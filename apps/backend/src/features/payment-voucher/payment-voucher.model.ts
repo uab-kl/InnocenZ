@@ -103,7 +103,7 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
   updatedBy: varchar('updated_by').notNull(),
 }, (table) => [
   /**
-   * ONE voucher per PR per week (migration 0078).
+   * ONE voucher per AGENCY per PR per week (migration 0129, re-keying 0078).
    *
    * Declared here as well as in SQL because of the drift class that runs the
    * dangerous way round: a constraint the database HAS and the model does NOT is
@@ -111,13 +111,28 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
    * "fixes" the difference by deleting it, and nothing fails — the rule just
    * stops existing.
    *
+   * ⚠️ `agencyId` is in the key, and dropping it is not a simplification.
+   * 0078 keyed this on (prId, weekStart) alone, reasoning that "a PR belongs to
+   * one agency". A PR does not: membership lives on `agency_pr`, one row PER
+   * AGENCY, and four people on the live database hold two to four of them. The
+   * narrow key therefore never meant "no double payment" — it meant "only the
+   * first agency to reach the week may pay this person at all", which blocked
+   * the second agency outright and crashed whatever run hit the index.
+   *
+   * The key alone is not the whole fix. The lookups in the repository must
+   * carry an agency term too (`getCurrentWeekDraft` / `getWeekVoucher`), or the
+   * second agency is simply HANDED the first agency's open voucher and writes
+   * its money onto it — the silent half of the same bug. Index and queries move
+   * together; see the migration header.
+   *
    * Partial because `pr_id` and `week_start` are both nullable. Postgres already
    * treats NULLs as distinct, so this changes no behaviour; it states that an
    * unassigned or weekless voucher is deliberately unconstrained, rather than
-   * leaving a reader to infer it from the NULL rule.
+   * leaving a reader to infer it from the NULL rule. `agency_id` is NOT NULL and
+   * so needs no term of its own.
    */
-  uniqueIndex('payment_voucher_one_per_pr_week')
-    .on(table.prId, table.weekStart)
+  uniqueIndex('payment_voucher_one_per_agency_pr_week')
+    .on(table.agencyId, table.prId, table.weekStart)
     .where(sql`${table.prId} IS NOT NULL AND ${table.weekStart} IS NOT NULL`),
 ]);
 

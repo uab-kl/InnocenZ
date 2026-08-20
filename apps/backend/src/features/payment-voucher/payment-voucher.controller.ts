@@ -118,6 +118,7 @@ import {
   PaymentVoucherReceiptStatus,
   PaymentVoucherReceiptType,
   PaymentVoucherType,
+  PaymentVoucherWithLines,
 } from './payment-voucher.model';
 import type { PrType } from '@/features/pr-personnel/pr.model';
 // The outlet's floor-sales mirror. A LEAF module by design — importing the
@@ -1346,6 +1347,89 @@ export class PaymentVoucherControllerClass {
     }));
   }
 
+  /**
+   * One week, every voucher in it — ONE GRID, N PVs.
+   *
+   * Since 0129 a PR who worked for two agencies in one week holds two vouchers,
+   * because each agency signs and pays its own. The phone still shows ONE week:
+   * the person worked one week and wants to see one week's money. So the lines,
+   * the day statuses and the disputes MERGE, while the vouchers themselves stay
+   * separate and are listed — a merged total is not a document anybody can sign.
+   *
+   * Before this, both PR week reads took `getWeekVoucher`, which is
+   * `ORDER BY created_at DESC LIMIT 1`. With one voucher per week that was the
+   * only answer; with two it silently becomes a CHOICE, and the PR would have
+   * been shown one agency's money as though it were their whole week.
+   *
+   * `receiptInfoMap` and `prDayReviews` are computed PER VOUCHER and merged
+   * after, never across the pooled rows: receipt statuses and day reviews both
+   * key off a voucher id, and pooling them first would attribute one agency's
+   * approval to the other's lines.
+   */
+  private async mergeWeekVouchers(
+    vouchers: (PaymentVoucherWithLines & { agencyName: string | null })[],
+  ) {
+    const parts = await Promise.all(
+      vouchers.map(async (voucher) => {
+        const receiptRows = await this.paymentVoucherRepository.listReceipts(voucher.id);
+        const statuses = receiptInfoMap(receiptRows);
+        return {
+          voucher,
+          receiptRows,
+          lines: voucher.lines.map((l) => toReceiptLineDTO(l, statuses)),
+          dayReviews: await this.prDayReviews(voucher, receiptRows),
+          disputes: await this.weekDisputes(voucher.id),
+        };
+      }),
+    );
+
+    /*
+     * Day status across vouchers: the WEAKEST wins.
+     *
+     * `approved` only if every voucher that reviewed the date says approved. If
+     * Atlas approved Tuesday and Delta is still holding it, the PR's Tuesday is
+     * NOT approved — half their money for that day is unreviewed. Painting it
+     * green would invite them to sign against evidence one agency has not
+     * given, which is the same reasoning as the per-day downgrade in
+     * `buildWeekGridFromLines` one level up.
+     */
+    const dayStatus = new Map<string, 'approved' | 'held' | null>();
+    for (const part of parts) {
+      for (const review of part.dayReviews) {
+        if (!dayStatus.has(review.date)) {
+          dayStatus.set(review.date, review.status);
+          continue;
+        }
+        if (dayStatus.get(review.date) === 'approved' && review.status !== 'approved') {
+          dayStatus.set(review.date, review.status);
+        }
+      }
+    }
+
+    // Newest voucher is the HEADLINE — what the single-voucher fields keep
+    // reporting so a client that has not learned about `vouchers` yet is not
+    // broken by a second row appearing. `vouchers` below is the truth.
+    const headline = parts.length > 0 ? (parts[parts.length - 1]?.voucher ?? null) : null;
+
+    return {
+      headline,
+      lines: parts.flatMap((p) => p.lines),
+      disputes: parts.flatMap((p) => p.disputes),
+      dayReviews: [...dayStatus].map(([date, status]) => ({ date, status })),
+      // The week's money, summed across agencies. The grid shows one week, so
+      // its total has to be the week's, not the newest voucher's share of it.
+      net: parts.reduce((sum, p) => sum + Number(p.voucher.net ?? 0), 0).toFixed(2),
+      vouchers: parts.map((p) => ({
+        id: p.voucher.id,
+        voucherNo: p.voucher.voucherNo,
+        agencyId: p.voucher.agencyId,
+        agencyName: p.voucher.agencyName,
+        net: p.voucher.net,
+        status: p.voucher.status,
+      })),
+    };
+  }
+
   /** The signed-in PR's live current-week earnings (Check-In STATUS + Payment This-week). */
   async getMyCurrentWeek(req: Request, res: Response) {
     try {
@@ -1367,50 +1451,53 @@ export class PaymentVoucherControllerClass {
       // Reading and writing want different lookups. This is the read, so it
       // takes the week's voucher whatever its status — the same call
       // getMyLastWeek() already makes.
-      const draft = await this.paymentVoucherRepository.getWeekVoucher(
-        pr.id,
-        weekStart,
-        pr.userId,
+      // EVERY voucher for the week, not the newest one. This is the THIS-WEEK
+      // section, where the PR watches the agency approve what they logged — and
+      // since 0129 "the agency" may be two of them, each with its own voucher.
+      // mergeWeekVouchers computes the receipt states and the day statuses per
+      // voucher and merges after, so line statuses and day statuses can never
+      // describe different states of the same voucher.
+      const week = await this.mergeWeekVouchers(
+        await this.paymentVoucherRepository.listWeekVouchers(pr.id, weekStart, pr.userId),
       );
-      // This is the THIS-WEEK section, where the PR watches the agency approve
-      // what they logged — so the receipt states have to come with the lines.
-      // Held in a variable because the DAY statuses below are computed from the
-      // same rows: one read, one moment, no chance of the line statuses and the
-      // day statuses describing different states of the same voucher.
-      const receiptRows = draft
-        ? await this.paymentVoucherRepository.listReceipts(draft.id)
-        : [];
-      const statuses = draft ? receiptInfoMap(receiptRows) : undefined;
-      const lines = (draft?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses));
       res.status(200).json({
         success: true,
         message: 'OK',
         data: {
-          voucherId: draft?.id ?? null,
+          voucherId: week.headline?.id ?? null,
           // The stored number (0075). Sent so the app can print the same string
           // as the paper voucher instead of deriving its own from the week.
-          voucherNo: draft?.voucherNo ?? null,
+          voucherNo: week.headline?.voucherNo ?? null,
           weekStart,
           weekEnd,
-          net: draft?.net ?? '0.00',
-          status: draft?.status ?? null,
+          net: week.net,
+          status: week.headline?.status ?? null,
+          /*
+           * EVERY voucher this week, one per agency — the field to read.
+           *
+           * `voucherId` / `voucherNo` / `status` above describe only the newest
+           * and are kept so an older build keeps working. They are a headline,
+           * not the week: a PR with two agencies has two documents to sign, and
+           * anything that signs, downloads or disputes must walk this array.
+           */
+          vouchers: week.vouchers,
           // Proof photos now store bare R2 keys (`user/…`); the client joins
           // this base + '/' + key. Old rows still hold data URLs, rendered
           // as-is — the keys themselves are never rewritten server-side.
           r2PublicUrl: r2PublicBase(),
-          lines,
+          lines: week.lines,
           // The shifts those lines came from, so the Payment grid can prove a
           // day's figure against the check-in/check-out that earned it.
-          shifts: await this.weekShifts(pr.id, lines),
+          shifts: await this.weekShifts(pr.id, week.lines),
           // Where the agency has got to, day by day. Without this the phone can
           // only read the VOUCHER's status, which stays 'pending_review' for the
           // whole week — so a day the agency approved on Tuesday still showed
           // PENDING to the PR until the voucher was sent on Sunday.
-          dayReviews: await this.prDayReviews(draft ?? null, receiptRows),
+          dayReviews: week.dayReviews,
           // The PR's own claims, so a disputed day survives a reload. Held only
           // in React state before, it disappeared from the PR's screen while
           // still sitting in the agency's queue.
-          disputes: await this.weekDisputes(draft?.id ?? null),
+          disputes: week.disputes,
         },
       });
     } catch (error) {
@@ -1426,45 +1513,46 @@ export class PaymentVoucherControllerClass {
       if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
 
       const { weekStart, weekEnd } = previousWeekBounds();
-      const voucher = await this.paymentVoucherRepository.getWeekVoucher(
-        pr.id,
-        weekStart,
-        pr.userId,
+      // Every voucher for the week — see mergeWeekVouchers. The LAST-WEEK
+      // section is where disputes are raised, and whether a line may be disputed
+      // depends on its receipt's state, so this read carries the same per-voucher
+      // statuses as this-week rather than guessing from `source`.
+      const week = await this.mergeWeekVouchers(
+        await this.paymentVoucherRepository.listWeekVouchers(pr.id, weekStart, pr.userId),
       );
-      // The LAST-WEEK section is where disputes are raised, and whether a line
-      // may be disputed depends on its receipt's state — so this read carries
-      // the same statuses as this-week rather than guessing from `source`.
-      const receiptRows = voucher
-        ? await this.paymentVoucherRepository.listReceipts(voucher.id)
-        : [];
-      const statuses = voucher ? receiptInfoMap(receiptRows) : undefined;
-      const lines = (voucher?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses));
       res.status(200).json({
         success: true,
         message: 'OK',
         data: {
-          voucherId: voucher?.id ?? null,
-          voucherNo: voucher?.voucherNo ?? null,
+          voucherId: week.headline?.id ?? null,
+          voucherNo: week.headline?.voucherNo ?? null,
           weekStart,
           weekEnd,
-          net: voucher?.net ?? '0.00',
-          status: voucher?.status ?? null,
+          net: week.net,
+          status: week.headline?.status ?? null,
+          /** Every voucher this week, one per agency — see current-week. */
+          vouchers: week.vouchers,
           // Same key→URL join base as current-week — one rule, both sections.
           r2PublicUrl: r2PublicBase(),
           // A PR can dispute this issued voucher; surface the persisted dispute
           // so the "Last week" grid reflects it after a reload (§3 F).
-          disputeReason: voucher?.disputeReason ?? null,
-          disputeNote: voucher?.disputeNote ?? null,
-          disputedAt: voucher?.disputedAt ?? null,
-          lines,
+          //
+          // These three are the HEADLINE voucher's legacy dispute columns, which
+          // is all they ever were — superseded by `disputes` below (table 0051),
+          // which carries every voucher's claims. A second agency's dispute
+          // appears there, not here.
+          disputeReason: week.headline?.disputeReason ?? null,
+          disputeNote: week.headline?.disputeNote ?? null,
+          disputedAt: week.headline?.disputedAt ?? null,
+          lines: week.lines,
           // Same evidence trail as this-week: the PR must be able to see which
           // shift a figure came from BEFORE deciding whether to dispute it.
-          shifts: await this.weekShifts(pr.id, lines),
+          shifts: await this.weekShifts(pr.id, week.lines),
           // Carried on last week too, so the grid renders one rule rather than
           // one per section.
-          dayReviews: await this.prDayReviews(voucher ?? null, receiptRows),
+          dayReviews: week.dayReviews,
           // Same rule both sections: the grid reads one shape, not one per week.
-          disputes: await this.weekDisputes(voucher?.id ?? null),
+          disputes: week.disputes,
         },
       });
     } catch (error) {
@@ -2684,6 +2772,18 @@ export class PaymentVoucherControllerClass {
       if (owned.voucher.status !== 'pending_review') {
         return res.status(400).json({ success: false, message: 'This week is already closed for edits', data: null });
       }
+      // Same rule as deleteMyLine, and for the same reason: editing a RM 250
+      // cancellation fee down to RM 0 removes the money just as effectively as
+      // deleting the line, so guarding only the delete would leave the front
+      // door locked and the window open.
+      if (resolveComponent(owned.line) === 'deduction') {
+        return res.status(403).json({
+          success: false,
+          message:
+            'This is a charge from your agency, not a line you added. Raise a dispute if you think it is wrong.',
+          data: null,
+        });
+      }
       const locked = await this.lockedReceiptFor(owned.line);
       if (locked) {
         return res.status(409).json({
@@ -2819,6 +2919,31 @@ export class PaymentVoucherControllerClass {
       }
       if (owned.voucher.status !== 'pending_review') {
         return res.status(400).json({ success: false, message: 'This week is already closed for edits', data: null });
+      }
+      /*
+       * A DEDUCTION is not the PR's line to remove.
+       *
+       * Everything else on `/mine/lines` is money the PR themselves logged, so
+       * deleting it is just withdrawing their own claim. A cancellation fee is
+       * the opposite: it is money the AGENCY is taking, attached automatically
+       * when the PR cancelled (0130), and the only person entitled to lift it
+       * is the agency, through the waive endpoint that records who and why.
+       *
+       * Without this the whole opt-out feature is defeated from the side being
+       * charged — and silently, which is worse than loudly: the guard below
+       * fires on a reviewed RECEIPT, and a penalty line has no receipt, while
+       * the voucher is `pending_review` by construction because that is exactly
+       * what auto-attach targets. The line would go, `cancel_fee_charged_at`
+       * would stay stamped, and the fee would never resurface on the Finance
+       * list. The agency would simply never be paid, with nothing to see.
+       */
+      if (resolveComponent(owned.line) === 'deduction') {
+        return res.status(403).json({
+          success: false,
+          message:
+            'This is a charge from your agency, not a line you added. Raise a dispute if you think it is wrong.',
+          data: null,
+        });
       }
       // Deleting is the sharper case: it would take the reviewed evidence away
       // along with the money, leaving the agency's approval pointing at nothing.

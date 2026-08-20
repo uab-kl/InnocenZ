@@ -762,6 +762,11 @@ export class ShiftAssignmentRepositoryClass {
             sql`${ShiftAssignmentTable.cancelFeeRm} IS NOT NULL`,
             sql`${ShiftAssignmentTable.cancelFeeRm} > 0`,
             sql`${ShiftAssignmentTable.cancelFeeChargedAt} IS NULL`,
+            // WAIVED is not UNCHARGED (0130). Without this a forgiven fee comes
+            // straight back onto the Finance list and gets charged after all,
+            // silently reversing a decision somebody made on purpose. The two
+            // NULLs mean different things and both have to be asked.
+            sql`${ShiftAssignmentTable.cancelFeeWaivedAt} IS NULL`,
           ),
         )
         .orderBy(asc(ShiftTable.shiftDate));
@@ -806,12 +811,125 @@ export class ShiftAssignmentRepositoryClass {
             // to resurface, never quietly disappear.
             sql`${ShiftAssignmentTable.cancelFeeRm} IS NOT NULL`,
             sql`${ShiftAssignmentTable.cancelFeeRm} > 0`,
+            // A WAIVED fee may never be charged (0130). The uncharged list
+            // already excludes it, but this endpoint takes ids from a CLIENT —
+            // a stale Finance page loaded before the waive would otherwise
+            // re-charge money the agency has already forgiven, and the PR would
+            // see the deduction reappear with no decision behind it.
+            sql`${ShiftAssignmentTable.cancelFeeWaivedAt} IS NULL`,
           ),
         )
         .returning({ id: ShiftAssignmentTable.id });
       return rows.length;
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.markCancelFeesCharged] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The agency FORGIVES a sealed cancellation fee (0130).
+   *
+   * RE-ENTRANT BY CONSTRUCTION, and that is the whole design. Waiving is two
+   * effects — stamp the decision, take the line off the voucher — and they
+   * cannot share a transaction because the line lives on another aggregate. So
+   * a waive can half-complete, and the only safe shape is one that heals when
+   * called again: this stamps, returns the voucher id, and the caller removes
+   * the line. A repeat call finds `waived_at` already set, returns the SAME
+   * voucher id with `alreadyWaived`, and the caller simply retries the removal.
+   *
+   * ⚠️ `cancel_fee_voucher_id` is NOT cleared here. It is both the audit trail
+   * of where the money went and the only way a retry FINDS the line to remove.
+   * An earlier design nulled it in the same statement that stamped `waived_at`,
+   * which makes a half-completed waive permanently unrecoverable — stamped, so
+   * nothing lists it again, with a live deduction on the PR's voucher that no
+   * code path can now reach.
+   *
+   * `charged_at` is not cleared either. "Charged, then forgiven" is what
+   * actually happened, and erasing the first half to express the second would
+   * lose the fact that the PR ever saw the deduction.
+   *
+   * Agency-scoped in the WHERE, not just the guard: the id arrives from a
+   * client, and a bare `eq(id)` would let one agency forgive — and silently
+   * strip a line from — another agency's voucher.
+   */
+  async waiveCancelFee(
+    agencyId: string,
+    assignmentId: string,
+    actor: string,
+    reason: string | null,
+  ): Promise<
+    | { ok: true; voucherId: string | null; alreadyWaived: boolean; feeRm: string | null }
+    | { ok: false; reason: 'not_found' | 'no_fee' }
+  > {
+    try {
+      const [existing] = await db
+        .select({
+          id: ShiftAssignmentTable.id,
+          feeRm: ShiftAssignmentTable.cancelFeeRm,
+          voucherId: ShiftAssignmentTable.cancelFeeVoucherId,
+          waivedAt: ShiftAssignmentTable.cancelFeeWaivedAt,
+        })
+        .from(ShiftAssignmentTable)
+        .where(
+          and(
+            eq(ShiftAssignmentTable.id, assignmentId),
+            eq(ShiftAssignmentTable.agencyId, agencyId),
+          ),
+        )
+        .limit(1);
+      if (!existing) return { ok: false, reason: 'not_found' };
+      // Nothing to forgive. A free cancel seals '0.00' so the row still explains
+      // itself, but there is no money on it and no line to remove — waiving it
+      // would write a decision about nothing.
+      if (existing.feeRm == null || Number(existing.feeRm) <= 0) {
+        return { ok: false, reason: 'no_fee' };
+      }
+      if (existing.waivedAt) {
+        return {
+          ok: true,
+          voucherId: existing.voucherId,
+          alreadyWaived: true,
+          feeRm: existing.feeRm,
+        };
+      }
+
+      const [row] = await db
+        .update(ShiftAssignmentTable)
+        .set({
+          cancelFeeWaivedAt: new Date(),
+          cancelFeeWaivedBy: actor,
+          cancelFeeWaiveReason: reason,
+          updatedBy: actor,
+        })
+        .where(
+          and(
+            eq(ShiftAssignmentTable.id, assignmentId),
+            eq(ShiftAssignmentTable.agencyId, agencyId),
+            // The transition IS the mutex — two concurrent waives, one winner.
+            sql`${ShiftAssignmentTable.cancelFeeWaivedAt} IS NULL`,
+          ),
+        )
+        .returning({ voucherId: ShiftAssignmentTable.cancelFeeVoucherId });
+
+      // Lost the race: someone else stamped it between the read and the update.
+      // Their waive stands, and the line removal is retried either way.
+      if (!row) {
+        return {
+          ok: true,
+          voucherId: existing.voucherId,
+          alreadyWaived: true,
+          feeRm: existing.feeRm,
+        };
+      }
+      return {
+        ok: true,
+        voucherId: row.voucherId,
+        alreadyWaived: false,
+        feeRm: existing.feeRm,
+      };
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.waiveCancelFee] Error:', error);
       throw error;
     }
   }
@@ -2275,12 +2393,20 @@ export class ShiftAssignmentRepositoryClass {
     weekStart: string;
     weekEnd: string;
     graceMinutes: number;
-  }): Promise<{ assignedThisWeek: number; excusedThisWeek: number; shiftsThisWeek: number; lateThisWeek: number; mcThisMonth: number }> {
+  }): Promise<{
+    assignedThisWeek: number;
+    excusedThisWeek: number;
+    paidCancellationsThisWeek: number;
+    shiftsThisWeek: number;
+    lateThisWeek: number;
+    mcThisMonth: number;
+  }> {
     try {
       const { prId, weekStart, weekEnd, graceMinutes } = input;
       const result = await db.execute(sql`
         with wk as (
-          select sa.status, sa.check_in_at, s.shift_date, s.slot
+          select sa.status, sa.check_in_at, s.shift_date, s.slot,
+                 sa.cancel_fee_rm, sa.cancel_fee_waived_at
           from main.shift_assignment sa
           join main.shift s on s.id = sa.shift_id
           where sa.pr_id = ${prId}
@@ -2298,15 +2424,42 @@ export class ShiftAssignmentRepositoryClass {
         select
           -- Every assignment the agency GAVE this PR that week, whatever became
           -- of it. This is opportunity, not attendance: a PR who was handed two
-          -- shifts cannot be faulted for not working three. Counted across all
-          -- statuses on purpose — a shift the PR themselves cancelled was still
-          -- an opportunity offered (and the cancellation fee answers for that
-          -- separately), so excluding it would let someone dodge the minimum by
-          -- dropping shifts.
+          -- shifts cannot be faulted for not working three. Counted across ALL
+          -- statuses, including ones nobody ever resolved — a past shift left
+          -- 'assigned', never checked into and never cancelled, is a shift that
+          -- was offered and not worked, which is exactly what "missed" means
+          -- (owner's call, 20 Aug 2026).
           (select count(*)::int from wk) as assigned_this_week,
           -- Shifts the AGENCY excused. Approved MC/leave is permission not to
           -- work, so it cannot then be counted as a shift they failed to work.
           (select count(*)::int from wk where status = 'leave_approved') as excused_this_week,
+          -- Cancellations the PR ALREADY PAID FOR (owner's call, 20 Aug 2026).
+          --
+          -- One absence, one penalty. A cancelled shift used to count toward the
+          -- minimum as well as carrying its own fee, so a PR who dropped a shift
+          -- was billed twice for it: the cancellation fee, and again through the
+          -- below-minimum fine that same absence helped cause. jk's 9-15 Aug week
+          -- was the live example — RM 20 for the cancel, then RM 50 for "1 of 3".
+          --
+          -- The earlier reasoning here was that excluding these lets a PR dodge
+          -- the minimum by dropping shifts. It does not: a cancel fee is 25-50%
+          -- of a daily wage (RM 125-250 on a RM 500 day) against a RM 50 minimum
+          -- fine, so dropping a shift to escape the minimum costs several times
+          -- what it saves. Deterrence lives in the fee, which is proportional,
+          -- not in a flat weekly charge stacked on top of it.
+          --
+          -- PAID is the whole test, and both halves matter:
+          --   fee > 0  — a free cancel (24h+ notice) took nothing, so counting
+          --              it as missed is a first charge, not a second.
+          --   not waived — a forgiven fee took nothing either. If the agency
+          --              handed the money back, the absence has not been paid
+          --              for and still counts.
+          (select count(*)::int from wk
+             where status = 'cancelled'
+               and cancel_fee_rm is not null
+               and cancel_fee_rm > 0
+               and cancel_fee_waived_at is null
+          ) as paid_cancellations_this_week,
           (select count(*)::int from wk where status = 'completed') as shifts_this_week,
           (select count(*)::int from wk
              where status = 'completed'
@@ -2325,6 +2478,7 @@ export class ShiftAssignmentRepositoryClass {
         : ((result as { rows?: unknown[] })?.rows ?? [])) as Array<{
         assigned_this_week: number;
         excused_this_week: number;
+        paid_cancellations_this_week: number;
         shifts_this_week: number;
         late_this_week: number;
         mc_this_month: number;
@@ -2334,6 +2488,7 @@ export class ShiftAssignmentRepositoryClass {
       return {
         assignedThisWeek: row?.assigned_this_week ?? 0,
         excusedThisWeek: row?.excused_this_week ?? 0,
+        paidCancellationsThisWeek: row?.paid_cancellations_this_week ?? 0,
         shiftsThisWeek: row?.shifts_this_week ?? 0,
         lateThisWeek: row?.late_this_week ?? 0,
         mcThisMonth: row?.mc_this_month ?? 0,

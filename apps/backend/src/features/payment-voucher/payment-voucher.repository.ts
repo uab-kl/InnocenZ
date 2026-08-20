@@ -1,5 +1,6 @@
 import {
   and,
+  asc,
   desc,
   eq,
   gte,
@@ -21,7 +22,7 @@ import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { ShiftTable } from '@/features/shift/shift.model';
-import { prepareLine } from './payment-voucher-component';
+import { prepareLine, resolveComponent } from './payment-voucher-component';
 import {
   assignmentIdFromRef,
   checkLineAgainstShift,
@@ -269,17 +270,58 @@ export class PaymentVoucherRepositoryClass {
           }
           for (const [ref, count] of refCounts) if (count > 1) carryable.delete(ref);
 
+          /*
+           * PENALTY LINES SURVIVE THE WIPE — they are not the caller's to drop.
+           *
+           * This path deletes every line and re-inserts only what the payload
+           * carried, which is correct for money the agency is editing. A
+           * deduction is different: since 0130 it is attached AUTOMATICALLY when
+           * a PR cancels, so it appears on a voucher the agency may never have
+           * reloaded, and any save from a stale editor would silently destroy
+           * it. `cancel_fee_charged_at` would stay stamped, the uncharged list
+           * would never show it again, and the agency would simply not be paid —
+           * with nothing anywhere to indicate it had happened.
+           *
+           * So: whatever the payload says, every `-pen` line that was on the
+           * voucher before is re-appended after. Removing one is a WAIVE, which
+           * records who and why; it is deliberately not something a line edit
+           * can do as a side effect.
+           *
+           * Matched on the dedupe ref rather than the id because the payload may
+           * legitimately carry the same line back (a faithful round-trip), and
+           * re-appending it then would double the charge.
+           */
+          const protectedLines = previous.filter(
+            (l) => resolveComponent(l) === 'deduction',
+          );
+          const sentRefs = new Set(lines.map((l) => l.ref).filter(Boolean));
+          const missing = protectedLines.filter((l) => !l.ref || !sentRefs.has(l.ref));
+
           // Before the delete, not after: this path wipes and re-inserts every
           // line, so a refusal that landed mid-way would leave the voucher with
           // no lines at all.
           await this.assertLinesAgreeWithShifts(tx, lines);
           await tx.delete(PaymentVoucherLineTable).where(eq(PaymentVoucherLineTable.voucherId, id));
+          // Restored penalties are re-stated as ordinary LineInputs so BOTH sets
+          // go through one `prepareLine` map below — two arms with two shapes is
+          // how the classification rule starts differing between them.
+          const restored: LineInput[] = missing.map((line) => ({
+            description: line.description,
+            amount: line.amount,
+            quantity: line.quantity,
+            ref: line.ref,
+            lineDate: line.lineDate,
+            outlet: line.outlet,
+            component: line.component,
+            receiptId: line.receiptId,
+            proofPhotos: line.proofPhotos,
+          }));
           const insertedLines =
-            lines.length > 0
+            lines.length + restored.length > 0
               ? await tx
                   .insert(PaymentVoucherLineTable)
                   .values(
-                    lines.map((line, i) => {
+                    [...lines, ...restored].map((line, i) => {
                       const carried = line.ref ? carryable.get(line.ref) : undefined;
                       return prepareLine({
                         ...line,
@@ -294,6 +336,10 @@ export class PaymentVoucherRepositoryClass {
                   )
                   .returning()
               : [];
+          // Totals derive from what ACTUALLY landed, not from the caller's
+          // arithmetic — a restored penalty the payload never mentioned still
+          // has to reach the subtotal.
+          await this.recomputeTotals(id, tx);
           return { ...voucher, lines: insertedLines };
         }
 
@@ -508,16 +554,34 @@ export class PaymentVoucherRepositoryClass {
    *
    * `sent`, `signed` and `paid` stay OUT — those have left the PR's hands.
    */
-  private static readonly OPEN_WEEK_STATUSES: PaymentVoucherStatus[] = [
+  // PUBLIC since 0130: the waive endpoint asks the same question in the other
+  // direction — "may a line still come OFF this voucher?" — and it must be the
+  // same set that decides whether one may go ON, or the two drift into a state
+  // where a fee can be added but never forgiven.
+  static readonly OPEN_WEEK_STATUSES: PaymentVoucherStatus[] = [
     'pending_review',
     'disputed',
   ];
 
-  /** The PR's current-week draft voucher (pending_review) with its lines, or null. */
+  /**
+   * The PR's current-week draft voucher (pending_review) with its lines, or null.
+   *
+   * ⚠️ `agencyId` is what keeps one agency's money off another's voucher, and it
+   * is optional ONLY so the PR-facing reads can stay whole-week. Every WRITE
+   * path must pass it. Without it this matches on PR + week alone, so a PR who
+   * works for two agencies in one week hands the second agency the FIRST
+   * agency's open voucher, and `addLine` writes to it — silently, on every path
+   * that routes money weekly: self-logged receipts, approved overtime, penalty
+   * charges. Migration 0129 widened the unique key to (agency, PR, week) for the
+   * same reason; the index and this term have to move together, because the
+   * index only stops a second INSERT and this is the lookup that never got that
+   * far.
+   */
   async getCurrentWeekDraft(
     prId: string,
     weekStart: string,
     userId?: string | null,
+    agencyId?: string | null,
   ): Promise<PaymentVoucherWithLines | null> {
     try {
       const [voucher] = await db
@@ -527,6 +591,7 @@ export class PaymentVoucherRepositoryClass {
           and(
             this.ownershipOf(prId, userId),
             eq(PaymentVoucherTable.weekStart, weekStart),
+            ...(agencyId ? [eq(PaymentVoucherTable.agencyId, agencyId)] : []),
             inArray(
               PaymentVoucherTable.status,
               PaymentVoucherRepositoryClass.OPEN_WEEK_STATUSES,
@@ -545,20 +610,36 @@ export class PaymentVoucherRepositoryClass {
 
   /**
    * The PR's voucher for a given week regardless of status (draft, sent,
-   * signed, paid…) with its lines — used for the Payment "Last week" view. The
-   * most recently created one wins if more than one exists.
+   * signed, paid…) with its lines. The most recently created one wins if more
+   * than one exists.
+   *
+   * ⚠️ Pass `agencyId` from any WRITE path — see getCurrentWeekDraft. Without it
+   * the "is this week already closed?" question is answered by whichever agency
+   * created a voucher most recently, which is how agency B came to be told that
+   * agency A's voucher "has already been sent … ask your agency to reopen it"
+   * about a document B can neither see nor reopen.
+   *
+   * Since 0129 a week can legitimately hold ONE VOUCHER PER AGENCY, so an
+   * unscoped call returning a single row is now a CHOICE among several rather
+   * than the only answer. PR-facing reads that must show the whole week use
+   * `listWeekVouchers` instead.
    */
   async getWeekVoucher(
     prId: string,
     weekStart: string,
     userId?: string | null,
+    agencyId?: string | null,
   ): Promise<PaymentVoucherWithLines | null> {
     try {
       const [voucher] = await db
         .select()
         .from(PaymentVoucherTable)
         .where(
-          and(this.ownershipOf(prId, userId), eq(PaymentVoucherTable.weekStart, weekStart)),
+          and(
+            this.ownershipOf(prId, userId),
+            eq(PaymentVoucherTable.weekStart, weekStart),
+            ...(agencyId ? [eq(PaymentVoucherTable.agencyId, agencyId)] : []),
+          ),
         )
         .orderBy(desc(PaymentVoucherTable.createdAt))
         .limit(1);
@@ -567,6 +648,51 @@ export class PaymentVoucherRepositoryClass {
       return { ...voucher, lines };
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getWeekVoucher] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * EVERY voucher a PR holds for one week — one per agency since 0129.
+   *
+   * The PR-facing counterpart to `getWeekVoucher`. A person who worked for two
+   * agencies in one week has two vouchers, and each is signed and paid by its
+   * own agency, so neither may be dropped and they must not be summed into a
+   * single signable document. The Payment week MERGES their lines for display
+   * while the vouchers stay distinct underneath — one grid, two PVs.
+   *
+   * Ordered oldest-first so the merged view is stable across refreshes; callers
+   * that need a headline voucher take the newest themselves rather than relying
+   * on an ordering this method might later change.
+   */
+  async listWeekVouchers(
+    prId: string,
+    weekStart: string,
+    userId?: string | null,
+  ): Promise<(PaymentVoucherWithLines & { agencyName: string | null })[]> {
+    try {
+      // The agency NAME is joined, not stored. Two vouchers in a week differ by
+      // who owes the money, and "PV-000012" beside "PV-000019" tells the PR
+      // nothing about which is which — the name is the only thing that makes
+      // them distinguishable on the phone. Read through the FK rather than
+      // copied onto the voucher: one fact, one table.
+      const rows = await db
+        .select({ voucher: PaymentVoucherTable, agencyName: AgencyTable.name })
+        .from(PaymentVoucherTable)
+        .leftJoin(AgencyTable, eq(AgencyTable.id, PaymentVoucherTable.agencyId))
+        .where(
+          and(this.ownershipOf(prId, userId), eq(PaymentVoucherTable.weekStart, weekStart)),
+        )
+        .orderBy(asc(PaymentVoucherTable.createdAt));
+      return await Promise.all(
+        rows.map(async (row) => ({
+          ...row.voucher,
+          agencyName: row.agencyName ?? null,
+          lines: await this.getLines(row.voucher.id),
+        })),
+      );
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listWeekVouchers] Error:', error);
       throw error;
     }
   }
@@ -789,16 +915,30 @@ export class PaymentVoucherRepositoryClass {
     | { ok: false; reason: string; existing: PaymentVoucherType }
   > {
     try {
+      // AGENCY-SCOPED, both of them. This is the write path, and a PR may hold
+      // one voucher per agency for a week (0129). Without the agency term the
+      // caller is handed whichever agency got here first: an OPEN voucher
+      // belonging to someone else to append to, or a CLOSED one to be refused
+      // by. Both were live — the first mixed two agencies' money on one
+      // document, the second told agency B to "ask your agency to reopen"
+      // agency A's voucher.
       const existing = await this.getCurrentWeekDraft(
         data.prId,
         data.weekStart,
         data.userId,
+        data.agencyId,
       );
       if (existing) return { ok: true, voucher: existing };
 
       // No DRAFT — but is there a voucher for this week at all? Checked across
-      // every status precisely because the draft lookup cannot see one.
-      const closed = await this.getWeekVoucher(data.prId, data.weekStart, data.userId);
+      // every status precisely because the draft lookup cannot see one, and
+      // scoped to THIS agency for the same reason as above.
+      const closed = await this.getWeekVoucher(
+        data.prId,
+        data.weekStart,
+        data.userId,
+        data.agencyId,
+      );
       if (closed) {
         return {
           ok: false,

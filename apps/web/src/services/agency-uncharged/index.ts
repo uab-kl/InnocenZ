@@ -72,6 +72,43 @@ export async function markUnchargedCollected(
 	return response.data;
 }
 
+/**
+ * FORGIVE one cancellation fee, and take its line off the voucher (0130).
+ *
+ * The counterpart to `markUnchargedCollected`, and the one an agency reaches for
+ * far more often now: since the fee attaches itself the moment a PR cancels, the
+ * remaining decision is whether to let it stand. Charging is the default;
+ * waiving is the exception that needs a reason.
+ *
+ * Safe to call twice — the endpoint is re-entrant and answers `alreadyWaived`
+ * rather than failing, so a double-click cannot strand a half-finished waive.
+ *
+ * Refused with 409 once the voucher has been sent: at that point the PR is
+ * signing a document showing the deduction, and it becomes a credit on a later
+ * voucher rather than an edit to this one.
+ */
+export async function waiveCancelFee(
+	agencyId: string,
+	assignmentId: string,
+	reason: string | null,
+	onRefreshFail: () => void,
+): Promise<{
+	success: boolean;
+	message: string;
+	data: {
+		assignmentId: string;
+		lineRemoved: boolean;
+		alreadyWaived: boolean;
+	} | null;
+}> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post(
+		`/agency/${agencyId}/uncharged/${assignmentId}/waive`,
+		{ reason },
+	);
+	return response.data;
+}
+
 /** Accept a week's weekly breaches as owed — creates penalty_charge rows. */
 export async function sealPenaltyWeek(
 	agencyId: string,

@@ -43,7 +43,28 @@ export type PrAttendanceWindow = {
    * toward the cap there.
    */
   excusedThisWeek: number;
-  /** Completed shifts inside the voucher week. */
+  /**
+   * Cancellations that week the PR ALREADY PAID a fee for — sealed above zero
+   * and not waived.
+   *
+   * Also subtracted from the opportunity, for a different reason than
+   * `excusedThisWeek`. Leave is permission not to work; this is an absence that
+   * has already been charged for. Counting it again inside the minimum bills the
+   * same absence twice — once at 25-50% of a daily wage, then again through the
+   * flat below-minimum fine it helped cause.
+   *
+   * A FREE cancel (24h+ notice) and a WAIVED one are both excluded from this
+   * number and therefore still count as missed: nothing was taken for them, so
+   * counting them is a first charge, not a second.
+   */
+  paidCancellationsThisWeek: number;
+  /**
+   * Completed shifts inside the voucher week.
+   *
+   * The numerator, and deliberately COMPLETED only. A past shift still sitting
+   * in `assigned` — never checked into, never cancelled — does not count here,
+   * which is what makes it read as missed (owner's call, 20 Aug 2026).
+   */
   shiftsThisWeek: number;
   /** Check-ins later than shift start + the rule's grace, inside the week. */
   lateThisWeek: number;
@@ -101,16 +122,22 @@ export function evaluatePrPenalties(
 
     if (rule.ruleType === 'min_shifts_per_week') {
       const min = rule.minShiftsPerWeek;
-      // SAFETY NET: you cannot work shifts you were never given, and you cannot
-      // work the ones you were excused from.
+      // SAFETY NET: you cannot work shifts you were never given, you cannot work
+      // the ones you were excused from, and you must not be billed twice for the
+      // ones you already paid to drop.
       //
-      // Opportunity = assigned MINUS approved MC/leave. Both subtractions are
-      // the same principle — the PR must have had a real chance to reach the
-      // minimum — but they fail differently if you skip either: without the
-      // first, an agency that rosters someone twice fines them for not working
-      // three times; without the second, an agency APPROVES a PR's medical
-      // leave and then fines them for taking it.
-      const opportunity = window.assignedThisWeek - window.excusedThisWeek;
+      // Opportunity = assigned MINUS approved MC/leave MINUS paid cancellations.
+      // All three subtractions serve the same principle — the PR must have had a
+      // real chance to reach the minimum — but each fails differently if skipped:
+      // without the first, an agency that rosters someone twice fines them for
+      // not working three times; without the second, an agency APPROVES a PR's
+      // medical leave and then fines them for taking it; without the third, one
+      // absence is charged twice, a proportional cancel fee and then a flat
+      // below-minimum fine on top of it (owner's call, 20 Aug 2026).
+      const opportunity =
+        window.assignedThisWeek -
+        window.excusedThisWeek -
+        window.paidCancellationsThisWeek;
       if (min != null && opportunity < min) continue;
       // Strictly BELOW the minimum — hitting it exactly is compliance.
       if (min != null && window.shiftsThisWeek < min) {
