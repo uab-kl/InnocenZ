@@ -1,0 +1,10 @@
+# Keep EAS upload off local Gradle locks / caches (Windows EBUSY).
+android/.gradle/
+android/**/.gradle/
+android/build/
+android/app/build/
+android/.cxx/
+ios/Pods/
+ios/build/
+.expo/
+node_modules/

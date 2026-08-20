@@ -17,7 +17,11 @@
 const { existsSync } = require('node:fs');
 const path = require('node:path');
 const { config: loadEnv } = require('dotenv');
-const { withPodfileProperties } = require('@expo/config-plugins');
+const {
+  AndroidConfig,
+  withPodfileProperties,
+  withStringsXml,
+} = require('@expo/config-plugins');
 
 const mobileRoot = __dirname;
 const repoRoot = path.resolve(mobileRoot, '../..');
@@ -46,18 +50,17 @@ function withIosPodProperties(config) {
   });
 }
 
-/**
- * Public R2 base, carried into the binary as config rather than only as an
- * inlined `EXPO_PUBLIC_` constant.
- *
- * `r2PublicBase()` in lib/api.ts already reads `expoConfig.extra.r2PublicUrl`
- * as its third fallback — nothing ever set it, so that branch could not fire.
- * Without a base, `assetUrl` returns null for every `user/…` object key and
- * every stored photo resolves to nothing: the comcard, the avatar, the
- * portfolio. Setting it here means a stale Metro cache or a build whose
- * EXPO_PUBLIC inlining did not pick the var up still resolves images, instead
- * of failing silently and looking like the photos were never saved.
- */
+function withAndroidAppDisplayName(config, displayName) {
+  if (!displayName) return config;
+  return withStringsXml(config, (conf) => {
+    conf.modResults = AndroidConfig.Strings.setStringItem(
+      [{ _: displayName, $: { name: 'app_name' } }],
+      conf.modResults,
+    );
+    return conf;
+  });
+}
+
 const R2_PUBLIC_URL = (
   process.env.EXPO_PUBLIC_R2_PUBLIC_URL ??
   process.env.R2_PUBLIC_URL ??
@@ -78,24 +81,31 @@ const DISPLAY_NAME =
     ? 'InnocenZ(beta)'
     : null);
 
-module.exports = ({ config }) => ({
-  ...config,
-  ...(DISPLAY_NAME ? { name: DISPLAY_NAME } : {}),
-  extra: {
-    // Spread first: app.json's extra carries the EAS projectId.
-    ...config.extra,
-    ...(R2_PUBLIC_URL ? { r2PublicUrl: R2_PUBLIC_URL } : {}),
-    easBuildProfile: EAS_PROFILE || null,
-  },
-  plugins: [
-    ...(config.plugins ?? []),
-    withIosPodProperties,
-    [
-      'react-native-maps',
-      {
-        iosGoogleMapsApiKey: GOOGLE_MAPS_API_KEY,
-        androidGoogleMapsApiKey: GOOGLE_MAPS_API_KEY,
-      },
+module.exports = ({ config }) => {
+  const appName = DISPLAY_NAME || config.name || 'InnocenZ';
+  let next = {
+    ...config,
+    name: appName,
+    extra: {
+      // Spread first: app.json's extra carries the EAS projectId.
+      ...config.extra,
+      ...(R2_PUBLIC_URL ? { r2PublicUrl: R2_PUBLIC_URL } : {}),
+      easBuildProfile: EAS_PROFILE || null,
+      appDisplayName: appName,
+    },
+    plugins: [
+      ...(config.plugins ?? []),
+      withIosPodProperties,
+      [
+        'react-native-maps',
+        {
+          iosGoogleMapsApiKey: GOOGLE_MAPS_API_KEY,
+          androidGoogleMapsApiKey: GOOGLE_MAPS_API_KEY,
+        },
+      ],
     ],
-  ],
-});
+  };
+  // Always sync native label from resolved name (preview env → beta).
+  next = withAndroidAppDisplayName(next, appName);
+  return next;
+};
