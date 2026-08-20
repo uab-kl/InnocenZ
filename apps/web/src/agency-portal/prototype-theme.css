@@ -8627,19 +8627,30 @@ button.iz-pr-offer-row:hover {
 }
 
 /* Shift transaction log (agency + outlet history) */
+/*
+ * The ONE filter-row style for every history tab, agency and outlet alike.
+ *
+ * There used to be a second copy of this — `.iz-outlet-hist-filter*` — picked
+ * by a ternary in `ShiftHistoryLog`, so "By PR" rendered violet labels over
+ * near-black selects while "By outlet" and "Paid PVs" rendered grey labels over
+ * translucent ones. Same control, same page, two looks. The colours here follow
+ * the roster filter bar, which is the house rule: the heading is violet, the
+ * field labels are muted, and the select fill comes from the base
+ * `.iz-hist-select-trigger` so it can only ever be defined in one place.
+ */
 .iz-txn-filter-heading {
 	font-family: "Sora", sans-serif;
 	font-size: 15px;
 	font-weight: 700;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
-	color: var(--iz-muted2);
+	color: var(--iz-violet-l, #d4c4f5);
 }
 .iz-txn-filters {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 8px;
-	margin-top: 8px;
+	gap: 10px;
+	margin-top: 10px;
 }
 .iz-txn-card-metrics {
 	display: grid;
@@ -8725,34 +8736,6 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 0;
-}
-.iz-outlet-hist-filter-heading {
-	margin-top: 4px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
-	font-weight: 700;
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: rgba(183, 156, 232, 0.85);
-}
-.iz-outlet-hist-filters {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 10px;
-	margin-top: 10px;
-}
-.iz-outlet-hist-filters .iz-hist-select-trigger {
-	min-height: 44px;
-	border-radius: 12px;
-	border-color: rgba(255, 255, 255, 0.08);
-	background: rgba(18, 15, 28, 0.95);
-	font-size: 17px;
-}
-.iz-outlet-hist-filters .iz-hist-custom-select label {
-	color: rgba(183, 156, 232, 0.75);
-	font-size: 14px;
-	letter-spacing: 0.12em;
-	margin-bottom: 6px;
 }
 .iz-outlet-hist-log-head {
 	display: flex;
@@ -9321,7 +9304,7 @@ button.iz-pr-offer-row:hover {
 	white-space: nowrap;
 }
 @media (max-width: 640px) {
-	.iz-outlet-hist-filters {
+	.iz-txn-filters {
 		grid-template-columns: 1fr;
 	}
 	.iz-outlet-hist-metrics {
@@ -13565,7 +13548,8 @@ button.iz-pr-offer-row:hover {
 	background: rgba(0, 0, 0, 0.22);
 }
 
-.iz-roster-page /* ===========================================================================
+.iz-roster-page
+	/* ===========================================================================
    Roster filter bar — ONE bar for both roster tabs.
    Replaces .iz-roster-shift-filters (Live) and .iz-roster-timetable-filters
    (Planning), which were two grids with two breakpoint schemes for the same
@@ -13573,7 +13557,7 @@ button.iz-pr-offer-row:hover {
    strand a half-empty second row the way the old >=1024px rule did (two time
    fields laid into five columns).
    =========================================================================== */
-.iz-roster-filterbar {
+	.iz-roster-filterbar {
 	margin-bottom: 14px;
 	padding: 12px 14px 14px;
 	border-radius: 14px;
@@ -13771,6 +13755,20 @@ button.iz-pr-offer-row:hover {
      without "Cancel Agency (0)" wrapping, and the PR cards' chip rows fit on
      two lines rather than three. */
 	grid-template-columns: minmax(400px, 435px) minmax(0, 1fr);
+	gap: 0;
+	/*
+	 * The frame and the full height belong to EVERY state, not just the
+	 * collapsed one. They were declared only under `[data-collapsed="true"]`,
+	 * so with the nav open `min-height` computed to 0 and the layout shrank to
+	 * fit its content — which is why the sidebar's dark background stopped
+	 * partway down the page whenever a queue was short or empty. The dvh floor
+	 * keeps the column painted to the bottom in both nav states.
+	 */
+	min-height: calc(100dvh - var(--iz-portal-header-h, 56px) - 24px);
+	border: 1px solid var(--iz-line);
+	border-radius: 14px;
+	overflow: hidden;
+	background: rgba(0, 0, 0, 0.12);
 }
 
 /*
@@ -13782,12 +13780,6 @@ button.iz-pr-offer-row:hover {
  */
 .iz-portal[data-collapsed="true"] .iz-approvals-layout {
 	grid-template-columns: minmax(400px, 603px) minmax(0, 1fr);
-	gap: 0;
-	min-height: calc(100dvh - var(--iz-portal-header-h, 56px) - 24px);
-	border: 1px solid var(--iz-line);
-	border-radius: 14px;
-	overflow: hidden;
-	background: rgba(0, 0, 0, 0.12);
 }
 
 .iz-approvals-sidebar {

@@ -343,20 +343,15 @@ export function ShiftHistoryLog({
 				<p className="iz-tiny iz-muted mt-1">{subtitleOverride}</p>
 			)}
 
-			<p
-				className={
-					outletStyleLayout
-						? "iz-outlet-hist-filter-heading"
-						: "iz-txn-filter-heading mt-4"
-				}
-			>
+			{/*
+			 * One class, not a ternary. Branching here gave the same filter row
+			 * two different looks on neighbouring tabs of the same page — see the
+			 * note on `.iz-txn-filter-heading`.
+			 */}
+			<p className="iz-txn-filter-heading mt-4">
 				<TitleWithIcon>{t.history.filterBy}</TitleWithIcon>
 			</p>
-			<div
-				className={
-					outletStyleLayout ? "iz-outlet-hist-filters" : "iz-txn-filters"
-				}
-			>
+			<div className="iz-txn-filters">
 				<HistSelectField
 					label={primaryLabel}
 					value={nameFilter}
