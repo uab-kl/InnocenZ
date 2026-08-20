@@ -72,7 +72,14 @@ export function calendarNavBounds(
 	return { startMonth: new Date(minY, 0, 1), endMonth: new Date(maxY, 11, 1) };
 }
 
-function HistCalendarMonthNav({
+/**
+ * The Month + Year dropdown header.
+ *
+ * Exported because the Manage Outlet date filter is meant to look like this
+ * one, and the alternative was a second header built to match — which is how
+ * two controls that are supposed to be the same drift apart.
+ */
+export function HistCalendarMonthNav({
 	viewMonth,
 	onMonthChange,
 	startMonth,
