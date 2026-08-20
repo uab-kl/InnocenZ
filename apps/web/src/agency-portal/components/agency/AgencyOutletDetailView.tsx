@@ -507,7 +507,7 @@ function ShiftSourceBadge({ shift }: { shift: AgencyOutletAvailableShift }) {
 	// arrow made it read as a dropdown (owner, 20 Aug).
 	return (
 		<IzPill variant="ink" className="iz-outlet-detail-shift-badge">
-			{outletShiftSourceLabel(shift.source)}
+			{outletShiftSourceLabel(shift.source, t)}
 		</IzPill>
 	);
 }
