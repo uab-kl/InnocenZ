@@ -13579,11 +13579,16 @@ button.iz-pr-offer-row:hover {
    "Leave — awaiting you" alone pushed the status field to 239px and tipped the
    whole row over its width — the bar then wrapped to four rows on a 1512
    screen with room to spare. */
+/* 42px tall with a 13px radius, matching `.iz-hist-select-trigger.sm` — the
+   history filter controls. The date trigger in this bar IS one of those now,
+   so anything standing beside it has to be the same shape or the row reads as
+   two different control sets. */
 .iz-roster-filterbar__field .iz-select {
 	min-width: 148px;
 	max-width: 210px;
-	height: 40px;
-	min-height: 40px;
+	height: 42px;
+	min-height: 42px;
+	border-radius: 13px;
 }
 .iz-roster-filterbar__label {
 	font-size: 12px;
@@ -13597,9 +13602,9 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	min-height: 40px;
+	min-height: 42px;
 	padding: 0 12px;
-	border-radius: 10px;
+	border-radius: 13px;
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.3);
 }
@@ -13619,10 +13624,10 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-muted2);
 }
 .iz-roster-filterbar__input--num {
-	min-height: 40px;
+	min-height: 42px;
 	width: 92px;
-	padding: 0 10px;
-	border-radius: 10px;
+	padding: 0 11px;
+	border-radius: 13px;
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.3);
 	font-variant-numeric: tabular-nums;
@@ -13653,10 +13658,6 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-filterbar__date .iz-roster-planning-date-trigger {
 	min-width: 148px;
-	min-height: 40px;
-	height: 40px;
-	border-radius: 10px;
-	font-size: 15px;
 }
 
 /*
@@ -17015,7 +17016,14 @@ button.iz-pr-offer-row:hover {
 .iz-hist-custom-select.compact label {
 	font-size: 14px;
 }
-.iz-hist-select-trigger {
+/* The Manage Outlet date filter is listed here, not given a copy of these
+   values: it is meant to look like the history date filter, and a second
+   copy is how two controls that are supposed to match drift apart. */
+.iz-hist-select-trigger,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__date
+	.iz-roster-planning-date-trigger {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -17035,16 +17043,26 @@ button.iz-pr-offer-row:hover {
 		border-color 0.15s,
 		box-shadow 0.15s;
 }
-.iz-hist-select-trigger.sm {
+.iz-hist-select-trigger.sm,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__date
+	.iz-roster-planning-date-trigger {
 	min-height: 42px;
 	font-size: 16px;
 	padding: 0 11px;
 }
 .iz-hist-select-trigger.open,
-.iz-hist-select-trigger:focus-visible {
+.iz-hist-select-trigger:focus-visible,
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger:hover,
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger.open,
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger:focus-visible {
 	outline: none;
 	border-color: var(--iz-gold-d);
 	box-shadow: 0 0 0 3px rgba(183, 156, 232, 0.12);
+	/* The roster trigger tints its background gold on hover; the history one
+	   does not, and this control is now a history one. */
+	background: rgba(255, 255, 255, 0.03);
 }
 .iz-hist-select-menu {
 	position: absolute;
