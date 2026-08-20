@@ -8,7 +8,8 @@ import { logger } from '@/util/logger.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository.js';
-import { buildPenaltyLine, penaltyDedupeRef } from '@/features/payment-voucher/penalty-line.js';
+import { attachPenaltyToWeek } from '@/features/payment-voucher/attach-penalty-to-week.js';
+import { penaltyDedupeRef } from '@/features/payment-voucher/penalty-line.js';
 import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week.js';
 import {
   PenaltyChargeRepositoryClass,
@@ -134,15 +135,27 @@ export class AgencyPenaltyRuleControllerClass {
         });
       }
 
-      // Two windows, one list. Lateness and the MC cap are final the moment
-      // they happen, so they come from the week asked for. Minimum-shifts is
-      // only true once a week has closed, so it comes from the PREVIOUS week —
-      // otherwise a PR mid-week is shown "1 of 3" as though it were a verdict.
+      // Two windows, one list — the SAME pair `sealWeek` records from, so what
+      // this list shows and what "record" charges cannot disagree.
+      //
+      // Lateness and the MC cap are final the moment they happen, so they come
+      // from the week asked for. Minimum-shifts is only true once a week has
+      // closed: for a week still RUNNING it would show a PR "1 of 3" on Tuesday
+      // as though it were a verdict, so that window falls back to the previous
+      // week. For a week that has CLOSED the breach IS a verdict, and asking
+      // the previous week anyway is what made those fines invisible — the seal
+      // recorded min-shifts for the selected week while the list never named
+      // them, so pressing "record" was the only way to learn they existed.
       const prevStart = shiftIsoDays(weekStart, -7);
       const prevEnd = shiftIsoDays(weekStart, -1);
+      // Same expression `sealWeek` uses, deliberately: two different notions of
+      // "closed" would put the boundary week straight back into disagreement.
+      const weekClosed = weekEnd < new Date().toISOString().slice(0, 10);
       const [live, closed] = await Promise.all([
         this.evaluateWeek(agencyId, weekStart, weekEnd, 'live-only'),
-        this.evaluateWeek(agencyId, prevStart, prevEnd, 'week-end-only'),
+        weekClosed
+          ? this.evaluateWeek(agencyId, weekStart, weekEnd, 'week-end-only')
+          : this.evaluateWeek(agencyId, prevStart, prevEnd, 'week-end-only'),
       ]);
       const proposals = [...closed.proposals, ...live.proposals];
 
@@ -296,6 +309,95 @@ export class AgencyPenaltyRuleControllerClass {
   }
 
   /**
+   * The agency FORGIVES one cancellation fee, and the line comes off the PV.
+   *
+   * The opt-out half of 0130. The fee attaches itself when the PR cancels, so
+   * the agency's remaining decision is this one — and because the default is now
+   * "charged", forgiving has to be a recorded act rather than the absence of
+   * one. `waiveCancelFee` stamps who and why.
+   *
+   * ── THE WINDOW CLOSES ON SEND ───────────────────────────────────────────────
+   * Only while the voucher is still in the agency's hands. Once it is `sent` the
+   * PR is looking at — and signing — a document that shows the deduction, and
+   * quietly editing it underneath them is precisely what the send gate exists to
+   * stop. After that, forgiveness is a credit on a later voucher, not a deletion
+   * from this one. Tested against OPEN_WEEK_STATUSES, the same set that decides
+   * whether a line may be ADDED, so the two directions agree by construction.
+   *
+   * ── RE-ENTRANT ─────────────────────────────────────────────────────────────
+   * Stamp and line-removal cannot share a transaction (different aggregates), so
+   * a waive can half-complete. A repeat call therefore returns 200 and RETRIES
+   * the removal rather than refusing as "already waived" — which would strand a
+   * live deduction that nothing can now reach.
+   */
+  async waiveCancelFee(req: Request, res: Response) {
+    try {
+      const agencyId = paramId(req.params.id);
+      const assignmentId = paramId(req.params.assignmentId);
+      // `paramId` does not validate, and this segment is behind no schema. A
+      // non-uuid would otherwise reach Postgres and come back as a 500 about
+      // invalid input syntax, which tells the caller nothing.
+      if (!/^[0-9a-f-]{36}$/i.test(assignmentId)) {
+        return res.status(400).json({ success: false, message: 'Invalid assignment id', data: null });
+      }
+      const reasonRaw = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      const reason = reasonRaw.slice(0, 500) || null;
+      const actor = getActor(req);
+
+      const waived = await this.shiftAssignmentRepository.waiveCancelFee(
+        agencyId,
+        assignmentId,
+        actor,
+        reason,
+      );
+      if (!waived.ok) {
+        return waived.reason === 'no_fee'
+          ? res.status(400).json({
+              success: false,
+              message: 'This cancellation carries no fee to waive.',
+              data: null,
+            })
+          : res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // No voucher ever took it — the fee was still sitting uncharged. The stamp
+      // above is the whole job; there is no line to remove.
+      let lineRemoved = false;
+      if (waived.voucherId) {
+        const voucher = await this.paymentVoucherRepository.getById(waived.voucherId);
+        if (
+          voucher &&
+          !PaymentVoucherRepositoryClass.OPEN_WEEK_STATUSES.includes(voucher.status)
+        ) {
+          return res.status(409).json({
+            success: false,
+            message:
+              `This week's voucher (${voucher.voucherNo ?? voucher.id}) has already been ` +
+              `${voucher.status === 'sent' ? 'sent to the PR' : voucher.status}, so the charge ` +
+              'cannot be taken off it. Credit it on next week\'s voucher instead.',
+            data: null,
+          });
+        }
+        const dedupe = penaltyDedupeRef(assignmentId);
+        const line = voucher?.lines.find((l) => (l.ref ?? '').includes(dedupe));
+        if (line) {
+          await this.paymentVoucherRepository.deleteLine(line.id);
+          lineRemoved = true;
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Cancellation fee waived',
+        data: { assignmentId, lineRemoved, alreadyWaived: waived.alreadyWaived },
+      });
+    } catch (error) {
+      logger.error('[AgencyPenaltyRuleController.waiveCancelFee] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
    * Put each charge on the PR's voucher for the week it BELONGS to, then stamp
    * it charged against that voucher.
    *
@@ -392,17 +494,28 @@ export class AgencyPenaltyRuleControllerClass {
     for (const item of items) {
       try {
         const pr = await this.prRepository.getById(item.prId);
-        const result = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
-          prId: item.prId,
-          userId: item.userId ?? pr?.userId,
-          agencyId,
-          prName: pr?.name ?? 'PR',
-          prIc: pr?.icNo,
-          outlet: item.outlet,
-          weekStart: item.weekStart,
-          weekEnd: item.weekEnd,
-          actor,
-        });
+        // Shared with the AUTOMATIC attach on PR cancel (0130). Both paths must
+        // put a fee on the same week's voucher and dedupe it the same way, so
+        // neither inlines the rule — see attach-penalty-to-week.ts.
+        const result = await attachPenaltyToWeek(
+          { paymentVoucherRepository: this.paymentVoucherRepository },
+          {
+            chargeId: item.id,
+            agencyId,
+            prId: item.prId,
+            userId: item.userId ?? pr?.userId,
+            prName: pr?.name ?? 'PR',
+            prIc: pr?.icNo,
+            outlet: item.outlet,
+            label: item.label,
+            detail: item.detail,
+            fineRm: item.fineRm,
+            lineDate: item.lineDate,
+            weekStart: item.weekStart,
+            weekEnd: item.weekEnd,
+            actor,
+          },
+        );
         if (!result.ok) {
           // A signed/sent week cannot take a new deduction. Leaving it uncharged
           // is the honest outcome — the agency has to decide whether to carry it
@@ -410,26 +523,12 @@ export class AgencyPenaltyRuleControllerClass {
           failed.push({ id: item.id, reason: result.reason });
           continue;
         }
-        const vId = result.voucher.id;
-
-        const { line } = buildPenaltyLine({
-          chargeId: item.id,
-          label: item.label,
-          detail: item.detail,
-          fineRm: item.fineRm,
-          lineDate: item.lineDate,
-        });
-        const full = await this.paymentVoucherRepository.getById(vId);
-        const dedupe = penaltyDedupeRef(item.id);
-        if (!full?.lines.some((l) => (l.ref ?? '').includes(dedupe))) {
-          await this.paymentVoucherRepository.addLine(vId, line);
-        }
 
         // Always the voucher the line actually landed on. A caller-supplied
         // voucherId used to win here, which would stamp `charged_voucher_id`
         // with one voucher while the deduction sat on another — the audit trail
         // would then point at a document that never carried the charge.
-        const target = vId;
+        const target = result.voucherId;
         const n =
           item.kind === 'fee'
             ? await this.shiftAssignmentRepository.markCancelFeesCharged(
@@ -446,7 +545,7 @@ export class AgencyPenaltyRuleControllerClass {
               );
         if (n > 0) {
           charged += n;
-          touched.add(vId);
+          touched.add(result.voucherId);
         }
       } catch (error) {
         logger.error('[AgencyPenaltyRuleController.applyCharges] Error:', error);

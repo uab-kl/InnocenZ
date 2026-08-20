@@ -453,6 +453,14 @@ const en = {
 		// Uncharged penalties & fees panel
 		unchargedPenaltiesFees: "Uncharged penalties & fees",
 		nothingOutstanding: "nothing outstanding",
+		/* "nothing outstanding" means nothing BILLED. Said alone it made a week
+		   with unrecorded breaches read exactly like a clean one. */
+		nothingBilledYet: "nothing billed yet",
+		checkingPenalties: "checking penalties…",
+		notYetRecorded: "Not yet recorded",
+		notYetRecordedHint:
+			"Breaches this week has already earned. Recording them turns each into a charge you can add to a voucher.",
+		couldNotLoadPenalties: "Could not load this week’s penalties.",
 		/** "Record penalties for last week" — the week is appended at the call site. */
 		recordPenaltiesFor: "Record penalties for",
 		thisWeekFallback: "this week",
@@ -508,7 +516,6 @@ const en = {
 		notSignedYet: "not signed yet",
 		thisWeekLower: "this week",
 		lastWeekLower: "last week",
-		thePaymentWeek: "the payment week",
 		signedCountSuffix: "signed",
 		useToRecordTransfer: "to record each bank transfer",
 		paidInHistory: "paid in History",
@@ -539,6 +546,8 @@ const en = {
 	filters: {
 		filters: "Filters",
 		filterShifts: "Filter shifts",
+		filterOutlets: "Filter outlets",
+		source: "Source",
 		search: "Search",
 		name: "Name",
 		outlet: "Outlet",
@@ -551,11 +560,17 @@ const en = {
 		everyone: "Everyone",
 		startFrom: "Start from",
 		endBy: "End by",
-		startTime: "Start Time",
-		endTime: "End Time",
+		/* Short on purpose: these sit inside a group already labelled "Shift
+		   time", separated by a dash, and "Start Time" clipped the picker's own
+		   80px label. */
+		startTime: "Start",
+		endTime: "End",
 		shiftStartFrom: "Shift start from",
 		shiftEndBy: "Shift end by",
 		minPayout: "Min payout (RM)",
+		/* Labels for the two PAIRED range controls in the roster filter bars. */
+		shiftTime: "Shift time",
+		payoutRange: "Payout (RM)",
 		maxPayout: "Max payout (RM)",
 		optional: "Optional",
 		prType: "PR type",
@@ -572,6 +587,13 @@ const en = {
 	/** Roster grid, filters and attendance panel. */
 	rosterGrid: {
 		awaitingPr: "Awaiting PR",
+		/*
+		 * What `assignment-pending` ACTUALLY means on a backend session: the only
+		 * status mapping to it is `leave_pending`, an MC/leave request awaiting the
+		 * AGENCY. "Awaiting PR" named the wrong party and the wrong decision — PRs
+		 * never accept or decline a shift (see the pr-cannot-accept-decline rule).
+		 */
+		leaveAwaitingAgency: "Leave — awaiting you",
 		outletRequest: "Outlet request",
 		swapPending: "Swap pending",
 		lateFlag: "Late flag",
@@ -599,9 +621,7 @@ const en = {
 		forOpen: "for",
 		openSlotUnit: "open slot",
 		week: "Week",
-		scheduled: "Scheduled",
-		pending: "Pending",
-		off: "Off",
+
 		awaitingOutlet: "Awaiting outlet",
 		swapArrow: "Swap",
 		/** "Open Vicky in Manage PR" — the name is inserted at the call site. */
@@ -862,7 +882,6 @@ const en = {
 		shiftsThisWeek: "Shifts this week",
 		estLabourCost: "Est labour cost",
 		liveGps: "Live GPS",
-		lateFlagsNotRecorded: "Late flags are not recorded yet",
 		prSwapRequests: "PR swap requests",
 		replacement: "Replacement",
 		shifts: "Shifts",
@@ -875,6 +894,8 @@ const en = {
 		assign: "Assign",
 		onDuty: "On duty",
 		scheduled: "Scheduled",
+		/* The shift has finished — derived from the clock, never stored. */
+		ended: "Ended",
 		unavailable: "Unavailable",
 		newShift: "New shift",
 		loadingShifts: "Loading shifts…",
@@ -899,6 +920,8 @@ const en = {
 		noOpenShiftsOtherOutlets: "No open shifts at other outlets today.",
 		editShift: "Edit shift",
 		requestOutletSwap: "Request outlet swap",
+		/** The shift is over — the PR stamped out. Not a status, a stamp. */
+		checkedOut: "Checked out",
 		removeAssignment: "Remove assignment",
 		keepAssignment: "Keep assignment",
 		/** Why the edit sheet offers nothing to change on a night already worked. */
@@ -1126,7 +1149,7 @@ const en = {
 	 * translating them would orphan every saved rate. Resolved via tierLabel().
 	 */
 	outletDetail: {
-		backToOutlets: "Back to outlets",
+		returnLabel: "Return",
 		headMeta: "Wage RM{wage}/shift · Drinks {drinks}% · Tips {tips}%",
 		events: "Events",
 		today: "Today",
@@ -1164,6 +1187,10 @@ const en = {
 			"Derived from daily wages ÷ {hours}h shift (default 6h)",
 		notApplicable: "Not applicable",
 		noWorkspaceRates: "This outlet has not saved its workspace rates yet.",
+		couldNotLoadRates:
+			"Could not load this outlet’s rates — the workspace request failed. Reload to try again.",
+		outletNotLinked:
+			"This venue is not one of your approved outlets, so its rates cannot be read here.",
 		syncedFromWorkspace: "{range} · synced from outlet workspace",
 		tier1: "Tier 1",
 		tier2: "Tier 2",
@@ -1182,6 +1209,11 @@ const en = {
 	 * `cap*` / `desc*` are the display-only copy beside each plan name.
 	 */
 	subscription: {
+		/* Aging buckets on an issued collection invoice — rendered by
+		   COLLECTION_AGING_PILL on BOTH the agency and outlet screens. */
+		agingCurrent: "Current",
+		agingDueSoon: "Due soon",
+		agingOverdue: "Overdue",
 		noAccess: "You do not have access to subscription billing.",
 		financeReadOnly: "Finance view — read-only · contact owner to update card",
 		lastPayrollWeek: "Last payroll week · {cycle}",
@@ -1228,7 +1260,8 @@ const en = {
 		whatYouSubscribedTo:
 			"What your agency is subscribed to with InnocenZ today. It records what you subscribed to and when, so it does not say whether a given week was paid.",
 		loadingSubscription: "Loading your subscription…",
-		noActiveSubscription: "No active subscription for this agency.",
+		noActiveSubscription:
+			"No plan has been assigned to this agency yet, so nothing has been billed. {plan} above is the tier your PV volume implies — not a plan you are paying for.",
 		noSubscriptionInvoices: "No subscription invoices yet.",
 		oneRowPerPeriod:
 			"One row per billing period — agencies are billed weekly, Sunday to Saturday, the same week your payroll runs on. A period stays Unpaid until InnocenZ marks the payment received.",
@@ -1885,7 +1918,7 @@ const en = {
 	/** Outlet → Calendar. The month grid, its legend and the shift sheet. */
 	calendar: {
 		title: "Calendar",
-		subtitle: "Upcoming shifts — click a day to view details.",
+		subtitle: "Every shift at this venue — click one to open it.",
 		pageTitle: "Calendar page",
 		noAccess: "Your role cannot access upcoming shifts.",
 		today: "Today",
@@ -1896,6 +1929,16 @@ const en = {
 		legendConfirmed: "Confirmed",
 		legendOpen: "Open",
 		legendDraft: "Draft",
+		legendPast: "Past",
+		legendSealed: "Sealed",
+		sealThisShift: "Close this shift?",
+		sealExplains:
+			"This tells your agency the night is done and nobody else can be added to it. Wages already earned are not affected.",
+		keepOpenShift: "Not yet",
+		sealShift: "Close shift",
+		sealing: "Closing…",
+		couldNotSeal: "Couldn't close this shift.",
+		alreadySealed: "Closed — no one can be added to this shift.",
 		/*
 		 * Weekday column heads. Spelled out rather than derived from a date
 		 * formatter so the three-letter English abbreviations do not leak into a
@@ -1910,6 +1953,15 @@ const en = {
 		wdFri: "FRI",
 		wdSat: "SAT",
 		noUpcomingShifts: "No upcoming shifts — use Post Job to create one.",
+		/* Month summary strip, above the weekday heads. */
+		summaryShiftsOne: "1 shift",
+		summaryShiftsMany: "{n} shifts",
+		summarySlots: "{filled} of {total} upcoming slots filled",
+		summaryUnfilled: "{n} unfilled",
+		summaryAllStaffed: "All staffed",
+		summaryNoShifts: "No shifts in {month}",
+		moreShifts: "+{n} more",
+		staffedAria: "{supplied} of {demand} staffed",
 		demandSupplied: "Demand / supplied",
 		demandSuppliedAria: "{demand} demand, {supplied} supplied",
 		noPrsBooked: "No PRs booked",
@@ -2598,6 +2650,9 @@ const en = {
 		noLeaveRecordsHere: "No MC / leave records here",
 		specialEvent: "Special event",
 		normalShift: "Normal shift",
+		/* The two sides an agency approves: people, and venues. */
+		groupPr: "PR",
+		groupOutlet: "Outlet",
 		agencyTied: "Agency-Tied",
 		cutlost: "Cutlost",
 		mcLeaves: "MC/Leaves",
@@ -3115,6 +3170,11 @@ const zh: PortalTranslations = {
 		overtime: "加班",
 		unchargedPenaltiesFees: "未入账的罚款与费用",
 		nothingOutstanding: "暂无未处理项",
+		nothingBilledYet: "尚未入账",
+		checkingPenalties: "正在检查罚款…",
+		notYetRecorded: "尚未登记",
+		notYetRecordedHint: "本周已产生的违规。登记后即可作为扣款加入付款凭单。",
+		couldNotLoadPenalties: "无法加载本周的罚款。",
 		recordPenaltiesFor: "登记罚款：",
 		thisWeekFallback: "本周",
 		thisWeeksPenalties: "本周罚款",
@@ -3163,7 +3223,6 @@ const zh: PortalTranslations = {
 		notSignedYet: "张尚未签署",
 		thisWeekLower: "本周",
 		lastWeekLower: "上周",
-		thePaymentWeek: "结算周",
 		signedCountSuffix: "张已签署",
 		useToRecordTransfer: "登记每笔银行转账",
 		paidInHistory: "张已付款（见历史记录）",
@@ -3186,6 +3245,8 @@ const zh: PortalTranslations = {
 	filters: {
 		filters: "筛选",
 		filterShifts: "筛选班次",
+		filterOutlets: "筛选场地",
+		source: "来源",
 		search: "搜索",
 		name: "姓名",
 		outlet: "门店",
@@ -3198,11 +3259,13 @@ const zh: PortalTranslations = {
 		everyone: "全部人员",
 		startFrom: "开始时间不早于",
 		endBy: "结束时间不晚于",
-		startTime: "开始时间",
-		endTime: "结束时间",
+		startTime: "开始",
+		endTime: "结束",
 		shiftStartFrom: "班次开始时间不早于",
 		shiftEndBy: "班次结束时间不晚于",
 		minPayout: "最低支出（RM）",
+		shiftTime: "班次时间",
+		payoutRange: "支出（RM）",
 		maxPayout: "最高支出（RM）",
 		optional: "选填",
 		prType: "PR 类型",
@@ -3217,6 +3280,7 @@ const zh: PortalTranslations = {
 	},
 	rosterGrid: {
 		awaitingPr: "待 PR 确认",
+		leaveAwaitingAgency: "请假 —— 待你审批",
 		outletRequest: "门店请求",
 		swapPending: "换班待处理",
 		lateFlag: "迟到标记",
@@ -3243,9 +3307,7 @@ const zh: PortalTranslations = {
 		forOpen: "可填补",
 		openSlotUnit: "个空缺岗位",
 		week: "本周",
-		scheduled: "已排班",
-		pending: "待确认",
-		off: "休息",
+
 		awaitingOutlet: "待门店确认",
 		swapArrow: "调班",
 		openInManagePrPrefix: "在 PR 管理中打开",
@@ -3483,7 +3545,6 @@ const zh: PortalTranslations = {
 		shiftsThisWeek: "本周班次",
 		estLabourCost: "预计人力成本",
 		liveGps: "实时定位",
-		lateFlagsNotRecorded: "尚未记录迟到标记",
 		prSwapRequests: "PR 换班申请",
 		replacement: "替班人员",
 		shifts: "班次",
@@ -3496,6 +3557,7 @@ const zh: PortalTranslations = {
 		assign: "指派",
 		onDuty: "在岗",
 		scheduled: "已排班",
+		ended: "已结束",
 		unavailable: "不可排班",
 		newShift: "新增班次",
 		loadingShifts: "正在加载班次…",
@@ -3520,6 +3582,7 @@ const zh: PortalTranslations = {
 		noOpenShiftsOtherOutlets: "今天其他门店没有空缺班次。",
 		editShift: "编辑班次",
 		requestOutletSwap: "申请换店",
+		checkedOut: "已签退",
 		removeAssignment: "移除排班",
 		keepAssignment: "保留排班",
 		shiftAlreadyPassed:
@@ -3702,7 +3765,7 @@ const zh: PortalTranslations = {
 		dotsMarkOpenShifts: "圆点表示当天有空缺班次。",
 	},
 	outletDetail: {
-		backToOutlets: "返回门店列表",
+		returnLabel: "返回",
 		headMeta: "薪酬 RM{wage}/班 · 酒水 {drinks}% · 小费 {tips}%",
 		events: "活动",
 		today: "今天",
@@ -3737,6 +3800,8 @@ const zh: PortalTranslations = {
 		derivedFromDailyWages: "由日薪 ÷ {hours} 小时班次推算（默认 6 小时）",
 		notApplicable: "不适用",
 		noWorkspaceRates: "此门店尚未保存其工作区费率。",
+		couldNotLoadRates: "无法加载该门店的费率 —— 工作区请求失败。请刷新重试。",
+		outletNotLinked: "该场地不在您已审批的门店列表中，因此无法读取其费率。",
 		syncedFromWorkspace: "{range} · 已从门店工作区同步",
 		tier1: "等级 1",
 		tier2: "等级 2",
@@ -3746,6 +3811,9 @@ const zh: PortalTranslations = {
 		servant: "服务员",
 	},
 	subscription: {
+		agingCurrent: "未到期",
+		agingDueSoon: "即将到期",
+		agingOverdue: "已逾期",
 		noAccess: "你没有查看订阅账单的权限。",
 		financeReadOnly: "财务视图 —— 只读 · 如需更换银行卡请联系东主",
 		lastPayrollWeek: "上一个薪资周 · {cycle}",
@@ -3789,7 +3857,8 @@ const zh: PortalTranslations = {
 		whatYouSubscribedTo:
 			"这是你的经纪公司目前在 InnocenZ 的订阅内容。它记录你订阅了什么以及订阅时间，并不表示某一周是否已付款。",
 		loadingSubscription: "正在加载你的订阅…",
-		noActiveSubscription: "此经纪公司没有生效中的订阅。",
+		noActiveSubscription:
+			"InnocenZ 尚未为你的经纪公司分配订阅方案，因此没有产生任何账单。上方的 {plan} 是根据 PV 用量推算出的级别，并非你正在支付的方案。",
 		noSubscriptionInvoices: "还没有订阅账单。",
 		oneRowPerPeriod:
 			"每个计费周期一行 —— 经纪公司按周计费，周日至周六，与你的薪资周一致。在 InnocenZ 确认收款前，该周期显示为未付款。",
@@ -4400,7 +4469,7 @@ const zh: PortalTranslations = {
 	},
 	calendar: {
 		title: "日历",
-		subtitle: "即将到来的班次 —— 点击某一天查看详情。",
+		subtitle: "本门店的所有班次 —— 点击任一班次查看详情。",
 		pageTitle: "日历页面",
 		noAccess: "你的角色无权查看即将到来的班次。",
 		today: "今天",
@@ -4411,6 +4480,16 @@ const zh: PortalTranslations = {
 		legendConfirmed: "已确认",
 		legendOpen: "招募中",
 		legendDraft: "草稿",
+		legendPast: "已过去",
+		legendSealed: "已封存",
+		sealThisShift: "确定结束此班次？",
+		sealExplains:
+			"这会告知经纪公司当晚已结束，之后无法再加入人员。已赚取的薪资不受影响。",
+		keepOpenShift: "暂不",
+		sealShift: "结束班次",
+		sealing: "正在结束…",
+		couldNotSeal: "无法结束此班次。",
+		alreadySealed: "已结束 —— 无法再为此班次加入人员。",
 		wdSun: "日",
 		wdMon: "一",
 		wdTue: "二",
@@ -4419,6 +4498,14 @@ const zh: PortalTranslations = {
 		wdFri: "五",
 		wdSat: "六",
 		noUpcomingShifts: "没有即将到来的班次 —— 请用「发布职位」创建。",
+		summaryShiftsOne: "1 个班次",
+		summaryShiftsMany: "{n} 个班次",
+		summarySlots: "未来名额已配置 {filled}/{total}",
+		summaryUnfilled: "{n} 个空缺",
+		summaryAllStaffed: "已全部配置",
+		summaryNoShifts: "{month} 没有班次",
+		moreShifts: "另有 {n} 个",
+		staffedAria: "已配置 {supplied}/{demand} 人",
 		demandSupplied: "需求 / 已配置",
 		demandSuppliedAria: "需求 {demand} 人，已配置 {supplied} 人",
 		noPrsBooked: "尚未预订 PR",
@@ -5075,6 +5162,8 @@ const zh: PortalTranslations = {
 		noLeaveRecordsHere: "此处暂无病假 / 请假记录",
 		specialEvent: "特别活动",
 		normalShift: "普通班次",
+		groupPr: "PR",
+		groupOutlet: "门店",
 		agencyTied: "签约 PR",
 		cutlost: "缺班损失",
 		mcLeaves: "病假 / 请假",

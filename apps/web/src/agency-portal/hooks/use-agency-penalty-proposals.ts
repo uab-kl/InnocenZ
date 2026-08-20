@@ -41,18 +41,31 @@ function weekIso(
  * permanently read "No active penalties this week" while the backend could see
  * the breaches perfectly well. The evaluator now lives in exactly one place.
  */
-export function useAgencyPenaltyProposals() {
+export function useAgencyPenaltyProposals(override?: {
+	weekStart: string;
+	weekEnd: string;
+}) {
 	const { logout } = useAuth();
 	const identity = useMemo(() => getAgencyIdentity(), []);
 	const backed = identity !== null;
 	const agencyId = identity?.agencyId ?? null;
-	// The CURRENT week. The backend splits the windows per rule: lateness and
-	// the MC cap come from this week, minimum-shifts from the one before, since
-	// that one is not a fact until the week closes.
-	const week = useMemo(() => weekIso(0), []);
+	// Defaults to the CURRENT week. The backend splits the windows per rule:
+	// lateness and the MC cap come from this week, minimum-shifts from the one
+	// before, since that one is not a fact until the week closes.
+	//
+	// Callers on a week-tabbed screen pass their own week, because a panel that
+	// always asked for today’s would answer the Last Week tab with this
+	// week’s breaches — the same fee looking like it belonged to both tabs.
+	const currentWeek = useMemo(() => weekIso(0), []);
+	const week = override ?? currentWeek;
 
 	const query = useQuery({
-		queryKey: ["agency-penalty-proposals", agencyId ?? "none", week.weekStart],
+		queryKey: [
+			"agency-penalty-proposals",
+			agencyId ?? "none",
+			week.weekStart,
+			week.weekEnd,
+		],
 		queryFn: () =>
 			fetchPenaltyProposals(
 				agencyId as string,

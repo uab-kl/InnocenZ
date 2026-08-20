@@ -9,7 +9,6 @@ import {
 import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 /*
  * Both sentences are passed in whole rather than composed here. The old
@@ -40,7 +39,6 @@ function ShiftEventPriceGroup({
 	hint: string;
 	children: ReactNode;
 }) {
-	const { t } = usePortalLocale();
 	return (
 		<div className="rounded-2xl border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2.5">
 			<div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">

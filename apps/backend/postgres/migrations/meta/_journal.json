@@ -897,6 +897,20 @@
       "when": 1790200000000,
       "tag": "0127_agency_outlet_ended_and_event",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0129_pv_one_per_agency_pr_week",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0130_cancel_fee_waived",
+      "breakpoints": true
     }
   ]
 }

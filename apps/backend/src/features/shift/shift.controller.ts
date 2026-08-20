@@ -14,7 +14,12 @@ import { CreateShiftSchema, UpdateShiftSchema } from '@/schema/shift.schema';
 import { ShiftFilter, ShiftStatus, ShiftEventKind } from './shift.model';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
-import { shiftsOverlap, shiftDayKey, slotsAreSameWindow } from '@/util/slot-window';
+import {
+  shiftsOverlap,
+  shiftDayKey,
+  slotsAreSameWindow,
+  shiftWindowInstants,
+} from '@/util/slot-window';
 import {
   outletDailyPrUsage,
   resolveActivePlanLimit,
@@ -467,6 +472,40 @@ export class ShiftControllerClass {
       }
 
       const { payTiers, ...data } = parsed.data;
+
+      // SEALING: the venue declaring the night closed. Only legal on a shift
+      // that has actually FINISHED.
+      //
+      // This is not cosmetic. `sealed` is one of the two statuses excluded from
+      // ASSIGNABLE_SHIFT_STATUSES, so a sealed shift cannot take a PR — sealing a
+      // FUTURE shift would silently make it unstaffable while it still shows on
+      // the venue's calendar as a night it expects covered.
+      //
+      // The window comes from `shiftWindowInstants`, which reads the slot in the
+      // VENUE's timezone and carries an overnight 22:00-04:00 into the next day.
+      // A plain end-time comparison would call that shift finished at 04:00 on
+      // the morning it started, while it was still on the floor.
+      //
+      // Fails CLOSED on a slot carrying no window ("Late night"): we cannot prove
+      // such a shift has ended, and "this night is closed" is not a declaration
+      // to grant on the strength of a string we could not read.
+      if (data.status === 'sealed' && existing.status !== 'sealed') {
+        const sealWindow = shiftWindowInstants(shiftDayKey(existing.shiftDate), existing.slot);
+        if (!sealWindow) {
+          return res.status(400).json({
+            success: false,
+            message: 'This shift has no scheduled time, so it cannot be sealed',
+            data: null,
+          });
+        }
+        if (sealWindow.end.getTime() > Date.now()) {
+          return res.status(400).json({
+            success: false,
+            message: 'A shift can only be sealed after it has finished',
+            data: null,
+          });
+        }
+      }
 
       // Against the EFFECTIVE quantity and the EFFECTIVE tier rows. Dropping
       // quantity from 6 to 4 without resending payTiers has to be refused too,

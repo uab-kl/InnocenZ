@@ -40,5 +40,10 @@ export function useAgencyOutlets() {
 
 	const outlets = useMemo<Outlet[]>(() => query.data?.data ?? [], [query.data]);
 
-	return { backed, outlets, isLoading: query.isLoading };
+	return {
+		backed,
+		outlets,
+		isLoading: query.isLoading,
+		isError: query.isError,
+	};
 }

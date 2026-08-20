@@ -13,6 +13,10 @@ import {
 	payTierDisplayOrder,
 	postJobPayTierIdForOutletTier,
 } from "@agency-portal/lib/post-job-pay-tiers";
+import {
+	hasShiftEnded,
+	shiftStartInstant,
+} from "@agency-portal/lib/shift-window";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 import type {
 	CreateShiftInput,
@@ -168,19 +172,70 @@ function numOrUndefined(
 }
 
 /**
+ * Minutes after the scheduled start before a check-in counts as LATE.
+ *
+ * Deliberately the same five minutes as `WAGE_GRACE_MINUTES`
+ * (apps/backend/src/features/shift-assignment/wage.ts:41), the owner's
+ * "around 1-5 minutes". Two different graces for the same slip would let the
+ * roster call a PR late for a shift the wage rule paid in full.
+ */
+export const ROSTER_LATE_GRACE_MINUTES = 5;
+
+/**
+ * Did this PR arrive late?
+ *
+ * Overnight-safe by construction: `shiftStartInstant` builds a real instant from
+ * the shift's DATE plus its slot, so a 22:00 start is 22:00 that evening and
+ * never 22:00 on some other day. Comparing a check-in timestamp against a bare
+ * "HH:MM" would call every overnight arrival late.
+ *
+ * Returns undefined — not false — when there is nothing to judge: no check-in,
+ * or a slot with no parseable window. The filter treats undefined as "not
+ * late", and an unreadable slot must not accuse anyone.
+ */
+function lateFlagFor(
+	shiftDate: string,
+	slot: string | null | undefined,
+	checkInAt: string | null | undefined,
+): true | undefined {
+	if (!checkInAt) return undefined;
+	const start = shiftStartInstant(localDateIso(shiftDate), slot);
+	if (!start) return undefined;
+	const lateBy = new Date(checkInAt).getTime() - start.getTime();
+	if (Number.isNaN(lateBy)) return undefined;
+	return lateBy > ROSTER_LATE_GRACE_MINUTES * 60_000 ? true : undefined;
+}
+
+/**
  * The roster status a live view should show. `rosterStatusFromAssignment` maps
  * the stored enum for the planning grid; here the timestamps get the final say,
  * because a PR who has checked in and not checked out is on duty right now no
  * matter what the row's enum says.
  */
-function liveRosterStatus(a: ShiftAssignment): RosterSlotStatus {
+function liveRosterStatus(
+	a: ShiftAssignment,
+	shiftDate?: string,
+	slot?: string | null,
+): RosterSlotStatus {
 	const working =
 		!!a.checkInAt &&
 		!a.checkOutAt &&
 		a.status !== "cancelled" &&
 		a.status !== "no_show" &&
 		a.status !== "leave_approved";
-	return working ? "on-duty" : rosterStatusFromAssignment(a.status);
+	if (working) return "on-duty";
+	const mapped = rosterStatusFromAssignment(a.status);
+	// A finished night reads "Ended", not "Scheduled". Only over `scheduled`:
+	// an absence, a pending leave or a swap question are all still true after
+	// the shift is over, and saying "Ended" would erase them.
+	if (
+		mapped === "scheduled" &&
+		shiftDate &&
+		hasShiftEnded(localDateIso(shiftDate), slot, new Date())
+	) {
+		return "ended";
+	}
+	return mapped;
 }
 
 /**
@@ -260,7 +315,7 @@ export function rosterSlotsFromBackend(input: {
 			// alone cannot see this (a "confirmed" row is scheduled until the PR
 			// actually arrives), and the live GPS panel keys off "on-duty", so
 			// without this a real check-in would never appear on the map.
-			status: liveRosterStatus(a),
+			status: liveRosterStatus(a, shift.shiftDate, shift.slot),
 			checkedInAt: a.checkInAt ?? undefined,
 			checkedOutAt: a.checkOutAt ?? undefined,
 			// Real, server-verified position — see the AgencyRosterSlot doc.
@@ -272,6 +327,10 @@ export function rosterSlotsFromBackend(input: {
 			outletLng: numOrUndefined(outletGeo?.lng),
 			outletGeoFenceRadiusM: numOrUndefined(outletGeo?.geoFenceRadius),
 			noShowFlag: a.status === "no_show" ? true : undefined,
+			// Real lateness, from the stamp the PR actually made. This was demo-only
+			// until now, so the roster's "Late" filter silently matched nothing on
+			// every real session.
+			lateFlag: lateFlagFor(shift.shiftDate, shift.slot, a.checkInAt),
 			cancelledAt: a.status === "cancelled" ? a.updatedAt : undefined,
 			agencyId: a.agencyId,
 			// The SUPPLIER of this PR, named. Resolved only when the caller could

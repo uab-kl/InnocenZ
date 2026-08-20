@@ -8627,19 +8627,30 @@ button.iz-pr-offer-row:hover {
 }
 
 /* Shift transaction log (agency + outlet history) */
+/*
+ * The ONE filter-row style for every history tab, agency and outlet alike.
+ *
+ * There used to be a second copy of this — `.iz-outlet-hist-filter*` — picked
+ * by a ternary in `ShiftHistoryLog`, so "By PR" rendered violet labels over
+ * near-black selects while "By outlet" and "Paid PVs" rendered grey labels over
+ * translucent ones. Same control, same page, two looks. The colours here follow
+ * the roster filter bar, which is the house rule: the heading is violet, the
+ * field labels are muted, and the select fill comes from the base
+ * `.iz-hist-select-trigger` so it can only ever be defined in one place.
+ */
 .iz-txn-filter-heading {
 	font-family: "Sora", sans-serif;
 	font-size: 15px;
 	font-weight: 700;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
-	color: var(--iz-muted2);
+	color: var(--iz-violet-l, #d4c4f5);
 }
 .iz-txn-filters {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 8px;
-	margin-top: 8px;
+	gap: 10px;
+	margin-top: 10px;
 }
 .iz-txn-card-metrics {
 	display: grid;
@@ -8725,34 +8736,6 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 0;
-}
-.iz-outlet-hist-filter-heading {
-	margin-top: 4px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
-	font-weight: 700;
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: rgba(183, 156, 232, 0.85);
-}
-.iz-outlet-hist-filters {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 10px;
-	margin-top: 10px;
-}
-.iz-outlet-hist-filters .iz-hist-select-trigger {
-	min-height: 44px;
-	border-radius: 12px;
-	border-color: rgba(255, 255, 255, 0.08);
-	background: rgba(18, 15, 28, 0.95);
-	font-size: 17px;
-}
-.iz-outlet-hist-filters .iz-hist-custom-select label {
-	color: rgba(183, 156, 232, 0.75);
-	font-size: 14px;
-	letter-spacing: 0.12em;
-	margin-bottom: 6px;
 }
 .iz-outlet-hist-log-head {
 	display: flex;
@@ -9321,7 +9304,7 @@ button.iz-pr-offer-row:hover {
 	white-space: nowrap;
 }
 @media (max-width: 640px) {
-	.iz-outlet-hist-filters {
+	.iz-txn-filters {
 		grid-template-columns: 1fr;
 	}
 	.iz-outlet-hist-metrics {
@@ -10167,6 +10150,23 @@ button.iz-pr-offer-row:hover {
 }
 .iz-topbar-back-label {
 	white-space: nowrap;
+}
+
+/*
+ * The roomier back pill.
+ *
+ * Size ONLY — no colour. `--cancel` below is 42px too, but it also paints
+ * itself gold because it means "cancel editing", so borrowing it would have
+ * dressed a plain back button as a destructive one. (It also has no callers in
+ * any .tsx right now.)
+ */
+.iz-topbar-back--lg {
+	height: 42px;
+	min-height: 42px;
+	gap: 7px;
+	padding: 0 16px 0 13px;
+	border-radius: 13px;
+	font-size: 15px;
 }
 /* Larger Cancel edit control on Settings / Profile */
 .iz-topbar-back--cancel {
@@ -11704,9 +11704,49 @@ button.iz-pr-offer-row:hover {
 	max-width: 252px;
 }
 
+/*
+ * Sized to its CONTENT, not to a number.
+ *
+ * This was a flat 252px against a `.iz-hist-cal--popover` floor of 280px, so
+ * it computed to 280px with 12px of padding either side — a content box of
+ * 256px holding a day grid that is seven cells wide. The cells size to their
+ * text, and the portal-wide `.text-sm` uplift took that text from 14px to
+ * 17px, which pushed the grid to 280px and sliced the Saturday column off the
+ * right edge. A fixed width cannot survive a type change; max-content lets the
+ * grid decide, so no future size bump can clip it again.
+ */
 .iz-roster-planning-date .iz-hist-cal--popover {
-	right: auto;
-	width: 252px;
+	/*
+	 * 390px because that is what the history calendar comes out at.
+	 *
+	 * Nothing sets its width — it is content-sized, and it happens to hold a
+	 * From/To row and month + year dropdowns, which push it to ~391px. The day
+	 * cells are `aspect-square w-full` inside a 7-column grid, so cell size is
+	 * nothing but width ÷ 7: 391px gave history 52px cells while this one, at
+	 * 306px, got 40px and read as the cramped version of the same calendar.
+	 *
+	 * So the number is derived, not picked: 7 × 52px of grid, plus the 12px
+	 * padding either side and the border. max-content keeps the floor honest if
+	 * the contents ever grow past it, which is what stopped Saturday being
+	 * sliced off in the first place.
+	 */
+	width: max-content;
+	min-width: 390px;
+	max-width: min(92vw, 430px);
+}
+
+/*
+ * Let the calendar FILL the popover, which is what makes the cells grow.
+ *
+ * Both calendars carry the same `--cell-size: 2rem`, so that variable was never
+ * the difference. This one’s root also carries Tailwind’s `w-fit`, so it shrank
+ * to 280px and its `aspect-square` cells came out at 40px; the history root has
+ * no `w-fit`, fills its 367px content box, and gets 52px cells from the same
+ * variable. Widening the popover alone did nothing for exactly this reason — a
+ * shrink-to-fit child does not care how much room it is given.
+ */
+.iz-roster-planning-date .iz-hist-cal--popover .rdp-root {
+	width: 100%;
 }
 
 /* Planning week picker — compact + equal columns + Mon–Sun week highlight */
@@ -12132,54 +12172,14 @@ button.iz-pr-offer-row:hover {
 	}
 }
 
-.iz-outlet-manage-filters-card {
-	padding: 12px 14px !important;
-}
-
 .iz-pr-manage-filters-card {
 	padding: 12px 14px !important;
 }
 
 .iz-pr-manage-filters-card .iz-tiny,
-.iz-outlet-manage-filters-card .iz-tiny,
 .iz-roster-shift-filters-head .iz-tiny,
 .iz-special-service-filters-head .iz-tiny {
 	font-size: 18px;
-}
-
-.iz-pr-manage-filters-grid {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 10px;
-	align-items: end;
-}
-
-.iz-pr-manage-filter-field {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
-}
-
-.iz-pr-manage-filter-control,
-.iz-pr-manage-filters-grid .iz-select,
-.iz-pr-manage-filters-grid .iz-roster-filter-input,
-.iz-pr-manage-filters-grid .iz-roster-filter-input--plain {
-	font-size: 18px !important;
-	min-height: 42px;
-	padding-top: 9px;
-	padding-bottom: 9px;
-	font-weight: 500;
-}
-
-.iz-pr-manage-filters-grid .iz-roster-filter-label {
-	font-size: 15px;
-}
-
-@media (min-width: 1024px) {
-	.iz-pr-manage-filters-grid {
-		grid-template-columns: repeat(6, minmax(0, 1fr));
-	}
 }
 
 .iz-pr-manage-header {
@@ -12225,31 +12225,6 @@ button.iz-pr-offer-row:hover {
 }
 .iz-pr-manage-header__btn--primary:hover {
 	background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-}
-.iz-pr-manage-filters-inline {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	align-items: center;
-}
-.iz-pr-manage-filters-inline .iz-pr-manage-filter-chip {
-	flex: 1 1 120px;
-	min-width: 0;
-}
-.iz-pr-manage-filters-inline .iz-pr-manage-filter-chip--wide {
-	flex: 1.4 1 140px;
-}
-.iz-pr-manage-filters-inline .iz-roster-filter-input--plain,
-.iz-pr-manage-filters-inline .iz-select {
-	width: 100%;
-	min-height: 38px;
-	padding: 8px 12px;
-	font-size: 13px !important;
-	font-weight: 500;
-	border-radius: 10px;
-	background: var(--iz-bg2);
-	border: 1px solid var(--iz-line);
-	color: var(--iz-muted);
 }
 .iz-pr-manage-stats {
 	display: flex;
@@ -12482,44 +12457,6 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-card__metric-value--gold {
 	color: var(--iz-gold-l, var(--iz-gold));
 	font-weight: 700;
-}
-
-.iz-outlet-manage-filters--inline {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	align-items: center;
-}
-.iz-outlet-manage-filters--inline .iz-outlet-manage-filter-chip {
-	flex: 1 1 120px;
-	min-width: 0;
-}
-.iz-outlet-manage-filters--inline .iz-outlet-manage-filter-chip--wide {
-	flex: 1.25 1 150px;
-}
-.iz-outlet-manage-filters--inline .iz-roster-filter-input--plain,
-.iz-outlet-manage-filters--inline .iz-select,
-.iz-outlet-manage-filter-date--inline .iz-roster-planning-date-trigger {
-	width: 100%;
-	min-height: 42px;
-	padding: 8px 12px;
-	font-size: 15px !important;
-	font-weight: 500;
-	border-radius: 10px;
-	background: var(--iz-bg2);
-	border: 1px solid var(--iz-line);
-	color: var(--iz-muted);
-}
-.iz-outlet-manage-filter-clear {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 38px;
-	height: 38px;
-	border-radius: 10px;
-	border: 1px solid var(--iz-line);
-	background: var(--iz-bg2);
-	color: var(--iz-muted2);
 }
 .iz-outlet-manage-grid {
 	display: grid;
@@ -12803,20 +12740,11 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-page .iz-outlet-detail-section__badge {
 	font-size: 15px;
 }
+/* Placement only. Everything this button LOOKS like now comes from
+   `.iz-topbar-back`, so the two back controls cannot drift apart. */
 .iz-outlet-detail-back {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	width: 100%;
-	min-height: 44px;
+	align-self: flex-start;
 	margin-bottom: 16px;
-	border-radius: 12px;
-	border: 1px solid var(--iz-line2);
-	background: var(--iz-bg2);
-	color: var(--iz-violet-l);
-	font-size: 15px;
-	font-weight: 600;
 }
 .iz-outlet-detail-head {
 	display: flex;
@@ -13250,47 +13178,6 @@ button.iz-pr-offer-row:hover {
 	font-weight: 600;
 	white-space: nowrap;
 }
-
-.iz-outlet-manage-filters-grid {
-	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
-	gap: 10px;
-	align-items: end;
-}
-
-.iz-outlet-manage-filter-field {
-	display: flex;
-	flex-direction: column;
-	gap: 5px;
-	min-width: 0;
-}
-
-.iz-outlet-manage-filter-date {
-	width: 100%;
-}
-
-.iz-outlet-manage-filter-date .iz-roster-planning-date-trigger {
-	min-height: 42px;
-	font-size: 18px;
-}
-
-.iz-outlet-manage-filters-grid .iz-select,
-.iz-outlet-manage-filters-grid .iz-roster-filter-input,
-.iz-outlet-manage-filters-grid .iz-roster-filter-input--plain {
-	font-size: 18px !important;
-	min-height: 42px;
-}
-
-.iz-outlet-manage-filters-grid .iz-roster-filter-label {
-	font-size: 15px;
-}
-
-@media (max-width: 767px) {
-	.iz-outlet-manage-filters-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-}
-
 .iz-roster-pr-link:hover {
 	border-color: rgba(183, 156, 232, 0.35);
 	background: rgba(183, 156, 232, 0.08);
@@ -13565,7 +13452,257 @@ button.iz-pr-offer-row:hover {
 	background: rgba(0, 0, 0, 0.22);
 }
 
-.iz-roster-page .iz-roster-shift-filters {
+/* ===========================================================================
+   Portal filter bar — ONE bar for every filtered list.
+   Replaces .iz-roster-shift-filters (Live) and .iz-roster-timetable-filters
+   (Planning), which were two grids with two breakpoint schemes for the same
+   job. A flex row that wraps needs no hardcoded column counts, and cannot
+   strand a half-empty second row the way the old >=1024px rule did (two time
+   fields laid into five columns).
+   =========================================================================== */
+.iz-roster-filterbar {
+	margin-bottom: 14px;
+	padding: 12px 14px 14px;
+	border-radius: 14px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.22);
+}
+.iz-roster-filterbar__head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+.iz-roster-filterbar__spacer {
+	flex: 1 1 auto;
+}
+.iz-roster-filterbar__title {
+	font-size: 13px;
+	font-weight: 800;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--iz-violet-l, #d4c4f5);
+}
+.iz-roster-filterbar__count {
+	font-size: 14px;
+	color: var(--iz-muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+/* The count of what is HIDDEN, not just "a filter is on" — a boolean the user
+   can already see. It is what makes Clear a decision rather than a guess. */
+.iz-roster-filterbar__clear {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	border: 1px solid rgba(212, 196, 245, 0.36);
+	background: rgba(212, 196, 245, 0.12);
+	color: var(--iz-violet-l, #d4c4f5);
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1.3;
+	padding: 4px 12px;
+	cursor: pointer;
+	transition:
+		background 0.12s ease,
+		border-color 0.12s ease;
+}
+.iz-roster-filterbar__clear:hover {
+	background: rgba(212, 196, 245, 0.22);
+	border-color: var(--iz-violet-l);
+}
+.iz-roster-filterbar__clear:focus-visible {
+	outline: 2px solid var(--iz-violet-l);
+	outline-offset: 2px;
+}
+.iz-roster-filterbar__badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: var(--iz-violet-l, #d4c4f5);
+	color: #17122a;
+	font-size: 12px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+.iz-roster-filterbar__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 10px 12px;
+}
+.iz-roster-filterbar__field,
+.iz-roster-filterbar__range {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 0;
+	flex: 0 1 auto;
+}
+/* Search takes the slack: it is the control people reach for first and the one
+   whose content is unbounded. */
+.iz-roster-filterbar__field--grow {
+	flex: 1 1 180px;
+	min-width: 160px;
+}
+/* Capped as well as floored. A select sizes to its LONGEST option, so
+   "Leave — awaiting you" alone pushed the status field to 239px and tipped the
+   whole row over its width — the bar then wrapped to four rows on a 1512
+   screen with room to spare. */
+/* 42px tall with a 13px radius, matching `.iz-hist-select-trigger.sm` — the
+   history filter controls. The date trigger in this bar IS one of those now,
+   so anything standing beside it has to be the same shape or the row reads as
+   two different control sets. */
+.iz-roster-filterbar__field .iz-select {
+	min-width: 148px;
+	max-width: 210px;
+	height: 42px;
+	min-height: 42px;
+	border-radius: 13px;
+}
+.iz-roster-filterbar__label {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--iz-muted2);
+	white-space: nowrap;
+}
+.iz-roster-filterbar__inputwrap {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 42px;
+	padding: 0 12px;
+	border-radius: 13px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.3);
+}
+.iz-roster-filterbar__inputwrap:focus-within {
+	border-color: var(--iz-violet-l);
+}
+.iz-roster-filterbar__input {
+	width: 100%;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--iz-txt);
+	font-size: 15px;
+	outline: none;
+}
+.iz-roster-filterbar__input::placeholder {
+	color: var(--iz-muted2);
+}
+.iz-roster-filterbar__input--num {
+	min-height: 42px;
+	width: 92px;
+	padding: 0 11px;
+	border-radius: 13px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.3);
+	font-variant-numeric: tabular-nums;
+}
+.iz-roster-filterbar__input--num:focus {
+	border-color: var(--iz-violet-l);
+}
+/* A range is ONE control with two ends, so it gets one label and a dash — not
+   two peer fields with two labels, which is how the old bar made seven
+   unrelated-looking boxes out of five questions. */
+.iz-roster-filterbar__rangerow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.iz-roster-filterbar__dash {
+	color: var(--iz-muted2);
+	font-size: 15px;
+	flex-shrink: 0;
+}
+.iz-roster-filterbar__time {
+	min-width: 108px;
+}
+
+/*
+ * `--fill`: every field shares the row.
+ *
+ * The default bar leaves its fields at `flex: 0 1 auto` and lets ONE of them —
+ * the free-text search, marked `--grow` — take the slack. A bar with no search
+ * field has nothing to absorb it, so Manage PR sat with six controls packed
+ * against the left edge and a third of the row empty, while its number inputs
+ * were clipped to "Min ag" by the fixed 92px `--num` width.
+ *
+ * The cap on selects has to be lifted here too: `max-width: 210px` exists to
+ * stop one long option pushing the row over, which is not a risk once the
+ * fields are sharing the width equally.
+ */
+.iz-roster-filterbar--fill .iz-roster-filterbar__field {
+	flex: 1 1 140px;
+}
+.iz-roster-filterbar--fill .iz-roster-filterbar__field .iz-select {
+	width: 100%;
+	max-width: none;
+}
+.iz-roster-filterbar--fill .iz-roster-filterbar__input--num {
+	width: 100%;
+}
+/* The date picker is a button, not an <input>, so it needs the select sizing
+   spelled out to line up with the controls beside it. */
+.iz-roster-filterbar__date {
+	width: 100%;
+}
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger {
+	min-width: 148px;
+}
+
+/*
+ * ONE type size for every control in the bar.
+ *
+ * Four boxes standing in a row were set in three sizes, because three
+ * different rules owned them: `.iz-portal-main .iz-select` at 18px, the
+ * agency override `[data-portal="agency"] .iz-portal-main
+ * .iz-roster-planning-date-trigger` at 13px, and the bar's own input at 15px.
+ * 16px is the size the history filter selects already use, so every filter
+ * control in the portal now reads at one size.
+ *
+ * The long selectors are deliberate, not cargo cult: the two rules being
+ * overridden carry 0-2-0 and 0-3-0 specificity, so a short selector here loses
+ * and the sizes silently drift back apart.
+ */
+.iz-portal-main .iz-roster-filterbar .iz-select,
+.iz-portal-main .iz-roster-filterbar .iz-roster-filterbar__input,
+.iz-portal-main .iz-roster-filterbar .iz-roster-filterbar__time,
+.iz-portal-main .iz-roster-filterbar .iz-roster-filterbar__time input,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__time
+	.iz-time-picker-btn,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__time
+	.iz-time-picker-label,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__date
+	.iz-roster-planning-date-trigger {
+	font-size: 16px;
+}
+@media (max-width: 720px) {
+	.iz-roster-filterbar__field,
+	.iz-roster-filterbar__range {
+		flex: 1 1 100%;
+	}
+	.iz-roster-filterbar__field .iz-select {
+		min-width: 0;
+	}
+}
+
+.iz-roster-shift-filters {
 	margin-bottom: 12px;
 	padding: 10px 12px;
 	border-radius: 12px;
@@ -13586,16 +13723,36 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-layout {
 	display: grid;
-	/* Sidebar widened (and the detail pane narrowed to match) so the three tabs
-     sit on one row without cramping. Floor of 330px is what the widest label
-     needs at a third of the column. */
-	grid-template-columns: minmax(330px, 360px) minmax(0, 1fr);
+	/* Sidebar widened (and the detail pane narrowed to match — it is 1fr, so it
+     gives back exactly what this takes) so the three queue tabs sit on one row
+     without "Cancel Agency (0)" wrapping, and the PR cards' chip rows fit on
+     two lines rather than three. */
+	grid-template-columns: minmax(400px, 435px) minmax(0, 1fr);
 	gap: 0;
+	/*
+	 * The frame and the full height belong to EVERY state, not just the
+	 * collapsed one. They were declared only under `[data-collapsed="true"]`,
+	 * so with the nav open `min-height` computed to 0 and the layout shrank to
+	 * fit its content — which is why the sidebar's dark background stopped
+	 * partway down the page whenever a queue was short or empty. The dvh floor
+	 * keeps the column painted to the bottom in both nav states.
+	 */
 	min-height: calc(100dvh - var(--iz-portal-header-h, 56px) - 24px);
 	border: 1px solid var(--iz-line);
 	border-radius: 14px;
 	overflow: hidden;
 	background: rgba(0, 0, 0, 0.12);
+}
+
+/*
+ * Collapsing the nav gives the freed width to the LEFT panel, not the detail
+ * pane. The rail frees 168px (240 -> 72); the detail pane is `1fr` and would
+ * otherwise swallow all of it, which is backwards — the reason to collapse the
+ * nav here is to see more of the queue you are working through, and the detail
+ * pane was already the roomier of the two.
+ */
+.iz-portal[data-collapsed="true"] .iz-approvals-layout {
+	grid-template-columns: minmax(400px, 603px) minmax(0, 1fr);
 }
 
 .iz-approvals-sidebar {
@@ -13620,12 +13777,76 @@ button.iz-pr-offer-row:hover {
 	line-height: 1.2;
 }
 
+/*
+ * PR vs Outlet — the two things an agency approves.
+ *
+ * Five peer chips gave no clue that "Cancel Agency" and "Outlet-Linking" answer
+ * completely different questions from completely different senders. Splitting by
+ * WHO RAISED the request means the reader picks the sender first and the queue
+ * second, and each group shows the work waiting inside it.
+ */
+.iz-approvals-groups {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+	padding: 4px;
+	margin-bottom: 10px;
+	border-radius: 12px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.28);
+}
+.iz-approvals-group {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	padding: 9px 8px;
+	border: 0;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--iz-muted);
+	font-size: 14px;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 0.12s ease,
+		color 0.12s ease;
+}
+.iz-approvals-group:hover {
+	color: var(--iz-txt);
+}
+.iz-approvals-group.on {
+	background: rgba(212, 196, 245, 0.16);
+	color: var(--iz-txt);
+	box-shadow: inset 0 0 0 1px rgba(212, 196, 245, 0.36);
+}
+.iz-approvals-group__count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: rgba(232, 224, 245, 0.12);
+	color: var(--iz-muted);
+	font-size: 12px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+.iz-approvals-group.on .iz-approvals-group__count {
+	background: var(--iz-violet-l, #d4c4f5);
+	color: #17122a;
+}
+
 .iz-approvals-tabs {
 	display: grid;
-	/* Three tabs on ONE row (Agency-Tied · Cutlost · MC/Leaves). minmax(0,1fr)
-     rather than 1fr so a long label shrinks its own column instead of pushing
-     the grid wider than the sidebar. */
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	/* auto-fit, not a fixed 3: the PR group has three queues and the Outlet
+     group has two, and a hardcoded three left the Outlet row with a phantom
+     empty column. minmax(0,1fr) so a long label shrinks its own column instead
+     of pushing the grid wider than the sidebar. */
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(0, 1fr);
 	gap: 6px;
 }
 
@@ -13692,9 +13913,9 @@ button.iz-pr-offer-row:hover {
 .iz-approvals-list-item {
 	display: flex;
 	align-items: flex-start;
-	gap: 10px;
+	gap: 12px;
 	width: 100%;
-	padding: 10px;
+	padding: 13px 12px;
 	border-radius: 12px;
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
@@ -13787,10 +14008,16 @@ button.iz-pr-offer-row:hover {
 	color: #fff;
 }
 
-.iz-approvals-avatar.sm {
-	width: 34px;
-	height: 34px;
+.iz-approvals-list-item .name {
 	font-size: 14px;
+}
+.iz-approvals-list-item .sub {
+	font-size: 12px;
+}
+.iz-approvals-avatar.sm {
+	width: 46px;
+	height: 46px;
+	font-size: 17px;
 }
 
 .iz-approvals-avatar.md {
@@ -13950,12 +14177,47 @@ button.iz-pr-offer-row:hover {
  * than one filter under the tab that owns them. Scoped here rather than by
  * reordering `.iz-chip`, which every other screen depends on.
  */
-.iz-approvals-subfilter .iz-chip {
+/*
+ * Status filters — ONE style for every "narrow this queue" row.
+ *
+ * There were three: the PR side used chips at 11px, the outlet-linking side
+ * borrowed the queue-tab pill, and the Current/Approved row rendered chunkier
+ * than the tabs above it. Three sizes for one job made the sidebar read as
+ * three levels of navigation instead of two.
+ */
+.iz-approvals-subfilter {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+/*
+ * Sized DOWN the hierarchy, which it was not. Measured before this:
+ * group 14px/39px, queue tab 10px/33px, status filter 18px/44px — the deepest
+ * level was the largest and the middle one the smallest, so the sidebar read
+ * bottom-up. The portal-wide uplift restyles a bare `.iz-chip` to 18px, which
+ * is right for a chip in main content and wrong for the third level of a
+ * sidebar, so these are scoped under `.iz-portal-main` to outrank it rather
+ * than fought with !important.
+ */
+.iz-portal-main .iz-approvals-verify-badge {
 	padding: 4px 9px;
-	border-radius: 8px;
-	font-size: 11px;
+	font-size: 11.5px;
+	line-height: 1.4;
+}
+.iz-portal-main .iz-approvals-subfilter .iz-chip {
+	padding: 5px 11px;
+	border-radius: 999px;
+	font-size: 12px;
 	font-weight: 700;
-	letter-spacing: 0.3px;
+	letter-spacing: 0.2px;
+	line-height: 1.4;
+	min-height: 0;
+}
+/* The queue tab sat at 10px — below the middle level's own floor, and under the
+   filters beneath it. It leads them now. */
+.iz-portal-main .iz-approvals-tab {
+	font-size: 12px;
 }
 
 /* The event name leads the Shift card — it is the one line that says WHICH
@@ -14758,6 +15020,10 @@ button.iz-pr-offer-row:hover {
 	white-space: nowrap;
 }
 
+/* Finished — pulled back so a past night stops competing with the live plan. */
+.iz-roster-week-cell--ended {
+	opacity: 0.62;
+}
 .iz-roster-week-cell--scheduled {
 	background: rgba(183, 156, 232, 0.12);
 	border-color: rgba(183, 156, 232, 0.35);
@@ -14787,6 +15053,32 @@ button.iz-pr-offer-row:hover {
 	background: rgba(124, 107, 255, 0.12);
 	border-color: rgba(124, 107, 255, 0.35);
 	color: var(--iz-violet);
+}
+
+/*
+ * Shift over, PR stamped out. Deliberately the quietest cell on the grid: it is
+ * the only state that needs nothing from anyone, so it recedes and lets the
+ * live and pending cells carry the colour. NOT --off, which is red and means a
+ * booking was called off.
+ */
+.iz-roster-week-cell--done {
+	background: rgba(255, 255, 255, 0.03);
+	border-color: var(--iz-line2);
+	opacity: 0.75;
+}
+
+.iz-roster-week-cell--done .status {
+	color: var(--iz-muted);
+}
+
+/* The live cell's own status colour — the background above was already here,
+   waiting for a mapping that never arrived. */
+.iz-roster-week-cell--live .status {
+	color: var(--iz-green);
+}
+
+.iz-roster-week-cell--swap .status {
+	color: var(--iz-violet-l);
 }
 
 .iz-roster-week-cell--off {
@@ -16106,6 +16398,23 @@ button.iz-pr-offer-row:hover {
 	background: rgba(255, 107, 107, 0.45);
 }
 .iz-outlet-ops-cal {
+	/*
+	 * Status and severity colours are named HERE rather than taken from the
+	 * theme tokens. `--iz-gold` was rebranded to #b79ce8 (a violet) at some
+	 * point, which left "Open" and "Draft" as two near-identical violets the
+	 * moment the status stripe became visible again. A status palette has to be
+	 * distinguishable from itself, so it cannot ride on tokens that move for
+	 * unrelated brand reasons.
+	 */
+	--cal-live: #4ade80;
+	--cal-confirmed: #60a5fa;
+	--cal-draft: #a78bfa;
+	--cal-past: #8d82a0;
+	--cal-sealed: #d4c4f5;
+	/* Staffing severity: met / partly met / nobody. */
+	--cal-full: #4ade80;
+	--cal-short: #f4b740;
+	--cal-none: #f87171;
 	border-radius: 16px;
 	border: 1px solid var(--iz-line);
 	background: linear-gradient(
@@ -16113,7 +16422,7 @@ button.iz-pr-offer-row:hover {
 		rgba(14, 11, 24, 0.98) 0%,
 		rgba(8, 6, 14, 0.99) 100%
 	);
-	padding: 16px 14px 14px;
+	padding: 10px 14px 12px;
 	min-height: min(72vh, 720px);
 	display: flex;
 	flex-direction: column;
@@ -16124,7 +16433,7 @@ button.iz-pr-offer-row:hover {
 	grid-template-columns: 1fr auto 1fr;
 	align-items: center;
 	gap: 10px 12px;
-	margin-bottom: 14px;
+	margin-bottom: 8px;
 }
 .iz-outlet-ops-cal-toolbar__left {
 	display: flex;
@@ -16137,7 +16446,7 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid rgba(183, 156, 232, 0.35);
 	background: rgba(26, 22, 38, 0.95);
 	color: var(--iz-txt);
-	font-size: 13px;
+	font-size: 14px;
 	font-weight: 700;
 	padding: 6px 14px;
 	cursor: pointer;
@@ -16145,9 +16454,16 @@ button.iz-pr-offer-row:hover {
 		background 0.12s ease,
 		border-color 0.12s ease;
 }
-.iz-outlet-ops-cal-today:hover {
+.iz-outlet-ops-cal-today:hover:not(:disabled) {
 	background: rgba(36, 30, 52, 0.98);
 	border-color: rgba(183, 156, 232, 0.5);
+}
+/* You are already on this month — the control stays in place so the nav arrows
+   do not move, but stops advertising an action that would do nothing. */
+.iz-outlet-ops-cal-today:disabled {
+	opacity: 0.4;
+	cursor: default;
+	border-color: var(--iz-line);
 }
 .iz-outlet-ops-cal-nav {
 	display: flex;
@@ -16175,7 +16491,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-ops-cal-month {
 	font-family: var(--font-sora, inherit);
-	font-size: 16px;
+	font-size: 18px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	text-align: center;
@@ -16189,7 +16505,7 @@ button.iz-pr-offer-row:hover {
 	justify-content: flex-end;
 	justify-self: end;
 	margin: 0;
-	font-size: 12px;
+	font-size: 13px;
 	font-weight: 600;
 	color: var(--iz-muted2);
 }
@@ -16206,44 +16522,88 @@ button.iz-pr-offer-row:hover {
 	border-radius: 999px;
 	flex-shrink: 0;
 }
+/* Same variables the card stripes use, so the legend cannot describe a colour
+   the grid does not show. */
 .iz-outlet-ops-cal-legend__swatch.live {
-	background: var(--iz-green);
-	box-shadow: 0 0 6px rgba(74, 222, 128, 0.55);
+	background: var(--cal-live);
 }
 .iz-outlet-ops-cal-legend__swatch.confirmed {
-	background: #60a5fa;
-	box-shadow: 0 0 6px rgba(96, 165, 250, 0.45);
-}
-.iz-outlet-ops-cal-legend__swatch.open {
-	background: var(--iz-gold);
-	box-shadow: 0 0 6px rgba(244, 183, 64, 0.45);
+	background: var(--cal-confirmed);
 }
 .iz-outlet-ops-cal-legend__swatch.draft {
-	background: #a78bfa;
-	box-shadow: 0 0 6px rgba(167, 139, 250, 0.4);
+	background: var(--cal-draft);
+}
+.iz-outlet-ops-cal-legend__swatch.past {
+	background: var(--cal-past);
 }
 .iz-outlet-ops-cal-legend__swatch.sealed {
-	background: var(--iz-muted2);
+	background: var(--cal-sealed);
 }
+/* Month totals, between the toolbar and the weekday heads. */
+.iz-outlet-ops-cal-summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 8px;
+	margin-bottom: 6px;
+	padding: 4px 10px;
+	border-radius: 10px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.25);
+	font-size: 14px;
+	color: var(--iz-muted);
+}
+.iz-outlet-ops-cal-summary__count {
+	font-weight: 800;
+	color: var(--iz-txt);
+}
+.iz-outlet-ops-cal-summary__sep {
+	color: var(--iz-muted2);
+}
+.iz-outlet-ops-cal-summary__slots {
+	font-variant-numeric: tabular-nums;
+}
+.iz-outlet-ops-cal-summary__gap {
+	margin-left: auto;
+	border-radius: 999px;
+	padding: 1px 9px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+	color: var(--cal-none);
+	border: 1px solid color-mix(in srgb, var(--cal-none) 46%, transparent);
+	background: color-mix(in srgb, var(--cal-none) 14%, transparent);
+}
+.iz-outlet-ops-cal-summary__gap--clear {
+	color: var(--cal-full);
+	border-color: color-mix(in srgb, var(--cal-full) 40%, transparent);
+	background: color-mix(in srgb, var(--cal-full) 12%, transparent);
+}
+.iz-outlet-ops-cal-summary__quiet {
+	display: inline-flex;
+	align-items: center;
+	min-height: 22px;
+	color: var(--iz-muted2);
+}
+
 .iz-outlet-ops-cal-weekdays {
 	display: grid;
 	grid-template-columns: repeat(7, minmax(0, 1fr));
 	gap: 6px;
-	margin-bottom: 6px;
+	margin-bottom: 4px;
 	padding: 0 2px;
 }
 .iz-outlet-ops-cal-weekday {
 	text-align: center;
-	font-size: 12px;
+	font-size: 13px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	color: var(--iz-muted2);
-	padding: 2px 0;
+	padding: 0 0 1px;
 }
 .iz-outlet-ops-cal-grid {
 	display: grid;
 	grid-template-columns: repeat(7, minmax(0, 1fr));
-	grid-auto-rows: minmax(6.5rem, 1fr);
+	grid-auto-rows: minmax(6.4rem, 1fr);
 	gap: 6px;
 	flex: 1;
 	padding: 2px;
@@ -16252,8 +16612,8 @@ button.iz-pr-offer-row:hover {
 	background: rgba(18, 15, 28, 0.92);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	border-radius: 10px;
-	min-height: 6.5rem;
-	padding: 6px 7px 7px;
+	min-height: 6.4rem;
+	padding: 7px 8px 8px;
 	display: flex;
 	flex-direction: column;
 	gap: 5px;
@@ -16264,30 +16624,31 @@ button.iz-pr-offer-row:hover {
 	background: rgba(12, 10, 18, 0.75);
 }
 .iz-outlet-ops-cal-cell--today {
-	background: rgba(20, 18, 32, 0.98);
-	border-color: rgba(74, 222, 128, 0.22);
-	box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.12);
+	background: rgba(24, 20, 38, 0.98);
+	border-color: rgba(212, 196, 245, 0.28);
+	box-shadow: inset 0 0 0 1px rgba(212, 196, 245, 0.12);
 }
 .iz-outlet-ops-cal-cell-head {
 	display: flex;
-	justify-content: flex-end;
+	align-items: center;
+	min-height: 1.15rem;
 }
 .iz-outlet-ops-cal-day-num {
+	margin-left: auto;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 1.5rem;
-	height: 1.5rem;
-	font-size: 12px;
+	min-width: 1.15rem;
+	height: 1.15rem;
+	font-size: 13px;
 	font-weight: 700;
 	color: var(--iz-muted);
 	border-radius: 999px;
 }
 .iz-outlet-ops-cal-day-num--today {
-	background: var(--iz-green);
-	color: #0a1a10;
+	background: var(--iz-violet-l, #d4c4f5);
+	color: #17122a;
 	font-weight: 800;
-	box-shadow: 0 0 10px rgba(74, 222, 128, 0.55);
 }
 .iz-outlet-ops-cal-events {
 	display: flex;
@@ -16308,7 +16669,17 @@ button.iz-pr-offer-row:hover {
 	background: rgba(255, 255, 255, 0.15);
 	border-radius: 999px;
 }
+/*
+ * Two rows: [time | fill chip] over [title]. The old card stacked time, title
+ * and a labelled DEMAND/SUPPLIED box into 77px — taller than the 77px viewport
+ * its cell gave it, so exactly one card per day was reachable. This is ~34px,
+ * which is what makes EVENTS_PER_CELL = 2 plus a "+N more" chip fit.
+ */
 .iz-outlet-ops-cal-event {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	column-gap: 4px;
 	width: 100%;
 	min-width: 0;
 	max-width: 100%;
@@ -16317,9 +16688,9 @@ button.iz-pr-offer-row:hover {
 	text-align: left;
 	border-radius: 8px;
 	border: 1px solid rgba(255, 255, 255, 0.05);
-	border-left-width: 3px;
-	padding: 5px 6px;
-	font-size: 12px;
+	border-left-width: 4px;
+	padding: 5px 7px;
+	font-size: 13px;
 	line-height: 1.3;
 	cursor: pointer;
 	background: rgba(0, 0, 0, 0.35);
@@ -16328,36 +16699,45 @@ button.iz-pr-offer-row:hover {
 		border-color 0.12s ease;
 }
 .iz-outlet-ops-cal-event:hover {
-	background: rgba(0, 0, 0, 0.5);
+	background: rgba(0, 0, 0, 0.55);
+}
+.iz-outlet-ops-cal-event:focus-visible {
+	outline: 2px solid var(--iz-violet-l);
+	outline-offset: 1px;
 }
 .iz-outlet-ops-cal-event-top {
-	margin-bottom: 2px;
-	min-width: 0;
+	display: contents;
 }
-.iz-outlet-ops-cal-event--open {
-	border-left-color: var(--iz-gold);
-	border-color: rgba(244, 183, 64, 0.18);
-}
+/* Status stripe. ORDER MATTERS: `border-color` is a shorthand for all four
+   sides, so it must come BEFORE `border-left-color` or it wipes the stripe.
+   Written the other way round, every status rendered the same 18%-alpha edge
+   while the legend beside the grid showed solid colours. */
 .iz-outlet-ops-cal-event--live {
-	border-left-color: var(--iz-green);
-	border-color: rgba(74, 222, 128, 0.18);
+	border-color: color-mix(in srgb, var(--cal-live) 22%, transparent);
+	border-left-color: var(--cal-live);
 }
 .iz-outlet-ops-cal-event--confirmed {
-	border-left-color: #60a5fa;
-	border-color: rgba(96, 165, 250, 0.18);
+	border-color: color-mix(in srgb, var(--cal-confirmed) 22%, transparent);
+	border-left-color: var(--cal-confirmed);
 }
 .iz-outlet-ops-cal-event--draft {
-	border-left-color: #a78bfa;
-	border-color: rgba(167, 139, 250, 0.18);
+	border-color: color-mix(in srgb, var(--cal-draft) 22%, transparent);
+	border-left-color: var(--cal-draft);
+}
+.iz-outlet-ops-cal-event--past {
+	border-color: var(--iz-line);
+	border-left-color: var(--cal-past);
+	opacity: 0.72;
 }
 .iz-outlet-ops-cal-event--sealed {
-	border-left-color: var(--iz-muted2);
-	border-color: var(--iz-line);
+	border-color: color-mix(in srgb, var(--cal-sealed) 24%, transparent);
+	border-left-color: var(--cal-sealed);
+	opacity: 0.85;
 }
 .iz-outlet-ops-cal-event-time {
 	display: block;
 	font-weight: 800;
-	font-size: 10px;
+	font-size: 12px;
 	color: var(--iz-muted);
 	letter-spacing: 0.01em;
 	line-height: 1.2;
@@ -16370,79 +16750,128 @@ button.iz-pr-offer-row:hover {
 	display: none;
 }
 .iz-outlet-ops-cal-event-title {
+	grid-column: 1 / -1;
 	display: block;
 	font-weight: 700;
-	font-size: 11px;
+	font-size: 13px;
 	color: var(--iz-txt);
-	line-height: 1.25;
+	line-height: 1.3;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.iz-outlet-ops-cal-event-stats {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 3px;
-	margin-top: 3px;
-	padding: 4px 5px;
+/*
+ * Staffing, coloured by how far short it falls. This is the whole point of the
+ * screen: 1/6 and 6/6 used to render in identical violet chrome, and the 8px
+ * uppercase "DEMAND / SUPPLIED" label above them was physically larger than the
+ * numbers it explained, eating 34 of the card's 77px.
+ */
+.iz-outlet-ops-cal-fill {
+	justify-self: end;
+	flex-shrink: 0;
 	border-radius: 5px;
-	border: 1px solid rgba(167, 139, 250, 0.28);
-	background: rgba(167, 139, 250, 0.06);
-	min-width: 0;
-	width: 100%;
-	box-sizing: border-box;
-}
-.iz-outlet-ops-cal-event-stats__label {
-	display: block;
-	width: 100%;
-	font-size: 8px;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	line-height: 1.15;
-	color: var(--iz-violet-l);
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.iz-outlet-ops-cal-event-stats__nums {
-	display: flex;
-	align-items: baseline;
-	justify-content: flex-start;
-	gap: 1px;
-	width: 100%;
+	padding: 1px 4px;
 	font-family: var(--font-sora, "Sora", sans-serif);
 	font-variant-numeric: tabular-nums;
-	line-height: 1;
-	min-width: 0;
-}
-.iz-outlet-ops-cal-event-stats__demand {
-	font-size: 12px;
-	font-weight: 800;
-	color: var(--iz-txt);
-}
-.iz-outlet-ops-cal-event-stats__sep {
-	font-size: 10px;
-	font-weight: 700;
-	color: var(--iz-muted);
-}
-.iz-outlet-ops-cal-event-stats__supplied {
 	font-size: 11px;
-	font-weight: 700;
-	color: var(--iz-muted2);
+	font-weight: 800;
+	line-height: 1.4;
+	white-space: nowrap;
+	border: 1px solid transparent;
 }
-.iz-outlet-ops-cal-event--sealed .iz-outlet-ops-cal-event-stats {
-	border-color: var(--iz-line2);
-	background: rgba(0, 0, 0, 0.22);
+.iz-outlet-ops-cal-fill--full {
+	color: var(--cal-full);
+	border-color: color-mix(in srgb, var(--cal-full) 34%, transparent);
+	background: color-mix(in srgb, var(--cal-full) 12%, transparent);
 }
-.iz-outlet-ops-cal-event--sealed .iz-outlet-ops-cal-event-stats__label {
-	color: var(--iz-muted2);
+.iz-outlet-ops-cal-fill--short {
+	color: var(--cal-short);
+	border-color: color-mix(in srgb, var(--cal-short) 40%, transparent);
+	background: color-mix(in srgb, var(--cal-short) 14%, transparent);
 }
-.iz-outlet-ops-cal-event--sealed .iz-outlet-ops-cal-event-stats__demand {
+.iz-outlet-ops-cal-fill--none {
+	color: var(--cal-none);
+	border-color: color-mix(in srgb, var(--cal-none) 46%, transparent);
+	background: color-mix(in srgb, var(--cal-none) 16%, transparent);
+}
+/* Overflow chip. A day with more shifts than the cell can show has to SAY so —
+   the previous 3px scrollbar was the only evidence and nobody reads a 3px
+   scrollbar. */
+.iz-outlet-ops-cal-more {
+	align-self: flex-start;
+	flex-shrink: 0;
+	border: 1px solid rgba(212, 196, 245, 0.36);
+	border-radius: 999px;
+	background: rgba(212, 196, 245, 0.12);
+	color: var(--iz-violet-l, #d4c4f5);
+	font-size: 15px;
+	font-weight: 800;
+	line-height: 1.25;
+	padding: 2px 12px;
+	cursor: pointer;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+	transition:
+		background 0.12s ease,
+		color 0.12s ease,
+		border-color 0.12s ease;
+}
+.iz-outlet-ops-cal-more:hover {
+	background: rgba(212, 196, 245, 0.2);
+	color: #f2ecff;
+	border-color: var(--iz-violet-l);
+}
+.iz-outlet-ops-cal-more:focus-visible {
+	outline: 2px solid var(--iz-violet-l);
+	outline-offset: 1px;
+}
+/* Rows inside the "+N more" day sheet. */
+.iz-outlet-ops-cal-daylist-row {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 16px;
+	width: 100%;
+	text-align: left;
+	border: 1px solid var(--iz-line);
+	border-left-width: 5px;
+	border-radius: 12px;
+	background: rgba(0, 0, 0, 0.28);
+	padding: 13px 16px;
+	cursor: pointer;
+	transition:
+		background 0.12s ease,
+		border-color 0.12s ease;
+}
+.iz-outlet-ops-cal-daylist-row:hover {
+	background: rgba(0, 0, 0, 0.5);
+}
+.iz-outlet-ops-cal-daylist-row:focus-visible {
+	outline: 2px solid var(--iz-violet-l);
+	outline-offset: 2px;
+}
+.iz-outlet-ops-cal-daylist-row__time {
+	font-size: 16px;
+	font-weight: 800;
 	color: var(--iz-muted);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+.iz-outlet-ops-cal-daylist-row__title {
+	font-size: 18px;
+	font-weight: 700;
+	color: var(--iz-txt);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* The staffing chip is shared with the grid, where it must stay dense. In the
+   sheet it has room to reach the portal's pill scale. */
+.iz-outlet-ops-cal-daylist-row .iz-outlet-ops-cal-fill {
+	font-size: 15px;
+	padding: 3px 9px;
+	border-radius: 7px;
 }
 .iz-outlet-ops-cal-event-meta,
 .iz-outlet-ops-cal-event-agency,
@@ -16587,7 +17016,14 @@ button.iz-pr-offer-row:hover {
 .iz-hist-custom-select.compact label {
 	font-size: 14px;
 }
-.iz-hist-select-trigger {
+/* The Manage Outlet date filter is listed here, not given a copy of these
+   values: it is meant to look like the history date filter, and a second
+   copy is how two controls that are supposed to match drift apart. */
+.iz-hist-select-trigger,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__date
+	.iz-roster-planning-date-trigger {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -16607,16 +17043,26 @@ button.iz-pr-offer-row:hover {
 		border-color 0.15s,
 		box-shadow 0.15s;
 }
-.iz-hist-select-trigger.sm {
+.iz-hist-select-trigger.sm,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__date
+	.iz-roster-planning-date-trigger {
 	min-height: 42px;
 	font-size: 16px;
 	padding: 0 11px;
 }
 .iz-hist-select-trigger.open,
-.iz-hist-select-trigger:focus-visible {
+.iz-hist-select-trigger:focus-visible,
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger:hover,
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger.open,
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger:focus-visible {
 	outline: none;
 	border-color: var(--iz-gold-d);
 	box-shadow: 0 0 0 3px rgba(183, 156, 232, 0.12);
+	/* The roster trigger tints its background gold on hover; the history one
+	   does not, and this control is now a history one. */
+	background: rgba(255, 255, 255, 0.03);
 }
 .iz-hist-select-menu {
 	position: absolute;
@@ -17959,6 +18405,37 @@ html:has(.iz-pr-app) {
 		height: 40px;
 	}
 
+	/*
+	 * The language switcher, which this block forgot.
+	 *
+	 * Between 768 and 1023 the sidebar becomes a 72px rail WITHOUT
+	 * `data-collapsed`, so the collapsed-state rules in agency-app-overrides.css
+	 * do not apply here. The switcher kept its full-width two-pill row — 143px
+	 * inside a 72px rail — and pushed a horizontal scrollbar across the bottom of
+	 * the nav. Stacked rather than hidden: losing the language control because
+	 * the window is narrow is a worse answer than making it fit.
+	 */
+	.iz-portal-lang-switch {
+		flex-direction: column;
+		gap: 4px;
+		padding-left: 0;
+		padding-right: 0;
+	}
+
+	.iz-portal-lang-switch > svg {
+		display: none;
+	}
+
+	.iz-portal-lang-switch > div {
+		flex-direction: column;
+		width: 100%;
+		gap: 4px;
+	}
+
+	.iz-portal-sidebar {
+		overflow-x: hidden;
+	}
+
 	.iz-portal-sidebar-identity {
 		justify-content: center;
 		padding: 8px;
@@ -18875,21 +19352,6 @@ html:has(.iz-pr-app) {
 }
 [data-portal="agency"] .iz-portal-main .iz-pr-manage-filters-card .iz-tiny {
 	font-size: 18px;
-}
-[data-portal="agency"]
-	.iz-portal-main
-	.iz-pr-manage-filters-grid
-	.iz-roster-filter-label {
-	font-size: 15px;
-}
-[data-portal="agency"] .iz-portal-main .iz-pr-manage-filter-control,
-[data-portal="agency"] .iz-portal-main .iz-pr-manage-filters-grid .iz-select,
-[data-portal="agency"]
-	.iz-portal-main
-	.iz-pr-manage-filters-grid
-	.iz-roster-filter-input--plain {
-	font-size: 18px !important;
-	min-height: 42px;
 }
 [data-portal="agency"] .iz-portal-main .iz-roster-filter-label {
 	font-size: 15px;

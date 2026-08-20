@@ -135,6 +135,20 @@ router.post(
   ...canRecordCharges,
   agencyPenaltyRuleController.markCharged.bind(agencyPenaltyRuleController),
 );
+// FORGIVE one cancellation fee (0130). Same gate as recording a charge, and for
+// the same reason: taking a sealed fee off a voucher is bookkeeping at a price
+// policy already set, not a policy decision. Owner AND finance, both scoped to
+// this agency by `requireAgencySubRoleScoped` — and the repository re-scopes the
+// UPDATE itself, because a guard that checks the role but not the ORG is how one
+// agency ends up editing another's rows.
+//
+// 4-segment path, so it cannot collide with '/:id/uncharged' (2) or
+// '/:id/uncharged/mark-charged' (3).
+router.post(
+  '/:id/uncharged/:assignmentId/waive',
+  ...canRecordCharges,
+  agencyPenaltyRuleController.waiveCancelFee.bind(agencyPenaltyRuleController),
+);
 
 // Broadcast a notice to selected PRs on this agency's roster.
 //

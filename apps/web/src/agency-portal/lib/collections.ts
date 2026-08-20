@@ -1,4 +1,5 @@
 import { format, parseISO } from "date-fns";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type { CollectionInvoice } from "@/services/collection-invoice";
 
 /**
@@ -56,11 +57,30 @@ export function collectionStampLabel(iso: string | null): string {
 	return Number.isNaN(at.getTime()) ? "" : format(at, "d MMM");
 }
 
+/**
+ * Aging buckets for an issued collection invoice.
+ *
+ * `label` is a RESOLVER, not a string: this map is module scope, so no hook can
+ * run here, and a bare dictionary KEY would type-check and then render the key
+ * name. It is also the last status vocabulary in the portal that the i18n sweep
+ * missed — it sat in a lib file rather than between JSX tags, so a sweep looking
+ * for English in markup could not see it, and it shipped untranslated on BOTH
+ * the agency and the outlet subscription screens.
+ *
+ * Keyed on `string` DELIBERATELY, unlike the roster grid's status map: `aging`
+ * arrives from the server and is not a union the client owns, so an unknown
+ * bucket must be able to arrive. Both call sites already guard with
+ * `inv.aging ? COLLECTION_AGING_PILL[inv.aging] : null` and render no pill when
+ * the lookup misses — absence, not a wrong label.
+ */
 export const COLLECTION_AGING_PILL: Record<
 	string,
-	{ variant: "green" | "amber" | "red"; label: string }
+	{
+		variant: "green" | "amber" | "red";
+		label: (t: PortalTranslations) => string;
+	}
 > = {
-	current: { variant: "green", label: "Current" },
-	due_soon: { variant: "amber", label: "Due soon" },
-	overdue: { variant: "red", label: "Overdue" },
+	current: { variant: "green", label: (t) => t.subscription.agingCurrent },
+	due_soon: { variant: "amber", label: (t) => t.subscription.agingDueSoon },
+	overdue: { variant: "red", label: (t) => t.subscription.agingOverdue },
 };

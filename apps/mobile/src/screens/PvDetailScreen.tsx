@@ -459,11 +459,22 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             {GRID_ROWS.map((row) => {
               const rowTotal = grid.reduce((s, d) => s + cellAmount(d, row.key), 0);
               const isDeduction = row.key === 'deductions';
-              // No fines that week, no row — same rule as the Payment grid.
-              if (isDeduction && rowTotal === 0) return null;
+              /*
+               * Always drawn, even at zero — same rule as the Payment grid,
+               * which stopped hiding it for the reason spelled out there: an
+               * absent row cannot say "you were not docked". On a signed voucher
+               * that matters more, not less; this IS the document.
+               */
               return (
                 <View key={row.key} style={styles.gridRow}>
-                  <Text style={styles.gridLabel}>{row.label}</Text>
+                  <Text
+                    style={[
+                      styles.gridLabel,
+                      isDeduction && styles.gridLabelDeduction,
+                    ]}
+                  >
+                    {row.label}
+                  </Text>
                   {grid.map((d) => {
                     const amount = cellAmount(d, row.key);
                     const key = `${d.dateIso}-${row.key}`;
@@ -490,8 +501,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                           style={[
                             styles.gridVal,
                             isDisputed && styles.gridValDisputed,
-                            // Only the real figure goes red — see PaymentScreen.
-                            isDeduction && amount !== 0 && styles.gridValDeduction,
+                            // Whole row red, dashes included — see PaymentScreen.
+                            isDeduction && styles.gridValDeduction,
                           ]}
                         >
                           {formatCell(amount)}
@@ -507,7 +518,15 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                     );
                   })}
                   <View style={styles.gridCol}>
-                    <Text style={styles.gridVal}>{formatCell(rowTotal)}</Text>
+                    {/* The week TOTAL is a cell in this row too — see PaymentScreen. */}
+                    <Text
+                      style={[
+                        styles.gridVal,
+                        isDeduction && styles.gridValDeduction,
+                      ]}
+                    >
+                      {formatCell(rowTotal)}
+                    </Text>
                   </View>
                 </View>
               );
@@ -870,8 +889,10 @@ const styles = StyleSheet.create({
   gridDate: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
   gridVal: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
   gridValDisputed: { color: C.red },
-  /** Money going the other way — same red as the Payment grid's Deductions. */
+  /** Every cell in the row, any amount — same red as the Payment grid. */
   gridValDeduction: { color: C.red },
+  /** The label, same red as its cells: the whole line reads as one thing. */
+  gridLabelDeduction: { color: C.red },
   statusPill: {
     fontFamily: F.sora,
     fontSize: 8,

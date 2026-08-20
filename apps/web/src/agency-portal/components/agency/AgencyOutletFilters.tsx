@@ -2,18 +2,30 @@ import { RosterPlanningDatePicker } from "@agency-portal/components/agency/Roste
 import { IzSelect } from "@agency-portal/components/iz/ui";
 import {
 	type AgencyOutletFilterState,
-	agencyOutletFiltersActive,
+	countActiveAgencyOutletFilters,
 	EMPTY_AGENCY_OUTLET_FILTERS,
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { RotateCcw } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
+/**
+ * Filter bar for Manage Outlet.
+ *
+ * There used to be two layouts in here behind an `inline` prop: a labelled grid
+ * and a row of bare chips. Only one caller existed and it passed `inline`, so
+ * the labelled version was unreachable code and every user got four unlabelled
+ * boxes whose meaning lived entirely in their placeholder text — which vanishes
+ * the moment you pick a value. Both are gone; this is the same
+ * `iz-roster-filterbar` the roster tabs use, so there is one bar to style and
+ * one to fix.
+ */
 export function AgencyOutletFilters({
 	filters,
 	onChange,
 	shiftDateIsos,
 	outletNames,
-	inline = false,
+	resultCount,
+	totalCount,
 }: {
 	filters: AgencyOutletFilterState;
 	onChange: (patch: Partial<AgencyOutletFilterState>) => void;
@@ -31,88 +43,41 @@ export function AgencyOutletFilters({
 	 * real agency again the moment a new caller forgot to pass it.
 	 */
 	outletNames: string[];
-	/** Compact pill row — Manage Outlet page layout */
-	inline?: boolean;
+	/** Venues shown after filtering, and the total before it. */
+	resultCount: number;
+	totalCount: number;
 }) {
 	const { t } = usePortalLocale();
-	const active = agencyOutletFiltersActive(filters);
+	const activeCount = countActiveAgencyOutletFilters(filters);
 
-	if (inline) {
-		return (
-			<div className="iz-outlet-manage-filters iz-outlet-manage-filters--inline">
-				<label className="iz-outlet-manage-filter-chip iz-outlet-manage-filter-chip--wide">
-					<IzSelect
-						block
-						value={filters.outlet}
-						onChange={(e) => onChange({ outlet: e.target.value })}
-					>
-						<option value="">{t.filters.allOutlets}</option>
-						{outletNames.map((o) => (
-							<option key={o} value={o}>
-								{o}
-							</option>
-						))}
-					</IzSelect>
-				</label>
-				<label className="iz-outlet-manage-filter-chip iz-outlet-manage-filter-chip--wide">
-					<RosterPlanningDatePicker
-						value={filters.date}
-						onChange={(date) => onChange({ date })}
-						rosterDates={shiftDateIsos}
-						placeholder={t.filters.allDates}
-						allowClear
-						hint={t.manageOutlet.dotsMarkOpenShifts}
-						className="iz-outlet-manage-filter-date iz-outlet-manage-filter-date--inline"
-					/>
-				</label>
-				<label className="iz-outlet-manage-filter-chip">
-					<IzSelect
-						block
-						value={filters.source}
-						onChange={(e) =>
-							onChange({
-								source: e.target.value as AgencyOutletFilterState["source"],
-							})
-						}
-					>
-						<option value="">{t.manageOutlet.anySource}</option>
-						<option value="posted">{t.manageOutlet.postedShift}</option>
-						<option value="assignment-pending">
-							{t.manageOutlet.awaitingPr}
-						</option>
-					</IzSelect>
-				</label>
-				<label className="iz-outlet-manage-filter-chip">
-					<input
-						type="number"
-						min={1}
-						placeholder={t.manageOutlet.minOpenSlots}
-						className="iz-roster-filter-input iz-roster-filter-input--plain"
-						value={filters.minOpenSlots}
-						onChange={(e) => onChange({ minOpenSlots: e.target.value })}
-					/>
-				</label>
-				{active && (
+	return (
+		<div className="iz-roster-filterbar">
+			<div className="iz-roster-filterbar__head">
+				<span className="iz-roster-filterbar__title">
+					{t.filters.filterOutlets}
+				</span>
+				<span className="iz-roster-filterbar__spacer" />
+				<span className="iz-roster-filterbar__count">
+					{resultCount} {t.roster.countOf} {totalCount}
+				</span>
+				{activeCount > 0 && (
 					<button
 						type="button"
-						className="iz-outlet-manage-filter-clear"
-						onClick={() => onChange(EMPTY_AGENCY_OUTLET_FILTERS)}
+						className="iz-roster-filterbar__clear"
+						onClick={() => onChange({ ...EMPTY_AGENCY_OUTLET_FILTERS })}
 					>
 						<RotateCcw className="h-3.5 w-3.5" />
+						{t.rosterGrid.clearFilters}
+						<span className="iz-roster-filterbar__badge">{activeCount}</span>
 					</button>
 				)}
 			</div>
-		);
-	}
 
-	return (
-		<div className="iz-outlet-manage-filters">
-			<div className="iz-outlet-manage-filters-grid">
-				<label className="iz-outlet-manage-filter-field">
-					<span className="iz-roster-filter-label">{t.filters.outlet}</span>
+			<div className="iz-roster-filterbar__row">
+				<label className="iz-roster-filterbar__field iz-roster-filterbar__field--grow">
+					<span className="iz-roster-filterbar__label">{t.filters.outlet}</span>
 					<IzSelect
 						block
-						className="!text-sm"
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
@@ -125,8 +90,12 @@ export function AgencyOutletFilters({
 					</IzSelect>
 				</label>
 
-				<label className="iz-outlet-manage-filter-field">
-					<span className="iz-roster-filter-label">{t.filters.date}</span>
+				<div className="iz-roster-filterbar__field">
+					{/*
+					 * A <div>, not a <label>: the picker renders a <button>, and a label
+					 * wrapping a button forwards the click to nothing.
+					 */}
+					<span className="iz-roster-filterbar__label">{t.filters.date}</span>
 					<RosterPlanningDatePicker
 						value={filters.date}
 						onChange={(date) => onChange({ date })}
@@ -134,15 +103,14 @@ export function AgencyOutletFilters({
 						placeholder={t.filters.allDates}
 						allowClear
 						hint={t.manageOutlet.dotsMarkOpenShifts}
-						className="iz-outlet-manage-filter-date"
+						className="iz-roster-filterbar__date"
 					/>
-				</label>
+				</div>
 
-				<label className="iz-outlet-manage-filter-field">
-					<span className="iz-roster-filter-label">Source</span>
+				<label className="iz-roster-filterbar__field">
+					<span className="iz-roster-filterbar__label">{t.filters.source}</span>
 					<IzSelect
 						block
-						className="!text-sm"
 						value={filters.source}
 						onChange={(e) =>
 							onChange({
@@ -150,6 +118,12 @@ export function AgencyOutletFilters({
 							})
 						}
 					>
+						{/*
+						 * Two options for three union members. `tied-offer` has no entry
+						 * because it is not a distinction a viewer can see — it carries the
+						 * same badge as `posted`, and the predicate matches the pair
+						 * together, so "Posted shift" keeps every row that reads as one.
+						 */}
 						<option value="">{t.manageOutlet.anySource}</option>
 						<option value="posted">{t.manageOutlet.postedShift}</option>
 						<option value="assignment-pending">
@@ -158,31 +132,20 @@ export function AgencyOutletFilters({
 					</IzSelect>
 				</label>
 
-				<label className="iz-outlet-manage-filter-field">
-					<span className="iz-roster-filter-label">
+				<label className="iz-roster-filterbar__field">
+					<span className="iz-roster-filterbar__label">
 						{t.manageOutlet.minOpenSlots}
 					</span>
 					<input
 						type="number"
 						min={1}
+						className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
 						placeholder={t.manageOutlet.egTwo}
-						className="iz-roster-filter-input iz-roster-filter-input--plain"
 						value={filters.minOpenSlots}
 						onChange={(e) => onChange({ minOpenSlots: e.target.value })}
 					/>
 				</label>
 			</div>
-
-			{active && (
-				<button
-					type="button"
-					className="iz-roster-filter-clear"
-					onClick={() => onChange(EMPTY_AGENCY_OUTLET_FILTERS)}
-				>
-					<RotateCcw className="h-3 w-3" />
-					Clear filters
-				</button>
-			)}
 		</div>
 	);
 }

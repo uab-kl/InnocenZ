@@ -11,8 +11,27 @@ export const PaymentVoucherLineSchema = z.object({
   outlet: z.string().max(255, 'Outlet is too long').optional(),
   description: z.string().min(1, 'Description is required').max(500, 'Description is too long'),
   quantity: z.number().int().positive().optional(),
-  // Kept as a plain number so the controller can sum lines into the subtotal.
-  amount: z.number().nonnegative(),
+  /*
+   * Kept as a plain number so the controller can sum lines into the subtotal.
+   *
+   * SIGNED, unlike the `money` helper above. A deduction line is negative — that
+   * sign is the entire difference between a RM 250 charge and a RM 250 bonus,
+   * and `payment_voucher_line.amount` has always been able to hold it, because
+   * `buildPenaltyLine` writes exactly that.
+   *
+   * It was `nonnegative()`, which was true of every line that existed when it
+   * was written and became false the moment penalties landed. The bug it caused
+   * is subtle and total: `PUT /payment-voucher/:id` replaces the whole line set,
+   * so a client faithfully round-tripping a voucher that carries a −250.00
+   * deduction was REJECTED at the schema — a 400 that fails the entire edit,
+   * over a line the client did not author and only sent back unchanged. The
+   * only way to succeed was to drop the line, which destroys it.
+   *
+   * The sign is guarded where it is DECIDED (`buildPenaltyLine` takes the
+   * magnitude and negates it once), not here, where guarding it only stops
+   * honest callers returning what the server itself wrote.
+   */
+  amount: z.number().finite(),
   ref: z.string().max(100, 'Ref is too long').optional(),
   /**
    * The receipt this line came from, and the proof behind it.

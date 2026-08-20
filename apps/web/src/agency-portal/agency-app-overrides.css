@@ -132,3 +132,34 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 .iz-portal[data-collapsed="true"] .iz-logo-horizontal__wordmark {
 	display: none;
 }
+
+/*
+ * The FOOTER of the collapsed rail. Everything above it had a collapsed rule;
+ * this did not, so the language switcher kept its full-width two-pill row inside
+ * a 72px rail and pushed a horizontal scrollbar across the bottom of the
+ * sidebar. The pills stack instead of being hidden — losing the language control
+ * entirely because the rail is narrow is a worse answer than making it fit.
+ */
+.iz-portal[data-collapsed="true"] .iz-portal-lang-switch {
+	flex-direction: column;
+	gap: 4px;
+	padding-left: 0;
+	padding-right: 0;
+}
+.iz-portal[data-collapsed="true"] .iz-portal-lang-switch > svg {
+	display: none;
+}
+.iz-portal[data-collapsed="true"] .iz-portal-lang-switch > div {
+	flex-direction: column;
+	width: 100%;
+	gap: 4px;
+}
+/* Nothing in the rail may exceed its 72px: a single overflowing child is what
+   produced the scrollbar, and a scrollbar on a nav rail reads as broken chrome
+   rather than as content to scroll. */
+.iz-portal[data-collapsed="true"] .iz-portal-sidebar {
+	overflow-x: hidden;
+}
+.iz-portal[data-collapsed="true"] .iz-portal-sidebar-foot {
+	min-width: 0;
+}

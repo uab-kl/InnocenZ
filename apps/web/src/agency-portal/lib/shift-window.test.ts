@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { hasShiftEnded, parseSlotRange, shiftEndInstant } from "./shift-window";
+import {
+	hasShiftEnded,
+	isShiftLiveNow,
+	parseSlotRange,
+	shiftEndInstant,
+	shiftStartInstant,
+} from "./shift-window";
 
 /** Local-time Date, matching how a venue reads its own clock. */
 const at = (iso: string, h: number, m: number) => {
@@ -107,5 +113,73 @@ describe("hasShiftEnded", () => {
 
 	test("fails OPEN on an unparseable slot rather than hiding it", () => {
 		expect(hasShiftEnded(day, "Night", at("2027-01-01", 12, 0))).toBe(false);
+	});
+});
+
+describe("shiftStartInstant", () => {
+	test("an overnight shift still STARTS on its own calendar day", () => {
+		expect(shiftStartInstant("2026-08-10", "22:00 - 04:00")).toEqual(
+			at("2026-08-10", 22, 0),
+		);
+	});
+
+	test("returns null for a slot that is not a time range", () => {
+		expect(shiftStartInstant("2026-08-10", "Night")).toBeNull();
+	});
+});
+
+describe("isShiftLiveNow", () => {
+	const day = "2026-08-10";
+
+	test("is live between start and end", () => {
+		expect(isShiftLiveNow(day, "13:00 - 14:00", at(day, 13, 30))).toBe(true);
+	});
+
+	test("is live at the exact start instant", () => {
+		expect(isShiftLiveNow(day, "13:00 - 14:00", at(day, 13, 0))).toBe(true);
+	});
+
+	test("is NOT live at the exact end instant — hasShiftEnded owns that minute", () => {
+		const end = at(day, 14, 0);
+		expect(isShiftLiveNow(day, "13:00 - 14:00", end)).toBe(false);
+		expect(hasShiftEnded(day, "13:00 - 14:00", end)).toBe(true);
+	});
+
+	test("is not live before it starts", () => {
+		expect(isShiftLiveNow(day, "13:00 - 14:00", at(day, 12, 59))).toBe(false);
+	});
+
+	test("an overnight shift is live AFTER midnight, on the next calendar day", () => {
+		// The whole reason this module exists: 02:00 on the 11th is inside a
+		// 22:00-04:00 shift dated the 10th.
+		expect(isShiftLiveNow(day, "22:00 - 04:00", at("2026-08-11", 2, 0))).toBe(
+			true,
+		);
+	});
+
+	test("an overnight shift is not live once the next morning passes its end", () => {
+		expect(isShiftLiveNow(day, "22:00 - 04:00", at("2026-08-11", 4, 30))).toBe(
+			false,
+		);
+	});
+
+	test("nothing on a past date is live", () => {
+		expect(isShiftLiveNow("2026-08-09", "22:00 - 04:00", at(day, 12, 0))).toBe(
+			false,
+		);
+	});
+
+	test("FAILS CLOSED on an unreadable slot, unlike hasShiftEnded", () => {
+		expect(isShiftLiveNow(day, "Night", at(day, 23, 0))).toBe(false);
+		expect(hasShiftEnded(day, "Night", at(day, 23, 0))).toBe(false);
+	});
+
+	test("live and ended are never both true", () => {
+		for (const h of [0, 6, 12, 21, 22, 23]) {
+			const now = at(day, h, 0);
+			const live = isShiftLiveNow(day, "22:00 - 04:00", now);
+			const ended = hasShiftEnded(day, "22:00 - 04:00", now);
+			expect(live && ended).toBe(false);
+		}
 	});
 });

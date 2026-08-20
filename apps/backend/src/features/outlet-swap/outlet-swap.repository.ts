@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, notInArray, sql, SQL } from 'drizzle-orm';
+import { ASSIGNABLE_SHIFT_STATUSES } from '@/features/shift/shift.model';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
@@ -59,6 +60,10 @@ export type OutletSwapApprovalRejection =
   // another Tier III no matter who cancels.
   | 'destination_tier_full'
   | 'date_mismatch'
+  // The destination shift is no longer taking anyone — sealed by the venue, or
+  // reverted to draft. Distinct from `destination_full` because no cancellation
+  // will ever open a seat on it: the shift is closed, not busy.
+  | 'destination_not_assignable'
   | 'already_assigned';
 
 export type OutletSwapApprovalResult =
@@ -231,6 +236,21 @@ export class OutletSwapRepositoryClass {
           .limit(1)
           .for('update');
         if (!toShift) return { ok: false, reason: 'not_found' };
+
+        // The destination must still be TAKING people. `POST /shift-assignment`
+        // refuses a sealed or draft shift via this same constant, and the swap
+        // lane writes `shift_assignment.shift_id` directly — so without this
+        // check a swap could seat a PR on a shift the assign lane would have
+        // turned away, which is the whole reason sealing a night is supposed to
+        // mean something. Checked inside the lock, after `for('update')`, so a
+        // seal landing mid-approval loses the race rather than slipping past.
+        if (
+          !ASSIGNABLE_SHIFT_STATUSES.includes(
+            toShift.status as (typeof ASSIGNABLE_SHIFT_STATUSES)[number],
+          )
+        ) {
+          return { ok: false, reason: 'destination_not_assignable' };
+        }
 
         // A swap moves a PR between venues on the same night. If the origin has
         // been re-dated since the request was raised, this is no longer the swap
@@ -640,7 +660,9 @@ export class OutletSwapRepositoryClass {
                 .where(eq(ShiftAgencyTable.agencyId, params.agencyId)),
             ),
             eq(ShiftTable.shiftDate, params.shiftDate),
-            inArray(ShiftTable.status, ['open', 'confirmed']),
+            // The shared constant, not a second copy: this list and the assign
+            // guard must never drift apart about what "staffable" means.
+            inArray(ShiftTable.status, [...ASSIGNABLE_SHIFT_STATUSES]),
           ),
         )
         .orderBy(asc(OutletTable.name));

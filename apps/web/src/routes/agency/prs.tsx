@@ -74,6 +74,7 @@ import {
 	Megaphone,
 	MousePointerClick,
 	Pencil,
+	RotateCcw,
 	Star,
 	UserMinus,
 } from "lucide-react";
@@ -222,6 +223,35 @@ function AgencyManagePRs() {
 			),
 		[agencyPRs, ratings, ageMin, ratingMin, lang, race, place, expMin],
 	);
+
+	/*
+	 * The denominator for "N of M".
+	 *
+	 * NOT `agencyPRs.length`: `filtered` drops detached PRs unconditionally,
+	 * before any filter is applied, so counting the raw list would have the bar
+	 * reporting a narrowing that no filter performed — "12 of 20" with every
+	 * field empty.
+	 */
+	const totalPrs = useMemo(
+		() => agencyPRs.filter((p) => !p.detached).length,
+		[agencyPRs],
+	);
+	const activeFilterCount = [
+		ageMin,
+		ratingMin,
+		expMin,
+		lang,
+		race,
+		place,
+	].filter(Boolean).length;
+	const clearPrFilters = () => {
+		setAgeMin("");
+		setRatingMin("");
+		setExpMin("");
+		setLang("");
+		setRace("");
+		setPlace("");
+	};
 
 	const detail = agencyPRs.find((p) => p.id === detailId);
 	const activeCount = useMemo(
@@ -509,42 +539,75 @@ function AgencyManagePRs() {
 				)}
 			</IzCard>
 
-			<IzCard flat className="iz-pr-manage-filters-card">
-				<div className="flex items-center gap-2 iz-sm iz-muted mb-2">
-					<Filter className="h-4 w-4 shrink-0" /> {t.managePr.filterPrs}
+			{/* The house filter bar — same one the roster tabs and Manage Outlet use.
+			    These were six placeholder-only boxes: the moment you picked a value the
+			    word telling you what it meant was replaced by the value itself. */}
+			<div className="iz-roster-filterbar iz-roster-filterbar--fill">
+				<div className="iz-roster-filterbar__head">
+					<span className="iz-roster-filterbar__title">
+						{t.managePr.filterPrs}
+					</span>
+					<span className="iz-roster-filterbar__spacer" />
+					<span className="iz-roster-filterbar__count">
+						{filtered.length} {t.roster.countOf} {totalPrs}
+					</span>
+					{activeFilterCount > 0 && (
+						<button
+							type="button"
+							className="iz-roster-filterbar__clear"
+							onClick={clearPrFilters}
+						>
+							<RotateCcw className="h-3.5 w-3.5" />
+							{t.rosterGrid.clearFilters}
+							<span className="iz-roster-filterbar__badge">
+								{activeFilterCount}
+							</span>
+						</button>
+					)}
 				</div>
-				<div className="iz-pr-manage-filters-inline">
-					<label className="iz-pr-manage-filter-chip">
+
+				<div className="iz-roster-filterbar__row">
+					<label className="iz-roster-filterbar__field">
+						<span className="iz-roster-filterbar__label">{t.managePr.age}</span>
 						<input
 							type="number"
+							className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
 							placeholder={t.managePr.minAge}
-							className="iz-roster-filter-input iz-roster-filter-input--plain"
 							value={ageMin}
 							onChange={(e) => setAgeMin(e.target.value)}
 						/>
 					</label>
-					<label className="iz-pr-manage-filter-chip">
+					<label className="iz-roster-filterbar__field">
+						<span className="iz-roster-filterbar__label">
+							{t.managePr.rating}
+						</span>
 						<input
 							type="number"
 							min={0}
 							max={5}
 							step={0.1}
+							className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
 							placeholder={t.managePr.minRating}
-							className="iz-roster-filter-input iz-roster-filter-input--plain"
 							value={ratingMin}
 							onChange={(e) => setRatingMin(e.target.value)}
 						/>
 					</label>
-					<label className="iz-pr-manage-filter-chip">
+					<label className="iz-roster-filterbar__field">
+						<span className="iz-roster-filterbar__label">
+							{t.managePr.experience}
+						</span>
 						<input
 							type="number"
+							className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
 							placeholder={t.managePr.minYears}
-							className="iz-roster-filter-input iz-roster-filter-input--plain"
 							value={expMin}
 							onChange={(e) => setExpMin(e.target.value)}
 						/>
 					</label>
-					<label className="iz-pr-manage-filter-chip iz-pr-manage-filter-chip--wide">
+					<label className="iz-roster-filterbar__field">
+						<span className="iz-roster-filterbar__label">
+							{t.managePr.languages}
+						</span>
 						<IzSelect
 							block
 							value={lang}
@@ -558,7 +621,10 @@ function AgencyManagePRs() {
 							))}
 						</IzSelect>
 					</label>
-					<label className="iz-pr-manage-filter-chip">
+					<label className="iz-roster-filterbar__field">
+						<span className="iz-roster-filterbar__label">
+							{t.managePr.race}
+						</span>
 						<IzSelect
 							block
 							value={race}
@@ -572,7 +638,10 @@ function AgencyManagePRs() {
 							))}
 						</IzSelect>
 					</label>
-					<label className="iz-pr-manage-filter-chip">
+					<label className="iz-roster-filterbar__field">
+						<span className="iz-roster-filterbar__label">
+							{t.managePr.place}
+						</span>
 						<IzSelect
 							block
 							value={place}
@@ -587,7 +656,7 @@ function AgencyManagePRs() {
 						</IzSelect>
 					</label>
 				</div>
-			</IzCard>
+			</div>
 
 			<section className="mt-4">
 				<div className="iz-pr-manage-stats">

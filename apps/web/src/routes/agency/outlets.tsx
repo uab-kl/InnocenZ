@@ -205,19 +205,20 @@ function AgencyManageOutlets() {
 				</p>
 			</IzCard>
 
-			<IzCard flat className="iz-outlet-manage-filters-card">
-				<AgencyOutletFilters
-					inline
-					filters={filters}
-					onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
-					shiftDateIsos={shiftDateIsos}
-					// The venues actually on this page — deduped and sorted where it is
-					// defined above. Left to a default the dropdown listed a demo
-					// constant instead: venues this agency never onboarded, so picking
-					// one emptied the page.
-					outletNames={outletFilterNames}
-				/>
-			</IzCard>
+			{/* The bar draws its own frame, so it is no longer wrapped in an IzCard
+			    that drew a second one around it. */}
+			<AgencyOutletFilters
+				filters={filters}
+				onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
+				shiftDateIsos={shiftDateIsos}
+				// The venues actually on this page — deduped and sorted where it is
+				// defined above. Left to a default the dropdown listed a demo
+				// constant instead: venues this agency never onboarded, so picking
+				// one emptied the page.
+				outletNames={outletFilterNames}
+				resultCount={filtered.length}
+				totalCount={summaries.length}
+			/>
 
 			<section className="mt-4">
 				<div className="iz-pr-manage-stats">

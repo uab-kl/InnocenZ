@@ -3,6 +3,7 @@ import {
 	AgencyReceiptsPanel,
 	receiptsInPayrollWeek,
 } from "@agency-portal/components/agency/AgencyReceiptsPanel";
+import { CancellationFeesPanel } from "@agency-portal/components/agency/CancellationFeesPanel";
 import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
 import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQueuePanel";
 import { PayrollVerifyPanel } from "@agency-portal/components/agency/PayrollVerifyPanel";
@@ -872,42 +873,44 @@ function AgencyPV() {
 
 			{/* Above the tabs, not inside one: an uncollected fee is not scoped to
 			    the voucher/receipt/dispute view someone happens to be on, and
-			    burying it under a tab is how it went unbilled in the first place. */}
-			<div className="mt-2.5">
-				{/* `weekStart`/`weekEnd` follow the tabs, so "record this week's
-				    penalties" seals the week the operator is looking at, not whatever
-				    week today falls in.
+			    burying it under a tab is how it went unbilled in the first place.
 
-				    `canMark` is `raisePv`, NOT `editSettings`: recording and settling
-				    charges is payroll bookkeeping, which the finance head does on this
-				    very screen. `editSettings` is owner-only and made this a list
-				    finance could read but never act on. Writing the fine SCHEDULE
-				    stays owner-only — that is policy, this is bookkeeping. */}
-				<UnchargedFeesPanel
-					canMark={can("raisePv")}
-					weekLabel={
-						payrollWeekTab === "this_week"
-							? t.payroll.thisWeekLower
-							: payrollWeekTab === "last_week"
-								? t.payroll.lastWeekLower
-								: t.payroll.thePaymentWeek
-					}
-					weekStart={
-						payrollWeekTab === "this_week"
-							? thisWeekBounds.weekStartIso
-							: payrollWeekTab === "last_week"
-								? lastWeekBounds.weekStartIso
-								: lastLastWeekBounds.weekStartIso
-					}
-					weekEnd={
-						payrollWeekTab === "this_week"
-							? thisWeekBounds.weekEndIso
-							: payrollWeekTab === "last_week"
-								? lastWeekBounds.weekEndIso
-								: lastLastWeekBounds.weekEndIso
-					}
-				/>
-			</div>
+			    Not on the PAYMENT WEEK tab at all, though. Those vouchers are signed
+			    and queued to pay, and a signed voucher cannot take another line — so
+			    every action the panel offers is refused there. It used to render
+			    read-only, which is a debt shown to someone forbidden to act on it;
+			    the two weeks that CAN still take a charge are where it belongs. */}
+			{payrollWeekTab !== "last_last_week" && (
+				<div className="mt-2.5">
+					{/* `weekStart`/`weekEnd` follow the tabs, so "record this week's
+					    penalties" seals the week the operator is looking at, not whatever
+					    week today falls in.
+
+					    `canMark` is `raisePv`, NOT `editSettings`: recording and settling
+					    charges is payroll bookkeeping, which the finance head does on this
+					    very screen. `editSettings` is owner-only and made this a list
+					    finance could read but never act on. Writing the fine SCHEDULE
+					    stays owner-only — that is policy, this is bookkeeping. */}
+					<UnchargedFeesPanel
+						canMark={can("raisePv")}
+						weekLabel={
+							payrollWeekTab === "this_week"
+								? t.payroll.thisWeekLower
+								: t.payroll.lastWeekLower
+						}
+						weekStart={
+							payrollWeekTab === "this_week"
+								? thisWeekBounds.weekStartIso
+								: lastWeekBounds.weekStartIso
+						}
+						weekEnd={
+							payrollWeekTab === "this_week"
+								? thisWeekBounds.weekEndIso
+								: lastWeekBounds.weekEndIso
+						}
+					/>
+				</div>
+			)}
 
 			<div className="iz-payroll-tabs mt-2.5">
 				<button
@@ -2024,6 +2027,12 @@ function PvDetail({
           Both render nothing on a demo voucher, whose id has no backend row
           behind it, and both read the same fetch. */}
 			<AgencyPvDayReviewPanel voucherId={pv.id} />
+			{/* Cancellation fees are charged AUTOMATICALLY now (0130), so the
+          agency's decision is whether to waive one — and that decision belongs
+          beside the voucher the deduction is actually on, not on the uncharged
+          Finance list, which no longer sees them. Renders nothing when the
+          voucher carries none, which is most of them. */}
+			<CancellationFeesPanel voucherId={pv.id} canWaive={can("raisePv")} />
 			<PayrollVerifyPanel voucherId={pv.id} />
 
 			<button

@@ -77,7 +77,7 @@ export function PortalLanguageSwitcher({
 	// component cannot see. Tokens keep it on-theme without touching that file.
 	return (
 		<fieldset
-			className={`flex items-center gap-2 px-3 py-2${className ? ` ${className}` : ""}`}
+			className={`iz-portal-lang-switch flex items-center gap-2 px-3 py-2${className ? ` ${className}` : ""}`}
 			aria-label={t.lang.language}
 		>
 			<Languages

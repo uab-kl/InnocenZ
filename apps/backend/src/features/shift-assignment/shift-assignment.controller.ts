@@ -17,7 +17,12 @@ import { AgencyOutletRepository } from '@/features/agency/agency-outlet.reposito
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
-import { notify, notifyMany } from '@/features/notification/notify.js';
+import {
+  notify,
+  notifyMany,
+  resolveCoverNeeded,
+  resolveCoverNeededForShift,
+} from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -34,6 +39,7 @@ import { formatCents } from '@/features/payment-voucher/payment-voucher-balance'
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository';
 import { buildOvertimeLine, overtimeDedupeRef } from '@/features/payment-voucher/overtime-line';
 import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
+import { attachPenaltyToWeek } from '@/features/payment-voucher/attach-penalty-to-week';
 import { sealCheckOut } from './seal-checkout';
 import { computeCancelFee, type CancelFee } from './cancel-fee';
 import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penalty-rule.repository.js';
@@ -45,6 +51,7 @@ import {
   resolveTierWageOutcomesForShifts,
 } from './resolve-tier-wages';
 import { shiftDayKey, shiftsOverlap } from '@/util/slot-window';
+import { assignmentHistoryReason } from './assignment-history-guard';
 import { travelWarningFor } from './travel-gap';
 import {
   CheckInMineSchema,
@@ -546,9 +553,17 @@ export class ShiftAssignmentControllerClass {
       // is what stops an later edit to the agency's bands from restating what
       // they owe. `payAmount` is still the forecast day rate here — the shift
       // was never worked, so nothing has sealed it down.
+      // HOISTED out of the fee block: the automatic attach after the response
+      // needs this row's DATE to decide which week's voucher the fee belongs to,
+      // and reading it twice invites the two halves to disagree about the shift.
+      // A failure is not fatal here — it only means the fee cannot be priced.
+      const shift = await this.shiftRepository.getById(existing.shiftId).catch((shiftError) => {
+        logger.error('[ShiftAssignmentController.cancelMine] shift read:', shiftError);
+        return null;
+      });
+
       let fee: CancelFee = { feeRm: '0.00', pct: 0, noticeHours: '0.00' };
       try {
-        const shift = await this.shiftRepository.getById(existing.shiftId);
         const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(existing.agencyId);
 
         // The basis is the TIER RATE for this outlet, not `pay_amount`.
@@ -606,6 +621,29 @@ export class ShiftAssignmentControllerClass {
         shiftId: existing.shiftId,
         prName: pr?.name ?? 'PR',
         reason: 'cancelled',
+        actor,
+      });
+
+      /*
+       * The fee goes onto the week's voucher AUTOMATICALLY (0130).
+       *
+       * AFTER the response, and fire-and-forget, for the same reason the notify
+       * above is: the PR asked to leave a shift, and nothing about writing a
+       * voucher line should make them wait for that or — far worse — fail it.
+       * Every failure path inside leaves `cancel_fee_charged_at` NULL, which is
+       * precisely the state this feature replaced, so the fee simply appears on
+       * the agency's uncharged list exactly as it did before 0130. Degrading to
+       * the old behaviour is the correct failure mode here.
+       */
+      void this.autoAttachCancelFee({
+        assignmentId: id,
+        agencyId: existing.agencyId,
+        prId: existing.prId,
+        userId: existing.userId,
+        prName: pr?.name ?? 'PR',
+        prIc: pr?.icNo,
+        shiftDate: shift?.shiftDate ?? null,
+        fee,
         actor,
       });
     } catch (error) {
@@ -1783,6 +1821,30 @@ export class ShiftAssignmentControllerClass {
         actor,
       });
 
+      /*
+       * Did this assignment BACKFILL a slot somebody had dropped?
+       *
+       * The other half of retiring "Cover needed". A cancelled PR is usually not
+       * un-cancelled — someone else is put in their place — and that carries a
+       * different assignment id, so the by-assignment retirement can never match
+       * it. Keyed on the shift instead.
+       *
+       * Gated on the shift being FULL again, asked without a PR so only headcount
+       * is checked (`hasFreeSeat`'s own contract). Two PRs can drop off one shift
+       * and be replaced one at a time; retiring both prompts after the first
+       * replacement would report the job done with a seat still empty.
+       */
+      void (async () => {
+        try {
+          const seat = await this.shiftAssignmentRepository.hasFreeSeat(shift.id);
+          if (seat.staffed >= seat.quantity) {
+            await resolveCoverNeededForShift(shift.id, actor);
+          }
+        } catch (coverError) {
+          logger.error('[ShiftAssignmentController.create] retire cover prompt:', coverError);
+        }
+      })();
+
       // CAN THEY GET THERE? The guard above refuses a strict overlap, so a PR could
       // be booked 11:00–12:00 at one venue and 12:01–13:01 at another across the city
       // and every check passed — nothing measured the space BETWEEN two shifts.
@@ -1917,6 +1979,84 @@ export class ShiftAssignmentControllerClass {
     }
   }
 
+  /**
+   * Put a just-sealed cancellation fee on the week's voucher, then stamp it.
+   *
+   * The OPT-OUT half of 0130. Everything that decides WHERE the line goes lives
+   * in `attachPenaltyToWeek`, shared with the agency's manual Charge button, so
+   * the automatic and manual paths cannot answer "which week?" differently.
+   *
+   * ⚠️ NEVER THROWS. It is invoked with `void` after the response has already
+   * gone, so an exception here would be an unhandled rejection on a request the
+   * PR has been told succeeded — and their cancel DID succeed. Every exit leaves
+   * the fee uncharged and on the agency's Finance list, which is the pre-0130
+   * behaviour and a safe place to land.
+   *
+   * ORDER: line first, stamp second. The reverse would mark a fee collected
+   * against a voucher that never received it, and it would then be invisible to
+   * the uncharged list forever — the repository's stated invariant is that an
+   * uncollected fee has to resurface, never quietly disappear.
+   */
+  private async autoAttachCancelFee(input: {
+    assignmentId: string;
+    agencyId: string;
+    prId: string;
+    userId: string | null;
+    prName: string;
+    prIc?: string | null;
+    shiftDate: string | null;
+    fee: CancelFee;
+    actor: string;
+  }): Promise<void> {
+    try {
+      // A free cancel seals '0.00' so the row still explains itself, but there
+      // is no money on it. Charging nothing would put a RM 0.00 line on a
+      // payslip and a phantom entry on a Finance list.
+      if (Number(input.fee.feeRm) <= 0) return;
+
+      const date = String(input.shiftDate ?? '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+      const week = weekOfDate(date);
+      if (!week) return;
+
+      const result = await attachPenaltyToWeek(
+        { paymentVoucherRepository: this.paymentVoucherRepository },
+        {
+          chargeId: input.assignmentId,
+          agencyId: input.agencyId,
+          prId: input.prId,
+          userId: input.userId,
+          prName: input.prName,
+          prIc: input.prIc,
+          label: 'Cancelled shift',
+          detail: `${input.fee.pct}% of daily wage`,
+          fineRm: input.fee.feeRm,
+          lineDate: date,
+          weekStart: week.weekStart,
+          weekEnd: week.weekEnd,
+          actor: input.actor,
+        },
+      );
+      if (!result.ok) {
+        // The commonest reason by far: the PR cancelled a shift in a week whose
+        // voucher has already been sent. Not an error — the fee stays listed.
+        logger.info(
+          `[ShiftAssignmentController.autoAttachCancelFee] not attached: ${result.reason}`,
+        );
+        return;
+      }
+
+      await this.shiftAssignmentRepository.markCancelFeesCharged(
+        input.agencyId,
+        [input.assignmentId],
+        result.voucherId,
+        input.actor,
+      );
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.autoAttachCancelFee] Error:', error);
+    }
+  }
+
   private async notifyAgencyCoverNeeded(input: {
     agencyId: string;
     assignmentId: string;
@@ -2007,6 +2147,44 @@ export class ShiftAssignmentControllerClass {
         checkOutAt: parsed.data.checkOutAt ? new Date(parsed.data.checkOutAt) : undefined,
         notes: parsed.data.notes,
         updatedBy: getActor(req),
+        /*
+         * RE-STAFFING WIPES THE CANCELLATION FEE STATE (0130).
+         *
+         * The row is going back into service, so it must judge its NEXT
+         * cancellation on its own facts. Left behind, the old stamps produce a
+         * charge nobody can see:
+         *
+         *   cancel → fee attached and charged → agency WAIVES (line removed,
+         *   `waived_at` stamped) → agency re-staffs → PR cancels again.
+         *
+         * The second cancellation seals a new fee and `attachPenaltyToWeek`
+         * adds a real line — the old one was deleted, so nothing dedupes it —
+         * but `markCancelFeesCharged` then refuses, because its guard requires
+         * `cancel_fee_waived_at IS NULL` and the stamp from the FIRST waive is
+         * still there. The result is a live deduction on the PR's voucher with
+         * `charged_at` NULL and `waived_at` set, which `listUnchargedCancelFees`
+         * excludes by that same predicate: money taken, invisible to Finance,
+         * carrying a "forgiven" mark that belongs to a different cancellation.
+         *
+         * Clearing costs nothing that matters. The durable record of a fee that
+         * was actually collected is the VOUCHER LINE, which survives this and
+         * keeps its own description, amount and ref.
+         *
+         * Only on the re-staffing branch: a note edit or a check-out stamp on a
+         * still-cancelled row must not quietly erase what it owes.
+         */
+        ...(reStaffing
+          ? {
+              cancelFeeRm: null,
+              cancelFeePct: null,
+              cancelNoticeHours: null,
+              cancelFeeChargedAt: null,
+              cancelFeeVoucherId: null,
+              cancelFeeWaivedAt: null,
+              cancelFeeWaivedBy: null,
+              cancelFeeWaiveReason: null,
+            }
+          : {}),
       };
 
       // The shift this row is going back onto, read ONCE: the status gate just
@@ -2037,6 +2215,13 @@ export class ShiftAssignmentControllerClass {
           prId: existing.userId ?? existing.prId,
           agencyId: existing.agencyId,
         });
+        // The seat is filled, so "Cover needed — find a replacement" is answered.
+        // Retired only on SUCCESS: a refused re-staffing (no free seat, PR
+        // unavailable, tier full) leaves the slot exactly as empty as it was, and
+        // withdrawing the prompt there would tell the agency the job was done
+        // while the shift went unstaffed. Fire-and-forget for the same reason the
+        // raise is — a notification must not fail the write that earned it.
+        if (result.ok) void resolveCoverNeeded(id, getActor(req));
         if (!result.ok) {
           const { seat } = result;
           // Checked before the two capacity refusals: when the PR has blocked
@@ -2140,10 +2325,18 @@ export class ShiftAssignmentControllerClass {
       // the shift rule is: on a UTC host `new Date()` rolls the date eight hours
       // early, which would reopen yesterday for a Kuala Lumpur agency at 08:00.
       // Admin is exempt — support has to be able to clean up a bad row.
+      // The rule itself lives in `assignment-history-guard.ts` so it can be
+      // tested without firing this endpoint: a bug in it does not return 409
+      // here, it deletes a real row and takes the attendance and the sealed
+      // wage with it. Same function guards the swap lane.
       if (!scope.isAdmin) {
-        const todayIso = shiftDayKey(new Date());
-        const shiftIso = shift ? String(shift.shiftDate).slice(0, 10) : null;
-        if (shiftIso && shiftIso < todayIso) {
+        const reason = assignmentHistoryReason({
+          shiftDate: shift ? String(shift.shiftDate) : null,
+          checkInAt: existing.checkInAt,
+          checkOutAt: existing.checkOutAt,
+          todayIso: shiftDayKey(new Date()),
+        });
+        if (reason === 'past-shift') {
           return res.status(409).json({
             success: false,
             message:
@@ -2151,7 +2344,7 @@ export class ShiftAssignmentControllerClass {
             data: null,
           });
         }
-        if (existing.checkInAt || existing.checkOutAt) {
+        if (reason === 'attendance-stamped') {
           return res.status(409).json({
             success: false,
             message:

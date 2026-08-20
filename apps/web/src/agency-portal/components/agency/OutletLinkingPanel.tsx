@@ -377,15 +377,19 @@ export function OutletLinkingList({
 
 	return (
 		<div className="flex flex-col gap-2">
-			<div className="iz-approvals-tabs">
+			{/* Chips, not queue tabs: this narrows ONE queue by status, exactly
+			    like the PR side's Current/Approved/Rejected/All. Wearing the
+			    `iz-approvals-tab` look made it read as a third level of
+			    navigation. */}
+			<div className="iz-approvals-subfilter">
 				{FILTERS.map((status) => (
 					<button
 						key={status}
 						type="button"
-						className={cn("iz-approvals-tab", filter === status && "on")}
+						className={cn("iz-chip iz-tiny", filter === status && "on")}
 						onClick={() => onFilterChange(status)}
 					>
-						{STATUS_LABEL[status](t)}
+						{STATUS_LABEL[status](t)} ({queue.counts[status] ?? "…"})
 					</button>
 				))}
 			</div>

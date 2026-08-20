@@ -28,12 +28,34 @@ export function AgencyCommissionRulesPanel({
 	// a workspace), and it must never fall back to the demo rate card: those
 	// defaults are a fixture outlet's money, and rendering them is exactly what
 	// made the agency look out of sync with the outlet.
+	/*
+	 * Four states, not two.
+	 *
+	 * This read `isLoading ? "loading" : "the outlet saved nothing"`, so every
+	 * way of failing came out as one of those two sentences. A request that
+	 * ERRORED claimed the outlet had saved no rates — an assertion about the
+	 * venue on the strength of a request that never answered. A request still
+	 * retrying said "Loading rates…" and, when it finally gave up, said the
+	 * outlet had saved nothing. And a venue outside this agency’s approved
+	 * directory never ran the query at all, which looked identical again.
+	 */
 	if (!workspace) {
+		const message = backend.isLoading
+			? t.outletDetail.loadingRates
+			: backend.isError
+				? t.outletDetail.couldNotLoadRates
+				: backend.hasOutletId
+					? t.outletDetail.noWorkspaceRates
+					: t.outletDetail.outletNotLinked;
 		return (
-			<p className="iz-tiny iz-muted2">
-				{backend.isLoading
-					? t.outletDetail.loadingRates
-					: t.outletDetail.noWorkspaceRates}
+			<p
+				className={
+					backend.isError
+						? "iz-tiny text-[var(--iz-red,#e5484d)]"
+						: "iz-tiny iz-muted2"
+				}
+			>
+				{message}
 			</p>
 		);
 	}

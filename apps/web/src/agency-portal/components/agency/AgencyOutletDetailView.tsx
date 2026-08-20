@@ -82,9 +82,23 @@ export function AgencyOutletDetailView({
 
 	return (
 		<div className="iz-screen iz-outlet-detail-page">
-			<button type="button" className="iz-outlet-detail-back" onClick={onBack}>
-				<ArrowLeft className="h-4 w-4" />
-				{t.outletDetail.backToOutlets}
+			{/*
+			 * The same back control the rest of the app uses, not a second one.
+			 *
+			 * This was a full-width 44px bar with centred text — a button shaped
+			 * like a section header, sitting where every other screen puts a small
+			 * pill in the corner. `iz-topbar-back` is that pill; the local class is
+			 * kept for placement only.
+			 */}
+			<button
+				type="button"
+				className="iz-topbar-back iz-topbar-back--lg iz-outlet-detail-back"
+				onClick={onBack}
+			>
+				<ArrowLeft className="h-4 w-4 shrink-0" strokeWidth={2.2} />
+				<span className="iz-topbar-back-label">
+					{t.outletDetail.returnLabel}
+				</span>
 			</button>
 
 			<header className="iz-outlet-detail-head">
@@ -430,7 +444,7 @@ function ShiftSourceBadge({ shift }: { shift: AgencyOutletAvailableShift }) {
 	}
 	return (
 		<span className="iz-outlet-detail-shift-source">
-			{outletShiftSourceLabel(shift.source)}
+			{outletShiftSourceLabel(shift.source, t)}
 			<ChevronDown className="h-3.5 w-3.5" aria-hidden />
 		</span>
 	);
@@ -578,7 +592,7 @@ function OutletDetailFutureShiftCard({
 								{formatOutletHistRm(shift.payEstimate)}
 							</p>
 							<span className="iz-outlet-detail-shift-future__action">
-								{outletShiftSourceLabel(shift.source)}
+								{outletShiftSourceLabel(shift.source, t)}
 								<ChevronRight className="h-3.5 w-3.5" aria-hidden />
 							</span>
 						</div>

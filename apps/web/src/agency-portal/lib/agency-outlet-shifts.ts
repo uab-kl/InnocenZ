@@ -33,6 +33,7 @@ import {
 } from "@agency-portal/lib/pr-features";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import type { ShiftRequest } from "@agency-portal/lib/store";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type OutletShiftSource = "posted" | "tied-offer" | "assignment-pending";
 
@@ -116,14 +117,34 @@ export const EMPTY_AGENCY_OUTLET_FILTERS: AgencyOutletFilterState = {
 	source: "",
 };
 
-const SOURCE_LABEL: Record<OutletShiftSource, string> = {
-	posted: "Posted shift",
-	"tied-offer": "Posted shift",
-	"assignment-pending": "Awaiting PR",
+/*
+ * The badge on a shift row.
+ *
+ * These were three hardcoded English strings, while the filter that selects on
+ * the very same values read from the dictionary — so a Chinese screen offered
+ * the viewer one word and answered with another for the same shift. Both sides
+ * read one source now.
+ *
+ * Still a Record keyed by the union rather than an if/else, so adding a source
+ * breaks the build here instead of silently inheriting the posted label.
+ * "tied-offer" shares its label with "posted" on purpose: the distinction is
+ * internal, and filterAgencyOutletSummaries matches the two together, so the
+ * rows a viewer reads as a posted shift are exactly the rows that filter keeps.
+ */
+const SOURCE_LABEL: Record<
+	OutletShiftSource,
+	(t: PortalTranslations) => string
+> = {
+	posted: (t) => t.manageOutlet.postedShift,
+	"tied-offer": (t) => t.manageOutlet.postedShift,
+	"assignment-pending": (t) => t.manageOutlet.awaitingPr,
 };
 
-export function outletShiftSourceLabel(source: OutletShiftSource) {
-	return SOURCE_LABEL[source];
+export function outletShiftSourceLabel(
+	source: OutletShiftSource,
+	t: PortalTranslations,
+) {
+	return SOURCE_LABEL[source](t);
 }
 
 const DEFAULT_EVENT_HEADCOUNT = 12;
@@ -150,7 +171,10 @@ function ymdToIso([y, m, d]: [number, number, number]) {
 
 type TierRatesContext = {
 	commissionRules: OutletCommissionRule[];
-	workspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	workspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 };
 
 function outletDefaultTierRates(outlet: string, ctx: TierRatesContext) {
@@ -510,7 +534,10 @@ export function buildAgencyOutletSummaries(input: {
 	tiedOffers?: AgencyTiedOffer[];
 	todayIso?: string;
 	commissionRules?: OutletCommissionRule[];
-	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	outletWorkspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 }): AgencyOutletSummary[] {
 	const outlets = input.outlets ?? OUTLET_NAMES;
 	const tied = input.tiedOffers ?? PR_AGENCY_TIED_OFFERS;
@@ -657,9 +684,7 @@ function resolveShiftDateIso(shift: AgencyOutletAvailableShift): string {
  * the row's presence.
  */
 export function isOutletShiftOnOrAfterToday(
-	shift: Pick<AgencyOutletAvailableShift, "date" | "dateIso"> & {
-		shift?: string;
-	},
+	shift: { date: string; dateIso?: string; shift?: string },
 	todayIso: string = DEFAULT_ROSTER_DATE_ISO,
 ): boolean {
 	const dateIso = resolveOutletShiftDateIso(
@@ -681,7 +706,10 @@ export function listAvailableShiftsForEarlyReleaseReassign(input: {
 	dateIso?: string;
 	todayIso?: string;
 	commissionRules?: OutletCommissionRule[];
-	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	outletWorkspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 }): AgencyOutletAvailableShift[] {
 	const todayIso = input.todayIso ?? DEFAULT_ROSTER_DATE_ISO;
 	const dayIso = input.dateIso ?? todayIso;
@@ -931,6 +959,16 @@ export function agencyOutletFiltersActive(f: AgencyOutletFilterState): boolean {
 	return Boolean(f.outlet || f.date || f.minOpenSlots || f.source);
 }
 
+/**
+ * How many filters are narrowing the list — not merely whether any is.
+ * The bar shows this on Clear so the button is a decision, not a guess.
+ */
+export function countActiveAgencyOutletFilters(
+	f: AgencyOutletFilterState,
+): number {
+	return [f.outlet, f.date, f.minOpenSlots, f.source].filter(Boolean).length;
+}
+
 export function filterAgencyOutletSummaries(
 	summaries: AgencyOutletSummary[],
 	f: AgencyOutletFilterState,
@@ -1058,7 +1096,10 @@ export function outletHomeShiftRequests(input: {
 	tiedOffers?: AgencyTiedOffer[];
 	todayIso?: string;
 	commissionRules?: OutletCommissionRule[];
-	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	outletWorkspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 }): ShiftRequest[] {
 	const todayIso = input.todayIso ?? DEFAULT_ROSTER_DATE_ISO;
 	const [summary] = buildAgencyOutletSummaries({
@@ -1083,7 +1124,10 @@ export function outletHomeShiftRequests(input: {
 			if (agencyPostedIds.has(shift.id)) return true;
 			return (
 				shift.status === "confirmed" &&
-				isOutletShiftOnOrAfterToday({ date: shift.date }, todayIso)
+				isOutletShiftOnOrAfterToday(
+					{ date: shift.date, dateIso: shift.dateIso },
+					todayIso,
+				)
 			);
 		})
 		.sort((a, b) => {
@@ -1105,7 +1149,10 @@ export type PlanningWeekOutletShiftInput = {
 	tiedOffers?: AgencyTiedOffer[];
 	todayIso?: string;
 	commissionRules?: OutletCommissionRule[];
-	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	outletWorkspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 };
 
 /** Outlet-posted / tied offers with open slots for each day in the planning week */

@@ -804,6 +804,12 @@ export function calcShiftPayout(
 
 export type RosterSlotStatus =
 	| "scheduled"
+	/**
+	 * The shift has finished. Derived from the CLOCK, not from a stored value:
+	 * nothing marks a shift ended, so a night that ran last week kept reading
+	 * "Scheduled" on the roster forever.
+	 */
+	| "ended"
 	| "on-duty"
 	| "en-route"
 	| "unavailable"

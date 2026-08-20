@@ -310,6 +310,17 @@ export interface PrAttendanceWindow {
 	assignedThisWeek?: number;
 	/** Assigned shifts the agency EXCUSED (approved MC/leave) — not opportunity. */
 	excusedThisWeek?: number;
+	/**
+	 * Cancellations that week the PR ALREADY PAID a fee for — sealed above zero
+	 * and not waived. Also removed from the opportunity, so one absence is not
+	 * charged twice: a proportional cancel fee AND the flat below-minimum fine
+	 * it helped cause (owner's call, 20 Aug 2026).
+	 *
+	 * Free cancels (24h+ notice) and waived ones are NOT counted here, so they
+	 * still read as missed — nothing was taken for them, so counting them is a
+	 * first charge, not a second.
+	 */
+	paidCancellationsThisWeek?: number;
 	shiftsThisWeek?: number;
 	lateThisWeek?: number;
 	mcThisMonth?: number;
@@ -330,6 +341,8 @@ export function prAttendanceWindow(pr: {
 	assignedThisWeek?: number;
 	/** Assigned shifts the agency EXCUSED (approved MC/leave) — not opportunity. */
 	excusedThisWeek?: number;
+	/** Cancellations already paid for — see PrAttendanceWindow. */
+	paidCancellationsThisWeek?: number;
 	shiftsThisWeek?: number;
 	lateThisWeek?: number;
 	mcThisMonth?: number;
@@ -337,6 +350,7 @@ export function prAttendanceWindow(pr: {
 	return {
 		assignedThisWeek: pr.assignedThisWeek,
 		excusedThisWeek: pr.excusedThisWeek,
+		paidCancellationsThisWeek: pr.paidCancellationsThisWeek,
 		shiftsThisWeek: pr.shiftsThisWeek,
 		lateThisWeek: pr.lateThisWeek,
 		mcThisMonth: pr.mcThisMonth,
@@ -363,9 +377,13 @@ export function evaluatePrPenalties(
 	// for the same reason in the other direction. Mirrors the backend guard in
 	// pr-penalty.ts; if the two disagree the agency sees one number on screen
 	// and another on the voucher.
+	// Mirrors pr-penalty.ts exactly — see that file's header. Opportunity is
+	// assigned MINUS approved leave MINUS cancellations already paid for, so one
+	// absence is never billed twice.
 	const opportunity =
 		(window.assignedThisWeek ?? Number.POSITIVE_INFINITY) -
-		(window.excusedThisWeek ?? 0);
+		(window.excusedThisWeek ?? 0) -
+		(window.paidCancellationsThisWeek ?? 0);
 	if (
 		min.enabled &&
 		opportunity >= min.minShiftsPerWeek &&

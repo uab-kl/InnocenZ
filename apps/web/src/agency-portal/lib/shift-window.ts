@@ -70,6 +70,46 @@ export function shiftEndInstant(
 }
 
 /**
+ * The instant a shift BEGINS, in the viewer's local zone. `null` when the slot
+ * is not a time range.
+ */
+export function shiftStartInstant(
+	shiftDate: string | null | undefined,
+	slot: string | null | undefined,
+): Date | null {
+	const range = parseSlotRange(slot);
+	if (!range || !shiftDate) return null;
+
+	const [y, m, d] = shiftDate.slice(0, 10).split("-").map(Number);
+	if (!y || !m || !d) return null;
+	return new Date(y, m - 1, d, 0, range.startMin, 0, 0);
+}
+
+/**
+ * Is this shift on the floor RIGHT NOW?
+ *
+ * Half-open [start, end): a shift is live from the moment it starts until the
+ * moment it ends, and `hasShiftEnded` already treats the end instant as over —
+ * so the two never both claim the same minute.
+ *
+ * Fails CLOSED, the opposite of `hasShiftEnded`: an unparseable slot returns
+ * `false`. The two defaults differ on purpose. There, failing open keeps an
+ * unknown shift visible; here, failing open would paint it live — asserting
+ * something is happening now on the strength of a string we could not read.
+ */
+export function isShiftLiveNow(
+	shiftDate: string | null | undefined,
+	slot: string | null | undefined,
+	now: Date,
+): boolean {
+	const start = shiftStartInstant(shiftDate, slot);
+	const end = shiftEndInstant(shiftDate, slot);
+	if (!start || !end) return false;
+	const t = now.getTime();
+	return start.getTime() <= t && t < end.getTime();
+}
+
+/**
  * Has this shift already finished?
  *
  * Fails OPEN: an unparseable slot returns `false`, so a shift we cannot reason

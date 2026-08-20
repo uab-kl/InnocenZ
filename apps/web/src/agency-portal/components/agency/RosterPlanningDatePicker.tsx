@@ -1,3 +1,4 @@
+import { HistCalendarMonthNav } from "@agency-portal/components/iz/HistDateCalendar";
 import { Calendar as CalendarUi } from "@agency-portal/components/ui/calendar";
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
 import {
@@ -58,6 +59,28 @@ export function RosterPlanningDatePicker({
 	const placeholderLabel = placeholder ?? t.roster.pickWeek;
 	const hintLabel = hint ?? t.rosterGrid.dotsMarkRosterDays;
 	const [open, setOpen] = useState(false);
+
+	/*
+	 * The month on VIEW, which the header drives.
+	 *
+	 * The stock `‹ August 2026 ›` caption only steps one month at a time. The
+	 * history filter replaced it with Month and Year dropdowns, and matching that
+	 * means the month has to become state here rather than something
+	 * react-day-picker owns privately.
+	 */
+	const [viewMonth, setViewMonth] = useState<Date>(
+		() => dateFromIso(value) ?? dateFromIso(rosterDates[0] ?? "") ?? new Date(),
+	);
+	/* A year either side of today. `calendarNavBounds` is not reused: it caps the
+	   end at the latest date it already knows about, which is right for a history
+	   filter and wrong for a planner whose whole job is future dates. */
+	const navBounds = useMemo(() => {
+		const y = new Date().getFullYear();
+		return {
+			startMonth: new Date(y - 1, 0, 1),
+			endMonth: new Date(y + 1, 11, 1),
+		};
+	}, []);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const selected = dateFromIso(value);
 	const rosterDateSet = new Set(rosterDates);
@@ -139,14 +162,31 @@ export function RosterPlanningDatePicker({
 				>
 					{/* Always Sunday-first: with a Monday-first grid the highlighted
 					    Sun–Sat band would wrap across two of its rows. */}
+					<HistCalendarMonthNav
+						viewMonth={viewMonth}
+						onMonthChange={setViewMonth}
+						startMonth={navBounds.startMonth}
+						endMonth={navBounds.endMonth}
+					/>
 					<CalendarUi
 						mode="single"
 						weekStartsOn={0}
 						showOutsideDays
-						selected={selected}
-						defaultMonth={
-							selected ?? dateFromIso(rosterDates[0] ?? value) ?? new Date()
+						hideNavigation
+						month={viewMonth}
+						onMonthChange={setViewMonth}
+						startMonth={navBounds.startMonth}
+						endMonth={navBounds.endMonth}
+						/* Greyed out rather than hidden, as on history: the row keeps its
+						   shape and the days that are not this month plainly read as not
+						   this month. Only OUTSIDE days — unlike the history filter, a
+						   planner must be able to pick a future date. */
+						disabled={(date) =>
+							date.getFullYear() !== viewMonth.getFullYear() ||
+							date.getMonth() !== viewMonth.getMonth()
 						}
+						classNames={{ month_caption: "hidden", nav: "hidden" }}
+						selected={selected}
 						onSelect={(d) => {
 							if (d) onChange(isoFromDate(d));
 							setOpen(false);

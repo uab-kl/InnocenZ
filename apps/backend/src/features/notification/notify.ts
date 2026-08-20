@@ -83,3 +83,46 @@ export async function notifyMany(
   }
   return written;
 }
+
+/**
+ * The opposite of raising one: what was asked for has happened.
+ *
+ * Lives beside `notify` deliberately. A producer that can raise a call to action
+ * needs somewhere obvious to retire it, and having nowhere is how
+ * `shift_cover_needed` came to be raised on every cancel and retired by nothing —
+ * an agency that re-staffed the PR still carried an unread notice telling them to
+ * find a replacement they had already found.
+ *
+ * **Never throws**, the same contract as `notify`: retiring a prompt must not be
+ * able to fail the re-staffing that earned it.
+ */
+export async function resolveCoverNeeded(
+  assignmentId: string,
+  actor: string = SYSTEM_ACTOR,
+): Promise<number> {
+  try {
+    return await repository.resolveCoverNeeded(assignmentId, actor);
+  } catch (error) {
+    logger.error('[resolveCoverNeeded] Error:', error);
+    return 0;
+  }
+}
+
+/**
+ * Retire the prompt when a DIFFERENT PR filled the seat.
+ *
+ * The caller must have established that the shift is no longer short — see the
+ * repository method, which explains why retiring early is worse than retiring
+ * late. Never throws, same as the rest of this module.
+ */
+export async function resolveCoverNeededForShift(
+  shiftId: string,
+  actor: string = SYSTEM_ACTOR,
+): Promise<number> {
+  try {
+    return await repository.resolveCoverNeededForShift(shiftId, actor);
+  } catch (error) {
+    logger.error('[resolveCoverNeededForShift] Error:', error);
+    return 0;
+  }
+}

@@ -1617,8 +1617,38 @@ export type PrCurrentWeek = {
   /** Mon–Sun window (YYYY-MM-DD) the server bucketed the lines into. */
   weekStart: string;
   weekEnd: string;
+  /**
+   * The WEEK's money — every voucher in it summed, not `voucherId`'s share.
+   *
+   * A PR who worked for two agencies in one week has two vouchers (0129), and
+   * the grid shows one week, so this is the figure that matches what the grid
+   * adds up to. Per-voucher amounts are in `vouchers[]`.
+   */
   net: string;
   status: string | null;
+  /**
+   * EVERY voucher for this week — ONE PER AGENCY since 0129.
+   *
+   * `voucherId` / `voucherNo` / `status` describe only the NEWEST one and are
+   * kept so this build keeps working against either backend. They are a
+   * headline, not the week. Anything that SIGNS, DOWNLOADS or DISPUTES must
+   * walk this array instead: each agency signs and pays its own voucher, so a
+   * PR with two of them has two documents to sign, and acting on the headline
+   * alone silently signs one and abandons the other.
+   *
+   * Optional because a backend that has not restarted does not send it; absent
+   * means "fall back to the single-voucher fields", which is exactly the
+   * behaviour that shipped before.
+   */
+  vouchers?: {
+    id: string;
+    voucherNo: string | null;
+    agencyId: string;
+    /** Joined through the FK — what tells the PR the two PVs apart. */
+    agencyName: string | null;
+    net: string;
+    status: string | null;
+  }[];
   /** Set on the "Last week" voucher when the PR has raised a dispute (§3 F). */
   disputeReason?: string | null;
   disputeNote?: string | null;

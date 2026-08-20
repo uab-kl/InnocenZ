@@ -194,14 +194,46 @@ export const ShiftAssignmentTable = MainSchema.table(
     cancelFeePct: integer('cancel_fee_pct'),
     cancelNoticeHours: numeric('cancel_notice_hours', { precision: 6, scale: 2 }),
     /**
-     * NULL = sealed but NOT YET CHARGED — the agency's Finance head's list.
+     * NULL = sealed but NOT YET on a voucher.
      *
-     * A fee only becomes money when a human puts it on a voucher, the same
-     * restraint overtime and penalty proposals already carry: a charge that
-     * takes pay away from a worker gets a signature, never an automatic write.
+     * ⚠️ Since 0130 the fee ATTACHES AUTOMATICALLY when the PR cancels, and
+     * this stamps itself. That reverses what 0116 did, deliberately: the old
+     * flow required an agency to press Charge before sending the week's PV, so
+     * FORGETTING was the default and a missed fee slid into a later week or
+     * vanished. The agency's own screen said so out loud.
+     *
+     * A cancellation fee can carry that automation where a weekly penalty
+     * cannot, and the difference is consent, not convenience: the amount is
+     * sealed at the instant of the act, priced by published bands, and the PR
+     * was SHOWN the exact figure on the Cancel button before confirming. There
+     * is no judgement left to apply. `pr-penalty.ts` still proposes and never
+     * deducts, and must keep doing so — its rules need a human to decide
+     * whether an absence was excusable, and the PR agreed to nothing.
+     *
+     * The human is not removed, only moved: the agency now WAIVES rather than
+     * charges, and sending the PV is the signature.
      */
     cancelFeeChargedAt: timestamp('cancel_fee_charged_at', { withTimezone: true }),
+    /**
+     * The voucher the deduction landed on. Also how a retried waive FINDS the
+     * line to remove — never cleared, not even by a waive. See 0130.
+     */
     cancelFeeVoucherId: uuid('cancel_fee_voucher_id'),
+    /**
+     * The agency FORGAVE this fee (0130) — a decision, not an omission.
+     *
+     * `cancel_fee_charged_at IS NULL` cannot express both "nobody has got to it
+     * yet" and "somebody decided not to charge it", and conflating them is how
+     * a forgiven fee reappears on the Finance list and gets charged anyway.
+     * The uncharged list therefore tests BOTH: a waived fee stops resurfacing
+     * forever, an uncharged one keeps coming back until it is settled.
+     *
+     * `_by` and `_reason` are the audit trail. Money taken off a worker's pay
+     * and then given back is exactly the event that needs to say who and why.
+     */
+    cancelFeeWaivedAt: timestamp('cancel_fee_waived_at', { withTimezone: true }),
+    cancelFeeWaivedBy: varchar('cancel_fee_waived_by'),
+    cancelFeeWaiveReason: varchar('cancel_fee_waive_reason', { length: 500 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

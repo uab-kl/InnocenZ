@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchOutlets } from "@/services/outlet/outlet";
+import { fetchOutletSwaps } from "@/services/outlet-swap";
 import {
 	blockedDatesByPr,
 	fetchPrAvailability,
@@ -17,8 +18,9 @@ import { fetchShiftAssignments } from "@/services/shift-assignment";
  * Loads the active agency's roster for a week from the backend (shifts +
  * assignments + PRs + outlets) and maps it into the demo's AgencyRosterSlot
  * shape, so the existing roster UI can render live data. One assignment = one
- * slot. Phase 1: read-only. Demo-only fields (swaps, floor metrics, pay tiers)
- * are left unset until their backend features land.
+ * slot. Phase 1: read-only. Floor metrics and pay tiers are still unset — their backend
+ * features have not landed. Swaps HAVE landed, so pending swap requests are
+ * folded in below.
  */
 export function useRosterSlots(params: {
 	fromDate: string;
@@ -83,6 +85,25 @@ export function useRosterSlots(params: {
 		staleTime: 30_000,
 	});
 
+	/**
+	 * Assignments with a swap awaiting the PR's answer.
+	 *
+	 * The roster slot id IS the assignment id (see `rosterSlotsFromBackend`), so
+	 * this set maps straight onto slots. Without it the roster's "Swap pending"
+	 * filter matched nothing on a real session — the status existed only in demo
+	 * fixtures — while the swap itself was live in the backend.
+	 */
+	const swapsQuery = useQuery({
+		queryKey: ["roster", "pending-swaps"],
+		queryFn: () => fetchOutletSwaps({ status: "pending_pr" }, logout),
+		enabled,
+		staleTime: 30_000,
+	});
+	const pendingSwapAssignmentIds = useMemo(
+		() => new Set((swapsQuery.data ?? []).map((r) => r.assignmentId)),
+		[swapsQuery.data],
+	);
+
 	const slots = useMemo<AgencyRosterSlot[]>(() => {
 		const prs = prsQuery.data?.data ?? [];
 		const outlets = outletsQuery.data?.data ?? [];
@@ -103,8 +124,17 @@ export function useRosterSlots(params: {
 					{ lat: o.lat, lng: o.lng, geoFenceRadius: o.geoFenceRadius },
 				]),
 			),
-		});
+		}).map((slot) =>
+			// Only over a SCHEDULED slot. A PR already on the floor, or off the plan
+			// entirely, is not usefully described as "swap pending" — the swap is a
+			// question about a future shift, and overwriting on-duty would hide
+			// someone actually working from the live view.
+			slot.status === "scheduled" && pendingSwapAssignmentIds.has(slot.id)
+				? { ...slot, status: "swap-pending" as const }
+				: slot,
+		);
 	}, [
+		pendingSwapAssignmentIds,
 		shiftsQuery.data,
 		assignmentsQuery.data,
 		prsQuery.data,
