@@ -1,5 +1,8 @@
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
+import { useAgencyOutlets } from "@agency-portal/hooks/use-agency-outlets";
 import { AgencyCommissionRulesPanel } from "@agency-portal/components/agency/AgencyCommissionRulesPanel";
 import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
+import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { formatOutletHistRm } from "@agency-portal/components/outlet/outlet-history-ui";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
@@ -24,6 +27,8 @@ import {
 	resolveShiftPayTierRows,
 	shiftTierStaffingByPayTier,
 } from "@agency-portal/lib/post-job-pay-tiers";
+import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
+import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { useStore } from "@agency-portal/lib/store";
 import {
@@ -31,13 +36,20 @@ import {
 	Briefcase,
 	Calendar,
 	ChevronDown,
-	ChevronRight,
 	Clock,
+	MapPin,
 	Star,
+	ZoomIn,
 } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+
+/** "2026-08-20" reads like a database row — show "Thu · 20 Aug 2026", the same
+    friendly form the PR app uses. Demo labels ("Tonight") pass through. */
+function prettyShiftDate(date: string): string {
+	return /^\d{4}-\d{2}-\d{2}$/.test(date) ? fmtDateLabelFromIso(date) : date;
+}
 
 type AgencyOutletDetailViewProps = {
 	summary: AgencyOutletSummary;
@@ -59,6 +71,10 @@ export function AgencyOutletDetailView({
 	logo,
 }: AgencyOutletDetailViewProps) {
 	const { t } = usePortalLocale();
+	// The venue's mark, full size on tap (owner: the agency must be able to
+	// zoom the logo too, not just the event picture).
+	const logoSrc = prPhotoSrc(logo);
+	const [logoZoom, setLogoZoom] = useState(false);
 	const shiftGroups = useMemo(
 		() => groupOutletShiftsTodayFuture(shifts, DEFAULT_ROSTER_DATE_ISO),
 		[shifts],
@@ -76,6 +92,21 @@ export function AgencyOutletDetailView({
 	// subtitle can't quote demo money while the table shows the outlet's real
 	// rates — `summary.rule` is a demo fixture on a backed session.
 	const backendWorkspace = useAgencyOutletWorkspace(summary.outlet).workspace;
+	// The venue's real address, from the agency's own outlet registry — the
+	// same directory the workspace lookup resolves through.
+	const { outlets: registryOutlets } = useAgencyOutlets();
+	const registryRow = registryOutlets.find((o) => o.name === summary.outlet);
+	const outletAddress = [
+		registryRow?.addressLine1,
+		registryRow?.addressLine2,
+		[registryRow?.postcode, registryRow?.city, registryRow?.state]
+			.map((x) => x?.trim())
+			.filter(Boolean)
+			.join(" "),
+	]
+		.map((x) => x?.trim())
+		.filter(Boolean)
+		.join(", ");
 	const headWage = backendWorkspace?.basePayPerHour ?? summary.rule.wagePerHour;
 	const headDrinkPct = backendWorkspace?.drinkPct ?? summary.rule.drinkPct;
 	const headTipPct = backendWorkspace?.tipPct ?? summary.rule.tipPct;
@@ -84,11 +115,35 @@ export function AgencyOutletDetailView({
 		<div className="iz-screen iz-outlet-detail-page">
 			<button type="button" className="iz-outlet-detail-back" onClick={onBack}>
 				<ArrowLeft className="h-4 w-4" />
-				{t.outletDetail.backToOutlets}
+				{t.postJob.returnBack}
 			</button>
 
 			<header className="iz-outlet-detail-head">
-				<OutletLogoTile logo={logo} className="iz-outlet-detail-head__icon" />
+				{logoSrc ? (
+					<button
+						type="button"
+						className="iz-outlet-detail-head__logo-zoom"
+						onClick={() => setLogoZoom(true)}
+						aria-label={t.postJob.tapToZoom}
+					>
+						<OutletLogoTile
+							logo={logo}
+							className="iz-outlet-detail-head__icon"
+						/>
+						<span className="iz-zoom-badge" aria-hidden>
+							<ZoomIn className="h-3 w-3" />
+						</span>
+					</button>
+				) : (
+					<OutletLogoTile logo={logo} className="iz-outlet-detail-head__icon" />
+				)}
+				{logoZoom && logoSrc && (
+					<PhotoLightbox
+						photo={logoSrc}
+						alt={summary.outlet}
+						onClose={() => setLogoZoom(false)}
+					/>
+				)}
 				<div className="min-w-0">
 					<h1 className="iz-outlet-detail-head__title">{summary.outlet}</h1>
 					<p className="iz-outlet-detail-head__meta">
@@ -98,6 +153,12 @@ export function AgencyOutletDetailView({
 							tips: headTipPct,
 						})}
 					</p>
+					{outletAddress ? (
+						<p className="iz-outlet-detail-head__addr">
+							<MapPin className="h-3.5 w-3.5" aria-hidden />
+							{outletAddress}
+						</p>
+					) : null}
 				</div>
 			</header>
 
@@ -428,11 +489,12 @@ function ShiftSourceBadge({ shift }: { shift: AgencyOutletAvailableShift }) {
 			</IzPill>
 		);
 	}
+	// Display-only status tag — no chevron: this never opens anything, and the
+	// arrow made it read as a dropdown (owner, 20 Aug).
 	return (
-		<span className="iz-outlet-detail-shift-source">
+		<IzPill variant="ink" className="iz-outlet-detail-shift-badge">
 			{outletShiftSourceLabel(shift.source)}
-			<ChevronDown className="h-3.5 w-3.5" aria-hidden />
-		</span>
+		</IzPill>
 	);
 }
 
@@ -446,9 +508,49 @@ function OutletShiftCardDetails({
 	const { t } = usePortalLocale();
 	const eventType = outletShiftEventTypeLabel(shift, t);
 	const isSpecialEvent = outletShiftIsSpecialEvent(shift);
+	const coverSrc = apiAssetUrl(shift.templateCoverImage);
+	const [coverZoom, setCoverZoom] = useState(false);
 
 	return (
 		<>
+			{/* The event picture leads (owner: "where is the event picture?") —
+			    the kind badge rides on it, so the card stays simple. Tapping it
+			    opens the FULL image (owner: "agency can zoom in to see"). */}
+			{coverSrc && (
+				<button
+					type="button"
+					className="iz-agency-shift-cover"
+					aria-label={t.postJob.tapToZoom}
+					onClick={(e) => {
+						// The future cards render this inside a <summary> — a plain
+						// click would also toggle the card open/shut.
+						e.preventDefault();
+						e.stopPropagation();
+						setCoverZoom(true);
+					}}
+				>
+					<img src={coverSrc} alt="" loading="lazy" />
+					<span
+						className={
+							isSpecialEvent
+								? "iz-agency-shift-cover__badge iz-agency-shift-cover__badge--special"
+								: "iz-agency-shift-cover__badge"
+						}
+					>
+						{eventType}
+					</span>
+					<span className="iz-zoom-badge" aria-hidden>
+						<ZoomIn className="h-3 w-3" />
+					</span>
+				</button>
+			)}
+			{coverZoom && coverSrc && (
+				<PhotoLightbox
+					photo={coverSrc}
+					alt={shift.event}
+					onClose={() => setCoverZoom(false)}
+				/>
+			)}
 			<div className="iz-outlet-detail-shift-card__metrics">
 				<OutletDemandSuppliedStat
 					demand={shift.demandSlots}
@@ -458,6 +560,7 @@ function OutletShiftCardDetails({
 				<OutletShiftMetric label={t.outletDetail.estPayout} tone="gold">
 					{formatOutletHistRm(shift.payEstimate)}
 				</OutletShiftMetric>
+{!shift.templateCoverImage && (
 				<OutletShiftMetric
 					label={t.outletDetail.eventType}
 					tone={isSpecialEvent ? "gold" : "ink"}
@@ -465,6 +568,7 @@ function OutletShiftCardDetails({
 				>
 					{eventType}
 				</OutletShiftMetric>
+				)}
 			</div>
 
 			{showBriefingInSummary && shift.briefing && (
@@ -513,6 +617,8 @@ function OutletDetailTodayShiftCard({
 			<summary>
 				<div className="iz-outlet-detail-shift-card__main">
 					<div className="iz-outlet-detail-shift-card__top">
+						{/* No head thumbnail — the card's big cover below already
+						    shows the SAME picture (owner: no duplicates). */}
 						<div className="min-w-0 flex-1">
 							<p className="iz-outlet-detail-shift-card__title">
 								{shift.event}
@@ -520,7 +626,7 @@ function OutletDetailTodayShiftCard({
 							<div className="iz-outlet-detail-shift-card__when">
 								<span>
 									<Calendar className="h-3.5 w-3.5" aria-hidden />
-									{shift.date}
+									{prettyShiftDate(shift.date)}
 								</span>
 								<span>
 									<Clock className="h-3.5 w-3.5" aria-hidden />
@@ -568,7 +674,8 @@ function OutletDetailFutureShiftCard({
 								{shift.event}
 							</p>
 							<p className="iz-outlet-detail-shift-future__sub">
-								{shift.date} · {shift.shift} · {shift.demandSlots}/
+								{prettyShiftDate(shift.date)} · {shift.shift} ·{" "}
+								{shift.demandSlots}/
 								{shift.suppliedSlots}
 								{shift.openSlots > 0 ? ` · ${shift.openSlots} open` : ""}
 							</p>
@@ -577,10 +684,7 @@ function OutletDetailFutureShiftCard({
 							<p className="iz-outlet-detail-shift-future__pay">
 								{formatOutletHistRm(shift.payEstimate)}
 							</p>
-							<span className="iz-outlet-detail-shift-future__action">
-								{outletShiftSourceLabel(shift.source)}
-								<ChevronRight className="h-3.5 w-3.5" aria-hidden />
-							</span>
+							<ShiftSourceBadge shift={shift} />
 						</div>
 					</div>
 

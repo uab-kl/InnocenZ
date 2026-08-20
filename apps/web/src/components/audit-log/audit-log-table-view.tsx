@@ -135,7 +135,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 					<Button variant="outline" size="sm" asChild>
 						<Link to="/admin/audit-log">
 							<ArrowLeft className="mr-2 h-4 w-4" />
-							Back to roles
+							Return
 						</Link>
 					</Button>
 				}

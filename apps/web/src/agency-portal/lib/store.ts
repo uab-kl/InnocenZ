@@ -381,6 +381,10 @@ export interface ShiftRequest {
 	languages: string;
 	event: string;
 	eventKind?: ShiftEventKind;
+	/** Event template the shift was posted from (0128). */
+	templateId?: string;
+	/** That template's cover picture (R2 key), for every shift view. */
+	templateCoverImage?: string;
 	specialEventType?: string;
 	/** Custom label when specialEventType is "other" */
 	customSpecialEventName?: string;

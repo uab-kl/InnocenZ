@@ -6,7 +6,7 @@
  * the prototype seeds until the backend models shifts.
  */
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   fmtDFriendly,
@@ -18,10 +18,11 @@ import {
   type Ymd,
 } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
-import { type ShiftAssignmentRecord } from '../lib/api';
+import { assetUrl, type ShiftAssignmentRecord } from '../lib/api';
 import { useViewportSize } from '../lib/viewport';
 import { useLocale } from '../i18n';
 import { Section } from '../components/Section';
+import { ImageLightbox, ZoomHint } from '../components/ImageLightbox';
 import { AgencySchedulePanel } from '../components/AgencySchedulePanel';
 import { OutletSwapRequests } from '../components/OutletSwapRequests';
 import { useOutletSwaps } from '../lib/outlet-swaps';
@@ -36,6 +37,7 @@ import {
   House,
   MapPin,
   Store,
+  ZoomIn,
 } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 import { useActiveShift } from '../lib/active-shift';
@@ -76,6 +78,7 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
     // outlet join has always been in the /mine query; `outlet.logo_image` is
     // simply the one column it did not select.
     logoPath: a.outletLogo ?? null,
+    eventPhotoPath: a.templateCoverImage ?? null,
     status,
   };
 }
@@ -602,8 +605,11 @@ function TonightCard({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  /** Full-size viewer for the event picture / outlet logo (owner: PR can zoom). */
+  const [zoomUri, setZoomUri] = useState<string | null>(null);
   return (
     <View style={[styles.shiftCard, grad(GRADIENTS.shiftCard, 'rgba(232,194,122,0.08)')]}>
+      <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
       <Pressable onPress={() => setOpen((o) => !o)}>
         <View style={styles.shiftCardHead}>
           <Text style={styles.shiftEyebrow}>{eyebrow}</Text>
@@ -613,15 +619,50 @@ function TonightCard({
             style={open ? { transform: [{ rotate: '180deg' }] } : undefined}
           />
         </View>
+        {/* The night's own picture — the event card the outlet posted from.
+            Hero, not a footnote: the PR recognises the event before reading. */}
+        {shift.eventPhotoPath ? (
+          <Pressable
+            style={styles.shiftHeroWrap}
+            onPress={() => setZoomUri(assetUrl(shift.eventPhotoPath) ?? null)}
+          >
+            <Image
+              source={{ uri: assetUrl(shift.eventPhotoPath) ?? undefined }}
+              style={styles.shiftHero}
+              resizeMode="cover"
+            />
+            <View style={styles.shiftHeroBadge}>
+              <Text
+                style={[
+                  styles.shiftHeroBadgeText,
+                  shift.eventKind === 'Special event' && styles.shiftHeroBadgeTextSpecial,
+                ]}
+              >
+                {shift.eventKind ?? 'Normal shift'}
+              </Text>
+            </View>
+            <View style={styles.zoomBadge}>
+              <ZoomIn size={12} color="#fff" strokeWidth={2.2} />
+            </View>
+          </Pressable>
+        ) : null}
         <View style={styles.shiftVenue}>
-          <Avatar
-            size={52}
-            radius={16}
-            photoPath={shift.logoPath}
-            initial={shift.outlet.trim()[0]?.toUpperCase()}
-            logo
-            style={styles.shiftLogo}
-          />
+          <Pressable
+            disabled={!assetUrl(shift.logoPath)}
+            onPress={() => setZoomUri(assetUrl(shift.logoPath) ?? null)}
+          >
+            <Avatar
+              size={52}
+              radius={16}
+              photoPath={shift.logoPath}
+              initial={shift.outlet.trim()[0]?.toUpperCase()}
+              logo
+              style={styles.shiftLogo}
+            />
+            {assetUrl(shift.logoPath) ? (
+              <ZoomHint size={16} style={{ right: -3, bottom: -3 }} />
+            ) : null}
+          </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
             <LabelWithIcon icon={Store} label="Outlet name" />
             <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
@@ -665,6 +706,51 @@ function TonightCard({
 }
 
 const styles = StyleSheet.create({
+  shiftHeroWrap: {
+    position: 'relative',
+    marginTop: 10,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  shiftHero: {
+    width: '100%',
+    height: 132,
+  },
+  shiftHeroBadge: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  shiftHeroBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: '#C9B8F2',
+  },
+  shiftHeroBadgeTextSpecial: {
+    color: '#E8C27A',
+  },
+  /** Magnifier chip on the hero — "this picture opens bigger". */
+  zoomBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
   screen: {
     paddingTop: 6,
     paddingHorizontal: 18,

@@ -92,6 +92,8 @@ export type DemoShift = {
   payout: number;
   /** Served by the backend static /img route */
   logoPath: string | null;
+  /** The event picture (template cover R2 key); null on blank/old shifts. */
+  eventPhotoPath?: string | null;
   status: 'scheduled' | 'pending' | 'on-duty' | 'complete';
 };
 

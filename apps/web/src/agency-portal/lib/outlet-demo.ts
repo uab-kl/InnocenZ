@@ -504,6 +504,15 @@ export const OUTLET_SERVICE_ENTITLEMENT_SECTION_ID = "service-entitlement";
 export const OUTLET_DRINKS_PRICE_SECTION_ID = "drinks-price";
 
 /**
+ * Workspace page anchor — Rates by PR tier (wages, drinks %, tips %, target).
+ *
+ * The price lists have had anchors since they were built; this section never
+ * did, so Post Job could send a venue to "change your prices" but had nowhere
+ * to send them for "change your wages" — the other half of the same question.
+ */
+export const OUTLET_TIER_RATES_SECTION_ID = "tier-rates";
+
+/**
  * Workspace page anchor — opens BOTH price lists (Drinks Price and Service
  * Entitlement) and lands on the first. Post Job's "Prices" row links here,
  * because "Follow Workspace" covers both lists, not drinks alone.

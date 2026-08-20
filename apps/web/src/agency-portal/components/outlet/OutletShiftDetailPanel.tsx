@@ -1,4 +1,6 @@
+import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzPill } from "@agency-portal/components/iz/ui";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 // import { OutletSealReview } from "@agency-portal/components/outlet/OutletSealReview";
 import {
 	OUTLET_OPEN_CUTLOST_EVENT,
@@ -58,8 +60,9 @@ import {
 	Lock,
 	PlayCircle,
 	Trash2,
+	ZoomIn,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { dressCodeLabel } from "@/lib/portal-i18n/language-label";
@@ -205,6 +208,12 @@ export function OutletShiftDetailPanel({
 		shift.specialEventType,
 		shift.customSpecialEventName,
 	);
+	// The event picture (owner's ask, 19 Aug): a shift posted from a template
+	// shows that card's cover. It arrives ON the shift payload (joined
+	// server-side, 0128) — an agency may not read another org's template
+	// list, so a lookup would blank exactly the cross-org surfaces that need it.
+	const eventCover = apiAssetUrl(shift.templateCoverImage);
+	const [coverZoom, setCoverZoom] = useState(false);
 	const drinkPricingLabel = formatShiftDrinkPricingSummary(
 		shift,
 		outletWorkspace.drinkMenu ?? [],
@@ -328,6 +337,33 @@ export function OutletShiftDetailPanel({
 				    header's own "10pm – 4am" as an unformatted "22:00 — 04:00"
 				    directly beneath it. The header already states the window, and a
 				    second copy in a different format reads as two different facts. */}
+				{eventCover && (
+					<button
+						type="button"
+						className="iz-event-cover-zoom w-full"
+						onClick={(e) => {
+							e.preventDefault();
+							setCoverZoom(true);
+						}}
+					>
+						<img
+							className="iz-shift-event-cover"
+							src={eventCover}
+							alt=""
+							loading="lazy"
+						/>
+						<span className="iz-zoom-badge" aria-hidden>
+							<ZoomIn className="h-3 w-3" />
+						</span>
+					</button>
+				)}
+				{coverZoom && eventCover && (
+					<PhotoLightbox
+						photo={eventCover}
+						alt={shift.event}
+						onClose={() => setCoverZoom(false)}
+					/>
+				)}
 				<div className="space-y-0.5">
 					<p className="iz-tiny iz-muted2">
 						<span className="text-[var(--iz-muted)]">

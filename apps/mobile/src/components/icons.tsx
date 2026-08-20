@@ -269,3 +269,10 @@ export const Trash2 = makeIcon([
   ['path', { d: 'M10 11v6' }],
   ['path', { d: 'M14 11v6' }],
 ]);
+
+export const ZoomIn = makeIcon([
+  ['circle', { cx: '11', cy: '11', r: '8' }],
+  ['path', { d: 'm21 21-4.3-4.3' }],
+  ['path', { d: 'M11 8v6' }],
+  ['path', { d: 'M8 11h6' }],
+]);

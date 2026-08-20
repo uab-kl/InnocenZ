@@ -21,6 +21,7 @@ import {
 	OUTLET_DRINKS_PRICE_SECTION_ID,
 	OUTLET_PRICES_SECTION_ID,
 	OUTLET_SERVICE_ENTITLEMENT_SECTION_ID,
+	OUTLET_TIER_RATES_SECTION_ID,
 	type OutletDrinkPrice,
 	outletDrinkCategory,
 	sortOutletDrinkMenuByPrice,
@@ -141,6 +142,7 @@ function OutletWorkspacePage() {
 	// are controlled (not defaultOpen) so arriving on #prices can open both.
 	const [drinksOpen, setDrinksOpen] = useState(false);
 	const [servicesOpen, setServicesOpen] = useState(false);
+	const [tierRatesOpen, setTierRatesOpen] = useState(false);
 
 	useEffect(() => {
 		const openLinkedSection = () => {
@@ -151,12 +153,16 @@ function OutletWorkspacePage() {
 			const wantsServices =
 				hash === OUTLET_SERVICE_ENTITLEMENT_SECTION_ID ||
 				hash === OUTLET_PRICES_SECTION_ID;
-			if (!wantsDrinks && !wantsServices) return;
+			const wantsTierRates = hash === OUTLET_TIER_RATES_SECTION_ID;
+			if (!wantsDrinks && !wantsServices && !wantsTierRates) return;
 			if (wantsDrinks) setDrinksOpen(true);
 			if (wantsServices) setServicesOpen(true);
-			const targetId = wantsDrinks
-				? OUTLET_DRINKS_PRICE_SECTION_ID
-				: OUTLET_SERVICE_ENTITLEMENT_SECTION_ID;
+			if (wantsTierRates) setTierRatesOpen(true);
+			const targetId = wantsTierRates
+				? OUTLET_TIER_RATES_SECTION_ID
+				: wantsDrinks
+					? OUTLET_DRINKS_PRICE_SECTION_ID
+					: OUTLET_SERVICE_ENTITLEMENT_SECTION_ID;
 			// Scroll after the newly expanded body has laid out, or the section
 			// lands off-screen at its collapsed height.
 			requestAnimationFrame(() => {
@@ -293,7 +299,9 @@ function OutletWorkspacePage() {
 				iconKey="Rates by PR tier"
 				className="!mt-4"
 				collapsible
-				defaultOpen={false}
+				id={OUTLET_TIER_RATES_SECTION_ID}
+				open={tierRatesOpen}
+				onOpenChange={setTierRatesOpen}
 			>
 				<IzCard className="!py-3">
 					<WorkspaceTierRatesEditor

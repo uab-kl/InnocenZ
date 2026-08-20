@@ -35,6 +35,7 @@ import { useLocale } from '../i18n';
 import { Avatar, IzButton } from '../components/ui';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { PortfolioSlotGrid } from '../components/PortfolioSlotGrid';
+import { ImageLightbox, ZoomHint } from '../components/ImageLightbox';
 import { AppToast, useToast } from '../components/Toast';
 import { LanguageMultiPicker } from './sign-up/fields';
 import {
@@ -219,6 +220,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const displayPortfolio = pendingOrder ?? portfolio;
 
   const avatarPath = me?.profileImage ?? null;
+  /**
+   * Full-size viewer (owner: PR can zoom profile pic / comcard / gallery).
+   * No conflict with updating: the CAMERA badge is the only "change photo"
+   * control once a photo exists — tapping the picture itself views it.
+   */
+  const avatarZoomUri = assetUrl(avatarPath);
+  const [zoomUri, setZoomUri] = useState<string | null>(null);
 
   const comcardTiles = useMemo(() => {
     // A saved comcard image wins; else a collage from the account's real photos.
@@ -697,6 +705,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   return (
     <View style={styles.screen}>
       <AppToast message={toast} variant={toastVariant} />
+      <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
 
       <View style={styles.hero}>
         <View style={styles.heroHead}>
@@ -715,7 +724,17 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
         <View style={styles.profileRow}>
           <View style={styles.avatarWrap}>
-            <Pressable onPress={canPickImages ? onPickAvatar : undefined}>
+            {/* With a photo: tap = view full size (change stays on the camera
+                badge). Without one there is nothing to view — tap picks. */}
+            <Pressable
+              onPress={
+                avatarZoomUri
+                  ? () => setZoomUri(avatarZoomUri)
+                  : canPickImages
+                    ? onPickAvatar
+                    : undefined
+              }
+            >
               <Avatar
                 size={80}
                 radius={22}
@@ -723,6 +742,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 photoPath={avatarPath}
                 initial={displayName.trim()[0]?.toUpperCase()}
               />
+              {/* Top-right: the camera badge owns the bottom corner. */}
+              {avatarZoomUri ? (
+                <ZoomHint size={18} style={{ right: -4, top: -4, bottom: undefined }} />
+              ) : null}
             </Pressable>
             {canPickImages && (
               <Pressable style={styles.avatarEdit} onPress={onPickAvatar}>
@@ -909,13 +932,19 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             {comcardTiles.mode === 'single' ? (
               <View style={styles.collage}>
                 {comcardShowing ? (
-                  <Image
-                    key={comcardTiles.src}
-                    source={{ uri: comcardSrc!, cache: 'reload' }}
+                  <Pressable
                     style={StyleSheet.absoluteFillObject}
-                    resizeMode="cover"
-                    onError={() => setComcardLoadFailed(true)}
-                  />
+                    onPress={() => setZoomUri(comcardSrc)}
+                  >
+                    <Image
+                      key={comcardTiles.src}
+                      source={{ uri: comcardSrc!, cache: 'reload' }}
+                      style={StyleSheet.absoluteFillObject}
+                      resizeMode="cover"
+                      onError={() => setComcardLoadFailed(true)}
+                    />
+                    <ZoomHint />
+                  </Pressable>
                 ) : (
                   /*
                    * NOT an empty frame. The comcard exists — it is saved and the
@@ -940,12 +969,18 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 {comcardTiles.paths.map((path, idx) => {
                   const uri = path ? assetUrl(path) : null;
                   return uri ? (
-                    <Image
+                    <Pressable
                       key={`${path}-${idx}`}
-                      source={{ uri }}
                       style={styles.collageTile}
-                      resizeMode="cover"
-                    />
+                      onPress={() => setZoomUri(uri)}
+                    >
+                      <Image
+                        source={{ uri }}
+                        style={{ width: '100%', height: '100%' }}
+                        resizeMode="cover"
+                      />
+                      <ZoomHint size={18} />
+                    </Pressable>
                   ) : (
                     <View
                       key={`empty-${idx}`}
@@ -1165,6 +1200,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               canEdit={canPickImages}
               saving={saving}
               resolveUri={assetUrl}
+              onView={(uri) => setZoomUri(uri)}
               onPick={onPickPortfolio}
               onRemove={onRemovePortfolio}
               onReorder={(next) => {

@@ -34,6 +34,10 @@ export interface Shift {
 	slot: string | null;
 	eventName: string | null;
 	eventKind: ShiftEventKind;
+	/** Event template the shift was posted from (0128); null on blank posts. */
+	templateId?: string | null;
+	/** That template's cover picture (R2 key), joined server-side. */
+	templateCoverImage?: string | null;
 	languages: string | null;
 	quantity: number;
 	filled: number;
@@ -133,6 +137,8 @@ export interface CreateShiftInput {
 	slot?: string;
 	eventName?: string;
 	eventKind?: ShiftEventKind;
+	/** The event template this shift was posted from (0128). */
+	templateId?: string;
 	languages?: string;
 	quantity?: number;
 	filled?: number;

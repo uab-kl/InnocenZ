@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, inArray, lte, ne, notInArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { ShiftTemplateTable } from '@/features/shift-template/shift-template.model';
 import { logger } from '@/util/logger';
 import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
 // The SAME status set the roster and the capacity guard use — a private copy here
@@ -65,7 +66,16 @@ export class ShiftRepositoryClass {
 
   async getById(id: string): Promise<ShiftType | null> {
     try {
-      const [shift] = await db.select().from(ShiftTable).where(eq(ShiftTable.id, id)).limit(1);
+      // The event cover rides on every shift read (0128): agencies and PRs
+      // may not read another org's template list, so the picture has to
+      // arrive WITH the shift.
+      const [row] = await db
+        .select({ shift: ShiftTable, templateCoverImage: ShiftTemplateTable.coverImage })
+        .from(ShiftTable)
+        .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
+        .where(eq(ShiftTable.id, id))
+        .limit(1);
+      const shift = row ? { ...row.shift, templateCoverImage: row.templateCoverImage } : undefined;
       return shift ?? null;
     } catch (error) {
       logger.error('[ShiftRepository.getById] Error:', error);
@@ -433,13 +443,15 @@ export class ShiftRepositoryClass {
         .where(whereClause);
       const totalCount = Number(countRow?.value ?? 0);
 
-      const shifts = await db
-        .select()
+      const shiftRows = await db
+        .select({ shift: ShiftTable, templateCoverImage: ShiftTemplateTable.coverImage })
         .from(ShiftTable)
+        .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
         .where(whereClause)
         .orderBy(ShiftTable.shiftDate)
         .limit(pageSize)
         .offset((page - 1) * pageSize);
+      const shifts = shiftRows.map((r) => ({ ...r.shift, templateCoverImage: r.templateCoverImage }));
 
       return { shifts, totalCount };
     } catch (error) {

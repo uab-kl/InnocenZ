@@ -944,6 +944,8 @@ export type ShiftAssignmentRecord = {
    * venue's initial rather than showing an empty circle.
    */
   outletLogo?: string | null;
+  /** The event picture — cover of the template this shift was posted from (0128). */
+  templateCoverImage?: string | null;
   /** The shift outlet's address (composed from its address columns via FK). */
   outletAddress: string | null;
   /** Venue pin off the outlet FK — null until the outlet drops its pin. */
@@ -1568,6 +1570,9 @@ export type PrWeekShift = {
    * the tag than not shown at all.
    */
   eventKind?: string | null;
+  /** The venue logo + the event picture, for the evidence sheet header. */
+  outletLogo?: string | null;
+  templateCoverImage?: string | null;
   outletName: string | null;
   /** ISO timestamp, or null when the shift was never started. */
   checkInAt: string | null;

@@ -2031,7 +2031,7 @@ function PvDetail({
 				className="iz-btn iz-btn-soft mt-2"
 				onClick={onClose}
 			>
-				Back to payroll
+				Return
 			</button>
 		</>
 	);

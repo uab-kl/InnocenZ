@@ -3,17 +3,19 @@
  * date/time block, and the notification bell with its unread badge + sheet.
  * Identity comes from the backend session (/auth/me).
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { fmtClock, fmtDTopbar, formatRM, todayYmd, weekPvIssueDayLabel } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import {
+  assetUrl,
   fetchMyNotifications,
   markNotificationRead,
   type NotificationRecord,
 } from '../lib/api';
+import { ImageLightbox } from './ImageLightbox';
 import { formatMessage, useLocale } from '../i18n';
 import { Avatar, IzButton } from './ui';
 import { Bell, ChevronLeft, FileText } from './icons';
@@ -124,15 +126,46 @@ export function TopBar({
 
   const displayName = me?.username ?? 'PR';
   const roleLabel = me?.profile.underAgency ? t.topbar.prAgencyTied : t.topbar.pr;
+  /**
+   * Owner's spec: ONE tap on the identity opens the Profile page, a DOUBLE tap
+   * opens the profile picture full size. The single tap therefore waits one
+   * beat (300ms) for a possible second tap — only when there is a picture to
+   * zoom; with no photo the tap opens Profile immediately.
+   */
+  const avatarUri = assetUrl(me?.profileImage);
+  const [zoomUri, setZoomUri] = useState<string | null>(null);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+    };
+  }, []);
+  const onIdentityPress = () => {
+    if (!avatarUri) {
+      onOpenProfile?.();
+      return;
+    }
+    if (tapTimer.current) {
+      clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      setZoomUri(avatarUri);
+      return;
+    }
+    tapTimer.current = setTimeout(() => {
+      tapTimer.current = null;
+      onOpenProfile?.();
+    }, 300);
+  };
   return (
     <View style={[styles.topbar, grad(GRADIENTS.topbar, 'transparent')]}>
+      <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
       {backLabel && onBack ? (
         <Pressable style={styles.backBtn} onPress={onBack}>
           <ChevronLeft size={18} color={C.goldL} />
           <Text style={styles.backText}>{backLabel}</Text>
         </Pressable>
       ) : (
-        <Pressable style={styles.identity} onPress={onOpenProfile}>
+        <Pressable style={styles.identity} onPress={onIdentityPress}>
           <Avatar
             size={44}
             radius={14}
@@ -153,7 +186,7 @@ export function TopBar({
 
       <View style={styles.actions}>
         {!!backLabel && (
-          <Pressable style={styles.identityCompact} onPress={onOpenProfile}>
+          <Pressable style={styles.identityCompact} onPress={onIdentityPress}>
             <Avatar
               size={28}
               radius={9}

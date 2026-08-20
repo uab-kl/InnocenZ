@@ -71,6 +71,10 @@ export function outletShiftRequestFromBackend(
 		languages: shift.languages ?? "",
 		event: shift.eventName ?? "",
 		eventKind: shift.eventKind,
+		// The event card's picture rides the shift payload (an agency cannot read
+		// another org's template list) — dropping it here is what blanked the
+		// cover on /agency/outlets while the roster dialogs showed it fine.
+		templateCoverImage: shift.templateCoverImage ?? undefined,
 		preferredRating: shift.preferredRating ?? 0,
 		estimatedCost: Number(shift.estimatedCost) || 0,
 		liveSales: Number(shift.liveSales) || 0,

@@ -52,6 +52,7 @@ import {
 	fetchPrAvailability,
 } from "@/services/pr-availability";
 import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { fetchShifts, type Shift } from "@/services/shift";
 import {
 	fetchShiftAssignments,
@@ -869,6 +870,15 @@ function AssignBackendCellSheet({
 										aria-disabled={Boolean(blocked)}
 										title={blocked ? shiftBlockLong(blocked, t) : undefined}
 									>
+										{/* The event picture — the card this shift was posted from (0128). */}
+										{shift.templateCoverImage && (
+											<img
+												className="iz-shift-event-thumb"
+												src={apiAssetUrl(shift.templateCoverImage) ?? undefined}
+												alt=""
+												loading="lazy"
+											/>
+										)}
 										<div className="min-w-0 flex-1 text-left">
 											<div className="flex flex-wrap items-center gap-1.5">
 												<span className="font-sora text-sm font-bold text-[var(--iz-txt)]">

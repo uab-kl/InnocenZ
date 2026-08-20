@@ -50,6 +50,8 @@ import { SpecialServiceRepositoryClass } from '@/features/special-service/specia
 import { SpecialServiceControllerClass } from '@/features/special-service/special-service.controller.js';
 import { OutletWorkspaceRepositoryClass } from '@/features/outlet-workspace/outlet-workspace.repository.js';
 import { OutletWorkspaceControllerClass } from '@/features/outlet-workspace/outlet-workspace.controller.js';
+import { ShiftTemplateRepositoryClass } from '@/features/shift-template/shift-template.repository.js';
+import { ShiftTemplateControllerClass } from '@/features/shift-template/shift-template.controller.js';
 import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penalty-rule.repository.js';
 import { AgencyPenaltyRuleControllerClass } from '@/features/agency/agency-penalty-rule.controller.js';
 import { PenaltyChargeRepositoryClass } from '@/features/agency/penalty-charge.repository.js';
@@ -249,6 +251,8 @@ export const specialServiceController = new SpecialServiceControllerClass(
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();
 export const outletWorkspaceController = new OutletWorkspaceControllerClass(outletWorkspaceRepository);
+export const shiftTemplateRepository = new ShiftTemplateRepositoryClass();
+export const shiftTemplateController = new ShiftTemplateControllerClass(shiftTemplateRepository, authRepository, agencyMemberRepository, outletMemberRepository, outletRepository);
 
 export const agencyPenaltyRuleRepository = new AgencyPenaltyRuleRepositoryClass();
 

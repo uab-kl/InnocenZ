@@ -25,6 +25,7 @@ import outletTransactionRoutes from '@/features/outlet-transaction/outlet-transa
 import adminRequestRoutes from '@/features/admin-request/admin-request.routes.js';
 import specialServiceRoutes from '@/features/special-service/special-service.routes.js';
 import outletWorkspaceRoutes from '@/features/outlet-workspace/outlet-workspace.routes.js';
+import shiftTemplateRoutes from '@/features/shift-template/shift-template.routes.js';
 import ratingRoutes from '@/features/rating/rating.routes.js';
 import notificationRoutes from '@/features/notification/notification.routes.js';
 import collectionInvoiceRoutes from '@/features/collection-invoice/collection-invoice.routes.js';
@@ -90,6 +91,7 @@ v1Router.use('/outlet-transaction', outletTransactionRoutes);
 v1Router.use('/admin-request', adminRequestRoutes);
 v1Router.use('/special-service', specialServiceRoutes);
 v1Router.use('/outlet-workspace', outletWorkspaceRoutes);
+v1Router.use('/shift-template', shiftTemplateRoutes);
 v1Router.use('/rating', ratingRoutes);
 // No role guard: every signed-in role has an inbox. Scoped by req.user.id in
 // the controller, so there is no user id for a caller to tamper with.

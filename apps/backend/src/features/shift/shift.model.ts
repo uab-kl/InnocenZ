@@ -62,6 +62,13 @@ export const ShiftTable = MainSchema.table('shift', {
   slot: varchar('slot', { length: 100 }),
   eventName: varchar('event_name', { length: 255 }),
   eventKind: shiftEventKindEnum('event_kind').notNull().default('normal'),
+  /**
+   * Which event template this shift was posted from (0128), or null for a
+   * blank post. Plain uuid here — the FK (SET NULL on template delete) lives
+   * in the DDL, because `shift_template.model.ts` imports this file's enum
+   * and a `.references()` back at it would be a module cycle.
+   */
+  templateId: uuid('template_id'),
   languages: varchar('languages', { length: 255 }),
   quantity: integer('quantity').notNull().default(0),
   filled: integer('filled').notNull().default(0),
