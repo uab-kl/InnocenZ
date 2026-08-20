@@ -15,11 +15,10 @@
  * the owner's rule: the user must be TOLD a picture opens bigger, on every
  * picture that does.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
   Modal,
-  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
@@ -64,11 +63,47 @@ type WebFrameNode = WebEventTarget & {
   ownerDocument?: WebEventTarget;
 };
 
-function touchDistance(touches: WebTouchList): number {
-  return Math.hypot(
-    touches[0].pageX - touches[1].pageX,
-    touches[0].pageY - touches[1].pageY,
-  );
+function touchDistance(a: { pageX: number; pageY: number }, b: { pageX: number; pageY: number }): number {
+  return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+}
+
+/**
+ * Every ACTIVE finger on screen — not the thin `nativeEvent.touches` array.
+ *
+ * Why: on native Android, PanResponder / Responder `nativeEvent.touches` (and
+ * even `gestureState.numberActiveTouches`) often stays at **1** for the whole
+ * pinch. The browser path never hit this; the owner's real phone did
+ * (20 Aug 2026). `touchHistory.touchBank` is the RN multi-touch source of
+ * truth (currentPageX/Y + touchActive). Web falls back to `touches`.
+ */
+type Finger = { pageX: number; pageY: number };
+type TouchBankEntry = {
+  touchActive?: boolean;
+  currentPageX?: number;
+  currentPageY?: number;
+};
+function activeFingers(e: {
+  touchHistory?: { touchBank?: ReadonlyArray<TouchBankEntry | null | undefined> };
+  nativeEvent: { touches: WebTouchList | ReadonlyArray<WebTouch> };
+}): Finger[] {
+  const bank = e.touchHistory?.touchBank;
+  if (bank && bank.length > 0) {
+    const out: Finger[] = [];
+    for (const t of bank) {
+      if (t?.touchActive && typeof t.currentPageX === 'number' && typeof t.currentPageY === 'number') {
+        out.push({ pageX: t.currentPageX, pageY: t.currentPageY });
+      }
+    }
+    if (out.length > 0) return out;
+  }
+  const touches = e.nativeEvent.touches;
+  const n = touches.length;
+  const out: Finger[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = touches[i];
+    if (t) out.push({ pageX: t.pageX, pageY: t.pageY });
+  }
+  return out;
 }
 
 export function ImageLightbox({
@@ -82,9 +117,8 @@ export function ImageLightbox({
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
-  // The PanResponder is created once, so everything it reads lives in refs —
-  // reading state directly would freeze the gesture at the first render's
-  // values (the classic stale-closure bug).
+  // The gesture handlers close over refs, so they stay correct across
+  // re-renders even though the prop object is recreated each pass.
   const scaleRef = useRef(1);
   const offsetRef = useRef({ x: 0, y: 0 });
   const frameSize = useRef({ w: 0, h: 0 });
@@ -171,65 +205,104 @@ export function ImageLightbox({
     lastTapAt.current = now;
   };
 
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          moved.current = false;
-          pinchBase.current = null;
-          panBase.current = null;
-        },
-        onPanResponderMove: (e, g) => {
-          const touches = e.nativeEvent.touches;
-          if (touches.length >= 2) {
-            // PINCH. Baseline resets whenever the 2nd finger (re)lands, so a
-            // lift-and-repinch never jumps.
-            const d = touchDistance(touches);
-            if (!pinchBase.current) {
-              pinchBase.current = { dist: d || 1, scale: scaleRef.current };
+  /** Shared pinch / pan / tap math — used by native onTouch* AND the web
+      document listeners. Kept outside any responder so a second finger that
+      Android refuses to feed through PanResponder still reaches us. */
+  const onFingers = (fingers: Finger[], phase: 'start' | 'move' | 'end') => {
+    if (phase === 'end') {
+      if (fingers.length === 0) {
+        const wasMoved = moved.current;
+        pinchBase.current = null;
+        panBase.current = null;
+        moved.current = false;
+        if (!wasMoved) handleTap();
+      } else {
+        // One finger left after a pinch — re-baseline pan on next move.
+        pinchBase.current = null;
+        panBase.current = null;
+      }
+      return;
+    }
+    if (fingers.length >= 2) {
+      const d = touchDistance(fingers[0], fingers[1]);
+      if (!pinchBase.current || phase === 'start') {
+        pinchBase.current = { dist: d || 1, scale: scaleRef.current };
+        panBase.current = null;
+      }
+      moved.current = true;
+      applyScale(pinchBase.current.scale * (d / pinchBase.current.dist));
+      return;
+    }
+    pinchBase.current = null;
+    if (fingers.length === 1 && scaleRef.current > MIN_SCALE) {
+      const t = fingers[0];
+      if (!panBase.current || phase === 'start') {
+        panBase.current = {
+          x: t.pageX,
+          y: t.pageY,
+          ox: offsetRef.current.x,
+          oy: offsetRef.current.y,
+        };
+      }
+      const dx = t.pageX - panBase.current.x;
+      const dy = t.pageY - panBase.current.y;
+      if (Math.hypot(dx, dy) > TAP_JITTER_PX) moved.current = true;
+      applyOffset(panBase.current.ox + dx, panBase.current.oy + dy);
+    }
+  };
+
+  // NATIVE: raw onTouch* — PanResponder on Android often reports touches.length
+  // === 1 for a whole pinch AND can stop delivering Move the moment finger 2
+  // lands (owner's phone, 20 Aug 2026). onTouchMove keeps both fingers.
+  // Claim the responder so a parent ScrollView cannot steal the drag, but do
+  // NOT capture on start (✕ Return / −/+ Pressables must still win their hits).
+  const nativeTouchProps =
+    Platform.OS === 'web'
+      ? {}
+      : {
+          onStartShouldSetResponder: () => true,
+          onMoveShouldSetResponder: () => true,
+          onResponderTerminationRequest: () => false,
+          onTouchStart: (e: {
+            touchHistory?: { touchBank?: ReadonlyArray<TouchBankEntry | null | undefined> };
+            nativeEvent: { touches: WebTouchList };
+          }) => {
+            const fingers = activeFingers(e);
+            // A brand-new ONE-finger contact resets the tap/pan baselines.
+            // A SECOND finger landing (length >= 2) must NOT wipe `moved` —
+            // that is the pinch starting, and Android does fire touchStart
+            // for finger 2.
+            if (fingers.length < 2) {
+              moved.current = false;
+              pinchBase.current = null;
               panBase.current = null;
+              return;
             }
-            moved.current = true;
-            applyScale(pinchBase.current.scale * (d / pinchBase.current.dist));
-            return;
-          }
-          pinchBase.current = null;
-          if (touches.length === 1 && scaleRef.current > MIN_SCALE) {
-            // DRAG the zoomed picture. Baseline resets when the drag starts
-            // (including after a pinch ends on one finger — no jump).
-            const t = touches[0];
-            if (!panBase.current) {
-              panBase.current = {
-                x: t.pageX,
-                y: t.pageY,
-                ox: offsetRef.current.x,
-                oy: offsetRef.current.y,
-              };
-            }
-            if (Math.hypot(g.dx, g.dy) > TAP_JITTER_PX) moved.current = true;
-            applyOffset(
-              panBase.current.ox + (t.pageX - panBase.current.x),
-              panBase.current.oy + (t.pageY - panBase.current.y),
-            );
-            return;
-          }
-          if (Math.hypot(g.dx, g.dy) > TAP_JITTER_PX) moved.current = true;
-        },
-        onPanResponderRelease: () => {
-          pinchBase.current = null;
-          panBase.current = null;
-          if (moved.current) return;
-          handleTap();
-        },
-        onPanResponderTerminate: () => {
-          pinchBase.current = null;
-          panBase.current = null;
-        },
-      }),
-    [],
-  );
+            onFingers(fingers, 'start');
+          },
+          onTouchMove: (e: {
+            touchHistory?: { touchBank?: ReadonlyArray<TouchBankEntry | null | undefined> };
+            nativeEvent: { touches: WebTouchList };
+          }) => {
+            onFingers(activeFingers(e), 'move');
+          },
+          onTouchEnd: (e: {
+            touchHistory?: { touchBank?: ReadonlyArray<TouchBankEntry | null | undefined> };
+            nativeEvent: { touches: WebTouchList };
+          }) => {
+            // Prefer nativeEvent.touches length on end — touchBank can lag one
+            // frame with touchActive still true on the finger that just lifted,
+            // which would skip the tap/close baseline reset.
+            const remaining = e.nativeEvent.touches?.length ?? 0;
+            if (remaining === 0) onFingers([], 'end');
+            else onFingers(activeFingers(e), 'end');
+          },
+          onTouchCancel: () => {
+            onFingers([], 'end');
+          },
+        };
+
+  // Web uses the document listeners below; native uses onTouch* above.
 
   // A fresh picture always opens at 1×, centred.
   useEffect(() => {
@@ -272,7 +345,7 @@ export function ImageLightbox({
       if (ev.touches.length >= 2) {
         active = true;
         ev.preventDefault();
-        pinch = { dist: touchDistance(ev.touches) || 1, scale: scaleRef.current };
+        pinch = { dist: touchDistance(ev.touches[0], ev.touches[1]) || 1, scale: scaleRef.current };
         pan = null;
         movedHere = true;
         return;
@@ -294,7 +367,7 @@ export function ImageLightbox({
       if (!active) return;
       ev.preventDefault();
       if (ev.touches.length >= 2) {
-        const d = touchDistance(ev.touches);
+        const d = touchDistance(ev.touches[0], ev.touches[1]);
         if (!pinch) pinch = { dist: d || 1, scale: scaleRef.current };
         movedHere = true;
         applyScale(pinch.scale * (d / pinch.dist));
@@ -345,15 +418,15 @@ export function ImageLightbox({
           way out (owner's call) — plus the hardware back via onRequestClose. */}
       <View
         style={s.backdrop}
-        // NATIVE (Expo on the phone): the gesture surface is the WHOLE viewer,
-        // same rule as web — in a natural pinch the thumb lands off the
-        // picture, and a frame-only responder never saw that finger. The
-        // ✕ Return and −/+ Pressables still win their own taps (deepest
-        // touchable claims the responder first).
-        {...(Platform.OS === 'web' ? {} : responder.panHandlers)}
+        // NATIVE (Expo on the phone): onTouch* on the WHOLE viewer — see
+        // nativeTouchProps. PanResponder was dropped: Android reports one
+        // finger through it and can stop Move when finger 2 lands.
+        // ✕ Return / −/+ Pressables still win their own one-finger taps
+        // (deepest touchable claims the responder first; we do not capture).
+        {...nativeTouchProps}
       >
         {/* The way OUT, stated. Red = close. */}
-        <View style={s.topBar} ref={attachTopBar}>
+        <View style={s.topBar} ref={attachTopBar} pointerEvents="box-none">
           <Pressable style={s.returnBtn} onPress={onClose} hitSlop={8}>
             <XIcon size={14} color={C.red} strokeWidth={2.4} />
             <Text style={s.returnText}>Return</Text>
@@ -377,22 +450,24 @@ export function ImageLightbox({
             };
           }}
         >
-          <Image
-            source={{ uri }}
-            style={[
-              s.img,
-              {
-                transform: [
-                  { translateX: offset.x },
-                  { translateY: offset.y },
-                  { scale },
-                ],
-              },
-            ]}
-            resizeMode="contain"
-          />
+          <View style={s.img} pointerEvents="none">
+            <Image
+              source={{ uri }}
+              style={[
+                s.img,
+                {
+                  transform: [
+                    { translateX: offset.x },
+                    { translateY: offset.y },
+                    { scale },
+                  ],
+                },
+              ]}
+              resizeMode="contain"
+            />
+          </View>
         </View>
-        <View style={s.controls} ref={attachControls}>
+        <View style={s.controls} ref={attachControls} pointerEvents="box-none">
           <Pressable
             style={[s.zoomBtn, scale <= MIN_SCALE && s.zoomBtnOff]}
             disabled={scale <= MIN_SCALE}

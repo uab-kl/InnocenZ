@@ -16,7 +16,8 @@ import {
   MapPin,
   Shield,
 } from './icons';
-import { Pill } from './ui';
+import { Avatar, Pill } from './ui';
+import { ImageLightbox, ZoomHint } from './ImageLightbox';
 import { PhoneSheet } from './PhoneSheet';
 import {
   DEFAULT_CANCELLATION_BANDS,
@@ -43,6 +44,7 @@ import { useActiveShift } from '../lib/active-shift';
 import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useSession } from '../lib/session';
 import {
+  assetUrl,
   blockMyDay,
   cancelMyShiftAssignment,
   fetchMyUnavailableDays,
@@ -301,6 +303,12 @@ export function AgencySchedulePanel() {
           checkOutAt: a.checkOutAt,
           status: a.status,
           agencyName,
+          // The night's identity — the timetable card renders it like the
+          // Today section (picture + venue mark), owner's ask 20 Aug 2026.
+          event: a.eventName ?? null,
+          eventKind: a.eventKind ?? null,
+          logoPath: a.outletLogo ?? null,
+          eventPhotoPath: a.templateCoverImage ?? null,
         })),
     [assignments, agencyName],
   );
@@ -942,38 +950,77 @@ function TimetableRow({
 }) {
   const [y, m, d] = isoToYmd(entry.dateIso);
   const dateFriendly = `${DAY_NAMES[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, '0')} ${MONTH_NAMES[m - 1]} ${y}`;
+  /** Collapsed = the night at a glance (picture, venue, status) — the Today
+      section's design (owner, 20 Aug 2026). Expanded adds date/time/address
+      and the Cancel / MC actions. Warnings stay visible in BOTH states. */
+  const [open, setOpen] = useState(false);
+  const [zoomUri, setZoomUri] = useState<string | null>(null);
+  const heroUri = assetUrl(entry.eventPhotoPath);
+  const logoUri = assetUrl(entry.logoPath);
+  const isSpecial = (entry.eventKind ?? '').toLowerCase() === 'special';
 
   return (
-    <View style={styles.ttRow}>
+    <Pressable style={styles.ttRow} onPress={() => setOpen((o) => !o)}>
+      <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
       <View style={styles.agencyBadge}>
         <Shield size={12} color={C.violetL} />
         <Text style={styles.agencyBadgeText}>AGENCY · {entry.sourceLabel.toUpperCase()}</Text>
       </View>
-      <View style={styles.ttTop}>
-        <View style={styles.ttTitleRow}>
-          <CalendarDays size={14} color={C.muted2} />
-          <Text style={styles.ttOutlet}>{entry.outlet}</Text>
-          <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
-        </View>
-      </View>
-      <View style={styles.ttDateTimeRow}>
-        <View style={styles.ttField}>
-          <Text style={styles.ttFieldLabel}>DATE</Text>
-          <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
-        </View>
-        <View style={styles.ttField}>
-          <Text style={styles.ttFieldLabel}>TIME</Text>
-          <Text style={styles.ttFieldValue}>{entry.time}</Text>
-        </View>
-      </View>
-      {entry.address ? (
-        <View style={styles.ttAddrBlock}>
-          <Text style={styles.ttFieldLabel}>ADDRESS</Text>
-          <View style={styles.ttAddrRow}>
-            <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
-            <Text style={styles.ttAddrValue}>{entry.address}</Text>
+      {heroUri ? (
+        <Pressable style={styles.ttHeroWrap} onPress={() => setZoomUri(heroUri)}>
+          <Image source={{ uri: heroUri }} style={styles.ttHero} resizeMode="cover" />
+          <View style={styles.ttHeroBadge}>
+            <Text style={[styles.ttHeroBadgeText, isSpecial && styles.ttHeroBadgeTextSpecial]}>
+              {isSpecial ? 'Special event' : 'Normal shift'}
+            </Text>
           </View>
+          <ZoomHint />
+        </Pressable>
+      ) : null}
+      <View style={styles.ttVenueRow}>
+        <Pressable disabled={!logoUri} onPress={() => logoUri && setZoomUri(logoUri)}>
+          <Avatar
+            size={44}
+            radius={14}
+            photoPath={entry.logoPath}
+            initial={entry.outlet.trim()[0]?.toUpperCase()}
+            logo
+          />
+          {logoUri ? <ZoomHint size={16} style={{ right: -3, bottom: -3 }} /> : null}
+        </Pressable>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.ttOutlet}>{entry.outlet}</Text>
+          {entry.event ? (
+            <Text style={styles.ttEventLine} numberOfLines={1}>
+              {entry.event} · {isSpecial ? 'Special event' : 'Normal shift'}
+            </Text>
+          ) : null}
+          <Text style={styles.ttTapHint}>{open ? 'Tap to collapse' : 'Tap to expand'}</Text>
         </View>
+        <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
+      </View>
+      {open ? (
+        <>
+          <View style={styles.ttDateTimeRow}>
+            <View style={styles.ttField}>
+              <Text style={styles.ttFieldLabel}>DATE</Text>
+              <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
+            </View>
+            <View style={styles.ttField}>
+              <Text style={styles.ttFieldLabel}>TIME</Text>
+              <Text style={styles.ttFieldValue}>{entry.time}</Text>
+            </View>
+          </View>
+          {entry.address ? (
+            <View style={styles.ttAddrBlock}>
+              <Text style={styles.ttFieldLabel}>ADDRESS</Text>
+              <View style={styles.ttAddrRow}>
+                <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
+                <Text style={styles.ttAddrValue}>{entry.address}</Text>
+              </View>
+            </View>
+          ) : null}
+        </>
       ) : null}
       {leaveRejected ? (
         <View style={styles.leaveRejectedNote}>
@@ -990,7 +1037,7 @@ function TimetableRow({
             MC / Leave submitted — awaiting agency review.
           </Text>
         </View>
-      ) : !entry.canCancel && !entry.canLeave ? null : (
+      ) : !open || (!entry.canCancel && !entry.canLeave) ? null : (
         <View style={styles.actionRow}>
           {entry.canCancel ? (
             <Pressable onPress={onCancel} style={[styles.cancelBtn, styles.actionBtn]}>
@@ -1011,7 +1058,7 @@ function TimetableRow({
           ) : null}
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -1248,6 +1295,51 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     backgroundColor: 'rgba(255,255,255,0.02)',
     padding: 12,
+  },
+  /* The night's own picture — same design language as the Today card. */
+  ttHeroWrap: {
+    position: 'relative',
+    marginTop: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  ttHero: { width: '100%', height: 120 },
+  ttHeroBadge: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  ttHeroBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: '#C9B8F2',
+  },
+  ttHeroBadgeTextSpecial: { color: '#E8C27A' },
+  ttVenueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  ttEventLine: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.muted,
+  },
+  ttTapHint: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.violetL,
   },
   agencyBadge: {
     alignSelf: 'flex-start',
