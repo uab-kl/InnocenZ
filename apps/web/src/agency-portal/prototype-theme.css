@@ -14208,13 +14208,28 @@ button.iz-pr-offer-row:hover {
 	gap: 6px;
 	margin-bottom: 10px;
 }
-.iz-approvals-subfilter .iz-chip {
-	padding: 5px 11px;
+/*
+ * Sized DOWN the hierarchy, which it was not. Measured before this:
+ * group 14px/39px, queue tab 10px/33px, status filter 18px/44px — the deepest
+ * level was the largest and the middle one the smallest, so the sidebar read
+ * bottom-up. The portal-wide uplift restyles a bare `.iz-chip` to 18px, which
+ * is right for a chip in main content and wrong for the third level of a
+ * sidebar, so these are scoped under `.iz-portal-main` to outrank it rather
+ * than fought with !important.
+ */
+.iz-portal-main .iz-approvals-subfilter .iz-chip {
+	padding: 4px 10px;
 	border-radius: 999px;
-	font-size: 12px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.2px;
-	line-height: 1.35;
+	line-height: 1.4;
+	min-height: 0;
+}
+/* The queue tab sat at 10px — below the middle level's own floor, and under the
+   filters beneath it. It leads them now. */
+.iz-portal-main .iz-approvals-tab {
+	font-size: 12px;
 }
 
 /* The event name leads the Shift card — it is the one line that says WHICH
