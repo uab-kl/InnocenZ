@@ -19,6 +19,7 @@ import {
   Image,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -202,7 +203,15 @@ export function ImageLightbox({
           </Pressable>
         </View>
         <View
-          style={s.imgFrame}
+          // `touchAction: none` (web only): without it the phone BROWSER takes
+          // the pinch for page zoom and the picture never sees the 2nd finger.
+          // Native ignores the prop — it is not a valid RN style there.
+          style={[
+            s.imgFrame,
+            Platform.OS === 'web'
+              ? ({ touchAction: 'none' } as unknown as ViewStyle)
+              : null,
+          ]}
           {...responder.panHandlers}
           onLayout={(e) => {
             frameSize.current = {
