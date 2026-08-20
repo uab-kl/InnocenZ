@@ -52,7 +52,7 @@ import {
 } from './resolve-tier-wages';
 import { shiftDayKey, shiftsOverlap } from '@/util/slot-window';
 import { assignmentHistoryReason } from './assignment-history-guard';
-import { travelWarningFor } from './travel-gap';
+import { foreignTravelBlock, PR_UNAVAILABLE_THEN, travelWarningFor } from './travel-gap';
 import {
   CheckInMineSchema,
   CreateShiftAssignmentSchema,
@@ -1505,6 +1505,17 @@ export class ShiftAssignmentControllerClass {
   }
 
   async create(req: Request, res: Response) {
+    /**
+     * What the CATCH needs to answer a lost race without re-deriving it.
+     *
+     * `shift`, `pr` and `actingAgencyId` are all `try`-scoped, so the unique-violation
+     * handler cannot see them — and it must, because the `(shift_id, pr_id)` index is
+     * agency-agnostic and its bare refusal would otherwise disclose a rival agency's
+     * booking. Null until identity is resolved; a violation before that point simply
+     * takes the neutral branch.
+     */
+    let raceCtx: { shiftId: string; prId: string; userId: string | null; actingAgencyId: string } | null =
+      null;
     try {
       const parsed = CreateShiftAssignmentSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1710,7 +1721,47 @@ export class ShiftAssignmentControllerClass {
       // re-assignment the release existed to make possible. A row is closed when
       // it has a check-out stamp, and a stamp is a fact about the past — it
       // cannot collide with work not yet done.
+      raceCtx = {
+        shiftId: shift.id,
+        prId: pr.id,
+        userId: pr.userId ?? null,
+        actingAgencyId,
+      };
+
       const others = await this.shiftAssignmentRepository.listForPr(pr.id);
+
+      // ALREADY ON THIS VERY SHIFT — and WHOSE booking that is decides what may
+      // be said about it.
+      //
+      // ⚠️ Nothing else catches this. Both guards below compare OTHER shifts
+      // (`a.shiftId !== shift.id`), deliberately, so a PR already seated on this
+      // one is not an "overlap" and not a "trip". The only thing that stopped it
+      // was the `(shift_id, pr_id)` unique index firing at INSERT time, and the
+      // handler answered "PR is already assigned to this shift" — which on a
+      // SHARED shift tells a rival agency, in as many words, that this person is
+      // already working for someone else that night. The index is agency-agnostic
+      // by design (one person, one seat, whoever sold it), so the refusal has to
+      // do the discriminating the index cannot.
+      //
+      // Same agency: its own roster, named plainly and actionably. Another
+      // agency: the anonymous sentence, identical to every other cross-agency
+      // refusal so the four cannot be told apart.
+      const alreadyHere = others.find(
+        (a) =>
+          a.shiftId === shift.id &&
+          !NON_STAFFING_STATUSES.includes(a.status as (typeof NON_STAFFING_STATUSES)[number]),
+      );
+      if (alreadyHere) {
+        return res.status(409).json({
+          success: false,
+          message:
+            alreadyHere.agencyId === actingAgencyId
+              ? 'PR is already assigned to this shift'
+              : PR_UNAVAILABLE_THEN,
+          data: null,
+        });
+      }
+
       const clash = others.find(
         (a) =>
           a.shiftId !== shift.id &&
@@ -1719,44 +1770,81 @@ export class ShiftAssignmentControllerClass {
           shiftsOverlap(shift.shiftDate, shift.slot, a.shiftDate, a.slot),
       );
       if (clash) {
+        // ⚠️ WHOSE booking it collides with decides what may be SAID about it.
+        //
+        // A clash with this agency's OWN booking is the agency's own fact, so it
+        // is named in full — slot and venue — which is what makes the refusal
+        // actionable: "move it off 22:00, she is at JK House".
+        //
+        // A clash with ANOTHER agency's booking may say none of that. The venue
+        // name is the identity of a rival's client and the slot is when that
+        // client trades; fired at a roster one PR at a time, this endpoint would
+        // become a survey of a competitor's business. So it answers in the single
+        // anonymous sentence the travel refusal below also uses — see
+        // `PR_UNAVAILABLE_THEN` for why those two must stay the SAME string.
+        //
+        // The GUARD stays cross-agency — a person can only be in one place at one
+        // time, whoever booked them — and only the EXPLANATION narrows.
+        const ownClash = clash.agencyId === actingAgencyId;
         return res.status(400).json({
           success: false,
-          message: `This PR already works ${clash.slot ?? 'a shift'} at ${clash.outletName ?? 'another outlet'} that day — pick a time that does not overlap.`,
+          message: ownClash
+            ? `This PR already works ${clash.slot ?? 'a shift'} at ${clash.outletName ?? 'another outlet'} that day — pick a time that does not overlap.`
+            : PR_UNAVAILABLE_THEN,
           data: null,
         });
       }
 
-      // THE DAY BELONGS TO THE PR (owner's rule, 18 Aug 2026).
+      // THE SHIFT AND THE TRIP BELONG TO THE PR — not the day (owner's rule,
+      // 20 Aug 2026, narrowing the 18 Aug rule).
       //
-      // A confirmed assignment at ANY agency takes that calendar day off the market
-      // for every OTHER agency. Two agencies can hold the same PR on their rosters,
-      // and without this both can book her for the same night — the overlap guard
-      // above only catches shifts that actually collide, so an afternoon at A and a
-      // night at B sail through and the PR discovers the double-booking herself.
+      // What this replaced: a confirmed assignment at ANY agency took that whole
+      // CALENDAR DAY off the market for every other agency. It was safe and far too
+      // blunt. A PR who finishes an afternoon at one venue can obviously work a
+      // night at another, and the day rule refused every one of those — the PR lost
+      // the shift and the second agency lost the booking, for a conflict that did
+      // not exist. The owner's instruction is to keep only the part that is
+      // physical: the other shift's own window, PLUS the time it takes to travel
+      // between the two venues. Everything outside that stays bookable by anyone.
       //
-      // ⚠️ The refusal deliberately reuses the SELF-DECLARED BLOCK wording, word for
-      // word. Agency B must not be able to tell "she took the day off" from "she is
-      // booked by someone else": both are true statements about her availability and
-      // neither mentions an agency. A distinguishable message would turn this guard
-      // into a probe for reading a rival's roster one day at a time.
+      // The overlap guard above already refuses the window itself, cross-agency and
+      // on a continuous timeline, so all that is left here is the TRIP.
       //
-      // Same-agency doubles still work — the rule is about what OTHER agencies may
-      // do, and an agency already knows its own bookings.
-      const dayKey = shiftDayKey(shift.shiftDate);
-      const committedElsewhere = others.find(
-        (a) =>
-          a.shiftId !== shift.id &&
-          // "Booked by SOMEONE ELSE" means an agency other than the one acting.
-          // Against the anchor, an agency sharing a shift measured its own other
-          // bookings as a rival's and refused its own PR.
-          a.agencyId !== actingAgencyId &&
-          !NON_STAFFING_STATUSES.includes(a.status as (typeof NON_STAFFING_STATUSES)[number]) &&
-          shiftDayKey(a.shiftDate) === dayKey,
-      );
-      if (committedElsewhere) {
+      // ⚠️ ASYMMETRIC ON PURPOSE, and this is the one thing not to "tidy up": a
+      // tight turnaround against this agency's OWN booking stays a warning it may
+      // override (17 Aug rule — it can see both venues and may know the two share a
+      // car park). Against a FOREIGN booking it is a refusal, because that agency
+      // cannot see the other shift at all and so has nothing to exercise judgement
+      // with; an "override" there is not a decision, it is a guess that ends with a
+      // PR who cannot arrive. `travelWarningFor` below handles the own-agency half.
+      //
+      // Says nothing about who, where or when — see `PR_UNAVAILABLE_THEN`, which the
+      // overlap refusal above deliberately shares so a caller cannot tell a direct
+      // collision from a travel shortfall and read distance off the difference.
+      const shiftPin = await this.shiftAssignmentRepository.getOutletPin(shift.outletId);
+      if (
+        shiftPin &&
+        foreignTravelBlock({
+          shift: {
+            shiftDate: shift.shiftDate,
+            slot: shift.slot,
+            outletId: shift.outletId,
+            lat: shiftPin.lat,
+            lng: shiftPin.lng,
+          },
+          others: others.filter(
+            (a) =>
+              a.shiftId !== shift.id &&
+              !NON_STAFFING_STATUSES.includes(
+                a.status as (typeof NON_STAFFING_STATUSES)[number],
+              ),
+          ),
+          actingAgencyId,
+        })
+      ) {
         return res.status(400).json({
           success: false,
-          message: `This PR has marked ${dayKey} as unavailable — pick someone else for this shift.`,
+          message: PR_UNAVAILABLE_THEN,
           data: null,
         });
       }
@@ -1856,6 +1944,9 @@ export class ShiftAssignmentControllerClass {
       const travelWarning = await travelWarningFor({
         shift,
         prId: pr.id,
+        // Own-agency neighbours only. A foreign one was already refused above and
+        // must not be described here.
+        actingAgencyId,
         excludeShiftId: shift.id,
         loadPin: (outletId) => this.shiftAssignmentRepository.getOutletPin(outletId),
         loadAssignments: (prId) => this.shiftAssignmentRepository.listForPr(prId),
@@ -1871,7 +1962,29 @@ export class ShiftAssignmentControllerClass {
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
-        return res.status(409).json({ success: false, message: 'PR is already assigned to this shift', data: null });
+        // The pre-check above catches this in the ordinary case; reaching here
+        // means two requests raced for the same seat. Re-read WHO won before
+        // answering — the index is agency-agnostic, so the bare wording would
+        // otherwise disclose a rival's booking on exactly the narrow path the
+        // pre-check cannot cover.
+        const ctx = raceCtx;
+        const holder = ctx
+          ? (await this.shiftAssignmentRepository.listByShift(ctx.shiftId)).find(
+              (row) =>
+                (row.prId === ctx.prId || (ctx.userId && row.userId === ctx.userId)) &&
+                !NON_STAFFING_STATUSES.includes(
+                  row.status as (typeof NON_STAFFING_STATUSES)[number],
+                ),
+            )
+          : undefined;
+        return res.status(409).json({
+          success: false,
+          message:
+            ctx && holder && holder.agencyId !== ctx.actingAgencyId
+              ? PR_UNAVAILABLE_THEN
+              : 'PR is already assigned to this shift',
+          data: null,
+        });
       }
       // The PR blocked this day on their own schedule. 409 like the two below —
       // well-formed and authorised, just refused — but the remedy is a different
@@ -2203,6 +2316,80 @@ export class ShiftAssignmentControllerClass {
         if (blocked) {
           return res.status(400).json({ success: false, message: blocked, data: null });
         }
+
+        // CAN THE PR ACTUALLY BE THERE? The same two physical-presence rules
+        // `create` applies, for the same reason the shift-status rule above is
+        // repeated: this branch SEATS somebody.
+        //
+        // ⚠️ Without this the whole cross-agency rule had a one-request bypass.
+        // `create` refuses a collision, but cancelling a row and un-cancelling it
+        // through this PATCH re-seated the PR with only headcount, tier and the
+        // PR's own blocked-days checked — so the way to double-book a person
+        // across two agencies was to book them, cancel, and put them back. The
+        // travel shortfall was invisible on top of that, because `travelShortfall`
+        // deliberately SKIPS overlapping neighbours (an overlap is a different
+        // fault), so the advisory warning underneath said nothing either.
+        //
+        // Same asymmetry as `create`: a foreign conflict refuses in the anonymous
+        // wording, this agency's own collision is named in full.
+        if (seatedShift) {
+          const heldRows = await this.shiftAssignmentRepository.listForPr(
+            existing.userId ?? existing.prId,
+          );
+          const neighbours = heldRows.filter(
+            (a) =>
+              a.shiftId !== existing.shiftId &&
+              !NON_STAFFING_STATUSES.includes(
+                a.status as (typeof NON_STAFFING_STATUSES)[number],
+              ),
+          );
+          // ⚠️ The SAME predicate as `create`'s overlap guard, 'completed' included.
+          // `neighbours` above drops only NON_STAFFING_STATUSES, because the TRAVEL
+          // check below genuinely wants finished shifts in — a completed shift is
+          // precisely the one a PR travels FROM. The OVERLAP check does not: a
+          // closed shift cannot collide with work not yet done. Leaving the two
+          // lanes with different lists is how one rule becomes two answers, which
+          // is the fault this whole area keeps being repaired for.
+          const reClash = neighbours.find(
+            (a) =>
+              a.status !== 'completed' &&
+              !a.checkOutAt &&
+              shiftsOverlap(seatedShift.shiftDate, seatedShift.slot, a.shiftDate, a.slot),
+          );
+          if (reClash) {
+            return res.status(409).json({
+              success: false,
+              message:
+                reClash.agencyId === existing.agencyId
+                  ? `This PR already works ${reClash.slot ?? 'a shift'} at ${reClash.outletName ?? 'another outlet'} that day — they cannot be put back on this shift.`
+                  : PR_UNAVAILABLE_THEN,
+              data: null,
+            });
+          }
+          const reStaffPin = await this.shiftAssignmentRepository.getOutletPin(
+            seatedShift.outletId,
+          );
+          if (
+            reStaffPin &&
+            foreignTravelBlock({
+              shift: {
+                shiftDate: seatedShift.shiftDate,
+                slot: seatedShift.slot,
+                outletId: seatedShift.outletId,
+                lat: reStaffPin.lat,
+                lng: reStaffPin.lng,
+              },
+              others: neighbours,
+              actingAgencyId: existing.agencyId,
+            })
+          ) {
+            return res.status(409).json({
+              success: false,
+              message: PR_UNAVAILABLE_THEN,
+              data: null,
+            });
+          }
+        }
         // Seat check AND write in ONE transaction, with the shift row locked.
         // The PR is named so the TIER mix is checked too, not just headcount:
         // without it, cancelling a Tier I, backfilling with another and then
@@ -2269,6 +2456,9 @@ export class ShiftAssignmentControllerClass {
           travelWarning = await travelWarningFor({
             shift: seatedShift,
             prId: existing.userId ?? existing.prId,
+            // The assignment's own agency IS the acting one here — the scope check
+            // at the top of `update` already refuses anyone else.
+            actingAgencyId: existing.agencyId,
             excludeShiftId: existing.shiftId,
             loadPin: (outletId) => this.shiftAssignmentRepository.getOutletPin(outletId),
             loadAssignments: (prId) => this.shiftAssignmentRepository.listForPr(prId),

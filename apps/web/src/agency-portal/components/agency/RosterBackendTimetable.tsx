@@ -38,6 +38,7 @@ import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
@@ -49,10 +50,11 @@ import {
 	blockedDatesByPr,
 	blockedReasonKey,
 	blockedReasonsByPr,
+	committedWindowsByPr,
 	fetchPrAvailability,
+	fetchPrCommittedWindows,
 } from "@/services/pr-availability";
 import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
-import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { fetchShifts, type Shift } from "@/services/shift";
 import {
 	fetchShiftAssignments,
@@ -263,6 +265,29 @@ export function RosterBackendTimetable({
 	const blockedDates = useMemo(
 		() => blockedDatesByPr(availabilityQuery.data ?? []),
 		[availabilityQuery.data],
+	);
+	/*
+	 * WHEN this roster is committed to ANOTHER agency — times only.
+	 *
+	 * The preview half of the cross-agency rule. Until now the grid showed nothing
+	 * and the agency only found out at the moment it pressed Schedule, which made
+	 * the refusal read as an error rather than as a fact about the person. Shown
+	 * here, that refusal becomes a reminder of something already on screen.
+	 *
+	 * Shares the roster's query-key discipline so the grid and the assign sheet
+	 * cannot disagree about who is free. Deliberately NOT merged into
+	 * `availabilityQuery`: a blocked DAY cannot be booked around, these windows
+	 * can, and flattening the two would undo the rule change.
+	 */
+	const committedQuery = useQuery({
+		queryKey: ["roster", "committed", fromDate, toDate],
+		queryFn: () =>
+			fetchPrCommittedWindows({ from: fromDate, to: toDate }, logout),
+		staleTime: 30_000,
+	});
+	const committedWindows = useMemo(
+		() => committedWindowsByPr(committedQuery.data ?? []),
+		[committedQuery.data],
 	);
 	// The PR's own words for why. Optional — most blocks carry none.
 	const blockedReasons = useMemo(
@@ -577,6 +602,28 @@ export function RosterBackendTimetable({
 												// able to tell them apart.
 												const prBlocked =
 													blockedDates.get(pr.id)?.has(dateIso) ?? false;
+												/*
+												 * BUSY ELSEWHERE — a THIRD state, and not a fourth
+												 * flavour of the two above.
+												 *
+												 * "Blocked" is the whole day and the agency cannot work
+												 * around it. "Filled" is this agency's own booking. This
+												 * is neither: the person is spoken for during these hours
+												 * only, and the rest of the day is genuinely bookable —
+												 * which is the entire point of the window rule and the
+												 * reason the cell must STAY clickable underneath.
+												 *
+												 * Times, never the agency or the venue. The grid says WHEN
+												 * so the roster can be planned around it; who booked her
+												 * is a rival's business and stays out of the payload.
+												 */
+												const busyWindows =
+													committedWindows.get(pr.id)?.get(dateIso) ?? null;
+												const busyLabel = busyWindows
+													? busyWindows.length > 0
+														? busyWindows.join(", ")
+														: t.roster.unavailable
+													: null;
 												const reason = blockedReasons.get(
 													blockedReasonKey(pr.id, dateIso),
 												);
@@ -715,6 +762,49 @@ export function RosterBackendTimetable({
 																<span className="dash">—</span>
 															)}
 														</button>
+														{/*
+														 * BUSY ELSEWHERE, under the still-clickable cell.
+														 *
+														 * Deliberately BELOW the assign button and not in
+														 * place of it: those hours are taken, the rest of the
+														 * day is not, and replacing the button would refuse in
+														 * the interface exactly the bookings the window rule
+														 * exists to allow.
+														 *
+														 * Says WHEN and nothing else — no agency, no venue.
+														 * The assign sheet's refusal now repeats what this
+														 * already showed, which is what turns it from an error
+														 * into a reminder.
+														 */}
+														{busyLabel && (
+															<div
+																className="iz-roster-week-busy"
+																title={fill(t.rosterGrid.busyElsewhereAt, {
+																	name: pr.name,
+																	time: busyLabel,
+																})}
+															>
+																{/*
+																 * ⚠️ SAYS UNAVAILABLE, NEVER "WORKING".
+																 *
+																 * The earlier wording was "already working 15:00 -
+																 * 04:00", which states there IS a job on. Since it is
+																 * plainly not THIS agency's job, that names a rival by
+																 * elimination — the exact disclosure the refusal it
+																 * previews was written to avoid. The status of the
+																 * hours is all an agency needs to roster around them,
+																 * and it is all they are owed.
+																 *
+																 * Same word as the self-declared block above, on
+																 * purpose: an agency must not be able to tell "she
+																 * took these hours off" from "she is spoken for".
+																 */}
+																<span className="status">
+																	{t.rosterGrid.unavailableAtTime}
+																</span>
+																<span className="time">{busyLabel}</span>
+															</div>
+														)}
 													</td>
 												);
 											})}
@@ -734,6 +824,13 @@ export function RosterBackendTimetable({
 					shifts={openShiftsByDay[assignTarget.dateIso] ?? []}
 					staffingByShift={staffingByShift}
 					outletNameById={outletNameById}
+					// The same windows the grid greys behind this sheet, so the two
+					// cannot disagree about who is free.
+					busyWindows={
+						committedWindows
+							.get(assignTarget.pr.id)
+							?.get(assignTarget.dateIso) ?? null
+					}
 					onAssign={onAssign}
 					onClose={() => setAssignTarget(null)}
 				/>
@@ -753,12 +850,44 @@ function shiftLabel(s: Shift, t: PortalTranslations): string {
 	return s.slot || s.eventName || t.rosterGrid.shift;
 }
 
+/**
+ * "15:00 - 04:00" → minutes from midnight, with the END rolled past 24h when the
+ * window crosses it. Null for a label-only slot ("Late night"), which carries no
+ * window and therefore cannot be said to collide with anything.
+ *
+ * Local to this sheet on purpose: it answers a within-the-day question the sheet
+ * asks, and the AUTHORITY on overlap is the server (`shiftsOverlap`), which works
+ * on a continuous timeline across dates. Anything here is advice that saves a
+ * round-trip, never the rule itself.
+ */
+function parseDialogWindow(
+	slot: string | null | undefined,
+): { from: number; to: number; label: string } | null {
+	const m = slot?.match(/^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$/);
+	if (!m) return null;
+	const from = Number(m[1]) * 60 + Number(m[2]);
+	let to = Number(m[3]) * 60 + Number(m[4]);
+	// 22:00-04:00 ends the NEXT day; without this it would read as a negative
+	// window and overlap nothing.
+	if (to <= from) to += 24 * 60;
+	return { from, to, label: slot!.trim() };
+}
+
+/** Half-open overlap: a shift ENDING exactly when another starts is not a clash. */
+function dialogWindowsOverlap(
+	a: { from: number; to: number },
+	b: { from: number; to: number },
+): boolean {
+	return a.from < b.to && b.from < a.to;
+}
+
 function AssignBackendCellSheet({
 	pr,
 	dateIso,
 	shifts,
 	staffingByShift,
 	outletNameById,
+	busyWindows,
 	onAssign,
 	onClose,
 }: {
@@ -770,6 +899,14 @@ function AssignBackendCellSheet({
 		{ staffed: number; tiers: (string | null)[]; unknown?: number }
 	>;
 	outletNameById: Map<string, string>;
+	/**
+	 * Windows this PR is already unavailable for on this DATE — times only, the
+	 * same feed the week grid marks its cells from. Null when nothing is known.
+	 *
+	 * Times, never who or where: see the endpoint. The sheet greys a card and says
+	 * "unavailable", exactly as the grid behind it does.
+	 */
+	busyWindows?: string[] | null;
 	onAssign: (
 		shiftId: string,
 		prId: string,
@@ -778,8 +915,8 @@ function AssignBackendCellSheet({
 	onClose: () => void;
 }) {
 	const { t } = usePortalLocale();
-	// Why each shift can or cannot take THIS PR — the same two rules the API
-	// applies, in the same order, so nothing selectable here can be refused there.
+	// Why each shift can or cannot take THIS PR — the same rules the API applies,
+	// in the same order, so nothing selectable here can be refused there.
 	const blockedById = useMemo(() => {
 		const map = new Map<string, ShiftBlockReason | null>();
 		for (const s of shifts) {
@@ -797,9 +934,45 @@ function AssignBackendCellSheet({
 		return map;
 	}, [shifts, staffingByShift, pr.tier]);
 
+	/**
+	 * THE THIRD RULE — the PR is not available at that time.
+	 *
+	 * The two rules above are facts about the SHIFT (full, wrong tier). This is a
+	 * fact about the PERSON, and the server applies it too, so the sheet has to
+	 * as well: a card left selectable here is a promise the assign will go
+	 * through, and until now that promise was broken by a red refusal AFTER the
+	 * agency had picked a shift and pressed the button.
+	 *
+	 * Kept out of `shiftBlockedFor` deliberately. That helper is shared with the
+	 * auto-assign planner and takes only shift-shaped inputs; widening it to carry
+	 * a PR's commitments would push person-state into a module about shifts.
+	 *
+	 * ⚠️ Compares within the DAY. A window that spills past midnight (15:00–04:00)
+	 * is keyed to the date it STARTS, so a 02:00 shift the next morning is not
+	 * greyed here — the server still refuses it, and this stays advisory rather
+	 * than pretending to be the authority.
+	 */
+	const unavailableById = useMemo(() => {
+		const map = new Map<string, string | null>();
+		const windows = (busyWindows ?? [])
+			.map(parseDialogWindow)
+			.filter(
+				(w): w is { from: number; to: number; label: string } => w !== null,
+			);
+		for (const s of shifts) {
+			const own = parseDialogWindow(s.slot);
+			const hit = own && windows.find((w) => dialogWindowsOverlap(own, w));
+			map.set(s.id, hit ? hit.label : null);
+		}
+		return map;
+	}, [shifts, busyWindows]);
+
 	const selectable = useMemo(
-		() => shifts.filter((s) => !blockedById.get(s.id)),
-		[shifts, blockedById],
+		() =>
+			shifts.filter(
+				(s) => !blockedById.get(s.id) && !unavailableById.get(s.id),
+			),
+		[shifts, blockedById, unavailableById],
 	);
 
 	// Would this shift take this PR's tier AT ALL, ignoring how full it is?
@@ -921,6 +1094,11 @@ function AssignBackendCellSheet({
 								const outlet =
 									outletNameById.get(shift.outletId) ?? shift.outletId;
 								const blocked = blockedById.get(shift.id) ?? null;
+								// The PR is not free then. Greys the card exactly as the two
+								// shift-side rules do — the agency should not have to pick a
+								// shift and press the button to be told.
+								const unavailableAt = unavailableById.get(shift.id) ?? null;
+								const off = Boolean(blocked) || Boolean(unavailableAt);
 								const staffed = staffingByShift.get(shift.id)?.staffed ?? 0;
 								return (
 									<button
@@ -928,13 +1106,22 @@ function AssignBackendCellSheet({
 										type="button"
 										className={cn(
 											"iz-roster-shift-pick",
-											selected && !blocked && "on",
-											blocked && "is-blocked",
+											selected && !off && "on",
+											off && "is-blocked",
 										)}
-										onClick={() => !blocked && setPickId(shift.id)}
-										disabled={busy || Boolean(blocked)}
-										aria-disabled={Boolean(blocked)}
-										title={blocked ? shiftBlockLong(blocked, t) : undefined}
+										onClick={() => !off && setPickId(shift.id)}
+										disabled={busy || off}
+										aria-disabled={off}
+										title={
+											unavailableAt
+												? fill(t.rosterGrid.busyElsewhereAt, {
+														name: pr.name,
+														time: unavailableAt,
+													})
+												: blocked
+													? shiftBlockLong(blocked, t)
+													: undefined
+										}
 									>
 										{/* The event picture — the card this shift was posted from (0128). */}
 										{shift.templateCoverImage && (
@@ -972,14 +1159,19 @@ function AssignBackendCellSheet({
 											<p
 												className={cn(
 													"iz-tiny mt-1",
-													blocked ? "iz-muted2" : "text-[var(--iz-gold-l)]",
+													off ? "iz-muted2" : "text-[var(--iz-gold-l)]",
 												)}
 											>
-												{blocked
-													? shiftBlockShort(blocked, t)
-													: fill(t.rosterGrid.openCount, {
-															n: shift.quantity - staffed,
-														})}{" "}
+												{/* Says only that the PR is unavailable — never that
+												    there is other work on, which would name a rival by
+												    elimination. Same word the grid behind uses. */}
+												{unavailableAt
+													? `${t.rosterGrid.unavailableAtTime} · ${unavailableAt}`
+													: blocked
+														? shiftBlockShort(blocked, t)
+														: fill(t.rosterGrid.openCount, {
+																n: shift.quantity - staffed,
+															})}{" "}
 												·{" "}
 												{/* NOT `shift.payPerHour`: that is the shift's own
 												    figure and does not move when you pick a different

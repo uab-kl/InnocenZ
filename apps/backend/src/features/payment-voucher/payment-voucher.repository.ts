@@ -709,7 +709,7 @@ export class PaymentVoucherRepositoryClass {
       excludeWeekStart?: string;
       userId?: string | null;
     },
-  ): Promise<PaymentVoucherWithLines[]> {
+  ): Promise<(PaymentVoucherWithLines & { agencyName: string | null })[]> {
     try {
       const statuses = opts?.statuses ?? (['signed', 'paid'] as PaymentVoucherStatus[]);
       const conditions = [
@@ -719,16 +719,29 @@ export class PaymentVoucherRepositoryClass {
       if (opts?.excludeWeekStart) {
         conditions.push(ne(PaymentVoucherTable.weekStart, opts.excludeWeekStart));
       }
+      /*
+       * WHO PAID IT — joined for the same reason `listWeekVouchers` joins it.
+       *
+       * A PR on two rosters gets one voucher PER AGENCY per week, so history can
+       * hold two rows with an identical week label and often an identical outlet
+       * label, separable only by PV number. Without the agency the PR cannot tell
+       * who owes them which half of their own week.
+       *
+       * LEFT join: `agency_id` is NOT NULL behind an FK so the row is always
+       * there, but a missing name must degrade to an unlabelled card rather than
+       * dropping a voucher out of the PR's own history.
+       */
       const vouchers = await db
-        .select()
+        .select({ voucher: PaymentVoucherTable, agencyName: AgencyTable.name })
         .from(PaymentVoucherTable)
+        .leftJoin(AgencyTable, eq(AgencyTable.id, PaymentVoucherTable.agencyId))
         .where(and(...conditions))
         .orderBy(desc(PaymentVoucherTable.weekStart), desc(PaymentVoucherTable.createdAt));
 
-      const withLines: PaymentVoucherWithLines[] = [];
-      for (const voucher of vouchers) {
-        const lines = await this.getLines(voucher.id);
-        withLines.push({ ...voucher, lines });
+      const withLines: (PaymentVoucherWithLines & { agencyName: string | null })[] = [];
+      for (const row of vouchers) {
+        const lines = await this.getLines(row.voucher.id);
+        withLines.push({ ...row.voucher, lines, agencyName: row.agencyName });
       }
       return withLines;
     } catch (error) {

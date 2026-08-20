@@ -20,6 +20,8 @@ export type AwaitingPvTodo = {
   net: number;
   ref: string;
   outlet: string;
+  /** WHOSE voucher this is — null on a backend that has not restarted yet. */
+  agencyName?: string | null;
 };
 
 /** The stored number (0075); the week-derived form is a pre-0075 fallback. */
@@ -64,27 +66,89 @@ export function useAwaitingLastWeekPv() {
     void refresh();
   }, [refresh]);
 
-  const awaiting = useMemo(() => {
-    if (!week?.voucherId) return null;
-    if (!REVIEWABLE.has(week.status ?? '')) return null;
-    if (isSigned(week.voucherId)) return null;
-    const net = Number(week.net) || 0;
-    const hasLines = week.lines.some((l) => l.commission > 0);
-    if (net <= 0 && !hasLines) return null;
-    const ref = pvRef(week);
-    const outlet = outletFromWeek(week);
-    const todo: AwaitingPvTodo = {
-      id: `todo-pv-${week.voucherId}`,
-      pvId: week.voucherId,
-      title: 'Review payment voucher',
-      subtitle: `${outlet} · ${ref} · ${formatRM(net)}`,
-      actionLabel: 'Review PV',
-      net,
-      ref,
-      outlet,
-    };
-    return { week, todo, weekLabel: weekRangeLabel(1) };
+  /**
+   * ONE TO-DO PER VOUCHER — a week can be waiting on more than one signature.
+   *
+   * ⚠️ This gated on `week.status` and `week.net`, which are the NEWEST voucher's
+   * status and the WHOLE WEEK's money. For a PR on two rosters that was wrong
+   * twice over. With Atlas's voucher `sent` and Why We Met's newer one still
+   * `pending_review`, the week's status was `pending_review`, the gate failed,
+   * and the PR was NEVER TOLD Atlas was waiting on them. Reverse the order and
+   * they got a single to-do whose amount was both agencies' money and whose id
+   * was one agency's document.
+   *
+   * Each voucher is now asked for itself, and each to-do NAMES the agency it
+   * belongs to — the PR is signing that agency's document, so it has to say so.
+   */
+  const awaitingAll = useMemo<AwaitingPvTodo[]>(() => {
+    if (!week) return [];
+
+    // Per-voucher when the backend offers it, else the single merged week — which
+    // IS one voucher on a one-agency week, the case this always handled.
+    const rows =
+      week.vouchers && week.vouchers.length > 0
+        ? week.vouchers.map((v) => ({
+            id: v.id,
+            voucherNo: v.voucherNo,
+            agencyName: v.agencyName,
+            net: v.net,
+            status: v.status,
+            lines: week.lines.filter((l) => !l.voucherId || l.voucherId === v.id),
+          }))
+        : week.voucherId
+          ? [
+              {
+                id: week.voucherId,
+                voucherNo: week.voucherNo ?? null,
+                agencyName: null as string | null,
+                net: week.net,
+                status: week.status,
+                lines: week.lines,
+              },
+            ]
+          : [];
+
+    return rows.flatMap((row) => {
+      if (!REVIEWABLE.has(row.status ?? '')) return [];
+      if (isSigned(row.id)) return [];
+      const net = Number(row.net) || 0;
+      const hasLines = row.lines.some((l) => l.commission > 0);
+      if (net <= 0 && !hasLines) return [];
+      const ref =
+        row.voucherNo ?? pvRef({ ...week, voucherId: row.id, voucherNo: row.voucherNo });
+      const outlet = outletFromWeek({ ...week, lines: row.lines });
+      // The agency LEADS the subtitle: on a two-voucher week the venue and the
+      // week label are often identical, so it is the only thing telling the PR
+      // which of the two they are about to sign.
+      const who = row.agencyName?.trim();
+      return [
+        {
+          id: `todo-pv-${row.id}`,
+          pvId: row.id,
+          title: 'Review payment voucher',
+          subtitle: `${who ? `${who} · ` : ''}${outlet} · ${ref} · ${formatRM(net)}`,
+          actionLabel: 'Review PV',
+          net,
+          ref,
+          outlet,
+          agencyName: row.agencyName ?? null,
+        },
+      ];
+    });
   }, [week, isSigned]);
 
-  return { awaiting, loading, refresh, lastWeek: week };
+  /**
+   * The FIRST outstanding to-do, for the callers that show a single prompt
+   * (TopBar's badge, the Shifts to-do row). Kept so those keep working unchanged;
+   * anything LISTING signatures should read `awaitingAll`.
+   */
+  const awaiting = useMemo(
+    () =>
+      awaitingAll.length > 0
+        ? { week, todo: awaitingAll[0]!, weekLabel: weekRangeLabel(1) }
+        : null,
+    [awaitingAll, week],
+  );
+
+  return { awaiting, awaitingAll, loading, refresh, lastWeek: week };
 }

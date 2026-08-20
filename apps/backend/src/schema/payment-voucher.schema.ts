@@ -97,7 +97,29 @@ export const CreatePrReceiptLineSchema = z.object({
   lineDate: isoDate.optional(),
   outlet: z.string().max(255, 'Outlet is too long').optional(),
   // For wages: the assignment id, so a repeated check-out never double-seals.
+  //
+  // ⚠️ NOT the way to tell the server which shift a line belongs to — use
+  // `assignmentId` below. This field is welded to the DEDUPE check: a line
+  // arriving with a ref already present on the draft is answered
+  // `200 Already sealed` with the EXISTING line, so a drink sent under a wage's
+  // ref would be silently discarded rather than written. One field, one fact.
   dedupeRef: z.string().max(80, 'Ref is too long').optional(),
+  /**
+   * WHICH SHIFT this line was earned on — the evidence deciding WHOSE voucher
+   * the money lands on (see `resolveMoneyAgencyId`).
+   *
+   * A PR on two agencies' rosters can legitimately work both in one day since
+   * the window rule, so neither the date nor their membership list can answer
+   * this. The check-out seal already knows the assignment (it sends it as
+   * `dedupeRef`, for a different purpose); a manual self-log knows it too and
+   * simply had nowhere to put it — which made an honest tip on a two-agency day
+   * impossible to log at all. Same field and same meaning as
+   * `CreatePrReceiptSchema.assignmentId`.
+   *
+   * Optional: single-roster PRs resolve without it, and an older client that
+   * omits it keeps working exactly as before.
+   */
+  assignmentId: z.string().uuid('Invalid assignment ID').optional(),
   // Proof photo(s) the PR snaps for a self-log (client downscales before send).
   // Stored on payment_voucher_line.proof_photos so the agency can verify.
   proofPhotos: z

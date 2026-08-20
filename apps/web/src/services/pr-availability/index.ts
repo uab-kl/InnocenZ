@@ -90,3 +90,65 @@ export function blockedReasonsByPr(
 	}
 	return byKey;
 }
+
+/**
+ * A window this agency's PR is already working for SOMEONE ELSE.
+ *
+ * Times only — no agency, no outlet, no shift id. That is the whole payload the
+ * backend will give, deliberately: an agency must know WHEN its own roster member
+ * cannot be booked, or it cannot roster around them, and is entitled to nothing
+ * beyond that. Naming the venue would hand over a rival's client.
+ */
+export type PrCommittedWindow = {
+	userId: string;
+	/** YYYY-MM-DD. */
+	date: string;
+	/** "15:00 - 04:00", or null for a label-only shift that carries no window. */
+	slot: string | null;
+};
+
+export async function fetchPrCommittedWindows(
+	params: { from?: string; to?: string; prId?: string },
+	onRefreshFail: () => void,
+): Promise<PrCommittedWindow[]> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		from: params.from,
+		to: params.to,
+		prId: params.prId,
+	});
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: PrCommittedWindow[];
+	}>(`/pr-availability/committed${queryString}`);
+	return response.data.data ?? [];
+}
+
+/**
+ * Committed windows folded into `prId -> date -> slots`, the shape the week grid
+ * asks its question in ("is this PR busy that day, and when?").
+ *
+ * SEPARATE from `blockedDatesByPr`, and it must stay separate: a self-declared
+ * block takes the whole DAY and the agency cannot book around it, while these are
+ * time windows the agency very much can book around — that is the entire point of
+ * the rule change. Merging them would flatten a bookable day into an unbookable
+ * one and undo it.
+ *
+ * A window with no slot still registers the date with an empty entry, so a
+ * label-only shift shows as "busy, time unknown" rather than vanishing.
+ */
+export function committedWindowsByPr(
+	rows: PrCommittedWindow[],
+): Map<string, Map<string, string[]>> {
+	const byPr = new Map<string, Map<string, string[]>>();
+	for (const row of rows) {
+		const byDate = byPr.get(row.userId) ?? new Map<string, string[]>();
+		const slots = byDate.get(row.date) ?? [];
+		const slot = row.slot?.trim();
+		if (slot && !slots.includes(slot)) slots.push(slot);
+		byDate.set(row.date, slots);
+		byPr.set(row.userId, byDate);
+	}
+	return byPr;
+}

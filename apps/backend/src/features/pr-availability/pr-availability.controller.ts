@@ -7,7 +7,6 @@ import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { OrgScope, resolveOrgScope } from '@/util/org-scope';
 import { BlockPrDaySchema, PrAvailabilityRangeSchema } from '@/schema/pr-availability.schema';
-import { PrAvailabilityWithPrType } from './pr-availability.model';
 import { PrAvailabilityRepositoryClass } from './pr-availability.repository';
 
 export class PrAvailabilityControllerClass {
@@ -117,6 +116,51 @@ export class PrAvailabilityControllerClass {
   }
 
   /**
+   * WHEN this agency's roster is already committed elsewhere — the week grid's
+   * "unavailable at that time" markers.
+   *
+   * Deliberately a SEPARATE endpoint from `listForAgency`, not a second array on
+   * it. The two answer different questions: that one lists days the PR blocked
+   * HERSELF, which is a `pr_availability` row with her own reason; this one lists
+   * time WINDOWS derived from other agencies' bookings, which is not a row at all
+   * and carries no reason. Folding derived entries into that feed once already
+   * produced a list whose halves had to be made indistinguishable field by field.
+   *
+   * Same guard as its sibling: agency or admin, scoped in the repository through
+   * `agency_pr`. An outlet is not a reader — a PR's commitments elsewhere are
+   * their agency's staffing concern, never the venue's.
+   */
+  async listCommittedForAgency(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+      }
+      const parsed = PrAvailabilityRangeSchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+      // Same rule as the sibling read: an admin may name an agency, anyone else
+      // gets their own, and an admin who names none gets nothing rather than a
+      // read across every agency on the platform.
+      const agencyId = scope.isAdmin ? (req.query.agencyId as string | undefined) : scope.agencyId;
+      if (!agencyId) {
+        return res.status(200).json({ success: true, message: 'OK', data: [] });
+      }
+      const rows = await this.prAvailabilityRepository.listCommittedWindows({
+        agencyId,
+        from: parsed.data.from,
+        to: parsed.data.to,
+        userId: req.query.prId as string | undefined,
+      });
+      res.status(200).json({ success: true, message: 'OK', data: rows });
+    } catch (error) {
+      logger.error('[PrAvailabilityController.listCommittedForAgency] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
    * Blocked days across the calling agency's own roster, for the week grid.
    *
    * Agency (or admin) only, and scoped through `agency_pr` in the repository —
@@ -143,102 +187,41 @@ export class PrAvailabilityControllerClass {
       if (!agencyId) {
         return res.status(200).json({ success: true, message: 'OK', data: [] });
       }
-      const [rows, committedElsewhere] = await Promise.all([
-        this.prAvailabilityRepository.listForAgency({
-          agencyId,
-          from: parsed.data.from,
-          to: parsed.data.to,
-          userId: req.query.prId as string | undefined,
-        }),
-        // THE DAY BELONGS TO THE PR. A day this PR already works for another agency is
-        // unavailable to this one, and it arrives here as an ordinary block so the
-        // picker greys it with the wording it already has — see the repository note on
-        // why the two must stay indistinguishable.
-        this.prAvailabilityRepository.listCommittedElsewhere({
-          agencyId,
-          from: parsed.data.from,
-          to: parsed.data.to,
-          userId: req.query.prId as string | undefined,
-        }),
-      ]);
+      const rows = await this.prAvailabilityRepository.listForAgency({
+        agencyId,
+        from: parsed.data.from,
+        to: parsed.data.to,
+        userId: req.query.prId as string | undefined,
+      });
 
-      // A day already blocked by hand wins: it is a real row with the PR's own reason,
-      // and replacing it with a derived stand-in would throw those words away.
-      //
-      // ⚠️ THE FIELD IS `unavailableDate`, NOT `date` — both halves of this merge
-      // had it wrong, and the mistake was invisible twice over. The `as {...}`
-      // casts asserted a shape the row does not have, so `tsc` had nothing to
-      // object to; and the runtime failure is silent, because a derived entry
-      // arrived carrying `unavailableDate: undefined`, `blockedDatesByPr` added
-      // `undefined` to the set, and no calendar day ever matched it. The whole
-      // committed-elsewhere feature was wired end to end and greyed nothing.
-      const declared = new Set(rows.map((r) => `${r.userId}|${r.unavailableDate}`));
-      // Typed as the REAL row type on purpose. Every field a `pr_availability`
-      // row has must be present and of the right type here, and now the compiler
-      // is the one enforcing it — the previous version of this object type-checked
-      // happily while being null in five places.
-      //
-      // ⚠️ EVERY FIELD BELOW EXCEPT `reason` WAS `null`, AND THAT WAS THE BUG. The
-      // nulls were meant to make a derived entry look like a real row and did the
-      // exact opposite: `created_at`, `updated_at`, `created_by` and `updated_by`
-      // are all NOT NULL with defaults in the live schema (checked against
-      // information_schema, and no live row is null in any of them), and `prName`
-      // is coalesced to 'PR'. A genuine block therefore CANNOT be null in any of
-      // the five, so `row.createdAt === null` answered "is this a rival's booking?"
-      // with perfect accuracy — a cleaner probe than the one this merge exists to
-      // prevent.
-      //
-      // ⚠️ KEY ORDER IS PART OF THE SHAPE. `prName` goes LAST because the declared
-      // half is built as `{ ...row, prName }`, which appends it after the table's
-      // own columns. Placing it anywhere else here left `JSON.stringify` emitting
-      // two visibly different objects, and the raw response in a network tab
-      // separated the sets without a single value being read.
-      const derived: PrAvailabilityWithPrType[] = committedElsewhere
-        .filter((c) => !declared.has(`${c.userId}|${c.date}`))
-        .map((c) => ({
-          // Uuid-shaped and stable across polls; see `derivedBlockId`. The old
-          // value was the literal string `derived-<user>-<date>`.
-          id: c.id,
-          userId: c.userId,
-          // The repository returns this column as `date`; the WIRE name is
-          // `unavailableDate`, because that is what a real `pr_availability` row
-          // is called and a derived block has to be indistinguishable from one.
-          unavailableDate: c.date,
-          // The ONE field that stays null, and the only one that may: the column
-          // itself is nullable and most live declared rows are null in it, so a
-          // reader who finds no reason has learned nothing.
-          reason: null,
-          // When the day actually stopped being free, taken from the underlying
-          // assignment. Stable across requests, which `new Date()` would not be:
-          // derived rows advancing on every poll while declared ones stand still
-          // is the old null tell wearing a clock. These name no agency, no outlet
-          // and no shift — only an instant, which is exactly what a declared row's
-          // timestamps disclose about it too.
-          createdAt: c.createdAt,
-          updatedAt: c.updatedAt,
-          // The PR's OWN user id, which is what every real row here holds:
-          // `blockMine` is the only writer and stamps `getActor`, i.e. the
-          // signed-in PR. It is also the only safe answer — the literally truthful
-          // one, the rival agency's id, would not merely be a tell, it would hand
-          // over the exact fact being withheld.
-          createdBy: c.userId,
-          updatedBy: c.userId,
-          // Same expression the declared half renders (see `prDisplayNameSql`), so
-          // the two halves cannot disagree about what to call the same person.
-          prName: c.prName,
-        }));
-
-      // ONE list, sorted as one. `[...rows, ...derived]` shipped every declared
-      // block ahead of every derived one, so POSITION answered the question the
-      // null fields used to: a 14 Aug row sitting after a 20 Aug row was a rival's
-      // booking, no field inspection required. Sorting both halves on the same key
-      // makes a row's index say nothing about where it came from.
-      const merged = [...rows, ...derived].sort(
-        (a, b) =>
-          a.unavailableDate.localeCompare(b.unavailableDate) ||
-          a.userId.localeCompare(b.userId) ||
-          a.id.localeCompare(b.id),
-      );
+      /*
+       * ⚠️ THE DERIVED "COMMITTED ELSEWHERE" DAY-BLOCKS ARE GONE (owner's change,
+       * 20 Aug 2026). `listCommittedElsewhere` is deliberately LEFT in the
+       * repository rather than deleted — read this before re-wiring it.
+       *
+       * They existed to serve the DAY rule: a shift at any agency took that whole
+       * calendar day off the market for every other agency, so the picker greyed
+       * the day and the assign guard refused it — preview and action agreeing, as
+       * they must. The rule is now the shift's own window PLUS the travel time
+       * between the two venues, and nothing else. The day is no longer the unit of
+       * anything.
+       *
+       * Left as day-blocks they would now be the WRONG half of that pair. A PR
+       * booked 15:00–04:00 elsewhere is genuinely free that morning, and greying
+       * the whole day would refuse IN THE INTERFACE exactly the bookings the new
+       * rule exists to allow — the owner's instruction defeated by the preview
+       * instead of by the guard.
+       *
+       * What is lost is early warning, and it is worth stating plainly: the planner
+       * can now propose a time the assign guard will refuse. That is the lesser of
+       * the two faults — a refusal at Confirm costs a click, a greyed day costs the
+       * PR the shift — but the real repair is to preview the WINDOWS rather than
+       * the days, and `listCommittedElsewhere` is the query to build that on, which
+       * is why it stays. Anything reinstated here must keep the anonymity work
+       * already inside it: no agency, no venue, and no separable row shape.
+       */
+      // The declared blocks ARE the answer now — nothing is appended.
+      const merged = rows;
 
       res.status(200).json({ success: true, message: 'OK', data: merged });
     } catch (error) {

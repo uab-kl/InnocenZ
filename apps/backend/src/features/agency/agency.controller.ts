@@ -86,12 +86,9 @@ export class AgencyControllerClass {
 
       // Admin + agency operators may look up any PR; a PR may only read self.
       const roles = await this.authRepository.getRolesForUserIds([callerId]);
-      const canBrowseOthers = roles.some(
-        (r) =>
-          r.roleName === portalRoleName.ADMIN ||
-          r.portalCode === 'agency',
-      );
-      if (!canBrowseOthers) {
+      const isAdmin = roles.some((r) => r.roleName === portalRoleName.ADMIN);
+      const isAgency = roles.some((r) => r.portalCode === 'agency');
+      if (!isAdmin && !isAgency) {
         userIds = [callerId];
       }
 
@@ -104,6 +101,38 @@ export class AgencyControllerClass {
           message: 'At most 200 userIds can be requested at once',
           data: null,
         });
+      }
+
+      /**
+       * ⚠️ AN AGENCY SEES ITS OWN LINK AND NO OTHER.
+       *
+       * Being allowed to LOOK UP a PR is not the same as being allowed to read
+       * every roster that PR is on, and this conflated the two: any agency token
+       * could post up to 200 user ids and get back, for each, the name and code of
+       * every agency they work for, plus that agency's private `tier` for them.
+       *
+       * That is a rival's identity attached to a shared PR, and it walks straight
+       * through the cross-agency anonymity everything else maintains — the roster
+       * grid says only WHEN a shared PR is unavailable, deliberately, and this
+       * handed over the short list of WHO to pair it with. The portal will not even
+       * render a foreign tier where it happens to hold one.
+       *
+       * Admin stays unfiltered: the user-management screens are its only caller and
+       * an admin is already trusted across every agency. A PR reading self is
+       * clamped above and keeps the whole list, which is hers to see.
+       */
+      if (!isAdmin) {
+        const own = await this.agencyMemberRepository.listMembershipsByUserIds([callerId]);
+        const callerAgencyId = own[0]?.agencyId ?? null;
+        if (!callerAgencyId) {
+          // An agency-portal account with no agency behind it can answer nothing.
+          // Empty, never unfiltered — failing open here is the whole bug.
+          return res.status(200).json({ success: true, message: 'OK', data: [] });
+        }
+        const scoped = await this.agencyPrRepository.listLinksByUserIds(userIds, {
+          agencyId: callerAgencyId,
+        });
+        return res.status(200).json({ success: true, message: 'OK', data: scoped });
       }
 
       const links = await this.agencyPrRepository.listLinksByUserIds(userIds);

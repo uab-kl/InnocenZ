@@ -93,10 +93,28 @@ export function ScanScreen({
   // scheduled date (the seed dates some shifts a day ahead) and never a UTC day
   // that rolls over at night.
   const todayKey = ymdToIso(...todayYmd());
+  /*
+   * ⚠️ EVERY self-logged line NAMES ITS SHIFT.
+   *
+   * The server decides whose voucher the money lands on from the assignment, not
+   * from the PR's membership list — a PR on two rosters can legitimately work
+   * both agencies in one day, so the date cannot answer it and the server refuses
+   * rather than guess. Without this the free-amount form (shown whenever the
+   * outlet has no drink/tip catalogue) sent no shift at all, and an honest RM 50
+   * tip on a two-agency day could not be logged anywhere.
+   *
+   * `assignmentId`, NOT `dedupeRef`: that field is the double-seal key, and a
+   * drink carrying a wage's ref comes back "already sealed" and is dropped.
+   * `submitReceipt` below already sends it the same way.
+   */
   const logLine = (input: Parameters<typeof addLine>[0]) =>
-    addLine({ lineDate: todayKey, ...input });
+    addLine({ lineDate: todayKey, ...(active?.id ? { assignmentId: active.id } : {}), ...input });
   const editLine = (id: string, input: Parameters<typeof updateLine>[1]) =>
-    updateLine(id, { lineDate: todayKey, ...input });
+    updateLine(id, {
+      lineDate: todayKey,
+      ...(active?.id ? { assignmentId: active.id } : {}),
+      ...input,
+    });
 
   // Real shift context from the active assignment: outlet, its drink menu, and
   // this PR's resolved rate card (drink/tip %, happy-hour window).

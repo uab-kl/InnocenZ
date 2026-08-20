@@ -248,6 +248,43 @@ function shortStamp(iso: string | null): string {
   return `${d.getDate()} ${mo}, ${h}:${m} ${ampm}`;
 }
 
+/**
+ * WHICH VOUCHER a tapped cell belongs to, or null when it cannot be told.
+ *
+ * A PR on two rosters holds one voucher PER AGENCY for the same week, and the
+ * grid merges them — so "the week's voucher" is not a thing any action on a cell
+ * may assume. Resolution narrows fastest-first:
+ *
+ *   - a chosen RECEIPT names exactly one shift, so its line's voucher is the
+ *     answer and nothing else needs consulting;
+ *   - failing that, the lines in that day+bucket, IF they all sit on one voucher;
+ *   - failing that, the week's single voucher — the one-agency case, where the
+ *     old behaviour was already correct.
+ *
+ * Null means genuinely ambiguous: two agencies in one cell with nothing picked.
+ * The caller must ASK rather than choose, because either choice files a claim
+ * against an agency the PR did not mean.
+ */
+function voucherOwning(
+  week: PrCurrentWeek | null | undefined,
+  sel: { receiptId: string | null; dateIso: string; component: IncomeKey },
+): string | null {
+  if (!week) return null;
+  const lines = week.lines ?? [];
+  if (sel.receiptId) {
+    const byReceipt = lines.find((l) => l.receiptId === sel.receiptId)?.voucherId;
+    if (byReceipt) return byReceipt;
+  }
+  const inCell = lines.filter((l) => l.lineDate === sel.dateIso && l.kind === sel.component);
+  const distinct = [...new Set(inCell.map((l) => l.voucherId).filter(Boolean))] as string[];
+  if (distinct.length === 1) return distinct[0]!;
+  if (distinct.length > 1) return null;
+  // Nothing attributable — a single-voucher week, or a backend that has not
+  // restarted yet and stamps no `voucherId` on its lines.
+  if ((week.vouchers?.length ?? 0) > 1) return null;
+  return week.voucherId ?? null;
+}
+
 // buildWeekGridFromLines moved to lib/week-pay-grid so PvDetailScreen renders
 // the identical grid for the same voucher.
 
@@ -394,13 +431,36 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   /** Has the AGENCY issued this week's voucher? The paperwork, not the days. */
   const weekIssued = !!lastWeek?.status && VERIFIED_STATUSES.includes(lastWeek.status);
   const hasLastWeekRows = grid.some((d) => d.status !== 'empty');
-  // Only a real, agency-sent voucher the PR hasn't signed yet is reviewable.
-  const awaiting =
-    lastWeek?.voucherId &&
-    (lastWeek.status === 'awaiting_pr' || lastWeek.status === 'sent') &&
-    !isSigned(lastWeek.voucherId)
-      ? { id: lastWeek.voucherId, net: Number(lastWeek.net) }
-      : undefined;
+  /**
+   * EVERY voucher still waiting on this PR — one button each, named by agency.
+   *
+   * ⚠️ This gated on `lastWeek.status`, the NEWEST voucher's. With Atlas `sent`
+   * and a newer Why We Met voucher still `pending_review`, the whole week read as
+   * un-reviewable and the PR was never offered Atlas's document at all; the other
+   * way round they were offered ONE button carrying both agencies' money.
+   */
+  const awaitingVouchers = useMemo(() => {
+    const rows =
+      lastWeek?.vouchers && lastWeek.vouchers.length > 0
+        ? lastWeek.vouchers
+        : lastWeek?.voucherId
+          ? [
+              {
+                id: lastWeek.voucherId,
+                agencyName: null as string | null,
+                net: lastWeek.net,
+                status: lastWeek.status,
+                voucherNo: lastWeek.voucherNo ?? null,
+              },
+            ]
+          : [];
+    return rows
+      .filter((v) => v.status === 'awaiting_pr' || v.status === 'sent')
+      .filter((v) => !isSigned(v.id))
+      .map((v) => ({ id: v.id, net: Number(v.net), agencyName: v.agencyName ?? null }));
+  }, [lastWeek, isSigned]);
+  /** The first one, for the single-button callers that have not been widened. */
+  const awaiting = awaitingVouchers[0];
   const reviewAmount = weekTotal > 0 ? weekTotal : awaiting?.net ?? 0;
   // The dispute is persisted at the voucher grain (payment_voucher.status), so
   // the whole "Last week" PV is either under dispute or not (§3 F).
@@ -713,8 +773,27 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     receiptId: string | null;
   }) => {
     if (!token || !claimDay || disputeBusy) return;
-    const voucherId = claimDay.week === 'last' ? lastWeek?.voucherId : current?.voucherId;
-    if (!voucherId) return;
+    // Withdraw where it was RAISED. The claim carries its own receipt, so the
+    // owning voucher is knowable — routing this by "the week's voucher" would
+    // aim a withdrawal at the other agency's document, where it matches nothing.
+    const claimWeek = claimDay.week === 'last' ? lastWeek : current;
+    const voucherId = voucherOwning(claimWeek, {
+      receiptId: d.receiptId,
+      dateIso: d.disputeDate,
+      component: d.component,
+    });
+    if (!voucherId) {
+      // ⚠️ SAY SOMETHING. The old line here was a bare `return`, which was survivable
+      // while the id came from the week and was therefore always present. Now that it
+      // is RESOLVED, it can legitimately come back null — a legacy claim carrying no
+      // receiptId, on a day two agencies both have money in — and a Withdraw button
+      // that silently does nothing reads as a broken app, not as a refusal.
+      Alert.alert(
+        'Open the day first',
+        'That day has money from more than one agency, so this claim cannot be matched to a voucher from here. Open the day, pick the shift, and withdraw it there.',
+      );
+      return;
+    }
     const go = async () => {
       setDisputeBusy(true);
       try {
@@ -765,7 +844,38 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // Reading `lastWeek` unconditionally is what made a This-week dispute post
     // against last week's voucher — or, with no last-week voucher, refuse.
     const forLast = disputeTarget.week === 'last';
-    const voucherId = forLast ? lastWeek?.voucherId : current?.voucherId;
+    const disputeWeek = forLast ? lastWeek : current;
+    const pickedReceiptId =
+      disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.receiptId ?? null;
+    /*
+     * WHICH VOUCHER OWNS THE TAPPED CELL.
+     *
+     * ⚠️ This was `week.voucherId` — the NEWEST voucher — while the grid it was
+     * tapped on MERGES every voucher in the week. So a PR disputing a RM 3.60
+     * drink on Why We Met's receipt posted the claim to ATLAS's voucher, and it
+     * failed SILENTLY rather than loudly: the server's own reads are
+     * voucher-scoped, so the foreign receipt matched no line, the claim priced
+     * itself at RM 0.00, and Atlas's voucher flipped to `disputed` over money it
+     * never owed — while Why We Met never heard about the argument at all.
+     *
+     * The backend now refuses a receipt that is not on the named voucher, so
+     * getting this wrong is at least visible. Getting it RIGHT is here.
+     */
+    const voucherId = voucherOwning(disputeWeek, {
+      receiptId: pickedReceiptId,
+      dateIso: disputeTarget.dateIso,
+      component: disputeTarget.incomeKey,
+    });
+    if (token && disputeWeek && !voucherId && (disputeWeek.vouchers?.length ?? 0) > 1) {
+      // Two agencies hold money in that cell and nothing narrows it to one. The
+      // claim is genuinely ambiguous, and picking either would file it against an
+      // agency the PR did not mean.
+      Alert.alert(
+        'Pick the shift first',
+        'That day has money from more than one agency. Open the day, choose the shift you want to dispute, then try again.',
+      );
+      return;
+    }
     if (!token || !voucherId) {
       Alert.alert(
         'No voucher to dispute yet',
@@ -1155,14 +1265,29 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 </Text>
               )}
 
-              {awaiting && (
+              {/*
+                * ONE BUTTON PER VOUCHER. With two agencies in a week there are two
+                * documents to sign, and a single button could only ever open one of
+                * them while quoting the other's money — `reviewAmount` is the whole
+                * week's total, which is not what either voucher says.
+                *
+                * The agency NAMES each button, and the amount is that voucher's own
+                * net. On the ordinary one-voucher week this renders exactly as
+                * before, with the week total, because there the two are the same.
+                */}
+              {awaitingVouchers.map((v) => (
                 <IzButton
-                  label={`Review & sign · ${formatRM(reviewAmount)}`}
+                  key={v.id}
+                  label={
+                    awaitingVouchers.length > 1
+                      ? `Review & sign · ${v.agencyName ?? 'Agency'} · ${formatRM(v.net)}`
+                      : `Review & sign · ${formatRM(reviewAmount)}`
+                  }
                   small
-                  onPress={() => openPv(awaiting.id)}
+                  onPress={() => openPv(v.id)}
                   style={{ marginTop: 10 }}
                 />
-              )}
+              ))}
             </View>
           )}
         </View>
