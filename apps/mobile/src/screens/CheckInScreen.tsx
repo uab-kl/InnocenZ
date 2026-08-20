@@ -35,7 +35,7 @@ import { getAttendanceFix } from '../lib/device-location';
 import { Avatar, EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
 import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
-import { MapPin, ZoomIn } from '../components/icons';
+import { MapPin } from '../components/icons';
 import { ImageLightbox, ZoomHint } from '../components/ImageLightbox';
 import type { PrTab } from '../components/BottomNav';
 
@@ -556,23 +556,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       {active?.eventKind === 'special' ? 'Special event' : 'Normal shift'}
                     </Text>
                   </View>
-                  <View
-                    style={{
-                      position: 'absolute',
-                      right: 8,
-                      bottom: 8,
-                      width: 22,
-                      height: 22,
-                      borderRadius: 999,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: 'rgba(0,0,0,0.62)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(255,255,255,0.3)',
-                    }}
-                  >
-                    <ZoomIn size={12} color="#fff" strokeWidth={2.2} />
-                  </View>
+                  <ZoomHint />
                 </Pressable>
               ) : null}
               <View style={styles.briefMain}>

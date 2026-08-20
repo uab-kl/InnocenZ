@@ -37,7 +37,6 @@ import {
   House,
   MapPin,
   Store,
-  ZoomIn,
 } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 import { useActiveShift } from '../lib/active-shift';
@@ -641,9 +640,7 @@ function TonightCard({
                 {shift.eventKind ?? 'Normal shift'}
               </Text>
             </View>
-            <View style={styles.zoomBadge}>
-              <ZoomIn size={12} color="#fff" strokeWidth={2.2} />
-            </View>
+            <ZoomHint />
           </Pressable>
         ) : null}
         <View style={styles.shiftVenue}>
@@ -736,20 +733,6 @@ const styles = StyleSheet.create({
   },
   shiftHeroBadgeTextSpecial: {
     color: '#E8C27A',
-  },
-  /** Magnifier chip on the hero — "this picture opens bigger". */
-  zoomBadge: {
-    position: 'absolute',
-    right: 8,
-    bottom: 8,
-    width: 22,
-    height: 22,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.62)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
   },
   screen: {
     paddingTop: 6,

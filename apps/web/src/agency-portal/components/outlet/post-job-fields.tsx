@@ -13,7 +13,6 @@ import {
 	OutletMultiDatePopover,
 } from "@agency-portal/components/outlet/outlet-date-popover";
 import { PostJobTierRatesEditor } from "@agency-portal/components/outlet/PostJobTierRatesEditor";
-import { useOutletEffectivePlan } from "@agency-portal/hooks/use-outlet-effective-plan";
 import {
 	PostJobEditableInputShell,
 	PostJobFormLegend,
@@ -26,6 +25,7 @@ import {
 import { ShiftEventPriceEditor } from "@agency-portal/components/outlet/ShiftEventPriceEditor";
 import { PrComcardPickerThumb } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { JobPostingMicroLabel } from "@agency-portal/components/special-service/job-posting-ui";
+import { useOutletEffectivePlan } from "@agency-portal/hooks/use-outlet-effective-plan";
 import {
 	buildDefaultTierRates,
 	cloneTierRates,
@@ -90,7 +90,15 @@ import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { addDays, format, startOfToday } from "date-fns";
-import { ArrowUpRight, Check, Lock, Minus, Pencil, Plus, X } from "lucide-react";
+import {
+	ArrowUpRight,
+	Check,
+	Lock,
+	Minus,
+	Pencil,
+	Plus,
+	X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";

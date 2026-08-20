@@ -1381,7 +1381,10 @@ export function formatOutletPlanDailyHeadcountHint(
 	const band = plan.prPerDayMin
 		? `${plan.prPerDayMin}–${plan.prPerDayMax}`
 		: String(plan.prPerDayMax);
-	return `${plan.label} plan · ${band} PRs/day · ${remaining} available on ${dateLabel}`;
+	// Says WHICH counter this is. Bare "45 available" next to the picker's "49
+	// named PR slots left" read as the same ledger disagreeing with itself —
+	// this one is total headcount (agency fill included), the named limit is not.
+	return `${plan.label} plan · ${band} PRs/day · ${remaining} of ${plan.prPerDayMax} headcount available on ${dateLabel}`;
 }
 
 /**
