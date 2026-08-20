@@ -11687,9 +11687,21 @@ button.iz-pr-offer-row:hover {
 	max-width: 252px;
 }
 
+/*
+ * Sized to its CONTENT, not to a number.
+ *
+ * This was a flat 252px against a `.iz-hist-cal--popover` floor of 280px, so
+ * it computed to 280px with 12px of padding either side — a content box of
+ * 256px holding a day grid that is seven cells wide. The cells size to their
+ * text, and the portal-wide `.text-sm` uplift took that text from 14px to
+ * 17px, which pushed the grid to 280px and sliced the Saturday column off the
+ * right edge. A fixed width cannot survive a type change; max-content lets the
+ * grid decide, so no future size bump can clip it again.
+ */
 .iz-roster-planning-date .iz-hist-cal--popover {
-	right: auto;
-	width: 252px;
+	width: max-content;
+	min-width: 280px;
+	max-width: min(92vw, 340px);
 }
 
 /* Planning week picker — compact + equal columns + Mon–Sun week highlight */
