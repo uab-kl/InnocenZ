@@ -144,6 +144,32 @@ function PendingComcardVisual({
  */
 type Tab = "signups" | "cancel" | "cutlost" | "leaves" | "outlet-linking";
 
+/**
+ * The two things an agency approves: people, and venues.
+ *
+ * Five peer chips gave no clue that "Cancel Agency" and "Outlet-Linking" are
+ * answers to completely different questions from completely different senders.
+ * The split is by WHO RAISED the request, which is also how the backend gates
+ * them: cutlost is created under `requireRole('admin','outlet')` — the venue
+ * asks to cut a PR loose and the agency decides — so it belongs with the venue's
+ * link request, not with the PR's own join, departure and leave.
+ */
+type ApprovalGroup = "pr" | "outlet";
+
+const TAB_GROUP: Record<Tab, ApprovalGroup> = {
+	signups: "pr",
+	cancel: "pr",
+	leaves: "pr",
+	cutlost: "outlet",
+	"outlet-linking": "outlet",
+};
+
+/** Where each group opens: its first queue. */
+const GROUP_FIRST_TAB: Record<ApprovalGroup, Tab> = {
+	pr: "signups",
+	outlet: "cutlost",
+};
+
 const AVATAR_VARIANTS = ["rose", "sky", "violet", "amber", "mint"] as const;
 
 function avatarVariant(id: string) {
@@ -1421,6 +1447,7 @@ function AgencyPending() {
 	 * history. Filtering on leave_status, never `status` — a rejection reverts
 	 * `status` to `assigned` and would otherwise be invisible.
 	 */
+
 	const [leaveFilter, setLeaveFilter] = useState<
 		"pending" | "approved" | "rejected" | "all"
 	>("pending");
@@ -1437,6 +1464,7 @@ function AgencyPending() {
 	const [tiedFilter, setTiedFilter] = useState<
 		"pending" | "approved" | "rejected" | "all"
 	>("pending");
+	const group = TAB_GROUP[tab];
 	const kindOf = (p: PendingPR) => p.requestKind ?? "join";
 	const tiedKind: "join" | "leave" = tab === "cancel" ? "leave" : "join";
 	const tiedCounts = useMemo(
@@ -1449,6 +1477,32 @@ function AgencyPending() {
 				.length,
 		}),
 		[signups, backend.approvedHistory, backend.rejectedHistory, tiedKind],
+	);
+
+	const groupCounts = useMemo(
+		() => ({
+			pr: {
+				count:
+					tiedCounts.joinCurrent +
+					agencyLinkRequests.length +
+					tiedCounts.leaveCurrent +
+					leaveRequests.length,
+				loading: queue.leaveIsLoading,
+			},
+			outlet: {
+				count: cutlostRequests.length + outletLinks.pendingCount,
+				loading: outletLinks.pendingIsLoading,
+			},
+		}),
+		[
+			tiedCounts,
+			agencyLinkRequests.length,
+			leaveRequests.length,
+			queue.leaveIsLoading,
+			cutlostRequests.length,
+			outletLinks.pendingCount,
+			outletLinks.pendingIsLoading,
+		],
 	);
 	const tiedList = useMemo(() => {
 		const only = (list: PendingPR[]) =>
@@ -1565,58 +1619,85 @@ function AgencyPending() {
 						</p>
 					</header>
 
+					{/* Two groups first, their queues underneath — so the reader picks
+					    WHO they are answering before WHICH request. A group's count is
+					    the work waiting across its queues, and shows "…" while any of
+					    them is still loading: a premature "(0)" claims there is nothing
+					    to do, which is a different statement from "not known yet". */}
+					<div className="iz-approvals-groups" role="tablist">
+						{(["pr", "outlet"] as const).map((g) => (
+							<button
+								key={g}
+								type="button"
+								role="tab"
+								aria-selected={group === g}
+								className={cn("iz-approvals-group", group === g && "on")}
+								onClick={() => setTab(GROUP_FIRST_TAB[g])}
+							>
+								{g === "pr" ? t.approvals.groupPr : t.approvals.groupOutlet}
+								<span className="iz-approvals-group__count">
+									{groupCounts[g].loading ? "…" : groupCounts[g].count}
+								</span>
+							</button>
+						))}
+					</div>
+
 					<div className="iz-approvals-tabs">
-						<button
-							type="button"
-							className={cn("iz-approvals-tab", tab === "signups" && "on")}
-							onClick={() => setTab("signups")}
-						>
-							{t.approvals.agencyTied} (
-							{tiedCounts.joinCurrent + agencyLinkRequests.length})
-						</button>
-						<button
-							type="button"
-							className={cn("iz-approvals-tab", tab === "cancel" && "on")}
-							onClick={() => setTab("cancel")}
-						>
-							{/* Departures live on their OWN tab so approving one can never
-							    be mistaken for accepting a PR under the agency. */}
-							{t.approvals.cancelAgency} ({tiedCounts.leaveCurrent})
-						</button>
-						<button
-							type="button"
-							className={cn("iz-approvals-tab", tab === "cutlost" && "on")}
-							onClick={() => setTab("cutlost")}
-						>
-							{t.approvals.cutlost} ({cutlostRequests.length})
-						</button>
-						<button
-							type="button"
-							className={cn("iz-approvals-tab", tab === "leaves" && "on")}
-							onClick={() => setTab("leaves")}
-						>
-							{/* "(0)" while the query is still in flight reads as "there are
-							    none", which is a different claim from "not known yet" — and
-							    it is the claim that made a pending request look deleted. */}
-							{t.approvals.mcLeaves} (
-							{queue.leaveIsLoading ? "…" : leaveRequests.length})
-						</button>
-						{/* Venues asking to work with this agency (0123). Counted like every
-						    other tab — an uncounted tab reads as "there is nothing here",
-						    which is a different claim from "not known yet". "…" while
-						    loading for that same reason: a premature "(0)" says there is no
-						    work when there may be plenty. */}
-						<button
-							type="button"
-							className={cn(
-								"iz-approvals-tab",
-								tab === "outlet-linking" && "on",
-							)}
-							onClick={() => setTab("outlet-linking")}
-						>
-							{t.approvals.outletLinking} (
-							{outletLinks.pendingIsLoading ? "…" : outletLinks.pendingCount})
-						</button>
+						{group === "pr" ? (
+							<>
+								<button
+									type="button"
+									className={cn("iz-approvals-tab", tab === "signups" && "on")}
+									onClick={() => setTab("signups")}
+								>
+									{t.approvals.agencyTied} (
+									{tiedCounts.joinCurrent + agencyLinkRequests.length})
+								</button>
+								<button
+									type="button"
+									className={cn("iz-approvals-tab", tab === "cancel" && "on")}
+									onClick={() => setTab("cancel")}
+								>
+									{/* Departures live on their OWN tab so approving one can
+									    never be mistaken for accepting a PR under the agency. */}
+									{t.approvals.cancelAgency} ({tiedCounts.leaveCurrent})
+								</button>
+								<button
+									type="button"
+									className={cn("iz-approvals-tab", tab === "leaves" && "on")}
+									onClick={() => setTab("leaves")}
+								>
+									{t.approvals.mcLeaves} (
+									{queue.leaveIsLoading ? "…" : leaveRequests.length})
+								</button>
+							</>
+						) : (
+							<>
+								{/* The venue asks to cut a PR loose early; the agency decides. */}
+								<button
+									type="button"
+									className={cn("iz-approvals-tab", tab === "cutlost" && "on")}
+									onClick={() => setTab("cutlost")}
+								>
+									{t.approvals.cutlost} ({cutlostRequests.length})
+								</button>
+								{/* Venues asking to work with this agency (0123). */}
+								<button
+									type="button"
+									className={cn(
+										"iz-approvals-tab",
+										tab === "outlet-linking" && "on",
+									)}
+									onClick={() => setTab("outlet-linking")}
+								>
+									{t.approvals.outletLinking} (
+									{outletLinks.pendingIsLoading
+										? "…"
+										: outletLinks.pendingCount}
+									)
+								</button>
+							</>
+						)}
 					</div>
 
 					{tab === "signups" && (

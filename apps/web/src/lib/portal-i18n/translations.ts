@@ -2637,6 +2637,9 @@ const en = {
 		noLeaveRecordsHere: "No MC / leave records here",
 		specialEvent: "Special event",
 		normalShift: "Normal shift",
+		/* The two sides an agency approves: people, and venues. */
+		groupPr: "PR",
+		groupOutlet: "Outlet",
 		agencyTied: "Agency-Tied",
 		cutlost: "Cutlost",
 		mcLeaves: "MC/Leaves",
@@ -5138,6 +5141,8 @@ const zh: PortalTranslations = {
 		noLeaveRecordsHere: "此处暂无病假 / 请假记录",
 		specialEvent: "特别活动",
 		normalShift: "普通班次",
+		groupPr: "PR",
+		groupOutlet: "门店",
 		agencyTied: "签约 PR",
 		cutlost: "缺班损失",
 		mcLeaves: "病假 / 请假",

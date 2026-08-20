@@ -13800,12 +13800,76 @@ button.iz-pr-offer-row:hover {
 	line-height: 1.2;
 }
 
+/*
+ * PR vs Outlet — the two things an agency approves.
+ *
+ * Five peer chips gave no clue that "Cancel Agency" and "Outlet-Linking" answer
+ * completely different questions from completely different senders. Splitting by
+ * WHO RAISED the request means the reader picks the sender first and the queue
+ * second, and each group shows the work waiting inside it.
+ */
+.iz-approvals-groups {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+	padding: 4px;
+	margin-bottom: 10px;
+	border-radius: 12px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.28);
+}
+.iz-approvals-group {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	padding: 9px 8px;
+	border: 0;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--iz-muted);
+	font-size: 14px;
+	font-weight: 700;
+	cursor: pointer;
+	transition:
+		background 0.12s ease,
+		color 0.12s ease;
+}
+.iz-approvals-group:hover {
+	color: var(--iz-txt);
+}
+.iz-approvals-group.on {
+	background: rgba(212, 196, 245, 0.16);
+	color: var(--iz-txt);
+	box-shadow: inset 0 0 0 1px rgba(212, 196, 245, 0.36);
+}
+.iz-approvals-group__count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: rgba(232, 224, 245, 0.12);
+	color: var(--iz-muted);
+	font-size: 12px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+.iz-approvals-group.on .iz-approvals-group__count {
+	background: var(--iz-violet-l, #d4c4f5);
+	color: #17122a;
+}
+
 .iz-approvals-tabs {
 	display: grid;
-	/* Three tabs on ONE row (Agency-Tied · Cutlost · MC/Leaves). minmax(0,1fr)
-     rather than 1fr so a long label shrinks its own column instead of pushing
-     the grid wider than the sidebar. */
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	/* auto-fit, not a fixed 3: the PR group has three queues and the Outlet
+     group has two, and a hardcoded three left the Outlet row with a phantom
+     empty column. minmax(0,1fr) so a long label shrinks its own column instead
+     of pushing the grid wider than the sidebar. */
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(0, 1fr);
 	gap: 6px;
 }
 
@@ -18304,6 +18368,37 @@ html:has(.iz-pr-app) {
 	.iz-portal-sidebar-logo .iz-logo-horizontal__mark {
 		width: 40px;
 		height: 40px;
+	}
+
+	/*
+	 * The language switcher, which this block forgot.
+	 *
+	 * Between 768 and 1023 the sidebar becomes a 72px rail WITHOUT
+	 * `data-collapsed`, so the collapsed-state rules in agency-app-overrides.css
+	 * do not apply here. The switcher kept its full-width two-pill row — 143px
+	 * inside a 72px rail — and pushed a horizontal scrollbar across the bottom of
+	 * the nav. Stacked rather than hidden: losing the language control because
+	 * the window is narrow is a worse answer than making it fit.
+	 */
+	.iz-portal-lang-switch {
+		flex-direction: column;
+		gap: 4px;
+		padding-left: 0;
+		padding-right: 0;
+	}
+
+	.iz-portal-lang-switch > svg {
+		display: none;
+	}
+
+	.iz-portal-lang-switch > div {
+		flex-direction: column;
+		width: 100%;
+		gap: 4px;
+	}
+
+	.iz-portal-sidebar {
+		overflow-x: hidden;
 	}
 
 	.iz-portal-sidebar-identity {
