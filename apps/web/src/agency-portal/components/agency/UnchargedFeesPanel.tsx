@@ -25,22 +25,18 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
  */
 export function UnchargedFeesPanel({
 	canMark,
-	canRecord = true,
 	weekStart,
 	weekEnd,
 	weekLabel,
 }: {
 	canMark: boolean;
-	/**
-	 * May this week still take NEW penalties?
-	 *
-	 * False on the Payment Week tab. That tab holds vouchers already signed and
-	 * queued to pay, and a signed voucher cannot take another line — the panel
-	 * says so itself two paragraphs down. Offering "record penalties" there
-	 * invited a press whose only possible outcome was a charge stranded as
-	 * outstanding, waiting for a week that had already gone.
+	/*
+	 * There is no `canRecord` any more. It existed for the Payment Week tab —
+	 * vouchers already signed and queued to pay, which cannot take another line —
+	 * and left behind a panel whose every action was disabled. That is not
+	 * information, it is furniture: the payroll page now simply does not mount
+	 * this on that tab.
 	 */
-	canRecord?: boolean;
 	weekStart?: string;
 	weekEnd?: string;
 	/** Human label for the selected week tab, e.g. "02 Aug – 08 Aug". */
@@ -80,12 +76,37 @@ export function UnchargedFeesPanel({
 		isLoading: proposalsLoading,
 		isError: proposalsError,
 	} = useAgencyPenaltyProposals(proposalWeek);
-	/* Only the ones not already recorded — a sealed proposal is a charge, and it
-	   is already in the list below under its own heading. */
-	const pending = proposals.filter((p) => !p.sealed);
+	/**
+	 * Does this row belong to the week tab currently selected?
+	 *
+	 * Declared up here because the proposal list needs it too — see `pending`.
+	 */
+	const inSelectedWeek = (rowWeekStart: string | null | undefined): boolean => {
+		if (!weekStart || !weekEnd || !rowWeekStart) return false;
+		const d = String(rowWeekStart).slice(0, 10);
+		return d >= weekStart && d <= weekEnd;
+	};
+
+	/*
+	 * Exactly what THIS tab's "record" would charge, and nothing else.
+	 *
+	 * Two filters, each for its own reason. Not sealed: a sealed proposal is
+	 * already a charge and appears below under its own heading. In the selected
+	 * week: for a week still RUNNING the backend answers with the PREVIOUS
+	 * week's minimum-shifts — a preview this tab's seal cannot record, because
+	 * "1 of 3 shifts" is not a verdict until the week closes. Left in, it would
+	 * be a fine visible on two tabs and recordable on only one; the tab that
+	 * owns the week shows it, and can act on it.
+	 */
+	const pending = proposals.filter(
+		(p) => !p.sealed && inSelectedWeek(p.weekStart),
+	);
 	const pendingRm = pending.reduce((n, p) => n + Number(p.fineRm ?? 0), 0);
 
 	const toast = useStore((s) => s.toast);
+	/* Open by default. A panel about money owed and not billed should never need
+	   a click to admit it has contents; collapsing it is a choice the operator
+	   makes after reading, not a state it starts in. */
 	const [open, setOpen] = useState(true);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [selectedCharges, setSelectedCharges] = useState<Set<string>>(
@@ -103,8 +124,18 @@ export function UnchargedFeesPanel({
 			</IzCard>
 		);
 	}
+	/*
+	 * Offered only when there is something to record.
+	 *
+	 * It used to sit in the header of every week, clean ones included, which is
+	 * what made it read as the way to SEE penalties rather than the way to
+	 * charge them — press it and find out. Nothing is discovered by pressing it:
+	 * the list below is the same evaluation, fetched by a GET. So the button now
+	 * belongs to that list and disappears with it, and a week with no breaches
+	 * offers no button to wonder about.
+	 */
 	const sealButton =
-		canRecord && canMark && weekStart && weekEnd ? (
+		canMark && weekStart && weekEnd && pending.length > 0 ? (
 			<button
 				type="button"
 				disabled={isSealing}
@@ -143,11 +174,9 @@ export function UnchargedFeesPanel({
 					{t.payroll.notYetRecorded} · {pending.length} · RM{" "}
 					{pendingRm.toFixed(2)}
 				</b>
-				<p className="iz-tiny iz-muted2">
-					{canRecord
-						? t.payroll.notYetRecordedHint
-						: t.payroll.notYetRecordedClosedHint}
-				</p>
+				{/* The heading above already says "Not yet recorded · 2 · RM 100.00",
+				    and the button below says what pressing it does. A sentence
+				    restating both was the third way of saying one thing. */}
 				{pending.map((p) => (
 					<div
 						key={`${p.prId}-${p.ruleType}-${p.weekStart}`}
@@ -164,26 +193,21 @@ export function UnchargedFeesPanel({
 						</span>
 					</div>
 				))}
+				{/* Under the rows, not above them: the press follows from reading
+				    what it will charge. */}
+				{sealButton && <div>{sealButton}</div>}
 			</div>
 		) : null;
 
-	/**
-	 * Does this row belong to the week tab currently selected?
-	 *
-	 * The list itself is NOT week-filtered, deliberately — a fee left uncollected
-	 * for three weeks is exactly the one worth surfacing, and filtering would
-	 * hide it the moment it aged out of the cycle. But an unlabelled all-weeks
-	 * list inside a week-tabbed page reads as "this week's", which is how the
-	 * same RM 50 appeared to belong to both tabs. So the rows are SPLIT rather
-	 * than filtered: the selected week first, everything older beneath it under
-	 * its own heading.
+	/*
+	 * The SEALED lists below are NOT week-filtered the way `pending` is — a fee
+	 * left uncollected for three weeks is exactly the one worth surfacing, and
+	 * filtering would hide it the moment it aged out of the cycle. But an
+	 * unlabelled all-weeks list inside a week-tabbed page reads as "this
+	 * week's", which is how the same RM 50 appeared to belong to both tabs. So
+	 * those rows are SPLIT rather than filtered: the selected week first,
+	 * everything older beneath it under its own heading.
 	 */
-	const inSelectedWeek = (rowWeekStart: string | null | undefined): boolean => {
-		if (!weekStart || !weekEnd || !rowWeekStart) return false;
-		const d = String(rowWeekStart).slice(0, 10);
-		return d >= weekStart && d <= weekEnd;
-	};
-
 	const weekPenalties = penalties.filter((p) => inSelectedWeek(p.weekStart));
 	const olderPenalties = penalties.filter((p) => !inSelectedWeek(p.weekStart));
 	const weekCancellations = cancellations.filter((c) =>
@@ -202,30 +226,54 @@ export function UnchargedFeesPanel({
 	/* Nothing BILLED is not the same as nothing HAPPENING. This branch used to
 	   say "nothing outstanding" and stop, which is what made an unrecorded week
 	   indistinguishable from a clean one. */
+	/* Is there anything for the chevron to reveal here? A truly clean week has
+	   only the one-line header, and offering a control that opens onto nothing
+	   is the empty-toggle version of the bug this panel already fixed once. */
+	const hasEmptyStateBody = proposalsError || pending.length > 0;
 	if (count === 0) {
 		return (
 			<IzCard flat className="border-[var(--iz-line2)]">
-				<div className="flex flex-wrap items-center gap-1.5">
+				{/* The same header control as the populated card, so the panel does not
+				    change its nature between a clean week and a busy one. The chevron
+				    dims and goes inert when there is genuinely nothing beneath it —
+				    a toggle that reveals nothing is worse than no toggle at all. */}
+				<button
+					type="button"
+					onClick={() => setOpen((v) => !v)}
+					aria-expanded={hasEmptyStateBody ? open : undefined}
+					disabled={!hasEmptyStateBody}
+					className="flex w-full flex-wrap items-center gap-1.5 text-left"
+				>
+					<ChevronDown
+						className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+							hasEmptyStateBody
+								? `text-[var(--iz-muted)] ${open ? "" : "-rotate-90"}`
+								: "text-[var(--iz-muted)] opacity-25"
+						}`}
+					/>
 					<b className="iz-tiny uppercase tracking-wide iz-muted">
 						{t.payroll.unchargedPenaltiesFees}
 					</b>
+					{/* The headline number, not just a word. "nothing billed yet" alone
+					    was technically true of a week carrying RM 150 of unrecorded
+					    breaches, and read like a clean one at a glance. */}
 					<span className="iz-tiny iz-muted2">
 						·{" "}
 						{proposalsLoading
 							? t.payroll.checkingPenalties
 							: pending.length > 0
-								? t.payroll.nothingBilledYet
+								? `${t.payroll.nothingBilledYet} · ${pending.length} · RM ${pendingRm.toFixed(2)}`
 								: t.payroll.nothingOutstanding}
 					</span>
-					<span className="ml-auto">{sealButton}</span>
-				</div>
-				{proposalsError ? (
-					<p className="iz-tiny iz-muted2 mt-1">
-						{t.payroll.couldNotLoadPenalties}
-					</p>
-				) : (
-					pendingBlock
-				)}
+				</button>
+				{open &&
+					(proposalsError ? (
+						<p className="iz-tiny iz-muted2 mt-1">
+							{t.payroll.couldNotLoadPenalties}
+						</p>
+					) : (
+						pendingBlock
+					))}
 			</IzCard>
 		);
 	}
@@ -249,11 +297,15 @@ export function UnchargedFeesPanel({
 
 	return (
 		<IzCard flat className="border-[var(--iz-line2)]">
+			{/* One dropdown for the whole card, open by default — and the only one
+			    left. The inner "Carried over" <details> stays gone: a disclosure
+			    nested in a disclosure put the oldest debt two clicks deep. Collapsing
+			    is now the operator's choice; it was the panel's before. */}
 			<button
 				type="button"
 				onClick={() => setOpen((v) => !v)}
 				aria-expanded={open}
-				className="flex w-full items-center gap-1.5 text-left"
+				className="flex w-full flex-wrap items-center gap-1.5 text-left"
 			>
 				<ChevronDown
 					className={`h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)] transition-transform ${
@@ -269,26 +321,27 @@ export function UnchargedFeesPanel({
 					{penalties.length > 0 && cancellations.length > 0
 						? ` (RM ${penaltiesRm} weekly + RM ${cancellationsRm} cancellations)`
 						: ""}
+					{/* Sealed and unrecorded are different debts. Summing only the
+					    sealed ones here hid the half nobody had accepted yet. */}
+					{pending.length > 0
+						? ` · ${t.payroll.notYetRecorded}: ${pending.length} · RM ${pendingRm.toFixed(2)}`
+						: ""}
 				</span>
 			</button>
 
 			{open && (
 				<>
-					{/* This used to end "it does not edit the voucher" — true when the
-					    action only stamped a row, and FALSE since it started writing the
-					    deduction line. Copy describing the old behaviour is worse than no
-					    copy: it tells Finance the voucher is untouched while money moves. */}
-					<p className="iz-tiny iz-muted2 mt-2">
-						Sealed when accepted, at the rules in force then. Adding one writes
-						a deduction line onto that PR's voucher for the week the breach
-						belongs to.
+					{/* One line where there were three. What survived the cut is the only
+			    sentence that changes what someone DOES: a voucher already sent
+			    refuses the line, so the order of the two actions matters. How
+			    sealing works was background — each row below already carries its
+			    rule, its week and its amount. */}
+					<p className="iz-tiny mt-1.5 text-[var(--iz-gold-l)]">
+						⚠ Add these before sending the PV — a voucher already sent cannot
+						take a new line.
 					</p>
-					<p className="iz-tiny mt-1 text-[var(--iz-gold-l)]">
-						⚠ Add penalties BEFORE sending the PV. A voucher already sent to the
-						PR cannot take a new line — the charge stays outstanding here and
-						has to wait for another week's voucher.
-					</p>
-					{sealButton && <div className="mt-2">{sealButton}</div>}
+					{/* No standalone "record" button here — it travels with the list of
+					    what it would charge, inside `pendingBlock`. */}
 					{pendingBlock}
 
 					{weekPenalties.length > 0 && (
@@ -327,9 +380,9 @@ export function UnchargedFeesPanel({
 										<span className="iz-tiny iz-muted2 block">
 											{p.ruleType.replace(/_/g, " ")} · {p.detail}
 										</span>
-										<span className="iz-tiny iz-muted2 block">
-											week {p.weekStart} – {p.weekEnd}
-										</span>
+										{/* No week line here — these rows ARE the selected week and
+										    the tab above says which. It stays on the carried-over
+										    rows, where the week is the whole point. */}
 									</span>
 								</label>
 							))}
@@ -397,11 +450,13 @@ export function UnchargedFeesPanel({
 						    leaving it unlabelled is what made the same RM 50 look like it
 						    belonged to both the This Week and Last Week tabs. */}
 					{olderCount > 0 && (
-						<details className="mt-3">
-							<summary className="cursor-pointer iz-tiny uppercase tracking-wide iz-muted2">
+						<div className="mt-3">
+							{/* Was a <details>. The oldest debt is the one most worth
+							    chasing, and it was the one folded away by default. */}
+							<b className="iz-tiny uppercase tracking-wide iz-muted2 block">
 								Carried over from other weeks · {olderCount} · RM{" "}
 								{olderRm.toFixed(2)}
-							</summary>
+							</b>
 							<div className="mt-2 flex flex-col gap-1.5">
 								{olderPenalties.map((p) => (
 									<label
@@ -471,7 +526,7 @@ export function UnchargedFeesPanel({
 									</label>
 								))}
 							</div>
-						</details>
+						</div>
 					)}
 
 					{canMark && selected.size + selectedCharges.size > 0 && (

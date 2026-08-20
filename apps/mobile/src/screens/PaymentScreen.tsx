@@ -943,6 +943,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <Text style={styles.weekCaption}>Last week {lastLabel}</Text>
               <Text style={styles.verified}>Verified days {verifiedDays}/7</Text>
 
+              {/* Which agencies owe last week, when there is more than one. */}
+              <WeekVouchers week={lastWeek} />
+
               {/* Last week matters more than this one for penalties: the weekly
                   rules are evaluated against a COMPLETE week, so a charge
                   usually appears only once the week has closed. */}
@@ -978,11 +981,20 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   {GRID_ROWS.map((row) => {
                     const rowTotal = grid.reduce((s, d) => s + cellAmount(d, row.key), 0);
                     const isDeduction = row.key === 'deductions';
-                    // Hidden when the week carried no fines — see This week.
-                    if (isDeduction && rowTotal === 0) return null;
+                    /*
+                     * Deductions is NOT dropped at zero — see the note on This
+                     * week. A row of dashes IS the answer; an absent row is not.
+                     */
                     return (
                       <View key={row.key} style={styles.gridRow}>
-                        <Text style={styles.gridLabel}>{row.label}</Text>
+                        <Text
+                          style={[
+                            styles.gridLabel,
+                            isDeduction && styles.gridLabelDeduction,
+                          ]}
+                        >
+                          {row.label}
+                        </Text>
                         {grid.map((d) => {
                           const amount = cellAmount(d, row.key);
                           const key = `${d.dateIso}-${row.key}`;
@@ -1006,7 +1018,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                   // Only the real figure goes red. Colouring the
                                   // whole row painted the empty days' dashes red
                                   // too, so a week with one fine looked like six.
-                                  isDeduction && amount !== 0 && styles.gridValDeduction,
+                                  // Whole row red, dashes included: the row reads
+                                  // as one thing rather than a red word with grey
+                                  // figures under it. Owner's call, 20 Aug.
+                                  isDeduction && styles.gridValDeduction,
                                 ]}
                               >
                                 {formatCell(amount)}
@@ -1034,7 +1049,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           );
                         })}
                         <View style={styles.gridCol}>
-                          <Text style={styles.gridVal}>{formatCell(rowTotal)}</Text>
+                          {/* The week TOTAL is a cell in this row too — leaving it
+                              the default colour was the one grey figure in a red
+                              line, which reads as a mistake rather than a total. */}
+                          <Text
+                            style={[
+                              styles.gridVal,
+                              isDeduction && styles.gridValDeduction,
+                            ]}
+                          >
+                            {formatCell(rowTotal)}
+                          </Text>
                         </View>
                       </View>
                     );
@@ -1232,16 +1257,27 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     );
                     const isDeduction = row.key === 'deductions';
                     /*
-                     * A row of nothing but dashes is noise on a payslip — the
-                     * same reason the penalties card hides itself at RM 0.00.
-                     * Only Deductions gets this: the four earning rows are the
-                     * shape of the week and stay put even when empty, so the
-                     * grid does not change height night to night.
+                     * Deductions stays drawn at zero, exactly like the four
+                     * earning rows.
+                     *
+                     * It used to be dropped as "noise on a payslip". But an
+                     * ABSENT row does not say "you were not docked" — it says
+                     * nothing, and a PR checking whether a fine landed cannot
+                     * tell "no deductions" from "this screen does not show
+                     * deductions". The reassuring answer and the missing feature
+                     * looked identical. Five rows are the shape of the week, and
+                     * the grid keeps one height whatever the week did.
                      */
-                    if (isDeduction && rowTotal === 0) return null;
                     return (
                       <View key={row.key} style={styles.gridRow}>
-                        <Text style={styles.gridLabel}>{row.label}</Text>
+                        <Text
+                          style={[
+                            styles.gridLabel,
+                            isDeduction && styles.gridLabelDeduction,
+                          ]}
+                        >
+                          {row.label}
+                        </Text>
                         {thisGrid.map((d) => {
                           const amount = cellAmount(d, row.key);
                           const canTap = amount !== 0 && d.status !== 'empty';
@@ -1259,7 +1295,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                   // Only the real figure goes red. Colouring the
                                   // whole row painted the empty days' dashes red
                                   // too, so a week with one fine looked like six.
-                                  isDeduction && amount !== 0 && styles.gridValDeduction,
+                                  // Whole row red, dashes included: the row reads
+                                  // as one thing rather than a red word with grey
+                                  // figures under it. Owner's call, 20 Aug.
+                                  isDeduction && styles.gridValDeduction,
                                 ]}
                               >
                                 {formatCell(amount)}
@@ -1281,7 +1320,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           );
                         })}
                         <View style={styles.gridCol}>
-                          <Text style={styles.gridVal}>{formatCell(rowTotal)}</Text>
+                          {/* The week TOTAL is a cell in this row too — leaving it
+                              the default colour was the one grey figure in a red
+                              line, which reads as a mistake rather than a total. */}
+                          <Text
+                            style={[
+                              styles.gridVal,
+                              isDeduction && styles.gridValDeduction,
+                            ]}
+                          >
+                            {formatCell(rowTotal)}
+                          </Text>
                         </View>
                       </View>
                     );
@@ -1366,6 +1415,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 PV on <Text style={styles.footBold}>{issueDay}</Text> · total{' '}
                 <Text style={styles.footTotal}>{formatRM(thisWeekTotal)}</Text>
               </Text>
+
+              {/* Directly under the total, because that total is the thing it
+                  qualifies: with two agencies it is the sum of two documents,
+                  not one voucher's figure. */}
+              <WeekVouchers week={current} />
 
               <PenaltiesForWeek weeksAgo={0} />
 
@@ -1968,6 +2022,81 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 }
 
 /**
+ * "Who is paying me this week?" — one row per AGENCY voucher.
+ *
+ * A PR who worked for two agencies in one week holds TWO vouchers (0129), one
+ * per agency, because each agency signs and pays its own. The grid above stays
+ * a single merged week — the person worked one week and wants to see one week's
+ * money — so this is the only place the split is visible, and without it the
+ * footer's single total would look like one document that does not exist.
+ *
+ * Renders NOTHING for the ordinary one-agency week: a lone row restating the
+ * total the footer already gives is noise, and the week it matters is the week
+ * it must stand out. Same reasoning as PenaltiesForWeek below.
+ *
+ * Absent `vouchers` (a backend that has not restarted) also renders nothing,
+ * which is the single-voucher behaviour that shipped before — never a claim
+ * that the PR has no vouchers.
+ */
+function WeekVouchers({ week }: { week: PrCurrentWeek | null }) {
+  const vouchers = week?.vouchers ?? [];
+  if (vouchers.length < 2) return null;
+
+  return (
+    <View style={voucherStyles.card}>
+      <Text style={voucherStyles.title}>
+        {vouchers.length} PAYMENT VOUCHERS THIS WEEK
+      </Text>
+      <Text style={voucherStyles.hint}>
+        You worked for more than one agency. Each pays and is signed separately.
+      </Text>
+      {vouchers.map((v) => (
+        <View key={v.id} style={voucherStyles.row}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={voucherStyles.agency} numberOfLines={1}>
+              {v.agencyName ?? 'Agency'}
+            </Text>
+            <Text style={voucherStyles.no}>{v.voucherNo ?? 'Not yet numbered'}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={voucherStyles.amount}>{formatRM(Number(v.net ?? 0))}</Text>
+            <Text style={voucherStyles.state}>
+              {(v.status ?? 'pending').replace(/_/g, ' ')}
+            </Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const voucherStyles = StyleSheet.create({
+  card: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(139,124,246,0.35)',
+    backgroundColor: 'rgba(139,124,246,0.06)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  title: { color: '#c4b5fd', fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  hint: { color: '#9b93b8', fontSize: 11, marginTop: 3 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  agency: { color: '#e9e6f5', fontSize: 13, fontWeight: '700' },
+  no: { color: '#9b93b8', fontSize: 11, marginTop: 2 },
+  amount: { color: '#e9e6f5', fontSize: 13, fontWeight: '800' },
+  state: { color: '#9b93b8', fontSize: 10, marginTop: 2, textTransform: 'uppercase' },
+});
+
+/**
  * "Was I penalised this week?" — the PR's own SEALED charges.
  *
  * Renders nothing when there is none, which is the common case: a permanent
@@ -2197,7 +2326,19 @@ const styles = StyleSheet.create({
   gridValDisputed: { color: C.red },
   // Money going the other way. Red is already the app's colour for "this needs
   // your attention" (disputed cells, Close buttons), and a fine qualifies.
+  // Applied to EVERY cell in the row — day figures, dashes and the week total
+  // alike, whatever the amount. Half a red row reads as a rendering fault.
   gridValDeduction: { color: C.red },
+  /*
+   * The row label, same red as its cells, so the line reads as one thing.
+   *
+   * Red here names a CATEGORY — money going the other way — not an event. A
+   * week of dashes is therefore still red, and it should be read as "nothing
+   * was taken from you" rather than as an alarm. That is a deliberate trade the
+   * owner made on 20 Aug: one unmistakable row beats a colour that only appears
+   * once you have already been fined.
+   */
+  gridLabelDeduction: { color: C.red },
   // DEDUCTED is a settled state, not a warning — but it is still money off, so
   // it keeps the deduction colour rather than borrowing VERIFIED's green.
   statusPillDeducted: { color: C.red },
