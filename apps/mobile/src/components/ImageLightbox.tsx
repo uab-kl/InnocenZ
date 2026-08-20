@@ -14,7 +14,7 @@
  * the owner's rule: the user must be TOLD a picture opens bigger, on every
  * picture that does.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Modal,
@@ -41,17 +41,26 @@ const DOUBLE_TAP_MS = 280;
 /** Structural touch types — the mobile tsconfig has no DOM lib. */
 type WebTouch = { pageX: number; pageY: number };
 type WebTouchList = { length: number; [index: number]: WebTouch };
-type WebTouchEvent = { touches: WebTouchList; preventDefault: () => void };
+type WebTouchEvent = {
+  touches: WebTouchList;
+  target: unknown;
+  preventDefault: () => void;
+};
 type WebEventTarget = {
   addEventListener?: (
     type: string,
     handler: (e: WebTouchEvent) => void,
-    options?: { passive: boolean },
+    options?: { passive?: boolean; capture?: boolean },
   ) => void;
   removeEventListener?: (
     type: string,
     handler: (e: WebTouchEvent) => void,
+    options?: { capture?: boolean },
   ) => void;
+};
+type WebFrameNode = WebEventTarget & {
+  contains?: (target: unknown) => boolean;
+  ownerDocument?: WebEventTarget;
 };
 
 function touchDistance(touches: WebTouchList): number {
@@ -88,7 +97,21 @@ export function ImageLightbox({
   const moved = useRef(false);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // CALLBACK ref, not useRef: the Modal portals its content in a tick AFTER
+  // the commit that set `uri`, so an effect keyed on [uri] runs while the
+  // frame is still null and silently attaches nothing (proven live 20 Aug
+  // 2026 — the by-hand probe listener worked, the component's never fired).
+  // State re-runs the effect the moment the node actually exists.
+  const [frameNode, setFrameNode] = useState<View | null>(null);
   const frameRef = useRef<View | null>(null);
+  // STABLE identity (useCallback): an inline ref function is new every render,
+  // so React detaches/reattaches it on EACH render — and every pinch step
+  // renders — cycling the effect and wiping the gesture mid-pinch (proven
+  // live: touchstart logged, the very next touchmove found active=false).
+  const attachFrame = useCallback((n: View | null) => {
+    frameRef.current = n;
+    setFrameNode(n);
+  }, []);
 
   const clampOffset = (x: number, y: number, atScale: number) => {
     // Keep the picture on screen: at scale s the frame can slide at most
@@ -215,14 +238,25 @@ export function ImageLightbox({
   // actually stops the page from zooming. Native keeps the PanResponder.
   useEffect(() => {
     if (Platform.OS !== 'web' || !uri) return;
-    const node = frameRef.current as unknown as WebEventTarget | null;
-    if (!node?.addEventListener || !node.removeEventListener) return;
+    const node = frameNode as unknown as WebFrameNode | null;
+    // DOCUMENT capture, not the frame: RN-web's root intercepts touch events
+    // in the capture phase, so NO listener on an element inside it — bubble or
+    // capture — ever hears a touch that targets the <img>. Proven live 20 Aug
+    // 2026: the same pinch fired at the img was silent on frame listeners in
+    // both phases and loud on the frame node itself. The document sits ABOVE
+    // the root in the capture path, so it hears every finger first; touches
+    // that do not start inside the frame are ignored (so ✕ / −/+ keep working).
+    const doc = node?.ownerDocument;
+    if (!node?.contains || !doc?.addEventListener || !doc.removeEventListener) return;
 
     let pinch: { dist: number; scale: number } | null = null;
     let pan: { x: number; y: number; ox: number; oy: number } | null = null;
     let movedHere = false;
+    let active = false;
 
     const onTouchStart = (ev: WebTouchEvent) => {
+      if (!node.contains?.(ev.target)) return;
+      active = true;
       ev.preventDefault();
       if (ev.touches.length >= 2) {
         pinch = { dist: touchDistance(ev.touches) || 1, scale: scaleRef.current };
@@ -233,6 +267,7 @@ export function ImageLightbox({
       }
     };
     const onTouchMove = (ev: WebTouchEvent) => {
+      if (!active) return;
       ev.preventDefault();
       if (ev.touches.length >= 2) {
         const d = touchDistance(ev.touches);
@@ -252,7 +287,9 @@ export function ImageLightbox({
       }
     };
     const onTouchEnd = (ev: WebTouchEvent) => {
+      if (!active) return;
       if (ev.touches.length === 0) {
+        active = false;
         pinch = null;
         pan = null;
         if (!movedHere) handleTap();
@@ -264,18 +301,19 @@ export function ImageLightbox({
       }
     };
 
-    node.addEventListener('touchstart', onTouchStart, { passive: false });
-    node.addEventListener('touchmove', onTouchMove, { passive: false });
-    node.addEventListener('touchend', onTouchEnd);
-    node.addEventListener('touchcancel', onTouchEnd);
+    const opts = { passive: false, capture: true };
+    doc.addEventListener('touchstart', onTouchStart, opts);
+    doc.addEventListener('touchmove', onTouchMove, opts);
+    doc.addEventListener('touchend', onTouchEnd, opts);
+    doc.addEventListener('touchcancel', onTouchEnd, opts);
     return () => {
-      node.removeEventListener?.('touchstart', onTouchStart);
-      node.removeEventListener?.('touchmove', onTouchMove);
-      node.removeEventListener?.('touchend', onTouchEnd);
-      node.removeEventListener?.('touchcancel', onTouchEnd);
+      doc.removeEventListener?.('touchstart', onTouchStart, { capture: true });
+      doc.removeEventListener?.('touchmove', onTouchMove, { capture: true });
+      doc.removeEventListener?.('touchend', onTouchEnd, { capture: true });
+      doc.removeEventListener?.('touchcancel', onTouchEnd, { capture: true });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs + stable setters only
-  }, [uri]);
+  }, [uri, frameNode]);
   useEffect(() => {
     return () => {
       if (tapTimer.current) clearTimeout(tapTimer.current);
@@ -294,7 +332,7 @@ export function ImageLightbox({
           </Pressable>
         </View>
         <View
-          ref={frameRef}
+          ref={attachFrame}
           // `touchAction: none` (web only): without it the phone BROWSER takes
           // the pinch for page zoom and the picture never sees the 2nd finger.
           // Native ignores the prop — it is not a valid RN style there.
