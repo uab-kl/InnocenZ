@@ -28,6 +28,13 @@ export interface AgencyOutletLinkQueue {
 	links: AgencyOutletLink[];
 	/** Rows genuinely awaiting a decision, whatever filter is showing. */
 	pendingCount: number;
+	/**
+	 * How many rows sit under EACH status, so the filter chips can carry counts
+	 * the way the PR side's do. Undefined per key until known — a chip must not
+	 * print "(0)" while the answer is still loading, which claims there is
+	 * nothing there.
+	 */
+	counts: Partial<Record<AgencyOutletApproveStatus, number>>;
 	isLoading: boolean;
 	/** True until the pending count is known — the badge must not claim "0" yet. */
 	pendingIsLoading: boolean;
@@ -87,6 +94,21 @@ export function useAgencyOutletLinks(
 		staleTime: 30_000,
 	});
 
+	/**
+	 * Every link, unfiltered, purely to count by status.
+	 *
+	 * The list query is filtered SERVER-side (`approveStatus: filter`), so it can
+	 * only ever know the count of the status currently showing — and a chip row
+	 * where three of four counts are unknowable is worse than none. One extra
+	 * cached read answers all four. `pending` is counted through `isRealRequest`
+	 * like everywhere else: an onboarding row is not a request anyone can act on.
+	 */
+	const countsQuery = useQuery({
+		queryKey: ["agency-outlet", "links", "all"],
+		queryFn: () => fetchAgencyOutletLinks(kickToLogin, {}),
+		staleTime: 30_000,
+	});
+
 	const decideMutation = useMutation({
 		mutationFn: (input: {
 			outletId: string;
@@ -131,9 +153,27 @@ export function useAgencyOutletLinks(
 		[pendingQuery.data],
 	);
 
+	const counts = useMemo<
+		Partial<Record<AgencyOutletApproveStatus, number>>
+	>(() => {
+		if (!countsQuery.data) return {};
+		const out: Partial<Record<AgencyOutletApproveStatus, number>> = {};
+		for (const link of countsQuery.data) {
+			const key = link.approveStatus;
+			if (key === "pending" && !isRealRequest(link)) continue;
+			out[key] = (out[key] ?? 0) + 1;
+		}
+		// Statuses with no rows must read 0, not blank — the query HAS answered.
+		for (const key of ["pending", "approved", "rejected", "ended"] as const) {
+			out[key] = out[key] ?? 0;
+		}
+		return out;
+	}, [countsQuery.data]);
+
 	return {
 		links,
 		pendingCount,
+		counts,
 		isLoading: listQuery.isLoading,
 		pendingIsLoading: pendingQuery.isLoading,
 		decide: async (input) => {

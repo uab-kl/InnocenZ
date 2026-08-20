@@ -389,7 +389,7 @@ export function OutletLinkingList({
 						className={cn("iz-chip iz-tiny", filter === status && "on")}
 						onClick={() => onFilterChange(status)}
 					>
-						{STATUS_LABEL[status](t)}
+						{STATUS_LABEL[status](t)} ({queue.counts[status] ?? "…"})
 					</button>
 				))}
 			</div>
