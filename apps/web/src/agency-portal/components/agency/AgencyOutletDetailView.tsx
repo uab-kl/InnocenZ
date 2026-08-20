@@ -82,9 +82,23 @@ export function AgencyOutletDetailView({
 
 	return (
 		<div className="iz-screen iz-outlet-detail-page">
-			<button type="button" className="iz-outlet-detail-back" onClick={onBack}>
-				<ArrowLeft className="h-4 w-4" />
-				{t.outletDetail.backToOutlets}
+			{/*
+			 * The same back control the rest of the app uses, not a second one.
+			 *
+			 * This was a full-width 44px bar with centred text — a button shaped
+			 * like a section header, sitting where every other screen puts a small
+			 * pill in the corner. `iz-topbar-back` is that pill; the local class is
+			 * kept for placement only.
+			 */}
+			<button
+				type="button"
+				className="iz-topbar-back iz-outlet-detail-back"
+				onClick={onBack}
+			>
+				<ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} />
+				<span className="iz-topbar-back-label">
+					{t.outletDetail.backToOutlets}
+				</span>
 			</button>
 
 			<header className="iz-outlet-detail-head">

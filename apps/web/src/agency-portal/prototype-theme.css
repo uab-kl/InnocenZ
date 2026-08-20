@@ -12783,20 +12783,11 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-page .iz-outlet-detail-section__badge {
 	font-size: 15px;
 }
+/* Placement only. Everything this button LOOKS like now comes from
+   `.iz-topbar-back`, so the two back controls cannot drift apart. */
 .iz-outlet-detail-back {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	width: 100%;
-	min-height: 44px;
+	align-self: flex-start;
 	margin-bottom: 16px;
-	border-radius: 12px;
-	border: 1px solid var(--iz-line2);
-	background: var(--iz-bg2);
-	color: var(--iz-violet-l);
-	font-size: 15px;
-	font-weight: 600;
 }
 .iz-outlet-detail-head {
 	display: flex;
