@@ -950,17 +950,15 @@ function TimetableRow({
 }) {
   const [y, m, d] = isoToYmd(entry.dateIso);
   const dateFriendly = `${DAY_NAMES[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, '0')} ${MONTH_NAMES[m - 1]} ${y}`;
-  /** Collapsed = the night at a glance (picture, venue, status) — the Today
-      section's design (owner, 20 Aug 2026). Expanded adds date/time/address
-      and the Cancel / MC actions. Warnings stay visible in BOTH states. */
-  const [open, setOpen] = useState(false);
+  // No collapse here (owner, 20 Aug 2026): Cancel and MC/Leave are the card's
+  // point — money actions a PR must never have to discover behind a tap.
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const heroUri = assetUrl(entry.eventPhotoPath);
   const logoUri = assetUrl(entry.logoPath);
   const isSpecial = (entry.eventKind ?? '').toLowerCase() === 'special';
 
   return (
-    <Pressable style={styles.ttRow} onPress={() => setOpen((o) => !o)}>
+    <View style={styles.ttRow}>
       <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
       <View style={styles.agencyBadge}>
         <Shield size={12} color={C.violetL} />
@@ -995,32 +993,27 @@ function TimetableRow({
               {entry.event} · {isSpecial ? 'Special event' : 'Normal shift'}
             </Text>
           ) : null}
-          <Text style={styles.ttTapHint}>{open ? 'Tap to collapse' : 'Tap to expand'}</Text>
         </View>
         <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
       </View>
-      {open ? (
-        <>
-          <View style={styles.ttDateTimeRow}>
+      <View style={styles.ttDateTimeRow}>
             <View style={styles.ttField}>
-              <Text style={styles.ttFieldLabel}>DATE</Text>
-              <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
-            </View>
-            <View style={styles.ttField}>
-              <Text style={styles.ttFieldLabel}>TIME</Text>
-              <Text style={styles.ttFieldValue}>{entry.time}</Text>
-            </View>
+          <Text style={styles.ttFieldLabel}>DATE</Text>
+          <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
+        </View>
+        <View style={styles.ttField}>
+          <Text style={styles.ttFieldLabel}>TIME</Text>
+          <Text style={styles.ttFieldValue}>{entry.time}</Text>
+        </View>
+      </View>
+      {entry.address ? (
+        <View style={styles.ttAddrBlock}>
+          <Text style={styles.ttFieldLabel}>ADDRESS</Text>
+          <View style={styles.ttAddrRow}>
+            <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
+            <Text style={styles.ttAddrValue}>{entry.address}</Text>
           </View>
-          {entry.address ? (
-            <View style={styles.ttAddrBlock}>
-              <Text style={styles.ttFieldLabel}>ADDRESS</Text>
-              <View style={styles.ttAddrRow}>
-                <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
-                <Text style={styles.ttAddrValue}>{entry.address}</Text>
-              </View>
-            </View>
-          ) : null}
-        </>
+        </View>
       ) : null}
       {leaveRejected ? (
         <View style={styles.leaveRejectedNote}>
@@ -1037,7 +1030,7 @@ function TimetableRow({
             MC / Leave submitted — awaiting agency review.
           </Text>
         </View>
-      ) : !open || (!entry.canCancel && !entry.canLeave) ? null : (
+      ) : !entry.canCancel && !entry.canLeave ? null : (
         <View style={styles.actionRow}>
           {entry.canCancel ? (
             <Pressable onPress={onCancel} style={[styles.cancelBtn, styles.actionBtn]}>
@@ -1058,7 +1051,7 @@ function TimetableRow({
           ) : null}
         </View>
       )}
-    </Pressable>
+    </View>
   );
 }
 
@@ -1334,12 +1327,6 @@ const styles = StyleSheet.create({
     fontFamily: F.manrope,
     fontSize: 12,
     color: C.muted,
-  },
-  ttTapHint: {
-    marginTop: 2,
-    fontFamily: F.manrope,
-    fontSize: 11,
-    color: C.violetL,
   },
   agencyBadge: {
     alignSelf: 'flex-start',
