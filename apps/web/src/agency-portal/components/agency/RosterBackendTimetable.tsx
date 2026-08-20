@@ -424,8 +424,9 @@ export function RosterBackendTimetable({
 	// Row filter mirrors the demo timetable's filterTimetablePrs, adapted to
 	// backend PRs: name/nickname search, the scheduled/free toggle, and — when
 	// any shift filter is active — keep only PRs with a matching slot or a free
-	// day. prType only offers "agency" and every backend PR is agency-scoped, so
-	// it never excludes anyone here.
+	// day. (The old `prType` filter is gone: it only offered "agency" and every
+	// backend PR is agency-scoped, so it never excluded anyone — this comment is
+	// what proved it was dead.)
 	const prRows = useMemo(() => {
 		const q = filters.nameQuery.trim().toLowerCase();
 		return (prsQuery.data?.data ?? [])

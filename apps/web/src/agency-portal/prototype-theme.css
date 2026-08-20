@@ -13565,7 +13565,187 @@ button.iz-pr-offer-row:hover {
 	background: rgba(0, 0, 0, 0.22);
 }
 
-.iz-roster-page .iz-roster-shift-filters {
+.iz-roster-page /* ===========================================================================
+   Roster filter bar — ONE bar for both roster tabs.
+   Replaces .iz-roster-shift-filters (Live) and .iz-roster-timetable-filters
+   (Planning), which were two grids with two breakpoint schemes for the same
+   job. A flex row that wraps needs no hardcoded column counts, and cannot
+   strand a half-empty second row the way the old >=1024px rule did (two time
+   fields laid into five columns).
+   =========================================================================== */
+.iz-roster-filterbar {
+	margin-bottom: 14px;
+	padding: 12px 14px 14px;
+	border-radius: 14px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.22);
+}
+.iz-roster-filterbar__head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+.iz-roster-filterbar__spacer {
+	flex: 1 1 auto;
+}
+.iz-roster-filterbar__title {
+	font-size: 13px;
+	font-weight: 800;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--iz-violet-l, #d4c4f5);
+}
+.iz-roster-filterbar__count {
+	font-size: 14px;
+	color: var(--iz-muted);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+/* The count of what is HIDDEN, not just "a filter is on" — a boolean the user
+   can already see. It is what makes Clear a decision rather than a guess. */
+.iz-roster-filterbar__clear {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	border: 1px solid rgba(212, 196, 245, 0.36);
+	background: rgba(212, 196, 245, 0.12);
+	color: var(--iz-violet-l, #d4c4f5);
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1.3;
+	padding: 4px 12px;
+	cursor: pointer;
+	transition:
+		background 0.12s ease,
+		border-color 0.12s ease;
+}
+.iz-roster-filterbar__clear:hover {
+	background: rgba(212, 196, 245, 0.22);
+	border-color: var(--iz-violet-l);
+}
+.iz-roster-filterbar__clear:focus-visible {
+	outline: 2px solid var(--iz-violet-l);
+	outline-offset: 2px;
+}
+.iz-roster-filterbar__badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: var(--iz-violet-l, #d4c4f5);
+	color: #17122a;
+	font-size: 12px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+.iz-roster-filterbar__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 10px 12px;
+}
+.iz-roster-filterbar__field,
+.iz-roster-filterbar__range {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 0;
+	flex: 0 1 auto;
+}
+/* Search takes the slack: it is the control people reach for first and the one
+   whose content is unbounded. */
+.iz-roster-filterbar__field--grow {
+	flex: 1 1 180px;
+	min-width: 160px;
+}
+/* Capped as well as floored. A select sizes to its LONGEST option, so
+   "Leave — awaiting you" alone pushed the status field to 239px and tipped the
+   whole row over its width — the bar then wrapped to four rows on a 1512
+   screen with room to spare. */
+.iz-roster-filterbar__field .iz-select {
+	min-width: 148px;
+	max-width: 210px;
+	height: 40px;
+	min-height: 40px;
+}
+.iz-roster-filterbar__label {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--iz-muted2);
+	white-space: nowrap;
+}
+.iz-roster-filterbar__inputwrap {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+	padding: 0 12px;
+	border-radius: 10px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.3);
+}
+.iz-roster-filterbar__inputwrap:focus-within {
+	border-color: var(--iz-violet-l);
+}
+.iz-roster-filterbar__input {
+	width: 100%;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--iz-txt);
+	font-size: 15px;
+	outline: none;
+}
+.iz-roster-filterbar__input::placeholder {
+	color: var(--iz-muted2);
+}
+.iz-roster-filterbar__input--num {
+	min-height: 40px;
+	width: 92px;
+	padding: 0 10px;
+	border-radius: 10px;
+	border: 1px solid var(--iz-line);
+	background: rgba(0, 0, 0, 0.3);
+	font-variant-numeric: tabular-nums;
+}
+.iz-roster-filterbar__input--num:focus {
+	border-color: var(--iz-violet-l);
+}
+/* A range is ONE control with two ends, so it gets one label and a dash — not
+   two peer fields with two labels, which is how the old bar made seven
+   unrelated-looking boxes out of five questions. */
+.iz-roster-filterbar__rangerow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.iz-roster-filterbar__dash {
+	color: var(--iz-muted2);
+	font-size: 15px;
+	flex-shrink: 0;
+}
+.iz-roster-filterbar__time {
+	min-width: 108px;
+}
+@media (max-width: 720px) {
+	.iz-roster-filterbar__field,
+	.iz-roster-filterbar__range {
+		flex: 1 1 100%;
+	}
+	.iz-roster-filterbar__field .iz-select {
+		min-width: 0;
+	}
+}
+
+.iz-roster-shift-filters {
 	margin-bottom: 12px;
 	padding: 10px 12px;
 	border-radius: 12px;

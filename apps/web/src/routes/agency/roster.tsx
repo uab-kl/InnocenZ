@@ -212,6 +212,22 @@ function AgencyRoster() {
 		[agencyRoster],
 	);
 
+	/**
+	 * The outlets the filter bars offer — taken from the ROWS THEMSELVES.
+	 *
+	 * Both bars used to map `OUTLET_NAMES`, a demo constant, so a real agency was
+	 * offered five venues it does not staff while its own sat in the grid.
+	 * Deriving from `agencyRoster` means an option can never fail to match
+	 * something, and it needs no extra request — unlike the roster's own outlets
+	 * query, which fetches EVERY outlet on the platform (no `linkedToAgencyId`)
+	 * and would offer venues this agency has nothing to do with.
+	 */
+	const rosterOutletNames = useMemo(
+		() =>
+			[...new Set(agencyRoster.map((s) => s.outlet).filter(Boolean))].sort(),
+		[agencyRoster],
+	);
+
 	const liveDateIso = DEFAULT_ROSTER_DATE_ISO;
 
 	const dateFiltered = useMemo(
@@ -564,6 +580,7 @@ function AgencyRoster() {
 							totalPrs={activePrs.length}
 							shiftCount={timetableShiftCount}
 							totalShifts={weekShiftTotal}
+							outletNames={rosterOutletNames}
 						/>
 						<RosterBackendTimetable
 							weekStartIso={weekStartIso}
@@ -673,6 +690,7 @@ function AgencyRoster() {
 						}
 						resultCount={filtered.length}
 						totalCount={dateFiltered.length}
+						outletNames={rosterOutletNames}
 					/>
 					<RosterShiftTable
 						slots={filtered}

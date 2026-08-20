@@ -1,7 +1,9 @@
 import { IzSelect, IzTimeInput } from "@agency-portal/components/iz/ui";
-import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import type { RosterTimetableFilterState } from "@agency-portal/lib/roster-shift-filters";
-import { rosterTimetableFiltersActive } from "@agency-portal/lib/roster-shift-filters";
+import {
+	countActiveRosterTimetableFilters,
+	EMPTY_ROSTER_TIMETABLE_FILTERS,
+} from "@agency-portal/lib/roster-shift-filters";
 import { RotateCcw, Search } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -13,6 +15,7 @@ export function RosterTimetableFilters({
 	totalPrs,
 	shiftCount,
 	totalShifts,
+	outletNames,
 }: {
 	filters: RosterTimetableFilterState;
 	onChange: (patch: Partial<RosterTimetableFilterState>) => void;
@@ -20,17 +23,23 @@ export function RosterTimetableFilters({
 	totalPrs: number;
 	shiftCount: number;
 	totalShifts: number;
+	/**
+	 * The outlets to offer, from the SAME rows the grid renders. Required for the
+	 * reason it is required on `AgencyOutletFilters` and `RosterShiftFilters`: an
+	 * optional prop defaulting to the `OUTLET_NAMES` demo constant is exactly how
+	 * five demo venues ended up in front of real agencies here.
+	 */
+	outletNames: string[];
 }) {
 	const { t } = usePortalLocale();
-	const active = rosterTimetableFiltersActive(filters);
+	const activeCount = countActiveRosterTimetableFilters(filters);
 
 	return (
-		<div className="iz-roster-shift-filters iz-roster-timetable-filters iz-roster-timetable-filters--compact">
-			<div className="iz-roster-shift-filters-head">
-				<span className="iz-roster-timetable-filters-title">
-					{t.filters.filters}
-				</span>
-				<span className="iz-roster-timetable-filters-stats">
+		<div className="iz-roster-filterbar">
+			<div className="iz-roster-filterbar__head">
+				<span className="iz-roster-filterbar__title">{t.filters.filters}</span>
+				<span className="iz-roster-filterbar__spacer" />
+				<span className="iz-roster-filterbar__count">
 					{/*
 					 * Counts go through the dictionary rather than an inline "s" ternary:
 					 * that ternary IS the English plural rule, and it left "shift" on a
@@ -50,23 +59,34 @@ export function RosterTimetableFilters({
 							{ n: shiftCount },
 						),
 					})}
-					{active
+					{activeCount > 0
 						? fill(t.rosterGrid.ofTotals, {
 								prs: totalPrs,
 								shifts: totalShifts,
 							})
 						: ""}
 				</span>
+				{activeCount > 0 && (
+					<button
+						type="button"
+						className="iz-roster-filterbar__clear"
+						onClick={() => onChange({ ...EMPTY_ROSTER_TIMETABLE_FILTERS })}
+					>
+						<RotateCcw className="h-3.5 w-3.5" />
+						{t.rosterGrid.clearFilters}
+						<span className="iz-roster-filterbar__badge">{activeCount}</span>
+					</button>
+				)}
 			</div>
 
-			<div className="iz-roster-timetable-filters-primary">
-				<label className="iz-roster-filter-field iz-roster-filter-field--search">
-					<span className="iz-roster-filter-label">{t.filters.name}</span>
-					<span className="iz-roster-filter-input-wrap">
-						<Search className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted2)]" />
+			<div className="iz-roster-filterbar__row">
+				<label className="iz-roster-filterbar__field iz-roster-filterbar__field--grow">
+					<span className="iz-roster-filterbar__label">{t.filters.name}</span>
+					<span className="iz-roster-filterbar__inputwrap">
+						<Search className="h-4 w-4 shrink-0 text-[var(--iz-muted2)]" />
 						<input
 							type="search"
-							className="iz-roster-filter-input"
+							className="iz-roster-filterbar__input"
 							placeholder={t.filters.search}
 							value={filters.nameQuery}
 							onChange={(e) => onChange({ nameQuery: e.target.value })}
@@ -74,24 +94,20 @@ export function RosterTimetableFilters({
 					</span>
 				</label>
 
-				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">{t.filters.prType}</span>
-					<IzSelect
-						block
-						value={filters.prType}
-						onChange={(e) =>
-							onChange({
-								prType: e.target.value as RosterTimetableFilterState["prType"],
-							})
-						}
-					>
-						<option value="">{t.filters.allPrs}</option>
-						<option value="agency">{t.filters.agencyTiedOnly}</option>
-					</IzSelect>
-				</label>
+				{/*
+				 * The "PR type" select that used to sit here is GONE. It offered
+				 * "All PRs / Agency-tied only" and was written but never read: no
+				 * predicate in the codebase consulted `prType`, and
+				 * `RosterBackendTimetable` said so in its own comment — every backend PR
+				 * is agency-scoped, so it never excluded anyone. Its one real effect was
+				 * to flip the "filters are active" flag, which made the header append an
+				 * "of N · M" suffix claiming a narrowing that had not happened.
+				 */}
 
-				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">{t.filters.showPrs}</span>
+				<label className="iz-roster-filterbar__field">
+					<span className="iz-roster-filterbar__label">
+						{t.filters.showPrs}
+					</span>
 					<IzSelect
 						block
 						value={filters.showPrs}
@@ -108,15 +124,15 @@ export function RosterTimetableFilters({
 					</IzSelect>
 				</label>
 
-				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">{t.filters.outlet}</span>
+				<label className="iz-roster-filterbar__field">
+					<span className="iz-roster-filterbar__label">{t.filters.outlet}</span>
 					<IzSelect
 						block
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
 						<option value="">{t.filters.allOutlets}</option>
-						{OUTLET_NAMES.map((o) => (
+						{outletNames.map((o) => (
 							<option key={o} value={o}>
 								{o}
 							</option>
@@ -124,8 +140,8 @@ export function RosterTimetableFilters({
 					</IzSelect>
 				</label>
 
-				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">
+				<label className="iz-roster-filterbar__field">
+					<span className="iz-roster-filterbar__label">
 						{t.filters.shiftStatus}
 					</span>
 					<IzSelect
@@ -137,69 +153,51 @@ export function RosterTimetableFilters({
 							})
 						}
 					>
+						{/*
+						 * `outlet-request-pending` removed: there is no outlet-request
+						 * feature server-side — no table, no endpoint — so it matched
+						 * nothing and always would. `swap-pending` stays and now works,
+						 * derived from real pending `outlet_swap` rows.
+						 */}
 						<option value="">{t.filters.anyStatus}</option>
 						<option value="scheduled">{t.roster.scheduled}</option>
 						<option value="assignment-pending">
-							{t.rosterGrid.awaitingPr}
-						</option>
-						<option value="outlet-request-pending">
-							{t.rosterGrid.outletRequest}
+							{t.rosterGrid.leaveAwaitingAgency}
 						</option>
 						<option value="on-duty">{t.roster.onDuty}</option>
 						<option value="swap-pending">{t.rosterGrid.swapPending}</option>
 						<option value="unavailable">{t.roster.unavailable}</option>
 					</IzSelect>
 				</label>
+
+				{/* One range, not two peer fields — see RosterShiftFilters. */}
+				<div className="iz-roster-filterbar__range">
+					<span className="iz-roster-filterbar__label">
+						{t.filters.shiftTime}
+					</span>
+					<div className="iz-roster-filterbar__rangerow">
+						<IzTimeInput
+							value={filters.startTime}
+							onChange={(v) => onChange({ startTime: v })}
+							showIcon={false}
+							placeholder={t.filters.startTime}
+							className="iz-roster-filterbar__time"
+							aria-label={t.filters.shiftStartFrom}
+						/>
+						<span className="iz-roster-filterbar__dash" aria-hidden>
+							–
+						</span>
+						<IzTimeInput
+							value={filters.endTime}
+							onChange={(v) => onChange({ endTime: v })}
+							showIcon={false}
+							placeholder={t.filters.endTime}
+							className="iz-roster-filterbar__time"
+							aria-label={t.filters.shiftEndBy}
+						/>
+					</div>
+				</div>
 			</div>
-
-			<div className="iz-roster-timetable-filters-secondary">
-				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">{t.filters.startFrom}</span>
-					<IzTimeInput
-						value={filters.startTime}
-						onChange={(v) => onChange({ startTime: v })}
-						showIcon={false}
-						placeholder={t.filters.startTime}
-						className="iz-roster-filter-time"
-						aria-label={t.filters.shiftStartFrom}
-					/>
-				</label>
-
-				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">{t.filters.endBy}</span>
-					<IzTimeInput
-						value={filters.endTime}
-						onChange={(v) => onChange({ endTime: v })}
-						showIcon={false}
-						placeholder={t.filters.endTime}
-						className="iz-roster-filter-time"
-						aria-label={t.filters.shiftEndBy}
-					/>
-				</label>
-			</div>
-
-			{active && (
-				<button
-					type="button"
-					className="iz-roster-filter-clear"
-					onClick={() => onChange({ ...EMPTY_TIMETABLE_CLEAR })}
-				>
-					<RotateCcw className="h-3 w-3" />
-					{t.rosterGrid.clearFilters}
-				</button>
-			)}
 		</div>
 	);
 }
-
-const EMPTY_TIMETABLE_CLEAR: RosterTimetableFilterState = {
-	nameQuery: "",
-	outlet: "",
-	status: "",
-	payoutMin: "",
-	payoutMax: "",
-	startTime: "",
-	endTime: "",
-	prType: "",
-	showPrs: "",
-};

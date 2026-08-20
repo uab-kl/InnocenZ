@@ -556,6 +556,9 @@ const en = {
 		shiftStartFrom: "Shift start from",
 		shiftEndBy: "Shift end by",
 		minPayout: "Min payout (RM)",
+		/* Labels for the two PAIRED range controls in the roster filter bars. */
+		shiftTime: "Shift time",
+		payoutRange: "Payout (RM)",
 		maxPayout: "Max payout (RM)",
 		optional: "Optional",
 		prType: "PR type",
@@ -572,6 +575,13 @@ const en = {
 	/** Roster grid, filters and attendance panel. */
 	rosterGrid: {
 		awaitingPr: "Awaiting PR",
+		/*
+		 * What `assignment-pending` ACTUALLY means on a backend session: the only
+		 * status mapping to it is `leave_pending`, an MC/leave request awaiting the
+		 * AGENCY. "Awaiting PR" named the wrong party and the wrong decision — PRs
+		 * never accept or decline a shift (see the pr-cannot-accept-decline rule).
+		 */
+		leaveAwaitingAgency: "Leave — awaiting you",
 		outletRequest: "Outlet request",
 		swapPending: "Swap pending",
 		lateFlag: "Late flag",
@@ -3227,6 +3237,8 @@ const zh: PortalTranslations = {
 		shiftStartFrom: "班次开始时间不早于",
 		shiftEndBy: "班次结束时间不晚于",
 		minPayout: "最低支出（RM）",
+		shiftTime: "班次时间",
+		payoutRange: "支出（RM）",
 		maxPayout: "最高支出（RM）",
 		optional: "选填",
 		prType: "PR 类型",
@@ -3241,6 +3253,7 @@ const zh: PortalTranslations = {
 	},
 	rosterGrid: {
 		awaitingPr: "待 PR 确认",
+		leaveAwaitingAgency: "请假 —— 待你审批",
 		outletRequest: "门店请求",
 		swapPending: "换班待处理",
 		lateFlag: "迟到标记",
