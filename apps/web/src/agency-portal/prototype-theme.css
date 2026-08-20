@@ -14194,12 +14194,27 @@ button.iz-pr-offer-row:hover {
  * than one filter under the tab that owns them. Scoped here rather than by
  * reordering `.iz-chip`, which every other screen depends on.
  */
+/*
+ * Status filters — ONE style for every "narrow this queue" row.
+ *
+ * There were three: the PR side used chips at 11px, the outlet-linking side
+ * borrowed the queue-tab pill, and the Current/Approved row rendered chunkier
+ * than the tabs above it. Three sizes for one job made the sidebar read as
+ * three levels of navigation instead of two.
+ */
+.iz-approvals-subfilter {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 10px;
+}
 .iz-approvals-subfilter .iz-chip {
-	padding: 4px 9px;
-	border-radius: 8px;
-	font-size: 11px;
+	padding: 5px 11px;
+	border-radius: 999px;
+	font-size: 12px;
 	font-weight: 700;
-	letter-spacing: 0.3px;
+	letter-spacing: 0.2px;
+	line-height: 1.35;
 }
 
 /* The event name leads the Shift card — it is the one line that says WHICH

@@ -1737,7 +1737,7 @@ function AgencyPending() {
 								{/* Same tuple-map as the MC/Leaves chips below — Current is
 								    the work queue, the rest is the record. Counts are scoped
 								    to THIS tab's direction. */}
-								<div className="iz-approvals-subfilter mb-2 flex flex-wrap gap-1">
+								<div className="iz-approvals-subfilter">
 									{(
 										[
 											[
@@ -1914,7 +1914,7 @@ function AgencyPending() {
 							<>
 								{/* Current vs history. Counts come from the two queries, so
 								    "Pending" is work-to-do and the rest is the record. */}
-								<div className="iz-approvals-subfilter mb-2 flex flex-wrap gap-1">
+								<div className="iz-approvals-subfilter">
 									{(
 										[
 											[
