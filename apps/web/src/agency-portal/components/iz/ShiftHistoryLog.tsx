@@ -504,7 +504,7 @@ export function ShiftHistoryLog({
 								}
 							>
 								{portal === "outlet" || !detailPrVenue
-									? "← Back to log"
+									? "← Return"
 									: "← All outlets"}
 							</button>
 							<p className="iz-tiny iz-muted2 uppercase">
@@ -673,7 +673,7 @@ export function ShiftHistoryLog({
 								className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
 								onClick={() => setDetailVenue(null)}
 							>
-								← Back to log
+								← Return
 							</button>
 							<p className="iz-tiny iz-muted2 uppercase">
 								PR breakdown · {agencyName}
@@ -868,7 +868,7 @@ export function OutletPrShiftHistorySheet({
 						className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
 						onClick={onClose}
 					>
-						← Back to log
+						← Return
 					</button>
 					<p className="iz-tiny iz-muted2 uppercase">Shift log · {prName}</p>
 					<h3>{outletName}</h3>

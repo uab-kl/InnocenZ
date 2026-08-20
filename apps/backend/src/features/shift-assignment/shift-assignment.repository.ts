@@ -3,6 +3,7 @@ import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
+import { ShiftTemplateTable } from '@/features/shift-template/shift-template.model';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
@@ -1253,6 +1254,13 @@ export class ShiftAssignmentRepositoryClass {
            * venue name on every shift card it has ever shown.
            */
           outletLogo: OutletTable.logoImage,
+          /*
+           * The EVENT picture — the template card this shift was posted from
+           * (0128). Same one-fact-one-place rule as the logo: read through the
+           * FK join, never copied. Null on blank posts and on every shift
+           * posted before templates existed.
+           */
+          templateCoverImage: ShiftTemplateTable.coverImage,
           // Address parts read straight off the FK-joined outlet — never copied
           // onto the assignment. Composed into one display line below.
           outletAddressLine1: OutletTable.addressLine1,
@@ -1268,6 +1276,7 @@ export class ShiftAssignmentRepositoryClass {
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
         .where(ownership)
         .orderBy(ShiftTable.shiftDate);
       return rows.map((row) => {
@@ -1291,6 +1300,7 @@ export class ShiftAssignmentRepositoryClass {
           outletId: row.outletId,
           outletName: row.outletName,
           outletLogo: row.outletLogo,
+          templateCoverImage: row.templateCoverImage,
           outletAddress,
           outletLat: row.outletLat === null ? null : Number(row.outletLat),
           outletLng: row.outletLng === null ? null : Number(row.outletLng),
@@ -1357,6 +1367,8 @@ export class ShiftAssignmentRepositoryClass {
           // shift row is reached the event TYPE always has a value.
           eventKind: ShiftTable.eventKind,
           outletName: OutletTable.name,
+          outletLogo: OutletTable.logoImage,
+          templateCoverImage: ShiftTemplateTable.coverImage,
           status: ShiftAssignmentTable.status,
           cancelFeeRm: ShiftAssignmentTable.cancelFeeRm,
           cancelFeePct: ShiftAssignmentTable.cancelFeePct,
@@ -1365,12 +1377,15 @@ export class ShiftAssignmentRepositoryClass {
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
         .where(and(inArray(ShiftAssignmentTable.id, ids), inArray(ShiftAssignmentTable.prId, prIds)))
         .orderBy(ShiftAssignmentTable.checkInAt);
       return rows.map((row) => ({
         id: row.id,
         prId: row.prId,
         shiftDate: row.shiftDate,
+        outletLogo: row.outletLogo,
+        templateCoverImage: row.templateCoverImage,
         slot: row.slot,
         eventName: row.eventName,
         eventKind: row.eventKind,

@@ -9,6 +9,7 @@ import { notifyMany } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
 import { paramId, uuidParam } from '@/util/params';
 import { getActor } from '@/util/actor';
+import { shiftTemplateBelongsToOutlet } from '@/features/shift-template/shift-template.repository';
 import { logger } from '@/util/logger';
 import { CreateShiftSchema, UpdateShiftSchema } from '@/schema/shift.schema';
 import { ShiftFilter, ShiftStatus, ShiftEventKind } from './shift.model';
@@ -387,6 +388,14 @@ export class ShiftControllerClass {
         return res.status(403).json({ success: false, message: 'No organization associated with this account', data: null });
       }
 
+      // A template link must name one of the VENUE'S OWN cards — a forged id
+      // would hang another outlet's picture on this shift (0128).
+      if (parsed.data.templateId) {
+        const owns = await shiftTemplateBelongsToOutlet(parsed.data.templateId, outletId);
+        if (!owns) {
+          return res.status(400).json({ success: false, message: 'Unknown event template for this outlet', data: null });
+        }
+      }
       const actor = getActor(req);
       // payTiers is a child-table override, not a shift column — keep it out of
       // the shift insert and persist it alongside in one transaction.

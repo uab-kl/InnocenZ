@@ -1,5 +1,7 @@
+import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
+import { EventTemplatePicker } from "@agency-portal/components/outlet/EventTemplatePicker";
 import {
 	OutletPage,
 	OutletPageHeader,
@@ -26,12 +28,12 @@ import {
 } from "@agency-portal/components/outlet/post-job-fields";
 import { PostJobActionPanel } from "@agency-portal/components/outlet/post-job-shift-ui";
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
+import { useOutletEffectivePlan } from "@agency-portal/hooks/use-outlet-effective-plan";
 import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
 import { useOutletPrPool } from "@agency-portal/hooks/use-outlet-pr-pool";
 import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import {
 	canonicalOutletName,
-	getOutletSubscriptionPlan,
 	isOtherDressCode,
 	isOtherSpecialEvent,
 	outletNamedPrCountForDate,
@@ -53,11 +55,13 @@ import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { startOfToday } from "date-fns";
-import { Sparkles } from "lucide-react";
+import { ChevronLeft, CircleHelp, Sparkles, ZoomIn } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { ShiftTemplate } from "@/services/shift-template";
 
 type PostJobTab = "shifts" | "services";
 
@@ -122,14 +126,8 @@ function PostJobPage() {
 		navigate({ search: { tab: next } });
 	};
 
-	const {
-		createShifts,
-		outletWorkspace,
-		agencyPRs,
-		shifts,
-		outletOwner,
-		toast,
-	} = useStore();
+	const { createShifts, outletWorkspace, agencyPRs, shifts, toast } =
+		useStore();
 
 	// On a real outlet session, posting writes to the backend; a demo session
 	// keeps the local store. `backed` decides which path submitNew takes.
@@ -161,14 +159,52 @@ function PostJobPage() {
 			? t.postJob.loadingYourPrs
 			: t.postJob.noPrsToNameYet;
 
-	const subscriptionPlan = getOutletSubscriptionPlan(
-		outletOwner.subscriptionPlanId,
-	);
+	// The venue's REAL plan (member_subscription ledger) — the demo store id is
+	// only the demo fallback. See the hook: Subscription said Enterprise while
+	// this composer capped at Essential.
+	const subscriptionPlan = useOutletEffectivePlan();
 	const outletName = outletWorkspace.outletName;
 
 	const [composer, setComposer] = useState<DraftShift>(() =>
 		newDraftShift(undefined, effectiveWorkspace),
 	);
+
+	// The step BEFORE the form (owner's flow): null = show the event gallery,
+	// "blank" = start fresh, a template = the card the composer was filled from.
+	// Demo sessions skip the gallery — templates are backend rows only.
+	const [eventChosen, setEventChosen] = useState<
+		ShiftTemplate | "blank" | null
+	>(null);
+
+	const applyTemplate = (tpl: ShiftTemplate) => {
+		setComposer({
+			...newDraftShift(
+				{
+					eventKind: tpl.eventKind,
+					specialEventType:
+						tpl.eventKind === "special"
+							? ((tpl.specialEventType ??
+									"vip") as DraftShift["specialEventType"])
+							: undefined,
+					customSpecialEventName: tpl.customSpecialEventName ?? undefined,
+					shiftTime: tpl.slot ?? undefined,
+					quantity: tpl.quantity ?? undefined,
+					langs: tpl.languages
+						? tpl.languages
+								.split(",")
+								.map((x) => x.trim())
+								.filter(Boolean)
+						: undefined,
+					dressCode: tpl.dressCode ?? undefined,
+				},
+				effectiveWorkspace,
+			),
+			// newDraftShift returns a fixed shape; the template link rides on top.
+			templateId: tpl.id,
+			templateName: tpl.name,
+		});
+		setEventChosen(tpl);
+	};
 
 	const [draftShifts, setDraftShifts] = useState<DraftShift[]>([]);
 	/**
@@ -181,6 +217,9 @@ function PostJobPage() {
 	// Whether this venue may post at all. Same hook the "Send to" picker reads, so
 	// the button and the picker cannot disagree about it.
 	const agencyLinks = useOutletAgencyLinks();
+
+	// "What you can do here" — the page's own answer to "does it have X?".
+	const [helpOpen, setHelpOpen] = useState(false);
 
 	const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
 
@@ -568,9 +607,14 @@ function PostJobPage() {
 
 			// Posting straight from the composer skips addDraftShift, so fall back
 			// to the placeholder's suggestion here too rather than post a blank name.
-			event: resolveDraftEventName(s),
+			// Unnamed + posted from a card → the CARD names the night, never the
+			// generic suggestion. The field starts empty on purpose (20 Aug).
+			event:
+				s.event?.trim() || s.templateName?.trim() || resolveDraftEventName(s),
 
 			eventKind: s.eventKind,
+
+			templateId: s.templateId,
 
 			specialEventType:
 				s.eventKind === "special" ? s.specialEventType : undefined,
@@ -608,6 +652,7 @@ function PostJobPage() {
 
 		const resetForm = () => {
 			setComposer(newDraftShift(undefined, effectiveWorkspace));
+			setEventChosen(null);
 			setDraftShifts([]);
 			setEditingShiftId(null);
 		};
@@ -709,6 +754,26 @@ function PostJobPage() {
 				/>
 			)}
 
+			{/* The RETURN button (owner's ask): once an event is chosen, the top
+				    bar carries the way back to the gallery — the same back pattern
+				    every other page uses, not only the small "Change event" chip. */}
+			{!editingShiftId &&
+				backed &&
+				eventChosen !== null &&
+				tab === "shifts" && (
+					<button
+						type="button"
+						className="iz-post-job-return"
+						onClick={() => {
+							setComposer(newDraftShift(undefined, effectiveWorkspace));
+							setEventChosen(null);
+						}}
+					>
+						<ChevronLeft className="h-4 w-4" aria-hidden />
+						{t.postJob.returnBack}
+					</button>
+				)}
+
 			<OutletPageHeader
 				eyebrow={outletName}
 				title={t.postJob.title}
@@ -719,7 +784,34 @@ function PostJobPage() {
 							? t.postJob.buildHint
 							: `${outletName} · ${t.postJob.agencyAddOns}`
 				}
+				trailing={
+					<button
+						type="button"
+						className="iz-post-job-help-btn"
+						aria-expanded={helpOpen}
+						onClick={() => setHelpOpen((v) => !v)}
+					>
+						<CircleHelp className="h-4 w-4" aria-hidden />
+						{t.postJob.whatYouCanDoHere}
+					</button>
+				}
 			/>
+
+			{helpOpen && (
+				<div className="iz-post-job-help-panel">
+					<p className="iz-post-job-help-panel__title">
+						{t.postJob.whatYouCanDoHere}
+					</p>
+					<ul className="iz-post-job-help-panel__list">
+						<li>{t.postJob.canDoPostJob1}</li>
+						<li>{t.postJob.canDoPostJob2}</li>
+						<li>{t.postJob.canDoPostJob3}</li>
+						<li>{t.postJob.canDoPostJob4}</li>
+						<li>{t.postJob.canDoPostJob5}</li>
+						<li>{t.postJob.canDoPostJob6}</li>
+					</ul>
+				</div>
+			)}
 
 			{/* A venue with no APPROVED agency cannot post — the server refuses it.
 			    Said here, at the top, rather than only in the "Send to" card: the
@@ -798,143 +890,174 @@ function PostJobPage() {
 							viewOnly ? "m-0 border-0 p-0 opacity-70" : "m-0 border-0 p-0"
 						}
 					>
-						<div className="iz-post-job-layout">
-							<div className="iz-post-job-layout__main">
-								<DraftShiftEditor
-									shift={composer}
-									onChange={(patch) => setComposer((c) => ({ ...c, ...patch }))}
-									title={t.postJob.shiftDetails}
-									shiftIndex={1}
-									shiftTotal={Math.max(1, draftShifts.length + 1)}
-									namedPrsOnDate={composerNamedPrsOnDate}
-									peopleRemaining={composerPeopleRemaining}
-									prCandidates={prPool.backed ? prPool.prs : undefined}
-									prEmptyHint={prPoolEmptyHint}
-									workspaceMenu={workspaceMenu}
-									workspaceRates={effectiveWorkspace}
-								/>
-
-								{draftShifts.length > 0 && (
-									<>
-										<div className="mt-4 flex items-center justify-between">
-											<IzSectionLabel>
-												Shifts for {sectionDate.toLowerCase()}
-											</IzSectionLabel>
-											<span className="text-[10px] text-[var(--iz-muted)]">
-												{draftShifts.length} slot
-												{draftShifts.length !== 1 ? "s" : ""}
-											</span>
-										</div>
-										=======
-										<div className="mt-3 flex flex-col gap-4">
-											{draftShifts.map((s, i) =>
-												editingShiftId === s.id ? (
-													<DraftShiftEditor
-														key={s.id}
-														shift={s}
-														onChange={(patch) => updateDraftShift(s.id, patch)}
-														onRemove={() => removeDraftShift(s.id)}
-														showRemove
-														title={t.postJob.shiftDetails}
-														shiftIndex={i + 1}
-														shiftTotal={draftShifts.length}
-														onDone={() => setEditingShiftId(null)}
-														namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
-														peopleRemaining={peopleRemainingForShift(s, s.id)}
-														prCandidates={
-															prPool.backed ? prPool.prs : undefined
-														}
-														prEmptyHint={prPoolEmptyHint}
-														workspaceMenu={workspaceMenu}
-														workspaceRates={effectiveWorkspace}
-													/>
-												) : (
-													<DraftShiftSummary
-														key={s.id}
-														shift={s}
-														title={fill(t.postJob.shiftN, { n: i + 1 })}
-														onEdit={() => setEditingShiftId(s.id)}
-														onRemove={() => removeDraftShift(s.id)}
-														showRemove
-														workspaceMenu={workspaceMenu}
-													/>
-												),
+						{backed && !editingShiftId && eventChosen === null ? (
+							<EventTemplatePicker
+								onPick={applyTemplate}
+								onBlank={() => setEventChosen("blank")}
+							/>
+						) : (
+							<>
+								<div className="iz-post-job-layout">
+									<div className="iz-post-job-layout__main">
+										{eventChosen && eventChosen !== "blank" && (
+											<ChosenEventBar
+												template={eventChosen}
+												eventName={composer.event}
+												onChange={() => {
+													setComposer(
+														newDraftShift(undefined, effectiveWorkspace),
+													);
+													setEventChosen(null);
+												}}
+											/>
+										)}
+										<DraftShiftEditor
+											eventTypeLocked={Boolean(
+												eventChosen && eventChosen !== "blank",
 											)}
-										</div>
-									</>
-								)}
-							</div>
+											shift={composer}
+											onChange={(patch) =>
+												setComposer((c) => ({ ...c, ...patch }))
+											}
+											title={t.postJob.shiftDetails}
+											shiftIndex={1}
+											shiftTotal={Math.max(1, draftShifts.length + 1)}
+											namedPrsOnDate={composerNamedPrsOnDate}
+											peopleRemaining={composerPeopleRemaining}
+											prCandidates={prPool.backed ? prPool.prs : undefined}
+											prEmptyHint={prPoolEmptyHint}
+											workspaceMenu={workspaceMenu}
+											workspaceRates={effectiveWorkspace}
+										/>
 
-							{/* NARROW SCREENS ONLY. The aside below is `display:none` under
+										{draftShifts.length > 0 && (
+											<>
+												<div className="mt-4 flex items-center justify-between">
+													<IzSectionLabel>
+														Shifts for {sectionDate.toLowerCase()}
+													</IzSectionLabel>
+													<span className="text-[10px] text-[var(--iz-muted)]">
+														{draftShifts.length} slot
+														{draftShifts.length !== 1 ? "s" : ""}
+													</span>
+												</div>
+												=======
+												<div className="mt-3 flex flex-col gap-4">
+													{draftShifts.map((s, i) =>
+														editingShiftId === s.id ? (
+															<DraftShiftEditor
+																key={s.id}
+																shift={s}
+																onChange={(patch) =>
+																	updateDraftShift(s.id, patch)
+																}
+																onRemove={() => removeDraftShift(s.id)}
+																showRemove
+																title={t.postJob.shiftDetails}
+																shiftIndex={i + 1}
+																shiftTotal={draftShifts.length}
+																onDone={() => setEditingShiftId(null)}
+																namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
+																peopleRemaining={peopleRemainingForShift(
+																	s,
+																	s.id,
+																)}
+																prCandidates={
+																	prPool.backed ? prPool.prs : undefined
+																}
+																prEmptyHint={prPoolEmptyHint}
+																workspaceMenu={workspaceMenu}
+																workspaceRates={effectiveWorkspace}
+															/>
+														) : (
+															<DraftShiftSummary
+																key={s.id}
+																shift={s}
+																title={fill(t.postJob.shiftN, { n: i + 1 })}
+																onEdit={() => setEditingShiftId(s.id)}
+																onRemove={() => removeDraftShift(s.id)}
+																showRemove
+																workspaceMenu={workspaceMenu}
+															/>
+														),
+													)}
+												</div>
+											</>
+										)}
+									</div>
+
+									{/* NARROW SCREENS ONLY. The aside below is `display:none` under
 							    900px, so without this copy the picker would vanish on a phone
 							    and the venue would post to every agency without being asked.
 							    Both copies are driven by the same state; only one is ever
 							    visible. Real sessions only — a demo session has no links. */}
-							{backed && (
-								<div className="iz-post-job-sendto--mobile iz-post-job-summary-card mt-3">
-									<p className="iz-post-job-summary-card__title">
-										{t.postJob.sendTo}
-									</p>
-									<PostJobAgencyPicker
-										value={postAgencyIds}
-										onChange={setPostAgencyIds}
-									/>
-								</div>
-							)}
-							{/* `iz-post-job-layout` is a two-column grid, so this aside MUST be
+									{backed && (
+										<div className="iz-post-job-sendto--mobile iz-post-job-summary-card mt-3">
+											<p className="iz-post-job-summary-card__title">
+												{t.postJob.sendTo}
+											</p>
+											<PostJobAgencyPicker
+												value={postAgencyIds}
+												onChange={setPostAgencyIds}
+											/>
+										</div>
+									)}
+									{/* `iz-post-job-layout` is a two-column grid, so this aside MUST be
 							    the second child — an extra element between it and the composer
 							    takes the right column and pushes the summary down into the left
 							    one. "Send to" therefore lives INSIDE the aside, above the
 							    summary, rather than beside it. */}
-							<aside className="iz-post-job-layout__aside">
-								{backed && (
-									/* The SAME card as the Summary below it, reusing that component's
+									<aside className="iz-post-job-layout__aside">
+										{backed && (
+											/* The SAME card as the Summary below it, reusing that component's
 									   own classes rather than a hand-rolled border, so the two cannot
 									   drift apart. */
-									<div className="iz-post-job-summary-card mb-3">
-										<p className="iz-post-job-summary-card__title">
-											{t.postJob.sendTo}
-										</p>
-										<PostJobAgencyPicker
-											value={postAgencyIds}
-											onChange={setPostAgencyIds}
+											<div className="iz-post-job-summary-card mb-3">
+												<p className="iz-post-job-summary-card__title">
+													{t.postJob.sendTo}
+												</p>
+												<PostJobAgencyPicker
+													value={postAgencyIds}
+													onChange={setPostAgencyIds}
+												/>
+											</div>
+										)}
+										{!viewOnly && (
+											<PostJobActionPanel
+												headcount={totalHeadcount}
+												cost={totalCost}
+												shiftCount={shiftCountForPost}
+												onAddShift={addDraftShift}
+												onSubmit={submitNew}
+												submitDisabled={
+													totalHeadcount <= 0 ||
+													isPosting ||
+													(backed && !agencyLinks.canPost)
+												}
+											/>
+										)}
+									</aside>
+								</div>
+
+								{!viewOnly && (
+									<div
+										className="iz-post-job-mobile-dock"
+										aria-label={t.postJob.shiftSummaryActions}
+									>
+										<PostJobActionPanel
+											headcount={totalHeadcount}
+											cost={totalCost}
+											shiftCount={shiftCountForPost}
+											onAddShift={addDraftShift}
+											onSubmit={submitNew}
+											submitDisabled={
+												totalHeadcount <= 0 || (backed && !agencyLinks.canPost)
+											}
+											compact
 										/>
 									</div>
 								)}
-								{!viewOnly && (
-									<PostJobActionPanel
-										headcount={totalHeadcount}
-										cost={totalCost}
-										shiftCount={shiftCountForPost}
-										onAddShift={addDraftShift}
-										onSubmit={submitNew}
-										submitDisabled={
-											totalHeadcount <= 0 ||
-											isPosting ||
-											(backed && !agencyLinks.canPost)
-										}
-									/>
-								)}
-							</aside>
-						</div>
-
-						{!viewOnly && (
-							<div
-								className="iz-post-job-mobile-dock"
-								aria-label={t.postJob.shiftSummaryActions}
-							>
-								<PostJobActionPanel
-									headcount={totalHeadcount}
-									cost={totalCost}
-									shiftCount={shiftCountForPost}
-									onAddShift={addDraftShift}
-									onSubmit={submitNew}
-									submitDisabled={
-										totalHeadcount <= 0 || (backed && !agencyLinks.canPost)
-									}
-									compact
-								/>
-							</div>
+							</>
 						)}
 					</fieldset>
 				</section>
@@ -942,5 +1065,81 @@ function PostJobPage() {
 				<OutletServicePostSection />
 			) : null}
 		</OutletPage>
+	);
+}
+
+/** The bar above the form naming the picked card, with the way back. */
+function ChosenEventBar({
+	template,
+	eventName,
+	onChange,
+}: {
+	template: ShiftTemplate;
+	/** The composer's LIVE event name - may differ from the card's name. */
+	eventName?: string;
+	onChange: () => void;
+}) {
+	const { t } = usePortalLocale();
+	const cover = apiAssetUrl(template.coverImage);
+	// Owner's ask: tap the small picture to see it big. Zoom + pan included.
+	const [zoomOpen, setZoomOpen] = useState(false);
+	return (
+		<div className="iz-chosen-event-bar">
+			{cover ? (
+				<button
+					type="button"
+					className="iz-event-cover-zoom"
+					aria-label={template.name}
+					onClick={() => setZoomOpen(true)}
+				>
+					<img className="iz-chosen-event-bar__thumb" src={cover} alt="" />
+					{/* Says "this zooms" — the behaviour existed, nothing announced it. */}
+					<span className="iz-zoom-badge" aria-hidden>
+						<ZoomIn className="h-2.5 w-2.5" />
+					</span>
+				</button>
+			) : (
+				<span
+					className="iz-chosen-event-bar__thumb iz-chosen-event-bar__thumb--empty"
+					aria-hidden
+				>
+					<Sparkles className="h-3.5 w-3.5" />
+				</span>
+			)}
+			<span className="iz-chosen-event-bar__name">
+				<span className="iz-chosen-event-bar__top">
+					{template.name}
+					<span
+						className={cn(
+							"iz-chosen-event-bar__kind",
+							template.eventKind === "special"
+								? "iz-chosen-event-bar__kind--special"
+								: "iz-chosen-event-bar__kind--normal",
+						)}
+					>
+						{template.eventKind === "special"
+							? t.postJob.specialEvent
+							: t.postJob.normalEvent}
+					</span>
+				</span>
+				{/* The shift's own name, live from the form - one night can be
+				    renamed without touching the card. */}
+				<span className="iz-chosen-event-bar__event">
+					{t.postJob.eventName}:{" "}
+					{eventName?.trim() || t.postJob.clickToPutEventName}
+				</span>
+			</span>
+			<button type="button" className="iz-chip" onClick={onChange}>
+				<ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+				{t.postJob.changeEvent}
+			</button>
+			{zoomOpen && cover && (
+				<PhotoLightbox
+					photo={cover}
+					alt={template.name}
+					onClose={() => setZoomOpen(false)}
+				/>
+			)}
+		</div>
 	);
 }

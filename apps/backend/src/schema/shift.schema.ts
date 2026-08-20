@@ -62,6 +62,8 @@ export const CreateShiftSchema = z.object({
   slot: z.string().max(100, 'Slot is too long').optional(),
   eventName: z.string().max(255, 'Event name is too long').optional(),
   eventKind: z.enum(shiftEventKindValues).optional(),
+  /** The event template this shift was posted from (0128) — optional. */
+  templateId: z.string().uuid('Invalid template ID').optional(),
   languages: z.string().max(255, 'Languages is too long').optional(),
   quantity: z.number().int().nonnegative().optional(),
   filled: z.number().int().nonnegative().optional(),

@@ -7,7 +7,7 @@
  * panel) and the wages seal write to the backend current-week voucher.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { distanceM } from '../lib/geo';
@@ -30,12 +30,13 @@ import { useSession } from '../lib/session';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { usePrNav } from '../lib/pr-nav';
 import { useLocale } from '../i18n';
-import { checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
+import { assetUrl, checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
 import { getAttendanceFix } from '../lib/device-location';
 import { Avatar, EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
 import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
 import { MapPin } from '../components/icons';
+import { ImageLightbox, ZoomHint } from '../components/ImageLightbox';
 import type { PrTab } from '../components/BottomNav';
 
 // react-native-maps ships native code only — requiring it on web would crash
@@ -202,6 +203,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [holding, setHolding] = useState(false);
   const [progress, setProgress] = useState(0);
   const [briefOpen, setBriefOpen] = useState(false);
+  /** Full-size viewer for the event picture / outlet logo. Its taps are nested
+      Pressables, so they never fight the card's own tap-to-expand. */
+  const [zoomUri, setZoomUri] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -502,6 +506,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       ) : (
         active && (
           <>
+            <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
             <Pressable
               style={[styles.brief, grad(GRADIENTS.shiftCard, 'rgba(232,194,122,0.1)')]}
               onPress={() => setBriefOpen((o) => !o)}
@@ -513,45 +518,92 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <Text style={styles.statusV}>{statusLabel}</Text>
                 </View>
               </View>
+              {/* COLLAPSED (owner's design): the event picture, the logo and
+                  the outlet name — the night at a glance. Everything else
+                  (address, day & date, shift time, payout) lives in the fold. */}
+              {active?.templateCoverImage ? (
+                <Pressable
+                  style={{ position: 'relative', marginTop: 10, borderRadius: 12, overflow: 'hidden' }}
+                  onPress={() => setZoomUri(assetUrl(active.templateCoverImage) ?? null)}
+                >
+                  <Image
+                    source={{ uri: assetUrl(active.templateCoverImage) ?? undefined }}
+                    style={{ width: '100%', height: 132 }}
+                    resizeMode="cover"
+                  />
+                  <View
+                    style={{
+                      position: 'absolute',
+                      left: 8,
+                      bottom: 8,
+                      paddingHorizontal: 9,
+                      paddingVertical: 3,
+                      borderRadius: 999,
+                      backgroundColor: 'rgba(0,0,0,0.62)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(255,255,255,0.25)',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: '800',
+                        letterSpacing: 1,
+                        textTransform: 'uppercase',
+                        color: active?.eventKind === 'special' ? '#E8C27A' : '#C9B8F2',
+                      }}
+                    >
+                      {active?.eventKind === 'special' ? 'Special event' : 'Normal shift'}
+                    </Text>
+                  </View>
+                  <ZoomHint />
+                </Pressable>
+              ) : null}
               <View style={styles.briefMain}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.venueName}>{outletName}</Text>
-                  <Text style={styles.shiftMeta}>
-                    {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'} · {shiftTime}
-                  </Text>
+                  <Text style={styles.event}>{active.eventName ?? 'Shift'}</Text>
+                  <Text style={styles.tapHint}>{briefOpen ? 'Tap to collapse' : 'Tap to expand'}</Text>
+                </View>
+                {/* The venue's own logo, with its initial as the fallback.
+                    Nested Pressable: tapping the mark zooms it, everywhere
+                    else on the card still expands/collapses. */}
+                <Pressable
+                  disabled={!assetUrl(active?.outletLogo)}
+                  onPress={() => setZoomUri(assetUrl(active?.outletLogo) ?? null)}
+                >
+                  <Avatar
+                    size={52}
+                    radius={999}
+                    fontSize={22}
+                    photoPath={active?.outletLogo}
+                    initial={outletName.trim()[0]?.toUpperCase()}
+                    logo
+                    style={styles.mark}
+                  />
+                  {assetUrl(active?.outletLogo) ? (
+                    <ZoomHint size={16} style={{ right: -3, bottom: -3 }} />
+                  ) : null}
+                </Pressable>
+              </View>
+              {briefOpen && (
+                <View style={styles.briefBody}>
                   {active.outletAddress ? (
                     <View style={styles.addrRow}>
                       <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
                       <Text style={styles.addrText}>{active.outletAddress}</Text>
                     </View>
                   ) : null}
-                  <Text style={styles.event}>{active.eventName ?? 'Shift'}</Text>
-                  <Text style={styles.tapHint}>{briefOpen ? 'Tap to collapse' : 'Tap to expand'}</Text>
-                </View>
-                {/*
-                  * The venue's own logo, with its initial as the fallback —
-                  * the same Avatar the Today card uses, so one shift does not
-                  * look like two different venues across two tabs. `logo`
-                  * gives it the dark plate and slight scale a wordmark needs.
-                  */}
-                <Avatar
-                  size={52}
-                  radius={999}
-                  fontSize={22}
-                  photoPath={active?.outletLogo}
-                  initial={outletName.trim()[0]?.toUpperCase()}
-                  logo
-                  style={styles.mark}
-                />
-              </View>
-              {briefOpen && (
-                <View style={styles.briefBody}>
-                  <Text style={styles.briefBodyLabel}>Est. payout</Text>
+                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Day & date</Text>
                   <Text style={styles.briefBodyValue}>
-                    {formatRM(shiftWagesRm)}
+                    {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'}
                   </Text>
                   <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Shift time</Text>
                   <Text style={styles.briefBodyValue}>{shiftTime}</Text>
+                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Est. payout</Text>
+                  <Text style={styles.briefBodyValue}>
+                    {formatRM(shiftWagesRm)}
+                  </Text>
                 </View>
               )}
             </Pressable>

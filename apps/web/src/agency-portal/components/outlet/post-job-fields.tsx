@@ -15,7 +15,9 @@ import {
 import { PostJobTierRatesEditor } from "@agency-portal/components/outlet/PostJobTierRatesEditor";
 import {
 	PostJobEditableInputShell,
-	PostJobLockedValue,
+	PostJobFormLegend,
+	PostJobGroupHeader,
+	PostJobInfoTip,
 	PostJobShiftCardHeader,
 	PostJobShiftField,
 	PostJobTierSectionHeader,
@@ -23,6 +25,7 @@ import {
 import { ShiftEventPriceEditor } from "@agency-portal/components/outlet/ShiftEventPriceEditor";
 import { PrComcardPickerThumb } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { JobPostingMicroLabel } from "@agency-portal/components/special-service/job-posting-ui";
+import { useOutletEffectivePlan } from "@agency-portal/hooks/use-outlet-effective-plan";
 import {
 	buildDefaultTierRates,
 	cloneTierRates,
@@ -49,10 +52,11 @@ import {
 	formatOutletPlanPrPickerRule,
 	formatShiftDrinkPricingSummary,
 	formatShiftEventTypeSummary,
-	getOutletSubscriptionPlan,
 	isOtherDressCode,
 	isOtherSpecialEvent,
-	OUTLET_PRICES_SECTION_ID,
+	OUTLET_DRINKS_PRICE_SECTION_ID,
+	OUTLET_TIER_RATES_SECTION_ID,
+	outletDrinkCategory,
 	SHIFT_EVENT_KIND_LABELS,
 	SHIFT_SPECIAL_EVENT_OPTIONS,
 	type ShiftDestination,
@@ -86,7 +90,15 @@ import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { addDays, format, startOfToday } from "date-fns";
-import { Check, Minus, Pencil, Plus, X } from "lucide-react";
+import {
+	ArrowUpRight,
+	Check,
+	Lock,
+	Minus,
+	Pencil,
+	Plus,
+	X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -203,6 +215,11 @@ export { workspaceTierRatesSignature };
 
 export type DraftShift = {
 	id: string;
+	/** The event template this draft was started from (0128), if any. */
+	templateId?: string;
+	/** That template's name — the post-time fallback when the owner leaves
+	 * the Event name empty (the field starts blank on purpose, 20 Aug). */
+	templateName?: string;
 	selectedDateIsos: string[];
 	event: string;
 	eventKind: ShiftEventKind;
@@ -1480,6 +1497,7 @@ export function DraftShiftSummary({
 }
 
 export function DraftShiftEditor({
+	eventTypeLocked = false,
 	shift,
 	onChange,
 	onRemove,
@@ -1495,6 +1513,12 @@ export function DraftShiftEditor({
 	workspaceMenu,
 	workspaceRates,
 }: {
+	/**
+	 * True when a picked event card already decided the kind - the form
+	 * then hides its own Event-type toggle instead of asking again. The
+	 * chosen-event bar states the kind; "Change event" is the way back.
+	 */
+	eventTypeLocked?: boolean;
 	shift: DraftShift;
 	onChange: (patch: Partial<DraftShift>) => void;
 	onRemove?: () => void;
@@ -1523,7 +1547,6 @@ export function DraftShiftEditor({
 	// Demo sessions have no backend pool, so the language options come from the
 	// demo roster instead. A real session passes `prCandidates` and ignores this.
 	const agencyPRs = useStore((s) => s.agencyPRs);
-	const outletOwner = useStore((s) => s.outletOwner);
 	const storeWorkspace = useStore((s) => s.outletWorkspace);
 	// Same story as the price list below: a real session's rate card lives in the
 	// backend and arrives as a prop. Reading only the store showed Post Job the
@@ -1605,9 +1628,9 @@ export function DraftShiftEditor({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-time expand composer to all tier columns
 	}, []);
 
-	const subscriptionPlan = getOutletSubscriptionPlan(
-		outletOwner.subscriptionPlanId,
-	);
+	// Same ledger-first plan as the composer route — never the demo store alone,
+	// or this picker caps a real Enterprise venue at Essential's numbers.
+	const subscriptionPlan = useOutletEffectivePlan();
 	const namedPrRemaining = Math.max(
 		0,
 		subscriptionPlan.prPerDayMax - namedPrsOnDate,
@@ -1734,10 +1757,6 @@ export function DraftShiftEditor({
 		});
 	};
 
-	const planHintParts = peopleNeededHint.split(" · ");
-	const planHintLead = planHintParts.slice(0, -1).join(" · ");
-	const planHintTail = planHintParts[planHintParts.length - 1] ?? "";
-
 	return (
 		<div className="iz-job-posting-form-card !mb-0">
 			<PostJobShiftCardHeader
@@ -1772,7 +1791,14 @@ export function DraftShiftEditor({
 			/>
 
 			<div className="mt-3 space-y-3">
-				<PostJobShiftField label={t.postJob.date}>
+				<PostJobFormLegend />
+
+				<PostJobGroupHeader label={t.postJob.groupTheNight} />
+
+				<PostJobShiftField
+					label={t.postJob.date}
+					info={<PostJobInfoTip text={t.postJob.helpDates} />}
+				>
 					<div className="iz-job-posting-control">
 						<JobMultiDatePicker
 							embedded
@@ -1782,137 +1808,100 @@ export function DraftShiftEditor({
 					</div>
 				</PostJobShiftField>
 
-				<PostJobShiftField label={t.postJob.eventType} layout="stack">
-					<div className="iz-post-job-event-type-grid">
-						{(Object.keys(SHIFT_EVENT_KIND_LABELS) as ShiftEventKind[]).map(
-							(kind) => (
-								<button
-									key={kind}
-									type="button"
-									onClick={() => {
-										const nextKind = kind;
-										onChange({
-											eventKind: nextKind,
-											specialEventType:
-												nextKind === "special"
-													? (shift.specialEventType ?? "vip")
-													: undefined,
-											customSpecialEventName:
-												nextKind === "special" &&
-												isOtherSpecialEvent(shift.specialEventType)
-													? (shift.customSpecialEventName ?? "")
-													: "",
-											eventDrinkMenu:
-												nextKind === "special"
-													? (shift.eventDrinkMenu ??
-														cloneDrinkMenu(workspaceDrinkMenu))
-													: undefined,
-											event: resolveDraftEventOnPresetChange(shift.event),
-										});
-									}}
-									className={cn(
-										"iz-post-job-event-type-pill",
-										shift.eventKind === kind && "is-active",
-									)}
-								>
-									{SHIFT_EVENT_KIND_LABELS[kind](t)}
-								</button>
-							),
-						)}
-					</div>
-					{shift.eventKind === "special" && (
-						<>
-							<IzHScroll className="mt-2 flex w-full gap-1 pb-0.5">
-								{SHIFT_SPECIAL_EVENT_OPTIONS.map((option) => (
+				{!eventTypeLocked && (
+					<PostJobShiftField label={t.postJob.eventType} layout="stack">
+						<div className="iz-post-job-event-type-grid">
+							{(Object.keys(SHIFT_EVENT_KIND_LABELS) as ShiftEventKind[]).map(
+								(kind) => (
 									<button
-										key={option.id}
+										key={kind}
 										type="button"
-										onClick={() =>
+										onClick={() => {
+											const nextKind = kind;
 											onChange({
-												specialEventType: option.id,
-												customSpecialEventName: isOtherSpecialEvent(option.id)
-													? (shift.customSpecialEventName ?? "")
-													: "",
+												eventKind: nextKind,
+												specialEventType:
+													nextKind === "special"
+														? (shift.specialEventType ?? "vip")
+														: undefined,
+												customSpecialEventName:
+													nextKind === "special" &&
+													isOtherSpecialEvent(shift.specialEventType)
+														? (shift.customSpecialEventName ?? "")
+														: "",
+												eventDrinkMenu:
+													nextKind === "special"
+														? (shift.eventDrinkMenu ??
+															cloneDrinkMenu(workspaceDrinkMenu))
+														: undefined,
 												event: resolveDraftEventOnPresetChange(shift.event),
-											})
-										}
+											});
+										}}
 										className={cn(
-											"iz-job-posting-type-pill shrink-0 whitespace-nowrap",
-											shift.specialEventType === option.id && "is-active",
+											"iz-post-job-event-type-pill",
+											shift.eventKind === kind && "is-active",
 										)}
 									>
-										{option.label(t)}
+										{SHIFT_EVENT_KIND_LABELS[kind](t)}
 									</button>
-								))}
-							</IzHScroll>
-							{isOtherSpecialEvent(shift.specialEventType) && (
-								<input
-									type="text"
-									className="iz-job-posting-control iz-job-posting-input mt-2 block w-full min-w-0"
-									placeholder={t.postJob.nameYourEventType}
-									aria-label={t.postJob.customSpecialEventType}
-									value={shift.customSpecialEventName ?? ""}
-									onChange={(e) =>
-										onChange({ customSpecialEventName: e.target.value })
-									}
-								/>
+								),
 							)}
-						</>
-					)}
-				</PostJobShiftField>
-
-				<PostJobShiftField label={t.postJob.prices}>
-					{shift.eventKind === "special" ? (
-						<div className="w-full min-w-0">
-							<p className="mb-2 text-[10px] text-[var(--iz-muted)]">
-								Set prices for this special event only. Later events keep using
-								the Workspace prices.
-							</p>
-							<ShiftEventPriceEditor
-								menu={eventPriceMenu}
-								onChange={(eventDrinkMenu) => onChange({ eventDrinkMenu })}
-							/>
-							<button
-								type="button"
-								className="iz-chip mt-2 w-full text-[11px]"
-								onClick={() =>
-									onChange({
-										eventDrinkMenu: cloneDrinkMenu(workspaceDrinkMenu),
-									})
-								}
-							>
-								{t.postJob.resetToWorkspacePrices}
-							</button>
 						</div>
-					) : (
-						// Locked here, editable in Workspace — so the row is the way there.
-						// #prices opens both price lists (drinks and services) on arrival.
-						<Link
-							to="/outlet/workspace"
-							hash={OUTLET_PRICES_SECTION_ID}
-							className="iz-job-posting-control block w-full min-w-0 transition-opacity hover:opacity-80"
-							aria-label={t.postJob.editPricesInWorkspace}
-						>
-							<PostJobLockedValue>
-								Follow Workspace
-								{(() => {
-									const range = drinkMenuPriceRange(workspaceDrinkMenu);
-									return ` · RM ${range.min}–${range.max}`;
-								})()}
-							</PostJobLockedValue>
-						</Link>
-					)}
-				</PostJobShiftField>
+						{shift.eventKind === "special" && (
+							<>
+								<IzHScroll className="mt-2 flex w-full gap-1 pb-0.5">
+									{SHIFT_SPECIAL_EVENT_OPTIONS.map((option) => (
+										<button
+											key={option.id}
+											type="button"
+											onClick={() =>
+												onChange({
+													specialEventType: option.id,
+													customSpecialEventName: isOtherSpecialEvent(option.id)
+														? (shift.customSpecialEventName ?? "")
+														: "",
+													event: resolveDraftEventOnPresetChange(shift.event),
+												})
+											}
+											className={cn(
+												"iz-job-posting-type-pill shrink-0 whitespace-nowrap",
+												shift.specialEventType === option.id && "is-active",
+											)}
+										>
+											{option.label(t)}
+										</button>
+									))}
+								</IzHScroll>
+								{isOtherSpecialEvent(shift.specialEventType) && (
+									<input
+										type="text"
+										className="iz-job-posting-control iz-job-posting-input mt-2 block w-full min-w-0"
+										placeholder={t.postJob.nameYourEventType}
+										aria-label={t.postJob.customSpecialEventType}
+										value={shift.customSpecialEventName ?? ""}
+										onChange={(e) =>
+											onChange({ customSpecialEventName: e.target.value })
+										}
+									/>
+								)}
+							</>
+						)}
+					</PostJobShiftField>
+				)}
 
 				<PostJobShiftField label={t.postJob.eventName}>
 					<PostJobEditableInputShell>
 						<JobEventInput
 							value={shift.event}
 							onChange={(event) => onChange({ event })}
-							placeholder={draftEventPlaceholder(
-								shift.eventKind ?? "normal",
-								shift.specialEventType,
-							)}
+							placeholder={
+								eventTypeLocked
+									? t.postJob.clickToPutEventName
+									: draftEventPlaceholder(
+											shift.eventKind ?? "normal",
+											shift.specialEventType,
+										)
+							}
 						/>
 					</PostJobEditableInputShell>
 				</PostJobShiftField>
@@ -1925,7 +1914,12 @@ export function DraftShiftEditor({
 					/>
 				</PostJobShiftField>
 
-				<PostJobShiftField label={t.postJob.peopleNeeded}>
+				<PostJobGroupHeader label={t.postJob.groupWhoWorks} />
+
+				<PostJobShiftField
+					label={t.postJob.peopleNeeded}
+					info={<PostJobInfoTip text={t.postJob.helpPeopleNeeded} />}
+				>
 					<div className="flex w-full flex-col gap-1">
 						<QuantityStepper
 							value={shift.quantity}
@@ -1940,6 +1934,34 @@ export function DraftShiftEditor({
 					</div>
 				</PostJobShiftField>
 
+				<PostJobShiftField
+					label={t.postJob.selectPrs}
+					info={<PostJobInfoTip text={t.postJob.helpSelectPrs} />}
+					className="iz-post-job-pr-field"
+					layout="stack"
+				>
+					{maxNamedPrSelect === 0 ? (
+						<p className="text-[11px] text-[var(--iz-muted)]">{prPickerHint}</p>
+					) : (
+						<DraftPrPicker
+							candidates={prCandidates}
+							emptyHint={prEmptyHint}
+							selected={shift.prIds}
+							onSelectedChange={(prIds) =>
+								onChange({
+									prIds,
+									quantity: Math.max(shift.quantity, prIds.length),
+								})
+							}
+							quantity={shift.quantity}
+							poolSize={subscriptionPlan.prPoolSize}
+							maxSelect={subscriptionPlan.prSelectMax}
+							dailyRemaining={namedPrRemaining}
+							poolHint={prPickerHint}
+						/>
+					)}
+				</PostJobShiftField>
+
 				<PostJobShiftField label={t.postJob.preferredLanguages}>
 					<JobLanguagePicker
 						variant="postJob"
@@ -1949,59 +1971,6 @@ export function DraftShiftEditor({
 						onSelectedChange={(langs) => onChange({ langs })}
 					/>
 				</PostJobShiftField>
-
-				<div className="iz-post-job-tier-section border-t border-[var(--iz-line)] pt-4">
-					<PostJobTierSectionHeader />
-					<div className="mt-3">
-						{maxPeople <= 0 ? (
-							<p className="mb-2 text-[11px] text-[var(--iz-muted)]">
-								{peopleNeededHint}
-							</p>
-						) : null}
-						<PostJobTierRatesEditor
-							rows={shift.payTierRows}
-							workspaceTierRates={outletWorkspace.tierRates}
-							commissionOnlyRates={outletWorkspace.commissionOnlyRates}
-							maxPrTotal={shift.quantity}
-							onChange={updatePayTierRows}
-							planHint={
-								maxPeople > 0 ? (
-									<>
-										{planHintLead ? `${planHintLead} · ` : ""}
-										<span className="text-[var(--iz-green)] font-semibold">
-											{planHintTail}
-										</span>
-									</>
-								) : undefined
-							}
-						/>
-						<div className="iz-post-job-tier-footer">
-							<button
-								type="button"
-								className="iz-chip col-span-2 w-full text-[11px]"
-								onClick={() => {
-									const wsRates = draftTierRatesFromWorkspace(outletWorkspace);
-									const payTierRows = defaultComposerPayTierRows(
-										wsRates,
-										Math.max(1, shift.quantity || 6),
-										outletWorkspace.commissionOnlyRates,
-									);
-									onChange({
-										tierRates: syncTierRatesFromPayTierRows(
-											payTierRows,
-											wsRates,
-										),
-										payTierRows,
-										payPerHour: basePayFromPayTierRows(payTierRows),
-										prIds: shift.prIds.slice(0, shift.quantity),
-									});
-								}}
-							>
-								{t.postJob.resetToWorkspaceRates}
-							</button>
-						</div>
-					</div>
-				</div>
 
 				<PostJobShiftField label={t.postJob.dressCode}>
 					<div className="flex w-full min-w-0 flex-col gap-2">
@@ -2045,32 +2014,144 @@ export function DraftShiftEditor({
 					</div>
 				</PostJobShiftField>
 
+				<PostJobGroupHeader label={t.postJob.groupWhatItPays} />
+
 				<PostJobShiftField
-					label={t.postJob.selectPrs}
-					className="!mb-0 iz-post-job-pr-field"
-					layout="stack"
+					label={t.postJob.prices}
+					info={<PostJobInfoTip text={t.postJob.helpPrices} />}
 				>
-					{maxNamedPrSelect === 0 ? (
-						<p className="text-[11px] text-[var(--iz-muted)]">{prPickerHint}</p>
+					{shift.eventKind === "special" ? (
+						<div className="w-full min-w-0">
+							<p className="mb-2 text-[10px] text-[var(--iz-muted)]">
+								{t.postJob.specialPricesIntro}
+							</p>
+							<ShiftEventPriceEditor
+								menu={eventPriceMenu}
+								onChange={(eventDrinkMenu) => onChange({ eventDrinkMenu })}
+							/>
+							<button
+								type="button"
+								className="iz-chip mt-2 w-full text-[11px]"
+								onClick={() =>
+									onChange({
+										eventDrinkMenu: cloneDrinkMenu(workspaceDrinkMenu),
+									})
+								}
+							>
+								{t.postJob.resetToWorkspacePrices}
+							</button>
+						</div>
 					) : (
-						<DraftPrPicker
-							candidates={prCandidates}
-							emptyHint={prEmptyHint}
-							selected={shift.prIds}
-							onSelectedChange={(prIds) =>
-								onChange({
-									prIds,
-									quantity: Math.max(shift.quantity, prIds.length),
-								})
-							}
-							quantity={shift.quantity}
-							poolSize={subscriptionPlan.prPoolSize}
-							maxSelect={subscriptionPlan.prSelectMax}
-							dailyRemaining={namedPrRemaining}
-							poolHint={prPickerHint}
-						/>
+						// Read-only here BY DESIGN, prices live on the Workspace page. The
+						// old row printed one blended range that matched no Workspace
+						// section and was secretly a link nothing marked as one. Each list
+						// now keeps its own range and its own named, underlined link to
+						// the exact section anchor it edits.
+						<div className="iz-post-job-prices-card">
+							<div className="iz-post-job-prices-card__head">
+								<span className="min-w-0 flex-1 text-sm font-semibold text-[var(--iz-txt)]">
+									{t.postJob.followingWorkspacePrices}
+								</span>
+								<span className="iz-post-job-locked-badge">
+									<Lock className="h-3 w-3" aria-hidden />
+									{t.postJob.fromWorkspace}
+								</span>
+							</div>
+							{(() => {
+								const drinks = workspaceDrinkMenu.filter(
+									(d) => outletDrinkCategory(d) === "drink",
+								);
+								const services = workspaceDrinkMenu.filter(
+									(d) => outletDrinkCategory(d) === "service",
+								);
+								const fmt = (menu: OutletDrinkPrice[]) => {
+									const range = drinkMenuPriceRange(menu);
+									return `RM ${range.min}–${range.max}`;
+								};
+								return (
+									<p className="iz-post-job-prices-card__ranges">
+										{drinks.length > 0 && (
+											<span>
+												<span className="iz-post-job-prices-card__range-label">
+													{t.postJob.drinksWord}
+												</span>
+												{fmt(drinks)}
+											</span>
+										)}
+										{services.length > 0 && (
+											<span>
+												<span className="iz-post-job-prices-card__range-label">
+													{t.postJob.servicesWord}
+												</span>
+												{fmt(services)}
+											</span>
+										)}
+									</p>
+								);
+							})()}
+							<div className="iz-post-job-ws-links">
+								<span>{t.postJob.changeInWorkspace}</span>
+								<Link
+									to="/outlet/workspace"
+									hash={OUTLET_DRINKS_PRICE_SECTION_ID}
+									className="iz-post-job-ws-link"
+								>
+									{t.postJob.linkDrinksPrice}
+									<ArrowUpRight className="h-3 w-3" aria-hidden />
+								</Link>
+								<Link
+									to="/outlet/workspace"
+									hash={OUTLET_TIER_RATES_SECTION_ID}
+									className="iz-post-job-ws-link"
+								>
+									{t.postJob.linkTierRates}
+									<ArrowUpRight className="h-3 w-3" aria-hidden />
+								</Link>
+							</div>
+						</div>
 					)}
 				</PostJobShiftField>
+
+				<div className="iz-post-job-tier-section border-t border-[var(--iz-line)] pt-4">
+					<div className="flex items-start justify-between gap-2">
+						<PostJobTierSectionHeader />
+						<PostJobInfoTip text={t.postJob.helpTierGrid} />
+					</div>
+					<div className="mt-3">
+						<PostJobTierRatesEditor
+							rows={shift.payTierRows}
+							workspaceTierRates={outletWorkspace.tierRates}
+							commissionOnlyRates={outletWorkspace.commissionOnlyRates}
+							maxPrTotal={shift.quantity}
+							onChange={updatePayTierRows}
+						/>
+						<div className="iz-post-job-tier-footer">
+							<button
+								type="button"
+								className="iz-chip col-span-2 w-full text-[11px]"
+								onClick={() => {
+									const wsRates = draftTierRatesFromWorkspace(outletWorkspace);
+									const payTierRows = defaultComposerPayTierRows(
+										wsRates,
+										Math.max(1, shift.quantity || 6),
+										outletWorkspace.commissionOnlyRates,
+									);
+									onChange({
+										tierRates: syncTierRatesFromPayTierRows(
+											payTierRows,
+											wsRates,
+										),
+										payTierRows,
+										payPerHour: basePayFromPayTierRows(payTierRows),
+										prIds: shift.prIds.slice(0, shift.quantity),
+									});
+								}}
+							>
+								{t.postJob.resetToWorkspaceRates}
+							</button>
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	);

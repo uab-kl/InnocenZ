@@ -20,6 +20,7 @@ import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
 import type { PrWeekShift } from '../lib/api';
 import { resolveProofPhotoUri } from '../lib/proof-photo';
+import { ImageLightbox, ZoomHint } from './ImageLightbox';
 import type { ReceiptClaimState } from '../lib/receipt-review';
 
 const KIND_LABEL: Record<CellEvidence['kind'], string> = {
@@ -628,6 +629,7 @@ export function CellEvidenceSheet({
                               {/* `src` may be an R2 key — resolve for display only;
                                   keys, dedupe and zoom state stay on the raw string. */}
                               <Image source={{ uri: resolveProofPhotoUri(src) }} style={s.thumb} />
+                              <ZoomHint size={18} />
                             </Pressable>
                           ))}
                         </View>
@@ -673,16 +675,10 @@ export function CellEvidenceSheet({
             * photo would defeat the comparison. Tap anywhere to dismiss.
             */}
           {zoom && (
-            <Modal visible transparent animationType="fade" onRequestClose={() => setZoom(null)}>
-              <Pressable style={s.zoomBackdrop} onPress={() => setZoom(null)}>
-                <Image
-                  source={{ uri: resolveProofPhotoUri(zoom) }}
-                  style={s.zoomImage}
-                  resizeMode="contain"
-                />
-                <Text style={s.zoomHint}>Tap anywhere to close</Text>
-              </Pressable>
-            </Modal>
+            <ImageLightbox
+              uri={resolveProofPhotoUri(zoom)}
+              onClose={() => setZoom(null)}
+            />
           )}
         </View>
       </View>
@@ -898,20 +894,6 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line2,
     backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  zoomBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(6,3,12,0.94)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  zoomImage: { width: '100%', height: '82%' },
-  zoomHint: {
-    marginTop: 14,
-    fontFamily: F.manrope,
-    fontSize: 12,
-    color: C.muted2,
   },
   footer: { marginTop: 12, gap: 8 },
   /** Gold = act — the same accent the dispute modal's Submit wears. */

@@ -52,6 +52,8 @@ export type AgencyOutletAvailableShift = {
 	languages?: string;
 	destination?: ShiftDestination;
 	eventKind?: ShiftEventKind;
+	/** Event template cover (R2 key), joined onto the shift server-side. */
+	templateCoverImage?: string;
 	specialEventType?: string;
 	/** Custom label when specialEventType is "other" */
 	customSpecialEventName?: string;
@@ -341,11 +343,11 @@ function postedShiftBriefing(
 function postedShiftEventFields(
 	shift: Pick<
 		ShiftRequest,
-		"eventKind" | "specialEventType" | "customSpecialEventName"
+		"eventKind" | "specialEventType" | "customSpecialEventName" | "templateCoverImage"
 	>,
 ): Pick<
 	AgencyOutletAvailableShift,
-	"eventKind" | "specialEventType" | "customSpecialEventName" | "vip"
+	"eventKind" | "specialEventType" | "customSpecialEventName" | "vip" | "templateCoverImage"
 > {
 	const eventKind = shift.eventKind ?? "normal";
 	const specialEventType =
@@ -358,6 +360,7 @@ function postedShiftEventFields(
 		eventKind,
 		specialEventType,
 		customSpecialEventName,
+		templateCoverImage: shift.templateCoverImage,
 		vip: eventKind === "special" && specialEventType === "vip",
 	};
 }

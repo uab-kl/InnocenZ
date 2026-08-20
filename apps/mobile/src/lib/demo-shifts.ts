@@ -92,6 +92,8 @@ export type DemoShift = {
   payout: number;
   /** Served by the backend static /img route */
   logoPath: string | null;
+  /** The event picture (template cover R2 key); null on blank/old shifts. */
+  eventPhotoPath?: string | null;
   status: 'scheduled' | 'pending' | 'on-duty' | 'complete';
 };
 
@@ -162,6 +164,12 @@ export type TimetableEntry = {
   canCancel: boolean;
   /** MC/Leave request allowed — same window as Cancel, minus an already-pending request. */
   canLeave: boolean;
+  /** Event identity — the timetable card renders the night's picture + venue
+      mark like the Today section (owner, 20 Aug 2026). */
+  event?: string | null;
+  eventKind?: string | null;
+  logoPath?: string | null;
+  eventPhotoPath?: string | null;
 };
 
 /**
@@ -300,6 +308,12 @@ type ScheduleShiftLike = {
   checkOutAt?: string | null;
   status?: string | null;
   agencyName?: string | null;
+  /** Event identity for the timetable card (owner: the schedule card shows
+      the night's picture too, designed like the Today section). */
+  event?: string | null;
+  eventKind?: string | null;
+  logoPath?: string | null;
+  eventPhotoPath?: string | null;
 };
 
 /** Build Sun→+21d schedule window from real assignments (fallback: demo UPCOMING_SHIFTS). */
@@ -380,11 +394,16 @@ export function buildUpcomingWeekTimetable(
       id: s.id,
       dateIso: ymdToIso(...s.date),
       outlet: s.outlet,
+      address: null,
       time: s.time,
       status: s.status === 'pending' ? 'assigned' : 'confirmed',
       checkInAt: s.status === 'on-duty' || s.status === 'complete' ? '1' : null,
       checkOutAt: s.status === 'complete' ? '1' : null,
       agencyName: 'Atlas Agency',
+      event: null,
+      eventKind: null,
+      logoPath: null,
+      eventPhotoPath: null,
     }));
   return source
     .filter((s) => s.dateIso >= fromIso && s.dateIso <= toIso)
@@ -402,6 +421,10 @@ export function buildUpcomingWeekTimetable(
         ...stamp,
         sourceLabel: s.agencyName?.trim() || 'Agency',
         sourceDetail: 'Agency assigned this shift on your roster',
+        event: s.event ?? null,
+        eventKind: s.eventKind ?? null,
+        logoPath: s.logoPath ?? null,
+        eventPhotoPath: s.eventPhotoPath ?? null,
       };
     });
 }

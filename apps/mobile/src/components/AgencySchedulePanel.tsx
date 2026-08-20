@@ -16,7 +16,8 @@ import {
   MapPin,
   Shield,
 } from './icons';
-import { Pill } from './ui';
+import { Avatar, Pill } from './ui';
+import { ImageLightbox, ZoomHint } from './ImageLightbox';
 import { PhoneSheet } from './PhoneSheet';
 import {
   DEFAULT_CANCELLATION_BANDS,
@@ -43,6 +44,7 @@ import { useActiveShift } from '../lib/active-shift';
 import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useSession } from '../lib/session';
 import {
+  assetUrl,
   blockMyDay,
   cancelMyShiftAssignment,
   fetchMyUnavailableDays,
@@ -301,6 +303,12 @@ export function AgencySchedulePanel() {
           checkOutAt: a.checkOutAt,
           status: a.status,
           agencyName,
+          // The night's identity — the timetable card renders it like the
+          // Today section (picture + venue mark), owner's ask 20 Aug 2026.
+          event: a.eventName ?? null,
+          eventKind: a.eventKind ?? null,
+          logoPath: a.outletLogo ?? null,
+          eventPhotoPath: a.templateCoverImage ?? null,
         })),
     [assignments, agencyName],
   );
@@ -942,37 +950,63 @@ function TimetableRow({
 }) {
   const [y, m, d] = isoToYmd(entry.dateIso);
   const dateFriendly = `${DAY_NAMES[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, '0')} ${MONTH_NAMES[m - 1]} ${y}`;
+  // No collapse here (owner, 20 Aug 2026): Cancel and MC/Leave are the card's
+  // point — money actions a PR must never have to discover behind a tap.
+  const [zoomUri, setZoomUri] = useState<string | null>(null);
+  const heroUri = assetUrl(entry.eventPhotoPath);
+  const logoUri = assetUrl(entry.logoPath);
+  const isSpecial = (entry.eventKind ?? '').toLowerCase() === 'special';
 
   return (
     <View style={styles.ttRow}>
-      <View style={styles.agencyBadge}>
-        <Shield size={12} color={C.violetL} />
-        <Text style={styles.agencyBadgeText}>AGENCY · {entry.sourceLabel.toUpperCase()}</Text>
+      <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
+      {/* COMPACT by design (owner: "many shift will be very messy — minimise").
+          One thumbnail-led row per shift, everything visible, no fold. */}
+      <View style={styles.ttHeadRow}>
+        <View style={styles.agencyBadge}>
+          <Shield size={12} color={C.violetL} />
+          <Text style={styles.agencyBadgeText}>AGENCY · {entry.sourceLabel.toUpperCase()}</Text>
+        </View>
+        <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
       </View>
-      <View style={styles.ttTop}>
-        <View style={styles.ttTitleRow}>
-          <CalendarDays size={14} color={C.muted2} />
-          <Text style={styles.ttOutlet}>{entry.outlet}</Text>
-          <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
+      <View style={styles.ttMainRow}>
+        {heroUri ? (
+          <Pressable style={styles.ttThumbWrap} onPress={() => setZoomUri(heroUri)}>
+            <Image source={{ uri: heroUri }} style={styles.ttThumb} resizeMode="cover" />
+            <ZoomHint size={14} style={{ right: 3, bottom: 3 }} />
+          </Pressable>
+        ) : logoUri ? (
+          <Pressable style={styles.ttThumbWrap} onPress={() => setZoomUri(logoUri)}>
+            <Avatar
+              size={64}
+              radius={12}
+              photoPath={entry.logoPath}
+              initial={entry.outlet.trim()[0]?.toUpperCase()}
+              logo
+            />
+            <ZoomHint size={14} style={{ right: 3, bottom: 3 }} />
+          </Pressable>
+        ) : null}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.ttOutlet} numberOfLines={1}>
+            {entry.outlet}
+          </Text>
+          {entry.event ? (
+            <Text style={styles.ttEventLine} numberOfLines={1}>
+              {entry.event} · {isSpecial ? 'Special event' : 'Normal shift'}
+            </Text>
+          ) : null}
+          <Text style={styles.ttWhenLine} numberOfLines={1}>
+            {dateFriendly} · {entry.time}
+          </Text>
         </View>
       </View>
-      <View style={styles.ttDateTimeRow}>
-        <View style={styles.ttField}>
-          <Text style={styles.ttFieldLabel}>DATE</Text>
-          <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
-        </View>
-        <View style={styles.ttField}>
-          <Text style={styles.ttFieldLabel}>TIME</Text>
-          <Text style={styles.ttFieldValue}>{entry.time}</Text>
-        </View>
-      </View>
+      {/* The WHOLE address (owner: "dont hide the address") — its own
+          full-width line so the thumbnail never squeezes it. */}
       {entry.address ? (
-        <View style={styles.ttAddrBlock}>
-          <Text style={styles.ttFieldLabel}>ADDRESS</Text>
-          <View style={styles.ttAddrRow}>
-            <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
-            <Text style={styles.ttAddrValue}>{entry.address}</Text>
-          </View>
+        <View style={[styles.ttAddrRow, { marginTop: 8 }]}>
+          <MapPin size={11} color={C.prMuted2} strokeWidth={2} />
+          <Text style={styles.ttAddrCompact}>{entry.address}</Text>
         </View>
       ) : null}
       {leaveRejected ? (
@@ -1248,6 +1282,46 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     backgroundColor: 'rgba(255,255,255,0.02)',
     padding: 12,
+  },
+  /* Compact card: badge+status row, then a thumbnail-led main row. */
+  ttHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  ttMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  ttThumbWrap: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  ttThumb: { width: 76, height: 76 },
+  ttEventLine: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.muted,
+  },
+  ttWhenLine: {
+    marginTop: 2,
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  ttAddrCompact: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted2,
   },
   agencyBadge: {
     alignSelf: 'flex-start',

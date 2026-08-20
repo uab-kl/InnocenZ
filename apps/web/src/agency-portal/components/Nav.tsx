@@ -152,13 +152,20 @@ export function PortalBackButton({
 
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
 	const navigate = useNavigate();
 
 	const { pathname } = useLocation();
 
 	const resolvedBackTo = backTo ?? getAutoBackTo(pathname);
 
-	const resolvedLabel = backLabel ?? getAutoBackLabel(pathname);
+	// OWNER'S RULE (20 Aug): every back control in every portal is named
+	// "Return" — one word, every page. The cancel variant keeps its own
+	// label because cancelling an edit is not a navigation back.
+	const isCancel = className?.includes("--cancel") ?? false;
+	const resolvedLabel = isCancel
+		? (backLabel ?? getAutoBackLabel(pathname))
+		: t.postJob.returnBack;
 
 	const showBack = onBack != null || resolvedBackTo != null;
 
@@ -175,6 +182,15 @@ export function PortalBackButton({
 
 		if (resolvedBackTo === WELCOME_PATH) {
 			goToWelcome();
+
+			return;
+		}
+
+		// OWNER'S RULE (20 Aug): Return goes to the page the user was ACTUALLY
+		// on before — real history — never a hardcoded "home". The fixed route
+		// survives only as the fallback for a deep link with no history.
+		if (window.history.length > 1) {
+			window.history.back();
 
 			return;
 		}

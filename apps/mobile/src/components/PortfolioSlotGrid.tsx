@@ -20,7 +20,7 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
-import { ImagePlus, XIcon } from './icons';
+import { ImagePlus, XIcon, ZoomIn } from './icons';
 import { lockPhoneScroll, unlockPhoneScroll, scrollPhoneBy, autoScrollDirectionForFinger, refreshPhoneScrollWindow } from '../lib/phone-scroll';
 
 type Props = {
@@ -33,6 +33,12 @@ type Props = {
   onPick: (slot: number) => void;
   onRemove: (slot: number) => void;
   onReorder: (next: (string | null)[]) => void;
+  /**
+   * Full-size view of a filled slot's photo. Own magnifier chip per tile —
+   * NOT the tile tap, which already means pick-to-swap; the two must never
+   * fight (owner, 20 Aug 2026).
+   */
+  onView?: (uri: string) => void;
 };
 
 type DragState = {
@@ -87,6 +93,7 @@ export function PortfolioSlotGrid({
   onPick,
   onRemove,
   onReorder,
+  onView,
 }: Props) {
   const gridRef = useRef<View>(null);
   const gridOrigin = useRef<GridOrigin>({ x: 0, y: 0 });
@@ -566,6 +573,25 @@ export function PortfolioSlotGrid({
           );
         })}
 
+        {onView && !drag && picked == null
+          ? Array.from({ length: slotCount }, (_, i) => {
+              const path = slots[i];
+              const uri = previewUris?.[i] ?? (path ? resolveUri(path) : null);
+              if (!uri || tileW <= 0) return null;
+              const L = cellRect(i, tileW, tileH);
+              return (
+                <Pressable
+                  key={`zoom-${i}`}
+                  style={[styles.viewBtn, { left: L.x + 7, top: L.y + 7 }]}
+                  hitSlop={8}
+                  onPress={() => onView(uri)}
+                >
+                  <ZoomIn size={12} color="rgba(255,255,255,0.9)" strokeWidth={2.2} />
+                </Pressable>
+              );
+            })
+          : null}
+
         {canEdit && !drag && picked == null
           ? Array.from({ length: slotCount }, (_, i) => {
               const path = slots[i];
@@ -709,6 +735,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   remove: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  /** Magnifier chip (top-left) — same shape as the ✕, other corner. */
+  viewBtn: {
     position: 'absolute',
     width: 24,
     height: 24,

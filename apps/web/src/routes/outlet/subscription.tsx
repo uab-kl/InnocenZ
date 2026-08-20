@@ -14,6 +14,7 @@ import {
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useOutletCollections } from "@agency-portal/hooks/use-outlet-collections";
+import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
 import { useOutletSubscription } from "@agency-portal/hooks/use-outlet-subscription";
 import {
 	COLLECTION_AGING_PILL,
@@ -487,13 +488,19 @@ function OutletSubscriptionPage() {
 	};
 
 	const todayIso = isoKeyFromDate(new Date());
+	// THE SAME LIST POST JOB COUNTS. On a real session the demo `shifts` store
+	// is empty, so counting it here showed "0 / 50 requested PRs today" while
+	// Post Job — reading the real bookings — said 49 named slots were left. One
+	// outlet, two answers (owner, 20 Aug 2026). Count the real bookings.
+	const { backed: postJobBacked, bookedShifts } = useOutletPostJob();
+	const capShifts = postJobBacked ? bookedShifts : shifts;
 	const namedPrsToday = useMemo(
-		() => outletNamedPrCountForDate(shifts, outletName, todayIso),
-		[shifts, outletName, todayIso],
+		() => outletNamedPrCountForDate(capShifts, outletName, todayIso),
+		[capShifts, outletName, todayIso],
 	);
 	const peakDailyNamedPrs = useMemo(
-		() => maxDailyOutletNamedPrCount(shifts, outletName),
-		[shifts, outletName],
+		() => maxDailyOutletNamedPrCount(capShifts, outletName),
+		[capShifts, outletName],
 	);
 
 	const selectPlan = (planId: OutletSubscriptionPlanId) => {

@@ -389,6 +389,8 @@ export function shiftRequestFromBackendShift(input: {
 		languages: shift.languages ?? "",
 		event: shift.eventName ?? "Shift",
 		eventKind: shift.eventKind,
+		templateId: shift.templateId ?? undefined,
+		templateCoverImage: shift.templateCoverImage ?? undefined,
 		preferredRating: shift.preferredRating ?? 0,
 		estimatedCost: num(shift.estimatedCost),
 		liveSales: num(shift.liveSales),
@@ -420,6 +422,8 @@ export interface OutletShiftPostItem {
 	languages: string;
 	event: string;
 	eventKind?: ShiftEventKind;
+	/** Event template this shift was posted from (0128). */
+	templateId?: string;
 	preferredRating: number;
 	estimatedCost: number;
 	payPerHour: number;
@@ -550,6 +554,7 @@ export function createShiftInputFromPost(
 		slot: item.shift.trim() || undefined,
 		eventName: item.event.trim() || undefined,
 		eventKind: item.eventKind,
+		templateId: item.templateId,
 		languages: item.languages.trim() || undefined,
 		quantity: nonNegative(Math.round(item.quantity)),
 		preferredRating: clampRating(item.preferredRating),

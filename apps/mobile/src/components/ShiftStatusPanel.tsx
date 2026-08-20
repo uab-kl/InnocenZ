@@ -12,6 +12,7 @@ import type { PrReceiptLine } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
 import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { isReceiptLocked } from '../lib/receipt-review';
+import { ImageLightbox, ZoomHint } from './ImageLightbox';
 import {
   Camera,
   Check,
@@ -377,6 +378,7 @@ export function ShiftStatusPanel({
                     <View key={`${it.lineId}-${it.idx}`} style={styles.galleryItem}>
                       <Pressable onPress={() => setLightbox(uri)}>
                         <Image source={{ uri }} style={styles.galleryThumb} />
+                        <ZoomHint size={18} />
                       </Pressable>
                       {canEditPhotos && (
                         <Pressable
@@ -406,18 +408,7 @@ export function ShiftStatusPanel({
         )}
       </View>
 
-      <Modal
-        visible={lightbox != null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLightbox(null)}
-      >
-        <Pressable style={styles.lightboxBackdrop} onPress={() => setLightbox(null)}>
-          {lightbox && (
-            <Image source={{ uri: lightbox }} style={styles.lightboxImg} resizeMode="contain" />
-          )}
-        </Pressable>
-      </Modal>
+      <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
     </View>
   );
 }
@@ -861,12 +852,4 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   galleryAddText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
-  lightboxBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(6,3,12,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  lightboxImg: { width: '100%', height: '80%' },
 });

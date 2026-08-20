@@ -1,14 +1,14 @@
 import { JobPostingMicroLabel } from "@agency-portal/components/special-service/job-posting-ui";
 import { cn } from "@agency-portal/lib/utils";
 import { Calendar, ChevronRight, Info, Lock, Pencil, Plus } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
 export function PostJobFormLegend() {
 	const { t } = usePortalLocale();
 	return (
-		<details className="iz-post-job-legend">
+		<details className="iz-post-job-legend" open>
 			<summary className="iz-post-job-legend__title cursor-pointer select-none">
 				{t.postJob.howToReadThisForm}
 			</summary>
@@ -30,13 +30,60 @@ export function PostJobFormLegend() {
 	);
 }
 
+/**
+ * Touch-safe help. The old guidance lived in `title=` tooltips, which only
+ * exist for a mouse — on the phones outlets actually use, every one of those
+ * hints was invisible. An (i) button with a tap-to-toggle panel works on
+ * touch, mouse and screen readers alike.
+ */
+export function PostJobInfoTip({ text }: { text: string }) {
+	const { t } = usePortalLocale();
+	const [open, setOpen] = useState(false);
+	return (
+		<span className="iz-post-job-info-tip">
+			<button
+				type="button"
+				className="iz-post-job-info-tip__btn"
+				aria-expanded={open}
+				aria-label={t.postJob.infoTipLabel}
+				onClick={(e) => {
+					// The whole field is wrapped in a <label>; an unhandled click here
+					// would focus/activate the field control instead of the tip.
+					e.preventDefault();
+					e.stopPropagation();
+					setOpen((v) => !v);
+				}}
+			>
+				<Info className="h-3 w-3" aria-hidden />
+			</button>
+			{open && <span className="iz-post-job-info-tip__panel">{text}</span>}
+		</span>
+	);
+}
+
+/**
+ * One of the three labelled blocks the form is grouped into — The night /
+ * Who works it / What it pays. A heading, not a card: the fields under it
+ * stay exactly the flat siblings they always were.
+ */
+export function PostJobGroupHeader({ label }: { label: string }) {
+	return (
+		<p className="iz-post-job-group-header" aria-hidden={false}>
+			{label}
+		</p>
+	);
+}
+
 export function PostJobShiftField({
 	label,
+	info,
 	children,
 	className,
 	layout = "row",
 }: {
 	label: string;
+	/** Optional touch-safe help — rendered as an (i) beside the label. */
+	info?: ReactNode;
 	children: ReactNode;
 	className?: string;
 	layout?: "row" | "stack";
@@ -53,6 +100,7 @@ export function PostJobShiftField({
 		>
 			<JobPostingMicroLabel className="iz-post-job-field__label">
 				{label}
+				{info}
 			</JobPostingMicroLabel>
 			<div className="iz-post-job-field__control">{children}</div>
 		</label>
@@ -149,7 +197,7 @@ export function PostJobTierSectionHeader() {
 					{t.postJob.payByPrTier}
 				</p>
 				<p className="mt-0.5 text-xs leading-snug text-[var(--iz-muted2)]">
-					{t.postJob.payByPrTierHint}· set PR count per tier
+					{t.postJob.payByPrTierHint}
 				</p>
 			</div>
 		</div>
@@ -287,7 +335,6 @@ export function PostJobActionPanel({
 					{t.postJob.greenWord}
 				</span>
 				{t.postJob.greenExplains}
-				the job and notifies your linked agencies instantly.
 			</p>
 		</div>
 	);
