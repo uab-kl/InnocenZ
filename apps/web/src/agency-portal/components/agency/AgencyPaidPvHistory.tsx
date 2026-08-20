@@ -1,4 +1,5 @@
 import { AgencyPaidPvDetail } from "@agency-portal/components/agency/AgencyPaidPvDetail";
+import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
 import {
 	HistDateRangePickerField,
 	HistSelectField,
@@ -129,7 +130,9 @@ export function AgencyPaidPvHistory({
 		<>
 			<p className="iz-tiny iz-muted mt-1">{t.history.paidPvIntro}</p>
 
-			<p className="iz-txn-filter-heading mt-4">{t.history.filterBy}</p>
+			<p className="iz-txn-filter-heading mt-4">
+				<TitleWithIcon>{t.history.filterBy}</TitleWithIcon>
+			</p>
 			<div className="iz-txn-filters">
 				<HistSelectField
 					label={t.history.colOutlet}

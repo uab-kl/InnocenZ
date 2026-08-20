@@ -13768,9 +13768,20 @@ button.iz-pr-offer-row:hover {
 	display: grid;
 	/* Sidebar widened (and the detail pane narrowed to match — it is 1fr, so it
      gives back exactly what this takes) so the three queue tabs sit on one row
-     without "Cancel Agency (0)" wrapping. Floor of 366px is what the widest
-     label needs at a third of the column. */
-	grid-template-columns: minmax(366px, 396px) minmax(0, 1fr);
+     without "Cancel Agency (0)" wrapping, and the PR cards' chip rows fit on
+     two lines rather than three. */
+	grid-template-columns: minmax(400px, 435px) minmax(0, 1fr);
+}
+
+/*
+ * Collapsing the nav gives the freed width to the LEFT panel, not the detail
+ * pane. The rail frees 168px (240 -> 72); the detail pane is `1fr` and would
+ * otherwise swallow all of it, which is backwards — the reason to collapse the
+ * nav here is to see more of the queue you are working through, and the detail
+ * pane was already the roomier of the two.
+ */
+.iz-portal[data-collapsed="true"] .iz-approvals-layout {
+	grid-template-columns: minmax(400px, 603px) minmax(0, 1fr);
 	gap: 0;
 	min-height: calc(100dvh - var(--iz-portal-header-h, 56px) - 24px);
 	border: 1px solid var(--iz-line);
@@ -13937,9 +13948,9 @@ button.iz-pr-offer-row:hover {
 .iz-approvals-list-item {
 	display: flex;
 	align-items: flex-start;
-	gap: 10px;
+	gap: 12px;
 	width: 100%;
-	padding: 10px;
+	padding: 13px 12px;
 	border-radius: 12px;
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
@@ -14032,10 +14043,16 @@ button.iz-pr-offer-row:hover {
 	color: #fff;
 }
 
-.iz-approvals-avatar.sm {
-	width: 34px;
-	height: 34px;
+.iz-approvals-list-item .name {
 	font-size: 14px;
+}
+.iz-approvals-list-item .sub {
+	font-size: 12px;
+}
+.iz-approvals-avatar.sm {
+	width: 46px;
+	height: 46px;
+	font-size: 17px;
 }
 
 .iz-approvals-avatar.md {
@@ -14218,6 +14235,11 @@ button.iz-pr-offer-row:hover {
  * sidebar, so these are scoped under `.iz-portal-main` to outrank it rather
  * than fought with !important.
  */
+.iz-portal-main .iz-approvals-verify-badge {
+	padding: 4px 9px;
+	font-size: 11.5px;
+	line-height: 1.4;
+}
 .iz-portal-main .iz-approvals-subfilter .iz-chip {
 	padding: 5px 11px;
 	border-radius: 999px;
