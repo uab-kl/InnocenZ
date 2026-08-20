@@ -1,8 +1,9 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
+import { useAgencyPenaltyProposals } from "@agency-portal/hooks/use-agency-penalty-proposals";
 import { useAgencyUncharged } from "@agency-portal/hooks/use-agency-uncharged";
 import { useStore } from "@agency-portal/lib/store";
 import { AlertTriangle, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /**
@@ -24,11 +25,22 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
  */
 export function UnchargedFeesPanel({
 	canMark,
+	canRecord = true,
 	weekStart,
 	weekEnd,
 	weekLabel,
 }: {
 	canMark: boolean;
+	/**
+	 * May this week still take NEW penalties?
+	 *
+	 * False on the Payment Week tab. That tab holds vouchers already signed and
+	 * queued to pay, and a signed voucher cannot take another line — the panel
+	 * says so itself two paragraphs down. Offering "record penalties" there
+	 * invited a press whose only possible outcome was a charge stranded as
+	 * outstanding, waiting for a week that had already gone.
+	 */
+	canRecord?: boolean;
 	weekStart?: string;
 	weekEnd?: string;
 	/** Human label for the selected week tab, e.g. "02 Aug – 08 Aug". */
@@ -50,6 +62,29 @@ export function UnchargedFeesPanel({
 		markCharged,
 		sealWeek,
 	} = useAgencyUncharged();
+	/*
+	 * Who is in breach, computed server-side and read-only.
+	 *
+	 * The list below it holds SEALED charges — rows that exist only after someone
+	 * presses "record". So until that press, a week with real breaches in it read
+	 * "nothing outstanding", and the only way to find out otherwise was to take
+	 * the one action that also creates the debt. Looking should not require
+	 * committing: proposals are a GET, so they are simply shown.
+	 */
+	const proposalWeek = useMemo(
+		() => (weekStart && weekEnd ? { weekStart, weekEnd } : undefined),
+		[weekStart, weekEnd],
+	);
+	const {
+		proposals,
+		isLoading: proposalsLoading,
+		isError: proposalsError,
+	} = useAgencyPenaltyProposals(proposalWeek);
+	/* Only the ones not already recorded — a sealed proposal is a charge, and it
+	   is already in the list below under its own heading. */
+	const pending = proposals.filter((p) => !p.sealed);
+	const pendingRm = pending.reduce((n, p) => n + Number(p.fineRm ?? 0), 0);
+
 	const toast = useStore((s) => s.toast);
 	const [open, setOpen] = useState(true);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -69,7 +104,7 @@ export function UnchargedFeesPanel({
 		);
 	}
 	const sealButton =
-		canMark && weekStart && weekEnd ? (
+		canRecord && canMark && weekStart && weekEnd ? (
 			<button
 				type="button"
 				disabled={isSealing}
@@ -91,6 +126,45 @@ export function UnchargedFeesPanel({
 					? t.payroll.recording
 					: `${t.payroll.recordPenaltiesFor} ${weekLabel ?? t.payroll.thisWeekFallback}`}
 			</button>
+		) : null;
+
+	/*
+	 * Breaches the backend can already see, shown without asking for anything.
+	 *
+	 * Read-only on purpose: these are not debts yet. "Record" is what turns them
+	 * into penalty_charge rows, and that stays a deliberate press — but deciding
+	 * whether to press it requires seeing what it would charge, which is exactly
+	 * what was missing.
+	 */
+	const pendingBlock =
+		pending.length > 0 ? (
+			<div className="mt-2 flex flex-col gap-1.5">
+				<b className="iz-tiny uppercase tracking-wide iz-muted2">
+					{t.payroll.notYetRecorded} · {pending.length} · RM{" "}
+					{pendingRm.toFixed(2)}
+				</b>
+				<p className="iz-tiny iz-muted2">
+					{canRecord
+						? t.payroll.notYetRecordedHint
+						: t.payroll.notYetRecordedClosedHint}
+				</p>
+				{pending.map((p) => (
+					<div
+						key={`${p.prId}-${p.ruleType}-${p.weekStart}`}
+						className="rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2"
+					>
+						<span className="flex items-baseline justify-between gap-2">
+							<b className="iz-sm text-[var(--iz-txt)]">{p.prName ?? "PR"}</b>
+							<b className="iz-sm shrink-0 tabular-nums text-[var(--iz-gold-l)]">
+								RM {Number(p.fineRm ?? 0).toFixed(2)}
+							</b>
+						</span>
+						<span className="iz-tiny iz-muted2 block">
+							{p.ruleType.replace(/_/g, " ")} · {p.detail}
+						</span>
+					</div>
+				))}
+			</div>
 		) : null;
 
 	/**
@@ -125,6 +199,9 @@ export function UnchargedFeesPanel({
 
 	// Nothing outstanding is a real, good answer. Say it rather than rendering an
 	// empty card that reads as broken.
+	/* Nothing BILLED is not the same as nothing HAPPENING. This branch used to
+	   say "nothing outstanding" and stop, which is what made an unrecorded week
+	   indistinguishable from a clean one. */
 	if (count === 0) {
 		return (
 			<IzCard flat className="border-[var(--iz-line2)]">
@@ -133,10 +210,22 @@ export function UnchargedFeesPanel({
 						{t.payroll.unchargedPenaltiesFees}
 					</b>
 					<span className="iz-tiny iz-muted2">
-						· {t.payroll.nothingOutstanding}
+						·{" "}
+						{proposalsLoading
+							? t.payroll.checkingPenalties
+							: pending.length > 0
+								? t.payroll.nothingBilledYet
+								: t.payroll.nothingOutstanding}
 					</span>
 					<span className="ml-auto">{sealButton}</span>
 				</div>
+				{proposalsError ? (
+					<p className="iz-tiny iz-muted2 mt-1">
+						{t.payroll.couldNotLoadPenalties}
+					</p>
+				) : (
+					pendingBlock
+				)}
 			</IzCard>
 		);
 	}
@@ -200,6 +289,7 @@ export function UnchargedFeesPanel({
 						has to wait for another week's voucher.
 					</p>
 					{sealButton && <div className="mt-2">{sealButton}</div>}
+					{pendingBlock}
 
 					{weekPenalties.length > 0 && (
 						<div className="mt-2 flex flex-col gap-1.5">

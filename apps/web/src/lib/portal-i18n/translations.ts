@@ -453,6 +453,16 @@ const en = {
 		// Uncharged penalties & fees panel
 		unchargedPenaltiesFees: "Uncharged penalties & fees",
 		nothingOutstanding: "nothing outstanding",
+		/* "nothing outstanding" means nothing BILLED. Said alone it made a week
+		   with unrecorded breaches read exactly like a clean one. */
+		nothingBilledYet: "nothing billed yet",
+		checkingPenalties: "checking penalties…",
+		notYetRecorded: "Not yet recorded",
+		notYetRecordedHint:
+			"Breaches this week has already earned. Recording them turns each into a charge you can add to a voucher.",
+		notYetRecordedClosedHint:
+			"Shown for reference. This week’s vouchers are signed, so these cannot be charged here — they stay outstanding for a later week.",
+		couldNotLoadPenalties: "Could not load this week’s penalties.",
 		/** "Record penalties for last week" — the week is appended at the call site. */
 		recordPenaltiesFor: "Record penalties for",
 		thisWeekFallback: "this week",
@@ -3159,6 +3169,13 @@ const zh: PortalTranslations = {
 		overtime: "加班",
 		unchargedPenaltiesFees: "未入账的罚款与费用",
 		nothingOutstanding: "暂无未处理项",
+		nothingBilledYet: "尚未入账",
+		checkingPenalties: "正在检查罚款…",
+		notYetRecorded: "尚未登记",
+		notYetRecordedHint: "本周已产生的违规。登记后即可作为扣款加入付款凭单。",
+		notYetRecordedClosedHint:
+			"仅供参考。本周凭单已签署，因此无法在此入账 —— 它们将保留至以后的周次。",
+		couldNotLoadPenalties: "无法加载本周的罚款。",
 		recordPenaltiesFor: "登记罚款：",
 		thisWeekFallback: "本周",
 		thisWeeksPenalties: "本周罚款",

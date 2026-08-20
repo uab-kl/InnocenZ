@@ -885,6 +885,11 @@ function AgencyPV() {
 				    stays owner-only — that is policy, this is bookkeeping. */}
 				<UnchargedFeesPanel
 					canMark={can("raisePv")}
+					/* No NEW penalties on the payment week. Those vouchers are signed
+					   and queued to pay, and a signed voucher cannot take another line —
+					   so the button could only ever have produced a charge stranded as
+					   outstanding. The list still shows, read-only. */
+					canRecord={payrollWeekTab !== "last_last_week"}
 					weekLabel={
 						payrollWeekTab === "this_week"
 							? t.payroll.thisWeekLower
