@@ -92,12 +92,12 @@ export function AgencyOutletDetailView({
 			 */}
 			<button
 				type="button"
-				className="iz-topbar-back iz-outlet-detail-back"
+				className="iz-topbar-back iz-topbar-back--lg iz-outlet-detail-back"
 				onClick={onBack}
 			>
-				<ArrowLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} />
+				<ArrowLeft className="h-4 w-4 shrink-0" strokeWidth={2.2} />
 				<span className="iz-topbar-back-label">
-					{t.outletDetail.backToOutlets}
+					{t.outletDetail.returnLabel}
 				</span>
 			</button>
 

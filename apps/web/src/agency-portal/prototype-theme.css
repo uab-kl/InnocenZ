@@ -10151,6 +10151,23 @@ button.iz-pr-offer-row:hover {
 .iz-topbar-back-label {
 	white-space: nowrap;
 }
+
+/*
+ * The roomier back pill.
+ *
+ * Size ONLY — no colour. `--cancel` below is 42px too, but it also paints
+ * itself gold because it means "cancel editing", so borrowing it would have
+ * dressed a plain back button as a destructive one. (It also has no callers in
+ * any .tsx right now.)
+ */
+.iz-topbar-back--lg {
+	height: 42px;
+	min-height: 42px;
+	gap: 7px;
+	padding: 0 16px 0 13px;
+	border-radius: 13px;
+	font-size: 15px;
+}
 /* Larger Cancel edit control on Settings / Profile */
 .iz-topbar-back--cancel {
 	height: 42px;

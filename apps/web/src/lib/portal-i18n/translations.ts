@@ -460,8 +460,6 @@ const en = {
 		notYetRecorded: "Not yet recorded",
 		notYetRecordedHint:
 			"Breaches this week has already earned. Recording them turns each into a charge you can add to a voucher.",
-		notYetRecordedClosedHint:
-			"Shown for reference. This week’s vouchers are signed, so these cannot be charged here — they stay outstanding for a later week.",
 		couldNotLoadPenalties: "Could not load this week’s penalties.",
 		/** "Record penalties for last week" — the week is appended at the call site. */
 		recordPenaltiesFor: "Record penalties for",
@@ -518,7 +516,6 @@ const en = {
 		notSignedYet: "not signed yet",
 		thisWeekLower: "this week",
 		lastWeekLower: "last week",
-		thePaymentWeek: "the payment week",
 		signedCountSuffix: "signed",
 		useToRecordTransfer: "to record each bank transfer",
 		paidInHistory: "paid in History",
@@ -1152,7 +1149,7 @@ const en = {
 	 * translating them would orphan every saved rate. Resolved via tierLabel().
 	 */
 	outletDetail: {
-		backToOutlets: "Back to outlets",
+		returnLabel: "Return",
 		headMeta: "Wage RM{wage}/shift · Drinks {drinks}% · Tips {tips}%",
 		events: "Events",
 		today: "Today",
@@ -3173,8 +3170,6 @@ const zh: PortalTranslations = {
 		checkingPenalties: "正在检查罚款…",
 		notYetRecorded: "尚未登记",
 		notYetRecordedHint: "本周已产生的违规。登记后即可作为扣款加入付款凭单。",
-		notYetRecordedClosedHint:
-			"仅供参考。本周凭单已签署，因此无法在此入账 —— 它们将保留至以后的周次。",
 		couldNotLoadPenalties: "无法加载本周的罚款。",
 		recordPenaltiesFor: "登记罚款：",
 		thisWeekFallback: "本周",
@@ -3224,7 +3219,6 @@ const zh: PortalTranslations = {
 		notSignedYet: "张尚未签署",
 		thisWeekLower: "本周",
 		lastWeekLower: "上周",
-		thePaymentWeek: "结算周",
 		signedCountSuffix: "张已签署",
 		useToRecordTransfer: "登记每笔银行转账",
 		paidInHistory: "张已付款（见历史记录）",
@@ -3767,7 +3761,7 @@ const zh: PortalTranslations = {
 		dotsMarkOpenShifts: "圆点表示当天有空缺班次。",
 	},
 	outletDetail: {
-		backToOutlets: "返回门店列表",
+		returnLabel: "返回",
 		headMeta: "薪酬 RM{wage}/班 · 酒水 {drinks}% · 小费 {tips}%",
 		events: "活动",
 		today: "今天",
