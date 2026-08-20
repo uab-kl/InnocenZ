@@ -30,10 +30,10 @@ import { PostJobActionPanel } from "@agency-portal/components/outlet/post-job-sh
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
 import { useOutletPrPool } from "@agency-portal/hooks/use-outlet-pr-pool";
+import { useOutletEffectivePlan } from "@agency-portal/hooks/use-outlet-effective-plan";
 import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import {
 	canonicalOutletName,
-	getOutletSubscriptionPlan,
 	isOtherDressCode,
 	isOtherSpecialEvent,
 	outletNamedPrCountForDate,
@@ -131,7 +131,6 @@ function PostJobPage() {
 		outletWorkspace,
 		agencyPRs,
 		shifts,
-		outletOwner,
 		toast,
 	} = useStore();
 
@@ -165,9 +164,10 @@ function PostJobPage() {
 			? t.postJob.loadingYourPrs
 			: t.postJob.noPrsToNameYet;
 
-	const subscriptionPlan = getOutletSubscriptionPlan(
-		outletOwner.subscriptionPlanId,
-	);
+	// The venue's REAL plan (member_subscription ledger) — the demo store id is
+	// only the demo fallback. See the hook: Subscription said Enterprise while
+	// this composer capped at Essential.
+	const subscriptionPlan = useOutletEffectivePlan();
 	const outletName = outletWorkspace.outletName;
 
 	const [composer, setComposer] = useState<DraftShift>(() =>

@@ -5478,6 +5478,15 @@
 .iz-post-job-editable-shell {
 	justify-content: space-between;
 }
+/* The pencil is a MARKER, not a column — without this the control's
+   `> * { flex: 1 1 0 }` rule stretched it to half the shell and truncated
+   the "Click here to input" placeholder beside it. */
+.iz-post-job-editable-shell > svg {
+	flex: 0 0 auto;
+	width: 14px;
+	min-width: 14px;
+	margin-left: 8px;
+}
 .iz-post-job-event-type-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -13,6 +13,7 @@ import {
 	OutletMultiDatePopover,
 } from "@agency-portal/components/outlet/outlet-date-popover";
 import { PostJobTierRatesEditor } from "@agency-portal/components/outlet/PostJobTierRatesEditor";
+import { useOutletEffectivePlan } from "@agency-portal/hooks/use-outlet-effective-plan";
 import {
 	PostJobEditableInputShell,
 	PostJobFormLegend,
@@ -51,7 +52,6 @@ import {
 	formatOutletPlanPrPickerRule,
 	formatShiftDrinkPricingSummary,
 	formatShiftEventTypeSummary,
-	getOutletSubscriptionPlan,
 	isOtherDressCode,
 	isOtherSpecialEvent,
 	OUTLET_DRINKS_PRICE_SECTION_ID,
@@ -1539,7 +1539,6 @@ export function DraftShiftEditor({
 	// Demo sessions have no backend pool, so the language options come from the
 	// demo roster instead. A real session passes `prCandidates` and ignores this.
 	const agencyPRs = useStore((s) => s.agencyPRs);
-	const outletOwner = useStore((s) => s.outletOwner);
 	const storeWorkspace = useStore((s) => s.outletWorkspace);
 	// Same story as the price list below: a real session's rate card lives in the
 	// backend and arrives as a prop. Reading only the store showed Post Job the
@@ -1621,9 +1620,9 @@ export function DraftShiftEditor({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-time expand composer to all tier columns
 	}, []);
 
-	const subscriptionPlan = getOutletSubscriptionPlan(
-		outletOwner.subscriptionPlanId,
-	);
+	// Same ledger-first plan as the composer route — never the demo store alone,
+	// or this picker caps a real Enterprise venue at Essential's numbers.
+	const subscriptionPlan = useOutletEffectivePlan();
 	const namedPrRemaining = Math.max(
 		0,
 		subscriptionPlan.prPerDayMax - namedPrsOnDate,

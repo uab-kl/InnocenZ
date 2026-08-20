@@ -1,5 +1,3 @@
-import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
-import { useAgencyOutlets } from "@agency-portal/hooks/use-agency-outlets";
 import { AgencyCommissionRulesPanel } from "@agency-portal/components/agency/AgencyCommissionRulesPanel";
 import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
@@ -7,6 +5,7 @@ import { IzPill } from "@agency-portal/components/iz/ui";
 import { formatOutletHistRm } from "@agency-portal/components/outlet/outlet-history-ui";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
 import { useAgencyOutletWorkspace } from "@agency-portal/hooks/use-agency-outlet-workspace";
+import { useAgencyOutlets } from "@agency-portal/hooks/use-agency-outlets";
 import {
 	formatTierSalesTargets,
 	formatTierWageRange,
@@ -42,6 +41,7 @@ import {
 	ZoomIn,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
@@ -560,14 +560,14 @@ function OutletShiftCardDetails({
 				<OutletShiftMetric label={t.outletDetail.estPayout} tone="gold">
 					{formatOutletHistRm(shift.payEstimate)}
 				</OutletShiftMetric>
-{!shift.templateCoverImage && (
-				<OutletShiftMetric
-					label={t.outletDetail.eventType}
-					tone={isSpecialEvent ? "gold" : "ink"}
-					title={eventType}
-				>
-					{eventType}
-				</OutletShiftMetric>
+				{!shift.templateCoverImage && (
+					<OutletShiftMetric
+						label={t.outletDetail.eventType}
+						tone={isSpecialEvent ? "gold" : "ink"}
+						title={eventType}
+					>
+						{eventType}
+					</OutletShiftMetric>
 				)}
 			</div>
 
@@ -675,8 +675,7 @@ function OutletDetailFutureShiftCard({
 							</p>
 							<p className="iz-outlet-detail-shift-future__sub">
 								{prettyShiftDate(shift.date)} · {shift.shift} ·{" "}
-								{shift.demandSlots}/
-								{shift.suppliedSlots}
+								{shift.demandSlots}/{shift.suppliedSlots}
 								{shift.openSlots > 0 ? ` · ${shift.openSlots} open` : ""}
 							</p>
 						</div>
