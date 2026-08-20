@@ -38,7 +38,23 @@ const TAP_JITTER_PX = 8;
 /** Two taps inside this window = double-tap (same beat as the TopBar). */
 const DOUBLE_TAP_MS = 280;
 
-function touchDistance(touches: { pageX: number; pageY: number }[]): number {
+/** Structural touch types — the mobile tsconfig has no DOM lib. */
+type WebTouch = { pageX: number; pageY: number };
+type WebTouchList = { length: number; [index: number]: WebTouch };
+type WebTouchEvent = { touches: WebTouchList; preventDefault: () => void };
+type WebEventTarget = {
+  addEventListener?: (
+    type: string,
+    handler: (e: WebTouchEvent) => void,
+    options?: { passive: boolean },
+  ) => void;
+  removeEventListener?: (
+    type: string,
+    handler: (e: WebTouchEvent) => void,
+  ) => void;
+};
+
+function touchDistance(touches: WebTouchList): number {
   return Math.hypot(
     touches[0].pageX - touches[1].pageX,
     touches[0].pageY - touches[1].pageY,
@@ -71,6 +87,8 @@ export function ImageLightbox({
   const panBase = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const moved = useRef(false);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const frameRef = useRef<View | null>(null);
 
   const clampOffset = (x: number, y: number, atScale: number) => {
     // Keep the picture on screen: at scale s the frame can slide at most
@@ -105,6 +123,21 @@ export function ImageLightbox({
     const bounded = clampOffset(x, y, scaleRef.current);
     offsetRef.current = bounded;
     setOffset(bounded);
+  };
+
+  /** Clean tap: double-tap toggles 1×↔2×; a lone tap closes after one beat
+      (the wait is what tells the two apart). Shared by native + web paths. */
+  const handleTap = () => {
+    if (tapTimer.current) {
+      clearTimeout(tapTimer.current);
+      tapTimer.current = null;
+      applyScale(scaleRef.current > MIN_SCALE ? MIN_SCALE : 2);
+      return;
+    }
+    tapTimer.current = setTimeout(() => {
+      tapTimer.current = null;
+      onCloseRef.current();
+    }, DOUBLE_TAP_MS);
   };
 
   const responder = useMemo(
@@ -157,18 +190,7 @@ export function ImageLightbox({
           pinchBase.current = null;
           panBase.current = null;
           if (moved.current) return;
-          // A clean tap. Double-tap toggles 1×↔2×; a lone tap closes after
-          // one beat (the wait is what tells the two apart).
-          if (tapTimer.current) {
-            clearTimeout(tapTimer.current);
-            tapTimer.current = null;
-            applyScale(scaleRef.current > MIN_SCALE ? MIN_SCALE : 2);
-            return;
-          }
-          tapTimer.current = setTimeout(() => {
-            tapTimer.current = null;
-            onCloseRef.current();
-          }, DOUBLE_TAP_MS);
+          handleTap();
         },
         onPanResponderTerminate: () => {
           pinchBase.current = null;
@@ -184,6 +206,75 @@ export function ImageLightbox({
     offsetRef.current = { x: 0, y: 0 };
     setScale(1);
     setOffset({ x: 0, y: 0 });
+  }, [uri]);
+
+  // WEB (the phone browser on 8081): the RN-web gesture layer proved
+  // unreliable for the SECOND finger on a real device (owner, 20 Aug 2026 —
+  // "test on my phone devices not yet work"), so the pinch listens to the
+  // browser's raw touch events instead, non-passive so preventDefault()
+  // actually stops the page from zooming. Native keeps the PanResponder.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !uri) return;
+    const node = frameRef.current as unknown as WebEventTarget | null;
+    if (!node?.addEventListener || !node.removeEventListener) return;
+
+    let pinch: { dist: number; scale: number } | null = null;
+    let pan: { x: number; y: number; ox: number; oy: number } | null = null;
+    let movedHere = false;
+
+    const onTouchStart = (ev: WebTouchEvent) => {
+      ev.preventDefault();
+      if (ev.touches.length >= 2) {
+        pinch = { dist: touchDistance(ev.touches) || 1, scale: scaleRef.current };
+        pan = null;
+        movedHere = true;
+      } else {
+        movedHere = false;
+      }
+    };
+    const onTouchMove = (ev: WebTouchEvent) => {
+      ev.preventDefault();
+      if (ev.touches.length >= 2) {
+        const d = touchDistance(ev.touches);
+        if (!pinch) pinch = { dist: d || 1, scale: scaleRef.current };
+        movedHere = true;
+        applyScale(pinch.scale * (d / pinch.dist));
+        return;
+      }
+      pinch = null;
+      if (ev.touches.length === 1 && scaleRef.current > MIN_SCALE) {
+        const t = ev.touches[0];
+        if (!pan) {
+          pan = { x: t.pageX, y: t.pageY, ox: offsetRef.current.x, oy: offsetRef.current.y };
+        }
+        if (Math.hypot(t.pageX - pan.x, t.pageY - pan.y) > TAP_JITTER_PX) movedHere = true;
+        applyOffset(pan.ox + (t.pageX - pan.x), pan.oy + (t.pageY - pan.y));
+      }
+    };
+    const onTouchEnd = (ev: WebTouchEvent) => {
+      if (ev.touches.length === 0) {
+        pinch = null;
+        pan = null;
+        if (!movedHere) handleTap();
+        movedHere = false;
+      } else {
+        // One finger left (pinch ended): re-baseline the pan on its next move.
+        pinch = null;
+        pan = null;
+      }
+    };
+
+    node.addEventListener('touchstart', onTouchStart, { passive: false });
+    node.addEventListener('touchmove', onTouchMove, { passive: false });
+    node.addEventListener('touchend', onTouchEnd);
+    node.addEventListener('touchcancel', onTouchEnd);
+    return () => {
+      node.removeEventListener?.('touchstart', onTouchStart);
+      node.removeEventListener?.('touchmove', onTouchMove);
+      node.removeEventListener?.('touchend', onTouchEnd);
+      node.removeEventListener?.('touchcancel', onTouchEnd);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs + stable setters only
   }, [uri]);
   useEffect(() => {
     return () => {
@@ -203,6 +294,7 @@ export function ImageLightbox({
           </Pressable>
         </View>
         <View
+          ref={frameRef}
           // `touchAction: none` (web only): without it the phone BROWSER takes
           // the pinch for page zoom and the picture never sees the 2nd finger.
           // Native ignores the prop — it is not a valid RN style there.
@@ -212,7 +304,9 @@ export function ImageLightbox({
               ? ({ touchAction: 'none' } as unknown as ViewStyle)
               : null,
           ]}
-          {...responder.panHandlers}
+          // Web listens to the browser's own touch events (effect above) —
+          // running BOTH layers would double-handle every move.
+          {...(Platform.OS === 'web' ? {} : responder.panHandlers)}
           onLayout={(e) => {
             frameSize.current = {
               w: e.nativeEvent.layout.width,
