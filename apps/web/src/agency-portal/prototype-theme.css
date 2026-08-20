@@ -12182,41 +12182,6 @@ button.iz-pr-offer-row:hover {
 	font-size: 18px;
 }
 
-.iz-pr-manage-filters-grid {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 10px;
-	align-items: end;
-}
-
-.iz-pr-manage-filter-field {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	min-width: 0;
-}
-
-.iz-pr-manage-filter-control,
-.iz-pr-manage-filters-grid .iz-select,
-.iz-pr-manage-filters-grid .iz-roster-filter-input,
-.iz-pr-manage-filters-grid .iz-roster-filter-input--plain {
-	font-size: 18px !important;
-	min-height: 42px;
-	padding-top: 9px;
-	padding-bottom: 9px;
-	font-weight: 500;
-}
-
-.iz-pr-manage-filters-grid .iz-roster-filter-label {
-	font-size: 15px;
-}
-
-@media (min-width: 1024px) {
-	.iz-pr-manage-filters-grid {
-		grid-template-columns: repeat(6, minmax(0, 1fr));
-	}
-}
-
 .iz-pr-manage-header {
 	display: flex;
 	align-items: flex-start;
@@ -12260,31 +12225,6 @@ button.iz-pr-offer-row:hover {
 }
 .iz-pr-manage-header__btn--primary:hover {
 	background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-}
-.iz-pr-manage-filters-inline {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	align-items: center;
-}
-.iz-pr-manage-filters-inline .iz-pr-manage-filter-chip {
-	flex: 1 1 120px;
-	min-width: 0;
-}
-.iz-pr-manage-filters-inline .iz-pr-manage-filter-chip--wide {
-	flex: 1.4 1 140px;
-}
-.iz-pr-manage-filters-inline .iz-roster-filter-input--plain,
-.iz-pr-manage-filters-inline .iz-select {
-	width: 100%;
-	min-height: 38px;
-	padding: 8px 12px;
-	font-size: 13px !important;
-	font-weight: 500;
-	border-radius: 10px;
-	background: var(--iz-bg2);
-	border: 1px solid var(--iz-line);
-	color: var(--iz-muted);
 }
 .iz-pr-manage-stats {
 	display: flex;
@@ -19388,21 +19328,6 @@ html:has(.iz-pr-app) {
 }
 [data-portal="agency"] .iz-portal-main .iz-pr-manage-filters-card .iz-tiny {
 	font-size: 18px;
-}
-[data-portal="agency"]
-	.iz-portal-main
-	.iz-pr-manage-filters-grid
-	.iz-roster-filter-label {
-	font-size: 15px;
-}
-[data-portal="agency"] .iz-portal-main .iz-pr-manage-filter-control,
-[data-portal="agency"] .iz-portal-main .iz-pr-manage-filters-grid .iz-select,
-[data-portal="agency"]
-	.iz-portal-main
-	.iz-pr-manage-filters-grid
-	.iz-roster-filter-input--plain {
-	font-size: 18px !important;
-	min-height: 42px;
 }
 [data-portal="agency"] .iz-portal-main .iz-roster-filter-label {
 	font-size: 15px;
