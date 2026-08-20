@@ -32,7 +32,17 @@ router.get('/', canRead, shiftController.list.bind(shiftController));
 router.get('/:id', canRead, shiftController.getById.bind(shiftController));
 // Posting a job is outletCan('postJob'), which Outlet Finance does not hold.
 router.post('/', canCreate, outletOwnerOrOps, shiftController.create.bind(shiftController));
-router.put('/:id', canUpdate, shiftController.update.bind(shiftController));
-router.delete('/:id', canDelete, shiftController.remove.bind(shiftController));
+// The SAME lane guard as POST. `requireRole('outlet')` admits every outlet lane,
+// so without this Finance and Director — who cannot post a job — could still
+// confirm staffing or seal a night by calling the API directly. The client has
+// always agreed with this: `confirmShift` and `sealShift` are held by exactly
+// the lanes that hold `postJob` (owner + ops), and `postJob` IS
+// `booking:create`, which is what `outletOwnerOrOps` checks. The gate was only
+// ever missing on the server side.
+router.put('/:id', canUpdate, outletOwnerOrOps, shiftController.update.bind(shiftController));
+// Withdrawing is the mirror of posting, and the more consequential half: a
+// delete CASCADES to shift_assignment and from there to swaps and cut-loss
+// requests, so it cancels people. Same lane as POST and PUT.
+router.delete('/:id', canDelete, outletOwnerOrOps, shiftController.remove.bind(shiftController));
 
 export default router;

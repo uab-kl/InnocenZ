@@ -32,6 +32,13 @@ export interface UseOutletShiftActions {
 	/** Withdraw a future shift. Today's and past shifts are refused server-side too. */
 	deleteShift: (shiftId: string) => Promise<void>;
 	isDeleting: boolean;
+	/**
+	 * Close a finished shift (shift status -> sealed). The server refuses this
+	 * for a shift that has not ended yet, so the UI must not offer it earlier —
+	 * see the seal guard in `shift.controller.ts`.
+	 */
+	sealShift: (shiftId: string) => Promise<void>;
+	isSealing: boolean;
 }
 
 /**
@@ -76,11 +83,27 @@ export function useOutletShiftActions(): UseOutletShiftActions {
 		},
 	});
 
+	const seal = useMutation({
+		mutationFn: async (shiftId: string) => {
+			await updateShift(shiftId, { status: "sealed" }, logout);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["outlet"] });
+			queryClient.invalidateQueries({ queryKey: ["roster"] });
+			// A sealed shift stops being assignable, so the agency's demand views
+			// have to hear about it too — same reason the withdraw path invalidates
+			// this key.
+			queryClient.invalidateQueries({ queryKey: ["agency"] });
+		},
+	});
+
 	return {
 		backed,
 		confirmShift: (shiftId) => confirm.mutateAsync(shiftId),
 		isConfirming: confirm.isPending,
 		deleteShift: (shiftId) => remove.mutateAsync(shiftId),
 		isDeleting: remove.isPending,
+		sealShift: (shiftId) => seal.mutateAsync(shiftId),
+		isSealing: seal.isPending,
 	};
 }

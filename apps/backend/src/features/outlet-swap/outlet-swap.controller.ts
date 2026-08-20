@@ -35,6 +35,8 @@ const REJECTION_MESSAGES: Record<OutletSwapApprovalRejection, string> = {
   destination_tier_full:
     'That shift has no seat left for your tier — ask your agency to re-send it for another shift',
   date_mismatch: 'The shifts are no longer on the same date — ask your agency to re-send it',
+  destination_not_assignable:
+    'That shift has been closed by the venue — ask your agency to re-send it for another shift',
   already_assigned: 'You are already on that shift',
 };
 
