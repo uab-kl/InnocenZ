@@ -999,16 +999,16 @@ function TimetableRow({
           <Text style={styles.ttWhenLine} numberOfLines={1}>
             {dateFriendly} · {entry.time}
           </Text>
-          {entry.address ? (
-            <View style={styles.ttAddrRow}>
-              <MapPin size={11} color={C.prMuted2} strokeWidth={2} />
-              <Text style={styles.ttAddrCompact} numberOfLines={1}>
-                {entry.address}
-              </Text>
-            </View>
-          ) : null}
         </View>
       </View>
+      {/* The WHOLE address (owner: "dont hide the address") — its own
+          full-width line so the thumbnail never squeezes it. */}
+      {entry.address ? (
+        <View style={[styles.ttAddrRow, { marginTop: 8 }]}>
+          <MapPin size={11} color={C.prMuted2} strokeWidth={2} />
+          <Text style={styles.ttAddrCompact}>{entry.address}</Text>
+        </View>
+      ) : null}
       {leaveRejected ? (
         <View style={styles.leaveRejectedNote}>
           <AlertTriangle size={13} color={C.red} />
