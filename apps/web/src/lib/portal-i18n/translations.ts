@@ -539,6 +539,8 @@ const en = {
 	filters: {
 		filters: "Filters",
 		filterShifts: "Filter shifts",
+		filterOutlets: "Filter outlets",
+		source: "Source",
 		search: "Search",
 		name: "Name",
 		outlet: "Outlet",
@@ -3228,6 +3230,8 @@ const zh: PortalTranslations = {
 	filters: {
 		filters: "筛选",
 		filterShifts: "筛选班次",
+		filterOutlets: "筛选场地",
+		source: "来源",
 		search: "搜索",
 		name: "姓名",
 		outlet: "门店",

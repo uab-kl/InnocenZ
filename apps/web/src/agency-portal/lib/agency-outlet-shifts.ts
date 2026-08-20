@@ -117,14 +117,34 @@ export const EMPTY_AGENCY_OUTLET_FILTERS: AgencyOutletFilterState = {
 	source: "",
 };
 
-const SOURCE_LABEL: Record<OutletShiftSource, string> = {
-	posted: "Posted shift",
-	"tied-offer": "Posted shift",
-	"assignment-pending": "Awaiting PR",
+/*
+ * The badge on a shift row.
+ *
+ * These were three hardcoded English strings, while the filter that selects on
+ * the very same values read from the dictionary — so a Chinese screen offered
+ * the viewer one word and answered with another for the same shift. Both sides
+ * read one source now.
+ *
+ * Still a Record keyed by the union rather than an if/else, so adding a source
+ * breaks the build here instead of silently inheriting the posted label.
+ * "tied-offer" shares its label with "posted" on purpose: the distinction is
+ * internal, and filterAgencyOutletSummaries matches the two together, so the
+ * rows a viewer reads as a posted shift are exactly the rows that filter keeps.
+ */
+const SOURCE_LABEL: Record<
+	OutletShiftSource,
+	(t: PortalTranslations) => string
+> = {
+	posted: (t) => t.manageOutlet.postedShift,
+	"tied-offer": (t) => t.manageOutlet.postedShift,
+	"assignment-pending": (t) => t.manageOutlet.awaitingPr,
 };
 
-export function outletShiftSourceLabel(source: OutletShiftSource) {
-	return SOURCE_LABEL[source];
+export function outletShiftSourceLabel(
+	source: OutletShiftSource,
+	t: PortalTranslations,
+) {
+	return SOURCE_LABEL[source](t);
 }
 
 const DEFAULT_EVENT_HEADCOUNT = 12;
@@ -937,6 +957,16 @@ export function groupOutletShiftsTodayFuture(
 
 export function agencyOutletFiltersActive(f: AgencyOutletFilterState): boolean {
 	return Boolean(f.outlet || f.date || f.minOpenSlots || f.source);
+}
+
+/**
+ * How many filters are narrowing the list — not merely whether any is.
+ * The bar shows this on Clear so the button is a decision, not a guess.
+ */
+export function countActiveAgencyOutletFilters(
+	f: AgencyOutletFilterState,
+): number {
+	return [f.outlet, f.date, f.minOpenSlots, f.source].filter(Boolean).length;
 }
 
 export function filterAgencyOutletSummaries(

@@ -12115,16 +12115,11 @@ button.iz-pr-offer-row:hover {
 	}
 }
 
-.iz-outlet-manage-filters-card {
-	padding: 12px 14px !important;
-}
-
 .iz-pr-manage-filters-card {
 	padding: 12px 14px !important;
 }
 
 .iz-pr-manage-filters-card .iz-tiny,
-.iz-outlet-manage-filters-card .iz-tiny,
 .iz-roster-shift-filters-head .iz-tiny,
 .iz-special-service-filters-head .iz-tiny {
 	font-size: 18px;
@@ -12465,44 +12460,6 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-card__metric-value--gold {
 	color: var(--iz-gold-l, var(--iz-gold));
 	font-weight: 700;
-}
-
-.iz-outlet-manage-filters--inline {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	align-items: center;
-}
-.iz-outlet-manage-filters--inline .iz-outlet-manage-filter-chip {
-	flex: 1 1 120px;
-	min-width: 0;
-}
-.iz-outlet-manage-filters--inline .iz-outlet-manage-filter-chip--wide {
-	flex: 1.25 1 150px;
-}
-.iz-outlet-manage-filters--inline .iz-roster-filter-input--plain,
-.iz-outlet-manage-filters--inline .iz-select,
-.iz-outlet-manage-filter-date--inline .iz-roster-planning-date-trigger {
-	width: 100%;
-	min-height: 42px;
-	padding: 8px 12px;
-	font-size: 15px !important;
-	font-weight: 500;
-	border-radius: 10px;
-	background: var(--iz-bg2);
-	border: 1px solid var(--iz-line);
-	color: var(--iz-muted);
-}
-.iz-outlet-manage-filter-clear {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 38px;
-	height: 38px;
-	border-radius: 10px;
-	border: 1px solid var(--iz-line);
-	background: var(--iz-bg2);
-	color: var(--iz-muted2);
 }
 .iz-outlet-manage-grid {
 	display: grid;
@@ -13233,47 +13190,6 @@ button.iz-pr-offer-row:hover {
 	font-weight: 600;
 	white-space: nowrap;
 }
-
-.iz-outlet-manage-filters-grid {
-	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
-	gap: 10px;
-	align-items: end;
-}
-
-.iz-outlet-manage-filter-field {
-	display: flex;
-	flex-direction: column;
-	gap: 5px;
-	min-width: 0;
-}
-
-.iz-outlet-manage-filter-date {
-	width: 100%;
-}
-
-.iz-outlet-manage-filter-date .iz-roster-planning-date-trigger {
-	min-height: 42px;
-	font-size: 18px;
-}
-
-.iz-outlet-manage-filters-grid .iz-select,
-.iz-outlet-manage-filters-grid .iz-roster-filter-input,
-.iz-outlet-manage-filters-grid .iz-roster-filter-input--plain {
-	font-size: 18px !important;
-	min-height: 42px;
-}
-
-.iz-outlet-manage-filters-grid .iz-roster-filter-label {
-	font-size: 15px;
-}
-
-@media (max-width: 767px) {
-	.iz-outlet-manage-filters-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-}
-
 .iz-roster-pr-link:hover {
 	border-color: rgba(183, 156, 232, 0.35);
 	background: rgba(183, 156, 232, 0.08);
@@ -13548,16 +13464,15 @@ button.iz-pr-offer-row:hover {
 	background: rgba(0, 0, 0, 0.22);
 }
 
-.iz-roster-page
-	/* ===========================================================================
-   Roster filter bar — ONE bar for both roster tabs.
+/* ===========================================================================
+   Portal filter bar — ONE bar for every filtered list.
    Replaces .iz-roster-shift-filters (Live) and .iz-roster-timetable-filters
    (Planning), which were two grids with two breakpoint schemes for the same
    job. A flex row that wraps needs no hardcoded column counts, and cannot
    strand a half-empty second row the way the old >=1024px rule did (two time
    fields laid into five columns).
    =========================================================================== */
-	.iz-roster-filterbar {
+.iz-roster-filterbar {
 	margin-bottom: 14px;
 	padding: 12px 14px 14px;
 	border-radius: 14px;
@@ -13718,6 +13633,51 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-filterbar__time {
 	min-width: 108px;
+}
+/* The date picker is a button, not an <input>, so it needs the select sizing
+   spelled out to line up with the controls beside it. */
+.iz-roster-filterbar__date {
+	width: 100%;
+}
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger {
+	min-width: 148px;
+	min-height: 40px;
+	height: 40px;
+	border-radius: 10px;
+	font-size: 15px;
+}
+
+/*
+ * ONE type size for every control in the bar.
+ *
+ * Four boxes standing in a row were set in three sizes, because three
+ * different rules owned them: `.iz-portal-main .iz-select` at 18px, the
+ * agency override `[data-portal="agency"] .iz-portal-main
+ * .iz-roster-planning-date-trigger` at 13px, and the bar's own input at 15px.
+ * 16px is the size the history filter selects already use, so every filter
+ * control in the portal now reads at one size.
+ *
+ * The long selectors are deliberate, not cargo cult: the two rules being
+ * overridden carry 0-2-0 and 0-3-0 specificity, so a short selector here loses
+ * and the sizes silently drift back apart.
+ */
+.iz-portal-main .iz-roster-filterbar .iz-select,
+.iz-portal-main .iz-roster-filterbar .iz-roster-filterbar__input,
+.iz-portal-main .iz-roster-filterbar .iz-roster-filterbar__time,
+.iz-portal-main .iz-roster-filterbar .iz-roster-filterbar__time input,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__time
+	.iz-time-picker-btn,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__time
+	.iz-time-picker-label,
+.iz-portal-main
+	.iz-roster-filterbar
+	.iz-roster-filterbar__date
+	.iz-roster-planning-date-trigger {
+	font-size: 16px;
 }
 @media (max-width: 720px) {
 	.iz-roster-filterbar__field,
