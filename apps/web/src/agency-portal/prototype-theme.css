@@ -13766,10 +13766,11 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-layout {
 	display: grid;
-	/* Sidebar widened (and the detail pane narrowed to match) so the three tabs
-     sit on one row without cramping. Floor of 330px is what the widest label
-     needs at a third of the column. */
-	grid-template-columns: minmax(330px, 360px) minmax(0, 1fr);
+	/* Sidebar widened (and the detail pane narrowed to match — it is 1fr, so it
+     gives back exactly what this takes) so the three queue tabs sit on one row
+     without "Cancel Agency (0)" wrapping. Floor of 366px is what the widest
+     label needs at a third of the column. */
+	grid-template-columns: minmax(366px, 396px) minmax(0, 1fr);
 	gap: 0;
 	min-height: calc(100dvh - var(--iz-portal-header-h, 56px) - 24px);
 	border: 1px solid var(--iz-line);
