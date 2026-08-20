@@ -960,61 +960,55 @@ function TimetableRow({
   return (
     <View style={styles.ttRow}>
       <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
-      <View style={styles.agencyBadge}>
-        <Shield size={12} color={C.violetL} />
-        <Text style={styles.agencyBadgeText}>AGENCY · {entry.sourceLabel.toUpperCase()}</Text>
+      {/* COMPACT by design (owner: "many shift will be very messy — minimise").
+          One thumbnail-led row per shift, everything visible, no fold. */}
+      <View style={styles.ttHeadRow}>
+        <View style={styles.agencyBadge}>
+          <Shield size={12} color={C.violetL} />
+          <Text style={styles.agencyBadgeText}>AGENCY · {entry.sourceLabel.toUpperCase()}</Text>
+        </View>
+        <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
       </View>
-      {heroUri ? (
-        <Pressable style={styles.ttHeroWrap} onPress={() => setZoomUri(heroUri)}>
-          <Image source={{ uri: heroUri }} style={styles.ttHero} resizeMode="cover" />
-          <View style={styles.ttHeroBadge}>
-            <Text style={[styles.ttHeroBadgeText, isSpecial && styles.ttHeroBadgeTextSpecial]}>
-              {isSpecial ? 'Special event' : 'Normal shift'}
-            </Text>
-          </View>
-          <ZoomHint />
-        </Pressable>
-      ) : null}
-      <View style={styles.ttVenueRow}>
-        <Pressable disabled={!logoUri} onPress={() => logoUri && setZoomUri(logoUri)}>
-          <Avatar
-            size={44}
-            radius={14}
-            photoPath={entry.logoPath}
-            initial={entry.outlet.trim()[0]?.toUpperCase()}
-            logo
-          />
-          {logoUri ? <ZoomHint size={16} style={{ right: -3, bottom: -3 }} /> : null}
-        </Pressable>
+      <View style={styles.ttMainRow}>
+        {heroUri ? (
+          <Pressable style={styles.ttThumbWrap} onPress={() => setZoomUri(heroUri)}>
+            <Image source={{ uri: heroUri }} style={styles.ttThumb} resizeMode="cover" />
+            <ZoomHint size={14} style={{ right: 3, bottom: 3 }} />
+          </Pressable>
+        ) : logoUri ? (
+          <Pressable style={styles.ttThumbWrap} onPress={() => setZoomUri(logoUri)}>
+            <Avatar
+              size={64}
+              radius={12}
+              photoPath={entry.logoPath}
+              initial={entry.outlet.trim()[0]?.toUpperCase()}
+              logo
+            />
+            <ZoomHint size={14} style={{ right: 3, bottom: 3 }} />
+          </Pressable>
+        ) : null}
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.ttOutlet}>{entry.outlet}</Text>
+          <Text style={styles.ttOutlet} numberOfLines={1}>
+            {entry.outlet}
+          </Text>
           {entry.event ? (
             <Text style={styles.ttEventLine} numberOfLines={1}>
               {entry.event} · {isSpecial ? 'Special event' : 'Normal shift'}
             </Text>
           ) : null}
+          <Text style={styles.ttWhenLine} numberOfLines={1}>
+            {dateFriendly} · {entry.time}
+          </Text>
+          {entry.address ? (
+            <View style={styles.ttAddrRow}>
+              <MapPin size={11} color={C.prMuted2} strokeWidth={2} />
+              <Text style={styles.ttAddrCompact} numberOfLines={1}>
+                {entry.address}
+              </Text>
+            </View>
+          ) : null}
         </View>
-        <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
       </View>
-      <View style={styles.ttDateTimeRow}>
-            <View style={styles.ttField}>
-          <Text style={styles.ttFieldLabel}>DATE</Text>
-          <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
-        </View>
-        <View style={styles.ttField}>
-          <Text style={styles.ttFieldLabel}>TIME</Text>
-          <Text style={styles.ttFieldValue}>{entry.time}</Text>
-        </View>
-      </View>
-      {entry.address ? (
-        <View style={styles.ttAddrBlock}>
-          <Text style={styles.ttFieldLabel}>ADDRESS</Text>
-          <View style={styles.ttAddrRow}>
-            <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
-            <Text style={styles.ttAddrValue}>{entry.address}</Text>
-          </View>
-        </View>
-      ) : null}
       {leaveRejected ? (
         <View style={styles.leaveRejectedNote}>
           <AlertTriangle size={13} color={C.red} />
@@ -1289,44 +1283,45 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.02)',
     padding: 12,
   },
-  /* The night's own picture — same design language as the Today card. */
-  ttHeroWrap: {
-    position: 'relative',
-    marginTop: 10,
-    borderRadius: 12,
-    overflow: 'hidden',
+  /* Compact card: badge+status row, then a thumbnail-led main row. */
+  ttHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  ttHero: { width: '100%', height: 120 },
-  ttHeroBadge: {
-    position: 'absolute',
-    left: 8,
-    bottom: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.62)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  ttHeroBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: '#C9B8F2',
-  },
-  ttHeroBadgeTextSpecial: { color: '#E8C27A' },
-  ttVenueRow: {
+  ttMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     marginTop: 10,
   },
+  ttThumbWrap: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  ttThumb: { width: 76, height: 76 },
   ttEventLine: {
     marginTop: 2,
     fontFamily: F.manrope,
     fontSize: 12,
     color: C.muted,
+  },
+  ttWhenLine: {
+    marginTop: 2,
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  ttAddrCompact: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted2,
   },
   agencyBadge: {
     alignSelf: 'flex-start',
