@@ -2,7 +2,8 @@
  * Full-image viewer: the tapped picture, whole and uncropped, on a dark
  * backdrop. FINGERS FIRST (owner, 20 Aug 2026: "the finger touch screen
  * cannot zoom in and out freely"): pinch to zoom, drag to move once zoomed,
- * double-tap to jump 1×↔2×, tap once to close — plus a visible ✕ Return
+ * double-tap to jump 1×↔2× — and the ✕ Return button is the ONE way to
+ * close (owner's call: no tap-to-close; a stray tap must never dismiss) —
  * button (owner: closing must never depend on knowing the hidden tap), red =
  * close per the app's colour rule. The −/+ buttons stay for mouse users on
  * the web build — same clamp, same scale.
@@ -95,7 +96,16 @@ export function ImageLightbox({
   /** Pan baseline: finger + offset at the moment the drag started. */
   const panBase = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const moved = useRef(false);
-  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapAt = useRef(0);
+  /** The ✕ Return bar and the −/+ row — single fingers there keep their
+      native tap; everywhere else the gesture layer owns the touch. */
+  const controlRefs = useRef<(View | null)[]>([null, null]);
+  const attachTopBar = useCallback((n: View | null) => {
+    controlRefs.current[0] = n;
+  }, []);
+  const attachControls = useCallback((n: View | null) => {
+    controlRefs.current[1] = n;
+  }, []);
 
   // CALLBACK ref, not useRef: the Modal portals its content in a tick AFTER
   // the commit that set `uri`, so an effect keyed on [uri] runs while the
@@ -148,19 +158,17 @@ export function ImageLightbox({
     setOffset(bounded);
   };
 
-  /** Clean tap: double-tap toggles 1×↔2×; a lone tap closes after one beat
-      (the wait is what tells the two apart). Shared by native + web paths. */
+  /** Double-tap toggles 1×↔2×. A lone tap does NOTHING — closing is the
+      ✕ Return button's job alone (owner, 20 Aug 2026: a tap that closes can
+      fire mid-fumbled-pinch and reads as the viewer breaking). */
   const handleTap = () => {
-    if (tapTimer.current) {
-      clearTimeout(tapTimer.current);
-      tapTimer.current = null;
+    const now = Date.now();
+    if (now - lastTapAt.current < DOUBLE_TAP_MS) {
+      lastTapAt.current = 0;
       applyScale(scaleRef.current > MIN_SCALE ? MIN_SCALE : 2);
       return;
     }
-    tapTimer.current = setTimeout(() => {
-      tapTimer.current = null;
-      onCloseRef.current();
-    }, DOUBLE_TAP_MS);
+    lastTapAt.current = now;
   };
 
   const responder = useMemo(
@@ -269,9 +277,15 @@ export function ImageLightbox({
         movedHere = true;
         return;
       }
-      // ONE finger: only the picture itself — a single finger on ✕ / −/+ must
-      // keep its native tap, or the buttons die.
-      if (!node.contains?.(ev.target)) return;
+      // ONE finger: the ✕ Return and −/+ keep their native tap; EVERYWHERE
+      // else the touch is claimed (preventDefault) immediately. This matters
+      // for the thumb-first pinch: if the first finger lands on the backdrop
+      // un-prevented, the browser owns the sequence before the second finger
+      // arrives and the pinch dies (owner's phone, 20 Aug 2026).
+      const onControls = controlRefs.current.some((c) =>
+        (c as unknown as WebFrameNode | null)?.contains?.(ev.target),
+      );
+      if (onControls) return;
       active = true;
       ev.preventDefault();
       movedHere = false;
@@ -324,18 +338,14 @@ export function ImageLightbox({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs + stable setters only
   }, [uri, frameNode]);
-  useEffect(() => {
-    return () => {
-      if (tapTimer.current) clearTimeout(tapTimer.current);
-    };
-  }, []);
-
   if (!uri) return null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={s.backdrop} onPress={onClose}>
-        {/* The way OUT, stated — never only the hidden tap. Red = close. */}
-        <View style={s.topBar}>
+      {/* Plain View, NOT a closing Pressable: the ✕ Return button is the ONE
+          way out (owner's call) — plus the hardware back via onRequestClose. */}
+      <View style={s.backdrop}>
+        {/* The way OUT, stated. Red = close. */}
+        <View style={s.topBar} ref={attachTopBar}>
           <Pressable style={s.returnBtn} onPress={onClose} hitSlop={8}>
             <XIcon size={14} color={C.red} strokeWidth={2.4} />
             <Text style={s.returnText}>Return</Text>
@@ -377,7 +387,7 @@ export function ImageLightbox({
             resizeMode="contain"
           />
         </View>
-        <View style={s.controls}>
+        <View style={s.controls} ref={attachControls}>
           <Pressable
             style={[s.zoomBtn, scale <= MIN_SCALE && s.zoomBtnOff]}
             disabled={scale <= MIN_SCALE}
@@ -397,9 +407,9 @@ export function ImageLightbox({
           </Pressable>
         </View>
         <Text style={s.hint}>
-          Pinch or double-tap to zoom · drag to move · tap once to close
+          Pinch or double-tap to zoom · drag to move · close with ✕ Return
         </Text>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
