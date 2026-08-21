@@ -21,6 +21,7 @@ import { UserProfileTable } from '@/features/user/user-profile/user-profile.mode
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
+import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { prepareLine, resolveComponent } from './payment-voucher-component';
 import {
@@ -520,12 +521,29 @@ export class PaymentVoucherRepositoryClass {
 
   async remove(id: string): Promise<boolean> {
     try {
-      const [row] = await db
-        .delete(PaymentVoucherTable)
-        .where(eq(PaymentVoucherTable.id, id))
-        .returning({ id: PaymentVoucherTable.id });
-      // No row => not found; a real DB error re-throws below. Lines cascade.
-      return !!row;
+      return await db.transaction(async (tx) => {
+        // Un-charge the fees this voucher carried BEFORE the row goes. The FK
+        // SET-NULLs cancel_fee_voucher_id but leaves cancel_fee_charged_at
+        // stamped — and listUnchargedCancelFees filters on `charged_at IS
+        // NULL`, so a fee whose voucher was deleted would never surface again:
+        // money the agency is owed that no screen can show. Same shape on
+        // penalty_charge. Resetting both pointers returns each fee to the
+        // uncharged pool, where the next voucher run re-attaches it.
+        await tx
+          .update(ShiftAssignmentTable)
+          .set({ cancelFeeChargedAt: null, cancelFeeVoucherId: null })
+          .where(eq(ShiftAssignmentTable.cancelFeeVoucherId, id));
+        await tx
+          .update(PenaltyChargeTable)
+          .set({ chargedAt: null, chargedVoucherId: null })
+          .where(eq(PenaltyChargeTable.chargedVoucherId, id));
+        const [row] = await tx
+          .delete(PaymentVoucherTable)
+          .where(eq(PaymentVoucherTable.id, id))
+          .returning({ id: PaymentVoucherTable.id });
+        // No row => not found; a real DB error re-throws below. Lines cascade.
+        return !!row;
+      });
     } catch (error) {
       logger.error('[PaymentVoucherRepository.remove] Error:', error);
       throw error;

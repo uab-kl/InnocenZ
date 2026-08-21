@@ -191,8 +191,14 @@ export class AuditLogRepositoryClass {
         entity: input.entity,
         entityId: input.entityId ?? undefined,
         batchId: input.batchId ?? undefined,
-        oldData: input.oldData,
-        newData: input.newData,
+        // Redacted HERE, not at the call sites, because this insert is the one
+        // choke point every lane goes through — REST, GraphQL, the withAudit
+        // decorator, and their failure branches. Redaction applied per-lane is
+        // how the login response's {accessToken, refreshToken} spent months in
+        // new_data in PLAINTEXT: req.body was redacted, the response never was,
+        // and audit_logs became a table of live 7-day bearer tokens.
+        oldData: redactSensitive(input.oldData),
+        newData: redactSensitive(input.newData),
         ipAddress: input.ipAddress,
         userAgent: input.userAgent,
       })
@@ -200,6 +206,57 @@ export class AuditLogRepositoryClass {
 
     return auditLog;
   }
+}
+
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'passwordHash',
+  'password_hash',
+  'token',
+  'accessToken',
+  'refreshToken',
+  'currentPassword',
+  'newPassword',
+  // The MFA enrol response returns the raw TOTP secret and its otpauth URI;
+  // either one is enough to mint valid codes forever.
+  'secret',
+  'otpauthUri',
+  'mfaSecret',
+  // A successful OTP verify returns a verificationId that the password reset
+  // accepts as sole proof — a bearer credential until it is consumed.
+  'verificationId',
+]);
+
+/**
+ * Strip credential-bearing fields before anything is persisted to audit_logs.
+ *
+ * Dates pass through untouched: old_data is a raw DB row, and rebuilding a Date
+ * via Object.entries would flatten created_at/updated_at into `{}` — redaction
+ * must never corrupt the audit record it is protecting.
+ */
+export function redactSensitive<T>(value: T): T {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitive(item)) as T;
+  }
+
+  if (typeof value !== 'object') {
+    return value;
+  }
+
+  const redacted: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    redacted[key] = SENSITIVE_KEYS.has(key) ? '[REDACTED]' : redactSensitive(entry);
+  }
+
+  return redacted as T;
 }
 
 export type AuditOldDataFetcher = (req: import('express').Request) => Promise<unknown>;

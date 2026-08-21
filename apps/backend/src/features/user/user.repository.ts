@@ -58,6 +58,43 @@ export class UserRepositoryClass {
     }
   }
 
+  /**
+   * Count one failed login IN SQL, atomically.
+   *
+   * The controller used to compute `attempts + 1` in JS from a row read before
+   * the bcrypt compare — so N concurrent wrong guesses all read the same
+   * snapshot, all wrote the same value, and MAX_FAILED_ATTEMPTS never tripped.
+   * Worse, the sub-threshold branch wrote `lockedUntil: null` unconditionally,
+   * letting a request still inside bcrypt erase a lock two other requests had
+   * just earned. The CASE keeps an existing lock (ELSE locked_until, never
+   * NULL) and only ever extends, so concurrent failures can't unlock anyone.
+   */
+  async recordFailedLoginAttempt(
+    id: string,
+    maxAttempts: number,
+    lockoutMinutes: number,
+  ): Promise<{ attempts: number; lockedUntil: Date | null } | null> {
+    try {
+      const [row] = await db
+        .update(UserTable)
+        .set({
+          failedLoginAttempts: sql`${UserTable.failedLoginAttempts} + 1`,
+          lockedUntil: sql`CASE WHEN ${UserTable.failedLoginAttempts} + 1 >= ${maxAttempts} THEN now() + (${lockoutMinutes} * interval '1 minute') ELSE ${UserTable.lockedUntil} END`,
+          updatedAt: new Date(),
+          updatedBy: id,
+        })
+        .where(eq(UserTable.id, id))
+        .returning({
+          attempts: UserTable.failedLoginAttempts,
+          lockedUntil: UserTable.lockedUntil,
+        });
+      return row ?? null;
+    } catch (error) {
+      logger.error('[UserRepository.recordFailedLoginAttempt] Error:', error);
+      throw error;
+    }
+  }
+
   async updateUser(
     user: Partial<UserInsertType>,
     id: string,

@@ -171,10 +171,17 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 
 	const reportQuery = useQuery({
 		queryKey: ["outlet", "shift-sale-report", outletId],
-		enabled: backed,
+		// Pinned to THIS venue, same as use-outlet-ratings: for an account active
+		// at two outlets the server returns the UNION of scope.outletIds, so an
+		// unpinned read headlined both venues' floor sales and PR cost as this
+		// one's — and fed that pooled total to the reconciliation banner, which
+		// compares it against ONE venue's invoice and raises a permanent false
+		// "agency billed below your records" alert. The server ANDs outletId
+		// inside the scope, so this can only narrow, never widen.
+		enabled: backed && Boolean(outletId),
 		queryFn: (): Promise<ShiftSaleReport> =>
 			fetchShiftSaleReport(
-				{ fromDate: REPORT_FROM, toDate: REPORT_TO },
+				{ outletId, fromDate: REPORT_FROM, toDate: REPORT_TO },
 				logout,
 			),
 	});

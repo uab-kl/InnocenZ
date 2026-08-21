@@ -19,6 +19,8 @@ import {
   UpdateOutletMemberSchema,
 } from '@/schema/outlet.schema';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository';
+import { AuthRepositoryClass } from '@/features/auth/auth.repository';
+import { portalRoleName } from '@/types/rbac-constant.js';
 import { addressQueryFromOutlet, geocodeAddress } from './geocode';
 import { OutletFilter, OutletStatus } from './outlet.model';
 import { saveOrgLogoFromBase64 } from '@/util/org-logo';
@@ -47,6 +49,8 @@ export class OutletControllerClass {
     // Only to prove the agency in setOnboardingAgency() exists — a bad uuid
     // would otherwise surface as an FK violation 500 instead of a 400.
     private agencyRepository: AgencyRepositoryClass,
+    // Only for the admin check in listMemberships' scoping clamp.
+    private authRepository: AuthRepositoryClass,
   ) {}
 
   async list(req: Request, res: Response) {
@@ -112,6 +116,37 @@ export class OutletControllerClass {
         await this.outletMemberRepository.listMembershipsByUserIds(userIds, {
           status: status === 'all' ? undefined : status,
         });
+
+      // The clamp AgencyController.listMemberships got (a7f9edf) and this twin
+      // lane did not: unclamped, any agency or rival-outlet operator could feed
+      // in 200 user ids and map exactly which venues each person runs and in
+      // what sub-role. Admin reads everything; a single self-read stays
+      // unfiltered because resolve-session-identity derives the operator's own
+      // session from it; everyone else sees only rows at venues where they
+      // themselves hold an ACTIVE membership — a multi-venue operator keeps all
+      // their venues, which is why this filters to the set rather than [0].
+      const callerId = req.user?.id ?? null;
+      const roles = callerId
+        ? await this.authRepository.getRolesForUserIds([callerId])
+        : [];
+      const isAdmin = roles.some((r) => r.roleName === portalRoleName.ADMIN);
+      const isSelfReadOnly = userIds.length === 1 && userIds[0] === callerId;
+      if (!isAdmin && !isSelfReadOnly) {
+        const own = await this.outletMemberRepository.listMembershipsByUserIds(
+          callerId ? [callerId] : [],
+          { status: 'active' },
+        );
+        const ownOutletIds = new Set(own.map((m) => m.outletId));
+        // No venue behind the account answers nothing. Empty, never unfiltered.
+        const scoped =
+          ownOutletIds.size > 0
+            ? memberships.filter((m) => ownOutletIds.has(m.outletId))
+            : [];
+        return res
+          .status(200)
+          .json({ success: true, message: 'OK', data: scoped });
+      }
+
       res.status(200).json({ success: true, message: 'OK', data: memberships });
     } catch (error) {
       logger.error('[OutletController.listMemberships] Error:', error);

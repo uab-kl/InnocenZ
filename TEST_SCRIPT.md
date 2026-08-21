@@ -322,6 +322,41 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ 🔴 THE PV EDITOR LOST-UPDATE IS THE ONE AUDIT HIGH STILL OPEN (deferred 22 Aug 2026)
+
+`payment-voucher.repository.ts` update path (~:304) deletes EVERY line and re-inserts the
+payload; a line the PR logs while the agency editor is open (60s staleTime) is destroyed with
+its proof photo, totals shrink, nobody errors. The fix is optimistic concurrency —
+`expectedUpdatedAt` in UpdatePaymentVoucherSchema, re-read inside the transaction, 409 on
+mismatch, web sends `pv.updatedAt` — but it changes the client↔server protocol on the money
+editor and CANNOT be verified without rendering both sides, so it was NOT rushed into the
+22 Aug batch. Do it as its own slice with the editor open in a browser.
+
+### ▶ 🟠 PURGE THE TOKENS ALREADY SITTING IN audit_logs (added 22 Aug 2026)
+
+The redaction fix stops NEW tokens landing in `audit_logs.new_data`, but every login/enrol row
+written before it still holds live-looking `accessToken`/`refreshToken`/TOTP secrets. One-off
+ops task on the live DB, e.g. `UPDATE audit_logs SET new_data = new_data - 'data' ...` or a
+targeted script nulling the token keys inside `new_data` for `entity='Auth'` rows. Until then a
+DB dump is still a token dump.
+
+### ▶ 🟠 CLICK-THROUGHS FOR THE 22 AUG NINE-FIX BATCH (added 22 Aug 2026)
+
+None are render-verified. The fastest meaningful pass, per surface:
+- **Special-service**: agency A creates a posting → sees ONLY its own list; agency B's list
+  excludes it; B opening A's id gets 404; a forged `postingAgencyId` in the create body lands
+  as the CALLER's id/name, not the forged one.
+- **Outlet portal, two-venue account**: /outlet/billing headlines ONE venue; Post Job cap
+  counts only this venue; Today/Calendar shows only this venue's shifts. Single-venue account:
+  everything identical to before.
+- **Workspace**: a fresh venue's first save leaves the drink menu EMPTY (no Velvet 23 rows) and
+  the next save writes no fixture prices.
+- **RBAC**: open role A then role B → B's matrix never shows A's ticks; kill the network and
+  open a role → Save stays disabled.
+- **OTP**: 5 wrong codes → 429 with fresh guesses refused; /otp/verify spam from one IP → 429.
+- **Removed-staff**: deactivate an agency Finance user → their token loses PV access (org-scope
+  fallback was already fixed by PR #76; the outlet-memberships clamp added here is the twin).
+
 ### ▶ 🔴 CLICK THROUGH THE PV REMINDER ON A REAL AGENCY LOGIN (added 22 Aug 2026)
 
 The 22 Aug payout-job fix (§10) is compile-, lint- and build-verified only. The **UI half has
@@ -1956,6 +1991,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-22 | **Nine audit findings closed in one slice — every remaining high from the 21-22 Aug report except the PV-editor lost-update (deferred, §9).** (1) **audit_logs stored live tokens**: redaction ran only on `req.body`, so the login response's `{accessToken, refreshToken}`, the MFA enrol's raw TOTP `secret`/`otpauthUri`, and OTP verify's `verificationId` all landed in `new_data` in plaintext. `redactSensitive` MOVED to `audit-log.repository.ts` and applied inside `createAuditLog` — the one choke point every lane (REST, GraphQL, withAudit decorator, failure branches) goes through — with 4 new keys and a `Date` guard so old_data rows keep their timestamps (`Object.entries` on a Date yields `{}`). ⚠️ Existing rows still hold old tokens — purge is an ops task. (2) **PV delete wrote off its fees**: `remove()` now a transaction resetting `cancel_fee_charged_at/-voucher_id` and `penalty_charge.charged_at/charged_voucher_id` before the delete (both pools filter on `charged_at IS NULL`); same two resets added inside `wipe-test-vouchers.ts`'s transaction. (3) **GET /outlet/memberships unscoped** — the twin lane a7f9edf missed: mirrored the agency clamp (admin unfiltered; single-self unfiltered for resolve-session-identity; else filtered to the caller's own ACTIVE outlet set — plural, multi-venue operators keep all theirs). OutletController gained `authRepository`. (4) **Login/OTP counters were lost updates**: `recordFailedLoginAttempt` now increments IN SQL with a CASE that never nulls an existing lock (the old code erased locks earned mid-bcrypt); `countFailedAttempt` on phone_verification increments with `attempts < max` in the predicate — empty result = 429, closing the race on the endpoint whose verified id IS the password-reset proof. (5) **`/otp/verify` had NO limiter** while `/otp/send` stacked two: added `otpVerifyLimiter` (60/15min per IP) + `otpVerifyPerPhoneLimiter` (15/hr per phone digits). (6) **Special-service cross-agency leak (both halves)**: `scopedFilter` now adds `postingAgencyId: scope.agencyId` (the column existed all along; filter + where-clause added), `getById` ownership keys on `postingAgencyId === scope.agencyId` not `initiatedBy === 'agency'`, and `create` OVERWRITES `postingAgencyId`/`Name` from `resolveOrgScope` for non-admin callers (agency lane: own id + name from the agency row; outlet/PR lanes: nulled — no client sends them there). SpecialServiceController gained `agencyRepository`. (7) **Velvet drink menu on real outlets**: `outlet-workspace-map.ts` maps an empty saved menu to `[]` — a fact, not a missing value — so the fixture can no longer render as a real venue's price list nor be written back by the next full-draft PUT. Tier-rate DEFAULTs left alone (display-only per the audit's own verification). (8) **RBAC role-sheet wipe**: Save now disabled on `permissionsError` or an empty portal matrix (a sheet that could not load a matrix cannot post one), and `selectedIds` resets on open so role B never inherits role A's grants. (9) **Multi-venue pooling**: `use-outlet-sales-report` / `use-outlet-today` / `use-outlet-post-job` now pin `outletId` into fetch + query key + `enabled`, mirroring `use-outlet-ratings` — kills the false "agency billed below your records" banner, venue B's shifts rendering as A's, and B's headcount eating A's plan cap. Plus the literal `=======` merge marker rendering on Post Job (bookings.tsx) removed. Verified: backend tsc **0**, web tsc **0**, **65/65 tests**, lint on touched files 0 errors, backend build clean, web build clean. ⚠️ None of these are render-verified or test-pinned — §9. | (this commit) |
 
 | 2026-08-22 | **The Sunday payout job sent vouchers UNSIGNED, and sending locked the signature out for good.** `weekly-payout.job.ts` flipped every gate-passing voucher to `sent` with no finance-signature check. The HTTP send has one — `payment-voucher.controller.ts` 409s with *"Sign this voucher first — the finance signature is what the PR is asked to counter-sign"* — but `voucherSendGate` carries no signature term, so the job's own comment claiming "the same gate" was wrong. Not an edge case: `financeSignVoucher` refuses anything that is not `pending_review`, and signing only becomes legal at 00:00 Sunday, so the job running 02:00 the SAME NIGHT was the default path. `finance_head_signed_at` stayed null permanently, every exported PDF/Excel printed an empty finance stamp, and the PR was asked to counter-sign a wage document nobody at the agency had attested. Now held at `pending_review` — the only status finance can still sign from. **The notification had to change with it**: the held queue only said "awaiting day review", so a voucher held for a SIGNATURE would have sent finance to approve days already approved. `awaitingByAgency` now splits `{ dayReview, unsigned }` and one notification per agency names the real action and its consequence — *"finance has to sign before they can reach the PR. Until then the PR sees nothing for that week."* **No schema change**: `kind` is a pgEnum and the journal is corrupt (`drizzle-kit generate` cannot run), so this reuses `pv_day_review_pending`, whose own note already scopes it to "the Monday payout job held one or more vouchers", agency-addressed, one per run. **Plus the reminder the owner asked for**: `/agency` (the real landing — `dashboard.tsx` only redirects there) had NO to-do surface at all, so one was added above the KPI tiles, rendered only when `PENDING_REVIEW` vouchers exist, split sign-vs-review the same way, linking to `/agency/pv?status=PENDING_REVIEW` — verified present in that route's `validateSearch` allow-list, so the filter actually applies. EN + 中文 (7 keys each). Reads `backendPvs.pvs` under the page's existing `backed = identity !== null` split, so a real login cannot surface demo vouchers. Verified: backend typecheck **0**, web typecheck **0**, **65/65 tests**, biome lint **0 errors**, both builds clean. ⚠️ **The reminder has never been rendered** — it only appears when a real agency holds vouchers; see §9. | (this commit) |
 

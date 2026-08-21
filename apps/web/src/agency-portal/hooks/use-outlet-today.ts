@@ -64,6 +64,7 @@ export function useOutletToday(
 	const identity = useMemo(() => getOutletIdentity(), []);
 	const backed = identity !== null;
 	const outletName = identity?.outletName ?? "";
+	const outletId = identity?.outletId ?? "";
 
 	const todayIso = useMemo(() => getLiveTodayIso(), []);
 	const fromDate = useMemo(
@@ -77,10 +78,15 @@ export function useOutletToday(
 
 	const shiftsQuery = useQuery({
 		// The window is part of the key — a wider Calendar fetch must not be
-		// served from (or overwrite) Today's narrower one.
-		queryKey: ["outlet", "today", "shifts", fromDate, toDate],
-		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
-		enabled: backed,
+		// served from (or overwrite) Today's narrower one. The venue too: a
+		// two-venue operator gets the UNION from the server, and every returned
+		// shift was stamped with THIS venue's name downstream, so venue B's
+		// bookings rendered as A's. Pinned like use-outlet-ratings — the server
+		// ANDs outletId inside scope, so it can only narrow.
+		queryKey: ["outlet", "today", "shifts", outletId, fromDate, toDate],
+		queryFn: () =>
+			fetchShifts({ outletId, fromDate, toDate, pageSize: 200 }, logout),
+		enabled: backed && Boolean(outletId),
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
 	});

@@ -165,6 +165,11 @@ export function RoleSheet({
 	useEffect(() => {
 		if (!open) return;
 		form.reset();
+		// Never carry one role's matrix into another: without this reset, opening
+		// role A then role B and pressing Save posted A's permission ids onto B —
+		// the seeding effect below only OVERWRITES when its queries succeed, so
+		// stale ids survived every failed or slow load.
+		setSelectedIds(new Set());
 		if (isManage && role) {
 			form.setFieldValue("roleName", role.roleName);
 			form.setFieldValue("portalId", role.portalId ?? "");
@@ -541,7 +546,20 @@ export function RoleSheet({
 						</Button>
 						<Button
 							type="submit"
-							disabled={isBusy || (isManage && permissionsLoading)}
+							// A sheet that could not LOAD the matrix must not POST one:
+							// with permissionsError unchecked, an admin who opened a role
+							// just to rename it submitted the still-empty selectedIds, the
+							// backend deleted every grant and answered 200, and the sheet
+							// closed on a green "saved" — every holder of the role locked
+							// out at once. An empty portal matrix (null portalId) is the
+							// same wipe without even an error to show.
+							disabled={
+								isBusy ||
+								(isManage &&
+									(permissionsLoading ||
+										!!permissionsError ||
+										portalPermissionIds.size === 0))
+							}
 						>
 							{isSubmitting ? (
 								<>

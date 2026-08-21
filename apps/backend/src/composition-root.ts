@@ -193,6 +193,7 @@ export const outletController = new OutletControllerClass(
   orgMemberInviteRepository,
   userRoleRepository,
   agencyRepository,
+  authRepository,
 );
 
 export const orgMemberInviteController = new OrgMemberInviteControllerClass(
@@ -285,6 +286,8 @@ export const specialServiceController = new SpecialServiceControllerClass(
   // `create` must check the caller may post against the outlet it names — see
   // the note there. It could not, until this was handed over.
   agencyOutletRepository,
+  // For the server-resolved agency NAME on create; the id comes from scope.
+  agencyRepository,
 );
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();

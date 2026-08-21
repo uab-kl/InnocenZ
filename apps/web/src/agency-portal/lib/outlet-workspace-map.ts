@@ -62,6 +62,15 @@ export function workspaceSettingsFromBackend(
 			}
 		: { ...DEFAULT_OUTLET_WORKSPACE.commissionOnlyRates };
 
+	// An empty saved menu is a FACT, not a missing value. This mapper only runs
+	// on real backed sessions, and the empty state is reachable on a venue's
+	// FIRST save (the backend writes no child rows for an empty list, so the
+	// refetch hands back exactly this). Falling back to the Velvet 23 fixture
+	// here rendered demo drinks as the venue's own price list — and because
+	// workspace.tsx seeds its draft from this output and PUTs the whole draft,
+	// the next save on any unrelated field wrote Velvet's prices into the real
+	// outlet_drink_menu, with drink commission computed against them. Direct
+	// violation of the no-DEFAULT_*-on-real-logins rule.
 	const drinkMenu =
 		record.drinkMenu.length > 0
 			? [...record.drinkMenu]
@@ -75,7 +84,7 @@ export function workspaceSettingsFromBackend(
 								? ("drink" as const)
 								: ("service" as const),
 					}))
-			: DEFAULT_OUTLET_WORKSPACE.drinkMenu.map((d) => ({ ...d }));
+			: [];
 
 	const baseTier = repairedTierRates[OUTLET_BASE_TIER];
 

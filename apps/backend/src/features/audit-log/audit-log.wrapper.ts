@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { Request } from 'express';
 import { GraphQLContext } from '@/graphql/context';
-import { CreateAuditLogInput, registerAuditOldDataFetcher } from './audit-log.repository';
+import {
+  CreateAuditLogInput,
+  redactSensitive,
+  registerAuditOldDataFetcher,
+} from './audit-log.repository';
+
+export { redactSensitive };
 import {
   auditLogRepository,
   authRepository,
@@ -38,16 +44,10 @@ export type ResolverFn<TParent, TArgs, TResult> = (
   info: unknown,
 ) => Promise<TResult>;
 
-const SENSITIVE_KEYS = new Set([
-  'password',
-  'passwordHash',
-  'password_hash',
-  'token',
-  'accessToken',
-  'refreshToken',
-  'currentPassword',
-  'newPassword',
-]);
+// SENSITIVE_KEYS and redactSensitive moved to audit-log.repository.ts, where
+// createAuditLog applies them to EVERY lane's old/new data at the insert —
+// the wrapper only ever redacted req.body, which is how login responses ended
+// up storing live tokens. Re-exported below so existing imports keep working.
 
 const ENTITY_MAP: Record<string, string> = {
   role: 'Role',
@@ -318,27 +318,6 @@ export async function resolveAuditActor(
   } catch {
     return { userId: null, role: null };
   }
-}
-
-export function redactSensitive<T>(value: T): T {
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => redactSensitive(item)) as T;
-  }
-
-  if (typeof value !== 'object') {
-    return value;
-  }
-
-  const redacted: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    redacted[key] = SENSITIVE_KEYS.has(key) ? '[REDACTED]' : redactSensitive(entry);
-  }
-
-  return redacted as T;
 }
 
 export function resolveEntityFromPath(path: string): string {

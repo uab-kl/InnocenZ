@@ -241,20 +241,20 @@ export class AuthControllerClass {
    */
   private async recordFailedLogin(user: { id: string; username: string; failedLoginAttempts: number }): Promise<void> {
     try {
-      const attempts = (user.failedLoginAttempts ?? 0) + 1;
-      const lock = attempts >= AuthControllerClass.MAX_FAILED_ATTEMPTS;
-      await this.userRepository.updateUser(
-        {
-          failedLoginAttempts: attempts,
-          lockedUntil: lock
-            ? new Date(Date.now() + AuthControllerClass.LOCKOUT_MINUTES * 60_000)
-            : null,
-          updatedBy: user.id,
-        },
+      // Incremented in SQL, not from the row this request read before bcrypt:
+      // N concurrent wrong guesses used to all write the same snapshot value,
+      // so the threshold never tripped — and the sub-threshold branch wrote
+      // lockedUntil: null, erasing a lock other requests had just earned. The
+      // repository's CASE keeps an existing lock and only ever extends it.
+      const row = await this.userRepository.recordFailedLoginAttempt(
         user.id,
+        AuthControllerClass.MAX_FAILED_ATTEMPTS,
+        AuthControllerClass.LOCKOUT_MINUTES,
       );
-      if (lock) {
-        logger.warn(`[AuthController] Locked ${user.username} after ${attempts} failed attempts`);
+      if (row && row.attempts >= AuthControllerClass.MAX_FAILED_ATTEMPTS) {
+        logger.warn(
+          `[AuthController] Locked ${user.username} after ${row.attempts} failed attempts`,
+        );
       }
     } catch (error) {
       logger.error('[AuthController.recordFailedLogin] Error:', error);

@@ -23,6 +23,7 @@ import { parseDatesQuery } from '@/util/filter-date-format.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import type { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
+import type { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 
 export class SpecialServiceControllerClass {
   constructor(
@@ -31,6 +32,9 @@ export class SpecialServiceControllerClass {
     private authRepository: AuthRepositoryClass,
     private orgScopeDeps: OrgScopeDeps,
     private agencyOutletRepository: AgencyOutletRepository,
+    // Only to resolve the caller's own agency NAME in create — the id comes
+    // from scope, and the name must not be the client's free text.
+    private agencyRepository: AgencyRepositoryClass,
   ) {}
 
   /**
@@ -159,7 +163,13 @@ export class SpecialServiceControllerClass {
     // venues sees the first. A multi-outlet filter is the follow-up.
     const outletId = scope.outletIds[0];
     if (outletId) return { ...filter, outletId };
-    if (scope.agencyId) return { ...filter, initiatedBy: 'agency' };
+    // ITS OWN postings only. `initiatedBy: 'agency'` alone returned every
+    // agency's rows — title, budget, venue — to every agency caller; the web
+    // hook then filtered client-side, which hid the leak from the UI while the
+    // whole payload sat in the response body. posting_agency_id has been on
+    // the table (FK to agency) the entire time; the filter just never used it.
+    if (scope.agencyId)
+      return { ...filter, initiatedBy: 'agency', postingAgencyId: scope.agencyId };
     return null;
   }
 
@@ -347,7 +357,10 @@ export class SpecialServiceControllerClass {
         scope.isAdmin ||
         (record.outletId !== null &&
           scope.outletIds.includes(record.outletId)) ||
-        (scope.agencyId !== null && record.initiatedBy === 'agency');
+        // THIS agency's posting, not any agency's — `initiatedBy === 'agency'`
+        // alone let every agency open every rival's order by id.
+        (scope.agencyId !== null &&
+          record.postingAgencyId === scope.agencyId);
       if (!ownsIt) {
         return res
           .status(404)
@@ -420,6 +433,33 @@ export class SpecialServiceControllerClass {
         });
       }
 
+      // Agency attribution is pinned from what the caller IS — the rule this
+      // handler already applies to initiatedBy, postingPrId and outletId, but
+      // not to these two: they were stored verbatim from the body, so Agency B
+      // could read A's uuid from GET /agency and file a budgeted posting onto
+      // A's books, with the free-text name driving the admin queue's label.
+      // Only admin may attribute on another org's behalf. The honest agency
+      // client sends its own id and name, so nothing legitimate changes.
+      const callerScope = await resolveOrgScope(req, this.orgScopeDeps);
+      let postingAgencyId = parsed.data.postingAgencyId ?? null;
+      let postingAgencyName = parsed.data.postingAgencyName ?? null;
+      if (!callerScope.isAdmin) {
+        if (initiatedBy === 'agency') {
+          postingAgencyId = callerScope.agencyId;
+          const ownAgency = callerScope.agencyId
+            ? await this.agencyRepository.getById(callerScope.agencyId)
+            : null;
+          // The schema requires a name on the agency lane, so keep the client's
+          // wording only if the agency row is somehow nameless.
+          postingAgencyName = ownAgency?.name ?? postingAgencyName;
+        } else {
+          // Outlet and PR lanes carry no agency attribution — no client sends
+          // one, so a value here is only ever a forgery.
+          postingAgencyId = null;
+          postingAgencyName = null;
+        }
+      }
+
       const record = await this.repository.create({
         outletId: parsed.data.outletId ?? null,
         title: parsed.data.title,
@@ -432,8 +472,8 @@ export class SpecialServiceControllerClass {
         status: 'open',
         initiatedBy,
         adminAccepted,
-        postingAgencyId: parsed.data.postingAgencyId ?? null,
-        postingAgencyName: parsed.data.postingAgencyName ?? null,
+        postingAgencyId,
+        postingAgencyName,
         postingPrId,
         postingUserId,
         scheduledFor: parsed.data.scheduledFor ?? null,

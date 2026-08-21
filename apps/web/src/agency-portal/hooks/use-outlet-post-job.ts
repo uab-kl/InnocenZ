@@ -90,13 +90,17 @@ export function useOutletPostJob(): UseOutletPostJob {
 		[todayIso],
 	);
 
-	// Existing shifts + their roster, server-scoped to this outlet, so the daily
-	// plan caps count real bookings instead of the always-empty demo store.
+	// Existing shifts + their roster, pinned to THIS venue — "server-scoped"
+	// was the union of every venue the account holds, so a two-venue operator
+	// had venue B's headcount counted against A's PR-per-day plan cap, and Post
+	// Job refused a post A was entitled to. Same pin as use-outlet-ratings; the
+	// server ANDs outletId inside scope, so it can only narrow.
+	const outletId = identity?.outletId ?? "";
 	const shiftsQuery = useQuery({
-		queryKey: ["outlet", "post-job", "shifts", todayIso, toDate],
+		queryKey: ["outlet", "post-job", "shifts", outletId, todayIso, toDate],
 		queryFn: () =>
-			fetchShifts({ fromDate: todayIso, toDate, pageSize: 200 }, logout),
-		enabled: backed,
+			fetchShifts({ outletId, fromDate: todayIso, toDate, pageSize: 200 }, logout),
+		enabled: backed && Boolean(outletId),
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
 	});
