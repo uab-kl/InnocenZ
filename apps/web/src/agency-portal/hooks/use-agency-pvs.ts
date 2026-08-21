@@ -73,8 +73,7 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 	// save from this stale editor used to silently destroy that line and its
 	// proof photo. With the token, the backend 409s and the operator reloads.
 	const rawUpdatedAt = useMemo(
-		() =>
-			new Map((pvQuery.data?.data ?? []).map((v) => [v.id, v.updatedAt])),
+		() => new Map((pvQuery.data?.data ?? []).map((v) => [v.id, v.updatedAt])),
 		[pvQuery.data],
 	);
 
