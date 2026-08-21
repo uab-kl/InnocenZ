@@ -308,7 +308,24 @@ export function ShiftHistoryLog({
 				),
 			});
 
-	const agencyName = rows[0]?.agencyName ?? "Atlas Agency";
+	// Names the agencies present in `detailOutletRows` — the exact rows the
+	// breakdown under this header is aggregated from (one venue, already
+	// filtered). It used to be `rows[0]?.agencyName`, which took whichever
+	// agency happened to sit first in the WHOLE merged feed: a PR who works for
+	// several agencies got the panel labelled with an agency that booked none of
+	// the shifts listed beneath it. Same shape as `agencyLabel` in
+	// OutletPrShiftHistorySheet further down this file.
+	//
+	// The old `?? "Atlas Agency"` fallback is gone on purpose: Atlas is DEMO
+	// data, and a real agency signing in must never be shown it.
+	// See .cursor/rules/no-demo-data-on-real-sessions.mdc.
+	const detailOutletAgencyLabel = useMemo(
+		() =>
+			[...new Set(detailOutletRows.map((r) => r.agencyName))]
+				.filter(Boolean)
+				.join(" · "),
+		[detailOutletRows],
+	);
 
 	const shellClass = embedded
 		? useOutletCardLayout
@@ -672,7 +689,9 @@ export function ShiftHistoryLog({
 								← Return
 							</button>
 							<p className="iz-tiny iz-muted2 uppercase">
-								PR breakdown · {agencyName}
+								{detailOutletAgencyLabel
+									? `PR breakdown · ${detailOutletAgencyLabel}`
+									: "PR breakdown"}
 							</p>
 							<h3>{detailOutletRollup.venue}</h3>
 						</div>
