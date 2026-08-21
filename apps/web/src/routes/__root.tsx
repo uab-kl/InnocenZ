@@ -33,21 +33,19 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			(match) => match.status === "notFound" || match.globalNotFound,
 		);
 
-    return {
-      meta: [
-        { charSet: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        ...(isNotFound
-          ? (notFoundHead().meta ?? [])
-          : [{ title: 'Innocenz' }]),
-      ],
-      links: [
-        { rel: 'stylesheet', href: appCss },
-        { rel: 'icon', href: '/assets/innocenz-logo.png', type: 'image/png' },
-        { rel: 'apple-touch-icon', href: '/assets/innocenz-logo.png' },
-      ],
-    }
-  },
+		return {
+			meta: [
+				{ charSet: "utf-8" },
+				{ name: "viewport", content: "width=device-width, initial-scale=1" },
+				...(isNotFound ? (notFoundHead().meta ?? []) : [{ title: "Innocenz" }]),
+			],
+			links: [
+				{ rel: "stylesheet", href: appCss },
+				{ rel: "icon", href: "/assets/innocenz-logo.png", type: "image/png" },
+				{ rel: "apple-touch-icon", href: "/assets/innocenz-logo.png" },
+			],
+		};
+	},
 
 	shellComponent: RootDocument,
 });

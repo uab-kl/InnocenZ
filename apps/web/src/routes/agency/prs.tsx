@@ -69,7 +69,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
 	AlertTriangle,
 	ChevronDown,
-	Filter,
 	Lock,
 	Megaphone,
 	MousePointerClick,

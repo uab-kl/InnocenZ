@@ -1,5 +1,5 @@
-import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
+import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { PostJobEditableInputShell } from "@agency-portal/components/outlet/post-job-shift-ui";
 import {
 	isOtherSpecialEvent,
@@ -7,7 +7,14 @@ import {
 } from "@agency-portal/lib/outlet-demo";
 import { cn } from "@agency-portal/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, Pencil, Plus, Sparkles, Trash2, ZoomIn } from "lucide-react";
+import {
+	ImagePlus,
+	Pencil,
+	Plus,
+	Sparkles,
+	Trash2,
+	ZoomIn,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
@@ -165,8 +172,6 @@ function TemplateRow({
 	);
 }
 
-
-
 function TemplateCard({
 	template,
 	onPick,
@@ -292,7 +297,9 @@ function TemplateEditorSheet({
 								: "iz-chosen-event-bar__kind--normal",
 						)}
 					>
-						{eventKind === "special" ? t.postJob.specialEvent : t.postJob.normalEvent}
+						{eventKind === "special"
+							? t.postJob.specialEvent
+							: t.postJob.normalEvent}
 					</span>
 					<div className="flex items-center gap-2">
 						{template && (
@@ -336,7 +343,6 @@ function TemplateEditorSheet({
 								/>
 							</PostJobEditableInputShell>
 						</label>
-
 
 						<div className="iz-event-editor__field">
 							<span>{t.postJob.coverPicture}</span>
@@ -392,13 +398,13 @@ function TemplateEditorSheet({
 							</span>
 						</span>
 					</div>
-				{previewZoom && preview && (
-					<PhotoLightbox
-						photo={preview}
-						alt={name.trim() || t.postJob.newTemplate}
-						onClose={() => setPreviewZoom(false)}
-					/>
-				)}
+					{previewZoom && preview && (
+						<PhotoLightbox
+							photo={preview}
+							alt={name.trim() || t.postJob.newTemplate}
+							onClose={() => setPreviewZoom(false)}
+						/>
+					)}
 				</div>
 			</div>
 		</IzSheet>

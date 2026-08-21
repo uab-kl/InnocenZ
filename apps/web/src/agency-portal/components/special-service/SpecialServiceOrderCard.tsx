@@ -7,7 +7,6 @@ import {
 	specialServiceRecordTypeLabel,
 	specialServiceStatusLabel,
 	specialServiceStatusVariant,
-	specialServiceTypeLabel,
 } from "@agency-portal/lib/special-service-demo";
 import { cn } from "@agency-portal/lib/utils";
 

@@ -383,17 +383,26 @@ const en = {
 		changeInWorkspace: "Change in Workspace",
 		linkDrinksPrice: "Drinks Price",
 		linkTierRates: "Rates by PR tier",
-		specialPricesIntro: "This event's own price list — later events keep using your Workspace prices.",
+		specialPricesIntro:
+			"This event's own price list — later events keep using your Workspace prices.",
 		infoTipLabel: "How this works",
-		helpDates: "Tap days to add or remove them. Inside the calendar: 3 days / 1 week picks a span, and double-tapping one day selects only that day.",
-		helpPeopleNeeded: "How many PRs this shift needs. The pay table splits this number across tiers, and Select PRs can name who you want.",
-		helpSelectPrs: "Optional — name PRs who have worked at your venue before. Slots you leave unnamed are staffed by your agency. Clear all removes every pick.",
-		helpPrices: "Drink and service prices come from your Workspace and apply to every normal event. Use the links to change them there.",
-		helpTierGrid: "Tap a gold cell to set the daily wage. Tap Commission to open drinks & tips %. Target sales is optional. PR count splits People needed across the tiers.",
+		helpDates:
+			"Tap days to add or remove them. Inside the calendar: 3 days / 1 week picks a span, and double-tapping one day selects only that day.",
+		helpPeopleNeeded:
+			"How many PRs this shift needs. The pay table splits this number across tiers, and Select PRs can name who you want.",
+		helpSelectPrs:
+			"Optional — name PRs who have worked at your venue before. Slots you leave unnamed are staffed by your agency. Clear all removes every pick.",
+		helpPrices:
+			"Drink and service prices come from your Workspace and apply to every normal event. Use the links to change them there.",
+		helpTierGrid:
+			"Tap a gold cell to set the daily wage. Tap Commission to open drinks & tips %. Target sales is optional. PR count splits People needed across the tiers.",
 		whatYouCanDoHere: "What you can do here",
-		canDoPostJob1: "Post one shift, or several nights at once — 3 days / 1 week in the date picker",
-		canDoPostJob2: "Set pay per PR tier, or keep following your Workspace rates",
-		canDoPostJob3: "Name PRs who worked here before, or let the agency staff it",
+		canDoPostJob1:
+			"Post one shift, or several nights at once — 3 days / 1 week in the date picker",
+		canDoPostJob2:
+			"Set pay per PR tier, or keep following your Workspace rates",
+		canDoPostJob3:
+			"Name PRs who worked here before, or let the agency staff it",
 		canDoPostJob4: "Give a special event its own price list",
 		canDoPostJob5: "Add another shift and post them together",
 		canDoPostJob6: "Pick which linked agencies receive the job",
@@ -403,7 +412,8 @@ const en = {
 		returnBack: "Return",
 		specialEventTypeLabel: "Special event type",
 		tapToZoom: "Tap the picture to zoom",
-		otherTypeEditableHint: "Your own words — tap the field below and write any event type.",
+		otherTypeEditableHint:
+			"Your own words — tap the field below and write any event type.",
 		blankStartFresh: "Blank — start fresh",
 		loadingTemplates: "Loading your event cards…",
 		newTemplate: "New template",
@@ -3163,13 +3173,19 @@ const zh: PortalTranslations = {
 		linkTierRates: "按 PR 等级的费率",
 		specialPricesIntro: "本活动专属价格表 — 之后的活动仍沿用工作区价格。",
 		infoTipLabel: "使用说明",
-		helpDates: "点击日期即可添加或移除。日历内：「3 天 / 1 周」可选择连续日期，双击某一天则只选中当天。",
-		helpPeopleNeeded: "本班次所需的 PR 人数。下方薪酬表会把这个人数分配到各等级，「选择 PR」可指定想要的人。",
-		helpSelectPrs: "可选 — 指定曾在本店工作过的 PR。未指定的名额由经纪公司安排。「全部清除」可移除所有已选。",
-		helpPrices: "酒水与服务价格来自您的工作区，适用于所有普通活动。可通过链接前往修改。",
-		helpTierGrid: "点击金色单元格设置日薪；点击「佣金」展开酒水与小费 %；目标销售额为选填；「PR 人数」把所需人数分配到各等级。",
+		helpDates:
+			"点击日期即可添加或移除。日历内：「3 天 / 1 周」可选择连续日期，双击某一天则只选中当天。",
+		helpPeopleNeeded:
+			"本班次所需的 PR 人数。下方薪酬表会把这个人数分配到各等级，「选择 PR」可指定想要的人。",
+		helpSelectPrs:
+			"可选 — 指定曾在本店工作过的 PR。未指定的名额由经纪公司安排。「全部清除」可移除所有已选。",
+		helpPrices:
+			"酒水与服务价格来自您的工作区，适用于所有普通活动。可通过链接前往修改。",
+		helpTierGrid:
+			"点击金色单元格设置日薪；点击「佣金」展开酒水与小费 %；目标销售额为选填；「PR 人数」把所需人数分配到各等级。",
 		whatYouCanDoHere: "此页面能做什么",
-		canDoPostJob1: "发布一个班次，或一次发布多晚 — 在日期选择器中用「3 天 / 1 周」",
+		canDoPostJob1:
+			"发布一个班次，或一次发布多晚 — 在日期选择器中用「3 天 / 1 周」",
 		canDoPostJob2: "按 PR 等级设置薪酬，或继续沿用工作区费率",
 		canDoPostJob3: "指定曾在本店工作过的 PR，或交由经纪公司安排",
 		canDoPostJob4: "为特别活动设置专属价格表",

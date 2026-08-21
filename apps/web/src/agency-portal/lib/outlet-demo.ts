@@ -38,7 +38,6 @@ import {
 	type PostJobPayTierRow,
 	postJobPayTierIdForOutletTier,
 	resolveEffectiveShiftPayTierRows,
-	resolveShiftPayTierRows,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import { type PrPayClass, prPayClass } from "@agency-portal/lib/pr-penalties";
 import { fill } from "@/lib/portal-i18n/fill";

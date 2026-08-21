@@ -6,7 +6,6 @@ import {
 	migrateCommissionRuleToTierIBase,
 	normalizeTierRates,
 	OUTLET_BASE_TIER,
-	OUTLET_PR_TIERS,
 	type OutletCommissionRule,
 	type OutletPrTier,
 	type OutletTierRateSettings,

@@ -76,7 +76,6 @@ import {
 	formatPayTierRowSummary,
 	isCommissionOnlyPayTier,
 	newPostJobPayTierRow,
-	type PostJobPayTierId,
 	type PostJobPayTierRow,
 	payTierRowsFromLegacy,
 	RANKED_POST_JOB_PAY_TIER_IDS,
@@ -1305,39 +1304,6 @@ export function DraftPrPicker({
 					</div>
 				</div>
 			)}
-		</div>
-	);
-}
-
-function FormRow({
-	label,
-	children,
-	last,
-	alignTop,
-	stacked,
-}: {
-	label: string;
-	children: React.ReactNode;
-	last?: boolean;
-	alignTop?: boolean;
-	stacked?: boolean;
-}) {
-	if (stacked) {
-		return (
-			<div
-				className={`flex flex-col gap-1.5 py-2.5 ${last ? "" : "border-b border-[var(--iz-line)]"}`}
-			>
-				<span className="text-xs text-[var(--iz-muted)]">{label}</span>
-				<div className="min-w-0 w-full">{children}</div>
-			</div>
-		);
-	}
-	return (
-		<div
-			className={`flex gap-3 py-2.5 ${alignTop ? "items-start" : "items-center"} ${last ? "" : "border-b border-[var(--iz-line)]"}`}
-		>
-			<span className="shrink-0 text-xs text-[var(--iz-muted)]">{label}</span>
-			<div className="ml-auto flex min-w-0 flex-1 justify-end">{children}</div>
 		</div>
 	);
 }

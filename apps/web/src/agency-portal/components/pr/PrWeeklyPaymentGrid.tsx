@@ -52,7 +52,7 @@ export function PrWeeklyPaymentGrid({
 	interactive,
 	onDisputeDay,
 	onWithdrawDay,
-	weekPhase = "open",
+	weekPhase: _weekPhase = "open",
 	activeDisputeKey,
 }: {
 	summary: WeeklyPaymentSummary;

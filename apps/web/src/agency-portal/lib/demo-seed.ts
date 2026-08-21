@@ -20,7 +20,6 @@ import {
 	SEED_AGENCY_PRS_ALL,
 	SEED_AGENCY_ROSTER,
 	SEED_PENDING_PRS,
-	SEED_RECONCILIATION,
 } from "@agency-portal/lib/agency-demo";
 import { resolveOutletShiftDateIso } from "@agency-portal/lib/agency-outlet-shifts";
 import {
@@ -69,14 +68,11 @@ import {
 	demoPayrollWeekBoundsForWeeksAgo,
 	fmtDateLabelFromIso,
 	getPrProfile,
-	LIVE_SEED_PR_PVS,
 	LIVE_SEED_RECEIPT_SCANS,
-	PORTFOLIO_SLOT_COUNT,
 	type PrPaymentVoucher,
 	remapSeedPaymentVouchers,
 	SEED_PR_AVATAR_IMAGE,
 	SEED_PR_PVS,
-	SEED_RECEIPT_SCANS,
 } from "@agency-portal/lib/pr-demo";
 import {
 	DEMO_AGENCY_TIED_AT,

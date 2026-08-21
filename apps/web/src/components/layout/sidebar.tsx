@@ -16,7 +16,6 @@ import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 import { cn } from "@/lib/utils";
 
 function isAdminUser(

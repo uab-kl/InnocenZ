@@ -207,7 +207,7 @@ export function shiftDurationLabel(session: {
 export function buildShiftStatusRows(
 	session: PrActiveShiftSession,
 	scans: PrReceiptScan[],
-	baseWages: number,
+	_baseWages: number,
 	opts?: { freezeSelfLogVerification?: boolean },
 ): ShiftStatusRow[] {
 	const duty = calcDutyWagesFromOutlet(

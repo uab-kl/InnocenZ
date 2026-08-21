@@ -12,10 +12,7 @@ import {
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
-import {
-	ShiftTxnMetric,
-	ShiftTxnMetricsRow,
-} from "@agency-portal/components/outlet/outlet-history-metrics";
+import { ShiftTxnMetricsRow } from "@agency-portal/components/outlet/outlet-history-metrics";
 import {
 	findOutletRatingForPr,
 	OutletPrHistoryCard,
@@ -45,7 +42,7 @@ import {
 	sumShiftHistoryVenueRollups,
 } from "@agency-portal/lib/shift-history-utils";
 import { useStore } from "@agency-portal/lib/store";
-import { format, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
 import {
 	Calendar as CalendarIcon,
 	ChevronDown,
@@ -482,7 +479,6 @@ export function ShiftHistoryLog({
 						<PrHistoryCard
 							key={rollup.prId}
 							rollup={rollup}
-							venueLabel={venueLabel}
 							portal={portal}
 							onTap={showPrDetail ? () => openPrDetail(rollup.prId) : undefined}
 						/>
@@ -995,14 +991,16 @@ function VenueHistoryCard({
 	return <IzCard>{body}</IzCard>;
 }
 
+// `venueLabel` was a prop here and nothing read it: the card builds its own
+// `venueSummary` from `rollup.venues` just below, which is the fact it actually
+// wants. A prop that is passed, typed and then ignored reads as a bug at the
+// call site — the caller believes it is choosing the label.
 function PrHistoryCard({
 	rollup,
-	venueLabel,
 	portal,
 	onTap,
 }: {
 	rollup: ShiftHistoryPrRollup;
-	venueLabel: string;
 	portal: Portal;
 	onTap?: () => void;
 }) {
@@ -1279,119 +1277,6 @@ export function HistDateRangePickerField({
 					<p className="iz-tiny iz-muted2 mt-1 px-1">
 						{t.history.pickFromThenTo}
 					</p>
-				</div>
-			)}
-		</div>
-	);
-}
-
-function HistDatePickerField({
-	label,
-	value,
-	onChange,
-	dateOptions,
-}: {
-	label: string;
-	value: string;
-	onChange: (v: string) => void;
-	dateOptions: { key: string; label: string }[];
-}) {
-	const { t } = usePortalLocale();
-	const [open, setOpen] = useState(false);
-	const rootRef = useRef<HTMLDivElement>(null);
-	const selectedLabel = dateOptions.find((o) => o.key === value)?.label;
-	const selected = dateFromKey(value);
-	const defaultMonth = defaultHistCalendarMonth(dateOptions);
-	const navBounds = useMemo(
-		() => calendarNavBounds(dateOptions, defaultMonth),
-		[dateOptions, defaultMonth],
-	);
-	const [viewMonth, setViewMonth] = useState(selected ?? defaultMonth);
-
-	useEffect(() => {
-		if (open)
-			setViewMonth(
-				selected ?? dateFromKey(dateOptions[0]?.key ?? "") ?? defaultMonth,
-			);
-	}, [open, selected, defaultMonth, dateOptions]);
-
-	useEffect(() => {
-		if (!open) return;
-		const onDoc = (e: MouseEvent) => {
-			if (rootRef.current?.contains(e.target as Node)) return;
-			setOpen(false);
-		};
-		const id = window.setTimeout(
-			() => document.addEventListener("mousedown", onDoc),
-			0,
-		);
-		return () => {
-			window.clearTimeout(id);
-			document.removeEventListener("mousedown", onDoc);
-		};
-	}, [open]);
-
-	return (
-		<div ref={rootRef} className="iz-hist-custom-select compact">
-			<label>{label}</label>
-			<button
-				type="button"
-				className={`iz-hist-select-trigger sm${open ? " open" : ""}`}
-				onClick={() => setOpen((o) => !o)}
-				aria-expanded={open}
-				aria-label={t.history.chooseDate}
-			>
-				<span
-					className={`flex min-w-0 items-center gap-1.5 truncate${value ? "" : " iz-muted2"}`}
-				>
-					<CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
-					<span className="truncate">
-						{value ? (selectedLabel ?? value) : t.filters.allDates}
-					</span>
-				</span>
-				{value ? (
-					<span
-						role="button"
-						tabIndex={0}
-						className="iz-hist-clear"
-						aria-label={t.history.clearDate}
-						onClick={(e) => {
-							e.stopPropagation();
-							onChange("");
-							setOpen(false);
-						}}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" || e.key === " ") {
-								e.preventDefault();
-								e.stopPropagation();
-								onChange("");
-								setOpen(false);
-							}
-						}}
-					>
-						<X className="h-3.5 w-3.5" />
-					</span>
-				) : (
-					<ChevronDown
-						className={`h-4 w-4 shrink-0 text-[var(--iz-muted2)] transition-transform${open ? " rotate-180" : ""}`}
-					/>
-				)}
-			</button>
-			{open && (
-				<div
-					className="iz-hist-cal iz-hist-cal--popover"
-					onMouseDown={(e) => e.stopPropagation()}
-				>
-					<HistDateCalendar
-						selected={selected}
-						viewMonth={viewMonth}
-						onViewMonthChange={setViewMonth}
-						navBounds={navBounds}
-						onSelectDay={(d) => {
-							onChange(isoKeyFromDate(d));
-							setOpen(false);
-						}}
-					/>
 				</div>
 			)}
 		</div>

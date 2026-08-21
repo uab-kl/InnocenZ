@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import { Camera, Check, Lock, Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 /** View = read-only display · edit = editable input · locked = shown but not editable here. */
 export type ProfileFieldMode = "view" | "edit" | "locked";

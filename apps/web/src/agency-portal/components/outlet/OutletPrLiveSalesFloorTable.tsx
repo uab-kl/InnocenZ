@@ -4,7 +4,6 @@ import type { OutletPrLiveEarningsBreakdown } from "@agency-portal/lib/outlet-fi
 import { roundRm } from "@agency-portal/lib/outlet-financial-sync";
 import { cn } from "@agency-portal/lib/utils";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 function FormulaCell({
 	baseLabel,
@@ -33,7 +32,6 @@ function EarningsRow({
 	row: OutletPrLiveEarningsBreakdown;
 	onClick?: () => void;
 }) {
-	const { t } = usePortalLocale();
 	return (
 		<tr
 			className={cn(

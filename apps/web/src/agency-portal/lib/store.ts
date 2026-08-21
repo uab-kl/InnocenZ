@@ -28,7 +28,6 @@ import {
 	migrateCommissionRuleToTierIBase,
 	migrateLegacyOutletCommissionRules,
 	migrateTierMultipliersToTierIBase,
-	normalizeOutletTierMultipliers,
 	normalizeTierRates,
 	OUTLET_BASE_TIER,
 	OUTLET_COMMISSION_RULES,
@@ -40,9 +39,7 @@ import {
 	pendingPRToManagedPR,
 	RETIRED_PENDING_PR_IDS,
 	SCALING_TIER_MULTIPLIERS,
-	SEED_AGENCY_COLLECTIONS,
 	SEED_AGENCY_PRS_ALL,
-	SEED_AGENCY_ROSTER,
 	SEED_PENDING_PRS,
 	SEED_RECONCILIATION,
 	snapTierWage,
@@ -107,7 +104,6 @@ import {
 	DEFAULT_OUTLET_OPS_HEAD,
 	DEFAULT_OUTLET_OWNER,
 	DEFAULT_OUTLET_SETTINGS,
-	DEFAULT_OUTLET_WORKSPACE,
 	effectiveShiftDrinkMenu,
 	getOutletSubscriptionPlan,
 	mergeReleasedEarlyAt,
@@ -128,7 +124,6 @@ import {
 	outletShiftActivePrIds,
 	outletShiftCutLossForShift,
 	outletShiftCutLossSavings,
-	outletShiftEffectiveDemand,
 	outletShiftPlannedLaborPerSlot,
 	outletSubscriptionInvoiceForPlan,
 	outletUnfilledDemandSlots,
@@ -144,7 +139,6 @@ import {
 } from "@agency-portal/lib/outlet-demo";
 import {
 	computeDrinkSales,
-	computeShiftLiveSales,
 	type OutletPnlSynced,
 	recomputeAllOutletPnl,
 	withShiftFinancialDefaults,
@@ -154,7 +148,6 @@ import {
 	addPrToOutletShift,
 	addPrToPostedOutletShift,
 	buildShiftHistoryRow,
-	canonicalOutlet,
 	ensureRosterSlot,
 	marketplacePrsFromAgency,
 	mergeOutletRequestRosterSlots,
@@ -180,7 +173,6 @@ import {
 } from "@agency-portal/lib/pr-availability-sync";
 import {
 	buildManualReceiptItems,
-	buildPaymentVoucherFromShift,
 	COMCARD,
 	calcReceiptCommissions,
 	DEFAULT_TIED_AGENCY_ID,
@@ -190,7 +182,6 @@ import {
 	filterReceiptScansForPrProfile,
 	findDuplicateReceiptScan,
 	fmtDateLabelFromIso,
-	formatPrDisplayName,
 	formatPvSignTimestamp,
 	getPrAgencyById,
 	getPrProfile,
@@ -206,7 +197,6 @@ import {
 	mergePersistedReceiptScanWithSeed,
 	migratePrPortfolioAssetPath,
 	PORTFOLIO_SLOT_COUNT,
-	PR_SHIFT_OFFERS,
 	type PrActiveShiftSession,
 	type PrComcard,
 	type PrPaymentVoucher,
@@ -217,26 +207,18 @@ import {
 	receiptScanCategory,
 	receiptScanFingerprint,
 	reconcilePvTotals,
-	remapSeedPaymentVoucher,
 	remapSeedPaymentVouchers,
-	remapSeedReceiptScan,
-	remapSeedReceiptScans,
 	resolveManualSelfLogItems,
 	SEED_PR_PVS,
-	SEED_RECEIPT_SCANS,
-	SHIFT_TODAY,
 	TIED_DEMO_ROSTER_PR_ID,
 } from "@agency-portal/lib/pr-demo";
 import {
 	DEMO_AGENCY_TIED_AT,
-	listingById,
 	mergePrSwapRequests,
-	offerToShiftIndex,
 	PR_AGENCY_CODES,
 	PR_AGENCY_TIED_OFFERS,
 	type PrNotification,
 	type PrSwapRequest,
-	type PrSwapTargetOption,
 	type PrUpcomingShift,
 	remapSeedUpcomingShifts,
 	SEED_PR_NOTIFICATIONS,
@@ -271,7 +253,6 @@ import {
 	aggregateShiftSales,
 	calcDutyWagesFromOutlet,
 	receiptItemsForShift,
-	shiftPayoutTotal,
 } from "@agency-portal/lib/pr-shift-status";
 import {
 	applyDisputeTargetsToRows,
@@ -291,10 +272,7 @@ import {
 	notificationStamp,
 	type PushEvent,
 } from "@agency-portal/lib/push-notifications";
-import {
-	receiptDateIso,
-	validateReceiptScan,
-} from "@agency-portal/lib/receipt-scan-utils";
+import { receiptDateIso } from "@agency-portal/lib/receipt-scan-utils";
 import {
 	buildReconciliationFromLedger,
 	isWeeklyReconciliationSunday,
@@ -1415,7 +1393,6 @@ function syncLedgerState(
 ): Partial<StoreState> {
 	const shifts = patch.shifts ?? st.shifts;
 	const roster = patch.agencyRoster ?? st.agencyRoster;
-	const pvs = patch.prPaymentVouchers ?? st.prPaymentVouchers;
 	const drinkMenu = st.outletWorkspace.drinkMenu ?? DEFAULT_OUTLET_DRINK_MENU;
 	const commissionRules = st.outletCommissionRules;
 	const outletPnl = recomputeAllOutletPnl(
@@ -5512,7 +5489,6 @@ export const useStore = create<StoreState>()(
 				const newShifts: ShiftRequest[] = items.map((s) => {
 					const prs = s.prs ?? [];
 					const hours = shiftHoursFromLabel(s.shift);
-					const pay = s.payPerHour ?? ws.basePayPerHour;
 					const tierRates = s.tierRates ?? cloneTierRates(ws.tierRates);
 					const tierIPay = tierRates["Tier I"].wagePerHour;
 					const eventDrinkMenu =
@@ -5607,13 +5583,6 @@ export const useStore = create<StoreState>()(
 						);
 						return merged;
 					});
-					const outletPnl = recomputeAllOutletPnl(
-						nextShifts,
-						undefined,
-						st.agencyRoster,
-						menu,
-						nextRules,
-					);
 					const reconciliation = buildReconciliationFromLedger(st, {
 						prPaymentVouchers: st.prPaymentVouchers,
 					});
@@ -6594,7 +6563,6 @@ export const useStore = create<StoreState>()(
 				const ratedShiftId = openPrompt?.prIds.includes(prId)
 					? openPrompt.shiftId
 					: undefined;
-				const outletName = get().outletWorkspace.outletName || "Velvet 23";
 				const lowShift = stars < RATING_SUSPEND_SHIFT_THRESHOLD;
 				const stamp = new Date().toLocaleDateString("en-MY", {
 					day: "numeric",

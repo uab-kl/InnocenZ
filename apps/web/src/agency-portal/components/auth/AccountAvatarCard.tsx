@@ -7,7 +7,6 @@ import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { uploadMyProfileImage } from "@/lib/auth/profile-api";
 import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 const ACCEPTED = "image/jpeg,image/png,image/webp";
 const MAX_BYTES = 5 * 1024 * 1024;

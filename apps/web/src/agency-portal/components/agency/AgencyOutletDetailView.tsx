@@ -335,7 +335,6 @@ function OutletDetailKpiCard({
 	sub?: string;
 	tone: "events" | "today" | "future";
 }) {
-	const { t } = usePortalLocale();
 	const hasRatio =
 		demand != null && supplied != null && (demand > 0 || supplied > 0);
 
@@ -599,7 +598,6 @@ function OutletShiftTierPreview({
 }: {
 	shift: AgencyOutletAvailableShift;
 }) {
-	const { t } = usePortalLocale();
 	const tierRequest = formatPayTierRowsCompact(
 		resolveShiftPayTierRows({
 			payTierRows: shift.payTierRows,
@@ -677,7 +675,6 @@ function OutletDetailFutureShiftCard({
 }: {
 	shift: AgencyOutletAvailableShift;
 }) {
-	const { t } = usePortalLocale();
 	return (
 		<details className="iz-outlet-detail-shift-card iz-outlet-detail-shift-card--future group">
 			<summary>

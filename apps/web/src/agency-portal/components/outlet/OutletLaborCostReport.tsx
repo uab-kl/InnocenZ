@@ -62,7 +62,6 @@ function ReportRow({
 	onToggle?: () => void;
 	hasChildren?: boolean;
 }) {
-	const { t } = usePortalLocale();
 	const variance = line.actualRm - line.budgetRm;
 	const favorable = isLaborVarianceFavorable(variance);
 	const isParent = line.depth === 0;

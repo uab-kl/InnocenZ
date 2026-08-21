@@ -4,7 +4,6 @@ import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MapPin, Settings, Store } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/outlet/profile")({
 	component: OutletProfile,

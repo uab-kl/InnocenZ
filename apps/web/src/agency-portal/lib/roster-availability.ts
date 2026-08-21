@@ -3,10 +3,7 @@ import type {
 	AgencyRosterSlot,
 } from "@agency-portal/lib/agency-demo";
 import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
-import {
-	getLiveTodayIso,
-	migrateDemoDateIso,
-} from "@agency-portal/lib/demo-clock";
+import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import { primarySlotForPrOnDate } from "@agency-portal/lib/roster-week-plan";
 
 /** Live “today” for roster availability filters */

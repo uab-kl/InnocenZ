@@ -11,7 +11,6 @@ import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/outlet/")({
 	component: OutletHome,

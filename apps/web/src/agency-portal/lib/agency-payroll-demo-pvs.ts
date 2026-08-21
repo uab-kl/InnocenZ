@@ -139,7 +139,7 @@ function markDisputedRows(rows: PayrollPvRow[]): PayrollPvRow[] {
 	);
 }
 
-function disputeDemoFields(prName: string, rows: PayrollPvRow[]) {
+function disputeDemoFields(_prName: string, rows: PayrollPvRow[]) {
 	const line =
 		rows.find((row) => row.ref === "Disputed") ??
 		rows.find((row) => row.desc.includes("Drinks"));

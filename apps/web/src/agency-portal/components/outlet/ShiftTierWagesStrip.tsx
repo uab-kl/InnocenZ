@@ -8,7 +8,6 @@ import {
 } from "@agency-portal/lib/agency-demo";
 import { cn } from "@agency-portal/lib/utils";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 function formatTargetAmount(targetSalesRm: number): string {
 	if (targetSalesRm >= 1000) {

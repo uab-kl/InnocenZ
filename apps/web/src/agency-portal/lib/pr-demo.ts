@@ -8,12 +8,10 @@ import {
 	addDaysToIso,
 	getLiveTodayIso,
 	getPayrollWeekSundayIso,
-	getPreviousWeekSundayIso,
 	getShiftToday,
 	isWeekPvIssuedOnCalendar,
 	migrateDemoDateIso,
 	migrateDemoYmd,
-	remapIsoByWeekSlide,
 	ymdToIso,
 } from "@agency-portal/lib/demo-clock";
 import {
@@ -22,7 +20,7 @@ import {
 	seedFinanceHeadStamp,
 } from "@agency-portal/lib/finance-head-stamp";
 import { getDrinkMenuForOutlet } from "@agency-portal/lib/outlet-drink-menu";
-import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import type { PaymentVoucherComponent } from "@/services/payment-voucher";
 
 export type PrSubRole = "pr_tied";
@@ -192,7 +190,7 @@ export function fmtDShort(y: number, m: number, d: number) {
 	return `${dayName(y, m, d)} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
-export function fmtDtable(y: number, m: number, d: number) {
+export function fmtDtable(_y: number, m: number, d: number) {
 	return `${String(d).padStart(2, "0")} ${MONTH_NAMES[m - 1]}`;
 }
 
