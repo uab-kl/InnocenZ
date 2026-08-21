@@ -65,8 +65,10 @@ import {
 import {
 	buildSeedPrPortfolio,
 	COMCARD,
+	DEFAULT_TIED_AGENCY_ID,
 	demoPayrollWeekBoundsForWeeksAgo,
 	fmtDateLabelFromIso,
+	getPrAgencyById,
 	getPrProfile,
 	LIVE_SEED_RECEIPT_SCANS,
 	type PrPaymentVoucher,
@@ -1421,6 +1423,9 @@ export function buildDemoStoreReset() {
 			SEED_SHIFT_HISTORY.map((row) => ({ ...row })),
 			prDemo.prPaymentVouchers,
 			agencyPRs,
+			// The seed builds the tied-agency demo, so name THAT agency from its own
+			// record rather than repeating a literal. Same string, honest source.
+			getPrAgencyById(DEFAULT_TIED_AGENCY_ID)?.name ?? "",
 		),
 	);
 

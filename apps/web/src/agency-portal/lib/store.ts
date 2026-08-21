@@ -7011,6 +7011,10 @@ export const useStore = create<StoreState>()(
 								mergedShiftHistory,
 								mergedPvs,
 								mergedAgencyPRsForLedger,
+								// Rehydrate: the signed-in agency comes from the persisted blob.
+								getPrAgencyById(
+									p?.activeAgencyId ?? DEFAULT_TIED_AGENCY_ID,
+								)?.name ?? "",
 							),
 							current.shiftHistory,
 							mergedAgencyPRsForLedger,
