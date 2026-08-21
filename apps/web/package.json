@@ -10,6 +10,7 @@
     "dev": "vite dev",
     "generate-routes": "tsr generate",
     "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "preview": "vite preview",
     "test": "vitest run",
     "format": "biome format",

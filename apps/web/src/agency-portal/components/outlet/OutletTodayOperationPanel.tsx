@@ -249,6 +249,17 @@ export function OutletTodayOperationPanel({
 			window.removeEventListener(OUTLET_OPEN_LIVE_SALES_EVENT, openLiveSales);
 	}, []);
 
+	// These five are the re-run TRIGGERS for the sync, not values the effect
+	// reads: every one of them is a live check-in/check-out fact, and a roster
+	// slot arriving after first render has to be synced too. Dropping them
+	// leaves a one-shot sync (the store action is stable), so a PR who checks in
+	// while this panel is open would keep rendering as merely booked.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(checkedIn): live-attendance trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(checkedOut): live-attendance trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(prActiveShift): live-attendance trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(prSubRole): live-attendance trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(prSessionByRole): live-attendance trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(agencyRoster.length): live-attendance trigger — see comment above
 	useEffect(() => {
 		syncLivePrCheckInToRoster();
 	}, [
@@ -339,15 +350,12 @@ export function OutletTodayOperationPanel({
 					STATUS_SORT[a.displayStatus] - STATUS_SORT[b.displayStatus] ||
 					a.pr.name.localeCompare(b.pr.name),
 			);
-	}, [
-		shift.prs,
-		shift.shift,
-		shift.releasedEarlyPrIds,
-		prs,
-		rosterTonight,
-		tiedLive,
-		agencyPrById,
-	]);
+		// `shift` whole, not three of its fields: `resolveStaffFloorStatus` is
+		// handed the shift itself and reads its clock through
+		// `outletShiftClockStarted`, so a start/end edit has to recompute this
+		// too. It is the same object identity `shift.prs` rode on, so the
+		// recompute cadence is unchanged.
+	}, [shift, prs, rosterTonight, tiedLive, agencyPrById]);
 
 	const statusCounts = useMemo(() => {
 		const counts = { onDuty: 0, enRoute: 0, booked: 0, checkedOut: 0 };
@@ -458,6 +466,7 @@ export function OutletTodayOperationPanel({
 			shift,
 			outletName,
 			outletWorkspace.drinkMenu,
+			outletWorkspace.commissionOnlyRates,
 			outletWorkspace.happyHourStart,
 			outletWorkspace.happyHourEnd,
 			rosterTonight,

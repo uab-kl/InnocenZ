@@ -39,7 +39,11 @@ type HtmlFileInput = {
   accept: string;
   capture: string;
   multiple: boolean;
-  files: FileList | null;
+  // NOT `FileList`: React Native ships no DOM lib on purpose, and this type
+  // only describes the <input> the web branch creates. `ArrayLike<Blob>` is
+  // everything the code below needs — Array.from() accepts it, and Blob
+  // already carries `.type` and is what downscaleToDataUrl() takes.
+  files: ArrayLike<Blob> | null;
   onchange: ((ev: Event) => void) | null;
   click: () => void;
 };

@@ -73,12 +73,12 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
 		return null;
 	}
 
-	return (
-		<style
-			dangerouslySetInnerHTML={{
-				__html: Object.entries(THEMES)
-					.map(
-						([theme, prefix]) => `
+	// Rendered as the <style> element's text child rather than through
+	// `dangerouslySetInnerHTML`: React writes the same stylesheet either way,
+	// and the innerHTML-shaped API is the thing worth not having in the tree.
+	const css = Object.entries(THEMES)
+		.map(
+			([theme, prefix]) => `
 ${prefix} [data-chart=${id}] {
 ${colorConfig
 	.map(([key, itemConfig]) => {
@@ -90,11 +90,10 @@ ${colorConfig
 	.join("\n")}
 }
 `,
-					)
-					.join("\n"),
-			}}
-		/>
-	);
+		)
+		.join("\n");
+
+	return <style>{css}</style>;
 };
 
 const ChartTooltip = RechartsPrimitive.Tooltip;

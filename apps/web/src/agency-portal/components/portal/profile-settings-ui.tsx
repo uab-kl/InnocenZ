@@ -68,7 +68,7 @@ export function ProfileEditingBanner({
 }) {
 	const { t } = usePortalLocale();
 	return (
-		<div className="iz-profile-edit-banner" role="status">
+		<output className="iz-profile-edit-banner">
 			<div className="iz-profile-edit-banner__dot" aria-hidden />
 			<div>
 				<p className="iz-profile-edit-banner__title">Editing {what}</p>
@@ -76,7 +76,7 @@ export function ProfileEditingBanner({
 					{editableHint ?? t.profile.highlightedFieldsHint}
 				</p>
 			</div>
-		</div>
+		</output>
 	);
 }
 

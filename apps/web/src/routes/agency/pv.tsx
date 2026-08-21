@@ -98,7 +98,7 @@ import {
 	Sheet,
 	Shield,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 export const Route = createFileRoute("/agency/pv")({
@@ -595,7 +595,7 @@ function AgencyPV() {
 
 	const activeWeekBilling = useMemo(
 		() => agencySubscriptionBillingForWeeklyPv(activeWeekStats.pvCount, t),
-		[activeWeekStats.pvCount],
+		[activeWeekStats.pvCount, t],
 	);
 
 	/**
@@ -1404,6 +1404,7 @@ function PvDetail({
 	const [signOpen, setSignOpen] = useState(false);
 	const [signError, setSignError] = useState<string | null>(null);
 	const [bankRef, setBankRef] = useState("");
+	const deductId = useId();
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const toast = useStore((s) => s.toast);
 	// The letterhead the printed voucher carries — the signed-in agency, so this
@@ -1702,10 +1703,11 @@ function PvDetail({
 						))}
 						{editing && (
 							<div className="mt-2">
-								<label className="iz-tiny iz-muted">
+								<label htmlFor={deductId} className="iz-tiny iz-muted">
 									{t.payroll.deductions}
 								</label>
 								<input
+									id={deductId}
 									type="number"
 									className="mt-1 w-full rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-3 py-2 text-sm"
 									value={deduct}

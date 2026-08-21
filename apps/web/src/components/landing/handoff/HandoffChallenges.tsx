@@ -231,6 +231,15 @@ function FlowNode({
 	);
 }
 
+/**
+ * The animation offsets of the travelling dots on the flow rail, written out
+ * rather than derived from a map index — the offset IS the dot's identity, so
+ * it is also the React key. Values are exactly the ones the old `-i * 1.6` /
+ * `-i * 2.4 - 0.8` expressions produced.
+ */
+const FLOW_GOLD_DOT_BEGINS = ["0s", "-1.6s", "-3.2s"] as const;
+const FLOW_VIOLET_DOT_BEGINS = ["-0.8s", "-3.2s"] as const;
+
 function FlowDiagram() {
 	const { t } = useLandingLocale();
 
@@ -274,7 +283,8 @@ function FlowDiagram() {
 				viewBox="0 0 1100 500"
 				preserveAspectRatio="xMidYMid meet"
 				className="absolute inset-0 h-full w-full"
-				aria-hidden
+				aria-hidden="true"
+				focusable="false"
 			>
 				<defs>
 					<linearGradient id="rail" x1="0" x2="1">
@@ -298,12 +308,12 @@ function FlowDiagram() {
 					fill="none"
 					strokeDasharray="3 6"
 				/>
-				{Array.from({ length: 3 }).map((_, i) => (
-					<circle key={i} r="3.5" fill="#f2c66b">
+				{FLOW_GOLD_DOT_BEGINS.map((begin) => (
+					<circle key={`gold-${begin}`} r="3.5" fill="#f2c66b">
 						<animateMotion
 							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 1.6}s`}
+							begin={begin}
 							path="M 170 250 C 350 120, 550 380, 750 250 S 1000 180, 1030 250"
 						/>
 						<animate
@@ -311,16 +321,16 @@ function FlowDiagram() {
 							values="0;1;1;0"
 							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 1.6}s`}
+							begin={begin}
 						/>
 					</circle>
 				))}
-				{Array.from({ length: 2 }).map((_, i) => (
-					<circle key={`v${i}`} r="2.5" fill="#b67cff">
+				{FLOW_VIOLET_DOT_BEGINS.map((begin) => (
+					<circle key={`violet-${begin}`} r="2.5" fill="#b67cff">
 						<animateMotion
 							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 2.4 - 0.8}s`}
+							begin={begin}
 							path="M 170 250 C 350 120, 550 380, 750 250 S 1000 180, 1030 250"
 						/>
 						<animate
@@ -328,7 +338,7 @@ function FlowDiagram() {
 							values="0;1;1;0"
 							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 2.4 - 0.8}s`}
+							begin={begin}
 						/>
 					</circle>
 				))}

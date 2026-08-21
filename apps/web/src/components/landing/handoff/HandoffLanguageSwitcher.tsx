@@ -1,5 +1,11 @@
 import { ChevronDown } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { type LandingLocale, useLandingLocale } from "@/lib/landing-i18n";
 
@@ -16,7 +22,7 @@ export function HandoffLanguageSwitcher() {
 	const menuRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 
-	const updateMenuPosition = () => {
+	const updateMenuPosition = useCallback(() => {
 		const trigger = triggerRef.current;
 		if (!trigger) return;
 		const rect = trigger.getBoundingClientRect();
@@ -24,12 +30,12 @@ export function HandoffLanguageSwitcher() {
 			top: rect.bottom + 12,
 			left: Math.max(8, rect.right - MENU_MIN_WIDTH),
 		});
-	};
+	}, []);
 
 	useLayoutEffect(() => {
 		if (!open) return;
 		updateMenuPosition();
-	}, [open]);
+	}, [open, updateMenuPosition]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -61,7 +67,7 @@ export function HandoffLanguageSwitcher() {
 			window.removeEventListener("resize", onScrollOrResize);
 			window.removeEventListener("scroll", onScrollOrResize, true);
 		};
-	}, [open]);
+	}, [open, updateMenuPosition]);
 
 	const options: { id: LandingLocale; label: string }[] = [
 		{ id: "en", label: t.nav.english },

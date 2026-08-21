@@ -420,6 +420,7 @@ export function AgencyReceiptsPanel({
 	 * week first and the list renders after the fetch resolves, so scrolling on
 	 * mount alone would aim at an element that is not on the page yet.
 	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies(receipts): receipts is the re-run TRIGGER, not a value the effect reads — it re-queries the DOM for the deep-linked row. Drop it and the scroll only fires before the fetch resolves, when `receipt-<id>` is not on the page yet, so the deep link lands nowhere.
 	useEffect(() => {
 		if (!focusReceiptId) return;
 		const el = document.getElementById(`receipt-${focusReceiptId}`);

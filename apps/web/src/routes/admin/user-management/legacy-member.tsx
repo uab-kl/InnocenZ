@@ -240,6 +240,12 @@ function LegacyMemberPage() {
 		return () => window.clearTimeout(timer);
 	}, [nameFilter, codeFilter, contactFilter]);
 
+	// These three are reset TRIGGERS, not values the effect reads: changing the
+	// role filter or the sort must send the list back to page 1, or the user
+	// keeps the old offset and lands on a blank page of a shorter result set.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(roleFilter): reset trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(sortBy): reset trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(sortOrder): reset trigger — see comment above
 	useEffect(() => {
 		setPage(1);
 	}, [roleFilter, sortBy, sortOrder]);
@@ -708,8 +714,12 @@ function LegacyMemberPage() {
 													{formatDate(row.updatedAt)}
 												</TableCell>
 												<TableCell>
+													{/* Layout-only wrapper: role="none" because the click
+													    handler is purely a propagation guard so the row's
+													    own onClick does not fire behind these buttons. */}
 													<div
 														className="flex flex-wrap gap-2"
+														role="none"
 														onClick={(e) => e.stopPropagation()}
 													>
 														{(row.role === "agency" ||

@@ -445,6 +445,7 @@ export function LiveWorkforceList({
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const perDrinkRm = useStore((s) => s.outletWorkspace.perDrinkRm);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies(agencyRoster.length): the roster count is the re-run TRIGGER, not a value read here — a slot arriving after first render must be re-synced with the live check-in. Dropping it makes this a one-shot sync (the store action is stable), so newly loaded slots would render as never checked in.
 	useEffect(() => {
 		syncLivePrCheckInToRoster();
 	}, [syncLivePrCheckInToRoster, agencyRoster.length]);

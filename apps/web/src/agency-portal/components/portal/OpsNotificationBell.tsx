@@ -222,9 +222,15 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 								{t.notifications.reported} {sosDetail.at}
 							</p>
 						</IzCard>
-						<label className="iz-tiny iz-muted2 mt-3 block uppercase tracking-wide">
+						{/*
+						 * A <span>, not a <label>: there is no field here. The incident
+						 * note below is read-only text, so this is a caption — a <label>
+						 * would promise a control that does not exist. `block` keeps the
+						 * same box the label had.
+						 */}
+						<span className="iz-tiny iz-muted2 mt-3 block uppercase tracking-wide">
 							{t.notifications.incidentNote}
-						</label>
+						</span>
 						<p className="iz-sm mt-1 whitespace-pre-wrap">{sosDetail.note}</p>
 						{sosDetail.photoDataUrl && (
 							<img

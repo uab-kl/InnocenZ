@@ -11,6 +11,7 @@ import {
 	isLeaveAgencyService,
 	specialServiceOffer,
 } from "@agency-portal/lib/special-service-demo";
+import { useId } from "react";
 
 export type SpecialServiceOrderDraft = {
 	prId: string;
@@ -49,6 +50,7 @@ export function SpecialServiceOrderSheet({
 }) {
 	const offer = specialServiceOffer(draft.serviceType);
 	const leaveRequest = isLeaveAgencyService(draft.serviceType);
+	const fieldId = useId();
 
 	const onServiceTypeChange = (serviceId: string) => {
 		const next = specialServiceOffer(serviceId);
@@ -79,9 +81,15 @@ export function SpecialServiceOrderSheet({
 
 			{showPrPicker !== false && (
 				<>
-					<label className="iz-tiny iz-muted mb-1 block">PR</label>
+					<label
+						htmlFor={`${fieldId}-pr`}
+						className="iz-tiny iz-muted mb-1 block"
+					>
+						PR
+					</label>
 					<IzSelect
 						block
+						id={`${fieldId}-pr`}
 						className="mb-3 !text-sm"
 						value={draft.prId}
 						onChange={(e) => onChange({ prId: e.target.value })}
@@ -97,9 +105,15 @@ export function SpecialServiceOrderSheet({
 
 			{showOutletPicker && outletOptions && (
 				<>
-					<label className="iz-tiny iz-muted mb-1 block">Outlet</label>
+					<label
+						htmlFor={`${fieldId}-outlet`}
+						className="iz-tiny iz-muted mb-1 block"
+					>
+						Outlet
+					</label>
 					<IzSelect
 						block
+						id={`${fieldId}-outlet`}
 						className="mb-3 !text-sm"
 						value={draft.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
@@ -113,9 +127,15 @@ export function SpecialServiceOrderSheet({
 				</>
 			)}
 
-			<label className="iz-tiny iz-muted mb-1 block">Service</label>
+			<label
+				htmlFor={`${fieldId}-service`}
+				className="iz-tiny iz-muted mb-1 block"
+			>
+				Service
+			</label>
 			<IzSelect
 				block
+				id={`${fieldId}-service`}
 				className="mb-1 !text-sm"
 				value={draft.serviceType}
 				onChange={(e) => onServiceTypeChange(e.target.value)}
@@ -130,7 +150,10 @@ export function SpecialServiceOrderSheet({
 
 			{!leaveRequest && role === "agency" && (
 				<>
-					<label className="iz-tiny iz-muted mb-1 block">
+					<label
+						htmlFor={`${fieldId}-amount-out`}
+						className="iz-tiny iz-muted mb-1 block"
+					>
 						Amount out (RM)
 						{offer && (
 							<span className="iz-muted2">
@@ -140,6 +163,7 @@ export function SpecialServiceOrderSheet({
 						)}
 					</label>
 					<input
+						id={`${fieldId}-amount-out`}
 						type="number"
 						min={0}
 						step={5}
@@ -152,10 +176,14 @@ export function SpecialServiceOrderSheet({
 
 			{(showAmountIn || role === "agency") && !leaveRequest && (
 				<>
-					<label className="iz-tiny iz-muted mb-1 block">
+					<label
+						htmlFor={`${fieldId}-amount-in`}
+						className="iz-tiny iz-muted mb-1 block"
+					>
 						Amount in (RM) · outlet recovery
 					</label>
 					<input
+						id={`${fieldId}-amount-in`}
 						type="number"
 						min={0}
 						step={5}
@@ -169,7 +197,7 @@ export function SpecialServiceOrderSheet({
 
 			{!leaveRequest && (
 				<>
-					<label className="iz-tiny iz-muted mb-1 block">Service time</label>
+					<span className="iz-tiny iz-muted mb-1 block">Service time</span>
 					<IzTimeInput
 						value={draft.time}
 						onChange={(time) => onChange({ time })}
@@ -179,10 +207,14 @@ export function SpecialServiceOrderSheet({
 				</>
 			)}
 
-			<label className="iz-tiny iz-muted mb-1 block">
+			<label
+				htmlFor={`${fieldId}-note`}
+				className="iz-tiny iz-muted mb-1 block"
+			>
 				{leaveRequest ? "Reason" : "Notes"}
 			</label>
 			<textarea
+				id={`${fieldId}-note`}
 				className="iz-field-input mb-4 min-h-[72px] !text-sm"
 				placeholder={
 					leaveRequest

@@ -6,6 +6,8 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
+import { execSync } from "node:child_process";
+import pkg from "../../package.json" with { type: "json" };
 
 // Opt-in: `VITE_TANSTACK_DEVTOOLS=1 pnpm dev:web` — slows SSR when Metro co-runs.
 const enableDevtools = process.env.VITE_TANSTACK_DEVTOOLS === "1";
@@ -40,7 +42,31 @@ const forceProductionNodeEnv = {
 	},
 };
 
+/**
+ * Short commit for the build badge. Must never break the build: Docker images
+ * are built from a copied context with no .git, and CI checkouts can be
+ * shallow — so an env var wins if set, and anything else degrades to "unknown".
+ */
+function appGitSha(): string {
+	const fromEnv = process.env.IZ_APP_GIT_SHA?.trim();
+	if (fromEnv) return fromEnv;
+	try {
+		return execSync("git rev-parse --short HEAD", {
+			stdio: ["ignore", "pipe", "ignore"],
+		})
+			.toString()
+			.trim();
+	} catch {
+		return "unknown";
+	}
+}
+
 const config = defineConfig({
+	// Consumed by src/agency-portal/lib/build-info.ts — see src/build-globals.d.ts.
+	define: {
+		__IZ_APP_VERSION__: JSON.stringify(pkg.version),
+		__IZ_APP_GIT_SHA__: JSON.stringify(appGitSha()),
+	},
 	resolve: {
 		tsconfigPaths: true,
 		// TanStack Start also dedupes these; keep here so client + SSR share one copy

@@ -1,8 +1,8 @@
 /**
- * Compares the LIVE database against the newest drizzle snapshot.
+ * Compares the LIVE database against the drizzle MODELS.
  *
  * This exists because nothing else does it. `tsc` types come from the drizzle
- * model, and `drizzle-kit generate` diffs the model against the snapshot —
+ * model, and `drizzle-kit generate` diffs the model against a snapshot —
  * neither ever opens a connection. So a table can silently disagree with the
  * code while both report green, which is exactly what happened twice:
  *
@@ -14,6 +14,20 @@
  *   - platform_config is missing six columns the model declares, so
  *     PATCH /platform-config writes to columns that do not exist.
  *
+ * ⚠️ It used to compare against the newest drizzle SNAPSHOT, and that made it
+ * worse than useless. Snapshots stopped at 0070 because the migration journal
+ * is corrupt and `drizzle-kit generate` cannot run, while hand-authored
+ * migrations carried on to 0130. So it was judging a 2026-era database against
+ * a 60-migration-old picture and reporting five FALSE problems every single
+ * run — `pr` (dropped on purpose in 0095), `agency_user.sub_role` and
+ * `outlet_user.sub_role` (dropped in 0107), `outlet_penalty_rule` (moved to
+ * agency scope in 0113) and `agency_pr.pr_id`. A check that always fails is a
+ * check everyone learns to ignore, and it was also BLIND to real drift in
+ * everything added after 0070.
+ *
+ * The models are the thing the running code actually reads, so they are the
+ * honest reference and they cannot go stale.
+ *
  * Run it after every migrate and in CI. Exits non-zero on drift so a build can
  * fail on it instead of someone finding it months later.
  *
@@ -21,36 +35,64 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { is } from 'drizzle-orm';
+import { PgTable, getTableConfig } from 'drizzle-orm/pg-core';
 import { Client } from 'pg';
 import { env } from '@/env.js';
 
-const META_DIR = path.join(process.cwd(), 'postgres', 'migrations', 'meta');
+const FEATURES_DIR = path.join(process.cwd(), 'src', 'features');
 
-type SnapshotColumn = { name: string; type: string };
-type SnapshotTable = { name: string; columns: Record<string, SnapshotColumn> };
-type Snapshot = { tables: Record<string, SnapshotTable> };
-
-/** Enum types are schema-qualified and quoted in snapshots but bare in pg. */
+/** Enum types are schema-qualified and quoted in some places but bare in pg. */
 function normaliseType(value: string): string {
   return value.replace(/"/g, '').replace(/^main\./, '').toLowerCase();
 }
 
-function newestSnapshot(): { file: string; snapshot: Snapshot } {
-  const file = fs
-    .readdirSync(META_DIR)
-    .filter((f) => /^\d+_snapshot\.json$/.test(f))
-    .sort()
-    .pop();
-  if (!file) throw new Error(`No snapshot found in ${META_DIR}`);
-  return {
-    file,
-    snapshot: JSON.parse(fs.readFileSync(path.join(META_DIR, file), 'utf8')) as Snapshot,
-  };
+/** Every `*.model.ts` under src/features — the same glob drizzle.config.ts uses. */
+function modelFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...modelFiles(full));
+    else if (entry.name.endsWith('.model.ts')) out.push(full);
+  }
+  return out;
+}
+
+type ModelTable = { name: string; columns: { name: string; sqlType: string; isEnum: boolean }[] };
+
+/**
+ * Load every model and pull its table shape.
+ *
+ * Import errors are NOT swallowed: a model that fails to load would otherwise
+ * vanish from the comparison and turn this into another green-signal-that-lies.
+ */
+async function modelTables(): Promise<ModelTable[]> {
+  const files = modelFiles(FEATURES_DIR);
+  if (files.length === 0) throw new Error(`No *.model.ts found under ${FEATURES_DIR}`);
+
+  const tables: ModelTable[] = [];
+  for (const file of files) {
+    const mod: Record<string, unknown> = await import(pathToFileURL(file).href);
+    for (const value of Object.values(mod)) {
+      if (!is(value, PgTable)) continue;
+      const cfg = getTableConfig(value);
+      tables.push({
+        name: cfg.name,
+        columns: cfg.columns.map((column) => ({
+          name: column.name,
+          sqlType: column.getSQLType(),
+          isEnum: Array.isArray((column as { enumValues?: string[] }).enumValues),
+        })),
+      });
+    }
+  }
+  return tables;
 }
 
 async function main() {
-  const { file, snapshot } = newestSnapshot();
-  console.log(`[drift] comparing live DB against ${file}`);
+  const tables = await modelTables();
+  console.log(`[drift] comparing live DB against ${tables.length} drizzle models`);
 
   const client = new Client({
     host: env.POSTGRES_HOST,
@@ -80,13 +122,13 @@ async function main() {
 
   const problems: string[] = [];
 
-  for (const table of Object.values(snapshot.tables)) {
+  for (const table of tables) {
     const liveColumns = byTable.get(table.name);
     if (!liveColumns) {
       problems.push(`TABLE MISSING in live DB: ${table.name}`);
       continue;
     }
-    for (const column of Object.values(table.columns)) {
+    for (const column of table.columns) {
       const liveColumn = liveColumns.get(column.name);
       if (!liveColumn) {
         problems.push(`COLUMN MISSING in live DB: ${table.name}.${column.name}`);
@@ -95,22 +137,28 @@ async function main() {
       // Only enum columns are type-compared. Comparing every type would drown
       // the signal in spelling differences (varchar(255) vs character varying),
       // and a wrong enum is the failure mode that actually bit us.
-      if (liveColumn.data_type === 'USER-DEFINED') {
-        const want = normaliseType(column.type);
+      if (column.isEnum && liveColumn.data_type === 'USER-DEFINED') {
+        const want = normaliseType(column.sqlType);
         const got = normaliseType(liveColumn.udt_name);
         if (want !== got) {
           problems.push(
-            `ENUM MISMATCH: ${table.name}.${column.name} — snapshot says ${want}, live has ${got}`,
+            `ENUM MISMATCH: ${table.name}.${column.name} — model says ${want}, live has ${got}`,
           );
         }
       }
     }
   }
 
+  // Reported, never failed on: a live table the models no longer mention is
+  // usually a dropped feature's leftovers, not a break in the running code.
+  const modelled = new Set(tables.map((t) => t.name));
+  const orphans = [...byTable.keys()].filter((name) => !modelled.has(name)).sort();
+
   for (const problem of problems) console.log(`  ${problem}`);
-  console.log(
-    `[drift] ${Object.keys(snapshot.tables).length} tables checked · ${problems.length} problem(s)`,
-  );
+  if (orphans.length > 0) {
+    console.log(`[drift] note — ${orphans.length} live table(s) no model declares: ${orphans.join(', ')}`);
+  }
+  console.log(`[drift] ${tables.length} tables checked · ${problems.length} problem(s)`);
 
   if (problems.length > 0) {
     console.log('[drift] FAIL — the live database does not match the model.');

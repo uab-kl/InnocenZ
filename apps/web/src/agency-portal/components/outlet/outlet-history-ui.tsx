@@ -153,6 +153,9 @@ function RatedStarRow({
 
 	return (
 		<span
+			// `role="img"` so the label has something to attach to: the stars are one
+			// meaningful graphic, not five, and each <Star> below is aria-hidden.
+			role="img"
 			className={cn(
 				"iz-rated-stars",
 				size === "sm" && "iz-rated-stars--sm",
@@ -443,13 +446,19 @@ export function OutletPrHistoryCard({
 					<div className="iz-outlet-hist-avatar-wrap">
 						{rank === 1 ? (
 							<span
+								role="img"
 								className="iz-outlet-hist-crown"
 								aria-label={t.history.topEarner}
 							>
-								<Crown className="h-2.5 w-2.5" strokeWidth={2.5} />
+								<Crown
+									className="h-2.5 w-2.5"
+									strokeWidth={2.5}
+									aria-hidden="true"
+								/>
 							</span>
 						) : rank > 1 ? (
 							<span
+								role="img"
 								className="iz-outlet-hist-rank-badge"
 								aria-label={fill(t.reports.rankLabel, { rank })}
 							>

@@ -30,7 +30,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 	head: ({ matches }) => {
 		const isNotFound = matches.some(
-			(match) => match.status === "notFound" || match.globalNotFound,
+			(match) => match.status === "notFound" || match._notFound,
 		);
 
 		return {

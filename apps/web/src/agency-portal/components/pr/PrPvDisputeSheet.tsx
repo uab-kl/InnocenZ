@@ -61,10 +61,7 @@ function DisputeImageAttachments({
 			{images.length > 0 && (
 				<div className="iz-pv-dispute-files-grid mt-2">
 					{images.map((src, index) => (
-						<div
-							key={`${index}-${src.slice(0, 24)}`}
-							className="iz-pv-dispute-file"
-						>
+						<div key={src} className="iz-pv-dispute-file">
 							<img src={src} alt="" className="iz-pv-dispute-file-img" />
 							<button
 								type="button"

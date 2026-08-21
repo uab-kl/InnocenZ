@@ -109,6 +109,8 @@ export function SubscriptionFormSheet({
 		},
 	});
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies(form.reset): this effect re-seeds the sheet only when it opens or the edit target changes; keying it on the form API instead would re-run the reset while the user is typing and wipe their input.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(form.setFieldValue): same window — the field seeding is intentionally scoped to open/editTarget, not to the form API identity.
 	useEffect(() => {
 		if (!open) {
 			form.reset();

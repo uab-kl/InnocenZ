@@ -116,6 +116,13 @@ function dayBefore(a: Date, b: Date): boolean {
 	return startOfDay(a).getTime() < startOfDay(b).getTime();
 }
 
+function normalizeRange(a: Date, b: Date): { from: Date; to: Date } {
+	const start = startOfDay(a);
+	const end = startOfDay(b);
+	if (end < start) return { from: end, to: start };
+	return { from: start, to: end };
+}
+
 export function OutletCompactRangeCalendar({
 	rangeFrom,
 	rangeTo,
@@ -191,14 +198,7 @@ export function OutletDateRangePopover({
 			setDraftStart(from);
 			setAwaitingEnd(false);
 		}
-	}, [open, from, to]);
-
-	const normalizeRange = (a: Date, b: Date) => {
-		const start = startOfDay(a);
-		const end = startOfDay(b);
-		if (end < start) return { from: end, to: start };
-		return { from: start, to: end };
-	};
+	}, [open, from]);
 
 	const previewRange = useMemo((): RangeHighlight | undefined => {
 		if (!draftStart) return undefined;

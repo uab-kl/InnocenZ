@@ -92,21 +92,20 @@ export function ManageOutletGridCard({
 	const theme = outletThemeKey(summary.outlet);
 	const wage = summary.rule.wagePerHour.toLocaleString("en-MY");
 
+	// A real <button>, not an <article role="button">: the whole card is one
+	// activation target, and the native element brings the keyboard handling the
+	// hand-rolled onKeyDown was reproducing (Enter and Space both fire click on a
+	// button). The card class already carries the flex layout, left alignment and
+	// pointer cursor a button needs.
 	return (
-		<article
-			role="button"
-			tabIndex={0}
+		<button
+			type="button"
 			className={cn(
-				"iz-outlet-manage-card",
+				"iz-outlet-manage-card w-full",
 				`iz-outlet-manage-card--${theme}`,
 				picked && "iz-outlet-manage-card--picked",
 			)}
 			onClick={onActivate}
-			onKeyDown={(e) => {
-				if (e.key !== "Enter" && e.key !== " ") return;
-				e.preventDefault();
-				onActivate();
-			}}
 		>
 			{selectMode && (
 				<div
@@ -175,6 +174,6 @@ export function ManageOutletGridCard({
 					{t.manageOutlet.demandSupplied}
 				</span>
 			</div>
-		</article>
+		</button>
 	);
 }

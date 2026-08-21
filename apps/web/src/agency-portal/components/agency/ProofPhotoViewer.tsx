@@ -87,6 +87,12 @@ export function PhotoLightbox({
 	// three panels that already used this: it was full-screen fixed anyway.
 	return createPortal(
 		<div
+			// This layer IS a modal — naming it one gives the mouse handler below a
+			// role to hang off, and tells assistive tech that the portal behind it
+			// is inert while the photo is open.
+			role="dialog"
+			aria-modal="true"
+			aria-label={alt}
 			className="fixed inset-0 z-[300] flex flex-col bg-black/85 backdrop-blur-sm"
 			// Backdrop click closes; clicks on the image itself must not, or a pan
 			// ending over the backdrop would dismiss the viewer mid-drag.
@@ -136,6 +142,14 @@ export function PhotoLightbox({
 			</div>
 
 			<div
+				// role="none" (the current spelling of role="presentation") on purpose:
+				// this wrapper is only the MOUSE viewport for wheel-zoom and drag-pan
+				// and carries no meaning of its own, so it should not appear in the
+				// accessibility tree at all — the <img> inside keeps its own name.
+				// Nothing is withheld from a keyboard user either: zoom in, zoom out
+				// and reset are real buttons on the toolbar above, and +/-/Escape are
+				// bound in the effect at the top of this component.
+				role="none"
 				className="flex flex-1 items-center justify-center overflow-hidden"
 				onWheel={(e) => zoomTo(zoom + (e.deltaY < 0 ? STEP : -STEP))}
 				onMouseDown={(e) => {

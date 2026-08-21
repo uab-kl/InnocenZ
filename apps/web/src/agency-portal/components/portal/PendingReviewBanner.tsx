@@ -18,26 +18,20 @@ export function PendingReviewBanner({
 
 	if (isOrgSuspended(orgStatus)) {
 		return (
-			<div
-				role="status"
-				className="mb-4 rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100"
-			>
+			<output className="mb-4 block rounded-lg border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
 				<span className="font-semibold text-red-50">Suspended.</span> Your{" "}
 				{label} access is limited to this profile. Contact InnocenZ to restore
 				full portal features.
-			</div>
+			</output>
 		);
 	}
 
 	if (!isOrgPendingReview(orgStatus)) return null;
 	return (
-		<div
-			role="status"
-			className="mb-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
-		>
+		<output className="mb-4 block rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
 			<span className="font-semibold text-amber-50">Pending review.</span> Your{" "}
 			{label} is awaiting InnocenZ admin approval. You can update your profile
 			here — other portal features unlock after approval.
-		</div>
+		</output>
 	);
 }

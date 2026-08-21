@@ -5,7 +5,7 @@ import {
 import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import { format, parseISO } from "date-fns";
 import { ChevronDown } from "lucide-react";
-import { type ComponentProps, useMemo } from "react";
+import { type ComponentProps, useCallback, useMemo } from "react";
 
 const MONTH_LABELS = [
 	"January",
@@ -163,8 +163,11 @@ export function HistDateCalendar({
 	const viewYear = viewMonth.getFullYear();
 	const viewMonthIndex = viewMonth.getMonth();
 
-	const isInViewMonth = (date: Date) =>
-		date.getFullYear() === viewYear && date.getMonth() === viewMonthIndex;
+	const isInViewMonth = useCallback(
+		(date: Date) =>
+			date.getFullYear() === viewYear && date.getMonth() === viewMonthIndex,
+		[viewYear, viewMonthIndex],
+	);
 
 	const DayButton = useMemo(() => {
 		function HistDayButton(props: ComponentProps<typeof CalendarDayButton>) {
@@ -182,7 +185,7 @@ export function HistDateCalendar({
 			);
 		}
 		return HistDayButton;
-	}, [onSelectDay, viewYear, viewMonthIndex]);
+	}, [onSelectDay, isInViewMonth]);
 
 	return (
 		<>

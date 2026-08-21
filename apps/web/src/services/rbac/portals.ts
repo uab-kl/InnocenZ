@@ -15,7 +15,7 @@ interface PortalsApiResponse {
 }
 
 export async function fetchPortals(
-	onUnauthorized?: () => void,
+	onUnauthorized: () => void,
 ): Promise<RbacPortal[]> {
 	const client = getClient(onUnauthorized);
 	const res = await client.get<PortalsApiResponse>("/rbac/portal");

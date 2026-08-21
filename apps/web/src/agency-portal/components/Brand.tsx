@@ -132,7 +132,8 @@ function StatusBar() {
 					height="12"
 					viewBox="0 0 17 12"
 					fill="currentColor"
-					aria-hidden
+					aria-hidden="true"
+					focusable="false"
 				>
 					<rect x="0" y="7" width="3" height="5" rx="1" />
 					<rect x="4.5" y="4" width="3" height="8" rx="1" />
@@ -144,7 +145,8 @@ function StatusBar() {
 					height="12"
 					viewBox="0 0 16 12"
 					fill="currentColor"
-					aria-hidden
+					aria-hidden="true"
+					focusable="false"
 				>
 					<path
 						d="M8 2.5c2 0 3.8.8 5.1 2l1.1-1.2C13.6 1.7 11 .7 8 .7S2.4 1.7.7 3.3l1.1 1.2C3.2 3.3 6 2.5 8 2.5z"
@@ -153,7 +155,14 @@ function StatusBar() {
 					<path d="M8 6c1.1 0 2.1.4 2.9 1.1l1.1-1.2C11 4.9 9.6 4.3 8 4.3s-3 .6-4 1.6l1.1 1.2C5.9 6.4 6.9 6 8 6z" />
 					<circle cx="8" cy="9.5" r="1.6" />
 				</svg>
-				<svg width="25" height="12" viewBox="0 0 25 12" fill="none" aria-hidden>
+				<svg
+					width="25"
+					height="12"
+					viewBox="0 0 25 12"
+					fill="none"
+					aria-hidden="true"
+					focusable="false"
+				>
 					<rect
 						x="1"
 						y="1"

@@ -6318,11 +6318,22 @@ export const useStore = create<StoreState>()(
 				};
 
 				set({ pendingCutlostRequests: [req, ...st.pendingCutlostRequests] });
-				get().pushNotify({
-					type: "shift_edit",
-					outlet: shift.outletName,
-					detail: `Cutlost request · ${cutlostRequestTitle(req)}`,
-				});
+				// One notification per PR the plan would release, exactly as
+				// `releaseOutletPrsEarly` above does it: `shift_edit` is PR-scoped —
+				// the agency line is titled with the PR's name and only that PR sees
+				// the host copy. A cut-slots-only request releases nobody, so it
+				// raises none; the agency still picks it up from the approval queue
+				// set on the line above.
+				for (const prId of req.releasedPrIds ?? []) {
+					const pr = st.agencyPRs.find((p) => p.id === prId);
+					get().pushNotify({
+						type: "shift_edit",
+						prId,
+						prName: pr?.name ?? prId,
+						outlet: shift.outletName,
+						detail: `Cutlost request · ${cutlostRequestTitle(req)}`,
+					});
+				}
 				get().toast("Sent to agency for approval", "info");
 			},
 			approveCutlostRequest: (id) => {

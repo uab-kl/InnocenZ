@@ -108,8 +108,7 @@ export function PostJobAgencyPicker({
 						<button
 							key={link.id}
 							type="button"
-							role="checkbox"
-							aria-checked={on}
+							aria-pressed={on}
 							disabled={isLastSelected}
 							title={
 								isLastSelected

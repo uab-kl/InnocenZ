@@ -77,7 +77,7 @@ import {
 	Star,
 	UserMinus,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { languageLabel, raceLabel } from "@/lib/portal-i18n/language-label";
@@ -166,6 +166,9 @@ function AgencyManagePRs() {
 	const [broadcastOpen, setBroadcastOpen] = useState(false);
 	const [penaltiesOpen, setPenaltiesOpen] = useState(false);
 	const [penaltyRulesOpen, setPenaltyRulesOpen] = useState(false);
+	const langSelectId = useId();
+	const raceSelectId = useId();
+	const placeSelectId = useId();
 
 	useEffect(() => {
 		if (prFromSearch) setDetailId(prFromSearch);
@@ -252,6 +255,23 @@ function AgencyManagePRs() {
 		setPlace("");
 	};
 
+	// HOISTED ABOVE the `if (detail)` early return below. React counts hooks per
+	// render: with this useMemo left underneath it, opening a PR detail (which is
+	// local `detailId` state, so the SAME component instance re-renders) called one
+	// hook fewer than the previous render and React threw "Rendered fewer hooks
+	// than expected". Keep every hook above that return.
+	// Name + id together, drawn from the SAME rows the cards render, so the
+	// broadcast sheet cannot list a different person than the one ticked. Built
+	// off `filtered` rather than `agencyPRs` for the same reason: a selection
+	// only ever comes from what is on screen.
+	const selectedRecipients = useMemo(
+		() =>
+			filtered
+				.filter((p) => selected.has(p.id))
+				.map((p) => ({ id: p.id, name: p.name })),
+		[filtered, selected],
+	);
+
 	const detail = agencyPRs.find((p) => p.id === detailId);
 	const activeCount = useMemo(
 		() => filtered.filter((p) => isAgencyPrActive(p)).length,
@@ -301,17 +321,6 @@ function AgencyManagePRs() {
 		setSelected(new Set(filtered.map((p) => p.id)));
 	};
 
-	// Name + id together, drawn from the SAME rows the cards render, so the
-	// broadcast sheet cannot list a different person than the one ticked. Built
-	// off `filtered` rather than `agencyPRs` for the same reason: a selection
-	// only ever comes from what is on screen.
-	const selectedRecipients = useMemo(
-		() =>
-			filtered
-				.filter((p) => selected.has(p.id))
-				.map((p) => ({ id: p.id, name: p.name })),
-		[filtered, selected],
-	);
 
 	const openBroadcast = () => {
 		if (!selectMode) {
@@ -443,18 +452,11 @@ function AgencyManagePRs() {
 					) : (
 						<div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
 							{penalizedPrs.map((x) => (
-								<div
+								<button
 									key={x.pr.id}
-									role="button"
-									tabIndex={0}
+									type="button"
 									onClick={() => openPrProfile(x.pr.id)}
-									onKeyDown={(e) => {
-										if (e.key === "Enter" || e.key === " ") {
-											e.preventDefault();
-											openPrProfile(x.pr.id);
-										}
-									}}
-									className="cursor-pointer rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2 transition-colors hover:border-[var(--iz-line2)] hover:bg-[rgba(255,255,255,0.04)]"
+									className="block w-full cursor-pointer rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2 text-left transition-colors hover:border-[var(--iz-line2)] hover:bg-[rgba(255,255,255,0.04)]"
 								>
 									<div className="flex items-center justify-between gap-2">
 										<b className="iz-sm text-[var(--iz-txt)]">{x.pr.name}</b>
@@ -482,7 +484,7 @@ function AgencyManagePRs() {
 											</div>
 										))}
 									</div>
-								</div>
+								</button>
 							))}
 						</div>
 					))}
@@ -603,11 +605,12 @@ function AgencyManagePRs() {
 							onChange={(e) => setExpMin(e.target.value)}
 						/>
 					</label>
-					<label className="iz-roster-filterbar__field">
+					<label htmlFor={langSelectId} className="iz-roster-filterbar__field">
 						<span className="iz-roster-filterbar__label">
 							{t.managePr.languages}
 						</span>
 						<IzSelect
+							id={langSelectId}
 							block
 							value={lang}
 							onChange={(e) => setLang(e.target.value)}
@@ -620,11 +623,12 @@ function AgencyManagePRs() {
 							))}
 						</IzSelect>
 					</label>
-					<label className="iz-roster-filterbar__field">
+					<label htmlFor={raceSelectId} className="iz-roster-filterbar__field">
 						<span className="iz-roster-filterbar__label">
 							{t.managePr.race}
 						</span>
 						<IzSelect
+							id={raceSelectId}
 							block
 							value={race}
 							onChange={(e) => setRace(e.target.value)}
@@ -637,11 +641,12 @@ function AgencyManagePRs() {
 							))}
 						</IzSelect>
 					</label>
-					<label className="iz-roster-filterbar__field">
+					<label htmlFor={placeSelectId} className="iz-roster-filterbar__field">
 						<span className="iz-roster-filterbar__label">
 							{t.managePr.place}
 						</span>
 						<IzSelect
+							id={placeSelectId}
 							block
 							value={place}
 							onChange={(e) => setPlace(e.target.value)}
@@ -843,6 +848,7 @@ function AgencyPrDetail({
 		next: PrPayClass;
 		conflicts: number;
 	} | null>(null);
+	const fieldId = useId();
 
 	// Real worked shifts. Demo sessions have no backend identity, so they keep
 	// reading the demo store — which is the only place their history exists.
@@ -1051,10 +1057,14 @@ function AgencyPrDetail({
 						<div className="iz-between items-start gap-2">
 							{editing ? (
 								<div className="iz-field !mb-0 min-w-0 flex-1">
-									<label className="!text-[9px]">
+									<label
+										htmlFor={`${fieldId}-nickname`}
+										className="!text-[9px]"
+									>
 										{t.managePr.floorNickname}
 									</label>
 									<input
+										id={`${fieldId}-nickname`}
 										type="text"
 										value={draft.name}
 										maxLength={20}
@@ -1209,8 +1219,8 @@ function AgencyPrDetail({
 						<div className="grid grid-cols-4 gap-2">
 							{detail
 								.portfolioPhotos!.filter((src): src is string => Boolean(src))
-								.map((src, i) => (
-									<PortfolioGalleryTile key={`${src}-${i}`} src={src} />
+								.map((src) => (
+									<PortfolioGalleryTile key={src} src={src} />
 								))}
 						</div>
 						<p className="iz-tiny iz-muted2 mt-2">
@@ -1230,8 +1240,11 @@ function AgencyPrDetail({
 						{editing ? (
 							<div className="space-y-2">
 								<div className="iz-field !mb-0">
-									<label>{t.managePr.legalIcName}</label>
+									<label htmlFor={`${fieldId}-ic-name`}>
+										{t.managePr.legalIcName}
+									</label>
 									<input
+										id={`${fieldId}-ic-name`}
 										value={draft.icName}
 										onChange={(e) =>
 											setDraft((p) => ({ ...p, icName: e.target.value }))
@@ -1239,8 +1252,11 @@ function AgencyPrDetail({
 									/>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>{t.managePr.mobile}</label>
+									<label htmlFor={`${fieldId}-mobile`}>
+										{t.managePr.mobile}
+									</label>
 									<input
+										id={`${fieldId}-mobile`}
 										value={draft.mobile}
 										onChange={(e) =>
 											setDraft((p) => ({ ...p, mobile: e.target.value }))
@@ -1248,8 +1264,9 @@ function AgencyPrDetail({
 									/>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>{t.managePr.email}</label>
+									<label htmlFor={`${fieldId}-email`}>{t.managePr.email}</label>
 									<input
+										id={`${fieldId}-email`}
 										type="email"
 										value={draft.email}
 										onChange={(e) =>
@@ -1286,8 +1303,9 @@ function AgencyPrDetail({
 						{editing ? (
 							<div className="space-y-2">
 								<div className="iz-field !mb-0">
-									<label>{t.managePr.race}</label>
+									<label htmlFor={`${fieldId}-race`}>{t.managePr.race}</label>
 									<input
+										id={`${fieldId}-race`}
 										value={draft.race}
 										onChange={(e) =>
 											setDraft((p) => ({ ...p, race: e.target.value }))
@@ -1295,8 +1313,9 @@ function AgencyPrDetail({
 									/>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>{t.managePr.place}</label>
+									<label htmlFor={`${fieldId}-place`}>{t.managePr.place}</label>
 									<input
+										id={`${fieldId}-place`}
 										value={draft.place}
 										onChange={(e) =>
 											setDraft((p) => ({ ...p, place: e.target.value }))
@@ -1309,8 +1328,11 @@ function AgencyPrDetail({
 									onChange={(n) => setDraft((p) => ({ ...p, yearsExp: n }))}
 								/>
 								<div className="iz-field !mb-0">
-									<label>{t.managePr.kpiTier}</label>
+									<label htmlFor={`${fieldId}-kpi-tier`}>
+										{t.managePr.kpiTier}
+									</label>
 									<IzSelect
+										id={`${fieldId}-kpi-tier`}
 										value={draft.kpiTier}
 										onChange={(e) =>
 											setDraft((p) => ({ ...p, kpiTier: e.target.value }))
@@ -1328,8 +1350,11 @@ function AgencyPrDetail({
 									</IzSelect>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>{t.managePr.trainingTier}</label>
+									<label htmlFor={`${fieldId}-training-tier`}>
+										{t.managePr.trainingTier}
+									</label>
 									<IzSelect
+										id={`${fieldId}-training-tier`}
 										value={draft.trainingLevel}
 										onChange={(e) =>
 											setDraft((p) => ({ ...p, trainingLevel: e.target.value }))
@@ -1343,8 +1368,11 @@ function AgencyPrDetail({
 									</IzSelect>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>{t.managePr.payClass}</label>
+									<label htmlFor={`${fieldId}-pay-class`}>
+										{t.managePr.payClass}
+									</label>
 									<IzSelect
+										id={`${fieldId}-pay-class`}
 										value={draft.payClass}
 										onChange={(e) =>
 											setDraft((p) => ({
@@ -1506,9 +1534,9 @@ function AgencyPrDetail({
 							<IzCard flat>
 								{[...detail.payClassHistory!]
 									.sort((a, b) => (a.fromIso < b.fromIso ? 1 : -1))
-									.map((c, i) => (
+									.map((c) => (
 										<div
-											key={`${c.fromIso}-${i}`}
+											key={`${c.fromIso}-${c.payClass}`}
 											className="iz-v-sum border-t border-[var(--iz-line)] py-1.5 first:border-0 first:pt-0"
 										>
 											<span className="iz-muted">From {c.fromIso}</span>
@@ -1741,6 +1769,7 @@ function AgencyComcardInput({
 	lockedNote?: string;
 }) {
 	const [noteShown, setNoteShown] = useState(false);
+	const plainFieldId = useId();
 	const shown =
 		Number.isFinite(value) && !(blankZero && value === 0) ? value : "";
 
@@ -1800,8 +1829,9 @@ function AgencyComcardInput({
 
 	return (
 		<div className="iz-comcard-field">
-			<label>{label}</label>
+			<label htmlFor={plainFieldId}>{label}</label>
 			<input
+				id={plainFieldId}
 				type="number"
 				inputMode="numeric"
 				value={shown}

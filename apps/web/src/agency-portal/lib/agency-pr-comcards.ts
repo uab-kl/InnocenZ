@@ -17,10 +17,18 @@ type ComcardSeed = Pick<
 	| "email"
 >;
 
+/**
+ * Per-PR fields layered over the shared demo defaults below. `trainingLevel`
+ * has no defensible shared default — it is a per-person grade, not a filler
+ * value — so the base literal omits it and every entry must state it here.
+ */
+type ComcardOverrides = Omit<Partial<AgencyManagedPR>, "trainingLevel"> &
+	Pick<AgencyManagedPR, "trainingLevel">;
+
 function comcardPr(
 	slug: string,
 	seed: ComcardSeed,
-	overrides?: Partial<AgencyManagedPR>,
+	overrides: ComcardOverrides,
 ): AgencyManagedPR {
 	const emailLocal = seed.email ?? `${slug.replace(/-/g, ".")}@inz.my`;
 	return {

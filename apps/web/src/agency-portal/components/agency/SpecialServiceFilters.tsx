@@ -8,6 +8,7 @@ import {
 } from "@agency-portal/lib/special-service-demo";
 import { cn } from "@agency-portal/lib/utils";
 import { RotateCcw } from "lucide-react";
+import { useId } from "react";
 
 export function SpecialServiceFilters({
 	filters,
@@ -34,6 +35,8 @@ export function SpecialServiceFilters({
 	jobPostingLayout?: boolean;
 }) {
 	const active = specialServiceFiltersActive(filters);
+	const serviceTypeId = useId();
+	const statusId = useId();
 
 	return (
 		<div
@@ -55,7 +58,9 @@ export function SpecialServiceFilters({
 			)}
 
 			<div className="iz-special-service-filters-grid">
-				<label
+				{/* Not a <label>: the picker below renders a popover trigger button,
+				    which is not a labelable control, so the caption is a caption. */}
+				<div
 					className={cn(
 						"iz-special-service-filter-field",
 						jobPostingLayout && "iz-special-service-filter-field--bare",
@@ -73,9 +78,10 @@ export function SpecialServiceFilters({
 						hint="Dots mark days with bookings."
 						className="iz-special-service-filter-date"
 					/>
-				</label>
+				</div>
 
 				<label
+					htmlFor={serviceTypeId}
 					className={cn(
 						"iz-special-service-filter-field",
 						jobPostingLayout && "iz-special-service-filter-field--bare",
@@ -87,6 +93,7 @@ export function SpecialServiceFilters({
 						</span>
 					)}
 					<IzSelect
+						id={serviceTypeId}
 						block
 						className="iz-special-service-filter-control"
 						value={filters.serviceType}
@@ -102,6 +109,7 @@ export function SpecialServiceFilters({
 				</label>
 
 				<label
+					htmlFor={statusId}
 					className={cn(
 						"iz-special-service-filter-field",
 						jobPostingLayout && "iz-special-service-filter-field--bare",
@@ -111,6 +119,7 @@ export function SpecialServiceFilters({
 						<span className="iz-roster-filter-label">Status</span>
 					)}
 					<IzSelect
+						id={statusId}
 						block
 						className="iz-special-service-filter-control"
 						value={filters.status}

@@ -9,6 +9,9 @@
 import React, { type ReactNode } from 'react';
 import { Modal, Platform, StyleSheet, View } from 'react-native';
 import { createPortal } from 'react-dom';
+
+/** Exactly what react-dom's createPortal accepts as a container. */
+type PortalHost = Parameters<typeof createPortal>[1];
 import { PHONE_SCREEN_ID } from './PhoneFrame';
 
 export function PhoneSheet({
@@ -23,8 +26,13 @@ export function PhoneSheet({
 }) {
   if (Platform.OS === 'web') {
     if (!visible) return null;
-    const host =
-      typeof document !== 'undefined' ? document.getElementById(PHONE_SCREEN_ID) : null;
+    // RN has no DOM lib (deliberately), so reach the browser document through
+    // globalThis rather than declaring a global — the same idiom as
+    // lib/proof-photo.ts. A global `document` would let native-only files
+    // reference it and still type-check, which is the bug this avoids.
+    const doc = (globalThis as { document?: { getElementById: (id: string) => PortalHost | null } })
+      .document;
+    const host = doc?.getElementById(PHONE_SCREEN_ID) ?? null;
     const overlay = <View style={styles.fill}>{children}</View>;
     // No phone element yet (first paint) — render in place rather than drop.
     return host ? createPortal(overlay, host) : overlay;

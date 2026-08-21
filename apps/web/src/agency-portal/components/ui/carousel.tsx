@@ -40,8 +40,8 @@ function useCarousel() {
 }
 
 const Carousel = React.forwardRef<
-	HTMLDivElement,
-	React.HTMLAttributes<HTMLDivElement> & CarouselProps
+	HTMLElement,
+	React.HTMLAttributes<HTMLElement> & CarouselProps
 >(
 	(
 		{
@@ -83,7 +83,7 @@ const Carousel = React.forwardRef<
 		}, [api]);
 
 		const handleKeyDown = React.useCallback(
-			(event: React.KeyboardEvent<HTMLDivElement>) => {
+			(event: React.KeyboardEvent<HTMLElement>) => {
 				if (event.key === "ArrowLeft") {
 					event.preventDefault();
 					scrollPrev();
@@ -131,16 +131,23 @@ const Carousel = React.forwardRef<
 					canScrollNext,
 				}}
 			>
-				<div
+				{/*
+				 * A real <section>, not <div role="region">. A <section> is only
+				 * exposed as a region once it has an accessible name, and without a
+				 * region `aria-roledescription` is dropped on the floor — hence the
+				 * default `aria-label`, which sits BEFORE the spread so a consumer can
+				 * override it with a name of their own.
+				 */}
+				<section
 					ref={ref}
 					onKeyDownCapture={handleKeyDown}
 					className={cn("relative", className)}
-					role="region"
 					aria-roledescription="carousel"
+					aria-label="Carousel"
 					{...props}
 				>
 					{children}
-				</div>
+				</section>
 			</CarouselContext.Provider>
 		);
 	},
@@ -176,6 +183,7 @@ const CarouselItem = React.forwardRef<
 	const { orientation } = useCarousel();
 
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: the rule's substitute for role="group" is <fieldset>, a form-control grouping element; a carousel slide is not a form, and the WAI-ARIA carousel pattern specifies exactly this div + role="group" + aria-roledescription="slide"
 		<div
 			ref={ref}
 			role="group"

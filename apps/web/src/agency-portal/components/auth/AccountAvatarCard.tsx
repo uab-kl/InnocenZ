@@ -119,14 +119,13 @@ export function AccountAvatarCard() {
 				</button>
 			</div>
 			{justUploaded && (
-				<p
+				<output
 					className="mt-2 flex items-center gap-1.5 text-xs font-semibold"
 					style={{ color: "var(--iz-green, #6ee7a8)" }}
-					role="status"
 				>
 					<Check className="h-3.5 w-3.5 shrink-0" />
 					Photo uploaded successfully
-				</p>
+				</output>
 			)}
 		</div>
 	);

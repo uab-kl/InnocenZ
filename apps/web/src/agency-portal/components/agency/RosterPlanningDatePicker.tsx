@@ -126,6 +126,7 @@ export function RosterPlanningDatePicker({
 					<span className="truncate">{label}</span>
 				</span>
 				{allowClear && value ? (
+					// biome-ignore lint/a11y/useSemanticElements: this clear control lives INSIDE the trigger <button>, and `.iz-hist-clear` is one of its `justify-content:space-between` flex children — a real <button> here would nest a button in a button, which the HTML parser splits apart on SSR and would break the trigger's layout.
 					<span
 						role="button"
 						tabIndex={0}

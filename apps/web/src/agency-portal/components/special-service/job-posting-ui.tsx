@@ -178,8 +178,17 @@ function ComposerField({
 	children: React.ReactNode;
 	className?: string;
 }) {
+	/*
+	 * A <div>, not a <label>: this is a caption over an arbitrary slot, and most
+	 * of what callers put in that slot is not a labelable control at all — the
+	 * multi-date picker and the service-type pill grid are both grids of buttons.
+	 * A <label> wrapping those associates itself with the FIRST labelable
+	 * descendant, so clicking the "Service type" caption activated the first
+	 * service pill. Every control that IS labelable in here carries its own
+	 * `aria-label`, so nothing loses its accessible name.
+	 */
 	return (
-		<label
+		<div
 			className={cn(
 				"iz-job-posting-field flex w-full min-w-0 flex-col gap-1",
 				className,
@@ -187,7 +196,7 @@ function ComposerField({
 		>
 			<JobPostingMicroLabel>{label}</JobPostingMicroLabel>
 			{children}
-		</label>
+		</div>
 	);
 }
 
@@ -371,6 +380,7 @@ export function JobPostingComposer({
 			<ComposerField label="Remark" className="mt-3">
 				<textarea
 					className="iz-job-posting-textarea w-full"
+					aria-label="Remark"
 					placeholder={specialServiceRemarkHint(draft.serviceType)}
 					value={draft.remark}
 					onChange={(e) => onChange({ remark: e.target.value })}

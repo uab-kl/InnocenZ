@@ -203,6 +203,7 @@ function AgencyRoster() {
 	// A sheet with no control over a field has no business writing that field. The
 	// footer is a plain Close now.
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies(agencyRoster.length): the roster count is the re-run TRIGGER, not a value read here — slots that arrive after first render still have to be synced with the live check-in. Dropping it makes this a one-shot sync (the store action is stable), so a late-loading slot would render as never checked in.
 	useEffect(() => {
 		syncLivePrCheckInToRoster();
 	}, [syncLivePrCheckInToRoster, agencyRoster.length]);
@@ -235,7 +236,9 @@ function AgencyRoster() {
 			dedupeLiveRosterByPr(
 				agencyRoster.filter((s) => s.dateIso === liveDateIso),
 			),
-		[agencyRoster, liveDateIso],
+		// `liveDateIso` is a module constant (DEFAULT_ROSTER_DATE_ISO), fixed for
+		// the life of the tab, so it can never re-trigger this memo.
+		[agencyRoster],
 	);
 
 	const filtered = useMemo(
@@ -284,6 +287,8 @@ function AgencyRoster() {
 	const shifts = useStore((s) => s.shifts);
 	const shiftApplicants = useStore((s) => s.shiftApplicants);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies(shifts): the shift list is the re-run TRIGGER, not a value read here — the sync rebuilds roster rows from whatever outlet requests now exist, so a new or edited shift has to re-run it.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(shiftApplicants): same trigger role — an applicant arriving changes the rows this sync writes, and the store action itself is stable, so without these two it would run once and never again.
 	useEffect(() => {
 		syncOutletRequestRoster();
 	}, [syncOutletRequestRoster, shifts, shiftApplicants]);
@@ -355,6 +360,7 @@ function AgencyRoster() {
 		drinkMenu,
 		prReceiptScans,
 		outletWorkspace.tierRates,
+		outletWorkspace.commissionOnlyRates,
 		outletWorkspace.happyHourStart,
 		outletWorkspace.happyHourEnd,
 	]);
@@ -460,10 +466,11 @@ function AgencyRoster() {
 				</div>
 				<div className="iz-roster-filters">
 					{viewMode === "live" ? (
-						<div
-							className="iz-roster-date-live"
-							aria-label={t.roster.dateTodayLive}
-						>
+						// A plain <div> has the generic role, which takes no accessible
+						// name — the aria-label that used to sit here was dropped by
+						// assistive tech anyway. The visible "Today" beside the calendar
+						// icon is the label.
+						<div className="iz-roster-date-live">
 							<Calendar className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
 							<span>{t.common.today}</span>
 						</div>
@@ -787,10 +794,14 @@ function AgencyRoster() {
 							· {swapToApprove.targetDate} · {swapToApprove.targetShift}. Pick a
 							replacement for their current slot.
 						</p>
-						<label className="iz-tiny iz-muted mb-1 block">
+						<label
+							htmlFor="roster-replacement-pr"
+							className="iz-tiny iz-muted mb-1 block"
+						>
 							{t.roster.replacementPr}
 						</label>
 						<IzSelect
+							id="roster-replacement-pr"
 							value={replacementPick}
 							onChange={(e) => setReplacementPick(e.target.value)}
 							className="mb-4 w-full"

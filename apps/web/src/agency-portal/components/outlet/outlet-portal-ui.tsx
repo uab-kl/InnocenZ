@@ -151,13 +151,18 @@ export function OutletField({
 	label,
 	children,
 	className,
+	htmlFor,
 }: {
 	label: string;
 	children: ReactNode;
 	className?: string;
+	/** Id of the control this field wraps. Nested inputs are associated
+	 *  implicitly; pass this when the control is rendered elsewhere. */
+	htmlFor?: string;
 }) {
 	return (
 		<label
+			htmlFor={htmlFor}
 			className={cn(
 				"iz-outlet-field flex w-full min-w-0 flex-col gap-1",
 				className,

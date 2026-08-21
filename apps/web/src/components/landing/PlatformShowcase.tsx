@@ -74,8 +74,12 @@ const portalDemos: Record<
 };
 
 function FlowHeadline({ steps }: { steps: string[] }) {
+	// No `aria-label` here: a generic <div> carries no role, so assistive tech
+	// ignores the label and reads the children instead. The step words below are
+	// real text and only the "→" separators are hidden, so the announced headline
+	// is already the step list in order.
 	return (
-		<div className="platform-flow-headline" aria-label={steps.join(", ")}>
+		<div className="platform-flow-headline">
 			{steps.map((step, i) => (
 				<span key={step} className="platform-flow-headline__group">
 					<span className="platform-flow-headline__step">{step}</span>

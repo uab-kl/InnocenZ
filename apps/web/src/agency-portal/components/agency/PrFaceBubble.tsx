@@ -40,6 +40,7 @@ export function PrFaceBubble({
 	const [failed, setFailed] = useState(false);
 	// A new src deserves its own attempt — otherwise one failure would blank
 	// this PR's face for as long as the component stays mounted.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(src): src is the reset TRIGGER, not a value the effect reads; dropping it would clear `failed` on mount only and leave a swapped-in photo permanently hidden behind the initial.
 	useEffect(() => setFailed(false), [src]);
 	const showPhoto = !!src && !failed;
 

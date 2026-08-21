@@ -16,13 +16,21 @@ const brands = [
 	"Element X",
 ];
 
+// The ticker repeats the same brand list three times so the marquee loops
+// seamlessly; each pass gets its own key prefix so the keys stay unique.
+const TICKER_PASSES = ["lead", "loop", "tail"] as const;
+
+const tickerBrands = TICKER_PASSES.flatMap((pass) =>
+	brands.map((name) => ({ key: `${pass}-${name}`, name })),
+);
+
 function TrustedBy() {
 	return (
 		<div className="hz-ticker-wrap">
 			<div className="hz-ticker-track">
-				{[...brands, ...brands, ...brands].map((b, i) => (
+				{tickerBrands.map(({ key, name }) => (
 					<div
-						key={`${b}-${i}`}
+						key={key}
 						className="flex items-center gap-2.5"
 						style={{
 							fontFamily: "var(--hz-font-display)",
@@ -41,7 +49,7 @@ function TrustedBy() {
 								opacity: 0.4,
 							}}
 						/>
-						{b}
+						{name}
 					</div>
 				))}
 			</div>
@@ -95,7 +103,8 @@ function OrbitBadge() {
 			<svg
 				viewBox="0 0 400 400"
 				className="pointer-events-none absolute inset-0 z-[2] h-full w-full"
-				aria-hidden
+				aria-hidden="true"
+				focusable="false"
 			>
 				<defs>
 					<mask id="hz-tri-mask">
@@ -123,7 +132,8 @@ function OrbitBadge() {
 				viewBox="0 0 400 400"
 				className="pointer-events-none absolute inset-0 z-[3] h-full w-full"
 				style={{ animation: "hz-orbit 30s linear infinite" }}
-				aria-hidden
+				aria-hidden="true"
+				focusable="false"
 			>
 				<defs>
 					<linearGradient id="ring1" x1="0" x2="1">
@@ -146,7 +156,8 @@ function OrbitBadge() {
 				viewBox="0 0 400 400"
 				className="pointer-events-none absolute inset-0 z-[3] h-full w-full"
 				style={{ animation: "hz-orbit-rev 40s linear infinite" }}
-				aria-hidden
+				aria-hidden="true"
+				focusable="false"
 			>
 				<circle
 					cx="200"

@@ -289,7 +289,10 @@ export function OutletShiftDetailPanel({
 				demandCut: shift.demandCut,
 				releasedEarlyPrIds: shift.releasedEarlyPrIds,
 				tierRates,
-				bookedPrIds: outletShiftActivePrIds(shift),
+				bookedPrIds: outletShiftActivePrIds({
+					prs: shift.prs,
+					releasedEarlyPrIds: shift.releasedEarlyPrIds,
+				}),
 				agencyPRs,
 				suppliedByTierBucket: shift.suppliedByTierBucket,
 			}),

@@ -14,7 +14,7 @@ export function PortalGateLoading({
 }: PortalGateLoadingProps) {
 	const isPortal = variant === "portal";
 	return (
-		<div
+		<output
 			className={cn(
 				"relative flex min-h-svh w-full flex-col items-center justify-center overflow-hidden px-6",
 				isPortal
@@ -22,7 +22,6 @@ export function PortalGateLoading({
 					: "bg-background text-muted-foreground",
 				className,
 			)}
-			role="status"
 			aria-live="polite"
 			aria-label="Loading"
 		>
@@ -83,6 +82,6 @@ export function PortalGateLoading({
 					100% { left: 100%; }
 				}
 			`}</style>
-		</div>
+		</output>
 	);
 }

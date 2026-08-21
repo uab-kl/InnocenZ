@@ -837,6 +837,14 @@ function PostJobLanguagePicker({
 	const [showOther, setShowOther] = useState(false);
 	const [otherInput, setOtherInput] = useState("");
 
+	// The field is only mounted once the outlet taps `+ Others`, and the whole
+	// point of that tap is to type — so focus follows the reveal, which is the
+	// job autoFocus used to do here.
+	const otherInputRef = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		if (showOther) otherInputRef.current?.focus();
+	}, [showOther]);
+
 	const addOther = () => {
 		const label = formatLanguageInput(otherInput);
 		if (!label) return;
@@ -885,7 +893,7 @@ function PostJobLanguagePicker({
 						type="text"
 						value={otherInput}
 						maxLength={32}
-						autoFocus
+						ref={otherInputRef}
 						placeholder={t.postJob.nameALanguage}
 						aria-label={t.postJob.otherPreferredLanguage}
 						className="iz-job-posting-control iz-job-posting-input min-w-0 flex-1 text-sm"
@@ -1081,14 +1089,14 @@ export function ShiftTimePicker({
 	if (layout === "grid") {
 		return (
 			<div className="grid w-full grid-cols-2 gap-2.5">
-				<label className="flex min-w-0 flex-col gap-1">
+				<div className="flex min-w-0 flex-col gap-1">
 					<JobPostingMicroLabel>{t.postJob.start}</JobPostingMicroLabel>
 					{startField}
-				</label>
-				<label className="flex min-w-0 flex-col gap-1">
+				</div>
+				<div className="flex min-w-0 flex-col gap-1">
 					<JobPostingMicroLabel>{t.postJob.end}</JobPostingMicroLabel>
 					{endField}
-				</label>
+				</div>
 			</div>
 		);
 	}
@@ -1547,6 +1555,7 @@ export function DraftShiftEditor({
 	const prevWorkspaceRatesKey = useRef(workspaceRatesKey);
 	const didExpandTierColumns = useRef(false);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: one-shot on mount (guarded by didExpandTierColumns) — it rewrites the shift's tier rows via onChange, so any dep here would re-trigger it on the change it just made.
 	useEffect(() => {
 		if (didExpandTierColumns.current) return;
 		const complete =
@@ -1624,6 +1633,7 @@ export function DraftShiftEditor({
 		dateLabel,
 	);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs only when plan/date capacity moves — it writes shift.quantity/prIds/payTierRows through onChange, so depending on those makes the clamp re-fire on its own write.
 	useEffect(() => {
 		if (peopleRemaining === undefined) return;
 		const patches: Partial<DraftShift> = {};
@@ -1657,6 +1667,7 @@ export function DraftShiftEditor({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- clamp when plan/date capacity changes only
 	}, [peopleRemaining, shift.selectedDateIsos]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: keyed to the saved rate card's signature on purpose — `shift` and `outletWorkspace` are read to build the patch, and depending on them would re-apply workspace rates over the outlet's own per-shift edits every render.
 	useEffect(() => {
 		if (prevWorkspaceRatesKey.current === workspaceRatesKey) return;
 		prevWorkspaceRatesKey.current = workspaceRatesKey;
