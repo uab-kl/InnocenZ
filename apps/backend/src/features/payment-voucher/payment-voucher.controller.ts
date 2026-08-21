@@ -3,7 +3,10 @@ import {
   DuplicateDisputeError,
   PaymentVoucherDisputeRepositoryClass,
 } from './payment-voucher-dispute.repository.js';
-import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
+import {
+  PaymentVoucherRepositoryClass,
+  VoucherConflictError,
+} from './payment-voucher.repository';
 import {
   buildVoucherPrintHtml,
   buildVoucherWorkbook,
@@ -1411,7 +1414,9 @@ export class PaymentVoucherControllerClass {
           .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      const { lines, ...data } = parsed.data;
+      // `expectedUpdatedAt` is the concurrency token, not a column — it must
+      // never reach the header `.set`, only the repository's check.
+      const { lines, expectedUpdatedAt, ...data } = parsed.data;
       // Agency users cannot move a voucher to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
 
@@ -1568,6 +1573,7 @@ export class PaymentVoucherControllerClass {
         id,
         { ...data, ...totals, ...stamps, updatedBy: getActor(req) },
         lines ? toLineRows(lines) : undefined,
+        expectedUpdatedAt,
       );
       if (!voucher)
         return res
@@ -1579,6 +1585,17 @@ export class PaymentVoucherControllerClass {
         data: voucher,
       });
     } catch (error) {
+      // The voucher moved while the editor was open — most often the PR's
+      // phone appending a line to the same current-week draft. A refusal, not
+      // a merge: the wholesale line replace would destroy their money.
+      if (error instanceof VoucherConflictError) {
+        return res.status(409).json({
+          success: false,
+          message:
+            'This voucher changed since you loaded it — reload the page and re-apply your edit.',
+          data: null,
+        });
+      }
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.update] Error:', error);
       res.status(500).json({

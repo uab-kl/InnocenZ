@@ -79,6 +79,18 @@ function isVoucherNoConflict(error: unknown): boolean {
   });
 }
 
+/**
+ * The voucher changed since the caller loaded it. Thrown by `update` when an
+ * `expectedUpdatedAt` token is stale — a typed class so the controller can turn
+ * exactly this into a 409 while every other error stays a 500.
+ */
+export class VoucherConflictError extends Error {
+  constructor(voucherId: string) {
+    super(`Voucher ${voucherId} changed since it was loaded`);
+    this.name = 'VoucherConflictError';
+  }
+}
+
 export class PaymentVoucherRepositoryClass {
   /**
    * The next voucher number — `PV-000001`, in the same shape as the receipt
@@ -230,9 +242,32 @@ export class PaymentVoucherRepositoryClass {
     id: string,
     data: Partial<PaymentVoucherInsertType>,
     lines?: LineInput[],
+    expectedUpdatedAt?: string,
   ): Promise<PaymentVoucherWithLines | null> {
     try {
       return await db.transaction(async (tx) => {
+        // Optimistic concurrency, checked INSIDE the transaction under a row
+        // lock — not in the controller, whose read races the very write it
+        // would be guarding against. The window is real: the agency editor
+        // seeds from a 60s-stale query while the PR's phone appends lines to
+        // the same current-week draft, and the wholesale replace below would
+        // destroy the PR's line and its proof photo with no error on either
+        // side. Only enforced when the caller sent a token, so the scheduler
+        // and every status-flip path are untouched.
+        if (expectedUpdatedAt !== undefined) {
+          const [current] = await tx
+            .select({ updatedAt: PaymentVoucherTable.updatedAt })
+            .from(PaymentVoucherTable)
+            .where(eq(PaymentVoucherTable.id, id))
+            .for('update');
+          if (
+            current &&
+            current.updatedAt.getTime() !== new Date(expectedUpdatedAt).getTime()
+          ) {
+            throw new VoucherConflictError(id);
+          }
+        }
+
         const [voucher] = await tx
           .update(PaymentVoucherTable)
           .set({ ...data, updatedAt: new Date() })

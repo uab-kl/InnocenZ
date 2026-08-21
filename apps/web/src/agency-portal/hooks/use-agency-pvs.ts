@@ -67,6 +67,17 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 		[pvQuery.data],
 	);
 
+	// Raw `updatedAt` per voucher, exactly as fetched — the optimistic-
+	// concurrency token editLines sends. This list sits behind a 60s staleTime
+	// while the PR's phone can append lines to the same current-week draft; a
+	// save from this stale editor used to silently destroy that line and its
+	// proof photo. With the token, the backend 409s and the operator reloads.
+	const rawUpdatedAt = useMemo(
+		() =>
+			new Map((pvQuery.data?.data ?? []).map((v) => [v.id, v.updatedAt])),
+		[pvQuery.data],
+	);
+
 	const updateMut = useMutation({
 		mutationFn: (vars: { id: string; input: UpdatePaymentVoucherInput }) =>
 			updatePaymentVoucher(vars.id, vars.input, logout),
@@ -107,9 +118,15 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 		// reason is recorded in the dispute note (backend has no override-audit).
 		overrideSigned: (id: string, reason: string) =>
 			patch(id, { status: "pending_review", disputeNote: reason }),
-		// Dispute-resolution line edit: replace lines and the deduction.
+		// Dispute-resolution line edit: replace lines and the deduction. Carries
+		// the concurrency token — this is the one patch that REPLACES the line
+		// set, so it is the one that must refuse when the voucher moved.
 		editLines: (id: string, rows: PrPvRow[], deduction: number) =>
-			patch(id, { lines: pvLineInputsFromRows(rows), deduction }),
+			patch(id, {
+				lines: pvLineInputsFromRows(rows),
+				deduction,
+				expectedUpdatedAt: rawUpdatedAt.get(id),
+			}),
 		// The agency's half of the dual signature — required before sendToPr.
 		financeSign: financeSignMut.mutateAsync,
 		isSigning: financeSignMut.isPending,
