@@ -488,6 +488,43 @@ export class AgencyControllerClass {
         subRole,
         status: status === 'all' ? undefined : status,
       });
+
+      /**
+       * ⚠️ AN AGENCY SEES ITS OWN STAFF AND NO OTHER — the operator-side twin of
+       * the rule `listPrLinks` above already enforces.
+       *
+       * This took an arbitrary list of up to 200 user ids and answered, for each,
+       * every agency they belong to, with that agency's name and code. Gated by
+       * `requireRole('admin','agency')` and nothing else, so any agency operator
+       * could map out which people staff which rival — the same cross-agency
+       * anonymity `listPrLinks` was hardened to protect, on the endpoint that
+       * carries the OPERATORS rather than the PRs. It never got the matching
+       * treatment because the fix there was named after PRs.
+       *
+       * Admin stays unfiltered — the user-management screens are its only caller
+       * and an admin is already trusted across every agency. A caller reading
+       * ONLY THEMSELVES keeps the whole list, which is the one live use of this
+       * endpoint: `resolve-session-identity` asks it which agency the signed-in
+       * operator belongs to, and clamping that would leave them with no session.
+       */
+      const callerId = req.user?.id ?? null;
+      const roles = callerId ? await this.authRepository.getRolesForUserIds([callerId]) : [];
+      const isAdmin = roles.some((r) => r.roleName === portalRoleName.ADMIN);
+      const isSelfReadOnly = userIds.length === 1 && userIds[0] === callerId;
+
+      if (!isAdmin && !isSelfReadOnly) {
+        const own = await this.agencyMemberRepository.listMembershipsByUserIds(
+          callerId ? [callerId] : [],
+          { status: 'active' },
+        );
+        const callerAgencyId = own[0]?.agencyId ?? null;
+        // No agency behind the account answers nothing. Empty, never unfiltered.
+        const scoped = callerAgencyId
+          ? memberships.filter((m) => m.agencyId === callerAgencyId)
+          : [];
+        return res.status(200).json({ success: true, message: 'OK', data: scoped });
+      }
+
       res.status(200).json({ success: true, message: 'OK', data: memberships });
     } catch (error) {
       logger.error('[AgencyController.listMemberships] Error:', error);
