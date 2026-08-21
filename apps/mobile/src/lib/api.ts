@@ -14,7 +14,9 @@ function detectApiUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
 
-  const loc = (globalThis as { location?: { protocol: string; hostname: string } }).location;
+  const loc = (
+    globalThis as { location?: { protocol: string; hostname: string } }
+  ).location;
   if (Platform.OS === 'web' && loc) {
     return `${loc.protocol}//${loc.hostname}:${DEFAULT_BACKEND_PORT}/api`;
   }
@@ -37,7 +39,9 @@ const DEFAULT_PROFILE_IMAGE = '/img/blank-profile-picture.png';
 let cachedR2PublicBase: string | null = null;
 
 /** Remember R2 public base from any API payload that includes `r2PublicUrl`. */
-export function noteR2PublicUrl(payload: { r2PublicUrl?: string | null } | null | undefined): void {
+export function noteR2PublicUrl(
+  payload: { r2PublicUrl?: string | null } | null | undefined,
+): void {
   const raw = payload?.r2PublicUrl?.trim();
   if (raw) cachedR2PublicBase = raw.replace(/\/$/, '');
 }
@@ -76,11 +80,15 @@ function isR2ObjectKey(ref: string): boolean {
  */
 export function assetUrl(pathname: string | null | undefined): string | null {
   if (!pathname || pathname === DEFAULT_PROFILE_IMAGE) return null;
-  if (/^https?:\/\//.test(pathname) || pathname.startsWith('data:')) return pathname;
+  if (/^https?:\/\//.test(pathname) || pathname.startsWith('data:'))
+    return pathname;
   if (isR2ObjectKey(pathname)) {
     const base = r2PublicBase();
     if (!base) {
-      console.warn('[assetUrl] R2 public URL unknown; cannot resolve key', pathname);
+      console.warn(
+        '[assetUrl] R2 public URL unknown; cannot resolve key',
+        pathname,
+      );
       return null;
     }
     return `${base}/${pathname}`;
@@ -179,13 +187,19 @@ async function requestEnvelope<T>(
       headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     });
   } catch {
-    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+    throw new ApiError(
+      `Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`,
+      0,
+    );
   }
   const body = (await res.json().catch(() => null)) as
-    | (ApiEnvelope<T> & { warning?: string | null })
-    | null;
+    (ApiEnvelope<T> & { warning?: string | null }) | null;
   if (!res.ok || !body?.success) {
-    throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status, body?.data ?? null);
+    throw new ApiError(
+      body?.message ?? `Request failed (${res.status})`,
+      res.status,
+      body?.data ?? null,
+    );
   }
   // Envelope-level (e.g. public /auth/agencies) — signup has no /auth/me yet.
   noteR2PublicUrl(body);
@@ -200,11 +214,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
-export function login(identifier: string, password: string): Promise<LoginResult> {
+export function login(
+  identifier: string,
+  password: string,
+): Promise<LoginResult> {
   const payload = identifier.includes('@')
     ? { email: identifier, password }
     : { phoneNum: identifier, password };
-  return request<LoginResult>('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
+  return request<LoginResult>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -254,9 +274,14 @@ export async function fetchPublicAgencies(): Promise<PublicAgency[]> {
    * without it this is a SIMPLE request that skips the preflight entirely.
    * `?_=` already defeats caching, which is what the header was reaching for.
    */
-  const res = await fetch(`${API_BASE}/auth/agencies?_=${Date.now()}`).catch(() => null);
+  const res = await fetch(`${API_BASE}/auth/agencies?_=${Date.now()}`).catch(
+    () => null,
+  );
   if (!res) {
-    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+    throw new ApiError(
+      `Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`,
+      0,
+    );
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<
     Array<{
@@ -267,10 +292,14 @@ export async function fetchPublicAgencies(): Promise<PublicAgency[]> {
     }>
   > | null;
   if (!res.ok || !body?.success || !Array.isArray(body.data)) {
-    throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status);
+    throw new ApiError(
+      body?.message ?? `Request failed (${res.status})`,
+      res.status,
+    );
   }
   noteR2PublicUrl(body);
-  const base = (body.r2PublicUrl ?? cachedR2PublicBase)?.replace(/\/$/, '') || null;
+  const base =
+    (body.r2PublicUrl ?? cachedR2PublicBase)?.replace(/\/$/, '') || null;
   return body.data.map((a) => {
     const key = a.logoImage?.replace(/^\//, '') || null;
     const fromServer = a.logoUrl?.trim() || null;
@@ -285,7 +314,10 @@ export async function fetchPublicAgencies(): Promise<PublicAgency[]> {
 }
 
 /** Step-1 gate: phone + ID must not already belong to an account. */
-export type RegisterCheckConflict = { field: 'phone' | 'idNo'; message: string };
+export type RegisterCheckConflict = {
+  field: 'phone' | 'idNo';
+  message: string;
+};
 
 export function checkPrRegisterAvailability(
   phoneNum: string,
@@ -438,12 +470,18 @@ export function registerPr(input: {
     // Arrays/objects must stay JSON — FormData stringifies them as useless text.
     form.append(
       key,
-      typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+      typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
         ? String(value)
         : JSON.stringify(value),
     );
   }
-  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
+  (
+    form as unknown as {
+      append: (name: string, value: Blob, fileName?: string) => void;
+    }
+  ).append(
     'profileImage',
     input.profileImage.file,
     input.profileImage.filename,
@@ -453,20 +491,33 @@ export function registerPr(input: {
     let res: Response;
     try {
       // Do not set Content-Type — RN/fetch must attach the multipart boundary.
-      res = await fetch(`${API_BASE}/auth/register`, { method: 'POST', body: form });
+      res = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        body: form,
+      });
     } catch {
-      throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+      throw new ApiError(
+        `Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`,
+        0,
+      );
     }
-    const body = (await res.json().catch(() => null)) as ApiEnvelope<null> | null;
+    const body = (await res
+      .json()
+      .catch(() => null)) as ApiEnvelope<null> | null;
     if (!res.ok || !body?.success) {
-      throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status);
+      throw new ApiError(
+        body?.message ?? `Request failed (${res.status})`,
+        res.status,
+      );
     }
     return body.data;
   })();
 }
 
 export function fetchMe(accessToken: string): Promise<Me> {
-  return request<Me>('/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
+  return request<Me>('/auth/me', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
 }
 
 export type AgencyMembership = {
@@ -503,7 +554,10 @@ export type PrAgencyLink = {
  * `pending` links, so the profile can show a request the agency hasn't
  * approved yet.
  */
-export function fetchMyAgencyLinks(accessToken: string, userId: string): Promise<PrAgencyLink[]> {
+export function fetchMyAgencyLinks(
+  accessToken: string,
+  userId: string,
+): Promise<PrAgencyLink[]> {
   const query = new URLSearchParams({ userIds: userId }).toString();
   return request<PrAgencyLink[]>(`/agency/pr-links?${query}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -540,7 +594,10 @@ export function updateMyAgencies(
  * still unsettled (unpaid vouchers, open disputes, upcoming shifts). That
  * message reaches callers as `ApiError.message` — show it VERBATIM.
  */
-export function requestAgencyLeave(accessToken: string, agencyId: string): Promise<unknown> {
+export function requestAgencyLeave(
+  accessToken: string,
+  agencyId: string,
+): Promise<unknown> {
   return request<unknown>(`/pr/mine/agencies/${agencyId}/leave`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -548,8 +605,14 @@ export function requestAgencyLeave(accessToken: string, agencyId: string): Promi
 }
 
 /** Agencies this PR belongs to — same rows the admin PR list joins on. */
-export function fetchMemberships(accessToken: string, userId: string): Promise<AgencyMembership[]> {
-  const query = new URLSearchParams({ userIds: userId, subRole: 'pr' }).toString();
+export function fetchMemberships(
+  accessToken: string,
+  userId: string,
+): Promise<AgencyMembership[]> {
+  const query = new URLSearchParams({
+    userIds: userId,
+    subRole: 'pr',
+  }).toString();
   return request<AgencyMembership[]>(`/agency/memberships?${query}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -578,7 +641,10 @@ export function portfolioSlotsFromProfile(
   photos: (string | null)[] | null | undefined,
   slotCount = 8,
 ): (string | null)[] {
-  const slots: (string | null)[] = Array.from({ length: slotCount }, () => null);
+  const slots: (string | null)[] = Array.from(
+    { length: slotCount },
+    () => null,
+  );
   if (!photos?.length) return slots;
   for (let i = 0; i < Math.min(photos.length, slotCount); i++) {
     const value = photos[i];
@@ -601,7 +667,10 @@ export function updateUserProfile(
 
 function meFromUpload(res: Response, body: ApiEnvelope<Me> | null): Me {
   if (!res.ok || !body?.success || !body.data) {
-    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
+    throw new ApiError(
+      body?.message ?? `Upload failed (${res.status})`,
+      res.status,
+    );
   }
   noteR2PublicUrl(body.data);
   return body.data;
@@ -651,8 +720,10 @@ function appendMultipartFile(
 function sanitizeUploadFilename(name: string): string {
   const base = name.trim() || 'photo.jpg';
   // Multer only allows jpg/png/webp — iPhone HEIC names must be remapped.
-  if (/\.(heic|heif)$/i.test(base)) return base.replace(/\.(heic|heif)$/i, '.jpg');
-  if (!/\.(jpe?g|png|webp)$/i.test(base)) return `${base.replace(/\.[^.]+$/, '') || 'photo'}.jpg`;
+  if (/\.(heic|heif)$/i.test(base))
+    return base.replace(/\.(heic|heif)$/i, '.jpg');
+  if (!/\.(jpe?g|png|webp)$/i.test(base))
+    return `${base.replace(/\.[^.]+$/, '') || 'photo'}.jpg`;
   return base;
 }
 
@@ -844,7 +915,9 @@ export function createPrSpecialService(
 }
 
 /** This PR's own service orders — the same rows the admin portal shows. */
-export function fetchMySpecialServices(accessToken: string): Promise<SpecialServiceRecord[]> {
+export function fetchMySpecialServices(
+  accessToken: string,
+): Promise<SpecialServiceRecord[]> {
   return request<SpecialServiceRecord[]>('/special-service/mine', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1009,9 +1082,12 @@ export async function fetchMyVoucherPdfBlob(
   accessToken: string,
   voucherId: string,
 ): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/payment-voucher/mine/${voucherId}/export.pdf`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const res = await fetch(
+    `${API_BASE}/payment-voucher/mine/${voucherId}/export.pdf`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
   if (!res.ok) throw new Error(`PDF export failed (${res.status})`);
   return res.blob();
 }
@@ -1025,9 +1101,12 @@ export async function fetchMyVoucherExcelBlob(
   accessToken: string,
   voucherId: string,
 ): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/payment-voucher/mine/${voucherId}/export.xlsx`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const res = await fetch(
+    `${API_BASE}/payment-voucher/mine/${voucherId}/export.xlsx`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
   if (!res.ok) throw new Error(`Excel export failed (${res.status})`);
   return res.blob();
 }
@@ -1048,10 +1127,14 @@ export async function createMyVoucherExportTicket(
   accessToken: string,
   voucherId: string,
 ): Promise<VoucherExportLinks> {
-  const d = await request<{ xlsxPath: string; pdfPath: string; printPath: string }>(
-    `/payment-voucher/mine/${voucherId}/export-ticket`,
-    { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
-  );
+  const d = await request<{
+    xlsxPath: string;
+    pdfPath: string;
+    printPath: string;
+  }>(`/payment-voucher/mine/${voucherId}/export-ticket`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   return {
     xlsxUrl: `${API_BASE}${d.xlsxPath}`,
     pdfUrl: `${API_BASE}${d.pdfPath}`,
@@ -1107,7 +1190,9 @@ export type NotificationRecord = {
  * Scoped server-side by the caller's user id — there is no user id in the
  * route, so nothing to scope wrong from here.
  */
-export function fetchMyNotifications(accessToken: string): Promise<NotificationRecord[]> {
+export function fetchMyNotifications(
+  accessToken: string,
+): Promise<NotificationRecord[]> {
   return request<NotificationRecord[]>('/notification?limit=50', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1125,7 +1210,9 @@ export function markNotificationRead(
 }
 
 /** This PR's shift assignments (mobile Shifts screen), scoped server-side. */
-export function fetchMyShiftAssignments(accessToken: string): Promise<ShiftAssignmentRecord[]> {
+export function fetchMyShiftAssignments(
+  accessToken: string,
+): Promise<ShiftAssignmentRecord[]> {
   return request<ShiftAssignmentRecord[]>('/shift-assignment/mine', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1145,7 +1232,9 @@ export type PrAvailabilityRecord = {
  * token. No window is sent: the calendar can be paged back and forward freely,
  * and the whole set is a handful of rows.
  */
-export function fetchMyUnavailableDays(accessToken: string): Promise<PrAvailabilityRecord[]> {
+export function fetchMyUnavailableDays(
+  accessToken: string,
+): Promise<PrAvailabilityRecord[]> {
   return request<PrAvailabilityRecord[]>('/pr-availability/mine', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1172,7 +1261,10 @@ export function blockMyDay(
 }
 
 /** Reopen a day this PR had blocked. */
-export function unblockMyDay(accessToken: string, date: string): Promise<{ date: string }> {
+export function unblockMyDay(
+  accessToken: string,
+  date: string,
+): Promise<{ date: string }> {
   return request<{ date: string }>(`/pr-availability/mine/${date}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -1187,7 +1279,11 @@ export function unblockMyDay(accessToken: string, date: string): Promise<{ date:
 export type PenaltyRuleRecord = {
   id: string;
   agencyId: string;
-  ruleType: 'min_shifts_per_week' | 'max_mc_per_month' | 'late_per_week' | 'cancellation';
+  ruleType:
+    | 'min_shifts_per_week'
+    | 'max_mc_per_month'
+    | 'late_per_week'
+    | 'cancellation';
   enabled: boolean;
   fineRm: string;
   minShiftsPerWeek: number | null;
@@ -1208,7 +1304,9 @@ export type PenaltyRuleRecord = {
  * The agency-side route is scoped to owner/finance, so a PR cannot use it, and
  * widening that one would have let any PR read any agency's fine schedule.
  */
-export function getMyPenaltyRules(accessToken: string): Promise<PenaltyRuleRecord[]> {
+export function getMyPenaltyRules(
+  accessToken: string,
+): Promise<PenaltyRuleRecord[]> {
   return request<PenaltyRuleRecord[]>('/pr/mine/penalty-rules', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1284,11 +1382,14 @@ export function checkInShiftAssignment(
   assignmentId: string,
   fix?: DeviceFix,
 ): Promise<ShiftAssignmentRecord> {
-  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/check-in`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify(fix ?? {}),
-  });
+  return request<ShiftAssignmentRecord>(
+    `/shift-assignment/mine/${assignmentId}/check-in`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(fix ?? {}),
+    },
+  );
 }
 
 /**
@@ -1301,11 +1402,14 @@ export function checkOutShiftAssignment(
   assignmentId: string,
   fix?: DeviceFix,
 ): Promise<ShiftAssignmentRecord> {
-  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/check-out`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify(fix ?? {}),
-  });
+  return request<ShiftAssignmentRecord>(
+    `/shift-assignment/mine/${assignmentId}/check-out`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(fix ?? {}),
+    },
+  );
 }
 
 /**
@@ -1318,11 +1422,14 @@ export function cancelMyShiftAssignment(
   assignmentId: string,
   reason: string,
 ): Promise<ShiftAssignmentRecord> {
-  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/cancel`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ reason }),
-  });
+  return request<ShiftAssignmentRecord>(
+    `/shift-assignment/mine/${assignmentId}/cancel`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ reason }),
+    },
+  );
 }
 
 /**
@@ -1351,7 +1458,9 @@ export type OutletSwapRecord = {
 };
 
 /** Outlet swaps addressed to this PR, scoped server-side by pr.id. */
-export function fetchMyOutletSwaps(accessToken: string): Promise<OutletSwapRecord[]> {
+export function fetchMyOutletSwaps(
+  accessToken: string,
+): Promise<OutletSwapRecord[]> {
   return request<OutletSwapRecord[]>('/outlet-swap/mine', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1416,11 +1525,14 @@ export function requestMyShiftLeave(
   reason: string,
   proofPhotos: string[],
 ): Promise<ShiftAssignmentRecord> {
-  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/leave`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ reason, proofPhotos }),
-  });
+  return request<ShiftAssignmentRecord>(
+    `/shift-assignment/mine/${assignmentId}/leave`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ reason, proofPhotos }),
+    },
+  );
 }
 
 /**
@@ -1583,7 +1695,14 @@ export type PrWeekDispute = {
    * after the agency edits the receipt or the voucher is rewritten. Null means
    * the whole receipt was claimed, or the row predates the column.
    */
-  disputedItems: { lineId: string; description: string; quantity: number; amount: string }[] | null;
+  disputedItems:
+    | {
+        lineId: string;
+        description: string;
+        quantity: number;
+        amount: string;
+      }[]
+    | null;
   /** null = STILL OPEN. Otherwise the agency has answered. */
   outcome: 'accepted' | 'rejected' | 'withdrawn' | null;
   resolvedAt: string | null;
@@ -1795,7 +1914,9 @@ export type PrReceiptLineInput = {
   proofPhotos?: string[];
 };
 
-export function fetchMyCurrentWeek(accessToken: string): Promise<PrCurrentWeek> {
+export function fetchMyCurrentWeek(
+  accessToken: string,
+): Promise<PrCurrentWeek> {
   return request<PrCurrentWeek>('/payment-voucher/mine/current-week', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1836,7 +1957,9 @@ export type PrHistoryVoucher = {
   lines: PrReceiptLine[];
 };
 
-export function fetchMyPaymentHistory(accessToken: string): Promise<PrHistoryVoucher[]> {
+export function fetchMyPaymentHistory(
+  accessToken: string,
+): Promise<PrHistoryVoucher[]> {
   return request<PrHistoryVoucher[]>('/payment-voucher/mine/history', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1931,7 +2054,10 @@ export function updateMyReceiptLine(
   });
 }
 
-export function deleteMyReceiptLine(accessToken: string, lineId: string): Promise<null> {
+export function deleteMyReceiptLine(
+  accessToken: string,
+  lineId: string,
+): Promise<null> {
   return request<null>(`/payment-voucher/mine/lines/${lineId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -1948,7 +2074,10 @@ export function deleteMyReceiptLine(accessToken: string, lineId: string): Promis
  * the client able to put the deleted ones back. It also only ever saw the lines
  * the current screen had loaded; the server reads them off the voucher.
  */
-export function deleteMyReceipt(accessToken: string, receiptId: string): Promise<null> {
+export function deleteMyReceipt(
+  accessToken: string,
+  receiptId: string,
+): Promise<null> {
   return request<null>(`/payment-voucher/mine/receipts/${receiptId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -1997,11 +2126,14 @@ export function raiseMyDispute(
     items?: { lineId: string }[];
   },
 ): Promise<PrDisputeResult> {
-  return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify(input),
-  });
+  return request<PrDisputeResult>(
+    `/payment-voucher/mine/${voucherId}/dispute`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 /**
@@ -2023,11 +2155,14 @@ export function withdrawMyDispute(
     receiptId?: string;
   },
 ): Promise<PrDisputeResult> {
-  return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute/withdraw`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify(input),
-  });
+  return request<PrDisputeResult>(
+    `/payment-voucher/mine/${voucherId}/dispute/withdraw`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function phoneCandidates(rawId: string): string[] {

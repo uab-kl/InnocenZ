@@ -46,7 +46,10 @@ export type CancelFee = {
  * old code could not express that and returned a 1970 midnight instead, pricing
  * such a shift at the maximum late band.
  */
-export function shiftStartMs(shiftDate: string, slot: string | null): number | null {
+export function shiftStartMs(
+  shiftDate: string,
+  slot: string | null,
+): number | null {
   return shiftWindowInstants(shiftDate, slot)?.start.getTime() ?? null;
 }
 
@@ -76,7 +79,8 @@ export function computeCancelFee(opts: {
   // No rule row, or the agency switched it off -> no fee. NOT "0% of the
   // bands": an agency that does not charge for cancellations must not have a
   // RM 0.00 line appear on a Finance list as though something were outstanding.
-  if (!rule || !rule.enabled) return { feeRm: '0.00', pct: 0, noticeHours: hours };
+  if (!rule || !rule.enabled)
+    return { feeRm: '0.00', pct: 0, noticeHours: hours };
 
   const free = rule.freeCancelHours;
   const short = rule.shortNoticeHours;
@@ -87,8 +91,11 @@ export function computeCancelFee(opts: {
   // A half-configured rule must not silently price at the late band. A missing
   // boundary means the agency has not defined that band, so nothing is due.
   const pct =
-    short != null && noticeHours >= short ? rule.shortNoticePct : rule.lateCancelPct;
-  if (pct == null || pct <= 0) return { feeRm: '0.00', pct: 0, noticeHours: hours };
+    short != null && noticeHours >= short
+      ? rule.shortNoticePct
+      : rule.lateCancelPct;
+  if (pct == null || pct <= 0)
+    return { feeRm: '0.00', pct: 0, noticeHours: hours };
 
   const wage = Number(opts.dailyWageRm ?? 0);
   if (!Number.isFinite(wage) || wage <= 0) {

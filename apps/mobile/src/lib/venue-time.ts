@@ -107,6 +107,9 @@ export function shiftWindowInstants(
 }
 
 /** A shift's start instant, or null when the slot carries no readable window. */
-export function shiftStartDate(shiftDate: string, slot: string | null): Date | null {
+export function shiftStartDate(
+  shiftDate: string,
+  slot: string | null,
+): Date | null {
   return shiftWindowInstants(shiftDate, slot)?.start ?? null;
 }

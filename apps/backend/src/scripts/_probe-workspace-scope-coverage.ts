@@ -50,9 +50,7 @@ async function main() {
   `);
 
   console.log('OUTLETS WITH A SAVED WORKSPACE:');
-  console.log(
-    '(approved_links=0 is the regression case for agency access)',
-  );
+  console.log('(approved_links=0 is the regression case for agency access)');
   for (const r of rows.rows) console.log(' ', JSON.stringify(r));
 
   const orphans = rows.rows.filter((r) => Number(r.approved_links ?? 0) === 0);
@@ -81,7 +79,9 @@ async function main() {
     console.log('   resolves via `onboarded_by_agency_id` would start 403ing.');
   }
   if (orphans.length === 0 && provenanceOnly.length === 0) {
-    console.log('\n✅ Every workspace is covered by an approved link. Guard is safe.');
+    console.log(
+      '\n✅ Every workspace is covered by an approved link. Guard is safe.',
+    );
   }
 }
 

@@ -23,11 +23,27 @@ const canReadOutlet = requireRole('admin', 'agency', 'outlet');
 // Outlet CRUD
 router.get('/', canReadOutlet, outletController.list.bind(outletController));
 // Must precede `/:id` so "memberships" isn't captured as an outlet id.
-router.get('/memberships', canReadOutlet, outletController.listMemberships.bind(outletController));
+router.get(
+  '/memberships',
+  canReadOutlet,
+  outletController.listMemberships.bind(outletController),
+);
 // Same reason: "geocode" must not be captured as an outlet id.
-router.get('/geocode', canReadOutlet, outletController.geocode.bind(outletController));
-router.get('/:id', canReadOutlet, outletController.getById.bind(outletController));
-router.get('/:id/geocode', canReadOutlet, outletController.geocodeOwnAddress.bind(outletController));
+router.get(
+  '/geocode',
+  canReadOutlet,
+  outletController.geocode.bind(outletController),
+);
+router.get(
+  '/:id',
+  canReadOutlet,
+  outletController.getById.bind(outletController),
+);
+router.get(
+  '/:id/geocode',
+  canReadOutlet,
+  outletController.geocodeOwnAddress.bind(outletController),
+);
 // Admin-only: creating a venue is an onboarding act, and `create` stamps
 // status='pending_review' for an admin to approve. No client calls this — every
 // existing row came from a seed script or admin. If agency-side outlet onboarding
@@ -71,8 +87,16 @@ router.delete(
   outletOwnerOfParam,
   outletController.clearGeoFence.bind(outletController),
 );
-router.patch('/:id/approve', requireAdmin, outletController.approve.bind(outletController));
-router.patch('/:id/suspend', requireAdmin, outletController.suspend.bind(outletController));
+router.patch(
+  '/:id/approve',
+  requireAdmin,
+  outletController.approve.bind(outletController),
+);
+router.patch(
+  '/:id/suspend',
+  requireAdmin,
+  outletController.suspend.bind(outletController),
+);
 
 // Outlet members. Same reasoning as the agency member routes: an outlet_user row
 // is what requireOutletSubRole and resolveOrgScope() read to decide who a caller
@@ -102,8 +126,20 @@ router.get(
   ...canWriteMembers,
   outletController.listInviteRoles.bind(outletController),
 );
-router.post('/:id/members', ...canWriteMembers, outletController.addMember.bind(outletController));
-router.put('/:id/members/:memberId', ...canWriteMembers, outletController.updateMember.bind(outletController));
-router.delete('/:id/members/:memberId', ...canWriteMembers, outletController.removeMember.bind(outletController));
+router.post(
+  '/:id/members',
+  ...canWriteMembers,
+  outletController.addMember.bind(outletController),
+);
+router.put(
+  '/:id/members/:memberId',
+  ...canWriteMembers,
+  outletController.updateMember.bind(outletController),
+);
+router.delete(
+  '/:id/members/:memberId',
+  ...canWriteMembers,
+  outletController.removeMember.bind(outletController),
+);
 
 export default router;

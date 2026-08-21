@@ -21,7 +21,9 @@ async function main() {
     order by count(ap.id) desc
     limit 5
   `);
-  console.log('PRs WITH agency_pr LINKS (fix 3 — a self-read must return these):');
+  console.log(
+    'PRs WITH agency_pr LINKS (fix 3 — a self-read must return these):',
+  );
   for (const r of prs.rows) console.log(' ', JSON.stringify(r));
 
   const outletMembers = await db.execute(sql`
@@ -33,14 +35,18 @@ async function main() {
     order by o.name
     limit 8
   `);
-  console.log('\nACTIVE OUTLET MEMBERS (fix 2 — each may touch ONLY their own outlet):');
+  console.log(
+    '\nACTIVE OUTLET MEMBERS (fix 2 — each may touch ONLY their own outlet):',
+  );
   for (const r of outletMembers.rows) console.log(' ', JSON.stringify(r));
 
   const workspaces = await db.execute(sql`
     select o.id, o.name from main.outlet_workspace w
     join main.outlet o on o.id = w.outlet_id order by o.name
   `);
-  console.log('\nOUTLETS WITH A WORKSPACE (targets for the cross-venue attempt):');
+  console.log(
+    '\nOUTLETS WITH A WORKSPACE (targets for the cross-venue attempt):',
+  );
   for (const r of workspaces.rows) console.log(' ', JSON.stringify(r));
 
   const agencyMembers = await db.execute(sql`
@@ -51,7 +57,9 @@ async function main() {
     order by au.status, a.name
     limit 8
   `);
-  console.log('\nAGENCY MEMBERS (any status <> active — fix 1 must now refuse those):');
+  console.log(
+    '\nAGENCY MEMBERS (any status <> active — fix 1 must now refuse those):',
+  );
   for (const r of agencyMembers.rows) console.log(' ', JSON.stringify(r));
 }
 

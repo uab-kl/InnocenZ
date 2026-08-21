@@ -60,7 +60,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useViewportSize } from '../lib/viewport';
 import { useLocale } from '../i18n';
 import { IzButton, Pill } from '../components/ui';
-import { ChevronDown, Flag, ImagePlus, Search, Wallet, XIcon } from '../components/icons';
+import {
+  ChevronDown,
+  Flag,
+  ImagePlus,
+  Search,
+  Wallet,
+  XIcon,
+} from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 import { usePrNav } from '../lib/pr-nav';
 
@@ -152,7 +159,12 @@ function formatCell(value: number): string {
  */
 function claimShifts(
   week: PrCurrentWeek | null,
-  d: { disputeDate: string; component: IncomeKey; receiptId: string | null; receiptRefs: string[] | null },
+  d: {
+    disputeDate: string;
+    component: IncomeKey;
+    receiptId: string | null;
+    receiptRefs: string[] | null;
+  },
 ) {
   const refs = d.receiptRefs ?? [];
   const evidence = buildCellEvidence(week, d.disputeDate, d.component);
@@ -195,9 +207,20 @@ function longDay(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
   const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
-  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
-    d.getUTCMonth()
-  ];
+  const mo = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ][d.getUTCMonth()];
   return `${wd} ${d.getUTCDate()} ${mo} ${d.getUTCFullYear()}`;
 }
 
@@ -220,12 +243,15 @@ function shiftWindowLabel(
   if (!checkInAt || !checkOutAt) return 'duration unknown';
   const start = new Date(checkInAt).getTime();
   const end = new Date(checkOutAt).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 'duration unknown';
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start)
+    return 'duration unknown';
   const mins = Math.round((end - start) / 60_000);
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   const base = m > 0 ? `${h}h ${m}m` : `${h}h`;
-  return overtimeMinutes && overtimeMinutes > 0 ? `${base} · +${overtimeMinutes}m OT` : base;
+  return overtimeMinutes && overtimeMinutes > 0
+    ? `${base} · +${overtimeMinutes}m OT`
+    : base;
 }
 
 /** "Special event" / "Normal shift" — the outlet's own toggle, worded as the agency words it. */
@@ -238,9 +264,20 @@ function shortStamp(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
-    d.getMonth()
-  ];
+  const mo = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ][d.getMonth()];
   let h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, '0');
   const ampm = h >= 12 ? 'pm' : 'am';
@@ -279,11 +316,17 @@ function voucherOwning(
   if (!week) return null;
   const lines = week.lines ?? [];
   if (sel.receiptId) {
-    const byReceipt = lines.find((l) => l.receiptId === sel.receiptId)?.voucherId;
+    const byReceipt = lines.find(
+      (l) => l.receiptId === sel.receiptId,
+    )?.voucherId;
     if (byReceipt) return byReceipt;
   }
-  const inCell = lines.filter((l) => l.lineDate === sel.dateIso && l.kind === sel.component);
-  const distinct = [...new Set(inCell.map((l) => l.voucherId).filter(Boolean))] as string[];
+  const inCell = lines.filter(
+    (l) => l.lineDate === sel.dateIso && l.kind === sel.component,
+  );
+  const distinct = [
+    ...new Set(inCell.map((l) => l.voucherId).filter(Boolean)),
+  ] as string[];
   if (distinct.length === 1) return distinct[0]!;
   if (distinct.length > 1) return null;
   // Nothing attributable — a single-voucher week, or a backend that has not
@@ -313,7 +356,7 @@ function statusOfVoucher(
   if (!voucherId) return null;
   const row = week?.vouchers?.find((v) => v.id === voucherId);
   if (row) return row.status ?? null;
-  return week?.voucherId === voucherId ? week.status ?? null : null;
+  return week?.voucherId === voucherId ? (week.status ?? null) : null;
 }
 
 /**
@@ -339,7 +382,11 @@ function voucherPill(status: string | null): {
 // buildWeekGridFromLines moved to lib/week-pay-grid so PvDetailScreen renders
 // the identical grid for the same voucher.
 
-export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
+export function PaymentScreen({
+  onNavigate,
+}: {
+  onNavigate: (tab: PrTab) => void;
+}) {
   const { t } = useLocale();
   const { openPv, route } = usePrNav();
   const { token } = useSession();
@@ -364,7 +411,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // from the pending count, which meant the whole section emptied itself out the
   // moment every day got approved.
   const hasThisWeekRows = thisGrid.some((d) => d.status !== 'empty');
-  const thisReviewCaption = useMemo(() => receiptReviewCaption(current), [current]);
+  const thisReviewCaption = useMemo(
+    () => receiptReviewCaption(current),
+    [current],
+  );
 
   // Last week's voucher comes from the same backend as this week — real data,
   // no demo grid. Fetched once on mount (it rarely changes mid-session).
@@ -387,9 +437,13 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // Check-out lands here with paymentWeek: 'current' so This week (sealed
   // shift) is visible immediately — not Last week.
   const focusWeek =
-    route.name === 'tabs' && route.tab === 'payment' ? route.paymentWeek : undefined;
+    route.name === 'tabs' && route.tab === 'payment'
+      ? route.paymentWeek
+      : undefined;
   const [weekTab, setWeekTab] = useState<WeekTab>(() =>
-    focusWeek === 'current' || (!focusWeek && hasThisWeekRows) ? 'current' : 'last',
+    focusWeek === 'current' || (!focusWeek && hasThisWeekRows)
+      ? 'current'
+      : 'last',
   );
   const [lastOpen, setLastOpen] = useState(true);
   const [thisOpen, setThisOpen] = useState(true);
@@ -404,7 +458,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       setLastOpen(true);
     }
   }, [focusWeek, refreshEarnings]);
-  const [disputedKeys, setDisputedKeys] = useState<Set<string>>(() => new Set());
+  const [disputedKeys, setDisputedKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
   /**
    * Cells to paint RED — the server's open claims, plus anything raised in this
    * session.
@@ -421,10 +477,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     return keys;
   }, [disputedKeys, lastWeek, current]);
   const [disputeOpen, setDisputeOpen] = useState(false);
-  const [disputeMode, setDisputeMode] = useState<'dispute' | 'withdraw'>('dispute');
-  const [disputeTarget, setDisputeTarget] = useState<DisputeTarget | null>(null);
+  const [disputeMode, setDisputeMode] = useState<'dispute' | 'withdraw'>(
+    'dispute',
+  );
+  const [disputeTarget, setDisputeTarget] = useState<DisputeTarget | null>(
+    null,
+  );
   /** Which day's CLAIMS are open — set by tapping a DISPUTED / VERIFIED status cell. */
-  const [claimDay, setClaimDay] = useState<{ dateIso: string; week: WeekTab } | null>(null);
+  const [claimDay, setClaimDay] = useState<{
+    dateIso: string;
+    week: WeekTab;
+  } | null>(null);
   /** Which cell's evidence is open, and the day/row it came from (to hand on to dispute). */
   const [evidenceTarget, setEvidenceTarget] = useState<{
     dateIso: string;
@@ -439,7 +502,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     day: WeeklyDayPay;
     row: (typeof GRID_ROWS)[number];
   } | null>(null);
-  const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
+  const [disputePreset, setDisputePreset] = useState<string>(
+    DISPUTE_PRESETS[0],
+  );
   /**
    * The ONE receipt being contested — a dispute is about a single shift.
    *
@@ -449,11 +514,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    * would produce one claim, one amount and one outcome spanning shifts that
    * may each need a different answer.
    */
-  const [disputePickedReceipt, setDisputePickedReceipt] = useState<string | null>(null);
+  const [disputePickedReceipt, setDisputePickedReceipt] = useState<
+    string | null
+  >(null);
   const [disputeNote, setDisputeNote] = useState('');
   const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
   /** Optional proof kept with submitted disputes (image upload is still local). */
-  const [disputePhotoMap, setDisputePhotoMap] = useState<Record<string, string[]>>({});
+  const [disputePhotoMap, setDisputePhotoMap] = useState<
+    Record<string, string[]>
+  >({});
   const [disputeBusy, setDisputeBusy] = useState(false);
 
   const lastLabel = weekRangeLabel(1);
@@ -521,11 +590,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     return rows
       .filter((v) => v.status === 'awaiting_pr' || v.status === 'sent')
       .filter((v) => !isSigned(v.id))
-      .map((v) => ({ id: v.id, net: Number(v.net), agencyName: v.agencyName ?? null }));
+      .map((v) => ({
+        id: v.id,
+        net: Number(v.net),
+        agencyName: v.agencyName ?? null,
+      }));
   }, [lastWeek, isSigned]);
   /** The first one, for the single-button callers that have not been widened. */
   const awaiting = awaitingVouchers[0];
-  const reviewAmount = weekTotal > 0 ? weekTotal : awaiting?.net ?? 0;
+  const reviewAmount = weekTotal > 0 ? weekTotal : (awaiting?.net ?? 0);
   /**
    * The vouchers actually under argument — plural, because a week can hold two.
    *
@@ -582,7 +655,14 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // old `<= 0` test made the one cell a PR would most want to interrogate the
     // one cell that could not be opened.
     if (amount === 0 || day.status === 'empty') return;
-    setEvidenceTarget({ dateIso: day.dateIso, incomeKey: row.key, amount, week, day, row });
+    setEvidenceTarget({
+      dateIso: day.dateIso,
+      incomeKey: row.key,
+      amount,
+      week,
+      day,
+      row,
+    });
   };
 
   const openDispute = (
@@ -709,14 +789,25 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const disputeReceipts = useMemo(() => {
     if (!disputeTarget) return [];
     const week = disputeTarget.week === 'last' ? lastWeek : current;
-    const evidence = buildCellEvidence(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    const evidence = buildCellEvidence(
+      week,
+      disputeTarget.dateIso,
+      disputeTarget.incomeKey,
+    );
     /*
      * Which shifts already carry a LIVE claim. Matched on the receipt id (the FK
      * a claim stores) or its number (pre-0088 claims), same as the evidence tags.
      * A whole-day open claim blocks every shift beneath it.
      */
-    const claims = receiptClaimState(week, disputeTarget.dateIso, disputeTarget.incomeKey);
-    const openClaimOn = (r: { receiptId: string | null; receiptNo: string | null }) =>
+    const claims = receiptClaimState(
+      week,
+      disputeTarget.dateIso,
+      disputeTarget.incomeKey,
+    );
+    const openClaimOn = (r: {
+      receiptId: string | null;
+      receiptNo: string | null;
+    }) =>
       claims.openAll ||
       (!!r.receiptId && claims.open.has(r.receiptId)) ||
       (!!r.receiptNo && claims.open.has(r.receiptNo));
@@ -828,14 +919,23 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     const week = evidenceTarget.week === 'last' ? lastWeek : current;
     // Excludes shifts already carrying an OPEN claim, exactly as the picker
     // does — otherwise the button opens a sheet where nothing can be selected.
-    const claims = receiptClaimState(week, evidenceTarget.dateIso, evidenceTarget.incomeKey);
+    const claims = receiptClaimState(
+      week,
+      evidenceTarget.dateIso,
+      evidenceTarget.incomeKey,
+    );
     if (claims.openAll) return 0;
-    return buildCellEvidence(week, evidenceTarget.dateIso, evidenceTarget.incomeKey)
+    return buildCellEvidence(
+      week,
+      evidenceTarget.dateIso,
+      evidenceTarget.incomeKey,
+    )
       .groups.flatMap((g) => g.receipts)
       .filter((r) => {
         if (!r.receiptNo) return false;
         const openOnIt =
-          (r.receiptId && claims.open.has(r.receiptId)) || claims.open.has(r.receiptNo);
+          (r.receiptId && claims.open.has(r.receiptId)) ||
+          claims.open.has(r.receiptNo);
         // Review state no longer withholds it — only an open claim does.
         return !openOnIt;
       }).length;
@@ -845,7 +945,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const disputeItems = useMemo(() => {
     if (!disputeTarget || !disputePickedReceipt) return [];
     const week = disputeTarget.week === 'last' ? lastWeek : current;
-    const evidence = buildCellEvidence(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    const evidence = buildCellEvidence(
+      week,
+      disputeTarget.dateIso,
+      disputeTarget.incomeKey,
+    );
     const receipt = evidence.groups
       .flatMap((g) => g.receipts)
       .find((r) => r.receiptNo === disputePickedReceipt);
@@ -870,7 +974,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     (disputeItems.length > 1 && disputePickedItems.length === 0);
 
   const disputePickedSubtotal = useMemo(
-    () => disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.subtotal ?? 0,
+    () =>
+      disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)
+        ?.subtotal ?? 0,
     [disputeReceipts, disputePickedReceipt],
   );
 
@@ -932,7 +1038,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         });
         setClaimDay(null);
       } catch (e) {
-        Alert.alert('Could not cancel', e instanceof Error ? e.message : 'Please try again.');
+        Alert.alert(
+          'Could not cancel',
+          e instanceof Error ? e.message : 'Please try again.',
+        );
       } finally {
         setDisputeBusy(false);
       }
@@ -942,7 +1051,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       'Your agency will stop reviewing it. You can raise it again later if you still disagree.',
       [
         { text: 'Keep it', style: 'cancel' },
-        { text: 'Cancel dispute', style: 'destructive', onPress: () => void go() },
+        {
+          text: 'Cancel dispute',
+          style: 'destructive',
+          onPress: () => void go(),
+        },
       ],
     );
   };
@@ -961,7 +1074,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     const forLast = disputeTarget.week === 'last';
     const disputeWeek = forLast ? lastWeek : current;
     const pickedReceiptId =
-      disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.receiptId ?? null;
+      disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)
+        ?.receiptId ?? null;
     /*
      * WHICH VOUCHER OWNS THE TAPPED CELL.
      *
@@ -981,7 +1095,12 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       dateIso: disputeTarget.dateIso,
       component: disputeTarget.incomeKey,
     });
-    if (token && disputeWeek && !voucherId && (disputeWeek.vouchers?.length ?? 0) > 1) {
+    if (
+      token &&
+      disputeWeek &&
+      !voucherId &&
+      (disputeWeek.vouchers?.length ?? 0) > 1
+    ) {
       // Two agencies hold money in that cell and nothing narrows it to one. The
       // claim is genuinely ambiguous, and picking either would file it against an
       // agency the PR did not mean.
@@ -1027,8 +1146,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                * not a deliberate claim against the whole day.
                */
               receiptId:
-                disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.receiptId ??
-                undefined,
+                disputeReceipts.find(
+                  (r) => r.receiptNo === disputePickedReceipt,
+                )?.receiptId ?? undefined,
               /*
                * Sent only when the PR NARROWED to some of the receipt's items.
                * Ticking them all means "this whole receipt", which the row
@@ -1108,7 +1228,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       <View style={styles.pageHeader}>
         <View style={styles.headerTitleRow}>
           <Wallet size={22} color={C.accent} />
-          <Text style={[styles.headerTitle, { fontSize: titleSize }]}>{t.payment.title}</Text>
+          <Text style={[styles.headerTitle, { fontSize: titleSize }]}>
+            {t.payment.title}
+          </Text>
         </View>
       </View>
 
@@ -1117,7 +1239,12 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           style={[styles.weekTab, weekTab === 'last' && styles.weekTabOn]}
           onPress={() => setWeekTab('last')}
         >
-          <Text style={[styles.weekTabTitle, weekTab === 'last' && { color: C.txt }]}>
+          <Text
+            style={[
+              styles.weekTabTitle,
+              weekTab === 'last' && { color: C.txt },
+            ]}
+          >
             Last week
           </Text>
           <Text style={styles.weekTabSub}>{lastLabel}</Text>
@@ -1126,7 +1253,12 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           style={[styles.weekTab, weekTab === 'current' && styles.weekTabOn]}
           onPress={() => setWeekTab('current')}
         >
-          <Text style={[styles.weekTabTitle, weekTab === 'current' && { color: C.txt }]}>
+          <Text
+            style={[
+              styles.weekTabTitle,
+              weekTab === 'current' && { color: C.txt },
+            ]}
+          >
             This week
           </Text>
           <Text style={styles.weekTabSub}>{thisLabel}</Text>
@@ -1135,31 +1267,34 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
       {weekTab === 'last' ? (
         <View style={styles.section}>
-          <Pressable style={styles.sectionHd} onPress={() => setLastOpen((o) => !o)}>
+          <Pressable
+            style={styles.sectionHd}
+            onPress={() => setLastOpen((o) => !o)}
+          >
             <View style={{ flex: 1 }}>
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>LAST WEEK</Text>
                 {/*
-                  * THE PILL IS THE VOUCHER'S STATE, NOT THE DAY COUNT.
-                  *
-                  * It keyed off `verifiedDays`, which was safe only while that
-                  * counted `'verified'` alone. Now that an agency-approved day
-                  * counts too, the old test would have printed **SENT** over a
-                  * voucher still sitting at `pending_review` — telling a PR
-                  * their week had gone out when nobody had issued it.
-                  *
-                  * Days are verified by day review; the WEEK is issued by the
-                  * agency. Two different facts, two different sources.
-                  *
-                  * ⚠️ AND ONE PILL PER VOUCHER once there are two. This printed a
-                  * single pill from `lastWeek.status` — the NEWEST voucher's — so
-                  * a week with Atlas `paid` and Why We Met `awaiting_pr` read
-                  * PAID in green, over money one agency had not even issued. A
-                  * merged total is not a document anybody can sign, and neither
-                  * is a merged status. Named by agency, in the same vocabulary
-                  * and with the same `?? 'Agency'` fallback as the Review & sign
-                  * buttons below, which are already one per voucher.
-                  */}
+                 * THE PILL IS THE VOUCHER'S STATE, NOT THE DAY COUNT.
+                 *
+                 * It keyed off `verifiedDays`, which was safe only while that
+                 * counted `'verified'` alone. Now that an agency-approved day
+                 * counts too, the old test would have printed **SENT** over a
+                 * voucher still sitting at `pending_review` — telling a PR
+                 * their week had gone out when nobody had issued it.
+                 *
+                 * Days are verified by day review; the WEEK is issued by the
+                 * agency. Two different facts, two different sources.
+                 *
+                 * ⚠️ AND ONE PILL PER VOUCHER once there are two. This printed a
+                 * single pill from `lastWeek.status` — the NEWEST voucher's — so
+                 * a week with Atlas `paid` and Why We Met `awaiting_pr` read
+                 * PAID in green, over money one agency had not even issued. A
+                 * merged total is not a document anybody can sign, and neither
+                 * is a merged status. Named by agency, in the same vocabulary
+                 * and with the same `?? 'Agency'` fallback as the Review & sign
+                 * buttons below, which are already one per voucher.
+                 */}
                 {lastWeekVouchers.length > 1 ? (
                   lastWeekVouchers.map((v) => {
                     const pill = voucherPill(v.status);
@@ -1174,9 +1309,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     {voucherPill(lastWeek.status).label}
                   </Pill>
                 ) : null}
-                <Text style={styles.sectionFrac}>
-                  {verifiedDays}/7
-                </Text>
+                <Text style={styles.sectionFrac}>{verifiedDays}/7</Text>
               </View>
               <Text style={styles.sectionAction}>
                 {lastOpen ? 'Tap to collapse' : 'Tap to expand'}
@@ -1185,14 +1318,18 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <ChevronDown
               size={16}
               color={C.goldL}
-              style={lastOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+              style={
+                lastOpen ? { transform: [{ rotate: '180deg' }] } : undefined
+              }
             />
           </Pressable>
 
           {lastOpen && (
             <View style={styles.sectionBody}>
               <Text style={styles.weekCaption}>Last week {lastLabel}</Text>
-              <Text style={styles.verified}>Verified days {verifiedDays}/7</Text>
+              <Text style={styles.verified}>
+                Verified days {verifiedDays}/7
+              </Text>
 
               {/* Which agencies owe last week, when there is more than one. */}
               <WeekVouchers week={lastWeek} />
@@ -1218,19 +1355,22 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     ))}
                     <View style={styles.gridCol}>
                       {/*
-                        * "TOT" meant nothing to the PR reading it. The column
-                        * is each row's seven days added up, so it says so —
-                        * and it keeps the two-line shape of the day columns
-                        * (WED / 5) instead of a lone abbreviation. 5 chars at
-                        * 10px bold clears the 56px column.
-                        */}
+                       * "TOT" meant nothing to the PR reading it. The column
+                       * is each row's seven days added up, so it says so —
+                       * and it keeps the two-line shape of the day columns
+                       * (WED / 5) instead of a lone abbreviation. 5 chars at
+                       * 10px bold clears the 56px column.
+                       */}
                       <Text style={styles.gridDay}>TOTAL</Text>
                       <Text style={styles.gridDate}>week</Text>
                     </View>
                   </View>
 
                   {GRID_ROWS.map((row) => {
-                    const rowTotal = grid.reduce((s, d) => s + cellAmount(d, row.key), 0);
+                    const rowTotal = grid.reduce(
+                      (s, d) => s + cellAmount(d, row.key),
+                      0,
+                    );
                     const isDeduction = row.key === 'deductions';
                     /*
                      * Deductions is NOT dropped at zero — see the note on This
@@ -1259,7 +1399,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 canTap && styles.gridColTap,
                                 isDisputed && styles.gridColDisputed,
                               ]}
-                              onPress={() => canTap && openEvidence(d, row, 'last')}
+                              onPress={() =>
+                                canTap && openEvidence(d, row, 'last')
+                              }
                               disabled={!canTap}
                             >
                               <Text
@@ -1278,25 +1420,25 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 {formatCell(amount)}
                               </Text>
                               {/*
-                                * A FLAG PROMISES A DISPUTE — only draw it where
-                                * one is possible. Wages and OT can never be
-                                * contested, so a flag on them advertised an
-                                * action that ends in a 400; they get the same
-                                * inspect glyph as This-week, because tapping
-                                * still opens the evidence.
-                                */}
+                               * A FLAG PROMISES A DISPUTE — only draw it where
+                               * one is possible. Wages and OT can never be
+                               * contested, so a flag on them advertised an
+                               * action that ends in a 400; they get the same
+                               * inspect glyph as This-week, because tapping
+                               * still opens the evidence.
+                               */}
                               {/*
-                                * ⚠️ `weekDisputable(lastWeek)` asked the NEWEST
-                                * voucher. One agency signing its document took
-                                * the flag off the OTHER agency's cells too,
-                                * which is a promise withdrawn from a PR who
-                                * still had every right to argue. The cell names
-                                * its own voucher through the same resolver the
-                                * write paths use; a cell that cannot be
-                                * attributed falls back to the week, where
-                                * `weekDisputable` now answers "is ANY of them
-                                * still arguable" rather than "is the newest".
-                                */}
+                               * ⚠️ `weekDisputable(lastWeek)` asked the NEWEST
+                               * voucher. One agency signing its document took
+                               * the flag off the OTHER agency's cells too,
+                               * which is a promise withdrawn from a PR who
+                               * still had every right to argue. The cell names
+                               * its own voucher through the same resolver the
+                               * write paths use; a cell that cannot be
+                               * attributed falls back to the week, where
+                               * `weekDisputable` now answers "is ANY of them
+                               * still arguable" rather than "is the newest".
+                               */}
                               {canTap &&
                                 (kindDisputable(row.key) &&
                                 weekDisputable(
@@ -1313,7 +1455,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                     style={{ marginTop: 2 }}
                                   />
                                 ) : (
-                                  <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
+                                  <Search
+                                    size={9}
+                                    color={C.muted2}
+                                    style={{ marginTop: 2 }}
+                                  />
                                 ))}
                             </Pressable>
                           );
@@ -1360,20 +1506,23 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         dayDisputed,
                       );
                       const claims = disputesForDay(lastWeek, d.dateIso);
-                      const openable = claims.open.length + claims.settled.length > 0;
+                      const openable =
+                        claims.open.length + claims.settled.length > 0;
                       return (
                         <Pressable
                           key={`st-${d.dateIso}`}
                           style={styles.gridCol}
                           onPress={() =>
-                            openable && setClaimDay({ dateIso: d.dateIso, week: 'last' })
+                            openable &&
+                            setClaimDay({ dateIso: d.dateIso, week: 'last' })
                           }
                           disabled={!openable}
                         >
                           <Text
                             style={[
                               styles.statusPill,
-                              d.status === 'pending' && styles.statusPillPending,
+                              d.status === 'pending' &&
+                                styles.statusPillPending,
                               label === 'DISPUTED' && styles.statusPillDisputed,
                               label === 'DEDUCTED' && styles.statusPillDeducted,
                               d.status === 'empty' && { color: C.muted2 },
@@ -1385,19 +1534,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       );
                     })}
                     <View style={styles.gridCol}>
-                      <Text style={styles.statusPill}>{verifiedDays} verified</Text>
+                      <Text style={styles.statusPill}>
+                        {verifiedDays} verified
+                      </Text>
                     </View>
                   </View>
                 </View>
               </ScrollView>
 
               {/*
-                * ONE BANNER PER DISPUTED VOUCHER, named — for the same reason as
-                * the pills above. A single banner off `lastWeek.status` said
-                * "Dispute open" over a week where only one of two agencies was
-                * being argued with, and said nothing at all when the claim was
-                * against the older voucher.
-                */}
+               * ONE BANNER PER DISPUTED VOUCHER, named — for the same reason as
+               * the pills above. A single banner off `lastWeek.status` said
+               * "Dispute open" over a week where only one of two agencies was
+               * being argued with, and said nothing at all when the claim was
+               * against the older voucher.
+               */}
               {disputedVouchers.map((v) => (
                 <View key={v.id || 'headline'} style={styles.disputeBanner}>
                   <Text style={styles.disputeBannerTitle}>
@@ -1412,7 +1563,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     </Text>
                   ) : null}
                   <Text style={styles.disputeBannerHint}>
-                    Tap any amount to see its receipts, then withdraw this dispute.
+                    Tap any amount to see its receipts, then withdraw this
+                    dispute.
                   </Text>
                 </View>
               ))}
@@ -1420,32 +1572,36 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               {hasLastWeekRows ? (
                 <>
                   <Text style={styles.disputeHint}>
-                    Tap any amount to see the order number, shift and items behind it —
-                    dispute it from there · tap a{' '}
-                    <Text style={{ color: C.red }}>red</Text> amount to withdraw a mistaken dispute.
+                    Tap any amount to see the order number, shift and items
+                    behind it — dispute it from there · tap a{' '}
+                    <Text style={{ color: C.red }}>red</Text> amount to withdraw
+                    a mistaken dispute.
                   </Text>
 
                   <Text style={styles.footNote}>
                     PV issued every Sunday · Total{' '}
-                    <Text style={styles.footTotal}>{formatRM(reviewAmount)}</Text>
+                    <Text style={styles.footTotal}>
+                      {formatRM(reviewAmount)}
+                    </Text>
                   </Text>
                 </>
               ) : (
                 <Text style={styles.emptyWeekHint}>
-                  No PV for last week yet — this week’s PV is issued next Sunday.
+                  No PV for last week yet — this week’s PV is issued next
+                  Sunday.
                 </Text>
               )}
 
               {/*
-                * ONE BUTTON PER VOUCHER. With two agencies in a week there are two
-                * documents to sign, and a single button could only ever open one of
-                * them while quoting the other's money — `reviewAmount` is the whole
-                * week's total, which is not what either voucher says.
-                *
-                * The agency NAMES each button, and the amount is that voucher's own
-                * net. On the ordinary one-voucher week this renders exactly as
-                * before, with the week total, because there the two are the same.
-                */}
+               * ONE BUTTON PER VOUCHER. With two agencies in a week there are two
+               * documents to sign, and a single button could only ever open one of
+               * them while quoting the other's money — `reviewAmount` is the whole
+               * week's total, which is not what either voucher says.
+               *
+               * The agency NAMES each button, and the amount is that voucher's own
+               * net. On the ordinary one-voucher week this renders exactly as
+               * before, with the week total, because there the two are the same.
+               */}
               {awaitingVouchers.map((v) => (
                 <IzButton
                   key={v.id}
@@ -1464,28 +1620,31 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         </View>
       ) : (
         <View style={styles.section}>
-          <Pressable style={styles.sectionHd} onPress={() => setThisOpen((o) => !o)}>
+          <Pressable
+            style={styles.sectionHd}
+            onPress={() => setThisOpen((o) => !o)}
+          >
             <View style={{ flex: 1 }}>
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>THIS WEEK</Text>
                 {/*
-                  * The voucher-level fact, stated once.
-                  *
-                  * A dispute moves `payment_voucher.status` to 'disputed' for the
-                  * WHOLE voucher, and that used to be invisible here — the week
-                  * simply went blank, because the reader could not find a
-                  * non-`pending_review` voucher at all. It reads correctly now,
-                  * so the state it is in has to be legible: an open claim on a
-                  * week the PR is still working is not an error, and saying so
-                  * beats a silently normal-looking grid.
-                  */}
+                 * The voucher-level fact, stated once.
+                 *
+                 * A dispute moves `payment_voucher.status` to 'disputed' for the
+                 * WHOLE voucher, and that used to be invisible here — the week
+                 * simply went blank, because the reader could not find a
+                 * non-`pending_review` voucher at all. It reads correctly now,
+                 * so the state it is in has to be legible: an open claim on a
+                 * week the PR is still working is not an error, and saying so
+                 * beats a silently normal-looking grid.
+                 */}
                 {/*
-                  * ⚠️ SAME HEADLINE READ AS LAST WEEK — this is This-week's copy
-                  * of it. `current.status` is the newest voucher's, so a claim
-                  * against one agency branded the whole live week, and a claim
-                  * against the older voucher showed nothing at all. One pill per
-                  * disputed voucher, named, exactly as Last week does.
-                  */}
+                 * ⚠️ SAME HEADLINE READ AS LAST WEEK — this is This-week's copy
+                 * of it. `current.status` is the newest voucher's, so a claim
+                 * against one agency branded the whole live week, and a claim
+                 * against the older voucher showed nothing at all. One pill per
+                 * disputed voucher, named, exactly as Last week does.
+                 */}
                 {(current?.vouchers ?? []).length > 1
                   ? (current?.vouchers ?? [])
                       .filter((v) => v.status === 'disputed')
@@ -1506,7 +1665,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <ChevronDown
               size={16}
               color={C.goldL}
-              style={thisOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+              style={
+                thisOpen ? { transform: [{ rotate: '180deg' }] } : undefined
+              }
             />
           </Pressable>
 
@@ -1550,12 +1711,12 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     ))}
                     <View style={styles.gridCol}>
                       {/*
-                        * "TOT" meant nothing to the PR reading it. The column
-                        * is each row's seven days added up, so it says so —
-                        * and it keeps the two-line shape of the day columns
-                        * (WED / 5) instead of a lone abbreviation. 5 chars at
-                        * 10px bold clears the 56px column.
-                        */}
+                       * "TOT" meant nothing to the PR reading it. The column
+                       * is each row's seven days added up, so it says so —
+                       * and it keeps the two-line shape of the day columns
+                       * (WED / 5) instead of a lone abbreviation. 5 chars at
+                       * 10px bold clears the 56px column.
+                       */}
                       <Text style={styles.gridDay}>TOTAL</Text>
                       <Text style={styles.gridDate}>week</Text>
                     </View>
@@ -1595,14 +1756,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           return (
                             <Pressable
                               key={`${d.dateIso}-${row.key}`}
-                              style={[styles.gridCol, canTap && styles.gridColTap]}
-                              onPress={() => canTap && openEvidence(d, row, 'current')}
+                              style={[
+                                styles.gridCol,
+                                canTap && styles.gridColTap,
+                              ]}
+                              onPress={() =>
+                                canTap && openEvidence(d, row, 'current')
+                              }
                               disabled={!canTap}
                             >
                               <Text
                                 style={[
                                   styles.gridVal,
-                                  d.status === 'pending' && amount > 0 && styles.gridValPending,
+                                  d.status === 'pending' &&
+                                    amount > 0 &&
+                                    styles.gridValPending,
                                   // Only the real figure goes red. Colouring the
                                   // whole row painted the empty days' dashes red
                                   // too, so a week with one fine looked like six.
@@ -1615,16 +1783,16 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 {formatCell(amount)}
                               </Text>
                               {/*
-                                * Same honesty rule as Last week: a flag where a
-                                * dispute is actually possible, the inspect glyph
-                                * where tapping only opens the evidence.
-                                */}
+                               * Same honesty rule as Last week: a flag where a
+                               * dispute is actually possible, the inspect glyph
+                               * where tapping only opens the evidence.
+                               */}
                               {/* Same per-cell resolution as Last week — and the
-                                * duplicated `weekDisputable(current) &&
-                                * weekDisputable(current)` goes with it. It was a
-                                * copy-paste, harmless, and exactly the kind of
-                                * thing that survives because nothing reads a
-                                * condition twice. */}
+                               * duplicated `weekDisputable(current) &&
+                               * weekDisputable(current)` goes with it. It was a
+                               * copy-paste, harmless, and exactly the kind of
+                               * thing that survives because nothing reads a
+                               * condition twice. */}
                               {canTap &&
                                 (kindDisputable(row.key) &&
                                 weekDisputable(
@@ -1635,9 +1803,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                     component: row.key,
                                   }),
                                 ) ? (
-                                  <Flag size={9} color={C.muted2} style={{ marginTop: 2 }} />
+                                  <Flag
+                                    size={9}
+                                    color={C.muted2}
+                                    style={{ marginTop: 2 }}
+                                  />
                                 ) : (
-                                  <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
+                                  <Search
+                                    size={9}
+                                    color={C.muted2}
+                                    style={{ marginTop: 2 }}
+                                  />
                                 ))}
                             </Pressable>
                           );
@@ -1693,20 +1869,23 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         dayDisputed,
                       );
                       const claims = disputesForDay(current, d.dateIso);
-                      const openable = claims.open.length + claims.settled.length > 0;
+                      const openable =
+                        claims.open.length + claims.settled.length > 0;
                       return (
                         <Pressable
                           key={`st-${d.dateIso}`}
                           style={styles.gridCol}
                           onPress={() =>
-                            openable && setClaimDay({ dateIso: d.dateIso, week: 'current' })
+                            openable &&
+                            setClaimDay({ dateIso: d.dateIso, week: 'current' })
                           }
                           disabled={!openable}
                         >
                           <Text
                             style={[
                               styles.statusPill,
-                              d.status === 'pending' && styles.statusPillPending,
+                              d.status === 'pending' &&
+                                styles.statusPillPending,
                               label === 'DISPUTED' && styles.statusPillDisputed,
                               label === 'VERIFIED' && styles.statusPillVerified,
                               label === 'DEDUCTED' && styles.statusPillDeducted,
@@ -1748,8 +1927,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
               {!hasThisWeekRows && (
                 <Text style={styles.emptyWeekHint}>
-                  Check out from Attendance to seal today’s wages and commissions here for this
-                  week’s PV.
+                  Check out from Attendance to seal today’s wages and
+                  commissions here for this week’s PV.
                 </Text>
               )}
             </View>
@@ -1758,206 +1937,250 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       )}
 
       {/*
-        * WHAT was disputed on this day — the answer to "it says DISPUTED, but
-        * which of my four rows?". Reachable by tapping the status cell, and fed
-        * by the server's own dispute rows, so it is the same record the agency
-        * is working from rather than a client-side echo of it.
-        */}
+       * WHAT was disputed on this day — the answer to "it says DISPUTED, but
+       * which of my four rows?". Reachable by tapping the status cell, and fed
+       * by the server's own dispute rows, so it is the same record the agency
+       * is working from rather than a client-side echo of it.
+       */}
       {claimDay && (
-        <Modal visible transparent animationType="slide" onRequestClose={() => setClaimDay(null)}>
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={() => setClaimDay(null)}
+        >
           {/*
-            * Dismiss target is a SIBLING above the sheet, not a Pressable
-            * parent — a Pressable ancestor competes with the ScrollView for the
-            * touch responder on Android, which is why scrolling sometimes
-            * failed. Same fix as CellEvidenceSheet.
-            */}
+           * Dismiss target is a SIBLING above the sheet, not a Pressable
+           * parent — a Pressable ancestor competes with the ScrollView for the
+           * touch responder on Android, which is why scrolling sometimes
+           * failed. Same fix as CellEvidenceSheet.
+           */}
           <View style={styles.backdrop}>
-            <Pressable style={styles.backdropTap} onPress={() => setClaimDay(null)} />
+            <Pressable
+              style={styles.backdropTap}
+              onPress={() => setClaimDay(null)}
+            />
             <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
               {(() => {
                 const week = claimDay.week === 'last' ? lastWeek : current;
-                const { open, settled } = disputesForDay(week, claimDay.dateIso);
+                const { open, settled } = disputesForDay(
+                  week,
+                  claimDay.dateIso,
+                );
                 const rows = [...open, ...settled];
                 const labelOf = (k: string) =>
                   INCOME_ROWS.find((r) => r.key === k)?.label ?? k;
                 return (
                   <>
                     <Text style={styles.claimTitle}>What you disputed</Text>
-                    <Text style={styles.claimDay}>{longDay(claimDay.dateIso)}</Text>
+                    <Text style={styles.claimDay}>
+                      {longDay(claimDay.dateIso)}
+                    </Text>
                     {/*
-                      * SCROLLS, and shrinks so Close stays reachable — a day
-                      * with two claims, each listing its shift and items, ran
-                      * off the bottom of the sheet with no way down.
-                      *
-                      * `claimShifts` walks the WHOLE week to rebuild the day's
-                      * evidence, and it was called three times per row — once
-                      * for the heading, once to test emptiness, once to map.
-                      * Hoisted to one call per claim.
-                      */}
-                    <ScrollView style={styles.claimScroll} showsVerticalScrollIndicator={false}>
-                    {rows.map((d) => {
-                      const shifts = claimShifts(week, d);
-                      return (
-                      <View key={d.id} style={styles.claimRow}>
-                        <View style={styles.claimHead}>
-                          <Text style={styles.claimComponent}>{labelOf(d.component)}</Text>
-                          <Text
-                            style={[
-                              styles.claimState,
-                              d.outcome === null && styles.statusPillDisputed,
-                              d.outcome === 'accepted' && styles.statusPillVerified,
-                            ]}
-                          >
-                            {d.outcome === null
-                              ? 'OPEN'
-                              : d.outcome === 'accepted'
-                                ? 'ACCEPTED'
-                                : d.outcome === 'rejected'
-                                  ? 'REJECTED'
-                                  : 'WITHDRAWN'}
-                          </Text>
-                        </View>
-                        <Text style={styles.claimMeta}>
-                          Voucher said {formatRM(Number(d.disputedAmount ?? 0))}
-                          {d.reason ? ` · ${d.reason}` : ''}
-                        </Text>
-                        {/*
-                          * WHEN it was raised. An open claim with no date on it
-                          * gives the PR no way to tell a dispute filed this
-                          * morning from one the agency has been sitting on for
-                          * a week — which is the whole question they open this
-                          * sheet to answer.
-                          */}
-                        <Text style={styles.claimMeta}>Raised {shortStamp(d.raisedAt)}</Text>
-
-                        {/*
-                          * WHICH SHIFT — resolved from the claim's own
-                          * `receiptRefs` back through the day's evidence, so the
-                          * PR reads the same outlet, slot and stamps the proof
-                          * sheet shows for that receipt.
-                          *
-                          * A claim with no refs predates the shift picker and
-                          * genuinely records no shift. That is stated rather
-                          * than left blank: an empty space reads as "not loaded
-                          * yet", which would have the PR waiting for something
-                          * that is never coming.
-                          */}
-                        {/*
-                          * A claim with no `receiptRefs` covered the whole cell,
-                          * so `claimShifts` returns EVERY shift on it. Saying so
-                          * above the list is what stops the PR reading two rows
-                          * as two separate claims.
-                          */}
-                        {!d.receiptRefs?.length && shifts.length > 1 && (
-                          <Text style={styles.claimNote}>
-                            Filed against the whole day — it covered both shifts below.
-                          </Text>
-                        )}
-                        {shifts.length > 0 ? (
-                          shifts.map((s) => (
-                            <View key={s.receiptNo} style={styles.claimShift}>
-                              {/*
-                                * The night first, the paper second. The agency
-                                * reads this claim beside its own receipt card,
-                                * which leads with the event — so this does too,
-                                * and the venue drops to the line below where it
-                                * belongs. `eventName` is null on shifts the
-                                * outlet never named, and the venue then carries
-                                * the heading on its own.
-                                */}
-                              <View style={styles.claimShiftTitleRow}>
-                                <Text style={styles.claimShiftHead}>
-                                  {s.eventName ?? s.outletName ?? 'Shift'}
-                                </Text>
-                                <Text style={styles.claimEventTag}>
-                                  {eventKindLabel(s.eventKind)}
-                                </Text>
-                              </View>
-                              <Text style={styles.claimShiftMeta}>
-                                {s.eventName && s.outletName ? `${s.outletName} · ` : ''}
-                                {s.slot ?? 'shift time unknown'}
+                     * SCROLLS, and shrinks so Close stays reachable — a day
+                     * with two claims, each listing its shift and items, ran
+                     * off the bottom of the sheet with no way down.
+                     *
+                     * `claimShifts` walks the WHOLE week to rebuild the day's
+                     * evidence, and it was called three times per row — once
+                     * for the heading, once to test emptiness, once to map.
+                     * Hoisted to one call per claim.
+                     */}
+                    <ScrollView
+                      style={styles.claimScroll}
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {rows.map((d) => {
+                        const shifts = claimShifts(week, d);
+                        return (
+                          <View key={d.id} style={styles.claimRow}>
+                            <View style={styles.claimHead}>
+                              <Text style={styles.claimComponent}>
+                                {labelOf(d.component)}
                               </Text>
-                              <Text style={styles.claimShiftMeta}>
-                                In {shortStamp(s.checkInAt)} · Out {shortStamp(s.checkOutAt)} ·{' '}
-                                {shiftWindowLabel(s.checkInAt, s.checkOutAt, s.overtimeMinutes)}
+                              <Text
+                                style={[
+                                  styles.claimState,
+                                  d.outcome === null &&
+                                    styles.statusPillDisputed,
+                                  d.outcome === 'accepted' &&
+                                    styles.statusPillVerified,
+                                ]}
+                              >
+                                {d.outcome === null
+                                  ? 'OPEN'
+                                  : d.outcome === 'accepted'
+                                    ? 'ACCEPTED'
+                                    : d.outcome === 'rejected'
+                                      ? 'REJECTED'
+                                      : 'WITHDRAWN'}
                               </Text>
-                              <Text style={styles.claimShiftMeta}>
-                                {s.orderNo ?? 'No order no'} · {s.receiptNo}
-                              </Text>
-                              {/*
-                                * WHAT was claimed, from the snapshot taken when
-                                * it was raised — so it still reads correctly
-                                * after the agency corrects the receipt. Absent
-                                * means the whole receipt, which is said out loud
-                                * rather than left to be inferred from silence.
-                                */}
-                              {d.disputedItems?.length ? (
-                                d.disputedItems.map((it) => (
-                                  <Text key={it.lineId} style={styles.claimItem}>
-                                    {it.description} × {it.quantity} ·{' '}
-                                    {formatRM(Number(it.amount ?? 0))}
-                                  </Text>
-                                ))
-                              ) : (
-                                <Text style={styles.claimShiftMeta}>
-                                  The whole receipt
-                                </Text>
-                              )}
                             </View>
-                          ))
-                        ) : (
-                          // Only when the day has no receipts at all to point at
-                          // — a wages/OT claim, which is derived from the
-                          // attendance stamps and has no paper behind it.
-                          <Text style={styles.claimNote}>
-                            No receipt behind this — it is calculated from your check-in and
-                            check-out times.
-                          </Text>
-                        )}
-
-                        {!!d.note && <Text style={styles.claimNote}>{d.note}</Text>}
-                        {/*
-                          * The agency's answer, verbatim. A rejected claim
-                          * without its reason is the PR asked to accept "no"
-                          * and given nothing to act on.
-                          */}
-                        {!!d.resolutionNote && (
-                          <Text style={styles.claimAnswer}>
-                            Agency: {d.resolutionNote}
-                          </Text>
-                        )}
-
-                        {/*
-                          * CANCEL, where the PR can see WHAT they are cancelling.
-                          *
-                          * Withdrawing was only reachable by tapping a red grid
-                          * cell, where the button still read "Dispute this
-                          * amount" and silently became a withdraw — so the one
-                          * action that takes a claim back was both hidden and
-                          * mislabelled. Here it sits under the claim itself.
-                          *
-                          * Only on an OPEN claim: an answered one is a decision
-                          * the agency has made, and retracting it afterwards
-                          * would rewrite the outcome of a money decision.
-                          */}
-                        {d.outcome === null && (
-                          <Pressable
-                            style={styles.claimCancel}
-                            disabled={disputeBusy}
-                            onPress={() => void cancelClaim(d)}
-                          >
-                            <Text style={styles.claimCancelText}>
-                              {disputeBusy ? 'Cancelling…' : 'Cancel this dispute'}
+                            <Text style={styles.claimMeta}>
+                              Voucher said{' '}
+                              {formatRM(Number(d.disputedAmount ?? 0))}
+                              {d.reason ? ` · ${d.reason}` : ''}
                             </Text>
-                          </Pressable>
-                        )}
-                      </View>
-                      );
-                    })}
+                            {/*
+                             * WHEN it was raised. An open claim with no date on it
+                             * gives the PR no way to tell a dispute filed this
+                             * morning from one the agency has been sitting on for
+                             * a week — which is the whole question they open this
+                             * sheet to answer.
+                             */}
+                            <Text style={styles.claimMeta}>
+                              Raised {shortStamp(d.raisedAt)}
+                            </Text>
+
+                            {/*
+                             * WHICH SHIFT — resolved from the claim's own
+                             * `receiptRefs` back through the day's evidence, so the
+                             * PR reads the same outlet, slot and stamps the proof
+                             * sheet shows for that receipt.
+                             *
+                             * A claim with no refs predates the shift picker and
+                             * genuinely records no shift. That is stated rather
+                             * than left blank: an empty space reads as "not loaded
+                             * yet", which would have the PR waiting for something
+                             * that is never coming.
+                             */}
+                            {/*
+                             * A claim with no `receiptRefs` covered the whole cell,
+                             * so `claimShifts` returns EVERY shift on it. Saying so
+                             * above the list is what stops the PR reading two rows
+                             * as two separate claims.
+                             */}
+                            {!d.receiptRefs?.length && shifts.length > 1 && (
+                              <Text style={styles.claimNote}>
+                                Filed against the whole day — it covered both
+                                shifts below.
+                              </Text>
+                            )}
+                            {shifts.length > 0 ? (
+                              shifts.map((s) => (
+                                <View
+                                  key={s.receiptNo}
+                                  style={styles.claimShift}
+                                >
+                                  {/*
+                                   * The night first, the paper second. The agency
+                                   * reads this claim beside its own receipt card,
+                                   * which leads with the event — so this does too,
+                                   * and the venue drops to the line below where it
+                                   * belongs. `eventName` is null on shifts the
+                                   * outlet never named, and the venue then carries
+                                   * the heading on its own.
+                                   */}
+                                  <View style={styles.claimShiftTitleRow}>
+                                    <Text style={styles.claimShiftHead}>
+                                      {s.eventName ?? s.outletName ?? 'Shift'}
+                                    </Text>
+                                    <Text style={styles.claimEventTag}>
+                                      {eventKindLabel(s.eventKind)}
+                                    </Text>
+                                  </View>
+                                  <Text style={styles.claimShiftMeta}>
+                                    {s.eventName && s.outletName
+                                      ? `${s.outletName} · `
+                                      : ''}
+                                    {s.slot ?? 'shift time unknown'}
+                                  </Text>
+                                  <Text style={styles.claimShiftMeta}>
+                                    In {shortStamp(s.checkInAt)} · Out{' '}
+                                    {shortStamp(s.checkOutAt)} ·{' '}
+                                    {shiftWindowLabel(
+                                      s.checkInAt,
+                                      s.checkOutAt,
+                                      s.overtimeMinutes,
+                                    )}
+                                  </Text>
+                                  <Text style={styles.claimShiftMeta}>
+                                    {s.orderNo ?? 'No order no'} · {s.receiptNo}
+                                  </Text>
+                                  {/*
+                                   * WHAT was claimed, from the snapshot taken when
+                                   * it was raised — so it still reads correctly
+                                   * after the agency corrects the receipt. Absent
+                                   * means the whole receipt, which is said out loud
+                                   * rather than left to be inferred from silence.
+                                   */}
+                                  {d.disputedItems?.length ? (
+                                    d.disputedItems.map((it) => (
+                                      <Text
+                                        key={it.lineId}
+                                        style={styles.claimItem}
+                                      >
+                                        {it.description} × {it.quantity} ·{' '}
+                                        {formatRM(Number(it.amount ?? 0))}
+                                      </Text>
+                                    ))
+                                  ) : (
+                                    <Text style={styles.claimShiftMeta}>
+                                      The whole receipt
+                                    </Text>
+                                  )}
+                                </View>
+                              ))
+                            ) : (
+                              // Only when the day has no receipts at all to point at
+                              // — a wages/OT claim, which is derived from the
+                              // attendance stamps and has no paper behind it.
+                              <Text style={styles.claimNote}>
+                                No receipt behind this — it is calculated from
+                                your check-in and check-out times.
+                              </Text>
+                            )}
+
+                            {!!d.note && (
+                              <Text style={styles.claimNote}>{d.note}</Text>
+                            )}
+                            {/*
+                             * The agency's answer, verbatim. A rejected claim
+                             * without its reason is the PR asked to accept "no"
+                             * and given nothing to act on.
+                             */}
+                            {!!d.resolutionNote && (
+                              <Text style={styles.claimAnswer}>
+                                Agency: {d.resolutionNote}
+                              </Text>
+                            )}
+
+                            {/*
+                             * CANCEL, where the PR can see WHAT they are cancelling.
+                             *
+                             * Withdrawing was only reachable by tapping a red grid
+                             * cell, where the button still read "Dispute this
+                             * amount" and silently became a withdraw — so the one
+                             * action that takes a claim back was both hidden and
+                             * mislabelled. Here it sits under the claim itself.
+                             *
+                             * Only on an OPEN claim: an answered one is a decision
+                             * the agency has made, and retracting it afterwards
+                             * would rewrite the outcome of a money decision.
+                             */}
+                            {d.outcome === null && (
+                              <Pressable
+                                style={styles.claimCancel}
+                                disabled={disputeBusy}
+                                onPress={() => void cancelClaim(d)}
+                              >
+                                <Text style={styles.claimCancelText}>
+                                  {disputeBusy
+                                    ? 'Cancelling…'
+                                    : 'Cancel this dispute'}
+                                </Text>
+                              </Pressable>
+                            )}
+                          </View>
+                        );
+                      })}
                     </ScrollView>
                     {/* Close is RED, app-wide (owner's colour code) — same as
-                      * dangerBtn and the evidence sheet's Close. */}
-                    <Pressable style={styles.sheetCloseBtn} onPress={() => setClaimDay(null)}>
+                     * dangerBtn and the evidence sheet's Close. */}
+                    <Pressable
+                      style={styles.sheetCloseBtn}
+                      onPress={() => setClaimDay(null)}
+                    >
                       <Text style={styles.sheetCloseText}>Close</Text>
                     </Pressable>
                   </>
@@ -2033,11 +2256,14 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
              */
             weekDisputable(
               evidenceTarget.week === 'last' ? lastWeek : current,
-              voucherOwning(evidenceTarget.week === 'last' ? lastWeek : current, {
-                receiptId: null,
-                dateIso: evidenceTarget.dateIso,
-                component: evidenceTarget.incomeKey,
-              }),
+              voucherOwning(
+                evidenceTarget.week === 'last' ? lastWeek : current,
+                {
+                  receiptId: null,
+                  dateIso: evidenceTarget.dateIso,
+                  component: evidenceTarget.incomeKey,
+                },
+              ),
             ) &&
             evidenceDisputableCount > 0
               ? () => {
@@ -2063,7 +2289,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             style={[
               styles.sheet,
               // Keyboard open: it already clears the nav bar, so its inset wins.
-              { paddingBottom: keyboardInset > 0 ? keyboardInset + 16 : 16 + insets.bottom },
+              {
+                paddingBottom:
+                  keyboardInset > 0 ? keyboardInset + 16 : 16 + insets.bottom,
+              },
             ]}
           >
             <ScrollView
@@ -2071,284 +2300,333 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
-            <Text style={styles.sheetTitle}>
-              {disputeMode === 'withdraw' ? 'Withdraw dispute?' : 'Dispute this amount'}
-            </Text>
-            {disputeTarget && (
-              <View style={styles.targetPill}>
-                <Text style={styles.targetPillText}>
-                  {disputeTarget.dayLabel} {disputeTarget.dateNum} · {disputeTarget.incomeLabel} ·{' '}
-                  {formatRM(disputeTarget.amount)}
-                </Text>
-              </View>
-            )}
-
-            {disputeMode === 'dispute' ? (
-              <>
-                {/*
-                  * WHICH SHIFT? Only asked when the day holds more than one
-                  * receipt in this bucket — a single-receipt day has nothing to
-                  * choose and a chooser there would be noise.
-                  *
-                  * A dispute is filed per day + component, so a PR working two
-                  * shifts on one night could previously only contest BOTH at
-                  * once: the claim was recorded against the day's full total,
-                  * and accepting it settled money nobody had questioned. The
-                  * selection rides in `receiptRefs` and narrows the server's
-                  * `disputedAmount` to exactly what was picked.
-                  *
-                  * Keyed by receiptNo because the order number is NOT unique —
-                  * the same paper logged twice on one night reads ORD0389 on
-                  * both, which is precisely the pair a PR needs to separate.
-                  */}
-                {disputeReceipts.length > 1 && (
-                  <>
-                    <Text style={styles.fieldLabel}>Which one is wrong?</Text>
-                    <View style={styles.presetWrap}>
-                      {disputeReceipts.map((r) => {
-                        const on = disputePickedReceipt === r.receiptNo;
-                        return (
-                          <Pressable
-                            key={r.receiptNo}
-                            style={[
-                              styles.rcptChip,
-                              on ? styles.rcptChipOn : styles.rcptChipOff,
-                              !r.disputable && styles.rcptChipBlocked,
-                            ]}
-                            // Tapping the chosen one again does NOT clear it: a
-                            // dispute needs a shift, and an empty selection is
-                            // not a state the PR can usefully be left in.
-                            onPress={() => r.disputable && setDisputePickedReceipt(r.receiptNo)}
-                            disabled={!r.disputable}
-                            accessibilityRole="radio"
-                            accessibilityState={{ selected: on, disabled: !r.disputable }}
-                            accessibilityLabel={`${r.label}${on ? ', selected' : ''}${
-                              r.blockedNote ? `, ${r.blockedNote}` : ''
-                            }`}
-                          >
-                            {/*
-                              * A TICKED BOX, not a tinted outline.
-                              *
-                              * These chips reused the "quick reason" style, which
-                              * is a single-select — so multi-select read as a
-                              * radio group, and the only difference between on
-                              * and off was a faint border tint. Worse, the label
-                              * referenced `styles.presetText`, which does not
-                              * exist, so it rendered with NO style at all.
-                              *
-                              * Selection now carries three independent signals —
-                              * the box, the fill, and the text weight/colour — so
-                              * it survives a dim screen and does not depend on
-                              * colour perception alone.
-                              */}
-                            {/*
-                              * A filled DOT, drawn with a View — not an icon.
-                              *
-                              * This held `<Check />`, which was never imported,
-                              * so the first render of the picker threw a
-                              * ReferenceError and the whole screen went blank on
-                              * tapping Dispute. A dot is also the right mark for
-                              * an exclusive choice, so nothing is lost by it.
-                              */}
-                            <View style={[styles.rcptBox, on && styles.rcptBoxOn]}>
-                              {on && <View style={styles.rcptDot} />}
-                            </View>
-                            {/*
-                              * NO numberOfLines — the note is the point.
-                              * Clamping to one line turned "waiting on your
-                              * agency" into "waiting on yo…", which reads as a
-                              * glitch rather than a reason. It wraps instead.
-                              */}
-                            <Text style={[styles.rcptChipText, on && styles.rcptChipTextOn]}>
-                              {r.label}
-                              {r.blockedNote ? ` · ${r.blockedNote}` : ''}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    <Text style={styles.pickedHint}>
-                      {disputePickedReceipt === null
-                        ? 'Pick the shift you are disputing.'
-                        : `Disputing ${formatRM(disputePickedSubtotal)} of this day's ${formatRM(disputeTarget?.amount ?? 0)}.`}
-                    </Text>
-                  </>
-                )}
-
-                {/*
-                  * WHICH ITEM on that shift's receipt.
-                  *
-                  * Shown once a shift is chosen and it carries more than one
-                  * item. A tips receipt holds Tips, Booking commission and Havoc
-                  * together, so "tips on Tue 4 is wrong" left the agency to guess
-                  * which of the three — and the PR with no way to say.
-                  *
-                  * MULTI-select here, unlike the shift above: one paper can
-                  * genuinely have two wrong lines, and they are one argument
-                  * about one receipt. All start ticked, so the common "this whole
-                  * receipt is wrong" needs no extra taps.
-                  */}
-                {disputeItems.length > 1 && (
-                  <>
-                    <Text style={styles.fieldLabel}>Which item?</Text>
-                    <View style={styles.presetWrap}>
-                      {disputeItems.map((it) => {
-                        const on = disputePickedItems.includes(it.id);
-                        return (
-                          <Pressable
-                            key={it.id}
-                            style={[styles.rcptChip, on ? styles.rcptChipOn : styles.rcptChipOff]}
-                            onPress={() =>
-                              setDisputePickedItems((prev) =>
-                                prev.includes(it.id)
-                                  ? prev.filter((x) => x !== it.id)
-                                  : [...prev, it.id],
-                              )
-                            }
-                            accessibilityRole="checkbox"
-                            accessibilityState={{ checked: on }}
-                          >
-                            <View style={[styles.rcptSquare, on && styles.rcptSquareOn]} />
-                            <Text
-                              style={[styles.rcptChipText, on && styles.rcptChipTextOn]}
-                              numberOfLines={1}
-                            >
-                              {it.label}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    {disputePickedItems.length === 0 && (
-                      <Text style={styles.pickedHint}>Pick at least one item.</Text>
-                    )}
-                  </>
-                )}
-
-                <Text style={styles.fieldLabel}>Quick reason</Text>
-                <View style={styles.presetWrap}>
-                  {DISPUTE_PRESETS.map((p) => (
-                    <Pressable
-                      key={p}
-                      style={[styles.presetChip, disputePreset === p && styles.presetChipOn]}
-                      onPress={() => setDisputePreset(p)}
-                    >
-                      <Text
-                        style={[
-                          styles.presetChipText,
-                          disputePreset === p && { color: C.violetL },
-                        ]}
-                      >
-                        {p}
-                      </Text>
-                    </Pressable>
-                  ))}
+              <Text style={styles.sheetTitle}>
+                {disputeMode === 'withdraw'
+                  ? 'Withdraw dispute?'
+                  : 'Dispute this amount'}
+              </Text>
+              {disputeTarget && (
+                <View style={styles.targetPill}>
+                  <Text style={styles.targetPillText}>
+                    {disputeTarget.dayLabel} {disputeTarget.dateNum} ·{' '}
+                    {disputeTarget.incomeLabel} ·{' '}
+                    {formatRM(disputeTarget.amount)}
+                  </Text>
                 </View>
-                <TextInput
-                  value={disputeNote}
-                  onChangeText={setDisputeNote}
-                  style={[styles.input, { minHeight: 88, textAlignVertical: 'top', marginTop: 10 }]}
-                  multiline
-                  placeholder="Add detail for your agency…"
-                  placeholderTextColor={C.muted2}
-                />
+              )}
 
-                <Pressable
-                  style={styles.attachBtn}
-                  onPress={() =>
-                    pickDisputeImages((urls) =>
-                      setDisputePhotos((prev) => [...prev, ...urls].slice(0, 6)),
-                    )
-                  }
-                >
-                  <ImagePlus size={14} color={C.txt} />
-                  <Text style={styles.attachBtnText}>Attach files (images)</Text>
-                  <Text style={styles.attachOptional}>optional</Text>
-                </Pressable>
+              {disputeMode === 'dispute' ? (
+                <>
+                  {/*
+                   * WHICH SHIFT? Only asked when the day holds more than one
+                   * receipt in this bucket — a single-receipt day has nothing to
+                   * choose and a chooser there would be noise.
+                   *
+                   * A dispute is filed per day + component, so a PR working two
+                   * shifts on one night could previously only contest BOTH at
+                   * once: the claim was recorded against the day's full total,
+                   * and accepting it settled money nobody had questioned. The
+                   * selection rides in `receiptRefs` and narrows the server's
+                   * `disputedAmount` to exactly what was picked.
+                   *
+                   * Keyed by receiptNo because the order number is NOT unique —
+                   * the same paper logged twice on one night reads ORD0389 on
+                   * both, which is precisely the pair a PR needs to separate.
+                   */}
+                  {disputeReceipts.length > 1 && (
+                    <>
+                      <Text style={styles.fieldLabel}>Which one is wrong?</Text>
+                      <View style={styles.presetWrap}>
+                        {disputeReceipts.map((r) => {
+                          const on = disputePickedReceipt === r.receiptNo;
+                          return (
+                            <Pressable
+                              key={r.receiptNo}
+                              style={[
+                                styles.rcptChip,
+                                on ? styles.rcptChipOn : styles.rcptChipOff,
+                                !r.disputable && styles.rcptChipBlocked,
+                              ]}
+                              // Tapping the chosen one again does NOT clear it: a
+                              // dispute needs a shift, and an empty selection is
+                              // not a state the PR can usefully be left in.
+                              onPress={() =>
+                                r.disputable &&
+                                setDisputePickedReceipt(r.receiptNo)
+                              }
+                              disabled={!r.disputable}
+                              accessibilityRole="radio"
+                              accessibilityState={{
+                                selected: on,
+                                disabled: !r.disputable,
+                              }}
+                              accessibilityLabel={`${r.label}${on ? ', selected' : ''}${
+                                r.blockedNote ? `, ${r.blockedNote}` : ''
+                              }`}
+                            >
+                              {/*
+                               * A TICKED BOX, not a tinted outline.
+                               *
+                               * These chips reused the "quick reason" style, which
+                               * is a single-select — so multi-select read as a
+                               * radio group, and the only difference between on
+                               * and off was a faint border tint. Worse, the label
+                               * referenced `styles.presetText`, which does not
+                               * exist, so it rendered with NO style at all.
+                               *
+                               * Selection now carries three independent signals —
+                               * the box, the fill, and the text weight/colour — so
+                               * it survives a dim screen and does not depend on
+                               * colour perception alone.
+                               */}
+                              {/*
+                               * A filled DOT, drawn with a View — not an icon.
+                               *
+                               * This held `<Check />`, which was never imported,
+                               * so the first render of the picker threw a
+                               * ReferenceError and the whole screen went blank on
+                               * tapping Dispute. A dot is also the right mark for
+                               * an exclusive choice, so nothing is lost by it.
+                               */}
+                              <View
+                                style={[styles.rcptBox, on && styles.rcptBoxOn]}
+                              >
+                                {on && <View style={styles.rcptDot} />}
+                              </View>
+                              {/*
+                               * NO numberOfLines — the note is the point.
+                               * Clamping to one line turned "waiting on your
+                               * agency" into "waiting on yo…", which reads as a
+                               * glitch rather than a reason. It wraps instead.
+                               */}
+                              <Text
+                                style={[
+                                  styles.rcptChipText,
+                                  on && styles.rcptChipTextOn,
+                                ]}
+                              >
+                                {r.label}
+                                {r.blockedNote ? ` · ${r.blockedNote}` : ''}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <Text style={styles.pickedHint}>
+                        {disputePickedReceipt === null
+                          ? 'Pick the shift you are disputing.'
+                          : `Disputing ${formatRM(disputePickedSubtotal)} of this day's ${formatRM(disputeTarget?.amount ?? 0)}.`}
+                      </Text>
+                    </>
+                  )}
 
-                {disputePhotos.length > 0 && (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.photoRow}
-                    contentContainerStyle={{ gap: 8 }}
+                  {/*
+                   * WHICH ITEM on that shift's receipt.
+                   *
+                   * Shown once a shift is chosen and it carries more than one
+                   * item. A tips receipt holds Tips, Booking commission and Havoc
+                   * together, so "tips on Tue 4 is wrong" left the agency to guess
+                   * which of the three — and the PR with no way to say.
+                   *
+                   * MULTI-select here, unlike the shift above: one paper can
+                   * genuinely have two wrong lines, and they are one argument
+                   * about one receipt. All start ticked, so the common "this whole
+                   * receipt is wrong" needs no extra taps.
+                   */}
+                  {disputeItems.length > 1 && (
+                    <>
+                      <Text style={styles.fieldLabel}>Which item?</Text>
+                      <View style={styles.presetWrap}>
+                        {disputeItems.map((it) => {
+                          const on = disputePickedItems.includes(it.id);
+                          return (
+                            <Pressable
+                              key={it.id}
+                              style={[
+                                styles.rcptChip,
+                                on ? styles.rcptChipOn : styles.rcptChipOff,
+                              ]}
+                              onPress={() =>
+                                setDisputePickedItems((prev) =>
+                                  prev.includes(it.id)
+                                    ? prev.filter((x) => x !== it.id)
+                                    : [...prev, it.id],
+                                )
+                              }
+                              accessibilityRole="checkbox"
+                              accessibilityState={{ checked: on }}
+                            >
+                              <View
+                                style={[
+                                  styles.rcptSquare,
+                                  on && styles.rcptSquareOn,
+                                ]}
+                              />
+                              <Text
+                                style={[
+                                  styles.rcptChipText,
+                                  on && styles.rcptChipTextOn,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {it.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      {disputePickedItems.length === 0 && (
+                        <Text style={styles.pickedHint}>
+                          Pick at least one item.
+                        </Text>
+                      )}
+                    </>
+                  )}
+
+                  <Text style={styles.fieldLabel}>Quick reason</Text>
+                  <View style={styles.presetWrap}>
+                    {DISPUTE_PRESETS.map((p) => (
+                      <Pressable
+                        key={p}
+                        style={[
+                          styles.presetChip,
+                          disputePreset === p && styles.presetChipOn,
+                        ]}
+                        onPress={() => setDisputePreset(p)}
+                      >
+                        <Text
+                          style={[
+                            styles.presetChipText,
+                            disputePreset === p && { color: C.violetL },
+                          ]}
+                        >
+                          {p}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <TextInput
+                    value={disputeNote}
+                    onChangeText={setDisputeNote}
+                    style={[
+                      styles.input,
+                      {
+                        minHeight: 88,
+                        textAlignVertical: 'top',
+                        marginTop: 10,
+                      },
+                    ]}
+                    multiline
+                    placeholder="Add detail for your agency…"
+                    placeholderTextColor={C.muted2}
+                  />
+
+                  <Pressable
+                    style={styles.attachBtn}
+                    onPress={() =>
+                      pickDisputeImages((urls) =>
+                        setDisputePhotos((prev) =>
+                          [...prev, ...urls].slice(0, 6),
+                        ),
+                      )
+                    }
                   >
-                    {disputePhotos.map((src, index) => (
-                      <View key={`${index}-${src.slice(0, 24)}`} style={styles.photoThumb}>
-                        {/* Fresh picks are data URLs; entries may be R2 keys if
+                    <ImagePlus size={14} color={C.txt} />
+                    <Text style={styles.attachBtnText}>
+                      Attach files (images)
+                    </Text>
+                    <Text style={styles.attachOptional}>optional</Text>
+                  </Pressable>
+
+                  {disputePhotos.length > 0 && (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.photoRow}
+                      contentContainerStyle={{ gap: 8 }}
+                    >
+                      {disputePhotos.map((src, index) => (
+                        <View
+                          key={`${index}-${src.slice(0, 24)}`}
+                          style={styles.photoThumb}
+                        >
+                          {/* Fresh picks are data URLs; entries may be R2 keys if
                             ever seeded from a saved dispute — resolve for display,
                             submit still sends the raw strings. */}
-                        <Image
-                          source={{ uri: resolveProofPhotoUri(src) }}
-                          style={styles.photoImg}
-                        />
-                        <Pressable
-                          style={styles.photoRemove}
-                          onPress={() =>
-                            setDisputePhotos((prev) => prev.filter((_, i) => i !== index))
-                          }
-                          hitSlop={6}
-                        >
-                          <XIcon size={12} color={C.txt} />
-                        </Pressable>
-                      </View>
-                    ))}
-                  </ScrollView>
-                )}
+                          <Image
+                            source={{ uri: resolveProofPhotoUri(src) }}
+                            style={styles.photoImg}
+                          />
+                          <Pressable
+                            style={styles.photoRemove}
+                            onPress={() =>
+                              setDisputePhotos((prev) =>
+                                prev.filter((_, i) => i !== index),
+                              )
+                            }
+                            hitSlop={6}
+                          >
+                            <XIcon size={12} color={C.txt} />
+                          </Pressable>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  )}
 
-                <Text style={styles.attachHint}>
-                  {disputePhotos.length > 0
-                    ? `${disputePhotos.length} image${disputePhotos.length === 1 ? '' : 's'} attached as proof`
-                    : 'Proof images are optional — attach a receipt photo if you have one.'}
-                </Text>
+                  <Text style={styles.attachHint}>
+                    {disputePhotos.length > 0
+                      ? `${disputePhotos.length} image${disputePhotos.length === 1 ? '' : 's'} attached as proof`
+                      : 'Proof images are optional — attach a receipt photo if you have one.'}
+                  </Text>
 
-                <View style={styles.sheetActions}>
-                  <Pressable style={styles.backBtn} onPress={closeDispute}>
-                    <Text style={styles.backBtnText}>Back</Text>
-                  </Pressable>
+                  <View style={styles.sheetActions}>
+                    <Pressable style={styles.backBtn} onPress={closeDispute}>
+                      <Text style={styles.backBtnText}>Back</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.submitBtn,
+                        grad(GRADIENTS.accent, C.accent),
+                        (disputeBusy || noReceiptPicked) && { opacity: 0.6 },
+                      ]}
+                      onPress={submitDispute}
+                      /*
+                       * Deselecting every receipt is not "dispute the whole day" —
+                       * it is an unfinished sentence. Blocked rather than silently
+                       * widened back to the full cell, which would file a claim
+                       * about money the PR had just deselected.
+                       */
+                      disabled={disputeBusy || noReceiptPicked}
+                    >
+                      <Text style={styles.primaryText}>
+                        {disputeBusy ? 'Submitting…' : 'Submit dispute'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.sheetSub}>
+                    Flagged this amount by mistake? Withdraw and it returns to
+                    verified.
+                    {disputeTarget && disputePhotoMap[disputeTarget.key]?.length
+                      ? ` · ${disputePhotoMap[disputeTarget.key].length} proof image(s) will be cleared.`
+                      : ''}
+                  </Text>
                   <Pressable
-                    style={[
-                      styles.submitBtn,
-                      grad(GRADIENTS.accent, C.accent),
-                      (disputeBusy || noReceiptPicked) && { opacity: 0.6 },
-                    ]}
+                    style={[styles.dangerBtn, disputeBusy && { opacity: 0.6 }]}
                     onPress={submitDispute}
-                    /*
-                     * Deselecting every receipt is not "dispute the whole day" —
-                     * it is an unfinished sentence. Blocked rather than silently
-                     * widened back to the full cell, which would file a claim
-                     * about money the PR had just deselected.
-                     */
-                    disabled={disputeBusy || noReceiptPicked}
+                    disabled={disputeBusy}
                   >
-                    <Text style={styles.primaryText}>
-                      {disputeBusy ? 'Submitting…' : 'Submit dispute'}
+                    <Text style={styles.dangerBtnText}>
+                      {disputeBusy ? 'Withdrawing…' : 'Withdraw dispute'}
                     </Text>
                   </Pressable>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.sheetSub}>
-                  Flagged this amount by mistake? Withdraw and it returns to verified.
-                  {(disputeTarget && disputePhotoMap[disputeTarget.key]?.length)
-                    ? ` · ${disputePhotoMap[disputeTarget.key].length} proof image(s) will be cleared.`
-                    : ''}
-                </Text>
-                <Pressable
-                  style={[styles.dangerBtn, disputeBusy && { opacity: 0.6 }]}
-                  onPress={submitDispute}
-                  disabled={disputeBusy}
-                >
-                  <Text style={styles.dangerBtnText}>
-                    {disputeBusy ? 'Withdrawing…' : 'Withdraw dispute'}
-                  </Text>
-                </Pressable>
-                <Pressable style={styles.cancel} onPress={closeDispute}>
-                  <Text style={styles.cancelText}>Back</Text>
-                </Pressable>
-              </>
-            )}
+                  <Pressable style={styles.cancel} onPress={closeDispute}>
+                    <Text style={styles.cancelText}>Back</Text>
+                  </Pressable>
+                </>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -2392,10 +2670,14 @@ function WeekVouchers({ week }: { week: PrCurrentWeek | null }) {
             <Text style={voucherStyles.agency} numberOfLines={1}>
               {v.agencyName ?? 'Agency'}
             </Text>
-            <Text style={voucherStyles.no}>{v.voucherNo ?? 'Not yet numbered'}</Text>
+            <Text style={voucherStyles.no}>
+              {v.voucherNo ?? 'Not yet numbered'}
+            </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={voucherStyles.amount}>{formatRM(Number(v.net ?? 0))}</Text>
+            <Text style={voucherStyles.amount}>
+              {formatRM(Number(v.net ?? 0))}
+            </Text>
             <Text style={voucherStyles.state}>
               {(v.status ?? 'pending').replace(/_/g, ' ')}
             </Text>
@@ -2415,7 +2697,12 @@ const voucherStyles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
-  title: { color: '#c4b5fd', fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  title: {
+    color: '#c4b5fd',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
   hint: { color: '#9b93b8', fontSize: 11, marginTop: 3 },
   row: {
     flexDirection: 'row',
@@ -2429,7 +2716,12 @@ const voucherStyles = StyleSheet.create({
   agency: { color: '#e9e6f5', fontSize: 13, fontWeight: '700' },
   no: { color: '#9b93b8', fontSize: 11, marginTop: 2 },
   amount: { color: '#e9e6f5', fontSize: 13, fontWeight: '800' },
-  state: { color: '#9b93b8', fontSize: 10, marginTop: 2, textTransform: 'uppercase' },
+  state: {
+    color: '#9b93b8',
+    fontSize: 10,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
 });
 
 /**
@@ -2470,16 +2762,22 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
     <View style={penaltyStyles.card}>
       <View style={penaltyStyles.head}>
         <Text style={penaltyStyles.title}>PENALTIES THIS WEEK</Text>
-        <Text style={penaltyStyles.total}>−{formatRM(Number(data.totalRm))}</Text>
+        <Text style={penaltyStyles.total}>
+          −{formatRM(Number(data.totalRm))}
+        </Text>
       </View>
       {data.penalties.map((p) => (
         <View key={p.id} style={penaltyStyles.row}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={penaltyStyles.label}>{p.ruleType.replace(/_/g, ' ')}</Text>
+            <Text style={penaltyStyles.label}>
+              {p.ruleType.replace(/_/g, ' ')}
+            </Text>
             <Text style={penaltyStyles.detail}>{p.detail}</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={penaltyStyles.amount}>−{formatRM(Number(p.fineRm))}</Text>
+            <Text style={penaltyStyles.amount}>
+              −{formatRM(Number(p.fineRm))}
+            </Text>
             <Text style={penaltyStyles.state}>
               {p.chargedAt ? 'deducted' : 'pending'}
             </Text>
@@ -2492,11 +2790,14 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
             <Text style={penaltyStyles.label}>Cancelled shift</Text>
             <Text style={penaltyStyles.detail}>
               {String(c.shiftDate ?? '').slice(0, 10)}
-              {c.outletName ? ` · ${c.outletName}` : ''} · {c.feePct ?? 0}% of daily wage
+              {c.outletName ? ` · ${c.outletName}` : ''} · {c.feePct ?? 0}% of
+              daily wage
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={penaltyStyles.amount}>−{formatRM(Number(c.feeRm ?? 0))}</Text>
+            <Text style={penaltyStyles.amount}>
+              −{formatRM(Number(c.feeRm ?? 0))}
+            </Text>
             <Text style={penaltyStyles.state}>
               {c.chargedAt ? 'deducted' : 'pending'}
             </Text>
@@ -2516,8 +2817,17 @@ const penaltyStyles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
   },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { color: '#f07171', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  title: {
+    color: '#f07171',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
   total: { color: '#f07171', fontSize: 13, fontWeight: '800' },
   row: {
     flexDirection: 'row',
@@ -2528,7 +2838,12 @@ const penaltyStyles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  label: { color: C.txt, fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  label: {
+    color: C.txt,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
   detail: { color: C.muted2, fontSize: 11, marginTop: 1 },
   amount: { color: '#f07171', fontSize: 12, fontWeight: '800' },
   state: { color: C.muted2, fontSize: 10, marginTop: 1 },
@@ -2537,8 +2852,18 @@ const penaltyStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
   pageHeader: { paddingTop: 2 },
-  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
-  headerTitle: { fontFamily: F.sora, fontWeight: '800', letterSpacing: -0.45, color: C.txt },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
+  },
+  headerTitle: {
+    fontFamily: F.sora,
+    fontWeight: '800',
+    letterSpacing: -0.45,
+    color: C.txt,
+  },
   weekTabs: {
     marginTop: 12,
     flexDirection: 'row',
@@ -2558,7 +2883,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(183,156,232,0.45)',
     backgroundColor: 'rgba(183,156,232,0.1)',
   },
-  weekTabTitle: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.muted },
+  weekTabTitle: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.muted,
+  },
   weekTabSub: {
     marginTop: 4,
     fontFamily: F.manrope,
@@ -2580,7 +2910,12 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
   },
-  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   sectionTitle: {
     fontFamily: F.sora,
     fontSize: 12,
@@ -2588,7 +2923,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     color: C.txt,
   },
-  sectionFrac: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.goldL },
+  sectionFrac: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.goldL,
+  },
   sectionAction: {
     marginTop: 4,
     fontFamily: F.manrope,
@@ -2596,7 +2936,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: C.goldL,
   },
-  sectionBody: { paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderTopColor: C.line },
+  sectionBody: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+  },
   weekCaption: {
     marginTop: 12,
     fontFamily: F.sora,
@@ -2618,7 +2963,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  verified: { marginTop: 4, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
+  verified: {
+    marginTop: 4,
+    fontFamily: F.manrope,
+    fontSize: 13,
+    color: C.prMuted,
+  },
   reviewCaption: {
     marginTop: 8,
     fontFamily: F.manrope,
@@ -2655,9 +3005,19 @@ const styles = StyleSheet.create({
   gridColDisputed: {
     backgroundColor: 'rgba(240,138,138,0.1)',
   },
-  gridDay: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.muted2 },
+  gridDay: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.muted2,
+  },
   gridDate: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
-  gridVal: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
+  gridVal: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.txt,
+  },
   gridValPending: { color: C.amber },
   gridValDisputed: { color: C.red },
   // Money going the other way. Red is already the app's colour for "this needs
@@ -2772,9 +3132,24 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.45)',
     backgroundColor: 'rgba(240,138,138,0.12)',
   },
-  sheetCloseText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
-  claimTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
-  claimDay: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  sheetCloseText: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.red,
+  },
+  claimTitle: {
+    fontFamily: F.sora,
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.txt,
+  },
+  claimDay: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
+  },
   claimRow: {
     marginTop: 12,
     padding: 12,
@@ -2783,18 +3158,47 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     backgroundColor: C.glass,
   },
-  claimHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  claimComponent: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.txt },
-  claimState: { fontFamily: F.sora, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
-  claimMeta: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  claimHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  claimComponent: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.txt,
+  },
+  claimState: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  claimMeta: {
+    marginTop: 4,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
+  },
   claimShift: {
     marginTop: 8,
     paddingLeft: 9,
     borderLeftWidth: 2,
     borderLeftColor: C.line2,
   },
-  claimShiftTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
-  claimShiftHead: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.accentL },
+  claimShiftTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  claimShiftHead: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '800',
+    color: C.accentL,
+  },
   /* Champagne, matching the evidence sheet's tag exactly — the PR sees the
      same event on both surfaces and should not have to check it is the same. */
   claimEventTag: {
@@ -2811,8 +3215,19 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     overflow: 'hidden',
   },
-  claimShiftMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
-  claimItem: { marginTop: 3, fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
+  claimShiftMeta: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted2,
+  },
+  claimItem: {
+    marginTop: 3,
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.txt,
+  },
   claimCancel: {
     marginTop: 10,
     alignSelf: 'flex-start',
@@ -2823,9 +3238,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  claimCancelText: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.red },
-  claimNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
-  claimAnswer: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.goldL },
+  claimCancelText: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '800',
+    color: C.red,
+  },
+  claimNote: {
+    marginTop: 4,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.muted2,
+  },
+  claimAnswer: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.goldL,
+  },
   /** Voucher-level DISPUTED chip in the This-week card header. */
   disputePill: {
     fontFamily: F.sora,
@@ -2921,7 +3351,12 @@ const styles = StyleSheet.create({
      */
     maxHeight: '90%',
   },
-  sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
+  sheetTitle: {
+    fontFamily: F.sora,
+    fontSize: 20,
+    fontWeight: '800',
+    color: C.txt,
+  },
   sheetSub: {
     marginTop: 6,
     fontFamily: F.manrope,
@@ -3076,7 +3511,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  primaryText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: '#241a08' },
+  primaryText: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#241a08',
+  },
   dangerBtn: {
     marginTop: 16,
     borderRadius: 12,
@@ -3086,7 +3526,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.45)',
     backgroundColor: 'rgba(240,138,138,0.12)',
   },
-  dangerBtnText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
+  dangerBtnText: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.red,
+  },
   cancel: { marginTop: 10, alignItems: 'center', padding: 10 },
-  cancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
+  cancelText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.muted,
+  },
 });

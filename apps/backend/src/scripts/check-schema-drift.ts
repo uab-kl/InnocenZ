@@ -45,7 +45,10 @@ const FEATURES_DIR = path.join(process.cwd(), 'src', 'features');
 
 /** Enum types are schema-qualified and quoted in some places but bare in pg. */
 function normaliseType(value: string): string {
-  return value.replace(/"/g, '').replace(/^main\./, '').toLowerCase();
+  return value
+    .replace(/"/g, '')
+    .replace(/^main\./, '')
+    .toLowerCase();
 }
 
 /** Every `*.model.ts` under src/features — the same glob drizzle.config.ts uses. */
@@ -59,7 +62,10 @@ function modelFiles(dir: string): string[] {
   return out;
 }
 
-type ModelTable = { name: string; columns: { name: string; sqlType: string; isEnum: boolean }[] };
+type ModelTable = {
+  name: string;
+  columns: { name: string; sqlType: string; isEnum: boolean }[];
+};
 
 /**
  * Load every model and pull its table shape.
@@ -69,7 +75,8 @@ type ModelTable = { name: string; columns: { name: string; sqlType: string; isEn
  */
 async function modelTables(): Promise<ModelTable[]> {
   const files = modelFiles(FEATURES_DIR);
-  if (files.length === 0) throw new Error(`No *.model.ts found under ${FEATURES_DIR}`);
+  if (files.length === 0)
+    throw new Error(`No *.model.ts found under ${FEATURES_DIR}`);
 
   const tables: ModelTable[] = [];
   for (const file of files) {
@@ -82,7 +89,9 @@ async function modelTables(): Promise<ModelTable[]> {
         columns: cfg.columns.map((column) => ({
           name: column.name,
           sqlType: column.getSQLType(),
-          isEnum: Array.isArray((column as { enumValues?: string[] }).enumValues),
+          isEnum: Array.isArray(
+            (column as { enumValues?: string[] }).enumValues,
+          ),
         })),
       });
     }
@@ -92,7 +101,9 @@ async function modelTables(): Promise<ModelTable[]> {
 
 async function main() {
   const tables = await modelTables();
-  console.log(`[drift] comparing live DB against ${tables.length} drizzle models`);
+  console.log(
+    `[drift] comparing live DB against ${tables.length} drizzle models`,
+  );
 
   const client = new Client({
     host: env.POSTGRES_HOST,
@@ -131,7 +142,9 @@ async function main() {
     for (const column of table.columns) {
       const liveColumn = liveColumns.get(column.name);
       if (!liveColumn) {
-        problems.push(`COLUMN MISSING in live DB: ${table.name}.${column.name}`);
+        problems.push(
+          `COLUMN MISSING in live DB: ${table.name}.${column.name}`,
+        );
         continue;
       }
       // Only enum columns are type-compared. Comparing every type would drown
@@ -152,13 +165,19 @@ async function main() {
   // Reported, never failed on: a live table the models no longer mention is
   // usually a dropped feature's leftovers, not a break in the running code.
   const modelled = new Set(tables.map((t) => t.name));
-  const orphans = [...byTable.keys()].filter((name) => !modelled.has(name)).sort();
+  const orphans = [...byTable.keys()]
+    .filter((name) => !modelled.has(name))
+    .sort();
 
   for (const problem of problems) console.log(`  ${problem}`);
   if (orphans.length > 0) {
-    console.log(`[drift] note — ${orphans.length} live table(s) no model declares: ${orphans.join(', ')}`);
+    console.log(
+      `[drift] note — ${orphans.length} live table(s) no model declares: ${orphans.join(', ')}`,
+    );
   }
-  console.log(`[drift] ${tables.length} tables checked · ${problems.length} problem(s)`);
+  console.log(
+    `[drift] ${tables.length} tables checked · ${problems.length} problem(s)`,
+  );
 
   if (problems.length > 0) {
     console.log('[drift] FAIL — the live database does not match the model.');
@@ -169,6 +188,9 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('[drift] could not run:', error instanceof Error ? error.message : error);
+  console.error(
+    '[drift] could not run:',
+    error instanceof Error ? error.message : error,
+  );
   process.exit(1);
 });

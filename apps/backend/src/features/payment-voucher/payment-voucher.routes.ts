@@ -8,13 +8,34 @@ const router = Router();
 // A signed-in PR reads/mutates ONLY its own current-week draft voucher, scoped
 // server-side by pr.id — so these sit outside the agency/admin guard below and
 // must precede it (and the '/:id' route).
-router.get('/mine/current-week', paymentVoucherController.getMyCurrentWeek.bind(paymentVoucherController));
-router.get('/mine/last-week', paymentVoucherController.getMyLastWeek.bind(paymentVoucherController));
-router.get('/mine/history', paymentVoucherController.getMyHistory.bind(paymentVoucherController));
-router.post('/mine/lines', paymentVoucherController.addMyLine.bind(paymentVoucherController));
-router.post('/mine/receipts', paymentVoucherController.addMyReceipt.bind(paymentVoucherController));
-router.patch('/mine/lines/:lineId', paymentVoucherController.updateMyLine.bind(paymentVoucherController));
-router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(paymentVoucherController));
+router.get(
+  '/mine/current-week',
+  paymentVoucherController.getMyCurrentWeek.bind(paymentVoucherController),
+);
+router.get(
+  '/mine/last-week',
+  paymentVoucherController.getMyLastWeek.bind(paymentVoucherController),
+);
+router.get(
+  '/mine/history',
+  paymentVoucherController.getMyHistory.bind(paymentVoucherController),
+);
+router.post(
+  '/mine/lines',
+  paymentVoucherController.addMyLine.bind(paymentVoucherController),
+);
+router.post(
+  '/mine/receipts',
+  paymentVoucherController.addMyReceipt.bind(paymentVoucherController),
+);
+router.patch(
+  '/mine/lines/:lineId',
+  paymentVoucherController.updateMyLine.bind(paymentVoucherController),
+);
+router.delete(
+  '/mine/lines/:lineId',
+  paymentVoucherController.deleteMyLine.bind(paymentVoucherController),
+);
 // Whole-receipt removal, server-side and in one call. The phone used to loop
 // `deleteLine` over the siblings it could see, which half-removes a paper on any
 // mid-loop failure and can only ever see the lines the screen had loaded.
@@ -25,7 +46,10 @@ router.delete(
 
 // A PR signs its OWN issued voucher — the acceptance the agency waits on.
 // 3-segment, so no collision with the 2-segment '/mine/lines' above.
-router.post('/mine/:voucherId/sign', paymentVoucherController.signMyVoucher.bind(paymentVoucherController));
+router.post(
+  '/mine/:voucherId/sign',
+  paymentVoucherController.signMyVoucher.bind(paymentVoucherController),
+);
 
 // The PR downloads its OWN voucher as the printed Excel document (History →
 // Excel button). Same 3-segment shape as '/sign' above.
@@ -44,13 +68,21 @@ router.get(
 // the Bearer header, and the session token must never appear in a URL.
 router.post(
   '/mine/:voucherId/export-ticket',
-  paymentVoucherController.createMyVoucherExportTicket.bind(paymentVoucherController),
+  paymentVoucherController.createMyVoucherExportTicket.bind(
+    paymentVoucherController,
+  ),
 );
 
 // A PR raises / withdraws a dispute on its OWN issued voucher (§3 F). 3- and
 // 4-segment paths, so they never collide with the 2-segment '/mine/lines'.
-router.post('/mine/:voucherId/dispute', paymentVoucherController.raiseMyDispute.bind(paymentVoucherController));
-router.post('/mine/:voucherId/dispute/withdraw', paymentVoucherController.withdrawMyDispute.bind(paymentVoucherController));
+router.post(
+  '/mine/:voucherId/dispute',
+  paymentVoucherController.raiseMyDispute.bind(paymentVoucherController),
+);
+router.post(
+  '/mine/:voucherId/dispute/withdraw',
+  paymentVoucherController.withdrawMyDispute.bind(paymentVoucherController),
+);
 
 // Payment vouchers are an agency (or admin) function; scoping to the caller's
 // own agency is enforced in the controller.
@@ -84,7 +116,10 @@ router.post(
 
 // The agency's receipt-review feed (full OCR evidence per receipt). One
 // segment, so it MUST precede '/:id' below.
-router.get('/receipts', paymentVoucherController.listAgencyReceipts.bind(paymentVoucherController));
+router.get(
+  '/receipts',
+  paymentVoucherController.listAgencyReceipts.bind(paymentVoucherController),
+);
 
 // The receipt lifecycle: PENDING -> APPROVED (here) -> VERIFIED (the Monday
 // rollover, or a resolved dispute — never a request).
@@ -155,14 +190,20 @@ router.patch(
 // merely approving a day required agencyOwnerOrFinance. Same asymmetry the
 // create/update routes had. `guard()` lets admin bypass the sub-role check, so
 // this narrows agency members WITHOUT closing the escalation path above.
-router.get('/disputes', paymentVoucherController.listDisputes.bind(paymentVoucherController));
+router.get(
+  '/disputes',
+  paymentVoucherController.listDisputes.bind(paymentVoucherController),
+);
 router.post(
   '/disputes/:disputeId/resolve',
   agencyOwnerOrFinance,
   paymentVoucherController.resolveDispute.bind(paymentVoucherController),
 );
 
-router.get('/:id', paymentVoucherController.getById.bind(paymentVoucherController));
+router.get(
+  '/:id',
+  paymentVoucherController.getById.bind(paymentVoucherController),
+);
 
 // Raising and rewriting a voucher are money WRITES, and until now they were the
 // LEAST-gated routes here: any agency member could reach them, while merely
@@ -180,8 +221,16 @@ router.get('/:id', paymentVoucherController.getById.bind(paymentVoucherControlle
 //
 // READS stay open to the whole agency: seeing what a PR is owed is ordinary
 // roster work, and narrowing that would blank live screens.
-router.post('/', agencyOwnerOrFinance, paymentVoucherController.create.bind(paymentVoucherController));
-router.put('/:id', agencyOwnerOrFinance, paymentVoucherController.update.bind(paymentVoucherController));
+router.post(
+  '/',
+  agencyOwnerOrFinance,
+  paymentVoucherController.create.bind(paymentVoucherController),
+);
+router.put(
+  '/:id',
+  agencyOwnerOrFinance,
+  paymentVoucherController.update.bind(paymentVoucherController),
+);
 // The agency's half of the dual signature, taken BEFORE the voucher is sent —
 // `update` now refuses the pending_review -> sent transition without it. Same
 // guard as every other money write here: signing is an attestation, and the
@@ -191,6 +240,10 @@ router.post(
   agencyOwnerOrFinance,
   paymentVoucherController.financeSignVoucher.bind(paymentVoucherController),
 );
-router.delete('/:id', canDelete, paymentVoucherController.remove.bind(paymentVoucherController));
+router.delete(
+  '/:id',
+  canDelete,
+  paymentVoucherController.remove.bind(paymentVoucherController),
+);
 
 export default router;

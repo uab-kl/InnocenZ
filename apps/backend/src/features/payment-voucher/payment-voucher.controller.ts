@@ -9,7 +9,10 @@ import {
   buildVoucherWorkbook,
   voucherRef,
 } from './payment-voucher-excel.js';
-import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
+import {
+  issueExportTicket,
+  redeemExportTicket,
+} from './payment-voucher-export-ticket.js';
 import { buildVoucherPdf } from './payment-voucher-pdf.js';
 import { archiveVoucherPdf } from './payment-voucher-archive.js';
 
@@ -24,15 +27,20 @@ export function voucherExportLines(bundle: {
 }) {
   // No receipt-status map on purpose: the printed document shows kind, date,
   // outlet, quantity and commission, none of which depend on the review state.
-  return bundle.voucher.lines.map((line) => toReceiptLineDTO(line)).map((l) => ({
-    kind: l.kind,
-    lineDate: l.lineDate,
-    outlet: l.outlet,
-    quantity: l.quantity,
-    commission: l.commission,
-  }));
+  return bundle.voucher.lines
+    .map((line) => toReceiptLineDTO(line))
+    .map((l) => ({
+      kind: l.kind,
+      lineDate: l.lineDate,
+      outlet: l.outlet,
+      quantity: l.quantity,
+      commission: l.commission,
+    }));
 }
-import { checkLineAgainstWeek, LineDateConflictError } from './payment-voucher-audit.js';
+import {
+  checkLineAgainstWeek,
+  LineDateConflictError,
+} from './payment-voucher-audit.js';
 
 /**
  * Turns the repository's line-vs-shift refusal into a 400.
@@ -140,7 +148,10 @@ type Scope = { isAdmin: boolean; agencyId: string | null };
 
 function parsePaging(req: Request): { page: number; pageSize: number } {
   const page = Math.max(1, Number(req.query.page) || 1);
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(req.query.pageSize) || DEFAULT_PAGE_SIZE));
+  const pageSize = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, Number(req.query.pageSize) || DEFAULT_PAGE_SIZE),
+  );
   return { page, pageSize };
 }
 
@@ -176,8 +187,10 @@ function resolveTotals(params: {
     params.subtotal !== undefined
       ? Number(params.subtotal)
       : (params.lines ?? []).reduce((sum, line) => sum + line.amount, 0);
-  const deductionNum = params.deduction !== undefined ? Number(params.deduction) : 0;
-  const netNum = params.net !== undefined ? Number(params.net) : subtotalNum - deductionNum;
+  const deductionNum =
+    params.deduction !== undefined ? Number(params.deduction) : 0;
+  const netNum =
+    params.net !== undefined ? Number(params.net) : subtotalNum - deductionNum;
   return {
     subtotal: subtotalNum.toFixed(2),
     deduction: deductionNum.toFixed(2),
@@ -213,7 +226,9 @@ function r2PublicBase(): string | null {
  * with the weekly payout cron. Change one, change all four.
  */
 function weekBounds(now = new Date()): { weekStart: string; weekEnd: string } {
-  const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const base = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
   const daysSinceSunday = base.getUTCDay(); // Sun=0 → 0, Sat=6 → 6
   const sunday = new Date(base);
   sunday.setUTCDate(base.getUTCDate() - daysSinceSunday);
@@ -224,7 +239,10 @@ function weekBounds(now = new Date()): { weekStart: string; weekEnd: string } {
 }
 
 /** The Sun–Sat window immediately before the one containing `now`. */
-function previousWeekBounds(now = new Date()): { weekStart: string; weekEnd: string } {
+function previousWeekBounds(now = new Date()): {
+  weekStart: string;
+  weekEnd: string;
+} {
   const prior = new Date(now);
   prior.setUTCDate(now.getUTCDate() - 7);
   return weekBounds(prior);
@@ -241,7 +259,9 @@ function encodeRef(
   dedupe?: string,
   category?: string,
 ): string {
-  return [kind, source, sales.toFixed(2), dedupe ?? '', category ?? ''].join(REF_SEP);
+  return [kind, source, sales.toFixed(2), dedupe ?? '', category ?? ''].join(
+    REF_SEP,
+  );
 }
 function decodeRef(ref: string | null): {
   kind: PrReceiptKind;
@@ -253,7 +273,9 @@ function decodeRef(ref: string | null): {
 } {
   const [kind, source, sales, dedupe, category] = (ref ?? '').split(REF_SEP);
   return {
-    kind: (prReceiptKindValues as readonly string[]).includes(kind) ? (kind as PrReceiptKind) : 'others',
+    kind: (prReceiptKindValues as readonly string[]).includes(kind)
+      ? (kind as PrReceiptKind)
+      : 'others',
     source: (prReceiptSourceValues as readonly string[]).includes(source)
       ? (source as PrReceiptSource)
       : 'manual',
@@ -275,8 +297,13 @@ function decodeRef(ref: string | null): {
  * 'tip' alone would refuse every legitimate tips add, which is precisely the
  * mis-filing `scripts/refile-service-lines.ts` had to undo on 4 Aug 2026.
  */
-function catalogueMatchesKind(category: string, kind: 'drinks' | 'tips'): boolean {
-  return kind === 'drinks' ? category === 'drink' : category === 'service' || category === 'tip';
+function catalogueMatchesKind(
+  category: string,
+  kind: 'drinks' | 'tips',
+): boolean {
+  return kind === 'drinks'
+    ? category === 'drink'
+    : category === 'service' || category === 'tip';
 }
 
 /** What the outlet calls the section a line of this kind is checked against. */
@@ -413,7 +440,10 @@ type PrReceiptLineDTO = {
  * looked at. `decodeRef`'s own 'others' stays the last resort, for a line with
  * neither a packed ref nor a classified column.
  */
-function lineKind(line: PaymentVoucherLineType, refKind: PrReceiptKind): PrReceiptKind {
+function lineKind(
+  line: PaymentVoucherLineType,
+  refKind: PrReceiptKind,
+): PrReceiptKind {
   if (refPacksKind(line.ref)) return refKind;
   const fromColumn = kindFromComponent(line.component);
   return (prReceiptKindValues as readonly string[]).includes(fromColumn ?? '')
@@ -436,7 +466,8 @@ type ReceiptInfo = {
 };
 
 /** A uuid, or null. Guards ids recovered from the free-text `ref`. */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function asAssignmentId(raw: string | null | undefined): string | null {
   if (!raw) return null;
   /*
@@ -464,7 +495,9 @@ function toReceiptLineDTO(
 ): PrReceiptLineDTO {
   const { kind: refKind, source, sales, dedupe } = decodeRef(line.ref);
   const kind = lineKind(line, refKind);
-  const info = line.receiptId ? (receiptInfoById?.get(line.receiptId) ?? null) : null;
+  const info = line.receiptId
+    ? (receiptInfoById?.get(line.receiptId) ?? null)
+    : null;
   const receiptStatus = info?.status ?? null;
   return {
     id: line.id,
@@ -494,7 +527,9 @@ function toReceiptLineDTO(
      * Inheriting it here fixes that without copying the same image onto every
      * row: one fact, one place, read by whoever needs it.
      */
-    proofPhotos: line.proofPhotos?.length ? line.proofPhotos : (info?.proofPhotos ?? []),
+    proofPhotos: line.proofPhotos?.length
+      ? line.proofPhotos
+      : (info?.proofPhotos ?? []),
     receiptStatus,
     receiptNo: info?.receiptNo ?? null,
     /**
@@ -519,7 +554,9 @@ function toReceiptLineDTO(
      * that and this used to throw it away.
      */
     shiftAssignmentId:
-      info?.shiftAssignmentId ?? asAssignmentId(dedupe) ?? asAssignmentId(line.ref),
+      info?.shiftAssignmentId ??
+      asAssignmentId(dedupe) ??
+      asAssignmentId(line.ref),
     disputable: lineDisputable(kind, receiptStatus),
   };
 }
@@ -624,7 +661,9 @@ export class PaymentVoucherControllerClass {
    */
   private async lockedReceiptFor(line: PaymentVoucherLineType) {
     if (!line.receiptId) return null;
-    const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(line.receiptId);
+    const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(
+      line.receiptId,
+    );
     return owned && owned.receipt.status !== 'pending' ? owned.receipt : null;
   }
 
@@ -655,10 +694,15 @@ export class PaymentVoucherControllerClass {
     pr: PrType,
     voucherId: string,
   ): Promise<
-    | { ok: true; receipt: PaymentVoucherReceiptType; siblings: PaymentVoucherLineType[] }
+    | {
+        ok: true;
+        receipt: PaymentVoucherReceiptType;
+        siblings: PaymentVoucherLineType[];
+      }
     | { ok: false; status: 404 | 409; reason: string }
   > {
-    const owned = await this.paymentVoucherRepository.getLineWithVoucher(lineId);
+    const owned =
+      await this.paymentVoucherRepository.getLineWithVoucher(lineId);
     if (!owned || !this.ownsMineVoucher(owned.voucher, pr)) {
       return { ok: false, status: 404, reason: Error.NOT_FOUND };
     }
@@ -670,14 +714,16 @@ export class PaymentVoucherControllerClass {
       return {
         ok: false,
         status: 409,
-        reason: 'That row belongs to another voucher — open it there to change it.',
+        reason:
+          'That row belongs to another voucher — open it there to change it.',
       };
     }
     if (!owned.line.receiptId) {
       return {
         ok: false,
         status: 409,
-        reason: 'That row has no receipt behind it — edit it instead of re-scanning.',
+        reason:
+          'That row has no receipt behind it — edit it instead of re-scanning.',
       };
     }
     const rcpt = await this.paymentVoucherRepository.getReceiptWithVoucher(
@@ -743,7 +789,10 @@ export class PaymentVoucherControllerClass {
     pr: PrType,
     opts: { assignmentRef?: string | null; lineDate?: string | null },
   ): Promise<string | null> {
-    const ownsAssignment = (row: { prId?: string | null; userId?: string | null }) =>
+    const ownsAssignment = (row: {
+      prId?: string | null;
+      userId?: string | null;
+    }) =>
       (row.userId != null && pr.userId != null && row.userId === pr.userId) ||
       row.prId === pr.id ||
       (pr.userId != null && row.prId === pr.userId);
@@ -792,7 +841,8 @@ export class PaymentVoucherControllerClass {
     voucher: { prId?: string | null; userId?: string | null },
     pr: PrType,
   ): boolean {
-    if (voucher.userId && pr.userId && voucher.userId === pr.userId) return true;
+    if (voucher.userId && pr.userId && voucher.userId === pr.userId)
+      return true;
     return voucher.prId === pr.id;
   }
 
@@ -821,7 +871,11 @@ export class PaymentVoucherControllerClass {
     try {
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && !scope.agencyId) {
-        return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No agency associated with this account',
+          data: null,
+        });
       }
 
       const { page, pageSize } = parsePaging(req);
@@ -831,20 +885,38 @@ export class PaymentVoucherControllerClass {
         prName: req.query.prName as string | undefined,
         fromDate: req.query.fromDate as string | undefined,
         toDate: req.query.toDate as string | undefined,
-        agencyId: scope.isAdmin ? (req.query.agencyId as string | undefined) : scope.agencyId!,
+        agencyId: scope.isAdmin
+          ? (req.query.agencyId as string | undefined)
+          : scope.agencyId!,
       };
 
-      const { vouchers, totalCount } = await this.paymentVoucherRepository.listPaginated({ filter, page, pageSize });
+      const { vouchers, totalCount } =
+        await this.paymentVoucherRepository.listPaginated({
+          filter,
+          page,
+          pageSize,
+        });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
         message: 'OK',
         data: vouchers,
-        pagination: { page, pageSize, totalCount, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.list] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -853,24 +925,35 @@ export class PaymentVoucherControllerClass {
       // A non-uuid cannot match a row, and handing one to Postgres 500s — so it
       // is answered as what it is: not found. See uuidParam().
       const voucherId = uuidParam(req.params.id);
-      const voucher = voucherId ? await this.paymentVoucherRepository.getById(voucherId) : null;
-      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const voucher = voucherId
+        ? await this.paymentVoucherRepository.getById(voucherId)
+        : null;
+      if (!voucher)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
       // Hide existence of records outside the caller's agency (404, not 403).
       if (!scope.isAdmin && voucher.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // Receipts ride along so the agency can verify a week's commission against
       // the evidence without a second round trip. Loaded only AFTER the ownership
       // check above, so a foreign voucher never leaks its receipts.
-      const receipts = await this.paymentVoucherRepository.listReceipts(voucher.id);
+      const receipts = await this.paymentVoucherRepository.listReceipts(
+        voucher.id,
+      );
 
       // The day-by-day review state rides along for the same reason receipts do:
       // the panel that shows a week needs the decisions with it, and a second
       // round trip is a second chance for the two to disagree.
-      const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+      const reviews = await this.paymentVoucherRepository.listDayReviews(
+        voucher.id,
+      );
       const dayReviews = buildDayReviewView(voucher.lines, reviews);
 
       res.status(200).json({
@@ -886,12 +969,17 @@ export class PaymentVoucherControllerClass {
           // receipts' own statuses (and each day's own status), not on these
           // roll-ups — a summary flag is one refactor away from disagreeing
           // with the rows it summarises.
-          pendingReceiptCount: receipts.filter((r) => r.status === 'pending').length,
+          pendingReceiptCount: receipts.filter((r) => r.status === 'pending')
+            .length,
         },
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.getById] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -912,14 +1000,21 @@ export class PaymentVoucherControllerClass {
     dayReviews: DayReviewView[],
     actor: string,
     justApprovedDates: Set<string>,
-  ): Promise<{ receipts: PaymentVoucherReceiptType[]; approvedReceiptNos: string[] }> {
+  ): Promise<{
+    receipts: PaymentVoucherReceiptType[];
+    approvedReceiptNos: string[];
+  }> {
     // Nothing was approved by this call, so there is nothing to carry — and no
     // read to spend. An approve-all that approves zero days must be inert.
     if (justApprovedDates.size === 0) {
-      const receipts = await this.paymentVoucherRepository.listReceipts(voucher.id);
+      const receipts = await this.paymentVoucherRepository.listReceipts(
+        voucher.id,
+      );
       return { receipts, approvedReceiptNos: [] };
     }
-    const receipts = await this.paymentVoucherRepository.listReceipts(voucher.id);
+    const receipts = await this.paymentVoucherRepository.listReceipts(
+      voucher.id,
+    );
     const approvedDates = new Set(
       dayReviews.filter((d) => d.status === 'approved').map((d) => d.date),
     );
@@ -955,20 +1050,29 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = ReviewVoucherDaySchema.safeParse(req.body);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       // A non-uuid cannot match a row, and handing one to Postgres 500s — so it
       // is answered as what it is: not found. See uuidParam().
       const voucherId = uuidParam(req.params.id);
-      const voucher = voucherId ? await this.paymentVoucherRepository.getById(voucherId) : null;
-      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const voucher = voucherId
+        ? await this.paymentVoucherRepository.getById(voucherId)
+        : null;
+      if (!voucher)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && voucher.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // Reviewing a voucher the PR has already signed is backwards — they would
@@ -977,7 +1081,8 @@ export class PaymentVoucherControllerClass {
       if (voucher.prSignedAt) {
         return res.status(409).json({
           success: false,
-          message: 'This voucher is already signed by the PR — day review happens before it is sent.',
+          message:
+            'This voucher is already signed by the PR — day review happens before it is sent.',
           data: null,
         });
       }
@@ -1006,25 +1111,30 @@ export class PaymentVoucherControllerClass {
           actor,
         });
         if (!saved) {
-          return res
-            .status(500)
-            .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+          return res.status(500).json({
+            success: false,
+            message: Error.INTERNAL_SERVER_ERROR,
+            data: null,
+          });
         }
       }
 
-      const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+      const reviews = await this.paymentVoucherRepository.listDayReviews(
+        voucher.id,
+      );
       const dayReviews = buildDayReviewView(voucher.lines, reviews);
       // An approved day approves the receipts it is made of — the agency has
       // just signed off the total those receipts sum to.
-      const { receipts, approvedReceiptNos } = await this.carryDayApprovalToReceipts(
-        voucher,
-        dayReviews,
-        actor,
-        // Only THIS day, and only if it was approved. A hold or a clear carries
-        // nothing, and must not re-assert an older day's sweep over a receipt
-        // the agency has since withdrawn.
-        parsed.data.status === 'approved' ? new Set([date]) : new Set(),
-      );
+      const { receipts, approvedReceiptNos } =
+        await this.carryDayApprovalToReceipts(
+          voucher,
+          dayReviews,
+          actor,
+          // Only THIS day, and only if it was approved. A hold or a clear carries
+          // nothing, and must not re-assert an older day's sweep over a receipt
+          // the agency has since withdrawn.
+          parsed.data.status === 'approved' ? new Set([date]) : new Set(),
+        );
       return res.status(200).json({
         success: true,
         message:
@@ -1038,14 +1148,17 @@ export class PaymentVoucherControllerClass {
           // same response that moved them, never from a second read.
           receipts,
           approvedReceipts: approvedReceiptNos,
-          pendingReceiptCount: receipts.filter((r) => r.status === 'pending').length,
+          pendingReceiptCount: receipts.filter((r) => r.status === 'pending')
+            .length,
         },
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.reviewDay] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1062,22 +1175,32 @@ export class PaymentVoucherControllerClass {
       // A non-uuid cannot match a row, and handing one to Postgres 500s — so it
       // is answered as what it is: not found. See uuidParam().
       const voucherId = uuidParam(req.params.id);
-      const voucher = voucherId ? await this.paymentVoucherRepository.getById(voucherId) : null;
-      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const voucher = voucherId
+        ? await this.paymentVoucherRepository.getById(voucherId)
+        : null;
+      if (!voucher)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && voucher.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (voucher.prSignedAt) {
         return res.status(409).json({
           success: false,
-          message: 'This voucher is already signed by the PR — day review happens before it is sent.',
+          message:
+            'This voucher is already signed by the PR — day review happens before it is sent.',
           data: null,
         });
       }
 
-      const existing = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+      const existing = await this.paymentVoucherRepository.listDayReviews(
+        voucher.id,
+      );
       const view = buildDayReviewView(voucher.lines, existing);
       const actor = getActor(req);
 
@@ -1104,18 +1227,23 @@ export class PaymentVoucherControllerClass {
         }
       }
 
-      const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+      const reviews = await this.paymentVoucherRepository.listDayReviews(
+        voucher.id,
+      );
       const dayReviews = buildDayReviewView(voucher.lines, reviews);
       const held = dayReviews.filter((d) => d.status === 'held').length;
-      const { receipts, approvedReceiptNos } = await this.carryDayApprovalToReceipts(
-        voucher,
-        dayReviews,
-        actor,
-        justApproved,
-      );
+      const { receipts, approvedReceiptNos } =
+        await this.carryDayApprovalToReceipts(
+          voucher,
+          dayReviews,
+          actor,
+          justApproved,
+        );
       const parts = [`${approved} day(s) approved`];
       if (approvedReceiptNos.length > 0) {
-        parts.push(`${approvedReceiptNos.length} receipt(s) approved with them`);
+        parts.push(
+          `${approvedReceiptNos.length} receipt(s) approved with them`,
+        );
       }
       if (held > 0) parts.push(`${held} held day(s) left untouched`);
       return res.status(200).json({
@@ -1126,14 +1254,17 @@ export class PaymentVoucherControllerClass {
           allDaysReviewed: allDaysReviewed(dayReviews),
           receipts,
           approvedReceipts: approvedReceiptNos,
-          pendingReceiptCount: receipts.filter((r) => r.status === 'pending').length,
+          pendingReceiptCount: receipts.filter((r) => r.status === 'pending')
+            .length,
         },
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.approveAllDays] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1141,19 +1272,31 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = CreatePaymentVoucherSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const scope = await this.resolveScope(req);
       let agencyId: string;
       if (scope.isAdmin) {
         if (!parsed.data.agencyId) {
-          return res.status(400).json({ success: false, message: 'agencyId is required', data: null });
+          return res.status(400).json({
+            success: false,
+            message: 'agencyId is required',
+            data: null,
+          });
         }
         agencyId = parsed.data.agencyId;
       } else {
         if (!scope.agencyId) {
-          return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+          return res.status(403).json({
+            success: false,
+            message: 'No agency associated with this account',
+            data: null,
+          });
         }
         agencyId = scope.agencyId;
       }
@@ -1200,12 +1343,19 @@ export class PaymentVoucherControllerClass {
             weekEnd: header.weekEnd,
           });
           if (outOfWeek) {
-            return res.status(400).json({ success: false, message: outOfWeek, data: null });
+            return res
+              .status(400)
+              .json({ success: false, message: outOfWeek, data: null });
           }
         }
       }
 
-      const totals = resolveTotals({ lines, subtotal: header.subtotal, deduction: header.deduction, net: header.net });
+      const totals = resolveTotals({
+        lines,
+        subtotal: header.subtotal,
+        deduction: header.deduction,
+        net: header.net,
+      });
       const actor = getActor(req);
       const voucher = await this.paymentVoucherRepository.create(
         {
@@ -1220,11 +1370,19 @@ export class PaymentVoucherControllerClass {
         },
         toLineRows(lines ?? []),
       );
-      res.status(201).json({ success: true, message: 'Payment voucher created', data: voucher });
+      res.status(201).json({
+        success: true,
+        message: 'Payment voucher created',
+        data: voucher,
+      });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.create] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1233,15 +1391,24 @@ export class PaymentVoucherControllerClass {
       const id = paramId(req.params.id);
       const parsed = UpdatePaymentVoucherSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const existing = await this.paymentVoucherRepository.getById(id);
-      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!existing)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const { lines, ...data } = parsed.data;
@@ -1326,11 +1493,13 @@ export class PaymentVoucherControllerClass {
         const prId = existing.prId;
         const pendingOvertime =
           prId && weekStart && weekEnd
-            ? await this.shiftAssignmentRepository.listPendingOvertimeForPrWeek({
-                prId,
-                fromDate: weekStart,
-                toDate: weekEnd,
-              })
+            ? await this.shiftAssignmentRepository.listPendingOvertimeForPrWeek(
+                {
+                  prId,
+                  fromDate: weekStart,
+                  toDate: weekEnd,
+                },
+              )
             : [];
         const gate = voucherSendGate(
           buildDayReviewView(existing.lines, reviews),
@@ -1368,33 +1537,55 @@ export class PaymentVoucherControllerClass {
             weekEnd: effectiveWeekEnd,
           });
           if (outOfWeek) {
-            return res.status(400).json({ success: false, message: outOfWeek, data: null });
+            return res
+              .status(400)
+              .json({ success: false, message: outOfWeek, data: null });
           }
         }
       }
 
       // Replacing the lines invalidates client-omitted totals — recompute them.
       const totals = lines
-        ? resolveTotals({ lines, subtotal: data.subtotal, deduction: data.deduction, net: data.net })
+        ? resolveTotals({
+            lines,
+            subtotal: data.subtotal,
+            deduction: data.deduction,
+            net: data.net,
+          })
         : {};
 
       // Status transitions stamp their timestamp once (never overwritten).
-      const stamps: { prSignedAt?: Date; paidAt?: Date; disputedAt?: Date } = {};
-      if (data.status === 'signed' && !existing.prSignedAt) stamps.prSignedAt = new Date();
-      if (data.status === 'paid' && !existing.paidAt) stamps.paidAt = new Date();
-      if (data.status === 'disputed' && !existing.disputedAt) stamps.disputedAt = new Date();
+      const stamps: { prSignedAt?: Date; paidAt?: Date; disputedAt?: Date } =
+        {};
+      if (data.status === 'signed' && !existing.prSignedAt)
+        stamps.prSignedAt = new Date();
+      if (data.status === 'paid' && !existing.paidAt)
+        stamps.paidAt = new Date();
+      if (data.status === 'disputed' && !existing.disputedAt)
+        stamps.disputedAt = new Date();
 
       const voucher = await this.paymentVoucherRepository.update(
         id,
         { ...data, ...totals, ...stamps, updatedBy: getActor(req) },
         lines ? toLineRows(lines) : undefined,
       );
-      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Payment voucher updated', data: voucher });
+      if (!voucher)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      res.status(200).json({
+        success: true,
+        message: 'Payment voucher updated',
+        data: voucher,
+      });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.update] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1403,19 +1594,35 @@ export class PaymentVoucherControllerClass {
       const id = paramId(req.params.id);
 
       const existing = await this.paymentVoucherRepository.getById(id);
-      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!existing)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const removed = await this.paymentVoucherRepository.remove(id);
-      if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Payment voucher removed', data: null });
+      if (!removed)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      res.status(200).json({
+        success: true,
+        message: 'Payment voucher removed',
+        data: null,
+      });
     } catch (error) {
       logger.error('[PaymentVoucherController.remove] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1435,7 +1642,13 @@ export class PaymentVoucherControllerClass {
    * else's shift.
    */
   private async weekShifts(prId: string, lines: PrReceiptLineDTO[]) {
-    const ids = [...new Set(lines.map((l) => l.shiftAssignmentId).filter((id): id is string => !!id))];
+    const ids = [
+      ...new Set(
+        lines
+          .map((l) => l.shiftAssignmentId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
     return this.shiftAssignmentRepository.listByIdsForPr(prId, ids);
   }
 
@@ -1465,7 +1678,9 @@ export class PaymentVoucherControllerClass {
     receipts: PaymentVoucherReceiptType[],
   ): Promise<{ date: string; status: 'approved' | 'held' | null }[]> {
     if (!voucher) return [];
-    const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+    const reviews = await this.paymentVoucherRepository.listDayReviews(
+      voucher.id,
+    );
     const view = buildDayReviewView(voucher.lines, reviews);
     return prVisibleDayStatuses(view, voucher.lines, receipts);
   }
@@ -1487,7 +1702,8 @@ export class PaymentVoucherControllerClass {
    */
   private async weekDisputes(voucherId: string | null) {
     if (!voucherId) return [];
-    const rows = await this.paymentVoucherDisputeRepository.listForVoucher(voucherId);
+    const rows =
+      await this.paymentVoucherDisputeRepository.listForVoucher(voucherId);
     return rows.map((d) => ({
       id: d.id,
       /**
@@ -1556,7 +1772,9 @@ export class PaymentVoucherControllerClass {
   ) {
     const parts = await Promise.all(
       vouchers.map(async (voucher) => {
-        const receiptRows = await this.paymentVoucherRepository.listReceipts(voucher.id);
+        const receiptRows = await this.paymentVoucherRepository.listReceipts(
+          voucher.id,
+        );
         const statuses = receiptInfoMap(receiptRows);
         return {
           voucher,
@@ -1585,7 +1803,10 @@ export class PaymentVoucherControllerClass {
           dayStatus.set(review.date, review.status);
           continue;
         }
-        if (dayStatus.get(review.date) === 'approved' && review.status !== 'approved') {
+        if (
+          dayStatus.get(review.date) === 'approved' &&
+          review.status !== 'approved'
+        ) {
           dayStatus.set(review.date, review.status);
         }
       }
@@ -1594,7 +1815,8 @@ export class PaymentVoucherControllerClass {
     // Newest voucher is the HEADLINE — what the single-voucher fields keep
     // reporting so a client that has not learned about `vouchers` yet is not
     // broken by a second row appearing. `vouchers` below is the truth.
-    const headline = parts.length > 0 ? (parts[parts.length - 1]?.voucher ?? null) : null;
+    const headline =
+      parts.length > 0 ? (parts[parts.length - 1]?.voucher ?? null) : null;
 
     return {
       headline,
@@ -1603,7 +1825,9 @@ export class PaymentVoucherControllerClass {
       dayReviews: [...dayStatus].map(([date, status]) => ({ date, status })),
       // The week's money, summed across agencies. The grid shows one week, so
       // its total has to be the week's, not the newest voucher's share of it.
-      net: parts.reduce((sum, p) => sum + Number(p.voucher.net ?? 0), 0).toFixed(2),
+      net: parts
+        .reduce((sum, p) => sum + Number(p.voucher.net ?? 0), 0)
+        .toFixed(2),
       vouchers: parts.map((p) => ({
         id: p.voucher.id,
         voucherNo: p.voucher.voucherNo,
@@ -1619,7 +1843,12 @@ export class PaymentVoucherControllerClass {
   async getMyCurrentWeek(req: Request, res: Response) {
     try {
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
       const { weekStart, weekEnd } = weekBounds();
       // READ the week; do not look for a DRAFT of it.
@@ -1643,7 +1872,11 @@ export class PaymentVoucherControllerClass {
       // voucher and merges after, so line statuses and day statuses can never
       // describe different states of the same voucher.
       const week = await this.mergeWeekVouchers(
-        await this.paymentVoucherRepository.listWeekVouchers(pr.id, weekStart, pr.userId),
+        await this.paymentVoucherRepository.listWeekVouchers(
+          pr.id,
+          weekStart,
+          pr.userId,
+        ),
       );
       res.status(200).json({
         success: true,
@@ -1687,7 +1920,11 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.getMyCurrentWeek] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1695,7 +1932,12 @@ export class PaymentVoucherControllerClass {
   async getMyLastWeek(req: Request, res: Response) {
     try {
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
       const { weekStart, weekEnd } = previousWeekBounds();
       // Every voucher for the week — see mergeWeekVouchers. The LAST-WEEK
@@ -1703,7 +1945,11 @@ export class PaymentVoucherControllerClass {
       // depends on its receipt's state, so this read carries the same per-voucher
       // statuses as this-week rather than guessing from `source`.
       const week = await this.mergeWeekVouchers(
-        await this.paymentVoucherRepository.listWeekVouchers(pr.id, weekStart, pr.userId),
+        await this.paymentVoucherRepository.listWeekVouchers(
+          pr.id,
+          weekStart,
+          pr.userId,
+        ),
       );
       res.status(200).json({
         success: true,
@@ -1742,7 +1988,11 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.getMyLastWeek] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1766,19 +2016,26 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = FinanceSignVoucherSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const id = paramId(req.params.id);
       const existing = await this.paymentVoucherRepository.getById(id);
-      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!existing)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
       // Cross-tenant reads 404 rather than 403 — never confirm a record exists.
       if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       if (existing.status !== 'pending_review') {
@@ -1794,9 +2051,11 @@ export class PaymentVoucherControllerClass {
       // app hides the pad on an in-progress week, but a hidden control is not a
       // rule — anything holding an agency token could still sign a live week.
       if (voucherWeekStillOpen(existing.weekEnd)) {
-        return res
-          .status(409)
-          .json({ success: false, message: WEEK_STILL_OPEN_MESSAGE, data: null });
+        return res.status(409).json({
+          success: false,
+          message: WEEK_STILL_OPEN_MESSAGE,
+          data: null,
+        });
       }
 
       const actor = getActor(req);
@@ -1807,10 +2066,19 @@ export class PaymentVoucherControllerClass {
         updatedBy: actor,
       });
 
-      res.status(200).json({ success: true, message: 'Voucher signed', data: voucher });
+      res
+        .status(200)
+        .json({ success: true, message: 'Voucher signed', data: voucher });
     } catch (error) {
-      logger.error('[PaymentVoucherController.financeSignVoucher] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.financeSignVoucher] Error:',
+        error,
+      );
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1836,14 +2104,22 @@ export class PaymentVoucherControllerClass {
   async getMyHistory(req: Request, res: Response) {
     try {
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
       const { weekStart: currentWeekStart } = weekBounds();
-      const vouchers = await this.paymentVoucherRepository.listHistoryForPr(pr.id, {
-        statuses: ['pending_review', 'sent', 'signed', 'paid', 'disputed'],
-        excludeWeekStart: currentWeekStart,
-        userId: pr.userId,
-      });
+      const vouchers = await this.paymentVoucherRepository.listHistoryForPr(
+        pr.id,
+        {
+          statuses: ['pending_review', 'sent', 'signed', 'paid', 'disputed'],
+          excludeWeekStart: currentWeekStart,
+          userId: pr.userId,
+        },
+      );
 
       // One receipt read per week, so a past line reports the state it actually
       // ended in. Without it a settled week would still badge a self-log
@@ -1851,7 +2127,9 @@ export class PaymentVoucherControllerClass {
       // cancelled subscription rendering "Paid".
       const weeks = [];
       for (const v of vouchers) {
-        const statuses = receiptInfoMap(await this.paymentVoucherRepository.listReceipts(v.id));
+        const statuses = receiptInfoMap(
+          await this.paymentVoucherRepository.listReceipts(v.id),
+        );
         weeks.push({
           voucherId: v.id,
           voucherNo: v.voucherNo,
@@ -1878,12 +2156,19 @@ export class PaymentVoucherControllerClass {
 
       // `data` is an ARRAY of weeks, so the key→URL join base rides at the
       // envelope's top level — additive, and no week payload is reshaped.
-      res
-        .status(200)
-        .json({ success: true, message: 'OK', data: weeks, r2PublicUrl: r2PublicBase() });
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: weeks,
+        r2PublicUrl: r2PublicBase(),
+      });
     } catch (error) {
       logger.error('[PaymentVoucherController.getMyHistory] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -1892,11 +2177,20 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = CreatePrReceiptLineSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
       const { weekStart, weekEnd } = weekBounds();
       const actor = getActor(req);
@@ -1908,7 +2202,9 @@ export class PaymentVoucherControllerClass {
       const lineDate = parsed.data.lineDate ?? todayIso();
       const outOfWeek = checkLineAgainstWeek(lineDate, { weekStart, weekEnd });
       if (outOfWeek) {
-        return res.status(400).json({ success: false, message: outOfWeek, data: null });
+        return res
+          .status(400)
+          .json({ success: false, message: outOfWeek, data: null });
       }
 
       // WHOSE money this is — from the shift, not from membership age. See
@@ -1939,22 +2235,25 @@ export class PaymentVoucherControllerClass {
         });
       }
 
-      const draftResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
-        prId: pr.id,
-        userId: pr.userId,
-        agencyId: moneyAgencyId,
-        prName: pr.name,
-        prIc: pr.icNo,
-        outlet: parsed.data.outlet ?? null,
-        weekStart,
-        weekEnd,
-        actor,
-      });
+      const draftResult =
+        await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
+          prId: pr.id,
+          userId: pr.userId,
+          agencyId: moneyAgencyId,
+          prName: pr.name,
+          prIc: pr.icNo,
+          outlet: parsed.data.outlet ?? null,
+          weekStart,
+          weekEnd,
+          actor,
+        });
       // 409, not 500: a closed week is a legitimate state the PR has to be told
       // about, not a fault. Refusing here is what stops a second voucher being
       // minted for a week that has already been sent.
       if (!draftResult.ok) {
-        return res.status(409).json({ success: false, message: draftResult.reason, data: null });
+        return res
+          .status(409)
+          .json({ success: false, message: draftResult.reason, data: null });
       }
       const draft = draftResult.voucher;
 
@@ -1962,9 +2261,15 @@ export class PaymentVoucherControllerClass {
       // check-out no-ops instead of double-paying.
       if (parsed.data.dedupeRef) {
         const full = await this.paymentVoucherRepository.getById(draft.id);
-        const dupe = full?.lines.find((l) => decodeRef(l.ref).dedupe === parsed.data.dedupeRef);
+        const dupe = full?.lines.find(
+          (l) => decodeRef(l.ref).dedupe === parsed.data.dedupeRef,
+        );
         if (dupe) {
-          return res.status(200).json({ success: true, message: 'Already sealed', data: toReceiptLineDTO(dupe) });
+          return res.status(200).json({
+            success: true,
+            message: 'Already sealed',
+            data: toReceiptLineDTO(dupe),
+          });
         }
       }
 
@@ -1987,16 +2292,29 @@ export class PaymentVoucherControllerClass {
         description: parsed.data.item,
         quantity: parsed.data.quantity ?? 1,
         amount: parsed.data.commission.toFixed(2),
-        ref: encodeRef(parsed.data.kind, parsed.data.source, parsed.data.sales, parsed.data.dedupeRef),
+        ref: encodeRef(
+          parsed.data.kind,
+          parsed.data.source,
+          parsed.data.sales,
+          parsed.data.dedupeRef,
+        ),
         proofPhotos,
         createdBy: actor,
         updatedBy: actor,
       });
-      res.status(201).json({ success: true, message: 'Logged', data: toReceiptLineDTO(line) });
+      res.status(201).json({
+        success: true,
+        message: 'Logged',
+        data: toReceiptLineDTO(line),
+      });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.addMyLine] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -2012,11 +2330,20 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = CreatePrReceiptSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
       const { weekStart, weekEnd } = weekBounds();
       const actor = getActor(req);
@@ -2029,7 +2356,9 @@ export class PaymentVoucherControllerClass {
       const lineDate = parsed.data.lineDate ?? todayIso();
       const outOfWeek = checkLineAgainstWeek(lineDate, { weekStart, weekEnd });
       if (outOfWeek) {
-        return res.status(400).json({ success: false, message: outOfWeek, data: null });
+        return res
+          .status(400)
+          .json({ success: false, message: outOfWeek, data: null });
       }
 
       // Same rule as `addMyLine`, and this path has the BETTER evidence: a scanned
@@ -2048,19 +2377,22 @@ export class PaymentVoucherControllerClass {
         });
       }
 
-      const draftResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
-        prId: pr.id,
-        userId: pr.userId,
-        agencyId: moneyAgencyId,
-        prName: pr.name,
-        prIc: pr.icNo,
-        outlet: parsed.data.outlet ?? null,
-        weekStart,
-        weekEnd,
-        actor,
-      });
+      const draftResult =
+        await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
+          prId: pr.id,
+          userId: pr.userId,
+          agencyId: moneyAgencyId,
+          prName: pr.name,
+          prIc: pr.icNo,
+          outlet: parsed.data.outlet ?? null,
+          weekStart,
+          weekEnd,
+          actor,
+        });
       if (!draftResult.ok) {
-        return res.status(409).json({ success: false, message: draftResult.reason, data: null });
+        return res
+          .status(409)
+          .json({ success: false, message: draftResult.reason, data: null });
       }
       const draft = draftResult.voucher;
 
@@ -2080,7 +2412,11 @@ export class PaymentVoucherControllerClass {
        * to be told to ignore. Nothing is removed here.
        */
       const replaced = parsed.data.replacesLineId
-        ? await this.replaceableReceiptFor(parsed.data.replacesLineId, pr, draft.id)
+        ? await this.replaceableReceiptFor(
+            parsed.data.replacesLineId,
+            pr,
+            draft.id,
+          )
         : null;
       if (replaced && !replaced.ok) {
         return res
@@ -2131,9 +2467,10 @@ export class PaymentVoucherControllerClass {
       // `listByIdsForPr` is the same PR-scoped reader `weekShifts` uses; an id
       // this PR does not own simply resolves to nothing.
       if (parsed.data.assignmentId) {
-        const owned = await this.shiftAssignmentRepository.listByIdsForPr(pr.id, [
-          parsed.data.assignmentId,
-        ]);
+        const owned = await this.shiftAssignmentRepository.listByIdsForPr(
+          pr.id,
+          [parsed.data.assignmentId],
+        );
         if (owned.length === 0) {
           return res.status(404).json({
             success: false,
@@ -2157,7 +2494,9 @@ export class PaymentVoucherControllerClass {
             // folder rather than being filed under a component it half belongs to.
             bucket: (() => {
               const buckets = new Set(
-                (parsed.data.items ?? []).map((it) => proofBucketForComponent(it.kind)),
+                (parsed.data.items ?? []).map((it) =>
+                  proofBucketForComponent(it.kind),
+                ),
               );
               return buckets.size === 1 ? [...buckets][0] : undefined;
             })(),
@@ -2170,42 +2509,43 @@ export class PaymentVoucherControllerClass {
       // were logged, so the earning lands in the current shift/week PV even
       // when the paper is dated differently. `lineDate` is resolved and
       // week-checked above, before the draft is touched.
-      const { receipt, lines } = await this.paymentVoucherRepository.createReceiptWithLines(
-        {
-          voucherId: draft.id,
-          shiftAssignmentId: parsed.data.assignmentId ?? null,
-          orderNo: parsed.data.orderNo ?? null,
-          source: parsed.data.source,
-          receiptDate: parsed.data.receiptDate ?? null,
-          receiptTime: parsed.data.receiptTime ?? null,
-          note: parsed.data.note ?? null,
-          proofPhotos,
-          // Only a MANUAL self-log waits on the agency (owner's decision #3):
-          // an OCR scan and a check-in seal were not self-declared, so holding
-          // them would block a week on evidence nobody disputes. The PR can
-          // still contest either once the voucher is issued.
-          status: parsed.data.source === 'manual' ? 'pending' : 'approved',
-          createdBy: actor,
-          updatedBy: actor,
-        },
-        parsed.data.items.map((item, i) => ({
-          lineDate,
-          outlet: parsed.data.outlet,
-          description: item.item,
-          quantity: item.quantity,
-          amount: item.commission.toFixed(2),
-          ref: encodeRef(
-            item.kind,
-            parsed.data.source,
-            item.sales,
-            `${parsed.data.orderNo ?? ''}:${i}`,
-            item.category,
-          ),
-          proofPhotos: i === 0 ? proofPhotos : null,
-          createdBy: actor,
-          updatedBy: actor,
-        })),
-      );
+      const { receipt, lines } =
+        await this.paymentVoucherRepository.createReceiptWithLines(
+          {
+            voucherId: draft.id,
+            shiftAssignmentId: parsed.data.assignmentId ?? null,
+            orderNo: parsed.data.orderNo ?? null,
+            source: parsed.data.source,
+            receiptDate: parsed.data.receiptDate ?? null,
+            receiptTime: parsed.data.receiptTime ?? null,
+            note: parsed.data.note ?? null,
+            proofPhotos,
+            // Only a MANUAL self-log waits on the agency (owner's decision #3):
+            // an OCR scan and a check-in seal were not self-declared, so holding
+            // them would block a week on evidence nobody disputes. The PR can
+            // still contest either once the voucher is issued.
+            status: parsed.data.source === 'manual' ? 'pending' : 'approved',
+            createdBy: actor,
+            updatedBy: actor,
+          },
+          parsed.data.items.map((item, i) => ({
+            lineDate,
+            outlet: parsed.data.outlet,
+            description: item.item,
+            quantity: item.quantity,
+            amount: item.commission.toFixed(2),
+            ref: encodeRef(
+              item.kind,
+              parsed.data.source,
+              item.sales,
+              `${parsed.data.orderNo ?? ''}:${i}`,
+              item.category,
+            ),
+            proofPhotos: i === 0 ? proofPhotos : null,
+            createdBy: actor,
+            updatedBy: actor,
+          })),
+        );
 
       /*
        * ONLY NOW does the paper this re-scan replaces go.
@@ -2242,18 +2582,20 @@ export class PaymentVoucherControllerClass {
           for (const old of replaced.siblings) {
             await this.paymentVoucherRepository.deleteLine(old.id);
           }
-          await this.paymentVoucherRepository.deleteReceipt(replaced.receipt.id);
-        // Never a key the REPLACEMENT now references: a client that carried a
-        // kept photo forward would otherwise have its own live evidence deleted
-        // out from under it.
-        const stillReferenced = new Set(proofPhotos ?? []);
-        await deleteProofPhotoKeys(
-          req.user!.id,
-          [
-            ...replaced.siblings.flatMap((l) => l.proofPhotos ?? []),
-            ...(replaced.receipt.proofPhotos ?? []),
-          ].filter((p) => !stillReferenced.has(p)),
-        );
+          await this.paymentVoucherRepository.deleteReceipt(
+            replaced.receipt.id,
+          );
+          // Never a key the REPLACEMENT now references: a client that carried a
+          // kept photo forward would otherwise have its own live evidence deleted
+          // out from under it.
+          const stillReferenced = new Set(proofPhotos ?? []);
+          await deleteProofPhotoKeys(
+            req.user!.id,
+            [
+              ...replaced.siblings.flatMap((l) => l.proofPhotos ?? []),
+              ...(replaced.receipt.proofPhotos ?? []),
+            ].filter((p) => !stillReferenced.has(p)),
+          );
           // Recompute-never-increment, and it must run AFTER the removal or it
           // would bake in the transient double.
           if (oldSaleKey) await recomputeShiftSale(oldSaleKey, actor);
@@ -2289,13 +2631,19 @@ export class PaymentVoucherControllerClass {
           receiptTime: receipt.receiptTime,
           source: receipt.source,
           status: receipt.status,
-          lines: lines.map((l) => toReceiptLineDTO(l, receiptInfoMap([receipt]))),
+          lines: lines.map((l) =>
+            toReceiptLineDTO(l, receiptInfoMap([receipt])),
+          ),
         },
       });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.addMyReceipt] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -2313,7 +2661,11 @@ export class PaymentVoucherControllerClass {
       const roles = await this.authRepository.getRolesForUserIds([user.id]);
       const isAdmin = roles.some((r) => r.roleName === 'admin');
       let agencyId: string | null = null;
-      if (isAdmin && typeof req.query.agencyId === 'string' && req.query.agencyId) {
+      if (
+        isAdmin &&
+        typeof req.query.agencyId === 'string' &&
+        req.query.agencyId
+      ) {
         agencyId = req.query.agencyId;
       } else {
         // A SECOND copy of the same fallback. `listAgencyReceipts` does not go
@@ -2321,19 +2673,30 @@ export class PaymentVoucherControllerClass {
         // found by searching for the pattern, not the function. It serves the
         // whole OCR receipt feed for every PR of the agency: order numbers,
         // printed date and time, proof photos, per-line amounts.
-        const memberships = await this.agencyMemberRepository.listByUser(user.id);
+        const memberships = await this.agencyMemberRepository.listByUser(
+          user.id,
+        );
         agencyId = activeAgencyId(memberships);
       }
       if (!agencyId) {
-        return res
-          .status(403)
-          .json({ success: false, message: 'No agency associated with this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No agency associated with this account',
+          data: null,
+        });
       }
 
-      const rows = await this.paymentVoucherRepository.listReceiptsForAgency(agencyId, {
-        fromDate: typeof req.query.fromDate === 'string' ? req.query.fromDate : undefined,
-        toDate: typeof req.query.toDate === 'string' ? req.query.toDate : undefined,
-      });
+      const rows = await this.paymentVoucherRepository.listReceiptsForAgency(
+        agencyId,
+        {
+          fromDate:
+            typeof req.query.fromDate === 'string'
+              ? req.query.fromDate
+              : undefined,
+          toDate:
+            typeof req.query.toDate === 'string' ? req.query.toDate : undefined,
+        },
+      );
 
       // One batched lookup for the whole feed, not one per receipt. Scoped to
       // the PRs on these rows — `listByIdsForPrs` keeps the security boundary,
@@ -2342,7 +2705,11 @@ export class PaymentVoucherControllerClass {
       const receiptShiftById = new Map(
         (
           await this.shiftAssignmentRepository.listByIdsForPrs(
-            [...new Set(rows.map((r) => r.prId).filter((id): id is string => !!id))],
+            [
+              ...new Set(
+                rows.map((r) => r.prId).filter((id): id is string => !!id),
+              ),
+            ],
             [
               ...new Set(
                 rows
@@ -2402,7 +2769,8 @@ export class PaymentVoucherControllerClass {
           // assignment, so there is nothing to disambiguate. Null when the
           // receipt has no assignment (self-logged before the shift was known)
           // or when the id does not resolve to THIS PR, which fails closed.
-          shift: receiptShiftById.get(r.receipt.shiftAssignmentId ?? '') ?? null,
+          shift:
+            receiptShiftById.get(r.receipt.shiftAssignmentId ?? '') ?? null,
           lines: r.lines.map((l) => ({
             id: l.id,
             lineDate: l.lineDate,
@@ -2421,8 +2789,15 @@ export class PaymentVoucherControllerClass {
         })),
       });
     } catch (error) {
-      logger.error('[PaymentVoucherController.listAgencyReceipts] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.listAgencyReceipts] Error:',
+        error,
+      );
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -2442,19 +2817,27 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = ReviewReceiptSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const receiptId = paramId(req.params.receiptId);
-      const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
-      if (!owned) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const owned =
+        await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+      if (!owned)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
       // Cross-tenant reads 404 rather than 403 — never confirm a record exists.
       if (!scope.isAdmin && owned.voucher.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       if (owned.receipt.status === 'verified') {
@@ -2468,7 +2851,8 @@ export class PaymentVoucherControllerClass {
       if (owned.voucher.prSignedAt) {
         return res.status(409).json({
           success: false,
-          message: 'This voucher is already signed by the PR — receipt review happens before it is sent.',
+          message:
+            'This voucher is already signed by the PR — receipt review happens before it is sent.',
           data: null,
         });
       }
@@ -2479,9 +2863,11 @@ export class PaymentVoucherControllerClass {
         getActor(req),
       );
       if (!receipt) {
-        return res
-          .status(500)
-          .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
       }
 
       // THE gate that moves money onto the outlet's screen. Only 'approved' and
@@ -2491,14 +2877,19 @@ export class PaymentVoucherControllerClass {
 
       return res.status(200).json({
         success: true,
-        message: parsed.data.status === 'approved' ? 'Receipt approved' : 'Approval withdrawn',
+        message:
+          parsed.data.status === 'approved'
+            ? 'Receipt approved'
+            : 'Approval withdrawn',
         data: receipt,
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.reviewReceipt] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -2523,19 +2914,27 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = AgencyEditReceiptLineSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const receiptId = paramId(req.params.receiptId);
       const lineId = paramId(req.params.lineId);
-      const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
-      if (!owned) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const owned =
+        await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+      if (!owned)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && owned.voucher.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (owned.receipt.status === 'verified') {
         return res.status(409).json({
@@ -2547,31 +2946,46 @@ export class PaymentVoucherControllerClass {
       if (owned.voucher.prSignedAt) {
         return res.status(409).json({
           success: false,
-          message: 'This voucher is already signed by the PR — correct it before it is sent.',
+          message:
+            'This voucher is already signed by the PR — correct it before it is sent.',
           data: null,
         });
       }
 
       // The line must belong to THIS receipt. Without the check, a valid receipt
       // id would authorize editing any line on any voucher in the agency.
-      const line = await this.paymentVoucherRepository.getLineWithVoucher(lineId);
+      const line =
+        await this.paymentVoucherRepository.getLineWithVoucher(lineId);
       if (!line || line.line.receiptId !== receiptId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const actor = getActor(req);
       const updated = await this.paymentVoucherRepository.updateLine(lineId, {
-        ...(parsed.data.quantity !== undefined ? { quantity: parsed.data.quantity } : {}),
-        ...(parsed.data.amount !== undefined ? { amount: parsed.data.amount.toFixed(2) } : {}),
+        ...(parsed.data.quantity !== undefined
+          ? { quantity: parsed.data.quantity }
+          : {}),
+        ...(parsed.data.amount !== undefined
+          ? { amount: parsed.data.amount.toFixed(2) }
+          : {}),
         updatedBy: actor,
       });
-      if (!updated) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!updated)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // See the docstring: the approval described the old figure, and nothing
       // stored would let a reader notice that later.
       const receipt =
         owned.receipt.status === 'approved'
-          ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
+          ? await this.paymentVoucherRepository.setReceiptStatus(
+              receiptId,
+              'pending',
+              actor,
+            )
           : owned.receipt;
 
       // AFTER the drop back to pending: a corrected figure the agency has not
@@ -2586,15 +3000,20 @@ export class PaymentVoucherControllerClass {
             : 'Line corrected',
         data: {
           receipt,
-          line: toReceiptLineDTO(updated, receiptInfoMap(receipt ? [receipt] : [])),
+          line: toReceiptLineDTO(
+            updated,
+            receiptInfoMap(receipt ? [receipt] : []),
+          ),
         },
       });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.editReceiptLine] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -2614,16 +3033,24 @@ export class PaymentVoucherControllerClass {
     req: Request,
     res: Response,
     receiptId: string,
-  ): Promise<{ receipt: PaymentVoucherReceiptType; voucher: PaymentVoucherType } | null> {
-    const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+  ): Promise<{
+    receipt: PaymentVoucherReceiptType;
+    voucher: PaymentVoucherType;
+  } | null> {
+    const owned =
+      await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
     if (!owned) {
-      res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      res
+        .status(404)
+        .json({ success: false, message: Error.NOT_FOUND, data: null });
       return null;
     }
 
     const scope = await this.resolveScope(req);
     if (!scope.isAdmin && owned.voucher.agencyId !== scope.agencyId) {
-      res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      res
+        .status(404)
+        .json({ success: false, message: Error.NOT_FOUND, data: null });
       return null;
     }
     if (owned.receipt.status === 'verified') {
@@ -2637,7 +3064,8 @@ export class PaymentVoucherControllerClass {
     if (owned.voucher.prSignedAt) {
       res.status(409).json({
         success: false,
-        message: 'This voucher is already signed by the PR — correct it before it is sent.',
+        message:
+          'This voucher is already signed by the PR — correct it before it is sent.',
         data: null,
       });
       return null;
@@ -2671,25 +3099,34 @@ export class PaymentVoucherControllerClass {
   private async catalogueForReceipt(
     receipt: PaymentVoucherReceiptType,
     receiptLines: PaymentVoucherLineType[],
-  ): Promise<{ outletId: string; outlet: string; items: ResolvedDrinkItem[] } | null> {
+  ): Promise<{
+    outletId: string;
+    outlet: string;
+    items: ResolvedDrinkItem[];
+  } | null> {
     const assignmentId =
       receipt.shiftAssignmentId ??
       receiptLines
-        .map((l) => asAssignmentId(decodeRef(l.ref).dedupe) ?? asAssignmentId(l.ref))
+        .map(
+          (l) =>
+            asAssignmentId(decodeRef(l.ref).dedupe) ?? asAssignmentId(l.ref),
+        )
         .find((id): id is string => !!id) ??
       null;
     if (!assignmentId) return null;
 
-    const outlet = await this.shiftAssignmentRepository.getOutletForAssignment(assignmentId);
+    const outlet =
+      await this.shiftAssignmentRepository.getOutletForAssignment(assignmentId);
     if (!outlet) return null;
 
     // The same reader the PR's phone already gets its self-log menu from, so the
     // list the agency is held to is the list the outlet published — an outlet
     // with no workspace or an empty menu simply has no entry, which is the
     // "nothing configured" signal the caller must report honestly.
-    const menus = await this.shiftAssignmentRepository.resolveDrinkMenusForOutlets([
-      outlet.outletId,
-    ]);
+    const menus =
+      await this.shiftAssignmentRepository.resolveDrinkMenusForOutlets([
+        outlet.outletId,
+      ]);
     return {
       outletId: outlet.outletId,
       outlet: outlet.outletName,
@@ -2715,21 +3152,33 @@ export class PaymentVoucherControllerClass {
   async getReceiptCatalogue(req: Request, res: Response) {
     try {
       const receiptId = paramId(req.params.receiptId);
-      const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+      const owned =
+        await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
       if (!owned) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && owned.voucher.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // Same inputs as the add path takes, so the list shown is the list the
       // write will be judged against — a read that resolved a different outlet
       // would offer items the add then refuses.
-      const voucher = await this.paymentVoucherRepository.getById(owned.voucher.id);
-      const receiptLines = (voucher?.lines ?? []).filter((l) => l.receiptId === receiptId);
-      const catalogue = await this.catalogueForReceipt(owned.receipt, receiptLines);
+      const voucher = await this.paymentVoucherRepository.getById(
+        owned.voucher.id,
+      );
+      const receiptLines = (voucher?.lines ?? []).filter(
+        (l) => l.receiptId === receiptId,
+      );
+      const catalogue = await this.catalogueForReceipt(
+        owned.receipt,
+        receiptLines,
+      );
       if (!catalogue) {
         return res.status(200).json({
           success: true,
@@ -2771,10 +3220,15 @@ export class PaymentVoucherControllerClass {
         },
       });
     } catch (error) {
-      logger.error('[PaymentVoucherController.getReceiptCatalogue] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.getReceiptCatalogue] Error:',
+        error,
+      );
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -2799,9 +3253,11 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = AgencyAddReceiptLineSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const receiptId = paramId(req.params.receiptId);
@@ -2812,8 +3268,12 @@ export class PaymentVoucherControllerClass {
       // sits on and the outlet it was earned at, so a line added to it inherits
       // both rather than inventing them. A receipt whose lines disagree with each
       // other about the day is what makes a day review stop describing a receipt.
-      const voucher = await this.paymentVoucherRepository.getById(owned.voucher.id);
-      const siblings = (voucher?.lines ?? []).filter((l) => l.receiptId === receiptId);
+      const voucher = await this.paymentVoucherRepository.getById(
+        owned.voucher.id,
+      );
+      const siblings = (voucher?.lines ?? []).filter(
+        (l) => l.receiptId === receiptId,
+      );
 
       const lineDate =
         parsed.data.lineDate ??
@@ -2835,7 +3295,9 @@ export class PaymentVoucherControllerClass {
             })
           : null;
       if (outOfWeek) {
-        return res.status(400).json({ success: false, message: outOfWeek, data: null });
+        return res
+          .status(400)
+          .json({ success: false, message: outOfWeek, data: null });
       }
 
       // THE ITEM MUST BE ONE THE OUTLET ACTUALLY SELLS (owner's rule, 4 Aug
@@ -2870,7 +3332,9 @@ export class PaymentVoucherControllerClass {
       // catalogue's own spelling, so the line and the outlet's list can never
       // drift into two names for one item.
       const typed = parsed.data.description.trim();
-      const listed = offered.find((i) => i.name.trim().toLowerCase() === typed.toLowerCase());
+      const listed = offered.find(
+        (i) => i.name.trim().toLowerCase() === typed.toLowerCase(),
+      );
       if (!listed) {
         return res.status(400).json({
           success: false,
@@ -2888,35 +3352,47 @@ export class PaymentVoucherControllerClass {
       const usedSlots = siblings
         .map((l) => Number(decodeRef(l.ref).dedupe.split(':').pop()))
         .filter((n) => Number.isFinite(n));
-      const nextSlot = usedSlots.length > 0 ? Math.max(...usedSlots) + 1 : siblings.length;
-      const line = await this.paymentVoucherRepository.addLine(owned.voucher.id, {
-        receiptId,
-        lineDate,
-        outlet: siblings.find((l) => l.outlet)?.outlet ?? owned.voucher.outlet,
-        // The CATALOGUE's spelling, not the typed one — see the check above.
-        description: listed.name,
-        quantity: parsed.data.quantity,
-        amount: parsed.data.amount.toFixed(2),
-        // Gross sale 0: the agency states a COMMISSION, and the paper's own
-        // printed total is on the photo rather than in this form. The dedupe slot
-        // follows the sibling lines' `<order no>:<n>` shape and is sliced because
-        // `ref` is varchar(100) — an order number may be 100 on its own.
-        ref: encodeRef(
-          parsed.data.kind,
-          'manual',
-          0,
-          `${owned.receipt.orderNo || owned.receipt.receiptNo}:${nextSlot}`.slice(0, 40),
-          parsed.data.kind === 'tips' ? 'tip' : 'drink',
-        ),
-        createdBy: actor,
-        updatedBy: actor,
-      });
+      const nextSlot =
+        usedSlots.length > 0 ? Math.max(...usedSlots) + 1 : siblings.length;
+      const line = await this.paymentVoucherRepository.addLine(
+        owned.voucher.id,
+        {
+          receiptId,
+          lineDate,
+          outlet:
+            siblings.find((l) => l.outlet)?.outlet ?? owned.voucher.outlet,
+          // The CATALOGUE's spelling, not the typed one — see the check above.
+          description: listed.name,
+          quantity: parsed.data.quantity,
+          amount: parsed.data.amount.toFixed(2),
+          // Gross sale 0: the agency states a COMMISSION, and the paper's own
+          // printed total is on the photo rather than in this form. The dedupe slot
+          // follows the sibling lines' `<order no>:<n>` shape and is sliced because
+          // `ref` is varchar(100) — an order number may be 100 on its own.
+          ref: encodeRef(
+            parsed.data.kind,
+            'manual',
+            0,
+            `${owned.receipt.orderNo || owned.receipt.receiptNo}:${nextSlot}`.slice(
+              0,
+              40,
+            ),
+            parsed.data.kind === 'tips' ? 'tip' : 'drink',
+          ),
+          createdBy: actor,
+          updatedBy: actor,
+        },
+      );
 
       // See `editReceiptLine`: the approval described a receipt without this line
       // on it, and nothing stored would let a reader notice that later.
       const receipt =
         owned.receipt.status === 'approved'
-          ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
+          ? await this.paymentVoucherRepository.setReceiptStatus(
+              receiptId,
+              'pending',
+              actor,
+            )
           : owned.receipt;
 
       // AFTER the drop back to pending, never before: an approved receipt that
@@ -2932,15 +3408,20 @@ export class PaymentVoucherControllerClass {
             : 'Line added',
         data: {
           receipt,
-          line: toReceiptLineDTO(line, receiptInfoMap(receipt ? [receipt] : [])),
+          line: toReceiptLineDTO(
+            line,
+            receiptInfoMap(receipt ? [receipt] : []),
+          ),
         },
       });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.addReceiptLine] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -2963,17 +3444,23 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = AgencyEditReceiptSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const receiptId = paramId(req.params.receiptId);
       const owned = await this.receiptOpenForCorrection(req, res, receiptId);
       if (!owned) return;
 
-      const voucher = await this.paymentVoucherRepository.getById(owned.voucher.id);
-      const siblings = (voucher?.lines ?? []).filter((l) => l.receiptId === receiptId);
+      const voucher = await this.paymentVoucherRepository.getById(
+        owned.voucher.id,
+      );
+      const siblings = (voucher?.lines ?? []).filter(
+        (l) => l.receiptId === receiptId,
+      );
 
       const patch: {
         orderNo?: string | null;
@@ -2982,7 +3469,8 @@ export class PaymentVoucherControllerClass {
       } = {};
       // Absent leaves the number alone; empty or null CLEARS it — a number OCR
       // invented off a blurred photo has to be removable, not just replaceable.
-      if (parsed.data.orderNo !== undefined) patch.orderNo = parsed.data.orderNo?.trim() || null;
+      if (parsed.data.orderNo !== undefined)
+        patch.orderNo = parsed.data.orderNo?.trim() || null;
       // The printed clock time, same absent/clear rule as the order number and
       // for the same reason: OCR misreads it off a photograph (owner, 4 Aug).
       // It moves NO money — a line's day is `line_date`, never this — so unlike
@@ -3002,7 +3490,9 @@ export class PaymentVoucherControllerClass {
               })
             : null;
         if (outOfWeek) {
-          return res.status(400).json({ success: false, message: outOfWeek, data: null });
+          return res
+            .status(400)
+            .json({ success: false, message: outOfWeek, data: null });
         }
         patch.receiptDate = parsed.data.receiptDate;
       }
@@ -3021,8 +3511,14 @@ export class PaymentVoucherControllerClass {
       // to stop walked straight through the date field instead.
       const effectiveOrderNo =
         patch.orderNo !== undefined ? patch.orderNo : owned.receipt.orderNo;
-      if (effectiveOrderNo && (patch.orderNo !== undefined || patch.receiptDate !== undefined)) {
-        const day = patch.receiptDate ?? siblings.find((l) => l.lineDate)?.lineDate ?? null;
+      if (
+        effectiveOrderNo &&
+        (patch.orderNo !== undefined || patch.receiptDate !== undefined)
+      ) {
+        const day =
+          patch.receiptDate ??
+          siblings.find((l) => l.lineDate)?.lineDate ??
+          null;
         const clash = day
           ? await this.paymentVoucherRepository.findReceiptByOrderNo(
               owned.voucher.id,
@@ -3043,13 +3539,24 @@ export class PaymentVoucherControllerClass {
       }
 
       const actor = getActor(req);
-      const updated = await this.paymentVoucherRepository.updateReceiptHeader(receiptId, patch, actor);
-      if (!updated) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const updated = await this.paymentVoucherRepository.updateReceiptHeader(
+        receiptId,
+        patch,
+        actor,
+      );
+      if (!updated)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // Status LAST, so the row returned already carries the corrected facts.
       const receipt =
         owned.receipt.status === 'approved'
-          ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
+          ? await this.paymentVoucherRepository.setReceiptStatus(
+              receiptId,
+              'pending',
+              actor,
+            )
           : updated.receipt;
 
       // A header edit can drop an approved receipt back to pending (above), which
@@ -3061,7 +3568,9 @@ export class PaymentVoucherControllerClass {
       // The moved lines ride back for the same reason the day review returns its
       // receipts: the card that shows them must re-render from the response that
       // moved them, never from a second read that could describe another moment.
-      const after = await this.paymentVoucherRepository.getById(owned.voucher.id);
+      const after = await this.paymentVoucherRepository.getById(
+        owned.voucher.id,
+      );
       const info = receiptInfoMap(receipt ? [receipt] : []);
       return res.status(200).json({
         success: true,
@@ -3079,9 +3588,11 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.editReceipt] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3090,18 +3601,34 @@ export class PaymentVoucherControllerClass {
       const lineId = paramId(req.params.lineId);
       const parsed = UpdatePrReceiptLineSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
-      const owned = await this.paymentVoucherRepository.getLineWithVoucher(lineId);
+      const owned =
+        await this.paymentVoucherRepository.getLineWithVoucher(lineId);
       if (!owned || !this.ownsMineVoucher(owned.voucher, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (owned.voucher.status !== 'pending_review') {
-        return res.status(400).json({ success: false, message: 'This week is already closed for edits', data: null });
+        return res.status(400).json({
+          success: false,
+          message: 'This week is already closed for edits',
+          data: null,
+        });
       }
       // Same rule as deleteMyLine, and for the same reason: editing a RM 250
       // cancellation fee down to RM 0 removes the money just as effectively as
@@ -3137,8 +3664,10 @@ export class PaymentVoucherControllerClass {
         updatedBy: string;
       } = { updatedBy: getActor(req) };
       if (parsed.data.item !== undefined) patch.description = parsed.data.item;
-      if (parsed.data.quantity !== undefined) patch.quantity = parsed.data.quantity;
-      if (parsed.data.commission !== undefined) patch.amount = parsed.data.commission.toFixed(2);
+      if (parsed.data.quantity !== undefined)
+        patch.quantity = parsed.data.quantity;
+      if (parsed.data.commission !== undefined)
+        patch.amount = parsed.data.commission.toFixed(2);
       if (parsed.data.lineDate !== undefined) {
         // THE THIRD DOOR. `addMyLine` and `addMyReceipt` now refuse an
         // out-of-week date on the way in — but this endpoint could move an
@@ -3158,7 +3687,9 @@ export class PaymentVoucherControllerClass {
               })
             : null;
         if (outOfWeek) {
-          return res.status(400).json({ success: false, message: outOfWeek, data: null });
+          return res
+            .status(400)
+            .json({ success: false, message: outOfWeek, data: null });
         }
         patch.lineDate = parsed.data.lineDate;
       }
@@ -3192,8 +3723,14 @@ export class PaymentVoucherControllerClass {
         cur.category || undefined,
       );
 
-      const line = await this.paymentVoucherRepository.updateLine(lineId, patch);
-      if (!line) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const line = await this.paymentVoucherRepository.updateLine(
+        lineId,
+        patch,
+      );
+      if (!line)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       // A re-snapped picture must follow the paper: keep the parent receipt's
       // photo in step with the line the app displays and the agency verifies.
       // The CONVERTED array (R2 keys), never the raw payload — the two rows
@@ -3227,13 +3764,19 @@ export class PaymentVoucherControllerClass {
       // revenue. Recompute re-derives the whole (shift, PR) total, so no
       // compensating write is needed for the old figure.
       await recomputeShiftSaleForLine(lineId, getActor(req));
-      res
-        .status(200)
-        .json({ success: true, message: 'Updated', data: toReceiptLineDTO(line, statuses) });
+      res.status(200).json({
+        success: true,
+        message: 'Updated',
+        data: toReceiptLineDTO(line, statuses),
+      });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.updateMyLine] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3242,14 +3785,26 @@ export class PaymentVoucherControllerClass {
     try {
       const lineId = paramId(req.params.lineId);
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
-      const owned = await this.paymentVoucherRepository.getLineWithVoucher(lineId);
+      const owned =
+        await this.paymentVoucherRepository.getLineWithVoucher(lineId);
       if (!owned || !this.ownsMineVoucher(owned.voucher, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (owned.voucher.status !== 'pending_review') {
-        return res.status(400).json({ success: false, message: 'This week is already closed for edits', data: null });
+        return res.status(400).json({
+          success: false,
+          message: 'This week is already closed for edits',
+          data: null,
+        });
       }
       /*
        * A DEDUCTION is not the PR's line to remove.
@@ -3309,14 +3864,18 @@ export class PaymentVoucherControllerClass {
         if (left === 0) {
           removedPhotos.push(...(owned.line.proofPhotos ?? []));
           removedPhotos.push(...(rcpt?.receipt.proofPhotos ?? []));
-          await this.paymentVoucherRepository.deleteReceipt(owned.line.receiptId);
+          await this.paymentVoucherRepository.deleteReceipt(
+            owned.line.receiptId,
+          );
         } else {
           // The receipt SURVIVES, and its photo is stored once and inherited
           // by every sibling line — so a key the receipt still references is
           // live evidence, not garbage. Only keys it does not carry may go.
           const stillReferenced = new Set(rcpt?.receipt.proofPhotos ?? []);
           removedPhotos.push(
-            ...(owned.line.proofPhotos ?? []).filter((p) => !stillReferenced.has(p)),
+            ...(owned.line.proofPhotos ?? []).filter(
+              (p) => !stillReferenced.has(p),
+            ),
           );
         }
       } else {
@@ -3330,7 +3889,11 @@ export class PaymentVoucherControllerClass {
       res.status(200).json({ success: true, message: 'Removed', data: null });
     } catch (error) {
       logger.error('[PaymentVoucherController.deleteMyLine] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3359,14 +3922,19 @@ export class PaymentVoucherControllerClass {
     try {
       const pr = await this.resolvePr(req);
       if (!pr) {
-        return res
-          .status(403)
-          .json({ success: false, message: 'No PR profile for this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
       }
       const receiptId = paramId(req.params.receiptId);
-      const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+      const owned =
+        await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
       if (!owned || !this.ownsMineVoucher(owned.voucher, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (owned.voucher.status !== 'pending_review') {
         return res.status(400).json({
@@ -3385,8 +3953,12 @@ export class PaymentVoucherControllerClass {
 
       // Read from the VOUCHER, not from what the phone could see — the client
       // sends one receipt id and the server decides what belongs to it.
-      const voucher = await this.paymentVoucherRepository.getById(owned.voucher.id);
-      const lines = (voucher?.lines ?? []).filter((l) => l.receiptId === receiptId);
+      const voucher = await this.paymentVoucherRepository.getById(
+        owned.voucher.id,
+      );
+      const lines = (voucher?.lines ?? []).filter(
+        (l) => l.receiptId === receiptId,
+      );
 
       // A cancellation fee is the agency's charge, not a line the PR may drop —
       // the same refusal `deleteMyLine` makes, applied before anything is
@@ -3401,7 +3973,9 @@ export class PaymentVoucherControllerClass {
       }
 
       // Resolved BEFORE the deletes — afterwards no line is left to resolve from.
-      const saleKey = lines[0] ? await resolveShiftPrForLine(lines[0].id) : null;
+      const saleKey = lines[0]
+        ? await resolveShiftPrForLine(lines[0].id)
+        : null;
       for (const line of lines) {
         await this.paymentVoucherRepository.deleteLine(line.id);
       }
@@ -3413,10 +3987,16 @@ export class PaymentVoucherControllerClass {
       // Recompute-never-increment, and only once the removal is complete.
       if (saleKey) await recomputeShiftSale(saleKey, getActor(req));
 
-      res.status(200).json({ success: true, message: 'Receipt removed', data: null });
+      res
+        .status(200)
+        .json({ success: true, message: 'Receipt removed', data: null });
     } catch (error) {
       logger.error('[PaymentVoucherController.deleteMyReceipt] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3470,9 +4050,11 @@ export class PaymentVoucherControllerClass {
     try {
       const pr = await this.resolvePr(req);
       if (!pr) {
-        return res
-          .status(403)
-          .json({ success: false, message: 'No PR profile for this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
       }
 
       const voucherId = paramId(req.params.voucherId);
@@ -3480,7 +4062,9 @@ export class PaymentVoucherControllerClass {
       // Same rule as the dispute routes: someone else's voucher is a 404, never
       // a 403, so the response does not confirm the id exists.
       if (!existing || !this.ownsMineVoucher(existing, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // Idempotent. A double tap, or a retry after a dropped response, must not
@@ -3533,7 +4117,9 @@ export class PaymentVoucherControllerClass {
         updatedBy: actor,
       });
       if (!signed) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // ARCHIVE the signed document to R2 at a DETERMINISTIC key — no DB
@@ -3543,7 +4129,8 @@ export class PaymentVoucherControllerClass {
       // signature is already recorded above, and a storage hiccup must not
       // un-sign a voucher or fail the request.
       try {
-        const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+        const bundle =
+          await this.paymentVoucherRepository.getExportBundle(voucherId);
         if (bundle) {
           await archiveVoucherPdf({
             // The voucher's OWN payee, not whoever is signing. They are the
@@ -3574,9 +4161,11 @@ export class PaymentVoucherControllerClass {
         .json({ success: true, message: 'Voucher signed', data: signed });
     } catch (error) {
       logger.error('[PaymentVoucherController.signMyVoucher] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3590,24 +4179,34 @@ export class PaymentVoucherControllerClass {
     try {
       const pr = await this.resolvePr(req);
       if (!pr) {
-        return res
-          .status(403)
-          .json({ success: false, message: 'No PR profile for this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
       }
 
       const voucherId = paramId(req.params.voucherId);
-      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      const bundle =
+        await this.paymentVoucherRepository.getExportBundle(voucherId);
       // Someone else's voucher is a 404, never a 403 — same rule as sign/dispute.
       if (!bundle || !this.ownsMineVoucher(bundle.voucher, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       return await this.sendVoucherExcel(res, bundle);
     } catch (error) {
-      logger.error('[PaymentVoucherController.exportMyVoucherExcel] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.exportMyVoucherExcel] Error:',
+        error,
+      );
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3641,15 +4240,20 @@ export class PaymentVoucherControllerClass {
     try {
       const pr = await this.resolvePr(req);
       if (!pr) {
-        return res
-          .status(403)
-          .json({ success: false, message: 'No PR profile for this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
       }
 
       const voucherId = paramId(req.params.voucherId);
-      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      const bundle =
+        await this.paymentVoucherRepository.getExportBundle(voucherId);
       if (!bundle || !this.ownsMineVoucher(bundle.voucher, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const pdf = await buildVoucherPdf({
@@ -3663,10 +4267,15 @@ export class PaymentVoucherControllerClass {
       res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
       return res.status(200).send(pdf);
     } catch (error) {
-      logger.error('[PaymentVoucherController.exportMyVoucherPdf] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.exportMyVoucherPdf] Error:',
+        error,
+      );
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3680,15 +4289,19 @@ export class PaymentVoucherControllerClass {
     try {
       const pr = await this.resolvePr(req);
       if (!pr) {
-        return res
-          .status(403)
-          .json({ success: false, message: 'No PR profile for this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
       }
 
       const voucherId = paramId(req.params.voucherId);
       const existing = await this.paymentVoucherRepository.getById(voucherId);
       if (!existing || !this.ownsMineVoucher(existing, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const ticket = issueExportTicket(voucherId);
@@ -3703,10 +4316,15 @@ export class PaymentVoucherControllerClass {
         },
       });
     } catch (error) {
-      logger.error('[PaymentVoucherController.createMyVoucherExportTicket] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.createMyVoucherExportTicket] Error:',
+        error,
+      );
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3717,18 +4335,28 @@ export class PaymentVoucherControllerClass {
       if (!voucherId) {
         return res
           .status(404)
-          .send('This download link has expired — open the app and tap Excel again.');
+          .send(
+            'This download link has expired — open the app and tap Excel again.',
+          );
       }
-      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      const bundle =
+        await this.paymentVoucherRepository.getExportBundle(voucherId);
       if (!bundle) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       return await this.sendVoucherExcel(res, bundle);
     } catch (error) {
-      logger.error('[PaymentVoucherController.exportTicketExcel] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.exportTicketExcel] Error:',
+        error,
+      );
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3739,11 +4367,16 @@ export class PaymentVoucherControllerClass {
       if (!voucherId) {
         return res
           .status(404)
-          .send('This download link has expired — open the app and tap PDF again.');
+          .send(
+            'This download link has expired — open the app and tap PDF again.',
+          );
       }
-      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      const bundle =
+        await this.paymentVoucherRepository.getExportBundle(voucherId);
       if (!bundle) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       const pdf = await buildVoucherPdf({
         voucher: bundle.voucher,
@@ -3753,13 +4386,18 @@ export class PaymentVoucherControllerClass {
       });
       const filename = `${voucherRef(bundle.voucher)}-payment-voucher.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${filename}"`,
+      );
       return res.status(200).send(pdf);
     } catch (error) {
       logger.error('[PaymentVoucherController.exportTicketPdf] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3772,9 +4410,12 @@ export class PaymentVoucherControllerClass {
           .status(404)
           .send('This link has expired — open the app and tap PDF again.');
       }
-      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      const bundle =
+        await this.paymentVoucherRepository.getExportBundle(voucherId);
       if (!bundle) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       const html = buildVoucherPrintHtml({
         voucher: bundle.voucher,
@@ -3784,10 +4425,15 @@ export class PaymentVoucherControllerClass {
       });
       return res.status(200).type('html').send(html);
     } catch (error) {
-      logger.error('[PaymentVoucherController.exportTicketPrint] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.exportTicketPrint] Error:',
+        error,
+      );
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -3795,22 +4441,38 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = PrRaiseDisputeSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
       const voucherId = paramId(req.params.voucherId);
       const existing = await this.paymentVoucherRepository.getById(voucherId);
       // Hide vouchers that aren't this PR's own behind a 404 (never 403-leak).
       if (!existing || !this.ownsMineVoucher(existing, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      if (!PaymentVoucherControllerClass.DISPUTABLE_STATUSES.includes(existing.status)) {
+      if (
+        !PaymentVoucherControllerClass.DISPUTABLE_STATUSES.includes(
+          existing.status,
+        )
+      ) {
         return res.status(400).json({
           success: false,
-          message: 'This voucher is already signed or paid and can no longer be disputed',
+          message:
+            'This voucher is already signed or paid and can no longer be disputed',
           data: null,
         });
       }
@@ -3845,7 +4507,8 @@ export class PaymentVoucherControllerClass {
         if (!owned || owned.voucher.id !== voucherId) {
           return res.status(400).json({
             success: false,
-            message: 'That receipt is not on this voucher — reopen the day and try again.',
+            message:
+              'That receipt is not on this voucher — reopen the day and try again.',
             data: null,
           });
         }
@@ -3900,16 +4563,24 @@ export class PaymentVoucherControllerClass {
        * greys those shifts rather than letting them 409.
        */
       if (!parsed.data.receiptId) {
-        const receipts = await this.paymentVoucherRepository.listReceipts(voucherId);
+        const receipts =
+          await this.paymentVoucherRepository.listReceipts(voucherId);
         const statuses = receiptInfoMap(receipts);
         const waiting = existing.lines
-          .filter((l) => l.lineDate === disputeDate && decodeRef(l.ref).kind === component)
+          .filter(
+            (l) =>
+              l.lineDate === disputeDate && decodeRef(l.ref).kind === component,
+          )
           // Every receipt on the day — this branch only runs for a claim that
           // named none, so the claim really does cover all of them.
-          .map((l) => (l.receiptId ? receipts.find((r) => r.id === l.receiptId) : null))
+          .map((l) =>
+            l.receiptId ? receipts.find((r) => r.id === l.receiptId) : null,
+          )
           .filter((r) => r && statuses.get(r.id)?.status === 'pending');
         if (waiting.length > 0) {
-          const numbers = [...new Set(waiting.map((r) => r!.receiptNo))].join(', ');
+          const numbers = [...new Set(waiting.map((r) => r!.receiptNo))].join(
+            ', ',
+          );
           return res.status(409).json({
             success: false,
             message: `The agency has not finished reviewing ${numbers} — you can dispute ${component} on ${disputeDate} once it is approved.`,
@@ -3924,12 +4595,13 @@ export class PaymentVoucherControllerClass {
       // with two shifts on one night can contest the second alone, and the
       // figure the claim is measured against has to be THAT shift's, not the
       // day's — otherwise accepting the claim settles money nobody contested.
-      const disputedItems = await this.paymentVoucherDisputeRepository.resolveDisputeItems(
-        voucherId,
-        disputeDate,
-        component,
-        (parsed.data.items ?? []).map((i) => i.lineId),
-      );
+      const disputedItems =
+        await this.paymentVoucherDisputeRepository.resolveDisputeItems(
+          voucherId,
+          disputeDate,
+          component,
+          (parsed.data.items ?? []).map((i) => i.lineId),
+        );
 
       /*
        * Narrowest thing the PR named wins: ITEMS, else the RECEIPT, else the
@@ -3939,7 +4611,9 @@ export class PaymentVoucherControllerClass {
        * nobody contested when it was accepted.
        */
       const disputedAmount = disputedItems.length
-        ? disputedItems.reduce((sum, i) => sum + Number(i.amount ?? 0), 0).toFixed(2)
+        ? disputedItems
+            .reduce((sum, i) => sum + Number(i.amount ?? 0), 0)
+            .toFixed(2)
         : await this.paymentVoucherDisputeRepository.sumLinesFor(
             voucherId,
             disputeDate,
@@ -3994,7 +4668,11 @@ export class PaymentVoucherControllerClass {
         });
       }
       if (!dispute) {
-        return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
       }
 
       // The voucher's dispute columns are now a CACHE of the rows, not the truth.
@@ -4018,7 +4696,11 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.raiseMyDispute] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -4026,16 +4708,27 @@ export class PaymentVoucherControllerClass {
   async withdrawMyDispute(req: Request, res: Response) {
     try {
       const pr = await this.resolvePr(req);
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!pr)
+        return res.status(403).json({
+          success: false,
+          message: 'No PR profile for this account',
+          data: null,
+        });
 
       const voucherId = paramId(req.params.voucherId);
       const existing = await this.paymentVoucherRepository.getById(voucherId);
       if (!existing || !this.ownsMineVoucher(existing, pr)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       const parsed = PrWithdrawDisputeSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const actor = getActor(req);
@@ -4047,7 +4740,8 @@ export class PaymentVoucherControllerClass {
         parsed.data.component,
         // The exact claim when the app names one. Omitted = the whole-day claim,
         // which is the only shape a pre-picker client can have raised.
-        parsed.data.receiptId ?? (parsed.data.receiptId === undefined ? undefined : null),
+        parsed.data.receiptId ??
+          (parsed.data.receiptId === undefined ? undefined : null),
       );
       if (!target) {
         return res.status(404).json({
@@ -4057,7 +4751,10 @@ export class PaymentVoucherControllerClass {
         });
       }
 
-      const withdrawn = await this.paymentVoucherDisputeRepository.withdraw(target.id, actor);
+      const withdrawn = await this.paymentVoucherDisputeRepository.withdraw(
+        target.id,
+        actor,
+      );
       if (!withdrawn) {
         // Already decided by the agency, or already withdrawn. Retracting a
         // settled claim would rewrite the outcome of a money decision.
@@ -4070,7 +4767,10 @@ export class PaymentVoucherControllerClass {
 
       // Only hand the voucher back once NOTHING is still contested — withdrawing
       // Tuesday's tips must not clear Thursday's wages claim.
-      const stillOpen = await this.paymentVoucherDisputeRepository.listOpenForVoucher(voucherId);
+      const stillOpen =
+        await this.paymentVoucherDisputeRepository.listOpenForVoucher(
+          voucherId,
+        );
       const voucher =
         stillOpen.length === 0
           ? await this.paymentVoucherRepository.update(voucherId, {
@@ -4092,8 +4792,15 @@ export class PaymentVoucherControllerClass {
         },
       });
     } catch (error) {
-      logger.error('[PaymentVoucherController.withdrawMyDispute] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      logger.error(
+        '[PaymentVoucherController.withdrawMyDispute] Error:',
+        error,
+      );
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -4105,12 +4812,19 @@ export class PaymentVoucherControllerClass {
     try {
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && !scope.agencyId) {
-        return res.status(403).json({ success: false, message: 'No agency for this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No agency for this account',
+          data: null,
+        });
       }
 
-      const rows = await this.paymentVoucherDisputeRepository.listForScope(scope.agencyId, {
-        openOnly: req.query.open === '1' || req.query.open === 'true',
-      });
+      const rows = await this.paymentVoucherDisputeRepository.listForScope(
+        scope.agencyId,
+        {
+          openOnly: req.query.open === '1' || req.query.open === 'true',
+        },
+      );
 
       // WHICH SHIFT each claim is about. Two batched steps: dispute -> receipt
       // -> assignment ids, then those ids -> the shift facts. Both fail closed —
@@ -4118,15 +4832,24 @@ export class PaymentVoucherControllerClass {
       // linked", which is the honest answer for a wages/OT claim (no receipt
       // exists by design) and far better than a confident wrong outlet.
       const assignmentIdsByDispute =
-        await this.paymentVoucherDisputeRepository.resolveAssignmentIdsForDisputes(rows);
+        await this.paymentVoucherDisputeRepository.resolveAssignmentIdsForDisputes(
+          rows,
+        );
       const everyAssignmentId = [
         ...new Set([...assignmentIdsByDispute.values()].flat()),
       ];
-      const prIds = [...new Set(rows.map((r) => r.voucher.prId).filter((id): id is string => !!id))];
-      const factsById = new Map(
-        (await this.shiftAssignmentRepository.listByIdsForPrs(prIds, everyAssignmentId)).map(
-          (f) => [f.id, f],
+      const prIds = [
+        ...new Set(
+          rows.map((r) => r.voucher.prId).filter((id): id is string => !!id),
         ),
+      ];
+      const factsById = new Map(
+        (
+          await this.shiftAssignmentRepository.listByIdsForPrs(
+            prIds,
+            everyAssignmentId,
+          )
+        ).map((f) => [f.id, f]),
       );
 
       res.status(200).json({
@@ -4179,7 +4902,11 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.listDisputes] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -4196,25 +4923,40 @@ export class PaymentVoucherControllerClass {
     try {
       const parsed = ResolveDisputeSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && !scope.agencyId) {
-        return res.status(403).json({ success: false, message: 'No agency for this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No agency for this account',
+          data: null,
+        });
       }
 
       const disputeId = paramId(req.params.disputeId);
-      const dispute = await this.paymentVoucherDisputeRepository.getById(disputeId);
+      const dispute =
+        await this.paymentVoucherDisputeRepository.getById(disputeId);
       if (!dispute) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // Ownership is checked through the voucher, since a dispute carries no
       // agency of its own. Cross-tenant reads 404 rather than 403.
-      const voucher = await this.paymentVoucherRepository.getById(dispute.voucherId);
+      const voucher = await this.paymentVoucherRepository.getById(
+        dispute.voucherId,
+      );
       if (!voucher || (!scope.isAdmin && voucher.agencyId !== scope.agencyId)) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const actor = getActor(req);
@@ -4233,7 +4975,10 @@ export class PaymentVoucherControllerClass {
       }
 
       // Hand the voucher back once nothing on it is still contested.
-      const stillOpen = await this.paymentVoucherDisputeRepository.listOpenForVoucher(voucher.id);
+      const stillOpen =
+        await this.paymentVoucherDisputeRepository.listOpenForVoucher(
+          voucher.id,
+        );
       if (stillOpen.length === 0) {
         if (voucher.status === 'disputed') {
           await this.paymentVoucherRepository.update(voucher.id, {
@@ -4249,10 +4994,11 @@ export class PaymentVoucherControllerClass {
         // is live would close the evidence under a claim still being heard. The
         // sweep itself skips vouchers with open disputes for the same reason, so
         // the two arms cannot contradict each other.
-        const closed = await this.paymentVoucherRepository.verifyApprovedReceipts({
-          voucherId: voucher.id,
-          actor,
-        });
+        const closed =
+          await this.paymentVoucherRepository.verifyApprovedReceipts({
+            voucherId: voucher.id,
+            actor,
+          });
         if (closed.length > 0) {
           logger.info(
             `[PaymentVoucherController.resolveDispute] verified ${closed.length} receipt(s) on ${voucher.id}: ${closed.join(', ')}`,
@@ -4275,7 +5021,11 @@ export class PaymentVoucherControllerClass {
             body: `${resolved.component} on ${resolved.disputeDate}${
               resolved.resolutionNote ? ` — ${resolved.resolutionNote}` : ''
             }`,
-            payload: { voucherId: voucher.id, disputeId: resolved.id, outcome: resolved.outcome },
+            payload: {
+              voucherId: voucher.id,
+              disputeId: resolved.id,
+              outcome: resolved.outcome,
+            },
             actor,
           });
         }
@@ -4288,7 +5038,11 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.resolveDispute] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 }

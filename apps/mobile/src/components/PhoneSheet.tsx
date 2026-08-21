@@ -30,15 +30,23 @@ export function PhoneSheet({
     // globalThis rather than declaring a global — the same idiom as
     // lib/proof-photo.ts. A global `document` would let native-only files
     // reference it and still type-check, which is the bug this avoids.
-    const doc = (globalThis as { document?: { getElementById: (id: string) => PortalHost | null } })
-      .document;
+    const doc = (
+      globalThis as {
+        document?: { getElementById: (id: string) => PortalHost | null };
+      }
+    ).document;
     const host = doc?.getElementById(PHONE_SCREEN_ID) ?? null;
     const overlay = <View style={styles.fill}>{children}</View>;
     // No phone element yet (first paint) — render in place rather than drop.
     return host ? createPortal(overlay, host) : overlay;
   }
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onRequestClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onRequestClose}
+    >
       {children}
     </Modal>
   );

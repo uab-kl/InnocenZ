@@ -3,13 +3,21 @@ import { paymentVoucherStatusValues } from '@/features/payment-voucher/payment-v
 
 // Accept a non-negative number from the client and store it as a fixed(2) string,
 // matching the numeric(12,2) columns.
-const money = z.number().nonnegative().transform((n) => n.toFixed(2));
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be yyyy-MM-dd');
+const money = z
+  .number()
+  .nonnegative()
+  .transform((n) => n.toFixed(2));
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be yyyy-MM-dd');
 
 export const PaymentVoucherLineSchema = z.object({
   lineDate: isoDate.optional(),
   outlet: z.string().max(255, 'Outlet is too long').optional(),
-  description: z.string().min(1, 'Description is required').max(500, 'Description is too long'),
+  description: z
+    .string()
+    .min(1, 'Description is required')
+    .max(500, 'Description is too long'),
   quantity: z.number().int().positive().optional(),
   /*
    * Kept as a plain number so the controller can sum lines into the subtotal.
@@ -49,7 +57,10 @@ export const CreatePaymentVoucherSchema = z.object({
   // Optional: derived from the caller's agency for agency users; required for admin.
   agencyId: z.string().uuid('Invalid agency ID').optional(),
   prId: z.string().uuid('Invalid PR ID').optional(),
-  prName: z.string().min(1, 'PR name is required').max(255, 'PR name is too long'),
+  prName: z
+    .string()
+    .min(1, 'PR name is required')
+    .max(255, 'PR name is too long'),
   prIc: z.string().max(100, 'PR IC is too long').optional(),
   outlet: z.string().max(255, 'Outlet is too long').optional(),
   cycle: z.string().max(100, 'Cycle is too long').optional(),
@@ -61,26 +72,45 @@ export const CreatePaymentVoucherSchema = z.object({
   subtotal: money.optional(),
   deduction: money.optional(),
   net: money.optional(),
-  financeHeadName: z.string().max(255, 'Finance head name is too long').optional(),
+  financeHeadName: z
+    .string()
+    .max(255, 'Finance head name is too long')
+    .optional(),
   bankRef: z.string().max(100, 'Bank ref is too long').optional(),
-  lines: z.array(PaymentVoucherLineSchema).max(200, 'Too many lines').optional(),
+  lines: z
+    .array(PaymentVoucherLineSchema)
+    .max(200, 'Too many lines')
+    .optional(),
 });
 
-export const UpdatePaymentVoucherSchema = CreatePaymentVoucherSchema.partial().extend({
-  status: z.enum(paymentVoucherStatusValues).optional(),
-  disputeReason: z.string().max(1000, 'Dispute reason is too long').optional(),
-  disputeNote: z.string().max(1000, 'Dispute note is too long').optional(),
-});
+export const UpdatePaymentVoucherSchema =
+  CreatePaymentVoucherSchema.partial().extend({
+    status: z.enum(paymentVoucherStatusValues).optional(),
+    disputeReason: z
+      .string()
+      .max(1000, 'Dispute reason is too long')
+      .optional(),
+    disputeNote: z.string().max(1000, 'Dispute note is too long').optional(),
+  });
 
 export type PaymentVoucherLineInput = z.infer<typeof PaymentVoucherLineSchema>;
-export type CreatePaymentVoucherInput = z.infer<typeof CreatePaymentVoucherSchema>;
-export type UpdatePaymentVoucherInput = z.infer<typeof UpdatePaymentVoucherSchema>;
+export type CreatePaymentVoucherInput = z.infer<
+  typeof CreatePaymentVoucherSchema
+>;
+export type UpdatePaymentVoucherInput = z.infer<
+  typeof UpdatePaymentVoucherSchema
+>;
 
 // A PR logs earnings against its *current-week* voucher (status pending_review)
 // as it works a shift — one payment_voucher_line per entry. `kind` splits the
 // Payment week grid (wages/drinks/tips/others); `source` drives the pending vs
 // matched badge (manual self-logs stay pending until the agency verifies).
-export const prReceiptKindValues = ['wages', 'drinks', 'tips', 'others'] as const;
+export const prReceiptKindValues = [
+  'wages',
+  'drinks',
+  'tips',
+  'others',
+] as const;
 export type PrReceiptKind = (typeof prReceiptKindValues)[number];
 export const prReceiptSourceValues = ['scan', 'manual', 'checkin'] as const;
 export type PrReceiptSource = (typeof prReceiptSourceValues)[number];
@@ -130,14 +160,19 @@ export const CreatePrReceiptLineSchema = z.object({
 
 export const UpdatePrReceiptLineSchema = CreatePrReceiptLineSchema.partial();
 
-export type CreatePrReceiptLineInput = z.infer<typeof CreatePrReceiptLineSchema>;
-export type UpdatePrReceiptLineInput = z.infer<typeof UpdatePrReceiptLineSchema>;
+export type CreatePrReceiptLineInput = z.infer<
+  typeof CreatePrReceiptLineSchema
+>;
+export type UpdatePrReceiptLineInput = z.infer<
+  typeof UpdatePrReceiptLineSchema
+>;
 
 // One whole SCANNED / SELF-LOGGED RECEIPT: header facts the OCR read (order
 // number, date, time) plus its item lines. Persisted as one
 // payment_voucher_receipt row + one payment_voucher_line per item (FK-linked).
 export const prReceiptItemCategoryValues = ['drink', 'service', 'tip'] as const;
-export type PrReceiptItemCategory = (typeof prReceiptItemCategoryValues)[number];
+export type PrReceiptItemCategory =
+  (typeof prReceiptItemCategoryValues)[number];
 
 export const CreatePrReceiptSchema = z.object({
   source: z.enum(prReceiptSourceValues),
@@ -176,7 +211,10 @@ export const CreatePrReceiptSchema = z.object({
       z.object({
         kind: z.enum(prReceiptKindValues),
         category: z.enum(prReceiptItemCategoryValues).default('drink'),
-        item: z.string().min(1, 'Item is required').max(255, 'Item is too long'),
+        item: z
+          .string()
+          .min(1, 'Item is required')
+          .max(255, 'Item is too long'),
         quantity: z.number().int().positive().max(999),
         sales: z.number().nonnegative(),
         commission: z.number().nonnegative(),
@@ -204,9 +242,14 @@ export type CreatePrReceiptInput = z.infer<typeof CreatePrReceiptSchema>;
  */
 export const PrRaiseDisputeSchema = z.object({
   /** The disputed shift day, yyyy-MM-dd, matching payment_voucher_line.line_date. */
-  disputeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
+  disputeDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
   component: z.enum(['wages', 'drinks', 'tips', 'others']),
-  reason: z.string().min(1, 'Reason is required').max(200, 'Reason is too long'),
+  reason: z
+    .string()
+    .min(1, 'Reason is required')
+    .max(200, 'Reason is too long'),
   note: z.string().max(1000, 'Note is too long').optional(),
   /**
    * OPTIONAL, matching the PR app's dispute sheet ("Proof images are optional —
@@ -245,7 +288,9 @@ export const PrRaiseDisputeSchema = z.object({
    * Omit to dispute the whole receipt.
    */
   items: z
-    .array(z.object({ lineId: z.string().uuid('lineId must be a voucher line id') }))
+    .array(
+      z.object({ lineId: z.string().uuid('lineId must be a voucher line id') }),
+    )
     .optional(),
 });
 
@@ -260,7 +305,9 @@ export type PrRaiseDisputeInput = z.infer<typeof PrRaiseDisputeSchema>;
  * track dispute ids purely to undo something it can already point at.
  */
 export const PrWithdrawDisputeSchema = z.object({
-  disputeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
+  disputeDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
   component: z.enum(['wages', 'drinks', 'tips', 'others']),
   /**
    * WHICH claim, when the day+bucket holds more than one.
@@ -350,7 +397,9 @@ export const AgencyEditReceiptLineSchema = z
     message: 'Send a quantity, an amount, or both',
   });
 
-export type AgencyEditReceiptLineInput = z.infer<typeof AgencyEditReceiptLineSchema>;
+export type AgencyEditReceiptLineInput = z.infer<
+  typeof AgencyEditReceiptLineSchema
+>;
 
 /**
  * The agency ADDING a line the paper carries and the log missed.
@@ -376,14 +425,19 @@ export const AgencyAddReceiptLineSchema = z.object({
    * shift, which zod cannot enumerate; the refusal lives where the outlet is
    * known. Matching is trimmed and case-insensitive.
    */
-  description: z.string().min(1, 'Description is required').max(500, 'Description is too long'),
+  description: z
+    .string()
+    .min(1, 'Description is required')
+    .max(500, 'Description is too long'),
   quantity: z.number().int().positive().max(999),
   amount: z.number().nonnegative(),
   /** Defaults to the day this receipt's money already sits on — see the controller. */
   lineDate: isoDate.optional(),
 });
 
-export type AgencyAddReceiptLineInput = z.infer<typeof AgencyAddReceiptLineSchema>;
+export type AgencyAddReceiptLineInput = z.infer<
+  typeof AgencyAddReceiptLineSchema
+>;
 
 /**
  * The agency correcting the RECEIPT ITSELF — the order number typed off the
@@ -435,7 +489,12 @@ export const PrSignVoucherSchema = z.object({
       w: z.number().min(20).max(4000),
       h: z.number().min(20).max(2000),
       strokes: z
-        .array(z.array(z.tuple([z.number(), z.number()])).min(2).max(2000))
+        .array(
+          z
+            .array(z.tuple([z.number(), z.number()]))
+            .min(2)
+            .max(2000),
+        )
         .min(1)
         .max(100),
     })
@@ -463,7 +522,12 @@ export const FinanceSignVoucherSchema = z.object({
     w: z.number().min(20).max(4000),
     h: z.number().min(20).max(2000),
     strokes: z
-      .array(z.array(z.tuple([z.number(), z.number()])).min(2).max(2000))
+      .array(
+        z
+          .array(z.tuple([z.number(), z.number()]))
+          .min(2)
+          .max(2000),
+      )
       .min(1)
       .max(100),
   }),

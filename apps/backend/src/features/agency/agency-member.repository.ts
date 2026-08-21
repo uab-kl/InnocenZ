@@ -91,7 +91,10 @@ export class AgencyMemberRepositoryClass {
   ): Promise<AgencyUserType> {
     try {
       const dbClient = tx ?? db;
-      const [member] = await dbClient.insert(AgencyUserTable).values(data).returning();
+      const [member] = await dbClient
+        .insert(AgencyUserTable)
+        .values(data)
+        .returning();
       logger.info('[AgencyMemberRepository.add] Member added:', member.id);
       return member;
     } catch (error) {
@@ -134,19 +137,29 @@ export class AgencyMemberRepositoryClass {
   }
 
   /** Membership + derived agency lane from RBAC. */
-  async getByIdEnriched(id: string): Promise<(AgencyUserType & { subRole: AgencyUserSubRole }) | null> {
+  async getByIdEnriched(
+    id: string,
+  ): Promise<(AgencyUserType & { subRole: AgencyUserSubRole }) | null> {
     const member = await this.getById(id);
     if (!member) return null;
     const lanes = await agencyLanesByUserIds([member.userId]);
     return { ...member, subRole: lanes.get(member.userId) ?? 'owner' };
   }
 
-  async getByAgencyAndUser(agencyId: string, userId: string): Promise<AgencyUserType | null> {
+  async getByAgencyAndUser(
+    agencyId: string,
+    userId: string,
+  ): Promise<AgencyUserType | null> {
     try {
       const [member] = await db
         .select()
         .from(AgencyUserTable)
-        .where(and(eq(AgencyUserTable.agencyId, agencyId), eq(AgencyUserTable.userId, userId)))
+        .where(
+          and(
+            eq(AgencyUserTable.agencyId, agencyId),
+            eq(AgencyUserTable.userId, userId),
+          ),
+        )
         .limit(1);
       return member ?? null;
     } catch (error) {
@@ -277,7 +290,10 @@ export class AgencyMemberRepositoryClass {
       }
       return enriched;
     } catch (error) {
-      logger.error('[AgencyMemberRepository.listMembershipsByUserIds] Error:', error);
+      logger.error(
+        '[AgencyMemberRepository.listMembershipsByUserIds] Error:',
+        error,
+      );
       return [];
     }
   }

@@ -27,7 +27,9 @@ export type ReceiptReviewCounts = {
   verified: number;
 };
 
-export function receiptReviewCounts(week: PrCurrentWeek | null): ReceiptReviewCounts {
+export function receiptReviewCounts(
+  week: PrCurrentWeek | null,
+): ReceiptReviewCounts {
   const counts: ReceiptReviewCounts = { waiting: 0, approved: 0, verified: 0 };
   for (const line of week?.lines ?? []) {
     if (line.receiptStatus === 'pending') counts.waiting += 1;
@@ -38,7 +40,9 @@ export function receiptReviewCounts(week: PrCurrentWeek | null): ReceiptReviewCo
 }
 
 /** One short sentence for the This-week header, or null when there is nothing to say. */
-export function receiptReviewCaption(week: PrCurrentWeek | null): string | null {
+export function receiptReviewCaption(
+  week: PrCurrentWeek | null,
+): string | null {
   const { waiting, approved, verified } = receiptReviewCounts(week);
   const settled = approved + verified;
   if (waiting === 0 && settled === 0) return null;
@@ -144,7 +148,9 @@ export function weekDisputable(
   const rows = week.vouchers ?? [];
   if (rows.length > 0) {
     const scoped = voucherId ? rows.filter((v) => v.id === voucherId) : rows;
-    return scoped.some((v) => !!v.status && DISPUTABLE_VOUCHER_STATUSES.includes(v.status));
+    return scoped.some(
+      (v) => !!v.status && DISPUTABLE_VOUCHER_STATUSES.includes(v.status),
+    );
   }
   // No `vouchers` at all = a backend that has not restarted, where the headline
   // IS the only voucher and the old behaviour was already right.
@@ -311,12 +317,7 @@ export function openDisputeKeys(week: PrCurrentWeek | null): Set<string> {
  * is exactly what is being argued with.
  */
 export type DayStatusLabel =
-  | 'PENDING'
-  | 'APPROVED'
-  | 'DISPUTED'
-  | 'VERIFIED'
-  | 'DEDUCTED'
-  | '—';
+  'PENDING' | 'APPROVED' | 'DISPUTED' | 'VERIFIED' | 'DEDUCTED' | '—';
 
 /**
  * THIS WEEK tops out at APPROVED — VERIFIED is earned, not granted.
@@ -356,7 +357,11 @@ export function dayStatusLabel(
   const { open, settled } = disputesForDay(week, dateIso);
   if (open.length > 0 || extraOpen) return 'DISPUTED';
   if (settled.length > 0) return 'VERIFIED';
-  return gridStatus === 'pending' ? 'PENDING' : gridStatus === 'approved' ? 'APPROVED' : 'VERIFIED';
+  return gridStatus === 'pending'
+    ? 'PENDING'
+    : gridStatus === 'approved'
+      ? 'APPROVED'
+      : 'VERIFIED';
 }
 
 export function cellDisputable(
@@ -370,7 +375,9 @@ export function cellDisputable(
   );
   if (lines.length === 0) return true;
   return lines.every((line) =>
-    line.disputable !== undefined ? line.disputable : line.receiptStatus !== 'pending',
+    line.disputable !== undefined
+      ? line.disputable
+      : line.receiptStatus !== 'pending',
   );
 }
 

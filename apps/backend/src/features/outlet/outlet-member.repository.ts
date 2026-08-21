@@ -55,10 +55,16 @@ async function outletLanesByUserIds(
     .leftJoin(PortalTable, eq(PortalTable.id, RoleTable.portalId))
     .where(inArray(UserRoleTable.userId, userIds));
 
-  const byUser = new Map<string, Array<{ portalCode: string | null; roleName: string }>>();
+  const byUser = new Map<
+    string,
+    Array<{ portalCode: string | null; roleName: string }>
+  >();
   for (const row of rows) {
     const list = byUser.get(row.userId) ?? [];
-    list.push({ portalCode: row.portalCode, roleName: row.roleName ?? 'Owner' });
+    list.push({
+      portalCode: row.portalCode,
+      roleName: row.roleName ?? 'Owner',
+    });
     byUser.set(row.userId, list);
   }
   for (const userId of userIds) {
@@ -74,7 +80,10 @@ export class OutletMemberRepositoryClass {
   ): Promise<OutletUserType> {
     try {
       const dbClient = tx ?? db;
-      const [member] = await dbClient.insert(OutletUserTable).values(data).returning();
+      const [member] = await dbClient
+        .insert(OutletUserTable)
+        .values(data)
+        .returning();
       logger.info('[OutletMemberRepository.add] Member added:', member.id);
       return member;
     } catch (error) {
@@ -125,7 +134,10 @@ export class OutletMemberRepositoryClass {
     return { ...member, subRole: lanes.get(member.userId) ?? 'owner' };
   }
 
-  async getByOutletAndUser(outletId: string, userId: string): Promise<OutletUserType | null> {
+  async getByOutletAndUser(
+    outletId: string,
+    userId: string,
+  ): Promise<OutletUserType | null> {
     try {
       const [member] = await db
         .select()
@@ -148,7 +160,9 @@ export class OutletMemberRepositoryClass {
     return this.listByOutletWithUser(outletId);
   }
 
-  async listByOutletWithUser(outletId: string): Promise<OutletMemberEnriched[]> {
+  async listByOutletWithUser(
+    outletId: string,
+  ): Promise<OutletMemberEnriched[]> {
     try {
       const rows = await db
         .select({
@@ -175,7 +189,10 @@ export class OutletMemberRepositoryClass {
         subRole: lanes.get(r.userId) ?? ('owner' as OutletUserSubRole),
       }));
     } catch (error) {
-      logger.error('[OutletMemberRepository.listByOutletWithUser] Error:', error);
+      logger.error(
+        '[OutletMemberRepository.listByOutletWithUser] Error:',
+        error,
+      );
       return [];
     }
   }
@@ -233,7 +250,10 @@ export class OutletMemberRepositoryClass {
         subRole: lanes.get(r.userId) ?? ('owner' as OutletUserSubRole),
       }));
     } catch (error) {
-      logger.error('[OutletMemberRepository.listMembershipsByUserIds] Error:', error);
+      logger.error(
+        '[OutletMemberRepository.listMembershipsByUserIds] Error:',
+        error,
+      );
       return [];
     }
   }

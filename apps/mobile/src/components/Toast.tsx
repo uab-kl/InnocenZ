@@ -83,14 +83,22 @@ export function AppToast({
     // globalThis rather than declaring a global — the same idiom as
     // lib/proof-photo.ts. A global `document` would let native-only files
     // reference it and still type-check, which is the bug this avoids.
-    const doc = (globalThis as { document?: { getElementById: (id: string) => PortalHost | null } })
-      .document;
+    const doc = (
+      globalThis as {
+        document?: { getElementById: (id: string) => PortalHost | null };
+      }
+    ).document;
     const host = doc?.getElementById(PHONE_SCREEN_ID) ?? null;
     return host ? createPortal(body, host) : body;
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+    >
       {body}
     </Modal>
   );

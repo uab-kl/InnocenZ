@@ -22,7 +22,12 @@ import {
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { buildWeekGridFromLines, type GridBucket } from '../lib/week-pay-grid';
-import { kindDisputable, openDisputeKeys, receiptClaimState, weekDisputable } from '../lib/receipt-review';
+import {
+  kindDisputable,
+  openDisputeKeys,
+  receiptClaimState,
+  weekDisputable,
+} from '../lib/receipt-review';
 import { buildCellEvidence } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
@@ -93,7 +98,20 @@ type LinkedReceipt = {
   matched: boolean;
 };
 
-const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 /** '2026-07-21' → '21 Jul 2026' for the linked receipt rows. */
 /**
@@ -138,7 +156,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
   const { isSigned, signPv } = useSignedPvs();
-  const { weeks: apiWeeks, vouchers: apiVouchers, refresh: refreshHistory } = usePaymentHistory();
+  const {
+    weeks: apiWeeks,
+    vouchers: apiVouchers,
+    refresh: refreshHistory,
+  } = usePaymentHistory();
   const { token, me } = useSession();
   // The real last-week voucher — the only PV a PR can still sign ("one week,
   // one PV"). Signed/paid weeks arrive through payment history instead.
@@ -167,7 +189,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const liveVoucher = lastWeek?.vouchers?.find((v) => v.id === pvId) ?? null;
 
   /** Whose voucher this is — history row first, then the live week's own entry. */
-  const pvAgencyName = histVoucher?.agencyName ?? liveVoucher?.agencyName ?? null;
+  const pvAgencyName =
+    histVoucher?.agencyName ?? liveVoucher?.agencyName ?? null;
 
   /**
    * This voucher's OWN lines out of the merged week.
@@ -177,7 +200,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    * empty on that path: showing no money at all is a worse lie than showing the
    * week's.
    */
-  const scopeLines = (lines: PrReceiptLine[], voucherId: string | null | undefined) => {
+  const scopeLines = (
+    lines: PrReceiptLine[],
+    voucherId: string | null | undefined,
+  ) => {
     if (!voucherId) return lines;
     const owned = lines.filter((l) => l.voucherId === voucherId);
     return owned.length > 0 || lines.every((l) => l.voucherId) ? owned : lines;
@@ -243,12 +269,13 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       : null;
 
   const liveOutlets = useMemo(
-    () =>
-      [
-        ...new Set(
-          (weekForGrid?.lines ?? []).map((l) => l.outlet?.trim()).filter(Boolean) as string[],
-        ),
-      ],
+    () => [
+      ...new Set(
+        (weekForGrid?.lines ?? [])
+          .map((l) => l.outlet?.trim())
+          .filter(Boolean) as string[],
+      ),
+    ],
     [weekForGrid],
   );
   const liveOutlet =
@@ -263,7 +290,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const liveRef = (() => {
     if (weekForGrid?.voucherNo) return weekForGrid.voucherNo;
     const m = (weekForGrid?.weekEnd ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return m ? `PV-${m[1]}${m[2]}${m[3]}` : `PV-${pvId.slice(0, 8).toUpperCase()}`;
+    return m
+      ? `PV-${m[1]}${m[2]}${m[3]}`
+      : `PV-${pvId.slice(0, 8).toUpperCase()}`;
   })();
 
   /** Any unsigned review opens the live last-week PV (same as Payment → Last week). */
@@ -299,7 +328,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         status: 'awaiting_pr',
         statusLabel: 'Awaiting signature',
       };
-  const grid = useMemo(() => buildWeekGridFromLines(weekForGrid), [weekForGrid]);
+  const grid = useMemo(
+    () => buildWeekGridFromLines(weekForGrid),
+    [weekForGrid],
+  );
   const gridTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
   /** Net always matches Payment → Last week total. */
   const netDisplay = !hist && gridTotal > 0 ? gridTotal : pv.net;
@@ -351,13 +383,16 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const linkedReceipts: LinkedReceipt[] = useMemo(
     () =>
       (weekForGrid?.lines ?? [])
-        .filter((l) => (l.kind === 'drinks' || l.kind === 'tips') && l.commission > 0)
+        .filter(
+          (l) => (l.kind === 'drinks' || l.kind === 'tips') && l.commission > 0,
+        )
         .map((l) => ({
           id: l.id,
           ref: SOURCE_LABEL[l.source],
           receiptNo: l.receiptNo ?? null,
           item: l.item,
-          category: l.kind === 'drinks' ? ('Drinks' as const) : ('Tips' as const),
+          category:
+            l.kind === 'drinks' ? ('Drinks' as const) : ('Tips' as const),
           qty: l.quantity,
           amount: l.sales || l.commission,
           commission: l.commission,
@@ -384,7 +419,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    * here, watch the cell turn red, sign believing the claim was lodged, and the
    * agency would never hear of it. The sheet is gone; the marks are real now.
    */
-  const disputedKeys = useMemo(() => openDisputeKeys(weekForGrid), [weekForGrid]);
+  const disputedKeys = useMemo(
+    () => openDisputeKeys(weekForGrid),
+    [weekForGrid],
+  );
   /** Which cell's evidence is open — the same sheet the Payment page uses. */
   const [evidenceTarget, setEvidenceTarget] = useState<{
     day: WeeklyDayPay;
@@ -392,7 +430,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
     amount: number;
   } | null>(null);
   const [receiptsOpen, setReceiptsOpen] = useState(true);
-  const [receiptDetail, setReceiptDetail] = useState<LinkedReceipt | null>(null);
+  const [receiptDetail, setReceiptDetail] = useState<LinkedReceipt | null>(
+    null,
+  );
 
   /**
    * This voucher's id IF it is a real backend row — an archived history
@@ -417,7 +457,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const confirmSign = async () => {
     if (sigName.trim().length < 2 || signBusy) return;
     if (!sigInk) {
-      Alert.alert('Draw your signature', 'Sign in the pad with your finger before confirming.');
+      Alert.alert(
+        'Draw your signature',
+        'Sign in the pad with your finger before confirming.',
+      );
       return;
     }
     if (!backendPvId || !token) {
@@ -488,317 +531,349 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       </View>
 
       {/*
-        * The BODY scrolls; only the back row above stays fixed.
-        *
-        * The root was a plain View, so this screen had NO vertical scroll at
-        * all — everything past one screen height (net payable, records,
-        * signature, the Sign button itself) was simply clipped, on the web
-        * frame and on device alike. It survived because the content used to be
-        * shorter than a phone. Bottom padding is the device inset, per the
-        * flexible-UI rule.
-        */}
+       * The BODY scrolls; only the back row above stays fixed.
+       *
+       * The root was a plain View, so this screen had NO vertical scroll at
+       * all — everything past one screen height (net payable, records,
+       * signature, the Sign button itself) was simply clipped, on the web
+       * frame and on device alike. It survived because the content used to be
+       * shorter than a phone. Bottom padding is the device inset, per the
+       * flexible-UI rule.
+       */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}
       >
-      <View style={styles.statusRow}>
-        <Pill variant={anyDisputed ? 'red' : isSealed ? (pv.status === 'paid' ? 'green' : 'amber') : 'amber'}>
-          {anyDisputed ? 'Dispute open' : isSealed ? pv.statusLabel : 'Pending your review'}
-        </Pill>
-        {/*
-          * WHO IS PAYING THIS. A PR on two rosters gets one voucher per agency for
-          * the same week, and the two documents are otherwise near-identical —
-          * same week label, often the same venue — so without the agency the PR
-          * cannot tell which of them they are about to sign. Falls back to the PV
-          * number alone when the backend has not restarted yet.
-          */}
-        <Text style={styles.pvId}>
-          {pvAgencyName ? `${pvAgencyName} · ${pv.ref}` : pv.ref}
-        </Text>
-      </View>
-
-      {!isSealed && !anyDisputed && (
-        <View style={styles.banner}>
-          <Text style={styles.bannerTitle}>
-            {awaitingMySignature ? 'Pending your review' : 'Waiting for your agency'}
-          </Text>
+        <View style={styles.statusRow}>
+          <Pill
+            variant={
+              anyDisputed
+                ? 'red'
+                : isSealed
+                  ? pv.status === 'paid'
+                    ? 'green'
+                    : 'amber'
+                  : 'amber'
+            }
+          >
+            {anyDisputed
+              ? 'Dispute open'
+              : isSealed
+                ? pv.statusLabel
+                : 'Pending your review'}
+          </Pill>
           {/*
-           * Was hardcoded "Sign-by Sunday · Finance Head already signed". The
-           * second half was simply untrue — no agency signature is captured
-           * anywhere in the product, so `finance_head_signed_at` is NULL on every
-           * voucher — and a PV screen that invents a counter-signature is telling
-           * the PR the money has been approved by someone who never saw it.
+           * WHO IS PAYING THIS. A PR on two rosters gets one voucher per agency for
+           * the same week, and the two documents are otherwise near-identical —
+           * same week label, often the same venue — so without the agency the PR
+           * cannot tell which of them they are about to sign. Falls back to the PV
+           * number alone when the backend has not restarted yet.
            */}
-          <Text style={styles.bannerBody}>
-            {awaitingMySignature
-              ? 'Review each day, then sign to confirm this week’s earnings.'
-              : 'Your agency has not issued this voucher yet — you can review it, but there is nothing to sign until they send it.'}
+          <Text style={styles.pvId}>
+            {pvAgencyName ? `${pvAgencyName} · ${pv.ref}` : pv.ref}
           </Text>
         </View>
-      )}
-      {anyDisputed && (
-        <View style={[styles.banner, styles.bannerDispute]}>
-          <Text style={styles.bannerTitle}>Dispute open</Text>
-          <Text style={styles.bannerBody}>
-            Your agency is reviewing the flagged amounts — see Payment for the details.
-          </Text>
-        </View>
-      )}
 
-      <View style={styles.weekCard}>
-        <Text style={styles.sectionLabel}>WEEK SUMMARY</Text>
-        <Text style={styles.weekLabel}>{displayWeekLabel}</Text>
+        {!isSealed && !anyDisputed && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerTitle}>
+              {awaitingMySignature
+                ? 'Pending your review'
+                : 'Waiting for your agency'}
+            </Text>
+            {/*
+             * Was hardcoded "Sign-by Sunday · Finance Head already signed". The
+             * second half was simply untrue — no agency signature is captured
+             * anywhere in the product, so `finance_head_signed_at` is NULL on every
+             * voucher — and a PV screen that invents a counter-signature is telling
+             * the PR the money has been approved by someone who never saw it.
+             */}
+            <Text style={styles.bannerBody}>
+              {awaitingMySignature
+                ? 'Review each day, then sign to confirm this week’s earnings.'
+                : 'Your agency has not issued this voucher yet — you can review it, but there is nothing to sign until they send it.'}
+            </Text>
+          </View>
+        )}
+        {anyDisputed && (
+          <View style={[styles.banner, styles.bannerDispute]}>
+            <Text style={styles.bannerTitle}>Dispute open</Text>
+            <Text style={styles.bannerBody}>
+              Your agency is reviewing the flagged amounts — see Payment for the
+              details.
+            </Text>
+          </View>
+        )}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          style={{ marginTop: 10 }}
-        >
-          <View>
-            <View style={styles.gridRow}>
-              <Text style={[styles.gridLabel, { width: 78 }]}> </Text>
-              {grid.map((d) => (
-                <View key={d.dateIso} style={styles.gridCol}>
-                  <Text style={styles.gridDay}>{d.day}</Text>
-                  <Text style={styles.gridDate}>{d.date}</Text>
-                </View>
-              ))}
-              <View style={styles.gridCol}>
-                <Text style={styles.gridDay}>TOT</Text>
-                <Text style={styles.gridDate}> </Text>
-              </View>
-            </View>
+        <View style={styles.weekCard}>
+          <Text style={styles.sectionLabel}>WEEK SUMMARY</Text>
+          <Text style={styles.weekLabel}>{displayWeekLabel}</Text>
 
-            {GRID_ROWS.map((row) => {
-              const rowTotal = grid.reduce((s, d) => s + cellAmount(d, row.key), 0);
-              const isDeduction = row.key === 'deductions';
-              /*
-               * Always drawn, even at zero — same rule as the Payment grid,
-               * which stopped hiding it for the reason spelled out there: an
-               * absent row cannot say "you were not docked". On a signed voucher
-               * that matters more, not less; this IS the document.
-               */
-              return (
-                <View key={row.key} style={styles.gridRow}>
-                  <Text
-                    style={[
-                      styles.gridLabel,
-                      isDeduction && styles.gridLabelDeduction,
-                    ]}
-                  >
-                    {row.label}
-                  </Text>
-                  {grid.map((d) => {
-                    const amount = cellAmount(d, row.key);
-                    const key = `${d.dateIso}-${row.key}`;
-                    const isDisputed = disputedKeys.has(key);
-                    // EVERY non-empty cell opens its details, wages included —
-                    // the owner asked to inspect a figure, not only to argue
-                    // with one. Whether it can be DISPUTED is decided inside the
-                    // sheet, by the same rules the Payment page applies.
-                    // `!== 0` so a deduction can be inspected too: "which shift
-                    // was this fine for" is exactly the question it raises.
-                    const canTap = amount !== 0 && d.status !== 'empty';
-                    return (
-                      <Pressable
-                        key={key}
-                        style={[
-                          styles.gridCol,
-                          canTap && styles.gridColTap,
-                          isDisputed && styles.gridColDisputed,
-                        ]}
-                        onPress={() => canTap && openEvidence(d, row)}
-                        disabled={!canTap}
-                      >
-                        <Text
-                          style={[
-                            styles.gridVal,
-                            isDisputed && styles.gridValDisputed,
-                            // Whole row red, dashes included — see PaymentScreen.
-                            isDeduction && styles.gridValDeduction,
-                          ]}
-                        >
-                          {formatCell(amount)}
-                        </Text>
-                        {canTap && (
-                          <Flag
-                            size={9}
-                            color={isDisputed ? C.red : C.muted2}
-                            style={{ marginTop: 2 }}
-                          />
-                        )}
-                      </Pressable>
-                    );
-                  })}
-                  <View style={styles.gridCol}>
-                    {/* The week TOTAL is a cell in this row too — see PaymentScreen. */}
-                    <Text
-                      style={[
-                        styles.gridVal,
-                        isDeduction && styles.gridValDeduction,
-                      ]}
-                    >
-                      {formatCell(rowTotal)}
-                    </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator
+            style={{ marginTop: 10 }}
+          >
+            <View>
+              <View style={styles.gridRow}>
+                <Text style={[styles.gridLabel, { width: 78 }]}> </Text>
+                {grid.map((d) => (
+                  <View key={d.dateIso} style={styles.gridCol}>
+                    <Text style={styles.gridDay}>{d.day}</Text>
+                    <Text style={styles.gridDate}>{d.date}</Text>
                   </View>
+                ))}
+                <View style={styles.gridCol}>
+                  <Text style={styles.gridDay}>TOT</Text>
+                  <Text style={styles.gridDate}> </Text>
                 </View>
-              );
-            })}
+              </View>
 
-            <View style={styles.gridRow}>
-              <Text style={styles.gridLabel}>Status</Text>
-              {grid.map((d) => {
-                const dayDisputed = INCOME_ROWS.some((r) =>
-                  disputedKeys.has(`${d.dateIso}-${r.key}`),
+              {GRID_ROWS.map((row) => {
+                const rowTotal = grid.reduce(
+                  (s, d) => s + cellAmount(d, row.key),
+                  0,
                 );
-                // From the day's own status, never hardcoded — this row read
-                // VERIFIED for every non-empty day, even under a banner saying
-                // the voucher had not been issued.
-                // 'approved' collapses into VERIFIED here for the same reason as
-                // Payment's Last-week row: this document is always a CLOSED week,
-                // so the agency's day sign-off is final. Showing APPROVED here
-                // while Payment showed VERIFIED for the same day would be two
-                // words for one fact, one tap apart.
-                // A day of nothing but a charged fine is DEDUCTED — settled, and
-                // never "waiting on the agency" that charged it. Ahead of the
-                // dispute test because a fine is not disputable here; it is only
-                // reached when the day holds no earnings at all.
-                const label =
-                  d.status === 'empty'
-                    ? '—'
-                    : d.status === 'deducted'
-                      ? 'DEDUCTED'
-                      : dayDisputed
-                        ? 'DISPUTED'
-                        : d.status === 'pending'
-                          ? 'PENDING'
-                          : 'VERIFIED';
+                const isDeduction = row.key === 'deductions';
+                /*
+                 * Always drawn, even at zero — same rule as the Payment grid,
+                 * which stopped hiding it for the reason spelled out there: an
+                 * absent row cannot say "you were not docked". On a signed voucher
+                 * that matters more, not less; this IS the document.
+                 */
                 return (
-                  <View key={`st-${d.dateIso}`} style={styles.gridCol}>
+                  <View key={row.key} style={styles.gridRow}>
                     <Text
                       style={[
-                        styles.statusPill,
-                        dayDisputed && styles.statusPillDisputed,
-                        d.status === 'deducted' && styles.gridValDeduction,
-                        d.status === 'empty' && { color: C.muted2 },
+                        styles.gridLabel,
+                        isDeduction && styles.gridLabelDeduction,
                       ]}
                     >
-                      {label}
+                      {row.label}
                     </Text>
+                    {grid.map((d) => {
+                      const amount = cellAmount(d, row.key);
+                      const key = `${d.dateIso}-${row.key}`;
+                      const isDisputed = disputedKeys.has(key);
+                      // EVERY non-empty cell opens its details, wages included —
+                      // the owner asked to inspect a figure, not only to argue
+                      // with one. Whether it can be DISPUTED is decided inside the
+                      // sheet, by the same rules the Payment page applies.
+                      // `!== 0` so a deduction can be inspected too: "which shift
+                      // was this fine for" is exactly the question it raises.
+                      const canTap = amount !== 0 && d.status !== 'empty';
+                      return (
+                        <Pressable
+                          key={key}
+                          style={[
+                            styles.gridCol,
+                            canTap && styles.gridColTap,
+                            isDisputed && styles.gridColDisputed,
+                          ]}
+                          onPress={() => canTap && openEvidence(d, row)}
+                          disabled={!canTap}
+                        >
+                          <Text
+                            style={[
+                              styles.gridVal,
+                              isDisputed && styles.gridValDisputed,
+                              // Whole row red, dashes included — see PaymentScreen.
+                              isDeduction && styles.gridValDeduction,
+                            ]}
+                          >
+                            {formatCell(amount)}
+                          </Text>
+                          {canTap && (
+                            <Flag
+                              size={9}
+                              color={isDisputed ? C.red : C.muted2}
+                              style={{ marginTop: 2 }}
+                            />
+                          )}
+                        </Pressable>
+                      );
+                    })}
+                    <View style={styles.gridCol}>
+                      {/* The week TOTAL is a cell in this row too — see PaymentScreen. */}
+                      <Text
+                        style={[
+                          styles.gridVal,
+                          isDeduction && styles.gridValDeduction,
+                        ]}
+                      >
+                        {formatCell(rowTotal)}
+                      </Text>
+                    </View>
                   </View>
                 );
               })}
-              <View style={styles.gridCol}>
-                <Text style={styles.statusPill}>
-                  {grid.filter((d) => d.status === 'verified').length} verified
-                </Text>
+
+              <View style={styles.gridRow}>
+                <Text style={styles.gridLabel}>Status</Text>
+                {grid.map((d) => {
+                  const dayDisputed = INCOME_ROWS.some((r) =>
+                    disputedKeys.has(`${d.dateIso}-${r.key}`),
+                  );
+                  // From the day's own status, never hardcoded — this row read
+                  // VERIFIED for every non-empty day, even under a banner saying
+                  // the voucher had not been issued.
+                  // 'approved' collapses into VERIFIED here for the same reason as
+                  // Payment's Last-week row: this document is always a CLOSED week,
+                  // so the agency's day sign-off is final. Showing APPROVED here
+                  // while Payment showed VERIFIED for the same day would be two
+                  // words for one fact, one tap apart.
+                  // A day of nothing but a charged fine is DEDUCTED — settled, and
+                  // never "waiting on the agency" that charged it. Ahead of the
+                  // dispute test because a fine is not disputable here; it is only
+                  // reached when the day holds no earnings at all.
+                  const label =
+                    d.status === 'empty'
+                      ? '—'
+                      : d.status === 'deducted'
+                        ? 'DEDUCTED'
+                        : dayDisputed
+                          ? 'DISPUTED'
+                          : d.status === 'pending'
+                            ? 'PENDING'
+                            : 'VERIFIED';
+                  return (
+                    <View key={`st-${d.dateIso}`} style={styles.gridCol}>
+                      <Text
+                        style={[
+                          styles.statusPill,
+                          dayDisputed && styles.statusPillDisputed,
+                          d.status === 'deducted' && styles.gridValDeduction,
+                          d.status === 'empty' && { color: C.muted2 },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </View>
+                  );
+                })}
+                <View style={styles.gridCol}>
+                  <Text style={styles.statusPill}>
+                    {grid.filter((d) => d.status === 'verified').length}{' '}
+                    verified
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
 
-        <Text style={styles.tapHint}>
-          Tap a drinks or tips amount to dispute it on the Payment page — a{' '}
-          <Text style={{ color: C.red }}>red</Text> amount already has an open dispute.
-        </Text>
-      </View>
+          <Text style={styles.tapHint}>
+            Tap a drinks or tips amount to dispute it on the Payment page — a{' '}
+            <Text style={{ color: C.red }}>red</Text> amount already has an open
+            dispute.
+          </Text>
+        </View>
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryK}>Net payable</Text>
-        <Text style={styles.summaryV}>{formatRM(netDisplay)}</Text>
-        <Text style={[styles.summaryK, { marginTop: 10 }]}>Payee</Text>
-        <Text style={styles.summaryBody}>PR Personnel · {pv.outlet}</Text>
-      </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryK}>Net payable</Text>
+          <Text style={styles.summaryV}>{formatRM(netDisplay)}</Text>
+          <Text style={[styles.summaryK, { marginTop: 10 }]}>Payee</Text>
+          <Text style={styles.summaryBody}>PR Personnel · {pv.outlet}</Text>
+        </View>
 
-      {linkedReceipts.length > 0 && (
-        <Pressable style={styles.collapse} onPress={() => setReceiptsOpen((o) => !o)}>
-          {/* Not all of these are scans — a self-log and a check-out seal reach
+        {linkedReceipts.length > 0 && (
+          <Pressable
+            style={styles.collapse}
+            onPress={() => setReceiptsOpen((o) => !o)}
+          >
+            {/* Not all of these are scans — a self-log and a check-out seal reach
               this list too, and the demo fallback is gone, so the heading can
               stop claiming a scan for every row. */}
-          <Text style={styles.collapseTitle}>DRINK &amp; TIP RECORDS</Text>
-          <Text style={styles.collapseAction}>{receiptsOpen ? 'Hide' : 'Details'}</Text>
-        </Pressable>
-      )}
-      {receiptsOpen && linkedReceipts.length > 0 && (
-        <View style={styles.receiptBox}>
-          {linkedReceipts.map((r) => (
-            <Pressable
-              key={r.id}
-              style={styles.receiptRow}
-              onPress={() => setReceiptDetail(r)}
-            >
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.receiptRef}>{r.ref}</Text>
-                <Text style={styles.receiptMeta}>
-                  {r.item} · {formatRM(r.amount)}
-                </Text>
-              </View>
-              <View style={styles.receiptRight}>
-                <Text style={styles.receiptMatched}>
-                  {r.matched ? 'Matched' : 'Pending'}
-                </Text>
-                <Text style={styles.receiptDetailsLink}>Details</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      )}
+            <Text style={styles.collapseTitle}>DRINK &amp; TIP RECORDS</Text>
+            <Text style={styles.collapseAction}>
+              {receiptsOpen ? 'Hide' : 'Details'}
+            </Text>
+          </Pressable>
+        )}
+        {receiptsOpen && linkedReceipts.length > 0 && (
+          <View style={styles.receiptBox}>
+            {linkedReceipts.map((r) => (
+              <Pressable
+                key={r.id}
+                style={styles.receiptRow}
+                onPress={() => setReceiptDetail(r)}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.receiptRef}>{r.ref}</Text>
+                  <Text style={styles.receiptMeta}>
+                    {r.item} · {formatRM(r.amount)}
+                  </Text>
+                </View>
+                <View style={styles.receiptRight}>
+                  <Text style={styles.receiptMatched}>
+                    {r.matched ? 'Matched' : 'Pending'}
+                  </Text>
+                  <Text style={styles.receiptDetailsLink}>Details</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
-      <View style={styles.sigCard}>
-        <Text style={styles.sectionLabel}>YOUR SIGNATURE</Text>
-        <Text style={styles.sigRole}>PR Personnel</Text>
-        {isSealed ? (
-          <View style={styles.signedRow}>
-            <Check size={16} color={C.green} />
-            <Text style={styles.signedText}>
-              Signed{sigName ? ` · ${sigName}` : ''} — Dual-signed · transfer processing
+        <View style={styles.sigCard}>
+          <Text style={styles.sectionLabel}>YOUR SIGNATURE</Text>
+          <Text style={styles.sigRole}>PR Personnel</Text>
+          {isSealed ? (
+            <View style={styles.signedRow}>
+              <Check size={16} color={C.green} />
+              <Text style={styles.signedText}>
+                Signed{sigName ? ` · ${sigName}` : ''} — Dual-signed · transfer
+                processing
+              </Text>
+            </View>
+          ) : awaitingMySignature ? (
+            <Text style={styles.pendingSig}>Pending</Text>
+          ) : (
+            // Names whose move it is. "Pending" alone read as "yours to do" beside a
+            // Sign button that the server would have refused.
+            <Text style={styles.pendingSig}>
+              Not sent to you yet — waiting for your agency
+            </Text>
+          )}
+        </View>
+
+        {!isSealed && awaitingMySignature && (
+          <Pressable
+            style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
+            onPress={() => setSignOpen(true)}
+          >
+            <Pencil size={16} color="#241a08" />
+            <Text style={styles.primaryText}>Sign payment voucher</Text>
+          </Pressable>
+        )}
+
+        {isSealed && pv.status === 'paid' && (
+          <View style={styles.paidBox}>
+            <Shield size={16} color={C.green} />
+            <Text style={styles.paidText}>
+              PAID · {formatRM(netDisplay)} in your bank
             </Text>
           </View>
-        ) : awaitingMySignature ? (
-          <Text style={styles.pendingSig}>Pending</Text>
-        ) : (
-          // Names whose move it is. "Pending" alone read as "yours to do" beside a
-          // Sign button that the server would have refused.
-          <Text style={styles.pendingSig}>
-            Not sent to you yet — waiting for your agency
-          </Text>
         )}
-      </View>
 
-      {!isSealed && awaitingMySignature && (
-        <Pressable
-          style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
-          onPress={() => setSignOpen(true)}
-        >
-          <Pencil size={16} color="#241a08" />
-          <Text style={styles.primaryText}>Sign payment voucher</Text>
-        </Pressable>
-      )}
-
-      {isSealed && pv.status === 'paid' && (
-        <View style={styles.paidBox}>
-          <Shield size={16} color={C.green} />
-          <Text style={styles.paidText}>PAID · {formatRM(netDisplay)} in your bank</Text>
-        </View>
-      )}
-
-      {isSealed && (
-        <Pressable style={styles.soft} onPress={() => setTab('history')}>
-          <Text style={styles.softText}>View in History · Payment history</Text>
-        </Pressable>
-      )}
+        {isSealed && (
+          <Pressable style={styles.soft} onPress={() => setTab('history')}>
+            <Text style={styles.softText}>
+              View in History · Payment history
+            </Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       {/*
-        * THE SAME evidence sheet as Payment — one component, one format.
-        *
-        * Every row opens it, wages included: the PR asked to inspect a figure,
-        * not only to argue with one, and wages have a shift and stamps behind
-        * them worth reading. The DISPUTE button appears only under the rules
-        * Payment applies (drinks/tips, a voucher the server still accepts, at
-        * least one shift not already claimed) and hands off to Payment → Last
-        * week, where the pickers and the server call live.
-        */}
+       * THE SAME evidence sheet as Payment — one component, one format.
+       *
+       * Every row opens it, wages included: the PR asked to inspect a figure,
+       * not only to argue with one, and wages have a shift and stamps behind
+       * them worth reading. The DISPUTE button appears only under the rules
+       * Payment applies (drinks/tips, a voucher the server still accepts, at
+       * least one shift not already claimed) and hands off to Payment → Last
+       * week, where the pickers and the server call live.
+       */}
       {evidenceTarget && (
         <CellEvidenceSheet
           evidence={buildCellEvidence(
@@ -816,7 +891,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           onDispute={
             kindDisputable(evidenceTarget.row.key) &&
             weekDisputable(weekForGrid) &&
-            buildCellEvidence(weekForGrid, evidenceTarget.day.dateIso, evidenceTarget.row.key)
+            buildCellEvidence(
+              weekForGrid,
+              evidenceTarget.day.dateIso,
+              evidenceTarget.row.key,
+            )
               .groups.flatMap((g) => g.receipts)
               .some((r) => {
                 if (!r.receiptNo) return false;
@@ -847,7 +926,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         animationType="slide"
         onRequestClose={() => setReceiptDetail(null)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setReceiptDetail(null)}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => setReceiptDetail(null)}
+        >
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.receiptSheetHead}>
               <Wallet size={18} color={C.goldL} />
@@ -879,19 +961,28 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                 <View style={styles.detailFoot}>
                   <Text style={styles.detailFootL}>
                     {receiptDetail.qty}× {receiptDetail.category}
-                    {receiptDetail.item !== 'Guest tip' ? ` · ${receiptDetail.item}` : ''}
+                    {receiptDetail.item !== 'Guest tip'
+                      ? ` · ${receiptDetail.item}`
+                      : ''}
                   </Text>
-                  <Text style={styles.detailFootR}>{formatRM(receiptDetail.amount)}</Text>
+                  <Text style={styles.detailFootR}>
+                    {formatRM(receiptDetail.amount)}
+                  </Text>
                 </View>
                 <View style={styles.matchedBanner}>
                   <Check size={14} color={C.green} />
                   <Text style={styles.matchedBannerText}>
-                    {receiptDetail.matched ? 'Matched to this PV' : 'Pending agency verify'}
+                    {receiptDetail.matched
+                      ? 'Matched to this PV'
+                      : 'Pending agency verify'}
                   </Text>
                 </View>
               </>
             )}
-            <Pressable style={styles.sheetCancel} onPress={() => setReceiptDetail(null)}>
+            <Pressable
+              style={styles.sheetCancel}
+              onPress={() => setReceiptDetail(null)}
+            >
               <Text style={styles.sheetCancelText}>Close</Text>
             </Pressable>
           </Pressable>
@@ -899,10 +990,18 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       </Modal>
 
       {/* Signature sheet */}
-      <Modal visible={signOpen} transparent animationType="slide" onRequestClose={() => setSignOpen(false)}>
+      <Modal
+        visible={signOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSignOpen(false)}
+      >
         <Pressable style={styles.backdrop} onPress={() => setSignOpen(false)}>
           <Pressable
-            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            style={[
+              styles.sheet,
+              keyboardInset > 0 && { paddingBottom: keyboardInset + 16 },
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={styles.sheetTitle}>Sign payment voucher</Text>
@@ -930,13 +1029,15 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             >
               <Text style={styles.primaryText}>Confirm signature</Text>
             </Pressable>
-            <Pressable style={styles.sheetCancel} onPress={() => setSignOpen(false)}>
+            <Pressable
+              style={styles.sheetCancel}
+              onPress={() => setSignOpen(false)}
+            >
               <Text style={styles.sheetCancelText}>Back</Text>
             </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
-
     </View>
   );
 }
@@ -950,9 +1051,24 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   back: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  backText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: C.txt },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  pvId: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.prMuted },
+  backText: {
+    fontFamily: F.sora,
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  pvId: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.prMuted,
+  },
   banner: {
     marginTop: 12,
     borderRadius: 12,
@@ -965,8 +1081,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.4)',
     backgroundColor: C.redBg,
   },
-  bannerTitle: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.txt },
-  bannerBody: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  bannerTitle: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  bannerBody: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
+  },
   weekCard: {
     marginTop: 14,
     borderRadius: 14,
@@ -982,7 +1108,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: C.muted2,
   },
-  weekLabel: { marginTop: 4, fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: C.txt },
+  weekLabel: {
+    marginTop: 4,
+    fontFamily: F.sora,
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.txt,
+  },
   gridRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   gridLabel: {
     width: 78,
@@ -998,9 +1130,19 @@ const styles = StyleSheet.create({
   gridColDisputed: {
     backgroundColor: 'rgba(240,138,138,0.1)',
   },
-  gridDay: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.muted2 },
+  gridDay: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.muted2,
+  },
   gridDate: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
-  gridVal: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
+  gridVal: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.txt,
+  },
   gridValDisputed: { color: C.red },
   /** Every cell in the row, any amount — same red as the Payment grid. */
   gridValDeduction: { color: C.red },
@@ -1060,7 +1202,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: C.muted2,
   },
-  collapseAction: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.goldL },
+  collapseAction: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.goldL,
+  },
   receiptBox: {
     borderRadius: 12,
     borderWidth: 1,
@@ -1076,8 +1223,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.line,
   },
-  receiptRef: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
-  receiptMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  receiptRef: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  receiptMeta: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
+  },
   receiptRight: { alignItems: 'flex-end', gap: 4 },
   receiptMatched: {
     fontFamily: F.sora,
@@ -1098,10 +1255,26 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
     padding: 14,
   },
-  sigRole: { marginTop: 4, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
-  signedRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sigRole: {
+    marginTop: 4,
+    fontFamily: F.manrope,
+    fontSize: 13,
+    color: C.prMuted,
+  },
+  signedRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   signedText: { flex: 1, fontFamily: F.manrope, fontSize: 13, color: C.green },
-  pendingSig: { marginTop: 8, fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.amber },
+  pendingSig: {
+    marginTop: 8,
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.amber,
+  },
   primary: {
     marginTop: 16,
     flexDirection: 'row',
@@ -1111,9 +1284,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
   },
-  primaryText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: '#241a08' },
+  primaryText: {
+    fontFamily: F.sora,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#241a08',
+  },
   soft: { marginTop: 12, alignItems: 'center', padding: 10 },
-  softText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.goldL },
+  softText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.goldL,
+  },
   paidBox: {
     marginTop: 14,
     flexDirection: 'row',
@@ -1125,7 +1308,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(93,217,160,0.35)',
   },
-  paidText: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.green },
+  paidText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.green,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(6,3,12,0.65)',
@@ -1149,7 +1337,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
-  sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
+  sheetTitle: {
+    fontFamily: F.sora,
+    fontSize: 20,
+    fontWeight: '800',
+    color: C.txt,
+  },
   sheetHint: {
     marginTop: 6,
     marginBottom: 8,
@@ -1181,8 +1374,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: C.line,
   },
-  detailFootL: { fontFamily: F.manrope, fontSize: 13, color: C.prMuted, flex: 1 },
-  detailFootR: { fontFamily: F.sora, fontSize: 16, fontWeight: '800', color: C.txt },
+  detailFootL: {
+    fontFamily: F.manrope,
+    fontSize: 13,
+    color: C.prMuted,
+    flex: 1,
+  },
+  detailFootR: {
+    fontFamily: F.sora,
+    fontSize: 16,
+    fontWeight: '800',
+    color: C.txt,
+  },
   matchedBanner: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1195,7 +1398,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(93,217,160,0.35)',
   },
-  matchedBannerText: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.green },
+  matchedBannerText: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.green,
+  },
   fieldLabel: {
     marginTop: 10,
     marginBottom: 4,
@@ -1276,7 +1484,12 @@ const styles = StyleSheet.create({
     color: C.txt,
   },
   sheetCancel: { marginTop: 10, alignItems: 'center', padding: 10 },
-  sheetCancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
+  sheetCancelText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.muted,
+  },
   dangerBtn: {
     marginTop: 12,
     borderRadius: 12,
@@ -1286,5 +1499,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(240,138,138,0.4)',
   },
-  dangerBtnText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: C.red },
+  dangerBtnText: {
+    fontFamily: F.sora,
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.red,
+  },
 });

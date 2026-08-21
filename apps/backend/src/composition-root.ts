@@ -81,15 +81,26 @@ import { CollectionInvoiceControllerClass } from '@/features/collection-invoice/
 export const jwtController = new JwtControllerClass();
 export const userRoleRepository = new UserRoleRepositoryClass();
 export const userProfileRepository = new UserProfileRepositoryClass();
-export const userRepository = new UserRepositoryClass(userRoleRepository, userProfileRepository);
-export const authRepository = new AuthRepositoryClass(jwtController, userRepository, userRoleRepository);
+export const userRepository = new UserRepositoryClass(
+  userRoleRepository,
+  userProfileRepository,
+);
+export const authRepository = new AuthRepositoryClass(
+  jwtController,
+  userRepository,
+  userRoleRepository,
+);
 // Declared above authController: registration resolves its own role by name now,
 // rather than trusting a roleId off the request body.
 export const roleRepository = new RoleRepositoryClass();
 // TOTP enrolments. Declared above authController, which challenges at login.
 export const adminMfaRepository = new AdminMfaRepositoryClass();
-export const phoneVerificationRepository = new PhoneVerificationRepositoryClass();
-export const otpController = new OtpControllerClass(phoneVerificationRepository, userRepository);
+export const phoneVerificationRepository =
+  new PhoneVerificationRepositoryClass();
+export const otpController = new OtpControllerClass(
+  phoneVerificationRepository,
+  userRepository,
+);
 // Declared before authController — PR register writes agency_pr by user_id;
 // outlet/agency web register creates the org + owner membership.
 export const agencyPrRepository = new AgencyPrRepository();
@@ -113,9 +124,11 @@ export const agencyOutletController = new AgencyOutletControllerClass(
 );
 export const orgMemberInviteRepository = new OrgMemberInviteRepositoryClass();
 export const subscriptionRepository = new SubscriptionRepositoryClass();
-export const memberSubscriptionRepository = new MemberSubscriptionRepositoryClass();
+export const memberSubscriptionRepository =
+  new MemberSubscriptionRepositoryClass();
 // One row per CHARGE, against member_subscription's one row per SUBSCRIPTION.
-export const subscriptionInvoiceRepository = new SubscriptionInvoiceRepositoryClass();
+export const subscriptionInvoiceRepository =
+  new SubscriptionInvoiceRepositoryClass();
 export const authController = new AuthControllerClass(
   authRepository,
   jwtController,
@@ -131,7 +144,6 @@ export const authController = new AuthControllerClass(
   outletMemberRepository,
   subscriptionRepository,
   memberSubscriptionRepository,
-
 );
 export const healthController = new HealthControllerClass();
 
@@ -143,25 +155,35 @@ export const moduleController = new ModuleControllerClass(
   moduleRepository,
   permissionRepository,
 );
-export const permissionController = new PermissionControllerClass(permissionRepository);
+export const permissionController = new PermissionControllerClass(
+  permissionRepository,
+);
 
 export const rolePermissionRepository = new RolePermissionRepositoryClass();
-export const rolePermissionController = new RolePermissionControllerClass(rolePermissionRepository);
+export const rolePermissionController = new RolePermissionControllerClass(
+  rolePermissionRepository,
+);
 
 export const userController = new UserControllerClass(
   userRepository,
   userProfileRepository,
 );
-export const userRoleController = new UserRoleControllerClass(userRoleRepository);
+export const userRoleController = new UserRoleControllerClass(
+  userRoleRepository,
+);
 export const auditLogRepository = new AuditLogRepositoryClass();
 
 // In-app notifications. Producers should call notify() rather than reaching for
 // this directly — it is the seam a real transport gets added behind later.
 export const notificationRepository = new NotificationRepositoryClass();
 // The read side. Producers write through notify(); recipients read through here.
-export const notificationController = new NotificationControllerClass(notificationRepository);
+export const notificationController = new NotificationControllerClass(
+  notificationRepository,
+);
 
-export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository);
+export const subscriptionController = new SubscriptionControllerClass(
+  subscriptionRepository,
+);
 
 export const outletController = new OutletControllerClass(
   outletRepository,
@@ -186,7 +208,9 @@ export const orgMemberInviteController = new OrgMemberInviteControllerClass(
 );
 
 export const platformConfigRepository = new PlatformConfigRepositoryClass();
-export const platformConfigController = new PlatformConfigControllerClass(platformConfigRepository);
+export const platformConfigController = new PlatformConfigControllerClass(
+  platformConfigRepository,
+);
 
 /**
  * Repositories for resolveOrgScope (util/org-scope.ts), the scope resolver five
@@ -198,11 +222,19 @@ export const orgScopeDeps = {
   outletMemberRepository,
 };
 
-export const memberSubscriptionController = new MemberSubscriptionControllerClass(memberSubscriptionRepository, orgScopeDeps);
+export const memberSubscriptionController =
+  new MemberSubscriptionControllerClass(
+    memberSubscriptionRepository,
+    orgScopeDeps,
+  );
 
 // Same scope resolver as the subscription ledger above — an org must read its
 // own invoices and no one else's.
-export const subscriptionInvoiceController = new SubscriptionInvoiceControllerClass(subscriptionInvoiceRepository, orgScopeDeps);
+export const subscriptionInvoiceController =
+  new SubscriptionInvoiceControllerClass(
+    subscriptionInvoiceRepository,
+    orgScopeDeps,
+  );
 
 // The card a venue/agency pays with. Same scope resolver: the owner comes from
 // the session, never from the request body.
@@ -212,8 +244,11 @@ export const paymentMethodController = new PaymentMethodControllerClass(
   orgScopeDeps,
 );
 
-export const outletTransactionRepository = new OutletTransactionRepositoryClass();
-export const outletTransactionController = new OutletTransactionControllerClass(outletTransactionRepository);
+export const outletTransactionRepository =
+  new OutletTransactionRepositoryClass();
+export const outletTransactionController = new OutletTransactionControllerClass(
+  outletTransactionRepository,
+);
 
 export const adminRequestRepository = new AdminRequestRepositoryClass();
 // Approving a plan change writes the member_subscription ledger, so the
@@ -253,14 +288,29 @@ export const specialServiceController = new SpecialServiceControllerClass(
 );
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();
-export const outletWorkspaceController = new OutletWorkspaceControllerClass(outletWorkspaceRepository);
+export const outletWorkspaceController = new OutletWorkspaceControllerClass(
+  outletWorkspaceRepository,
+);
 export const shiftTemplateRepository = new ShiftTemplateRepositoryClass();
-export const shiftTemplateController = new ShiftTemplateControllerClass(shiftTemplateRepository, authRepository, agencyMemberRepository, outletMemberRepository, outletRepository);
+export const shiftTemplateController = new ShiftTemplateControllerClass(
+  shiftTemplateRepository,
+  authRepository,
+  agencyMemberRepository,
+  outletMemberRepository,
+  outletRepository,
+);
 
-export const agencyPenaltyRuleRepository = new AgencyPenaltyRuleRepositoryClass();
+export const agencyPenaltyRuleRepository =
+  new AgencyPenaltyRuleRepositoryClass();
 
 export const ratingRepository = new RatingRepositoryClass();
-export const ratingController = new RatingControllerClass(ratingRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const ratingController = new RatingControllerClass(
+  ratingRepository,
+  prRepository,
+  agencyMemberRepository,
+  authRepository,
+  outletMemberRepository,
+);
 // Declared above prController, which needs it for the penalty proposal endpoint.
 // Takes no constructor args, so the move up is free.
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
@@ -283,7 +333,15 @@ export const prController = new PrControllerClass(
 );
 
 export const shiftRepository = new ShiftRepositoryClass();
-export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository, shiftAssignmentRepository, agencyOutletRepository);
+export const shiftController = new ShiftControllerClass(
+  shiftRepository,
+  agencyMemberRepository,
+  authRepository,
+  outletMemberRepository,
+  outletRepository,
+  shiftAssignmentRepository,
+  agencyOutletRepository,
+);
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 
@@ -298,8 +356,16 @@ export const agencyPenaltyRuleController = new AgencyPenaltyRuleControllerClass(
   paymentVoucherRepository,
   prRepository,
 );
-export const paymentVoucherDisputeRepository = new PaymentVoucherDisputeRepositoryClass();
-export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository, paymentVoucherDisputeRepository, shiftAssignmentRepository);
+export const paymentVoucherDisputeRepository =
+  new PaymentVoucherDisputeRepositoryClass();
+export const paymentVoucherController = new PaymentVoucherControllerClass(
+  paymentVoucherRepository,
+  agencyMemberRepository,
+  authRepository,
+  prRepository,
+  paymentVoucherDisputeRepository,
+  shiftAssignmentRepository,
+);
 
 // Takes paymentVoucherRepository (declared above) because approving overtime
 // writes a voucher line — the one place attendance becomes money outside the
@@ -309,14 +375,46 @@ export const paymentVoucherController = new PaymentVoucherControllerClass(paymen
 // Takes agencyPrRepository (declared far above) because assigning a shift must
 // check the agency has APPROVED that PR, and only agency_pr holds that per
 // membership — the synthetic PR reports its oldest agency's answer.
-export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository, paymentVoucherRepository, agencyPenaltyRuleRepository, agencyPrRepository, agencyOutletRepository);
+export const shiftAssignmentController = new ShiftAssignmentControllerClass(
+  shiftAssignmentRepository,
+  shiftRepository,
+  prRepository,
+  agencyMemberRepository,
+  authRepository,
+  outletMemberRepository,
+  paymentVoucherRepository,
+  agencyPenaltyRuleRepository,
+  agencyPrRepository,
+  agencyOutletRepository,
+);
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
-export const outletSwapController = new OutletSwapControllerClass(outletSwapRepository, shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const outletSwapController = new OutletSwapControllerClass(
+  outletSwapRepository,
+  shiftAssignmentRepository,
+  shiftRepository,
+  prRepository,
+  agencyMemberRepository,
+  authRepository,
+  outletMemberRepository,
+);
 export const prAvailabilityRepository = new PrAvailabilityRepositoryClass();
-export const prAvailabilityController = new PrAvailabilityControllerClass(prAvailabilityRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const prAvailabilityController = new PrAvailabilityControllerClass(
+  prAvailabilityRepository,
+  agencyMemberRepository,
+  authRepository,
+  outletMemberRepository,
+);
 export const cutlostRepository = new CutlostRepositoryClass();
-export const cutlostController = new CutlostControllerClass(cutlostRepository, shiftRepository, shiftAssignmentRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const cutlostController = new CutlostControllerClass(
+  cutlostRepository,
+  shiftRepository,
+  shiftAssignmentRepository,
+  prRepository,
+  agencyMemberRepository,
+  authRepository,
+  outletMemberRepository,
+);
 
 export const shiftSaleRepository = new ShiftSaleRepositoryClass();
 export const shiftSaleController = new ShiftSaleControllerClass(
@@ -329,9 +427,17 @@ export const shiftSaleController = new ShiftSaleControllerClass(
   outletMemberRepository,
 );
 
-export const paymentVoucherGenerator = new PaymentVoucherGeneratorClass(shiftAssignmentRepository, paymentVoucherRepository, prRepository);
+export const paymentVoucherGenerator = new PaymentVoucherGeneratorClass(
+  shiftAssignmentRepository,
+  paymentVoucherRepository,
+  prRepository,
+);
 
 // Collections: an agency's receivables from its outlets. A statement of
 // account only — this app does not move money between the two.
-export const collectionInvoiceRepository = new CollectionInvoiceRepositoryClass();
-export const collectionInvoiceController = new CollectionInvoiceControllerClass(collectionInvoiceRepository, orgScopeDeps);
+export const collectionInvoiceRepository =
+  new CollectionInvoiceRepositoryClass();
+export const collectionInvoiceController = new CollectionInvoiceControllerClass(
+  collectionInvoiceRepository,
+  orgScopeDeps,
+);

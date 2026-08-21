@@ -46,7 +46,9 @@ export function gridBucket(line: PrReceiptLine): GridBucket {
 /** Statuses that mean the agency has already processed the week's voucher. */
 export const VERIFIED_STATUSES = ['sent', 'awaiting_pr', 'signed', 'paid'];
 
-export function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay[] {
+export function buildWeekGridFromLines(
+  week: PrCurrentWeek | null,
+): WeeklyDayPay[] {
   if (!week) return [];
   /**
    * THE WEAKEST VOUCHER WINS, and this is the WEEK's grid, so it must ask every
@@ -77,7 +79,9 @@ export function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay
   // before the voucher's own status moves. Absent (older backend) simply means
   // no day is approved yet, which is what the screen used to assume anyway.
   const approvedDays = new Set(
-    (week.dayReviews ?? []).filter((d) => d.status === 'approved').map((d) => d.date),
+    (week.dayReviews ?? [])
+      .filter((d) => d.status === 'approved')
+      .map((d) => d.date),
   );
   /**
    * A day the server sent back as NOT approved — held, unreviewed, or downgraded
@@ -90,8 +94,11 @@ export function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay
    * and signing on it. Absent from `dayReviews` (or an older backend that sends
    * none) is NOT a downgrade: that is the legacy path and behaves as before.
    */
-  const reviewed = new Map((week.dayReviews ?? []).map((d) => [d.date, d.status]));
-  const downgraded = (iso: string) => reviewed.has(iso) && reviewed.get(iso) !== 'approved';
+  const reviewed = new Map(
+    (week.dayReviews ?? []).map((d) => [d.date, d.status]),
+  );
+  const downgraded = (iso: string) =>
+    reviewed.has(iso) && reviewed.get(iso) !== 'approved';
   const byIso = new Map<string, PrReceiptLine[]>();
   for (const line of week.lines) {
     const key = line.lineDate ?? week.weekStart;
@@ -107,7 +114,9 @@ export function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay
     const iso = d.toISOString().slice(0, 10);
     const dayLines = byIso.get(iso) ?? [];
     const sumBucket = (bucket: GridBucket) =>
-      dayLines.filter((l) => gridBucket(l) === bucket).reduce((s, l) => s + l.commission, 0);
+      dayLines
+        .filter((l) => gridBucket(l) === bucket)
+        .reduce((s, l) => s + l.commission, 0);
     days.push({
       day: WEEKDAY_ABBR[d.getUTCDay()],
       date: d.getUTCDate(),

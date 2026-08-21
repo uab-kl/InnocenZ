@@ -9,7 +9,11 @@ import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.rep
  * outlet member (their own venues). `outletIds` is empty for non-outlet callers.
  * Always resolved from the DB — never trusted from the request body.
  */
-export type OrgScope = { isAdmin: boolean; agencyId: string | null; outletIds: string[] };
+export type OrgScope = {
+  isAdmin: boolean;
+  agencyId: string | null;
+  outletIds: string[];
+};
 
 /** The repositories `resolveOrgScope` needs; controllers already hold all three. */
 export type OrgScopeDeps = {
@@ -60,7 +64,10 @@ export function activeAgencyId(
  * to. Agency membership wins when a user somehow holds both, and the outlet
  * fallback lets a venue operator read the shifts/rosters/sales at its own venues.
  */
-export async function resolveOrgScope(req: Request, deps: OrgScopeDeps): Promise<OrgScope> {
+export async function resolveOrgScope(
+  req: Request,
+  deps: OrgScopeDeps,
+): Promise<OrgScope> {
   const user = req.user!;
   const roles = await deps.authRepository.getRolesForUserIds([user.id]);
   const isAdmin = roles.some((r) => r.roleName === 'admin');
@@ -80,10 +87,14 @@ export async function resolveOrgScope(req: Request, deps: OrgScopeDeps): Promise
     return { isAdmin: false, agencyId, outletIds: [] };
   }
 
-  const outletMemberships = await deps.outletMemberRepository.listByUser(user.id);
+  const outletMemberships = await deps.outletMemberRepository.listByUser(
+    user.id,
+  );
   const outletIds = [
     ...new Set(
-      outletMemberships.filter((m) => m.status === 'active').map((m) => m.outletId),
+      outletMemberships
+        .filter((m) => m.status === 'active')
+        .map((m) => m.outletId),
     ),
   ];
   return { isAdmin: false, agencyId: null, outletIds };

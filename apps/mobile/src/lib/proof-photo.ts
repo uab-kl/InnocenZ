@@ -49,7 +49,11 @@ type HtmlFileInput = {
 };
 
 /** Downscale a captured photo to a bounded JPEG data URL (falls back to raw). */
-export function downscaleToDataUrl(file: Blob, maxPx = 1024, quality = 0.7): Promise<string> {
+export function downscaleToDataUrl(
+  file: Blob,
+  maxPx = 1024,
+  quality = 0.7,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(reader.error);
@@ -75,7 +79,9 @@ export function downscaleToDataUrl(file: Blob, maxPx = 1024, quality = 0.7): Pro
         const canvas = g.document!.createElement('canvas') as {
           width: number;
           height: number;
-          getContext: (t: string) => { drawImage: (...a: unknown[]) => void } | null;
+          getContext: (
+            t: string,
+          ) => { drawImage: (...a: unknown[]) => void } | null;
           toDataURL: (t: string, q: number) => string;
         };
         canvas.width = w;
@@ -117,7 +123,9 @@ export function pickProofPhotos(
     });
     return;
   }
-  const doc = (globalThis as { document?: { createElement: (t: string) => HtmlFileInput } }).document;
+  const doc = (
+    globalThis as { document?: { createElement: (t: string) => HtmlFileInput } }
+  ).document;
   if (!doc) return;
   const input = doc.createElement('input');
   input.type = 'file';

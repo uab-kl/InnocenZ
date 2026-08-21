@@ -17,11 +17,7 @@ import { paramId } from '@/util/params.js';
 
 export type AgencySubRole = 'owner' | 'finance' | 'director' | 'guarantor';
 export type OutletSubRole =
-  | 'owner'
-  | 'finance'
-  | 'operations_head'
-  | 'director'
-  | 'guarantor';
+  'owner' | 'finance' | 'operations_head' | 'director' | 'guarantor';
 
 const forbidden = (allowed: readonly string[]) =>
   'Forbidden — requires role: ' + allowed.join(' or ');
@@ -117,7 +113,9 @@ function guard(
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
     }
 
     try {
@@ -129,7 +127,9 @@ function guard(
           : await holdsOutletLane(user.id, allowed as OutletSubRole[]);
 
       if (!ok) {
-        return res.status(403).json({ success: false, message: forbidden(allowed), data: null });
+        return res
+          .status(403)
+          .json({ success: false, message: forbidden(allowed), data: null });
       }
 
       if (options.scopeParam) {
@@ -153,9 +153,11 @@ function guard(
 
       return next();
     } catch {
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   };
 }
@@ -168,11 +170,17 @@ export function requireOutletSubRole(...allowed: OutletSubRole[]) {
   return guard('outlet', allowed);
 }
 
-export function requireAgencySubRoleScoped(param: string, ...allowed: AgencySubRole[]) {
+export function requireAgencySubRoleScoped(
+  param: string,
+  ...allowed: AgencySubRole[]
+) {
   return guard('agency', allowed, { scopeParam: param });
 }
 
-export function requireOutletSubRoleScoped(param: string, ...allowed: OutletSubRole[]) {
+export function requireOutletSubRoleScoped(
+  param: string,
+  ...allowed: OutletSubRole[]
+) {
   return guard('outlet', allowed, { scopeParam: param });
 }
 
@@ -180,7 +188,9 @@ export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
     }
 
     try {
@@ -193,14 +203,18 @@ export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
       }
 
       if (!(await holdsOutletLane(user.id, allowed))) {
-        return res.status(403).json({ success: false, message: forbidden(allowed), data: null });
+        return res
+          .status(403)
+          .json({ success: false, message: forbidden(allowed), data: null });
       }
 
       return next();
     } catch {
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   };
 }
@@ -234,7 +248,9 @@ export function requireOutletScopeByParam(param: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
     }
 
     try {
@@ -250,8 +266,12 @@ export function requireOutletScopeByParam(param: string) {
 
       // Outlet side first: someone who operates venues is judged as a venue
       // operator, never allowed to fall through to the agency branch below.
-      const outletMemberships = await outletMemberRepository.listByUser(user.id);
-      const activeOutlets = outletMemberships.filter((m) => m.status === 'active');
+      const outletMemberships = await outletMemberRepository.listByUser(
+        user.id,
+      );
+      const activeOutlets = outletMemberships.filter(
+        (m) => m.status === 'active',
+      );
       if (activeOutlets.length > 0) {
         if (!activeOutlets.some((m) => m.outletId === outletId)) {
           return res.status(403).json({
@@ -263,12 +283,15 @@ export function requireOutletScopeByParam(param: string) {
         return next();
       }
 
-      const agencyMemberships = await agencyMemberRepository.listByUser(user.id);
+      const agencyMemberships = await agencyMemberRepository.listByUser(
+        user.id,
+      );
       const activeAgency = agencyMemberships.find((m) => m.status === 'active');
       if (activeAgency?.agencyId) {
-        const linked = await agencyOutletRepository.listApprovedOutletIdsForAgency(
-          activeAgency.agencyId,
-        );
+        const linked =
+          await agencyOutletRepository.listApprovedOutletIdsForAgency(
+            activeAgency.agencyId,
+          );
         if (!linked.includes(outletId)) {
           return res.status(403).json({
             success: false,
@@ -285,9 +308,11 @@ export function requireOutletScopeByParam(param: string) {
         data: null,
       });
     } catch {
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   };
 }
@@ -313,11 +338,16 @@ export function requireOutletScopeByParam(param: string) {
  * The WRITES on these routers were already scoped, via `agencyOwnerOfParam` /
  * `outletOwnerOfParam`. Only the reads were open.
  */
-export function requireOrgMembershipByParam(org: 'agency' | 'outlet', param: string) {
+export function requireOrgMembershipByParam(
+  org: 'agency' | 'outlet',
+  param: string,
+) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
     }
 
     try {
@@ -326,9 +356,11 @@ export function requireOrgMembershipByParam(org: 'agency' | 'outlet', param: str
       const raw = req.params[param];
       const orgId = raw == null ? '' : paramId(raw);
       if (!orgId) {
-        return res
-          .status(400)
-          .json({ success: false, message: 'Missing organisation id', data: null });
+        return res.status(400).json({
+          success: false,
+          message: 'Missing organisation id',
+          data: null,
+        });
       }
 
       const memberships =
@@ -348,9 +380,11 @@ export function requireOrgMembershipByParam(org: 'agency' | 'outlet', param: str
       }
       return next();
     } catch {
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   };
 }
@@ -363,27 +397,38 @@ export function refuseOrgStatusChange() {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
     }
     try {
       if (await isAdmin(user.id)) return next();
       if (req.body && typeof req.body === 'object' && 'status' in req.body) {
         return res.status(403).json({
           success: false,
-          message: 'Forbidden — status is set by admin approval, not by this endpoint',
+          message:
+            'Forbidden — status is set by admin approval, not by this endpoint',
           data: null,
         });
       }
       return next();
     } catch {
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   };
 }
 
-export const agencyOwnerOrFinance = requirePermission('payment_voucher', 'update');
+export const agencyOwnerOrFinance = requirePermission(
+  'payment_voucher',
+  'update',
+);
 export const outletOwnerOnly = requirePermission('settings', 'update');
 export const outletOwnerOrOps = requirePermission('booking', 'create');
-export const outletOwnerOrOpsIfMember = requireOutletSubRoleIfMember('owner', 'operations_head');
+export const outletOwnerOrOpsIfMember = requireOutletSubRoleIfMember(
+  'owner',
+  'operations_head',
+);
