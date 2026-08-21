@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { and, desc, eq, gt } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, sql } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import {
@@ -105,6 +105,34 @@ export class PhoneVerificationRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[PhoneVerificationRepository.update] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Count one wrong code IN SQL, atomically, refusing past the cap.
+   *
+   * `attempts: row.attempts + 1` in the controller was a lost update: N
+   * concurrent wrong guesses all read the same snapshot and all wrote the same
+   * value, so the 5-attempt cap never engaged — and a verified id is the sole
+   * proof the password reset accepts, which made grinding the 6-digit code an
+   * account takeover by phone number. The `attempts < max` predicate makes the
+   * increment and the cap one statement: an empty result means the budget is
+   * already spent, however many requests are in flight.
+   */
+  async countFailedAttempt(id: string, max: number): Promise<PhoneVerification | null> {
+    try {
+      const [row] = await db
+        .update(PhoneVerificationTable)
+        .set({
+          attempts: sql`${PhoneVerificationTable.attempts} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(PhoneVerificationTable.id, id), lt(PhoneVerificationTable.attempts, max)))
+        .returning();
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PhoneVerificationRepository.countFailedAttempt] Error:', error);
       return null;
     }
   }

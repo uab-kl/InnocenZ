@@ -303,7 +303,15 @@ export class CutlostControllerClass {
       }
 
       const shift = await this.shiftRepository.getById(assignment.shiftId);
-      const pr = await this.prRepository.getById(assignment.prId);
+      // The RELEASING agency's tier is what this shift pays — the same rule
+      // check-out seals under. Asked without an agency, `loadPrimaryMembership`
+      // returns the OLDEST `agency_pr` row, so a PR on two rosters was cut
+      // loose at the rival agency's grade. `pr` is used for pricing only here,
+      // so it can be scoped directly; the fallback keeps a non-member yielding
+      // the old answer instead of a null dayRate sealing RM0.00.
+      const pr =
+        (await this.prRepository.getById(assignment.prId, assignment.agencyId)) ??
+        (await this.prRepository.getById(assignment.prId));
       const dayRate =
         shift && pr
           ? await resolveTierWages(

@@ -111,6 +111,10 @@ export type SpecialServiceFilter = {
   category?: SpecialServiceCategory;
   vendorName?: string;
   initiatedBy?: SpecialServiceInitiatedBy;
+  /** Scope an agency caller to ITS OWN postings — the column has existed all
+   * along (posting_agency_id, FK to agency); only the filter was missing,
+   * which is why every agency read every rival's postings. */
+  postingAgencyId?: string;
   postingPrId?: string;
   postingUserId?: string;
   adminAccepted?: SpecialServiceAdminAccepted;

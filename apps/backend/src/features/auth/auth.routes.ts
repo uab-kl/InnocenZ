@@ -10,6 +10,8 @@ import {
   loginLimiter,
   otpSendLimiter,
   otpSendPerPhoneLimiter,
+  otpVerifyLimiter,
+  otpVerifyPerPhoneLimiter,
   resetPasswordLimiter,
 } from '@/middlewares/rate-limit.js';
 
@@ -130,7 +132,14 @@ router.post(
   optionalAuthenticateJWT,
   otpController.send.bind(otpController),
 );
-router.post('/otp/verify', otpController.verify.bind(otpController));
+// Limited like /otp/send above — verify was the ONLY auth endpoint with no
+// limiter, and it is the one whose success mints a password-reset proof.
+router.post(
+  '/otp/verify',
+  otpVerifyLimiter,
+  otpVerifyPerPhoneLimiter,
+  otpController.verify.bind(otpController),
+);
 
 /**
  * Rate limits run BEFORE the handler, so a throttled caller never reaches the

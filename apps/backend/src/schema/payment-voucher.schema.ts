@@ -85,6 +85,15 @@ export const CreatePaymentVoucherSchema = z.object({
 
 export const UpdatePaymentVoucherSchema =
   CreatePaymentVoucherSchema.partial().extend({
+    /**
+     * Optimistic-concurrency token: the voucher's `updatedAt` as the CLIENT
+     * loaded it. When present and stale, the update 409s instead of replacing
+     * the line set — the wipe-and-reinsert below would otherwise destroy a line
+     * (and its proof photo) the PR logged while the agency editor sat open on a
+     * 60-second-stale query, with no error on either side. Optional so every
+     * existing caller (status flips, the scheduler) keeps working unchanged.
+     */
+    expectedUpdatedAt: z.string().max(40).optional(),
     status: z.enum(paymentVoucherStatusValues).optional(),
     disputeReason: z
       .string()

@@ -240,10 +240,27 @@ export class OtpControllerClass {
       }
 
       if (!codesMatch(parsed.data.code, row.codeHash)) {
-        await this.phoneVerificationRepository.update(row.id, {
-          attempts: row.attempts + 1,
-          updatedBy: SYSTEM_ACTOR,
-        });
+        // Atomic, capped in the same statement. `row.attempts + 1` here was a
+        // lost update — concurrent wrong guesses all wrote the same snapshot
+        // value and the 5-attempt cap never engaged, on the endpoint whose
+        // verified id is the password reset's sole proof. An empty result
+        // means another request already spent the budget: answer 429, not
+        // another free guess.
+        const counted = await this.phoneVerificationRepository.countFailedAttempt(
+          row.id,
+          MAX_VERIFY_ATTEMPTS,
+        );
+        if (!counted) {
+          await this.phoneVerificationRepository.update(row.id, {
+            status: 'expired',
+            updatedBy: SYSTEM_ACTOR,
+          });
+          return res.status(429).json({
+            success: false,
+            message: 'Too many attempts — request a new code',
+            data: null,
+          });
+        }
         return res.status(401).json({
           success: false,
           message: 'Invalid code',

@@ -238,3 +238,31 @@ export const otpSendPerPhoneLimiter = rateLimit({
   },
   message: 'Too many verification codes requested. Please try again later.',
 });
+
+/**
+ * WhatsApp OTP verify. /otp/verify carried NO limiter while /otp/send stacked
+ * two — and verify is the more dangerous half: a verified row's id is the sole
+ * proof POST /auth/password/reset-otp accepts, so guessing the 6-digit code IS
+ * the account takeover. The per-row 5-attempt cap is the hard wall; this pair
+ * exists so an attacker cannot cycle send→guess→send to mint themselves a
+ * fresh 5-guess budget per code, and cannot spray many phones from one host.
+ */
+export const otpVerifyLimiter = rateLimit({
+  name: 'otp-verify',
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  keys: (req) => [`ip:${clientIp(req)}`],
+  message: 'Too many attempts. Please wait a few minutes and try again.',
+});
+
+export const otpVerifyPerPhoneLimiter = rateLimit({
+  name: 'otp-verify-phone',
+  windowMs: 60 * 60 * 1000,
+  max: 15,
+  keys: (req) => {
+    const phone = normalizedBodyField(req, 'phoneNum');
+    const digits = phone?.replace(/\D/g, '') ?? null;
+    return [digits ? `phone:${digits}` : null];
+  },
+  message: 'Too many attempts for this number. Please try again later.',
+});

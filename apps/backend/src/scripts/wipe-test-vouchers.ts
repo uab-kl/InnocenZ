@@ -53,6 +53,8 @@ import {
   PaymentVoucherDayReviewTable,
 } from '@/features/payment-voucher/payment-voucher.model.js';
 import { NotificationTable } from '@/features/notification/notification.model.js';
+import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model.js';
+import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model.js';
 
 function getArg(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -211,6 +213,18 @@ async function main() {
       .delete(PaymentVoucherDayReviewTable)
       .where(inArray(PaymentVoucherDayReviewTable.voucherId, ids));
     await tx.delete(NotificationTable).where(notificationMatch);
+    // Un-charge the fees these vouchers carried, or they are written off for
+    // good: listUnchargedCancelFees / the penalty pool both filter on
+    // `charged_at IS NULL`, and the FK only nulls the voucher pointer — the
+    // timestamp survives the delete and hides the fee forever.
+    await tx
+      .update(ShiftAssignmentTable)
+      .set({ cancelFeeChargedAt: null, cancelFeeVoucherId: null })
+      .where(inArray(ShiftAssignmentTable.cancelFeeVoucherId, ids));
+    await tx
+      .update(PenaltyChargeTable)
+      .set({ chargedAt: null, chargedVoucherId: null })
+      .where(inArray(PenaltyChargeTable.chargedVoucherId, ids));
     await tx.delete(PaymentVoucherTable).where(inArray(PaymentVoucherTable.id, ids));
   });
 

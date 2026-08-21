@@ -212,11 +212,23 @@ export type PrFilter = {
   tier?: PrTier;
   name?: string;
   /**
-   * Restricts to PRs rostered on a shift at one of these outlets — how an outlet
-   * caller sees the personnel working its own venues without seeing an agency's
-   * whole roster. An empty array matches nothing.
+   * Restricts to PRs rostered on a shift at one of these outlets — the PAST
+   * relationship: who has actually worked here.
+   *
+   * ⚠️ Not what the Post Job picker wants. Naming a PR for a shift that has not
+   * happened yet is a question about who an outlet MAY book, and this answers
+   * who it already HAS. Two venues on the same two agencies showed different
+   * lists — 6 PRs against 2 — purely because one had used more people. See
+   * `agencyIdsIn`, which is what the picker passes now. Kept for surfaces that
+   * genuinely mean "personnel at my venues" (history, attendance).
    */
   assignedToOutletIds?: string[];
+  /**
+   * Restricts to memberships at these agencies — how an outlet caller sees the
+   * rosters of the agencies it has an APPROVED partnership with, which is the
+   * pool it may name from. An empty array matches nothing, never everything.
+   */
+  agencyIdsIn?: string[];
   /**
    * Drops memberships still awaiting the agency's decision
    * (`agency_pr.approve_status = 'pending'`).

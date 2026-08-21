@@ -127,10 +127,21 @@ export async function runWeeklyPayout(): Promise<void> {
   const pending = await paymentVoucherRepository.listForWeek(weekStart, ['pending_review']);
   const issuedDate = klToday();
   const issued: { voucherId: string; prId: string | null }[] = [];
-  /** agencyId -> the vouchers this run refused to send, for one notification each. */
-  const awaitingByAgency = new Map<string, string[]>();
+  /**
+   * agencyId -> the vouchers this run refused to send, SPLIT BY WHY, so one
+   * notification per agency can name the action actually owed. Still one per
+   * agency per run: see `pv_day_review_pending`'s own note on why twelve
+   * notifications saying the same thing is how a bell gets ignored.
+   */
+  const awaitingByAgency = new Map<string, { dayReview: string[]; unsigned: string[] }>();
+  const heldFor = (agencyId: string) => {
+    const bucket = awaitingByAgency.get(agencyId) ?? { dayReview: [], unsigned: [] };
+    awaitingByAgency.set(agencyId, bucket);
+    return bucket;
+  };
   let held = 0;
   let awaitingReview = 0;
+  let awaitingSignature = 0;
   for (const voucher of pending) {
     const balance = checkVoucherBalance(voucher, voucher.lines);
     if (!balance.balanced) {
@@ -177,12 +188,34 @@ export async function runWeeklyPayout(): Promise<void> {
       logger.warn(`[weekly-payout] awaiting agency day review ${voucher.id}: ${gate.message}`);
       // Collected per agency so ONE notification below can name the whole queue.
       // A log line was the only signal before, which meant nobody was told at all.
-      awaitingByAgency.set(voucher.agencyId, [
-        ...(awaitingByAgency.get(voucher.agencyId) ?? []),
-        voucher.id,
-      ]);
+      heldFor(voucher.agencyId).dayReview.push(voucher.id);
       continue;
     }
+
+    // THE FINANCE SIGNATURE — the other half of the send gate, and the half
+    // `voucherSendGate` has no term for. The HTTP send 409s on exactly this
+    // (payment-voucher.controller.ts: "Sign this voucher first — the finance
+    // signature is what the PR is asked to counter-sign"), so leaving it out
+    // here made the scheduler a way around the agency's own attestation.
+    //
+    // It is not a rare edge. `financeSignVoucher` refuses any voucher that is
+    // not `pending_review`, and signing only becomes legal at 00:00 Sunday —
+    // so this job, running at 02:00 the same night, was the DEFAULT path.
+    // `finance_head_signed_at` then stayed null forever: every exported PDF
+    // and Excel printed an empty finance stamp, and the PR was asked to
+    // counter-sign a wage document nobody at the agency had attested.
+    //
+    // Held, not sent. The voucher stays `pending_review` — which is the only
+    // status finance can still sign from — and the agency is told below.
+    if (!voucher.financeHeadSignedAt) {
+      awaitingSignature += 1;
+      logger.warn(
+        `[weekly-payout] awaiting finance signature ${voucher.id} (agency ${voucher.agencyId})`,
+      );
+      heldFor(voucher.agencyId).unsigned.push(voucher.id);
+      continue;
+    }
+
     const sent = await paymentVoucherRepository.update(voucher.id, {
       status: 'sent',
       issuedDate: voucher.issuedDate ?? issuedDate,
@@ -193,7 +226,8 @@ export async function runWeeklyPayout(): Promise<void> {
   logger.info(
     `[weekly-payout] issued ${issued.length} voucher(s) to PRs` +
       (held > 0 ? ` (${held} held for agency review)` : '') +
-      (awaitingReview > 0 ? ` (${awaitingReview} awaiting day-by-day review)` : ''),
+      (awaitingReview > 0 ? ` (${awaitingReview} awaiting day-by-day review)` : '') +
+      (awaitingSignature > 0 ? ` (${awaitingSignature} awaiting finance signature)` : ''),
   );
 
   let notified = 0;
@@ -244,7 +278,7 @@ export async function runWeeklyPayout(): Promise<void> {
   // clear is noise. The sub-role enum happens to be exactly owner|finance today,
   // so this filter is a no-op right now; it is written down so a third sub-role
   // does not silently inherit money notifications.
-  for (const [agencyId, voucherIds] of awaitingByAgency) {
+  for (const [agencyId, buckets] of awaitingByAgency) {
     try {
       const members = await agencyMemberRepository.listByAgency(agencyId);
       const recipients = members
@@ -253,20 +287,58 @@ export async function runWeeklyPayout(): Promise<void> {
         .map((m) => m.userId);
       if (recipients.length === 0) {
         logger.warn(
-          `[weekly-payout] ${voucherIds.length} voucher(s) awaiting review at agency ${agencyId} with no owner/finance member to tell`,
+          `[weekly-payout] ${buckets.dayReview.length + buckets.unsigned.length} voucher(s) held at agency ${agencyId} with no owner/finance member to tell`,
         );
         continue;
       }
 
-      const count = voucherIds.length;
+      // Two reasons a week can be held, and the agency needs to know WHICH:
+      // a day review is a decision on the PR's logged money, a signature is
+      // finance attesting the finished voucher. Telling someone to "review"
+      // when the days are already approved sends them looking for work that
+      // is not there. Reusing the `pv_day_review_pending` kind rather than
+      // adding an enum value: `kind` is a pgEnum, a new value needs a
+      // migration, and this kind's own note already scopes it to "the Monday
+      // payout job held one or more vouchers", agency-addressed, one per run.
+      const reviewCount = buckets.dayReview.length;
+      const signCount = buckets.unsigned.length;
+      const voucherIds = [...buckets.dayReview, ...buckets.unsigned];
+      const total = voucherIds.length;
+      if (total === 0) continue;
+
+      const plural = (n: number) => (n === 1 ? '' : 's');
+      const title =
+        signCount > 0 && reviewCount === 0
+          ? `${signCount} voucher${plural(signCount)} waiting for your signature`
+          : reviewCount > 0 && signCount === 0
+            ? `${reviewCount} voucher${plural(reviewCount)} awaiting day review`
+            : `${total} voucher${plural(total)} need review or signature`;
+
+      const parts: string[] = [];
+      if (reviewCount > 0) {
+        parts.push(
+          `${reviewCount} ${reviewCount === 1 ? 'has a day that is' : 'have days that are'} held or unreviewed — approve each day on Payroll & PV`,
+        );
+      }
+      if (signCount > 0) {
+        parts.push(
+          `${signCount} ${signCount === 1 ? 'is' : 'are'} reviewed but unsigned — finance has to sign before ${signCount === 1 ? 'it' : 'they'} can reach the PR`,
+        );
+      }
+
       await notifyMany(recipients, {
         kind: 'pv_day_review_pending',
-        title: `${count} voucher${count === 1 ? '' : 's'} awaiting day review`,
+        title,
         body:
-          `Week ${weekStart} to ${weekEnd} did not go out: ${count} voucher${count === 1 ? '' : 's'} ` +
-          `${count === 1 ? 'has a day that is' : 'have days that are'} held or unreviewed. ` +
-          `Approve each day on Payroll & PV, then send.`,
-        payload: { weekStart, weekEnd, voucherIds },
+          `Last week (${weekStart} to ${weekEnd}) did not go out: ${parts.join('; ')}. ` +
+          `Until then the PR sees nothing for that week.`,
+        payload: {
+          weekStart,
+          weekEnd,
+          voucherIds,
+          dayReviewVoucherIds: buckets.dayReview,
+          unsignedVoucherIds: buckets.unsigned,
+        },
         actor: ACTOR,
       });
     } catch (error) {

@@ -644,6 +644,13 @@ export interface UpdatePaymentVoucherInput
 	status?: PaymentVoucherStatus;
 	disputeReason?: string;
 	disputeNote?: string;
+	/**
+	 * Optimistic-concurrency token — the voucher's `updatedAt` exactly as this
+	 * client fetched it. When stale the backend answers 409 instead of replacing
+	 * the line set, which is what protects a line the PR logged while the
+	 * agency's editor sat open. Send it on line-replacing updates.
+	 */
+	expectedUpdatedAt?: string;
 }
 
 export async function fetchPaymentVouchers(

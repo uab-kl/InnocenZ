@@ -66,6 +66,8 @@ export class SpecialServiceRepositoryClass {
     if (filter?.category) conditions.push(eq(SpecialServiceTable.category, filter.category));
     if (filter?.vendorName) conditions.push(eq(SpecialServiceTable.vendorName, filter.vendorName));
     if (filter?.initiatedBy) conditions.push(eq(SpecialServiceTable.initiatedBy, filter.initiatedBy));
+    if (filter?.postingAgencyId)
+      conditions.push(eq(SpecialServiceTable.postingAgencyId, filter.postingAgencyId));
     if (filter?.postingUserId && filter?.postingPrId) {
       conditions.push(
         or(

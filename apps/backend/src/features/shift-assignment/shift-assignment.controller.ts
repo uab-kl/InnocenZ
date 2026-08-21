@@ -400,9 +400,29 @@ export class ShiftAssignmentControllerClass {
 
       const actor = getActor(req);
       const shift = await this.shiftRepository.getById(existing.shiftId);
+      // WHICH agency sold the shift is what sets the tier — not which one
+      // signed this person up first.
+      //
+      // `pr` above is deliberately unscoped and must stay that way: it answers
+      // "is this assignment yours", and `ownsMineAssignment` needs its legacy
+      // `pr.id` fallback. Pricing is a different question with a different
+      // answer, and the answer is already on the row — `existing.agencyId`.
+      //
+      // Asked without an agency, `loadPrimaryMembership` falls to
+      // `.orderBy(asc(createdAt)).limit(1)` — the OLDEST membership — so a PR
+      // on two rosters was sealed at the rival's grade, overwriting the figure
+      // the assign lane (f091a55) had booked correctly. That commit fixed this
+      // on the assign side; this is the seal side of the same defect.
+      //
+      // Falls back to the unscoped row on a scoped miss: `getByUserId` returns
+      // null for a non-member by design, and `shift && wagePr` would then seal
+      // the shift at NO wage. A wrong tier is a bug; RM0.00 is a worse one.
+      const wagePr = shift
+        ? ((await this.prRepository.getByUserId(userId, existing.agencyId)) ?? pr)
+        : pr;
       const tierWages =
-        shift && pr
-          ? await this.resolveTierWages(pr, existing.shiftId, shift.outletId)
+        shift && wagePr
+          ? await this.resolveTierWages(wagePr, existing.shiftId, shift.outletId)
           : null;
       // Forgot-to-check-out guard: the stamp is CLAMPED to the shift's
       // scheduled end, so pay locks to the shift's duration — a check-out
@@ -579,14 +599,26 @@ export class ShiftAssignmentControllerClass {
         // commission-only PR has no daily wage, and `resolveTierWages` returns
         // null for them, which correctly yields no fee rather than a wrong one.
         let basis: string | null = null;
-        if (pr?.tier && shift?.outletId) {
-          // The same resolver check-out and cut-loss seal against — two copies
-          // would be two answers to "what does this shift pay".
-          basis = await this.resolveTierWages(
-            { tier: pr.tier },
-            existing.shiftId,
-            shift.outletId,
-          );
+        if (shift?.outletId) {
+          // Same rule as check-out: the fee is a percentage of what THIS
+          // agency pays, so the tier has to come from THIS agency's
+          // membership. `existing.agencyId` is already read on the penalty-rule
+          // line above — it was simply never used for the money, so a PR on two
+          // rosters had her fee priced off the oldest agency's grade.
+          //
+          // Falls back to the unscoped `pr` on a scoped miss, so a non-member
+          // still yields the old answer rather than silently no fee.
+          const feePr =
+            (await this.prRepository.getByUserId(userId, existing.agencyId)) ?? pr;
+          if (feePr?.tier) {
+            // The same resolver check-out and cut-loss seal against — two copies
+            // would be two answers to "what does this shift pay".
+            basis = await this.resolveTierWages(
+              { tier: feePr.tier },
+              existing.shiftId,
+              shift.outletId,
+            );
+          }
         }
 
         fee = computeCancelFee({

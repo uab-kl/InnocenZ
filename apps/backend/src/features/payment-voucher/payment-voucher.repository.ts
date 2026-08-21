@@ -21,6 +21,7 @@ import { UserProfileTable } from '@/features/user/user-profile/user-profile.mode
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
+import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { prepareLine, resolveComponent } from './payment-voucher-component';
 import {
@@ -76,6 +77,18 @@ function isVoucherNoConflict(error: unknown): boolean {
     const where = `${err.constraint ?? ''} ${err.message ?? ''}`;
     return where.includes('voucher_no');
   });
+}
+
+/**
+ * The voucher changed since the caller loaded it. Thrown by `update` when an
+ * `expectedUpdatedAt` token is stale — a typed class so the controller can turn
+ * exactly this into a 409 while every other error stays a 500.
+ */
+export class VoucherConflictError extends Error {
+  constructor(voucherId: string) {
+    super(`Voucher ${voucherId} changed since it was loaded`);
+    this.name = 'VoucherConflictError';
+  }
 }
 
 export class PaymentVoucherRepositoryClass {
@@ -229,9 +242,32 @@ export class PaymentVoucherRepositoryClass {
     id: string,
     data: Partial<PaymentVoucherInsertType>,
     lines?: LineInput[],
+    expectedUpdatedAt?: string,
   ): Promise<PaymentVoucherWithLines | null> {
     try {
       return await db.transaction(async (tx) => {
+        // Optimistic concurrency, checked INSIDE the transaction under a row
+        // lock — not in the controller, whose read races the very write it
+        // would be guarding against. The window is real: the agency editor
+        // seeds from a 60s-stale query while the PR's phone appends lines to
+        // the same current-week draft, and the wholesale replace below would
+        // destroy the PR's line and its proof photo with no error on either
+        // side. Only enforced when the caller sent a token, so the scheduler
+        // and every status-flip path are untouched.
+        if (expectedUpdatedAt !== undefined) {
+          const [current] = await tx
+            .select({ updatedAt: PaymentVoucherTable.updatedAt })
+            .from(PaymentVoucherTable)
+            .where(eq(PaymentVoucherTable.id, id))
+            .for('update');
+          if (
+            current &&
+            current.updatedAt.getTime() !== new Date(expectedUpdatedAt).getTime()
+          ) {
+            throw new VoucherConflictError(id);
+          }
+        }
+
         const [voucher] = await tx
           .update(PaymentVoucherTable)
           .set({ ...data, updatedAt: new Date() })
@@ -520,12 +556,29 @@ export class PaymentVoucherRepositoryClass {
 
   async remove(id: string): Promise<boolean> {
     try {
-      const [row] = await db
-        .delete(PaymentVoucherTable)
-        .where(eq(PaymentVoucherTable.id, id))
-        .returning({ id: PaymentVoucherTable.id });
-      // No row => not found; a real DB error re-throws below. Lines cascade.
-      return !!row;
+      return await db.transaction(async (tx) => {
+        // Un-charge the fees this voucher carried BEFORE the row goes. The FK
+        // SET-NULLs cancel_fee_voucher_id but leaves cancel_fee_charged_at
+        // stamped — and listUnchargedCancelFees filters on `charged_at IS
+        // NULL`, so a fee whose voucher was deleted would never surface again:
+        // money the agency is owed that no screen can show. Same shape on
+        // penalty_charge. Resetting both pointers returns each fee to the
+        // uncharged pool, where the next voucher run re-attaches it.
+        await tx
+          .update(ShiftAssignmentTable)
+          .set({ cancelFeeChargedAt: null, cancelFeeVoucherId: null })
+          .where(eq(ShiftAssignmentTable.cancelFeeVoucherId, id));
+        await tx
+          .update(PenaltyChargeTable)
+          .set({ chargedAt: null, chargedVoucherId: null })
+          .where(eq(PenaltyChargeTable.chargedVoucherId, id));
+        const [row] = await tx
+          .delete(PaymentVoucherTable)
+          .where(eq(PaymentVoucherTable.id, id))
+          .returning({ id: PaymentVoucherTable.id });
+        // No row => not found; a real DB error re-throws below. Lines cascade.
+        return !!row;
+      });
     } catch (error) {
       logger.error('[PaymentVoucherRepository.remove] Error:', error);
       throw error;

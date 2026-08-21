@@ -944,7 +944,6 @@ function PostJobPage() {
 														{draftShifts.length !== 1 ? "s" : ""}
 													</span>
 												</div>
-												=======
 												<div className="mt-3 flex flex-col gap-4">
 													{draftShifts.map((s, i) =>
 														editingShiftId === s.id ? (

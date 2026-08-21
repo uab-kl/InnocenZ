@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
+import type { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 import { PrRepositoryClass } from './pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import {
@@ -174,6 +175,9 @@ export class PrControllerClass {
     private userProfileRepository: UserProfileRepositoryClass,
     private userRoleRepository: UserRoleRepositoryClass,
     private roleRepository: RoleRepositoryClass,
+    // Resolves which agencies an outlet caller may book from — see
+    // `resolveBookableAgencyIds`.
+    private agencyOutletRepository: AgencyOutletRepository,
   ) {}
 
   /**
@@ -402,6 +406,25 @@ export class PrControllerClass {
     return { isAdmin: false, agencyId: null, outletIds };
   }
 
+  /**
+   * The agencies an outlet caller may book from: the union of APPROVED
+   * partnerships across its venues.
+   *
+   * Approved only — a pending or rejected request is not a partnership, and a
+   * venue must not browse the roster of an agency that has not accepted it.
+   * De-duplicated because a multi-venue operator's outlets commonly share
+   * agencies, and the same agency twice would widen nothing but cost a scan.
+   */
+  private async resolveBookableAgencyIds(outletIds: string[]): Promise<string[]> {
+    if (outletIds.length === 0) return [];
+    const perOutlet = await Promise.all(
+      outletIds.map((outletId) =>
+        this.agencyOutletRepository.listApprovedAgencyIdsForOutlet(outletId),
+      ),
+    );
+    return [...new Set(perOutlet.flat())];
+  }
+
   async list(req: Request, res: Response) {
     try {
       const scope = await this.resolveScope(req);
@@ -483,7 +506,21 @@ export class PrControllerClass {
         agencyId: scope.isAdmin
           ? (req.query.agencyId as string | undefined)
           : (scope.agencyId ?? undefined),
-        assignedToOutletIds: isOutletCaller ? scope.outletIds : undefined,
+        // WHO THIS OUTLET MAY NAME — its approved agencies' rosters, not the
+        // people who happen to have worked here before.
+        //
+        // `assignedToOutletIds` answered the past ("who has worked my venues"),
+        // which made the Post Job picker a list of repeat bookings: two venues
+        // sharing the SAME two agencies showed 6 PRs and 2 PRs purely because
+        // one had used more people, and a venue could never name a PR it had
+        // not already used — against a plan that sells "choose 100 from 200".
+        //
+        // A PR under an approved agency is bookable by that agency's outlets,
+        // so the pool is the union of those rosters. A person on two of them
+        // still appears ONCE: `dedupeByPerson` covers this filter too.
+        agencyIdsIn: isOutletCaller
+          ? await this.resolveBookableAgencyIds(scope.outletIds)
+          : undefined,
         // Same rule as the agency branch above, for the outlet caller. Admins
         // keep the unfiltered view — the admin PR screen is where an applicant
         // stuck in `pending` has to remain visible.
