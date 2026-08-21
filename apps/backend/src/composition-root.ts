@@ -333,6 +333,8 @@ export const prController = new PrControllerClass(
   userProfileRepository,
   userRoleRepository,
   roleRepository,
+  // An outlet caller's PR pool is its approved agencies' rosters.
+  agencyOutletRepository,
 );
 
 export const shiftRepository = new ShiftRepositoryClass();

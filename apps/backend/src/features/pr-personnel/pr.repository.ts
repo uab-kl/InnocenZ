@@ -650,6 +650,13 @@ export class PrRepositoryClass {
       // memberships. Nothing is lost by narrowing: `shift_assignment.agency_id`
       // is NOT NULL and every live row resolves a membership — verified against
       // the database by scripts/probe-outlet-pr-tier-and-history.ts.
+      // The outlet's bookable POOL: every PR on the roster of an agency it has
+      // an approved partnership with. Empty matches nothing — an outlet with no
+      // approved agency may name nobody, which is not the same as anybody.
+      if (filter?.agencyIdsIn) {
+        if (filter.agencyIdsIn.length === 0) return { prs: [], totalCount: 0 };
+        conditions.push(inArray(AgencyPrTable.agencyId, filter.agencyIdsIn));
+      }
       if (filter?.assignedToOutletIds) {
         if (filter.assignedToOutletIds.length === 0) return { prs: [], totalCount: 0 };
         conditions.push(
@@ -693,7 +700,7 @@ export class PrRepositoryClass {
       // Deliberately NOT applied to the agency branch (already pinned to one
       // agencyId, so one row per person) nor to admin (whose PR screen is where
       // a person's several memberships must stay individually visible).
-      const dedupeByPerson = Boolean(filter?.assignedToOutletIds);
+      const dedupeByPerson = Boolean(filter?.assignedToOutletIds || filter?.agencyIdsIn);
 
       const [countRow] = await db
         .select({
