@@ -61,17 +61,30 @@ export class OutletControllerClass {
         // one venue an agency originally signed up.
         linkedToAgencyId: req.query.linkedToAgencyId as string | undefined,
       };
-      const { outlets, totalCount } = await this.outletRepository.listPaginated({ filter, page, pageSize });
+      const { outlets, totalCount } = await this.outletRepository.listPaginated(
+        { filter, page, pageSize },
+      );
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
         message: 'OK',
         data: outlets,
-        pagination: { page, pageSize, totalCount, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
       });
     } catch (error) {
       logger.error('[OutletController.list] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -95,24 +108,38 @@ export class OutletControllerClass {
         });
       }
       const status = (req.query.status as string | undefined) ?? 'active';
-      const memberships = await this.outletMemberRepository.listMembershipsByUserIds(userIds, {
-        status: status === 'all' ? undefined : status,
-      });
+      const memberships =
+        await this.outletMemberRepository.listMembershipsByUserIds(userIds, {
+          status: status === 'all' ? undefined : status,
+        });
       res.status(200).json({ success: true, message: 'OK', data: memberships });
     } catch (error) {
       logger.error('[OutletController.listMemberships] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
   async getById(req: Request, res: Response) {
     try {
-      const outlet = await this.outletRepository.getById(paramId(req.params.id));
-      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const outlet = await this.outletRepository.getById(
+        paramId(req.params.id),
+      );
+      if (!outlet)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       res.status(200).json({ success: true, message: 'OK', data: outlet });
     } catch (error) {
       logger.error('[OutletController.getById] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -120,21 +147,33 @@ export class OutletControllerClass {
     try {
       const parsed = CreateOutletSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
       const actor = getActor(req);
       const outlet = await this.outletRepository.create({
         ...parsed.data,
-        lat: parsed.data.lat !== undefined ? String(parsed.data.lat) : undefined,
-        lng: parsed.data.lng !== undefined ? String(parsed.data.lng) : undefined,
+        lat:
+          parsed.data.lat !== undefined ? String(parsed.data.lat) : undefined,
+        lng:
+          parsed.data.lng !== undefined ? String(parsed.data.lng) : undefined,
         status: 'pending_review',
         createdBy: actor,
         updatedBy: actor,
       });
-      res.status(201).json({ success: true, message: 'Outlet created', data: outlet });
+      res
+        .status(201)
+        .json({ success: true, message: 'Outlet created', data: outlet });
     } catch (error) {
       logger.error('[OutletController.create] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -143,7 +182,11 @@ export class OutletControllerClass {
       const id = paramId(req.params.id);
       const parsed = UpdateOutletSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
       const {
         lat,
@@ -167,7 +210,10 @@ export class OutletControllerClass {
         lng: lng !== undefined ? String(lng) : undefined,
         updatedBy: getActor(req),
       });
-      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!outlet)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // Logo is not a column on the Zod rest shape that maps 1:1 — strip above,
       // then upload to R2 (or clear) and store only the object key. Always
@@ -204,7 +250,9 @@ export class OutletControllerClass {
             logoError instanceof globalThis.Error
               ? logoError.message
               : 'Logo upload failed';
-          return res.status(400).json({ success: false, message: msg, data: null });
+          return res
+            .status(400)
+            .json({ success: false, message: msg, data: null });
         }
       }
 
@@ -237,7 +285,11 @@ export class OutletControllerClass {
       res.status(200).json({ success: true, message, data: outlet });
     } catch (error) {
       logger.error('[OutletController.update] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -246,7 +298,11 @@ export class OutletControllerClass {
       const id = paramId(req.params.id);
       const parsed = UpdateGeoFenceSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
       const outlet = await this.outletRepository.update(id, {
         lat: String(parsed.data.lat),
@@ -254,11 +310,20 @@ export class OutletControllerClass {
         geoFenceRadius: parsed.data.geoFenceRadius,
         updatedBy: getActor(req),
       });
-      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Geo-fence updated', data: outlet });
+      if (!outlet)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      res
+        .status(200)
+        .json({ success: true, message: 'Geo-fence updated', data: outlet });
     } catch (error) {
       logger.error('[OutletController.setGeoFence] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -277,11 +342,20 @@ export class OutletControllerClass {
         lng: null,
         updatedBy: getActor(req),
       });
-      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Geo-fence removed', data: outlet });
+      if (!outlet)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      res
+        .status(200)
+        .json({ success: true, message: 'Geo-fence removed', data: outlet });
     } catch (error) {
       logger.error('[OutletController.clearGeoFence] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -295,19 +369,31 @@ export class OutletControllerClass {
     try {
       const parsed = GeocodeQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
       const outcome = await geocodeAddress(parsed.data.address);
       if (!outcome.ok) {
         // 404 for "nothing matched"; 503 for a key/quota/network problem, so the
         // form can tell "try another address" apart from "try again later".
         const status = outcome.reason === 'no_match' ? 404 : 503;
-        return res.status(status).json({ success: false, message: outcome.message, data: null });
+        return res
+          .status(status)
+          .json({ success: false, message: outcome.message, data: null });
       }
-      res.status(200).json({ success: true, message: 'OK', data: outcome.candidates });
+      res
+        .status(200)
+        .json({ success: true, message: 'OK', data: outcome.candidates });
     } catch (error) {
       logger.error('[OutletController.geocode] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -321,37 +407,58 @@ export class OutletControllerClass {
     try {
       const id = paramId(req.params.id);
       const outlet = await this.outletRepository.getById(id);
-      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!outlet)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const address = addressQueryFromOutlet(outlet);
       if (address.length < 3) {
         return res.status(400).json({
           success: false,
-          message: 'This outlet has no address saved yet — add one, or drop the pin on the map.',
+          message:
+            'This outlet has no address saved yet — add one, or drop the pin on the map.',
           data: null,
         });
       }
       const outcome = await geocodeAddress(address);
       if (!outcome.ok) {
         const status = outcome.reason === 'no_match' ? 404 : 503;
-        return res.status(status).json({ success: false, message: outcome.message, data: null });
+        return res
+          .status(status)
+          .json({ success: false, message: outcome.message, data: null });
       }
-      res.status(200).json({ success: true, message: 'OK', data: { query: address, candidates: outcome.candidates } });
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: { query: address, candidates: outcome.candidates },
+      });
     } catch (error) {
       logger.error('[OutletController.geocodeOwnAddress] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
   async approve(req: Request, res: Response) {
     try {
       const id = paramId(req.params.id);
-      const outlet = await this.outletRepository.update(id, { status: 'active', updatedBy: getActor(req) });
-      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const outlet = await this.outletRepository.update(id, {
+        status: 'active',
+        updatedBy: getActor(req),
+      });
+      if (!outlet)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // Notify the outlet owner — approval already persisted; email failure must not roll it back.
       try {
-        const members = await this.outletMemberRepository.listByOutletWithUser(id);
+        const members =
+          await this.outletMemberRepository.listByOutletWithUser(id);
         const owner = members.find((m) => m.subRole === 'owner' && m.email);
         if (owner?.email) {
           await sendOrgApprovedNotificationEmail({
@@ -361,28 +468,51 @@ export class OutletControllerClass {
             orgKind: 'outlet',
           });
         } else {
-          logger.warn('[OutletController.approve] No owner email to notify', { outletId: id });
+          logger.warn('[OutletController.approve] No owner email to notify', {
+            outletId: id,
+          });
         }
       } catch (mailError) {
-        logger.error('[OutletController.approve] Approval email failed:', mailError);
+        logger.error(
+          '[OutletController.approve] Approval email failed:',
+          mailError,
+        );
       }
 
-      res.status(200).json({ success: true, message: 'Outlet approved', data: outlet });
+      res
+        .status(200)
+        .json({ success: true, message: 'Outlet approved', data: outlet });
     } catch (error) {
       logger.error('[OutletController.approve] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
   async suspend(req: Request, res: Response) {
     try {
       const id = paramId(req.params.id);
-      const outlet = await this.outletRepository.update(id, { status: 'suspended', updatedBy: getActor(req) });
-      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Outlet suspended', data: outlet });
+      const outlet = await this.outletRepository.update(id, {
+        status: 'suspended',
+        updatedBy: getActor(req),
+      });
+      if (!outlet)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      res
+        .status(200)
+        .json({ success: true, message: 'Outlet suspended', data: outlet });
     } catch (error) {
       logger.error('[OutletController.suspend] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -403,7 +533,9 @@ export class OutletControllerClass {
       const outletId = paramId(req.params.id);
       const existing = await this.outletRepository.getById(outletId);
       if (!existing) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       const portal = await portalRepository.getPortalByCode('outlet');
       if (!portal) {
@@ -430,7 +562,11 @@ export class OutletControllerClass {
       res.status(200).json({ success: true, message: 'OK', data: roles });
     } catch (error) {
       logger.error('[OutletController.listInviteRoles] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -438,12 +574,20 @@ export class OutletControllerClass {
     try {
       const outletId = paramId(req.params.id);
       const existing = await this.outletRepository.getById(outletId);
-      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      const members = await this.outletMemberRepository.listByOutletWithUser(outletId);
+      if (!existing)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      const members =
+        await this.outletMemberRepository.listByOutletWithUser(outletId);
       res.status(200).json({ success: true, message: 'OK', data: members });
     } catch (error) {
       logger.error('[OutletController.listMembers] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -452,12 +596,18 @@ export class OutletControllerClass {
       const outletId = paramId(req.params.id);
       const parsed = AddOutletMemberSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const outlet = await this.outletRepository.getById(outletId);
       if (!outlet) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const inviteEmail = parsed.data.email?.trim()
@@ -465,7 +615,10 @@ export class OutletControllerClass {
         : null;
       let userId = parsed.data.userId;
       if (inviteEmail) {
-        const user = await this.userRepository.getUserByLoginMethod('email', inviteEmail);
+        const user = await this.userRepository.getUserByLoginMethod(
+          'email',
+          inviteEmail,
+        );
         // Account may not exist yet — invite is by email; they must sign up before accept.
         if (user) userId = user.id;
       } else if (userId) {
@@ -508,7 +661,9 @@ export class OutletControllerClass {
         }
       }
 
-      let role = null as Awaited<ReturnType<RoleRepositoryClass['getRoleById']>>;
+      let role = null as Awaited<
+        ReturnType<RoleRepositoryClass['getRoleById']>
+      >;
       let subRole = parsed.data.subRole;
 
       if (parsed.data.roleId) {
@@ -530,10 +685,16 @@ export class OutletControllerClass {
         }
         subRole =
           subRole ??
-          (inferMembershipSubRole('outlet', role.roleName) as (typeof outletUserSubRoleValues)[number]);
+          (inferMembershipSubRole(
+            'outlet',
+            role.roleName,
+          ) as (typeof outletUserSubRoleValues)[number]);
       } else {
         const roleName = portalRoleNameForSubRole('outlet', subRole!);
-        role = await this.roleRepository.findByNameAndPortalCode(roleName, 'outlet');
+        role = await this.roleRepository.findByNameAndPortalCode(
+          roleName,
+          'outlet',
+        );
         if (!role) {
           return res.status(500).json({
             success: false,
@@ -626,7 +787,11 @@ export class OutletControllerClass {
       });
     } catch (error) {
       logger.error('[OutletController.addMember] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -636,16 +801,23 @@ export class OutletControllerClass {
       const memberId = paramId(req.params.memberId);
       const parsed = UpdateOutletMemberSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       // The route's scope guard proves the caller owns the outlet in `:id`, and
       // says nothing about `:memberId` — the row actually being written. Without
       // this, an operator could address their OWN venue and mutate a member of
       // somebody else's. 404, not 403: a foreign member id must not be confirmed.
-      const target = await this.outletMemberRepository.getByIdEnriched(memberId);
+      const target =
+        await this.outletMemberRepository.getByIdEnriched(memberId);
       if (!target || target.outletId !== outletId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // You manage others' lanes — not your own. Appoint another owner first if
@@ -663,16 +835,54 @@ export class OutletControllerClass {
         });
       }
 
-      const members = await this.outletMemberRepository.listByOutletWithUser(outletId);
+      const members =
+        await this.outletMemberRepository.listByOutletWithUser(outletId);
       const refusal = guardMemberChange({ members, target, next: parsed.data });
       if (refusal) {
-        return res.status(409).json({ success: false, message: refusal, data: null });
+        return res
+          .status(409)
+          .json({ success: false, message: refusal, data: null });
       }
 
       const actor = getActor(req);
-      if (parsed.data.subRole != null && parsed.data.subRole !== target.subRole) {
-        const roleName = portalRoleNameForSubRole('outlet', parsed.data.subRole);
-        const nextRole = await this.roleRepository.findByNameAndPortalCode(roleName, 'outlet');
+
+      /**
+       * REACTIVATION NEEDS A ROLE NAMED — the twin of the agency guard.
+       *
+       * ⚠️ An active `outlet_user` row with NO outlet role reads back as an
+       * OWNER: every step of the sub-role derivation falls back to owner when it
+       * finds no role. `guardMemberChange` then counts that phantom as "another
+       * active owner", which permits removing the LAST real one and locks the
+       * venue out. The state only became reachable once removal started
+       * revoking the role, so this refusal belongs with that change.
+       */
+      const reactivating =
+        parsed.data.status === 'active' && target.status !== 'active';
+      if (reactivating && parsed.data.subRole == null) {
+        const portal = await portalRepository.getPortalByCode('outlet');
+        const held = await this.userRoleRepository.getUserRoles(target.userId);
+        if (!held.some((r) => portal && r.portalId === portal.id)) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'This member lost their role when they were removed — choose a role to restore them with.',
+            data: null,
+          });
+        }
+      }
+
+      if (
+        parsed.data.subRole != null &&
+        parsed.data.subRole !== target.subRole
+      ) {
+        const roleName = portalRoleNameForSubRole(
+          'outlet',
+          parsed.data.subRole,
+        );
+        const nextRole = await this.roleRepository.findByNameAndPortalCode(
+          roleName,
+          'outlet',
+        );
         if (!nextRole) {
           return res.status(500).json({
             success: false,
@@ -684,7 +894,10 @@ export class OutletControllerClass {
         const held = await this.userRoleRepository.getUserRoles(target.userId);
         for (const r of held) {
           if (portal && r.portalId === portal.id) {
-            await this.userRoleRepository.removeRoleFromUser(target.userId, r.id);
+            await this.userRoleRepository.removeRoleFromUser(
+              target.userId,
+              r.id,
+            );
           }
         }
         await this.userRoleRepository.assignRoleToUser({
@@ -703,13 +916,63 @@ export class OutletControllerClass {
             })
           : await this.outletMemberRepository.getById(memberId);
       if (!memberRow) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      const member = await this.outletMemberRepository.getByIdEnriched(memberId);
-      res.status(200).json({ success: true, message: 'Member updated', data: member });
+
+      // Deactivating here IS removing, so it revokes the same way — see the
+      // agency twin. Revoking only on the DELETE leaves the identical hole one
+      // route down.
+      if (parsed.data.status != null && parsed.data.status !== 'active') {
+        await this.revokeOutletPortalRoleIfLastMembership(target.userId);
+      }
+
+      const member =
+        await this.outletMemberRepository.getByIdEnriched(memberId);
+      res
+        .status(200)
+        .json({ success: true, message: 'Member updated', data: member });
     } catch (error) {
       logger.error('[OutletController.updateMember] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * Revoke the outlet portal role once the user's LAST active membership goes —
+   * the twin of `AgencyController.revokeAgencyPortalRoleIfLastMembership`.
+   *
+   * `remove()` and a `status` write on `updateMember` both only flip
+   * `outlet_user.status`. `resolveOrgScope` already filters outlet memberships
+   * on 'active', so a removed operator resolves to an empty `outletIds` and can
+   * reach no venue's data — but the `user_role` row survived, so they still
+   * cleared `requireRole('outlet')` and stayed a signed-in outlet account with
+   * nothing behind it.
+   *
+   * Conditional on it being the LAST one for the same reason as the agency
+   * side: `user_role` carries no outlet, so one role covers every venue a
+   * person operates, and revoking it while another membership is live would
+   * evict them from a venue that did not remove them.
+   */
+  private async revokeOutletPortalRoleIfLastMembership(
+    userId: string,
+  ): Promise<void> {
+    const stillActive = (
+      await this.outletMemberRepository.listByUser(userId)
+    ).some((m) => m.status === 'active');
+    if (stillActive) return;
+    const portal = await portalRepository.getPortalByCode('outlet');
+    if (!portal) return;
+    const held = await this.userRoleRepository.getUserRoles(userId);
+    for (const r of held) {
+      if (r.portalId === portal.id) {
+        await this.userRoleRepository.removeRoleFromUser(userId, r.id);
+      }
     }
   }
 
@@ -719,9 +982,12 @@ export class OutletControllerClass {
       const memberId = paramId(req.params.memberId);
 
       // Same two checks as updateMember, and for the same reasons.
-      const target = await this.outletMemberRepository.getByIdEnriched(memberId);
+      const target =
+        await this.outletMemberRepository.getByIdEnriched(memberId);
       if (!target || target.outletId !== outletId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // An owner must not delete their own membership row — that would lock them
@@ -735,18 +1001,33 @@ export class OutletControllerClass {
         });
       }
 
-      const members = await this.outletMemberRepository.listByOutletWithUser(outletId);
+      const members =
+        await this.outletMemberRepository.listByOutletWithUser(outletId);
       const refusal = guardMemberChange({ members, target });
       if (refusal) {
-        return res.status(409).json({ success: false, message: refusal, data: null });
+        return res
+          .status(409)
+          .json({ success: false, message: refusal, data: null });
       }
 
       const removed = await this.outletMemberRepository.remove(memberId);
-      if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Member removed', data: null });
+      if (!removed)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      await this.revokeOutletPortalRoleIfLastMembership(target.userId);
+
+      res
+        .status(200)
+        .json({ success: true, message: 'Member removed', data: null });
     } catch (error) {
       logger.error('[OutletController.removeMember] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 }

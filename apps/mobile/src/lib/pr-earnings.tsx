@@ -5,10 +5,18 @@
  * edit / delete), Check-In STATUS (live rows) and Payment (This-week grid) so a
  * change in one reflects everywhere after `refresh`.
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useSession } from './session';
 import {
   addMyReceiptLine,
+  deleteMyReceipt,
   deleteMyReceiptLine,
   fetchMyCurrentWeek,
   submitMyReceipt,
@@ -32,13 +40,21 @@ type PrEarningsState = {
   addLine: (input: PrReceiptLineInput) => Promise<PrReceiptLine>;
   /** Saves one whole scanned/self-logged receipt (header + items) in one call. */
   submitReceipt: (input: PrReceiptSubmitInput) => Promise<PrReceiptRecord>;
-  updateLine: (id: string, input: Partial<PrReceiptLineInput>) => Promise<PrReceiptLine>;
+  updateLine: (
+    id: string,
+    input: Partial<PrReceiptLineInput>,
+  ) => Promise<PrReceiptLine>;
   deleteLine: (id: string) => Promise<void>;
+  deleteReceipt: (receiptId: string) => Promise<void>;
 };
 
 const PrEarningsContext = createContext<PrEarningsState | null>(null);
 
-export function PrEarningsProvider({ children }: { children: React.ReactNode }) {
+export function PrEarningsProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { token } = useSession();
   const [current, setCurrent] = useState<PrCurrentWeek | null>(null);
   const [loading, setLoading] = useState(false);
@@ -100,23 +116,71 @@ export function PrEarningsProvider({ children }: { children: React.ReactNode }) 
     [token, refresh],
   );
 
+  /**
+   * Remove a whole receipt in ONE server call — see `deleteMyReceipt`.
+   *
+   * Anything holding a RECEIPT must use this rather than looping `deleteLine`
+   * over its lines: that loop half-removes the paper if any call in it fails,
+   * and there is nothing on the client able to restore what already went.
+   */
+  const deleteReceipt = useCallback(
+    async (receiptId: string) => {
+      if (!token) throw new Error('Not signed in');
+      await deleteMyReceipt(token, receiptId);
+      await refresh();
+    },
+    [token, refresh],
+  );
+
   const lines = current?.lines ?? [];
   const receiptLines = useMemo(
-    () => lines.filter((l) => l.kind === 'drinks' || l.kind === 'tips' || l.kind === 'others'),
+    () =>
+      lines.filter(
+        (l) => l.kind === 'drinks' || l.kind === 'tips' || l.kind === 'others',
+      ),
     [lines],
   );
 
   const value = useMemo<PrEarningsState>(
-    () => ({ current, loading, error, lines, receiptLines, refresh, addLine, submitReceipt, updateLine, deleteLine }),
-    [current, loading, error, lines, receiptLines, refresh, addLine, submitReceipt, updateLine, deleteLine],
+    () => ({
+      current,
+      loading,
+      error,
+      lines,
+      receiptLines,
+      refresh,
+      addLine,
+      submitReceipt,
+      updateLine,
+      deleteLine,
+      deleteReceipt,
+    }),
+    [
+      current,
+      loading,
+      error,
+      lines,
+      receiptLines,
+      refresh,
+      addLine,
+      submitReceipt,
+      updateLine,
+      deleteLine,
+      deleteReceipt,
+    ],
   );
 
-  return <PrEarningsContext.Provider value={value}>{children}</PrEarningsContext.Provider>;
+  return (
+    <PrEarningsContext.Provider value={value}>
+      {children}
+    </PrEarningsContext.Provider>
+  );
 }
 
 export function usePrEarnings(): PrEarningsState {
   const ctx = useContext(PrEarningsContext);
-  if (!ctx) throw new Error('usePrEarnings must be used inside PrEarningsProvider');
+  if (!ctx)
+    throw new Error('usePrEarnings must be used inside PrEarningsProvider');
   return ctx;
 }
 

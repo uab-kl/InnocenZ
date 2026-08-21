@@ -1,6 +1,5 @@
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzPill } from "@agency-portal/components/iz/ui";
-import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 // import { OutletSealReview } from "@agency-portal/components/outlet/OutletSealReview";
 import {
 	OUTLET_OPEN_CUTLOST_EVENT,
@@ -42,7 +41,6 @@ import {
 	scrollToOutletLaborCostReport,
 	scrollToOutletLiveSales,
 	shiftDrinkMenuDetailLines,
-	shiftSpecialEventLabel,
 } from "@agency-portal/lib/outlet-demo";
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
@@ -59,10 +57,10 @@ import {
 	Clock,
 	Lock,
 	PlayCircle,
-	Trash2,
 	ZoomIn,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { dressCodeLabel } from "@/lib/portal-i18n/language-label";
@@ -291,7 +289,10 @@ export function OutletShiftDetailPanel({
 				demandCut: shift.demandCut,
 				releasedEarlyPrIds: shift.releasedEarlyPrIds,
 				tierRates,
-				bookedPrIds: outletShiftActivePrIds(shift),
+				bookedPrIds: outletShiftActivePrIds({
+					prs: shift.prs,
+					releasedEarlyPrIds: shift.releasedEarlyPrIds,
+				}),
 				agencyPRs,
 				suppliedByTierBucket: shift.suppliedByTierBucket,
 			}),

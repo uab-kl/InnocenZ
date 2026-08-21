@@ -1,4 +1,5 @@
 import { Eye, EyeOff } from "lucide-react";
+import { useId } from "react";
 
 export function PasswordField({
 	label,
@@ -17,11 +18,14 @@ export function PasswordField({
 	onToggleShow: () => void;
 	autoComplete?: string;
 }) {
+	const inputId = useId();
+
 	return (
 		<div className="iz-field iz-security-field">
-			<label>{label}</label>
+			<label htmlFor={inputId}>{label}</label>
 			<div className="iz-security-field__wrap">
 				<input
+					id={inputId}
 					type={show ? "text" : "password"}
 					value={value}
 					onChange={(e) => onChange(e.target.value)}

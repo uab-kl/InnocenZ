@@ -3,7 +3,6 @@ import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
 import {
 	PORTAL_AUTH_TAGLINES,
 	PORTAL_SIGNIN_LABELS,
-	type SignInPortal,
 } from "@agency-portal/lib/portal-signin";
 import { PORTAL_TITLE_ICONS } from "@agency-portal/lib/title-icons";
 import { LogIn } from "lucide-react";

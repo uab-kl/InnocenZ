@@ -64,7 +64,14 @@ import {
 	Trophy,
 	Users,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	Bar,
 	BarChart,
@@ -354,6 +361,7 @@ export function OutletSalesDashboard() {
 		setPrefs(loadOutletReportPrefs(orgName));
 	}, [orgName]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: these prefs are the TRIGGER, not a value the effect reads — an expanded metric card describes one report window, so changing tab/week/custom range must collapse it. Dropping them would leave the card open over numbers from a different window.
 	useEffect(() => {
 		setExpandedMetric(null);
 	}, [
@@ -364,13 +372,18 @@ export function OutletSalesDashboard() {
 		prefs.customDateIsos,
 	]);
 
-	const updatePrefs = (patch: Partial<OutletReportPrefs>) => {
-		setPrefs((cur) => {
-			const next = { ...cur, ...patch };
-			saveOutletReportPrefs(orgName, next);
-			return next;
-		});
-	};
+	// Memoised on orgName alone so effects may depend on it without re-running
+	// every render (setPrefs is stable, saveOutletReportPrefs is module scope).
+	const updatePrefs = useCallback(
+		(patch: Partial<OutletReportPrefs>) => {
+			setPrefs((cur) => {
+				const next = { ...cur, ...patch };
+				saveOutletReportPrefs(orgName, next);
+				return next;
+			});
+		},
+		[orgName],
+	);
 
 	const todayIso = getLiveTodayIso();
 
@@ -398,7 +411,7 @@ export function OutletSalesDashboard() {
 			customStartIso: normalized.startIso,
 			customEndIso: normalized.endIso,
 		});
-	}, [prefs.tab, customDateIsos.length, reportableDateIsos]);
+	}, [prefs.tab, customDateIsos.length, reportableDateIsos, updatePrefs]);
 
 	const range = useMemo(
 		() => resolveReportRange(prefs, customDateIsos),

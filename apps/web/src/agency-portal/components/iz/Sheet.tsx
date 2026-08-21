@@ -87,6 +87,16 @@ function SheetContent({
 				aria-label="Close"
 				onClick={onClose}
 			/>
+			{/*
+			 * biome-ignore lint/a11y/useKeyWithClickEvents: this onClick performs no
+			 * action — it is a containment guard. The sheet is rendered through a
+			 * portal, and React bubbles events along the REACT tree, so without it a
+			 * click on anything inside the sheet also fires the onClick of whatever
+			 * row or card opened the sheet. There is nothing for a key press to do
+			 * here, and the keyboard path is already covered: Escape closes via the
+			 * window listener above, which a matching onKeyDown would in fact BREAK,
+			 * since stopping the keydown would stop Escape reaching that listener.
+			 */}
 			<div
 				className={`iz-sheet${sheetVariantClass(mode, variant)}${wide ? " iz-sheet--wide" : ""}${rating ? " iz-sheet--rating" : ""}${comcard ? " iz-sheet--comcard" : ""}${liveSales ? " iz-sheet--live-sales" : ""}`}
 				role="dialog"

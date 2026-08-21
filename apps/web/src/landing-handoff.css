@@ -842,10 +842,23 @@
 	object-fit: contain;
 	object-position: center;
 	image-rendering: -webkit-optimize-contrast;
-	image-rendering: crisp-edges;
 	backface-visibility: hidden;
 	transform: translateZ(0);
 	box-shadow: 0 0 0 1px rgba(242, 198, 107, 0.12);
+}
+
+/*
+ * `crisp-edges` is the standard spelling of the WebKit value above, not a
+ * second opinion — the two are a fallback pair. It lives in its own block so it
+ * reads as a fallback instead of a duplicate declaration; the selector and
+ * specificity are identical, so an engine that understands `crisp-edges` takes
+ * it and one that does not drops the whole declaration and keeps the WebKit
+ * value. Collapsing these into one value would blur the logo on one engine or
+ * the other.
+ */
+.landing-page .hz-logo-mark,
+.landing-page .brand-logo-mark {
+	image-rendering: crisp-edges;
 }
 
 @media (prefers-reduced-motion: reduce) {

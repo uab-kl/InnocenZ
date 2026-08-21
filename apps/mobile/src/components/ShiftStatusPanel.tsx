@@ -3,7 +3,15 @@
  * Scan / Self-log navigate to `/host/scan` equivalent (ScanScreen).
  */
 import React, { useMemo, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { C, F } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
@@ -51,7 +59,12 @@ export function ShiftStatusPanel({
   const { openScan } = usePrNav();
   // Receipt rows come from the backend current-week draft voucher, scoped to
   // this shift's day so Check-In and Payment never disagree on the amount.
-  const { receiptLines: allLogs, deleteLine, updateLine } = usePrEarnings();
+  const {
+    receiptLines: allLogs,
+    deleteLine,
+    deleteReceipt,
+    updateLine,
+  } = usePrEarnings();
   /**
    * THIS SHIFT's rows. The day filter alone was not enough: a PR can work twice
    * in one date, and the second check-in inherited the first shift's items,
@@ -62,7 +75,9 @@ export function ShiftStatusPanel({
    * all there is to go on.
    */
   const logs = useMemo(() => {
-    const byDay = dayKey ? allLogs.filter((l) => l.lineDate === dayKey) : allLogs;
+    const byDay = dayKey
+      ? allLogs.filter((l) => l.lineDate === dayKey)
+      : allLogs;
     const startedAt = checkInAt ? new Date(checkInAt).getTime() : null;
     if (startedAt === null || Number.isNaN(startedAt)) return byDay;
     return byDay.filter((l) => {
@@ -124,26 +139,45 @@ export function ShiftStatusPanel({
    * uncaught red toast. The paper is the unit the PR is holding: removing it
    * should remove what came off it.
    *
-   * The backend deletes the receipt itself once its LAST line goes
-   * (`deleteMyLine`), which is what frees the order number to be scanned again —
-   * so this deletes every line of the receipt and lets that cleanup fire.
+   * ONE server call does the whole removal — lines, receipt and photos — which
+   * is also what frees the order number to be scanned again. It used to be a
+   * loop over `deleteLine`, relying on the backend dropping the receipt once its
+   * LAST line went; see the note inside for why that was wrong.
    *
    * Rows with no receipt behind them (a bare self-log) delete alone, as before.
    */
   const removeWholeReceipt = async (row: PrReceiptLine) => {
-    const siblings = row.receiptNo
-      ? logs.filter((l) => l.receiptNo === row.receiptNo)
-      : [row];
     try {
-      for (const line of siblings) {
-        await deleteLine(line.id);
+      /*
+       * ONE CALL, SERVER-SIDE. This used to loop `deleteLine` over the siblings
+       * it could find in `logs`, which fails two ways.
+       *
+       * A failure PART-WAY leaves the paper half removed — some items gone, the
+       * rest standing against a receipt that no longer describes them — and
+       * nothing here can put the deleted ones back: a line's RCP number, review
+       * state and packed category are server facts the DTO never carries.
+       *
+       * And `logs` is only what THIS screen loaded, so "the whole receipt" was
+       * really "the siblings I happen to be showing". The server reads them off
+       * the voucher instead.
+       *
+       * A row with no receipt behind it — a bare self-log — is a single line and
+       * keeps the single-line path.
+       */
+      if (row.receiptId) {
+        await deleteReceipt(row.receiptId);
+      } else {
+        await deleteLine(row.id);
       }
     } catch (error) {
       // A refusal here is meaningful — an agency-reviewed receipt cannot be
       // removed — and it used to escape as "Uncaught (in promise)".
       const message =
-        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        (error instanceof Error ? error.message : 'Could not remove this receipt');
+        (error as { response?: { data?: { message?: string } } })?.response
+          ?.data?.message ??
+        (error instanceof Error
+          ? error.message
+          : 'Could not remove this receipt');
       setRemoveError(message);
     }
   };
@@ -191,7 +225,10 @@ export function ShiftStatusPanel({
     pickProofPhotos((urls) => {
       const line = logs.find((l) => l.id === proofTargetLineId);
       if (!line) return;
-      void applyPhotos(proofTargetLineId, [...(line.proofPhotos ?? []), ...urls].slice(0, 6));
+      void applyPhotos(
+        proofTargetLineId,
+        [...(line.proofPhotos ?? []), ...urls].slice(0, 6),
+      );
     });
   };
 
@@ -202,7 +239,10 @@ export function ShiftStatusPanel({
 
   const commissionTotal = useMemo(() => receiptCommissionTotal(logs), [logs]);
   // Real sales logged this shift (drink/tip sales), for the tier's target bar.
-  const salesLogged = useMemo(() => logs.reduce((s, l) => s + l.sales, 0), [logs]);
+  const salesLogged = useMemo(
+    () => logs.reduce((s, l) => s + l.sales, 0),
+    [logs],
+  );
   const targetPct =
     targetSalesRm && targetSalesRm > 0
       ? Math.min(100, Math.round((salesLogged / targetSalesRm) * 100))
@@ -245,7 +285,12 @@ export function ShiftStatusPanel({
             </Text>
           </View>
           <View style={styles.bar}>
-            <View style={[styles.barFill, { width: `${targetPct}%` as unknown as number }]} />
+            <View
+              style={[
+                styles.barFill,
+                { width: `${targetPct}%` as unknown as number },
+              ]}
+            />
           </View>
         </View>
       )}
@@ -266,7 +311,10 @@ export function ShiftStatusPanel({
       )}
 
       <View style={styles.statusSec}>
-        <Pressable style={styles.statusHd} onPress={() => setStatusOpen((o) => !o)}>
+        <Pressable
+          style={styles.statusHd}
+          onPress={() => setStatusOpen((o) => !o)}
+        >
           <View style={styles.statusTitleRow}>
             <Text style={styles.statusTitle}>STATUS</Text>
             <HelpCircle size={14} color={C.muted2} />
@@ -274,136 +322,156 @@ export function ShiftStatusPanel({
           <ChevronDown
             size={16}
             color={C.goldL}
-            style={statusOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+            style={
+              statusOpen ? { transform: [{ rotate: '180deg' }] } : undefined
+            }
           />
         </Pressable>
-        {statusHint ? <Text style={styles.statusHint}>{statusHint}</Text> : null}
+        {statusHint ? (
+          <Text style={styles.statusHint}>{statusHint}</Text>
+        ) : null}
 
         {statusOpen && (
           <>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.table}>
-              <View style={styles.trHead}>
-                <Text style={[styles.th, styles.colRef]}>REF</Text>
-                <Text style={[styles.th, styles.colItem]}>ITEM</Text>
-                <Text style={[styles.th, styles.colQty]}>QTY</Text>
-                <Text style={[styles.th, styles.colSrc]}>SOURCE</Text>
-                <Text style={[styles.th, styles.colComm]}>COMM.</Text>
-                <Text style={[styles.th, styles.colVerify]}>VERIFY</Text>
-                {!checkedOut && <Text style={[styles.th, styles.colAct]}> </Text>}
-              </View>
-
-              <View style={styles.tr}>
-                <View style={styles.colRef}>
-                  <Text style={styles.tdLabel}>Duty time</Text>
-                  <Text style={styles.tdDetail}>{fmtAttendanceStamp(checkedInAt)}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.table}>
+                <View style={styles.trHead}>
+                  <Text style={[styles.th, styles.colRef]}>REF</Text>
+                  <Text style={[styles.th, styles.colItem]}>ITEM</Text>
+                  <Text style={[styles.th, styles.colQty]}>QTY</Text>
+                  <Text style={[styles.th, styles.colSrc]}>SOURCE</Text>
+                  <Text style={[styles.th, styles.colComm]}>COMM.</Text>
+                  <Text style={[styles.th, styles.colVerify]}>VERIFY</Text>
+                  {!checkedOut && (
+                    <Text style={[styles.th, styles.colAct]}> </Text>
+                  )}
                 </View>
-                <Text style={[styles.td, styles.colItem]}>—</Text>
-                <Text style={[styles.td, styles.colQty]}>—</Text>
-                <Text style={[styles.td, styles.colSrc]}>Check-in</Text>
-                <Text style={[styles.td, styles.colComm]}>—</Text>
-                <View style={styles.colVerify}>
-                  <View style={styles.badgeSealed}>
-                    <Shield size={10} color={C.violetL} />
-                    <Text style={styles.badgeSealedText}>Sealed</Text>
+
+                <View style={styles.tr}>
+                  <View style={styles.colRef}>
+                    <Text style={styles.tdLabel}>Duty time</Text>
+                    <Text style={styles.tdDetail}>
+                      {fmtAttendanceStamp(checkedInAt)}
+                    </Text>
                   </View>
-                </View>
-                {!checkedOut && <View style={styles.colAct} />}
-              </View>
-
-              {logs.map((log) => {
-                const cat = log.kind === 'tips' ? 'tips' : 'drinks';
-                return (
-                  <LogRow
-                    key={log.id}
-                    log={log}
-                    checkedOut={checkedOut}
-                    missingPhoto={
-                      log.source !== 'checkin' && (log.proofPhotos ?? []).length === 0
-                    }
-                    onEdit={() => openScan(cat, 'selflog', log.id)}
-                    // A scanned row is corrected by SCANNING again (camera →
-                    // OCR → replaces row + receipt + snap). Self-log rows just
-                    // replace their proof picture.
-                    onRescan={() =>
-                      log.source === 'scan'
-                        ? openScan(cat, 'scan', log.id)
-                        : rescanPhoto(log.id)
-                    }
-                    onDelete={() => void removeWholeReceipt(log)}
-                  />
-                );
-              })}
-
-              <View style={styles.trFoot}>
-                <View style={styles.totalsBlock}>
-                  <Text style={styles.totalsLabel}>TOTALS</Text>
-                  <Text style={styles.totalsHint} numberOfLines={1}>
-                    wage {formatRM(dutyWagesRm)} + comm
-                  </Text>
-                </View>
-                <Text style={[styles.td, styles.colComm, styles.totalsComm]}>
-                  {formatRM(commissionTotal)}
-                </Text>
-                <View style={styles.colVerify} />
-                {!checkedOut && <View style={styles.colAct} />}
-              </View>
-            </View>
-          </ScrollView>
-
-          {proofItems.length > 0 && (
-            <View style={styles.gallery}>
-              <View style={styles.galleryHead}>
-                <Camera size={13} color={C.goldL} />
-                <Text style={styles.galleryLabel}>PROOF PHOTOS · {proofItems.length}</Text>
-              </View>
-              <Text style={styles.gallerySub}>
-                {canEditPhotos
-                  ? 'Tap to view · ✕ removes the receipt and everything logged from it'
-                  : 'Pictures you uploaded for this shift'}
-              </Text>
-              {removeError && (
-                <Text style={[styles.gallerySub, { color: C.red }]}>{removeError}</Text>
-              )}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.galleryRow}
-              >
-                {proofItems.map((it) => {
-                  // `it.src` may be a legacy data URL or an R2 key — resolve for
-                  // display only; removal/dedupe still key on the raw string.
-                  const uri = resolveProofPhotoUri(it.src);
-                  return (
-                    <View key={`${it.lineId}-${it.idx}`} style={styles.galleryItem}>
-                      <Pressable onPress={() => setLightbox(uri)}>
-                        <Image source={{ uri }} style={styles.galleryThumb} />
-                        <ZoomHint size={18} />
-                      </Pressable>
-                      {canEditPhotos && (
-                        <Pressable
-                          style={styles.galleryRemove}
-                          onPress={() => removePhoto(it.lineId, it.idx)}
-                          disabled={photoBusy}
-                          hitSlop={6}
-                        >
-                          <XIcon size={11} color={C.txt} />
-                        </Pressable>
-                      )}
+                  <Text style={[styles.td, styles.colItem]}>—</Text>
+                  <Text style={[styles.td, styles.colQty]}>—</Text>
+                  <Text style={[styles.td, styles.colSrc]}>Check-in</Text>
+                  <Text style={[styles.td, styles.colComm]}>—</Text>
+                  <View style={styles.colVerify}>
+                    <View style={styles.badgeSealed}>
+                      <Shield size={10} color={C.violetL} />
+                      <Text style={styles.badgeSealedText}>Sealed</Text>
                     </View>
+                  </View>
+                  {!checkedOut && <View style={styles.colAct} />}
+                </View>
+
+                {logs.map((log) => {
+                  const cat = log.kind === 'tips' ? 'tips' : 'drinks';
+                  return (
+                    <LogRow
+                      key={log.id}
+                      log={log}
+                      checkedOut={checkedOut}
+                      missingPhoto={
+                        log.source !== 'checkin' &&
+                        (log.proofPhotos ?? []).length === 0
+                      }
+                      onEdit={() => openScan(cat, 'selflog', log.id)}
+                      // A scanned row is corrected by SCANNING again (camera →
+                      // OCR → replaces row + receipt + snap). Self-log rows just
+                      // replace their proof picture.
+                      onRescan={() =>
+                        log.source === 'scan'
+                          ? openScan(cat, 'scan', log.id)
+                          : rescanPhoto(log.id)
+                      }
+                      onDelete={() => void removeWholeReceipt(log)}
+                    />
                   );
                 })}
-              </ScrollView>
-              {canEditPhotos && proofTargetLineId && (
-                <Pressable style={styles.galleryAddBtn} onPress={addPhotos} disabled={photoBusy}>
-                  <ImagePlus size={14} color={C.txt} />
-                  <Text style={styles.galleryAddText}>
-                    {photoBusy ? 'Saving…' : 'Add another photo'}
+
+                <View style={styles.trFoot}>
+                  <View style={styles.totalsBlock}>
+                    <Text style={styles.totalsLabel}>TOTALS</Text>
+                    <Text style={styles.totalsHint} numberOfLines={1}>
+                      wage {formatRM(dutyWagesRm)} + comm
+                    </Text>
+                  </View>
+                  <Text style={[styles.td, styles.colComm, styles.totalsComm]}>
+                    {formatRM(commissionTotal)}
                   </Text>
-                </Pressable>
-              )}
-            </View>
-          )}
+                  <View style={styles.colVerify} />
+                  {!checkedOut && <View style={styles.colAct} />}
+                </View>
+              </View>
+            </ScrollView>
+
+            {proofItems.length > 0 && (
+              <View style={styles.gallery}>
+                <View style={styles.galleryHead}>
+                  <Camera size={13} color={C.goldL} />
+                  <Text style={styles.galleryLabel}>
+                    PROOF PHOTOS · {proofItems.length}
+                  </Text>
+                </View>
+                <Text style={styles.gallerySub}>
+                  {canEditPhotos
+                    ? 'Tap to view · ✕ removes the receipt and everything logged from it'
+                    : 'Pictures you uploaded for this shift'}
+                </Text>
+                {removeError && (
+                  <Text style={[styles.gallerySub, { color: C.red }]}>
+                    {removeError}
+                  </Text>
+                )}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.galleryRow}
+                >
+                  {proofItems.map((it) => {
+                    // `it.src` may be a legacy data URL or an R2 key — resolve for
+                    // display only; removal/dedupe still key on the raw string.
+                    const uri = resolveProofPhotoUri(it.src);
+                    return (
+                      <View
+                        key={`${it.lineId}-${it.idx}`}
+                        style={styles.galleryItem}
+                      >
+                        <Pressable onPress={() => setLightbox(uri)}>
+                          <Image source={{ uri }} style={styles.galleryThumb} />
+                          <ZoomHint size={18} />
+                        </Pressable>
+                        {canEditPhotos && (
+                          <Pressable
+                            style={styles.galleryRemove}
+                            onPress={() => removePhoto(it.lineId, it.idx)}
+                            disabled={photoBusy}
+                            hitSlop={6}
+                          >
+                            <XIcon size={11} color={C.txt} />
+                          </Pressable>
+                        )}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+                {canEditPhotos && proofTargetLineId && (
+                  <Pressable
+                    style={styles.galleryAddBtn}
+                    onPress={addPhotos}
+                    disabled={photoBusy}
+                  >
+                    <ImagePlus size={14} color={C.txt} />
+                    <Text style={styles.galleryAddText}>
+                      {photoBusy ? 'Saving…' : 'Add another photo'}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
           </>
         )}
       </View>
@@ -451,7 +519,10 @@ function ScanCategory({
         <Camera size={14} color={C.txt} />
         <Text style={styles.scanBtnText}>Scan</Text>
       </Pressable>
-      <Pressable style={[styles.scanBtn, styles.scanBtnSelf]} onPress={onSelfLog}>
+      <Pressable
+        style={[styles.scanBtn, styles.scanBtnSelf]}
+        onPress={onSelfLog}
+      >
         <Pencil size={14} color={C.txt} />
         <Text style={styles.scanBtnText}>Self-log</Text>
       </Pressable>
@@ -481,7 +552,8 @@ function LogRow({
     : log.source === 'manual'
       ? 'Manual entry'
       : 'Receipt scan';
-  const refLabel = log.kind === 'tips' ? 'Tip' : log.kind === 'others' ? 'OT' : 'Drink';
+  const refLabel =
+    log.kind === 'tips' ? 'Tip' : log.kind === 'others' ? 'OT' : 'Drink';
   // Once the agency has approved the receipt, this row is no longer the PR's to
   // change — the server refuses the edit and the delete, and the way back is a
   // dispute. Hiding the controls is the honest form of that: leaving them would
@@ -620,7 +692,13 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: C.muted,
   },
-  targetPrice: { marginTop: 6, flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' },
+  targetPrice: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   targetV: {
     fontFamily: F.sora,
     fontSize: 28,
@@ -669,7 +747,12 @@ const styles = StyleSheet.create({
     backgroundColor: C.glass2,
   },
   scanBtnSelf: { backgroundColor: 'rgba(183,156,232,0.08)' },
-  scanBtnText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  scanBtnText: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.txt,
+  },
   statusSec: {
     borderRadius: 14,
     borderWidth: 1,
@@ -701,7 +784,13 @@ const styles = StyleSheet.create({
     color: C.goldL,
   },
   table: { paddingHorizontal: 10, paddingBottom: 12, minWidth: 620 },
-  trHead: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: C.line },
+  trHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
+  },
   tr: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -746,8 +835,18 @@ const styles = StyleSheet.create({
     color: C.muted2,
   },
   td: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  tdLabel: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
-  tdDetail: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
+  tdLabel: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  tdDetail: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted,
+  },
   colRef: { width: COL.ref, paddingRight: 8 },
   colItem: { width: COL.item, paddingRight: 6 },
   colQty: { width: COL.qty, paddingRight: 6 },
@@ -767,7 +866,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(183,156,232,0.3)',
   },
-  badgeSealedText: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.violetL },
+  badgeSealedText: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.violetL,
+  },
   badgePending: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -780,7 +884,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(232,198,106,0.35)',
   },
-  badgePendingText: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.amber },
+  badgePendingText: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.amber,
+  },
   badgeMatched: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -793,7 +902,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(93,217,160,0.35)',
   },
-  badgeMatchedText: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.green },
+  badgeMatchedText: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.green,
+  },
   gallery: {
     paddingHorizontal: 14,
     paddingTop: 12,
@@ -851,5 +965,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
-  galleryAddText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  galleryAddText: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.txt,
+  },
 });

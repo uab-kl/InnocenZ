@@ -89,6 +89,7 @@ export function PostJobShiftField({
 	layout?: "row" | "stack";
 }) {
 	return (
+		// biome-ignore lint/a11y/noLabelWithoutControl: the control this label wraps arrives through {children}, so biome cannot see it here; the wrapping <label> is deliberate — PostJobInfoTip above relies on a click inside the field reaching the control
 		<label
 			className={cn(
 				"iz-post-job-field",

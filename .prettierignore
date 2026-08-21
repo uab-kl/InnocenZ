@@ -4,3 +4,18 @@
 /.nx/cache
 /.nx/workspace-data
 .nx/self-healing
+# apps/web is formatted by BIOME, not prettier, and the two disagree:
+# apps/web/biome.json sets indentStyle "tab" and the tree uses double quotes,
+# while the root .prettierrc sets singleQuote and prettier defaults to spaces.
+# CI runs BOTH (`nx format:check` and `nx run-many -t lint`), so leaving this
+# tree to prettier made the two steps mutually unsatisfiable — 131 of the 169
+# files `format:check` flagged were apps/web files that biome had just
+# formatted correctly.
+/apps/web
+
+# Generated; never hand-formatted.
+pnpm-lock.yaml
+
+# The living session log — enormous single-line table rows that prettier
+# reflows into an unreadable diff. See CLAUDE.md for its role.
+/TEST_SCRIPT.md

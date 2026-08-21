@@ -52,7 +52,7 @@ export function PrWeeklyPaymentGrid({
 	interactive,
 	onDisputeDay,
 	onWithdrawDay,
-	weekPhase = "open",
+	weekPhase: _weekPhase = "open",
 	activeDisputeKey,
 }: {
 	summary: WeeklyPaymentSummary;
@@ -65,7 +65,7 @@ export function PrWeeklyPaymentGrid({
 	/** Highlights the cell the user tapped to dispute */
 	activeDisputeKey?: string | null;
 }) {
-	const canInteract = interactive && Boolean(onDisputeDay || onWithdrawDay);
+	const canInteract = Boolean(interactive && (onDisputeDay || onWithdrawDay));
 
 	const buildTarget = (
 		colIdx: number,

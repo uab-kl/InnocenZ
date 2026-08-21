@@ -11,7 +11,7 @@ import {
 	Phone,
 	X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { changeMyPassword } from "@/lib/auth/password-api";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -104,6 +104,11 @@ export function SecuritySettingsSheets({
 	const toast = useStore((s) => s.toast);
 
 	const [view, setView] = useState<SecurityView>("menu");
+	// Same `useId` pairing `PasswordField` uses, so the "New email" / "New mobile"
+	// captions are real labels: clicking one focuses its input and a screen reader
+	// announces it with the field.
+	const newEmailId = useId();
+	const newPhoneId = useId();
 
 	const [currentPassword, setCurrentPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
@@ -360,10 +365,11 @@ export function SecuritySettingsSheets({
 				<p className="iz-account-security__current mb-4">{email || "—"}</p>
 				{canEdit ? (
 					<>
-						<label className="iz-tiny iz-muted">
+						<label className="iz-tiny iz-muted" htmlFor={newEmailId}>
 							{t.profile.newEmailAddress}
 						</label>
 						<input
+							id={newEmailId}
 							type="email"
 							className="iz-account-security__input mt-1"
 							placeholder="you@example.com"
@@ -398,10 +404,11 @@ export function SecuritySettingsSheets({
 				<p className="iz-account-security__current mb-4">{mobile || "—"}</p>
 				{canEdit ? (
 					<>
-						<label className="iz-tiny iz-muted">
+						<label className="iz-tiny iz-muted" htmlFor={newPhoneId}>
 							{t.profile.newMobileNumber}
 						</label>
 						<input
+							id={newPhoneId}
 							type="tel"
 							className="iz-account-security__input mt-1"
 							placeholder="+60 12-345 6789"

@@ -155,6 +155,15 @@ export function Header() {
 	const { logout } = useAuthActions();
 	const { user } = useCurrentUser();
 	const breadcrumbSegments = useBreadcrumbSegments();
+	/* Keyed on the trail so far, not on the position: a label can repeat inside
+	   one trail (User › User), so the segment alone is not unique, while the
+	   prefix that leads to it is — and it is stable when the route changes. */
+	const breadcrumbCrumbs = breadcrumbSegments.map((segment, index) => ({
+		segment,
+		key: breadcrumbSegments.slice(0, index + 1).join(" / "),
+		isFirst: index === 0,
+		isLast: index === breadcrumbSegments.length - 1,
+	}));
 
 	const handleLogout = () => {
 		logout();
@@ -169,21 +178,17 @@ export function Header() {
 				aria-label={t.admin.breadcrumb}
 				className="flex items-center gap-2 text-sm font-semibold"
 			>
-				{breadcrumbSegments.map((segment, index) => (
-					<span key={`${segment}-${index}`} className="flex items-center gap-2">
-						{index > 0 && (
+				{breadcrumbCrumbs.map((crumb) => (
+					<span key={crumb.key} className="flex items-center gap-2">
+						{!crumb.isFirst && (
 							<span className="text-muted-foreground" aria-hidden="true">
 								›
 							</span>
 						)}
 						<span
-							className={
-								index === breadcrumbSegments.length - 1
-									? "text-primary"
-									: "text-foreground/80"
-							}
+							className={crumb.isLast ? "text-primary" : "text-foreground/80"}
 						>
-							{segment}
+							{crumb.segment}
 						</span>
 					</span>
 				))}

@@ -132,16 +132,44 @@ function signatureColumn(sig: PvSignatory) {
  * The five columns are the PDF's, in the PDF's proportions (83/191/64/89/88pt of
  * a 515pt content width).
  */
+/**
+ * The letterhead logo's URL, or "" when there is none to print.
+ *
+ * Two shapes arrive here now. The demo template's logo is a site-relative path
+ * (`/assets/atmosphere-logo.png`) and needs the origin; a real agency's is an
+ * ABSOLUTE R2 url, which must be left alone — the old unconditional
+ * `${window.location.origin}${issuer.logoPath}` would have produced
+ * `https://portal/https://r2…` and a broken image.
+ *
+ * "" is now a real, meaningful value: `issuerFromAgency` returns it for an
+ * agency with no uploaded logo. It used to be impossible, because that field
+ * was hardcoded to ATMOSPHERE's logo whoever the agency was. Callers must print
+ * no <img> at all rather than an empty one.
+ */
+function resolvePvLogoUrl(logoPath: string): string {
+	if (!logoPath) return "";
+	if (/^https?:\/\//.test(logoPath) || logoPath.startsWith("data:")) {
+		return logoPath;
+	}
+	return typeof window !== "undefined"
+		? `${window.location.origin}${logoPath}`
+		: logoPath;
+}
+
 export function buildPvBreakdownHtml(
 	pv: PrPaymentVoucher,
 	payee: PvPayeeProfile,
 	_receipts: PrReceiptScan[] = [],
-	issuer: PvIssuerProfile = PV_TEMPLATE_ISSUER,
+	// ⚠️ REQUIRED, not defaulted. This read
+	// `issuer: PvIssuerProfile = PV_TEMPLATE_ISSUER`, so passing `undefined` —
+	// which `usePvIssuer` returned for a still-loading fetch, a 401, an offline
+	// blip and a real operator with no resolved identity — silently printed
+	// ATMOSPHERE EVENT ENTERPRISE's name, reg. no. and address onto a live
+	// payment voucher. A default parameter turns "unknown" into "confidently
+	// wrong" and hides it from the compiler. Every caller now states it.
+	issuer: PvIssuerProfile,
 ) {
-	const logoUrl =
-		typeof window !== "undefined"
-			? `${window.location.origin}${issuer.logoPath}`
-			: issuer.logoPath;
+	const logoUrl = resolvePvLogoUrl(issuer.logoPath);
 
 	// No blank padding rows: the PR's PDF prints the lines the voucher has and
 	// stops. Padding a money document with dashes invites the reader to wonder
@@ -343,7 +371,11 @@ export function buildPvBreakdownHtml(
 <body>
   <div class="doc">
     <div class="hdr">
-      <img class="hdr-logo" src="${logoUrl}" alt="${escapeHtml(issuer.brand)}" />
+      ${
+				logoUrl
+					? `<img class="hdr-logo" src="${logoUrl}" alt="${escapeHtml(issuer.brand)}" />`
+					: ""
+			}
       <div class="hdr-title">Payment Voucher</div>
       <div class="hdr-name">${escapeHtml(issuer.name)}</div>
       <div class="hdr-line">${escapeHtml(issuer.regNo)}</div>
@@ -493,19 +525,46 @@ function pvExBox(
 	}
 }
 
+/**
+ * ExcelJS accepts only these three. The backend also stores `.webp`, which has
+ * no representation here — such a logo is DROPPED rather than mislabelled,
+ * because an image declared png and decoded as webp is a corrupt workbook, and
+ * a voucher that will not open is worse than one with no logo.
+ */
+function excelImageExtension(
+	logoPath: string,
+	contentType: string | null,
+): "png" | "jpeg" | "gif" | null {
+	const source =
+		`${contentType ?? ""} ${logoPath.split("?")[0] ?? ""}`.toLowerCase();
+	if (source.includes("png")) return "png";
+	if (source.includes("jpeg") || source.includes("jpg")) return "jpeg";
+	if (source.includes("gif")) return "gif";
+	return null;
+}
+
 async function fetchPvLogoBase64(
-	logoPath: string = PV_TEMPLATE_ISSUER.logoPath,
-): Promise<string | null> {
+	logoPath: string,
+): Promise<{ base64: string; extension: "png" | "jpeg" | "gif" } | null> {
 	if (typeof window === "undefined") return null;
+	// Was `logoPath: string = PV_TEMPLATE_ISSUER.logoPath` — the Excel half of the
+	// same default-parameter trap as the letterhead itself, so a missing logo
+	// became ATMOSPHERE's logo inside a real agency's workbook.
+	const url = resolvePvLogoUrl(logoPath);
+	if (!url) return null;
 	try {
-		const res = await fetch(`${window.location.origin}${logoPath}`);
+		const res = await fetch(url);
 		if (!res.ok) return null;
+		// Content-type first, path second: an R2 key can be extensionless, and the
+		// header is what the store actually says the bytes are.
+		const extension = excelImageExtension(url, res.headers.get("content-type"));
+		if (!extension) return null;
 		const buf = await res.arrayBuffer();
 		const bytes = new Uint8Array(buf);
 		let binary = "";
 		for (let i = 0; i < bytes.length; i++)
 			binary += String.fromCharCode(bytes[i]!);
-		return btoa(binary);
+		return { base64: btoa(binary), extension };
 	} catch {
 		return null;
 	}
@@ -533,7 +592,14 @@ function padSheetRow(cells: (string | number)[]): (string | number)[] {
 export function buildPvBreakdownSheetRows(
 	pv: PrPaymentVoucher,
 	payee: PvPayeeProfile,
-	issuer: PvIssuerProfile = PV_TEMPLATE_ISSUER,
+	// ⚠️ REQUIRED, not defaulted. This read
+	// `issuer: PvIssuerProfile = PV_TEMPLATE_ISSUER`, so passing `undefined` —
+	// which `usePvIssuer` returned for a still-loading fetch, a 401, an offline
+	// blip and a real operator with no resolved identity — silently printed
+	// ATMOSPHERE EVENT ENTERPRISE's name, reg. no. and address onto a live
+	// payment voucher. A default parameter turns "unknown" into "confidently
+	// wrong" and hides it from the compiler. Every caller now states it.
+	issuer: PvIssuerProfile,
 ): (string | number)[][] {
 	const templateLines = padPvTemplateLines(buildPvTemplateLines(pv), 5);
 	const voucherDate = formatPvVoucherDate(pv.issued);
@@ -613,7 +679,14 @@ export function buildPvBreakdownSheetRows(
 export async function buildPvBreakdownWorkbook(
 	pv: PrPaymentVoucher,
 	payee: PvPayeeProfile,
-	issuer: PvIssuerProfile = PV_TEMPLATE_ISSUER,
+	// ⚠️ REQUIRED, not defaulted. This read
+	// `issuer: PvIssuerProfile = PV_TEMPLATE_ISSUER`, so passing `undefined` —
+	// which `usePvIssuer` returned for a still-loading fetch, a 401, an offline
+	// blip and a real operator with no resolved identity — silently printed
+	// ATMOSPHERE EVENT ENTERPRISE's name, reg. no. and address onto a live
+	// payment voucher. A default parameter turns "unknown" into "confidently
+	// wrong" and hides it from the compiler. Every caller now states it.
+	issuer: PvIssuerProfile,
 ) {
 	const templateLines = padPvTemplateLines(buildPvTemplateLines(pv), 5);
 	const voucherDate = formatPvVoucherDate(pv.issued);
@@ -652,9 +725,16 @@ export async function buildPvBreakdownWorkbook(
 	// Logo in column A only; header text uses full width B:E
 	pvExMerge(ws, 1, 1, 6, 1, "", { align: { vertical: "middle" } });
 
-	const logoBase64 = await fetchPvLogoBase64(issuer.logoPath);
-	if (logoBase64) {
-		const imageId = wb.addImage({ base64: logoBase64, extension: "png" });
+	const logo = await fetchPvLogoBase64(issuer.logoPath);
+	if (logo) {
+		// ⚠️ `extension` was hardcoded "png". Harmless while the only logo this
+		// could ever reach was the template's own PNG; the moment a REAL agency's
+		// logo started arriving here it could be a jpg or a gif, declared png and
+		// written into the workbook — which is a file Excel refuses to open.
+		const imageId = wb.addImage({
+			base64: logo.base64,
+			extension: logo.extension,
+		});
 		ws.addImage(imageId, {
 			tl: { col: 0.15, row: 0.2 },
 			ext: { width: 64, height: 64 },
@@ -951,7 +1031,7 @@ export async function buildPvBreakdownWorkbook(
 export async function downloadPvBreakdownExcel(
 	pv: PrPaymentVoucher,
 	payee: PvPayeeProfile,
-	issuer?: PvIssuerProfile,
+	issuer: PvIssuerProfile,
 ) {
 	const wb = await buildPvBreakdownWorkbook(pv, payee, issuer);
 	const buffer = await wb.xlsx.writeBuffer();
@@ -965,7 +1045,7 @@ export async function downloadPvBreakdownExcel(
 export function buildPvBreakdownCsv(
 	pv: PrPaymentVoucher,
 	payee: PvPayeeProfile,
-	issuer?: PvIssuerProfile,
+	issuer: PvIssuerProfile,
 ): string {
 	return buildPvBreakdownSheetRows(pv, payee, issuer)
 		.map((row) => csvRow(row))
@@ -976,7 +1056,7 @@ export function buildPvBreakdownCsv(
 export function downloadPvBreakdownCsv(
 	pv: PrPaymentVoucher,
 	payee: PvPayeeProfile,
-	issuer?: PvIssuerProfile,
+	issuer: PvIssuerProfile,
 ) {
 	void downloadPvBreakdownExcel(pv, payee, issuer);
 }
@@ -986,7 +1066,7 @@ export function viewPvBreakdownPdf(
 	pv: PrPaymentVoucher,
 	payee: PvPayeeProfile,
 	receipts: PrReceiptScan[] = [],
-	issuer?: PvIssuerProfile,
+	issuer: PvIssuerProfile,
 ) {
 	const html = buildPvBreakdownHtml(pv, payee, receipts, issuer);
 	const viewWin = window.open("", "_blank");
@@ -1013,13 +1093,17 @@ export function downloadPvBreakdownPdf(
 	pv: PrPaymentVoucher,
 	payee: PvPayeeProfile,
 	receipts: PrReceiptScan[] = [],
-	issuer?: PvIssuerProfile,
+	issuer: PvIssuerProfile,
 ) {
 	viewPvBreakdownPdf(pv, payee, receipts, issuer);
 }
 
 export function downloadAgencyPvPdf(
 	pv: PrPaymentVoucher,
+	// Required, like every other letterhead parameter in this file. This function
+	// currently has no callers; it is kept honest so that whoever wires it up next
+	// is forced to name the issuer rather than inheriting a default.
+	issuer: PvIssuerProfile,
 	payeeOverrides?: Partial<PvPayeeProfile> & {
 		mobile?: string;
 		bank?: string;
@@ -1041,13 +1125,17 @@ export function downloadAgencyPvPdf(
 			)
 		: payeeFromPaymentVoucher(pv, payeeOverrides);
 
-	downloadPvBreakdownPdf(pv, payee, []);
+	downloadPvBreakdownPdf(pv, payee, [], issuer);
 }
 
 export function downloadPvReceipt(
 	pv: PrPaymentVoucher,
 	profile: Pick<PrProfile, "name" | "ic" | "mobile" | "bank" | "acc" | "first">,
 	receipts: PrReceiptScan[] = [],
+	// Required for the same reason as every other letterhead parameter here: the
+	// two callers of this both hold a resolved issuer, and neither should be able
+	// to omit it into a third company's name.
+	issuer: PvIssuerProfile,
 ) {
-	downloadPvBreakdownPdf(pv, payeeFromProfile(profile), receipts);
+	downloadPvBreakdownPdf(pv, payeeFromProfile(profile), receipts, issuer);
 }

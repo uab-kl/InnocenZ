@@ -183,6 +183,7 @@ export function OutletServicePostSection() {
 					</p>
 					<div className="mt-2 space-y-2">
 						{pendingAction.map((row) => (
+							// biome-ignore lint/a11y/useValidAriaRole: `role` here is SpecialServiceOrderCard's own required prop ("agency" | "outlet" | "pr" | "admin") — it decides which side may act on the row, and never reaches the DOM as an ARIA role.
 							<SpecialServiceOrderCard
 								key={row.id}
 								row={row}

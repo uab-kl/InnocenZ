@@ -12,10 +12,7 @@ import {
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
-import {
-	ShiftTxnMetric,
-	ShiftTxnMetricsRow,
-} from "@agency-portal/components/outlet/outlet-history-metrics";
+import { ShiftTxnMetricsRow } from "@agency-portal/components/outlet/outlet-history-metrics";
 import {
 	findOutletRatingForPr,
 	OutletPrHistoryCard,
@@ -45,7 +42,7 @@ import {
 	sumShiftHistoryVenueRollups,
 } from "@agency-portal/lib/shift-history-utils";
 import { useStore } from "@agency-portal/lib/store";
-import { format, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
 import {
 	Calendar as CalendarIcon,
 	ChevronDown,
@@ -53,7 +50,7 @@ import {
 	X,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -311,7 +308,24 @@ export function ShiftHistoryLog({
 				),
 			});
 
-	const agencyName = rows[0]?.agencyName ?? "Atlas Agency";
+	// Names the agencies present in `detailOutletRows` — the exact rows the
+	// breakdown under this header is aggregated from (one venue, already
+	// filtered). It used to be `rows[0]?.agencyName`, which took whichever
+	// agency happened to sit first in the WHOLE merged feed: a PR who works for
+	// several agencies got the panel labelled with an agency that booked none of
+	// the shifts listed beneath it. Same shape as `agencyLabel` in
+	// OutletPrShiftHistorySheet further down this file.
+	//
+	// The old `?? "Atlas Agency"` fallback is gone on purpose: Atlas is DEMO
+	// data, and a real agency signing in must never be shown it.
+	// See .cursor/rules/no-demo-data-on-real-sessions.mdc.
+	const detailOutletAgencyLabel = useMemo(
+		() =>
+			[...new Set(detailOutletRows.map((r) => r.agencyName))]
+				.filter(Boolean)
+				.join(" · "),
+		[detailOutletRows],
+	);
 
 	const shellClass = embedded
 		? useOutletCardLayout
@@ -482,7 +496,6 @@ export function ShiftHistoryLog({
 						<PrHistoryCard
 							key={rollup.prId}
 							rollup={rollup}
-							venueLabel={venueLabel}
 							portal={portal}
 							onTap={showPrDetail ? () => openPrDetail(rollup.prId) : undefined}
 						/>
@@ -676,7 +689,9 @@ export function ShiftHistoryLog({
 								← Return
 							</button>
 							<p className="iz-tiny iz-muted2 uppercase">
-								PR breakdown · {agencyName}
+								{detailOutletAgencyLabel
+									? `PR breakdown · ${detailOutletAgencyLabel}`
+									: "PR breakdown"}
 							</p>
 							<h3>{detailOutletRollup.venue}</h3>
 						</div>
@@ -995,14 +1010,16 @@ function VenueHistoryCard({
 	return <IzCard>{body}</IzCard>;
 }
 
+// `venueLabel` was a prop here and nothing read it: the card builds its own
+// `venueSummary` from `rollup.venues` just below, which is the fact it actually
+// wants. A prop that is passed, typed and then ignored reads as a bug at the
+// call site — the caller believes it is choosing the label.
 function PrHistoryCard({
 	rollup,
-	venueLabel,
 	portal,
 	onTap,
 }: {
 	rollup: ShiftHistoryPrRollup;
-	venueLabel: string;
 	portal: Portal;
 	onTap?: () => void;
 }) {
@@ -1123,6 +1140,7 @@ export function HistDateRangePickerField({
 	const [open, setOpen] = useState(false);
 	const [pickTarget, setPickTarget] = useState<"from" | "to">("from");
 	const rootRef = useRef<HTMLDivElement>(null);
+	const triggerId = useId();
 	const active = Boolean(range.from || range.to);
 	const displayLabel = formatDateRangeLabel(range, dateOptions, t);
 	const selectedKey = pickTarget === "from" ? range.from : range.to;
@@ -1171,10 +1189,16 @@ export function HistDateRangePickerField({
 
 	return (
 		<div ref={rootRef} className="iz-hist-custom-select compact">
-			<label>{label}</label>
+			<label htmlFor={triggerId}>{label}</label>
+			{/* The clear control is a sibling of this trigger, not a child of it:
+			    a button may not nest another interactive control. It is pinned
+			    over the trigger's right padding, which the inline paddingRight
+			    below reserves so a long range label cannot run underneath it. */}
 			<button
+				id={triggerId}
 				type="button"
 				className={`iz-hist-select-trigger sm${open ? " open" : ""}`}
+				style={active ? { paddingRight: 45 } : undefined}
 				onClick={() => setOpen((o) => !o)}
 				aria-expanded={open}
 				aria-label={t.history.chooseDateRange}
@@ -1185,39 +1209,32 @@ export function HistDateRangePickerField({
 					<CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
 					<span className="truncate">{displayLabel}</span>
 				</span>
-				{active ? (
-					<span
-						role="button"
-						tabIndex={0}
-						className="iz-hist-clear"
-						aria-label={t.history.clearDateRange}
-						onClick={(e) => {
-							e.stopPropagation();
-							onChange({ from: "", to: "" });
-							setPickTarget("from");
-							setOpen(false);
-						}}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" || e.key === " ") {
-								e.preventDefault();
-								e.stopPropagation();
-								onChange({ from: "", to: "" });
-								setPickTarget("from");
-								setOpen(false);
-							}
-						}}
-					>
-						<X className="h-3.5 w-3.5" />
-					</span>
-				) : (
+				{!active && (
 					<ChevronDown
 						className={`h-4 w-4 shrink-0 text-[var(--iz-muted2)] transition-transform${open ? " rotate-180" : ""}`}
 					/>
 				)}
 			</button>
+			{active && (
+				<button
+					type="button"
+					className="iz-hist-clear absolute right-[11px] bottom-[7px]"
+					aria-label={t.history.clearDateRange}
+					onClick={() => {
+						onChange({ from: "", to: "" });
+						setPickTarget("from");
+						setOpen(false);
+					}}
+				>
+					<X className="h-3.5 w-3.5" />
+				</button>
+			)}
 			{open && (
+				/* Layout-only wrapper: role="none" because the handler is a
+				   propagation guard, not a control of its own. */
 				<div
 					className="iz-hist-cal iz-hist-cal--popover iz-hist-cal--range"
+					role="none"
 					onMouseDown={(e) => e.stopPropagation()}
 				>
 					<div className="iz-hist-range-targets">
@@ -1285,119 +1302,6 @@ export function HistDateRangePickerField({
 	);
 }
 
-function HistDatePickerField({
-	label,
-	value,
-	onChange,
-	dateOptions,
-}: {
-	label: string;
-	value: string;
-	onChange: (v: string) => void;
-	dateOptions: { key: string; label: string }[];
-}) {
-	const { t } = usePortalLocale();
-	const [open, setOpen] = useState(false);
-	const rootRef = useRef<HTMLDivElement>(null);
-	const selectedLabel = dateOptions.find((o) => o.key === value)?.label;
-	const selected = dateFromKey(value);
-	const defaultMonth = defaultHistCalendarMonth(dateOptions);
-	const navBounds = useMemo(
-		() => calendarNavBounds(dateOptions, defaultMonth),
-		[dateOptions, defaultMonth],
-	);
-	const [viewMonth, setViewMonth] = useState(selected ?? defaultMonth);
-
-	useEffect(() => {
-		if (open)
-			setViewMonth(
-				selected ?? dateFromKey(dateOptions[0]?.key ?? "") ?? defaultMonth,
-			);
-	}, [open, selected, defaultMonth, dateOptions]);
-
-	useEffect(() => {
-		if (!open) return;
-		const onDoc = (e: MouseEvent) => {
-			if (rootRef.current?.contains(e.target as Node)) return;
-			setOpen(false);
-		};
-		const id = window.setTimeout(
-			() => document.addEventListener("mousedown", onDoc),
-			0,
-		);
-		return () => {
-			window.clearTimeout(id);
-			document.removeEventListener("mousedown", onDoc);
-		};
-	}, [open]);
-
-	return (
-		<div ref={rootRef} className="iz-hist-custom-select compact">
-			<label>{label}</label>
-			<button
-				type="button"
-				className={`iz-hist-select-trigger sm${open ? " open" : ""}`}
-				onClick={() => setOpen((o) => !o)}
-				aria-expanded={open}
-				aria-label={t.history.chooseDate}
-			>
-				<span
-					className={`flex min-w-0 items-center gap-1.5 truncate${value ? "" : " iz-muted2"}`}
-				>
-					<CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
-					<span className="truncate">
-						{value ? (selectedLabel ?? value) : t.filters.allDates}
-					</span>
-				</span>
-				{value ? (
-					<span
-						role="button"
-						tabIndex={0}
-						className="iz-hist-clear"
-						aria-label={t.history.clearDate}
-						onClick={(e) => {
-							e.stopPropagation();
-							onChange("");
-							setOpen(false);
-						}}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" || e.key === " ") {
-								e.preventDefault();
-								e.stopPropagation();
-								onChange("");
-								setOpen(false);
-							}
-						}}
-					>
-						<X className="h-3.5 w-3.5" />
-					</span>
-				) : (
-					<ChevronDown
-						className={`h-4 w-4 shrink-0 text-[var(--iz-muted2)] transition-transform${open ? " rotate-180" : ""}`}
-					/>
-				)}
-			</button>
-			{open && (
-				<div
-					className="iz-hist-cal iz-hist-cal--popover"
-					onMouseDown={(e) => e.stopPropagation()}
-				>
-					<HistDateCalendar
-						selected={selected}
-						viewMonth={viewMonth}
-						onViewMonthChange={setViewMonth}
-						navBounds={navBounds}
-						onSelectDay={(d) => {
-							onChange(isoKeyFromDate(d));
-							setOpen(false);
-						}}
-					/>
-				</div>
-			)}
-		</div>
-	);
-}
-
 export function HistSelectField({
 	label,
 	value,
@@ -1414,6 +1318,7 @@ export function HistSelectField({
 	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
+	const triggerId = useId();
 
 	useEffect(() => {
 		if (!open) return;
@@ -1432,13 +1337,14 @@ export function HistSelectField({
 
 	return (
 		<div ref={rootRef} className="iz-hist-custom-select compact">
-			<label>{label}</label>
+			<label htmlFor={triggerId}>{label}</label>
 			<button
+				id={triggerId}
 				type="button"
 				className={`iz-hist-select-trigger sm${open ? " open" : ""}`}
 				onClick={() => setOpen((o) => !o)}
 				aria-expanded={open}
-				aria-haspopup="listbox"
+				aria-haspopup="true"
 			>
 				<span
 					className={`flex min-w-0 items-center gap-1.5 truncate${value ? "" : " iz-muted2"}`}
@@ -1451,13 +1357,12 @@ export function HistSelectField({
 				/>
 			</button>
 			{open && (
-				<ul className="iz-hist-select-menu" role="listbox">
+				<ul className="iz-hist-select-menu">
 					{options.map((opt) => (
 						<li key={opt.value || "__any"}>
 							<button
 								type="button"
-								role="option"
-								aria-selected={value === opt.value}
+								aria-current={value === opt.value ? "true" : undefined}
 								className={value === opt.value ? "sel" : undefined}
 								onClick={() => {
 									onChange(opt.value);

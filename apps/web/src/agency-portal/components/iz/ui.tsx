@@ -309,6 +309,7 @@ function TimePickerColumn<T extends string | number>({
 }) {
 	const colRef = useRef<HTMLDivElement>(null);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies(value): value is the scroll TRIGGER, not something the effect reads — it re-queries the DOM for the selected cell. Drop it and the column only ever centres on mount, so opening the picker on an already-set time scrolls to the wrong row.
 	useEffect(() => {
 		const selected = colRef.current?.querySelector('[data-selected="true"]');
 		selected?.scrollIntoView({ block: "center" });

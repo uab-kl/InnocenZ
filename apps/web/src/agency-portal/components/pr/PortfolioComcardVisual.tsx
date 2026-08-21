@@ -106,8 +106,8 @@ export function PrComcardPickerThumb({
 				style={{ containerType: "inline-size" }}
 			>
 				<div className={portfolioComcardGridClass(gridPhotos.length)}>
-					{gridPhotos.map((src, i) => (
-						<PortfolioComcardCell key={`${src}-${i}`} src={src} />
+					{gridPhotos.map((src) => (
+						<PortfolioComcardCell key={src} src={src} />
 					))}
 				</div>
 				{/* Frosted at the same 0.62 + 8px blur as `.iz-portfolio-comcard__overlay`
@@ -199,8 +199,8 @@ export function PortfolioComcardVisual({
 					className={portfolioComcardGridClass(grid.length)}
 					aria-hidden={false}
 				>
-					{grid.map((src, i) => (
-						<PortfolioComcardCell key={`${src}-${i}`} src={src} />
+					{grid.map((src) => (
+						<PortfolioComcardCell key={src} src={src} />
 					))}
 				</div>
 				<div className="iz-portfolio-comcard__overlay">

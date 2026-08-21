@@ -5,11 +5,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
+function InputGroup({ className, ...props }: React.ComponentProps<"fieldset">) {
+	/*
+	 * A real <fieldset> instead of a div carrying `role="group"`: this genuinely
+	 * groups a control with its addon buttons (see PasswordInput's show/hide
+	 * toggle), which is exactly what a fieldset is. Layout is unchanged — the
+	 * class list already pins `min-w-0`, so the UA's `min-inline-size: min-content`
+	 * on fieldset cannot widen it, and every stylesheet hook for this component
+	 * matches on `[data-slot="input-group"]` / `.login-input-group`, never on `div`.
+	 */
 	return (
-		<div
+		<fieldset
 			data-slot="input-group"
-			role="group"
 			className={cn(
 				"group/input-group border-border bg-input relative flex w-full items-center rounded-md border shadow-xs transition-[color,box-shadow] outline-none",
 				"h-9 min-w-0 has-[>textarea]:h-auto",
@@ -47,10 +54,17 @@ function InputGroupAddon({
 	className,
 	align = "inline-start",
 	...props
-}: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
+}: React.ComponentProps<"fieldset"> &
+	VariantProps<typeof inputGroupAddonVariants>) {
 	return (
-		<div
-			role="group"
+		/*
+		 * Same swap as InputGroup: the semantic element for the `role="group"`
+		 * this used to declare. As a flex item of the row-direction InputGroup its
+		 * automatic minimum size was already `min-content`, so the fieldset UA
+		 * minimum changes nothing.
+		 */
+		// biome-ignore lint/a11y/useKeyWithClickEvents: the click is a mouse-only convenience — it forwards a click on the addon's padding to the field the addon decorates. There is no action to trigger by key: a keyboard user reaches that field with Tab, and giving this wrapper a key handler would mean giving it a tabIndex, i.e. a dead tab stop in front of every input.
+		<fieldset
 			data-slot="input-group-addon"
 			data-align={align}
 			className={cn(inputGroupAddonVariants({ align }), className)}

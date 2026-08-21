@@ -3,10 +3,8 @@ import { formatRM, IzCardTitle } from "@agency-portal/components/iz/ui";
 import { LiveEarningsLabel } from "@agency-portal/components/outlet/outlet-live-sales-ui";
 import type { OutletPrLiveEarningsBreakdown } from "@agency-portal/lib/outlet-financial-sync";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 function EarningsRow({ label, amount }: { label: string; amount: number }) {
-	const { t } = usePortalLocale();
 	return (
 		<div className="iz-outlet-pr-earnings-sheet__row">
 			<dt>

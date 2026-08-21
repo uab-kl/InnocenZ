@@ -6,6 +6,7 @@ import {
 	EMPTY_AGENCY_OUTLET_FILTERS,
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { RotateCcw } from "lucide-react";
+import { useId } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /**
@@ -49,6 +50,8 @@ export function AgencyOutletFilters({
 }) {
 	const { t } = usePortalLocale();
 	const activeCount = countActiveAgencyOutletFilters(filters);
+	const outletSelectId = useId();
+	const sourceSelectId = useId();
 
 	return (
 		<div className="iz-roster-filterbar">
@@ -74,9 +77,13 @@ export function AgencyOutletFilters({
 			</div>
 
 			<div className="iz-roster-filterbar__row">
-				<label className="iz-roster-filterbar__field iz-roster-filterbar__field--grow">
+				<label
+					htmlFor={outletSelectId}
+					className="iz-roster-filterbar__field iz-roster-filterbar__field--grow"
+				>
 					<span className="iz-roster-filterbar__label">{t.filters.outlet}</span>
 					<IzSelect
+						id={outletSelectId}
 						block
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
@@ -107,9 +114,10 @@ export function AgencyOutletFilters({
 					/>
 				</div>
 
-				<label className="iz-roster-filterbar__field">
+				<label htmlFor={sourceSelectId} className="iz-roster-filterbar__field">
 					<span className="iz-roster-filterbar__label">{t.filters.source}</span>
 					<IzSelect
+						id={sourceSelectId}
 						block
 						value={filters.source}
 						onChange={(e) =>

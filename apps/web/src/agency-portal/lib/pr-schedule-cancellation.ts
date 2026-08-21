@@ -35,10 +35,34 @@ export interface CancellationEvaluation {
 	detail: string;
 }
 
+/**
+ * Malaysia is UTC+8 all year — no DST — so a fixed offset is exact. The third
+ * statement of this constant in the repo, alongside the backend's
+ * `slot-window.ts` and the PR app's `lib/venue-time.ts`; the day a venue is not
+ * Malaysian, all three move onto the outlet row together.
+ */
+const VENUE_UTC_OFFSET_MINUTES = 8 * 60;
+
+/**
+ * A shift's start as a real instant, read in the VENUE's timezone.
+ *
+ * ⚠️ This built the date with `new Date(y, m, d, hh, mm)` — the local-time
+ * constructor, which here resolves the wall clock in the BROWSER's timezone.
+ * That is right only while every operator's device is set to Malaysia. It is the
+ * web copy of the defect fixed in the backend's cancel-fee path and in the PR
+ * app, where the same drift was eight hours and moved real money.
+ *
+ * Lower stakes than those two — `outletShiftStarted` gates a display, not a
+ * charge — but the same rule, because "has this shift started" is a question
+ * about the venue's clock and nobody else's.
+ */
 export function shiftStartMs(dateIso: string, shiftStart: string): number {
 	const [y, m, d] = dateIso.split("-").map(Number);
 	const [hh, mm] = shiftStart.split(":").map(Number);
-	return new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0).getTime();
+	const midnight =
+		Date.UTC(y as number, (m as number) - 1, d as number) -
+		VENUE_UTC_OFFSET_MINUTES * 60_000;
+	return midnight + ((hh || 0) * 60 + (mm || 0)) * 60_000;
 }
 
 export function hoursUntilShiftStart(

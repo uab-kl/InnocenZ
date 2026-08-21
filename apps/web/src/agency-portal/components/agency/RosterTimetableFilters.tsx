@@ -5,6 +5,7 @@ import {
 	EMPTY_ROSTER_TIMETABLE_FILTERS,
 } from "@agency-portal/lib/roster-shift-filters";
 import { RotateCcw, Search } from "lucide-react";
+import { useId } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
@@ -33,6 +34,9 @@ export function RosterTimetableFilters({
 }) {
 	const { t } = usePortalLocale();
 	const activeCount = countActiveRosterTimetableFilters(filters);
+	const showPrsSelectId = useId();
+	const outletSelectId = useId();
+	const statusSelectId = useId();
 
 	return (
 		<div className="iz-roster-filterbar">
@@ -104,11 +108,12 @@ export function RosterTimetableFilters({
 				 * "of N · M" suffix claiming a narrowing that had not happened.
 				 */}
 
-				<label className="iz-roster-filterbar__field">
+				<label htmlFor={showPrsSelectId} className="iz-roster-filterbar__field">
 					<span className="iz-roster-filterbar__label">
 						{t.filters.showPrs}
 					</span>
 					<IzSelect
+						id={showPrsSelectId}
 						block
 						value={filters.showPrs}
 						onChange={(e) =>
@@ -124,9 +129,10 @@ export function RosterTimetableFilters({
 					</IzSelect>
 				</label>
 
-				<label className="iz-roster-filterbar__field">
+				<label htmlFor={outletSelectId} className="iz-roster-filterbar__field">
 					<span className="iz-roster-filterbar__label">{t.filters.outlet}</span>
 					<IzSelect
+						id={outletSelectId}
 						block
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
@@ -140,11 +146,12 @@ export function RosterTimetableFilters({
 					</IzSelect>
 				</label>
 
-				<label className="iz-roster-filterbar__field">
+				<label htmlFor={statusSelectId} className="iz-roster-filterbar__field">
 					<span className="iz-roster-filterbar__label">
 						{t.filters.shiftStatus}
 					</span>
 					<IzSelect
+						id={statusSelectId}
 						block
 						value={filters.status}
 						onChange={(e) =>

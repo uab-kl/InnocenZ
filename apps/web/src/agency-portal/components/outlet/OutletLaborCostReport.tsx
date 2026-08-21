@@ -62,7 +62,6 @@ function ReportRow({
 	onToggle?: () => void;
 	hasChildren?: boolean;
 }) {
-	const { t } = usePortalLocale();
 	const variance = line.actualRm - line.budgetRm;
 	const favorable = isLaborVarianceFavorable(variance);
 	const isParent = line.depth === 0;
@@ -180,7 +179,7 @@ export function OutletLaborCostReport({
 			onOpenChange={setOpen}
 			className={cn("iz-outlet-labor-cost-section !mt-2.5", className)}
 		>
-			<div
+			<section
 				className="iz-outlet-labor-report iz-outlet-labor-report--embedded"
 				aria-label={t.today.laborCostReport}
 			>
@@ -250,7 +249,7 @@ export function OutletLaborCostReport({
 						</tbody>
 					</table>
 				</div>
-			</div>
+			</section>
 		</OutletSection>
 	);
 }

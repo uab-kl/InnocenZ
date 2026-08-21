@@ -285,10 +285,7 @@ function RouteComponent() {
 				</div>
 			</aside>
 
-			<main
-				role="main"
-				className="relative flex min-h-svh w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20"
-			>
+			<main className="relative flex min-h-svh w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20">
 				<a
 					href="/"
 					className="login-back mb-10 inline-flex w-fit items-center gap-3 font-semibold uppercase tracking-[0.12em] text-foreground/70 transition-colors hover:text-gold-bright lg:absolute lg:right-12 lg:top-12 lg:mb-0"

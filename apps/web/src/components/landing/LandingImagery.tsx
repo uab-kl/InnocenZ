@@ -32,7 +32,10 @@ export function HeroPortraitRing() {
 		>
 			{heroPortraitFrames.map((frame, i) => (
 				<motion.div
-					key={`${frame.src}-${i}`}
+					// `src` alone is not unique — 7 of the 22 frames reuse an image — so
+					// the key pairs it with `pos`, which IS unique: two frames cannot
+					// occupy the same spot on the ring.
+					key={`${frame.src}-${frame.pos}`}
 					initial={reduceMotion ? false : { opacity: 0, scale: 0.88, y: 24 }}
 					animate={{ opacity: 1, scale: 1, y: 0 }}
 					transition={{ duration: 0.75, delay: 0.12 + i * 0.04 }}

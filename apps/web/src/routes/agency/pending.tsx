@@ -277,6 +277,18 @@ function pendingLegalIcName(signup: PendingPR) {
 	return legal;
 }
 
+/**
+ * Join unless the row says otherwise — a request with no kind is a join, which
+ * is how every row written before departures existed reads.
+ *
+ * Module scope on purpose: it closes over nothing, and as a body-local arrow it
+ * took a new identity every render, which is a dependency the counting memos
+ * below cannot hold without recomputing on every render.
+ */
+function pendingRequestKind(p: PendingPR) {
+	return p.requestKind ?? "join";
+}
+
 function VerificationBadge({
 	ok,
 	label,
@@ -496,7 +508,7 @@ function DocPreviewSheet({
 				<div className="grid grid-cols-3 gap-2 px-4 pb-4">
 					{gallerySlots.map((src, i) => (
 						<div
-							key={i}
+							key={src}
 							className="aspect-square overflow-hidden rounded-lg border border-[var(--iz-line)]"
 						>
 							{zoomable(
@@ -548,6 +560,14 @@ function DocPreviewSheet({
 }
 
 type DocTab = "ic" | "selfie" | "gallery" | "comcard";
+
+/** The four empty portfolio cells shown when a PR has uploaded nothing yet. */
+const GALLERY_PLACEHOLDER_SLOTS = [
+	"gallery-empty-1",
+	"gallery-empty-2",
+	"gallery-empty-3",
+	"gallery-empty-4",
+] as const;
 
 function DocumentTabs({
 	activeTab,
@@ -673,7 +693,10 @@ function DocumentPreviewStack({
 	onPreview: (kind: "ic" | "selfie" | "gallery" | "comcard") => void;
 }) {
 	const { t } = usePortalLocale();
-	const galleryPlaceholders = gallerySlots.length > 0 ? 0 : 4;
+	// Named slots rather than a length: the empty cells are fixed furniture, so
+	// each one keeps its own key instead of borrowing its position in the array.
+	const galleryPlaceholders: readonly string[] =
+		gallerySlots.length > 0 ? [] : GALLERY_PLACEHOLDER_SLOTS;
 
 	const icCell = (label: string, src: string | undefined, aria: string) => (
 		<button
@@ -750,7 +773,7 @@ function DocumentPreviewStack({
 					{gallerySlots.length > 0
 						? gallerySlots.map((src, i) => (
 								<button
-									key={i}
+									key={src}
 									type="button"
 									className="iz-approvals-doc-cell gallery has-photo"
 									onClick={() => onPreview("gallery")}
@@ -759,9 +782,9 @@ function DocumentPreviewStack({
 									<img src={docImageSrc(src)} alt={`Portfolio ${i + 1}`} />
 								</button>
 							))
-						: Array.from({ length: galleryPlaceholders }).map((_, i) => (
+						: galleryPlaceholders.map((slot) => (
 								<div
-									key={i}
+									key={slot}
 									className="iz-approvals-doc-cell empty"
 									aria-hidden
 								>
@@ -819,6 +842,7 @@ function SignupDetailPanel({
 	) as string[];
 	const comcardMeta = comcardTabMeta(signup, t);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies(signup.id): the id is the reset TRIGGER, not a value the effect reads — a different applicant must open on the IC tab with no preview. Drop it and this resets on mount only, so the next card inherits the previous PR's open document.
 	useEffect(() => {
 		setDocTab("ic");
 		setPreview(null);
@@ -1280,7 +1304,7 @@ function LeaveDetailPanel({
 					<div className="mt-2 flex flex-wrap gap-2">
 						{mcPhotos.map((src, i) => (
 							<a
-								key={`${req.id}-mc-${i}`}
+								key={`${req.id}-mc-${src}`}
 								href={resolveProofPhotoUrl(src)}
 								target="_blank"
 								rel="noreferrer"
@@ -1465,16 +1489,19 @@ function AgencyPending() {
 		"pending" | "approved" | "rejected" | "all"
 	>("pending");
 	const group = TAB_GROUP[tab];
-	const kindOf = (p: PendingPR) => p.requestKind ?? "join";
 	const tiedKind: "join" | "leave" = tab === "cancel" ? "leave" : "join";
 	const tiedCounts = useMemo(
 		() => ({
-			joinCurrent: signups.filter((p) => kindOf(p) === "join").length,
-			leaveCurrent: signups.filter((p) => kindOf(p) === "leave").length,
-			approved: backend.approvedHistory.filter((p) => kindOf(p) === tiedKind)
+			joinCurrent: signups.filter((p) => pendingRequestKind(p) === "join")
 				.length,
-			rejected: backend.rejectedHistory.filter((p) => kindOf(p) === tiedKind)
+			leaveCurrent: signups.filter((p) => pendingRequestKind(p) === "leave")
 				.length,
+			approved: backend.approvedHistory.filter(
+				(p) => pendingRequestKind(p) === tiedKind,
+			).length,
+			rejected: backend.rejectedHistory.filter(
+				(p) => pendingRequestKind(p) === tiedKind,
+			).length,
 		}),
 		[signups, backend.approvedHistory, backend.rejectedHistory, tiedKind],
 	);
@@ -1507,7 +1534,7 @@ function AgencyPending() {
 	const tiedList = useMemo(() => {
 		const only = (list: PendingPR[]) =>
 			list
-				.filter((p) => kindOf(p) === tiedKind)
+				.filter((p) => pendingRequestKind(p) === tiedKind)
 				.map((p) => ({
 					...p,
 					cardKey: `${p.id}:${p.status}:${p.requestKind ?? "join"}`,

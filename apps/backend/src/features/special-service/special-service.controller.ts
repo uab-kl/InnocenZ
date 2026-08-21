@@ -21,6 +21,8 @@ import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
+import { portalRoleName } from '@/types/rbac-constant.js';
+import type { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 
 export class SpecialServiceControllerClass {
   constructor(
@@ -28,7 +30,44 @@ export class SpecialServiceControllerClass {
     private prRepository: PrRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private orgScopeDeps: OrgScopeDeps,
+    private agencyOutletRepository: AgencyOutletRepository,
   ) {}
+
+  /**
+   * May this caller file a posting against THIS venue?
+   *
+   * `create` pinned `initiatedBy` server-side but took `outletId` on trust — any
+   * uuid the client sent was stored. That stayed latent while the agency portal
+   * sent only `outletName` (which this handler ignores), so `outletId` arrived
+   * null from that path; sending the real id made it reachable, and a forged one
+   * would put an attacker-chosen job posting, budget and agency name onto a
+   * rival venue's own service list, where `getById` shows it as theirs because
+   * `scope.outletIds.includes(record.outletId)` is true.
+   *
+   * Scoped by the rule each org already uses: an OUTLET operator may post only
+   * at its own venues; an AGENCY only at venues it holds an approved
+   * `agency_outlet` link to — the repository's stated portal visibility rule.
+   * A posting with NO outlet stays allowed: a PR or an agency may raise one that
+   * names no venue, which is what a nullable `outlet_id` is for.
+   */
+  private async mayPostForOutlet(
+    req: Request,
+    outletId: string | null,
+  ): Promise<boolean> {
+    if (!outletId) return true;
+    const scope = await resolveOrgScope(req, this.orgScopeDeps);
+    if (scope.isAdmin) return true;
+    if (scope.outletIds.length > 0) return scope.outletIds.includes(outletId);
+    if (scope.agencyId) {
+      const linked =
+        await this.agencyOutletRepository.listApprovedOutletIdsForAgency(
+          scope.agencyId,
+        );
+      return linked.includes(outletId);
+    }
+    // A PR belongs to no venue, so it may not pin a posting to one.
+    return false;
+  }
 
   private parseOrder(req: Request): 'asc' | 'desc' {
     return req.query.order === 'asc' ? 'asc' : 'desc';
@@ -52,9 +91,31 @@ export class SpecialServiceControllerClass {
     const userId = req.user?.id;
     if (!userId) return null;
     const roles = await this.authRepository.getRolesForUserIds([userId]);
-    const roleNames = roles.map((role) => role.roleName);
-    if (roleNames.includes('admin')) return claimed;
-    return roleNames.includes(claimed) ? claimed : null;
+    if (roles.some((r) => r.roleName === portalRoleName.ADMIN)) return claimed;
+
+    /**
+     * ⚠️ THIS COMPARED THE ROLE NAME TO THE PORTAL CODE, so agency and outlet
+     * postings were refused outright — the feature has never worked for either.
+     *
+     * `initiatedBy` is one of 'outlet' | 'agency' | 'pr', which are PORTAL
+     * CODES. A role row carries both: an agency owner is
+     * `{ roleName: 'Owner', portalCode: 'agency' }` and an outlet owner is
+     * `{ roleName: 'Owner', portalCode: 'outlet' }`. Testing `roleName` against
+     * 'agency' therefore asked whether someone's TITLE was the word "agency",
+     * which no seeded role has, and every agency and outlet caller got
+     * "Cannot post a special service on behalf of another role".
+     *
+     * Only PRs slipped through, by coincidence: their role really is named 'pr'
+     * and their `portalCode` is null, so the old test passed for exactly the one
+     * caller it happened to fit. That is why the bug survived — the path that
+     * was exercised was the path that worked.
+     *
+     * Both are accepted now, matching `holdsAgencyLane`/`holdsOutletLane`, which
+     * already look at `portalCode` first and fall back to role names.
+     */
+    return roles.some((r) => r.portalCode === claimed || r.roleName === claimed)
+      ? claimed
+      : null;
   }
 
   private buildFilter(req: Request): SpecialServiceFilter {
@@ -64,8 +125,10 @@ export class SpecialServiceControllerClass {
       status: req.query.status as SpecialServiceStatus | undefined,
       category: req.query.category as SpecialServiceCategory | undefined,
       vendorName: req.query.vendorName as string | undefined,
-      initiatedBy: req.query.initiatedBy as SpecialServiceInitiatedBy | undefined,
-      adminAccepted: req.query.adminAccepted as SpecialServiceAdminAccepted | undefined,
+      initiatedBy: req.query.initiatedBy as
+        SpecialServiceInitiatedBy | undefined,
+      adminAccepted: req.query.adminAccepted as
+        SpecialServiceAdminAccepted | undefined,
       id: idRaw || undefined,
       dates: parseDatesQuery(req.query.dates),
       scheduledDates: parseDatesQuery(req.query.scheduledDates),
@@ -86,7 +149,9 @@ export class SpecialServiceControllerClass {
    *
    * Returns null when the caller belongs to no org.
    */
-  private async scopedFilter(req: Request): Promise<SpecialServiceFilter | null> {
+  private async scopedFilter(
+    req: Request,
+  ): Promise<SpecialServiceFilter | null> {
     const filter = this.buildFilter(req);
     const scope = await resolveOrgScope(req, this.orgScopeDeps);
     if (scope.isAdmin) return filter;
@@ -132,7 +197,11 @@ export class SpecialServiceControllerClass {
       });
     } catch (error) {
       logger.error('[SpecialServiceController.list] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -168,7 +237,11 @@ export class SpecialServiceControllerClass {
       });
     } catch (error) {
       logger.error('[SpecialServiceController.listAdminPending] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -188,9 +261,12 @@ export class SpecialServiceControllerClass {
       };
       const userId = req.user?.id;
       if (!userId) {
-        return res
-          .status(200)
-          .json({ success: true, message: 'OK', data: [], pagination: emptyPage });
+        return res.status(200).json({
+          success: true,
+          message: 'OK',
+          data: [],
+          pagination: emptyPage,
+        });
       }
       // Prefer posting_user_id (0087); fall back to legacy posting_pr_id bridge.
       const pr = await this.prRepository.getByUserId(userId);
@@ -219,7 +295,11 @@ export class SpecialServiceControllerClass {
       });
     } catch (error) {
       logger.error('[SpecialServiceController.listMine] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -239,33 +319,49 @@ export class SpecialServiceControllerClass {
         byStatus[row.status] = row.count;
         total += row.count;
       }
-      res.status(200).json({ success: true, message: 'OK', data: byStatus, total });
+      res
+        .status(200)
+        .json({ success: true, message: 'OK', data: byStatus, total });
     } catch (error) {
       logger.error('[SpecialServiceController.statusSummary] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
   async getById(req: Request, res: Response) {
     try {
       const record = await this.repository.getById(paramId(req.params.id));
-      if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!record)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // Someone else's order is a 404, not a 403 — the response must not confirm
       // the id exists. Same ownership rule as scopedFilter above.
       const scope = await resolveOrgScope(req, this.orgScopeDeps);
       const ownsIt =
         scope.isAdmin ||
-        (record.outletId !== null && scope.outletIds.includes(record.outletId)) ||
+        (record.outletId !== null &&
+          scope.outletIds.includes(record.outletId)) ||
         (scope.agencyId !== null && record.initiatedBy === 'agency');
       if (!ownsIt) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       res.status(200).json({ success: true, message: 'OK', data: record });
     } catch (error) {
       logger.error('[SpecialServiceController.getById] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -273,10 +369,17 @@ export class SpecialServiceControllerClass {
     try {
       const parsed = CreateSpecialServiceSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
       const actor = getActor(req);
-      const initiatedBy = await this.initiatedByForCaller(req, parsed.data.initiatedBy);
+      const initiatedBy = await this.initiatedByForCaller(
+        req,
+        parsed.data.initiatedBy,
+      );
       if (!initiatedBy) {
         return res.status(403).json({
           success: false,
@@ -306,12 +409,26 @@ export class SpecialServiceControllerClass {
         postingUserId = userId ?? pr.userId ?? null;
       }
 
+      // The venue must be one this caller may actually post at — see
+      // `mayPostForOutlet`. Checked here, after `initiatedBy` is pinned, so the
+      // scope is judged from what the caller IS, never from what they claimed.
+      if (!(await this.mayPostForOutlet(req, parsed.data.outletId ?? null))) {
+        return res.status(403).json({
+          success: false,
+          message: 'You cannot post a service at that outlet',
+          data: null,
+        });
+      }
+
       const record = await this.repository.create({
         outletId: parsed.data.outletId ?? null,
         title: parsed.data.title,
         category: parsed.data.category,
         description: parsed.data.description ?? null,
-        budget: parsed.data.budget !== undefined ? parsed.data.budget.toFixed(2) : null,
+        budget:
+          parsed.data.budget !== undefined
+            ? parsed.data.budget.toFixed(2)
+            : null,
         status: 'open',
         initiatedBy,
         adminAccepted,
@@ -323,11 +440,24 @@ export class SpecialServiceControllerClass {
         createdBy: actor,
         updatedBy: actor,
       });
-      if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
-      res.status(201).json({ success: true, message: 'Special service created', data: record });
+      if (!record)
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
+      res.status(201).json({
+        success: true,
+        message: 'Special service created',
+        data: record,
+      });
     } catch (error) {
       logger.error('[SpecialServiceController.create] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -336,18 +466,31 @@ export class SpecialServiceControllerClass {
     try {
       const parsed = AssignSpecialServiceSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
       const record = await this.repository.update(paramId(req.params.id), {
         vendorName: parsed.data.vendorName,
         status: 'assigned',
         updatedBy: getActor(req),
       });
-      if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Assigned to agency', data: record });
+      if (!record)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      res
+        .status(200)
+        .json({ success: true, message: 'Assigned to agency', data: record });
     } catch (error) {
       logger.error('[SpecialServiceController.assign] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -355,17 +498,30 @@ export class SpecialServiceControllerClass {
     try {
       const parsed = UpdateStatusSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
       const record = await this.repository.update(paramId(req.params.id), {
         status: parsed.data.status,
         updatedBy: getActor(req),
       });
-      if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Status updated', data: record });
+      if (!record)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      res
+        .status(200)
+        .json({ success: true, message: 'Status updated', data: record });
     } catch (error) {
       logger.error('[SpecialServiceController.updateStatus] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -374,18 +530,26 @@ export class SpecialServiceControllerClass {
     try {
       const parsed = UpdateSpecialServiceSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
       const existing = await this.repository.getById(paramId(req.params.id));
       if (!existing) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       const payload: Parameters<SpecialServiceRepositoryClass['update']>[1] = {
         updatedBy: getActor(req),
       };
       if (parsed.data.title !== undefined) payload.title = parsed.data.title;
-      if (parsed.data.description !== undefined) payload.description = parsed.data.description;
-      if (parsed.data.category !== undefined) payload.category = parsed.data.category;
+      if (parsed.data.description !== undefined)
+        payload.description = parsed.data.description;
+      if (parsed.data.category !== undefined)
+        payload.category = parsed.data.category;
       if (parsed.data.postingAgencyName !== undefined) {
         payload.postingAgencyName = parsed.data.postingAgencyName;
       }
@@ -404,12 +568,24 @@ export class SpecialServiceControllerClass {
       }
       const record = await this.repository.update(existing.id, payload);
       if (!record) {
-        return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
       }
-      res.status(200).json({ success: true, message: 'Special service updated', data: record });
+      res.status(200).json({
+        success: true,
+        message: 'Special service updated',
+        data: record,
+      });
     } catch (error) {
       logger.error('[SpecialServiceController.update] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -417,12 +593,18 @@ export class SpecialServiceControllerClass {
     try {
       const existing = await this.repository.getById(paramId(req.params.id));
       if (!existing) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      if (existing.initiatedBy !== 'agency' || existing.adminAccepted !== 'pending') {
+      if (
+        existing.initiatedBy !== 'agency' ||
+        existing.adminAccepted !== 'pending'
+      ) {
         return res.status(400).json({
           success: false,
-          message: 'Only agency-initiated jobs pending admin review can be approved',
+          message:
+            'Only agency-initiated jobs pending admin review can be approved',
           data: null,
         });
       }
@@ -430,11 +612,22 @@ export class SpecialServiceControllerClass {
         adminAccepted: 'accepted',
         updatedBy: getActor(req),
       });
-      if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
-      res.status(200).json({ success: true, message: 'Job posting approved', data: record });
+      if (!record)
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
+      res
+        .status(200)
+        .json({ success: true, message: 'Job posting approved', data: record });
     } catch (error) {
       logger.error('[SpecialServiceController.adminApprove] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -442,12 +635,18 @@ export class SpecialServiceControllerClass {
     try {
       const existing = await this.repository.getById(paramId(req.params.id));
       if (!existing) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      if (existing.initiatedBy !== 'agency' || existing.adminAccepted !== 'pending') {
+      if (
+        existing.initiatedBy !== 'agency' ||
+        existing.adminAccepted !== 'pending'
+      ) {
         return res.status(400).json({
           success: false,
-          message: 'Only agency-initiated jobs pending admin review can be declined',
+          message:
+            'Only agency-initiated jobs pending admin review can be declined',
           data: null,
         });
       }
@@ -456,11 +655,22 @@ export class SpecialServiceControllerClass {
         status: 'cancelled',
         updatedBy: getActor(req),
       });
-      if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
-      res.status(200).json({ success: true, message: 'Job posting declined', data: record });
+      if (!record)
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
+      res
+        .status(200)
+        .json({ success: true, message: 'Job posting declined', data: record });
     } catch (error) {
       logger.error('[SpecialServiceController.adminDecline] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 }

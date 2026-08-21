@@ -467,7 +467,6 @@ function ActionRow({
 	disabled?: boolean;
 	onClick: () => void;
 }) {
-	const { t } = usePortalLocale();
 	return (
 		<button
 			type="button"

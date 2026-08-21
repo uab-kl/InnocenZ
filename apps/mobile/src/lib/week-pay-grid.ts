@@ -46,14 +46,42 @@ export function gridBucket(line: PrReceiptLine): GridBucket {
 /** Statuses that mean the agency has already processed the week's voucher. */
 export const VERIFIED_STATUSES = ['sent', 'awaiting_pr', 'signed', 'paid'];
 
-export function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay[] {
+export function buildWeekGridFromLines(
+  week: PrCurrentWeek | null,
+): WeeklyDayPay[] {
   if (!week) return [];
-  const verified = week.status !== null && VERIFIED_STATUSES.includes(week.status);
+  /**
+   * THE WEAKEST VOUCHER WINS, and this is the WEEK's grid, so it must ask every
+   * voucher in it.
+   *
+   * ⚠️ This read `week.status` alone — the NEWEST voucher's, which `api.ts`
+   * documents as "a headline, not the week". Since 0129 a PR on two rosters
+   * holds one voucher PER AGENCY and this grid merges both agencies' lines, so
+   * with Atlas `paid` arriving newest and Why We Met still `pending_review`
+   * every WWM day carrying money was painted VERIFIED — and `verifiedDays`
+   * counted them, so the header read e.g. 6/7 over money one agency had not
+   * even issued.
+   *
+   * `every`, not `some`: the rule the server states where it merges these
+   * vouchers ("Day status across vouchers: the WEAKEST wins"), and the same
+   * reasoning as `downgraded` below — the strongest possible pill over the
+   * weakest possible evidence is what a PR then signs against.
+   *
+   * A one-voucher week, and a backend that sends no `vouchers`, both fall back
+   * to the headline — where it IS the only voucher and the old test was right.
+   */
+  const rows = week.vouchers ?? [];
+  const verified =
+    rows.length > 0
+      ? rows.every((v) => !!v.status && VERIFIED_STATUSES.includes(v.status))
+      : week.status !== null && VERIFIED_STATUSES.includes(week.status);
   // The agency's day-by-day sign-off, which happens DURING the week — long
   // before the voucher's own status moves. Absent (older backend) simply means
   // no day is approved yet, which is what the screen used to assume anyway.
   const approvedDays = new Set(
-    (week.dayReviews ?? []).filter((d) => d.status === 'approved').map((d) => d.date),
+    (week.dayReviews ?? [])
+      .filter((d) => d.status === 'approved')
+      .map((d) => d.date),
   );
   /**
    * A day the server sent back as NOT approved — held, unreviewed, or downgraded
@@ -66,8 +94,11 @@ export function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay
    * and signing on it. Absent from `dayReviews` (or an older backend that sends
    * none) is NOT a downgrade: that is the legacy path and behaves as before.
    */
-  const reviewed = new Map((week.dayReviews ?? []).map((d) => [d.date, d.status]));
-  const downgraded = (iso: string) => reviewed.has(iso) && reviewed.get(iso) !== 'approved';
+  const reviewed = new Map(
+    (week.dayReviews ?? []).map((d) => [d.date, d.status]),
+  );
+  const downgraded = (iso: string) =>
+    reviewed.has(iso) && reviewed.get(iso) !== 'approved';
   const byIso = new Map<string, PrReceiptLine[]>();
   for (const line of week.lines) {
     const key = line.lineDate ?? week.weekStart;
@@ -83,7 +114,9 @@ export function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay
     const iso = d.toISOString().slice(0, 10);
     const dayLines = byIso.get(iso) ?? [];
     const sumBucket = (bucket: GridBucket) =>
-      dayLines.filter((l) => gridBucket(l) === bucket).reduce((s, l) => s + l.commission, 0);
+      dayLines
+        .filter((l) => gridBucket(l) === bucket)
+        .reduce((s, l) => s + l.commission, 0);
     days.push({
       day: WEEKDAY_ABBR[d.getUTCDay()],
       date: d.getUTCDate(),

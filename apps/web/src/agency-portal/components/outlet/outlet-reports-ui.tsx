@@ -35,11 +35,16 @@ export function OutletReportTopPrCard({
 		<article className="iz-outlet-report-pr-card">
 			<div className="iz-outlet-report-pr-card__head">
 				<div className="iz-outlet-report-pr-card__identity">
-					<span
-						className="iz-outlet-report-pr-rank"
-						aria-label={fill(t.reports.rankLabel, { rank })}
-					>
-						{rank}
+					{/* The badge is a bare <span> (role=generic), and a generic element
+					    takes no accessible name — the aria-label here was read by
+					    nothing. The same words now ride as real text, hidden from
+					    sight only, with the bare numeral hidden from the reader so it
+					    is not announced twice. */}
+					<span className="iz-outlet-report-pr-rank">
+						<span className="sr-only">
+							{fill(t.reports.rankLabel, { rank })}
+						</span>
+						<span aria-hidden="true">{rank}</span>
 					</span>
 					<div className="min-w-0">
 						<p className="iz-outlet-report-pr-card__name">{name}</p>

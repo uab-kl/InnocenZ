@@ -30,24 +30,22 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 	head: ({ matches }) => {
 		const isNotFound = matches.some(
-			(match) => match.status === "notFound" || match.globalNotFound,
+			(match) => match.status === "notFound" || match._notFound,
 		);
 
-    return {
-      meta: [
-        { charSet: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        ...(isNotFound
-          ? (notFoundHead().meta ?? [])
-          : [{ title: 'Innocenz' }]),
-      ],
-      links: [
-        { rel: 'stylesheet', href: appCss },
-        { rel: 'icon', href: '/assets/innocenz-logo.png', type: 'image/png' },
-        { rel: 'apple-touch-icon', href: '/assets/innocenz-logo.png' },
-      ],
-    }
-  },
+		return {
+			meta: [
+				{ charSet: "utf-8" },
+				{ name: "viewport", content: "width=device-width, initial-scale=1" },
+				...(isNotFound ? (notFoundHead().meta ?? []) : [{ title: "Innocenz" }]),
+			],
+			links: [
+				{ rel: "stylesheet", href: appCss },
+				{ rel: "icon", href: "/assets/innocenz-logo.png", type: "image/png" },
+				{ rel: "apple-touch-icon", href: "/assets/innocenz-logo.png" },
+			],
+		};
+	},
 
 	shellComponent: RootDocument,
 });

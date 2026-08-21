@@ -23,7 +23,12 @@ const logos: {
 	{
 		name: "NOVA",
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<circle
 					cx="20"
 					cy="20"
@@ -46,7 +51,12 @@ const logos: {
 		name: "MAISON",
 		italic: true,
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<path
 					d="M8 30 L20 10 L32 30 M14 22 L26 22"
 					stroke="currentColor"
@@ -60,7 +70,12 @@ const logos: {
 	{
 		name: "LUME",
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<rect
 					x="10"
 					y="10"
@@ -79,7 +94,12 @@ const logos: {
 		name: "ATRIA",
 		mono: true,
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<path
 					d="M8 30 L20 8 L32 30 Z"
 					fill="none"
@@ -94,7 +114,12 @@ const logos: {
 	{
 		name: "ORBIT",
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<ellipse
 					cx="20"
 					cy="20"
@@ -112,7 +137,12 @@ const logos: {
 	{
 		name: "HAUS",
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<path
 					d="M10 30 L10 18 L20 10 L30 18 L30 30 Z"
 					fill="none"
@@ -133,7 +163,12 @@ const logos: {
 		name: "ECHO",
 		italic: true,
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<path
 					d="M28 12 A10 10 0 1 0 28 28"
 					fill="none"
@@ -155,7 +190,12 @@ const logos: {
 		name: "AXIS",
 		mono: true,
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<path
 					d="M8 8 L32 32 M32 8 L8 32"
 					stroke="currentColor"
@@ -177,7 +217,12 @@ const logos: {
 		name: "VELVET",
 		italic: true,
 		mark: (
-			<svg viewBox="0 0 40 40" className="h-full w-full">
+			<svg
+				viewBox="0 0 40 40"
+				className="h-full w-full"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<path
 					d="M8 12 L20 30 L32 12"
 					fill="none"

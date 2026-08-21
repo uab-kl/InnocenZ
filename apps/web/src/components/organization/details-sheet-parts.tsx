@@ -70,6 +70,7 @@ export function DetailsHero({
 	const [broken, setBroken] = useState(false);
 	const showImage = Boolean(imageUrl) && !broken;
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies(imageUrl): imageUrl is the reset TRIGGER, not a value the effect reads — a new photo has to clear the previous one's load failure. Drop it and `broken` only ever resets on mount, so once one image 404s every later one stays hidden behind the initial.
 	useEffect(() => {
 		setBroken(false);
 	}, [imageUrl]);

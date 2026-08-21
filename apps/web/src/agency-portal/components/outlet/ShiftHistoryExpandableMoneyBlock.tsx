@@ -7,7 +7,6 @@ import type { ShiftHistoryMoneyBreakdown } from "@agency-portal/lib/shift-histor
 import { cn } from "@agency-portal/lib/utils";
 import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 /** Clickable Total Received / Total Payout tiles with on-demand breakdown. */
 export function ShiftHistoryExpandableMoneyBlock({

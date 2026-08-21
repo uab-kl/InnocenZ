@@ -33,7 +33,6 @@ import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 const PV_COMMISSION_SCAN_PREFIX = "rc-pv-";
 const PAYROLL_SHIFT_ROW_PREFIX = "ap-shift-";
 const PAYROLL_RECEIPT_WEEKS_AGO = new Set([0, 1]);
-const PAYROLL_AGENCY_NAME = "Atlas Agency";
 
 function agencyPrReceiptCode(pr: AgencyManagedPR): string {
 	const digits = pr.id.replace(/\D/g, "").slice(0, 4);
@@ -453,6 +452,7 @@ function outletSlug(outlet: string): string {
 function buildShiftHistoryFromPayrollPvs(
 	pvs: PrPaymentVoucher[],
 	agencyPRs: AgencyManagedPR[],
+	agencyName: string,
 ): ShiftHistoryRow[] {
 	const slots = new Map<string, PayrollShiftSlot>();
 
@@ -529,7 +529,7 @@ function buildShiftHistoryFromPayrollPvs(
 			prName: acc.prName,
 			prId: acc.prId,
 			outlet: acc.outlet,
-			agencyName: PAYROLL_AGENCY_NAME,
+			agencyName,
 			dateDisplay: acc.dateDisplay,
 			dateIso: acc.dateIso,
 			totalPayout,
@@ -554,8 +554,18 @@ export function syncAgencyPayrollShiftHistory(
 	rows: ShiftHistoryRow[],
 	pvs: PrPaymentVoucher[],
 	agencyPRs: AgencyManagedPR[],
+	/**
+	 * Resolved by the CALLER from the agency actually signed in. This used to be
+	 * a module constant hardcoded to "Atlas Agency" and stamped onto every row
+	 * built here — and these are ShiftHistoryRow[], the exact rows
+	 * ShiftHistoryLog renders, so a real agency would have seen a demo agency's
+	 * name against its own shifts. Passed in rather than derived here so this
+	 * module stays a leaf and imports no store.
+	 * Pass "" when nothing is resolvable — consumers filter falsy names out.
+	 */
+	agencyName: string,
 ): ShiftHistoryRow[] {
-	const generated = buildShiftHistoryFromPayrollPvs(pvs, agencyPRs);
+	const generated = buildShiftHistoryFromPayrollPvs(pvs, agencyPRs, agencyName);
 	if (generated.length === 0) return rows;
 
 	const rosterPrIds = new Set(

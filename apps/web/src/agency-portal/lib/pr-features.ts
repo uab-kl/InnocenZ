@@ -15,10 +15,7 @@ import { outletMatches } from "@agency-portal/lib/portal-sync";
 import type { PrShiftOffer } from "@agency-portal/lib/pr-demo";
 import {
 	fmtDateLabelFromIso,
-	fmtDtable,
 	PR_SHIFT_OFFERS,
-	SHIFT_TODAY,
-	shiftTodayIso,
 } from "@agency-portal/lib/pr-demo";
 import type { PrNotification } from "@agency-portal/lib/pr-notifications";
 import {

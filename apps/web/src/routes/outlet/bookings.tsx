@@ -231,6 +231,7 @@ function PostJobPage() {
 	);
 	const prevWorkspaceRatesKey = useRef(workspaceRatesKey);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies(effectiveWorkspace): the signature IS derived from effectiveWorkspace.tierRates, so the key can only change in the same render the workspace did — the closure is never stale. Listing the object as well would re-enter this effect on every render of an unrelated workspace field.
 	useEffect(() => {
 		if (prevWorkspaceRatesKey.current === workspaceRatesKey) return;
 		prevWorkspaceRatesKey.current = workspaceRatesKey;
@@ -305,11 +306,13 @@ function PostJobPage() {
 		return Math.max(...days.map((day) => namedPrsOnDate(day, excludeShiftId)));
 	};
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the array already lists every VALUE the helper reads (the composer's dates, the booked shifts, the drafts, the venue). namedPrsOnDateForShift is re-created each render, so adding it — or widening to the whole composer — would recompute this on every keystroke in the composer form and throw the memo away.
 	const composerNamedPrsOnDate = useMemo(
 		() => namedPrsOnDateForShift(composer),
 		[composer.selectedDateIsos, capShifts, draftShifts, outletName],
 	);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: same as above — the per-day cap, the booked shifts, the drafts and the composer are all listed; only the re-created helper identity is missing, and listing it would defeat the memo.
 	const composerPeopleRemaining = useMemo(
 		() => peopleRemainingForShift(composer),
 		[
@@ -1040,7 +1043,7 @@ function PostJobPage() {
 								</div>
 
 								{!viewOnly && (
-									<div
+									<section
 										className="iz-post-job-mobile-dock"
 										aria-label={t.postJob.shiftSummaryActions}
 									>
@@ -1055,7 +1058,7 @@ function PostJobPage() {
 											}
 											compact
 										/>
-									</div>
+									</section>
 								)}
 							</>
 						)}

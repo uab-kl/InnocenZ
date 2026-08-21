@@ -120,7 +120,7 @@ function AgencyProfile() {
 	);
 	const subscriptionBilling = useMemo(
 		() => agencySubscriptionBillingForWeeklyPv(issuedWeeklyPv, t),
-		[issuedWeeklyPv],
+		[issuedWeeklyPv, t],
 	);
 	const avatarLetter =
 		owner.ownerName.trim()[0]?.toUpperCase() ??

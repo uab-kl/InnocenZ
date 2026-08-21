@@ -1,17 +1,25 @@
 import { Router } from 'express';
-import { agencyController, agencyPenaltyRuleController } from '@/composition-root.js';
+import {
+  agencyController,
+  agencyPenaltyRuleController,
+} from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
 import {
   agencyOwnerOfParam,
   refuseOrgStatusChange,
   requireAgencySubRoleScoped,
+  requireOrgMembershipByParam,
 } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
 // Directory listing is admin + agency only — outlet must not enumerate agencies
 // (admin dashboard pending_review used to succeed for any signed-in JWT).
-router.get('/', requireRole('admin', 'agency'), agencyController.list.bind(agencyController));
+router.get(
+  '/',
+  requireRole('admin', 'agency'),
+  agencyController.list.bind(agencyController),
+);
 router.get(
   '/memberships',
   requireRole('admin', 'agency'),
@@ -24,8 +32,16 @@ router.get(
   requireRole('admin', 'agency', 'pr'),
   agencyController.listPrLinks.bind(agencyController),
 );
-router.get('/:id', requireRole('admin', 'agency', 'outlet'), agencyController.getById.bind(agencyController));
-router.post('/', requireRole('admin', 'agency'), agencyController.create.bind(agencyController));
+router.get(
+  '/:id',
+  requireRole('admin', 'agency', 'outlet'),
+  agencyController.getById.bind(agencyController),
+);
+router.post(
+  '/',
+  requireRole('admin', 'agency'),
+  agencyController.create.bind(agencyController),
+);
 // Editing the agency record is agencyCan('editSettings') — owner only. This
 // carried no role gate at all before, so any signed-in account could rewrite an
 // agency's own details.
@@ -44,8 +60,16 @@ router.put(
   refuseOrgStatusChange(),
   agencyController.update.bind(agencyController),
 );
-router.patch('/:id/approve', requireAdmin, agencyController.approve.bind(agencyController));
-router.patch('/:id/suspend', requireAdmin, agencyController.suspend.bind(agencyController));
+router.patch(
+  '/:id/approve',
+  requireAdmin,
+  agencyController.approve.bind(agencyController),
+);
+router.patch(
+  '/:id/suspend',
+  requireAdmin,
+  agencyController.suspend.bind(agencyController),
+);
 
 // This carried NO gate at all while every route around it had one, so any
 // signed-in token — a PR's, an outlet's, another agency's — could read any
@@ -209,14 +233,34 @@ const canReadMembers = requireRole('admin', 'agency', 'outlet');
 // including handing ownership away. That is tenancy, not escalation.
 const canWriteMembers = [requireRole('admin', 'agency'), agencyOwnerOfParam];
 
-router.get('/:id/members', canReadMembers, agencyController.listMembers.bind(agencyController));
+// Membership scope, not just a role: the gate above proves you are AN agency,
+// this proves it is THIS one. Without it any agency or outlet token read a
+// rival's whole staff list, with usernames, emails and phone numbers.
+router.get(
+  '/:id/members',
+  canReadMembers,
+  requireOrgMembershipByParam('agency', 'id'),
+  agencyController.listMembers.bind(agencyController),
+);
 router.get(
   '/:id/invite-roles',
   ...canWriteMembers,
   agencyController.listInviteRoles.bind(agencyController),
 );
-router.post('/:id/members', ...canWriteMembers, agencyController.addMember.bind(agencyController));
-router.put('/:id/members/:memberId', ...canWriteMembers, agencyController.updateMember.bind(agencyController));
-router.delete('/:id/members/:memberId', ...canWriteMembers, agencyController.removeMember.bind(agencyController));
+router.post(
+  '/:id/members',
+  ...canWriteMembers,
+  agencyController.addMember.bind(agencyController),
+);
+router.put(
+  '/:id/members/:memberId',
+  ...canWriteMembers,
+  agencyController.updateMember.bind(agencyController),
+);
+router.delete(
+  '/:id/members/:memberId',
+  ...canWriteMembers,
+  agencyController.removeMember.bind(agencyController),
+);
 
 export default router;

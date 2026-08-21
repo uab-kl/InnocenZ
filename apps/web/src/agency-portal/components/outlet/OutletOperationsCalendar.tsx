@@ -418,7 +418,9 @@ export function OutletOperationsCalendar({
 	const eventsByDate = useMemo(() => {
 		const map: Record<string, CalendarEvent[]> = {};
 		for (const ev of events) {
-			(map[ev.dateIso] ??= []).push(ev);
+			const bucket = map[ev.dateIso];
+			if (bucket) bucket.push(ev);
+			else map[ev.dateIso] = [ev];
 		}
 		return map;
 	}, [events]);
@@ -499,10 +501,13 @@ export function OutletOperationsCalendar({
 						{format(viewMonth, "MMMM yyyy")}
 					</h3>
 
-					<div
-						className="iz-outlet-ops-cal-legend iz-outlet-ops-cal-legend--toolbar"
-						aria-label={t.calendar.statusLegend}
-					>
+					<div className="iz-outlet-ops-cal-legend iz-outlet-ops-cal-legend--toolbar">
+						{/* The heading was an aria-label on this <div>, which is
+						    role=generic — a generic element takes no accessible name,
+						    so nothing read it. As real text it is announced ahead of
+						    the swatches; `sr-only` is out of flow, so it adds no flex
+						    item and no gap. */}
+						<span className="sr-only">{t.calendar.statusLegend}</span>
 						{CAL_LEGEND.map((item) => (
 							<span key={item.key} className="iz-outlet-ops-cal-legend__item">
 								<i

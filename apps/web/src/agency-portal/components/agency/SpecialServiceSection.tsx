@@ -11,6 +11,7 @@ import {
 	parseJobPostingDraft,
 	type QueuedJobPosting,
 } from "@agency-portal/components/special-service/job-posting-ui";
+import { useAgencyOutlets } from "@agency-portal/hooks/use-agency-outlets";
 import {
 	type AgencyJobPost,
 	useAgencySpecialServices,
@@ -43,6 +44,18 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 	const toast = useStore((s) => s.toast);
 	// Real login → backend job postings; demo store otherwise (see the hook).
 	const backend = useAgencySpecialServices();
+	/**
+	 * The agency's OWN venues, for the composer's outlet picker.
+	 *
+	 * Empty on a demo session (`backed: false`), which is why the picker is only
+	 * rendered on the real branch — a demo composer keeps using the demo store's
+	 * venue and nothing about that path changes.
+	 */
+	const {
+		outlets: agencyOutlets,
+		isLoading: outletsLoading,
+		isError: outletsError,
+	} = useAgencyOutlets();
 
 	const serviceOffers = useMemo(() => bookableServiceOffers("agency"), []);
 	const prOptions = useMemo(
@@ -111,6 +124,25 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 		// Real login — post each queued job (× its dates) to the backend for admin
 		// review. No PR is attached: agency job postings are outlet + service.
 		if (backend.backed) {
+			/*
+			 * ⚠️ THE VENUE USED TO BE `DEFAULT_OUTLET` — `OUTLET_NAMES[0] ??
+			 * "Velvet 23"`, read from `agency-demo.ts` — on THIS, the real-login
+			 * branch. Two faults in one line: a demo venue's name inside a real
+			 * payload, against the standing no-demo-data-on-real-sessions rule;
+			 * and a NAME where the server wants an id, so the create handler,
+			 * which reads `outletId` and ignores `outletName`, filed every real
+			 * posting against no venue at all.
+			 *
+			 * The agency now picks from its own approved venues, and a job with no
+			 * venue is refused rather than silently filed. `useAgencyOutlets` is
+			 * the portal's visibility rule here: `agency_outlet`-approved only,
+			 * enforced server-side.
+			 */
+			const unassigned = queuedJobs.filter((job) => !job.outletId);
+			if (unassigned.length > 0) {
+				toast("Choose a venue for every job before submitting", "warn");
+				return;
+			}
 			const jobs = queuedJobs
 				.map((job): AgencyJobPost | null => {
 					const parsed = parseJobPostingDraft(job);
@@ -122,7 +154,9 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 						remark: job.remark,
 						time: job.time,
 						dateIsos: job.selectedDateIsos,
-						outletName: DEFAULT_OUTLET,
+						outletId: job.outletId,
+						outletName:
+							agencyOutlets.find((o) => o.id === job.outletId)?.name ?? "",
 					};
 				})
 				.filter((job): job is AgencyJobPost => job !== null);
@@ -200,12 +234,26 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 								onRemove={() => removeFromQueue(editingId)}
 								showRemove
 								onDone={() => setEditingId(null)}
+								{...(backend.backed
+									? {
+											outlets: agencyOutlets,
+											outletsLoading: outletsLoading,
+											outletsError: outletsError,
+										}
+									: {})}
 							/>
 						) : (
 							<JobPostingComposer
 								draft={composer}
 								onChange={(patch) => setComposer((c) => ({ ...c, ...patch }))}
 								offers={serviceOffers}
+								{...(backend.backed
+									? {
+											outlets: agencyOutlets,
+											outletsLoading: outletsLoading,
+											outletsError: outletsError,
+										}
+									: {})}
 							/>
 						)}
 

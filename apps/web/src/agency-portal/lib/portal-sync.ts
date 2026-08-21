@@ -17,10 +17,7 @@ import {
 	resolveRosterPrName,
 } from "@agency-portal/lib/agency-demo";
 import { resolveOutletShiftDateIso } from "@agency-portal/lib/agency-outlet-shifts";
-import {
-	addDaysToIso,
-	getPayrollWeekSundayIso,
-} from "@agency-portal/lib/demo-clock";
+import { getPayrollWeekSundayIso } from "@agency-portal/lib/demo-clock";
 import type { ShiftApplicant } from "@agency-portal/lib/outlet-demo";
 import {
 	findOutletShiftForRosterSlot,
@@ -44,7 +41,6 @@ import {
 import { shiftRowIncomeBreakdown } from "@agency-portal/lib/pr-weekly-payment";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import {
-	filterShiftHistoryThroughToday,
 	prepareShiftHistoryForDisplay,
 	type ShiftHistoryRow,
 	sortShiftHistoryDesc,
@@ -281,7 +277,7 @@ export function syncAgencyRosterToOutletShifts<
 >(
 	shifts: T[],
 	roster: AgencyRosterSlot[],
-	todayIso = DEFAULT_ROSTER_DATE_ISO,
+	_todayIso = DEFAULT_ROSTER_DATE_ISO,
 ): T[] {
 	if (roster.length === 0) return shifts;
 

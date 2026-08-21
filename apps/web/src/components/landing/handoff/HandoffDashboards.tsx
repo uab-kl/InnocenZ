@@ -29,7 +29,8 @@ function Spark({
 			viewBox={`0 0 ${w} ${h}`}
 			preserveAspectRatio="none"
 			className="block"
-			aria-hidden
+			aria-hidden="true"
+			focusable="false"
 		>
 			<defs>
 				<linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">

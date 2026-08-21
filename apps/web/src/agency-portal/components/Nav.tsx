@@ -13,16 +13,8 @@ import { usePrPortalReady } from "@agency-portal/lib/use-pr-sub-role";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
-import { lazy, type ReactNode, Suspense } from "react";
+import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-
-// PR demo + notification bell live in a separate chunk so agency/outlet SSR
-// (and login recovery) never waits on that graph.
-const PrPortalTopbar = lazy(() =>
-	import("@agency-portal/components/pr/PrPortalTopbar").then((m) => ({
-		default: m.PrPortalTopbar,
-	})),
-);
 
 export interface NavItem {
 	to: string;
@@ -263,21 +255,17 @@ export function AppTopbar({
 	const resolvedBackTo = backTo ?? getAutoBackTo(pathname);
 	const isPortalShell =
 		pathname.startsWith("/outlet") || pathname.startsWith("/agency");
-	const isPrPortal = pathname.startsWith("/host");
 
 	if (isPortalShell && onBack == null) {
 		return null;
 	}
 
-	const hasExplicitBack = backTo != null || backLabel != null;
-
+	// The `isPrPortal ? hasExplicitBack : …` arm went with the `/host` branch
+	// below: no such route exists in this app, so it was never taken. Everything
+	// that is not the portal shell now uses the ordinary rule.
 	const showBack =
 		!hideBack &&
-		(isPortalShell
-			? onBack != null
-			: isPrPortal
-				? hasExplicitBack
-				: onBack != null || resolvedBackTo != null);
+		(isPortalShell ? onBack != null : onBack != null || resolvedBackTo != null);
 
 	return (
 		<header
@@ -292,43 +280,31 @@ export function AppTopbar({
 				/>
 			)}
 
+			{/*
+			 * The `/host` branch that used to sit here — a lazy `PrPortalTopbar`
+			 * behind `isPrPortal` — is gone with the rest of the PR web portal.
+			 * `apps/web` has no `/host` route (only admin/, agency/, outlet/,
+			 * invite/ and the auth pages), so `pathname.startsWith("/host")` was
+			 * never true and the branch could not render. The PR product is
+			 * `apps/mobile`, which carries its own navigation.
+			 */}
 			{!isPortalShell && (
-				<>
-					{isPrPortal ? (
-						<Suspense
-							fallback={<span className="iz-topbar-spacer" aria-hidden />}
-						>
-							<PrPortalTopbar
-								prSubRole={prSubRole}
-								fallbackName={meta.name}
-								fallbackLabel={displayLabel}
-								fallbackAv={meta.av}
-								fallbackGradient={meta.gradient}
-								prDisplayName={prDisplayName}
-								prAvatarPhoto={prAvatarPhoto}
-							/>
-						</Suspense>
-					) : (
-						<div className="iz-topbar-identity">
-							<div
-								className={`iz-avatar iz-avatar--sm${prAvatarPhoto ? " iz-avatar-photo" : ""}`}
-								style={
-									prAvatarPhoto ? undefined : { background: displayGradient }
-								}
-							>
-								{prAvatarPhoto ? (
-									<img src={publicAssetPath(prAvatarPhoto)} alt="" />
-								) : (
-									displayAv
-								)}
-							</div>
-							<div className="iz-topbar-meta">
-								<div className="iz-topbar-name">{displayName}</div>
-								<div className="iz-topbar-role">{displayLabel}</div>
-							</div>
-						</div>
-					)}
-				</>
+				<div className="iz-topbar-identity">
+					<div
+						className={`iz-avatar iz-avatar--sm${prAvatarPhoto ? " iz-avatar-photo" : ""}`}
+						style={prAvatarPhoto ? undefined : { background: displayGradient }}
+					>
+						{prAvatarPhoto ? (
+							<img src={publicAssetPath(prAvatarPhoto)} alt="" />
+						) : (
+							displayAv
+						)}
+					</div>
+					<div className="iz-topbar-meta">
+						<div className="iz-topbar-name">{displayName}</div>
+						<div className="iz-topbar-role">{displayLabel}</div>
+					</div>
+				</div>
 			)}
 		</header>
 	);

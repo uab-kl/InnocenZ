@@ -1,7 +1,4 @@
-import {
-	addDaysToIso,
-	isWeekPvIssuedOnCalendar,
-} from "@agency-portal/lib/demo-clock";
+import { isWeekPvIssuedOnCalendar } from "@agency-portal/lib/demo-clock";
 import { seedFinanceHeadStamp } from "@agency-portal/lib/finance-head-stamp";
 import {
 	fmtDtable,
@@ -19,7 +16,7 @@ import {
 } from "@agency-portal/lib/pr-demo";
 import { verifyReceiptScan } from "@agency-portal/lib/pr-shift-status";
 import type { ShiftHistoryRow } from "@agency-portal/lib/shift-history-utils";
-import { addDays, format, parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
 
 /** Payroll week runs Sunday → Saturday; PV issues the following Sunday. */
 export const WEEKDAY_SHORT = [

@@ -3,13 +3,13 @@ import {
 	HistDateCalendar,
 } from "@agency-portal/components/iz/HistDateCalendar";
 import { IzTimeInput } from "@agency-portal/components/iz/ui";
-import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	dateFromIsoKey,
 	isoKeyFromDate,
 } from "@agency-portal/lib/pv-list-filters";
 import { Calendar, ChevronDown, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 function DatePickerField({
 	value,
@@ -25,6 +25,7 @@ function DatePickerField({
 	defaultMonth?: Date;
 }) {
 	const { t } = usePortalLocale();
+	const dateButtonId = useId();
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const selectedLabel = dateOptions.find((o) => o.key === value)?.label;
@@ -58,8 +59,14 @@ function DatePickerField({
 					: "iz-hist-date-picker-wrap iz-field"
 			}
 		>
-			<label className={compact ? "!text-[10px]" : undefined}>Date</label>
+			<label
+				htmlFor={dateButtonId}
+				className={compact ? "!text-[10px]" : undefined}
+			>
+				Date
+			</label>
 			<button
+				id={dateButtonId}
 				type="button"
 				className={`iz-hist-picker iz-hist-picker-btn${compact ? " iz-hist-picker-sm" : ""}${open ? " open" : ""}`}
 				onClick={() => setOpen((o) => !o)}
@@ -75,6 +82,7 @@ function DatePickerField({
 							: "Tap to choose a date"}
 				</span>
 				{value ? (
+					// biome-ignore lint/a11y/useSemanticElements: this clear control lives INSIDE the trigger <button>, and `.iz-hist-clear` is one of its flex children — a real <button> here would nest a button in a button, which the HTML parser splits apart on SSR and would break the trigger's layout.
 					<span
 						role="button"
 						tabIndex={0}
@@ -166,6 +174,7 @@ export function PvDateTimeFilter({
 			/>
 			<div className="iz-grid2">
 				<div className="iz-field !mb-0">
+					{/* biome-ignore lint/a11y/noLabelWithoutControl: caption only — IzTimeInput renders its own <button> and already carries the matching aria-label, and it exposes no `id`, so an htmlFor here would dangle. It stays a <label> because `.iz-field label` in prototype-theme.css is an ELEMENT selector: a <span> would silently drop the uppercase 10.5px Sora typography. */}
 					<label className={compact ? "!text-[10px]" : undefined}>
 						From time
 					</label>
@@ -177,6 +186,7 @@ export function PvDateTimeFilter({
 					/>
 				</div>
 				<div className="iz-field !mb-0">
+					{/* biome-ignore lint/a11y/noLabelWithoutControl: caption only — IzTimeInput renders its own <button> and already carries the matching aria-label, and it exposes no `id`, so an htmlFor here would dangle. It stays a <label> because `.iz-field label` in prototype-theme.css is an ELEMENT selector: a <span> would silently drop the uppercase 10.5px Sora typography. */}
 					<label className={compact ? "!text-[10px]" : undefined}>
 						To time
 					</label>

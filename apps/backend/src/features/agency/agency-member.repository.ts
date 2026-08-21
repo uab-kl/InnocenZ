@@ -91,7 +91,10 @@ export class AgencyMemberRepositoryClass {
   ): Promise<AgencyUserType> {
     try {
       const dbClient = tx ?? db;
-      const [member] = await dbClient.insert(AgencyUserTable).values(data).returning();
+      const [member] = await dbClient
+        .insert(AgencyUserTable)
+        .values(data)
+        .returning();
       logger.info('[AgencyMemberRepository.add] Member added:', member.id);
       return member;
     } catch (error) {
@@ -134,19 +137,29 @@ export class AgencyMemberRepositoryClass {
   }
 
   /** Membership + derived agency lane from RBAC. */
-  async getByIdEnriched(id: string): Promise<(AgencyUserType & { subRole: AgencyUserSubRole }) | null> {
+  async getByIdEnriched(
+    id: string,
+  ): Promise<(AgencyUserType & { subRole: AgencyUserSubRole }) | null> {
     const member = await this.getById(id);
     if (!member) return null;
     const lanes = await agencyLanesByUserIds([member.userId]);
     return { ...member, subRole: lanes.get(member.userId) ?? 'owner' };
   }
 
-  async getByAgencyAndUser(agencyId: string, userId: string): Promise<AgencyUserType | null> {
+  async getByAgencyAndUser(
+    agencyId: string,
+    userId: string,
+  ): Promise<AgencyUserType | null> {
     try {
       const [member] = await db
         .select()
         .from(AgencyUserTable)
-        .where(and(eq(AgencyUserTable.agencyId, agencyId), eq(AgencyUserTable.userId, userId)))
+        .where(
+          and(
+            eq(AgencyUserTable.agencyId, agencyId),
+            eq(AgencyUserTable.userId, userId),
+          ),
+        )
         .limit(1);
       return member ?? null;
     } catch (error) {
@@ -209,12 +222,31 @@ export class AgencyMemberRepositoryClass {
     }
   }
 
+  /**
+   * ORDERED, because callers pick ONE row out of this and the choice must not
+   * change between requests.
+   *
+   * `activeAgencyId` — and the four scope resolvers that share it — take the
+   * FIRST active membership. With no `ORDER BY` that was whichever row Postgres
+   * happened to emit, which is free to change after a VACUUM or a plan change.
+   * An operator who staffs two agencies could therefore read one agency's
+   * roster and vouchers on one request and the other's on the next, silently
+   * and with no error; `requireOutletScopeByParam` turns the same instability
+   * into an intermittent 403 on a venue they legitimately manage.
+   *
+   * Oldest first is NOT a claim that the oldest membership is the right one —
+   * for a genuine multi-agency operator there is no right answer without asking
+   * them, and an explicit agency switcher is the real fix. This makes the answer
+   * STABLE, which is the part that can be fixed here. `id` breaks ties so rows
+   * created in the same transaction still order deterministically.
+   */
   async listByUser(userId: string): Promise<AgencyUserType[]> {
     try {
       return db
         .select()
         .from(AgencyUserTable)
-        .where(eq(AgencyUserTable.userId, userId));
+        .where(eq(AgencyUserTable.userId, userId))
+        .orderBy(AgencyUserTable.createdAt, AgencyUserTable.id);
     } catch (error) {
       logger.error('[AgencyMemberRepository.listByUser] Error:', error);
       return [];
@@ -258,7 +290,10 @@ export class AgencyMemberRepositoryClass {
       }
       return enriched;
     } catch (error) {
-      logger.error('[AgencyMemberRepository.listMembershipsByUserIds] Error:', error);
+      logger.error(
+        '[AgencyMemberRepository.listMembershipsByUserIds] Error:',
+        error,
+      );
       return [];
     }
   }

@@ -98,7 +98,7 @@ import {
 	Sheet,
 	Shield,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 export const Route = createFileRoute("/agency/pv")({
@@ -595,7 +595,7 @@ function AgencyPV() {
 
 	const activeWeekBilling = useMemo(
 		() => agencySubscriptionBillingForWeeklyPv(activeWeekStats.pvCount, t),
-		[activeWeekStats.pvCount],
+		[activeWeekStats.pvCount, t],
 	);
 
 	/**
@@ -1404,6 +1404,7 @@ function PvDetail({
 	const [signOpen, setSignOpen] = useState(false);
 	const [signError, setSignError] = useState<string | null>(null);
 	const [bankRef, setBankRef] = useState("");
+	const deductId = useId();
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const toast = useStore((s) => s.toast);
 	// The letterhead the printed voucher carries — the signed-in agency, so this
@@ -1702,10 +1703,11 @@ function PvDetail({
 						))}
 						{editing && (
 							<div className="mt-2">
-								<label className="iz-tiny iz-muted">
+								<label htmlFor={deductId} className="iz-tiny iz-muted">
 									{t.payroll.deductions}
 								</label>
 								<input
+									id={deductId}
 									type="number"
 									className="mt-1 w-full rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-3 py-2 text-sm"
 									value={deduct}
@@ -1724,12 +1726,15 @@ function PvDetail({
 				</OutletSection>
 			)}
 
+			{/* No letterhead, no document — see AgencyPaidPvDetail for the why. */}
 			<div className="mt-2.5 flex gap-2">
 				<button
 					type="button"
-					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
+					disabled={!pvIssuer.issuer}
+					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs disabled:opacity-50"
 					onClick={() => {
-						downloadPvBreakdownPdf(displayPv, payee, [], pvIssuer);
+						if (!pvIssuer.issuer) return;
+						downloadPvBreakdownPdf(displayPv, payee, [], pvIssuer.issuer);
 						toast(t.payroll.officialPvOpened, "success");
 					}}
 				>
@@ -1737,20 +1742,32 @@ function PvDetail({
 				</button>
 				<button
 					type="button"
-					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
+					disabled={!pvIssuer.issuer}
+					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs disabled:opacity-50"
 					onClick={() => {
-						downloadPvBreakdownCsv(displayPv, payee, pvIssuer);
+						if (!pvIssuer.issuer) return;
+						downloadPvBreakdownCsv(displayPv, payee, pvIssuer.issuer);
 						toast(t.payroll.excelDownloaded, "success");
 					}}
 				>
 					<Sheet className="h-4 w-4 shrink-0" /> Excel
 				</button>
 			</div>
+			{!pvIssuer.issuer && (
+				<p className="iz-tiny iz-muted2 mt-1.5 text-center">
+					{pvIssuer.status === "loading"
+						? "Loading your agency's letterhead…"
+						: "Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload the page or check your connection."}
+				</p>
+			)}
 			<p className="iz-tiny iz-muted2 mt-1.5 text-center">
 				PDF and Excel match the official voucher layout · duplicate payment
 				blocked on send.
 			</p>
 
+			{/* `pr-demo`'s plain-text receipt, not the letterhead PDF — same name,
+			    different function, prints no issuer. Deliberately not gated on
+			    `pvIssuer`. */}
 			{pv.status === "PAID" && (
 				<button
 					type="button"

@@ -16,7 +16,7 @@ export function Toasts() {
 							? AlertTriangle
 							: Info;
 				return (
-					<div key={t.id} className="iz-toast" role="status">
+					<output key={t.id} className="iz-toast">
 						<div className="iz-toast-ic">
 							<Icon className="h-4 w-4" />
 						</div>
@@ -29,7 +29,7 @@ export function Toasts() {
 						>
 							✕
 						</button>
-					</div>
+					</output>
 				);
 			})}
 		</div>

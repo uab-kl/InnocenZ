@@ -25,13 +25,19 @@ import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shif
 import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
 import { EMPTY_PR_STATS, loadPrStats } from './pr-stats.js';
 import { derivedAge } from './ic-dob.js';
-import { refreshStoredComcard, touchesComcard } from '@/util/comcard-refresh.js';
+import {
+  refreshStoredComcard,
+  touchesComcard,
+} from '@/util/comcard-refresh.js';
+import { activeAgencyId } from '@/util/org-scope.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 
 /** Map agency_pr (+ user/user_profile) into the personnel list shape the web already uses. */
-function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | null {
+function rosterRowFromMembership(
+  row: AgencyPrEnriched,
+): PrWithProfileType | null {
   // `main.pr` is gone — `id` is the account's `userId`, which is always
   // present on a membership row.
   if (!row.userId) return null;
@@ -61,9 +67,12 @@ function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | nul
     row.comcardWaistCm,
     row.comcardHipCm,
   ].some((v) => v !== null && v !== undefined);
-  const rosterHasValue = [row.place, row.yearsExp, row.kpiTier, row.payClass].some(
-    (v) => v !== null && v !== undefined,
-  );
+  const rosterHasValue = [
+    row.place,
+    row.yearsExp,
+    row.kpiTier,
+    row.payClass,
+  ].some((v) => v !== null && v !== undefined);
   return {
     id: row.userId,
     agencyId: row.agencyId,
@@ -144,7 +153,10 @@ function pickDefined<T extends object>(obj: T): Partial<T> {
 
 function parsePaging(req: Request): { page: number; pageSize: number } {
   const page = Math.max(1, Number(req.query.page) || 1);
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(req.query.pageSize) || DEFAULT_PAGE_SIZE));
+  const pageSize = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, Number(req.query.pageSize) || DEFAULT_PAGE_SIZE),
+  );
   return { page, pageSize };
 }
 
@@ -173,12 +185,16 @@ export class PrControllerClass {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+        return res
+          .status(401)
+          .json({ success: false, message: Error.UNAUTHORIZED, data: null });
       }
 
       const pr = await this.prRepository.getByUserId(userId);
       if (!pr) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const raw = req.body?.agencyIds;
@@ -190,21 +206,33 @@ export class PrControllerClass {
         });
       }
       const agencyIds = [
-        ...new Set(raw.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)),
+        ...new Set(
+          raw.filter(
+            (id): id is string =>
+              typeof id === 'string' && id.trim().length > 0,
+          ),
+        ),
       ];
 
       // A request already on the agency's desk locks the selection: the PR
       // cannot add or drop agencies until it is approved or rejected.
-      const current = await this.agencyPrRepository.listLinksByUserIds([userId]);
-      const pendingLink = current.find((link) => link.approveStatus === 'pending');
+      const current = await this.agencyPrRepository.listLinksByUserIds([
+        userId,
+      ]);
+      const pendingLink = current.find(
+        (link) => link.approveStatus === 'pending',
+      );
       if (pendingLink) {
         return res.status(409).json({
           success: false,
-          message: 'An agency request is awaiting approval. You cannot change agencies until it is approved or rejected.',
+          message:
+            'An agency request is awaiting approval. You cannot change agencies until it is approved or rejected.',
           data: null,
         });
       }
-      const departingLink = current.find((link) => link.approveStatus === 'leave_pending');
+      const departingLink = current.find(
+        (link) => link.approveStatus === 'leave_pending',
+      );
       if (departingLink) {
         return res.status(409).json({
           success: false,
@@ -219,7 +247,9 @@ export class PrControllerClass {
       // without this guard the replace semantics would still be the old
       // silent-walk-out delete path.
       const droppedApproved = current.filter(
-        (link) => link.approveStatus === 'approved' && !agencyIds.includes(link.agencyId),
+        (link) =>
+          link.approveStatus === 'approved' &&
+          !agencyIds.includes(link.agencyId),
       );
       if (droppedApproved.length > 0) {
         const names = droppedApproved.map((l) => l.agencyName).join(', ');
@@ -231,7 +261,8 @@ export class PrControllerClass {
       }
 
       // Every id must be a real agency, else the FK insert would 500 later.
-      const known = await this.agencyPrRepository.filterExistingAgencyIds(agencyIds);
+      const known =
+        await this.agencyPrRepository.filterExistingAgencyIds(agencyIds);
       if (known.length !== agencyIds.length) {
         return res.status(400).json({
           success: false,
@@ -240,13 +271,23 @@ export class PrControllerClass {
         });
       }
 
-      await this.agencyPrRepository.syncLinksForUser(userId, known, getActor(req));
+      await this.agencyPrRepository.syncLinksForUser(
+        userId,
+        known,
+        getActor(req),
+      );
       const links = await this.agencyPrRepository.listLinksByUserIds([userId]);
 
-      res.status(200).json({ success: true, message: 'Agencies updated', data: links });
+      res
+        .status(200)
+        .json({ success: true, message: 'Agencies updated', data: links });
     } catch (error) {
       logger.error('[PrController.updateMyAgencies] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -264,14 +305,18 @@ export class PrControllerClass {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+        return res
+          .status(401)
+          .json({ success: false, message: Error.UNAUTHORIZED, data: null });
       }
       const agencyId = paramId(req.params.agencyId);
 
       const links = await this.agencyPrRepository.listLinksByUserIds([userId]);
       const link = links.find((l) => l.agencyId === agencyId);
       if (!link) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (link.approveStatus === 'leave_pending') {
         return res.status(409).json({
@@ -288,7 +333,10 @@ export class PrControllerClass {
         });
       }
 
-      const blockers = await this.agencyPrRepository.listLeaveBlockers(agencyId, userId);
+      const blockers = await this.agencyPrRepository.listLeaveBlockers(
+        agencyId,
+        userId,
+      );
       if (blockers.length > 0) {
         return res.status(409).json({
           success: false,
@@ -297,7 +345,12 @@ export class PrControllerClass {
         });
       }
 
-      await this.agencyPrRepository.setApproveStatus(agencyId, userId, 'leave_pending', getActor(req));
+      await this.agencyPrRepository.setApproveStatus(
+        agencyId,
+        userId,
+        'leave_pending',
+        getActor(req),
+      );
       res.status(200).json({
         success: true,
         message: `Departure requested — waiting for ${link.agencyName} to approve.`,
@@ -305,7 +358,11 @@ export class PrControllerClass {
       });
     } catch (error) {
       logger.error('[PrController.requestAgencyLeave] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -320,18 +377,26 @@ export class PrControllerClass {
     const isAdmin = roles.some((r) => r.roleName === 'admin');
     if (isAdmin) return { isAdmin: true, agencyId: null, outletIds: [] };
 
+    // Third copy of the `?? memberships[0]` fallback, and the one that decides
+    // which agency's PERSONNEL a caller may see and edit — IC, phone, DOB. An
+    // inactive membership resolved an agencyId here too, so a removed operator
+    // kept the roster they had just lost.
     const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    const active = memberships.find((m) => m.status === 'active') ?? memberships[0];
-    if (active?.agencyId) {
-      return { isAdmin: false, agencyId: active.agencyId, outletIds: [] };
+    const agencyId = activeAgencyId(memberships);
+    if (agencyId) {
+      return { isAdmin: false, agencyId, outletIds: [] };
     }
 
     // No agency link — fall back to outlet membership so an outlet can read the
     // personnel rostered at its own venues.
-    const outletMemberships = await this.outletMemberRepository.listByUser(user.id);
+    const outletMemberships = await this.outletMemberRepository.listByUser(
+      user.id,
+    );
     const outletIds = [
       ...new Set(
-        outletMemberships.filter((m) => m.status === 'active').map((m) => m.outletId),
+        outletMemberships
+          .filter((m) => m.status === 'active')
+          .map((m) => m.outletId),
       ),
     ];
     return { isAdmin: false, agencyId: null, outletIds };
@@ -340,18 +405,26 @@ export class PrControllerClass {
   async list(req: Request, res: Response) {
     try {
       const scope = await this.resolveScope(req);
-      const isOutletCaller = !scope.isAdmin && !scope.agencyId && scope.outletIds.length > 0;
+      const isOutletCaller =
+        !scope.isAdmin && !scope.agencyId && scope.outletIds.length > 0;
       if (!scope.isAdmin && !scope.agencyId && !isOutletCaller) {
-        return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+        return res.status(403).json({
+          success: false,
+          message: 'No agency associated with this account',
+          data: null,
+        });
       }
 
       const { page, pageSize } = parsePaging(req);
 
       // Agency roster: agency_pr ⋈ user ⋈ user_profile. No `pr` table — id === userId.
       if (scope.agencyId && !scope.isAdmin) {
-        const members = await this.agencyPrRepository.listByAgency(scope.agencyId, {
-          search: req.query.name as string | undefined,
-        });
+        const members = await this.agencyPrRepository.listByAgency(
+          scope.agencyId,
+          {
+            search: req.query.name as string | undefined,
+          },
+        );
 
         const prs: PrWithProfileType[] = [];
         for (const member of members) {
@@ -388,7 +461,10 @@ export class PrControllerClass {
         return res.status(200).json({
           success: true,
           message: 'OK',
-          data: pageRows.map((pr) => ({ ...pr, stats: stats.get(pr.id) ?? EMPTY_PR_STATS })),
+          data: pageRows.map((pr) => ({
+            ...pr,
+            stats: stats.get(pr.id) ?? EMPTY_PR_STATS,
+          })),
           pagination: {
             page,
             pageSize,
@@ -414,7 +490,11 @@ export class PrControllerClass {
         excludePending: !scope.isAdmin && req.query.status === undefined,
       };
 
-      const { prs, totalCount } = await this.prRepository.listPaginated({ filter, page, pageSize });
+      const { prs, totalCount } = await this.prRepository.listPaginated({
+        filter,
+        page,
+        pageSize,
+      });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       // An OUTLET caller never gets these. Attendance is arguably its business
       // for its own venues, but `totalPaidRm` is agency→PR payroll and a venue
@@ -423,16 +503,35 @@ export class PrControllerClass {
       // or across all agencies when they filtered by none.
       const stats = isOutletCaller
         ? null
-        : await loadPrStats({ prIds: prs.map((pr) => pr.id), agencyId: filter.agencyId ?? null });
+        : await loadPrStats({
+            prIds: prs.map((pr) => pr.id),
+            agencyId: filter.agencyId ?? null,
+          });
       res.status(200).json({
         success: true,
         message: 'OK',
-        data: stats ? prs.map((pr) => ({ ...pr, stats: stats.get(pr.id) ?? EMPTY_PR_STATS })) : prs,
-        pagination: { page, pageSize, totalCount, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+        data: stats
+          ? prs.map((pr) => ({
+              ...pr,
+              stats: stats.get(pr.id) ?? EMPTY_PR_STATS,
+            }))
+          : prs,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
       });
     } catch (error) {
       logger.error('[PrController.list] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -457,7 +556,9 @@ export class PrControllerClass {
     opts: { forWrite: boolean },
   ): Promise<{ pr: PrWithProfileType; agencyId: string } | null> {
     const notFound = () => {
-      res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      res
+        .status(404)
+        .json({ success: false, message: Error.NOT_FOUND, data: null });
       return null;
     };
 
@@ -473,7 +574,9 @@ export class PrControllerClass {
 
     // Admin. An explicitly named agency always wins, in either lane.
     const named =
-      (typeof req.body?.agencyId === 'string' ? req.body.agencyId : undefined) ??
+      (typeof req.body?.agencyId === 'string'
+        ? req.body.agencyId
+        : undefined) ??
       (typeof req.query.agencyId === 'string' ? req.query.agencyId : undefined);
     if (named) {
       const pr = await this.prRepository.getById(id, named);
@@ -509,14 +612,23 @@ export class PrControllerClass {
 
   async getById(req: Request, res: Response) {
     try {
-      const resolved = await this.resolvePrForCaller(req, res, paramId(req.params.id), {
-        forWrite: false,
-      });
+      const resolved = await this.resolvePrForCaller(
+        req,
+        res,
+        paramId(req.params.id),
+        {
+          forWrite: false,
+        },
+      );
       if (!resolved) return;
       res.status(200).json({ success: true, message: 'OK', data: resolved.pr });
     } catch (error) {
       logger.error('[PrController.getById] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -524,19 +636,31 @@ export class PrControllerClass {
     try {
       const parsed = CreatePrSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       const scope = await this.resolveScope(req);
       let agencyId: string;
       if (scope.isAdmin) {
         if (!parsed.data.agencyId) {
-          return res.status(400).json({ success: false, message: 'agencyId is required', data: null });
+          return res.status(400).json({
+            success: false,
+            message: 'agencyId is required',
+            data: null,
+          });
         }
         agencyId = parsed.data.agencyId;
       } else {
         if (!scope.agencyId) {
-          return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+          return res.status(403).json({
+            success: false,
+            message: 'No agency associated with this account',
+            data: null,
+          });
         }
         agencyId = scope.agencyId;
       }
@@ -550,11 +674,17 @@ export class PrControllerClass {
       let userId = parsed.data.userId;
       let createdStub = false;
       if (!userId && phone) {
-        const existingPhone = await this.userRepository.getUserByLoginMethod('phone', phone);
+        const existingPhone = await this.userRepository.getUserByLoginMethod(
+          'phone',
+          phone,
+        );
         if (existingPhone) userId = existingPhone.id;
       }
       if (!userId && email) {
-        const existingEmail = await this.userRepository.getUserByLoginMethod('email', email);
+        const existingEmail = await this.userRepository.getUserByLoginMethod(
+          'email',
+          email,
+        );
         if (existingEmail) userId = existingEmail.id;
       }
       if (!userId) {
@@ -619,10 +749,18 @@ export class PrControllerClass {
         icNo: parsed.data.icNo ?? null,
       });
       const withProfile = await this.prRepository.getById(pr.id);
-      res.status(201).json({ success: true, message: 'PR created', data: withProfile ?? pr });
+      res.status(201).json({
+        success: true,
+        message: 'PR created',
+        data: withProfile ?? pr,
+      });
     } catch (error) {
       logger.error('[PrController.create] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -631,14 +769,20 @@ export class PrControllerClass {
       const id = paramId(req.params.id);
       const parsed = UpdatePrSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
       }
 
       // Resolved AS THIS CALLER'S AGENCY, so `existing.agencyId` is the
       // membership being edited rather than the oldest one this person holds.
       // That is what the two multi-roster PRs needed: the 404 fired before any
       // field was looked at, so nothing on them could be saved at all.
-      const resolved = await this.resolvePrForCaller(req, res, id, { forWrite: true });
+      const resolved = await this.resolvePrForCaller(req, res, id, {
+        forWrite: true,
+      });
       if (!resolved) return;
       const existing = resolved.pr;
 
@@ -653,9 +797,15 @@ export class PrControllerClass {
       // No `dob` — age follows the PR's IC and is derived on read, so neither
       // the agency nor the PR sends one. `UpdatePrSchema` has already dropped
       // any that arrives.
-      const { race, languages, comcardHeightCm, comcardWeightKg, ...rest } = data;
+      const { race, languages, comcardHeightCm, comcardWeightKg, ...rest } =
+        data;
       const { place, yearsExp, kpiTier, payClass, ...prColumns } = rest;
-      const profilePatch = pickDefined({ race, languages, comcardHeightCm, comcardWeightKg });
+      const profilePatch = pickDefined({
+        race,
+        languages,
+        comcardHeightCm,
+        comcardWeightKg,
+      });
       const rosterPatch = pickDefined({ place, yearsExp, kpiTier, payClass });
 
       // Person facts → user / user_profile; membership tier/approval → agency_pr.
@@ -667,18 +817,32 @@ export class PrControllerClass {
             updatedBy: actor,
           });
         }
-        if (data.phone !== undefined || data.email !== undefined || data.nickname !== undefined) {
+        if (
+          data.phone !== undefined ||
+          data.email !== undefined ||
+          data.nickname !== undefined
+        ) {
           await this.userRepository.updateUser(
             {
-              ...(data.phone !== undefined ? { phoneNum: data.phone || null } : {}),
-              ...(data.email !== undefined ? { email: data.email || null } : {}),
-              ...(data.nickname !== undefined ? { username: data.nickname || existing.name } : {}),
+              ...(data.phone !== undefined
+                ? { phoneNum: data.phone || null }
+                : {}),
+              ...(data.email !== undefined
+                ? { email: data.email || null }
+                : {}),
+              ...(data.nickname !== undefined
+                ? { username: data.nickname || existing.name }
+                : {}),
               updatedBy: actor,
             },
             existing.userId,
           );
         }
-        if (data.tier !== undefined || data.status !== undefined || data.rejectReason !== undefined) {
+        if (
+          data.tier !== undefined ||
+          data.status !== undefined ||
+          data.rejectReason !== undefined
+        ) {
           const approveStatus =
             data.status === 'active'
               ? ('approved' as const)
@@ -711,19 +875,29 @@ export class PrControllerClass {
         ...(data.status === 'active' ? { rejectReason: null } : {}),
         updatedBy: actor,
       });
-      if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!pr)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
 
       if (Object.keys(profilePatch).length > 0) {
         if (!pr.userId) {
           return res.status(409).json({
             success: false,
-            message: 'This PR has no linked user account, so profile details cannot be saved',
+            message:
+              'This PR has no linked user account, so profile details cannot be saved',
             data: null,
           });
         }
-        const existingProfile = await this.userProfileRepository.getByUserId(pr.userId);
-        if (!existingProfile) await this.userProfileRepository.createEmpty(pr.userId, actor);
-        await this.userProfileRepository.update(pr.userId, { ...profilePatch, updatedBy: actor });
+        const existingProfile = await this.userProfileRepository.getByUserId(
+          pr.userId,
+        );
+        if (!existingProfile)
+          await this.userProfileRepository.createEmpty(pr.userId, actor);
+        await this.userProfileRepository.update(pr.userId, {
+          ...profilePatch,
+          updatedBy: actor,
+        });
       }
 
       // Height, weight and the display name are PRINTED on the comcard, so a
@@ -734,7 +908,12 @@ export class PrControllerClass {
       //
       // Read back AFTER the writes above so the card is rendered from what was
       // actually stored, not from the patch we hoped landed.
-      if (pr.userId && (touchesComcard(profilePatch) || data.name !== undefined || data.nickname !== undefined)) {
+      if (
+        pr.userId &&
+        (touchesComcard(profilePatch) ||
+          data.name !== undefined ||
+          data.nickname !== undefined)
+      ) {
         const saved = await this.userProfileRepository.getByUserId(pr.userId);
         const account = await this.userRepository.getUserById(pr.userId);
         if (saved) {
@@ -749,7 +928,10 @@ export class PrControllerClass {
             portfolioPhotos: saved.portfolioPhotos,
             save: (storedKey) =>
               this.userProfileRepository
-                .update(pr.userId!, { comcardImage: storedKey, updatedBy: actor })
+                .update(pr.userId!, {
+                  comcardImage: storedKey,
+                  updatedBy: actor,
+                })
                 .then(() => undefined),
           });
         }
@@ -769,14 +951,23 @@ export class PrControllerClass {
         );
       }
 
-      const JOIN_DECISION: Record<string, boolean> = { active: true, inactive: false };
+      const JOIN_DECISION: Record<string, boolean> = {
+        active: true,
+        inactive: false,
+      };
       const accepted = data.status ? JOIN_DECISION[data.status] : undefined;
 
-      if (accepted !== undefined && data.status !== existing.status && pr.userId) {
+      if (
+        accepted !== undefined &&
+        data.status !== existing.status &&
+        pr.userId
+      ) {
         await notify({
           userId: pr.userId,
           kind: 'agency_join_resolved',
-          title: accepted ? 'You were accepted by the agency' : 'Your agency application was declined',
+          title: accepted
+            ? 'You were accepted by the agency'
+            : 'Your agency application was declined',
           body: accepted
             ? 'You can now be scheduled for shifts.'
             : (pr.rejectReason ?? undefined),
@@ -792,11 +983,22 @@ export class PrControllerClass {
 
       // Read back through the SAME agency, so the response describes the
       // membership just written rather than another agency's view of them.
-      const withProfile = await this.prRepository.getById(pr.id, resolved.agencyId);
-      res.status(200).json({ success: true, message: 'PR updated', data: withProfile ?? pr });
+      const withProfile = await this.prRepository.getById(
+        pr.id,
+        resolved.agencyId,
+      );
+      res.status(200).json({
+        success: true,
+        message: 'PR updated',
+        data: withProfile ?? pr,
+      });
     } catch (error) {
       logger.error('[PrController.update] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -807,7 +1009,9 @@ export class PrControllerClass {
       // Same resolution as update, and for a sharper reason: `removeLink` takes
       // an agency id, so an oldest-membership answer here detaches the PR from
       // the wrong agency — for an admin, one that was never asked about.
-      const resolved = await this.resolvePrForCaller(req, res, id, { forWrite: true });
+      const resolved = await this.resolvePrForCaller(req, res, id, {
+        forWrite: true,
+      });
       if (!resolved) return;
       const existing = resolved.pr;
 
@@ -828,10 +1032,16 @@ export class PrControllerClass {
         status: 'inactive',
         updatedBy: getActor(req),
       });
-      res.status(200).json({ success: true, message: 'PR removed', data: null });
+      res
+        .status(200)
+        .json({ success: true, message: 'PR removed', data: null });
     } catch (error) {
       logger.error('[PrController.remove] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -850,21 +1060,31 @@ export class PrControllerClass {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+        return res
+          .status(401)
+          .json({ success: false, message: Error.UNAUTHORIZED, data: null });
       }
 
       const pr = await this.prRepository.getByUserId(userId);
       if (!pr) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(pr.agencyId);
+      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(
+        pr.agencyId,
+      );
       // Empty is a real answer — an agency that has written no rules charges
       // nothing — so this is 200 with [], never 404.
       res.status(200).json({ success: true, message: 'OK', data: rules });
     } catch (error) {
       logger.error('[PrController.getMyPenaltyRules] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -883,10 +1103,14 @@ export class PrControllerClass {
     try {
       const userId = req.user?.id;
       if (!userId) {
-        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+        return res
+          .status(401)
+          .json({ success: false, message: Error.UNAUTHORIZED, data: null });
       }
-      const weekStart = typeof req.query.weekStart === 'string' ? req.query.weekStart : '';
-      const weekEnd = typeof req.query.weekEnd === 'string' ? req.query.weekEnd : '';
+      const weekStart =
+        typeof req.query.weekStart === 'string' ? req.query.weekStart : '';
+      const weekEnd =
+        typeof req.query.weekEnd === 'string' ? req.query.weekEnd : '';
       const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
       if (!isDate(weekStart) || !isDate(weekEnd)) {
         return res.status(400).json({
@@ -898,16 +1122,25 @@ export class PrControllerClass {
 
       const pr = await this.prRepository.getByUserId(userId);
       if (!pr) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       const [penalties, cancellations] = await Promise.all([
         this.penaltyChargeRepository.listForPrWeek(pr.id, weekStart, weekEnd),
-        this.shiftAssignmentRepository.listCancelFeesForPrWeek(pr.id, weekStart, weekEnd),
+        this.shiftAssignmentRepository.listCancelFeesForPrWeek(
+          pr.id,
+          weekStart,
+          weekEnd,
+        ),
       ]);
       const sum = (n: number, v: string | null) => n + Number(v ?? 0);
       const penaltiesRm = penalties.reduce((n, p) => sum(n, p.fineRm), 0);
-      const cancellationsRm = cancellations.reduce((n, c) => sum(n, c.feeRm), 0);
+      const cancellationsRm = cancellations.reduce(
+        (n, c) => sum(n, c.feeRm),
+        0,
+      );
 
       res.status(200).json({
         success: true,
@@ -923,7 +1156,11 @@ export class PrControllerClass {
       });
     } catch (error) {
       logger.error('[PrController.getMyPenalties] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -947,8 +1184,10 @@ export class PrControllerClass {
   async getPenalties(req: Request, res: Response) {
     try {
       const prId = paramId(req.params.id);
-      const weekStart = typeof req.query.weekStart === 'string' ? req.query.weekStart : '';
-      const weekEnd = typeof req.query.weekEnd === 'string' ? req.query.weekEnd : '';
+      const weekStart =
+        typeof req.query.weekStart === 'string' ? req.query.weekStart : '';
+      const weekEnd =
+        typeof req.query.weekEnd === 'string' ? req.query.weekEnd : '';
       const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
       if (!isDate(weekStart) || !isDate(weekEnd)) {
         return res.status(400).json({
@@ -962,18 +1201,27 @@ export class PrControllerClass {
       // caller's agency so a PR on several rosters is judged by the rules of the
       // agency actually asking — the oldest-membership answer charged Alice by
       // Atlas's bands no matter who was looking.
-      const resolved = await this.resolvePrForCaller(req, res, prId, { forWrite: false });
+      const resolved = await this.resolvePrForCaller(req, res, prId, {
+        forWrite: false,
+      });
       if (!resolved) return;
       const pr = resolved.pr;
 
-      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(resolved.agencyId);
+      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(
+        resolved.agencyId,
+      );
       if (rules.length === 0) {
         // Not an error: most agencies have written no rules, and "no rules" is a
         // real answer meaning nothing can be charged.
         return res.status(200).json({
           success: true,
           message: 'OK',
-          data: { breaches: [], totalFineCents: 0, totalFineRm: '0.00', window: null },
+          data: {
+            breaches: [],
+            totalFineCents: 0,
+            totalFineRm: '0.00',
+            window: null,
+          },
         });
       }
 
@@ -995,7 +1243,11 @@ export class PrControllerClass {
       });
     } catch (error) {
       logger.error('[PrController.getPenalties] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 }

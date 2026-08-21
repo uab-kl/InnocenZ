@@ -23,6 +23,14 @@ function Slider({
 		[value, defaultValue, min, max],
 	);
 
+	// Thumbs are positional and never reorder, so one key per position is the
+	// stable identity. Keying off the value itself would remount the thumb on
+	// every drag tick and lose the pointer capture.
+	const _thumbKeys = Array.from(
+		{ length: _values.length },
+		(_, index) => `slider-thumb-${index}`,
+	);
+
 	return (
 		<SliderPrimitive.Root
 			data-slot="slider"
@@ -49,10 +57,10 @@ function Slider({
 					)}
 				/>
 			</SliderPrimitive.Track>
-			{Array.from({ length: _values.length }, (_, index) => (
+			{_thumbKeys.map((thumbKey) => (
 				<SliderPrimitive.Thumb
 					data-slot="slider-thumb"
-					key={index}
+					key={thumbKey}
 					className="block size-4 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
 				/>
 			))}

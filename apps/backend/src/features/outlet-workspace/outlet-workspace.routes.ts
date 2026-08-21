@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { outletWorkspaceController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
-import { outletOwnerOrOpsIfMember } from '@/middlewares/require-sub-role.js';
+import {
+  outletOwnerOrOpsIfMember,
+  requireOutletScopeByParam,
+} from '@/middlewares/require-sub-role.js';
 
 // Outlet operational workspace (pay/commission rates, drink menu).
 //
@@ -24,14 +27,30 @@ import { outletOwnerOrOpsIfMember } from '@/middlewares/require-sub-role.js';
 // sub-role check refines outlet members without excluding agency callers.
 const router = Router();
 
+// WHICH venue, then WHO within it — two different questions, two guards.
+//
+// `requireOutletScopeByParam` is the one that was missing. Everything above
+// established that agencies and outlet owner/ops may touch a rate card; nothing
+// established that it had to be THEIR rate card. `outletOwnerOrOpsIfMember`
+// asks "owner or ops anywhere", so the owner of one venue could rewrite a
+// rival's pay rates and drink prices, and an agency — which has no outlet
+// membership at all, and so hits that guard's `next()` short-circuit — could
+// rewrite any venue's, linked or not.
+//
+// The scope guard runs FIRST on both verbs so a caller with no business at this
+// venue is refused before any lane question is asked. The GET carries it too: a
+// rate card is what an agency negotiates and what a PR's wage is computed from,
+// so a rival venue reading it is a commercial leak, not a harmless read.
 router.get(
   '/:outletId',
   requireRole('admin', 'agency', 'outlet'),
+  requireOutletScopeByParam('outletId'),
   outletWorkspaceController.getByOutletId.bind(outletWorkspaceController),
 );
 router.put(
   '/:outletId',
   requireRole('admin', 'agency', 'outlet'),
+  requireOutletScopeByParam('outletId'),
   outletOwnerOrOpsIfMember,
   outletWorkspaceController.upsert.bind(outletWorkspaceController),
 );

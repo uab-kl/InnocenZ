@@ -26,6 +26,21 @@ export type JobPostingDraft = {
 	time: string;
 	budget: string;
 	remark: string;
+	/**
+	 * WHICH VENUE the job is for — the outlet's uuid, "" until chosen.
+	 *
+	 * A job posting is "outlet + service" (SpecialServiceSection says exactly
+	 * that in its own comment), but the draft never carried an outlet: the submit
+	 * path hardcoded `OUTLET_NAMES[0] ?? "Velvet 23"`, a demo constant, on the
+	 * REAL backend branch. It reached the server as `outletName`, which the
+	 * create handler ignores entirely — it reads `outletId` — so every real
+	 * posting was filed against NO venue while a demo venue's name rode along in
+	 * the payload.
+	 *
+	 * An id, not a name: `special_service` dropped its denormalised `outlet_name`
+	 * column and reads the venue's name back through the FK.
+	 */
+	outletId: string;
 };
 
 export type QueuedJobPosting = JobPostingDraft & { id: string };
@@ -41,6 +56,11 @@ export function newJobPostingDraft(
 		time: "19:00",
 		budget: "",
 		remark: "",
+		// Deliberately UNSET rather than pre-picked. Defaulting to "the first
+		// venue" is how the demo constant got here in the first place, and a job
+		// silently filed against a venue nobody chose is the same mistake with a
+		// real id instead of a fake name.
+		outletId: "",
 	};
 }
 
@@ -158,8 +178,17 @@ function ComposerField({
 	children: React.ReactNode;
 	className?: string;
 }) {
+	/*
+	 * A <div>, not a <label>: this is a caption over an arbitrary slot, and most
+	 * of what callers put in that slot is not a labelable control at all — the
+	 * multi-date picker and the service-type pill grid are both grids of buttons.
+	 * A <label> wrapping those associates itself with the FIRST labelable
+	 * descendant, so clicking the "Service type" caption activated the first
+	 * service pill. Every control that IS labelable in here carries its own
+	 * `aria-label`, so nothing loses its accessible name.
+	 */
 	return (
-		<label
+		<div
 			className={cn(
 				"iz-job-posting-field flex w-full min-w-0 flex-col gap-1",
 				className,
@@ -167,7 +196,7 @@ function ComposerField({
 		>
 			<JobPostingMicroLabel>{label}</JobPostingMicroLabel>
 			{children}
-		</label>
+		</div>
 	);
 }
 
@@ -179,6 +208,9 @@ export function JobPostingComposer({
 	onRemove,
 	showRemove,
 	onDone,
+	outlets,
+	outletsLoading,
+	outletsError,
 }: {
 	draft: JobPostingDraft;
 	onChange: (patch: Partial<JobPostingDraft>) => void;
@@ -187,6 +219,20 @@ export function JobPostingComposer({
 	onRemove?: () => void;
 	showRemove?: boolean;
 	onDone?: () => void;
+	/**
+	 * The venues this poster may choose between — the AGENCY's approved outlets.
+	 *
+	 * Omitted by the outlet portal's callers, which are already pinned to their
+	 * own venue and have nothing to pick; the field renders only when supplied.
+	 * Passed from the caller and never defaulted to a constant, following
+	 * `AgencyOutletFilters.outletNames`: "an optional prop defaulting to that
+	 * demo constant is how the wrong list got here".
+	 */
+	outlets?: { id: string; name: string }[];
+	/** True while `outlets` is still being fetched — an empty list is not yet a fact. */
+	outletsLoading?: boolean;
+	/** True when the fetch failed — an empty list is not a fact then either. */
+	outletsError?: boolean;
 }) {
 	const offer = specialServiceOffer(draft.serviceType);
 
@@ -259,6 +305,40 @@ export function JobPostingComposer({
 				</ComposerField>
 			</div>
 
+			{outlets && (
+				<ComposerField label="Outlet" className="mt-3">
+					<select
+						className="iz-job-posting-control iz-job-posting-input block w-full min-w-0"
+						aria-label="Outlet"
+						value={draft.outletId}
+						onChange={(e) => onChange({ outletId: e.target.value })}
+					>
+						<option value="">Select a venue…</option>
+						{outlets.map((o) => (
+							<option key={o.id} value={o.id}>
+								{o.name}
+							</option>
+						))}
+					</select>
+					{/*
+					 * "No linked venues yet" is a CLAIM ABOUT THE AGENCY, so it must
+					 * not be printed while the list is merely in flight or has failed
+					 * to load — an empty array means all three, and telling a real
+					 * agency with five venues that it has none is the same class of
+					 * lie as the demo constant this picker replaced.
+					 */}
+					{outlets.length === 0 && (
+						<p className="iz-job-posting-type-summary">
+							{outletsLoading
+								? "Loading your venues…"
+								: outletsError
+									? "Could not load your venues — reload the page and try again."
+									: "No linked venues yet — link an outlet before posting a job."}
+						</p>
+					)}
+				</ComposerField>
+			)}
+
 			<ComposerField label="Service type" className="mt-3">
 				<div className="iz-job-posting-type-grid">
 					{offers.map((option) => (
@@ -300,6 +380,7 @@ export function JobPostingComposer({
 			<ComposerField label="Remark" className="mt-3">
 				<textarea
 					className="iz-job-posting-textarea w-full"
+					aria-label="Remark"
 					placeholder={specialServiceRemarkHint(draft.serviceType)}
 					value={draft.remark}
 					onChange={(e) => onChange({ remark: e.target.value })}

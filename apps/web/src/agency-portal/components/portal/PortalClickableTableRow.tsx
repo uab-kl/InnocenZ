@@ -62,7 +62,6 @@ export function PortalClickableTableRow({
 			onClick={go}
 			onKeyDown={onKeyDown}
 			tabIndex={0}
-			role="link"
 		>
 			{children}
 		</tr>

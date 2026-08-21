@@ -7,7 +7,6 @@ import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { uploadMyProfileImage } from "@/lib/auth/profile-api";
 import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 const ACCEPTED = "image/jpeg,image/png,image/webp";
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -120,14 +119,13 @@ export function AccountAvatarCard() {
 				</button>
 			</div>
 			{justUploaded && (
-				<p
+				<output
 					className="mt-2 flex items-center gap-1.5 text-xs font-semibold"
 					style={{ color: "var(--iz-green, #6ee7a8)" }}
-					role="status"
 				>
 					<Check className="h-3.5 w-3.5 shrink-0" />
 					Photo uploaded successfully
-				</p>
+				</output>
 			)}
 		</div>
 	);

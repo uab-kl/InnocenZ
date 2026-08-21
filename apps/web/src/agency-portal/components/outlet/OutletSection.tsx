@@ -2,7 +2,8 @@ import { InnocenZBrandMark } from "@agency-portal/components/Brand";
 import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
 import { ChevronDown, iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { cn } from "@agency-portal/lib/utils";
-import { type ComponentType, type ReactNode, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function OutletSection({
@@ -28,7 +29,12 @@ export function OutletSection({
 	 * translated. Defaults to `title` for the many callers still passing English.
 	 */
 	iconKey?: string;
-	icon?: ComponentType<{ className?: string }>;
+	/**
+	 * A Lucide icon — the same shape `iconForNav` returns, because both end up
+	 * in `TitleWithIcon`, which renders the icon with `strokeWidth`. A plain
+	 * `ComponentType<{ className?: string }>` cannot take that prop.
+	 */
+	icon?: LucideIcon;
 	/** Use the InnocenZ circular mark instead of a Lucide section icon. */
 	brandMark?: boolean;
 	hint?: ReactNode;
@@ -126,7 +132,16 @@ export function OutletSection({
 						{open ? t.common.tapToCollapse : t.common.tapToExpand}
 					</span>
 				</span>
+				{/*
+				 * The wrapper below is a click-trap, not a control: its only job is to
+				 * stop a press on whatever the caller put in `trailing` from bubbling
+				 * up and toggling the section. It has no role and nothing to focus,
+				 * because the only thing it ever wraps in this branch is status pills —
+				 * and it already lives INSIDE the trigger `<button>`, so it cannot
+				 * become a button itself without nesting one button in another.
+				 */}
 				{trailing && (
+					// biome-ignore lint/a11y/noStaticElementInteractions: click-trap inside the trigger <button>; it stops a press on `trailing` from toggling the section. Giving it an interactive role would announce a control that does not exist, and making it a <button> would nest a button inside a button.
 					<span
 						className="shrink-0"
 						onClick={(e) => e.stopPropagation()}

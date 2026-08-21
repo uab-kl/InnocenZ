@@ -6,7 +6,6 @@ import type { ShiftRequest } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
 import { useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 export function OutletSealReview({
 	shift,

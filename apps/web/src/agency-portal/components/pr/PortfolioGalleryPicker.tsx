@@ -3,6 +3,16 @@ import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { Camera, X } from "lucide-react";
 import { useRef } from "react";
 
+/**
+ * The grid is a FIXED set of numbered slots, not a list of photos: slot 3 stays
+ * slot 3 whether or not it holds an image, so the slot's own name is the stable
+ * key. Photos themselves are opaque data URLs with no id to key on.
+ */
+const PORTFOLIO_SLOT_KEYS = Array.from(
+	{ length: PORTFOLIO_SLOT_COUNT },
+	(_, i) => `portfolio-slot-${i + 1}`,
+);
+
 function readImageFile(file: File, onLoad: (dataUrl: string) => void) {
 	const reader = new FileReader();
 	reader.onload = () => {
@@ -77,10 +87,10 @@ export function PortfolioGalleryPicker({
 				onChange={onFilePick}
 			/>
 			<div className={`iz-pgrid iz-pgrid-8 ${className}`.trim()}>
-				{Array.from({ length: PORTFOLIO_SLOT_COUNT }, (_, i) => {
+				{PORTFOLIO_SLOT_KEYS.map((slotKey, i) => {
 					const src = slots[i];
 					return (
-						<div key={i} className="relative">
+						<div key={slotKey} className="relative">
 							<button
 								type="button"
 								className={`iz-pcell w-full${src ? " has-photo" : ""}${editable ? " editable" : ""}`}

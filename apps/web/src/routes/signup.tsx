@@ -66,10 +66,7 @@ function SignupPageContent() {
 				</div>
 			</aside>
 
-			<main
-				role="main"
-				className="relative flex min-h-svh w-full min-w-0 flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10 lg:py-10 xl:px-14"
-			>
+			<main className="relative flex min-h-svh w-full min-w-0 flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10 lg:py-10 xl:px-14">
 				<div className="login-page-toolbar mb-6 flex flex-wrap items-center justify-between gap-3 lg:mb-8">
 					<div className="lg:hidden">
 						<BrandLogo variant="horizontal" size="sm" />

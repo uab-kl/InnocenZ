@@ -44,6 +44,12 @@ import { receiptDateIso } from "@agency-portal/lib/receipt-scan-utils";
 import type { ShiftHistoryRow } from "@agency-portal/lib/shift-history-utils";
 import { addDays, format, parseISO } from "date-fns";
 
+/**
+ * The only PR profile fields this ledger sync reads — every row it stamps
+ * carries just the PR's name and IC, so callers need not supply a full profile.
+ */
+type LedgerPrProfile = Pick<PrProfile, "name" | "ic">;
+
 function ymdFromIso(iso: string): [number, number, number] {
 	const [y, m, d] = iso.split("-").map(Number);
 	return [y, m, d];
@@ -151,7 +157,7 @@ function pvReceiptDatesAreSealed(pv: PrPaymentVoucher): boolean {
 export function buildReceiptScansFromPaymentVouchers(
 	pvs: PrPaymentVoucher[],
 	prId: string,
-	profile: PrProfile,
+	profile: LedgerPrProfile,
 ): PrReceiptScan[] {
 	const todayIso = getLiveTodayIso();
 	const out: PrReceiptScan[] = [];
@@ -273,7 +279,7 @@ function stripShiftHistorySyncedLedger(
 export function buildReceiptScansFromShiftHistory(
 	rows: ShiftHistoryRow[],
 	prId: string,
-	profile: PrProfile,
+	profile: LedgerPrProfile,
 	existing: PrReceiptScan[] = [],
 ): PrReceiptScan[] {
 	const todayIso = getLiveTodayIso();
@@ -455,7 +461,7 @@ export function buildWeeklyPvsFromShiftHistory(
 	rows: ShiftHistoryRow[],
 	scans: PrReceiptScan[],
 	prId: string,
-	profile: PrProfile,
+	profile: LedgerPrProfile,
 	existing: PrPaymentVoucher[] = [],
 ): PrPaymentVoucher[] {
 	const todayIso = getLiveTodayIso();
@@ -684,11 +690,13 @@ export function mergeHistoryDemoLedger(opts: {
 	scans: PrReceiptScan[];
 	pvs: PrPaymentVoucher[];
 	prId?: string;
-	profile?: PrProfile;
+	profile?: LedgerPrProfile;
 }): { scans: PrReceiptScan[]; pvs: PrPaymentVoucher[] } {
 	const prId = opts.prId ?? TIED_DEMO_ROSTER_PR_ID;
-	const profile =
-		opts.profile ?? ({ name: "Vicky", ic: "950312-14-8821" } as PrProfile);
+	const profile: LedgerPrProfile = opts.profile ?? {
+		name: "Vicky",
+		ic: "950312-14-8821",
+	};
 
 	const stripped = stripShiftHistorySyncedLedger(
 		opts.scans,
@@ -741,7 +749,7 @@ export function syncStoreHistoryLedger(
 	shiftHistory: ShiftHistoryRow[],
 	scans: PrReceiptScan[],
 	pvs: PrPaymentVoucher[],
-	profile: PrProfile = { name: "Vicky", ic: "950312-14-8821" },
+	profile: LedgerPrProfile = { name: "Vicky", ic: "950312-14-8821" },
 	prId: string = TIED_DEMO_ROSTER_PR_ID,
 ): { scans: PrReceiptScan[]; pvs: PrPaymentVoucher[] } {
 	return mergeHistoryDemoLedger({ shiftHistory, scans, pvs, prId, profile });

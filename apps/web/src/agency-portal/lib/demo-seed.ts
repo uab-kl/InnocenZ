@@ -20,7 +20,6 @@ import {
 	SEED_AGENCY_PRS_ALL,
 	SEED_AGENCY_ROSTER,
 	SEED_PENDING_PRS,
-	SEED_RECONCILIATION,
 } from "@agency-portal/lib/agency-demo";
 import { resolveOutletShiftDateIso } from "@agency-portal/lib/agency-outlet-shifts";
 import {
@@ -66,17 +65,16 @@ import {
 import {
 	buildSeedPrPortfolio,
 	COMCARD,
+	DEFAULT_TIED_AGENCY_ID,
 	demoPayrollWeekBoundsForWeeksAgo,
 	fmtDateLabelFromIso,
+	getPrAgencyById,
 	getPrProfile,
-	LIVE_SEED_PR_PVS,
 	LIVE_SEED_RECEIPT_SCANS,
-	PORTFOLIO_SLOT_COUNT,
 	type PrPaymentVoucher,
 	remapSeedPaymentVouchers,
 	SEED_PR_AVATAR_IMAGE,
 	SEED_PR_PVS,
-	SEED_RECEIPT_SCANS,
 } from "@agency-portal/lib/pr-demo";
 import {
 	DEMO_AGENCY_TIED_AT,
@@ -1425,6 +1423,9 @@ export function buildDemoStoreReset() {
 			SEED_SHIFT_HISTORY.map((row) => ({ ...row })),
 			prDemo.prPaymentVouchers,
 			agencyPRs,
+			// The seed builds the tied-agency demo, so name THAT agency from its own
+			// record rather than repeating a literal. Same string, honest source.
+			getPrAgencyById(DEFAULT_TIED_AGENCY_ID)?.name ?? "",
 		),
 	);
 

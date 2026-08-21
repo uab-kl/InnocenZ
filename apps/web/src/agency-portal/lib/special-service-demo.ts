@@ -466,26 +466,10 @@ export function mergeSpecialServiceOrders(
 			prName: resolveSpecialServicePrName(base, agencyPRs),
 		};
 		const normalized = normalizeAgencyJobDemoRow(withPr, seedRow);
-		if ("adminAccepted" in normalized) {
-			return {
-				...normalized,
-				status: recomputeSpecialServiceStatus(normalized),
-			};
-		}
-		const migrated: SpecialServiceRecord = {
+		return {
 			...normalized,
-			adminAccepted:
-				normalized.initiatedBy === "agency" ||
-				normalized.initiatedBy === "outlet"
-					? normalized.status === "declined" || normalized.status === "rejected"
-						? "declined"
-						: normalized.status === "pending_admin" ||
-								normalized.status === "pending_agency"
-							? "pending"
-							: "accepted"
-					: "n/a",
+			status: recomputeSpecialServiceStatus(normalized),
 		};
-		return { ...migrated, status: recomputeSpecialServiceStatus(migrated) };
 	});
 
 	const missingSeed = seed

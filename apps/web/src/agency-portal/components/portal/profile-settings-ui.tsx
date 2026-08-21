@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import { Camera, Check, Lock, Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 /** View = read-only display · edit = editable input · locked = shown but not editable here. */
 export type ProfileFieldMode = "view" | "edit" | "locked";
@@ -69,7 +68,7 @@ export function ProfileEditingBanner({
 }) {
 	const { t } = usePortalLocale();
 	return (
-		<div className="iz-profile-edit-banner" role="status">
+		<output className="iz-profile-edit-banner">
 			<div className="iz-profile-edit-banner__dot" aria-hidden />
 			<div>
 				<p className="iz-profile-edit-banner__title">Editing {what}</p>
@@ -77,7 +76,7 @@ export function ProfileEditingBanner({
 					{editableHint ?? t.profile.highlightedFieldsHint}
 				</p>
 			</div>
-		</div>
+		</output>
 	);
 }
 

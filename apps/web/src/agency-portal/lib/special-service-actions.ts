@@ -8,7 +8,6 @@ import {
 	recomputeSpecialServiceStatus,
 	type SpecialServiceInitiator,
 	type SpecialServiceRecord,
-	type SpecialServiceStatus,
 	specialServiceOffer,
 } from "@agency-portal/lib/special-service-demo";
 

@@ -6,7 +6,6 @@ import { useStore } from "@agency-portal/lib/store";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 /**
  * Record one signature, reuse it at signing time.

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { PoweredByBadge } from "@/components/landing/PoweredByBadge";
 import {
 	AGENCY_TIER_PRICES,
+	type LandingTranslations,
 	OUTLET_TIER_PRICES,
 	useLandingLocale,
 } from "@/lib/landing-i18n";
@@ -10,6 +11,15 @@ import { LogoMark, SplitTitle } from "./primitives";
 
 const OUTLET_POPULAR_INDEX = 2;
 const AGENCY_POPULAR_INDEX = 2;
+
+/**
+ * Outlet and agency tiers render through the same card, and either list may
+ * carry a tier priced "on request" instead of by the RM table. The agency
+ * entry is the shape that declares that optional `price`, so both lists are
+ * read through it — the outlet shape is assignable to it, and widening the
+ * union any other way drops `price` and makes `"price" in tier` yield unknown.
+ */
+type PricingTier = LandingTranslations["pricing"]["agencyTiers"][number];
 
 /** Map footer link labels (EN + ZH) to real routes when available. */
 function footerHref(label: string): string {
@@ -21,7 +31,9 @@ export function HandoffPricing() {
 	const { t } = useLandingLocale();
 	const [tab, setTab] = useState<"outlet" | "agency">("outlet");
 	const isAgency = tab === "agency";
-	const tiers = isAgency ? t.pricing.agencyTiers : t.pricing.outletTiers;
+	const tiers: readonly PricingTier[] = isAgency
+		? t.pricing.agencyTiers
+		: t.pricing.outletTiers;
 	const prices = isAgency ? AGENCY_TIER_PRICES : OUTLET_TIER_PRICES;
 	const popularIndex = isAgency ? AGENCY_POPULAR_INDEX : OUTLET_POPULAR_INDEX;
 
@@ -111,9 +123,7 @@ export function HandoffPricing() {
 					{tiers.map((tier, i) => {
 						const isCustom = "price" in tier && tier.price;
 						const isPopular = i === popularIndex;
-						const price = isCustom
-							? tier.price
-							: prices[i as keyof typeof prices];
+						const price = isCustom ? tier.price : prices[i];
 
 						return (
 							<div

@@ -210,6 +210,10 @@ export function SignupForm() {
 	});
 
 	// Client-only load from `main.subscription` (avoid SSR empty dehydrate).
+	// biome-ignore lint/correctness/useExhaustiveDependencies(packagesTick): the retry counter is the re-run TRIGGER of this fetch, not a value read inside it — remove it and the "try again" button stops reloading the package list.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(form.getFieldValue): the tanstack form instance is stable for the life of the component; listing its bound methods would re-request the package list on any render that hands back a new form object.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(form.setFieldValue): same stable form instance — see above; this effect must fire on account-type change and manual retry only.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(copy.packages.loadFailed): a last-resort error string read only in the catch; depending on it would re-request the package list on every locale switch.
 	useEffect(() => {
 		let cancelled = false;
 		setPackagesLoading(true);
@@ -274,6 +278,7 @@ export function SignupForm() {
 									const accountCopy = copy.accountTypes[type.key];
 
 									return (
+										// biome-ignore lint/a11y/useSemanticElements: role="radio" on a <button> inside the role="radiogroup" above is the WAI-ARIA composite pattern; a real <input type="radio"> would have to be sr-only behind this card, which hides the focus ring and changes the keyboard flow of the live signup form
 										<button
 											key={type.key}
 											type="button"
@@ -1219,10 +1224,7 @@ function SignupPhoneField({
 				<RequiredMark />
 			</FieldLabel>
 			<div className="flex gap-2">
-				<div
-					className="login-input-group flex h-auto shrink-0 items-center gap-2 rounded-md border border-royal-gold/20 bg-background/40 px-3 py-3 text-base text-foreground"
-					aria-label={dialDisplay}
-				>
+				<div className="login-input-group flex h-auto shrink-0 items-center gap-2 rounded-md border border-royal-gold/20 bg-background/40 px-3 py-3 text-base text-foreground">
 					<span className="whitespace-nowrap font-medium">{dialDisplay}</span>
 				</div>
 				<InputGroup className="login-input-group h-auto min-w-0 flex-1 border-royal-gold/20 bg-background/60">

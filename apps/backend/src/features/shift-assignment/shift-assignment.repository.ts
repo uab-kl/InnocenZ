@@ -1,4 +1,15 @@
-import { and, asc, eq, gte, inArray, lte, notInArray, or, sql, SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  gte,
+  inArray,
+  lte,
+  notInArray,
+  or,
+  sql,
+  SQL,
+} from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -193,7 +204,13 @@ function cancelledAtFrom(
   if (noticeHours === null || noticeHours === undefined) return null;
   const hours = Number(noticeHours);
   if (!Number.isFinite(hours)) return null;
-  return new Date(shiftStartMs(shiftDate, slot) - hours * 3_600_000);
+  // `shiftStartMs` now returns null for a slot it cannot read, rather than a
+  // 1970 midnight. Null here means "we cannot say when this was cancelled",
+  // which is exactly what this function's `Date | null` already promised —
+  // the alternative was a 1970-relative moment that looked like a real answer.
+  const startMs = shiftStartMs(shiftDate, slot);
+  if (startMs === null) return null;
+  return new Date(startMs - hours * 3_600_000);
 }
 
 export type AssignmentShiftFacts = {
@@ -359,7 +376,10 @@ export class ShiftAssignmentRepositoryClass {
         );
         if (takesSeat) {
           const [shift] = await client
-            .select({ quantity: ShiftTable.quantity, shiftDate: ShiftTable.shiftDate })
+            .select({
+              quantity: ShiftTable.quantity,
+              shiftDate: ShiftTable.shiftDate,
+            })
             .from(ShiftTable)
             .where(eq(ShiftTable.id, data.shiftId))
             .limit(1)
@@ -391,7 +411,8 @@ export class ShiftAssignmentRepositoryClass {
               ),
             )
             .limit(1);
-          if (blocked) throw new PrUnavailableError(assigneeId, shift.shiftDate);
+          if (blocked)
+            throw new PrUnavailableError(assigneeId, shift.shiftDate);
 
           const staffed = await countStaffing(client, data.shiftId);
           if (staffed >= shift.quantity) {
@@ -440,7 +461,9 @@ export class ShiftAssignmentRepositoryClass {
               .where(
                 and(
                   eq(ShiftAssignmentTable.shiftId, data.shiftId),
-                  notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+                  notInArray(ShiftAssignmentTable.status, [
+                    ...NON_STAFFING_STATUSES,
+                  ]),
                 ),
               );
             const [incoming] = await client
@@ -464,20 +487,36 @@ export class ShiftAssignmentRepositoryClass {
             });
             if (!verdict.ok) {
               throw verdict.reason === 'tier_full'
-                ? new TierFullError(data.shiftId, verdict.bucket, verdict.asked, verdict.staffed)
-                : new TierFullError(data.shiftId, null, verdict.leftover, verdict.staffed);
+                ? new TierFullError(
+                    data.shiftId,
+                    verdict.bucket,
+                    verdict.asked,
+                    verdict.staffed,
+                  )
+                : new TierFullError(
+                    data.shiftId,
+                    null,
+                    verdict.leftover,
+                    verdict.staffed,
+                  );
             }
           }
         }
 
-        const [assignment] = await client.insert(ShiftAssignmentTable).values(data).returning();
+        const [assignment] = await client
+          .insert(ShiftAssignmentTable)
+          .values(data)
+          .returning();
         return assignment;
       };
 
       // An outer transaction already owns the lock scope; joining it keeps the
       // check and the insert one atomic unit rather than opening a second.
       const assignment = tx ? await seat(tx) : await db.transaction(seat);
-      logger.info('[ShiftAssignmentRepository.create] Assignment created:', assignment.id);
+      logger.info(
+        '[ShiftAssignmentRepository.create] Assignment created:',
+        assignment.id,
+      );
       return assignment;
     } catch (error) {
       if (
@@ -529,7 +568,8 @@ export class ShiftAssignmentRepositoryClass {
      */
     prUnavailable?: { shiftDate: string };
   }> {
-    const run = (client: DbTransaction) => this.seatVerdict(client, shiftId, pr);
+    const run = (client: DbTransaction) =>
+      this.seatVerdict(client, shiftId, pr);
     try {
       return tx ? await run(tx) : await db.transaction(run);
     } catch (error) {
@@ -557,7 +597,10 @@ export class ShiftAssignmentRepositoryClass {
   }> {
     {
       const [shift] = await client
-        .select({ quantity: ShiftTable.quantity, shiftDate: ShiftTable.shiftDate })
+        .select({
+          quantity: ShiftTable.quantity,
+          shiftDate: ShiftTable.shiftDate,
+        })
         .from(ShiftTable)
         .where(eq(ShiftTable.id, shiftId))
         .limit(1)
@@ -639,7 +682,12 @@ export class ShiftAssignmentRepositoryClass {
       const [incoming] = await client
         .select({ tier: AgencyPrTable.tier })
         .from(AgencyPrTable)
-        .where(and(eq(AgencyPrTable.userId, pr.prId), eq(AgencyPrTable.agencyId, pr.agencyId)))
+        .where(
+          and(
+            eq(AgencyPrTable.userId, pr.prId),
+            eq(AgencyPrTable.agencyId, pr.agencyId),
+          ),
+        )
         .limit(1);
 
       const verdict = seatFor({
@@ -655,8 +703,16 @@ export class ShiftAssignmentRepositoryClass {
         staffed,
         tierFull:
           verdict.reason === 'tier_full'
-            ? { bucket: verdict.bucket, asked: verdict.asked, staffed: verdict.staffed }
-            : { bucket: null, asked: verdict.leftover, staffed: verdict.staffed },
+            ? {
+                bucket: verdict.bucket,
+                asked: verdict.asked,
+                staffed: verdict.staffed,
+              }
+            : {
+                bucket: null,
+                asked: verdict.leftover,
+                staffed: verdict.staffed,
+              },
       };
     }
   }
@@ -681,7 +737,12 @@ export class ShiftAssignmentRepositoryClass {
     params: { shiftId: string; prId: string; agencyId: string },
   ): Promise<
     | { ok: true; assignment: ShiftAssignmentType | null }
-    | { ok: false; seat: Awaited<ReturnType<ShiftAssignmentRepositoryClass['hasFreeSeat']>> }
+    | {
+        ok: false;
+        seat: Awaited<
+          ReturnType<ShiftAssignmentRepositoryClass['hasFreeSeat']>
+        >;
+      }
   > {
     try {
       return await db.transaction(async (tx) => {
@@ -694,7 +755,10 @@ export class ShiftAssignmentRepositoryClass {
         return { ok: true as const, assignment };
       });
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.updateIfSeatFree] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.updateIfSeatFree] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -772,7 +836,10 @@ export class ShiftAssignmentRepositoryClass {
         )
         .orderBy(asc(ShiftTable.shiftDate));
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listUnchargedCancelFees] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listUnchargedCancelFees] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -823,7 +890,10 @@ export class ShiftAssignmentRepositoryClass {
         .returning({ id: ShiftAssignmentTable.id });
       return rows.length;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.markCancelFeesCharged] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.markCancelFeesCharged] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -860,7 +930,12 @@ export class ShiftAssignmentRepositoryClass {
     actor: string,
     reason: string | null,
   ): Promise<
-    | { ok: true; voucherId: string | null; alreadyWaived: boolean; feeRm: string | null }
+    | {
+        ok: true;
+        voucherId: string | null;
+        alreadyWaived: boolean;
+        feeRm: string | null;
+      }
     | { ok: false; reason: 'not_found' | 'no_fee' }
   > {
     try {
@@ -967,7 +1042,10 @@ export class ShiftAssignmentRepositoryClass {
         );
       return rows.map((r) => r.prId).filter((id): id is string => !!id);
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listPrIdsForWeek] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listPrIdsForWeek] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -980,7 +1058,11 @@ export class ShiftAssignmentRepositoryClass {
    * make the answer shrink after payday, which reads as the record being wrong.
    * `> 0` still applies — a free cancel seals '0.00' and is not a penalty.
    */
-  async listCancelFeesForPrWeek(prId: string, weekStart: string, weekEnd: string) {
+  async listCancelFeesForPrWeek(
+    prId: string,
+    weekStart: string,
+    weekEnd: string,
+  ) {
     try {
       return await db
         .select({
@@ -1007,7 +1089,10 @@ export class ShiftAssignmentRepositoryClass {
         )
         .orderBy(asc(ShiftTable.shiftDate));
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listCancelFeesForPrWeek] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listCancelFeesForPrWeek] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1048,26 +1133,38 @@ export class ShiftAssignmentRepositoryClass {
     filter?: ShiftAssignmentFilter;
     page: number;
     pageSize: number;
-  }): Promise<{ assignments: ShiftAssignmentWithContextType[]; totalCount: number }> {
+  }): Promise<{
+    assignments: ShiftAssignmentWithContextType[];
+    totalCount: number;
+  }> {
     try {
       const { filter, page, pageSize } = params;
       const conditions: SQL[] = [];
       if (filter?.id) conditions.push(eq(ShiftAssignmentTable.id, filter.id));
-      if (filter?.agencyId) conditions.push(eq(ShiftAssignmentTable.agencyId, filter.agencyId));
-      if (filter?.shiftId) conditions.push(eq(ShiftAssignmentTable.shiftId, filter.shiftId));
-      if (filter?.prId) conditions.push(eq(ShiftAssignmentTable.prId, filter.prId));
-      if (filter?.status) conditions.push(eq(ShiftAssignmentTable.status, filter.status));
+      if (filter?.agencyId)
+        conditions.push(eq(ShiftAssignmentTable.agencyId, filter.agencyId));
+      if (filter?.shiftId)
+        conditions.push(eq(ShiftAssignmentTable.shiftId, filter.shiftId));
+      if (filter?.prId)
+        conditions.push(eq(ShiftAssignmentTable.prId, filter.prId));
+      if (filter?.status)
+        conditions.push(eq(ShiftAssignmentTable.status, filter.status));
       if (filter?.leaveStatuses) {
-        if (filter.leaveStatuses.length === 0) return { assignments: [], totalCount: 0 };
-        conditions.push(inArray(ShiftAssignmentTable.leaveStatus, filter.leaveStatuses));
+        if (filter.leaveStatuses.length === 0)
+          return { assignments: [], totalCount: 0 };
+        conditions.push(
+          inArray(ShiftAssignmentTable.leaveStatus, filter.leaveStatuses),
+        );
       }
       // An empty array must match nothing, not everything — guard before inArray.
       if (filter?.outletIds) {
-        if (filter.outletIds.length === 0) return { assignments: [], totalCount: 0 };
+        if (filter.outletIds.length === 0)
+          return { assignments: [], totalCount: 0 };
         conditions.push(inArray(ShiftTable.outletId, filter.outletIds));
       }
 
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const whereClause =
+        conditions.length > 0 ? and(...conditions) : undefined;
 
       const [countRow] = await db
         .select({ value: sql<number>`count(*)::int` as SQL<number> })
@@ -1103,7 +1200,10 @@ export class ShiftAssignmentRepositoryClass {
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(OutletTable.id, ShiftTable.outletId))
-        .leftJoin(AgencyTable, eq(AgencyTable.id, ShiftAssignmentTable.agencyId))
+        .leftJoin(
+          AgencyTable,
+          eq(AgencyTable.id, ShiftAssignmentTable.agencyId),
+        )
         .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .where(whereClause)
@@ -1201,7 +1301,10 @@ export class ShiftAssignmentRepositoryClass {
     return this.listMineAssignments({ userId });
   }
 
-  private async listMineAssignments(filter: { prId?: string; userId?: string }): Promise<
+  private async listMineAssignments(filter: {
+    prId?: string;
+    userId?: string;
+  }): Promise<
     Array<
       ShiftAssignmentType & {
         shiftDate: string;
@@ -1306,8 +1409,14 @@ export class ShiftAssignmentRepositoryClass {
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
-        .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
-        .leftJoin(AgencyTable, eq(AgencyTable.id, ShiftAssignmentTable.agencyId))
+        .leftJoin(
+          ShiftTemplateTable,
+          eq(ShiftTemplateTable.id, ShiftTable.templateId),
+        )
+        .leftJoin(
+          AgencyTable,
+          eq(AgencyTable.id, ShiftAssignmentTable.agencyId),
+        )
         .where(ownership)
         .orderBy(ShiftTable.shiftDate);
       return rows.map((row) => {
@@ -1335,7 +1444,8 @@ export class ShiftAssignmentRepositoryClass {
           outletAddress,
           outletLat: row.outletLat === null ? null : Number(row.outletLat),
           outletLng: row.outletLng === null ? null : Number(row.outletLng),
-          outletGeoFenceRadiusM: row.outletGeoFenceRadius ?? DEFAULT_GEOFENCE_RADIUS_M,
+          outletGeoFenceRadiusM:
+            row.outletGeoFenceRadius ?? DEFAULT_GEOFENCE_RADIUS_M,
           // `agencyId` comes through the spread of `row.assignment` above; only
           // the joined NAME has to be added here.
           agencyName: row.agencyName,
@@ -1366,7 +1476,10 @@ export class ShiftAssignmentRepositoryClass {
    * for a week where nothing has been logged yet.
    */
   // (type declared at module scope — see AssignmentShiftFacts below the class)
-  async listByIdsForPr(prId: string, ids: string[]): Promise<AssignmentShiftFacts[]> {
+  async listByIdsForPr(
+    prId: string,
+    ids: string[],
+  ): Promise<AssignmentShiftFacts[]> {
     return this.listByIdsForPrs([prId], ids);
   }
 
@@ -1383,7 +1496,10 @@ export class ShiftAssignmentRepositoryClass {
    * belonging to someone else. It fails closed: a mismatch yields no shift and
    * the card says "not linked", rather than showing another PR's stamps.
    */
-  async listByIdsForPrs(prIds: string[], ids: string[]): Promise<AssignmentShiftFacts[]> {
+  async listByIdsForPrs(
+    prIds: string[],
+    ids: string[],
+  ): Promise<AssignmentShiftFacts[]> {
     if (ids.length === 0 || prIds.length === 0) return [];
     try {
       const rows = await db
@@ -1411,8 +1527,16 @@ export class ShiftAssignmentRepositoryClass {
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
-        .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
-        .where(and(inArray(ShiftAssignmentTable.id, ids), inArray(ShiftAssignmentTable.prId, prIds)))
+        .leftJoin(
+          ShiftTemplateTable,
+          eq(ShiftTemplateTable.id, ShiftTable.templateId),
+        )
+        .where(
+          and(
+            inArray(ShiftAssignmentTable.id, ids),
+            inArray(ShiftAssignmentTable.prId, prIds),
+          ),
+        )
         .orderBy(ShiftAssignmentTable.checkInAt);
       return rows.map((row) => ({
         id: row.id,
@@ -1430,7 +1554,11 @@ export class ShiftAssignmentRepositoryClass {
         cancelNoticeHours: row.cancelNoticeHours,
         // Reconstructed from the SEALED notice, not from `updated_at` — see the
         // field docs. Requires the same `shiftStartMs` the seal used.
-        cancelledAt: cancelledAtFrom(row.shiftDate, row.slot, row.cancelNoticeHours),
+        cancelledAt: cancelledAtFrom(
+          row.shiftDate,
+          row.slot,
+          row.cancelNoticeHours,
+        ),
         checkInAt: row.checkInAt,
         checkOutAt: row.checkOutAt,
         overtimeMinutes: row.overtimeMinutes ?? null,
@@ -1456,7 +1584,11 @@ export class ShiftAssignmentRepositoryClass {
   } | null> {
     try {
       const [row] = await db
-        .select({ outletId: OutletTable.id, lat: OutletTable.lat, lng: OutletTable.lng })
+        .select({
+          outletId: OutletTable.id,
+          lat: OutletTable.lat,
+          lng: OutletTable.lng,
+        })
         .from(OutletTable)
         .where(eq(OutletTable.id, outletId))
         .limit(1);
@@ -1508,7 +1640,10 @@ export class ShiftAssignmentRepositoryClass {
         radiusM: row.radiusM ?? DEFAULT_GEOFENCE_RADIUS_M,
       };
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.getOutletGeoFenceForAssignment] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.getOutletGeoFenceForAssignment] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1536,7 +1671,10 @@ export class ShiftAssignmentRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.getOutletForAssignment] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.getOutletForAssignment] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1599,13 +1737,21 @@ export class ShiftAssignmentRepositoryClass {
           ),
         )
         .groupBy(ShiftAssignmentTable.shiftId);
-      const staffedByShift = new Map(staffedRows.map((r) => [r.shiftId, r.staffed]));
+      const staffedByShift = new Map(
+        staffedRows.map((r) => [r.shiftId, r.staffed]),
+      );
 
       return released
-        .map((r) => ({ ...r, staffedCount: staffedByShift.get(r.shiftId) ?? 0 }))
+        .map((r) => ({
+          ...r,
+          staffedCount: staffedByShift.get(r.shiftId) ?? 0,
+        }))
         .filter((r) => r.staffedCount < r.quantity);
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listBackfillSlots] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listBackfillSlots] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1665,7 +1811,10 @@ export class ShiftAssignmentRepositoryClass {
         staffedBuckets: staffedRows.map((r) => bucketForPrTier(r.tier)),
       });
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.remainingDemandForShift] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.remainingDemandForShift] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1748,8 +1897,16 @@ export class ShiftAssignmentRepositoryClass {
         })
         .from(AgencyPrTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
-        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, AgencyPrTable.userId))
-        .where(and(eq(AgencyPrTable.agencyId, params.agencyId), eq(AgencyPrTable.approveStatus, 'approved')))
+        .leftJoin(
+          UserProfileTable,
+          eq(UserProfileTable.userId, AgencyPrTable.userId),
+        )
+        .where(
+          and(
+            eq(AgencyPrTable.agencyId, params.agencyId),
+            eq(AgencyPrTable.approveStatus, 'approved'),
+          ),
+        )
         .orderBy(asc(prDisplayNameSql));
       const free = prs.filter((p) => !unavailable.has(p.prId));
       if (free.length === 0) return [];
@@ -1766,7 +1923,10 @@ export class ShiftAssignmentRepositoryClass {
           and(
             eq(ShiftTable.outletId, params.outletId),
             eq(ShiftAssignmentTable.status, 'completed'),
-            inArray(ShiftAssignmentTable.prId, free.map((p) => p.prId)),
+            inArray(
+              ShiftAssignmentTable.prId,
+              free.map((p) => p.prId),
+            ),
           ),
         )
         .groupBy(ShiftAssignmentTable.prId);
@@ -1789,12 +1949,16 @@ export class ShiftAssignmentRepositoryClass {
         }))
         .sort(
           (a, b) =>
-            Number(b.tier === params.preferTier) - Number(a.tier === params.preferTier) ||
+            Number(b.tier === params.preferTier) -
+              Number(a.tier === params.preferTier) ||
             b.timesAtOutlet - a.timesAtOutlet ||
             a.prName.localeCompare(b.prName),
         );
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listReplacementCandidates] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listReplacementCandidates] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1831,7 +1995,8 @@ export class ShiftAssignmentRepositoryClass {
           outletId: OutletWorkspaceTable.outletId,
           happyHourStart: OutletWorkspaceTable.happyHourStart,
           happyHourEnd: OutletWorkspaceTable.happyHourEnd,
-          happyHourDrinkDiscountPct: OutletWorkspaceTable.happyHourDrinkDiscountPct,
+          happyHourDrinkDiscountPct:
+            OutletWorkspaceTable.happyHourDrinkDiscountPct,
           wagePerHour: OutletTierRateTable.wagePerHour,
           drinkPct: OutletTierRateTable.drinkPct,
           happyHourDrinkPct: OutletTierRateTable.happyHourDrinkPct,
@@ -1842,7 +2007,10 @@ export class ShiftAssignmentRepositoryClass {
         .from(OutletWorkspaceTable)
         .innerJoin(
           OutletTierRateTable,
-          and(eq(OutletTierRateTable.workspaceId, OutletWorkspaceTable.id), tierMatch),
+          and(
+            eq(OutletTierRateTable.workspaceId, OutletWorkspaceTable.id),
+            tierMatch,
+          ),
         )
         .where(inArray(OutletWorkspaceTable.outletId, uniqueOutletIds));
       for (const row of rows) {
@@ -1860,7 +2028,10 @@ export class ShiftAssignmentRepositoryClass {
       }
       return result;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.resolveTierRatesForOutlets] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.resolveTierRatesForOutlets] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1899,7 +2070,9 @@ export class ShiftAssignmentRepositoryClass {
           targetSalesRm: ShiftPayTierTable.targetSalesRm,
         })
         .from(ShiftPayTierTable)
-        .where(and(inArray(ShiftPayTierTable.shiftId, uniqueShiftIds), tierMatch));
+        .where(
+          and(inArray(ShiftPayTierTable.shiftId, uniqueShiftIds), tierMatch),
+        );
       for (const row of rows) {
         result.set(row.shiftId, {
           wagePerHour: row.wagePerHour,
@@ -1912,7 +2085,10 @@ export class ShiftAssignmentRepositoryClass {
       }
       return result;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.resolveShiftTierOverrides] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.resolveShiftTierOverrides] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1958,7 +2134,10 @@ export class ShiftAssignmentRepositoryClass {
       }
       return result;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.resolveDrinkMenusForOutlets] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.resolveDrinkMenusForOutlets] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -2007,7 +2186,10 @@ export class ShiftAssignmentRepositoryClass {
         .orderBy(ShiftTable.shiftDate);
       return rows;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listCompletedForAgencyWeek] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listCompletedForAgencyWeek] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -2031,7 +2213,13 @@ export class ShiftAssignmentRepositoryClass {
     prId: string;
     fromDate: string;
     toDate: string;
-  }): Promise<Array<{ assignmentId: string; shiftDate: string; overtimeMinutes: number | null }>> {
+  }): Promise<
+    Array<{
+      assignmentId: string;
+      shiftDate: string;
+      overtimeMinutes: number | null;
+    }>
+  > {
     try {
       const { prId, fromDate, toDate } = params;
       return await db
@@ -2052,7 +2240,10 @@ export class ShiftAssignmentRepositoryClass {
         )
         .orderBy(ShiftTable.shiftDate);
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listPendingOvertimeForPrWeek] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listPendingOvertimeForPrWeek] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -2099,7 +2290,10 @@ export class ShiftAssignmentRepositoryClass {
         .returning();
       return row ?? null;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.claimOvertimeDecision] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.claimOvertimeDecision] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -2116,7 +2310,10 @@ export class ShiftAssignmentRepositoryClass {
    * this request just claimed, and refusing to undo because the row moved again
    * would strand exactly the case it exists for.
    */
-  async revertOvertimeDecision(assignmentId: string, actor: string): Promise<void> {
+  async revertOvertimeDecision(
+    assignmentId: string,
+    actor: string,
+  ): Promise<void> {
     try {
       await db
         .update(ShiftAssignmentTable)
@@ -2132,7 +2329,10 @@ export class ShiftAssignmentRepositoryClass {
     } catch (error) {
       // Logged, never rethrown: this runs inside a failure path, and replacing
       // the original error with this one hides why the approval failed.
-      logger.error('[ShiftAssignmentRepository.revertOvertimeDecision] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.revertOvertimeDecision] Error:',
+        error,
+      );
     }
   }
 
@@ -2166,7 +2366,10 @@ export class ShiftAssignmentRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.getOvertimeContext] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.getOvertimeContext] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -2229,7 +2432,10 @@ export class ShiftAssignmentRepositoryClass {
         )
         .orderBy(ShiftTable.shiftDate);
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listPendingOvertimeForAgency] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listPendingOvertimeForAgency] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -2324,13 +2530,19 @@ export class ShiftAssignmentRepositoryClass {
         .orderBy(asc(OutletTable.name), asc(prDisplayNameSql));
       return rows;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listAttendanceFixesForAgencyDate] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listAttendanceFixesForAgencyDate] Error:',
+        error,
+      );
       throw error;
     }
   }
 
   /** Distinct agency IDs that have any completed assignment in [fromDate, toDate]. */
-  async listAgencyIdsWithCompletedInRange(fromDate: string, toDate: string): Promise<string[]> {
+  async listAgencyIdsWithCompletedInRange(
+    fromDate: string,
+    toDate: string,
+  ): Promise<string[]> {
     try {
       const rows = await db
         .selectDistinct({ agencyId: ShiftAssignmentTable.agencyId })
@@ -2345,7 +2557,10 @@ export class ShiftAssignmentRepositoryClass {
         );
       return rows.map((r) => r.agencyId);
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listAgencyIdsWithCompletedInRange] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.listAgencyIdsWithCompletedInRange] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -2355,15 +2570,22 @@ export class ShiftAssignmentRepositoryClass {
    * then pin to the caller's org (agency or a set of venues, via the joined
    * shift) and the shift-date window. Empty `outletIds` is guarded by the caller.
    */
-  private buildCostConditions(filter?: ShiftAssignmentCostFilter): SQL | undefined {
+  private buildCostConditions(
+    filter?: ShiftAssignmentCostFilter,
+  ): SQL | undefined {
     const conditions: SQL[] = [
       notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
     ];
-    if (filter?.agencyId) conditions.push(eq(ShiftAssignmentTable.agencyId, filter.agencyId));
-    if (filter?.outletId) conditions.push(eq(ShiftTable.outletId, filter.outletId));
-    if (filter?.outletIds) conditions.push(inArray(ShiftTable.outletId, filter.outletIds));
-    if (filter?.fromDate) conditions.push(gte(ShiftTable.shiftDate, filter.fromDate));
-    if (filter?.toDate) conditions.push(lte(ShiftTable.shiftDate, filter.toDate));
+    if (filter?.agencyId)
+      conditions.push(eq(ShiftAssignmentTable.agencyId, filter.agencyId));
+    if (filter?.outletId)
+      conditions.push(eq(ShiftTable.outletId, filter.outletId));
+    if (filter?.outletIds)
+      conditions.push(inArray(ShiftTable.outletId, filter.outletIds));
+    if (filter?.fromDate)
+      conditions.push(gte(ShiftTable.shiftDate, filter.fromDate));
+    if (filter?.toDate)
+      conditions.push(lte(ShiftTable.shiftDate, filter.toDate));
     return and(...conditions);
   }
 
@@ -2373,7 +2595,9 @@ export class ShiftAssignmentRepositoryClass {
    * that under-counted cost (and so overstated margin); the (PR × day) grain
    * lets the client slice any date range and roll up both P&L and top-PRs.
    */
-  async reportCostByPrDay(filter?: ShiftAssignmentCostFilter): Promise<ShiftCostPrDayTotals[]> {
+  async reportCostByPrDay(
+    filter?: ShiftAssignmentCostFilter,
+  ): Promise<ShiftCostPrDayTotals[]> {
     try {
       if (filter?.outletIds && filter.outletIds.length === 0) return [];
       const rows = await db
@@ -2402,7 +2626,10 @@ export class ShiftAssignmentRepositoryClass {
         cost: Number(r.cost),
       }));
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.reportCostByPrDay] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.reportCostByPrDay] Error:',
+        error,
+      );
       return [];
     }
   }
@@ -2522,9 +2749,11 @@ export class ShiftAssignmentRepositoryClass {
           (select count(*)::int from mth) as mc_this_month
       `);
 
-      const rows = (Array.isArray(result)
-        ? result
-        : ((result as { rows?: unknown[] })?.rows ?? [])) as Array<{
+      const rows = (
+        Array.isArray(result)
+          ? result
+          : ((result as { rows?: unknown[] })?.rows ?? [])
+      ) as Array<{
         assigned_this_week: number;
         excused_this_week: number;
         paid_cancellations_this_week: number;
@@ -2543,7 +2772,10 @@ export class ShiftAssignmentRepositoryClass {
         mcThisMonth: row?.mc_this_month ?? 0,
       };
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.attendanceWindow] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.attendanceWindow] Error:',
+        error,
+      );
       throw error;
     }
   }

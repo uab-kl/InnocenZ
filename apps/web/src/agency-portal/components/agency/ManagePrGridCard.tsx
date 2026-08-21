@@ -53,21 +53,20 @@ export function ManagePrGridCard({
 	const paid = formatOutletHistRm(pr.totalPaid ?? 0);
 
 	return (
-		<article
-			role="button"
-			tabIndex={0}
+		// A real <button>, not an <article role="button">: the browser then gives us
+		// the focus ring, the Enter/Space activation and the announced role for free,
+		// so the hand-rolled tabIndex + onKeyDown pair could go. `items-stretch`
+		// restores the flex default the UA button stylesheet overrides to
+		// `flex-start`, which would otherwise shrink the card body to its text width.
+		<button
+			type="button"
 			className={cn(
-				"iz-pr-manage-card",
+				"iz-pr-manage-card items-stretch",
 				picked && "iz-pr-manage-card--picked",
 				!active && "iz-pr-manage-card--inactive",
 				flags.suspendStreak && active && "iz-pr-manage-card--warn-border",
 			)}
 			onClick={onActivate}
-			onKeyDown={(e) => {
-				if (e.key !== "Enter" && e.key !== " ") return;
-				e.preventDefault();
-				onActivate();
-			}}
 		>
 			{selectMode && (
 				<div
@@ -195,6 +194,6 @@ export function ManagePrGridCard({
 					</div>
 				</div>
 			</div>
-		</article>
+		</button>
 	);
 }

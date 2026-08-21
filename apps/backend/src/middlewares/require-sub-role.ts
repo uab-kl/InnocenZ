@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import {
   agencyMemberRepository,
+  agencyOutletRepository,
   authRepository,
   outletMemberRepository,
 } from '@/composition-root.js';
@@ -8,6 +9,7 @@ import { Error } from '@/error/index.js';
 import { requirePermission } from '@/middlewares/require-permission.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import { laneFromRoleHints } from '@/features/rbac/portal-role-map.js';
+import { paramId } from '@/util/params.js';
 
 /**
  * Org ACL: portal lane from user_role → role; membership for tenancy only.
@@ -15,11 +17,7 @@ import { laneFromRoleHints } from '@/features/rbac/portal-role-map.js';
 
 export type AgencySubRole = 'owner' | 'finance' | 'director' | 'guarantor';
 export type OutletSubRole =
-  | 'owner'
-  | 'finance'
-  | 'operations_head'
-  | 'director'
-  | 'guarantor';
+  'owner' | 'finance' | 'operations_head' | 'director' | 'guarantor';
 
 const forbidden = (allowed: readonly string[]) =>
   'Forbidden — requires role: ' + allowed.join(' or ');
@@ -115,7 +113,9 @@ function guard(
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
     }
 
     try {
@@ -127,7 +127,9 @@ function guard(
           : await holdsOutletLane(user.id, allowed as OutletSubRole[]);
 
       if (!ok) {
-        return res.status(403).json({ success: false, message: forbidden(allowed), data: null });
+        return res
+          .status(403)
+          .json({ success: false, message: forbidden(allowed), data: null });
       }
 
       if (options.scopeParam) {
@@ -151,9 +153,11 @@ function guard(
 
       return next();
     } catch {
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   };
 }
@@ -166,11 +170,17 @@ export function requireOutletSubRole(...allowed: OutletSubRole[]) {
   return guard('outlet', allowed);
 }
 
-export function requireAgencySubRoleScoped(param: string, ...allowed: AgencySubRole[]) {
+export function requireAgencySubRoleScoped(
+  param: string,
+  ...allowed: AgencySubRole[]
+) {
   return guard('agency', allowed, { scopeParam: param });
 }
 
-export function requireOutletSubRoleScoped(param: string, ...allowed: OutletSubRole[]) {
+export function requireOutletSubRoleScoped(
+  param: string,
+  ...allowed: OutletSubRole[]
+) {
   return guard('outlet', allowed, { scopeParam: param });
 }
 
@@ -178,7 +188,9 @@ export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
     }
 
     try {
@@ -191,14 +203,188 @@ export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
       }
 
       if (!(await holdsOutletLane(user.id, allowed))) {
-        return res.status(403).json({ success: false, message: forbidden(allowed), data: null });
+        return res
+          .status(403)
+          .json({ success: false, message: forbidden(allowed), data: null });
       }
 
       return next();
     } catch {
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  };
+}
+
+/**
+ * Confine a caller to the ONE venue named in the path.
+ *
+ * The lane guards above answer "does this person hold an owner/ops lane
+ * SOMEWHERE". That is not a scope check, and on `outlet-workspace` the
+ * difference was the whole bug: `outletOwnerOrOpsIfMember` let the owner of one
+ * venue rewrite ANOTHER venue's pay rates and drink prices, because nothing in
+ * the chain ever compared the caller against `:outletId`. The controller reads
+ * the id straight from the path and never consults `req.user`, so the router is
+ * the only place it can be stopped. Worse, that guard returns `next()` outright
+ * for a caller with no outlet membership — which is every agency account — so
+ * an agency could rewrite the rate card of a venue it has no relationship with.
+ *
+ * Each org is scoped by the rule that org already uses elsewhere:
+ *   - an OUTLET operator must hold an active membership of THIS venue;
+ *   - an AGENCY operator must hold an APPROVED `agency_outlet` link to it.
+ *     `listApprovedOutletIdsForAgency` is the repository's own stated "portal
+ *     visibility rule", and reusing it keeps one answer to "which venues may
+ *     this agency see". Agencies deliberately keep BOTH verbs here — they
+ *     configure rates on a venue's behalf, and the last attempt to restrict
+ *     this to outlet-only broke that flow.
+ *
+ * Compose this with a lane guard, do not replace one: this says WHICH venue,
+ * the lane guard says WHO within it.
+ */
+export function requireOutletScopeByParam(param: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
       return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+    }
+
+    try {
+      if (await isAdmin(user.id)) return next();
+
+      const raw = req.params[param];
+      const outletId = raw == null ? '' : paramId(raw);
+      if (!outletId) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Missing outlet id', data: null });
+      }
+
+      // Outlet side first: someone who operates venues is judged as a venue
+      // operator, never allowed to fall through to the agency branch below.
+      const outletMemberships = await outletMemberRepository.listByUser(
+        user.id,
+      );
+      const activeOutlets = outletMemberships.filter(
+        (m) => m.status === 'active',
+      );
+      if (activeOutlets.length > 0) {
+        if (!activeOutlets.some((m) => m.outletId === outletId)) {
+          return res.status(403).json({
+            success: false,
+            message: 'Forbidden — not a member of this outlet',
+            data: null,
+          });
+        }
+        return next();
+      }
+
+      const agencyMemberships = await agencyMemberRepository.listByUser(
+        user.id,
+      );
+      const activeAgency = agencyMemberships.find((m) => m.status === 'active');
+      if (activeAgency?.agencyId) {
+        const linked =
+          await agencyOutletRepository.listApprovedOutletIdsForAgency(
+            activeAgency.agencyId,
+          );
+        if (!linked.includes(outletId)) {
+          return res.status(403).json({
+            success: false,
+            message: 'Forbidden — your agency is not linked to this outlet',
+            data: null,
+          });
+        }
+        return next();
+      }
+
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden — not a member of this outlet',
+        data: null,
+      });
+    } catch {
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  };
+}
+
+/**
+ * Confine a caller to the ONE organisation named in the path — membership only,
+ * no lane.
+ *
+ * The sibling of `requireOutletScopeByParam`, for READS that do not care which
+ * lane you hold, only that the org is yours. `GET /agency/:id/members` and
+ * `GET /outlet/:id/members` were gated by `requireRole('admin','agency','outlet')`
+ * and NOTHING ELSE: the handlers read `:id` straight from the path and never
+ * consult `req.user`, so any agency or outlet token could enumerate a RIVAL
+ * organisation's entire staff list — and that payload is PII, carrying
+ * `username`, `email` and `phoneNum` per member.
+ *
+ * The route comments already stated the intended rule — "the agency and outlet
+ * profile screens list their own members" — but nothing enforced "their own".
+ * Every real caller passes its own org id (the profile screens, the settings
+ * Team panel) or is an admin screen, so this only removes the cross-org read
+ * that nothing was using and nobody should have.
+ *
+ * The WRITES on these routers were already scoped, via `agencyOwnerOfParam` /
+ * `outletOwnerOfParam`. Only the reads were open.
+ */
+export function requireOrgMembershipByParam(
+  org: 'agency' | 'outlet',
+  param: string,
+) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+    }
+
+    try {
+      if (await isAdmin(user.id)) return next();
+
+      const raw = req.params[param];
+      const orgId = raw == null ? '' : paramId(raw);
+      if (!orgId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Missing organisation id',
+          data: null,
+        });
+      }
+
+      const memberships =
+        org === 'agency'
+          ? await agencyMemberRepository.listByUser(user.id)
+          : await outletMemberRepository.listByUser(user.id);
+      const belongs = memberships
+        .filter((m) => m.status === 'active')
+        .some((m) => ('agencyId' in m ? m.agencyId : m.outletId) === orgId);
+
+      if (!belongs) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden — not a member of this organisation',
+          data: null,
+        });
+      }
+      return next();
+    } catch {
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   };
 }
@@ -211,27 +397,38 @@ export function refuseOrgStatusChange() {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
     }
     try {
       if (await isAdmin(user.id)) return next();
       if (req.body && typeof req.body === 'object' && 'status' in req.body) {
         return res.status(403).json({
           success: false,
-          message: 'Forbidden — status is set by admin approval, not by this endpoint',
+          message:
+            'Forbidden — status is set by admin approval, not by this endpoint',
           data: null,
         });
       }
       return next();
     } catch {
-      return res
-        .status(500)
-        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   };
 }
 
-export const agencyOwnerOrFinance = requirePermission('payment_voucher', 'update');
+export const agencyOwnerOrFinance = requirePermission(
+  'payment_voucher',
+  'update',
+);
 export const outletOwnerOnly = requirePermission('settings', 'update');
 export const outletOwnerOrOps = requirePermission('booking', 'create');
-export const outletOwnerOrOpsIfMember = requireOutletSubRoleIfMember('owner', 'operations_head');
+export const outletOwnerOrOpsIfMember = requireOutletSubRoleIfMember(
+  'owner',
+  'operations_head',
+);

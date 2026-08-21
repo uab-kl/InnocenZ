@@ -80,9 +80,15 @@ function Field({
 	orientation = "vertical",
 	...props
 }: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+	/*
+	 * No `role="group"`: a Field wraps ONE labelled control plus its description
+	 * and error, not a set of related controls — real grouping is what the
+	 * `FieldSet` / `FieldLegend` pair above is for, and those already render a
+	 * genuine <fieldset>/<legend>. The role carried no accessible name either,
+	 * so it only announced an empty "group" boundary around every input.
+	 */
 	return (
 		<div
-			role="group"
 			data-slot="field"
 			data-orientation={orientation}
 			className={cn(fieldVariants({ orientation }), className)}
@@ -219,9 +225,11 @@ function FieldError({
 
 		return (
 			<ul className="ml-4 flex list-disc flex-col gap-1">
+				{/* `uniqueErrors` is de-duplicated BY `message` just above, so the
+				    message itself is a stable, unique key for this list. */}
 				{uniqueErrors.map(
-					(error, index) =>
-						error?.message && <li key={index}>{error.message}</li>,
+					(error) =>
+						error?.message && <li key={error.message}>{error.message}</li>,
 				)}
 			</ul>
 		);

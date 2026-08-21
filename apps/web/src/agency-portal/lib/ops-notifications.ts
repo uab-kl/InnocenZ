@@ -110,6 +110,6 @@ export function sosIncidentById(
 	return incidents.find((i) => i.id === id);
 }
 
-export function prTypeLabel(prType: SosIncident["prType"]): string {
+export function prTypeLabel(_prType: SosIncident["prType"]): string {
 	return "Agency-tied";
 }

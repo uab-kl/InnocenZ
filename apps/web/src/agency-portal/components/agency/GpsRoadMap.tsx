@@ -24,7 +24,13 @@ const DRAG_THRESHOLD_PX = 5;
 function OutletMarker({ label }: { label: string }) {
 	return (
 		<div className="iz-gmaps-marker iz-gmaps-marker-outlet" title={label}>
-			<svg width="28" height="36" viewBox="0 0 28 36" aria-hidden>
+			<svg
+				width="28"
+				height="36"
+				viewBox="0 0 28 36"
+				aria-hidden="true"
+				focusable="false"
+			>
 				<path
 					d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.27 21.73 0 14 0z"
 					fill="#EA4335"
@@ -136,6 +142,15 @@ export function GpsRoadMap({
 		return boundsCenter(bounds);
 	}, [focusRow, bounds]);
 
+	// A new selection, or a new set of pins, invalidates whatever the user had
+	// panned to — these five are the reset TRIGGERS, not values the effect
+	// reads. Removing them makes this a mount-only reset, which would leave the
+	// map frozen on the previous PR's pan after the row selection changes.
+	// biome-ignore lint/correctness/useExhaustiveDependencies(selectedId): reset trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(bounds.minLat): reset trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(bounds.maxLat): reset trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(bounds.minLng): reset trigger — see comment above
+	// biome-ignore lint/correctness/useExhaustiveDependencies(bounds.maxLng): reset trigger — see comment above
 	useEffect(() => {
 		setCenterOverride(null);
 	}, [selectedId, bounds.minLat, bounds.maxLat, bounds.minLng, bounds.maxLng]);

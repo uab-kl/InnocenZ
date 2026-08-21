@@ -343,11 +343,18 @@ function postedShiftBriefing(
 function postedShiftEventFields(
 	shift: Pick<
 		ShiftRequest,
-		"eventKind" | "specialEventType" | "customSpecialEventName" | "templateCoverImage"
+		| "eventKind"
+		| "specialEventType"
+		| "customSpecialEventName"
+		| "templateCoverImage"
 	>,
 ): Pick<
 	AgencyOutletAvailableShift,
-	"eventKind" | "specialEventType" | "customSpecialEventName" | "vip" | "templateCoverImage"
+	| "eventKind"
+	| "specialEventType"
+	| "customSpecialEventName"
+	| "vip"
+	| "templateCoverImage"
 > {
 	const eventKind = shift.eventKind ?? "normal";
 	const specialEventType =

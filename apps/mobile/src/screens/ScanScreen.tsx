@@ -59,7 +59,10 @@ type Phase = 'idle' | 'scanning' | 'review' | 'manual' | 'logged';
 
 function shiftPvId(outlet: string, date: [number, number, number]) {
   const [y, m, d] = date;
-  const slug = outlet.replace(/[^a-zA-Z0-9]+/g, '').toUpperCase().slice(0, 10);
+  const slug = outlet
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toUpperCase()
+    .slice(0, 10);
   return `PV-SHIFT-${y}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}-${slug || 'OUTLET'}`;
 }
 
@@ -75,8 +78,14 @@ export function ScanScreen({
   const { goBack, setTab } = usePrNav();
   // Detail screen outside the tab shell — the back row must clear the status bar.
   const insets = useSafeAreaInsets();
-  const { active, phase: attendancePhase, refresh: refreshShift } = useActiveShift();
-  const { receiptLines, addLine, submitReceipt, updateLine, deleteLine } = usePrEarnings();
+  const {
+    active,
+    phase: attendancePhase,
+    refresh: refreshShift,
+  } = useActiveShift();
+  // `deleteLine` is deliberately NOT taken here any more — see `confirmOcr`.
+  // The provider still exports it for ShiftStatusPanel's whole-receipt removal.
+  const { receiptLines, addLine, submitReceipt, updateLine } = usePrEarnings();
   const onDuty = attendancePhase === 'on_duty';
 
   // Re-pull `/shift-assignment/mine` from the DATABASE every time this screen
@@ -108,7 +117,11 @@ export function ScanScreen({
    * `submitReceipt` below already sends it the same way.
    */
   const logLine = (input: Parameters<typeof addLine>[0]) =>
-    addLine({ lineDate: todayKey, ...(active?.id ? { assignmentId: active.id } : {}), ...input });
+    addLine({
+      lineDate: todayKey,
+      ...(active?.id ? { assignmentId: active.id } : {}),
+      ...input,
+    });
   const editLine = (id: string, input: Parameters<typeof updateLine>[1]) =>
     updateLine(id, {
       lineDate: todayKey,
@@ -155,7 +168,10 @@ export function ScanScreen({
   const [proofPhotos, setProofPhotos] = useState<string[]>([]);
 
   const pvId = useMemo(() => shiftPvId(outlet, dateYmd), [outlet, dateYmd]);
-  const drinkMenu = useMemo(() => drinkMenuFromAssignment(active?.drinkMenu), [active?.drinkMenu]);
+  const drinkMenu = useMemo(
+    () => drinkMenuFromAssignment(active?.drinkMenu),
+    [active?.drinkMenu],
+  );
   // The slice of the outlet catalog this page logs: Drinks page ↔ 'drink'
   // items; Tips page ↔ 'service' + 'tip' items (Booking commission, Havoc, Tip).
   const categoryMenu = useMemo(
@@ -193,7 +209,8 @@ export function ScanScreen({
    * — "no date" and "a date two months out" look identical otherwise, and only
    * one of them is fixed by re-photographing that part of the paper.
    */
-  const [dateRejected, setDateRejected] = useState<ParsedReceipt['dateRejected']>(null);
+  const [dateRejected, setDateRejected] =
+    useState<ParsedReceipt['dateRejected']>(null);
   const [receiptTime, setReceiptTime] = useState<string | null>(null);
   // The database-generated running number (RCP-000001) returned on save.
   const [serverReceiptNo, setServerReceiptNo] = useState<string | null>(null);
@@ -260,17 +277,24 @@ export function ScanScreen({
    * Deduped, receipt first, capped like keepAsProof does.
    */
   const proofForSubmit = useMemo(
-    () => [...new Set([...(receiptShot ? [receiptShot] : []), ...proofPhotos])].slice(0, 6),
+    () =>
+      [
+        ...new Set([...(receiptShot ? [receiptShot] : []), ...proofPhotos]),
+      ].slice(0, 6),
     [receiptShot, proofPhotos],
   );
   const missingProof = proofRequired && proofForSubmit.length === 0;
 
   // Commission at this PR's real tier rate (happy-hour aware); falls back to the
   // prototype flat rates only when the outlet has no rate card configured.
-  const commissionFor = (cat: ScanCategory, sales: number) => rateCommission(cat, sales, rate);
+  const commissionFor = (cat: ScanCategory, sales: number) =>
+    rateCommission(cat, sales, rate);
   /** Commission for one catalog item: drinks use the drink %, everything else the tip %. */
   const commissionForItem = (d: MenuDrink, sales: number) =>
-    commissionFor(receiptKindForItem(d) === 'drinks' ? 'drinks' : 'tips', sales);
+    commissionFor(
+      receiptKindForItem(d) === 'drinks' ? 'drinks' : 'tips',
+      sales,
+    );
 
   /**
    * What the guest pays for this row — the outlet's happy-hour discount applied
@@ -299,8 +323,14 @@ export function ScanScreen({
   const drinkIncomplete = proofRequired && !hasItemAmount;
 
   const detected = categoryMenu.filter((d) => detectedIds.includes(d.id));
-  const detectedTotal = detected.reduce((s, d) => s + salesFor(d, drinkQtys[d.id] ?? 0), 0);
-  const detectedUnits = detected.reduce((s, d) => s + (drinkQtys[d.id] ?? 0), 0);
+  const detectedTotal = detected.reduce(
+    (s, d) => s + salesFor(d, drinkQtys[d.id] ?? 0),
+    0,
+  );
+  const detectedUnits = detected.reduce(
+    (s, d) => s + (drinkQtys[d.id] ?? 0),
+    0,
+  );
   const detectedCommission = detected.reduce(
     (s, d) => s + commissionForItem(d, salesFor(d, drinkQtys[d.id] ?? 0)),
     0,
@@ -327,7 +357,8 @@ export function ScanScreen({
    * assumed one rather than passed off as read.
    */
   const missingRows = useMemo(
-    () => (editId ? [] : categoryMenu.filter((d) => !detectedIds.includes(d.id))),
+    () =>
+      editId ? [] : categoryMenu.filter((d) => !detectedIds.includes(d.id)),
     [editId, categoryMenu, detectedIds],
   );
 
@@ -379,7 +410,9 @@ export function ScanScreen({
       setPhase('manual');
       return;
     }
-    const parsed = parseReceipt(text, categoryMenu, { shiftDate: shiftDateIso });
+    const parsed = parseReceipt(text, categoryMenu, {
+      shiftDate: shiftDateIso,
+    });
     // MERGE with earlier passes: a rescan FILLS what's still missing and never
     // wipes a field an earlier shot already read — so the PR can scan the top
     // half (order no), then the bottom half (date + time), and it adds up.
@@ -391,7 +424,9 @@ export function ScanScreen({
     setReceiptTime(mergedTime);
     // Only carry a rejection while the date is still missing — once any pass
     // reads a believable one there is nothing left to explain.
-    setDateRejected((prev) => (mergedDate ? null : (parsed.dateRejected ?? prev)));
+    setDateRejected((prev) =>
+      mergedDate ? null : (parsed.dateRejected ?? prev),
+    );
     const rejectedNote = mergedDate
       ? ''
       : parsed.dateRejected
@@ -410,7 +445,9 @@ export function ScanScreen({
         .join(', ');
       setScanIssue(
         `OCR read the photo but found none of ${outlet}'s ${itemNoun}s` +
-          (wanted ? ` — it looks for: ${wanted}${categoryMenu.length > 4 ? ', …' : ''}.` : '.') +
+          (wanted
+            ? ` — it looks for: ${wanted}${categoryMenu.length > 4 ? ', …' : ''}.`
+            : '.') +
           ` Scan a receipt printing one of those, or self-log below (photo kept as proof).`,
       );
       keepAsProof(shot.dataUrl);
@@ -434,7 +471,9 @@ export function ScanScreen({
       setPhase('idle');
       return;
     }
-    setDetectedIds((prev) => Array.from(new Set([...prev, ...parsed.matches.map((m) => m.id)])));
+    setDetectedIds((prev) =>
+      Array.from(new Set([...prev, ...parsed.matches.map((m) => m.id)])),
+    );
     /*
      * A quantity the receipt PRINTED is the answer, not a floor on it: taking
      * the larger of old and new meant a stale value survived the scan that
@@ -474,7 +513,9 @@ export function ScanScreen({
       await fn();
       setPhase('logged');
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'Could not save. Try again.');
+      setSubmitError(
+        e instanceof Error ? e.message : 'Could not save. Try again.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -509,15 +550,31 @@ export function ScanScreen({
   const confirmOcr = () =>
     void runSubmit(async () => {
       const items = buildReceiptItems(detected);
-      if (items.length === 0) throw new Error('Set a quantity for at least one item.');
-      // RE-SCAN of an existing row: the old line goes first — its receipt and
-      // snap cascade away server-side — so the same paper's order number
-      // passes the per-shift duplicate check and the fresh scan lands with a
-      // NEW unique receipt id.
-      if (editId) await deleteLine(editId);
+      if (items.length === 0)
+        throw new Error('Set a quantity for at least one item.');
+      /*
+       * RE-SCAN of an existing row: the SERVER swaps it, in ONE call.
+       *
+       * This used to `await deleteLine(editId)` right here, before the submit.
+       * `runSubmit` restores nothing on failure, so every refusal after that
+       * point — the per-shift duplicate check, an R2 outage, a dropped
+       * connection — took the PR's money and left nothing to put back. And it
+       * deleted ONE line: on a multi-item receipt the paper survived its own
+       * removal, so the duplicate check refused the replacement EVERY time and
+       * the loss was certain, not merely likely.
+       *
+       * A client-side rollback could not have fixed it either: the receipt's
+       * RCP-… number, its review state and its packed item category are all
+       * server-side facts the line DTO never carries, so there is nothing here
+       * to put back with. `replacesLineId` moves the swap to the one place that
+       * can exclude the old paper from that duplicate check, and that can write
+       * first and remove second. A failure now leaves the original row untouched
+       * on screen.
+       */
       const receipt = await submitReceipt({
         source: 'scan',
         assignmentId: active?.id,
+        ...(editId ? { replacesLineId: editId } : {}),
         orderNo: receiptNo ?? undefined,
         receiptDate: receiptDate ?? undefined,
         receiptTime: receiptTime ?? undefined,
@@ -536,7 +593,8 @@ export function ScanScreen({
         if (editMenuMode) {
           // Menu edit: recompute from the (restored, then adjusted) quantities.
           const items = categoryMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
-          if (items.length === 0) throw new Error(`Set a ${itemNoun} quantity first.`);
+          if (items.length === 0)
+            throw new Error(`Set a ${itemNoun} quantity first.`);
           const [first, ...rest] = items;
           const firstQty = drinkQtys[first.id] ?? 0;
           const firstAmt = salesFor(first, firstQty);
@@ -574,7 +632,9 @@ export function ScanScreen({
         await editLine(editId, {
           kind: category,
           source: 'manual',
-          item: editItem || (category === 'tips' ? 'Guest tip' : 'Manual drink total'),
+          item:
+            editItem ||
+            (category === 'tips' ? 'Guest tip' : 'Manual drink total'),
           quantity: 1,
           sales: amt,
           commission: commissionFor(category, amt),
@@ -628,7 +688,6 @@ export function ScanScreen({
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 6 }]}>
-
       <View style={styles.titleRow}>
         {category === 'drinks' ? (
           <Wine size={22} color={C.goldL} />
@@ -638,7 +697,9 @@ export function ScanScreen({
         <Text style={styles.pageTitle}>{pageTitle}</Text>
       </View>
       <Text style={styles.pageSub}>
-        {editId ? 'Edit — agency re-verifies.' : "Scans between Time-In and Time-Out go to this shift's PV."}
+        {editId
+          ? 'Edit — agency re-verifies.'
+          : "Scans between Time-In and Time-Out go to this shift's PV."}
       </Text>
 
       {!onDuty ? (
@@ -652,7 +713,9 @@ export function ScanScreen({
             style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
             onPress={() => setTab('checkin')}
           >
-            <Text style={[styles.primaryText, { color: '#241a08' }]}>Go to Check-In</Text>
+            <Text style={[styles.primaryText, { color: '#241a08' }]}>
+              Go to Check-In
+            </Text>
           </Pressable>
         </View>
       ) : (
@@ -673,14 +736,20 @@ export function ScanScreen({
               <View style={styles.scanBox}>
                 {phase === 'idle' && (
                   <>
-                    {scanIssue && <Text style={styles.scanIssueText}>{scanIssue}</Text>}
-                    <Text style={styles.scanIdleHint}>Point at the receipt and snap</Text>
+                    {scanIssue && (
+                      <Text style={styles.scanIssueText}>{scanIssue}</Text>
+                    )}
+                    <Text style={styles.scanIdleHint}>
+                      Point at the receipt and snap
+                    </Text>
                   </>
                 )}
                 {phase === 'scanning' && (
                   <>
                     <ActivityIndicator color={C.violetL} size="large" />
-                    <Text style={styles.scanScanning}>Scanning… reading OCR fields</Text>
+                    <Text style={styles.scanScanning}>
+                      Scanning… reading OCR fields
+                    </Text>
                   </>
                 )}
               </View>
@@ -699,7 +768,9 @@ export function ScanScreen({
                 {/* A pure OCR scan is untouchable: what the receipt says is what
                     logs — no quantity edits, no manual additions. Wrong read?
                     The PR uses Self-log from Check-In instead. */}
-                <Text style={styles.fieldLabel}>OCR detected · as read from the receipt</Text>
+                <Text style={styles.fieldLabel}>
+                  OCR detected · as read from the receipt
+                </Text>
                 {detected.map((d) => {
                   const qty = drinkQtys[d.id] ?? 0;
                   return (
@@ -740,7 +811,9 @@ export function ScanScreen({
                     {submitting ? 'Saving…' : 'Confirm & log receipt'}
                   </Text>
                 </Pressable>
-                {submitError && <Text style={styles.errorText}>{submitError}</Text>}
+                {submitError && (
+                  <Text style={styles.errorText}>{submitError}</Text>
+                )}
               </>
             )}
 
@@ -755,7 +828,9 @@ export function ScanScreen({
                 disabled={phase === 'scanning'}
               >
                 <Camera size={16} color="#241a08" />
-                <Text style={[styles.primaryText, { color: '#241a08' }]}>Scan receipt now</Text>
+                <Text style={[styles.primaryText, { color: '#241a08' }]}>
+                  Scan receipt now
+                </Text>
               </Pressable>
             )}
 
@@ -764,19 +839,25 @@ export function ScanScreen({
                 <View style={styles.manualPill}>
                   <Text style={styles.manualPillText}>Manual self-log</Text>
                 </View>
-                {scanIssue && <Text style={styles.scanIssueText}>{scanIssue}</Text>}
+                {scanIssue && (
+                  <Text style={styles.scanIssueText}>{scanIssue}</Text>
+                )}
                 {!showItemMenu && (
-                  <Text style={styles.scanIdleHint}>Key in the amount · agency verifies.</Text>
+                  <Text style={styles.scanIdleHint}>
+                    Key in the amount · agency verifies.
+                  </Text>
                 )}
                 {showItemMenu ? (
                   <>
                     <View style={styles.selfLogHead}>
                       <Wine size={16} color={C.goldL} />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.selfLogHeadTitle}>{outlet.toUpperCase()}</Text>
+                        <Text style={styles.selfLogHeadTitle}>
+                          {outlet.toUpperCase()}
+                        </Text>
                         <Text style={styles.selfLogHeadSub}>
-                          OCR reads the receipt & matches this outlet's {categoryMenu.length}{' '}
-                          {itemNoun}
+                          OCR reads the receipt & matches this outlet's{' '}
+                          {categoryMenu.length} {itemNoun}
                           {categoryMenu.length === 1 ? '' : 's'}
                         </Text>
                       </View>
@@ -785,18 +866,25 @@ export function ScanScreen({
                     {!editId && manualScanAttempted && (
                       <View style={[styles.ocrBlock, { marginTop: 10 }]}>
                         <Text style={styles.ocrHead}>— OCR EXTRACTED —</Text>
-                        <Text style={styles.ocrLine}>Order No: {receiptNo ?? '—'}</Text>
-                        <Text style={styles.ocrLine}>Date: {receiptDate ?? '—'}</Text>
+                        <Text style={styles.ocrLine}>
+                          Order No: {receiptNo ?? '—'}
+                        </Text>
+                        <Text style={styles.ocrLine}>
+                          Date: {receiptDate ?? '—'}
+                        </Text>
                         {/* Why the date is blank when the paper clearly printed
                             one — otherwise this reads as an OCR failure and the
                             PR re-photographs a part that was never the problem. */}
                         {!receiptDate && dateRejected && (
                           <Text style={styles.ocrLineDropped}>
-                            ignored “{dateRejected.raw}” → {dateRejected.parsed} ·{' '}
-                            {dateRejected.driftDays} days from this shift ({shiftDateIso})
+                            ignored “{dateRejected.raw}” → {dateRejected.parsed}{' '}
+                            · {dateRejected.driftDays} days from this shift (
+                            {shiftDateIso})
                           </Text>
                         )}
-                        <Text style={styles.ocrLine}>Time: {receiptTime ?? '—'}</Text>
+                        <Text style={styles.ocrLine}>
+                          Time: {receiptTime ?? '—'}
+                        </Text>
                         <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
                         {ocrLines.length > 0 && (
                           <>
@@ -805,20 +893,25 @@ export function ScanScreen({
                               hitSlop={8}
                             >
                               <Text style={styles.ocrToggle}>
-                                {showOcrText ? 'Hide' : 'Show'} what OCR read ({ocrLines.length}{' '}
-                                line{ocrLines.length === 1 ? '' : 's'})
+                                {showOcrText ? 'Hide' : 'Show'} what OCR read (
+                                {ocrLines.length} line
+                                {ocrLines.length === 1 ? '' : 's'})
                               </Text>
                             </Pressable>
                             {showOcrText && (
                               <View style={styles.ocrRaw}>
                                 {ocrLines.map((l, i) => (
-                                  <Text key={`${i}-${l}`} style={styles.ocrRawLine}>
+                                  <Text
+                                    key={`${i}-${l}`}
+                                    style={styles.ocrRawLine}
+                                  >
                                     {l}
                                   </Text>
                                 ))}
                                 <Text style={styles.ocrRawHint}>
-                                  An item is only found when its name is on one of these lines. If a
-                                  name is missing or misspelt here, the paper or the photo is the
+                                  An item is only found when its name is on one
+                                  of these lines. If a name is missing or
+                                  misspelt here, the paper or the photo is the
                                   problem — scan again, flatter and closer.
                                 </Text>
                               </View>
@@ -828,33 +921,36 @@ export function ScanScreen({
                       </View>
                     )}
 
-                    {!editId && manualScanAttempted && missingRows.length > 0 && (
-                      <View style={styles.missingBlock}>
-                        <Text style={styles.fieldLabel}>
-                          NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER
-                        </Text>
-                        {missingRows.map((d) => (
-                          <View key={d.id} style={styles.drinkRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.drinkName}>{d.name}</Text>
-                              <Text style={styles.drinkUnit}>
-                                {formatRM(unitPriceFor(d))} each · OCR did not read this one
-                              </Text>
+                    {!editId &&
+                      manualScanAttempted &&
+                      missingRows.length > 0 && (
+                        <View style={styles.missingBlock}>
+                          <Text style={styles.fieldLabel}>
+                            NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER
+                          </Text>
+                          {missingRows.map((d) => (
+                            <View key={d.id} style={styles.drinkRow}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.drinkName}>{d.name}</Text>
+                                <Text style={styles.drinkUnit}>
+                                  {formatRM(unitPriceFor(d))} each · OCR did not
+                                  read this one
+                                </Text>
+                              </View>
+                              <Pressable
+                                style={styles.missingAddBtn}
+                                onPress={() => addMissingItem(d.id)}
+                              >
+                                <Text style={styles.missingAddText}>+ Add</Text>
+                              </Pressable>
                             </View>
-                            <Pressable
-                              style={styles.missingAddBtn}
-                              onPress={() => addMissingItem(d.id)}
-                            >
-                              <Text style={styles.missingAddText}>+ Add</Text>
-                            </Pressable>
-                          </View>
-                        ))}
-                        <Text style={styles.missingHint}>
-                          Only add what the receipt actually shows — the agency checks these against
-                          your photo.
-                        </Text>
-                      </View>
-                    )}
+                          ))}
+                          <Text style={styles.missingHint}>
+                            Only add what the receipt actually shows — the
+                            agency checks these against your photo.
+                          </Text>
+                        </View>
+                      )}
 
                     {!editId && (
                       <View style={styles.selfLogScanbox}>
@@ -870,14 +966,18 @@ export function ScanScreen({
                         >
                           <Camera size={14} color="#241a08" />
                           <Text style={styles.selfLogScanBtnText}>
-                            {manualRows.length === 0 ? `Scan ${itemNoun}s` : 'Scan again'}
+                            {manualRows.length === 0
+                              ? `Scan ${itemNoun}s`
+                              : 'Scan again'}
                           </Text>
                         </Pressable>
                       </View>
                     )}
 
                     {manualRows.length > 0 && (
-                      <Text style={styles.fieldLabel}>OCR DETECTED · ADJUST QUANTITY</Text>
+                      <Text style={styles.fieldLabel}>
+                        OCR DETECTED · ADJUST QUANTITY
+                      </Text>
                     )}
                     {manualRows.map((d) => (
                       <View key={d.id} style={styles.drinkRow}>
@@ -910,7 +1010,9 @@ export function ScanScreen({
                           >
                             <Text style={styles.qtyBtnText}>−</Text>
                           </Pressable>
-                          <Text style={styles.qtyVal}>{drinkQtys[d.id] ?? 0}</Text>
+                          <Text style={styles.qtyVal}>
+                            {drinkQtys[d.id] ?? 0}
+                          </Text>
                           <Pressable
                             style={styles.qtyBtn}
                             onPress={() =>
@@ -929,15 +1031,28 @@ export function ScanScreen({
                       <View style={styles.selfLogSummary}>
                         <View style={styles.selfLogSummaryRow}>
                           <Text style={styles.selfLogSummaryLabel}>
-                            {manualRows.filter((d) => (drinkQtys[d.id] ?? 0) > 0).length} {itemNoun}
+                            {
+                              manualRows.filter(
+                                (d) => (drinkQtys[d.id] ?? 0) > 0,
+                              ).length
+                            }{' '}
+                            {itemNoun}
                             {manualRows.length === 1 ? '' : 's'} ·{' '}
-                            {manualRows.reduce((n, d) => n + (drinkQtys[d.id] ?? 0), 0)} unit(s)
+                            {manualRows.reduce(
+                              (n, d) => n + (drinkQtys[d.id] ?? 0),
+                              0,
+                            )}{' '}
+                            unit(s)
                           </Text>
-                          <Text style={styles.selfLogSummaryTotal}>{formatRM(menuTotal)}</Text>
+                          <Text style={styles.selfLogSummaryTotal}>
+                            {formatRM(menuTotal)}
+                          </Text>
                         </View>
                         <Text style={styles.selfLogSummaryComm}>
                           Commission preview:{' '}
-                          <Text style={styles.activeBold}>{formatRM(menuCommission)}</Text>
+                          <Text style={styles.activeBold}>
+                            {formatRM(menuCommission)}
+                          </Text>
                         </Text>
                       </View>
                     )}
@@ -945,7 +1060,9 @@ export function ScanScreen({
                 ) : (
                   <>
                     <Text style={styles.fieldLabel}>
-                      {category === 'tips' ? 'Tip amount (RM)' : 'Drink amount (RM)'}
+                      {category === 'tips'
+                        ? 'Tip amount (RM)'
+                        : 'Drink amount (RM)'}
                     </Text>
                     <TextInput
                       value={amount}
@@ -961,7 +1078,9 @@ export function ScanScreen({
                     <View style={styles.proofHeadRow}>
                       <Camera size={16} color={C.goldL} />
                       <Text style={styles.proofTitle}>
-                        {editId ? 'Proof photo · retake to replace' : 'Proof photo · required'}
+                        {editId
+                          ? 'Proof photo · retake to replace'
+                          : 'Proof photo · required'}
                       </Text>
                     </View>
                     <Text style={styles.proofHint}>
@@ -977,7 +1096,9 @@ export function ScanScreen({
                             setProofPhotos((prev) =>
                               // Editing replaces the saved picture with ONE new
                               // snap; a fresh log can attach up to six.
-                              editId ? urls.slice(0, 1) : [...prev, ...urls].slice(0, 6),
+                              editId
+                                ? urls.slice(0, 1)
+                                : [...prev, ...urls].slice(0, 6),
                             ),
                           { multiple: !editId },
                         )
@@ -997,12 +1118,20 @@ export function ScanScreen({
                     {proofPhotos.length > 0 ? (
                       <View style={styles.proofThumbs}>
                         {proofPhotos.map((src, i) => (
-                          <View key={`${i}-${src.slice(0, 24)}`} style={styles.proofThumb}>
-                            <Image source={{ uri: src }} style={styles.proofImg} />
+                          <View
+                            key={`${i}-${src.slice(0, 24)}`}
+                            style={styles.proofThumb}
+                          >
+                            <Image
+                              source={{ uri: src }}
+                              style={styles.proofImg}
+                            />
                             <Pressable
                               style={styles.proofRemove}
                               onPress={() =>
-                                setProofPhotos((prev) => prev.filter((_, idx) => idx !== i))
+                                setProofPhotos((prev) =>
+                                  prev.filter((_, idx) => idx !== i),
+                                )
                               }
                               hitSlop={6}
                             >
@@ -1037,7 +1166,9 @@ export function ScanScreen({
                       missingProof ||
                       drinkIncomplete ||
                       manualNoteMissing ||
-                      (showItemMenu && !editId && menuTotal <= 0)) && { opacity: 0.6 },
+                      (showItemMenu && !editId && menuTotal <= 0)) && {
+                      opacity: 0.6,
+                    },
                   ]}
                   onPress={submitManual}
                   disabled={
@@ -1067,7 +1198,9 @@ export function ScanScreen({
                               : 'Submit self-log'}
                   </Text>
                 </Pressable>
-                {submitError && <Text style={styles.errorText}>{submitError}</Text>}
+                {submitError && (
+                  <Text style={styles.errorText}>{submitError}</Text>
+                )}
               </View>
             )}
 
@@ -1104,10 +1237,16 @@ export function ScanScreen({
                     </Pressable>
                   )}
                   <Pressable
-                    style={[styles.primary, grad(GRADIENTS.accent, C.accent), { flex: 1 }]}
+                    style={[
+                      styles.primary,
+                      grad(GRADIENTS.accent, C.accent),
+                      { flex: 1 },
+                    ]}
                     onPress={goBack}
                   >
-                    <Text style={[styles.primaryText, { color: '#241a08' }]}>Back to Check-In</Text>
+                    <Text style={[styles.primaryText, { color: '#241a08' }]}>
+                      Back to Check-In
+                    </Text>
                   </Pressable>
                 </View>
               </View>
@@ -1117,7 +1256,8 @@ export function ScanScreen({
           <View style={styles.tipCard}>
             <Shield size={12} color={C.muted} />
             <Text style={styles.tipText}>
-              Wrong scan? Check-In → <Text style={styles.activeBold}>Scan again</Text> · pending
+              Wrong scan? Check-In →{' '}
+              <Text style={styles.activeBold}>Scan again</Text> · pending
               self-logs can be edited or deleted.
             </Text>
           </View>
@@ -1157,7 +1297,12 @@ const styles = StyleSheet.create({
     color: C.prMuted,
   },
   gate: { alignItems: 'center', paddingVertical: 40, gap: 10 },
-  gateTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
+  gateTitle: {
+    fontFamily: F.sora,
+    fontSize: 20,
+    fontWeight: '800',
+    color: C.txt,
+  },
   gateBody: {
     fontFamily: F.manrope,
     fontSize: 14,
@@ -1252,7 +1397,12 @@ const styles = StyleSheet.create({
     color: C.prMuted,
     marginTop: 2,
   },
-  cardMeta: { marginTop: 10, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
+  cardMeta: {
+    marginTop: 10,
+    fontFamily: F.manrope,
+    fontSize: 13,
+    color: C.prMuted,
+  },
   primary: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1263,7 +1413,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     width: '100%',
   },
-  primaryText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.txt },
+  primaryText: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.txt,
+  },
   soft: { marginTop: 10, alignItems: 'center', paddingVertical: 6 },
   softAmber: {
     fontFamily: F.sora,
@@ -1282,7 +1437,12 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
     backgroundColor: 'rgba(255,255,255,0.03)',
   },
-  softText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.prMuted },
+  softText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.prMuted,
+  },
   tipCard: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1352,7 +1512,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.line,
   },
-  drinkName: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.txt },
+  drinkName: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.txt,
+  },
   drinkUnit: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   /** Amber, because it asks the PR to look at the paper — it is not an error. */
   qtyAssumed: {
@@ -1374,8 +1539,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  ocrRawLine: { fontFamily: F.manrope, fontSize: 11, color: C.txt, lineHeight: 16 },
-  ocrRawHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted, marginTop: 6 },
+  ocrRawLine: {
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.txt,
+    lineHeight: 16,
+  },
+  ocrRawHint: {
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted,
+    marginTop: 6,
+  },
   missingBlock: {
     marginTop: 12,
     padding: 10,
@@ -1391,8 +1566,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.goldL,
   },
-  missingAddText: { fontFamily: F.manrope, fontSize: 12, color: C.goldL, fontWeight: '700' },
-  missingHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted, marginTop: 8 },
+  missingAddText: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.goldL,
+    fontWeight: '700',
+  },
+  missingHint: {
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted,
+    marginTop: 8,
+  },
   qtyCtrl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyBtn: {
     width: 32,
@@ -1413,8 +1598,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   okRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  okTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
-  loggedActions: { flexDirection: 'row', gap: 8, marginTop: 4, alignItems: 'stretch' },
+  okTitle: {
+    fontFamily: F.sora,
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.txt,
+  },
+  loggedActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+    alignItems: 'stretch',
+  },
   errorText: {
     marginTop: 10,
     fontFamily: F.manrope,
@@ -1457,7 +1652,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  proofBtnText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  proofBtnText: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.txt,
+  },
   proofThumbs: {
     marginTop: 10,
     flexDirection: 'row',

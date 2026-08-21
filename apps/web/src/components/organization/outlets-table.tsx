@@ -32,7 +32,6 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { Outlet, OutletPagination } from "@/services/outlet";
 import {

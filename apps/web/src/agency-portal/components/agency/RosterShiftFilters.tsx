@@ -5,6 +5,7 @@ import {
 	EMPTY_ROSTER_SHIFT_FILTERS,
 } from "@agency-portal/lib/roster-shift-filters";
 import { RotateCcw, Search } from "lucide-react";
+import { useId } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function RosterShiftFilters({
@@ -35,6 +36,8 @@ export function RosterShiftFilters({
 	outletNames: string[];
 }) {
 	const { t } = usePortalLocale();
+	const outletSelectId = useId();
+	const statusSelectId = useId();
 	const activeCount = countActiveRosterShiftFilters(filters);
 
 	return (
@@ -75,9 +78,10 @@ export function RosterShiftFilters({
 					</span>
 				</label>
 
-				<label className="iz-roster-filterbar__field">
+				<label htmlFor={outletSelectId} className="iz-roster-filterbar__field">
 					<span className="iz-roster-filterbar__label">{t.filters.outlet}</span>
 					<IzSelect
+						id={outletSelectId}
 						block
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
@@ -91,9 +95,10 @@ export function RosterShiftFilters({
 					</IzSelect>
 				</label>
 
-				<label className="iz-roster-filterbar__field">
+				<label htmlFor={statusSelectId} className="iz-roster-filterbar__field">
 					<span className="iz-roster-filterbar__label">{t.filters.status}</span>
 					<IzSelect
+						id={statusSelectId}
 						block
 						value={filters.status}
 						onChange={(e) =>

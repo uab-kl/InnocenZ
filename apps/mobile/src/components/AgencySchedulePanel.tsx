@@ -4,7 +4,15 @@
  * (checked out) / Scheduled|Pending (booked).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { C, F } from '../theme/theme';
 import {
   AlertTriangle,
@@ -40,6 +48,7 @@ import {
   todayYmd,
   ymdToIso,
 } from '../lib/demo-shifts';
+import { shiftStartDate } from '../lib/venue-time';
 import { useActiveShift } from '../lib/active-shift';
 import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useSession } from '../lib/session';
@@ -62,13 +71,36 @@ const MAX_MC_PHOTOS = 5;
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
 
-const KIND_STYLE: Record<ScheduleDayKind, { bg: string; border: string; color: string }> = {
+const KIND_STYLE: Record<
+  ScheduleDayKind,
+  { bg: string; border: string; color: string }
+> = {
   past: { bg: 'transparent', border: 'transparent', color: C.muted2 },
-  open: { bg: 'rgba(255,255,255,0.03)', border: 'rgba(232,224,245,0.22)', color: C.muted },
-  unavailable: { bg: 'rgba(240,138,138,0.12)', border: 'rgba(240,138,138,0.35)', color: C.red },
-  assigned: { bg: 'rgba(93,217,160,0.16)', border: 'rgba(93,217,160,0.45)', color: C.green },
-  pending: { bg: 'rgba(232,198,106,0.14)', border: 'rgba(232,198,106,0.4)', color: C.amber },
-  active: { bg: 'rgba(232,194,122,0.18)', border: 'rgba(232,194,122,0.5)', color: C.accentL },
+  open: {
+    bg: 'rgba(255,255,255,0.03)',
+    border: 'rgba(232,224,245,0.22)',
+    color: C.muted,
+  },
+  unavailable: {
+    bg: 'rgba(240,138,138,0.12)',
+    border: 'rgba(240,138,138,0.35)',
+    color: C.red,
+  },
+  assigned: {
+    bg: 'rgba(93,217,160,0.16)',
+    border: 'rgba(93,217,160,0.45)',
+    color: C.green,
+  },
+  pending: {
+    bg: 'rgba(232,198,106,0.14)',
+    border: 'rgba(232,198,106,0.4)',
+    color: C.amber,
+  },
+  active: {
+    bg: 'rgba(232,194,122,0.18)',
+    border: 'rgba(232,194,122,0.5)',
+    color: C.accentL,
+  },
 };
 
 /** Overlay for a past day whose booked shift ended with NO check-in (missed). */
@@ -80,12 +112,19 @@ const MISSED_STYLE = {
 
 type CancelPenalty = { pct: number; amount: number; tierLabel: string };
 
-/** Parse the shift's start Date from its date + slot ("22:00 - 04:00"). */
-function shiftStartDate(shiftDate: string, slot: string | null): Date {
-  const [y, m, d] = shiftDate.split('-').map(Number);
-  const match = slot?.match(/(\d{1,2}):(\d{2})/);
-  return new Date(y, (m || 1) - 1, d || 1, match ? Number(match[1]) : 0, match ? Number(match[2]) : 0);
-}
+/*
+ * ⚠️ `shiftStartDate` USED TO LIVE HERE, built with `new Date(y, m, d, hh, mm)`.
+ *
+ * That reads the wall clock in the DEVICE's timezone, so the fee this screen
+ * quotes matched the one the server seals only while the phone was set to
+ * Malaysia — and the server, on a UTC container, was eight hours out in the
+ * other direction. `cancel-fee.ts` requires the two to "agree exactly — a PR who
+ * is shown -RM 27.50 and sealed at -RM 41.25 has been lied to". Both sides now
+ * read the VENUE's clock: `lib/venue-time` here, `util/slot-window` there.
+ *
+ * It also carried its own `/(\d{1,2}):(\d{2})/`, which read "8pm - 2am" as
+ * midnight. The shared parser resolves meridiem slots.
+ */
 
 /**
  * Cancellation penalty, computed from CANCELLATION_BANDS — the same numbers
@@ -101,13 +140,22 @@ function cancelPenalty(
   b: CancellationBands = DEFAULT_CANCELLATION_BANDS,
   now = new Date(),
 ): CancelPenalty {
-  const dailyWage = Number(assignment.rate?.wagePerHour) || Number(assignment.payAmount) || 0;
-  const hoursUntil =
-    (shiftStartDate(assignment.shiftDate, assignment.slot).getTime() - now.getTime()) / 3_600_000;
+  const dailyWage =
+    Number(assignment.rate?.wagePerHour) || Number(assignment.payAmount) || 0;
+  const start = shiftStartDate(assignment.shiftDate, assignment.slot);
   // A disabled rule is no cancellation charge at all — not 0% of the bands.
-  if (!b.enabled) return { pct: 0, amount: 0, tierLabel: 'No cancellation fee' };
+  if (!b.enabled)
+    return { pct: 0, amount: 0, tierLabel: 'No cancellation fee' };
+  // No readable window, no quoted fee — matching the server, which returns
+  // RM 0.00 rather than pricing an unknown schedule at the late band.
+  if (!start) return { pct: 0, amount: 0, tierLabel: 'No cancellation fee' };
+  const hoursUntil = (start.getTime() - now.getTime()) / 3_600_000;
   if (hoursUntil >= b.freeCancelHours) {
-    return { pct: 0, amount: 0, tierLabel: `${b.freeCancelHours}h+ before — no deduction` };
+    return {
+      pct: 0,
+      amount: 0,
+      tierLabel: `${b.freeCancelHours}h+ before — no deduction`,
+    };
   }
   if (hoursUntil >= b.shortNoticeHours) {
     return {
@@ -127,7 +175,9 @@ export function AgencySchedulePanel() {
   const today = todayYmd();
   const { me, agencies, token } = useSession();
   const { assignments, refresh } = useActiveShift();
-  const [viewMonth, setViewMonth] = useState(() => new Date(today[0], today[1] - 1, 1));
+  const [viewMonth, setViewMonth] = useState(
+    () => new Date(today[0], today[1] - 1, 1),
+  );
   // Days this PR has marked unavailable, mirroring `main.pr_availability`.
   // Server-owned, not local UI state: the agency's roster reads the same rows,
   // and the assign guard refuses a shift on any of them. Held as an array only
@@ -152,9 +202,10 @@ export function AgencySchedulePanel() {
   );
   const [cancelledIds, setCancelledIds] = useState<string[]>([]);
   // Cancel-shift confirmation (penalty + required reason → backend, agency notified).
-  const [cancelTarget, setCancelTarget] = useState<
-    { entry: TimetableEntry; penalty: CancelPenalty } | null
-  >(null);
+  const [cancelTarget, setCancelTarget] = useState<{
+    entry: TimetableEntry;
+    penalty: CancelPenalty;
+  } | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -237,7 +288,9 @@ export function AgencySchedulePanel() {
       setLeavePhotos([]);
       void refresh();
     } catch (e) {
-      setLeaveError(e instanceof Error ? e.message : 'Could not submit. Try again.');
+      setLeaveError(
+        e instanceof Error ? e.message : 'Could not submit. Try again.',
+      );
     } finally {
       setLeaveBusy(false);
     }
@@ -274,7 +327,9 @@ export function AgencySchedulePanel() {
       setCancelTarget(null);
       void refresh();
     } catch (e) {
-      setCancelError(e instanceof Error ? e.message : 'Could not cancel. Try again.');
+      setCancelError(
+        e instanceof Error ? e.message : 'Could not cancel. Try again.',
+      );
     } finally {
       setCancelBusy(false);
     }
@@ -336,7 +391,10 @@ export function AgencySchedulePanel() {
     () => buildScheduleDays(blocked, todayIso, scheduleShifts),
     [blocked, todayIso, scheduleShifts],
   );
-  const dayByIso = useMemo(() => new Map(days.map((d) => [d.dateIso, d])), [days]);
+  const dayByIso = useMemo(
+    () => new Map(days.map((d) => [d.dateIso, d])),
+    [days],
+  );
 
   // A booked shift whose window ended with NO check-in is a missed check-in —
   // marked red on the calendar. Requiring status 'assigned' means MC/leave
@@ -364,7 +422,10 @@ export function AgencySchedulePanel() {
   const [navOpen, setNavOpen] = useState<'month' | 'year' | null>(null);
 
   const weekRange = useMemo(() => getUpcomingWeekRange(todayIso), [todayIso]);
-  const weekLabel = formatUpcomingWeekLabel(weekRange.fromIso, weekRange.toIso).toUpperCase();
+  const weekLabel = formatUpcomingWeekLabel(
+    weekRange.fromIso,
+    weekRange.toIso,
+  ).toUpperCase();
   const timetable = useMemo(
     () =>
       buildUpcomingWeekTimetable(
@@ -434,19 +495,30 @@ export function AgencySchedulePanel() {
    * already rostered on), so the guard in `toggleDay` is the fast path, not the
    * guarantee.
    */
-  const writeDay = async (iso: string, opts: { block: boolean; reason?: string }) => {
+  const writeDay = async (
+    iso: string,
+    opts: { block: boolean; reason?: string },
+  ) => {
     if (!token) return;
     const { block, reason } = opts;
     setBlockingIso(iso);
     setBlockError(null);
-    setBlocked((prev) => (block ? [...prev, iso] : prev.filter((x) => x !== iso)));
+    setBlocked((prev) =>
+      block ? [...prev, iso] : prev.filter((x) => x !== iso),
+    );
     try {
       if (block) await blockMyDay(token, iso, reason);
       else await unblockMyDay(token, iso);
       setReasonTarget(null);
     } catch (e) {
-      setBlocked((prev) => (block ? prev.filter((x) => x !== iso) : [...prev, iso]));
-      setBlockError(e instanceof Error ? e.message : 'Could not update that day. Try again.');
+      setBlocked((prev) =>
+        block ? prev.filter((x) => x !== iso) : [...prev, iso],
+      );
+      setBlockError(
+        e instanceof Error
+          ? e.message
+          : 'Could not update that day. Try again.',
+      );
       // Keep the sheet open on failure so the typed reason is not lost — the
       // commonest refusal here ("you are already rostered that day") is one the
       // PR reads and then closes deliberately.
@@ -458,13 +530,18 @@ export function AgencySchedulePanel() {
   return (
     <View style={styles.root}>
       <View style={styles.rules}>
-        <Pressable style={styles.rulesHd} onPress={() => setRulesOpen((o) => !o)}>
+        <Pressable
+          style={styles.rulesHd}
+          onPress={() => setRulesOpen((o) => !o)}
+        >
           <AlertTriangle size={16} color={C.amber} />
           <Text style={styles.rulesTitle}>Cancellation rules</Text>
           <ChevronDown
             size={16}
             color={C.muted}
-            style={rulesOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+            style={
+              rulesOpen ? { transform: [{ rotate: '180deg' }] } : undefined
+            }
           />
         </Pressable>
         {rulesOpen && (
@@ -475,7 +552,14 @@ export function AgencySchedulePanel() {
                 <Text
                   style={[
                     styles.ruleOut,
-                    { color: r.tone === 'green' ? C.green : r.tone === 'amber' ? C.amber : C.red },
+                    {
+                      color:
+                        r.tone === 'green'
+                          ? C.green
+                          : r.tone === 'amber'
+                            ? C.amber
+                            : C.red,
+                    },
                   ]}
                 >
                   {r.outcome}
@@ -492,7 +576,9 @@ export function AgencySchedulePanel() {
             <Text style={styles.navLabel}>MONTH</Text>
             <Pressable
               style={styles.select}
-              onPress={() => setNavOpen((o) => (o === 'month' ? null : 'month'))}
+              onPress={() =>
+                setNavOpen((o) => (o === 'month' ? null : 'month'))
+              }
             >
               <Text style={styles.selectText}>{MONTH_LABELS[month]}</Text>
               <ChevronDown size={14} color={C.muted} />
@@ -521,7 +607,11 @@ export function AgencySchedulePanel() {
                   setNavOpen(null);
                 }}
               >
-                <Text style={[styles.yearChipText, y === year && { color: C.txt }]}>{y}</Text>
+                <Text
+                  style={[styles.yearChipText, y === year && { color: C.txt }]}
+                >
+                  {y}
+                </Text>
               </Pressable>
             ))}
           </View>
@@ -538,7 +628,12 @@ export function AgencySchedulePanel() {
                   setNavOpen(null);
                 }}
               >
-                <Text style={[styles.monthChipText, i === month && { color: C.txt }]}>
+                <Text
+                  style={[
+                    styles.monthChipText,
+                    i === month && { color: C.txt },
+                  ]}
+                >
                   {label.slice(0, 3)}
                 </Text>
               </Pressable>
@@ -556,7 +651,8 @@ export function AgencySchedulePanel() {
 
         <View style={styles.grid}>
           {cells.map((dayNum, i) => {
-            if (dayNum == null) return <View key={`e-${i}`} style={styles.dayCell} />;
+            if (dayNum == null)
+              return <View key={`e-${i}`} style={styles.dayCell} />;
             const iso = ymdToIso(year, month + 1, dayNum);
             const day = dayByIso.get(iso);
             const kind = day?.kind ?? 'past';
@@ -575,10 +671,14 @@ export function AgencySchedulePanel() {
                 ]}
                 disabled={(!canToggle && !missedRows) || blockingIso === iso}
                 onPress={() =>
-                  missedRows ? setMissedTarget({ iso, rows: missedRows }) : void toggleDay(iso)
+                  missedRows
+                    ? setMissedTarget({ iso, rows: missedRows })
+                    : void toggleDay(iso)
                 }
               >
-                <Text style={[styles.dayNum, { color: style.color }]}>{dayNum}</Text>
+                <Text style={[styles.dayNum, { color: style.color }]}>
+                  {dayNum}
+                </Text>
               </Pressable>
             );
           })}
@@ -604,7 +704,11 @@ export function AgencySchedulePanel() {
         <View style={styles.ttHead}>
           <Clock size={16} color={C.muted2} />
           <Text style={styles.ttTitle}>Timetable · {weekLabel}</Text>
-          <Pressable onPress={() => void refresh()} hitSlop={8} style={{ marginLeft: 'auto' }}>
+          <Pressable
+            onPress={() => void refresh()}
+            hitSlop={8}
+            style={{ marginLeft: 'auto' }}
+          >
             <Text style={styles.refreshText}>Refresh</Text>
           </Pressable>
         </View>
@@ -620,11 +724,14 @@ export function AgencySchedulePanel() {
                 <TimetableRow
                   key={entry.id}
                   entry={entry}
-                  penalty={assignment ? cancelPenalty(assignment, cancelBands) : null}
+                  penalty={
+                    assignment ? cancelPenalty(assignment, cancelBands) : null
+                  }
                   leavePending={assignment?.status === 'leave_pending'}
                   leaveRejected={
                     assignment?.status !== 'leave_pending' &&
-                    (assignment?.notes?.startsWith(LEAVE_REJECTED_PREFIX) ?? false)
+                    (assignment?.notes?.startsWith(LEAVE_REJECTED_PREFIX) ??
+                      false)
                   }
                   onCancel={() => openCancel(entry)}
                   onLeave={() => openLeave(entry)}
@@ -639,9 +746,18 @@ export function AgencySchedulePanel() {
           agency's roster cell shows, so it is asked for — but never required:
           a PR does not owe anyone an explanation for a day they cannot work,
           and demanding one would just produce junk text. */}
-      <PhoneSheet visible={reasonTarget != null} onRequestClose={() => setReasonTarget(null)}>
-        <Pressable style={styles.cancelBackdrop} onPress={() => setReasonTarget(null)}>
-          <Pressable style={styles.cancelSheet} onPress={(e) => e.stopPropagation()}>
+      <PhoneSheet
+        visible={reasonTarget != null}
+        onRequestClose={() => setReasonTarget(null)}
+      >
+        <Pressable
+          style={styles.cancelBackdrop}
+          onPress={() => setReasonTarget(null)}
+        >
+          <Pressable
+            style={styles.cancelSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.cancelHandle} />
             <View style={styles.cancelHeaderRow}>
               <CalendarDays size={20} color={C.goldL} />
@@ -653,8 +769,8 @@ export function AgencySchedulePanel() {
               </Text>
             )}
             <Text style={[styles.cancelNote, { marginTop: 12 }]}>
-              Your agency sees this day blocked on their roster and will not put you on a
-              shift. Adding a reason is optional.
+              Your agency sees this day blocked on their roster and will not put
+              you on a shift. Adding a reason is optional.
             </Text>
             <TextInput
               style={styles.reasonInput}
@@ -694,9 +810,18 @@ export function AgencySchedulePanel() {
         </Pressable>
       </PhoneSheet>
 
-      <PhoneSheet visible={cancelTarget != null} onRequestClose={() => setCancelTarget(null)}>
-        <Pressable style={styles.cancelBackdrop} onPress={() => setCancelTarget(null)}>
-          <Pressable style={styles.cancelSheet} onPress={(e) => e.stopPropagation()}>
+      <PhoneSheet
+        visible={cancelTarget != null}
+        onRequestClose={() => setCancelTarget(null)}
+      >
+        <Pressable
+          style={styles.cancelBackdrop}
+          onPress={() => setCancelTarget(null)}
+        >
+          <Pressable
+            style={styles.cancelSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.cancelHandle} />
             <View style={styles.cancelHeaderRow}>
               <Briefcase size={20} color={C.goldL} />
@@ -704,7 +829,8 @@ export function AgencySchedulePanel() {
             </View>
             {cancelTarget && (
               <Text style={styles.cancelHeaderSub}>
-                {cancelTarget.entry.outlet} · {cancelTarget.entry.dateLabel} · {cancelTarget.entry.time}
+                {cancelTarget.entry.outlet} · {cancelTarget.entry.dateLabel} ·{' '}
+                {cancelTarget.entry.time}
               </Text>
             )}
             <ScrollView
@@ -713,7 +839,8 @@ export function AgencySchedulePanel() {
               style={{ marginTop: 12 }}
             >
               <Text style={styles.cancelNote}>
-                Shifts are assigned by your agency — cancelling notifies your agency straight away.
+                Shifts are assigned by your agency — cancelling notifies your
+                agency straight away.
               </Text>
               {cancelTarget && (
                 <View
@@ -729,7 +856,9 @@ export function AgencySchedulePanel() {
                       ? `Penalty — (−${formatRM(cancelTarget.penalty.amount)}) from next PV`
                       : 'No deduction'}
                   </Text>
-                  <Text style={styles.penaltyBannerBody}>{cancelTarget.penalty.tierLabel}</Text>
+                  <Text style={styles.penaltyBannerBody}>
+                    {cancelTarget.penalty.tierLabel}
+                  </Text>
                 </View>
               )}
               <View style={styles.rulesCard}>
@@ -758,7 +887,11 @@ export function AgencySchedulePanel() {
                         styles.ruleCardOut,
                         {
                           color:
-                            r.tone === 'green' ? C.green : r.tone === 'amber' ? C.amber : C.red,
+                            r.tone === 'green'
+                              ? C.green
+                              : r.tone === 'amber'
+                                ? C.amber
+                                : C.red,
                         },
                       ]}
                     >
@@ -776,7 +909,9 @@ export function AgencySchedulePanel() {
                 placeholderTextColor={C.muted2}
                 multiline
               />
-              {cancelError && <Text style={styles.cancelErrorText}>{cancelError}</Text>}
+              {cancelError && (
+                <Text style={styles.cancelErrorText}>{cancelError}</Text>
+              )}
               <Pressable
                 style={[styles.cancelAcceptBtn, cancelBusy && { opacity: 0.6 }]}
                 onPress={confirmCancel}
@@ -790,7 +925,10 @@ export function AgencySchedulePanel() {
                       : 'Cancel & accept'}
                 </Text>
               </Pressable>
-              <Pressable style={styles.cancelBackBtn} onPress={() => setCancelTarget(null)}>
+              <Pressable
+                style={styles.cancelBackBtn}
+                onPress={() => setCancelTarget(null)}
+              >
                 <Text style={styles.cancelBackText}>Back</Text>
               </Pressable>
             </ScrollView>
@@ -798,9 +936,18 @@ export function AgencySchedulePanel() {
         </Pressable>
       </PhoneSheet>
 
-      <PhoneSheet visible={leaveTarget != null} onRequestClose={() => setLeaveTarget(null)}>
-        <Pressable style={styles.cancelBackdrop} onPress={() => setLeaveTarget(null)}>
-          <Pressable style={styles.cancelSheet} onPress={(e) => e.stopPropagation()}>
+      <PhoneSheet
+        visible={leaveTarget != null}
+        onRequestClose={() => setLeaveTarget(null)}
+      >
+        <Pressable
+          style={styles.cancelBackdrop}
+          onPress={() => setLeaveTarget(null)}
+        >
+          <Pressable
+            style={styles.cancelSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.cancelHandle} />
             <View style={styles.cancelHeaderRow}>
               <CalendarDays size={20} color={C.goldL} />
@@ -808,7 +955,8 @@ export function AgencySchedulePanel() {
             </View>
             {leaveTarget && (
               <Text style={styles.cancelHeaderSub}>
-                {leaveTarget.outlet} · {leaveTarget.dateLabel} · {leaveTarget.time}
+                {leaveTarget.outlet} · {leaveTarget.dateLabel} ·{' '}
+                {leaveTarget.time}
               </Text>
             )}
             <ScrollView
@@ -817,34 +965,47 @@ export function AgencySchedulePanel() {
               style={{ marginTop: 12 }}
             >
               <Text style={styles.cancelNote}>
-                Unable to work this shift due to MC or personal leave? Send the request to your
-                agency — you stay scheduled until they approve it.
+                Unable to work this shift due to MC or personal leave? Send the
+                request to your agency — you stay scheduled until they approve
+                it.
               </Text>
               <View style={[styles.penaltyBanner, styles.penaltyBannerOk]}>
-                <Text style={styles.penaltyBannerTitle}>No penalty when approved</Text>
+                <Text style={styles.penaltyBannerTitle}>
+                  No penalty when approved
+                </Text>
                 <Text style={styles.penaltyBannerBody}>
-                  An approved MC / leave excuses this shift with no deduction. If rejected, the
-                  shift stays yours — cancelling instead follows the cancellation rules.
+                  An approved MC / leave excuses this shift with no deduction.
+                  If rejected, the shift stays yours — cancelling instead
+                  follows the cancellation rules.
                 </Text>
               </View>
-              <Text style={styles.cancelFieldLabel}>MC / document photo (required)</Text>
+              <Text style={styles.cancelFieldLabel}>
+                MC / document photo (required)
+              </Text>
               <Pressable
                 style={styles.mcPickBtn}
                 onPress={() =>
                   pickProofPhotos((urls) =>
-                    setLeavePhotos((prev) => [...prev, ...urls].slice(0, MAX_MC_PHOTOS)),
+                    setLeavePhotos((prev) =>
+                      [...prev, ...urls].slice(0, MAX_MC_PHOTOS),
+                    ),
                   )
                 }
               >
                 <ImagePlus size={16} color={C.goldL} />
                 <Text style={styles.mcPickText}>
-                  {leavePhotos.length === 0 ? 'Snap / upload MC photo' : 'Add another photo'}
+                  {leavePhotos.length === 0
+                    ? 'Snap / upload MC photo'
+                    : 'Add another photo'}
                 </Text>
               </Pressable>
               {leavePhotos.length > 0 && (
                 <View style={styles.mcThumbRow}>
                   {leavePhotos.map((uri, i) => (
-                    <View key={`${i}-${uri.slice(-16)}`} style={styles.mcThumbWrap}>
+                    <View
+                      key={`${i}-${uri.slice(-16)}`}
+                      style={styles.mcThumbWrap}
+                    >
                       {/* Entries may be data URLs (fresh snaps) or R2 keys (server
                           leave_proof_photos) — resolve for display only. */}
                       <Image
@@ -856,7 +1017,9 @@ export function AgencySchedulePanel() {
                         style={styles.mcThumbX}
                         hitSlop={6}
                         onPress={() =>
-                          setLeavePhotos((prev) => prev.filter((_, idx) => idx !== i))
+                          setLeavePhotos((prev) =>
+                            prev.filter((_, idx) => idx !== i),
+                          )
                         }
                       >
                         <Text style={styles.mcThumbXText}>×</Text>
@@ -880,7 +1043,9 @@ export function AgencySchedulePanel() {
                 placeholderTextColor={C.muted2}
                 multiline
               />
-              {leaveError && <Text style={styles.cancelErrorText}>{leaveError}</Text>}
+              {leaveError && (
+                <Text style={styles.cancelErrorText}>{leaveError}</Text>
+              )}
               <Pressable
                 style={[
                   styles.leaveSubmitBtn,
@@ -897,7 +1062,10 @@ export function AgencySchedulePanel() {
                       : 'Submit leave request'}
                 </Text>
               </Pressable>
-              <Pressable style={styles.cancelBackBtn} onPress={() => setLeaveTarget(null)}>
+              <Pressable
+                style={styles.cancelBackBtn}
+                onPress={() => setLeaveTarget(null)}
+              >
                 <Text style={styles.cancelBackText}>Back</Text>
               </Pressable>
             </ScrollView>
@@ -906,9 +1074,18 @@ export function AgencySchedulePanel() {
       </PhoneSheet>
 
       {/* Missed check-in day detail — tap a red day on the calendar. */}
-      <PhoneSheet visible={missedTarget != null} onRequestClose={() => setMissedTarget(null)}>
-        <Pressable style={styles.cancelBackdrop} onPress={() => setMissedTarget(null)}>
-          <Pressable style={styles.cancelSheet} onPress={(e) => e.stopPropagation()}>
+      <PhoneSheet
+        visible={missedTarget != null}
+        onRequestClose={() => setMissedTarget(null)}
+      >
+        <Pressable
+          style={styles.cancelBackdrop}
+          onPress={() => setMissedTarget(null)}
+        >
+          <Pressable
+            style={styles.cancelSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
             <View style={styles.cancelHandle} />
             <View style={styles.cancelHeaderRow}>
               <Clock size={20} color="#f07171" />
@@ -921,7 +1098,9 @@ export function AgencySchedulePanel() {
                 </Text>
                 {missedTarget.rows.map((a) => (
                   <View key={a.id} style={styles.missedRow}>
-                    <Text style={styles.missedOutlet}>{a.outletName ?? 'Outlet'}</Text>
+                    <Text style={styles.missedOutlet}>
+                      {a.outletName ?? 'Outlet'}
+                    </Text>
                     <Text style={styles.missedMeta}>{a.slot ?? '—'}</Text>
                     {a.outletAddress ? (
                       <Text style={styles.missedMeta}>{a.outletAddress}</Text>
@@ -984,18 +1163,30 @@ function TimetableRow({
       <View style={styles.ttHeadRow}>
         <View style={styles.agencyBadge}>
           <Shield size={12} color={C.violetL} />
-          <Text style={styles.agencyBadgeText}>AGENCY · {entry.sourceLabel.toUpperCase()}</Text>
+          <Text style={styles.agencyBadgeText}>
+            AGENCY · {entry.sourceLabel.toUpperCase()}
+          </Text>
         </View>
         <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
       </View>
       <View style={styles.ttMainRow}>
         {heroUri ? (
-          <Pressable style={styles.ttThumbWrap} onPress={() => setZoomUri(heroUri)}>
-            <Image source={{ uri: heroUri }} style={styles.ttThumb} resizeMode="cover" />
+          <Pressable
+            style={styles.ttThumbWrap}
+            onPress={() => setZoomUri(heroUri)}
+          >
+            <Image
+              source={{ uri: heroUri }}
+              style={styles.ttThumb}
+              resizeMode="cover"
+            />
             <ZoomHint size={14} style={{ right: 3, bottom: 3 }} />
           </Pressable>
         ) : logoUri ? (
-          <Pressable style={styles.ttThumbWrap} onPress={() => setZoomUri(logoUri)}>
+          <Pressable
+            style={styles.ttThumbWrap}
+            onPress={() => setZoomUri(logoUri)}
+          >
             <Avatar
               size={64}
               radius={12}
@@ -1046,7 +1237,10 @@ function TimetableRow({
       ) : !entry.canCancel && !entry.canLeave ? null : (
         <View style={styles.actionRow}>
           {entry.canCancel ? (
-            <Pressable onPress={onCancel} style={[styles.cancelBtn, styles.actionBtn]}>
+            <Pressable
+              onPress={onCancel}
+              style={[styles.cancelBtn, styles.actionBtn]}
+            >
               <Text style={styles.cancelText} numberOfLines={1}>
                 Cancel
               </Text>
@@ -1058,7 +1252,10 @@ function TimetableRow({
             </Pressable>
           ) : null}
           {entry.canLeave ? (
-            <Pressable onPress={onLeave} style={[styles.leaveBtn, styles.actionBtn]}>
+            <Pressable
+              onPress={onLeave}
+              style={[styles.leaveBtn, styles.actionBtn]}
+            >
               <Text style={styles.leaveText}>MC / Leave</Text>
             </Pressable>
           ) : null}
@@ -1100,7 +1297,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(232,198,106,0.2)',
   },
-  ruleRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, paddingTop: 6 },
+  ruleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingTop: 6,
+  },
   ruleWhen: { fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
   ruleOut: { fontFamily: F.sora, fontSize: 13, fontWeight: '700' },
   calWrap: {
@@ -1131,8 +1333,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
-  selectText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt },
-  yearChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
+  selectText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.txt,
+  },
+  yearChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
   yearChip: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1141,8 +1353,18 @@ const styles = StyleSheet.create({
     borderColor: C.line,
   },
   yearChipOn: { borderColor: C.violet, backgroundColor: C.violetInk },
-  yearChipText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.muted },
-  monthChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 10 },
+  yearChipText: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.muted,
+  },
+  monthChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 10,
+  },
   monthChip: {
     paddingHorizontal: 7,
     paddingVertical: 3,
@@ -1162,8 +1384,18 @@ const styles = StyleSheet.create({
     color: C.muted2,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  dayCell: { flexBasis: '14.28%', maxWidth: '14.28%', aspectRatio: 1, padding: 2 },
-  dayBtn: { borderRadius: 999, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  dayCell: {
+    flexBasis: '14.28%',
+    maxWidth: '14.28%',
+    aspectRatio: 1,
+    padding: 2,
+  },
+  dayBtn: {
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dayToday: { borderWidth: 2, borderColor: C.goldL },
   dayNum: { fontFamily: F.sora, fontSize: 13, fontWeight: '700' },
   legend: {
@@ -1195,7 +1427,12 @@ const styles = StyleSheet.create({
     color: C.txt,
     textAlignVertical: 'top',
   },
-  reasonActions: { flexDirection: 'row', gap: 10, marginTop: 14, marginBottom: 4 },
+  reasonActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 4,
+  },
   reasonCancelBtn: {
     flex: 1,
     paddingVertical: 12,
@@ -1214,7 +1451,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.4)',
     alignItems: 'center',
   },
-  reasonConfirmText: { fontFamily: F.sora, fontSize: C.fsSm, fontWeight: '600', color: C.red },
+  reasonConfirmText: {
+    fontFamily: F.sora,
+    fontSize: C.fsSm,
+    fontWeight: '600',
+    color: C.red,
+  },
   mcPickBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1227,7 +1469,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,194,122,0.45)',
     backgroundColor: 'rgba(232,194,122,0.06)',
   },
-  mcPickText: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.goldL },
+  mcPickText: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.goldL,
+  },
   mcThumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   mcThumbWrap: { position: 'relative' },
   mcThumb: {
@@ -1251,9 +1498,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line2,
   },
-  mcThumbXText: { fontFamily: F.sora, fontSize: 13, fontWeight: '800', color: C.red },
-  mcHint: { marginTop: 6, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
-  missedDate: { marginTop: 4, fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
+  mcThumbXText: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '800',
+    color: C.red,
+  },
+  mcHint: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted2,
+  },
+  missedDate: {
+    marginTop: 4,
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.txt,
+  },
   missedRow: {
     marginTop: 10,
     borderWidth: 1,
@@ -1262,11 +1525,31 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
-  missedOutlet: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.txt },
-  missedMeta: { marginTop: 3, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  missedNote: { marginTop: 12, fontFamily: F.manrope, fontSize: 12, color: C.prMuted2 },
+  missedOutlet: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  missedMeta: {
+    marginTop: 3,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
+  },
+  missedNote: {
+    marginTop: 12,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted2,
+  },
   timetable: { marginTop: 2 },
-  ttHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  ttHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
   ttTitle: {
     fontFamily: F.sora,
     fontSize: 12,
@@ -1363,8 +1646,18 @@ const styles = StyleSheet.create({
     color: C.violetL,
   },
   ttTop: { marginBottom: 8 },
-  ttTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  ttOutlet: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: C.txt },
+  ttTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  ttOutlet: {
+    fontFamily: F.sora,
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.txt,
+  },
   ttFieldLabel: {
     fontFamily: F.sora,
     fontSize: 10,
@@ -1395,7 +1688,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   actionRow: { marginTop: 12, flexDirection: 'row', gap: 8 },
-  actionBtn: { flex: 1, minWidth: 0, marginTop: 0, minHeight: 46, justifyContent: 'center' },
+  actionBtn: {
+    flex: 1,
+    minWidth: 0,
+    marginTop: 0,
+    minHeight: 46,
+    justifyContent: 'center',
+  },
   cancelBtn: {
     marginTop: 12,
     alignItems: 'center',
@@ -1407,7 +1706,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.4)',
     backgroundColor: 'rgba(240,138,138,0.08)',
   },
-  cancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.red },
+  cancelText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.red,
+  },
   cancelPenaltyText: {
     marginTop: 2,
     fontFamily: F.manrope,
@@ -1426,7 +1730,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,198,106,0.4)',
     backgroundColor: 'rgba(232,198,106,0.08)',
   },
-  leaveText: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.amber },
+  leaveText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.amber,
+  },
   leavePendingNote: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1474,7 +1783,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(93,217,160,0.45)',
     backgroundColor: 'rgba(93,217,160,0.12)',
   },
-  leaveSubmitText: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: C.green },
+  leaveSubmitText: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '800',
+    color: C.green,
+  },
   cancelBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(6,3,12,0.65)',
@@ -1502,7 +1816,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cancelHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  cancelHeaderTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
+  cancelHeaderTitle: {
+    fontFamily: F.sora,
+    fontSize: 20,
+    fontWeight: '800',
+    color: C.txt,
+  },
   cancelHeaderSub: {
     marginTop: 4,
     fontFamily: F.sora,
@@ -1535,7 +1854,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(93,217,160,0.35)',
     backgroundColor: C.greenBg,
   },
-  penaltyBannerTitle: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: C.txt },
+  penaltyBannerTitle: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '800',
+    color: C.txt,
+  },
   penaltyBannerBody: {
     marginTop: 3,
     fontFamily: F.manrope,
@@ -1565,8 +1889,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
-  ruleCardWhen: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
-  ruleCardOut: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, fontWeight: '600' },
+  ruleCardWhen: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  ruleCardOut: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   cancelFieldLabel: {
     marginTop: 14,
     marginBottom: 4,
@@ -1605,7 +1939,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.45)',
     backgroundColor: 'rgba(240,138,138,0.12)',
   },
-  cancelAcceptText: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: C.red },
+  cancelAcceptText: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '800',
+    color: C.red,
+  },
   cancelBackBtn: { marginTop: 10, alignItems: 'center', padding: 10 },
-  cancelBackText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
+  cancelBackText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.muted,
+  },
 });
