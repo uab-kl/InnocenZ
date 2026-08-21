@@ -99,7 +99,10 @@ export function useOutletPostJob(): UseOutletPostJob {
 	const shiftsQuery = useQuery({
 		queryKey: ["outlet", "post-job", "shifts", outletId, todayIso, toDate],
 		queryFn: () =>
-			fetchShifts({ outletId, fromDate: todayIso, toDate, pageSize: 200 }, logout),
+			fetchShifts(
+				{ outletId, fromDate: todayIso, toDate, pageSize: 200 },
+				logout,
+			),
 		enabled: backed && Boolean(outletId),
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
