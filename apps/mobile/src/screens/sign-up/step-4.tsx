@@ -478,10 +478,21 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 		backDisplay?.status === 'matched' ||
 		(draft.idBackOcrOk && Boolean(draft.idPhotoBackUri));
 	const verified = frontOk && backOk;
+	/**
+	 * `rawText` is on only THREE of `IdOcrMatch`'s five variants — 'unreadable'
+	 * and 'unavailable' carry nothing but a status — so reading it straight off
+	 * the union was a type error (TS2339), which is why this line sat in the
+	 * baseline. It is NOT dead code: the kept-photo path above builds a match
+	 * with `rawText: '__kept_front__:…'`, so at runtime the test does fire.
+	 * Narrowed with `in` rather than widening the type, because the two
+	 * status-only variants genuinely have no raw text to report.
+	 */
+	const keptPhoto = (ocr: typeof frontOcr): boolean =>
+		!!ocr && 'rawText' in ocr && ocr.rawText.startsWith('__kept_');
 	const restored =
 		verified &&
-		((frontOcr?.rawText?.startsWith('__kept_') ?? false) ||
-			(backOcr?.rawText?.startsWith('__kept_') ?? false) ||
+		(keptPhoto(frontOcr) ||
+			keptPhoto(backOcr) ||
 			(draft.idFrontOcrOk &&
 				Boolean(draft.idPhotoFrontUri) &&
 				frontOcr?.status === 'matched'));

@@ -5,6 +5,7 @@ import {
   agencyOwnerOfParam,
   refuseOrgStatusChange,
   requireAgencySubRoleScoped,
+  requireOrgMembershipByParam,
 } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
@@ -209,7 +210,15 @@ const canReadMembers = requireRole('admin', 'agency', 'outlet');
 // including handing ownership away. That is tenancy, not escalation.
 const canWriteMembers = [requireRole('admin', 'agency'), agencyOwnerOfParam];
 
-router.get('/:id/members', canReadMembers, agencyController.listMembers.bind(agencyController));
+// Membership scope, not just a role: the gate above proves you are AN agency,
+// this proves it is THIS one. Without it any agency or outlet token read a
+// rival's whole staff list, with usernames, emails and phone numbers.
+router.get(
+  '/:id/members',
+  canReadMembers,
+  requireOrgMembershipByParam('agency', 'id'),
+  agencyController.listMembers.bind(agencyController),
+);
 router.get(
   '/:id/invite-roles',
   ...canWriteMembers,

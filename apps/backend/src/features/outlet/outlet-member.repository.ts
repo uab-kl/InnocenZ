@@ -180,12 +180,21 @@ export class OutletMemberRepositoryClass {
     }
   }
 
+  /**
+   * ORDERED, for the same reason as the agency twin: `resolveOrgScope` builds
+   * `outletIds` from this, and `special-service`'s scoped filter then takes
+   * `scope.outletIds[0]` — an operator of several venues sees "the first", which
+   * with no `ORDER BY` was whichever row Postgres emitted and could change
+   * between requests. Stable, not necessarily correct: a multi-venue filter is
+   * the real fix, and that file already says so.
+   */
   async listByUser(userId: string): Promise<OutletUserType[]> {
     try {
       return db
         .select()
         .from(OutletUserTable)
-        .where(eq(OutletUserTable.userId, userId));
+        .where(eq(OutletUserTable.userId, userId))
+        .orderBy(OutletUserTable.createdAt, OutletUserTable.id);
     } catch (error) {
       logger.error('[OutletMemberRepository.listByUser] Error:', error);
       return [];

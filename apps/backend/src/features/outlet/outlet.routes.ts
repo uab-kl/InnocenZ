@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { outletController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
-import { outletOwnerOfParam, refuseOrgStatusChange } from '@/middlewares/require-sub-role.js';
+import {
+  outletOwnerOfParam,
+  refuseOrgStatusChange,
+  requireOrgMembershipByParam,
+} from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -86,7 +90,13 @@ const canReadMembers = requireRole('admin', 'agency', 'outlet');
 // venue with no active owner.
 const canWriteMembers = [requireRole('admin', 'outlet'), outletOwnerOfParam];
 
-router.get('/:id/members', canReadMembers, outletController.listMembers.bind(outletController));
+// Membership scope, not just a role — the twin of the agency members read.
+router.get(
+  '/:id/members',
+  canReadMembers,
+  requireOrgMembershipByParam('outlet', 'id'),
+  outletController.listMembers.bind(outletController),
+);
 router.get(
   '/:id/invite-roles',
   ...canWriteMembers,

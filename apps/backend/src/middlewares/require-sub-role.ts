@@ -292,6 +292,69 @@ export function requireOutletScopeByParam(param: string) {
   };
 }
 
+/**
+ * Confine a caller to the ONE organisation named in the path — membership only,
+ * no lane.
+ *
+ * The sibling of `requireOutletScopeByParam`, for READS that do not care which
+ * lane you hold, only that the org is yours. `GET /agency/:id/members` and
+ * `GET /outlet/:id/members` were gated by `requireRole('admin','agency','outlet')`
+ * and NOTHING ELSE: the handlers read `:id` straight from the path and never
+ * consult `req.user`, so any agency or outlet token could enumerate a RIVAL
+ * organisation's entire staff list — and that payload is PII, carrying
+ * `username`, `email` and `phoneNum` per member.
+ *
+ * The route comments already stated the intended rule — "the agency and outlet
+ * profile screens list their own members" — but nothing enforced "their own".
+ * Every real caller passes its own org id (the profile screens, the settings
+ * Team panel) or is an admin screen, so this only removes the cross-org read
+ * that nothing was using and nobody should have.
+ *
+ * The WRITES on these routers were already scoped, via `agencyOwnerOfParam` /
+ * `outletOwnerOfParam`. Only the reads were open.
+ */
+export function requireOrgMembershipByParam(org: 'agency' | 'outlet', param: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+    }
+
+    try {
+      if (await isAdmin(user.id)) return next();
+
+      const raw = req.params[param];
+      const orgId = raw == null ? '' : paramId(raw);
+      if (!orgId) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Missing organisation id', data: null });
+      }
+
+      const memberships =
+        org === 'agency'
+          ? await agencyMemberRepository.listByUser(user.id)
+          : await outletMemberRepository.listByUser(user.id);
+      const belongs = memberships
+        .filter((m) => m.status === 'active')
+        .some((m) => ('agencyId' in m ? m.agencyId : m.outletId) === orgId);
+
+      if (!belongs) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden — not a member of this organisation',
+          data: null,
+        });
+      }
+      return next();
+    } catch {
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  };
+}
+
 export const agencyOwnerOnly = requireAgencySubRole('owner');
 export const agencyOwnerOfParam = requireAgencySubRoleScoped('id', 'owner');
 export const outletOwnerOfParam = requireOutletSubRoleScoped('id', 'owner');

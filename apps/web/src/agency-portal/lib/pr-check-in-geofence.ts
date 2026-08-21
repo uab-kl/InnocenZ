@@ -113,10 +113,15 @@ export async function verifyCheckInGeofence(
 	try {
 		const prCoord = await readDevicePosition();
 		const check = checkWithinOutletGeofence(outlet, prCoord, geofenceMeters);
+		// SPREAD FIRST, then the explicit keys. Written the other way round
+		// (`{ ok: false, reason: …, ...check }`) the spread silently overwrote the
+		// `ok` being stated — harmless only because `check.ok` happens to carry
+		// the same value in both branches, which is exactly the kind of accident
+		// that stops holding the moment `check` grows a field.
 		if (!check.ok) {
-			return { ok: false, reason: "out_of_range", ...check };
+			return { ...check, ok: false, reason: "out_of_range" };
 		}
-		return { ok: true, ...check };
+		return { ...check, ok: true };
 	} catch (err) {
 		return mapGeolocationError(outletLabel, err, geofenceMeters);
 	}

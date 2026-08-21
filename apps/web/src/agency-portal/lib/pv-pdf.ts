@@ -525,7 +525,27 @@ function pvExBox(
 	}
 }
 
-async function fetchPvLogoBase64(logoPath: string): Promise<string | null> {
+/**
+ * ExcelJS accepts only these three. The backend also stores `.webp`, which has
+ * no representation here — such a logo is DROPPED rather than mislabelled,
+ * because an image declared png and decoded as webp is a corrupt workbook, and
+ * a voucher that will not open is worse than one with no logo.
+ */
+function excelImageExtension(
+	logoPath: string,
+	contentType: string | null,
+): "png" | "jpeg" | "gif" | null {
+	const source =
+		`${contentType ?? ""} ${logoPath.split("?")[0] ?? ""}`.toLowerCase();
+	if (source.includes("png")) return "png";
+	if (source.includes("jpeg") || source.includes("jpg")) return "jpeg";
+	if (source.includes("gif")) return "gif";
+	return null;
+}
+
+async function fetchPvLogoBase64(
+	logoPath: string,
+): Promise<{ base64: string; extension: "png" | "jpeg" | "gif" } | null> {
 	if (typeof window === "undefined") return null;
 	// Was `logoPath: string = PV_TEMPLATE_ISSUER.logoPath` — the Excel half of the
 	// same default-parameter trap as the letterhead itself, so a missing logo
@@ -535,12 +555,16 @@ async function fetchPvLogoBase64(logoPath: string): Promise<string | null> {
 	try {
 		const res = await fetch(url);
 		if (!res.ok) return null;
+		// Content-type first, path second: an R2 key can be extensionless, and the
+		// header is what the store actually says the bytes are.
+		const extension = excelImageExtension(url, res.headers.get("content-type"));
+		if (!extension) return null;
 		const buf = await res.arrayBuffer();
 		const bytes = new Uint8Array(buf);
 		let binary = "";
 		for (let i = 0; i < bytes.length; i++)
 			binary += String.fromCharCode(bytes[i]!);
-		return btoa(binary);
+		return { base64: btoa(binary), extension };
 	} catch {
 		return null;
 	}
@@ -701,9 +725,16 @@ export async function buildPvBreakdownWorkbook(
 	// Logo in column A only; header text uses full width B:E
 	pvExMerge(ws, 1, 1, 6, 1, "", { align: { vertical: "middle" } });
 
-	const logoBase64 = await fetchPvLogoBase64(issuer.logoPath);
-	if (logoBase64) {
-		const imageId = wb.addImage({ base64: logoBase64, extension: "png" });
+	const logo = await fetchPvLogoBase64(issuer.logoPath);
+	if (logo) {
+		// ⚠️ `extension` was hardcoded "png". Harmless while the only logo this
+		// could ever reach was the template's own PNG; the moment a REAL agency's
+		// logo started arriving here it could be a jpg or a gif, declared png and
+		// written into the workbook — which is a file Excel refuses to open.
+		const imageId = wb.addImage({
+			base64: logo.base64,
+			extension: logo.extension,
+		});
 		ws.addImage(imageId, {
 			tl: { col: 0.15, row: 0.2 },
 			ext: { width: 64, height: 64 },
