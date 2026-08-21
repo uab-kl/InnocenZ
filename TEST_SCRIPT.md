@@ -322,6 +322,51 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ 🔴 CLICK THROUGH THE PV REMINDER ON A REAL AGENCY LOGIN (added 22 Aug 2026)
+
+The 22 Aug payout-job fix (§10) is compile-, lint- and build-verified only. The **UI half has
+never been rendered** — the block on `/agency` shows only when that agency actually holds
+`PENDING_REVIEW` vouchers, so nothing in CI can reach it. Needs a signed-in agency owner:
+
+- With **no** pending vouchers: the hub must look exactly as before — no empty card, no gap.
+- With an **unsigned** voucher: title reads *"Last week's vouchers need your signature"*, the
+  line beneath counts it under "waiting for a finance signature", and the red line states the
+  PR sees nothing. Clicking must land on `/agency/pv` **already filtered** to PENDING_REVIEW.
+- With a voucher that is signed but still pending review: the title must switch to the
+  **review** wording, not the signature wording. Both present → the "review or signature" title.
+- Switch to 中文 and confirm all seven strings translate — no English left on the card.
+- Then let the Sunday job run (or invoke it) and confirm an unsigned voucher is **held**, the
+  owner/finance notification arrives naming the signature, and the PR's app shows nothing for
+  that week until finance signs.
+
+### ▶ 🔴 VERIFY THE WAGE-TIER FIX ON A REAL TWO-AGENCY PR (added 22 Aug 2026)
+
+The 22 Aug fix (§10) is **typecheck- and test-verified only**, and the tests prove nothing here —
+none of the 65 touches `getByUserId` or agency scoping, which is exactly how the bug survived.
+Needs a signed-in run against the standing test case:
+
+- **Alice Yee Mei Me** — tier_1 at Atlas (joined Jul), tier_3 at Why We Met (joined Aug).
+  `pr.alice@innocenz.demo` / `password`; agencies `owner@atlas-agency.my` and
+  `whywemet@agency.com`, both `Password123!`.
+- Book her on a **Why We Met** shift at a venue whose card prices Tier III above Tier I.
+  Confirm the booked `pay_amount`, then **check out** and confirm it did NOT change.
+  Before the fix it dropped to Atlas's Tier I rate.
+- **Cancel** a WWM shift inside a fee band and confirm the fee is a % of WWM's rate, not Atlas's.
+- **Cut-loss** release her from a WWM shift and confirm the sealed day rate is WWM's.
+- Also check a **single-agency** PR still seals exactly as before — the fallback (`?? pr`) is what
+  keeps a non-member from sealing RM0.00, and that path is the risky one.
+
+### ▶ 🟠 NO TEST CAN PIN THE WAGE-TIER RULE TODAY (added 22 Aug 2026)
+
+All six backend test files are **pure-function unit tests** — `earnedWage`, `overtimeFromStamps`,
+`paymentDueDate`, `guardMemberChange`, the two guards. The tier choice lives in
+`loadPrimaryMembership` (a private DB read in `pr.repository.ts`) and in its call sites, so it is
+unreachable in that style. Pinning it needs a **controller-level test with fake repositories**,
+which this repo has never had — deliberately not invented as a side effect of a bug fix.
+Decide whether to add that pattern; until then this rule is protected by nothing but the comments
+written at the three call sites. Given the repo's documented habit of fixes drifting back in on
+sibling lanes (six instances found), that is thin cover for a money rule.
+
 **Remove the `inlineDynamicImports` workaround once nitro is fixed (added 21 Aug 2026).** The built server BOOTS and renders now — `/en/login` 200, `/en/agency` 200, `/en/outlet` 200, `/en/nope` 404, zero errors — but only because `apps/web/vite.config.ts` passes `inlineDynamicImports: true` to `nitro()`. That is a workaround for a NITRO chunking bug: vite's SSR output correctly imports rolldown's `__exportAll` helper from its runtime chunk, then nitro re-bundles, splits that chunk into TWO that import each other, and strands the helper on the far side of the cycle — a hoisted `var`, so it reads as `undefined` and every route 500s. A single chunk has no cycle. Cost is one ~20 MB server file and ~680 ms cold start (91 ms warm), both measured. Today's nitro nightly does not fix it. When it does, drop the flag and **re-run the boot check** — a green `nx build` proves nothing here.
 
 ### ▶ ⚠️ Click through the Payroll penalty panel on a REAL agency login (20 Aug 2026)
@@ -1911,6 +1956,10 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-22 | **The Sunday payout job sent vouchers UNSIGNED, and sending locked the signature out for good.** `weekly-payout.job.ts` flipped every gate-passing voucher to `sent` with no finance-signature check. The HTTP send has one — `payment-voucher.controller.ts` 409s with *"Sign this voucher first — the finance signature is what the PR is asked to counter-sign"* — but `voucherSendGate` carries no signature term, so the job's own comment claiming "the same gate" was wrong. Not an edge case: `financeSignVoucher` refuses anything that is not `pending_review`, and signing only becomes legal at 00:00 Sunday, so the job running 02:00 the SAME NIGHT was the default path. `finance_head_signed_at` stayed null permanently, every exported PDF/Excel printed an empty finance stamp, and the PR was asked to counter-sign a wage document nobody at the agency had attested. Now held at `pending_review` — the only status finance can still sign from. **The notification had to change with it**: the held queue only said "awaiting day review", so a voucher held for a SIGNATURE would have sent finance to approve days already approved. `awaitingByAgency` now splits `{ dayReview, unsigned }` and one notification per agency names the real action and its consequence — *"finance has to sign before they can reach the PR. Until then the PR sees nothing for that week."* **No schema change**: `kind` is a pgEnum and the journal is corrupt (`drizzle-kit generate` cannot run), so this reuses `pv_day_review_pending`, whose own note already scopes it to "the Monday payout job held one or more vouchers", agency-addressed, one per run. **Plus the reminder the owner asked for**: `/agency` (the real landing — `dashboard.tsx` only redirects there) had NO to-do surface at all, so one was added above the KPI tiles, rendered only when `PENDING_REVIEW` vouchers exist, split sign-vs-review the same way, linking to `/agency/pv?status=PENDING_REVIEW` — verified present in that route's `validateSearch` allow-list, so the filter actually applies. EN + 中文 (7 keys each). Reads `backendPvs.pvs` under the page's existing `backed = identity !== null` split, so a real login cannot surface demo vouchers. Verified: backend typecheck **0**, web typecheck **0**, **65/65 tests**, biome lint **0 errors**, both builds clean. ⚠️ **The reminder has never been rendered** — it only appears when a real agency holds vouchers; see §9. | (this commit) |
+
+| 2026-08-22 | **The agency that ASSIGNS is the agency that PAYS — the seal lanes never asked which one.** `f091a55` fixed this on the assign lane; its own comment says *"every shift those three sold her was priced at Atlas's grade"*. The three SEAL lanes were missed and still called `prRepository.getByUserId(userId)` / `getById(prId)` with **no agencyId**, so `loadPrimaryMembership` fell to `.orderBy(asc(createdAt)).limit(1)` — the OLDEST `agency_pr` row — and its tier overwrote the figure the assign lane had booked correctly. Live shape: Alice is tier_1 at Atlas (joined Jul) and tier_3 at Why We Met (joined Aug); WWM books her at the venue's Tier III card (RM700) and check-out re-sealed her at Atlas's Tier I (RM500). **Invisible to any audit** — the voucher is internally consistent, subtotal and total agree, nothing is out of balance; the only witness is the booked figure, which nothing compares against. Fixed at three sites, all pricing-only: `shift-assignment.controller.ts` **checkOutMine** (new `wagePr` scoped to `existing.agencyId`) and **cancelMine** (new `feePr`, same scope — the fee is a % of the day rate, so it was a % of the wrong one), and `cutlost.controller.ts:306` (`getById(prId, assignment.agencyId)`). **The unscoped `pr` is deliberately kept** at both controller sites: `ownsMineAssignment` returns early on `existing.userId`, but LEGACY rows written before the 0087 user_id dual-write have `userId` null and fall through to `existing.prId === pr.id` — a scoped lookup there can return a different id or null and lock the PR out of her own check-out. **Every scoped lookup falls back to the unscoped row** (`?? pr`): `getByUserId(userId, agencyId)` returns null for a non-member BY DESIGN, and `shift && wagePr` would then seal the shift at **RM0.00** — worse than the wrong tier. `cutlost.ts:432` deliberately untouched: that `pr` supplies only `userId` for the released-early notification, no pricing. Verified: backend typecheck **0 errors**, **65/65 tests pass**. ⚠️ **NOT pinned by a test** — see §9; every test in this repo is a pure-function unit test and this logic is a private DB read plus its call sites, so it cannot be covered without introducing a controller-test pattern that does not yet exist here. | (uncommitted, branch `jk`) |
 
 | 2026-08-21 | **CI was red and two of its checks could not have told us.** `.github/workflows/ci.yml:41` runs `nx run-many -t lint test typecheck e2e`; three tasks failed and two more passed no matter what. (1) **`typecheck` was a NO-OP** for innocenz-admin and innocenz-backend — the inferred target echoed *"disabled because one or more project references set 'noEmit: true'"* and exited **0**, so 19 real web type errors had never been seen by CI. Each app now owns an explicit `typecheck` SCRIPT (package.json scripts become nx targets and beat the inferred one); apps/mobile uses `-p tsconfig.app.json`, since its `tsconfig.json` is solution-style and compiles ZERO files. (2) **`check:drift` compared the live DB to `0070_snapshot.json` with 131 migrations on disk** — snapshots froze at 0070 because the journal is corrupt and `drizzle-kit generate` cannot run. It reported the same 5 FALSE problems every run (`pr` dropped in 0095, both `sub_role` columns in 0107, `outlet_penalty_rule` in 0113, `agency_pr.pr_id` in 0121/0123/0129) and was BLIND to everything added since. Rewritten to compare against the **drizzle models** via `getTableConfig`, which cannot go stale: 36 tables -> **51**, 0 problems. **Proved it can still FAIL** by injecting a bogus column and watching it report `COLUMN MISSING in live DB: agency.drift_probe_column`, then reverting. (3) **`@org/mobile:test` ran ZERO tests** — `react-native-maps` resolves a native TurboModule at require() time and CheckInScreen requires it eagerly, so the only spec died on import; added a scoped jest mock. It then failed a second way: Nx injects the repo-root `.env` (NODE_ENV=development) into every task, and RN only tolerates a detached view when NODE_ENV==='test' — same root cause as the vite jsxDEV bug, fixed in `jest.config.cts`. Then cleared everything the honest instruments exposed: **web 19 -> 0** and **mobile 7 -> 0** type errors, and **212 -> 0** biome lint errors (36 scoped `biome-ignore`s, each with a written why; NO rule disabled, NO file-level ignores, NO `any`). **Found a real pre-existing React crash on the way**: `routes/agency/prs.tsx` called `useMemo` BELOW the `if (detail) return` early return, and `detailId` is local state — so opening a PR detail rendered one hook fewer and React throws "Rendered fewer hooks than expected". Hoisted above the return. Verified: `nx run-many -t lint test typecheck e2e` **green for 3 projects**; `nx run-many -t build --exclude=@org/mobile` green; backend 0 + 65 tests, web 0 + 39 tests, mobile 0 + 1 test; drift OK; the built server re-swept across all 91 routes — 50x200 / 9x307 / 31x404, **zero 500s, zero log errors**, identical to before the changes; dev stack still serves "Sign in — InnocenZ" on :3000 with backend health 200. | (this commit) |
 
