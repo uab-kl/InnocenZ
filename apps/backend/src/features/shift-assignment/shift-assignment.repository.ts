@@ -193,7 +193,13 @@ function cancelledAtFrom(
   if (noticeHours === null || noticeHours === undefined) return null;
   const hours = Number(noticeHours);
   if (!Number.isFinite(hours)) return null;
-  return new Date(shiftStartMs(shiftDate, slot) - hours * 3_600_000);
+  // `shiftStartMs` now returns null for a slot it cannot read, rather than a
+  // 1970 midnight. Null here means "we cannot say when this was cancelled",
+  // which is exactly what this function's `Date | null` already promised —
+  // the alternative was a 1970-relative moment that looked like a real answer.
+  const startMs = shiftStartMs(shiftDate, slot);
+  if (startMs === null) return null;
+  return new Date(startMs - hours * 3_600_000);
 }
 
 export type AssignmentShiftFacts = {

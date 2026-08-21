@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import {
   agencyMemberRepository,
+  agencyOutletRepository,
   authRepository,
   outletMemberRepository,
 } from '@/composition-root.js';
@@ -8,6 +9,7 @@ import { Error } from '@/error/index.js';
 import { requirePermission } from '@/middlewares/require-permission.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import { laneFromRoleHints } from '@/features/rbac/portal-role-map.js';
+import { paramId } from '@/util/params.js';
 
 /**
  * Org ACL: portal lane from user_role → role; membership for tenancy only.
@@ -195,6 +197,93 @@ export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
       }
 
       return next();
+    } catch {
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  };
+}
+
+/**
+ * Confine a caller to the ONE venue named in the path.
+ *
+ * The lane guards above answer "does this person hold an owner/ops lane
+ * SOMEWHERE". That is not a scope check, and on `outlet-workspace` the
+ * difference was the whole bug: `outletOwnerOrOpsIfMember` let the owner of one
+ * venue rewrite ANOTHER venue's pay rates and drink prices, because nothing in
+ * the chain ever compared the caller against `:outletId`. The controller reads
+ * the id straight from the path and never consults `req.user`, so the router is
+ * the only place it can be stopped. Worse, that guard returns `next()` outright
+ * for a caller with no outlet membership — which is every agency account — so
+ * an agency could rewrite the rate card of a venue it has no relationship with.
+ *
+ * Each org is scoped by the rule that org already uses elsewhere:
+ *   - an OUTLET operator must hold an active membership of THIS venue;
+ *   - an AGENCY operator must hold an APPROVED `agency_outlet` link to it.
+ *     `listApprovedOutletIdsForAgency` is the repository's own stated "portal
+ *     visibility rule", and reusing it keeps one answer to "which venues may
+ *     this agency see". Agencies deliberately keep BOTH verbs here — they
+ *     configure rates on a venue's behalf, and the last attempt to restrict
+ *     this to outlet-only broke that flow.
+ *
+ * Compose this with a lane guard, do not replace one: this says WHICH venue,
+ * the lane guard says WHO within it.
+ */
+export function requireOutletScopeByParam(param: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+    }
+
+    try {
+      if (await isAdmin(user.id)) return next();
+
+      const raw = req.params[param];
+      const outletId = raw == null ? '' : paramId(raw);
+      if (!outletId) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Missing outlet id', data: null });
+      }
+
+      // Outlet side first: someone who operates venues is judged as a venue
+      // operator, never allowed to fall through to the agency branch below.
+      const outletMemberships = await outletMemberRepository.listByUser(user.id);
+      const activeOutlets = outletMemberships.filter((m) => m.status === 'active');
+      if (activeOutlets.length > 0) {
+        if (!activeOutlets.some((m) => m.outletId === outletId)) {
+          return res.status(403).json({
+            success: false,
+            message: 'Forbidden — not a member of this outlet',
+            data: null,
+          });
+        }
+        return next();
+      }
+
+      const agencyMemberships = await agencyMemberRepository.listByUser(user.id);
+      const activeAgency = agencyMemberships.find((m) => m.status === 'active');
+      if (activeAgency?.agencyId) {
+        const linked = await agencyOutletRepository.listApprovedOutletIdsForAgency(
+          activeAgency.agencyId,
+        );
+        if (!linked.includes(outletId)) {
+          return res.status(403).json({
+            success: false,
+            message: 'Forbidden — your agency is not linked to this outlet',
+            data: null,
+          });
+        }
+        return next();
+      }
+
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden — not a member of this outlet',
+        data: null,
+      });
     } catch {
       return res
         .status(500)

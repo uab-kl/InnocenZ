@@ -50,25 +50,47 @@ const ISSUER_DASH = "—";
  * blank line reads as a layout bug, and a plausible-looking substitute is how
  * this project has previously printed facts nothing stores.
  */
-export function issuerFromAgency(agency: {
-	name?: string | null;
-	ssmNo?: string | null;
-	contactPhone?: string | null;
-	contactEmail?: string | null;
-	addressLine1?: string | null;
-	addressLine2?: string | null;
-}): PvIssuerProfile {
+export function issuerFromAgency(
+	agency: {
+		name?: string | null;
+		ssmNo?: string | null;
+		contactPhone?: string | null;
+		contactEmail?: string | null;
+		addressLine1?: string | null;
+		addressLine2?: string | null;
+	},
+	/**
+	 * The agency's OWN logo, already resolved to a URL by the caller. Undefined or
+	 * null prints no logo at all — see the note on `logoPath` below.
+	 */
+	logoUrl?: string | null,
+): PvIssuerProfile {
 	const address = [agency.addressLine1, agency.addressLine2]
 		.filter((part): part is string => !!part && part.trim() !== "")
 		.join(", ");
 	return {
-		brand: agency.name || PV_TEMPLATE_ISSUER.brand,
+		// ⚠️ `brand` was `agency.name || PV_TEMPLATE_ISSUER.brand` — the ONE field
+		// here that fell back to a real third party's trading name while every
+		// other blank correctly became an em dash. An agency whose `name` is
+		// empty is a gap in our record, not permission to print "ATMOSPHERE
+		// EVENT PLANNER" across the top of their payment voucher.
+		brand: agency.name || ISSUER_DASH,
 		name: agency.name || ISSUER_DASH,
 		regNo: agency.ssmNo ? `(${agency.ssmNo})` : ISSUER_DASH,
 		phone: agency.contactPhone || ISSUER_DASH,
 		email: agency.contactEmail || ISSUER_DASH,
 		address: address || ISSUER_DASH,
-		logoPath: PV_TEMPLATE_ISSUER.logoPath,
+		// ⚠️ AND THE LOGO — this was `PV_TEMPLATE_ISSUER.logoPath`, so even a
+		// FULLY SUCCESSFUL fetch stamped another company's mark on a real
+		// agency's voucher. The logo is the most identity-bearing thing on the
+		// page and it was the one field that never even tried to read the
+		// agency. Empty means print no logo; a stranger's is not a fallback.
+		//
+		// Resolved by the caller (`usePvIssuer`) rather than here: turning
+		// `agency.logoImage` — an R2 object key — into a URL needs `apiAssetUrl`,
+		// and reaching from this lib into the component layer is how this portal
+		// earned its last import cycle.
+		logoPath: logoUrl ?? "",
 		paymentMethod: PV_TEMPLATE_ISSUER.paymentMethod,
 	};
 }

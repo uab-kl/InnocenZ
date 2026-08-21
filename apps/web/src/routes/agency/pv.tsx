@@ -1724,12 +1724,15 @@ function PvDetail({
 				</OutletSection>
 			)}
 
+			{/* No letterhead, no document — see AgencyPaidPvDetail for the why. */}
 			<div className="mt-2.5 flex gap-2">
 				<button
 					type="button"
-					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
+					disabled={!pvIssuer.issuer}
+					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs disabled:opacity-50"
 					onClick={() => {
-						downloadPvBreakdownPdf(displayPv, payee, [], pvIssuer);
+						if (!pvIssuer.issuer) return;
+						downloadPvBreakdownPdf(displayPv, payee, [], pvIssuer.issuer);
 						toast(t.payroll.officialPvOpened, "success");
 					}}
 				>
@@ -1737,20 +1740,32 @@ function PvDetail({
 				</button>
 				<button
 					type="button"
-					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
+					disabled={!pvIssuer.issuer}
+					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs disabled:opacity-50"
 					onClick={() => {
-						downloadPvBreakdownCsv(displayPv, payee, pvIssuer);
+						if (!pvIssuer.issuer) return;
+						downloadPvBreakdownCsv(displayPv, payee, pvIssuer.issuer);
 						toast(t.payroll.excelDownloaded, "success");
 					}}
 				>
 					<Sheet className="h-4 w-4 shrink-0" /> Excel
 				</button>
 			</div>
+			{!pvIssuer.issuer && (
+				<p className="iz-tiny iz-muted2 mt-1.5 text-center">
+					{pvIssuer.status === "loading"
+						? "Loading your agency's letterhead…"
+						: "Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload the page or check your connection."}
+				</p>
+			)}
 			<p className="iz-tiny iz-muted2 mt-1.5 text-center">
 				PDF and Excel match the official voucher layout · duplicate payment
 				blocked on send.
 			</p>
 
+			{/* `pr-demo`'s plain-text receipt, not the letterhead PDF — same name,
+			    different function, prints no issuer. Deliberately not gated on
+			    `pvIssuer`. */}
 			{pv.status === "PAID" && (
 				<button
 					type="button"

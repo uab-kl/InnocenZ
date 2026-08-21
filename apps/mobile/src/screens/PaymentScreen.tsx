@@ -267,7 +267,14 @@ function shortStamp(iso: string | null): string {
  */
 function voucherOwning(
   week: PrCurrentWeek | null | undefined,
-  sel: { receiptId: string | null; dateIso: string; component: IncomeKey },
+  /**
+   * `component` is a GRID BUCKET, not an `IncomeKey`, for the same reason
+   * `kindDisputable` takes one: the Deductions row must be able to ask the same
+   * question every other row asks. It resolves to null there — a fine has no
+   * receipt line to attribute — and every caller pairs this with
+   * `kindDisputable`, which refuses that bucket first anyway.
+   */
+  sel: { receiptId: string | null; dateIso: string; component: GridBucket },
 ): string | null {
   if (!week) return null;
   const lines = week.lines ?? [];
@@ -283,6 +290,50 @@ function voucherOwning(
   // restarted yet and stamps no `voucherId` on its lines.
   if ((week.vouchers?.length ?? 0) > 1) return null;
   return week.voucherId ?? null;
+}
+
+/**
+ * That voucher's OWN status — the companion `voucherOwning` always needed.
+ *
+ * `voucherOwning` answers with an id, and every caller that then wanted to know
+ * what state the cell's money was in reached for `week.status` instead, which is
+ * the NEWEST voucher's (`PrCurrentWeek` in api.ts: "They are a headline, not the
+ * week"). That is how one agency's `disputed` came to govern the other agency's
+ * cells.
+ *
+ * Falls back to the week's single status ONLY when the id IS the headline — a
+ * one-voucher week, or a backend that has not restarted and sends no
+ * `vouchers` — where the two are the same fact. Never otherwise: an id we cannot
+ * find a row for is an UNKNOWN status, not the week's.
+ */
+function statusOfVoucher(
+  week: PrCurrentWeek | null | undefined,
+  voucherId: string | null,
+): string | null {
+  if (!voucherId) return null;
+  const row = week?.vouchers?.find((v) => v.id === voucherId);
+  if (row) return row.status ?? null;
+  return week?.voucherId === voucherId ? week.status ?? null : null;
+}
+
+/**
+ * The word and the colour ONE voucher gets in a section header.
+ *
+ * Lifted verbatim out of the LAST WEEK header's own ternary so that the
+ * one-voucher and two-voucher renders cannot drift into different vocabularies
+ * for the same status — these words are what a PR quotes back at their agency.
+ */
+function voucherPill(status: string | null): {
+  variant: 'green' | 'amber' | 'red';
+  label: string;
+} {
+  if (status === 'disputed') return { variant: 'red', label: 'DISPUTED' };
+  if (status === 'paid') return { variant: 'green', label: 'PAID' };
+  if (status === 'signed') return { variant: 'green', label: 'SIGNED' };
+  if (status && VERIFIED_STATUSES.includes(status)) {
+    return { variant: 'green', label: 'SENT' };
+  }
+  return { variant: 'amber', label: 'PENDING' };
 }
 
 // buildWeekGridFromLines moved to lib/week-pay-grid so PvDetailScreen renders
@@ -428,8 +479,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const verifiedDays = grid.filter(
     (d) => d.status === 'approved' || d.status === 'verified',
   ).length;
-  /** Has the AGENCY issued this week's voucher? The paperwork, not the days. */
-  const weekIssued = !!lastWeek?.status && VERIFIED_STATUSES.includes(lastWeek.status);
+  /**
+   * The week's vouchers, when there is more than one to distinguish.
+   *
+   * ⚠️ `weekIssued` lived here — `!!lastWeek?.status && VERIFIED_STATUSES.includes(…)`.
+   * "Has the agency issued this week's voucher" is not a question the WEEK can
+   * answer once there are two agencies and two documents: with Atlas `paid` and
+   * Why We Met `awaiting_pr` it said yes, the header went green and read PAID,
+   * and the PR stopped looking for the voucher still waiting on their signature
+   * two lines further down the same screen.
+   *
+   * Empty on the ordinary one-agency week AND on a backend that has not been
+   * restarted — both of which keep the single-pill render below unchanged, where
+   * the headline and the only voucher are the same fact.
+   */
+  const lastWeekVouchers = lastWeek?.vouchers ?? [];
   const hasLastWeekRows = grid.some((d) => d.status !== 'empty');
   /**
    * EVERY voucher still waiting on this PR — one button each, named by agency.
@@ -462,9 +526,35 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   /** The first one, for the single-button callers that have not been widened. */
   const awaiting = awaitingVouchers[0];
   const reviewAmount = weekTotal > 0 ? weekTotal : awaiting?.net ?? 0;
-  // The dispute is persisted at the voucher grain (payment_voucher.status), so
-  // the whole "Last week" PV is either under dispute or not (§3 F).
-  const voucherDisputed = lastWeek?.status === 'disputed';
+  /**
+   * The vouchers actually under argument — plural, because a week can hold two.
+   *
+   * ⚠️ This was `lastWeek?.status === 'disputed'`, the NEWEST voucher's flag, and
+   * it fed three different things: the header pill, the banner, and the
+   * dispute-vs-withdraw decision on every tapped cell. A dispute IS persisted at
+   * the voucher grain (`payment_voucher.status`, §3 F) — that part was never
+   * wrong. What was wrong is that a merged week has more than one voucher grain,
+   * so a claim against Why We Met left Atlas's cells reading DISPUTED, and a
+   * claim against the OLDER voucher showed nothing at all.
+   *
+   * The single-voucher week degrades to exactly the old boolean: one row in, one
+   * row out.
+   */
+  const disputedVouchers =
+    lastWeekVouchers.length > 0
+      ? lastWeekVouchers.filter((v) => v.status === 'disputed')
+      : lastWeek?.status === 'disputed'
+        ? [
+            {
+              id: lastWeek.voucherId ?? '',
+              voucherNo: lastWeek.voucherNo ?? null,
+              agencyId: '',
+              agencyName: null as string | null,
+              net: lastWeek.net,
+              status: lastWeek.status,
+            },
+          ]
+        : [];
 
   /*
    * PROOF FIRST, DISPUTE SECOND.
@@ -513,8 +603,33 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
      */
     if (row.key === 'deductions') return;
     const weekData = week === 'last' ? lastWeek : current;
+    /*
+     * WHICH VOUCHER OWNS THE TAPPED CELL — the same question `submitDispute` and
+     * `cancelClaim` ask, through the same resolver.
+     *
+     * ⚠️ This read the WEEK's status (`lastWeek.status` / `current.status`),
+     * which is the NEWEST voucher's, while the grid it was tapped on merges
+     * every voucher in the week. With one agency `disputed` the sheet opened in
+     * WITHDRAW mode for EVERY cell, so tapping the other agency's drinks offered
+     * to take back a claim that was never filed against it — and the withdraw
+     * then posted to whichever voucher `voucherOwning` named, which is not the
+     * one the button was describing.
+     *
+     * `receiptId: null` on purpose: nothing has been picked yet — the picker
+     * lives INSIDE the sheet this is about to open. So a two-agency cell
+     * resolves to null, and null is "not known", not "not disputed": the sheet
+     * opens in the ordinary DISPUTE mode and `submitDispute` refuses with its
+     * existing "Pick the shift first" rather than acting on a guess.
+     */
     const weekDisputed =
-      week === 'last' ? voucherDisputed : current?.status === 'disputed';
+      statusOfVoucher(
+        weekData,
+        voucherOwning(weekData, {
+          receiptId: null,
+          dateIso: day.dateIso,
+          component: row.key,
+        }),
+      ) === 'disputed';
     const amount = cellAmount(day, row.key);
     if (amount <= 0 || day.status === 'empty') return;
     // A receipt the agency has not reviewed is still the PR's own claim, not a
@@ -943,6 +1058,22 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 disputeReason: next.disputeReason,
                 disputeNote: next.disputeNote,
                 disputedAt: next.disputedAt,
+                /*
+                 * ⚠️ AND THE MATCHING ROW IN `vouchers`, or this patch is
+                 * invisible.
+                 *
+                 * This used to write the headline alone, which was enough while
+                 * the pill and the banner read `lastWeek.status`. They now read
+                 * `vouchers[]` — it is the only thing that can say WHICH agency
+                 * is being argued with — so patching the headline and not the
+                 * array left the screen showing the pre-dispute state until the
+                 * next full refresh. Patched BY ID: `PrDisputeState.voucherId`
+                 * names the document the server actually moved, and the other
+                 * agency's row must not be touched by it.
+                 */
+                vouchers: prev.vouchers?.map((v) =>
+                  v.id === next.voucherId ? { ...v, status: next.status } : v,
+                ),
               }
             : prev,
         );
@@ -1008,31 +1139,41 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <View style={{ flex: 1 }}>
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>LAST WEEK</Text>
-                {lastWeek?.status && (
-                  /*
-                   * THE PILL IS THE VOUCHER'S STATE, NOT THE DAY COUNT.
-                   *
-                   * It keyed off `verifiedDays`, which was safe only while that
-                   * counted `'verified'` alone. Now that an agency-approved day
-                   * counts too, the old test would have printed **SENT** over a
-                   * voucher still sitting at `pending_review` — telling a PR
-                   * their week had gone out when nobody had issued it.
-                   *
-                   * Days are verified by day review; the WEEK is issued by the
-                   * agency. Two different facts, two different sources.
-                   */
-                  <Pill variant={voucherDisputed ? 'red' : weekIssued ? 'green' : 'amber'}>
-                    {voucherDisputed
-                      ? 'DISPUTED'
-                      : lastWeek.status === 'paid'
-                        ? 'PAID'
-                        : lastWeek.status === 'signed'
-                          ? 'SIGNED'
-                          : weekIssued
-                            ? 'SENT'
-                            : 'PENDING'}
+                {/*
+                  * THE PILL IS THE VOUCHER'S STATE, NOT THE DAY COUNT.
+                  *
+                  * It keyed off `verifiedDays`, which was safe only while that
+                  * counted `'verified'` alone. Now that an agency-approved day
+                  * counts too, the old test would have printed **SENT** over a
+                  * voucher still sitting at `pending_review` — telling a PR
+                  * their week had gone out when nobody had issued it.
+                  *
+                  * Days are verified by day review; the WEEK is issued by the
+                  * agency. Two different facts, two different sources.
+                  *
+                  * ⚠️ AND ONE PILL PER VOUCHER once there are two. This printed a
+                  * single pill from `lastWeek.status` — the NEWEST voucher's — so
+                  * a week with Atlas `paid` and Why We Met `awaiting_pr` read
+                  * PAID in green, over money one agency had not even issued. A
+                  * merged total is not a document anybody can sign, and neither
+                  * is a merged status. Named by agency, in the same vocabulary
+                  * and with the same `?? 'Agency'` fallback as the Review & sign
+                  * buttons below, which are already one per voucher.
+                  */}
+                {lastWeekVouchers.length > 1 ? (
+                  lastWeekVouchers.map((v) => {
+                    const pill = voucherPill(v.status);
+                    return (
+                      <Pill key={v.id} variant={pill.variant}>
+                        {`${(v.agencyName ?? 'Agency').toUpperCase()} · ${pill.label}`}
+                      </Pill>
+                    );
+                  })
+                ) : lastWeek?.status ? (
+                  <Pill variant={voucherPill(lastWeek.status).variant}>
+                    {voucherPill(lastWeek.status).label}
                   </Pill>
-                )}
+                ) : null}
                 <Text style={styles.sectionFrac}>
                   {verifiedDays}/7
                 </Text>
@@ -1144,9 +1285,28 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 * inspect glyph as This-week, because tapping
                                 * still opens the evidence.
                                 */}
+                              {/*
+                                * ⚠️ `weekDisputable(lastWeek)` asked the NEWEST
+                                * voucher. One agency signing its document took
+                                * the flag off the OTHER agency's cells too,
+                                * which is a promise withdrawn from a PR who
+                                * still had every right to argue. The cell names
+                                * its own voucher through the same resolver the
+                                * write paths use; a cell that cannot be
+                                * attributed falls back to the week, where
+                                * `weekDisputable` now answers "is ANY of them
+                                * still arguable" rather than "is the newest".
+                                */}
                               {canTap &&
                                 (kindDisputable(row.key) &&
-                                weekDisputable(lastWeek) ? (
+                                weekDisputable(
+                                  lastWeek,
+                                  voucherOwning(lastWeek, {
+                                    receiptId: null,
+                                    dateIso: d.dateIso,
+                                    component: row.key,
+                                  }),
+                                ) ? (
                                   <Flag
                                     size={9}
                                     color={isDisputed ? C.red : C.muted2}
@@ -1231,9 +1391,20 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 </View>
               </ScrollView>
 
-              {voucherDisputed && (
-                <View style={styles.disputeBanner}>
-                  <Text style={styles.disputeBannerTitle}>Dispute open · agency reviewing</Text>
+              {/*
+                * ONE BANNER PER DISPUTED VOUCHER, named — for the same reason as
+                * the pills above. A single banner off `lastWeek.status` said
+                * "Dispute open" over a week where only one of two agencies was
+                * being argued with, and said nothing at all when the claim was
+                * against the older voucher.
+                */}
+              {disputedVouchers.map((v) => (
+                <View key={v.id || 'headline'} style={styles.disputeBanner}>
+                  <Text style={styles.disputeBannerTitle}>
+                    {disputedVouchers.length > 1 || lastWeekVouchers.length > 1
+                      ? `${v.agencyName ?? 'Agency'} · dispute open · agency reviewing`
+                      : 'Dispute open · agency reviewing'}
+                  </Text>
                   {lastWeek?.disputeReason ? (
                     <Text style={styles.disputeBannerBody}>
                       {lastWeek.disputeReason}
@@ -1244,7 +1415,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     Tap any amount to see its receipts, then withdraw this dispute.
                   </Text>
                 </View>
-              )}
+              ))}
 
               {hasLastWeekRows ? (
                 <>
@@ -1308,9 +1479,24 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   * week the PR is still working is not an error, and saying so
                   * beats a silently normal-looking grid.
                   */}
-                {current?.status === 'disputed' && (
-                  <Text style={styles.disputePill}>DISPUTED</Text>
-                )}
+                {/*
+                  * ⚠️ SAME HEADLINE READ AS LAST WEEK — this is This-week's copy
+                  * of it. `current.status` is the newest voucher's, so a claim
+                  * against one agency branded the whole live week, and a claim
+                  * against the older voucher showed nothing at all. One pill per
+                  * disputed voucher, named, exactly as Last week does.
+                  */}
+                {(current?.vouchers ?? []).length > 1
+                  ? (current?.vouchers ?? [])
+                      .filter((v) => v.status === 'disputed')
+                      .map((v) => (
+                        <Text key={v.id} style={styles.disputePill}>
+                          {`${(v.agencyName ?? 'Agency').toUpperCase()} · DISPUTED`}
+                        </Text>
+                      ))
+                  : current?.status === 'disputed' && (
+                      <Text style={styles.disputePill}>DISPUTED</Text>
+                    )}
                 <Text style={styles.sectionFrac}>{thisApprovedDays}/7</Text>
               </View>
               <Text style={styles.sectionAction}>
@@ -1433,10 +1619,22 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 * dispute is actually possible, the inspect glyph
                                 * where tapping only opens the evidence.
                                 */}
+                              {/* Same per-cell resolution as Last week — and the
+                                * duplicated `weekDisputable(current) &&
+                                * weekDisputable(current)` goes with it. It was a
+                                * copy-paste, harmless, and exactly the kind of
+                                * thing that survives because nothing reads a
+                                * condition twice. */}
                               {canTap &&
                                 (kindDisputable(row.key) &&
-                                weekDisputable(current) &&
-                                weekDisputable(current) ? (
+                                weekDisputable(
+                                  current,
+                                  voucherOwning(current, {
+                                    receiptId: null,
+                                    dateIso: d.dateIso,
+                                    component: row.key,
+                                  }),
+                                ) ? (
                                   <Flag size={9} color={C.muted2} style={{ marginTop: 2 }} />
                                 ) : (
                                   <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
@@ -1827,7 +2025,20 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
              * again, and 0086's partial index is what permits the second one.
              */
             kindDisputable(evidenceTarget.incomeKey) &&
-            weekDisputable(evidenceTarget.week === 'last' ? lastWeek : current) &&
+            /*
+             * The sheet is open on ONE cell, so it can name its voucher — and it
+             * must: this gate decides whether `onDispute` exists at all, and
+             * reading the week's headline meant one agency's signed voucher
+             * removed the Dispute button from the OTHER agency's evidence.
+             */
+            weekDisputable(
+              evidenceTarget.week === 'last' ? lastWeek : current,
+              voucherOwning(evidenceTarget.week === 'last' ? lastWeek : current, {
+                receiptId: null,
+                dateIso: evidenceTarget.dateIso,
+                component: evidenceTarget.incomeKey,
+              }),
+            ) &&
             evidenceDisputableCount > 0
               ? () => {
                   const { day, row, week } = evidenceTarget;

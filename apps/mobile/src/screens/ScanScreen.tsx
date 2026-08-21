@@ -76,7 +76,9 @@ export function ScanScreen({
   // Detail screen outside the tab shell — the back row must clear the status bar.
   const insets = useSafeAreaInsets();
   const { active, phase: attendancePhase, refresh: refreshShift } = useActiveShift();
-  const { receiptLines, addLine, submitReceipt, updateLine, deleteLine } = usePrEarnings();
+  // `deleteLine` is deliberately NOT taken here any more — see `confirmOcr`.
+  // The provider still exports it for ShiftStatusPanel's whole-receipt removal.
+  const { receiptLines, addLine, submitReceipt, updateLine } = usePrEarnings();
   const onDuty = attendancePhase === 'on_duty';
 
   // Re-pull `/shift-assignment/mine` from the DATABASE every time this screen
@@ -510,14 +512,29 @@ export function ScanScreen({
     void runSubmit(async () => {
       const items = buildReceiptItems(detected);
       if (items.length === 0) throw new Error('Set a quantity for at least one item.');
-      // RE-SCAN of an existing row: the old line goes first — its receipt and
-      // snap cascade away server-side — so the same paper's order number
-      // passes the per-shift duplicate check and the fresh scan lands with a
-      // NEW unique receipt id.
-      if (editId) await deleteLine(editId);
+      /*
+       * RE-SCAN of an existing row: the SERVER swaps it, in ONE call.
+       *
+       * This used to `await deleteLine(editId)` right here, before the submit.
+       * `runSubmit` restores nothing on failure, so every refusal after that
+       * point — the per-shift duplicate check, an R2 outage, a dropped
+       * connection — took the PR's money and left nothing to put back. And it
+       * deleted ONE line: on a multi-item receipt the paper survived its own
+       * removal, so the duplicate check refused the replacement EVERY time and
+       * the loss was certain, not merely likely.
+       *
+       * A client-side rollback could not have fixed it either: the receipt's
+       * RCP-… number, its review state and its packed item category are all
+       * server-side facts the line DTO never carries, so there is nothing here
+       * to put back with. `replacesLineId` moves the swap to the one place that
+       * can exclude the old paper from that duplicate check, and that can write
+       * first and remove second. A failure now leaves the original row untouched
+       * on screen.
+       */
       const receipt = await submitReceipt({
         source: 'scan',
         assignmentId: active?.id,
+        ...(editId ? { replacesLineId: editId } : {}),
         orderNo: receiptNo ?? undefined,
         receiptDate: receiptDate ?? undefined,
         receiptTime: receiptTime ?? undefined,

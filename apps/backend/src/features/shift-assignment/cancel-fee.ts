@@ -1,4 +1,5 @@
 import type { AgencyPenaltyRule } from '@/features/agency/agency-penalty-rule.model.js';
+import { shiftWindowInstants } from '@/util/slot-window.js';
 
 /**
  * What cancelling a shift costs, computed at the moment of cancelling.
@@ -22,19 +23,31 @@ export type CancelFee = {
   noticeHours: string;
 };
 
-/** Parse a shift's start from its date + slot ("22:00 - 04:00" -> 22:00). */
-export function shiftStartMs(shiftDate: string, slot: string | null): number {
-  const [y, m, d] = shiftDate.split('-').map(Number);
-  const match = slot?.match(/(\d{1,2}):(\d{2})/);
-  return new Date(
-    y ?? 1970,
-    (m ?? 1) - 1,
-    d ?? 1,
-    match ? Number(match[1]) : 0,
-    match ? Number(match[2]) : 0,
-    0,
-    0,
-  ).getTime();
+/**
+ * A shift's start as a real instant, read in the VENUE's timezone.
+ *
+ * ⚠️ THIS BUILT THE DATE WITH `new Date(y, m, d, hh, mm)` — the local-time
+ * constructor, which resolves the wall clock in the SERVER process's timezone.
+ * On a UTC container a 22:00 Kuala Lumpur shift was read as 22:00Z, eight hours
+ * late, so every cancellation looked eight hours earlier than it was: notice
+ * hours inflated and the fee fell a band, or to nothing. That wrong figure is
+ * then SEALED onto the assignment and never recomputed.
+ *
+ * `slot-window.ts` exists to end exactly this failure — its own header says
+ * "Never build this with `new Date(y, m, d, hh, mm)`… on a UTC host a
+ * 20:00–02:00 Kuala Lumpur shift lands eight hours late" — and cites the wage
+ * incident where the same drift paid a fully-worked shift RM0.00. Cancel-fee was
+ * the one money path that never adopted it. It also carried its OWN slot parser,
+ * a lone `/(\d{1,2}):(\d{2})/`, which is the second parser `slotMinutes` was
+ * consolidated to remove: it read "8pm - 2am" as midnight.
+ *
+ * Null when the slot carries no readable window ("Late night") or the date is
+ * unusable — "no schedule", which callers must not treat as a zero window. The
+ * old code could not express that and returned a 1970 midnight instead, pricing
+ * such a shift at the maximum late band.
+ */
+export function shiftStartMs(shiftDate: string, slot: string | null): number | null {
+  return shiftWindowInstants(shiftDate, slot)?.start.getTime() ?? null;
 }
 
 export function computeCancelFee(opts: {
@@ -46,8 +59,17 @@ export function computeCancelFee(opts: {
   now?: Date;
 }): CancelFee {
   const now = opts.now ?? new Date();
-  const noticeHours =
-    (shiftStartMs(opts.shiftDate, opts.slot) - now.getTime()) / 3_600_000;
+  const startMs = shiftStartMs(opts.shiftDate, opts.slot);
+  // NO READABLE SCHEDULE, NO FEE. A slot this cannot parse ("Late night") or an
+  // unusable date leaves nothing to measure notice against, and a fee is a
+  // deduction from someone's pay — it must rest on a window we can actually
+  // name. The old parser could not express "unknown": it fell back to a 1970
+  // midnight, which is maximally in the past and therefore priced every such
+  // cancellation at the LATE band.
+  if (startMs === null) {
+    return { feeRm: '0.00', pct: 0, noticeHours: '0.00' };
+  }
+  const noticeHours = (startMs - now.getTime()) / 3_600_000;
   const hours = noticeHours.toFixed(2);
 
   const rule = opts.rule;

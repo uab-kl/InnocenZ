@@ -105,12 +105,24 @@ export function AgencyPaidPvDetail({
 				</OutletSection>
 			)}
 
+			{/*
+			 * NO LETTERHEAD, NO DOCUMENT.
+			 *
+			 * `pvIssuer.issuer` is null while the agency record is loading and
+			 * after it fails. Both used to reach `pv-pdf`'s default parameter and
+			 * print ATMOSPHERE EVENT ENTERPRISE — a real, unrelated company — at
+			 * the top of a live payment voucher. Refusing is the honest answer: a
+			 * voucher naming the wrong company is worse than no voucher, and the
+			 * reason is stated rather than left as a dead button.
+			 */}
 			<div className="mt-2.5 flex gap-2">
 				<button
 					type="button"
-					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
+					disabled={!pvIssuer.issuer}
+					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs disabled:opacity-50"
 					onClick={() => {
-						downloadPvBreakdownPdf(pv, payee, [], pvIssuer);
+						if (!pvIssuer.issuer) return;
+						downloadPvBreakdownPdf(pv, payee, [], pvIssuer.issuer);
 						toast(t.payroll.officialPvOpened, "success");
 					}}
 				>
@@ -118,16 +130,28 @@ export function AgencyPaidPvDetail({
 				</button>
 				<button
 					type="button"
-					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
+					disabled={!pvIssuer.issuer}
+					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs disabled:opacity-50"
 					onClick={() => {
-						downloadPvBreakdownCsv(pv, payee, pvIssuer);
+						if (!pvIssuer.issuer) return;
+						downloadPvBreakdownCsv(pv, payee, pvIssuer.issuer);
 						toast(t.payroll.excelDownloaded, "success");
 					}}
 				>
 					<Sheet className="h-4 w-4 shrink-0" /> Excel
 				</button>
 			</div>
+			{!pvIssuer.issuer && (
+				<p className="iz-tiny iz-muted2 mt-1.5 text-center">
+					{pvIssuer.status === "loading"
+						? "Loading your agency's letterhead…"
+						: "Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload the page or check your connection."}
+				</p>
+			)}
 
+			{/* NOTE: this is `pr-demo`'s plain-text receipt, not the letterhead PDF —
+			    same name, different function. It prints no issuer, so it is not
+			    gated on `pvIssuer`. */}
 			<button
 				type="button"
 				className="iz-btn iz-btn-primary mt-2 w-full"

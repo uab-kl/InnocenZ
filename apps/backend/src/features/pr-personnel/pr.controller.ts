@@ -26,6 +26,7 @@ import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
 import { EMPTY_PR_STATS, loadPrStats } from './pr-stats.js';
 import { derivedAge } from './ic-dob.js';
 import { refreshStoredComcard, touchesComcard } from '@/util/comcard-refresh.js';
+import { activeAgencyId } from '@/util/org-scope.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -320,10 +321,14 @@ export class PrControllerClass {
     const isAdmin = roles.some((r) => r.roleName === 'admin');
     if (isAdmin) return { isAdmin: true, agencyId: null, outletIds: [] };
 
+    // Third copy of the `?? memberships[0]` fallback, and the one that decides
+    // which agency's PERSONNEL a caller may see and edit — IC, phone, DOB. An
+    // inactive membership resolved an agencyId here too, so a removed operator
+    // kept the roster they had just lost.
     const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    const active = memberships.find((m) => m.status === 'active') ?? memberships[0];
-    if (active?.agencyId) {
-      return { isAdmin: false, agencyId: active.agencyId, outletIds: [] };
+    const agencyId = activeAgencyId(memberships);
+    if (agencyId) {
+      return { isAdmin: false, agencyId, outletIds: [] };
     }
 
     // No agency link — fall back to outlet membership so an outlet can read the

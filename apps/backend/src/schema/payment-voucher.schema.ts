@@ -155,6 +155,22 @@ export const CreatePrReceiptSchema = z.object({
     .array(z.string().min(1).max(1_500_000, 'Photo is too large'))
     .max(6, 'At most 6 photos')
     .optional(),
+  /**
+   * A RE-SCAN: the LINE the phone is showing, whose whole paper this receipt
+   * replaces.
+   *
+   * The swap used to happen on the phone — delete the old line, then post this
+   * receipt — and `ScanScreen.runSubmit` restores nothing, so any refusal after
+   * the delete took the PR's money with it. It only ever needed to be one call:
+   * the server is the only place that can exclude the paper being replaced from
+   * its own per-night duplicate check, and the only place that can order the new
+   * write ahead of the old removal.
+   *
+   * A LINE id, not a receipt id, because that is what the screen is holding and
+   * what the existing line authorisation checks against; the receipt is resolved
+   * from it server-side.
+   */
+  replacesLineId: z.string().uuid('Invalid line ID').optional(),
   items: z
     .array(
       z.object({

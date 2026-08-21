@@ -21,6 +21,7 @@ import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
+import type { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 
 export class SpecialServiceControllerClass {
   constructor(
@@ -28,7 +29,40 @@ export class SpecialServiceControllerClass {
     private prRepository: PrRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private orgScopeDeps: OrgScopeDeps,
+    private agencyOutletRepository: AgencyOutletRepository,
   ) {}
+
+  /**
+   * May this caller file a posting against THIS venue?
+   *
+   * `create` pinned `initiatedBy` server-side but took `outletId` on trust — any
+   * uuid the client sent was stored. That stayed latent while the agency portal
+   * sent only `outletName` (which this handler ignores), so `outletId` arrived
+   * null from that path; sending the real id made it reachable, and a forged one
+   * would put an attacker-chosen job posting, budget and agency name onto a
+   * rival venue's own service list, where `getById` shows it as theirs because
+   * `scope.outletIds.includes(record.outletId)` is true.
+   *
+   * Scoped by the rule each org already uses: an OUTLET operator may post only
+   * at its own venues; an AGENCY only at venues it holds an approved
+   * `agency_outlet` link to — the repository's stated portal visibility rule.
+   * A posting with NO outlet stays allowed: a PR or an agency may raise one that
+   * names no venue, which is what a nullable `outlet_id` is for.
+   */
+  private async mayPostForOutlet(req: Request, outletId: string | null): Promise<boolean> {
+    if (!outletId) return true;
+    const scope = await resolveOrgScope(req, this.orgScopeDeps);
+    if (scope.isAdmin) return true;
+    if (scope.outletIds.length > 0) return scope.outletIds.includes(outletId);
+    if (scope.agencyId) {
+      const linked = await this.agencyOutletRepository.listApprovedOutletIdsForAgency(
+        scope.agencyId,
+      );
+      return linked.includes(outletId);
+    }
+    // A PR belongs to no venue, so it may not pin a posting to one.
+    return false;
+  }
 
   private parseOrder(req: Request): 'asc' | 'desc' {
     return req.query.order === 'asc' ? 'asc' : 'desc';
@@ -304,6 +338,17 @@ export class SpecialServiceControllerClass {
         }
         postingPrId = pr.id;
         postingUserId = userId ?? pr.userId ?? null;
+      }
+
+      // The venue must be one this caller may actually post at — see
+      // `mayPostForOutlet`. Checked here, after `initiatedBy` is pinned, so the
+      // scope is judged from what the caller IS, never from what they claimed.
+      if (!(await this.mayPostForOutlet(req, parsed.data.outletId ?? null))) {
+        return res.status(403).json({
+          success: false,
+          message: 'You cannot post a service at that outlet',
+          data: null,
+        });
       }
 
       const record = await this.repository.create({

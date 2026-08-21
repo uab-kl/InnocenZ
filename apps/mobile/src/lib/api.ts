@@ -1869,6 +1869,18 @@ export type PrReceiptSubmitInput = {
   source: PrReceiptSource;
   /** The active shift assignment this receipt belongs to. */
   assignmentId?: string;
+  /**
+   * A RE-SCAN: the LINE id whose whole paper this receipt replaces.
+   *
+   * The server does the swap — it excludes that paper from its own per-night
+   * duplicate check, writes this receipt, and only THEN removes the old one. The
+   * phone must not delete first: `ScanScreen.runSubmit` restores nothing, so a
+   * client-side delete-then-write loses the money on any failure after the
+   * delete, and there is no client call that could put the receipt back — its
+   * RCP-… number, its review state and its packed item category are all
+   * server-side facts the line DTO never carries.
+   */
+  replacesLineId?: string;
   /** The order number OCR read off the paper (e.g. ORD0389). */
   orderNo?: string;
   receiptDate?: string;

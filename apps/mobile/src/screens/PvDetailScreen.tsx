@@ -226,6 +226,19 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           status: liveVoucher?.status ?? lastWeek.status,
           lines: scopeLines(lastWeek.lines ?? [], liveVoucher?.id),
           disputes: scopeDisputes(lastWeek.disputes ?? [], liveVoucher?.id),
+          /*
+           * ⚠️ AND THE VOUCHER LIST — the third thing that must be scoped, for
+           * the third time, for the same reason as `scopeLines` and
+           * `scopeDisputes` above.
+           *
+           * `...lastWeek` carried the WHOLE week's `vouchers[]` onto an object
+           * that claims to be ONE document. Nothing read it here until
+           * `weekDisputable` learned to prefer the array, at which point this
+           * page would have gone straight back to answering "is ANY voucher in
+           * the week disputable" while rendering Atlas's payslip — the exact bug
+           * the two scopers above exist to close.
+           */
+          vouchers: liveVoucher ? [liveVoucher] : lastWeek.vouchers,
         }
       : null;
 

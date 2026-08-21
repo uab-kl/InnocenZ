@@ -247,6 +247,9 @@ export const specialServiceController = new SpecialServiceControllerClass(
   prRepository,
   authRepository,
   orgScopeDeps,
+  // `create` must check the caller may post against the outlet it names — see
+  // the note there. It could not, until this was handed over.
+  agencyOutletRepository,
 );
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();

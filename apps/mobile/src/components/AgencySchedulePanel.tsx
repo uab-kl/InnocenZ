@@ -40,6 +40,7 @@ import {
   todayYmd,
   ymdToIso,
 } from '../lib/demo-shifts';
+import { shiftStartDate } from '../lib/venue-time';
 import { useActiveShift } from '../lib/active-shift';
 import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useSession } from '../lib/session';
@@ -80,12 +81,19 @@ const MISSED_STYLE = {
 
 type CancelPenalty = { pct: number; amount: number; tierLabel: string };
 
-/** Parse the shift's start Date from its date + slot ("22:00 - 04:00"). */
-function shiftStartDate(shiftDate: string, slot: string | null): Date {
-  const [y, m, d] = shiftDate.split('-').map(Number);
-  const match = slot?.match(/(\d{1,2}):(\d{2})/);
-  return new Date(y, (m || 1) - 1, d || 1, match ? Number(match[1]) : 0, match ? Number(match[2]) : 0);
-}
+/*
+ * ⚠️ `shiftStartDate` USED TO LIVE HERE, built with `new Date(y, m, d, hh, mm)`.
+ *
+ * That reads the wall clock in the DEVICE's timezone, so the fee this screen
+ * quotes matched the one the server seals only while the phone was set to
+ * Malaysia — and the server, on a UTC container, was eight hours out in the
+ * other direction. `cancel-fee.ts` requires the two to "agree exactly — a PR who
+ * is shown -RM 27.50 and sealed at -RM 41.25 has been lied to". Both sides now
+ * read the VENUE's clock: `lib/venue-time` here, `util/slot-window` there.
+ *
+ * It also carried its own `/(\d{1,2}):(\d{2})/`, which read "8pm - 2am" as
+ * midnight. The shared parser resolves meridiem slots.
+ */
 
 /**
  * Cancellation penalty, computed from CANCELLATION_BANDS — the same numbers
@@ -102,10 +110,13 @@ function cancelPenalty(
   now = new Date(),
 ): CancelPenalty {
   const dailyWage = Number(assignment.rate?.wagePerHour) || Number(assignment.payAmount) || 0;
-  const hoursUntil =
-    (shiftStartDate(assignment.shiftDate, assignment.slot).getTime() - now.getTime()) / 3_600_000;
+  const start = shiftStartDate(assignment.shiftDate, assignment.slot);
   // A disabled rule is no cancellation charge at all — not 0% of the bands.
   if (!b.enabled) return { pct: 0, amount: 0, tierLabel: 'No cancellation fee' };
+  // No readable window, no quoted fee — matching the server, which returns
+  // RM 0.00 rather than pricing an unknown schedule at the late band.
+  if (!start) return { pct: 0, amount: 0, tierLabel: 'No cancellation fee' };
+  const hoursUntil = (start.getTime() - now.getTime()) / 3_600_000;
   if (hoursUntil >= b.freeCancelHours) {
     return { pct: 0, amount: 0, tierLabel: `${b.freeCancelHours}h+ before — no deduction` };
   }

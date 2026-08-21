@@ -112,8 +112,43 @@ const DISPUTABLE_VOUCHER_STATUSES = ['pending_review', 'sent', 'disputed'];
  * would 404. The kind and the receipt's review state are separate tests —
  * `kindDisputable` and `cellDisputable` — and all three have to pass.
  */
-export function weekDisputable(week: PrCurrentWeek | null): boolean {
-  if (!week?.voucherId || !week.status) return false;
+export function weekDisputable(
+  week: PrCurrentWeek | null,
+  /**
+   * Narrow to ONE voucher. Omit it to ask the WEEK — "is any voucher in it still
+   * arguable?" — which is the right question for an affordance that has not
+   * resolved a cell yet. A cell that HAS resolved must pass its own id, or it
+   * inherits the other agency's answer.
+   */
+  voucherId?: string | null,
+): boolean {
+  if (!week) return false;
+  /*
+   * ⚠️ THIS READ `week.status` — the NEWEST voucher's, not this cell's.
+   *
+   * Since 0129 a PR on two rosters holds one voucher PER AGENCY for one week and
+   * `PrCurrentWeek` merges them, so `status` is a HEADLINE (see its doc comment
+   * in api.ts: "They are a headline, not the week"). With Atlas `signed`
+   * arriving newest and Why We Met still `pending_review`, this answered false
+   * for the whole week: the Flag glyph became the inspect glyph on every cell
+   * and the evidence sheet's Dispute button vanished — for the agency whose
+   * voucher the server would happily have accepted a claim against. It is the
+   * same shape as the sign lane's fix, which already carries the note that "the
+   * whole week read as un-reviewable and the PR was never offered Atlas's
+   * document at all".
+   *
+   * `some`, never `every`: an affordance must not be withheld because SOME OTHER
+   * agency's document is closed. Precision comes one step later, from
+   * `voucherOwning` naming the cell's voucher and passing it here.
+   */
+  const rows = week.vouchers ?? [];
+  if (rows.length > 0) {
+    const scoped = voucherId ? rows.filter((v) => v.id === voucherId) : rows;
+    return scoped.some((v) => !!v.status && DISPUTABLE_VOUCHER_STATUSES.includes(v.status));
+  }
+  // No `vouchers` at all = a backend that has not restarted, where the headline
+  // IS the only voucher and the old behaviour was already right.
+  if (!week.voucherId || !week.status) return false;
   return DISPUTABLE_VOUCHER_STATUSES.includes(week.status);
 }
 

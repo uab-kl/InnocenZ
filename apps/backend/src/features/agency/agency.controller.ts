@@ -118,11 +118,42 @@ export class AgencyControllerClass {
        * render a foreign tier where it happens to hold one.
        *
        * Admin stays unfiltered: the user-management screens are its only caller and
-       * an admin is already trusted across every agency. A PR reading self is
-       * clamped above and keeps the whole list, which is hers to see.
+       * an admin is already trusted across every agency.
        */
-      if (!isAdmin) {
-        const own = await this.agencyMemberRepository.listMembershipsByUserIds([callerId]);
+
+      /**
+       * ⚠️ AND SO DOES ANYONE READING ONLY THEMSELVES.
+       *
+       * The note above used to end "A PR reading self is clamped above and keeps
+       * the whole list, which is hers to see." The clamp was real — a PR's
+       * `userIds` is narrowed to `[callerId]` thirty lines up — but the list was
+       * not: a PR then fell into the agency-scoping branch below, which resolves
+       * the caller's own AGENCY_USER membership. A PR has no `agency_user` row at
+       * all (that is the staff table, and migration 0033 deleted its
+       * `sub_role='pr'` rows), so `callerAgencyId` came back null and the handler
+       * returned `[]` to the one person entitled to every row of it. On their
+       * phone, `fetchMyAgencyLinks` fed a profile screen that listed no agencies.
+       *
+       * Answered BEFORE the rival-privacy rule rather than inside it. The
+       * standing lesson from this very handler is that hardening one refusal
+       * means walking every EARLIER one; the converse is what bit here — a
+       * self-read has to be settled before a rule about OTHER people's data gets
+       * the chance to answer it, because to that rule every row looks foreign.
+       *
+       * Safe for every role, not just PRs: the rows returned are keyed to the
+       * caller's own user id, so an agency operator asking only about themselves
+       * learns nothing they did not already own.
+       */
+      const isSelfReadOnly = userIds.length === 1 && userIds[0] === callerId;
+
+      if (!isAdmin && !isSelfReadOnly) {
+        // ACTIVE memberships only, and never `own[0]`. An arbitrary row here is
+        // the same defect as the `?? memberships[0]` fallback removed from
+        // `resolveOrgScope`: it let a REMOVED operator keep answering as the
+        // agency that removed them.
+        const own = await this.agencyMemberRepository.listMembershipsByUserIds([callerId], {
+          status: 'active',
+        });
         const callerAgencyId = own[0]?.agencyId ?? null;
         if (!callerAgencyId) {
           // An agency-portal account with no agency behind it can answer nothing.
@@ -897,6 +928,43 @@ export class AgencyControllerClass {
       }
 
       const actor = getActor(req);
+
+      /**
+       * REACTIVATION NEEDS A ROLE NAMED, because removal took the old one away.
+       *
+       * ⚠️ A member with an active `agency_user` row and NO agency role reads
+       * back as an OWNER. The sub-role is derived from RBAC, and every step of
+       * that derivation falls back to owner when it finds nothing:
+       * `roleName: r.roleName ?? 'Owner'`, then `match?.roleName ??
+       * portalRoleName.OWNER` in `laneFromRoleHints`, then
+       * `lanes.get(userId) ?? 'owner'` in the enricher. `guardMemberChange`
+       * then counts that phantom as "another active owner" — which is what
+       * permits removing the LAST real one, and an agency with no account
+       * holding an agency role cannot reach the invite route to let anyone back
+       * in. That state was unreachable until `removeMember` began revoking the
+       * role, so this refusal is part of that change, not separate from it.
+       *
+       * There is nothing to restore automatically: the sub-role lives on
+       * `user_role`, never on `agency_user` (see the note on AgencyUserTable),
+       * so once the role is gone the member's former lane is gone with it. The
+       * owner has to say which lane they are restoring.
+       */
+      const reactivating =
+        parsed.data.status === 'active' && target.status !== 'active';
+      if (reactivating && parsed.data.subRole == null) {
+        const portal = await portalRepository.getPortalByCode('agency');
+        const held = await this.userRoleRepository.getUserRoles(target.userId);
+        const hasAgencyRole = held.some((r) => portal && r.portalId === portal.id);
+        if (!hasAgencyRole) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'This member lost their role when they were removed — choose a role to restore them with.',
+            data: null,
+          });
+        }
+      }
+
       if (parsed.data.subRole != null && parsed.data.subRole !== target.subRole) {
         const roleName = portalRoleNameForSubRole('agency', parsed.data.subRole);
         const nextRole = await this.roleRepository.findByNameAndPortalCode(roleName, 'agency');
@@ -932,11 +1000,62 @@ export class AgencyControllerClass {
       if (!memberRow) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
+
+      /**
+       * DEACTIVATING HERE IS REMOVING, so it must revoke the same way.
+       *
+       * `status` on this endpoint is free text and an owner's to set — the route
+       * file says so — and setting it to anything but 'active' takes the member
+       * out of the agency exactly as `removeMember` does. Revoking only on the
+       * DELETE would have left the identical hole one route down: the
+       * `user_role` row surviving, so a deactivated operator still clears
+       * `requireRole('agency')` and stays a signed-in agency account.
+       */
+      if (parsed.data.status != null && parsed.data.status !== 'active') {
+        await this.revokeAgencyPortalRoleIfLastMembership(target.userId);
+      }
+
       const member = await this.agencyMemberRepository.getByIdEnriched(memberId);
       res.status(200).json({ success: true, message: 'Member updated', data: member });
     } catch (error) {
       logger.error('[AgencyController.updateMember] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Revoke the agency portal role once the user's LAST active membership goes.
+   *
+   * `remove()` and a `status` write on `updateMember` both only flip
+   * `agency_user.status`; the `user_role` row survives, and
+   * `requireRole('agency')` reads that row. Leaving it behind meant an operator
+   * who had just been removed still cleared the coarse role gate — and, before
+   * the matching fix in `resolveOrgScope`, still resolved this agency's FULL
+   * scope through the very membership that was revoked.
+   *
+   * Conditional on it being the LAST one, because `user_role` is a global
+   * (user, role) pair with no agency on it: someone who staffs two agencies
+   * holds ONE agency role covering both, so revoking it unconditionally would
+   * evict them from the agency that did not remove them. While any active
+   * membership remains the role is still earned, and `resolveOrgScope` confines
+   * them to the agencies they are still in.
+   *
+   * Shared by both callers on purpose. Two copies of a revocation rule is how
+   * one of them gets missed — which is precisely what happened when this lived
+   * inline in `removeMember` and `updateMember` could deactivate without it.
+   */
+  private async revokeAgencyPortalRoleIfLastMembership(userId: string): Promise<void> {
+    const stillActive = (await this.agencyMemberRepository.listByUser(userId)).some(
+      (m) => m.status === 'active',
+    );
+    if (stillActive) return;
+    const portal = await portalRepository.getPortalByCode('agency');
+    if (!portal) return;
+    const held = await this.userRoleRepository.getUserRoles(userId);
+    for (const r of held) {
+      if (r.portalId === portal.id) {
+        await this.userRoleRepository.removeRoleFromUser(userId, r.id);
+      }
     }
   }
 
@@ -968,6 +1087,9 @@ export class AgencyControllerClass {
 
       const removed = await this.agencyMemberRepository.remove(memberId);
       if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      await this.revokeAgencyPortalRoleIfLastMembership(target.userId);
+
       res.status(200).json({ success: true, message: 'Member removed', data: null });
     } catch (error) {
       logger.error('[AgencyController.removeMember] Error:', error);

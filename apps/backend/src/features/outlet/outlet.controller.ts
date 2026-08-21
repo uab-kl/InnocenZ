@@ -670,6 +670,32 @@ export class OutletControllerClass {
       }
 
       const actor = getActor(req);
+
+      /**
+       * REACTIVATION NEEDS A ROLE NAMED — the twin of the agency guard.
+       *
+       * ⚠️ An active `outlet_user` row with NO outlet role reads back as an
+       * OWNER: every step of the sub-role derivation falls back to owner when it
+       * finds no role. `guardMemberChange` then counts that phantom as "another
+       * active owner", which permits removing the LAST real one and locks the
+       * venue out. The state only became reachable once removal started
+       * revoking the role, so this refusal belongs with that change.
+       */
+      const reactivating =
+        parsed.data.status === 'active' && target.status !== 'active';
+      if (reactivating && parsed.data.subRole == null) {
+        const portal = await portalRepository.getPortalByCode('outlet');
+        const held = await this.userRoleRepository.getUserRoles(target.userId);
+        if (!held.some((r) => portal && r.portalId === portal.id)) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'This member lost their role when they were removed — choose a role to restore them with.',
+            data: null,
+          });
+        }
+      }
+
       if (parsed.data.subRole != null && parsed.data.subRole !== target.subRole) {
         const roleName = portalRoleNameForSubRole('outlet', parsed.data.subRole);
         const nextRole = await this.roleRepository.findByNameAndPortalCode(roleName, 'outlet');
@@ -705,11 +731,50 @@ export class OutletControllerClass {
       if (!memberRow) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
+
+      // Deactivating here IS removing, so it revokes the same way — see the
+      // agency twin. Revoking only on the DELETE leaves the identical hole one
+      // route down.
+      if (parsed.data.status != null && parsed.data.status !== 'active') {
+        await this.revokeOutletPortalRoleIfLastMembership(target.userId);
+      }
+
       const member = await this.outletMemberRepository.getByIdEnriched(memberId);
       res.status(200).json({ success: true, message: 'Member updated', data: member });
     } catch (error) {
       logger.error('[OutletController.updateMember] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Revoke the outlet portal role once the user's LAST active membership goes —
+   * the twin of `AgencyController.revokeAgencyPortalRoleIfLastMembership`.
+   *
+   * `remove()` and a `status` write on `updateMember` both only flip
+   * `outlet_user.status`. `resolveOrgScope` already filters outlet memberships
+   * on 'active', so a removed operator resolves to an empty `outletIds` and can
+   * reach no venue's data — but the `user_role` row survived, so they still
+   * cleared `requireRole('outlet')` and stayed a signed-in outlet account with
+   * nothing behind it.
+   *
+   * Conditional on it being the LAST one for the same reason as the agency
+   * side: `user_role` carries no outlet, so one role covers every venue a
+   * person operates, and revoking it while another membership is live would
+   * evict them from a venue that did not remove them.
+   */
+  private async revokeOutletPortalRoleIfLastMembership(userId: string): Promise<void> {
+    const stillActive = (await this.outletMemberRepository.listByUser(userId)).some(
+      (m) => m.status === 'active',
+    );
+    if (stillActive) return;
+    const portal = await portalRepository.getPortalByCode('outlet');
+    if (!portal) return;
+    const held = await this.userRoleRepository.getUserRoles(userId);
+    for (const r of held) {
+      if (r.portalId === portal.id) {
+        await this.userRoleRepository.removeRoleFromUser(userId, r.id);
+      }
     }
   }
 
@@ -743,6 +808,9 @@ export class OutletControllerClass {
 
       const removed = await this.outletMemberRepository.remove(memberId);
       if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      await this.revokeOutletPortalRoleIfLastMembership(target.userId);
+
       res.status(200).json({ success: true, message: 'Member removed', data: null });
     } catch (error) {
       logger.error('[OutletController.removeMember] Error:', error);

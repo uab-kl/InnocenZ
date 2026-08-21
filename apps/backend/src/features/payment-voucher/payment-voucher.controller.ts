@@ -122,6 +122,7 @@ import {
   PaymentVoucherWithLines,
 } from './payment-voucher.model';
 import type { PrType } from '@/features/pr-personnel/pr.model';
+import { activeAgencyId } from '@/util/org-scope.js';
 // The outlet's floor-sales mirror. A LEAF module by design — importing the
 // shift-sale feature wholesale from here would close a cycle.
 import {
@@ -627,6 +628,80 @@ export class PaymentVoucherControllerClass {
     return owned && owned.receipt.status !== 'pending' ? owned.receipt : null;
   }
 
+  /**
+   * The receipt a RE-SCAN may replace, resolved from the line the phone shows.
+   *
+   * Ownership is the same pair `updateMyLine` and `deleteMyLine` use — a line id
+   * off the wire proves nothing until it is joined to a voucher this PR owns.
+   *
+   * The review gate is deliberately NOT `lockedReceiptFor` above. That one
+   * refuses any receipt whose status is not 'pending', and `addMyReceipt`
+   * inserts a SCANNED receipt as 'approved' on purpose (only a manual self-log
+   * waits on the agency) — so reusing it would refuse every row the re-scan
+   * button is offered on, telling the PR an agency had reviewed a receipt no
+   * person ever opened. What must be protected is a HUMAN ATTESTATION, and the
+   * row records exactly that: `reviewed_at` is stamped on every decision a
+   * person makes and cleared when an approval is taken back. A null stamp means
+   * nobody has looked yet, which is precisely when a PR may still replace their
+   * own paper. 'verified' is refused regardless — the Monday rollover closes a
+   * week without stamping anyone.
+   *
+   * Shape mirrors the draft resolver's `{ ok, reason }` so the caller can answer
+   * with the real refusal instead of flattening "not yours" and "already
+   * reviewed" into one message.
+   */
+  private async replaceableReceiptFor(
+    lineId: string,
+    pr: PrType,
+    voucherId: string,
+  ): Promise<
+    | { ok: true; receipt: PaymentVoucherReceiptType; siblings: PaymentVoucherLineType[] }
+    | { ok: false; status: 404 | 409; reason: string }
+  > {
+    const owned = await this.paymentVoucherRepository.getLineWithVoucher(lineId);
+    if (!owned || !this.ownsMineVoucher(owned.voucher, pr)) {
+      return { ok: false, status: 404, reason: Error.NOT_FOUND };
+    }
+    // The replacement lands on the CURRENT draft. A row on any other voucher is
+    // not a paper this scan can swap — removing it there while writing here
+    // would move money between two vouchers, and for a PR on two rosters those
+    // are two different agencies' books.
+    if (owned.voucher.id !== voucherId) {
+      return {
+        ok: false,
+        status: 409,
+        reason: 'That row belongs to another voucher — open it there to change it.',
+      };
+    }
+    if (!owned.line.receiptId) {
+      return {
+        ok: false,
+        status: 409,
+        reason: 'That row has no receipt behind it — edit it instead of re-scanning.',
+      };
+    }
+    const rcpt = await this.paymentVoucherRepository.getReceiptWithVoucher(
+      owned.line.receiptId,
+    );
+    if (!rcpt) return { ok: false, status: 404, reason: Error.NOT_FOUND };
+    if (rcpt.receipt.status === 'verified' || rcpt.receipt.reviewedAt) {
+      return {
+        ok: false,
+        status: 409,
+        reason: `${rcpt.receipt.receiptNo} has already been reviewed by the agency — raise a dispute if the figure is wrong.`,
+      };
+    }
+    // THE WHOLE PAPER, not one item off it. Swapping one line of a three-item
+    // scan would leave the other two describing a paper that no longer exists,
+    // and would leave the old receipt standing to refuse the replacement as a
+    // duplicate — which is the bug this is fixing.
+    const voucher = await this.paymentVoucherRepository.getById(voucherId);
+    const siblings = (voucher?.lines ?? []).filter(
+      (l) => l.receiptId === owned.line.receiptId,
+    );
+    return { ok: true, receipt: rcpt.receipt, siblings };
+  }
+
   /** The PR profile bound to the signed-in account, or null (not a PR). */
   private async resolvePr(req: Request): Promise<PrType | null> {
     const userId = req.user?.id;
@@ -731,9 +806,15 @@ export class PaymentVoucherControllerClass {
     const isAdmin = roles.some((r) => r.roleName === 'admin');
     if (isAdmin) return { isAdmin: true, agencyId: null };
 
+    // Was `?? memberships[0]`: an INACTIVE membership still resolved an
+    // agencyId, so an operator the agency had removed kept reading and WRITING
+    // its vouchers. This controller carries its own `resolveScope` and does not
+    // import `util/org-scope`, so repairing that file alone would have left the
+    // money lane — 14 handlers, `create` and `update` among them — untouched.
+    // Those writes sit behind `requirePermission('payment_voucher','update')`,
+    // which reads `user_role` and never asks about membership at all.
     const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    const active = memberships.find((m) => m.status === 'active') ?? memberships[0];
-    return { isAdmin: false, agencyId: active?.agencyId ?? null };
+    return { isAdmin: false, agencyId: activeAgencyId(memberships) };
   }
 
   async list(req: Request, res: Response) {
@@ -1983,6 +2064,31 @@ export class PaymentVoucherControllerClass {
       }
       const draft = draftResult.voucher;
 
+      /*
+       * A RE-SCAN REPLACES A PAPER — it must never DELETE one and hope.
+       *
+       * The phone used to delete the old line itself and then post this receipt
+       * (`ScanScreen.confirmOcr`), and its `runSubmit` restores nothing. So the
+       * delete landed FIRST and every refusal after it — the duplicate check
+       * below, an R2 outage in `saveProofPhotosToR2`, a dropped connection —
+       * left the money gone with nothing written and nothing to put back. Worse,
+       * it deleted ONE line: a multi-item receipt survived its own removal, so
+       * the check below fired on the very paper being replaced and the loss was
+       * CERTAIN rather than merely likely.
+       *
+       * Resolved BEFORE the duplicate check, because it is what that check has
+       * to be told to ignore. Nothing is removed here.
+       */
+      const replaced = parsed.data.replacesLineId
+        ? await this.replaceableReceiptFor(parsed.data.replacesLineId, pr, draft.id)
+        : null;
+      if (replaced && !replaced.ok) {
+        return res
+          .status(replaced.status)
+          .json({ success: false, message: replaced.reason, data: null });
+      }
+      const replacedReceiptId = replaced?.ok ? replaced.receipt.id : null;
+
       // ONE PAPER RECEIPT = ONE LOG PER NIGHT at that outlet — scanned or
       // self-logged alike, since both routes arrive here and a typed order
       // number describes the same paper an OCR'd one does.
@@ -1998,7 +2104,11 @@ export class PaymentVoucherControllerClass {
           parsed.data.orderNo,
           { lineDate, outlet: parsed.data.outlet ?? null },
         );
-        if (dupe) {
+        // A SELF-MATCH IS NOT A DUPLICATE — the same skip `editReceipt` makes,
+        // for the same reason: the paper being replaced is not a second log of
+        // itself. Without this the message would tell the PR to "re-scan its row
+        // (camera icon)", which is precisely what they just did.
+        if (dupe && dupe.id !== replacedReceiptId) {
           return res.status(409).json({
             success: false,
             message: `Receipt ${parsed.data.orderNo} is already logged today (${dupe.receiptNo}) — re-scan its row (camera icon) to replace the picture, edit it, or remove the row and log it afresh.`,
@@ -2097,6 +2207,68 @@ export class PaymentVoucherControllerClass {
         })),
       );
 
+      /*
+       * ONLY NOW does the paper this re-scan replaces go.
+       *
+       * Insert-first is the whole fix: every refusal above has left the PR's
+       * original money exactly where it was. The failure modes are not
+       * symmetrical — delete-first LOSES money, insert-first at worst leaves a
+       * DUPLICATE — and a duplicate that can be seen and corrected beats a row
+       * that vanished silently.
+       *
+       * ⚠️ BUT THE PR CANNOT CLEAR THAT DUPLICATE THEMSELVES. `deleteMyLine`
+       * refuses any line whose receipt is not 'pending' (`lockedReceiptFor`),
+       * and a SCANNED receipt is inserted 'approved' — only a manual self-log
+       * waits on the agency. So a stranded duplicate needs the agency to remove
+       * it, which is why the failure is logged loudly below with both receipt
+       * numbers rather than swallowed. Do not "improve" this into a rollback of
+       * the new receipt: that would restore delete-first's data loss on the
+       * commonest failure, an R2 outage, where the write we would be undoing is
+       * the only copy of the paper the PR still has.
+       *
+       * LINES BEFORE THE RECEIPT. `payment_voucher_line.receipt_id` is
+       * `on delete set null`, so dropping the receipt first would not cascade —
+       * it would ORPHAN the old money onto the voucher with no receipt behind
+       * it, which is the same loss wearing a different shape.
+       *
+       * The shift-sale key is resolved BEFORE the delete, because afterwards the
+       * line no longer exists to resolve from.
+       */
+      if (replaced?.ok) {
+        try {
+          const oldSaleKey = replaced.siblings[0]
+            ? await resolveShiftPrForLine(replaced.siblings[0].id)
+            : null;
+          for (const old of replaced.siblings) {
+            await this.paymentVoucherRepository.deleteLine(old.id);
+          }
+          await this.paymentVoucherRepository.deleteReceipt(replaced.receipt.id);
+        // Never a key the REPLACEMENT now references: a client that carried a
+        // kept photo forward would otherwise have its own live evidence deleted
+        // out from under it.
+        const stillReferenced = new Set(proofPhotos ?? []);
+        await deleteProofPhotoKeys(
+          req.user!.id,
+          [
+            ...replaced.siblings.flatMap((l) => l.proofPhotos ?? []),
+            ...(replaced.receipt.proofPhotos ?? []),
+          ].filter((p) => !stillReferenced.has(p)),
+        );
+          // Recompute-never-increment, and it must run AFTER the removal or it
+          // would bake in the transient double.
+          if (oldSaleKey) await recomputeShiftSale(oldSaleKey, actor);
+        } catch (swapError) {
+          // The replacement IS saved; only the old paper's removal failed. Never
+          // rethrow — a 500 here would tell the PR their re-scan did not land
+          // when it did, and send them to scan a third copy. Named on both
+          // sides so the leftover can be found and cleared by the agency.
+          logger.error(
+            `[PaymentVoucherController.addMyReceipt] RE-SCAN LEFT A DUPLICATE — new receipt saved, old receipt ${replaced.receipt.receiptNo} (${replaced.receipt.id}) NOT removed from voucher ${draft.id}. The PR cannot clear this themselves; an agency must.`,
+            swapError,
+          );
+        }
+      }
+
       // Mirror the gross onto the outlet's floor sales. Best-effort by design:
       // it logs and returns false rather than throwing, so a hiccup in the
       // revenue mirror can never fail the PR's receipt. A manual self-log lands
@@ -2144,9 +2316,13 @@ export class PaymentVoucherControllerClass {
       if (isAdmin && typeof req.query.agencyId === 'string' && req.query.agencyId) {
         agencyId = req.query.agencyId;
       } else {
+        // A SECOND copy of the same fallback. `listAgencyReceipts` does not go
+        // through `resolveScope` — it re-derives the agency inline — so it was
+        // found by searching for the pattern, not the function. It serves the
+        // whole OCR receipt feed for every PR of the agency: order numbers,
+        // printed date and time, proof photos, per-line amounts.
         const memberships = await this.agencyMemberRepository.listByUser(user.id);
-        agencyId =
-          (memberships.find((m) => m.status === 'active') ?? memberships[0])?.agencyId ?? null;
+        agencyId = activeAgencyId(memberships);
       }
       if (!agencyId) {
         return res

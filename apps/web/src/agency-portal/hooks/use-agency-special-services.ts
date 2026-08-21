@@ -25,6 +25,17 @@ export interface AgencyJobPost {
 	remark: string;
 	time: string;
 	dateIsos: string[];
+	/**
+	 * THE VENUE, by its uuid — the field the server actually reads.
+	 *
+	 * `outletName` below is display only. `special_service` dropped its
+	 * denormalised `outlet_name` column and joins the venue's name through the
+	 * FK, and the create handler stores `outletId ?? null` — so a posting sent
+	 * with only a name was filed against no venue at all. That is what happened
+	 * to every real agency job posting while this carried the demo constant
+	 * "Velvet 23".
+	 */
+	outletId: string;
 	outletName: string;
 }
 
@@ -41,6 +52,10 @@ function toCreateInput(
 		postingAgencyId: UUID_RE.test(identity.agencyId)
 			? identity.agencyId
 			: undefined,
+		// The id is what persists (FK); the name rides along for the optimistic
+		// render only. Sending the name alone is what filed every real posting
+		// against no venue.
+		outletId: job.outletId,
 		outletName: job.outletName,
 		title: specialServiceTypeLabel(job.serviceType, job.customServiceName),
 		category: job.serviceType as SpecialServiceCategory,
