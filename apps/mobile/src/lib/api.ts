@@ -1939,6 +1939,23 @@ export function deleteMyReceiptLine(accessToken: string, lineId: string): Promis
 }
 
 /**
+ * Remove a WHOLE receipt — every line off that paper, the receipt and its
+ * photos — in ONE call.
+ *
+ * Use this instead of looping `deleteMyReceiptLine` over the siblings. That loop
+ * half-removes a paper on any mid-loop failure, leaving some items gone and the
+ * rest standing against a receipt that no longer describes them, with nothing on
+ * the client able to put the deleted ones back. It also only ever saw the lines
+ * the current screen had loaded; the server reads them off the voucher.
+ */
+export function deleteMyReceipt(accessToken: string, receiptId: string): Promise<null> {
+  return request<null>(`/payment-voucher/mine/receipts/${receiptId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
  * Raise (or amend) a dispute on one of the PR's own issued vouchers so the
  * agency payroll page can verify/reject it (§3 F). Persists on the reused
  * payment_voucher dispute columns — no new table.

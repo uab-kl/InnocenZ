@@ -51,7 +51,7 @@ export function ShiftStatusPanel({
   const { openScan } = usePrNav();
   // Receipt rows come from the backend current-week draft voucher, scoped to
   // this shift's day so Check-In and Payment never disagree on the amount.
-  const { receiptLines: allLogs, deleteLine, updateLine } = usePrEarnings();
+  const { receiptLines: allLogs, deleteLine, deleteReceipt, updateLine } = usePrEarnings();
   /**
    * THIS SHIFT's rows. The day filter alone was not enough: a PR can work twice
    * in one date, and the second check-in inherited the first shift's items,
@@ -124,19 +124,35 @@ export function ShiftStatusPanel({
    * uncaught red toast. The paper is the unit the PR is holding: removing it
    * should remove what came off it.
    *
-   * The backend deletes the receipt itself once its LAST line goes
-   * (`deleteMyLine`), which is what frees the order number to be scanned again —
-   * so this deletes every line of the receipt and lets that cleanup fire.
+   * ONE server call does the whole removal — lines, receipt and photos — which
+   * is also what frees the order number to be scanned again. It used to be a
+   * loop over `deleteLine`, relying on the backend dropping the receipt once its
+   * LAST line went; see the note inside for why that was wrong.
    *
    * Rows with no receipt behind them (a bare self-log) delete alone, as before.
    */
   const removeWholeReceipt = async (row: PrReceiptLine) => {
-    const siblings = row.receiptNo
-      ? logs.filter((l) => l.receiptNo === row.receiptNo)
-      : [row];
     try {
-      for (const line of siblings) {
-        await deleteLine(line.id);
+      /*
+       * ONE CALL, SERVER-SIDE. This used to loop `deleteLine` over the siblings
+       * it could find in `logs`, which fails two ways.
+       *
+       * A failure PART-WAY leaves the paper half removed — some items gone, the
+       * rest standing against a receipt that no longer describes them — and
+       * nothing here can put the deleted ones back: a line's RCP number, review
+       * state and packed category are server facts the DTO never carries.
+       *
+       * And `logs` is only what THIS screen loaded, so "the whole receipt" was
+       * really "the siblings I happen to be showing". The server reads them off
+       * the voucher instead.
+       *
+       * A row with no receipt behind it — a bare self-log — is a single line and
+       * keeps the single-line path.
+       */
+      if (row.receiptId) {
+        await deleteReceipt(row.receiptId);
+      } else {
+        await deleteLine(row.id);
       }
     } catch (error) {
       // A refusal here is meaningful — an agency-reviewed receipt cannot be

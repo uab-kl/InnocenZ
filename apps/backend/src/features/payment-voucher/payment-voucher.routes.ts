@@ -15,6 +15,13 @@ router.post('/mine/lines', paymentVoucherController.addMyLine.bind(paymentVouche
 router.post('/mine/receipts', paymentVoucherController.addMyReceipt.bind(paymentVoucherController));
 router.patch('/mine/lines/:lineId', paymentVoucherController.updateMyLine.bind(paymentVoucherController));
 router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(paymentVoucherController));
+// Whole-receipt removal, server-side and in one call. The phone used to loop
+// `deleteLine` over the siblings it could see, which half-removes a paper on any
+// mid-loop failure and can only ever see the lines the screen had loaded.
+router.delete(
+  '/mine/receipts/:receiptId',
+  paymentVoucherController.deleteMyReceipt.bind(paymentVoucherController),
+);
 
 // A PR signs its OWN issued voucher — the acceptance the agency waits on.
 // 3-segment, so no collision with the 2-segment '/mine/lines' above.

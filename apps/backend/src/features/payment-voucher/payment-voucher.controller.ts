@@ -3334,6 +3334,92 @@ export class PaymentVoucherControllerClass {
     }
   }
 
+  /**
+   * Remove a WHOLE receipt — every line off that paper, the receipt, its photos.
+   *
+   * The phone used to do this by looping `deleteLine` over the siblings it could
+   * see (`ShiftStatusPanel.removeWholeReceipt`), which has two faults. A failure
+   * part-way leaves the paper HALF removed — some items gone, the rest standing
+   * against a receipt that no longer describes them — and nothing on the client
+   * can put the deleted ones back, for the same reason the re-scan swap moved
+   * here: the RCP number, the review state and the packed category are server
+   * facts the line DTO never carries. Second, the phone can only see the lines
+   * the current screen loaded, so "the whole receipt" was really "the siblings I
+   * happen to be showing".
+   *
+   * The review gate is `reviewedAt`, NOT `lockedReceiptFor`. That helper refuses
+   * anything not 'pending', and `addMyReceipt` writes every SCANNED receipt as
+   * 'approved' on purpose — so the old loop was refused on the first line of
+   * every scanned receipt, and the PR was told an agency had reviewed a paper
+   * nobody had opened. What must be protected is a human attestation, and
+   * `reviewed_at` is exactly that: stamped on every decision a person makes,
+   * cleared when an approval is taken back.
+   */
+  async deleteMyReceipt(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+      const receiptId = paramId(req.params.receiptId);
+      const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+      if (!owned || !this.ownsMineVoucher(owned.voucher, pr)) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (owned.voucher.status !== 'pending_review') {
+        return res.status(400).json({
+          success: false,
+          message: 'This week is already closed for edits',
+          data: null,
+        });
+      }
+      if (owned.receipt.status === 'verified' || owned.receipt.reviewedAt) {
+        return res.status(409).json({
+          success: false,
+          message: `${owned.receipt.receiptNo} has already been reviewed by the agency — raise a dispute instead of removing it.`,
+          data: null,
+        });
+      }
+
+      // Read from the VOUCHER, not from what the phone could see — the client
+      // sends one receipt id and the server decides what belongs to it.
+      const voucher = await this.paymentVoucherRepository.getById(owned.voucher.id);
+      const lines = (voucher?.lines ?? []).filter((l) => l.receiptId === receiptId);
+
+      // A cancellation fee is the agency's charge, not a line the PR may drop —
+      // the same refusal `deleteMyLine` makes, applied before anything is
+      // removed so a mixed receipt cannot be half-deleted.
+      if (lines.some((l) => resolveComponent(l) === 'deduction')) {
+        return res.status(403).json({
+          success: false,
+          message:
+            'This is a charge from your agency, not a line you added. Raise a dispute if you think it is wrong.',
+          data: null,
+        });
+      }
+
+      // Resolved BEFORE the deletes — afterwards no line is left to resolve from.
+      const saleKey = lines[0] ? await resolveShiftPrForLine(lines[0].id) : null;
+      for (const line of lines) {
+        await this.paymentVoucherRepository.deleteLine(line.id);
+      }
+      await this.paymentVoucherRepository.deleteReceipt(receiptId);
+      await deleteProofPhotoKeys(req.user!.id, [
+        ...lines.flatMap((l) => l.proofPhotos ?? []),
+        ...(owned.receipt.proofPhotos ?? []),
+      ]);
+      // Recompute-never-increment, and only once the removal is complete.
+      if (saleKey) await recomputeShiftSale(saleKey, getActor(req));
+
+      res.status(200).json({ success: true, message: 'Receipt removed', data: null });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.deleteMyReceipt] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   // Statuses on which a PR can raise/amend a dispute — the week is issued/under
   // review but not yet signed or paid. Signed/paid vouchers are locked.
   private static readonly DISPUTABLE_STATUSES: PaymentVoucherStatus[] = [

@@ -21,6 +21,7 @@ import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
+import { portalRoleName } from '@/types/rbac-constant.js';
 import type { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 
 export class SpecialServiceControllerClass {
@@ -86,9 +87,31 @@ export class SpecialServiceControllerClass {
     const userId = req.user?.id;
     if (!userId) return null;
     const roles = await this.authRepository.getRolesForUserIds([userId]);
-    const roleNames = roles.map((role) => role.roleName);
-    if (roleNames.includes('admin')) return claimed;
-    return roleNames.includes(claimed) ? claimed : null;
+    if (roles.some((r) => r.roleName === portalRoleName.ADMIN)) return claimed;
+
+    /**
+     * ⚠️ THIS COMPARED THE ROLE NAME TO THE PORTAL CODE, so agency and outlet
+     * postings were refused outright — the feature has never worked for either.
+     *
+     * `initiatedBy` is one of 'outlet' | 'agency' | 'pr', which are PORTAL
+     * CODES. A role row carries both: an agency owner is
+     * `{ roleName: 'Owner', portalCode: 'agency' }` and an outlet owner is
+     * `{ roleName: 'Owner', portalCode: 'outlet' }`. Testing `roleName` against
+     * 'agency' therefore asked whether someone's TITLE was the word "agency",
+     * which no seeded role has, and every agency and outlet caller got
+     * "Cannot post a special service on behalf of another role".
+     *
+     * Only PRs slipped through, by coincidence: their role really is named 'pr'
+     * and their `portalCode` is null, so the old test passed for exactly the one
+     * caller it happened to fit. That is why the bug survived — the path that
+     * was exercised was the path that worked.
+     *
+     * Both are accepted now, matching `holdsAgencyLane`/`holdsOutletLane`, which
+     * already look at `portalCode` first and fall back to role names.
+     */
+    return roles.some((r) => r.portalCode === claimed || r.roleName === claimed)
+      ? claimed
+      : null;
   }
 
   private buildFilter(req: Request): SpecialServiceFilter {
