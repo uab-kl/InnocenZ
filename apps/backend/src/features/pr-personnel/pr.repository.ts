@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, ilike, inArray, ne, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, ilike, inArray, ne, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -675,31 +675,81 @@ export class PrRepositoryClass {
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
+      // ONE CARD PER PERSON for an outlet caller.
+      //
+      // The narrowing above matches the assignment's own agency_id, and its
+      // note claims that "collapses the duplicate". It does — for a PR who has
+      // worked this venue under ONE agency. Alice has worked JK House under
+      // BOTH Atlas and Why We Met (an Atlas-owned shift staffed by WWM via
+      // shift_agency), so both memberships satisfy the EXISTS and the outlet's
+      // PR picker listed her twice, under one id, with two different tiers.
+      //
+      // A membership is not a person. The outlet is asking "who may I name for
+      // this shift", which is a question about PEOPLE — and at Post Job time no
+      // agency has been chosen yet, so no single membership's tier is the right
+      // answer anyway. Deduped in SQL rather than after the fetch, so the page
+      // is a page of people and totalCount counts people, not memberships.
+      //
+      // Deliberately NOT applied to the agency branch (already pinned to one
+      // agencyId, so one row per person) nor to admin (whose PR screen is where
+      // a person's several memberships must stay individually visible).
+      const dedupeByPerson = Boolean(filter?.assignedToOutletIds);
+
       const [countRow] = await db
-        .select({ value: sql<number>`count(*)::int` as SQL<number> })
+        .select({
+          value: (dedupeByPerson
+            ? sql<number>`count(distinct ${AgencyPrTable.userId})::int`
+            : sql<number>`count(*)::int`) as SQL<number>,
+        })
         .from(AgencyPrTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, AgencyPrTable.userId))
         .where(whereClause);
       const totalCount = Number(countRow?.value ?? 0);
 
-      const rows = await db
-        .select({
-          membership: AgencyPrTable,
-          username: UserTable.username,
-          phoneNum: UserTable.phoneNum,
-          email: UserTable.email,
-          fullName: UserProfileTable.fullName,
-          idNo: UserProfileTable.idNo,
-          ...profileColumns,
-        })
-        .from(AgencyPrTable)
-        .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
-        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, AgencyPrTable.userId))
-        .where(whereClause)
-        .orderBy(AgencyPrTable.createdAt)
-        .limit(pageSize)
-        .offset((page - 1) * pageSize);
+      const selection = {
+        membership: AgencyPrTable,
+        username: UserTable.username,
+        phoneNum: UserTable.phoneNum,
+        email: UserTable.email,
+        fullName: UserProfileTable.fullName,
+        idNo: UserProfileTable.idNo,
+        ...profileColumns,
+      };
+
+      // DISTINCT ON requires its expression to LEAD the ORDER BY, so the person
+      // key sorts first and `createdAt DESC` only decides WHICH membership
+      // survives — the newest, so a PR who moved agency shows her current grade
+      // rather than a lapsed one. That forced ordering is by user_id, not the
+      // caller's, so the page is re-sorted below to keep the list order the
+      // outlet portal had before this.
+      const rows = dedupeByPerson
+        ? await db
+            .selectDistinctOn([AgencyPrTable.userId], selection)
+            .from(AgencyPrTable)
+            .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
+            .leftJoin(UserProfileTable, eq(UserProfileTable.userId, AgencyPrTable.userId))
+            .where(whereClause)
+            .orderBy(AgencyPrTable.userId, desc(AgencyPrTable.createdAt))
+            .limit(pageSize)
+            .offset((page - 1) * pageSize)
+        : await db
+            .select(selection)
+            .from(AgencyPrTable)
+            .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
+            .leftJoin(UserProfileTable, eq(UserProfileTable.userId, AgencyPrTable.userId))
+            .where(whereClause)
+            .orderBy(AgencyPrTable.createdAt)
+            .limit(pageSize)
+            .offset((page - 1) * pageSize);
+
+      if (dedupeByPerson) {
+        rows.sort(
+          (a, b) =>
+            new Date(a.membership.createdAt).getTime() -
+            new Date(b.membership.createdAt).getTime(),
+        );
+      }
 
       const prs = rows.map((row) =>
         composePr({
