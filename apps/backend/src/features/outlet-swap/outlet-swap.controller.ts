@@ -1,5 +1,10 @@
 import { Request, Response } from 'express';
-import { travelWarningFor } from '@/features/shift-assignment/travel-gap';
+import {
+  foreignTravelBlock,
+  PR_UNAVAILABLE_THEN,
+  travelWarningFor,
+} from '@/features/shift-assignment/travel-gap';
+import { NON_STAFFING_STATUSES } from '@/features/shift-assignment/shift-assignment.model';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
@@ -58,6 +63,47 @@ export class OutletSwapControllerClass {
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
   ) {}
+
+  /**
+   * Can this PR physically take `toShift`, given the shifts OTHER agencies hold
+   * on them? The swap is the third lane that seats a person somewhere —
+   * travel-gap.ts's own contract says a cross-agency turnaround "is refused
+   * outright by `foreignTravelBlock` before the write", and the assign and
+   * re-staff lanes both do. This lane only ever WARNED, after the move: a swap
+   * could seat a PR exactly where POST /shift-assignment would have refused her.
+   *
+   * Same neighbour rules as the assign lane: the vacated shift is excluded (the
+   * swap empties it), the destination is excluded (not its own neighbour), and
+   * non-staffing rows don't count. Fails open on a missing venue pin, exactly
+   * like the assign lane's `shiftPin &&` guard — a venue with no pin cannot
+   * price the trip, and physics that cannot be computed must not block a move.
+   */
+  private async foreignTravelBlocked(params: {
+    toShift: { shiftDate: string; slot: string | null; outletId: string };
+    prId: string;
+    actingAgencyId: string;
+    excludeShiftIds: string[];
+  }): Promise<boolean> {
+    const pin = await this.shiftAssignmentRepository.getOutletPin(params.toShift.outletId);
+    if (!pin) return false;
+    const held = await this.shiftAssignmentRepository.listForPr(params.prId);
+    const others = held.filter(
+      (a) =>
+        !params.excludeShiftIds.includes(a.shiftId) &&
+        !NON_STAFFING_STATUSES.includes(a.status as (typeof NON_STAFFING_STATUSES)[number]),
+    );
+    return foreignTravelBlock({
+      shift: {
+        shiftDate: params.toShift.shiftDate,
+        slot: params.toShift.slot,
+        outletId: params.toShift.outletId,
+        lat: pin.lat,
+        lng: pin.lng,
+      },
+      others,
+      actingAgencyId: params.actingAgencyId,
+    });
+  }
 
   private resolveScope(req: Request): Promise<OrgScope> {
     return resolveOrgScope(req, {
@@ -252,6 +298,23 @@ export class OutletSwapControllerClass {
           data: null,
         });
       }
+      // Third screen, same courtesy logic as the two above: a request whose
+      // destination the PR physically cannot reach (a FOREIGN agency's shift
+      // too close to travel from) would sit in her queue only to be refused at
+      // approval. The anonymous sentence, not the reason — this answer goes to
+      // an agency that cannot see the other booking, and the assign lane's
+      // refusal for the identical situation uses the same string so the two
+      // cannot be told apart and probed.
+      if (
+        await this.foreignTravelBlocked({
+          toShift,
+          prId: assignment.userId ?? assignment.prId,
+          actingAgencyId: assignment.agencyId,
+          excludeShiftIds: [assignment.shiftId, toShiftId],
+        })
+      ) {
+        return res.status(409).json({ success: false, message: PR_UNAVAILABLE_THEN, data: null });
+      }
 
       const actor = getActor(req);
       const request = await this.outletSwapRepository.create({
@@ -334,6 +397,32 @@ export class OutletSwapControllerClass {
       }
       const owned = await this.resolveOwnPendingSwap(req, res);
       if (!owned) return;
+
+      // THE GUARANTEE, before the write — the raise-lane screen above is only
+      // the courtesy. Roster state can change between raise and approve (the
+      // other agency books her the same night), and until now nothing re-asked
+      // the physics at the moment that matters. The PR is the caller here and
+      // can see both of her bookings, so the message is plain rather than the
+      // anonymous agency-facing sentence.
+      const beingMoved = await this.shiftAssignmentRepository.getById(owned.assignmentId);
+      const destination = await this.shiftRepository.getById(owned.toShiftId);
+      if (
+        beingMoved &&
+        destination &&
+        (await this.foreignTravelBlocked({
+          toShift: destination,
+          prId: beingMoved.userId ?? beingMoved.prId,
+          actingAgencyId: beingMoved.agencyId,
+          excludeShiftIds: [beingMoved.shiftId, owned.toShiftId],
+        }))
+      ) {
+        return res.status(409).json({
+          success: false,
+          message:
+            'Another of your shifts is too close to this one — there is not enough time to travel between the venues, so this swap can no longer be approved.',
+          data: null,
+        });
+      }
 
       const result = await this.outletSwapRepository.approve({
         id: owned.id,
