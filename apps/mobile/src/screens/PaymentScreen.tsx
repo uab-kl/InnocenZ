@@ -2043,7 +2043,11 @@ export function PaymentScreen({
                             <Text style={styles.claimComponent}>
                               Receipts this day
                             </Text>
-                            <Text style={styles.claimState}>
+                            {/* claimState carries no colour of its own —
+                                the dispute rows always pair it with a status
+                                colour, and without one this printed near-black
+                                on the dark card (owner: "this in white"). */}
+                            <Text style={[styles.claimState, { color: C.txt }]}>
                               {dayReceipts.total} total
                             </Text>
                           </View>
