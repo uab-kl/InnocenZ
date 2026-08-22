@@ -331,6 +331,46 @@ changelog contradicted each other for three commits. `expectedUpdatedAt` is in
 code**: open the agency voucher editor, have the PR self-log a drink into the same day, save,
 and confirm the editor is refused with the 409 sentence rather than silently winning.
 
+### ▶ 🔴 FIRE `notifyShiftPosted` ONCE, BY HAND (added 22 Aug 2026)
+
+The only part of the 22 Aug batch with no evidence behind it. Post a real shift from the
+JK House outlet and confirm the agency bell increments and the message reads
+"New shift — JK House … needs N PRs". It cannot be proved without writing a real shift row,
+so it was deliberately left for the owner rather than faked. Check two things while there:
+that a SHARED shift (several approved agencies) reaches every invited agency and not just the
+anchor, and that no message anywhere names another agency.
+
+### ▶ 🟠 TWO BUSY-FLAG DEFECTS ARE STILL OPEN — N14 AND N16 (added 22 Aug 2026)
+
+Deliberately NOT fixed in the 22 Aug batch, because both change the assign sheet the owner was
+about to test by hand and neither is measured as occurring.
+
+- **N14 — a label-only slot cannot be blocked by anyone.** `slotMinutes` returns null for
+  "Late night", so `shiftsOverlap` returns FALSE and `travelShortfall` returns null: server AND
+  client both fail open, and a genuine double-booking passes every guard. The two screens then
+  disagree — `committedWindowsByPr` registers the date with an empty array so the grid prints
+  "Unavailable", while the sheet's `parseDialogWindow` returns null and blocks nothing. Decide
+  what a windowless commitment MEANS and say it once; blocking the whole day would re-impose
+  the rule the owner narrowed on 20 Aug 2026.
+- **N16 — client and server disagree about midnight.** The sheet compares parsed `HH:MM` with
+  `a.from < b.to && b.from < a.to`; the server runs a continuous timeline via `shiftWindow` /
+  `dayIndex`, so 22:00–04:00 on the 30th genuinely collides with 02:00–06:00 on the 31st. The
+  sheet under-warns. Fixing it means threading the PREVIOUS day's windows into
+  `AssignBackendCellSheet`, which today receives only one date's — a prop change through
+  `RosterBackendTimetable`.
+
+### ▶ 🟡 "PR BOOKED" ON THE AGENCY HOME NEEDS A STAFFED TOTAL (added 22 Aug 2026)
+
+The owner asked for PR needed AND PR booked; only **needed** shipped. `OpenShift` carries
+`openSlots` but no staffed count, and `mergeCrossAgencyStaffing` computes the cross-agency
+total inside `findOpenShifts` without exposing it. Surfacing it means adding a field to
+`AutoAssignPlan` — safe in itself (the sweep confirmed the only pair-construction site is the
+`pairs.push` at auto-assign.ts:649-660, and a new aggregate touches neither the `.filter` at
+591-602 nor the `.sort` at 603-608), but it was not worth doing an hour before a manual test
+pass. ⚠️ Note when picking it up: the owner's rule is that a PR booked by ANOTHER agency counts
+as on duty, shown anonymously — so the number must come from the merged cross-agency total, not
+from the agency's own assignments.
+
 ### ▶ 🟡 THE NICKNAME SEARCH IS UNPINNED BY ANY TEST (added 22 Aug 2026)
 
 The Post Job picker's search was proved by driving the live page (see §10), and every case
@@ -2018,6 +2058,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-22 | **The cross-agency busy flag stopped refusing bookings the server accepts, and posting a shift finally rings a bell.** Three fixes in `listCommittedWindows` (pr-availability.repository.ts), the read behind the roster's anonymous *UNAVAILABLE 15:00 - 04:00* marker. (1) **It over-blocked.** `/committed` kept `completed` rows and returned neither `status` nor `check_out_at`, while the assign guard skips both — so a PR who finished an afternoon shift and clocked out stayed greyed in the assign sheet and was dropped from `selectable` entirely. **Measured against `innocenz-test` before fixing: 67 committed windows, of which 24 (36%) were rows the server would have accepted.** Now filters `completed` + `check_out_at IS NOT NULL`, mirroring the guard exactly. (2) **`slot` is free text** (`z.string().max(100)`, no format rule) and was rendered verbatim to the rival agency, so a venue typing "Velvet VIP Launch 15:00-04:00" would defeat an anonymity the SQL enforces perfectly. New `canonicalWindow` reduces it to bare `HH:MM - HH:MM` via `slotMinutes` — the SAME parser the clash guard and pay window already share, so no third reading of a slot string enters the codebase. **Measured: 0 occurrences** — a real hole, never yet exploited; kept as a boundary, not a repair. (3) **Identity matched on `pr_id` only** while `hasLiveAssignmentOn` in the same file matches either column; now matches both and returns `agency_pr.user_id` as the canonical key. **Measured: 0 rows** where the columns differ — latent, not live. ⚠️ Both (2) and (3) were reported to the owner as live defects BEFORE measuring, and both were overstated; the numbers came from a throwaway probe, since deleted. **Also: `notifyShiftPosted`** — an outlet posting a shift used to notify nobody (withdrawal notified everyone; creation notified no one), so the agency learned of new work only when someone opened the roster and a 30s-stale query refetched. Fans out to every INVITED agency's active members (0124's lesson), fires after the 201, names the venue but never a rival agency, and reuses the existing `shift_cover_needed` kind — already agency-addressed, already means "seats need filling" — to avoid a `notification_kind` enum migration on a shared DB. **And a `PR NEEDED TODAY` KPI** on the agency home: open slots today from the `useAutoAssignPlan("today")` the AI panel beside it already mounts (shared query keys, no extra request), gated to `viewLiveFloor` so finance never fires it, hidden at zero. 3 keys × 2 dictionaries. Verified: backend tsc **0** beyond the TS2883 baseline, web tsc **0**, vitest **39/39**, and live on the real agency session — the busy marker still renders identically after the query rewrite, and the KPI reads `PR NEEDED TODAY · 1 · 1 free to fill them`. ⚠️ **`notifyShiftPosted` has NOT been fired end to end** — that needs a real shift posted from JK House; it is the first item in §9. | (this commit) |
 
 | 2026-08-22 | **Auto-assign stopped arriving pre-armed — selection is now opt-in — and the whole sheet got the translation it never had.** `AutoAssignSheet` opened with EVERY proposed pairing already included and a "Skip" chip per row, so the default action of the biggest button on screen was *write all of these* and the agency had to notice and decline each one it did not want. Assigning a PR to a shift is real money and a real person's evening, so the safe default is nothing selected: rows are now checkbox buttons (`aria-pressed`), the CTA is disabled and reads "Select at least one to continue" at zero, and **Select all N / Clear** keeps the bulk case one tap away. Same slice: the sheet was **100% hardcoded English** inside a portal with a 中文 toggle in its own sidebar — title, intro, both count labels, the CTA, the two shortage sentences and all four toasts. 26 keys added to `rosterGrid` in BOTH dictionaries, and the two callers' `scopeLabel` (`` `on ${day}` `` in the roster banner, `"today"` in the home card) moved into the dictionary too rather than being English glued onto a translated sentence. Verified **live on the real agency session** (Dato' Lim Wei Khoon, `/en/agency/roster?view=planning`): opens **0/1 selected** with the CTA disabled · tap the row → `aria-pressed=true`, tick renders, **1/1**, CTA "Confirm 1 assignment" enabled, toggle flips to "Clear" · Clear → back to 0/1 disabled · Select all → 1/1 enabled · 中文 renders 分配可用 PR / 已选 1/1 / 确认 1 项分配 / 请至少选择一项. `apps/web` tsc **0 errors**, biome clean. ⚠️ Two things deliberately NOT translated and left as-is: `tierLabel` ("Tier I") is a product proper noun, and `dropReasonLabel` returns English sentences from a pure lib with no `t` in scope — noted in §9. | (this commit) |
 

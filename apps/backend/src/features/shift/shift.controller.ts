@@ -446,6 +446,27 @@ export class ShiftControllerClass {
         selectedAgencyIds,
       );
       res.status(201).json({ success: true, message: 'Shift created', data: shift });
+
+      // AFTER the response on purpose: the shift is already written, the venue
+      // must not wait on a notification fan-out, and a bell that fails must not
+      // read as a post that failed.
+      void this.notifyShiftPosted({
+        shift: {
+          id: shift.id,
+          shiftDate: shift.shiftDate,
+          slot: shift.slot ?? null,
+          eventName: shift.eventName ?? null,
+          quantity: shift.quantity,
+        },
+        outletId: shiftData.outletId,
+        // Every invited agency, not just the anchor — the same fan-out the
+        // withdrawal path learned to use (0124). Falls back to the anchor for the
+        // admin path, which posts to exactly one agency.
+        agencyIds: selectedAgencyIds.length > 0 ? selectedAgencyIds : [agencyId],
+        actor,
+      }).catch((error) => {
+        logger.error('[ShiftController.create] notify Error:', error);
+      });
     } catch (error) {
       logger.error('[ShiftController.create] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -643,6 +664,76 @@ export class ShiftControllerClass {
       logger.error('[ShiftController.update] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
+  }
+
+  /**
+   * Tell the invited agencies that a venue has just asked for staff.
+   *
+   * Posting used to be SILENT on the agency's end. The shift reached them only
+   * when somebody happened to open the roster and a 30-second-stale query
+   * refetched, so the venue pressed Post and then had no way to know whether
+   * anyone had seen it. Withdrawal notified; creation did not — the half that
+   * takes work off the table was announced and the half that puts work on it was
+   * not.
+   *
+   * Reuses `shift_cover_needed` rather than adding a `shift_posted` kind. That
+   * kind is already AGENCY-addressed and already means "seats need filling",
+   * which is exactly true here — only the cause differs (a new post rather than
+   * a dropout). Same reasoning `notifyShiftWithdrawn` gives just below for
+   * reusing `shift_cancelled`, and it avoids a `notification_kind` enum
+   * migration on a shared database. If the two ever need filtering apart, a
+   * dedicated kind is the fix and it costs one hand-authored migration.
+   *
+   * ⚠️ Names the VENUE but never another agency. On a shared shift several
+   * agencies are invited at once, and each one is told only that the venue is
+   * asking — never who else was asked. Same rule as the busy flag: an agency
+   * learns WHAT it can act on, never who it is competing with.
+   *
+   * Never throws: the shift IS created, and a failed notification must not be
+   * reported to the outlet as a failed post.
+   */
+  private async notifyShiftPosted(input: {
+    shift: { id: string; shiftDate: string; slot: string | null; eventName: string | null; quantity: number };
+    outletId: string;
+    agencyIds: string[];
+    actor: string;
+  }): Promise<void> {
+    const { shift, outletId, agencyIds, actor } = input;
+    if (agencyIds.length === 0) return;
+
+    const outlet = await this.outletRepository.getById(outletId);
+    const where = outlet?.name ?? 'A venue';
+    const when = `${shift.shiftDate}${shift.slot ? ` · ${shift.slot}` : ''}`;
+
+    const memberLists = await Promise.all(
+      agencyIds.map((agencyId) => this.agencyMemberRepository.listByAgency(agencyId)),
+    );
+    // Deduped: one person can hold a membership at more than one invited agency
+    // and must not be told twice about a single shift.
+    const recipients = [
+      ...new Set(
+        memberLists
+          .flat()
+          .filter((m) => m.status === 'active')
+          .map((m) => m.userId),
+      ),
+    ];
+    if (recipients.length === 0) return;
+
+    await notifyMany(recipients, {
+      kind: 'shift_cover_needed',
+      title: `New shift — ${where}`,
+      body: `${where} posted a shift on ${when}${
+        shift.eventName ? ` (${shift.eventName})` : ''
+      } and needs ${shift.quantity} PR${shift.quantity === 1 ? '' : 's'}.`,
+      payload: {
+        shiftId: shift.id,
+        shiftDate: shift.shiftDate,
+        outletName: outlet?.name ?? null,
+        posted: true,
+      },
+      actor,
+    });
   }
 
   /**

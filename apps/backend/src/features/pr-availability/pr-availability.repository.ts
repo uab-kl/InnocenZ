@@ -1,4 +1,5 @@
-import { and, asc, eq, gte, inArray, lte, notInArray, or, sql, SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lte, notInArray, or, sql, SQL } from 'drizzle-orm';
+import { slotMinutes } from '@/util/slot-window';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -13,6 +14,37 @@ import {
   PrAvailabilityType,
   PrAvailabilityWithPrType,
 } from './pr-availability.model';
+
+/**
+ * A committed window reduced to bare clock times.
+ *
+ * ⚠️ THIS IS A PRIVACY BOUNDARY, not formatting. `shift.slot` is FREE TEXT —
+ * `z.string().max(100)` with no format constraint (shift.schema.ts) — written by
+ * the posting side and shown to a RIVAL agency by the endpoint below, whose own
+ * documentation promises "times only". A venue that types
+ * "Velvet VIP Launch 15:00-04:00" into that field would otherwise hand its
+ * client straight to a competitor, defeating by content an anonymity the SQL
+ * enforces perfectly: the query selects three columns and never joins `outlet`
+ * or `agency` at all. The owner's rule is explicit — the busy message may not
+ * mention which agency the PR is working for.
+ *
+ * `slotMinutes` is the SAME parser the clash guard and the pay window already
+ * share, so a slot that can block resolves here identically and no third reading
+ * of a slot string enters the codebase. Anything it cannot read becomes null,
+ * which the client already renders as "busy, time unknown" — the honest answer
+ * for a label-only slot like "Late night" that no guard can act on anyway.
+ */
+function canonicalWindow(slot: string | null): string | null {
+  const window = slotMinutes(slot);
+  if (!window) return null;
+  const hhmm = (minutes: number): string => {
+    const wrapped = ((minutes % 1440) + 1440) % 1440;
+    const h = String(Math.floor(wrapped / 60)).padStart(2, '0');
+    const m = String(wrapped % 60).padStart(2, '0');
+    return `${h}:${m}`;
+  };
+  return `${hhmm(window.start)} - ${hhmm(window.end)}`;
+}
 
 /** Same display rule as the roster: nickname when set, else legal name. */
 const prDisplayNameSql = sql<string>`coalesce(nullif(trim(${UserTable.username}), ''), nullif(trim(${UserProfileTable.fullName}), ''), 'PR')`;
@@ -128,31 +160,65 @@ export class PrAvailabilityRepositoryClass {
     userId?: string;
   }): Promise<{ userId: string; date: string; slot: string | null }[]> {
     try {
+      // The PERSON, whichever column the assignment row happens to carry them in.
+      // `pr_id` IS the user id post-0089 and `user_id` is preferred when set, so a
+      // row predating the dual-write backfill is reachable only through the other
+      // column — exactly the pair `hasLiveAssignmentOn` already matches a few
+      // methods below. Keying on one of them is how a real commitment goes
+      // unwarned, and the agency never learns the warning was missing.
+      const isThisPerson = or(
+        eq(AgencyPrTable.userId, ShiftAssignmentTable.prId),
+        eq(AgencyPrTable.userId, ShiftAssignmentTable.userId),
+      ) as SQL;
+
       const conditions: SQL[] = [
         eq(AgencyPrTable.agencyId, params.agencyId),
         eq(AgencyPrTable.approveStatus, 'approved'),
         // SOMEONE ELSE'S booking. An agency's own doubles are its own business and
         // it can already see them on this very grid.
         sql`${ShiftAssignmentTable.agencyId} <> ${params.agencyId}`,
-        notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+        // EXACTLY the rows the assign guard refuses on, and no others. That guard
+        // skips `completed` AND anything with `check_out_at` set
+        // (shift-assignment.controller.ts), so carrying those here made the assign
+        // sheet grey a card — and drop it from `selectable` — for a PR who had
+        // finished her earlier shift and clocked out, someone the server would
+        // have accepted without complaint. A preview that refuses MORE than the
+        // thing it previews is worse than no preview at all: it reads as a rule,
+        // so nobody reports it and the booking is simply lost.
+        notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES, 'completed']),
+        isNull(ShiftAssignmentTable.checkOutAt),
       ];
       if (params.from) conditions.push(gte(ShiftTable.shiftDate, params.from));
       if (params.to) conditions.push(lte(ShiftTable.shiftDate, params.to));
-      if (params.userId) conditions.push(eq(ShiftAssignmentTable.prId, params.userId));
+      if (params.userId) {
+        conditions.push(
+          or(
+            eq(ShiftAssignmentTable.prId, params.userId),
+            eq(ShiftAssignmentTable.userId, params.userId),
+          ) as SQL,
+        );
+      }
 
       const rows = await db
         .select({
-          userId: ShiftAssignmentTable.prId,
+          // `agency_pr.user_id` is the canonical person and the id the roster grid
+          // keys its map on. The assignment's own columns are how we FIND the row,
+          // never what we report — one of them may be the legacy spelling.
+          userId: AgencyPrTable.userId,
           date: ShiftTable.shiftDate,
           slot: ShiftTable.slot,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftTable.id, ShiftAssignmentTable.shiftId))
-        .innerJoin(AgencyPrTable, eq(AgencyPrTable.userId, ShiftAssignmentTable.prId))
+        .innerJoin(AgencyPrTable, isThisPerson)
         .where(and(...conditions))
         .orderBy(asc(ShiftTable.shiftDate), asc(ShiftTable.slot));
 
-      return rows.map((r) => ({ userId: r.userId, date: r.date, slot: r.slot }));
+      return rows.map((r) => ({
+        userId: r.userId,
+        date: r.date,
+        slot: canonicalWindow(r.slot),
+      }));
     } catch (error) {
       logger.error('[PrAvailabilityRepository.listCommittedWindows] Error:', error);
       // Empty, never partial. This is advice; the assign guard still refuses. A
