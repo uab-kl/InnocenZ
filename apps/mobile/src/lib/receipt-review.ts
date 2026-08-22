@@ -39,6 +39,42 @@ export function receiptReviewCounts(
   return counts;
 }
 
+/**
+ * The COLOUR a money cell earns from its receipts' review state — the
+ * owner's rule (23 Aug 2026): "all verified will green, approved yellow
+ * warning colour same with Pending, if half either some receipts on that
+ * day ... will show white". Receipt grain per (day, kind):
+ *
+ *   'verified' → every receipt-backed line settled at verified (green)
+ *   'warning'  → one uniform state that is NOT verified — all pending, or
+ *                all approved (amber; the two share the warning colour by
+ *                the owner's explicit call — the word carries the
+                  difference)
+ *   'mixed'    → two or more distinct states (white — the default ink)
+ *   null       → no receipt-backed lines here (wages seals); style as before
+ *
+ * DISPUTED is not decided here: the red comes from the dispute set the
+ * screen already holds, and it outranks whatever this returns.
+ *
+ * Accepts 'deductions' (a grid bucket, not a line kind) and returns null
+ * for it — a fine has no receipt to review and keeps its own red.
+ */
+export function cellReviewTone(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+  kind: PrReceiptLine['kind'] | 'deductions',
+): 'verified' | 'warning' | 'mixed' | null {
+  const statuses = new Set<string>();
+  for (const line of week?.lines ?? []) {
+    if (line.lineDate !== dateIso || line.kind !== kind) continue;
+    if (!line.receiptStatus) continue;
+    statuses.add(line.receiptStatus);
+  }
+  if (statuses.size === 0) return null;
+  if (statuses.size > 1) return 'mixed';
+  return statuses.has('verified') ? 'verified' : 'warning';
+}
+
 /** One receipt of a day, aggregated from its lines — what the day sheet lists. */
 export type DayReceiptRow = {
   receiptNo: string;

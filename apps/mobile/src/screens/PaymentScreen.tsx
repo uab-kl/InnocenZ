@@ -46,6 +46,7 @@ import { buildCellEvidence, receiptDisputable } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import {
   dayStatusLabel,
+  cellReviewTone,
   dayReceiptSummary,
   disputesForDay,
   kindDisputable,
@@ -1435,6 +1436,16 @@ export function PaymentScreen({
                               <Text
                                 style={[
                                   styles.gridVal,
+                                  // The receipts' own state colours the
+                                  // figure: green when every one is
+                                  // verified, amber when they all sit in
+                                  // one unsettled state, white when mixed
+                                  // (owner's rule, 23 Aug 2026). Disputed
+                                  // red below still outranks.
+                                  cellReviewTone(lastWeek, d.dateIso, row.key) ===
+                                    'verified' && styles.gridValVerified,
+                                  cellReviewTone(lastWeek, d.dateIso, row.key) ===
+                                    'warning' && styles.gridValPending,
                                   isDisputed && styles.gridValDisputed,
                                   // Only the real figure goes red. Colouring the
                                   // whole row painted the empty days' dashes red
@@ -1800,9 +1811,15 @@ export function PaymentScreen({
                               <Text
                                 style={[
                                   styles.gridVal,
-                                  d.status === 'pending' &&
-                                    amount > 0 &&
-                                    styles.gridValPending,
+                                  // Receipt-grain tone, replacing the old
+                                  // whole-day amber: one cell answers for
+                                  // ITS receipts, not the day's (owner's
+                                  // rule, 23 Aug 2026 — same map as the
+                                  // Last-week grid).
+                                  cellReviewTone(current, d.dateIso, row.key) ===
+                                    'verified' && styles.gridValVerified,
+                                  cellReviewTone(current, d.dateIso, row.key) ===
+                                    'warning' && styles.gridValPending,
                                   // Only the real figure goes red. Colouring the
                                   // whole row painted the empty days' dashes red
                                   // too, so a week with one fine looked like six.
@@ -2069,7 +2086,11 @@ export function PaymentScreen({
                                 <Text
                                   style={[
                                     styles.claimState,
-                                    r.status === 'pending' &&
+                                    // Approved shares the warning colour
+                                    // with pending (owner's call) — the
+                                    // word carries the difference.
+                                    (r.status === 'pending' ||
+                                      r.status === 'approved') &&
                                       styles.statusPillPending,
                                     r.status === 'verified' &&
                                       styles.statusPillVerified,
@@ -3114,6 +3135,7 @@ const styles = StyleSheet.create({
     color: C.txt,
   },
   gridValPending: { color: C.amber },
+  gridValVerified: { color: C.green },
   gridValDisputed: { color: C.red },
   // Money going the other way. Red is already the app's colour for "this needs
   // your attention" (disputed cells, Close buttons), and a fine qualifies.
