@@ -1436,6 +1436,14 @@ export function PaymentScreen({
                               <Text
                                 style={[
                                   styles.gridVal,
+                                  // Wages are a sealed system fact — no
+                                  // review step exists for them, so they
+                                  // read settled-green whenever real
+                                  // (owner: "the total and the wages
+                                  // always green").
+                                  row.key === 'wages' &&
+                                    amount > 0 &&
+                                    styles.gridValVerified,
                                   // The receipts' own state colours the
                                   // figure: green when every one is
                                   // verified, amber when they all sit in
@@ -1510,6 +1518,12 @@ export function PaymentScreen({
                           <Text
                             style={[
                               styles.gridVal,
+                              // Totals are arithmetic, not claims —
+                              // always green when real (owner's call);
+                              // the deductions row keeps its red.
+                              !isDeduction &&
+                                rowTotal !== 0 &&
+                                styles.gridValVerified,
                               isDeduction && styles.gridValDeduction,
                             ]}
                           >
@@ -1811,6 +1825,14 @@ export function PaymentScreen({
                               <Text
                                 style={[
                                   styles.gridVal,
+                                  // Wages are a sealed system fact — no
+                                  // review step exists for them, so they
+                                  // read settled-green whenever real
+                                  // (owner: "the total and the wages
+                                  // always green").
+                                  row.key === 'wages' &&
+                                    amount > 0 &&
+                                    styles.gridValVerified,
                                   // Receipt-grain tone, replacing the old
                                   // whole-day amber: one cell answers for
                                   // ITS receipts, not the day's (owner's
@@ -1874,6 +1896,12 @@ export function PaymentScreen({
                           <Text
                             style={[
                               styles.gridVal,
+                              // Totals are arithmetic, not claims —
+                              // always green when real (owner's call);
+                              // the deductions row keeps its red.
+                              !isDeduction &&
+                                rowTotal !== 0 &&
+                                styles.gridValVerified,
                               isDeduction && styles.gridValDeduction,
                             ]}
                           >
