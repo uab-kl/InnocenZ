@@ -1920,13 +1920,14 @@ function PvDetail({
 						</>
 					)}
 					{/* Only once we know WHY. While the fetch is in flight the button is
-						    disabled with no caption — a reason would be a guess. */}
-					{!sendGate.allowed &&
-						sendGate.heldDays.length + sendGate.unreviewedDays.length > 0 && (
-							<p className="iz-tiny iz-muted2 mt-1 text-center">
-								{sendGate.reason} — see Day review below.
-							</p>
-						)}
+						    disabled with no caption — a reason would be a guess. The day
+						    review is retired, so the pointer goes to the Receipts section
+						    where the approve action now lives. */}
+					{!sendGate.allowed && sendGate.pendingReceipts.length > 0 && (
+						<p className="iz-tiny iz-muted2 mt-1 text-center">
+							{sendGate.reason} — approve them in Payroll › Receipts.
+						</p>
+					)}
 				</>
 			)}
 
