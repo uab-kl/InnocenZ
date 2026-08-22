@@ -61,6 +61,51 @@ function respondIfLineDateConflict(res: Response, error: unknown): boolean {
   res.status(400).json({ success: false, message: error.reason, data: null });
   return true;
 }
+
+/**
+ * The 500 that says what actually broke — outside production only.
+ *
+ * Every guarded refusal on the receipt paths already answers with its own status
+ * and a sentence the PR can act on: a duplicate order is 409, a line dated
+ * against its shift is 400, an assignment that is not hers is 404. What is left
+ * is the genuinely unexpected, and it was answering with the bare string
+ * "Internal Server Error" — which is what a PR saw with RM1,050 of drinks she
+ * could not log, no way to tell whether retrying would help, whether the money
+ * had been recorded, or whether to stop and call someone. It also cost a full
+ * debugging round-trip: the cause was sitting in a server console nobody
+ * watching the phone could read.
+ *
+ * ⚠️ Guarded on NODE_ENV. A PG error carries `code`, `constraint` and `detail`,
+ * which name columns, indexes and sometimes the offending VALUES — that belongs
+ * in the log, not in a response a phone renders and a screenshot travels with.
+ * In production the wording is exactly what it was.
+ *
+ * Fields are read off the error rather than through `instanceof`: `Error` in
+ * this module is the message catalogue imported at the top, not the global
+ * constructor, so `instanceof Error` would not mean what it appears to.
+ */
+function respondUnexpected(res: Response, error: unknown, scope: string): void {
+  logger.error(`[PaymentVoucherController.${scope}] Error:`, error);
+  const e = error as {
+    message?: string;
+    code?: string;
+    constraint?: string;
+    detail?: string;
+  };
+  const detail =
+    env.NODE_ENV === 'production'
+      ? null
+      : [e?.code, e?.constraint, e?.message, e?.detail]
+          .filter((part): part is string => Boolean(part))
+          .join(' · ');
+  res.status(500).json({
+    success: false,
+    message: detail
+      ? `${Error.INTERNAL_SERVER_ERROR} — ${detail}`
+      : Error.INTERNAL_SERVER_ERROR,
+    data: null,
+  });
+}
 import {
   allDaysReviewed,
   buildDayReviewView,
@@ -2326,12 +2371,7 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
-      logger.error('[PaymentVoucherController.addMyLine] Error:', error);
-      res.status(500).json({
-        success: false,
-        message: Error.INTERNAL_SERVER_ERROR,
-        data: null,
-      });
+      respondUnexpected(res, error, 'addMyLine');
     }
   }
 
@@ -2655,12 +2695,7 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
-      logger.error('[PaymentVoucherController.addMyReceipt] Error:', error);
-      res.status(500).json({
-        success: false,
-        message: Error.INTERNAL_SERVER_ERROR,
-        data: null,
-      });
+      respondUnexpected(res, error, 'addMyReceipt');
     }
   }
 
@@ -3788,12 +3823,7 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
-      logger.error('[PaymentVoucherController.updateMyLine] Error:', error);
-      res.status(500).json({
-        success: false,
-        message: Error.INTERNAL_SERVER_ERROR,
-        data: null,
-      });
+      respondUnexpected(res, error, 'updateMyLine');
     }
   }
 

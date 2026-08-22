@@ -1,4 +1,5 @@
 import { windowMinutes } from "@agency-portal/lib/shift-slot-clash";
+import { hasShiftEnded } from "@agency-portal/lib/shift-window";
 import {
 	cannotReach,
 	type OccupiedWindow,
@@ -284,9 +285,20 @@ export function findOpenShifts(params: {
 	targetDates: readonly string[];
 	/** PR tier by id — needed to know which BUCKET each staffed seat consumed. */
 	tierByPrId?: Map<string, string | null>;
+	/**
+	 * The clock, injected rather than read, so this stays a pure function a test
+	 * can pin to a fixed instant. Defaults to now for the app.
+	 */
+	now?: Date;
 }): OpenShift[] {
-	const { shifts, assignments, outletNameById, targetDates, tierByPrId } =
-		params;
+	const {
+		shifts,
+		assignments,
+		outletNameById,
+		targetDates,
+		tierByPrId,
+		now = new Date(),
+	} = params;
 	const dates = new Set(targetDates);
 
 	const staffedByShift = new Map<string, number>();
@@ -321,7 +333,21 @@ export function findOpenShifts(params: {
 			.filter(
 				(s) =>
 					dates.has(s.shiftDate) &&
-					ASSIGNABLE_SHIFT_STATUSES.includes(s.status),
+					ASSIGNABLE_SHIFT_STATUSES.includes(s.status) &&
+					// A SHIFT THAT HAS ALREADY FINISHED IS NOT AN OPEN SLOT.
+					//
+					// Without this the banner went on advertising "1 PR for 1 open
+					// slot · Sat, 22 Aug" at 16:56 for a shift that ran 14:10–15:00,
+					// while the assign sheet beside it had dropped the same shift and
+					// said "No shifts posted for this day". Two surfaces on one screen
+					// disagreeing about whether work exists, and the one that was
+					// wrong was the one inviting the agency to act.
+					//
+					// `hasShiftEnded` FAILS OPEN — an unparseable slot ("Late night")
+					// returns false and the shift stays offered. That is deliberate and
+					// matches the rest of the system: a window we cannot read must not
+					// silently vanish from the picker.
+					!hasShiftEnded(s.shiftDate, s.slot, now),
 			)
 			.map((s) => {
 				// Mirrors the backend's `remainingByBucket`. A shift with no demand
