@@ -331,6 +331,67 @@ changelog contradicted each other for three commits. `expectedUpdatedAt` is in
 code**: open the agency voucher editor, have the PR self-log a drink into the same day, save,
 and confirm the editor is refused with the 409 sentence rather than silently winning.
 
+### ▶ 🔴 RECEIPT STATUS LIFECYCLE — owner's spec, 23 Aug 2026 (00:40)
+
+⚠️ **The spine already exists and matches the owner's description exactly.** Do NOT redesign it.
+`payment_voucher_receipt.status` is `['pending','approved','verified']`, and
+`payment-voucher.routes.ts` already documents *"PENDING -> APPROVED (here) -> VERIFIED (the
+Monday rollover, or a resolved dispute — never a request)"*. What follows is what is MISSING
+on top of that, in the owner's own terms.
+
+**The rules as stated (23 Aug 2026):**
+1. A shift/receipt submitted and awaiting the agency is **pending**, and pending lives in the
+   **this-week** section only.
+2. **Approve is a light touch, not an audit** — "approved mean the agency no deeply check just
+   one click only" — and it happens in the this-week section only.
+3. **A fully SCANNED shift needs no approval**: if every receipt on the shift was scanned, it
+   goes straight to **verified**. Approval exists for SELF-LOGS.
+4. On the rollover to next week, **approved → verified** when nothing on the shift is disputed.
+5. If the agency **edits/corrects a receipt and saves it to the PR**, that act itself verifies
+   it — a corrected figure has been looked at by definition.
+6. A dispute shows the PR **disputed**; once resolved it becomes **verified**.
+7. **This week + last week are the PR's dispute window.** Next week stays verified if nothing
+   was disputed. A verified receipt can STILL be disputed.
+
+**What must be built:**
+- **One-click approve-all** on the agency payroll page — every still-pending SELF-LOG in the
+  current week, in one action. Scanned-only shifts must not appear in it (rule 3).
+- **Direct-to-verified for all-scanned shifts** (rule 3) — check whether `review` currently
+  forces every receipt through `approved` regardless of source.
+- **Auto-verify on agency edit** (rule 5) — check `editReceipt` / the receipt-line PATCH.
+- **Agency payroll UI rework**: the page must say WHAT TO DO. Today it presents four tabs
+  (Payment Vouchers / Receipts / Disputes / Overtime) and leaves the operator to work out
+  which one needs them.
+- **PR-side counts**: verified/approved show `n of total` across the shift's drink + tip
+  receipts; **pending names WHICH shift is still pending** rather than only a count.
+
+⚠️ This is MONEY STATE. Every change needs a click-through AND a DB check that the row moved,
+not just that the badge changed.
+
+### ▶ 🟠 A SHIFT CAN END UNSTAFFED AND NOBODY IS TOLD (added 23 Aug 2026)
+
+Found by the owner on 22 Aug: JK House posted *baddie night* 14:10–15:00, nobody was ever
+assigned, and it simply ended at 0/1. `shift_cover_needed` is documented as "a CALL TO ACTION —
+find a replacement" and fires when an assigned PR DROPS OUT; nothing fires when nobody was ever
+assigned. The PR is correctly not told (it was never her shift), the outlet sees only the `0/1`
+on its calendar if it looks, and the agency's banner stops counting it once it ends — which the
+22 Aug fix made correct and, in doing so, removed the last place the gap was visible.
+
+Repair: report shifts whose window has ended with `staffed < quantity`, to the invited agencies
+and probably to the outlet that paid for the slot. `hasShiftEnded` is already tested and
+imported into `auto-assign`; `notifyMany` + `shift_cover_needed` is the same fan-out
+`notifyShiftPosted` uses.
+
+### ▶ 🟠 ADMIN VOUCHER LIST: `issuedDate` BLANK, SIGN TIMES NOT SHOWN (added 23 Aug 2026)
+
+`issued_date` is written in exactly ONE place — `weekly-payout.job.ts:221` — so a voucher that
+reached `sent` or `signed` by any other path shows "—" in the admin Payment Vouchers table and
+in its detail sheet. Live on `innocenz-test`: 5 of 7 vouchers blank, including `sent` ones.
+Separately the detail sheet renders Issued / Due / Week start / Week end but never
+`prSignedAt` or `financeHeadSignedAt`, although the DTO already carries both
+(`services/payment-voucher/index.ts:117,127`). The owner's requirement is that every date and
+time is present. Ordering was the third part of that report and is FIXED (23 Aug).
+
 ### ▶ 🔴 FIRE `notifyShiftPosted` ONCE, BY HAND (added 22 Aug 2026)
 
 The only part of the 22 Aug batch with no evidence behind it. Post a real shift from the
