@@ -420,6 +420,12 @@ export function PaymentScreen({
   // Last week's voucher comes from the same backend as this week — real data,
   // no demo grid. Fetched once on mount (it rarely changes mid-session).
   const [lastWeek, setLastWeek] = useState<PrCurrentWeek | null>(null);
+  // Same caption, last week: the owner asked for the counts where the money
+  // is being read, and after Sunday 00:00 that is the Last week card.
+  const lastReviewCaption = useMemo(
+    () => receiptReviewCaption(lastWeek),
+    [lastWeek],
+  );
   useEffect(() => {
     if (!token) return;
     let alive = true;
@@ -1344,6 +1350,13 @@ export function PaymentScreen({
               <Text style={styles.verified}>
                 Verified days {verifiedDays}/7
               </Text>
+
+              {/* Receipt-level counts — what is verified, what is approved,
+                  and WHICH shifts still wait. The grid chips are day-grain;
+                  this is the receipt-grain answer the owner asked for. */}
+              {lastReviewCaption && (
+                <Text style={styles.reviewCaption}>{lastReviewCaption}</Text>
+              )}
 
               {/* Which agencies owe last week, when there is more than one. */}
               <WeekVouchers week={lastWeek} />

@@ -195,30 +195,48 @@ export function prVisibleDayStatuses(
     if (pendingIds.has(line.receiptId)) daysWithPendingEvidence.add(line.lineDate);
   }
 
-  const out = view.map((d) => ({
-    date: d.date,
-    status:
-      d.status === 'approved' && daysWithPendingEvidence.has(d.date) ? null : d.status,
-  }));
-
   /*
    * DAYS APPROVE THEMSELVES FROM THEIR RECEIPTS now that the day-review
    * panel is gone (owner's call, 23 Aug 2026): a day whose receipt-backed
    * lines are all settled (approved or verified) reads APPROVED on the
    * phone with no day_review row behind it — the Receipts section is the
-   * review. A day carrying any pending receipt stays absent, which the
-   * phone already renders as not-yet-reviewed. Historic day_review rows
-   * (mapped above) win over the derivation: an explicit decision, held
-   * ones included, outranks an inference.
+   * review. A day carrying any pending receipt stays un-derived, which the
+   * phone already renders as not-yet-reviewed.
+   *
+   * An EXPLICIT decision still outranks the inference — but only a real
+   * one. `buildDayReviewView` emits a row for EVERY day that has dated
+   * lines, status null when nobody decided, and the first version of this
+   * derivation treated those null rows as decisions: `decided` was built
+   * from every view date, so the loop below skipped exactly the days it
+   * existed for, and the phone kept reading PENDING over five verified
+   * receipts (measured live on PV-000009, 23 Aug 2026). Null is the
+   * ABSENCE of a decision; approved and held are decisions.
    */
-  const decided = new Set(out.map((d) => d.date));
   const receiptDays = new Set<string>();
   for (const line of lines) {
     if (!line.receiptId || !line.lineDate) continue;
     receiptDays.add(line.lineDate);
   }
+  const derivable = (date: string) =>
+    receiptDays.has(date) && !daysWithPendingEvidence.has(date);
+
+  const out = view.map((d) => {
+    const explicit =
+      d.status === 'approved' && daysWithPendingEvidence.has(d.date)
+        ? null
+        : d.status;
+    if (explicit !== null) return { date: d.date, status: explicit };
+    return {
+      date: d.date,
+      status: derivable(d.date) ? ('approved' as const) : null,
+    };
+  });
+
+  // A receipt-backed day the view somehow missed (defensive: view is built
+  // from the same lines, so this is normally empty).
+  const seen = new Set(out.map((d) => d.date));
   for (const date of receiptDays) {
-    if (decided.has(date) || daysWithPendingEvidence.has(date)) continue;
+    if (seen.has(date) || !derivable(date)) continue;
     out.push({ date, status: 'approved' });
   }
   return out;
