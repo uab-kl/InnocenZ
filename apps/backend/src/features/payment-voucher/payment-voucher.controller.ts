@@ -115,7 +115,11 @@ import {
   receiptsCarriedByDays,
   voucherSendGate,
 } from './payment-voucher-day-review.js';
-import { klToday } from './payment-voucher-week.js';
+import {
+  klToday,
+  previousWeekBounds,
+  weekBounds,
+} from './payment-voucher-week.js';
 import {
   DISPUTABLE_KINDS,
   kindFromComponent,
@@ -246,8 +250,19 @@ function resolveTotals(params: {
   };
 }
 
+/**
+ * Today's calendar date in Kuala Lumpur.
+ *
+ * ⚠️ This was `new Date().toISOString()` — a UTC date, so for the first eight
+ * hours of every KL day it named YESTERDAY. It is the DEFAULT `lineDate` for a
+ * self-logged line, so a PR logging at 01:00 without an explicit date had the
+ * money filed to the previous calendar day; on a Sunday that is the previous
+ * WEEK. It must move together with `weekBounds()` — the guard between them
+ * compares the two, so fixing either alone turns a silently misfiled line
+ * into a rejected one.
+ */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return klToday();
 }
 
 /**
@@ -260,41 +275,6 @@ function r2PublicBase(): string | null {
   return env.R2_PUBLIC_URL?.replace(/\/$/, '') ?? null;
 }
 
-/**
- * The Sun–Sat window (yyyy-MM-dd) containing `now`, matching the PV cycle.
- *
- * Sunday-anchored on the owner's instruction (3 Aug 2026). It was Monday-
- * anchored, which put the backend and the PR app one day out from the agency
- * portal — the same money read `27 Jul – 02 Aug` on the phone and
- * `26 Jul – 01 Aug` on the web, and the agency could only find its vouchers via
- * a containment match written to paper over the gap.
- *
- * The anchor is the whole payroll cycle, so it must agree with
- * `previousCompleteWeek()` and `weekOfDate()` in payment-voucher-week.ts and
- * with the weekly payout cron. Change one, change all four.
- */
-function weekBounds(now = new Date()): { weekStart: string; weekEnd: string } {
-  const base = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const daysSinceSunday = base.getUTCDay(); // Sun=0 → 0, Sat=6 → 6
-  const sunday = new Date(base);
-  sunday.setUTCDate(base.getUTCDate() - daysSinceSunday);
-  const saturday = new Date(sunday);
-  saturday.setUTCDate(sunday.getUTCDate() + 6);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { weekStart: iso(sunday), weekEnd: iso(saturday) };
-}
-
-/** The Sun–Sat window immediately before the one containing `now`. */
-function previousWeekBounds(now = new Date()): {
-  weekStart: string;
-  weekEnd: string;
-} {
-  const prior = new Date(now);
-  prior.setUTCDate(now.getUTCDate() - 7);
-  return weekBounds(prior);
-}
 
 // A receipt line's kind/source/gross-sale/dedupe don't have their own columns —
 // the reused payment_voucher_line stores them packed into `ref`. `amount` holds

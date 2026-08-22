@@ -21,6 +21,7 @@ import {
   weekPvIssueDayLabel,
   weekRangeIso,
   weekRangeLabel,
+  weekRangeLabelFromIso,
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { usePrEarnings } from '../lib/pr-earnings';
@@ -525,8 +526,21 @@ export function PaymentScreen({
   >({});
   const [disputeBusy, setDisputeBusy] = useState(false);
 
-  const lastLabel = weekRangeLabel(1);
-  const thisLabel = weekRangeLabel(0);
+  /*
+   * THE WEEK THE FIGURES ARE FOR, NOT THE WEEK THE PHONE IS IN.
+   *
+   * These read `weekRangeLabel(n)` off the device clock while the grid below
+   * is built from the voucher's `weekStart`. One week, two sources — so a
+   * header could sit above figures from a different seven days, which is
+   * exactly what happened at 01:23 on Sun 23 Aug 2026: "23 Aug – 29 Aug"
+   * over columns SUN 16 … SAT 22.
+   *
+   * The clock stays as the FALLBACK, for the first load and for a week the
+   * server has no voucher for — there is nothing else to name it with then,
+   * and an empty grid carries no figures to contradict.
+   */
+  const lastLabel = weekRangeLabelFromIso(lastWeek?.weekStart) ?? weekRangeLabel(1);
+  const thisLabel = weekRangeLabelFromIso(current?.weekStart) ?? weekRangeLabel(0);
   const issueDay = weekPvIssueDayLabel(0);
   const grid = useMemo(() => buildWeekGridFromLines(lastWeek), [lastWeek]);
   const weekTotal = useMemo(() => weekPayGridTotal(grid), [grid]);

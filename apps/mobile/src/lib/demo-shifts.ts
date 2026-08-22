@@ -908,6 +908,36 @@ export function weekRangeLabel(weeksAgo: number, baseline = todayYmd()): string 
   return `${a} – ${b}`;
 }
 
+/**
+ * The same label as `weekRangeLabel`, but for a week the SERVER has named.
+ *
+ * ⚠️ The Payment screen printed `weekRangeLabel(0)` — derived from the
+ * DEVICE clock — above a grid whose columns come from the voucher's own
+ * `weekStart`. Two sources for one week, so they could disagree, and on
+ * 23 Aug 2026 they did: the header read "23 Aug – 29 Aug 2026" over columns
+ * SUN 16 … SAT 22. The backend cause is fixed (`weekBounds` now anchors to
+ * Kuala Lumpur), but a header and the figures under it should not be able
+ * to disagree in the first place — whatever zone the phone is set to.
+ *
+ * All-UTC, matching `buildWeekGridFromLines`, which builds those columns
+ * the same way. Identical arithmetic on identical input cannot drift.
+ *
+ * Returns null for anything malformed so the caller falls back to the clock
+ * rather than printing a week of `NaN`.
+ */
+export function weekRangeLabelFromIso(
+  weekStart: string | null | undefined,
+): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekStart ?? '');
+  if (!m) return null;
+  const start = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (Number.isNaN(start.getTime())) return null;
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+  const a = `${String(start.getUTCDate()).padStart(2, '0')} ${MONTH_NAMES[start.getUTCMonth()]}`;
+  const b = `${String(end.getUTCDate()).padStart(2, '0')} ${MONTH_NAMES[end.getUTCMonth()]} ${end.getUTCFullYear()}`;
+  return `${a} – ${b}`;
+}
 /** Next Sunday after the payroll week closes — PV issue day copy. */
 export function weekPvIssueDayLabel(weeksAgo = 0, baseline = todayYmd()): string {
   const [y, m, d] = baseline;
