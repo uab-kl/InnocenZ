@@ -58,15 +58,17 @@ const STATUS_LABEL: Record<
 	verified: "verified",
 };
 
-// Verified is GREEN, matching the PR app (owner: "make the verified status
-// in the agency show same colour with pr"). The phone renders VERIFIED in
-// C.green, and the two screens describe the same receipt.
+// The owner's platform colour code (23 Aug 2026): green = settled
+// (verified), amber = waiting — and PENDING and APPROVED deliberately
+// share it ("approved yellow warning colour same with Pending"; the word
+// carries the difference), red = disputed. Same map as the PR app, because
+// the two screens describe the same receipt.
 const STATUS_VARIANT: Record<
 	PaymentVoucherReceiptStatus,
 	"amber" | "green" | "ink"
 > = {
 	pending: "amber",
-	approved: "green",
+	approved: "amber",
 	verified: "green",
 };
 

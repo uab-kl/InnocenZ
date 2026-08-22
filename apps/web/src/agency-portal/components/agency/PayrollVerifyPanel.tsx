@@ -65,9 +65,12 @@ const STATUS_LABEL: Record<
 };
 
 const STATUS_PILL: Record<PaymentVoucherReceiptStatus, string> = {
+	// The owner's platform colour code: amber = waiting (pending AND
+	// approved share it), green = settled. Same map as AgencyReceiptsPanel
+	// and the PR app — one receipt, one colour everywhere.
 	pending: "iz-pill-amber",
-	approved: "iz-pill-green",
-	verified: "iz-pill-ink",
+	approved: "iz-pill-amber",
+	verified: "iz-pill-green",
 };
 
 /**
