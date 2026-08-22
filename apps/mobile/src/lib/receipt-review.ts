@@ -39,6 +39,58 @@ export function receiptReviewCounts(
   return counts;
 }
 
+/** One receipt of a day, aggregated from its lines — what the day sheet lists. */
+export type DayReceiptRow = {
+  receiptNo: string;
+  orderNo: string | null;
+  status: 'pending' | 'approved' | 'verified';
+  /** RM — the sum of this receipt’s lines dated this day. */
+  amount: number;
+};
+
+export type DayReceiptSummary = {
+  total: number;
+  pending: DayReceiptRow[];
+  approved: DayReceiptRow[];
+  verified: DayReceiptRow[];
+};
+
+/**
+ * ONE DAY's receipts by review state — the owner's ask (23 Aug 2026):
+ * “inside the status row pr can see what receipt still pending, how many is
+ * verified, how many is approved / that day total receipt”. Counted at
+ * RECEIPT grain, not line grain, because the agency decides receipts; a
+ * wages seal or legacy line with no paper behind it is skipped rather than
+ * counted as a receipt nobody can find.
+ */
+export function dayReceiptSummary(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+): DayReceiptSummary {
+  const byReceipt = new Map<string, DayReceiptRow>();
+  for (const line of week?.lines ?? []) {
+    if (line.lineDate !== dateIso) continue;
+    const id = line.receiptId;
+    const status = line.receiptStatus;
+    if (!id || !status) continue;
+    const row = byReceipt.get(id) ?? {
+      receiptNo: line.receiptNo ?? 'Receipt',
+      orderNo: line.orderNo ?? null,
+      status,
+      amount: 0,
+    };
+    row.amount += line.commission;
+    byReceipt.set(id, row);
+  }
+  const rows = [...byReceipt.values()];
+  return {
+    total: rows.length,
+    pending: rows.filter((r) => r.status === 'pending'),
+    approved: rows.filter((r) => r.status === 'approved'),
+    verified: rows.filter((r) => r.status === 'verified'),
+  };
+}
+
 const CAPTION_DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /** "Thu 20" from a lineDate — the shift the PR knows the entry by. All-UTC

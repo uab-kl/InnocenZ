@@ -46,6 +46,7 @@ import { buildCellEvidence, receiptDisputable } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import {
   dayStatusLabel,
+  dayReceiptSummary,
   disputesForDay,
   kindDisputable,
   openDisputeKeys,
@@ -1533,8 +1534,12 @@ export function PaymentScreen({
                         dayDisputed,
                       );
                       const claims = disputesForDay(lastWeek, d.dateIso);
+                      // A day with RECEIPTS opens too, not only a day with
+                      // claims — the sheet answers “what state is this
+                      // day’s paper in”, which every non-empty day can ask.
                       const openable =
-                        claims.open.length + claims.settled.length > 0;
+                        claims.open.length + claims.settled.length > 0 ||
+                        dayReceiptSummary(lastWeek, d.dateIso).total > 0;
                       return (
                         <Pressable
                           key={`st-${d.dateIso}`}
@@ -1896,8 +1901,10 @@ export function PaymentScreen({
                         dayDisputed,
                       );
                       const claims = disputesForDay(current, d.dateIso);
+                      // Same widening as the Last-week row above.
                       const openable =
-                        claims.open.length + claims.settled.length > 0;
+                        claims.open.length + claims.settled.length > 0 ||
+                        dayReceiptSummary(current, d.dateIso).total > 0;
                       return (
                         <Pressable
                           key={`st-${d.dateIso}`}
@@ -1995,11 +2002,17 @@ export function PaymentScreen({
                   claimDay.dateIso,
                 );
                 const rows = [...open, ...settled];
+                const dayReceipts = dayReceiptSummary(
+                  week,
+                  claimDay.dateIso,
+                );
                 const labelOf = (k: string) =>
                   INCOME_ROWS.find((r) => r.key === k)?.label ?? k;
                 return (
                   <>
-                    <Text style={styles.claimTitle}>What you disputed</Text>
+                    <Text style={styles.claimTitle}>
+                      {rows.length > 0 ? 'What you disputed' : 'Receipts this day'}
+                    </Text>
                     <Text style={styles.claimDay}>
                       {longDay(claimDay.dateIso)}
                     </Text>
@@ -2017,6 +2030,57 @@ export function PaymentScreen({
                       style={styles.claimScroll}
                       showsVerticalScrollIndicator={false}
                     >
+                      {/*
+                       * THE DAY’S PAPER, before the arguments about it
+                       * (owner: “beside the accepted disputed”). Receipt
+                       * grain: how many are settled out of the day’s total,
+                       * and WHICH ones still wait — pending listed first
+                       * because that is the one the PR is chasing.
+                       */}
+                      {dayReceipts.total > 0 && (
+                        <View style={styles.claimRow}>
+                          <View style={styles.claimHead}>
+                            <Text style={styles.claimComponent}>
+                              Receipts this day
+                            </Text>
+                            <Text style={styles.claimState}>
+                              {dayReceipts.total} total
+                            </Text>
+                          </View>
+                          <Text style={styles.claimMeta}>
+                            {dayReceipts.verified.length} verified ·{' '}
+                            {dayReceipts.approved.length} approved ·{' '}
+                            {dayReceipts.pending.length} pending
+                          </Text>
+                          {[
+                            ...dayReceipts.pending,
+                            ...dayReceipts.approved,
+                            ...dayReceipts.verified,
+                          ].map((r) => (
+                            <View key={r.receiptNo} style={styles.claimShift}>
+                              <View style={styles.claimShiftTitleRow}>
+                                <Text style={styles.claimShiftHead}>
+                                  {r.orderNo ?? r.receiptNo}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.claimState,
+                                    r.status === 'pending' &&
+                                      styles.statusPillPending,
+                                    r.status === 'verified' &&
+                                      styles.statusPillVerified,
+                                  ]}
+                                >
+                                  {r.status.toUpperCase()}
+                                </Text>
+                              </View>
+                              <Text style={styles.claimShiftMeta}>
+                                {r.receiptNo} · {formatRM(r.amount)}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                       {rows.map((d) => {
                         const shifts = claimShifts(week, d);
                         return (
