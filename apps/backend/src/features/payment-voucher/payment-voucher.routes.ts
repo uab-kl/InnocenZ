@@ -121,8 +121,19 @@ router.get(
   paymentVoucherController.listAgencyReceipts.bind(paymentVoucherController),
 );
 
-// The receipt lifecycle: PENDING -> APPROVED (here) -> VERIFIED (the Monday
-// rollover, or a resolved dispute — never a request).
+// ONE CLICK for the week: every still-pending (i.e. self-logged) receipt on
+// this agency's vouchers for one payroll week. Same sub-role gate as the
+// per-receipt review below — it IS that review, in bulk. Registered before the
+// ':receiptId' routes so "approve-all" is never read as a receipt id.
+router.post(
+  '/receipts/approve-all',
+  agencyOwnerOrFinance,
+  paymentVoucherController.approveAllReceipts.bind(paymentVoucherController),
+);
+
+// The receipt lifecycle: PENDING -> APPROVED (here, or the week-level
+// approve-all above) -> VERIFIED (a scan at creation, an agency correction,
+// the Monday rollover, or a resolved dispute — never a bare request).
 //
 // Both writes carry the same sub-role gate as the day review: approving a
 // receipt, and correcting the figure on it, are money attestations. The READ

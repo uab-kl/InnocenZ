@@ -1,4 +1,3 @@
-import { AgencyPvDayReviewPanel } from "@agency-portal/components/agency/AgencyPvDayReviewPanel";
 import {
 	AgencyReceiptsPanel,
 	receiptsInPayrollWeek,
@@ -2040,10 +2039,9 @@ function PvDetail({
 				</button>
 			</IzSheet>
 
-			{/* Day-by-day sign-off, then the receipt evidence it is judged against.
-          Both render nothing on a demo voucher, whose id has no backend row
-          behind it, and both read the same fetch. */}
-			<AgencyPvDayReviewPanel voucherId={pv.id} />
+			{/* The day-review panel is GONE (owner's call, 23 Aug 2026): the
+          Payroll › Receipts section is the review now, and the send gate
+          asks about receipt statuses rather than day sign-offs. */}
 			{/* Cancellation fees are charged AUTOMATICALLY now (0130), so the
           agency's decision is whether to waive one — and that decision belongs
           beside the voucher the deduction is actually on, not on the uncharged

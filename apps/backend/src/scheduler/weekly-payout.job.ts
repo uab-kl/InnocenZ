@@ -311,13 +311,13 @@ export async function runWeeklyPayout(): Promise<void> {
         signCount > 0 && reviewCount === 0
           ? `${signCount} voucher${plural(signCount)} waiting for your signature`
           : reviewCount > 0 && signCount === 0
-            ? `${reviewCount} voucher${plural(reviewCount)} awaiting day review`
+            ? `${reviewCount} voucher${plural(reviewCount)} awaiting receipt review`
             : `${total} voucher${plural(total)} need review or signature`;
 
       const parts: string[] = [];
       if (reviewCount > 0) {
         parts.push(
-          `${reviewCount} ${reviewCount === 1 ? 'has a day that is' : 'have days that are'} held or unreviewed — approve each day on Payroll & PV`,
+          `${reviewCount} ${reviewCount === 1 ? 'has receipts or overtime' : 'have receipts or overtime'} still undecided — approve them on Payroll › Receipts`,
         );
       }
       if (signCount > 0) {

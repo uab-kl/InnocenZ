@@ -161,6 +161,7 @@ import {
   PrSignVoucherSchema,
   ReviewVoucherDaySchema,
   ReviewReceiptSchema,
+  ApproveAllReceiptsSchema,
   AgencyAddReceiptLineSchema,
   AgencyEditReceiptLineSchema,
   AgencyEditReceiptSchema,
@@ -2561,7 +2562,13 @@ export class PaymentVoucherControllerClass {
             // an OCR scan and a check-in seal were not self-declared, so holding
             // them would block a week on evidence nobody disputes. The PR can
             // still contest either once the voucher is issued.
-            status: parsed.data.source === 'manual' ? 'pending' : 'approved',
+            // A SCAN carries the machine evidence on its face — order number, printed
+            // time, per-line prices — so it verifies at CREATION and never waits on a
+            // review (owner's rule, 23 Aug 2026: "if the shift is all scanned no need
+            // wait agency approve direct make the status verified"). Only a self-log
+            // (manual) starts at pending, which makes PENDING mean exactly one thing:
+            // a human figure no second party has looked at.
+            status: parsed.data.source === 'manual' ? 'pending' : 'verified',
             createdBy: actor,
             updatedBy: actor,
           },
@@ -2687,6 +2694,88 @@ export class PaymentVoucherControllerClass {
    * approve/dispute decision is made on everything the PR submitted. Admin may
    * pass ?agencyId=…; an agency caller is pinned to its own membership.
    */
+  /**
+   * ONE CLICK for the live week: approve every still-pending receipt on this
+   * agency's vouchers for one payroll week (owner's ask, 23 Aug 2026).
+   *
+   * PENDING receipts are self-logs by construction — a scan verifies at
+   * creation — so this is precisely "approve all the self-logged ones", without
+   * needing to look at `source`. The repository read already excludes vouchers
+   * the PR has signed, and `approvePendingReceipts` re-asserts
+   * `status = 'pending'` in its WHERE, so a receipt reviewed between the read
+   * and the click keeps its newer decision rather than being swept.
+   *
+   * Floor sales are recomputed per receipt AFTER the flip — approval is the
+   * gate that admits a self-log into the outlet's revenue, and this button is
+   * an approval like any other.
+   */
+  async approveAllReceipts(req: Request, res: Response) {
+    try {
+      const parsed = ApproveAllReceiptsSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
+      }
+
+      const scope = await this.resolveScope(req);
+      const agencyId = scope.isAdmin
+        ? typeof req.query.agencyId === 'string' && req.query.agencyId
+          ? req.query.agencyId
+          : null
+        : scope.agencyId;
+      if (!agencyId) {
+        return res.status(403).json({
+          success: false,
+          message: 'No agency associated with this account',
+          data: null,
+        });
+      }
+
+      const weekStart = parsed.data.weekStart ?? weekBounds().weekStart;
+      const pending =
+        await this.paymentVoucherRepository.listPendingReceiptsForAgencyWeek(
+          agencyId,
+          weekStart,
+        );
+      if (pending.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: 'Nothing is waiting — every receipt this week is settled.',
+          data: { approved: 0, receiptNos: [] },
+        });
+      }
+
+      const actor = getActor(req);
+      const updated =
+        await this.paymentVoucherRepository.approvePendingReceipts(
+          pending.map((p) => p.id),
+          actor,
+        );
+      for (const r of updated) {
+        await recomputeShiftSaleForReceipt(r.id, actor);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `${updated.length} receipt${updated.length === 1 ? '' : 's'} approved`,
+        data: {
+          approved: updated.length,
+          receiptNos: updated.map((r) => r.receiptNo),
+        },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.approveAllReceipts] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
   async listAgencyReceipts(req: Request, res: Response) {
     try {
       const user = req.user!;
@@ -2937,10 +3026,11 @@ export class PaymentVoucherControllerClass {
    * Two consequences are intended, not side effects:
    *  - the day's total changes, so `approved_total_cents` flips that day STALE
    *    and the agency must re-approve the day before the voucher can be sent;
-   *  - an APPROVED receipt drops back to PENDING. The receipt table stores no
-   *    amount, so staleness there cannot be DETECTED later — it has to be
-   *    recorded at the moment of the edit or the approval silently starts
-   *    describing numbers it never saw.
+   *  - the receipt becomes VERIFIED (owner's rule, 23 Aug 2026). It used to
+   *    drop back to PENDING so the stale approval could not stand — but the
+   *    correction is the agency's OWN figure, and asking it to re-approve a
+   *    number it just typed made "pending" mean nothing. An agency that has
+   *    corrected a receipt has checked it as deeply as checking goes.
    */
   async editReceiptLine(req: Request, res: Response) {
     try {
@@ -2968,13 +3058,14 @@ export class PaymentVoucherControllerClass {
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      if (owned.receipt.status === 'verified') {
-        return res.status(409).json({
-          success: false,
-          message: `${owned.receipt.receiptNo} is already verified — that week is closed.`,
-          data: null,
-        });
-      }
+      /*
+       * VERIFIED no longer blocks a correction (owner's rule, 23 Aug 2026):
+       * a scan verifies at creation and an agency edit verifies the receipt,
+       * so "verified" now means CHECKED, not closed. Keeping the old refusal
+       * would have made a scanned receipt's OCR mistakes permanently
+       * uncorrectable. What closes a receipt is the PR's signature below —
+       * at that point the figures are a signed document.
+       */
       if (owned.voucher.prSignedAt) {
         return res.status(409).json({
           success: false,
@@ -3009,27 +3100,24 @@ export class PaymentVoucherControllerClass {
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
 
-      // See the docstring: the approval described the old figure, and nothing
-      // stored would let a reader notice that later.
+      // See the docstring: the agency's own correction is the deepest check a
+      // receipt gets, so the edit VERIFIES it rather than un-approving it.
       const receipt =
-        owned.receipt.status === 'approved'
-          ? await this.paymentVoucherRepository.setReceiptStatus(
+        owned.receipt.status === 'verified'
+          ? owned.receipt
+          : await this.paymentVoucherRepository.setReceiptStatus(
               receiptId,
-              'pending',
+              'verified',
               actor,
-            )
-          : owned.receipt;
+            );
 
-      // AFTER the drop back to pending: a corrected figure the agency has not
-      // re-approved must leave the outlet's revenue until it does.
+      // AFTER the promotion, so the recompute sees the status the receipt ends
+      // on — verified counts as floor sales, exactly as approved did.
       await recomputeShiftSaleForReceipt(receiptId, actor);
 
       return res.status(200).json({
         success: true,
-        message:
-          owned.receipt.status === 'approved'
-            ? 'Line corrected — approve the receipt again to confirm the new figure'
-            : 'Line corrected',
+        message: 'Line corrected — receipt verified',
         data: {
           receipt,
           line: toReceiptLineDTO(
@@ -3085,14 +3173,12 @@ export class PaymentVoucherControllerClass {
         .json({ success: false, message: Error.NOT_FOUND, data: null });
       return null;
     }
-    if (owned.receipt.status === 'verified') {
-      res.status(409).json({
-        success: false,
-        message: `${owned.receipt.receiptNo} is already verified — that week is closed.`,
-        data: null,
-      });
-      return null;
-    }
+    /*
+     * VERIFIED does not block a correction — same relaxation as
+     * `editReceiptLine`, same owner's rule (23 Aug 2026), and the same reason:
+     * scans verify at creation, so refusing verified here would make every
+     * scanned receipt uncorrectable. The PR's signature below is the lock.
+     */
     if (owned.voucher.prSignedAt) {
       res.status(409).json({
         success: false,
@@ -3416,28 +3502,24 @@ export class PaymentVoucherControllerClass {
         },
       );
 
-      // See `editReceiptLine`: the approval described a receipt without this line
-      // on it, and nothing stored would let a reader notice that later.
+      // See `editReceiptLine`: adding a line the paper carries and the log
+      // missed IS the deep check, so it verifies the receipt too.
       const receipt =
-        owned.receipt.status === 'approved'
-          ? await this.paymentVoucherRepository.setReceiptStatus(
+        owned.receipt.status === 'verified'
+          ? owned.receipt
+          : await this.paymentVoucherRepository.setReceiptStatus(
               receiptId,
-              'pending',
+              'verified',
               actor,
-            )
-          : owned.receipt;
+            );
 
-      // AFTER the drop back to pending, never before: an approved receipt that
-      // just went stale contributes nothing until it is approved again, and the
-      // recompute must see the status it ends on.
+      // AFTER the promotion, never before: the recompute must see the status
+      // the receipt ends on.
       await recomputeShiftSaleForReceipt(receiptId, actor);
 
       return res.status(201).json({
         success: true,
-        message:
-          owned.receipt.status === 'approved'
-            ? 'Line added — approve the receipt again to confirm the new total'
-            : 'Line added',
+        message: 'Line added — receipt verified',
         data: {
           receipt,
           line: toReceiptLineDTO(
@@ -4798,10 +4880,18 @@ export class PaymentVoucherControllerClass {
         await this.paymentVoucherDisputeRepository.listOpenForVoucher(
           voucherId,
         );
+      // ⚠️ BACK TO THE STATUS IT ACTUALLY HELD, not to 'sent' unconditionally.
+      // A dispute may be raised on the LIVE week's voucher (pending_review is
+      // in DISPUTABLE_STATUSES — the owner's rule), and this write used to
+      // 'return' such a voucher to a status it had never reached: sent,
+      // unsigned, mid-week, skipping both the finance-signature gate and the
+      // week-still-running gate. That is exactly how PV-000009 reached its PR
+      // with no finance signature on 22 Aug 2026. The finance signature is the
+      // witness: a voucher without one can only have been pending_review.
       const voucher =
         stillOpen.length === 0
           ? await this.paymentVoucherRepository.update(voucherId, {
-              status: 'sent',
+              status: existing.financeHeadSignedAt ? 'sent' : 'pending_review',
               disputeReason: null,
               disputeNote: null,
               disputedAt: null,
@@ -5008,8 +5098,11 @@ export class PaymentVoucherControllerClass {
         );
       if (stillOpen.length === 0) {
         if (voucher.status === 'disputed') {
+          // Same rule as the withdraw lane above: back to the status the
+          // voucher actually held. Resolving a live-week dispute must not
+          // send an unsigned voucher.
           await this.paymentVoucherRepository.update(voucher.id, {
-            status: 'sent',
+            status: voucher.financeHeadSignedAt ? 'sent' : 'pending_review',
             disputeReason: null,
             disputeNote: null,
             disputedAt: null,

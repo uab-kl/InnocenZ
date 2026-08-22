@@ -39,20 +39,48 @@ export function receiptReviewCounts(
   return counts;
 }
 
-/** One short sentence for the This-week header, or null when there is nothing to say. */
+const CAPTION_DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Thu 20" from a lineDate — the shift the PR knows the entry by. All-UTC
+ * like the grid, so the named day is the column the money sits under. */
+function captionDay(iso: string | null): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return `${CAPTION_DAY_ABBR[d.getUTCDay()]} ${d.getUTCDate()}`;
+}
+
+/**
+ * The numbers the owner asked for (23 Aug 2026): how many entries are
+ * verified and approved out of everything receipt-backed, and WHICH shifts
+ * are still waiting — "pending just put what shift still pending". Null when
+ * the week has no receipt-backed entries at all.
+ */
 export function receiptReviewCaption(
   week: PrCurrentWeek | null,
 ): string | null {
   const { waiting, approved, verified } = receiptReviewCounts(week);
-  const settled = approved + verified;
-  if (waiting === 0 && settled === 0) return null;
-  if (waiting === 0) {
-    return `${settled} ${settled === 1 ? 'entry' : 'entries'} approved by your agency`;
-  }
-  if (settled === 0) {
-    return `${waiting} ${waiting === 1 ? 'entry is' : 'entries are'} waiting on your agency`;
-  }
-  return `${settled} approved · ${waiting} still waiting on your agency`;
+  const total = waiting + approved + verified;
+  if (total === 0) return null;
+  const settledParts: string[] = [];
+  if (verified > 0) settledParts.push(`${verified} verified`);
+  if (approved > 0) settledParts.push(`${approved} approved`);
+  const head =
+    settledParts.length > 0
+      ? `${settledParts.join(' · ')} of ${total} ${total === 1 ? 'entry' : 'entries'}`
+      : null;
+  if (waiting === 0) return head;
+  const pendingDays = [
+    ...new Set(
+      (week?.lines ?? [])
+        .filter((line) => line.receiptStatus === 'pending')
+        .map((line) => captionDay(line.lineDate))
+        .filter((d): d is string => d !== null),
+    ),
+  ];
+  const where = pendingDays.length > 0 ? ` (${pendingDays.join(', ')})` : '';
+  const tail = `${waiting} waiting on your agency${where}`;
+  return head ? `${head} · ${tail}` : tail;
 }
 
 /**

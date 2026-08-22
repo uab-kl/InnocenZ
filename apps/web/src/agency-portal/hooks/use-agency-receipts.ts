@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import {
 	type AgencyReceipt,
+	approveAllPaymentVoucherReceipts,
 	fetchAgencyReceipts,
 	reviewPaymentVoucherReceipt,
 } from "@/services/payment-voucher";
@@ -55,12 +56,30 @@ export function useAgencyReceipts() {
 		},
 	});
 
+	// The week-level bulk approve — same invalidations as the single review,
+	// because it IS that review, in bulk.
+	const approveAllMut = useMutation({
+		mutationFn: (weekStart: string) =>
+			approveAllPaymentVoucherReceipts(weekStart, logout),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: RECEIPTS_KEY });
+			queryClient.invalidateQueries({
+				queryKey: ["agency", "payment-voucher", "evidence"],
+			});
+			queryClient.invalidateQueries({
+				queryKey: ["agency", "payment-vouchers"],
+			});
+		},
+	});
+
 	return {
 		receipts: (query.data ?? []) as AgencyReceipt[],
 		isLoading: query.isLoading,
 		error: query.error,
 		reviewReceipt: reviewMut.mutateAsync,
 		isReviewing: reviewMut.isPending,
+		approveAllWeek: approveAllMut.mutateAsync,
+		isApprovingAll: approveAllMut.isPending,
 		/**
 		 * The server's refusal, verbatim — a verified receipt cannot be reopened and
 		 * a signed voucher cannot be reviewed at all. Both are rules the reviewer

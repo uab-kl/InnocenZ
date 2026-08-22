@@ -388,6 +388,21 @@ export const ReviewReceiptSchema = z.object({
 export type ReviewReceiptInput = z.infer<typeof ReviewReceiptSchema>;
 
 /**
+ * The week-level one-click: approve every still-pending receipt on the
+ * agency's vouchers for one payroll week. `weekStart` optional — the
+ * controller defaults it to the CURRENT payroll week, which is the only week
+ * the button is offered for.
+ */
+export const ApproveAllReceiptsSchema = z.object({
+  weekStart: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'weekStart must be YYYY-MM-DD')
+    .optional(),
+});
+
+export type ApproveAllReceiptsInput = z.infer<typeof ApproveAllReceiptsSchema>;
+
+/**
  * The agency correcting ONE line of a receipt under review.
  *
  * `amount` is the commission — what the PR is actually paid — because that is

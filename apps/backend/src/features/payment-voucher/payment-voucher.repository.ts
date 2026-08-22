@@ -1370,6 +1370,46 @@ export class PaymentVoucherRepositoryClass {
   }
 
   /**
+   * What a week-level "Approve all" may touch: receipts still PENDING, on THIS
+   * agency's vouchers, for ONE payroll week — and only while the PR has not yet
+   * signed. The signature is the same boundary every other review write holds;
+   * filtering here as well as in the UPDATE keeps a voucher signed between the
+   * read and the click out of the sweep.
+   *
+   * PENDING receipts are by construction self-logs: a scan verifies at
+   * creation, so it never appears here — which is exactly the owner's rule
+   * ("one click to approve ... for the any self-log only").
+   */
+  async listPendingReceiptsForAgencyWeek(
+    agencyId: string,
+    weekStart: string,
+  ): Promise<Array<{ id: string; receiptNo: string }>> {
+    try {
+      return await db
+        .select({
+          id: PaymentVoucherReceiptTable.id,
+          receiptNo: PaymentVoucherReceiptTable.receiptNo,
+        })
+        .from(PaymentVoucherReceiptTable)
+        .innerJoin(
+          PaymentVoucherTable,
+          eq(PaymentVoucherTable.id, PaymentVoucherReceiptTable.voucherId),
+        )
+        .where(
+          and(
+            eq(PaymentVoucherTable.agencyId, agencyId),
+            eq(PaymentVoucherTable.weekStart, weekStart),
+            eq(PaymentVoucherReceiptTable.status, 'pending'),
+            isNull(PaymentVoucherTable.prSignedAt),
+          ),
+        );
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listPendingReceiptsForAgencyWeek] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * APPROVED -> VERIFIED, the automatic arm of the lifecycle.
    *
    * Two modes, one implementation so they cannot drift: `voucherId` closes the
