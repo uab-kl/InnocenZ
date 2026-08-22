@@ -135,3 +135,56 @@ export function paymentDueDate(weekEnd: string, termDays: number = PAYMENT_TERM_
   due.setUTCDate(anchor.getUTCDate() + termDays);
   return isoDate(due);
 }
+
+/**
+ * The Sun–Sat window (yyyy-MM-dd) containing `now`, in Kuala Lumpur local time.
+ *
+ * ⚠️ THIS LIVED IN payment-voucher.controller.ts AND READ UTC CALENDAR FIELDS,
+ * which is the exact trap `klToday()` above was written to describe. KL is
+ * UTC+8, so between 00:00 and 08:00 local the UTC date is still YESTERDAY — and
+ * on SUNDAY, yesterday belongs to the week before. For those eight hours the
+ * server believed the current payroll week was the one that had just closed.
+ *
+ * That was not a cosmetic drift. `addMyLine` and `addMyReceipt` bound the
+ * client's `lineDate` with `checkLineAgainstWeek(lineDate, weekBounds())`, and
+ * the PR app dates a line from the PHONE's local clock. So from 00:00 to 07:59
+ * every Sunday the phone sent the real date, the server compared it against
+ * last week, and every attempt to log takings came back HTTP 400 — during the
+ * closing hours of Saturday night, which is when a PR actually logs them.
+ * Measured 22 Aug 2026: 4 of 8 sampled instants blocked, all of them in that
+ * window. The controller had `klToday` imported and used correctly three times
+ * elsewhere in the same file; this helper and its `todayIso()` were simply the
+ * lanes the 3 Aug timezone fix never reached.
+ *
+ * It is defined HERE, next to `previousCompleteWeek()` and `weekOfDate()`, for
+ * the reason the old docblock stated and could not enforce: "change one, change
+ * all four". Four copies of week arithmetic in two files is what let them drift.
+ * And it is expressed AS `weekOfDate(klToday(now))` rather than as a fifth copy
+ * of the day maths, so agreement is structural instead of aspirational.
+ *
+ * `weekOfDate` cannot return null for a well-formed `klToday()` output, but the
+ * fallback is real code rather than a `!` — a thrown TypeError inside a money
+ * read is worse than a week.
+ */
+export function weekBounds(now: Date = new Date()): {
+  weekStart: string;
+  weekEnd: string;
+} {
+  const today = klToday(now);
+  return weekOfDate(today) ?? { weekStart: today, weekEnd: today };
+}
+
+/**
+ * The Sun–Sat window immediately before the one containing `now`.
+ *
+ * Shifts the INSTANT by seven days and re-derives, so the KL offset is applied
+ * once, inside `weekBounds` — subtracting seven days from an already-computed
+ * KL date string would be a second place for the anchor to drift.
+ */
+export function previousWeekBounds(now: Date = new Date()): {
+  weekStart: string;
+  weekEnd: string;
+} {
+  const prior = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  return weekBounds(prior);
+}

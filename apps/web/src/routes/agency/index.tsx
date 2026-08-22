@@ -5,6 +5,7 @@ import { AiSuggestionsPanel } from "@agency-portal/components/portal/AiSuggestio
 import { useAgencyOutlets } from "@agency-portal/hooks/use-agency-outlets";
 import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
 import { useAgencyPvs } from "@agency-portal/hooks/use-agency-pvs";
+import { useAutoAssignPlan } from "@agency-portal/hooks/use-auto-assign-plan";
 import { OUTLET_NAMES, scopeToAgency } from "@agency-portal/lib/agency-demo";
 import {
 	agencyPendingPayoutDeadline,
@@ -16,10 +17,48 @@ import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/agency/")({
 	component: AgencyHub,
 });
+
+/**
+ * How many seats the venues are asking this agency to fill today.
+ *
+ * The home page could say what the agency OWES (pending payout), what it HOLDS
+ * (total PR, total outlets) and what it must DECIDE (the review tabs) — but not
+ * what it has been ASKED for, which is the one number that expires. An outlet
+ * posts a shift for tonight and, until now, nothing on this screen changed.
+ *
+ * Reads the same `useAutoAssignPlan("today")` the AI suggestion panel beside it
+ * already mounts, so this shares its query keys and fires no extra request. It
+ * is the count only — never which venue or which agency is competing for the
+ * same PRs — and it links to the roster where the staffing actually happens.
+ *
+ * Hidden at zero rather than showing "0": a KPI that is nearly always nought
+ * teaches people to stop reading it, and the whole point of this tile is to be
+ * noticed on the day it is not.
+ */
+function PrNeededKpi() {
+	const { t } = usePortalLocale();
+	const { backed, plan } = useAutoAssignPlan("today");
+	if (!backed || plan.openSlotCount <= 0) return null;
+	return (
+		<Link
+			to="/agency/roster"
+			className="iz-portal-kpi iz-portal-kpi-payout no-underline"
+		>
+			<div className="l">{t.agencyHome.prNeeded}</div>
+			<div className="n">{plan.openSlotCount}</div>
+			<p className="iz-tiny mt-1 leading-snug text-[var(--iz-muted2)]">
+				{plan.pairs.length > 0
+					? fill(t.agencyHome.prNeededReady, { n: plan.pairs.length })
+					: t.agencyHome.prNeededNobodyFree}
+			</p>
+		</Link>
+	);
+}
 
 function AgencyHub() {
 	const agencySubRole = useStore((s) => s.agencySubRole);
@@ -124,6 +163,10 @@ function AgencyHub() {
 					<div className="l">{t.agencyHome.totalOutlets}</div>
 					<div className="n">{totalOutlets}</div>
 				</div>
+				{/* Rendered only for roles that can actually staff a shift, so the
+				    hook inside it — and its roster queries — never mount for
+				    finance, who holds no `viewLiveFloor` and would 403 on some. */}
+				{showWorkforce && !isFinance && <PrNeededKpi />}
 				<Link
 					to="/agency/pv"
 					search={{ status: "TO_PAY" }}

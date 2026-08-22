@@ -195,11 +195,51 @@ export function prVisibleDayStatuses(
     if (pendingIds.has(line.receiptId)) daysWithPendingEvidence.add(line.lineDate);
   }
 
-  return view.map((d) => ({
-    date: d.date,
-    status:
-      d.status === 'approved' && daysWithPendingEvidence.has(d.date) ? null : d.status,
-  }));
+  /*
+   * DAYS APPROVE THEMSELVES FROM THEIR RECEIPTS now that the day-review
+   * panel is gone (owner's call, 23 Aug 2026): a day whose receipt-backed
+   * lines are all settled (approved or verified) reads APPROVED on the
+   * phone with no day_review row behind it — the Receipts section is the
+   * review. A day carrying any pending receipt stays un-derived, which the
+   * phone already renders as not-yet-reviewed.
+   *
+   * An EXPLICIT decision still outranks the inference — but only a real
+   * one. `buildDayReviewView` emits a row for EVERY day that has dated
+   * lines, status null when nobody decided, and the first version of this
+   * derivation treated those null rows as decisions: `decided` was built
+   * from every view date, so the loop below skipped exactly the days it
+   * existed for, and the phone kept reading PENDING over five verified
+   * receipts (measured live on PV-000009, 23 Aug 2026). Null is the
+   * ABSENCE of a decision; approved and held are decisions.
+   */
+  const receiptDays = new Set<string>();
+  for (const line of lines) {
+    if (!line.receiptId || !line.lineDate) continue;
+    receiptDays.add(line.lineDate);
+  }
+  const derivable = (date: string) =>
+    receiptDays.has(date) && !daysWithPendingEvidence.has(date);
+
+  const out = view.map((d) => {
+    const explicit =
+      d.status === 'approved' && daysWithPendingEvidence.has(d.date)
+        ? null
+        : d.status;
+    if (explicit !== null) return { date: d.date, status: explicit };
+    return {
+      date: d.date,
+      status: derivable(d.date) ? ('approved' as const) : null,
+    };
+  });
+
+  // A receipt-backed day the view somehow missed (defensive: view is built
+  // from the same lines, so this is normally empty).
+  const seen = new Set(out.map((d) => d.date));
+  for (const date of receiptDays) {
+    if (seen.has(date) || !derivable(date)) continue;
+    out.push({ date, status: 'approved' });
+  }
+  return out;
 }
 
 export type SendGateResult =
@@ -336,22 +376,24 @@ export function voucherSendGate(
     return { allowed: true };
   }
 
-  const heldDays = view.filter((d) => d.status === 'held').map((d) => d.date);
-  const unreviewedDays = view.filter((d) => d.status === null).map((d) => d.date);
-  if (
-    heldDays.length === 0 &&
-    unreviewedDays.length === 0 &&
-    pendingReceipts.length === 0 &&
-    pendingOvertime.length === 0
-  ) {
+  /*
+   * THE DAY-REVIEW TERMS ARE GONE (owner's call, 23 Aug 2026: "all verified
+   * no more need review in the pv remove it, do the approve action in the
+   * payroll agency receipt section"). The receipt statuses ARE the review:
+   * a voucher sends once no receipt is pending and no overtime is
+   * undecided. Un-reviewed days no longer block, and a legacy held row
+   * cannot either — with the panel removed there is no control left to
+   * clear one, so honouring it would brick the voucher it sits on. The
+   * result shape keeps both fields so no caller breaks; they are simply
+   * always empty now.
+   */
+  const heldDays: string[] = [];
+  const unreviewedDays: string[] = [];
+  if (pendingReceipts.length === 0 && pendingOvertime.length === 0) {
     return { allowed: true };
   }
 
   const parts: string[] = [];
-  if (heldDays.length > 0) parts.push(`${heldDays.length} day(s) held: ${heldDays.join(', ')}`);
-  if (unreviewedDays.length > 0) {
-    parts.push(`${unreviewedDays.length} day(s) not yet reviewed: ${unreviewedDays.join(', ')}`);
-  }
   if (pendingReceipts.length > 0) {
     parts.push(
       `${pendingReceipts.length} receipt(s) not yet reviewed: ${pendingReceipts.join(', ')}`,

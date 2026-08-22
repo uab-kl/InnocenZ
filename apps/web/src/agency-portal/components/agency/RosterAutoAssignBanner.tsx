@@ -93,7 +93,7 @@ export function RosterAutoAssignBanner({ dateIso }: { dateIso: string }) {
 					plan={plan}
 					confirm={confirm}
 					onClose={() => setOpen(false)}
-					scopeLabel={`on ${day}`}
+					scopeLabel={fill(t.rosterGrid.autoAssignScopeOn, { day })}
 				/>
 			)}
 		</>

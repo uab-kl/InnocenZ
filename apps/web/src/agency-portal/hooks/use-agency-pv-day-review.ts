@@ -59,33 +59,27 @@ const ALLOWED: PvSendGate = {
  * in a state and only a manual self-log is born pending.
  */
 export function buildSendGate(
-	days: PaymentVoucherDayReview[],
+	// Unused since the day terms left the gate; kept so no caller changes shape.
+	_days: PaymentVoucherDayReview[],
 	receipts: { receiptNo: string; status: PaymentVoucherReceiptStatus }[] = [],
 ): PvSendGate {
 	const pendingReceipts = receipts
 		.filter((r) => r.status === "pending")
 		.map((r) => r.receiptNo);
-	if (days.length === 0 && pendingReceipts.length === 0) return ALLOWED;
+	/*
+	 * THE DAY TERMS ARE GONE, here as on the server (owner's call, 23 Aug
+	 * 2026): the receipt statuses are the review, so only a pending receipt
+	 * blocks from this side. Undecided overtime also blocks, but this hook
+	 * has no overtime data — the server's own gate still refuses that send
+	 * and its message is surfaced by the send toast, so the button being
+	 * enabled is an offer, not a promise. The result shape keeps the day
+	 * fields, always empty, so no reader breaks.
+	 */
+	if (pendingReceipts.length === 0) return ALLOWED;
 
-	const heldDays = days.filter((d) => d.status === "held").map((d) => d.date);
-	// A stale day arrives with status null — the server already dropped it back to
-	// unreviewed — so it counts here as needing another look, not as approved.
-	const unreviewedDays = days
-		.filter((d) => d.status === null)
-		.map((d) => d.date);
-	if (
-		heldDays.length === 0 &&
-		unreviewedDays.length === 0 &&
-		pendingReceipts.length === 0
-	) {
-		return ALLOWED;
-	}
-
+	const heldDays: string[] = [];
+	const unreviewedDays: string[] = [];
 	const parts: string[] = [];
-	if (heldDays.length > 0) parts.push(`${heldDays.length} day(s) held`);
-	if (unreviewedDays.length > 0) {
-		parts.push(`${unreviewedDays.length} day(s) not yet reviewed`);
-	}
 	if (pendingReceipts.length > 0) {
 		parts.push(`${pendingReceipts.length} receipt(s) not yet reviewed`);
 	}

@@ -98,6 +98,10 @@ described 106 gaps against 141.
 - PR-scoped backend endpoints use the `/mine` pattern (derive `pr.id` server-side via
   `prRepository.getByUserId`, placed BEFORE `/:id` and OUTSIDE role guards).
 - Branch `jk` = this user; branch `SL` = teammate (outlet + agency web).
+- **Status colour code (owner, 23 Aug 2026), every receipt/PV surface:** green = settled
+  (verified, sealed wages, totals, signed/paid), amber = waiting — pending AND approved
+  share it deliberately, white = mixed states, red = disputed/deductions. Mobile authority:
+  `cellReviewTone()` in `receipt-review.ts`; web: `STATUS_VARIANT` in AgencyReceiptsPanel.
 - **Real outlet/agency logins: NEVER leave Velvet/Atlas demo data on screen.**
   Use `BLANK_OUTLET_*` / `BLANK_AGENCY_*` in `buildBlankPortalReset` and Settings
   overlays — not `DEFAULT_*`. See `.cursor/rules/no-demo-data-on-real-sessions.mdc`.

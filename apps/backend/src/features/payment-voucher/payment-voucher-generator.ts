@@ -4,7 +4,7 @@ import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
 import { checkVoucherBalance } from './payment-voucher-balance';
 import { auditVoucher } from './payment-voucher-audit';
-import { paymentDueDate } from './payment-voucher-week';
+import { klToday, paymentDueDate } from './payment-voucher-week';
 import { describeWorkedTime } from '@/features/shift-assignment/wage';
 
 export type GenerateWeeklyParams = {
@@ -55,8 +55,22 @@ export type GenerateWeeklyResult = {
   }>;
 };
 
+/**
+ * Today in Kuala Lumpur — the default `issued_date` stamped on a voucher.
+ *
+ * ⚠️ This read UTC calendar fields, and the payout cron fires at 02:00
+ * Asia/Kuala_Lumpur — 18:00 the PREVIOUS day UTC. So every voucher the job
+ * has ever generated was stamped as issued the day BEFORE it was issued:
+ * a Sunday run wrote `issued_date` of Saturday, inside the week it was
+ * closing. And the send step below it reads `voucher.issuedDate ?? klToday()`,
+ * so the wrong stamp WINS over the correct one sitting right there — which is
+ * why it never self-corrected. `previousCompleteWeek()` in the same feature
+ * already shifts by the KL offset for exactly this reason; this was the lane
+ * it missed. Verified 23 Aug 2026: weekly-payout.job.ts:54 calls
+ * generateForWeek WITHOUT issuedDate, so this default is the one the cron uses.
+ */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return klToday();
 }
 
 /**

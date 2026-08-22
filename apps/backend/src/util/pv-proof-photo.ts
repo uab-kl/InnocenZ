@@ -14,11 +14,15 @@
  *   user/{userId}/disputes/dispute-{ts}-{n}{ext}
  *   user/{userId}/leave/mc-{ts}-{n}{ext}
  *
- * FAILS OPEN, never the request: when R2 is not configured, or a put throws
- * (e.g. AccessDenied while the staging token is mis-scoped), the ORIGINAL data
- * URL is stored unchanged — the feature keeps working exactly as it does today
- * until R2 access is fixed. One warn per call, not one per photo.
+ * ⚠️ FAILS CLOSED — and this docblock used to promise the opposite. It said the
+ * original data URL is "stored unchanged … the feature keeps working exactly as
+ * it does today", which is the behaviour that was deliberately REMOVED: that is
+ * how an AccessDenied on a mis-scoped token quietly filled Postgres with base64
+ * while every screen reported success, and 22 proof photos then had to be
+ * migrated back out. A put that fails now throws and nothing is recorded. One
+ * warn per call, not one per photo.
  */
+import { env } from '@/env';
 import { logger } from '@/util/logger';
 import { isOwnedUserKey, userFolder } from '@/util/user-folder';
 import {
@@ -176,7 +180,30 @@ export async function saveProofPhotosToR2(input: {
       // Was: swallow and keep the data URL. That is how AccessDenied quietly
       // filled Postgres with base64 while every screen reported success.
       warnOnce('upload failed', error);
-      throw new Error('Could not save the photo to storage — nothing was recorded. Try again.');
+      // ⚠️ THE CAUSE USED TO DIE HERE. R2 answers with a name and an HTTP status
+      // that identify the fault in one word — AccessDenied/403 on a read-only
+      // token reads nothing like a 402 on a suspended account or a NoSuchBucket
+      // on a bad name — and all of it was discarded in favour of the sentence
+      // below. On the phone, in the log the PR cannot read, and in every support
+      // conversation, "storage failed" was where the investigation stopped; it
+      // cost a full session to rediscover a word R2 had been saying all along.
+      // Appended outside production only: these strings can carry bucket and
+      // key names, which belong in a log rather than in a screenshot that
+      // travels.
+      const r2 = error as {
+        name?: string;
+        message?: string;
+        $metadata?: { httpStatusCode?: number };
+      };
+      const detail =
+        env.NODE_ENV === 'production'
+          ? ''
+          : ` [${[r2?.name, r2?.$metadata?.httpStatusCode, r2?.message]
+              .filter(Boolean)
+              .join(' · ')}]`;
+      throw new Error(
+        `Could not save the photo to storage — nothing was recorded. Try again.${detail}`,
+      );
     }
   }
   return out;

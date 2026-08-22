@@ -188,6 +188,8 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | P6 | **F · Dispute now persists** — PR taps an amount on Payment → Last week → the PV flips to `status='disputed'` with reason+note on the **existing** `payment_voucher` columns (no new table). New PR-scoped endpoints `POST /payment-voucher/mine/:voucherId/dispute` + `…/dispute/withdraw`. Header shows a DISPUTED pill + open-dispute banner; withdraw reverts to `sent`. Agency web already reads these fields (`payment-voucher-map.ts`). | **PR → Agency** | `PaymentScreen` · backend `payment-voucher.*` | `payment_voucher` (status/disputeReason/disputeNote/disputedAt) | ⚠️ Reported (needs backend restart + agency-verify UI, §3 S10) |
 | P8 | **The PR sees APPROVED during the week** — `/mine/current-week` + `/mine/last-week` now ship `dayReviews[{date,status}]`, so a day the agency signs off on Tuesday reads **APPROVED** (green) on the phone instead of PENDING until Sunday's send. Header reads "Approved days n/7" — it used to say *Verified* over the PENDING count. A stale approval arrives as `null`, so a day whose total changed reads unreviewed on the phone too — **and so does a day carrying a PENDING receipt** (`prVisibleDayStatuses`), because APPROVED is what unlocks the dispute and must never over-claim. | **Agency → PR** | `payment-voucher.controller.ts` · `week-pay-grid.ts` · `PaymentScreen` | `payment_voucher_day_review` + `payment_voucher_receipt.status` (read-only, no DDL) | ⚠️ Reported (12/12 pure checks; needs a phone re-check after backend restart) |
 | P7 | **Self-log proof photo (P2)** — drink self-log requires ≥1 photo (camera capture + reminder above the Note; Submit gated); one-or-many photos saved on the new `payment_voucher_line.proof_photos` jsonb. | **PR → Agency** | `ScanScreen` · backend `payment-voucher.*` | `payment_voucher_line.proof_photos` (jsonb, reused table) | ⚠️ Reported (needs `pnpm migrate` + restart; agency display = SL) |
+| P9 | **A PR can log money in the small hours of Sunday again** — `weekBounds()` read UTC calendar fields while KL is UTC+8, so from 00:00–07:59 every Sunday the server believed the current payroll week was the one that had just closed. The self-log guard compares the PHONE’s local date against that window, so `addMyLine` / `addMyReceipt` returned **HTTP 400** for those eight hours — the closing hours of Saturday night, when takings actually get logged. Now `weekOfDate(klToday(now))`, defined beside `previousCompleteWeek()` in `payment-voucher-week.ts`. | PR (self) · **PR → Agency** | `payment-voucher-week.ts` · `payment-voucher.controller.ts` · `PaymentScreen` | none (read-side only, no DDL) | ✅ Verified (5 new tests; 336-hour sweep 0 rejections, was 4/8 blocked) |
+| P10 | **The receipt lifecycle is the owner’s spec end-to-end** — scan **verifies at creation** (machine evidence needs no review); self-log starts `pending`; the agency approves per receipt or with the new week-level **Approve all** (`POST /payment-voucher/receipts/approve-all`, self-logs only by construction); an agency **edit/add-line verifies** the receipt (its own correction is the deepest check — replaces the old drop-to-pending); the Sunday rollover and a resolved dispute still verify. **Day Review is retired**: the PV panel is removed, `voucherSendGate` now gates on receipts+overtime only, and the PR’s day chips derive APPROVED from settled receipts (`prVisibleDayStatuses`). Verified pill is green on both surfaces. PR caption: "2 verified · 1 approved of 5 entries · 2 waiting on your agency (Thu 20, Sat 22)". Also closed: **dispute withdraw/resolve teleported an unsigned live-week voucher to `sent`** (pending_review is disputable by design; both lanes now restore `pending_review` unless `finance_head_signed_at` is set) — that hole is how PV-000009 reached the PR unsigned; its row was repaired back to `pending_review`. | **PR ↔ Agency** | `payment-voucher.*` · `AgencyReceiptsPanel` · `receipt-review.ts` | `payment_voucher_receipt.status` (existing enum, no DDL) | ⚠️ Reported (tsc 0 ×3, vitest 70/70, biome lint clean; needs backend RESTART + a click-through: approve-all button renders only when a pending receipt exists) |
 
 ### Outlet side (SL)
 | # | Item | Role link | Where | Data source | Status |
@@ -322,15 +324,128 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ 🔴 THE PV EDITOR LOST-UPDATE IS THE ONE AUDIT HIGH STILL OPEN (deferred 22 Aug 2026)
+### ▶ ✅ CLOSED — the PV editor lost-update shipped in `d0fc0ae` (22 Aug 2026)
 
-`payment-voucher.repository.ts` update path (~:304) deletes EVERY line and re-inserts the
-payload; a line the PR logs while the agency editor is open (60s staleTime) is destroyed with
-its proof photo, totals shrink, nobody errors. The fix is optimistic concurrency —
-`expectedUpdatedAt` in UpdatePaymentVoucherSchema, re-read inside the transaction, 409 on
-mismatch, web sends `pv.updatedAt` — but it changes the client↔server protocol on the money
-editor and CANNOT be verified without rendering both sides, so it was NOT rushed into the
-22 Aug batch. Do it as its own slice with the editor open in a browser.
+Was the top open item here while §10 already recorded it as done — the backlog and the
+changelog contradicted each other for three commits. `expectedUpdatedAt` is in
+`UpdatePaymentVoucherSchema`, the repository re-reads under `SELECT … FOR UPDATE` and throws
+`VoucherConflictError` on a stale token. **What is still owed is the click-through, not the
+code**: open the agency voucher editor, have the PR self-log a drink into the same day, save,
+and confirm the editor is refused with the 409 sentence rather than silently winning.
+
+### ▶ 🔴 RECEIPT STATUS LIFECYCLE — owner's spec, 23 Aug 2026 (00:40)
+
+⚠️ **The spine already exists and matches the owner's description exactly.** Do NOT redesign it.
+`payment_voucher_receipt.status` is `['pending','approved','verified']`, and
+`payment-voucher.routes.ts` already documents *"PENDING -> APPROVED (here) -> VERIFIED (the
+Monday rollover, or a resolved dispute — never a request)"*. What follows is what is MISSING
+on top of that, in the owner's own terms.
+
+**The rules as stated (23 Aug 2026):**
+1. A shift/receipt submitted and awaiting the agency is **pending**, and pending lives in the
+   **this-week** section only.
+2. **Approve is a light touch, not an audit** — "approved mean the agency no deeply check just
+   one click only" — and it happens in the this-week section only.
+3. **A fully SCANNED shift needs no approval**: if every receipt on the shift was scanned, it
+   goes straight to **verified**. Approval exists for SELF-LOGS.
+4. On the rollover to next week, **approved → verified** when nothing on the shift is disputed.
+5. If the agency **edits/corrects a receipt and saves it to the PR**, that act itself verifies
+   it — a corrected figure has been looked at by definition.
+6. A dispute shows the PR **disputed**; once resolved it becomes **verified**.
+7. **This week + last week are the PR's dispute window.** Next week stays verified if nothing
+   was disputed. A verified receipt can STILL be disputed.
+
+**What must be built:**
+- **One-click approve-all** on the agency payroll page — every still-pending SELF-LOG in the
+  current week, in one action. Scanned-only shifts must not appear in it (rule 3).
+- **Direct-to-verified for all-scanned shifts** (rule 3) — check whether `review` currently
+  forces every receipt through `approved` regardless of source.
+- **Auto-verify on agency edit** (rule 5) — check `editReceipt` / the receipt-line PATCH.
+- **Agency payroll UI rework**: the page must say WHAT TO DO. Today it presents four tabs
+  (Payment Vouchers / Receipts / Disputes / Overtime) and leaves the operator to work out
+  which one needs them.
+- **PR-side counts**: verified/approved show `n of total` across the shift's drink + tip
+  receipts; **pending names WHICH shift is still pending** rather than only a count.
+
+⚠️ This is MONEY STATE. Every change needs a click-through AND a DB check that the row moved,
+not just that the badge changed.
+
+### ▶ 🟠 A SHIFT CAN END UNSTAFFED AND NOBODY IS TOLD (added 23 Aug 2026)
+
+Found by the owner on 22 Aug: JK House posted *baddie night* 14:10–15:00, nobody was ever
+assigned, and it simply ended at 0/1. `shift_cover_needed` is documented as "a CALL TO ACTION —
+find a replacement" and fires when an assigned PR DROPS OUT; nothing fires when nobody was ever
+assigned. The PR is correctly not told (it was never her shift), the outlet sees only the `0/1`
+on its calendar if it looks, and the agency's banner stops counting it once it ends — which the
+22 Aug fix made correct and, in doing so, removed the last place the gap was visible.
+
+Repair: report shifts whose window has ended with `staffed < quantity`, to the invited agencies
+and probably to the outlet that paid for the slot. `hasShiftEnded` is already tested and
+imported into `auto-assign`; `notifyMany` + `shift_cover_needed` is the same fan-out
+`notifyShiftPosted` uses.
+
+### ▶ 🟠 ADMIN VOUCHER LIST: `issuedDate` BLANK, SIGN TIMES NOT SHOWN (added 23 Aug 2026)
+
+`issued_date` is written in exactly ONE place — `weekly-payout.job.ts:221` — so a voucher that
+reached `sent` or `signed` by any other path shows "—" in the admin Payment Vouchers table and
+in its detail sheet. Live on `innocenz-test`: 5 of 7 vouchers blank, including `sent` ones.
+Separately the detail sheet renders Issued / Due / Week start / Week end but never
+`prSignedAt` or `financeHeadSignedAt`, although the DTO already carries both
+(`services/payment-voucher/index.ts:117,127`). The owner's requirement is that every date and
+time is present. Ordering was the third part of that report and is FIXED (23 Aug).
+
+### ▶ 🔴 FIRE `notifyShiftPosted` ONCE, BY HAND (added 22 Aug 2026)
+
+The only part of the 22 Aug batch with no evidence behind it. Post a real shift from the
+JK House outlet and confirm the agency bell increments and the message reads
+"New shift — JK House … needs N PRs". It cannot be proved without writing a real shift row,
+so it was deliberately left for the owner rather than faked. Check two things while there:
+that a SHARED shift (several approved agencies) reaches every invited agency and not just the
+anchor, and that no message anywhere names another agency.
+
+### ▶ 🟠 TWO BUSY-FLAG DEFECTS ARE STILL OPEN — N14 AND N16 (added 22 Aug 2026)
+
+Deliberately NOT fixed in the 22 Aug batch, because both change the assign sheet the owner was
+about to test by hand and neither is measured as occurring.
+
+- **N14 — a label-only slot cannot be blocked by anyone.** `slotMinutes` returns null for
+  "Late night", so `shiftsOverlap` returns FALSE and `travelShortfall` returns null: server AND
+  client both fail open, and a genuine double-booking passes every guard. The two screens then
+  disagree — `committedWindowsByPr` registers the date with an empty array so the grid prints
+  "Unavailable", while the sheet's `parseDialogWindow` returns null and blocks nothing. Decide
+  what a windowless commitment MEANS and say it once; blocking the whole day would re-impose
+  the rule the owner narrowed on 20 Aug 2026.
+- **N16 — client and server disagree about midnight.** The sheet compares parsed `HH:MM` with
+  `a.from < b.to && b.from < a.to`; the server runs a continuous timeline via `shiftWindow` /
+  `dayIndex`, so 22:00–04:00 on the 30th genuinely collides with 02:00–06:00 on the 31st. The
+  sheet under-warns. Fixing it means threading the PREVIOUS day's windows into
+  `AssignBackendCellSheet`, which today receives only one date's — a prop change through
+  `RosterBackendTimetable`.
+
+### ▶ 🟡 "PR BOOKED" ON THE AGENCY HOME NEEDS A STAFFED TOTAL (added 22 Aug 2026)
+
+The owner asked for PR needed AND PR booked; only **needed** shipped. `OpenShift` carries
+`openSlots` but no staffed count, and `mergeCrossAgencyStaffing` computes the cross-agency
+total inside `findOpenShifts` without exposing it. Surfacing it means adding a field to
+`AutoAssignPlan` — safe in itself (the sweep confirmed the only pair-construction site is the
+`pairs.push` at auto-assign.ts:649-660, and a new aggregate touches neither the `.filter` at
+591-602 nor the `.sort` at 603-608), but it was not worth doing an hour before a manual test
+pass. ⚠️ Note when picking it up: the owner's rule is that a PR booked by ANOTHER agency counts
+as on duty, shown anonymously — so the number must come from the merged cross-agency total, not
+from the agency's own assignments.
+
+### ▶ 🟡 THE NICKNAME SEARCH IS UNPINNED BY ANY TEST (added 22 Aug 2026)
+
+The Post Job picker's search was proved by driving the live page (see §10), and every case
+passed — but nothing in the repo will catch it breaking. `DraftPrPicker` has no test file at
+all. Worth a small `@testing-library/react` spec on the pure parts: query trims and lowercases,
+a mid-string hit matches, the plan cap (`poolSize`) is applied BEFORE the filter, and a
+selected PR stays selected while filtered out of view. That last one is the regression that
+would actually cost money — it silently drops a named PR from a posted shift.
+
+Two behaviours are chosen, not accidental, and a future change should not "fix" them:
+the legal name is deliberately unsearchable (privacy — see §10), and the search cannot reach
+past `poolSize` (plan entitlement). Both have comments in the source saying so.
 
 ### ▶ 🟠 PURGE THE TOKENS ALREADY SITTING IN audit_logs (added 22 Aug 2026)
 
@@ -419,7 +534,20 @@ Three things need a signed-in agency owner with at least one breaching PR to con
 Backend + web are already running (:7777, :3000). Signing in requires typing a password, so this
 one needs the owner at the keyboard.
 
-### ▶ 🔴 apps/web DOES NOT BUILD — a stale nested `@tanstack/router-core` (19 Aug 2026)
+### ▶ ✅ CLOSED — apps/web builds again (verified 22 Aug 2026, was: DOES NOT BUILD)
+
+Re-ran it to check rather than trusting the entry: `npx vite build` in `apps/web` →
+**`✓ built in 29.53s`**, `.output/server/index.mjs` written, exit 0. The `MISSING_EXPORT`
+failure below is HISTORY and is kept only for the diagnosis trail.
+
+⚠️ **The diagnosis recorded below was wrong, and the record should say so.** It blamed version
+drift across five `@tanstack/*` packages pinned to `"latest"`. PR #76 found the actual cause —
+a single DUPLICATE nested `@tanstack/router-core`, which the table below had in fact already
+identified — and fixed that. The `"latest"` pins are still a real hazard worth closing on their
+own (two machines can resolve different trees from one range), but they were not what broke the
+build. Left as the 🟡 item it always was, not the 🔴 it was written up as.
+
+<details><summary>Original 19 Aug write-up (superseded)</summary>
 
 `pnpm build` in `apps/web` dies with `MISSING_EXPORT` on `waitForRequest`,
 `disposeSsrResponseDetached`, `bindSsrResponseToRequest` and `_getRenderedMatches`. **Not caused by
@@ -443,6 +571,8 @@ different trees from one lockfile-less range. Fix by bumping `@tanstack/router-p
 `router-cli` to a release whose pinned `router-core` matches 1.171.24, then pinning the whole
 `@tanstack/*` set to explicit versions. **Dev is unaffected** — Vite serves every route fine; this
 blocks the production build only.
+
+</details>
 
 ### ▶ ✅ PROVEN LIVE 19 Aug 2026 — the two shift-assignment refusals (was: not yet fired)
 
@@ -1991,6 +2121,16 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-23 | **The owner’s receipt lifecycle shipped in one slice, and it killed the Day Review.** Rules, verbatim from the owner tonight: scans need no approval (**verified at creation** — machine evidence); self-logs start **pending**; the agency settles them **per receipt or in one click** (new `POST /payment-voucher/receipts/approve-all`, week-scoped, `agencyOwnerOrFinance`, skips PR-signed vouchers, floor sales recomputed per flip); an agency **edit or added line verifies** the receipt — the old code dropped it to pending, asking the agency to re-approve a figure it had just typed itself; rollover and resolved disputes still verify. **“all verified no more need review in the pv remove it”** — the Day Review panel is gone from the PV sheet, `voucherSendGate` lost its day terms (receipts + overtime + the week-end guard are the gate; a legacy `held` row can no longer brick a voucher nobody can un-hold), the payout notification names receipts instead of days, and `prVisibleDayStatuses` now **derives** a day’s APPROVED from its receipts so the phone shows progress with no day_review row behind it. Verified is **green on both surfaces** (was "ink" on web — owner: same colour as PR). PR header caption now carries the owner’s numbers: *"1 verified · 3 approved of 5 entries · 1 waiting on your agency (Thu 20)"*. **And the night’s real find:** the PR phone said SENT over a voucher the agency never signed. Measured: PV-000009 `sent`, `finance_head_signed_at` NULL. Cause: `pending_review` is deliberately disputable, and **dispute withdraw/resolve wrote `status:'sent'` unconditionally** — “returning” a live-week voucher to a status it never held, past the signature gate and the week-end gate. Vicky’s 22 Aug dispute test fired it. Both lanes now restore `sent` only when `finance_head_signed_at` exists, else `pending_review`; PV-000009 repaired to `pending_review` (guarded UPDATE, nothing signed). Also answered with live rows, not reading: **cancel fees and approved OT land on the week the shift was worked** — RM20 fee → PV-000008 (09–15 Aug), RM175 OT → PV-000002 (19–25 Jul), 0 misplacements — the deduction does NOT chase the next shift, by design. Verified: backend tsc 0, web tsc 0, mobile tsc 0, vitest 70/70, biome lint clean on touched files (the formatter’s CRLF complaints are the repo-wide autocrlf baseline, present on untouched files too). ⚠️ Backend watcher stuck on the 02:32 build — needs a manual restart; approve-all button unclicked (no pending receipt exists right now to render it against). | (this commit) |
+
+| 2026-08-23 | **For eight hours every Sunday a PR could not log a single ringgit — and the week on screen was the wrong week.** The owner’s screenshot showed *This week 23 Aug – 29 Aug 2026* above day columns **SUN 16 · MON 17 · TUE 18 · WED 19**. Two sources for one week: the header came from the PHONE’s clock (`weekRangeLabel(0)`), the columns from the voucher’s own `weekStart`. Root cause in `weekBounds()` (payment-voucher.controller.ts), which read **UTC calendar fields**. Kuala Lumpur is UTC+8, so between 00:00 and 07:59 local the UTC date is still yesterday — and **on Sunday, yesterday belongs to the week that just closed**. The screenshot was taken at 01:23 MYT = 17:23 Sat UTC, squarely inside that window. **This was not cosmetic.** `addMyLine` and `addMyReceipt` bound the client’s `lineDate` with `checkLineAgainstWeek(lineDate, weekBounds())`, and the PR app dates a line from `todayYmd()` — the device clock. So the phone sent 2026-08-23, the server compared it against 16–22, and **every attempt to log takings came back HTTP 400** during the closing hours of Saturday night, the busiest shift of the week. `getMyCurrentWeek` served the wrong grid and the history read excluded the wrong week from the same fault. **Measured before: 4 of 8 sampled instants blocked, all inside 00:00–07:59 Sunday. After: 0 rejections across an exhaustive 336-hour hourly sweep**, checking both the phone’s date and the server’s own default against the server’s own window. **The eighth missed sibling, and the tightest one yet** — `payment-voucher-week.ts` already carried `klToday()` whose docblock describes this exact trap in words (*"between 00:00 and 08:00 KL local it still reads YESTERDAY"*), the controller **already imported `klToday` and used it correctly three times** (line 656: *"`klToday()`, never `new Date()`"*), and `weekBounds`’ own docblock demanded *"change one, change all four"*. The comment stated the invariant; the code 400 lines above it violated it. Fixed by **moving** `weekBounds`/`previousWeekBounds` into `payment-voucher-week.ts` beside their siblings and expressing them as `weekOfDate(klToday(now))` — not a fifth copy of the day maths, so agreement is structural rather than aspirational. `todayIso()` moved with it (the two are compared by the guard, so fixing either alone turns a misfiled line into a rejected one). **Also fixed in the same family:** the generator’s own `todayIso()` stamped `issued_date` in UTC, and the payout cron fires 02:00 KL = 18:00 the previous day UTC, so every voucher it created was stamped issued the day BEFORE — and the send step reads `voucher.issuedDate ?? klToday()`, so the wrong stamp won over the correct one sitting right there. Verified 23 Aug: `weekly-payout.job.ts:54` calls `generateForWeek` WITHOUT `issuedDate`, so that default is the one the cron uses. **Client half:** the Payment header now derives from the server’s `weekStart` (`weekRangeLabelFromIso`, all-UTC like `buildWeekGridFromLines`) and falls back to the clock only when there is no voucher — so a header and the figures under it can no longer disagree whatever zone the phone is in. **5 new tests** pin the instant explicitly, including the exhaustive fortnight sweep; a test calling bare `new Date()` on a UTC+8 laptop cannot catch this, which is how it survived a green suite (the same warning `cancel-fee.test.ts` already carries). Verified: backend tsc **0** (387 files — and the "26 pre-existing TS2883" baseline in CLAUDE.md is now **stale**, those are gone), web tsc **0**, mobile tsc **0** via `tsconfig.app.json` (90 files), backend vitest **70/70**. ⚠️ **Not yet re-checked on the phone** — the next Sunday-morning window is the real proof; the fix is pinned by tests, not by a device. | (this commit) |
+
+| 2026-08-22 | **The cross-agency busy flag stopped refusing bookings the server accepts, and posting a shift finally rings a bell.** Three fixes in `listCommittedWindows` (pr-availability.repository.ts), the read behind the roster's anonymous *UNAVAILABLE 15:00 - 04:00* marker. (1) **It over-blocked.** `/committed` kept `completed` rows and returned neither `status` nor `check_out_at`, while the assign guard skips both — so a PR who finished an afternoon shift and clocked out stayed greyed in the assign sheet and was dropped from `selectable` entirely. **Measured against `innocenz-test` before fixing: 67 committed windows, of which 24 (36%) were rows the server would have accepted.** Now filters `completed` + `check_out_at IS NOT NULL`, mirroring the guard exactly. (2) **`slot` is free text** (`z.string().max(100)`, no format rule) and was rendered verbatim to the rival agency, so a venue typing "Velvet VIP Launch 15:00-04:00" would defeat an anonymity the SQL enforces perfectly. New `canonicalWindow` reduces it to bare `HH:MM - HH:MM` via `slotMinutes` — the SAME parser the clash guard and pay window already share, so no third reading of a slot string enters the codebase. **Measured: 0 occurrences** — a real hole, never yet exploited; kept as a boundary, not a repair. (3) **Identity matched on `pr_id` only** while `hasLiveAssignmentOn` in the same file matches either column; now matches both and returns `agency_pr.user_id` as the canonical key. **Measured: 0 rows** where the columns differ — latent, not live. ⚠️ Both (2) and (3) were reported to the owner as live defects BEFORE measuring, and both were overstated; the numbers came from a throwaway probe, since deleted. **Also: `notifyShiftPosted`** — an outlet posting a shift used to notify nobody (withdrawal notified everyone; creation notified no one), so the agency learned of new work only when someone opened the roster and a 30s-stale query refetched. Fans out to every INVITED agency's active members (0124's lesson), fires after the 201, names the venue but never a rival agency, and reuses the existing `shift_cover_needed` kind — already agency-addressed, already means "seats need filling" — to avoid a `notification_kind` enum migration on a shared DB. **And a `PR NEEDED TODAY` KPI** on the agency home: open slots today from the `useAutoAssignPlan("today")` the AI panel beside it already mounts (shared query keys, no extra request), gated to `viewLiveFloor` so finance never fires it, hidden at zero. 3 keys × 2 dictionaries. Verified: backend tsc **0** beyond the TS2883 baseline, web tsc **0**, vitest **39/39**, and live on the real agency session — the busy marker still renders identically after the query rewrite, and the KPI reads `PR NEEDED TODAY · 1 · 1 free to fill them`. ⚠️ **`notifyShiftPosted` has NOT been fired end to end** — that needs a real shift posted from JK House; it is the first item in §9. | (this commit) |
+
+| 2026-08-22 | **Auto-assign stopped arriving pre-armed — selection is now opt-in — and the whole sheet got the translation it never had.** `AutoAssignSheet` opened with EVERY proposed pairing already included and a "Skip" chip per row, so the default action of the biggest button on screen was *write all of these* and the agency had to notice and decline each one it did not want. Assigning a PR to a shift is real money and a real person's evening, so the safe default is nothing selected: rows are now checkbox buttons (`aria-pressed`), the CTA is disabled and reads "Select at least one to continue" at zero, and **Select all N / Clear** keeps the bulk case one tap away. Same slice: the sheet was **100% hardcoded English** inside a portal with a 中文 toggle in its own sidebar — title, intro, both count labels, the CTA, the two shortage sentences and all four toasts. 26 keys added to `rosterGrid` in BOTH dictionaries, and the two callers' `scopeLabel` (`` `on ${day}` `` in the roster banner, `"today"` in the home card) moved into the dictionary too rather than being English glued onto a translated sentence. Verified **live on the real agency session** (Dato' Lim Wei Khoon, `/en/agency/roster?view=planning`): opens **0/1 selected** with the CTA disabled · tap the row → `aria-pressed=true`, tick renders, **1/1**, CTA "Confirm 1 assignment" enabled, toggle flips to "Clear" · Clear → back to 0/1 disabled · Select all → 1/1 enabled · 中文 renders 分配可用 PR / 已选 1/1 / 确认 1 项分配 / 请至少选择一项. `apps/web` tsc **0 errors**, biome clean. ⚠️ Two things deliberately NOT translated and left as-is: `tierLabel` ("Tier I") is a product proper noun, and `dropReasonLabel` returns English sentences from a pure lib with no `t` in scope — noted in §9. | (this commit) |
+
+| 2026-08-22 | **The outlet can now find a PR by nickname on Post Job — and the picker's counter stopped being the one untranslated string on that screen.** SELECT PRS drew the whole pool as cards with nothing to narrow it; on a Scale plan that is up to 200 faces to scroll past to name one person. Added a search box to `DraftPrPicker` filtering `p.name`, which **is** the nickname: `managedPrFromBackend` maps `name` ← `pr.nickname` and only falls back to the legal name for a PR who has none — so no backend change, no new query, no new round trip. Two deliberate limits, both load-bearing: (a) the **legal name is NOT matched**, because it is a name this picker never displays and matching it would turn the box into an oracle for *whose nickname is this IC name*; (b) the filter runs **AFTER** `poolSize` has capped the list, because that cap is a plan entitlement ("choose 100 from 200 PRs") — filtering first would let a typed name reach past what the subscription pays for. An empty POOL and an empty SEARCH now read differently (`noPrMatches` quotes the query back), so a mistyped nickname no longer shows "No PRs available to select" to a venue that has 44 of them. Fixed in passing: the count badge rendered a hardcoded English `{n}/{cap} selected` although `postJob.selectedOfCap` already existed in BOTH dictionaries — 中文 now reads 已选 1/100. Verified **live on the real JK House outlet session** (not demo): 5 cards → `vic` → 1 (Vicky) · `aina` → Nurul Aina (mid-string, second word) · `  ALICE ` → Alice (case + padding tolerated) · `viczz` → the no-match sentence · clear button restores all 5 and hides itself · **a selection made before searching survives being filtered out** (badge holds 1/100) and is still marked when the query clears · 中文 renders all four new keys. Mobile 375px: the box fits its panel (284/310) with no horizontal page scroll. `apps/web` tsc **0 errors**, biome clean on the touched files, no new console errors. | (this commit) |
 
 | 2026-08-22 | **The outlet's PR picker listed the same person twice — a SEVENTH missed sibling, found by the owner on screen.** Post Job's SELECT PRS showed "Alice" on two cards. `GET /pr` returned two rows carrying the SAME id/userId (`1cfade6c-…`), differing only by `agencyId` and `tier` (Atlas tier_2, Why We Met tier_1). Root cause: `listPaginated` iterates **memberships** (`FROM agency_pr ⋈ user`), and the outlet branch pins to no single agencyId. The existing narrowing at pr.repository.ts:637 — match the assignment's own `agency_id` — carries a note claiming it "collapses the duplicate… nothing is lost by narrowing"; that is true only for a PR who worked the venue under ONE agency. **Alice has worked JK House under both Atlas and Why We Met** (an Atlas-owned shift staffed by WWM via `shift_agency`), so both memberships satisfy the EXISTS. Same shape as the six lanes already closed: a fix correct for the single-agency case, blind to the multi-agency one. Fixed with `selectDistinctOn([agency_pr.user_id])` ordered `user_id, created_at DESC` (newest membership survives, so a PR who moved agency shows her current grade), `count(distinct user_id)` so `totalCount` counts PEOPLE not memberships, and a post-query re-sort to keep the previous list order — DISTINCT ON forces its key to lead the ORDER BY. Gated on `filter.assignedToOutletIds`, so the agency branch (already pinned to one agencyId) and the admin PR screen (where several memberships MUST stay individually visible) are untouched. Verified: backend tsc **0**, **65/65**, build clean, and **live against the running app** — `GET /pr` went from `{Alice: 2, Victoria: 1}` to `{Alice: 1, Victoria: 1}`, totalCount 2. | (this commit) |
 

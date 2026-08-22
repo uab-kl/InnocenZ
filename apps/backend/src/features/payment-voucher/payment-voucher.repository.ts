@@ -480,7 +480,20 @@ export class PaymentVoucherRepositoryClass {
         .from(PaymentVoucherTable)
         .leftJoin(UserTable, eq(PaymentVoucherTable.prId, UserTable.id))
         .where(whereClause)
-        .orderBy(PaymentVoucherTable.createdAt)
+        // NEWEST WEEK FIRST. This was a bare `orderBy(createdAt)` — ascending —
+        // so the admin inbox opened on the oldest voucher on the platform and
+        // this week's sat on the last page. Every sibling read in this file
+        // already sorts the other way (`listHistoryForPr`, `listForWeek`); this
+        // was the lane that missed it.
+        //
+        // `weekStart` leads because that is the week the money belongs to, and
+        // `createdAt` only breaks ties — a voucher can be created late (a
+        // back-dated self-log opening a draft for an earlier week) and would
+        // otherwise jump ahead of the weeks it comes after.
+        .orderBy(
+          desc(PaymentVoucherTable.weekStart),
+          desc(PaymentVoucherTable.createdAt),
+        )
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 
@@ -1352,6 +1365,46 @@ export class PaymentVoucherRepositoryClass {
         .returning();
     } catch (error) {
       logger.error('[PaymentVoucherRepository.approvePendingReceipts] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * What a week-level "Approve all" may touch: receipts still PENDING, on THIS
+   * agency's vouchers, for ONE payroll week — and only while the PR has not yet
+   * signed. The signature is the same boundary every other review write holds;
+   * filtering here as well as in the UPDATE keeps a voucher signed between the
+   * read and the click out of the sweep.
+   *
+   * PENDING receipts are by construction self-logs: a scan verifies at
+   * creation, so it never appears here — which is exactly the owner's rule
+   * ("one click to approve ... for the any self-log only").
+   */
+  async listPendingReceiptsForAgencyWeek(
+    agencyId: string,
+    weekStart: string,
+  ): Promise<Array<{ id: string; receiptNo: string }>> {
+    try {
+      return await db
+        .select({
+          id: PaymentVoucherReceiptTable.id,
+          receiptNo: PaymentVoucherReceiptTable.receiptNo,
+        })
+        .from(PaymentVoucherReceiptTable)
+        .innerJoin(
+          PaymentVoucherTable,
+          eq(PaymentVoucherTable.id, PaymentVoucherReceiptTable.voucherId),
+        )
+        .where(
+          and(
+            eq(PaymentVoucherTable.agencyId, agencyId),
+            eq(PaymentVoucherTable.weekStart, weekStart),
+            eq(PaymentVoucherReceiptTable.status, 'pending'),
+            isNull(PaymentVoucherTable.prSignedAt),
+          ),
+        );
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listPendingReceiptsForAgencyWeek] Error:', error);
       throw error;
     }
   }

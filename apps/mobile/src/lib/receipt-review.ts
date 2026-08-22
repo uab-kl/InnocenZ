@@ -39,20 +39,136 @@ export function receiptReviewCounts(
   return counts;
 }
 
-/** One short sentence for the This-week header, or null when there is nothing to say. */
+/**
+ * The COLOUR a money cell earns from its receipts' review state — the
+ * owner's rule (23 Aug 2026): "all verified will green, approved yellow
+ * warning colour same with Pending, if half either some receipts on that
+ * day ... will show white". Receipt grain per (day, kind):
+ *
+ *   'verified' → every receipt-backed line settled at verified (green)
+ *   'warning'  → one uniform state that is NOT verified — all pending, or
+ *                all approved (amber; the two share the warning colour by
+ *                the owner's explicit call — the word carries the
+                  difference)
+ *   'mixed'    → two or more distinct states (white — the default ink)
+ *   null       → no receipt-backed lines here (wages seals); style as before
+ *
+ * DISPUTED is not decided here: the red comes from the dispute set the
+ * screen already holds, and it outranks whatever this returns.
+ *
+ * Accepts 'deductions' (a grid bucket, not a line kind) and returns null
+ * for it — a fine has no receipt to review and keeps its own red.
+ */
+export function cellReviewTone(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+  kind: PrReceiptLine['kind'] | 'deductions',
+): 'verified' | 'warning' | 'mixed' | null {
+  const statuses = new Set<string>();
+  for (const line of week?.lines ?? []) {
+    if (line.lineDate !== dateIso || line.kind !== kind) continue;
+    if (!line.receiptStatus) continue;
+    statuses.add(line.receiptStatus);
+  }
+  if (statuses.size === 0) return null;
+  if (statuses.size > 1) return 'mixed';
+  return statuses.has('verified') ? 'verified' : 'warning';
+}
+
+/** One receipt of a day, aggregated from its lines — what the day sheet lists. */
+export type DayReceiptRow = {
+  receiptNo: string;
+  orderNo: string | null;
+  status: 'pending' | 'approved' | 'verified';
+  /** RM — the sum of this receipt’s lines dated this day. */
+  amount: number;
+};
+
+export type DayReceiptSummary = {
+  total: number;
+  pending: DayReceiptRow[];
+  approved: DayReceiptRow[];
+  verified: DayReceiptRow[];
+};
+
+/**
+ * ONE DAY's receipts by review state — the owner's ask (23 Aug 2026):
+ * “inside the status row pr can see what receipt still pending, how many is
+ * verified, how many is approved / that day total receipt”. Counted at
+ * RECEIPT grain, not line grain, because the agency decides receipts; a
+ * wages seal or legacy line with no paper behind it is skipped rather than
+ * counted as a receipt nobody can find.
+ */
+export function dayReceiptSummary(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+): DayReceiptSummary {
+  const byReceipt = new Map<string, DayReceiptRow>();
+  for (const line of week?.lines ?? []) {
+    if (line.lineDate !== dateIso) continue;
+    const id = line.receiptId;
+    const status = line.receiptStatus;
+    if (!id || !status) continue;
+    const row = byReceipt.get(id) ?? {
+      receiptNo: line.receiptNo ?? 'Receipt',
+      orderNo: line.orderNo ?? null,
+      status,
+      amount: 0,
+    };
+    row.amount += line.commission;
+    byReceipt.set(id, row);
+  }
+  const rows = [...byReceipt.values()];
+  return {
+    total: rows.length,
+    pending: rows.filter((r) => r.status === 'pending'),
+    approved: rows.filter((r) => r.status === 'approved'),
+    verified: rows.filter((r) => r.status === 'verified'),
+  };
+}
+
+const CAPTION_DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Thu 20" from a lineDate — the shift the PR knows the entry by. All-UTC
+ * like the grid, so the named day is the column the money sits under. */
+function captionDay(iso: string | null): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return `${CAPTION_DAY_ABBR[d.getUTCDay()]} ${d.getUTCDate()}`;
+}
+
+/**
+ * The numbers the owner asked for (23 Aug 2026): how many entries are
+ * verified and approved out of everything receipt-backed, and WHICH shifts
+ * are still waiting — "pending just put what shift still pending". Null when
+ * the week has no receipt-backed entries at all.
+ */
 export function receiptReviewCaption(
   week: PrCurrentWeek | null,
 ): string | null {
   const { waiting, approved, verified } = receiptReviewCounts(week);
-  const settled = approved + verified;
-  if (waiting === 0 && settled === 0) return null;
-  if (waiting === 0) {
-    return `${settled} ${settled === 1 ? 'entry' : 'entries'} approved by your agency`;
-  }
-  if (settled === 0) {
-    return `${waiting} ${waiting === 1 ? 'entry is' : 'entries are'} waiting on your agency`;
-  }
-  return `${settled} approved · ${waiting} still waiting on your agency`;
+  const total = waiting + approved + verified;
+  if (total === 0) return null;
+  const settledParts: string[] = [];
+  if (verified > 0) settledParts.push(`${verified} verified`);
+  if (approved > 0) settledParts.push(`${approved} approved`);
+  const head =
+    settledParts.length > 0
+      ? `${settledParts.join(' · ')} of ${total} ${total === 1 ? 'entry' : 'entries'}`
+      : null;
+  if (waiting === 0) return head;
+  const pendingDays = [
+    ...new Set(
+      (week?.lines ?? [])
+        .filter((line) => line.receiptStatus === 'pending')
+        .map((line) => captionDay(line.lineDate))
+        .filter((d): d is string => d !== null),
+    ),
+  ];
+  const where = pendingDays.length > 0 ? ` (${pendingDays.join(', ')})` : '';
+  const tail = `${waiting} waiting on your agency${where}`;
+  return head ? `${head} · ${tail}` : tail;
 }
 
 /**

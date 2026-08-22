@@ -120,7 +120,7 @@ export function AiSuggestionsPanel() {
 					plan={plan}
 					confirm={confirm}
 					onClose={() => setOpen(false)}
-					scopeLabel="today"
+					scopeLabel={t.rosterGrid.autoAssignScopeToday}
 				/>
 			)}
 		</>

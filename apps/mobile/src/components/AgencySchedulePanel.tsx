@@ -104,6 +104,31 @@ const KIND_STYLE: Record<
 };
 
 /** Overlay for a past day whose booked shift ended with NO check-in (missed). */
+/**
+ * What happened to this shift's check-in, in the PR's own terms.
+ *
+ * `missed` is passed in rather than recomputed: the calendar already decides it
+ * (a booked shift whose window ended with no check-in), and a second opinion
+ * here is how a row would end up contradicting the colour of the day it sits on.
+ *
+ * Leave and cancellation are named before check-in state, because "you did not
+ * check in" is a false accusation on a day the agency approved her absence —
+ * which is exactly why `missedByIso` excludes those statuses too.
+ */
+function checkInOutcome(
+  a: ShiftAssignmentRecord,
+  missed: boolean,
+): string {
+  if (a.status === 'cancelled') return 'Cancelled';
+  if (a.status === 'no_show') return 'Marked no-show';
+  if (a.status === 'leave_approved') return 'Leave approved';
+  if (a.status === 'leave_pending') return 'Leave requested';
+  if (missed) return 'No check-in recorded';
+  if (a.checkOutAt) return 'Checked in and out';
+  if (a.checkInAt) return 'Checked in';
+  return 'Scheduled — not started';
+}
+
 const MISSED_STYLE = {
   bg: 'rgba(240,113,113,0.2)',
   border: 'rgba(240,113,113,0.6)',
@@ -397,6 +422,7 @@ export function AgencySchedulePanel() {
   );
 
   // A booked shift whose window ended with NO check-in is a missed check-in —
+  // see `checkInOutcome` below for how each row reports itself.
   // marked red on the calendar. Requiring status 'assigned' means MC/leave
   // (leave_pending/approved), cancellations and no-shows never count as missed.
   const missedByIso = useMemo(() => {
@@ -413,6 +439,36 @@ export function AgencySchedulePanel() {
     }
     return map;
   }, [assignments, todayIso]);
+  /**
+   * EVERY day that has shifts, not just the failed ones.
+   *
+   * The calendar could only be interrogated about days that went wrong: a red
+   * day opened a detail sheet, and a green "Scheduled / Complete" day was
+   * `disabled` — so a PR could inspect a check-in she missed but not one she
+   * made. "Did I work the 22nd, and did my check-in register?" is the same
+   * question in both directions, and the answer existed for only one of them.
+   */
+  const shiftsByIso = useMemo(() => {
+    const map = new Map<string, ShiftAssignmentRecord[]>();
+    for (const a of assignments) {
+      const list = map.get(a.shiftDate) ?? [];
+      list.push(a);
+      map.set(a.shiftDate, list);
+    }
+    // Earliest first, so a two-shift day reads in the order she worked it.
+    for (const list of map.values()) {
+      list.sort((x, y) => (x.slot ?? '').localeCompare(y.slot ?? ''));
+    }
+    return map;
+  }, [assignments]);
+
+  /** The ids the red marking is based on, so a row can say so in words. */
+  const missedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const rows of missedByIso.values()) for (const a of rows) ids.add(a.id);
+    return ids;
+  }, [missedByIso]);
+
   // Tap a red day → which outlet the missed shift was at.
   const [missedTarget, setMissedTarget] = useState<{
     iso: string;
@@ -657,6 +713,9 @@ export function AgencySchedulePanel() {
             const day = dayByIso.get(iso);
             const kind = day?.kind ?? 'past';
             const missedRows = missedByIso.get(iso);
+            const dayRows = shiftsByIso.get(iso);
+            // Red still means missed — widening what is TAPPABLE must not widen
+            // what is marked, or every worked day would read as a failure.
             const style = missedRows ? MISSED_STYLE : KIND_STYLE[kind];
             const isToday = iso === todayIso;
             const canToggle = kind === 'open' || kind === 'unavailable';
@@ -669,10 +728,14 @@ export function AgencySchedulePanel() {
                   { backgroundColor: style.bg, borderColor: style.border },
                   isToday && styles.dayToday,
                 ]}
-                disabled={(!canToggle && !missedRows) || blockingIso === iso}
+                // A day with shifts OPENS; a day without them toggles her
+                // availability. Shifts win when both could apply, because a day
+                // she is already rostered on is not a day she can mark free —
+                // and the server refuses that anyway.
+                disabled={(!canToggle && !dayRows) || blockingIso === iso}
                 onPress={() =>
-                  missedRows
-                    ? setMissedTarget({ iso, rows: missedRows })
+                  dayRows
+                    ? setMissedTarget({ iso, rows: dayRows })
                     : void toggleDay(iso)
                 }
               >
@@ -1088,8 +1151,24 @@ export function AgencySchedulePanel() {
           >
             <View style={styles.cancelHandle} />
             <View style={styles.cancelHeaderRow}>
-              <Clock size={20} color="#f07171" />
-              <Text style={styles.cancelHeaderTitle}>Missed check-in</Text>
+              {/* The header follows the DAY, not the sheet's history. It said
+                  "Missed check-in" unconditionally back when only red days could
+                  open it; now that any day with shifts opens, that title on a
+                  day she worked would accuse her of a failure that did not
+                  happen. */}
+              <Clock
+                size={20}
+                color={
+                  missedTarget?.rows.some((a) => missedIds.has(a.id))
+                    ? '#f07171'
+                    : C.accentL
+                }
+              />
+              <Text style={styles.cancelHeaderTitle}>
+                {missedTarget?.rows.some((a) => missedIds.has(a.id))
+                  ? 'Missed check-in'
+                  : 'Shifts this day'}
+              </Text>
             </View>
             {missedTarget && (
               <>
@@ -1102,15 +1181,46 @@ export function AgencySchedulePanel() {
                       {a.outletName ?? 'Outlet'}
                     </Text>
                     <Text style={styles.missedMeta}>{a.slot ?? '—'}</Text>
+                    {/* WHAT HAPPENED, per shift. A day can hold one shift she
+                        checked into and another she missed, and colouring the
+                        whole day red said only that something went wrong
+                        somewhere in it. */}
+                    <Text
+                      style={[
+                        styles.missedMeta,
+                        {
+                          color: missedIds.has(a.id)
+                            ? '#f07171'
+                            : a.checkInAt
+                              ? C.green
+                              : C.prMuted,
+                        },
+                      ]}
+                    >
+                      {checkInOutcome(a, missedIds.has(a.id))}
+                    </Text>
                     {a.outletAddress ? (
                       <Text style={styles.missedMeta}>{a.outletAddress}</Text>
                     ) : null}
                   </View>
                 ))}
-                <Text style={styles.missedNote}>
-                  No check-in was recorded for this shift, and no MC / leave or
-                  cancellation is on file. Contact your agency if this is wrong.
-                </Text>
+                {/* ONLY when something was actually missed. This footer printed
+                    unconditionally, which was harmless while red days were the
+                    only ones that could open the sheet — and became a flat
+                    contradiction the moment any day could: "No check-in was
+                    recorded for this shift" sitting directly under a row reading
+                    "Checked in and out", on the screen a PR opens to find out
+                    which of the two is true. */}
+                {missedTarget.rows.some((a) => missedIds.has(a.id)) && (
+                  <Text style={styles.missedNote}>
+                    No check-in was recorded for{' '}
+                    {missedTarget.rows.length > 1
+                      ? 'the shift marked above'
+                      : 'this shift'}
+                    , and no MC / leave or cancellation is on file. Contact your
+                    agency if this is wrong.
+                  </Text>
+                )}
               </>
             )}
           </Pressable>

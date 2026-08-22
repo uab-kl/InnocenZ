@@ -32,8 +32,8 @@ import {
 import { useSession } from '../lib/session';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useShiftSession } from '../lib/shift-session';
-import { useSignedPvs } from '../lib/signed-pv';
 import { usePrNav } from '../lib/pr-nav';
+import { useSignedPvs } from '../lib/signed-pv';
 import { IzButton, Pill } from './ui';
 import { HistDateField, HistDateTimeFilter, HistTimeInput } from './HistDateTimeFilter';
 import {
@@ -47,7 +47,26 @@ import {
   Wallet,
 } from './icons';
 
-type StatusChip = 'all' | 'paid' | 'signed';
+// Four states, matching the badge the cards already draw. 'pending' was the one
+// the rows could SHOW but the filter could not SELECT — so the single question a
+// PR opens this screen to ask ("what still needs me?") was the one it could not
+// answer, and an unsigned week from a fortnight ago stayed buried among paid ones.
+type StatusChip = 'all' | 'paid' | 'signed' | 'pending';
+
+/**
+ * One label map instead of a ternary repeated at both chip rows. The ternary
+ * ended `: 'Signed'`, so ANY new state would silently have rendered as "Signed"
+ * — on the one screen where that word is an attestation about money.
+ *
+ * Ordered pending → signed → paid on screen because that is the order a week
+ * actually moves through, and the first one is the only one the PR can act on.
+ */
+const CHIP_LABEL: Record<StatusChip, string> = {
+  all: 'All',
+  pending: 'To sign',
+  signed: 'Signed',
+  paid: 'Paid',
+};
 
 type Filters = {
   query: string;
@@ -70,7 +89,7 @@ const EMPTY: Filters = {
 };
 
 export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => void }) {
-  const { openPv } = usePrNav();
+  const { openPv, lastOpenedPvId } = usePrNav();
   const { token } = useSession();
   const keyboardInset = useKeyboardInset();
   const { weekRecords } = useShiftSession();
@@ -82,7 +101,17 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
   const [openSelect, setOpenSelect] = useState<'outlet' | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [sheetCalendarOpen, setSheetCalendarOpen] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  // Opens on the voucher she was just inside, and on nothing otherwise.
+  //
+  // The default is still every card collapsed — this only fires after a voucher
+  // has actually been opened. Coming back from one, signed or not, used to drop
+  // her onto a list of identical collapsed cards with nothing showing which one
+  // she had just acted on; after signing that is the exact moment she is looking
+  // for confirmation. Initialiser, not an effect, so it does not fight her if
+  // she then collapses it.
+  const [expanded, setExpanded] = useState<string | null>(
+    () => lastOpenedPvId,
+  );
 
   // Only keep local signed weeks that match a real API voucher (no demo phantoms).
   const allWeeks = useMemo(() => {
@@ -123,6 +152,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       if (!matchesPaymentWeekDayTime(w, dayTime)) return false;
       if (applied.status === 'paid' && w.status !== 'paid') return false;
       if (applied.status === 'signed' && w.status !== 'signed') return false;
+      if (applied.status === 'pending' && w.status !== 'pending') return false;
       if (applied.outlet !== 'all') {
         const hit =
           w.outlet === applied.outlet ||
@@ -155,14 +185,22 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
 
   const paidList = filtered.filter((w) => w.status === 'paid');
   const signedList = filtered.filter((w) => w.status === 'signed');
+  const pendingList = filtered.filter((w) => w.status === 'pending');
   const totalPaid = paidList.reduce((s, w) => s + w.net, 0);
   const totalSigned = signedList.reduce((s, w) => s + w.net, 0);
+  const totalPending = pendingList.reduce((s, w) => s + w.net, 0);
+  // "All" now means all. It used to read `totalPaid + totalSigned`, which
+  // quietly left unsigned weeks out of the headline figure — so a PR with a
+  // fortnight-old voucher waiting on her signature saw a total that did not
+  // include her own money, on the screen she opens to find exactly that.
   const totalNet =
     applied.status === 'paid'
       ? totalPaid
       : applied.status === 'signed'
         ? totalSigned
-        : totalPaid + totalSigned;
+        : applied.status === 'pending'
+          ? totalPending
+          : totalPaid + totalSigned + totalPending;
   const shifts = filtered.reduce((s, w) => s + w.shifts, 0);
 
   /** Streams the server-rendered workbook; the toast only fires on success. */
@@ -350,14 +388,14 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       </View>
 
       <View style={styles.chips}>
-        {(['all', 'paid', 'signed'] as StatusChip[]).map((c) => (
+        {(['all', 'pending', 'signed', 'paid'] as StatusChip[]).map((c) => (
           <Pressable
             key={c}
             style={[styles.chip, applied.status === c && styles.chipOn]}
             onPress={() => setApplied((f) => ({ ...f, status: c }))}
           >
             <Text style={[styles.chipText, applied.status === c && { color: C.txt }]}>
-              {c === 'all' ? 'All' : c === 'paid' ? 'Paid' : 'Signed'}
+              {CHIP_LABEL[c]}
             </Text>
           </Pressable>
         ))}
@@ -379,11 +417,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         <StatTile
           value={formatRM(totalNet)}
           label={
-            applied.status === 'paid'
-              ? 'Paid'
-              : applied.status === 'signed'
-                ? 'Signed'
-                : 'Total net'
+            applied.status === 'all' ? 'Total net' : CHIP_LABEL[applied.status]
           }
           valueColor={
             applied.status === 'paid'
@@ -500,14 +534,14 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
 
             <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Status</Text>
             <View style={styles.chips}>
-              {(['all', 'paid', 'signed'] as StatusChip[]).map((c) => (
+              {(['all', 'pending', 'signed', 'paid'] as StatusChip[]).map((c) => (
                 <Pressable
                   key={c}
                   style={[styles.chip, draft.status === c && styles.chipOn]}
                   onPress={() => setDraft((d) => ({ ...d, status: c }))}
                 >
                   <Text style={[styles.chipText, draft.status === c && { color: C.txt }]}>
-                    {c === 'all' ? 'All' : c === 'paid' ? 'Paid' : 'Signed'}
+                    {CHIP_LABEL[c]}
                   </Text>
                 </Pressable>
               ))}
@@ -587,6 +621,23 @@ function WeekCard({
           >
             {week.statusMeta}
           </Text>
+          {/* On the COLLAPSED card, beside the line that says it is waiting on
+              her. The only other way in is Open PV, which sits below a full week
+              breakdown inside the expanded body — so a PR who filtered to
+              "To sign", got one result and wanted to sign it still had to expand,
+              scroll past a table, and find a button whose label says nothing
+              about signing. The action a filtered list exists for should not be
+              three steps further in. */}
+          {week.status === 'pending' && (
+            <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+              <IzButton
+                label="Sign this week"
+                small
+                fullWidth={false}
+                onPress={onOpenPv}
+              />
+            </View>
+          )}
         </View>
         <View style={styles.cardRight}>
           <Text style={styles.cardNet}>{formatRM(week.net)}</Text>
@@ -678,7 +729,23 @@ function WeekCard({
           ) : null}
 
           <View style={styles.actions}>
-            <IzButton label="Open PV" small fullWidth={false} onPress={onOpenPv} />
+            {/* SIGN LEADS when the week is waiting on her, and is absent when it
+                is not — a button offering to sign an already-signed voucher is
+                either a no-op or a second attestation, and neither is a thing
+                this screen should suggest. It routes through `onOpenPv` rather
+                than pulling the signature pad in here: one signing path, on the
+                PV detail screen, where the full breakdown is in front of her
+                when she signs for the money. */}
+            {week.status === 'pending' && (
+              <IzButton label="Sign" small fullWidth={false} onPress={onOpenPv} />
+            )}
+            <IzButton
+              label="Open PV"
+              variant={week.status === 'pending' ? 'soft' : undefined}
+              small
+              fullWidth={false}
+              onPress={onOpenPv}
+            />
             <IzButton
               label="PDF"
               icon={FileText}

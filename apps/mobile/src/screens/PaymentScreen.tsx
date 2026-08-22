@@ -21,6 +21,7 @@ import {
   weekPvIssueDayLabel,
   weekRangeIso,
   weekRangeLabel,
+  weekRangeLabelFromIso,
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { usePrEarnings } from '../lib/pr-earnings';
@@ -45,6 +46,8 @@ import { buildCellEvidence, receiptDisputable } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import {
   dayStatusLabel,
+  cellReviewTone,
+  dayReceiptSummary,
   disputesForDay,
   kindDisputable,
   openDisputeKeys,
@@ -419,6 +422,12 @@ export function PaymentScreen({
   // Last week's voucher comes from the same backend as this week — real data,
   // no demo grid. Fetched once on mount (it rarely changes mid-session).
   const [lastWeek, setLastWeek] = useState<PrCurrentWeek | null>(null);
+  // Same caption, last week: the owner asked for the counts where the money
+  // is being read, and after Sunday 00:00 that is the Last week card.
+  const lastReviewCaption = useMemo(
+    () => receiptReviewCaption(lastWeek),
+    [lastWeek],
+  );
   useEffect(() => {
     if (!token) return;
     let alive = true;
@@ -525,8 +534,21 @@ export function PaymentScreen({
   >({});
   const [disputeBusy, setDisputeBusy] = useState(false);
 
-  const lastLabel = weekRangeLabel(1);
-  const thisLabel = weekRangeLabel(0);
+  /*
+   * THE WEEK THE FIGURES ARE FOR, NOT THE WEEK THE PHONE IS IN.
+   *
+   * These read `weekRangeLabel(n)` off the device clock while the grid below
+   * is built from the voucher's `weekStart`. One week, two sources — so a
+   * header could sit above figures from a different seven days, which is
+   * exactly what happened at 01:23 on Sun 23 Aug 2026: "23 Aug – 29 Aug"
+   * over columns SUN 16 … SAT 22.
+   *
+   * The clock stays as the FALLBACK, for the first load and for a week the
+   * server has no voucher for — there is nothing else to name it with then,
+   * and an empty grid carries no figures to contradict.
+   */
+  const lastLabel = weekRangeLabelFromIso(lastWeek?.weekStart) ?? weekRangeLabel(1);
+  const thisLabel = weekRangeLabelFromIso(current?.weekStart) ?? weekRangeLabel(0);
   const issueDay = weekPvIssueDayLabel(0);
   const grid = useMemo(() => buildWeekGridFromLines(lastWeek), [lastWeek]);
   const weekTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
@@ -1331,6 +1353,13 @@ export function PaymentScreen({
                 Verified days {verifiedDays}/7
               </Text>
 
+              {/* Receipt-level counts — what is verified, what is approved,
+                  and WHICH shifts still wait. The grid chips are day-grain;
+                  this is the receipt-grain answer the owner asked for. */}
+              {lastReviewCaption && (
+                <Text style={styles.reviewCaption}>{lastReviewCaption}</Text>
+              )}
+
               {/* Which agencies owe last week, when there is more than one. */}
               <WeekVouchers week={lastWeek} />
 
@@ -1407,6 +1436,24 @@ export function PaymentScreen({
                               <Text
                                 style={[
                                   styles.gridVal,
+                                  // Wages are a sealed system fact — no
+                                  // review step exists for them, so they
+                                  // read settled-green whenever real
+                                  // (owner: "the total and the wages
+                                  // always green").
+                                  row.key === 'wages' &&
+                                    amount > 0 &&
+                                    styles.gridValVerified,
+                                  // The receipts' own state colours the
+                                  // figure: green when every one is
+                                  // verified, amber when they all sit in
+                                  // one unsettled state, white when mixed
+                                  // (owner's rule, 23 Aug 2026). Disputed
+                                  // red below still outranks.
+                                  cellReviewTone(lastWeek, d.dateIso, row.key) ===
+                                    'verified' && styles.gridValVerified,
+                                  cellReviewTone(lastWeek, d.dateIso, row.key) ===
+                                    'warning' && styles.gridValPending,
                                   isDisputed && styles.gridValDisputed,
                                   // Only the real figure goes red. Colouring the
                                   // whole row painted the empty days' dashes red
@@ -1471,6 +1518,12 @@ export function PaymentScreen({
                           <Text
                             style={[
                               styles.gridVal,
+                              // Totals are arithmetic, not claims —
+                              // always green when real (owner's call);
+                              // the deductions row keeps its red.
+                              !isDeduction &&
+                                rowTotal !== 0 &&
+                                styles.gridValVerified,
                               isDeduction && styles.gridValDeduction,
                             ]}
                           >
@@ -1506,8 +1559,12 @@ export function PaymentScreen({
                         dayDisputed,
                       );
                       const claims = disputesForDay(lastWeek, d.dateIso);
+                      // A day with RECEIPTS opens too, not only a day with
+                      // claims — the sheet answers “what state is this
+                      // day’s paper in”, which every non-empty day can ask.
                       const openable =
-                        claims.open.length + claims.settled.length > 0;
+                        claims.open.length + claims.settled.length > 0 ||
+                        dayReceiptSummary(lastWeek, d.dateIso).total > 0;
                       return (
                         <Pressable
                           key={`st-${d.dateIso}`}
@@ -1768,9 +1825,23 @@ export function PaymentScreen({
                               <Text
                                 style={[
                                   styles.gridVal,
-                                  d.status === 'pending' &&
+                                  // Wages are a sealed system fact — no
+                                  // review step exists for them, so they
+                                  // read settled-green whenever real
+                                  // (owner: "the total and the wages
+                                  // always green").
+                                  row.key === 'wages' &&
                                     amount > 0 &&
-                                    styles.gridValPending,
+                                    styles.gridValVerified,
+                                  // Receipt-grain tone, replacing the old
+                                  // whole-day amber: one cell answers for
+                                  // ITS receipts, not the day's (owner's
+                                  // rule, 23 Aug 2026 — same map as the
+                                  // Last-week grid).
+                                  cellReviewTone(current, d.dateIso, row.key) ===
+                                    'verified' && styles.gridValVerified,
+                                  cellReviewTone(current, d.dateIso, row.key) ===
+                                    'warning' && styles.gridValPending,
                                   // Only the real figure goes red. Colouring the
                                   // whole row painted the empty days' dashes red
                                   // too, so a week with one fine looked like six.
@@ -1825,6 +1896,12 @@ export function PaymentScreen({
                           <Text
                             style={[
                               styles.gridVal,
+                              // Totals are arithmetic, not claims —
+                              // always green when real (owner's call);
+                              // the deductions row keeps its red.
+                              !isDeduction &&
+                                rowTotal !== 0 &&
+                                styles.gridValVerified,
                               isDeduction && styles.gridValDeduction,
                             ]}
                           >
@@ -1869,8 +1946,10 @@ export function PaymentScreen({
                         dayDisputed,
                       );
                       const claims = disputesForDay(current, d.dateIso);
+                      // Same widening as the Last-week row above.
                       const openable =
-                        claims.open.length + claims.settled.length > 0;
+                        claims.open.length + claims.settled.length > 0 ||
+                        dayReceiptSummary(current, d.dateIso).total > 0;
                       return (
                         <Pressable
                           key={`st-${d.dateIso}`}
@@ -1968,11 +2047,17 @@ export function PaymentScreen({
                   claimDay.dateIso,
                 );
                 const rows = [...open, ...settled];
+                const dayReceipts = dayReceiptSummary(
+                  week,
+                  claimDay.dateIso,
+                );
                 const labelOf = (k: string) =>
                   INCOME_ROWS.find((r) => r.key === k)?.label ?? k;
                 return (
                   <>
-                    <Text style={styles.claimTitle}>What you disputed</Text>
+                    <Text style={styles.claimTitle}>
+                      {rows.length > 0 ? 'What you disputed' : 'Receipts this day'}
+                    </Text>
                     <Text style={styles.claimDay}>
                       {longDay(claimDay.dateIso)}
                     </Text>
@@ -1990,6 +2075,65 @@ export function PaymentScreen({
                       style={styles.claimScroll}
                       showsVerticalScrollIndicator={false}
                     >
+                      {/*
+                       * THE DAY’S PAPER, before the arguments about it
+                       * (owner: “beside the accepted disputed”). Receipt
+                       * grain: how many are settled out of the day’s total,
+                       * and WHICH ones still wait — pending listed first
+                       * because that is the one the PR is chasing.
+                       */}
+                      {dayReceipts.total > 0 && (
+                        <View style={styles.claimRow}>
+                          <View style={styles.claimHead}>
+                            <Text style={styles.claimComponent}>
+                              Receipts this day
+                            </Text>
+                            {/* claimState carries no colour of its own —
+                                the dispute rows always pair it with a status
+                                colour, and without one this printed near-black
+                                on the dark card (owner: "this in white"). */}
+                            <Text style={[styles.claimState, { color: C.txt }]}>
+                              {dayReceipts.total} total
+                            </Text>
+                          </View>
+                          <Text style={styles.claimMeta}>
+                            {dayReceipts.verified.length} verified ·{' '}
+                            {dayReceipts.approved.length} approved ·{' '}
+                            {dayReceipts.pending.length} pending
+                          </Text>
+                          {[
+                            ...dayReceipts.pending,
+                            ...dayReceipts.approved,
+                            ...dayReceipts.verified,
+                          ].map((r) => (
+                            <View key={r.receiptNo} style={styles.claimShift}>
+                              <View style={styles.claimShiftTitleRow}>
+                                <Text style={styles.claimShiftHead}>
+                                  {r.orderNo ?? r.receiptNo}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.claimState,
+                                    // Approved shares the warning colour
+                                    // with pending (owner's call) — the
+                                    // word carries the difference.
+                                    (r.status === 'pending' ||
+                                      r.status === 'approved') &&
+                                      styles.statusPillPending,
+                                    r.status === 'verified' &&
+                                      styles.statusPillVerified,
+                                  ]}
+                                >
+                                  {r.status.toUpperCase()}
+                                </Text>
+                              </View>
+                              <Text style={styles.claimShiftMeta}>
+                                {r.receiptNo} · {formatRM(r.amount)}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                       {rows.map((d) => {
                         const shifts = claimShifts(week, d);
                         return (
@@ -3019,6 +3163,7 @@ const styles = StyleSheet.create({
     color: C.txt,
   },
   gridValPending: { color: C.amber },
+  gridValVerified: { color: C.green },
   gridValDisputed: { color: C.red },
   // Money going the other way. Red is already the app's colour for "this needs
   // your attention" (disputed cells, Close buttons), and a fine qualifies.

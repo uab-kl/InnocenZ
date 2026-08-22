@@ -26,6 +26,9 @@ type SetTabOptions = {
   paymentWeek?: PaymentWeekFocus;
 };
 
+/** The two halves of the History tab. */
+export type PrHistoryTab = 'shifts' | 'payment';
+
 type PrNavState = {
   route: PrRoute;
   setTab: (tab: PrTab, opts?: SetTabOptions) => void;
@@ -35,6 +38,27 @@ type PrNavState = {
   goBack: () => void;
   /** Current tab when on tabs route */
   tab: PrTab;
+  /**
+   * Which half of History to show — REMEMBERED, not reset.
+   *
+   * It lived as `useState('shifts')` inside HistoryScreen, so the screen was
+   * remounted on Shifts every time it was reached. Both journeys that end at
+   * History ended at the wrong half: a PR who opens a voucher from Payment
+   * history and comes back WITHOUT signing landed on Shifts, and — worse — one
+   * who DID sign is redirected here by PvDetailScreen and landed on Shifts too,
+   * so the confirmation she had just given RM3,708.20 for sat on a tab she had
+   * to know to press.
+   */
+  historyTab: PrHistoryTab;
+  setHistoryTab: (tab: PrHistoryTab) => void;
+  /**
+   * The voucher she last opened, so Payment history can reopen its card when she
+   * comes back. Same reset problem as `historyTab`: the panel's `expanded` is
+   * local state, so returning from a voucher — signed or not — dropped her onto
+   * a list of identical collapsed cards with nothing marking the one she had
+   * just been inside. Null until a voucher is opened.
+   */
+  lastOpenedPvId: string | null;
 };
 
 const PrNavContext = createContext<PrNavState | null>(null);
@@ -42,6 +66,10 @@ const PrNavContext = createContext<PrNavState | null>(null);
 export function PrNavProvider({ children }: { children: React.ReactNode }) {
   const [route, setRoute] = useState<PrRoute>({ name: 'tabs', tab: 'shifts' });
   const [stack, setStack] = useState<PrRoute[]>([]);
+  // Lives here rather than in HistoryScreen so it survives that screen being
+  // unmounted while a voucher is open. See `historyTab` on PrNavState.
+  const [historyTab, setHistoryTab] = useState<PrHistoryTab>('shifts');
+  const [lastOpenedPvId, setLastOpenedPvId] = useState<string | null>(null);
 
   const setTab = useCallback((tab: PrTab, opts?: SetTabOptions) => {
     setStack([]);
@@ -60,6 +88,12 @@ export function PrNavProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const openPv = useCallback((pvId: string) => {
+    // A voucher is only ever opened from the payment half — from Payment
+    // history, or from the Payment tab. Pinning it here means every way BACK
+    // lands there: the stack pop when she leaves without signing, and
+    // PvDetailScreen's `setTab('history')` after she signs.
+    setHistoryTab('payment');
+    setLastOpenedPvId(pvId);
     setRoute((prev) => {
       setStack((s) => [...s, prev]);
       return { name: 'pvDetail', pvId };
@@ -88,8 +122,29 @@ export function PrNavProvider({ children }: { children: React.ReactNode }) {
   const tab = route.name === 'tabs' ? route.tab : 'checkin';
 
   const value = useMemo(
-    () => ({ route, setTab, openScan, openPv, openSecurity, goBack, tab }),
-    [route, setTab, openScan, openPv, openSecurity, goBack, tab],
+    () => ({
+      route,
+      setTab,
+      openScan,
+      openPv,
+      openSecurity,
+      goBack,
+      tab,
+      historyTab,
+      setHistoryTab,
+      lastOpenedPvId,
+    }),
+    [
+      route,
+      setTab,
+      openScan,
+      openPv,
+      openSecurity,
+      goBack,
+      tab,
+      historyTab,
+      lastOpenedPvId,
+    ],
   );
 
   return <PrNavContext.Provider value={value}>{children}</PrNavContext.Provider>;

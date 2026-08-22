@@ -58,13 +58,18 @@ const STATUS_LABEL: Record<
 	verified: "verified",
 };
 
+// The owner's platform colour code (23 Aug 2026): green = settled
+// (verified), amber = waiting — and PENDING and APPROVED deliberately
+// share it ("approved yellow warning colour same with Pending"; the word
+// carries the difference), red = disputed. Same map as the PR app, because
+// the two screens describe the same receipt.
 const STATUS_VARIANT: Record<
 	PaymentVoucherReceiptStatus,
 	"amber" | "green" | "ink"
 > = {
 	pending: "amber",
-	approved: "green",
-	verified: "ink",
+	approved: "amber",
+	verified: "green",
 };
 
 type StatusFilter = "all" | PaymentVoucherReceiptStatus;
@@ -177,9 +182,13 @@ function ReceiptRow({
 
 	const total = sumLines(receipt);
 	const photos = receipt.proofPhotos ?? [];
-	// Verified means the week closed. The server refuses to re-decide it, so the
-	// buttons are withheld rather than offered and answered with a 409.
+	// Approve/withdraw stop at VERIFIED — the server refuses to re-decide it.
+	// EDITING no longer stops there (owner's rule, 23 Aug 2026): scans verify
+	// at creation and a correction verifies the receipt, so verified means
+	// CHECKED, not closed. The PR's signature is the real lock, and the
+	// server still refuses edits past it with a message the editor surfaces.
 	const decidable = canReview && receipt.status !== "verified";
+	const canEdit = canReview;
 
 	return (
 		<div className="rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)]/40">
@@ -354,7 +363,7 @@ function ReceiptRow({
 					 * correcting is the exception, and a row of equal buttons would
 					 * make the two read as alternatives of the same weight.
 					 */}
-					{decidable && (
+					{canEdit && (
 						<div className="mt-1.5">
 							<button
 								type="button"
@@ -368,7 +377,7 @@ function ReceiptRow({
 						</div>
 					)}
 
-					{decidable && editing && (
+					{canEdit && editing && (
 						<AgencyReceiptEditor receipt={receipt} lines={receipt.lines} />
 					)}
 				</div>
@@ -411,7 +420,18 @@ export function AgencyReceiptsPanel({
 		reviewReceipt,
 		isReviewing,
 		reviewError,
+		approveAllWeek,
+		isApprovingAll,
 	} = useAgencyReceipts();
+
+	const handleApproveAll = async () => {
+		try {
+			const result = await approveAllWeek(weekStartIso);
+			toast(result.message, "success");
+		} catch {
+			toast(t.receipts.approveAllFailed, "warn");
+		}
+	};
 
 	/**
 	 * Bring the deep-linked receipt into view once its row exists.
@@ -602,6 +622,21 @@ export function AgencyReceiptsPanel({
 								A voucher cannot be sent while one of its receipts is pending —
 								and the PR cannot dispute the money behind it until you decide.
 							</p>
+							{/* The owner's one click. The endpoint approves only receipts
+							    still pending on THIS week and skips anything the PR has
+							    already signed, so the button cannot overreach the banner
+							    above it. */}
+							{canReview && (
+								<button
+									type="button"
+									className="iz-btn iz-btn-primary mt-2 !h-8 !px-3 !text-[11px]"
+									disabled={isApprovingAll}
+									onClick={() => void handleApproveAll()}
+								>
+									<Check className="mr-1 h-3.5 w-3.5" />
+									{t.receipts.approveAll} ({statusCounts.pending})
+								</button>
+							)}
 						</IzCard>
 					)}
 

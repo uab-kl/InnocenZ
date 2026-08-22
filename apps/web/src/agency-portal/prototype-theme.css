@@ -6466,6 +6466,47 @@
 	color: var(--iz-muted2);
 	text-align: center;
 }
+.iz-post-job-pr-search {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 8px;
+	border-radius: 999px;
+	border: 1px solid var(--iz-line2);
+	background: rgba(255, 255, 255, 0.03);
+	padding: 5px 10px;
+}
+.iz-post-job-pr-search:focus-within {
+	border-color: rgba(183, 156, 232, 0.45);
+}
+.iz-post-job-pr-search-input {
+	width: 100%;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	font-size: 12px;
+	color: var(--iz-txt);
+	outline: none;
+}
+.iz-post-job-pr-search-input::placeholder {
+	color: var(--iz-muted);
+}
+/* Chrome draws its own clear "x" here, in a near-black that is invisible on
+   this panel. Hidden in favour of the themed button beside it. */
+.iz-post-job-pr-search-input::-webkit-search-cancel-button {
+	-webkit-appearance: none;
+	appearance: none;
+}
+.iz-post-job-pr-search-clear {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	color: var(--iz-muted2);
+}
+.iz-post-job-pr-search-clear:hover {
+	color: var(--iz-txt);
+}
 .iz-post-job-pr-scroll {
 	overflow-x: auto;
 	overflow-y: hidden;

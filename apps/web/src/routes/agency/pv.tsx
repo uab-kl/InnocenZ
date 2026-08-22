@@ -1,4 +1,3 @@
-import { AgencyPvDayReviewPanel } from "@agency-portal/components/agency/AgencyPvDayReviewPanel";
 import {
 	AgencyReceiptsPanel,
 	receiptsInPayrollWeek,
@@ -1921,13 +1920,14 @@ function PvDetail({
 						</>
 					)}
 					{/* Only once we know WHY. While the fetch is in flight the button is
-						    disabled with no caption — a reason would be a guess. */}
-					{!sendGate.allowed &&
-						sendGate.heldDays.length + sendGate.unreviewedDays.length > 0 && (
-							<p className="iz-tiny iz-muted2 mt-1 text-center">
-								{sendGate.reason} — see Day review below.
-							</p>
-						)}
+						    disabled with no caption — a reason would be a guess. The day
+						    review is retired, so the pointer goes to the Receipts section
+						    where the approve action now lives. */}
+					{!sendGate.allowed && sendGate.pendingReceipts.length > 0 && (
+						<p className="iz-tiny iz-muted2 mt-1 text-center">
+							{sendGate.reason} — approve them in Payroll › Receipts.
+						</p>
+					)}
 				</>
 			)}
 
@@ -2040,10 +2040,9 @@ function PvDetail({
 				</button>
 			</IzSheet>
 
-			{/* Day-by-day sign-off, then the receipt evidence it is judged against.
-          Both render nothing on a demo voucher, whose id has no backend row
-          behind it, and both read the same fetch. */}
-			<AgencyPvDayReviewPanel voucherId={pv.id} />
+			{/* The day-review panel is GONE (owner's call, 23 Aug 2026): the
+          Payroll › Receipts section is the review now, and the send gate
+          asks about receipt statuses rather than day sign-offs. */}
 			{/* Cancellation fees are charged AUTOMATICALLY now (0130), so the
           agency's decision is whether to waive one — and that decision belongs
           beside the voucher the deduction is actually on, not on the uncharged

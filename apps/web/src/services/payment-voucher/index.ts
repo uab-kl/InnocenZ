@@ -245,6 +245,26 @@ export async function reviewPaymentVoucherReceipt(
 }
 
 /**
+ * ONE CLICK: approve every still-pending receipt on this agency's vouchers
+ * for one payroll week. Pending receipts are self-logs by construction — a
+ * scan verifies at creation — so this is exactly the "approve all the
+ * self-logged ones" the owner asked for. Returns the server message so the
+ * caller can toast the real count.
+ */
+export async function approveAllPaymentVoucherReceipts(
+	weekStart: string,
+	onRefreshFail: () => void,
+): Promise<{ message: string; approved: number; receiptNos: string[] }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: { approved: number; receiptNos: string[] };
+	}>("/payment-voucher/receipts/approve-all", { weekStart });
+	return { message: response.data.message, ...response.data.data };
+}
+
+/**
  * Correct one line of a receipt under review — quantity, commission, or both.
  *
  * Targeted at a single line id rather than going through
