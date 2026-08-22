@@ -2,7 +2,7 @@
  * History — port of InnocenZ-proto `/host/history`
  * Shifts tab (filters + payroll weeks) + Payment history tab.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import { useLocale } from '../i18n';
@@ -11,14 +11,23 @@ import { PaymentHistoryPanel } from '../components/PaymentHistoryPanel';
 import { ShiftHistoryPanel } from '../components/ShiftHistoryPanel';
 import { Briefcase, HistoryIcon, Wallet } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
+import { type PrHistoryTab, usePrNav } from '../lib/pr-nav';
 
-type HistTab = 'shifts' | 'payment';
+/**
+ * The sub-tab is REMEMBERED in nav state, not held here.
+ *
+ * As local `useState('shifts')` it reset on every mount, so a PR who opened a
+ * voucher from Payment history came back to Shifts — and one who actually
+ * SIGNED, and is redirected to History by PvDetailScreen, also landed on
+ * Shifts, with the signature she had just given sitting on the other tab.
+ */
+type HistTab = PrHistoryTab;
 
 export function HistoryScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { t } = useLocale();
   const { width } = useViewportSize();
   const titleSize = Math.min(28, Math.max(22.4, width * 0.052));
-  const [tab, setTab] = useState<HistTab>('shifts');
+  const { historyTab: tab, setHistoryTab: setTab } = usePrNav();
 
   return (
     <View style={styles.screen}>
