@@ -322,15 +322,27 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ 🔴 THE PV EDITOR LOST-UPDATE IS THE ONE AUDIT HIGH STILL OPEN (deferred 22 Aug 2026)
+### ▶ ✅ CLOSED — the PV editor lost-update shipped in `d0fc0ae` (22 Aug 2026)
 
-`payment-voucher.repository.ts` update path (~:304) deletes EVERY line and re-inserts the
-payload; a line the PR logs while the agency editor is open (60s staleTime) is destroyed with
-its proof photo, totals shrink, nobody errors. The fix is optimistic concurrency —
-`expectedUpdatedAt` in UpdatePaymentVoucherSchema, re-read inside the transaction, 409 on
-mismatch, web sends `pv.updatedAt` — but it changes the client↔server protocol on the money
-editor and CANNOT be verified without rendering both sides, so it was NOT rushed into the
-22 Aug batch. Do it as its own slice with the editor open in a browser.
+Was the top open item here while §10 already recorded it as done — the backlog and the
+changelog contradicted each other for three commits. `expectedUpdatedAt` is in
+`UpdatePaymentVoucherSchema`, the repository re-reads under `SELECT … FOR UPDATE` and throws
+`VoucherConflictError` on a stale token. **What is still owed is the click-through, not the
+code**: open the agency voucher editor, have the PR self-log a drink into the same day, save,
+and confirm the editor is refused with the 409 sentence rather than silently winning.
+
+### ▶ 🟡 THE NICKNAME SEARCH IS UNPINNED BY ANY TEST (added 22 Aug 2026)
+
+The Post Job picker's search was proved by driving the live page (see §10), and every case
+passed — but nothing in the repo will catch it breaking. `DraftPrPicker` has no test file at
+all. Worth a small `@testing-library/react` spec on the pure parts: query trims and lowercases,
+a mid-string hit matches, the plan cap (`poolSize`) is applied BEFORE the filter, and a
+selected PR stays selected while filtered out of view. That last one is the regression that
+would actually cost money — it silently drops a named PR from a posted shift.
+
+Two behaviours are chosen, not accidental, and a future change should not "fix" them:
+the legal name is deliberately unsearchable (privacy — see §10), and the search cannot reach
+past `poolSize` (plan entitlement). Both have comments in the source saying so.
 
 ### ▶ 🟠 PURGE THE TOKENS ALREADY SITTING IN audit_logs (added 22 Aug 2026)
 
@@ -419,7 +431,20 @@ Three things need a signed-in agency owner with at least one breaching PR to con
 Backend + web are already running (:7777, :3000). Signing in requires typing a password, so this
 one needs the owner at the keyboard.
 
-### ▶ 🔴 apps/web DOES NOT BUILD — a stale nested `@tanstack/router-core` (19 Aug 2026)
+### ▶ ✅ CLOSED — apps/web builds again (verified 22 Aug 2026, was: DOES NOT BUILD)
+
+Re-ran it to check rather than trusting the entry: `npx vite build` in `apps/web` →
+**`✓ built in 29.53s`**, `.output/server/index.mjs` written, exit 0. The `MISSING_EXPORT`
+failure below is HISTORY and is kept only for the diagnosis trail.
+
+⚠️ **The diagnosis recorded below was wrong, and the record should say so.** It blamed version
+drift across five `@tanstack/*` packages pinned to `"latest"`. PR #76 found the actual cause —
+a single DUPLICATE nested `@tanstack/router-core`, which the table below had in fact already
+identified — and fixed that. The `"latest"` pins are still a real hazard worth closing on their
+own (two machines can resolve different trees from one range), but they were not what broke the
+build. Left as the 🟡 item it always was, not the 🔴 it was written up as.
+
+<details><summary>Original 19 Aug write-up (superseded)</summary>
 
 `pnpm build` in `apps/web` dies with `MISSING_EXPORT` on `waitForRequest`,
 `disposeSsrResponseDetached`, `bindSsrResponseToRequest` and `_getRenderedMatches`. **Not caused by
@@ -443,6 +468,8 @@ different trees from one lockfile-less range. Fix by bumping `@tanstack/router-p
 `router-cli` to a release whose pinned `router-core` matches 1.171.24, then pinning the whole
 `@tanstack/*` set to explicit versions. **Dev is unaffected** — Vite serves every route fine; this
 blocks the production build only.
+
+</details>
 
 ### ▶ ✅ PROVEN LIVE 19 Aug 2026 — the two shift-assignment refusals (was: not yet fired)
 
@@ -1991,6 +2018,10 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-22 | **Auto-assign stopped arriving pre-armed — selection is now opt-in — and the whole sheet got the translation it never had.** `AutoAssignSheet` opened with EVERY proposed pairing already included and a "Skip" chip per row, so the default action of the biggest button on screen was *write all of these* and the agency had to notice and decline each one it did not want. Assigning a PR to a shift is real money and a real person's evening, so the safe default is nothing selected: rows are now checkbox buttons (`aria-pressed`), the CTA is disabled and reads "Select at least one to continue" at zero, and **Select all N / Clear** keeps the bulk case one tap away. Same slice: the sheet was **100% hardcoded English** inside a portal with a 中文 toggle in its own sidebar — title, intro, both count labels, the CTA, the two shortage sentences and all four toasts. 26 keys added to `rosterGrid` in BOTH dictionaries, and the two callers' `scopeLabel` (`` `on ${day}` `` in the roster banner, `"today"` in the home card) moved into the dictionary too rather than being English glued onto a translated sentence. Verified **live on the real agency session** (Dato' Lim Wei Khoon, `/en/agency/roster?view=planning`): opens **0/1 selected** with the CTA disabled · tap the row → `aria-pressed=true`, tick renders, **1/1**, CTA "Confirm 1 assignment" enabled, toggle flips to "Clear" · Clear → back to 0/1 disabled · Select all → 1/1 enabled · 中文 renders 分配可用 PR / 已选 1/1 / 确认 1 项分配 / 请至少选择一项. `apps/web` tsc **0 errors**, biome clean. ⚠️ Two things deliberately NOT translated and left as-is: `tierLabel` ("Tier I") is a product proper noun, and `dropReasonLabel` returns English sentences from a pure lib with no `t` in scope — noted in §9. | (this commit) |
+
+| 2026-08-22 | **The outlet can now find a PR by nickname on Post Job — and the picker's counter stopped being the one untranslated string on that screen.** SELECT PRS drew the whole pool as cards with nothing to narrow it; on a Scale plan that is up to 200 faces to scroll past to name one person. Added a search box to `DraftPrPicker` filtering `p.name`, which **is** the nickname: `managedPrFromBackend` maps `name` ← `pr.nickname` and only falls back to the legal name for a PR who has none — so no backend change, no new query, no new round trip. Two deliberate limits, both load-bearing: (a) the **legal name is NOT matched**, because it is a name this picker never displays and matching it would turn the box into an oracle for *whose nickname is this IC name*; (b) the filter runs **AFTER** `poolSize` has capped the list, because that cap is a plan entitlement ("choose 100 from 200 PRs") — filtering first would let a typed name reach past what the subscription pays for. An empty POOL and an empty SEARCH now read differently (`noPrMatches` quotes the query back), so a mistyped nickname no longer shows "No PRs available to select" to a venue that has 44 of them. Fixed in passing: the count badge rendered a hardcoded English `{n}/{cap} selected` although `postJob.selectedOfCap` already existed in BOTH dictionaries — 中文 now reads 已选 1/100. Verified **live on the real JK House outlet session** (not demo): 5 cards → `vic` → 1 (Vicky) · `aina` → Nurul Aina (mid-string, second word) · `  ALICE ` → Alice (case + padding tolerated) · `viczz` → the no-match sentence · clear button restores all 5 and hides itself · **a selection made before searching survives being filtered out** (badge holds 1/100) and is still marked when the query clears · 中文 renders all four new keys. Mobile 375px: the box fits its panel (284/310) with no horizontal page scroll. `apps/web` tsc **0 errors**, biome clean on the touched files, no new console errors. | (this commit) |
 
 | 2026-08-22 | **The outlet's PR picker listed the same person twice — a SEVENTH missed sibling, found by the owner on screen.** Post Job's SELECT PRS showed "Alice" on two cards. `GET /pr` returned two rows carrying the SAME id/userId (`1cfade6c-…`), differing only by `agencyId` and `tier` (Atlas tier_2, Why We Met tier_1). Root cause: `listPaginated` iterates **memberships** (`FROM agency_pr ⋈ user`), and the outlet branch pins to no single agencyId. The existing narrowing at pr.repository.ts:637 — match the assignment's own `agency_id` — carries a note claiming it "collapses the duplicate… nothing is lost by narrowing"; that is true only for a PR who worked the venue under ONE agency. **Alice has worked JK House under both Atlas and Why We Met** (an Atlas-owned shift staffed by WWM via `shift_agency`), so both memberships satisfy the EXISTS. Same shape as the six lanes already closed: a fix correct for the single-agency case, blind to the multi-agency one. Fixed with `selectDistinctOn([agency_pr.user_id])` ordered `user_id, created_at DESC` (newest membership survives, so a PR who moved agency shows her current grade), `count(distinct user_id)` so `totalCount` counts PEOPLE not memberships, and a post-query re-sort to keep the previous list order — DISTINCT ON forces its key to lead the ORDER BY. Gated on `filter.assignedToOutletIds`, so the agency branch (already pinned to one agencyId) and the admin PR screen (where several memberships MUST stay individually visible) are untouched. Verified: backend tsc **0**, **65/65**, build clean, and **live against the running app** — `GET /pr` went from `{Alice: 2, Victoria: 1}` to `{Alice: 1, Victoria: 1}`, totalCount 2. | (this commit) |
 

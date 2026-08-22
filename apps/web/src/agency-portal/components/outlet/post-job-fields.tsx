@@ -96,6 +96,7 @@ import {
 	Minus,
 	Pencil,
 	Plus,
+	Search,
 	X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1192,7 +1193,7 @@ export function DraftPrPicker({
 		return cap;
 	}, [maxSelect, quantity, dailyRemaining]);
 
-	const candidates = useMemo(() => {
+	const pool = useMemo(() => {
 		// A backed outlet's pool arrives pre-sorted from the server read; the demo
 		// store's own list is still ranked here by its seeded rating.
 		const source: DraftPrCandidate[] =
@@ -1200,6 +1201,24 @@ export function DraftPrPicker({
 		const visible = source.filter((p) => !blocked.has(p.id));
 		return poolSize !== undefined ? visible.slice(0, poolSize) : visible;
 	}, [candidatesProp, prs, blocked, poolSize]);
+
+	const [query, setQuery] = useState("");
+	// Searches the name the card PRINTS. `managedPrFromBackend` maps `name` from
+	// the nickname and only falls back to the legal name for a PR who has none,
+	// so this IS the nickname search — and the legal name is deliberately not
+	// matched. It is a name this picker never displays, and matching it would
+	// turn the box into a way to confirm whose nickname is whose by typing an IC
+	// name at it.
+	//
+	// Filters AFTER `poolSize` has capped the list. That cap is a plan
+	// entitlement ("choose 100 from 200 PRs"), so search narrows the pool the
+	// venue already has; filtering before the slice would let a typed name reach
+	// past what the subscription pays for.
+	const candidates = useMemo(() => {
+		const needle = query.trim().toLowerCase();
+		if (!needle) return pool;
+		return pool.filter((p) => p.name.toLowerCase().includes(needle));
+	}, [pool, query]);
 
 	const toggle = (prId: string) => {
 		const has = selected.includes(prId);
@@ -1238,7 +1257,10 @@ export function DraftPrPicker({
 		<div className="iz-post-job-pr-section w-full min-w-0">
 			<div className="iz-post-job-pr-toolbar">
 				<span className="iz-post-job-pr-badge">
-					{selected.length}/{selectCap} selected
+					{fill(t.postJob.selectedOfCap, {
+						n: selected.length,
+						cap: selectCap,
+					})}
 				</span>
 				{selected.length > 0 ? (
 					<button
@@ -1253,9 +1275,40 @@ export function DraftPrPicker({
 				)}
 			</div>
 			{poolHint && <p className="iz-post-job-pr-hint mb-2">{poolHint}</p>}
-			{candidates.length === 0 ? (
+			{pool.length > 0 && (
+				<label className="iz-post-job-pr-search">
+					<Search className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted2)]" />
+					<input
+						type="search"
+						className="iz-post-job-pr-search-input"
+						value={query}
+						onChange={(e) => setQuery(e.target.value)}
+						placeholder={t.postJob.searchPrPlaceholder}
+						aria-label={t.postJob.searchPrLabel}
+					/>
+					{query !== "" && (
+						<button
+							type="button"
+							onClick={() => setQuery("")}
+							className="iz-post-job-pr-search-clear"
+							aria-label={t.postJob.searchPrClear}
+						>
+							<X className="h-3 w-3" />
+						</button>
+					)}
+				</label>
+			)}
+			{/* An empty POOL and an empty SEARCH are different facts and must read
+			    differently: "no PRs available to select" in front of a venue that has
+			    44 of them, because they mistyped a nickname, is the kind of message
+			    that gets reported as a broken roster. */}
+			{pool.length === 0 ? (
 				<p className="text-[11px] leading-snug text-[var(--iz-muted)]">
 					{emptyHint ?? t.postJob.noPrsAvailable}
+				</p>
+			) : candidates.length === 0 ? (
+				<p className="text-[11px] leading-snug text-[var(--iz-muted)]">
+					{fill(t.postJob.noPrMatches, { q: query.trim() })}
 				</p>
 			) : (
 				<div className="iz-post-job-pr-scroll">

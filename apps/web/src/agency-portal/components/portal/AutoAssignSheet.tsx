@@ -7,8 +7,11 @@ import {
 	tierLabel,
 } from "@agency-portal/lib/auto-assign";
 import { useStore } from "@agency-portal/lib/store";
-import { X } from "lucide-react";
+import { cn } from "@agency-portal/lib/utils";
+import { Check, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function plural(n: number, one: string, many = `${one}s`): string {
 	return n === 1 ? one : many;
@@ -23,7 +26,7 @@ export function dayLabel(iso: string): string {
 	});
 }
 
-/** "9pm–3am · Ladies night" — whatever context the shift actually carries. */
+/** "9pm-3am · Ladies night" — whatever context the shift actually carries. */
 function shiftContext(pair: AutoAssignPair): string {
 	return [pair.slot, pair.eventName].filter(Boolean).join(" · ");
 }
@@ -32,12 +35,19 @@ type AutoAssignConfirm = ReturnType<typeof useAutoAssignPlan>["confirm"];
 
 /**
  * The confirm step shared by every auto-assign surface: lists the proposed
- * pairings, lets the agency skip any of them, then writes the rest.
+ * pairings, lets the agency CHOOSE which ones to write, then writes those.
  *
  * It lives apart from the buttons that open it so the home card and the roster's
  * Planning banner cannot drift into two different meanings of "auto-assign"
  * again — the banner used to run a demo-store action that wrote nothing to the
  * backend at all.
+ *
+ * ⚠️ Selection is OPT-IN, and that is the point. This sheet used to arrive with
+ * every proposed pairing already included and a "Skip" chip on each row, so the
+ * default action of the biggest button on screen was "write all of these" and
+ * the agency had to notice and decline the ones it did not want. Assigning a PR
+ * to a shift is real money and a real person's evening; the safe default is
+ * nothing selected. "Select all" is one tap away for the common case.
  */
 export function AutoAssignSheet({
 	plan,
@@ -48,21 +58,23 @@ export function AutoAssignSheet({
 	plan: AutoAssignPlan;
 	confirm: AutoAssignConfirm;
 	onClose: () => void;
-	/** Names the dates being filled, e.g. "today" or "on Tue, 11 Aug". */
+	/** Names the dates being filled, already localised, e.g. "today". */
 	scopeLabel: string;
 }) {
 	const toast = useStore((s) => s.toast);
-	const [skipped, setSkipped] = useState<Set<string>>(new Set());
+	const { t } = usePortalLocale();
+	const [chosen, setChosen] = useState<Set<string>>(new Set());
 
 	const pairKey = (p: AutoAssignPair) => `${p.shiftId}:${p.prId}`;
 	const selected = useMemo(
-		() => plan.pairs.filter((p) => !skipped.has(`${p.shiftId}:${p.prId}`)),
-		[plan.pairs, skipped],
+		() => plan.pairs.filter((p) => chosen.has(`${p.shiftId}:${p.prId}`)),
+		[plan.pairs, chosen],
 	);
+	const allChosen = plan.pairs.length > 0 && chosen.size === plan.pairs.length;
 
-	const toggleSkip = (pair: AutoAssignPair) => {
+	const toggle = (pair: AutoAssignPair) => {
 		const key = pairKey(pair);
-		setSkipped((prev) => {
+		setChosen((prev) => {
 			const next = new Set(prev);
 			if (next.has(key)) next.delete(key);
 			else next.add(key);
@@ -70,8 +82,12 @@ export function AutoAssignSheet({
 		});
 	};
 
+	const toggleAll = () => {
+		setChosen(allChosen ? new Set() : new Set(plan.pairs.map(pairKey)));
+	};
+
 	const closeSheet = () => {
-		setSkipped(new Set());
+		setChosen(new Set());
 		onClose();
 	};
 
@@ -80,7 +96,12 @@ export function AutoAssignSheet({
 			onSuccess: ({ assigned, failed, dropped }) => {
 				if (assigned > 0) {
 					toast(
-						`Assigned ${assigned} ${plural(assigned, "PR")} to open ${plural(assigned, "shift")}`,
+						fill(
+							assigned === 1
+								? t.rosterGrid.autoAssignDoneOne
+								: t.rosterGrid.autoAssignDoneMany,
+							{ n: assigned },
+						),
 						"success",
 					);
 				}
@@ -91,7 +112,12 @@ export function AutoAssignSheet({
 						...new Set(dropped.map((d) => dropReasonLabel(d.reason))),
 					].join(", ");
 					toast(
-						`Skipped ${dropped.length} ${plural(dropped.length, "PR")} — ${reasons}`,
+						fill(
+							dropped.length === 1
+								? t.rosterGrid.autoAssignDroppedOne
+								: t.rosterGrid.autoAssignDroppedMany,
+							{ n: dropped.length, reasons },
+						),
 						"warn",
 					);
 				}
@@ -107,11 +133,18 @@ export function AutoAssignSheet({
 						...new Set(failed.map((f) => f.message).filter(Boolean)),
 					];
 					toast(
-						`${failed.length} ${plural(failed.length, "assignment")} could not be made — ${
-							reasons.length > 0
-								? reasons.join(" · ")
-								: "the server refused them"
-						}`,
+						fill(
+							failed.length === 1
+								? t.rosterGrid.autoAssignFailedOne
+								: t.rosterGrid.autoAssignFailedMany,
+							{
+								n: failed.length,
+								reasons:
+									reasons.length > 0
+										? reasons.join(" · ")
+										: t.rosterGrid.autoAssignFailedNoReason,
+							},
+						),
 						"warn",
 					);
 				}
@@ -120,7 +153,7 @@ export function AutoAssignSheet({
 				closeSheet();
 			},
 			onError: () => {
-				toast("Could not assign — please try again", "warn");
+				toast(t.rosterGrid.autoAssignErrorToast, "warn");
 			},
 		});
 	};
@@ -131,40 +164,79 @@ export function AutoAssignSheet({
 		<IzSheet open onClose={closeSheet}>
 			<div className="iz-sheet-head">
 				<div>
-					<h3>Assign available PR</h3>
+					<h3>{t.rosterGrid.autoAssignTitle}</h3>
 					<p className="iz-tiny iz-muted mt-1">
-						Best match by tier, then fewest shifts this week. Nothing is
-						assigned until you confirm.
+						{t.rosterGrid.autoAssignIntro}
 					</p>
 				</div>
 				<button
 					type="button"
 					className="iz-sheet-close"
 					onClick={closeSheet}
-					aria-label="Close"
+					aria-label={t.common.close}
 				>
 					<X className="h-4 w-4" />
+				</button>
+			</div>
+
+			<div className="mb-2 flex items-center justify-between gap-2">
+				<span className="iz-post-job-pr-badge">
+					{fill(t.rosterGrid.autoAssignSelectedOf, {
+						n: chosen.size,
+						total: plan.pairs.length,
+					})}
+				</span>
+				<button
+					type="button"
+					onClick={toggleAll}
+					className="iz-tiny font-semibold text-[var(--iz-gold)]"
+				>
+					{allChosen
+						? t.rosterGrid.autoAssignClear
+						: fill(t.rosterGrid.autoAssignSelectAll, { n: plan.pairs.length })}
 				</button>
 			</div>
 
 			<div className="space-y-2">
 				{plan.pairs.map((pair) => {
 					const key = pairKey(pair);
-					const isSkipped = skipped.has(key);
+					const on = chosen.has(key);
 					const context = shiftContext(pair);
 					return (
-						<div
+						<button
 							key={key}
-							className={`flex items-center gap-3 rounded-xl border border-[var(--iz-line)] px-3 py-2.5 ${
-								isSkipped ? "opacity-45" : ""
-							}`}
+							type="button"
+							onClick={() => toggle(pair)}
+							aria-pressed={on}
+							className={cn(
+								"flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+								on
+									? "border-[var(--iz-gold)] bg-[rgba(232,194,122,0.06)]"
+									: "border-[var(--iz-line)]",
+							)}
 						>
+							<span
+								className={cn(
+									"flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+									on
+										? "border-[var(--iz-gold)] bg-[var(--iz-gold)] text-black"
+										: "border-[var(--iz-line2)]",
+								)}
+								aria-hidden
+							>
+								{on && <Check className="h-3 w-3" />}
+							</span>
 							<div className="min-w-0 flex-1">
 								<p className="truncate text-sm font-semibold">
 									{pair.prName}
 									<span className="iz-tiny iz-muted2 ml-2 font-normal">
-										{tierLabel(pair.prTier)} · {pair.shiftsThisWeek}{" "}
-										{plural(pair.shiftsThisWeek, "shift")} this week
+										{tierLabel(pair.prTier)} ·{" "}
+										{fill(
+											pair.shiftsThisWeek === 1
+												? t.rosterGrid.autoAssignShiftsThisWeekOne
+												: t.rosterGrid.autoAssignShiftsThisWeekMany,
+											{ n: pair.shiftsThisWeek },
+										)}
 									</span>
 								</p>
 								<p className="iz-tiny iz-muted mt-0.5 truncate">
@@ -172,14 +244,7 @@ export function AutoAssignSheet({
 									{context ? ` · ${context}` : ""}
 								</p>
 							</div>
-							<button
-								type="button"
-								className="iz-chip !px-2 !py-1 !text-[10px]"
-								onClick={() => toggleSkip(pair)}
-							>
-								{isSkipped ? "Include" : "Skip"}
-							</button>
-						</div>
+						</button>
 					);
 				})}
 			</div>
@@ -192,24 +257,28 @@ export function AutoAssignSheet({
 					    when the fix was the shift's tier mix. */}
 					{tierBlockedCount > 0 ? (
 						<>
-							{tierBlockedCount} open {plural(tierBlockedCount, "slot")}{" "}
-							{tierBlockedCount === 1 ? "is" : "are"} reserved for tiers no free
-							PR holds {scopeLabel} — change the shift's tier mix to fill{" "}
-							{tierBlockedCount === 1 ? "it" : "them"}.
+							{fill(
+								tierBlockedCount === 1
+									? t.rosterGrid.autoAssignTierBlockedOne
+									: t.rosterGrid.autoAssignTierBlockedMany,
+								{ n: tierBlockedCount, scope: scopeLabel },
+							)}
 							{unfilledCount > tierBlockedCount && (
 								<>
 									{" "}
-									The other {unfilledCount - tierBlockedCount} need more free
-									PRs.
+									{fill(t.rosterGrid.autoAssignTierBlockedRest, {
+										n: unfilledCount - tierBlockedCount,
+									})}
 								</>
 							)}
 						</>
 					) : (
-						<>
-							{unfilledCount} open {plural(unfilledCount, "slot")} cannot be
-							filled — only {freePrCount} free {plural(freePrCount, "PR")}{" "}
-							{scopeLabel}.
-						</>
+						fill(
+							unfilledCount === 1
+								? t.rosterGrid.autoAssignShortOne
+								: t.rosterGrid.autoAssignShortMany,
+							{ n: unfilledCount, prs: freePrCount, scope: scopeLabel },
+						)
 					)}
 				</p>
 			)}
@@ -221,8 +290,15 @@ export function AutoAssignSheet({
 				onClick={runConfirm}
 			>
 				{confirm.isPending
-					? "Assigning…"
-					: `Confirm ${selected.length} ${plural(selected.length, "assignment")}`}
+					? t.rosterGrid.autoAssignAssigning
+					: selected.length === 0
+						? t.rosterGrid.autoAssignPickSome
+						: fill(
+								selected.length === 1
+									? t.rosterGrid.autoAssignConfirmOne
+									: t.rosterGrid.autoAssignConfirmMany,
+								{ n: selected.length },
+							)}
 			</button>
 		</IzSheet>
 	);
