@@ -126,6 +126,24 @@ export async function fetchPrCommittedWindows(
 }
 
 /**
+ * The OUTLET's committed-windows read — same bare-times shape, scoped
+ * server-side to the caller's approved agencies (0131 companion).
+ */
+export async function fetchOutletCommittedWindows(
+	params: { from?: string; to?: string },
+	onRefreshFail: () => void,
+): Promise<PrCommittedWindow[]> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({ from: params.from, to: params.to });
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: PrCommittedWindow[];
+	}>(`/pr-availability/committed-outlet${queryString}`);
+	return response.data.data ?? [];
+}
+
+/**
  * Committed windows folded into `prId -> date -> slots`, the shape the week grid
  * asks its question in ("is this PR busy that day, and when?").
  *

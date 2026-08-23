@@ -7,6 +7,7 @@ import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { OrgScope, resolveOrgScope } from '@/util/org-scope';
 import { BlockPrDaySchema, PrAvailabilityRangeSchema } from '@/schema/pr-availability.schema';
+import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 import { PrAvailabilityRepositoryClass } from './pr-availability.repository';
 
 export class PrAvailabilityControllerClass {
@@ -15,6 +16,7 @@ export class PrAvailabilityControllerClass {
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
+    private agencyOutletRepository: AgencyOutletRepository,
   ) {}
 
   private resolveScope(req: Request): Promise<OrgScope> {
@@ -23,6 +25,69 @@ export class PrAvailabilityControllerClass {
       agencyMemberRepository: this.agencyMemberRepository,
       outletMemberRepository: this.outletMemberRepository,
     });
+  }
+
+  /**
+   * WHEN the outlet's pool is spoken for — times only (0131 companion read).
+   *
+   * The venue's half of the cross-agency busy rule: it may know a PR's hours
+   * are taken so it does not post a job at them, and it may know NOTHING
+   * else — the rows leaving here carry userId, date and a bare HH:MM window
+   * (canonicalWindow upstream), never an agency or a venue. Scoped to the
+   * agencies APPROVED for the caller's own outlets, so a venue cannot read
+   * the movements of people it has no link to.
+   */
+  async listCommittedForOutlet(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      const outletIds = scope.isAdmin
+        ? [req.query.outletId as string].filter(Boolean)
+        : (scope.outletIds ?? []);
+      if (!scope.isAdmin && outletIds.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'No outlet associated with this account',
+          data: null,
+        });
+      }
+      const parsed = PrAvailabilityRangeSchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message,
+          data: null,
+        });
+      }
+      const agencyIds = new Set<string>();
+      for (const outletId of outletIds) {
+        const approved =
+          await this.agencyOutletRepository.listApprovedAgencyIdsForOutlet(
+            outletId,
+          );
+        for (const id of approved) agencyIds.add(id);
+      }
+      if (agencyIds.size === 0) {
+        return res.status(200).json({ success: true, message: 'OK', data: [] });
+      }
+      const rows = await this.prAvailabilityRepository.listCommittedWindows({
+        agencyIds: [...agencyIds],
+        from: parsed.data.from,
+        to: parsed.data.to,
+      });
+      // One person can surface via two memberships; the venue asked about
+      // the PERSON, so identical (person, day, window) rows collapse.
+      const seen = new Set<string>();
+      const deduped = rows.filter((r) => {
+        const key = `${r.userId}|${r.date}|${r.slot ?? ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      res.status(200).json({ success: true, message: 'OK', data: deduped });
+    } catch (error) {
+      logger.error('[PrAvailabilityController.listCommittedForOutlet] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
   }
 
   /** The signed-in PR's own blocked days. Scoped to the token, never to a query param. */

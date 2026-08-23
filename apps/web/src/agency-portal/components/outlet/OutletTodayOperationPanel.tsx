@@ -357,6 +357,23 @@ export function OutletTodayOperationPanel({
 		// recompute cadence is unchanged.
 	}, [shift, prs, rosterTonight, tiedLive, agencyPrById]);
 
+	// Who the venue ASKED for tonight but nobody has booked yet (0131) — the
+	// "waiting on the agency" list, beside the live staff it complements.
+	const requestedTonight = useMemo(() => {
+		const bookedIds = new Set(shift.prs ?? []);
+		return (shift.requestedPrs ?? [])
+			.filter((r) => !bookedIds.has(r.userId))
+			.map((r) => ({
+				userId: r.userId,
+				name: agencyPrById.get(r.userId)?.name ?? "PR",
+				photo:
+					agencyPrById.get(r.userId)?.comcardImageUrl ??
+					agencyPrById.get(r.userId)?.avatarPhoto ??
+					null,
+				agencyName: agencyNameById.get(r.agencyId) ?? null,
+			}));
+	}, [shift.requestedPrs, shift.prs, agencyPrById, agencyNameById]);
+
 	const statusCounts = useMemo(() => {
 		const counts = { onDuty: 0, enRoute: 0, booked: 0, checkedOut: 0 };
 		for (const { displayStatus } of staffTonight) {
@@ -595,6 +612,38 @@ export function OutletTodayOperationPanel({
 				onOpenChange={setPrTonightOpen}
 				className="!mb-0"
 			>
+				{requestedTonight.length > 0 && (
+					<div className="mb-2 space-y-1.5">
+						{requestedTonight.map((row) => (
+							<div key={row.userId} className="iz-outlet-demand-row">
+								{row.photo ? (
+									<img
+										src={row.photo}
+										alt=""
+										className="h-9 w-9 shrink-0 rounded-lg object-cover"
+									/>
+								) : (
+									<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--iz-bg-3)] text-sm font-bold">
+										{row.name.charAt(0).toUpperCase()}
+									</span>
+								)}
+								<div className="min-w-0 flex-1">
+									<p className="truncate text-xs font-semibold text-[var(--iz-txt)]">
+										{row.name}
+									</p>
+									{row.agencyName && (
+										<p className="iz-tiny iz-muted2 truncate">
+											{row.agencyName}
+										</p>
+									)}
+								</div>
+								<span className="iz-pill iz-pill-amber !py-0.5 !text-[9px]">
+									{t.today.requestedPill}
+								</span>
+							</div>
+						))}
+					</div>
+				)}
 				{staffTonight.length === 0 ? (
 					<p className="iz-tiny iz-muted rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-6 text-center">
 						{t.today.noPrsTonight}

@@ -154,7 +154,9 @@ export class PrAvailabilityRepositoryClass {
    * roster, and one it a PR has LEFT sees nothing.
    */
   async listCommittedWindows(params: {
-    agencyId: string;
+    /** One agency (the agency lane) — or many, for the outlet lane below. */
+    agencyId?: string;
+    agencyIds?: string[];
     from?: string;
     to?: string;
     userId?: string;
@@ -171,12 +173,24 @@ export class PrAvailabilityRepositoryClass {
         eq(AgencyPrTable.userId, ShiftAssignmentTable.userId),
       ) as SQL;
 
+      // The outlet lane asks across EVERY approved agency at once; the agency
+      // lane keeps its single id. Neither -> nothing, never everything.
+      const laneAgencyIds = params.agencyIds?.length
+        ? params.agencyIds
+        : params.agencyId
+          ? [params.agencyId]
+          : null;
+      if (!laneAgencyIds) return [];
       const conditions: SQL[] = [
-        eq(AgencyPrTable.agencyId, params.agencyId),
+        inArray(AgencyPrTable.agencyId, laneAgencyIds),
         eq(AgencyPrTable.approveStatus, 'approved'),
-        // SOMEONE ELSE'S booking. An agency's own doubles are its own business and
-        // it can already see them on this very grid.
-        sql`${ShiftAssignmentTable.agencyId} <> ${params.agencyId}`,
+        // SOMEONE ELSE'S booking — agency lane only. An agency's own doubles
+        // are its own business and it can already see them on this very grid.
+        // The OUTLET lane keeps every booking: a venue must learn the PR is
+        // taken even when the very agency it links to booked her elsewhere.
+        ...(params.agencyId && !params.agencyIds?.length
+          ? [sql`${ShiftAssignmentTable.agencyId} <> ${params.agencyId}`]
+          : []),
         // EXACTLY the rows the assign guard refuses on, and no others. That guard
         // skips `completed` AND anything with `check_out_at` set
         // (shift-assignment.controller.ts), so carrying those here made the assign

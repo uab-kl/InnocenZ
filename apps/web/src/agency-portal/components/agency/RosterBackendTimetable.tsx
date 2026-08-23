@@ -339,6 +339,31 @@ export function RosterBackendTimetable({
 		[outletsQuery.data],
 	);
 
+	// The venue's named asks, keyed pr -> day (0131). Server-scoped to this
+	// agency, so every row here is addressed to us; the outlet NAME may show
+	// (it is our client asking), unlike the anonymous busy windows below.
+	const requestedByPrDate = useMemo(() => {
+		const map = new Map<
+			string,
+			Map<string, { outlet: string; slot: string | null }[]>
+		>();
+		for (const shift of shiftsQuery.data?.data ?? []) {
+			const rows = shift.requestedPrs ?? [];
+			if (rows.length === 0) continue;
+			const outlet = outletNameById.get(shift.outletId) ?? "";
+			for (const r of rows) {
+				const byDate =
+					map.get(r.userId) ??
+					new Map<string, { outlet: string; slot: string | null }[]>();
+				const arr = byDate.get(shift.shiftDate) ?? [];
+				arr.push({ outlet, slot: shift.slot ?? null });
+				byDate.set(shift.shiftDate, arr);
+				map.set(r.userId, byDate);
+			}
+		}
+		return map;
+	}, [shiftsQuery.data, outletNameById]);
+
 	const shiftFiltersOn = rosterShiftFiltersActive(filters);
 
 	// ALL slots per (PR, day) — a PR can work two different-time shifts on the
@@ -619,6 +644,11 @@ export function RosterBackendTimetable({
 												 */
 												const busyWindows =
 													committedWindows.get(pr.id)?.get(dateIso) ?? null;
+												// The venue asked for THIS person on THIS day — the
+												// "waiting for agency to approve" state the owner
+												// wants visible on the planning grid.
+												const dayRequests =
+													requestedByPrDate.get(pr.id)?.get(dateIso) ?? null;
 												const busyLabel = busyWindows
 													? busyWindows.length > 0
 														? busyWindows.join(", ")
@@ -776,6 +806,29 @@ export function RosterBackendTimetable({
 														 * already showed, which is what turns it from an error
 														 * into a reminder.
 														 */}
+														{dayRequests && dayRequests.length > 0 && (
+															<div
+																className="iz-roster-week-cell iz-roster-week-cell--pending"
+																style={{ marginTop: 4 }}
+																title={dayRequests
+																	.map((r) =>
+																		[r.outlet, r.slot]
+																			.filter(Boolean)
+																			.join(" · "),
+																	)
+																	.join(", ")}
+															>
+																<span className="outlet">
+																	{dayRequests[0]?.outlet}
+																</span>
+																<span className="shift">
+																	{dayRequests[0]?.slot ?? ""}
+																</span>
+																<span className="status">
+																	{t.rosterGrid.outletRequest}
+																</span>
+															</div>
+														)}
 														{busyLabel && (
 															<div
 																className="iz-roster-week-busy"

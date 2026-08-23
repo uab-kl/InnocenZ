@@ -396,6 +396,9 @@ export function shiftRequestFromBackendShift(input: {
 		liveSales: num(shift.liveSales),
 		status: shift.status,
 		prs: staffing.map((a) => a.prId),
+		// Who the venue ASKED for — distinct from `prs` (who is booked). Rides
+		// straight off the server response; empty array means nobody was named.
+		requestedPrs: shift.requestedPrs ?? [],
 		payPerHour: num(shift.payPerHour),
 		// What the shift ASKED for, per tier. Without this every outlet screen fell
 		// back to a synthesised ladder — see `payTierRowsFromShiftPayTiers`.
@@ -415,6 +418,8 @@ export function shiftRequestFromBackendShift(input: {
  * are dropped here. The pay-tier rows ARE persisted, as `shift_pay_tier` rows.
  */
 export interface OutletShiftPostItem {
+	/** Named-PR picks resolved to (person, membership) pairs — see 0131. */
+	requestedPrs?: { userId: string; agencyId: string }[];
 	/** Canonical yyyy-MM-dd — the composer always sets this on a posted item. */
 	dateIso: string;
 	shift: string;
@@ -567,5 +572,10 @@ export function createShiftInputFromPost(
 		// and sending the field only when it carries a real choice keeps the
 		// request honest about whether the operator picked.
 		...(agencyIds && agencyIds.length ? { agencyIds } : {}),
+		// The named picks finally reach the backend (0131). This mapper used to
+		// document them as "dropped here" — that sentence was the bug.
+		...(item.requestedPrs && item.requestedPrs.length
+			? { requestedPrs: item.requestedPrs }
+			: {}),
 	};
 }

@@ -239,6 +239,13 @@ export class ShiftControllerClass {
       const staffedByShift = await this.shiftRepository.countStaffedForShifts(
         shifts.map((s) => s.id),
       );
+      // The venue's named-PR requests (0131). Agency callers see only the
+      // requests ADDRESSED to them — which PRs a venue asked of a rival is
+      // the rival's business; the outlet authored the rows and reads all.
+      const requestedByShift = await this.shiftRepository.listRequestedPrsForShifts(
+        shifts.map((s) => s.id),
+        !scope.isAdmin && !isOutletCaller ? (scope.agencyId ?? undefined) : undefined,
+      );
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
@@ -248,6 +255,7 @@ export class ShiftControllerClass {
           payTiers: payTiersByShift.get(s.id) ?? [],
           staffedCount: staffedByShift.get(s.id)?.total ?? 0,
           staffedBuckets: staffedByShift.get(s.id)?.byBucket ?? {},
+          requestedPrs: requestedByShift.get(s.id) ?? [],
         })),
         pagination: { page, pageSize, totalCount, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
       });
@@ -288,6 +296,15 @@ export class ShiftControllerClass {
       // and re-edit exactly what it posted (empty when it uses workspace defaults).
       const payTiers = await this.shiftRepository.listPayTiersForShift(shift.id);
       const staffed = (await this.shiftRepository.countStaffedForShifts([shift.id])).get(shift.id);
+      // Same scoping rule as the list read (0131).
+      const requested = (
+        await this.shiftRepository.listRequestedPrsForShifts(
+          [shift.id],
+          !scope.isAdmin && !this.isOutletCaller(scope)
+            ? (scope.agencyId ?? undefined)
+            : undefined,
+        )
+      ).get(shift.id);
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -296,6 +313,7 @@ export class ShiftControllerClass {
           payTiers,
           staffedCount: staffed?.total ?? 0,
           staffedBuckets: staffed?.byBucket ?? {},
+          requestedPrs: requested ?? [],
         },
       });
     } catch (error) {
@@ -399,7 +417,17 @@ export class ShiftControllerClass {
       const actor = getActor(req);
       // payTiers is a child-table override, not a shift column — keep it out of
       // the shift insert and persist it alongside in one transaction.
-      const { payTiers, ...shiftData } = parsed.data;
+      const { payTiers, requestedPrs, ...shiftData } = parsed.data;
+      // A request addressed to an agency that is NOT invited on this shift is
+      // dropped rather than refused: the picker pool and the agency links can
+      // drift between page load and post, and losing one stale name must not
+      // sink the whole job. The rows kept are only ones some agency can read.
+      const invitedForRequests = new Set(
+        selectedAgencyIds.length > 0 ? selectedAgencyIds : [agencyId],
+      );
+      const requestRows = (requestedPrs ?? []).filter((r) =>
+        invitedForRequests.has(r.agencyId),
+      );
 
       const overAsked = demandExceedsQuantity(payTiers, shiftData.quantity);
       if (overAsked) {
@@ -444,6 +472,7 @@ export class ShiftControllerClass {
         // Server-resolved and already filtered against the outlet's approved
         // links — never the raw client list.
         selectedAgencyIds,
+        requestRows,
       );
       res.status(201).json({ success: true, message: 'Shift created', data: shift });
 

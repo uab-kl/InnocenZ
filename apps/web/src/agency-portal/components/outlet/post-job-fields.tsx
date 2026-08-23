@@ -85,6 +85,8 @@ import {
 	workspaceTierRatesSignature,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import { formatStars } from "@agency-portal/lib/pr-rating-summary";
+import { useOutletBusyWindows } from "@agency-portal/hooks/use-outlet-busy-windows";
+import { windowsOverlap } from "@agency-portal/lib/pr-live-status";
 import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -1141,6 +1143,9 @@ export function ShiftTimePicker({
 /** The fields a PR card draws — a demo store `PR` and a backend PR both fit. */
 export type DraftPrCandidate = {
 	id: string;
+	/** The person + membership a request row names (0131). Absent on demo. */
+	userId?: string;
+	agencyId?: string | null;
 	name: string;
 	avatar: string;
 	comcardImageUrl?: string | null;
@@ -1154,6 +1159,7 @@ export type DraftPrCandidate = {
 
 export function DraftPrPicker({
 	candidates: candidatesProp,
+	busyByUserId,
 	emptyHint,
 	selected,
 	onSelectedChange,
@@ -1166,6 +1172,8 @@ export function DraftPrPicker({
 }: {
 	/** Real signed-in outlets pass their backend PR pool; demo sessions omit it. */
 	candidates?: DraftPrCandidate[];
+	/** Windows overlapping the drafted time, per user — the On-duty badge. */
+	busyByUserId?: Map<string, string[]>;
 	/** Replaces the bare "No PRs available" line with why the pool is empty. */
 	emptyHint?: string;
 	selected: string[];
@@ -1329,12 +1337,24 @@ export function DraftPrPicker({
 										full && "opacity-40",
 									)}
 								>
-									<PrComcardPickerThumb
-										comcardImageUrl={p.comcardImageUrl}
-										avatar={p.avatar}
-										name={p.name}
-										pr={"comcard" in p ? p.comcard : undefined}
-									/>
+									<div className="relative w-full">
+										<PrComcardPickerThumb
+											comcardImageUrl={p.comcardImageUrl}
+											avatar={p.avatar}
+											name={p.name}
+											pr={"comcard" in p ? p.comcard : undefined}
+										/>
+										{p.userId && busyByUserId?.get(p.userId) && (
+											<span
+												className="iz-pill iz-pill-amber absolute right-1 top-1 !py-0 !text-[9px]"
+												title={fill(t.postJob.onDutyTitle, {
+													time: (busyByUserId.get(p.userId) ?? []).join(", "),
+												})}
+											>
+												{t.postJob.onDutyBadge}
+											</span>
+										)}
+									</div>
 									<div className="mt-1.5 truncate text-xs font-semibold text-[var(--iz-txt)]">
 										{p.name}
 									</div>
@@ -1587,6 +1607,26 @@ export function DraftShiftEditor({
 				: storeWorkspace,
 		[storeWorkspace, workspaceRates],
 	);
+	// WHEN the pool is spoken for on the drafted dates — bare windows, no
+	// venue, no agency (the cross-agency busy rule). A card whose PR is taken
+	// during the drafted time wears an On-duty badge, so the outlet knows to
+	// pick another face or another hour before the agency has to refuse.
+	const busyWindows = useOutletBusyWindows(shift.selectedDateIsos);
+	const busyByUserId = useMemo(() => {
+		const map = new Map<string, string[]>();
+		if (!shift.shiftTime) return map;
+		for (const [userId, byDate] of busyWindows.byUser) {
+			const hits: string[] = [];
+			for (const iso of shift.selectedDateIsos) {
+				for (const w of byDate.get(iso) ?? []) {
+					if (windowsOverlap(w, shift.shiftTime)) hits.push(w);
+				}
+			}
+			if (hits.length > 0) map.set(userId, hits);
+		}
+		return map;
+	}, [busyWindows.byUser, shift.selectedDateIsos, shift.shiftTime]);
+
 	const workspaceRatesKey = workspaceTierRatesSignature(
 		outletWorkspace.tierRates,
 	);
@@ -1975,6 +2015,7 @@ export function DraftShiftEditor({
 					) : (
 						<DraftPrPicker
 							candidates={prCandidates}
+					busyByUserId={busyByUserId}
 							emptyHint={prEmptyHint}
 							selected={shift.prIds}
 							onSelectedChange={(prIds) =>

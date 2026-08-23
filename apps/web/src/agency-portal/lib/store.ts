@@ -348,6 +348,12 @@ export interface ShiftRequest {
 	 * shifts, where the local roster is the only truth there is.
 	 */
 	suppliedTotal?: number;
+	/**
+	 * The venue's named-PR requests (0131) — who was ASKED for, which is not
+	 * who is booked (`prs` below). userId is the person; agencyId the
+	 * membership the pick came from. Backend sessions only.
+	 */
+	requestedPrs?: { userId: string; agencyId: string }[];
 	id: string;
 	outletName: string;
 	date: string;

@@ -18,6 +18,10 @@ import { useOutletRatings } from "./use-outlet-ratings";
  */
 export interface OutletPrPoolCandidate {
 	id: string;
+	/** The person (user row id) — what a shift_pr_request names (0131). */
+	userId: string;
+	/** The membership this card came from; null on a legacy row without one. */
+	agencyId: string | null;
 	name: string;
 	avatar: string;
 	comcardImageUrl: string | null;
@@ -88,6 +92,9 @@ export function useOutletPrPool(): UseOutletPrPool {
 				const managed = managedPrFromBackend(pr);
 				return {
 					id: managed.id,
+					// pr.id IS the user id post-0089; userId is preferred when sent.
+					userId: pr.userId ?? pr.id,
+					agencyId: pr.agencyId ?? null,
 					name: managed.name,
 					// `avatar` is drawn as a TEXT GLYPH, not an image — the demo store
 					// puts an emoji here. A URL in this field renders the URL itself at
