@@ -15676,7 +15676,11 @@ button.iz-pr-offer-row:hover {
    Dashed border because nothing is committed yet; the count pill carries the
    urgency, the chips carry who the venue asked for, and the cover picture is
    the shift template's own. */
+/* The card is a BUTTON now (it opens the day sheet) — reset the UA button
+   chrome the class did not anticipate. */
 .iz-roster-demand-card {
+	font: inherit;
+	cursor: pointer;
 	display: flex;
 	flex-direction: column;
 	gap: 3px;

@@ -255,6 +255,10 @@ export function RosterBackendTimetable({
 		new Set(),
 	);
 
+	// A tapped demand card opens the whole day: every live shift, who the
+	// venue put in its cart, who is actually booked.
+	const [demandDay, setDemandDay] = useState<string | null>(null);
+
 	const days = useMemo(() => weekDayIsos(weekStartIso), [weekStartIso]);
 	const fromDate = days[0] ?? weekStartIso;
 	const toDate = days[days.length - 1] ?? weekStartIso;
@@ -352,7 +356,7 @@ export function RosterBackendTimetable({
 	const requestedByPrDate = useMemo(() => {
 		const map = new Map<
 			string,
-			Map<string, { outlet: string; slot: string | null }[]>
+			Map<string, { outlet: string; slot: string | null; shiftId: string }[]>
 		>();
 		for (const shift of shiftsQuery.data?.data ?? []) {
 			const rows = shift.requestedPrs ?? [];
@@ -361,9 +365,12 @@ export function RosterBackendTimetable({
 			for (const r of rows) {
 				const byDate =
 					map.get(r.userId) ??
-					new Map<string, { outlet: string; slot: string | null }[]>();
+					new Map<
+						string,
+						{ outlet: string; slot: string | null; shiftId: string }[]
+					>();
 				const arr = byDate.get(shift.shiftDate) ?? [];
-				arr.push({ outlet, slot: shift.slot ?? null });
+				arr.push({ outlet, slot: shift.slot ?? null, shiftId: shift.id });
 				byDate.set(shift.shiftDate, arr);
 				map.set(r.userId, byDate);
 			}
@@ -395,6 +402,32 @@ export function RosterBackendTimetable({
 		() => new Map((prsQuery.data?.data ?? []).map((p) => [p.id, p.tier])),
 		[prsQuery.data],
 	);
+
+	// The assignment a (PR, shift) pair already holds — what turns a request
+	// marker into a door: assigned opens the slot editor, unassigned opens
+	// the assign flow.
+	const assignmentIdByPrShift = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const a of assignmentsQuery.data?.data ?? []) {
+			if (NON_STAFFING_ASSIGNMENT_STATUSES.includes(a.status)) continue;
+			map.set(`${a.prId}|${a.shiftId}`, a.id);
+		}
+		return map;
+	}, [assignmentsQuery.data]);
+
+	// Who is BOOKED per shift — the demand sheet's answer to "requested vs
+	// seated". Names ride on the assignment join; ids let the cart rows tell
+	// a pick that landed from one still waiting.
+	const bookedByShift = useMemo(() => {
+		const map = new Map<string, { prId: string; name: string }[]>();
+		for (const a of assignmentsQuery.data?.data ?? []) {
+			if (NON_STAFFING_ASSIGNMENT_STATUSES.includes(a.status)) continue;
+			const arr = map.get(a.shiftId) ?? [];
+			arr.push({ prId: a.prId, name: a.prName ?? "PR" });
+			map.set(a.shiftId, arr);
+		}
+		return map;
+	}, [assignmentsQuery.data]);
 
 	// Nickname first, legal name as fallback — same choice every card makes.
 	const prNameById = useMemo(
@@ -634,9 +667,11 @@ export function RosterBackendTimetable({
 														outletNameById.get(s.outletId) ?? "";
 													const cover = apiAssetUrl(s.templateCoverImage);
 													return (
-														<div
+														<button
+															type="button"
 															key={s.id}
 															className="iz-roster-demand-card"
+															onClick={() => setDemandDay(dateIso)}
 															title={[
 																outlet,
 																s.slot,
@@ -678,7 +713,7 @@ export function RosterBackendTimetable({
 																	))}
 																</div>
 															)}
-														</div>
+														</button>
 													);
 												})}
 												{(hiddenCount > 0 || expanded) && (
@@ -782,8 +817,19 @@ export function RosterBackendTimetable({
 												// The venue asked for THIS person on THIS day — the
 												// "waiting for agency to approve" state the owner
 												// wants visible on the planning grid.
-												const dayRequests =
+												const dayRequestsAll =
 													requestedByPrDate.get(pr.id)?.get(dateIso) ?? null;
+												// A request the roster already satisfied VANISHES — the
+												// assigned slot cell is its display now, with its real
+												// status (owner: "if assigned for the pr not show outlet
+												// requested"). The marker only ever means "still waiting".
+												const dayRequests =
+													dayRequestsAll?.filter(
+														(r) =>
+															!assignmentIdByPrShift.has(
+																`${pr.id}|${r.shiftId}`,
+															),
+													) ?? null;
 												const busyLabel = busyWindows
 													? busyWindows.length > 0
 														? busyWindows.join(", ")
@@ -831,29 +877,31 @@ export function RosterBackendTimetable({
 															    she already holds a slot today: the request may be
 															    for a different hour, and hiding it made a named
 															    ask invisible exactly when the PR was busiest. */}
-															{dayRequests && dayRequests.length > 0 && (
-																<div
+															{dayRequests?.map((r, i) => (
+																<button
+																	type="button"
+																	key={`${r.outlet}-${r.slot ?? ""}-${i}`}
 																	className="iz-roster-week-cell iz-roster-week-cell--pending"
 																	style={{ marginTop: 4 }}
-																	title={dayRequests
-																		.map((r) =>
-																			[r.outlet, r.slot]
-																				.filter(Boolean)
-																				.join(" · "),
-																		)
-																		.join(", ")}
+																	title={[r.outlet, r.slot]
+																		.filter(Boolean)
+																		.join(" · ")}
+																	disabled={!canAssign}
+																	onClick={() => {
+																		const assignmentId = assignmentIdByPrShift.get(
+																			`${pr.id}|${r.shiftId}`,
+																		);
+																		if (assignmentId) onEditSlot(assignmentId);
+																		else setAssignTarget({ pr, dateIso });
+																	}}
 																>
-																	<span className="outlet">
-																		{dayRequests[0]?.outlet}
-																	</span>
-																	<span className="shift">
-																		{dayRequests[0]?.slot ?? ""}
-																	</span>
+																	<span className="outlet">{r.outlet}</span>
+																	<span className="shift">{r.slot ?? ""}</span>
 																	<span className="status">
 																		{t.rosterGrid.outletRequest}
 																	</span>
-																</div>
-															)}
+																</button>
+															))}
 															{/* Same day, second shift — allowed at a different
 															    time (the backend refuses overlaps). Not offered
 															    when the PR has blocked the day: the shift they
@@ -968,29 +1016,31 @@ export function RosterBackendTimetable({
 														 * already showed, which is what turns it from an error
 														 * into a reminder.
 														 */}
-														{dayRequests && dayRequests.length > 0 && (
-															<div
+														{dayRequests?.map((r, i) => (
+															<button
+																type="button"
+																key={`${r.outlet}-${r.slot ?? ""}-${i}`}
 																className="iz-roster-week-cell iz-roster-week-cell--pending"
 																style={{ marginTop: 4 }}
-																title={dayRequests
-																	.map((r) =>
-																		[r.outlet, r.slot]
-																			.filter(Boolean)
-																			.join(" · "),
-																	)
-																	.join(", ")}
+																title={[r.outlet, r.slot]
+																	.filter(Boolean)
+																	.join(" · ")}
+																disabled={!canAssign}
+																onClick={() => {
+																	const assignmentId = assignmentIdByPrShift.get(
+																		`${pr.id}|${r.shiftId}`,
+																	);
+																	if (assignmentId) onEditSlot(assignmentId);
+																	else setAssignTarget({ pr, dateIso });
+																}}
 															>
-																<span className="outlet">
-																	{dayRequests[0]?.outlet}
-																</span>
-																<span className="shift">
-																	{dayRequests[0]?.slot ?? ""}
-																</span>
+																<span className="outlet">{r.outlet}</span>
+																<span className="shift">{r.slot ?? ""}</span>
 																<span className="status">
 																	{t.rosterGrid.outletRequest}
 																</span>
-															</div>
-														)}
+															</button>
+														))}
 														{busyLabel && (
 															<div
 																className="iz-roster-week-busy"
@@ -1032,6 +1082,115 @@ export function RosterBackendTimetable({
 				</div>
 			</div>
 
+			{demandDay && (
+				<IzSheet open onClose={() => setDemandDay(null)}>
+					<div className="iz-sheet-head">
+						<div>
+							<p className="iz-tiny iz-muted2 uppercase tracking-widest">
+								{t.rosterGrid.openDemandRow}
+							</p>
+							<h3>{demandDay}</h3>
+						</div>
+						<button
+							type="button"
+							className="iz-sheet-close"
+							onClick={() => setDemandDay(null)}
+							aria-label={t.common.close}
+						>
+							<X className="h-4 w-4" />
+						</button>
+					</div>
+					<div className="mt-3 space-y-3">
+						{(openShiftsByDay[demandDay] ?? []).map((s) => {
+							const cover = apiAssetUrl(s.templateCoverImage);
+							const outlet = outletNameById.get(s.outletId) ?? "";
+							const booked = bookedByShift.get(s.id) ?? [];
+							const bookedIds = new Set(booked.map((b) => b.prId));
+							const cart = (s.requestedPrs ?? []).map((r) => ({
+								userId: r.userId,
+								name: prNameById.get(r.userId) ?? "PR",
+								booked: bookedIds.has(r.userId),
+							}));
+							const open = (s.quantity ?? 0) - (s.staffedCount ?? 0);
+							return (
+								<div
+									key={s.id}
+									className="rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg-2)] p-3"
+								>
+									<div className="flex items-center gap-3">
+										{cover && (
+											<img
+												src={cover}
+												alt=""
+												className="h-12 w-16 shrink-0 rounded-lg object-cover"
+											/>
+										)}
+										<div className="min-w-0 flex-1">
+											<p className="truncate text-sm font-bold text-[var(--iz-txt)]">
+												{outlet}
+											</p>
+											<p className="iz-tiny iz-muted2">
+												{s.slot ?? ""}
+												{s.eventName ? ` · ${s.eventName}` : ""}
+											</p>
+										</div>
+										<span
+											className={`iz-pill ${open > 0 ? "iz-pill-amber" : "iz-pill-green"} !text-[10px]`}
+										>
+											{fill(t.rosterGrid.demandFilled, {
+												n: s.staffedCount ?? 0,
+												total: s.quantity ?? 0,
+											})}
+										</span>
+									</div>
+									{cart.length > 0 && (
+										<div className="mt-2">
+											<p className="iz-tiny iz-muted2 uppercase tracking-wide">
+												{t.rosterGrid.demandCartHeading}
+											</p>
+											<div className="mt-1 flex flex-wrap gap-1.5">
+												{cart.map((c) => (
+													<span
+														key={c.userId}
+														className={`iz-pill ${c.booked ? "iz-pill-green" : "iz-pill-amber"} !text-[10px]`}
+													>
+														{c.name}
+														{" · "}
+														{c.booked
+															? t.today.bookedPill
+															: t.today.requestedPill}
+													</span>
+												))}
+											</div>
+										</div>
+									)}
+									<div className="mt-2">
+										<p className="iz-tiny iz-muted2 uppercase tracking-wide">
+											{t.rosterGrid.demandBookedHeading}
+										</p>
+										{booked.length === 0 ? (
+											<p className="iz-tiny iz-muted mt-1">
+												{t.rosterGrid.demandNoBooked}
+											</p>
+										) : (
+											<div className="mt-1 flex flex-wrap gap-1.5">
+												{booked.map((b) => (
+													<span
+														key={b.prId}
+														className="iz-pill iz-pill-green !text-[10px]"
+													>
+														{b.name}
+													</span>
+												))}
+											</div>
+										)}
+									</div>
+								</div>
+							);
+						})}
+					</div>
+				</IzSheet>
+			)}
 			{assignTarget && (
 				<AssignBackendCellSheet
 					pr={assignTarget.pr}
