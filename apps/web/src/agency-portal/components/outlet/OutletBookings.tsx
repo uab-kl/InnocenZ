@@ -97,15 +97,30 @@ export function OutletBookings({
 				s.status === "confirmed" &&
 				resolveOutletShiftDateIso(s.date, s.dateIso, todayIso) === todayIso,
 		);
+		// A CLOCK-ENDED SHIFT WITH AN OPEN BOOKING IS NOT OVER (owner, 23 Aug
+		// 2026: "the pr not yet end why show another shift"). Vicky booked
+		// 20:30-21:00, never checked in or out — and at 21:52 this card had
+		// already moved on to the 21:30 shift, hiding the one booking that
+		// still needed the venue's attention. The clock ends the WINDOW; only
+		// the people resolve the SHIFT: every booked slot checked out (or
+		// cancelled) is what "over" means here.
+		const hasOpenBooking = (s2: (typeof todays)[number], dIso: string) =>
+			agencyRoster.some(
+				(slot) =>
+					slot.dateIso === dIso &&
+					slot.shift === s2.shift &&
+					// The STAMP is the fact — the status vocabulary has no
+					// "checked-out" value (it folds back into scheduled). Cancelled,
+					// no-show and approved-leave rows map to "unavailable", which is
+					// an absence, not an open booking — they must not hold the card.
+					!slot.checkedOutAt &&
+					slot.status !== "unavailable",
+			);
 		return (
-			todays.find(
-				(s) =>
-					!hasShiftEnded(
-						resolveOutletShiftDateIso(s.date, s.dateIso, todayIso),
-						s.shift,
-						now,
-					),
-			) ??
+			todays.find((s) => {
+				const dIso = resolveOutletShiftDateIso(s.date, s.dateIso, todayIso);
+				return !hasShiftEnded(dIso, s.shift, now) || hasOpenBooking(s, dIso);
+			}) ??
 			// ⚠️ NO FALLBACK TO AN ENDED SHIFT.
 			//
 			// This was `?? todays[0]`, which on a day whose shifts have all finished
@@ -128,7 +143,7 @@ export function OutletBookings({
 			) ??
 			null
 		);
-	}, [visibleShifts]);
+	}, [visibleShifts, agencyRoster]);
 
 	const futureShifts = liveShift
 		? visibleShifts.filter((s) => s.id !== liveShift.id)

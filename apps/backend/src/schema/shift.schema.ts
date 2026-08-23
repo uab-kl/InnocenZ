@@ -74,6 +74,19 @@ export const CreateShiftSchema = z.object({
   // Per-shift rate overrides (Post Job pay-tier rows). Omit to keep the outlet's
   // workspace defaults; an empty array clears any existing overrides on update.
   payTiers: z.array(ShiftPayTierSchema).optional(),
+  // Named-PR requests from the venue's SELECT PRS picker (0131). Each pick
+  // names the person AND the membership its card came from, because a PR can
+  // belong to several agencies and only the addressed agency may see the ask.
+  // Capped at the largest plan's named-slot allowance.
+  requestedPrs: z
+    .array(
+      z.object({
+        userId: z.string().uuid(),
+        agencyId: z.string().uuid(),
+      }),
+    )
+    .max(100)
+    .optional(),
 });
 
 export const UpdateShiftSchema = CreateShiftSchema.partial().extend({

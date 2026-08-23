@@ -13,6 +13,7 @@ import {
 import { bucketForPrTier } from '@/features/shift-assignment/tier-demand';
 import { DbTransaction } from '@/types/db-transaction';
 import {
+  ShiftPrRequestTable,
   ShiftTable,
   ShiftInsertType,
   ShiftType,
@@ -281,6 +282,45 @@ export class ShiftRepositoryClass {
    * for, and doing that N times per page would put a query per row on the
    * busiest read in the portal.
    */
+  /**
+   * The venue's named-PR requests for a batch of shifts (0131), keyed by
+   * shift id — the same fan-out shape as `listPayTiersForShifts` below.
+   *
+   * `agencyId` scopes the read to requests ADDRESSED to that agency: the
+   * agency lane passes its own id and never learns what a venue asked of a
+   * rival's roster; the outlet and admin lanes pass nothing and read all
+   * of it (the outlet authored the rows). Returns an empty map on error —
+   * requests decorate a shift, they must never take the list down.
+   */
+  async listRequestedPrsForShifts(
+    shiftIds: string[],
+    agencyId?: string,
+  ): Promise<Map<string, { userId: string; agencyId: string }[]>> {
+    const byShift = new Map<string, { userId: string; agencyId: string }[]>();
+    if (shiftIds.length === 0) return byShift;
+    try {
+      const conditions: SQL[] = [inArray(ShiftPrRequestTable.shiftId, shiftIds)];
+      if (agencyId) conditions.push(eq(ShiftPrRequestTable.agencyId, agencyId));
+      const rows = await db
+        .select({
+          shiftId: ShiftPrRequestTable.shiftId,
+          userId: ShiftPrRequestTable.userId,
+          agencyId: ShiftPrRequestTable.agencyId,
+        })
+        .from(ShiftPrRequestTable)
+        .where(and(...conditions));
+      for (const row of rows) {
+        const arr = byShift.get(row.shiftId) ?? [];
+        arr.push({ userId: row.userId, agencyId: row.agencyId });
+        byShift.set(row.shiftId, arr);
+      }
+      return byShift;
+    } catch (error) {
+      logger.error('[ShiftRepository.listRequestedPrsForShifts] Error:', error);
+      return byShift;
+    }
+  }
+
   async listPayTiersForShifts(shiftIds: string[]): Promise<Map<string, ShiftPayTier[]>> {
     try {
       if (shiftIds.length === 0) return new Map();
@@ -335,6 +375,10 @@ export class ShiftRepositoryClass {
     payTiers: ShiftPayTierInput[] | undefined,
     actor: string,
     agencyIds?: string[],
+    // Already filtered by the controller to agencies actually invited on
+    // this shift — a request addressed to an uninvited agency would be a
+    // row nobody can ever read.
+    requestedPrs?: { userId: string; agencyId: string }[],
   ): Promise<ShiftType> {
     try {
       return await db.transaction(async (tx) => {
@@ -354,6 +398,23 @@ export class ShiftRepositoryClass {
           )
           .onConflictDoNothing();
         if (payTiers) await this.replacePayTiers(shift.id, payTiers, actor, tx);
+        // The venue's named picks, atomically with the shift they belong to
+        // (0131) — same reasoning as shift_agency above: a partial commit
+        // would post a job that silently forgot who was asked for.
+        if (requestedPrs && requestedPrs.length > 0) {
+          await tx
+            .insert(ShiftPrRequestTable)
+            .values(
+              requestedPrs.map((r) => ({
+                shiftId: shift.id,
+                userId: r.userId,
+                agencyId: r.agencyId,
+                createdBy: actor,
+                updatedBy: actor,
+              })),
+            )
+            .onConflictDoNothing();
+        }
         return shift;
       });
     } catch (error) {

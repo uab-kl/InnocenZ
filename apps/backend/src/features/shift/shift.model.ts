@@ -2,6 +2,7 @@ import { date, integer, numeric, timestamp, uuid, varchar } from 'drizzle-orm/pg
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
+import { UserTable } from '@/features/user/user.model';
 import { tierRateKindEnum } from '@/features/outlet-workspace/outlet-workspace.model';
 
 // Mirrors the frontend ShiftRequest.status lifecycle (agency-portal store).
@@ -113,6 +114,41 @@ export const ShiftAgencyTable = MainSchema.table('shift_agency', {
 });
 
 export type ShiftAgencyType = typeof ShiftAgencyTable.$inferSelect;
+
+/**
+ * A named-PR REQUEST from the venue — a want, not a booking (0131).
+ *
+ * The Post Job picker has let an outlet hand-pick faces since it shipped, and
+ * the client dropped the picks on the floor: "named PR ids have no backend
+ * column". This is the column. The agency stays the only party that can turn
+ * a want into a seat, so "booked" is NOT stored here — it is derived from a
+ * `shift_assignment` row existing for the same (shift, person). One fact,
+ * one place.
+ *
+ * `agencyId` records WHICH membership the tapped card came from (a PR can
+ * belong to several agencies), and is what scopes the agency read: each
+ * agency sees only the requests addressed to it, never a rival's.
+ *
+ * `userId`, not prId: there is no `pr` table — a PR is a `user` row (0089).
+ */
+export const ShiftPrRequestTable = MainSchema.table('shift_pr_request', {
+  id: uuid('id').defaultRandom().notNull().primaryKey(),
+  shiftId: uuid('shift_id')
+    .notNull()
+    .references(() => ShiftTable.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => UserTable.id, { onDelete: 'cascade' }),
+  agencyId: uuid('agency_id')
+    .notNull()
+    .references(() => AgencyTable.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdBy: varchar('created_by').notNull().default('system'),
+  updatedBy: varchar('updated_by').notNull().default('system'),
+});
+
+export type ShiftPrRequestType = typeof ShiftPrRequestTable.$inferSelect;
 
 /**
  * Per-shift pay-tier override. When an outlet posts a shift it may override its

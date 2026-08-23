@@ -651,6 +651,17 @@ function PostJobPage() {
 			destination: s.destination,
 
 			prs: s.prIds,
+
+			// The picks as (person, membership) pairs (0131). Resolved through the
+			// live pool so a demo id or a card whose membership is unknown simply
+			// drops out — the server would refuse it anyway.
+			requestedPrs: s.prIds
+				.map((id) => prPool.prs.find((c) => c.id === id))
+				.filter(
+					(c): c is (typeof prPool.prs)[number] =>
+						!!c && !!c.userId && !!c.agencyId,
+				)
+				.map((c) => ({ userId: c.userId, agencyId: c.agencyId as string })),
 		}));
 
 		const resetForm = () => {

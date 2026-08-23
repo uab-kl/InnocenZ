@@ -14,7 +14,6 @@ import {
 	postJobPayTierIdForOutletTier,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import {
-	hasShiftEnded,
 	shiftStartInstant,
 } from "@agency-portal/lib/shift-window";
 import type { ShiftRequest } from "@agency-portal/lib/store";
@@ -214,8 +213,10 @@ function lateFlagFor(
  */
 function liveRosterStatus(
 	a: ShiftAssignment,
-	shiftDate?: string,
-	slot?: string | null,
+	// Kept in the signature so the call sites need no churn; the clock-ended
+	// derivation they fed is gone (stamps end shifts, not clocks).
+	_shiftDate?: string,
+	_slot?: string | null,
 ): RosterSlotStatus {
 	const working =
 		!!a.checkInAt &&
@@ -225,16 +226,14 @@ function liveRosterStatus(
 		a.status !== "leave_approved";
 	if (working) return "on-duty";
 	const mapped = rosterStatusFromAssignment(a.status);
-	// A finished night reads "Ended", not "Scheduled". Only over `scheduled`:
-	// an absence, a pending leave or a swap question are all still true after
-	// the shift is over, and saying "Ended" would erase them.
-	if (
-		mapped === "scheduled" &&
-		shiftDate &&
-		hasShiftEnded(localDateIso(shiftDate), slot, new Date())
-	) {
-		return "ended";
-	}
+	// NO clock-derived "ended" any more (owner, 23 Aug 2026: "why show ended?
+	// the pr still can check in"). The window passing does not resolve a
+	// booking — stamps and decisions do: checked out reads Checked out (the
+	// grid's stamp tone), cancelled/no-show read Off, and a booked slot with
+	// no stamps stays SCHEDULED however late it gets, because a late check-in
+	// is still allowed and the agency still owes this row a decision. The
+	// clock-ended test lives on only in the shift pickers, where it decides
+	// which CARD leads — never what a booking's state is.
 	return mapped;
 }
 
@@ -396,6 +395,9 @@ export function shiftRequestFromBackendShift(input: {
 		liveSales: num(shift.liveSales),
 		status: shift.status,
 		prs: staffing.map((a) => a.prId),
+		// Who the venue ASKED for — distinct from `prs` (who is booked). Rides
+		// straight off the server response; empty array means nobody was named.
+		requestedPrs: shift.requestedPrs ?? [],
 		payPerHour: num(shift.payPerHour),
 		// What the shift ASKED for, per tier. Without this every outlet screen fell
 		// back to a synthesised ladder — see `payTierRowsFromShiftPayTiers`.
@@ -415,6 +417,8 @@ export function shiftRequestFromBackendShift(input: {
  * are dropped here. The pay-tier rows ARE persisted, as `shift_pay_tier` rows.
  */
 export interface OutletShiftPostItem {
+	/** Named-PR picks resolved to (person, membership) pairs — see 0131. */
+	requestedPrs?: { userId: string; agencyId: string }[];
 	/** Canonical yyyy-MM-dd — the composer always sets this on a posted item. */
 	dateIso: string;
 	shift: string;
@@ -567,5 +571,10 @@ export function createShiftInputFromPost(
 		// and sending the field only when it carries a real choice keeps the
 		// request honest about whether the operator picked.
 		...(agencyIds && agencyIds.length ? { agencyIds } : {}),
+		// The named picks finally reach the backend (0131). This mapper used to
+		// document them as "dropped here" — that sentence was the bug.
+		...(item.requestedPrs && item.requestedPrs.length
+			? { requestedPrs: item.requestedPrs }
+			: {}),
 	};
 }

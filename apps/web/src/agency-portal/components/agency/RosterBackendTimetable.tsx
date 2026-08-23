@@ -40,6 +40,8 @@ import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
+import { fetchOutletSwaps } from "@/services/outlet-swap";
+import { windowMinutes } from "@agency-portal/lib/pr-live-status";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -248,6 +250,17 @@ export function RosterBackendTimetable({
 		dateIso: string;
 	} | null>(null);
 
+	// Which demand-row days are expanded past their first two cards — a busy
+	// Saturday can hold six posted jobs, and six full cards would make the
+	// header row taller than the roster under it.
+	const [expandedDemandDays, setExpandedDemandDays] = useState<Set<string>>(
+		new Set(),
+	);
+
+	// A tapped demand card opens the whole day: every live shift, who the
+	// venue put in its cart, who is actually booked.
+	const [demandDay, setDemandDay] = useState<string | null>(null);
+
 	const days = useMemo(() => weekDayIsos(weekStartIso), [weekStartIso]);
 	const fromDate = days[0] ?? weekStartIso;
 	const toDate = days[days.length - 1] ?? weekStartIso;
@@ -339,28 +352,129 @@ export function RosterBackendTimetable({
 		[outletsQuery.data],
 	);
 
+	// The venue's named asks, keyed pr -> day (0131). Server-scoped to this
+	// agency, so every row here is addressed to us; the outlet NAME may show
+	// (it is our client asking), unlike the anonymous busy windows below.
+	const requestedByPrDate = useMemo(() => {
+		const map = new Map<
+			string,
+			Map<string, { outlet: string; slot: string | null; shiftId: string }[]>
+		>();
+		for (const shift of shiftsQuery.data?.data ?? []) {
+			const rows = shift.requestedPrs ?? [];
+			if (rows.length === 0) continue;
+			const outlet = outletNameById.get(shift.outletId) ?? "";
+			for (const r of rows) {
+				const byDate =
+					map.get(r.userId) ??
+					new Map<
+						string,
+						{ outlet: string; slot: string | null; shiftId: string }[]
+					>();
+				const arr = byDate.get(shift.shiftDate) ?? [];
+				arr.push({ outlet, slot: shift.slot ?? null, shiftId: shift.id });
+				byDate.set(shift.shiftDate, arr);
+				map.set(r.userId, byDate);
+			}
+		}
+		// Chronological inside every cell (owner: "please arrange by the time").
+		// A label-only slot has no window and sinks to the end of the day.
+		for (const byDate of map.values()) {
+			for (const arr of byDate.values()) {
+				arr.sort(
+					(a, b) =>
+						(windowMinutes(a.slot ?? "")?.[0] ?? 1e9) -
+						(windowMinutes(b.slot ?? "")?.[0] ?? 1e9),
+				);
+			}
+		}
+		return map;
+	}, [shiftsQuery.data, outletNameById]);
+
 	const shiftFiltersOn = rosterShiftFiltersActive(filters);
 
 	// ALL slots per (PR, day) — a PR can work two different-time shifts on the
 	// same day, so a cell holds a list. Filter matching is applied per-cell
 	// below via timetableSlotMatches, so a slot that fails the active filters
 	// reads as free rather than removing the whole row.
+	// Swaps still waiting on the PR (owner: "if swap waiting for pr to accept
+	// swap, status show pending swapping"). The swap-pending tone sat in the
+	// stylesheet since the demo era with nothing feeding it on a backed
+	// session — the grid never fetched outlet-swap rows.
+	const pendingSwapsQuery = useQuery({
+		queryKey: ["roster", "swaps", "pending"],
+		queryFn: () => fetchOutletSwaps({ status: "pending_pr" }, logout),
+		staleTime: 30_000,
+	});
+	const pendingSwapAssignmentIds = useMemo(
+		() =>
+			new Set((pendingSwapsQuery.data ?? []).map((swap) => swap.assignmentId)),
+		[pendingSwapsQuery.data],
+	);
+
 	const slotsByPrDay = useMemo(() => {
 		const map = new Map<string, AgencyRosterSlot[]>();
 		for (const slot of roster) {
 			const key = `${slot.prId}__${slot.dateIso}`;
 			const list = map.get(key) ?? [];
-			list.push(slot);
+			// The swap question outranks a plain "scheduled" — the agency is
+			// waiting on the PR and the cell should say so — but never a stamp:
+			// a PR already ON DUTY has answered the question with her feet.
+			list.push(
+				pendingSwapAssignmentIds.has(slot.id) &&
+					slot.status === "scheduled" &&
+					!slot.checkedInAt
+					? { ...slot, status: "swap-pending" as const }
+					: slot,
+			);
 			map.set(key, list);
 		}
 		return map;
-	}, [roster]);
+	}, [roster, pendingSwapAssignmentIds]);
 
 	// Tier per PR, so a staffed seat can be attributed to the bucket it consumed.
 	// `PrPersonnel.id` IS the user id, which is also what `shift_assignment.pr_id`
 	// holds after 0089 — the two line up without a translation step.
 	const tierByPrId = useMemo(
 		() => new Map((prsQuery.data?.data ?? []).map((p) => [p.id, p.tier])),
+		[prsQuery.data],
+	);
+
+	// The assignment a (PR, shift) pair already holds — what turns a request
+	// marker into a door: assigned opens the slot editor, unassigned opens
+	// the assign flow.
+	const assignmentIdByPrShift = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const a of assignmentsQuery.data?.data ?? []) {
+			if (NON_STAFFING_ASSIGNMENT_STATUSES.includes(a.status)) continue;
+			map.set(`${a.prId}|${a.shiftId}`, a.id);
+		}
+		return map;
+	}, [assignmentsQuery.data]);
+
+	// Who is BOOKED per shift — the demand sheet's answer to "requested vs
+	// seated". Names ride on the assignment join; ids let the cart rows tell
+	// a pick that landed from one still waiting.
+	const bookedByShift = useMemo(() => {
+		const map = new Map<string, { prId: string; name: string }[]>();
+		for (const a of assignmentsQuery.data?.data ?? []) {
+			if (NON_STAFFING_ASSIGNMENT_STATUSES.includes(a.status)) continue;
+			const arr = map.get(a.shiftId) ?? [];
+			arr.push({ prId: a.prId, name: a.prName ?? "PR" });
+			map.set(a.shiftId, arr);
+		}
+		return map;
+	}, [assignmentsQuery.data]);
+
+	// Nickname first, legal name as fallback — same choice every card makes.
+	const prNameById = useMemo(
+		() =>
+			new Map(
+				(prsQuery.data?.data ?? []).map((p) => [
+					p.id,
+					p.nickname?.trim() || p.name,
+				]),
+			),
 		[prsQuery.data],
 	);
 
@@ -440,9 +554,17 @@ export function RosterBackendTimetable({
 	const openShiftsByDay = useMemo(() => {
 		const map: Record<string, Shift[]> = {};
 		const now = new Date();
+		const todayLocal = now.toLocaleDateString("en-CA");
 		for (const s of shiftsQuery.data?.data ?? []) {
 			if (s.status === "sealed") continue;
-			if (hasShiftEnded(s.shiftDate, s.slot, now)) continue;
+			// TODAY's clock-ended shifts STAY (owner, 23 Aug 2026: "the outlet
+			// posted the shift earlier why after check out then agency cannot
+			// assign again"). Stamps and decisions resolve bookings, not clocks
+			// — the demand a venue posted stands for the rest of its day, and a
+			// late assign is a late check-in the phone already allows. Prior
+			// days keep the exclusion: yesterday is genuinely gone.
+			if (s.shiftDate !== todayLocal && hasShiftEnded(s.shiftDate, s.slot, now))
+				continue;
 			const outletName = outletNameById.get(s.outletId) ?? s.outletId;
 			if (filters.outlet && outletName !== filters.outlet) continue;
 			const list = map[s.shiftDate];
@@ -546,6 +668,132 @@ export function RosterBackendTimetable({
 							</tr>
 						</thead>
 						<tbody>
+							{/* THE VENUE'S DEMAND, without anyone tapping anything (owner:
+							    "if got outlet demand just show at the time table waiting
+							    for agency assign"). Every posted shift with open seats,
+							    per day, in the pending tone — the same openShiftsByDay
+							    the assign dialog reads, so the two can never disagree
+							    about what is still open. Sealed and ended shifts are
+							    already gone from that map. */}
+							{days.some(
+								(d) =>
+									(openShiftsByDay[d] ?? []).some(
+										(s) => (s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
+									),
+							) && (
+								<tr>
+									<th scope="row" className="iz-roster-week-pr">
+										<div className="iz-roster-week-pr-inner">
+											<span className="text-[10px] font-bold uppercase tracking-wide text-[var(--iz-amber)]">
+												{t.rosterGrid.openDemandRow}
+											</span>
+										</div>
+									</th>
+									{days.map((dateIso) => {
+										const demands = (openShiftsByDay[dateIso] ?? [])
+											.filter(
+												(s) =>
+													(s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
+											)
+											// Chronological, same rule as the request markers.
+											.sort(
+												(a, b) =>
+													(windowMinutes(a.slot ?? "")?.[0] ?? 1e9) -
+													(windowMinutes(b.slot ?? "")?.[0] ?? 1e9),
+											);
+										// MANY demands, one day (owner: "if that day many demand
+										// how design"): cards go DENSE (no covers), only the first
+										// two show, and a +N more toggle expands the day. One
+										// demand keeps its full card, picture and all.
+										const expanded = expandedDemandDays.has(dateIso);
+										const visibleDemands = expanded
+											? demands
+											: demands.slice(0, 2);
+										const hiddenCount = demands.length - visibleDemands.length;
+										const dense = demands.length > 1;
+										return (
+											<td key={`demand-${dateIso}`} className="iz-roster-week-td">
+												{visibleDemands.map((s) => {
+													const open =
+														(s.quantity ?? 0) - (s.staffedCount ?? 0);
+													const outlet =
+														outletNameById.get(s.outletId) ?? "";
+													const cover = apiAssetUrl(s.templateCoverImage);
+													return (
+														<button
+															type="button"
+															key={s.id}
+															className="iz-roster-demand-card"
+															onClick={() => setDemandDay(dateIso)}
+															title={[
+																outlet,
+																s.slot,
+																fill(t.rosterGrid.openDemandCell, {
+																	n: open,
+																}),
+															]
+																.filter(Boolean)
+																.join(" · ")}
+														>
+															{cover && !dense && (
+																<img
+																	src={cover}
+																	alt=""
+																	className="iz-roster-demand-cover"
+																/>
+															)}
+															<span className="outlet">{outlet}</span>
+															{s.slot && (
+																<span className="slot">{s.slot}</span>
+															)}
+															<span className="count">
+																{fill(t.rosterGrid.openDemandCount, {
+																	n: open,
+																})}
+															</span>
+															{/* WHO the venue asked for — its SELECT PRS picks,
+															    one chip each. Only requests addressed to THIS
+															    agency arrive, so every chip is ours to act on. */}
+															{(s.requestedPrs ?? []).length > 0 && (
+																<div className="iz-roster-demand-names">
+																	{(s.requestedPrs ?? []).map((r) => (
+																		<span
+																			key={r.userId}
+																			className="iz-roster-demand-chip"
+																		>
+																			{prNameById.get(r.userId) ?? "PR"}
+																		</span>
+																	))}
+																</div>
+															)}
+														</button>
+													);
+												})}
+												{(hiddenCount > 0 || expanded) && (
+													<button
+														type="button"
+														className="iz-roster-demand-more"
+														onClick={() =>
+															setExpandedDemandDays((prev) => {
+																const next = new Set(prev);
+																if (next.has(dateIso)) next.delete(dateIso);
+																else next.add(dateIso);
+																return next;
+															})
+														}
+													>
+														{expanded
+															? t.rosterGrid.demandLess
+															: fill(t.rosterGrid.demandMore, {
+																	n: hiddenCount,
+																})}
+													</button>
+												)}
+											</td>
+										);
+									})}
+								</tr>
+							)}
 							{prRows.length === 0 ? (
 								<tr>
 									<td
@@ -619,6 +867,22 @@ export function RosterBackendTimetable({
 												 */
 												const busyWindows =
 													committedWindows.get(pr.id)?.get(dateIso) ?? null;
+												// The venue asked for THIS person on THIS day — the
+												// "waiting for agency to approve" state the owner
+												// wants visible on the planning grid.
+												const dayRequestsAll =
+													requestedByPrDate.get(pr.id)?.get(dateIso) ?? null;
+												// A request the roster already satisfied VANISHES — the
+												// assigned slot cell is its display now, with its real
+												// status (owner: "if assigned for the pr not show outlet
+												// requested"). The marker only ever means "still waiting".
+												const dayRequests =
+													dayRequestsAll?.filter(
+														(r) =>
+															!assignmentIdByPrShift.has(
+																`${pr.id}|${r.shiftId}`,
+															),
+													) ?? null;
 												const busyLabel = busyWindows
 													? busyWindows.length > 0
 														? busyWindows.join(", ")
@@ -662,15 +926,49 @@ export function RosterBackendTimetable({
 																	</button>
 																);
 															})}
+															{/* The venue asked for THIS person — shown even when
+															    she already holds a slot today: the request may be
+															    for a different hour, and hiding it made a named
+															    ask invisible exactly when the PR was busiest. */}
+															{dayRequests?.map((r, i) => (
+																<button
+																	type="button"
+																	key={`${r.outlet}-${r.slot ?? ""}-${i}`}
+																	className="iz-roster-week-cell iz-roster-week-cell--pending"
+																	style={{ marginTop: 4 }}
+																	title={[r.outlet, r.slot]
+																		.filter(Boolean)
+																		.join(" · ")}
+																	disabled={!canAssign}
+																	onClick={() => {
+																		const assignmentId = assignmentIdByPrShift.get(
+																			`${pr.id}|${r.shiftId}`,
+																		);
+																		if (assignmentId) onEditSlot(assignmentId);
+																		else setAssignTarget({ pr, dateIso });
+																	}}
+																>
+																	<span className="outlet">{r.outlet}</span>
+																	<span className="shift">{r.slot ?? ""}</span>
+																	<span className="status">
+																		{t.rosterGrid.outletRequest}
+																	</span>
+																</button>
+															))}
 															{/* Same day, second shift — allowed at a different
 															    time (the backend refuses overlaps). Not offered
 															    when the PR has blocked the day: the shift they
 															    already hold predates the block, but a SECOND one
 															    is a new booking the server would refuse. */}
-															{canAssign && hasOpen && !prBlocked && (
+															{/* Present even with nothing open right now — the
+															    FREE cells keep their + in that state (dimmed,
+															    with the no-shifts title), and this branch hiding
+															    its own made the button look randomly missing
+															    (owner: "where is the add shift for the pr"). */}
+															{canAssign && !prBlocked && (
 																<button
 																	type="button"
-																	className="iz-roster-week-cell iz-roster-week-cell--empty"
+																	className={`iz-roster-week-cell iz-roster-week-cell--empty${!hasOpen ? " iz-roster-week-cell--no-shifts" : ""}`}
 																	style={{ marginTop: 4, minHeight: 28 }}
 																	onClick={() =>
 																		setAssignTarget({ pr, dateIso })
@@ -679,7 +977,11 @@ export function RosterBackendTimetable({
 																		t.rosterGrid.assignAnotherShift,
 																		{ name: pr.name, date: dateIso },
 																	)}
-																	title={t.rosterGrid.addAnotherShiftThisDay}
+																	title={
+																		hasOpen
+																			? t.rosterGrid.addAnotherShiftThisDay
+																			: t.rosterGrid.noOpenShiftsThisDay
+																	}
 																>
 																	<Plus className="h-3 w-3" />
 																</button>
@@ -776,6 +1078,31 @@ export function RosterBackendTimetable({
 														 * already showed, which is what turns it from an error
 														 * into a reminder.
 														 */}
+														{dayRequests?.map((r, i) => (
+															<button
+																type="button"
+																key={`${r.outlet}-${r.slot ?? ""}-${i}`}
+																className="iz-roster-week-cell iz-roster-week-cell--pending"
+																style={{ marginTop: 4 }}
+																title={[r.outlet, r.slot]
+																	.filter(Boolean)
+																	.join(" · ")}
+																disabled={!canAssign}
+																onClick={() => {
+																	const assignmentId = assignmentIdByPrShift.get(
+																		`${pr.id}|${r.shiftId}`,
+																	);
+																	if (assignmentId) onEditSlot(assignmentId);
+																	else setAssignTarget({ pr, dateIso });
+																}}
+															>
+																<span className="outlet">{r.outlet}</span>
+																<span className="shift">{r.slot ?? ""}</span>
+																<span className="status">
+																	{t.rosterGrid.outletRequest}
+																</span>
+															</button>
+														))}
 														{busyLabel && (
 															<div
 																className="iz-roster-week-busy"
@@ -817,6 +1144,115 @@ export function RosterBackendTimetable({
 				</div>
 			</div>
 
+			{demandDay && (
+				<IzSheet open onClose={() => setDemandDay(null)}>
+					<div className="iz-sheet-head">
+						<div>
+							<p className="iz-tiny iz-muted2 uppercase tracking-widest">
+								{t.rosterGrid.openDemandRow}
+							</p>
+							<h3>{demandDay}</h3>
+						</div>
+						<button
+							type="button"
+							className="iz-sheet-close"
+							onClick={() => setDemandDay(null)}
+							aria-label={t.common.close}
+						>
+							<X className="h-4 w-4" />
+						</button>
+					</div>
+					<div className="mt-3 space-y-3">
+						{(openShiftsByDay[demandDay] ?? []).map((s) => {
+							const cover = apiAssetUrl(s.templateCoverImage);
+							const outlet = outletNameById.get(s.outletId) ?? "";
+							const booked = bookedByShift.get(s.id) ?? [];
+							const bookedIds = new Set(booked.map((b) => b.prId));
+							const cart = (s.requestedPrs ?? []).map((r) => ({
+								userId: r.userId,
+								name: prNameById.get(r.userId) ?? "PR",
+								booked: bookedIds.has(r.userId),
+							}));
+							const open = (s.quantity ?? 0) - (s.staffedCount ?? 0);
+							return (
+								<div
+									key={s.id}
+									className="rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg-2)] p-3"
+								>
+									<div className="flex items-center gap-3">
+										{cover && (
+											<img
+												src={cover}
+												alt=""
+												className="h-12 w-16 shrink-0 rounded-lg object-cover"
+											/>
+										)}
+										<div className="min-w-0 flex-1">
+											<p className="truncate text-sm font-bold text-[var(--iz-txt)]">
+												{outlet}
+											</p>
+											<p className="iz-tiny iz-muted2">
+												{s.slot ?? ""}
+												{s.eventName ? ` · ${s.eventName}` : ""}
+											</p>
+										</div>
+										<span
+											className={`iz-pill ${open > 0 ? "iz-pill-amber" : "iz-pill-green"} !text-[10px]`}
+										>
+											{fill(t.rosterGrid.demandFilled, {
+												n: s.staffedCount ?? 0,
+												total: s.quantity ?? 0,
+											})}
+										</span>
+									</div>
+									{cart.length > 0 && (
+										<div className="mt-2">
+											<p className="iz-tiny iz-muted2 uppercase tracking-wide">
+												{t.rosterGrid.demandCartHeading}
+											</p>
+											<div className="mt-1 flex flex-wrap gap-1.5">
+												{cart.map((c) => (
+													<span
+														key={c.userId}
+														className={`iz-pill ${c.booked ? "iz-pill-green" : "iz-pill-amber"} !text-[10px]`}
+													>
+														{c.name}
+														{" · "}
+														{c.booked
+															? t.today.bookedPill
+															: t.today.requestedPill}
+													</span>
+												))}
+											</div>
+										</div>
+									)}
+									<div className="mt-2">
+										<p className="iz-tiny iz-muted2 uppercase tracking-wide">
+											{t.rosterGrid.demandBookedHeading}
+										</p>
+										{booked.length === 0 ? (
+											<p className="iz-tiny iz-muted mt-1">
+												{t.rosterGrid.demandNoBooked}
+											</p>
+										) : (
+											<div className="mt-1 flex flex-wrap gap-1.5">
+												{booked.map((b) => (
+													<span
+														key={b.prId}
+														className="iz-pill iz-pill-green !text-[10px]"
+													>
+														{b.name}
+													</span>
+												))}
+											</div>
+										)}
+									</div>
+								</div>
+							);
+						})}
+					</div>
+				</IzSheet>
+			)}
 			{assignTarget && (
 				<AssignBackendCellSheet
 					pr={assignTarget.pr}

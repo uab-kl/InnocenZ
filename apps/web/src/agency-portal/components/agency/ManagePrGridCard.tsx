@@ -18,6 +18,12 @@ const MAX_CARD_LANGUAGES = 2;
 type ManagePrGridCardProps = {
 	pr: AgencyManagedPR;
 	active: boolean;
+	/**
+	 * TODAY, right now: on-duty / scheduled / unavailable — or null for the
+	 * plain active/inactive pill. Rival duty arrives as bare windows only,
+	 * so this can say WHAT she is doing but never WHERE.
+	 */
+	liveStatus?: "on-duty" | "scheduled" | "unavailable" | null;
 	flags: ReturnType<typeof getAgencyPrFlags>;
 	/**
 	 * The PR's real mean rating, or null when they have never been rated.
@@ -33,6 +39,7 @@ type ManagePrGridCardProps = {
 export function ManagePrGridCard({
 	pr,
 	active,
+	liveStatus,
 	flags,
 	averageRating,
 	selectMode,
@@ -86,10 +93,28 @@ export function ManagePrGridCard({
 					className="iz-pr-manage-card__comcard"
 				/>
 				<IzPill
-					variant={active ? "green" : "ink"}
+					variant={
+						liveStatus === "on-duty"
+							? "gold"
+							: liveStatus === "scheduled"
+								? "amber"
+								: liveStatus === "unavailable"
+									? "ink"
+									: active
+										? "green"
+										: "ink"
+					}
 					className="iz-pr-manage-card__status"
 				>
-					{active ? t.managePr.active : t.managePr.inactive}
+					{liveStatus === "on-duty"
+						? t.roster.onDuty
+						: liveStatus === "scheduled"
+							? t.roster.scheduled
+							: liveStatus === "unavailable"
+								? t.roster.unavailable
+								: active
+									? t.managePr.active
+									: t.managePr.inactive}
 				</IzPill>
 			</div>
 

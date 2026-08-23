@@ -1,6 +1,7 @@
 import { AgencyBroadcastSheet } from "@agency-portal/components/agency/AgencyBroadcastSheet";
 import { Comcard3dPreviewVisual } from "@agency-portal/components/agency/Comcard3dPreview";
 import { ManagePrGridCard } from "@agency-portal/components/agency/ManagePrGridCard";
+import { useAgencyPrLiveStatus } from "@agency-portal/hooks/use-agency-pr-live-status";
 import { PenaltyRulesEditor } from "@agency-portal/components/agency/PenaltyRulesEditor";
 import { toComcardPreview } from "@agency-portal/components/agency/PrComcardIdentity";
 import { ProfileLanguagePicker } from "@agency-portal/components/iz/ProfileLanguagePicker";
@@ -123,6 +124,8 @@ function AgencyManagePRs() {
 	const demoRatings = useStore((s) => s.ratings);
 	const backendRatings = useAgencyRatings();
 	const ratings = backendRatings.backed ? backendRatings.ratings : demoRatings;
+	// Live TODAY status per comcard — on duty / scheduled / unavailable.
+	const liveStatusByPr = useAgencyPrLiveStatus(backendRatings.backed);
 	const requestAgencyPrDetach = useStore((s) => s.requestAgencyPrDetach);
 	// Backend rules when signed in for real; the demo store otherwise. A demo
 	// session must never render another agency's fine schedule.
@@ -718,6 +721,10 @@ function AgencyManagePRs() {
 								averageRating={averageRating}
 								selectMode={selectMode}
 								picked={picked}
+								liveStatus={(() => {
+									const s = liveStatusByPr.get(p.id);
+									return s && s !== "available" ? s : null;
+								})()}
 								onActivate={() => {
 									if (selectMode) toggleSelect(p.id);
 									else openPrProfile(p.id);

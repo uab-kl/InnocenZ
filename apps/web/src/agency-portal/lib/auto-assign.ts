@@ -129,6 +129,11 @@ export interface AutoAssignPair {
 	eventName: string | null;
 	/** Shifts the PR already holds this payroll week, before this plan. */
 	shiftsThisWeek: number;
+	/**
+	 * The venue named this PR on this shift (0131) — the pair the owner wants
+	 * surfaced first: "the pr of the day waiting for agency to approve".
+	 */
+	requestedByVenue?: boolean;
 }
 
 export interface AutoAssignPlan {
@@ -347,7 +352,17 @@ export function findOpenShifts(params: {
 					// returns false and the shift stays offered. That is deliberate and
 					// matches the rest of the system: a window we cannot read must not
 					// silently vanish from the picker.
-					!hasShiftEnded(s.shiftDate, s.slot, now),
+					//
+					// TODAY's clock-ended shifts STAY (owner, 23 Aug 2026: "the auto
+					// assign button to fullfill the number of pr requested from the
+					// outlet") — the same-day rule the assign grid already follows:
+					// stamps and decisions resolve bookings, not clocks, and a venue's
+					// demand stands for the rest of its day. At 22:24 the banner read
+					// "every shift is fully staffed" over a 21:30 shift with three open
+					// seats, because this filter had dropped it. Prior days keep the
+					// exclusion — yesterday is genuinely gone.
+					(s.shiftDate === now.toLocaleDateString("en-CA") ||
+						!hasShiftEnded(s.shiftDate, s.slot, now)),
 			)
 			.map((s) => {
 				// Mirrors the backend's `remainingByBucket`. A shift with no demand
@@ -424,6 +439,12 @@ export function buildAutoAssignPlan(params: {
 	 * server will refuse, so every real caller passes it.
 	 */
 	blockedDatesByPr?: Map<string, Set<string>>;
+	/**
+	 * Per shift, the user ids the VENUE asked for by name (0131) — already
+	 * agency-scoped by the server, so every id in here is this agency's to
+	 * act on. Requested PRs are picked FIRST for their requesting shift.
+	 */
+	requestedPrIdsByShift?: ReadonlyMap<string, ReadonlySet<string>>;
 	/**
 	 * `outletId -> map pin`. Without it the planner cannot ask whether a PR could
 	 * physically get from one venue to the next, and plans exactly as it did
@@ -614,6 +635,14 @@ export function buildAutoAssignPlan(params: {
 					? (seats.byBucket.get(bucket) ?? 0) > 0
 					: seats.unnamed > 0;
 			};
+			// The venue named these people for THIS shift — they outrank every
+			// generic ranking term below, because the ask is the whole point of
+			// the request lane. Matched on either id column (0089: pr.id IS the
+			// user id, userId preferred when present).
+			const requestedHere = params.requestedPrIdsByShift?.get(target.shiftId);
+			const isRequested = (p: PrPersonnel) =>
+				!!requestedHere &&
+				(requestedHere.has(p.userId ?? p.id) || requestedHere.has(p.id));
 			const pick = activePrs
 				.filter(
 					(p) =>
@@ -628,6 +657,7 @@ export function buildAutoAssignPlan(params: {
 				)
 				.sort(
 					(a, b) =>
+						Number(isRequested(b)) - Number(isRequested(a)) ||
 						tierRank(a.tier) - tierRank(b.tier) ||
 						load(a.id) - load(b.id) ||
 						prDisplayName(a).localeCompare(prDisplayName(b)),
@@ -683,6 +713,7 @@ export function buildAutoAssignPlan(params: {
 				slot: target.slot,
 				eventName: target.eventName,
 				shiftsThisWeek: weekCountByPr.get(pick.id) ?? 0,
+				requestedByVenue: isRequested(pick),
 			});
 		}
 	}

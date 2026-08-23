@@ -58,6 +58,13 @@ export interface Shift {
 	 * the shift declared no mix, so any tier fits and only `quantity` binds.
 	 */
 	payTiers?: ShiftPayTierDemand[];
+	/**
+	 * The venue's named-PR requests (0131), on both list and getById. Agency
+	 * callers receive only the requests ADDRESSED to them — the server scopes
+	 * this; a rival's asks never arrive. Optional: cached pre-0131 responses
+	 * carry none.
+	 */
+	requestedPrs?: { userId: string; agencyId: string }[];
 }
 
 /**
@@ -120,6 +127,12 @@ export interface ShiftPayTierInput {
 
 export interface CreateShiftInput {
 	agencyId?: string;
+	/**
+	 * Named-PR picks from the SELECT PRS picker (0131) — the person and the
+	 * membership the tapped card came from. The server drops any entry whose
+	 * agency is not invited on the shift.
+	 */
+	requestedPrs?: { userId: string; agencyId: string }[];
 	/**
 	 * Which of the outlet's APPROVED agencies this job goes to (0124).
 	 *

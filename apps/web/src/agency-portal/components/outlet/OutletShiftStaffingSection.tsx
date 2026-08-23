@@ -1,4 +1,4 @@
-import { TierBadge, TrafficPill } from "@agency-portal/components/iz/ui";
+import { IzPill, TierBadge, TrafficPill } from "@agency-portal/components/iz/ui";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -17,6 +17,8 @@ import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { trafficLevelForRatio } from "@agency-portal/lib/traffic-status";
 import { cn } from "@agency-portal/lib/utils";
 import { ClipboardList, UserCheck, Users } from "lucide-react";
+import { useMemo } from "react";
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -135,6 +137,28 @@ export function OutletShiftStaffingSection({
 		shift,
 		shiftApplicants,
 	);
+	// WHO the venue asked for, with their comcards — the owner: "this demand
+	// need show that the pr comcard which pr in demand". Booked is derived
+	// from the assignment rows (`shift.prs`), never stored on the request.
+	const agencyLinks = useOutletAgencyLinks();
+	const agencyNameById = useMemo(
+		() => new Map(agencyLinks.links.map((l) => [l.agencyId, l.agencyName])),
+		[agencyLinks.links],
+	);
+	const requestedRows = useMemo(() => {
+		const bookedIds = new Set(shift.prs ?? []);
+		return (shift.requestedPrs ?? []).map((r) => {
+			const managed = agencyPRs.find((p) => p.id === r.userId);
+			return {
+				userId: r.userId,
+				name: managed?.name ?? "PR",
+				photo: managed?.comcardImageUrl ?? managed?.avatarPhoto ?? null,
+				agencyName: agencyNameById.get(r.agencyId) ?? null,
+				booked: bookedIds.has(r.userId),
+			};
+		});
+	}, [shift.requestedPrs, shift.prs, agencyPRs, agencyNameById]);
+
 	const { booked, applicants } = buildShiftStaffRows({
 		shift,
 		dateIso,
@@ -185,6 +209,49 @@ export function OutletShiftStaffingSection({
 					))}
 				</div>
 			</div>
+
+			{requestedRows.length > 0 && (
+				<div className="iz-outlet-staffing-block">
+					<p className="iz-outlet-staffing-heading flex items-center gap-1.5">
+						<UserCheck className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
+						{fill(t.today.requestedHeading, { n: requestedRows.length })}
+					</p>
+					<p className="iz-tiny iz-muted2 mt-0.5">{t.today.requestedHint}</p>
+					<div className="mt-2 space-y-1.5">
+						{requestedRows.map((row) => (
+							<div key={row.userId} className="iz-outlet-demand-row">
+								{row.photo ? (
+									<img
+										src={row.photo}
+										alt=""
+										className="h-9 w-9 shrink-0 rounded-lg object-cover"
+									/>
+								) : (
+									<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--iz-bg-3)] text-sm font-bold">
+										{row.name.charAt(0).toUpperCase()}
+									</span>
+								)}
+								<div className="min-w-0 flex-1">
+									<p className="truncate text-xs font-semibold text-[var(--iz-txt)]">
+										{row.name}
+									</p>
+									{row.agencyName && (
+										<p className="iz-tiny iz-muted2 truncate">
+											{row.agencyName}
+										</p>
+									)}
+								</div>
+								<IzPill
+									variant={row.booked ? "green" : "amber"}
+									className="!py-0.5 !text-[9px]"
+								>
+									{row.booked ? t.today.bookedPill : t.today.requestedPill}
+								</IzPill>
+							</div>
+						))}
+					</div>
+				</div>
+			)}
 
 			<div className="iz-outlet-staffing-block">
 				<p className="iz-outlet-staffing-heading flex items-center gap-1.5">

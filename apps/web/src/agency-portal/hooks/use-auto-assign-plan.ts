@@ -136,6 +136,18 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		staleTime: 30_000,
 	});
 
+	// The venue's named asks per shift (0131) — the list response already
+	// carries them, agency-scoped by the server, so this is a pure reshape.
+	const requestedPrIdsByShift = useMemo(() => {
+		const map = new Map<string, Set<string>>();
+		for (const shift of shiftsQuery.data?.data ?? []) {
+			const rows = shift.requestedPrs ?? [];
+			if (rows.length === 0) continue;
+			map.set(shift.id, new Set(rows.map((r) => r.userId)));
+		}
+		return map;
+	}, [shiftsQuery.data]);
+
 	const plan = useMemo<AutoAssignPlan>(() => {
 		if (!backed) return EMPTY_AUTO_ASSIGN_PLAN;
 		const outlets = outletsQuery.data?.data ?? [];
@@ -163,6 +175,7 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 			// every one of those pairings 409s at Confirm — a preview that promises
 			// what the write cannot deliver.
 			blockedDatesByPr: blockedDatesByPr(availabilityQuery.data ?? []),
+			requestedPrIdsByShift,
 		});
 	}, [
 		backed,
@@ -172,6 +185,7 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		outletsQuery.data,
 		availabilityQuery.data,
 		targetDates,
+		requestedPrIdsByShift,
 	]);
 
 	/**
