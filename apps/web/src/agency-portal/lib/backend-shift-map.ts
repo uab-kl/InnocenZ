@@ -14,7 +14,6 @@ import {
 	postJobPayTierIdForOutletTier,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import {
-	hasShiftEnded,
 	shiftStartInstant,
 } from "@agency-portal/lib/shift-window";
 import type { ShiftRequest } from "@agency-portal/lib/store";
@@ -214,8 +213,10 @@ function lateFlagFor(
  */
 function liveRosterStatus(
 	a: ShiftAssignment,
-	shiftDate?: string,
-	slot?: string | null,
+	// Kept in the signature so the call sites need no churn; the clock-ended
+	// derivation they fed is gone (stamps end shifts, not clocks).
+	_shiftDate?: string,
+	_slot?: string | null,
 ): RosterSlotStatus {
 	const working =
 		!!a.checkInAt &&
@@ -225,16 +226,14 @@ function liveRosterStatus(
 		a.status !== "leave_approved";
 	if (working) return "on-duty";
 	const mapped = rosterStatusFromAssignment(a.status);
-	// A finished night reads "Ended", not "Scheduled". Only over `scheduled`:
-	// an absence, a pending leave or a swap question are all still true after
-	// the shift is over, and saying "Ended" would erase them.
-	if (
-		mapped === "scheduled" &&
-		shiftDate &&
-		hasShiftEnded(localDateIso(shiftDate), slot, new Date())
-	) {
-		return "ended";
-	}
+	// NO clock-derived "ended" any more (owner, 23 Aug 2026: "why show ended?
+	// the pr still can check in"). The window passing does not resolve a
+	// booking — stamps and decisions do: checked out reads Checked out (the
+	// grid's stamp tone), cancelled/no-show read Off, and a booked slot with
+	// no stamps stays SCHEDULED however late it gets, because a late check-in
+	// is still allowed and the agency still owes this row a decision. The
+	// clock-ended test lives on only in the shift pickers, where it decides
+	// which CARD leads — never what a booking's state is.
 	return mapped;
 }
 

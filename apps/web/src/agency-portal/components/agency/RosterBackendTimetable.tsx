@@ -40,6 +40,8 @@ import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
+import { fetchOutletSwaps } from "@/services/outlet-swap";
+import { windowMinutes } from "@agency-portal/lib/pr-live-status";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -375,6 +377,17 @@ export function RosterBackendTimetable({
 				map.set(r.userId, byDate);
 			}
 		}
+		// Chronological inside every cell (owner: "please arrange by the time").
+		// A label-only slot has no window and sinks to the end of the day.
+		for (const byDate of map.values()) {
+			for (const arr of byDate.values()) {
+				arr.sort(
+					(a, b) =>
+						(windowMinutes(a.slot ?? "")?.[0] ?? 1e9) -
+						(windowMinutes(b.slot ?? "")?.[0] ?? 1e9),
+				);
+			}
+		}
 		return map;
 	}, [shiftsQuery.data, outletNameById]);
 
@@ -384,16 +397,40 @@ export function RosterBackendTimetable({
 	// same day, so a cell holds a list. Filter matching is applied per-cell
 	// below via timetableSlotMatches, so a slot that fails the active filters
 	// reads as free rather than removing the whole row.
+	// Swaps still waiting on the PR (owner: "if swap waiting for pr to accept
+	// swap, status show pending swapping"). The swap-pending tone sat in the
+	// stylesheet since the demo era with nothing feeding it on a backed
+	// session — the grid never fetched outlet-swap rows.
+	const pendingSwapsQuery = useQuery({
+		queryKey: ["roster", "swaps", "pending"],
+		queryFn: () => fetchOutletSwaps({ status: "pending_pr" }, logout),
+		staleTime: 30_000,
+	});
+	const pendingSwapAssignmentIds = useMemo(
+		() =>
+			new Set((pendingSwapsQuery.data ?? []).map((swap) => swap.assignmentId)),
+		[pendingSwapsQuery.data],
+	);
+
 	const slotsByPrDay = useMemo(() => {
 		const map = new Map<string, AgencyRosterSlot[]>();
 		for (const slot of roster) {
 			const key = `${slot.prId}__${slot.dateIso}`;
 			const list = map.get(key) ?? [];
-			list.push(slot);
+			// The swap question outranks a plain "scheduled" — the agency is
+			// waiting on the PR and the cell should say so — but never a stamp:
+			// a PR already ON DUTY has answered the question with her feet.
+			list.push(
+				pendingSwapAssignmentIds.has(slot.id) &&
+					slot.status === "scheduled" &&
+					!slot.checkedInAt
+					? { ...slot, status: "swap-pending" as const }
+					: slot,
+			);
 			map.set(key, list);
 		}
 		return map;
-	}, [roster]);
+	}, [roster, pendingSwapAssignmentIds]);
 
 	// Tier per PR, so a staffed seat can be attributed to the bucket it consumed.
 	// `PrPersonnel.id` IS the user id, which is also what `shift_assignment.pr_id`
@@ -645,9 +682,17 @@ export function RosterBackendTimetable({
 										</div>
 									</th>
 									{days.map((dateIso) => {
-										const demands = (openShiftsByDay[dateIso] ?? []).filter(
-											(s) => (s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
-										);
+										const demands = (openShiftsByDay[dateIso] ?? [])
+											.filter(
+												(s) =>
+													(s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
+											)
+											// Chronological, same rule as the request markers.
+											.sort(
+												(a, b) =>
+													(windowMinutes(a.slot ?? "")?.[0] ?? 1e9) -
+													(windowMinutes(b.slot ?? "")?.[0] ?? 1e9),
+											);
 										// MANY demands, one day (owner: "if that day many demand
 										// how design"): cards go DENSE (no covers), only the first
 										// two show, and a +N more toggle expands the day. One
@@ -907,10 +952,15 @@ export function RosterBackendTimetable({
 															    when the PR has blocked the day: the shift they
 															    already hold predates the block, but a SECOND one
 															    is a new booking the server would refuse. */}
-															{canAssign && hasOpen && !prBlocked && (
+															{/* Present even with nothing open right now — the
+															    FREE cells keep their + in that state (dimmed,
+															    with the no-shifts title), and this branch hiding
+															    its own made the button look randomly missing
+															    (owner: "where is the add shift for the pr"). */}
+															{canAssign && !prBlocked && (
 																<button
 																	type="button"
-																	className="iz-roster-week-cell iz-roster-week-cell--empty"
+																	className={`iz-roster-week-cell iz-roster-week-cell--empty${!hasOpen ? " iz-roster-week-cell--no-shifts" : ""}`}
 																	style={{ marginTop: 4, minHeight: 28 }}
 																	onClick={() =>
 																		setAssignTarget({ pr, dateIso })
@@ -919,7 +969,11 @@ export function RosterBackendTimetable({
 																		t.rosterGrid.assignAnotherShift,
 																		{ name: pr.name, date: dateIso },
 																	)}
-																	title={t.rosterGrid.addAnotherShiftThisDay}
+																	title={
+																		hasOpen
+																			? t.rosterGrid.addAnotherShiftThisDay
+																			: t.rosterGrid.noOpenShiftsThisDay
+																	}
 																>
 																	<Plus className="h-3 w-3" />
 																</button>
