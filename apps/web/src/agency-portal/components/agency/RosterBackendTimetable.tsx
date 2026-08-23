@@ -389,6 +389,18 @@ export function RosterBackendTimetable({
 		[prsQuery.data],
 	);
 
+	// Nickname first, legal name as fallback — same choice every card makes.
+	const prNameById = useMemo(
+		() =>
+			new Map(
+				(prsQuery.data?.data ?? []).map((p) => [
+					p.id,
+					p.nickname?.trim() || p.name,
+				]),
+			),
+		[prsQuery.data],
+	);
+
 	const staffingByShift = useMemo(() => {
 		const map = new Map<
 			string,
@@ -618,6 +630,22 @@ export function RosterBackendTimetable({
 																	n: open,
 																})}
 															</span>
+															{/* WHO the venue asked for by name (owner: "this
+															    need show that which pr in on demand"). Only the
+															    requests addressed to THIS agency arrive, so the
+															    names are always ours to show. */}
+															{(s.requestedPrs ?? []).length > 0 && (
+																<span className="shift">
+																	{fill(t.rosterGrid.demandFor, {
+																		names: (s.requestedPrs ?? [])
+																			.map(
+																				(r) =>
+																					prNameById.get(r.userId) ?? "PR",
+																			)
+																			.join(", "),
+																	})}
+																</span>
+															)}
 														</div>
 													);
 												})}
@@ -747,6 +775,33 @@ export function RosterBackendTimetable({
 																	</button>
 																);
 															})}
+															{/* The venue asked for THIS person — shown even when
+															    she already holds a slot today: the request may be
+															    for a different hour, and hiding it made a named
+															    ask invisible exactly when the PR was busiest. */}
+															{dayRequests && dayRequests.length > 0 && (
+																<div
+																	className="iz-roster-week-cell iz-roster-week-cell--pending"
+																	style={{ marginTop: 4 }}
+																	title={dayRequests
+																		.map((r) =>
+																			[r.outlet, r.slot]
+																				.filter(Boolean)
+																				.join(" · "),
+																		)
+																		.join(", ")}
+																>
+																	<span className="outlet">
+																		{dayRequests[0]?.outlet}
+																	</span>
+																	<span className="shift">
+																		{dayRequests[0]?.slot ?? ""}
+																	</span>
+																	<span className="status">
+																		{t.rosterGrid.outletRequest}
+																	</span>
+																</div>
+															)}
 															{/* Same day, second shift — allowed at a different
 															    time (the backend refuses overlaps). Not offered
 															    when the PR has blocked the day: the shift they
