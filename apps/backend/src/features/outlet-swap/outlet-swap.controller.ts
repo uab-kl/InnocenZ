@@ -14,6 +14,7 @@ import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
+import { notifyMany } from '@/features/notification/notify.js';
 import { logger } from '@/util/logger';
 import { OrgScope, resolveOrgScope } from '@/util/org-scope';
 import { shiftDayKey } from '@/util/slot-window';
@@ -328,6 +329,33 @@ export class OutletSwapControllerClass {
         updatedBy: actor,
       });
       res.status(201).json({ success: true, message: 'Swap request sent to the PR', data: request });
+
+      // AFTER the response, same shape as notifyShiftPosted: the swap is
+      // already written and a bell that fails must not read as a request
+      // that failed. The PR was previously told NOTHING when a swap was
+      // raised — she found it only by opening the app (owner: "inform the
+      // pr to accept before the start shift time"). The deadline IS the
+      // message: an unanswered swap dies the moment the shift starts.
+      // Reuses agency_broadcast — an agency-to-PR message kind that already
+      // exists — rather than minting an enum value on a shared DB.
+      void notifyMany([assignment.userId ?? assignment.prId], {
+        kind: 'agency_broadcast',
+        title: 'Outlet swap — your answer is needed',
+        body:
+          `Your agency asks to move your ${fromShift.shiftDate} shift ` +
+          `(${fromShift.slot ?? 'time TBC'}) to another venue` +
+          `${toShift.slot && toShift.slot !== fromShift.slot ? ` at ${toShift.slot}` : ''}. ` +
+          `Accept or decline in the app BEFORE the shift starts — an ` +
+          `unanswered request expires at start time.`,
+        payload: {
+          swapId: request.id,
+          assignmentId,
+          shiftDate: fromShift.shiftDate,
+        },
+        actor,
+      }).catch((error) => {
+        logger.error('[OutletSwapController.create] notify Error:', error);
+      });
     } catch (error) {
       if (isUniqueViolation(error)) {
         return res.status(409).json({ success: false, message: 'This PR already has a swap request awaiting a reply', data: null });

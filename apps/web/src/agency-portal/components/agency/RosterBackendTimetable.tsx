@@ -554,9 +554,17 @@ export function RosterBackendTimetable({
 	const openShiftsByDay = useMemo(() => {
 		const map: Record<string, Shift[]> = {};
 		const now = new Date();
+		const todayLocal = now.toLocaleDateString("en-CA");
 		for (const s of shiftsQuery.data?.data ?? []) {
 			if (s.status === "sealed") continue;
-			if (hasShiftEnded(s.shiftDate, s.slot, now)) continue;
+			// TODAY's clock-ended shifts STAY (owner, 23 Aug 2026: "the outlet
+			// posted the shift earlier why after check out then agency cannot
+			// assign again"). Stamps and decisions resolve bookings, not clocks
+			// — the demand a venue posted stands for the rest of its day, and a
+			// late assign is a late check-in the phone already allows. Prior
+			// days keep the exclusion: yesterday is genuinely gone.
+			if (s.shiftDate !== todayLocal && hasShiftEnded(s.shiftDate, s.slot, now))
+				continue;
 			const outletName = outletNameById.get(s.outletId) ?? s.outletId;
 			if (filters.outlet && outletName !== filters.outlet) continue;
 			const list = map[s.shiftDate];
