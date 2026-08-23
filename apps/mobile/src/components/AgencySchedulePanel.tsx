@@ -716,7 +716,19 @@ export function AgencySchedulePanel() {
             const dayRows = shiftsByIso.get(iso);
             // Red still means missed — widening what is TAPPABLE must not widen
             // what is marked, or every worked day would read as a failure.
-            const style = missedRows ? MISSED_STYLE : KIND_STYLE[kind];
+            //
+            // A WORKED day marks GREEN (owner, 23 Aug 2026: "that day for pr
+            // got works why no marking? in green"). Completed shifts leave the
+            // schedule feed for the Today section, so their day came through
+            // as a neutral 'past' and Saturday's checked-in-and-out shift
+            // left no trace on the calendar. Only the NEUTRAL kinds upgrade —
+            // unavailable, pending and on-duty are stronger truths and keep
+            // their own colour.
+            const style = missedRows
+              ? MISSED_STYLE
+              : dayRows && (kind === 'past' || kind === 'open')
+                ? KIND_STYLE.assigned
+                : KIND_STYLE[kind];
             const isToday = iso === todayIso;
             const canToggle = kind === 'open' || kind === 'unavailable';
             return (

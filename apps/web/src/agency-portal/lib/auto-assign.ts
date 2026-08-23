@@ -352,7 +352,17 @@ export function findOpenShifts(params: {
 					// returns false and the shift stays offered. That is deliberate and
 					// matches the rest of the system: a window we cannot read must not
 					// silently vanish from the picker.
-					!hasShiftEnded(s.shiftDate, s.slot, now),
+					//
+					// TODAY's clock-ended shifts STAY (owner, 23 Aug 2026: "the auto
+					// assign button to fullfill the number of pr requested from the
+					// outlet") — the same-day rule the assign grid already follows:
+					// stamps and decisions resolve bookings, not clocks, and a venue's
+					// demand stands for the rest of its day. At 22:24 the banner read
+					// "every shift is fully staffed" over a 21:30 shift with three open
+					// seats, because this filter had dropped it. Prior days keep the
+					// exclusion — yesterday is genuinely gone.
+					(s.shiftDate === now.toLocaleDateString("en-CA") ||
+						!hasShiftEnded(s.shiftDate, s.slot, now)),
 			)
 			.map((s) => {
 				// Mirrors the backend's `remainingByBucket`. A shift with no demand
