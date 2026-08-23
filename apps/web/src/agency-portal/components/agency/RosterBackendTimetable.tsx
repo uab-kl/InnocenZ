@@ -248,6 +248,13 @@ export function RosterBackendTimetable({
 		dateIso: string;
 	} | null>(null);
 
+	// Which demand-row days are expanded past their first two cards — a busy
+	// Saturday can hold six posted jobs, and six full cards would make the
+	// header row taller than the roster under it.
+	const [expandedDemandDays, setExpandedDemandDays] = useState<Set<string>>(
+		new Set(),
+	);
+
 	const days = useMemo(() => weekDayIsos(weekStartIso), [weekStartIso]);
 	const fromDate = days[0] ?? weekStartIso;
 	const toDate = days[days.length - 1] ?? weekStartIso;
@@ -608,47 +615,92 @@ export function RosterBackendTimetable({
 										const demands = (openShiftsByDay[dateIso] ?? []).filter(
 											(s) => (s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
 										);
+										// MANY demands, one day (owner: "if that day many demand
+										// how design"): cards go DENSE (no covers), only the first
+										// two show, and a +N more toggle expands the day. One
+										// demand keeps its full card, picture and all.
+										const expanded = expandedDemandDays.has(dateIso);
+										const visibleDemands = expanded
+											? demands
+											: demands.slice(0, 2);
+										const hiddenCount = demands.length - visibleDemands.length;
+										const dense = demands.length > 1;
 										return (
 											<td key={`demand-${dateIso}`} className="iz-roster-week-td">
-												{demands.map((s) => {
+												{visibleDemands.map((s) => {
 													const open =
 														(s.quantity ?? 0) - (s.staffedCount ?? 0);
 													const outlet =
 														outletNameById.get(s.outletId) ?? "";
+													const cover = apiAssetUrl(s.templateCoverImage);
 													return (
 														<div
 															key={s.id}
-															className="iz-roster-week-cell iz-roster-week-cell--pending"
-															title={[outlet, s.slot]
+															className="iz-roster-demand-card"
+															title={[
+																outlet,
+																s.slot,
+																fill(t.rosterGrid.openDemandCell, {
+																	n: open,
+																}),
+															]
 																.filter(Boolean)
 																.join(" · ")}
 														>
+															{cover && !dense && (
+																<img
+																	src={cover}
+																	alt=""
+																	className="iz-roster-demand-cover"
+																/>
+															)}
 															<span className="outlet">{outlet}</span>
-															<span className="shift">{s.slot ?? ""}</span>
-															<span className="status">
-																{fill(t.rosterGrid.openDemandCell, {
+															{s.slot && (
+																<span className="slot">{s.slot}</span>
+															)}
+															<span className="count">
+																{fill(t.rosterGrid.openDemandCount, {
 																	n: open,
 																})}
 															</span>
-															{/* WHO the venue asked for by name (owner: "this
-															    need show that which pr in on demand"). Only the
-															    requests addressed to THIS agency arrive, so the
-															    names are always ours to show. */}
+															{/* WHO the venue asked for — its SELECT PRS picks,
+															    one chip each. Only requests addressed to THIS
+															    agency arrive, so every chip is ours to act on. */}
 															{(s.requestedPrs ?? []).length > 0 && (
-																<span className="shift">
-																	{fill(t.rosterGrid.demandFor, {
-																		names: (s.requestedPrs ?? [])
-																			.map(
-																				(r) =>
-																					prNameById.get(r.userId) ?? "PR",
-																			)
-																			.join(", "),
-																	})}
-																</span>
+																<div className="iz-roster-demand-names">
+																	{(s.requestedPrs ?? []).map((r) => (
+																		<span
+																			key={r.userId}
+																			className="iz-roster-demand-chip"
+																		>
+																			{prNameById.get(r.userId) ?? "PR"}
+																		</span>
+																	))}
+																</div>
 															)}
 														</div>
 													);
 												})}
+												{(hiddenCount > 0 || expanded) && (
+													<button
+														type="button"
+														className="iz-roster-demand-more"
+														onClick={() =>
+															setExpandedDemandDays((prev) => {
+																const next = new Set(prev);
+																if (next.has(dateIso)) next.delete(dateIso);
+																else next.add(dateIso);
+																return next;
+															})
+														}
+													>
+														{expanded
+															? t.rosterGrid.demandLess
+															: fill(t.rosterGrid.demandMore, {
+																	n: hiddenCount,
+																})}
+													</button>
+												)}
 											</td>
 										);
 									})}
