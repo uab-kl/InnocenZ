@@ -86,7 +86,7 @@ import {
 } from "@agency-portal/lib/post-job-pay-tiers";
 import { formatStars } from "@agency-portal/lib/pr-rating-summary";
 import { useOutletBusyWindows } from "@agency-portal/hooks/use-outlet-busy-windows";
-import { windowsOverlap } from "@agency-portal/lib/pr-live-status";
+import { windowsOverlapPadded } from "@agency-portal/lib/pr-live-status";
 import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -1347,11 +1347,11 @@ export function DraftPrPicker({
 										{p.userId && busyByUserId?.get(p.userId) && (
 											<span
 												className="iz-pill iz-pill-amber absolute right-1 top-1 !py-0 !text-[9px]"
-												title={fill(t.postJob.onDutyTitle, {
+												title={fill(t.postJob.busyTitle, {
 													time: (busyByUserId.get(p.userId) ?? []).join(", "),
 												})}
 											>
-												{t.postJob.onDutyBadge}
+												{t.postJob.busyBadge}
 											</span>
 										)}
 									</div>
@@ -1619,7 +1619,9 @@ export function DraftShiftEditor({
 			const hits: string[] = [];
 			for (const iso of shift.selectedDateIsos) {
 				for (const w of byDate.get(iso) ?? []) {
-					if (windowsOverlap(w, shift.shiftTime)) hits.push(w);
+					// Padded by the travel cooldown: a shift ending 19:00 still
+					// blocks a 19:15 draft — she cannot teleport between venues.
+					if (windowsOverlapPadded(w, shift.shiftTime)) hits.push(w);
 				}
 			}
 			if (hits.length > 0) map.set(userId, hits);

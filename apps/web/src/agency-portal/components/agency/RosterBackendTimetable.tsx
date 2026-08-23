@@ -571,6 +571,61 @@ export function RosterBackendTimetable({
 							</tr>
 						</thead>
 						<tbody>
+							{/* THE VENUE'S DEMAND, without anyone tapping anything (owner:
+							    "if got outlet demand just show at the time table waiting
+							    for agency assign"). Every posted shift with open seats,
+							    per day, in the pending tone — the same openShiftsByDay
+							    the assign dialog reads, so the two can never disagree
+							    about what is still open. Sealed and ended shifts are
+							    already gone from that map. */}
+							{days.some(
+								(d) =>
+									(openShiftsByDay[d] ?? []).some(
+										(s) => (s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
+									),
+							) && (
+								<tr>
+									<th scope="row" className="iz-roster-week-pr">
+										<div className="iz-roster-week-pr-inner">
+											<span className="text-[10px] font-bold uppercase tracking-wide text-[var(--iz-amber)]">
+												{t.rosterGrid.openDemandRow}
+											</span>
+										</div>
+									</th>
+									{days.map((dateIso) => {
+										const demands = (openShiftsByDay[dateIso] ?? []).filter(
+											(s) => (s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
+										);
+										return (
+											<td key={`demand-${dateIso}`} className="iz-roster-week-td">
+												{demands.map((s) => {
+													const open =
+														(s.quantity ?? 0) - (s.staffedCount ?? 0);
+													const outlet =
+														outletNameById.get(s.outletId) ?? "";
+													return (
+														<div
+															key={s.id}
+															className="iz-roster-week-cell iz-roster-week-cell--pending"
+															title={[outlet, s.slot]
+																.filter(Boolean)
+																.join(" · ")}
+														>
+															<span className="outlet">{outlet}</span>
+															<span className="shift">{s.slot ?? ""}</span>
+															<span className="status">
+																{fill(t.rosterGrid.openDemandCell, {
+																	n: open,
+																})}
+															</span>
+														</div>
+													);
+												})}
+											</td>
+										);
+									})}
+								</tr>
+							)}
 							{prRows.length === 0 ? (
 								<tr>
 									<td

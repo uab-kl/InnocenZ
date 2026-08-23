@@ -4,10 +4,12 @@
  * status is on duty, available, not available or scheduled for that time only".
  *
  * The states, strongest first:
- *   'on-duty'     — working RIGHT NOW: an own-agency assignment with a check-in
- *                   stamp and no check-out, or any committed window (own or
- *                   rival, bare times) containing the asked instant.
- *   'scheduled'   — booked some time that day, but not at the asked instant.
+ *   'on-duty'     — a CHECK-IN STAMP and no check-out. Nothing else: the
+ *                   owner's rule (23 Aug 2026), "if pr check in only on
+ *                   duty, if not yet check in is schedule". A window
+ *                   containing the current instant is still only a booking.
+ *   'scheduled'   — booked that day (own row, or any bare committed window),
+ *                   not yet checked in — cooldown/travel time included.
  *   'unavailable' — the PR blocked the day themselves.
  *   'available'   — none of the above; surfaces usually render NO badge.
  *
@@ -17,7 +19,11 @@
  * arithmetic on top.
  */
 
-export type PrLiveStatus = 'on-duty' | 'scheduled' | 'unavailable' | 'available';
+export type PrLiveStatus =
+	| "on-duty"
+	| "scheduled"
+	| "unavailable"
+	| "available";
 
 /**
  * "22:00 - 04:00" → [1320, 1680] — minutes from midnight, end pushed past 1440
@@ -51,6 +57,35 @@ export function windowsOverlap(a: string, b: string): boolean {
 	return false;
 }
 
+/**
+ * The cooldown either side of a booking (owner, 23 Aug 2026: "if still in
+ * cooldown time or travel time need show that the pr is scheduled"). The
+ * client cannot run the real travel-gap physics — rival venues arrive as
+ * bare windows with no pins — so this is the model's floor: 15 boarding
+ * minutes plus a nominal half-hour of city travel. ADVISORY ONLY: the
+ * server's location-aware guard still decides at assign time.
+ */
+export const TRAVEL_BUFFER_MINUTES = 45;
+
+/** `windowsOverlap`, with the busy window padded by the travel cooldown. */
+export function windowsOverlapPadded(
+	busy: string,
+	asked: string,
+	padMinutes: number = TRAVEL_BUFFER_MINUTES,
+): boolean {
+	const wb = windowMinutes(busy);
+	const wa = windowMinutes(asked);
+	if (!wb || !wa) return false;
+	const b0 = wb[0] - padMinutes;
+	const b1 = wb[1] + padMinutes;
+	for (const shift of [-1440, 0, 1440]) {
+		if (Math.max(wa[0], b0 + shift) < Math.min(wa[1], b1 + shift)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 /** Is this instant (minutes from the day's midnight) inside the window? */
 export function windowContains(win: string, minutes: number): boolean {
 	const w = windowMinutes(win);
@@ -73,11 +108,11 @@ export function derivePrLiveStatus(opts: {
 	/** Minutes from midnight of the instant being asked about. */
 	nowMinutes: number;
 }): PrLiveStatus {
-	if (opts.ownOnDuty) return 'on-duty';
-	if (opts.committedToday.some((w) => windowContains(w, opts.nowMinutes))) {
-		return 'on-duty';
-	}
-	if (opts.ownBookedToday || opts.committedToday.length > 0) return 'scheduled';
-	if (opts.blockedToday) return 'unavailable';
-	return 'available';
+	// Check-in alone earns ON DUTY. A rival window carries no stamps, so it
+	// can never claim more than scheduled — and an own booking without a
+	// check-in is exactly the state the check-in exists to distinguish.
+	if (opts.ownOnDuty) return "on-duty";
+	if (opts.ownBookedToday || opts.committedToday.length > 0) return "scheduled";
+	if (opts.blockedToday) return "unavailable";
+	return "available";
 }

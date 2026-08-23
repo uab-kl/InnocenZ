@@ -1,7 +1,7 @@
+import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { fetchOutletCommittedWindows } from "@/services/pr-availability";
 
 /**

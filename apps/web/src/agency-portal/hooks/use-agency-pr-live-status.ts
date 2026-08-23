@@ -1,3 +1,7 @@
+import {
+	derivePrLiveStatus,
+	type PrLiveStatus,
+} from "@agency-portal/lib/pr-live-status";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -6,10 +10,6 @@ import {
 	fetchPrCommittedWindows,
 } from "@/services/pr-availability";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
-import {
-	derivePrLiveStatus,
-	type PrLiveStatus,
-} from "@agency-portal/lib/pr-live-status";
 
 /** Assignment states that no longer put a person on a floor. */
 const NON_STAFFING = new Set(["cancelled", "no_show", "leave_approved"]);
