@@ -595,14 +595,48 @@ function LogRow({
             <Text style={styles.badgePendingText}>Pending</Text>
           </View>
         ) : (
-          <View style={styles.badgeMatched}>
-            <Check size={10} color={C.green} />
-            {/* "Approved" only when a receipt actually carries that state.
-                Everything else keeps saying "Matched", which claims less: that
-                the line has a receipt behind it, not that anybody signed it
-                off. A row with no receipt has nothing to approve. */}
-            <Text style={styles.badgeMatchedText}>
-              {reviewed ? 'Approved' : 'Matched'}
+          /*
+           * THE ROW'S OWN LIFECYCLE STATE — not the lock that shares its shape.
+           *
+           * This printed `reviewed ? 'Approved' : 'Matched'`, and `reviewed` is
+           * `isReceiptLocked`: true for approved OR verified, because its job is
+           * deciding whether the edit controls are hidden. So a VERIFIED receipt
+           * was badged "Approved" — the same paper read VERIFIED on Payment's day
+           * sheet and Approved here, and the WEAKER word won on the screen the PR
+           * looks at first. Not an edge case either: a scan verifies at CREATION
+           * (payment-voucher.controller.ts:2571), so it was the common one.
+           *
+           * `isReceiptLocked` keeps its real job just below — hiding edit/delete.
+           *
+           * Colour follows the owner's rule (23 Aug): approved is AMBER, the same
+           * waiting colour as pending, because approved money can still be
+           * contested. Only verified earns green. "Matched" is neither — the row
+           * has a receipt behind it and nobody has ruled on it, which claims less
+           * than either word.
+           */
+          <View
+            style={
+              log.receiptStatus === 'approved'
+                ? styles.badgeApproved
+                : styles.badgeMatched
+            }
+          >
+            <Check
+              size={10}
+              color={log.receiptStatus === 'approved' ? C.amber : C.green}
+            />
+            <Text
+              style={
+                log.receiptStatus === 'approved'
+                  ? styles.badgeApprovedText
+                  : styles.badgeMatchedText
+              }
+            >
+              {log.receiptStatus === 'verified'
+                ? 'Verified'
+                : log.receiptStatus === 'approved'
+                  ? 'Approved'
+                  : 'Matched'}
             </Text>
           </View>
         )}
@@ -892,6 +926,30 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,198,106,0.35)',
   },
   badgePendingText: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.amber,
+  },
+  /**
+   * Approved — decided, but still contestable, so it wears PENDING's amber
+   * rather than VERIFIED's green. Same shape as `badgePending`, named for its
+   * own state: a badge called "pending" on an approved row is how the two
+   * states get conflated again.
+   */
+  badgeApproved: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: C.amberBg,
+    borderWidth: 1,
+    borderColor: 'rgba(232,198,106,0.35)',
+  },
+  badgeApprovedText: {
     fontFamily: F.sora,
     fontSize: 10,
     fontWeight: '700',
