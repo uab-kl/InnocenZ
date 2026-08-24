@@ -129,6 +129,24 @@ export const Store = makeIcon([
   ['path', { d: 'M4 10.95V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.05' }],
 ]);
 
+// Path data copied VERBATIM from the installed lucide-react v0.577.0
+// (`node_modules/lucide-react/dist/esm/icons/shirt.js` and `languages.js`)
+// rather than typed from memory — this module's whole promise is that its
+// strokes match the web portal's 1:1, and a hand-drawn approximation would
+// break that silently.
+export const Shirt = makeIcon([
+  ['path', { d: 'M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z' }],
+]);
+
+export const Languages = makeIcon([
+  ['path', { d: 'm5 8 6 6' }],
+  ['path', { d: 'm4 14 6-6 2-3' }],
+  ['path', { d: 'M2 5h12' }],
+  ['path', { d: 'M7 2h1' }],
+  ['path', { d: 'm22 22-5-10-5 10' }],
+  ['path', { d: 'M14 18h6' }],
+]);
+
 export const Bell = makeIcon([
   ['path', { d: 'M10.268 21a2 2 0 0 0 3.464 0' }],
   ['path', { d: 'M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326' }],

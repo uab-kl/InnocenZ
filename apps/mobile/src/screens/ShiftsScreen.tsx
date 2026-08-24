@@ -35,7 +35,9 @@ import {
   FileText,
   ChevronDown,
   House,
+  Languages,
   MapPin,
+  Shirt,
   Store,
 } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
@@ -69,6 +71,10 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
     // the generic word "Shift", which read as a real event name on the card.
     event: a.eventName?.trim() || 'No event name',
     eventKind: a.eventKind === 'special' ? 'Special event' : 'Normal shift',
+    // The venue's asks. Trimmed to null so the card can gate on truthiness —
+    // an empty string would draw a labelled row with nothing after it.
+    dressCode: a.dressCode?.trim() || null,
+    languages: a.languages?.trim() || null,
     date: ymdFromIso(a.shiftDate),
     time: a.slot ?? '—',
     payout: Number(a.payAmount) || 0,
@@ -686,6 +692,33 @@ function TonightCard({
               <LabelWithIcon icon={Clock} label="Time" />
               <Text style={styles.shiftFactValue}>{shift.time}</Text>
             </View>
+            {/*
+              WHAT THE VENUE ASKED FOR. The dress code was collected on Post Job
+              and had no column behind it until 0132, so the one person who has
+              to act on it — the PR walking in the door — was never told. It sits
+              with Date and Time because it is the same kind of fact: something
+              to know BEFORE turning up, not a detail to hunt for.
+
+              Languages is the venue's PREFERENCE, never a requirement, and the
+              composer says so in as many words. Labelled "Preferred" here so a
+              PR who speaks none of them does not read her own booking as a
+              mistake and cancel.
+
+              Each row draws only when the shift carries that ask; a shift with
+              neither looks exactly as it did before.
+            */}
+            {shift.dressCode ? (
+              <View style={styles.shiftFact}>
+                <LabelWithIcon icon={Shirt} label="Dress code" />
+                <Text style={styles.shiftFactValue}>{shift.dressCode}</Text>
+              </View>
+            ) : null}
+            {shift.languages ? (
+              <View style={styles.shiftFact}>
+                <LabelWithIcon icon={Languages} label="Preferred languages" />
+                <Text style={styles.shiftFactValue}>{shift.languages}</Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.shiftEvent}>
             {/* The event moved up into the header, where it is readable
