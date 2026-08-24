@@ -41,6 +41,19 @@ export type HistPayWeek = {
   shifts: number;
   issued: string;
   status: HistPayStatus;
+  /**
+   * May the PR sign THIS voucher right now?
+   *
+   * Carried as its own fact because `status` cannot answer it: it collapses
+   * `pending_review`, `sent` and `disputed` into one 'pending' badge, and only
+   * the middle one is signable. Gating the Sign button on 'pending' therefore
+   * offered it on a voucher the agency had not issued yet — directly beneath
+   * the line reading "Waiting for your agency to issue".
+   *
+   * `statusMeta` already knows the difference, but it knows it as English prose.
+   * A boolean cannot be broken by rewording a sentence.
+   */
+  canSign: boolean;
   statusMeta: string;
   net: number;
   wages: number;

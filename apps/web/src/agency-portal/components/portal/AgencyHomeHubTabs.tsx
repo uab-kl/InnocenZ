@@ -40,13 +40,37 @@ type HubTab =
  * wrong yet. Green means people are on the floor, which is good news.
  */
 const HUB_TAB_ALERT_COLOR: Record<HubTab, string> = {
-	"on-duty": "text-[var(--iz-green)]",
-	approvals: "text-[var(--iz-amber)]",
-	review: "text-[var(--iz-amber)]",
-	disputes: "text-[var(--iz-red)]",
-	receipts: "text-[var(--iz-amber)]",
-	overtime: "text-[var(--iz-amber)]",
+	// ⚠️ The `!` is load-bearing, not a style tic. `.iz-agency-home-tab .n` sets
+	// `color: var(--iz-txt)` at specificity (0,2,0), and a bare Tailwind utility
+	// is (0,1,0) — so the stylesheet won every time and this whole map was
+	// INERT: every count rendered plain white however urgent it was. Nothing
+	// failed and nothing warned. The code read as though it were colouring.
+	"on-duty": "!text-[var(--iz-green)]",
+	approvals: "!text-[var(--iz-amber)]",
+	review: "!text-[var(--iz-amber)]",
+	disputes: "!text-[var(--iz-red)]",
+	receipts: "!text-[var(--iz-amber)]",
+	overtime: "!text-[var(--iz-amber)]",
 };
+
+/**
+ * The tabs whose backlog STOPS MONEY — which is what "urgent" means here.
+ *
+ * Each of these four holds a week shut: a voucher nobody reviewed cannot be
+ * sent, a dispute cannot be paid around, a pending receipt blocks its voucher,
+ * an undecided overtime claim holds the whole payroll week. So they colour
+ * their LABEL as well as their number. A coloured digit under a grey label
+ * reads as a statistic; these are a queue.
+ *
+ * `on-duty` and `approvals` are deliberately absent. PRs on the floor is good
+ * news, and a pending sign-up costs nobody their wages.
+ */
+const HUB_TAB_URGENT = new Set<HubTab>([
+	"review",
+	"disputes",
+	"receipts",
+	"overtime",
+]);
 
 /**
  * The PR app's own words for each bucket, so both sides read the same.
@@ -262,14 +286,28 @@ export function AgencyHomeHubTabs({
 						className={`iz-agency-home-tab${activeTab === t.id ? " on" : ""}`}
 						onClick={() => setTab(t.id)}
 					>
-						<div className="l">{t.label}</div>
+						{/* The label carries the colour too, but only for the four that
+						    stop money — see HUB_TAB_URGENT. Applied even on the OPEN tab,
+						    unlike the number: a queue does not stop being urgent because
+						    you are looking at it, and the underline already says which
+						    tab is open. */}
+						<div
+							className={`l${
+								HUB_TAB_URGENT.has(t.id) && counts[t.id] > 0
+									? ` ${HUB_TAB_ALERT_COLOR[t.id]}`
+									: ""
+							}`}
+						>
+							{t.label}
+						</div>
 						{/* A lookup, not a ternary chain. This was four nested conditionals
 						    for four tabs; at six it stops being readable, and the next
 						    person adding a tab would have had to work out where in the
 						    chain it belongs rather than just naming its colour. */}
 						<div
 							className={`n${
-								activeTab !== t.id && counts[t.id] > 0
+								counts[t.id] > 0 &&
+								(HUB_TAB_URGENT.has(t.id) || activeTab !== t.id)
 									? ` ${HUB_TAB_ALERT_COLOR[t.id]}`
 									: ""
 							}`}

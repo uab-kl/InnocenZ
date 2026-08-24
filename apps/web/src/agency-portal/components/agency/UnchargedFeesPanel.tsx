@@ -27,7 +27,6 @@ export function UnchargedFeesPanel({
 	canMark,
 	weekStart,
 	weekEnd,
-	weekLabel,
 }: {
 	canMark: boolean;
 	/*
@@ -39,8 +38,10 @@ export function UnchargedFeesPanel({
 	 */
 	weekStart?: string;
 	weekEnd?: string;
-	/** Human label for the selected week tab, e.g. "02 Aug – 08 Aug". */
-	weekLabel?: string;
+	/*
+	 * `weekLabel` went with the button. It existed only to name the week the
+	 * seal would cover, and a label with nothing left to label is decoration.
+	 */
 }) {
 	const { t } = usePortalLocale();
 	const {
@@ -54,9 +55,7 @@ export function UnchargedFeesPanel({
 		isLoading,
 		isError,
 		isMarking,
-		isSealing,
 		markCharged,
-		sealWeek,
 	} = useAgencyUncharged();
 	/*
 	 * Who is in breach, computed server-side and read-only.
@@ -125,39 +124,19 @@ export function UnchargedFeesPanel({
 		);
 	}
 	/*
-	 * Offered only when there is something to record.
+	 * There is no "record penalties" button here any more (owner, 24 Aug).
 	 *
-	 * It used to sit in the header of every week, clean ones included, which is
-	 * what made it read as the way to SEE penalties rather than the way to
-	 * charge them — press it and find out. Nothing is discovered by pressing it:
-	 * the list below is the same evaluation, fetched by a GET. So the button now
-	 * belongs to that list and disappears with it, and a week with no breaches
-	 * offers no button to wonder about.
+	 * It was the last control on the panel that asked to be pressed before it
+	 * would tell you anything, and it kept reading as the way to SEE penalties
+	 * even after the list started showing them. The list IS the answer.
+	 *
+	 * ⚠️ It was also the ONLY caller of POST /agency/:id/penalties/seal in the
+	 * whole web app, so nothing turns a proposal into a penalty_charge row now —
+	 * and "Add to voucher" needs a chargeId, which only sealing creates. The
+	 * "Not yet recorded" rows below are therefore read-only until sealing gets a
+	 * home: folded into "Add to voucher", or moved to Manage PR. The hook's
+	 * `sealWeek` and the service call are left in place for whichever it becomes.
 	 */
-	const sealButton =
-		canMark && weekStart && weekEnd && pending.length > 0 ? (
-			<button
-				type="button"
-				disabled={isSealing}
-				onClick={(e) => {
-					e.stopPropagation();
-					// "0 recorded" is a real and common answer — a clean week, or one
-					// already sealed. Saying so beats a button that appears to do
-					// nothing.
-					void sealWeek(weekStart, weekEnd)
-						.then((res) => toast(res.message, "success"))
-						.catch(() => toast(t.payroll.couldNotRecordPenalties, "warn"));
-				}}
-				className="rounded-lg border border-[var(--iz-line2)] px-2 py-1 text-[11px] font-semibold text-[var(--iz-txt)] disabled:opacity-60"
-			>
-				{/* Names the week it will seal. t.payroll.thisWeeksPenalties was a lie on
-				    the Last Week tab: the button follows the tab, so on Last Week it
-				    sealed 02–08 Aug while calling it "this week". */}
-				{isSealing
-					? t.payroll.recording
-					: `${t.payroll.recordPenaltiesFor} ${weekLabel ?? t.payroll.thisWeekFallback}`}
-			</button>
-		) : null;
 
 	/*
 	 * Breaches the backend can already see, shown without asking for anything.
@@ -193,9 +172,6 @@ export function UnchargedFeesPanel({
 						</span>
 					</div>
 				))}
-				{/* Under the rows, not above them: the press follows from reading
-				    what it will charge. */}
-				{sealButton && <div>{sealButton}</div>}
 			</div>
 		) : null;
 

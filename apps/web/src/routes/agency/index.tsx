@@ -90,26 +90,29 @@ function AgencyHub() {
 		() => agencyPendingPayoutDeadline(pvsForCalc, prsForCalc),
 		[pvsForCalc, prsForCalc],
 	);
-	// The Sunday payout job HOLDS a voucher it cannot send and tells the agency
-	// by notification (weekly-payout.job.ts). A bell is easy to miss, and the
-	// consequence is silent on this end and loud on the PR's: until finance acts,
-	// last week shows them nothing. So the same queue is stated here, on the page
-	// the agency actually lands on.
-	//
-	// PENDING_REVIEW is the only status finance can still sign from — once a
-	// voucher is SENT the signature is locked out — so it is exactly the set that
-	// needs a person. Split by whether the finance stamp is already on it:
-	// "review" and "sign" are different jobs, and telling someone to review days
-	// that are already approved sends them looking for work that is not there.
-	const pvTodo = useMemo(() => {
-		const pending = pvsForCalc.filter((pv) => pv.status === "PENDING_REVIEW");
-		const unsigned = pending.filter((pv) => !pv.financeHeadSignedAt);
-		return {
-			sign: unsigned.length,
-			review: pending.length - unsigned.length,
-			total: pending.length,
-		};
-	}, [pvsForCalc]);
+	/*
+	 * The PENDING_REVIEW banner is GONE (owner, 24 Aug 2026).
+	 *
+	 * It ran the identical query to the hub's "Pending agency review" tab — same
+	 * array, same `status === "PENDING_REVIEW"` filter, same
+	 * `/agency/pv?status=PENDING_REVIEW` destination — so it was a second
+	 * rendering of one fact, and the worse of the two: the tab's rows carry
+	 * `?pv=<id>` and open the voucher, while the banner passed status alone and
+	 * let `tabHoldingStatus` snap to the FIRST week holding one, landing on a
+	 * list showing 1 of 3.
+	 *
+	 * Its copy had also outlived its own premise. "Until this is done, the PR
+	 * sees nothing for last week" was true while `getMyHistory` filtered to
+	 * signed+paid; that filter was deliberately widened to all five statuses, so
+	 * the PR now sees a pending_review week with its full breakdown under the
+	 * line "Waiting for your agency to issue". The banner was telling the agency
+	 * something the PR's own screen contradicts.
+	 *
+	 * Visibility is not lost with it — the hub strip shows the count without a
+	 * click. What went is the consequence sentence, and the accurate version of
+	 * that is "the PR cannot sign, so cannot be paid", which belongs beside the
+	 * list it describes if it ever comes back.
+	 */
 	const totalPrs = prsForCalc.filter((p) => !p.detached).length;
 	const totalOutlets = backed
 		? backendOutlets.outlets.length
@@ -120,40 +123,6 @@ function AgencyHub() {
 
 	return (
 		<div className="iz-screen iz-portal-page">
-			{pvTodo.total > 0 && (
-				<Link
-					to="/agency/pv"
-					search={{ status: "PENDING_REVIEW" }}
-					className="iz-card no-underline mb-3 block border-l-4 border-l-[var(--iz-red)] p-3"
-				>
-					<div className="font-semibold">
-						{pvTodo.sign > 0 && pvTodo.review === 0
-							? t.agencyHome.pvTodoSignTitle
-							: pvTodo.review > 0 && pvTodo.sign === 0
-								? t.agencyHome.pvTodoReviewTitle
-								: t.agencyHome.pvTodoBothTitle}
-					</div>
-					<p className="iz-tiny mt-1 leading-snug text-[var(--iz-muted2)]">
-						{[
-							pvTodo.sign > 0
-								? `${pvTodo.sign} ${t.agencyHome.pvTodoSign}`
-								: null,
-							pvTodo.review > 0
-								? `${pvTodo.review} ${t.agencyHome.pvTodoReview}`
-								: null,
-						]
-							.filter(Boolean)
-							.join(" · ")}
-					</p>
-					<p className="iz-tiny mt-1 leading-snug text-[var(--iz-red)]">
-						{t.agencyHome.pvTodoBlocked}
-					</p>
-					<p className="iz-tiny mt-2 font-semibold">
-						{t.agencyHome.pvTodoCta} →
-					</p>
-				</Link>
-			)}
-
 			<div className="iz-portal-kpi-grid iz-portal-desktop-only">
 				<div className="iz-portal-kpi">
 					<div className="l">{t.agencyHome.totalPr}</div>

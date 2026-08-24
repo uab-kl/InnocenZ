@@ -10740,8 +10740,13 @@ button.iz-pr-offer-row:hover {
 	height: 30px;
 	padding: 0 8px 0 6px;
 	border-radius: 10px;
-	border: 1px solid var(--iz-line);
-	background: var(--iz-glass2);
+	/* No box. The pill's border + fill read as a black square parked in the
+	   top-left corner of every page, which is chrome competing with the page
+	   title beside it. The arrow and the word are the control. Kept
+	   transparent rather than removed so the hover state has something to
+	   paint into and the metrics do not shift by a pixel. */
+	border: 1px solid transparent;
+	background: transparent;
 	color: var(--iz-muted);
 	font-family: "Sora", sans-serif;
 	font-size: 11px;
@@ -10755,7 +10760,9 @@ button.iz-pr-offer-row:hover {
 		background 0.15s;
 }
 .iz-topbar-back:hover {
-	border-color: var(--iz-line2);
+	/* Brightening the label is the whole affordance now — restoring a border
+	   on hover would put the square back for exactly as long as the pointer
+	   is over it. */
 	color: var(--iz-txt);
 	background: rgba(255, 255, 255, 0.05);
 }
@@ -13351,7 +13358,20 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-page .iz-outlet-detail-section__badge {
 	font-size: 15px;
 }
-.iz-outlet-detail-back {
+/*
+ * The roomier back pill — Manage Outlet's, and now Payroll's PV detail.
+ *
+ * TWO names, ONE rule, on purpose. The owner asked for the PV Return to copy
+ * this exact design; copying the VALUES would have made a second definition of
+ * the same look, free to drift the moment either page is restyled. The outlet
+ * keeps its historical class name so its markup needs no edit.
+ *
+ * It re-declares border and background, which is why it still reads as a pill
+ * after the base .iz-topbar-back went transparent: the plain control lost its
+ * box, this one never had the plain box to begin with.
+ */
+.iz-outlet-detail-back,
+.iz-topbar-back--pill {
 	display: inline-flex;
 	align-self: flex-start;
 	align-items: center;

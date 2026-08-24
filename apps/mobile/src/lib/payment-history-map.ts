@@ -152,6 +152,16 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
     shifts: countShifts(v.lines) || Math.max(1, new Set(lines.map((l) => l.date)).size),
     issued: issuedLabel(v),
     status,
+    /*
+     * Only a SENT voucher is signable, and only while it is still unsigned.
+     *
+     * `sent` is the one status meaning the agency has finished with it and
+     * handed it over. `pending_review` is still on the agency's desk and
+     * `disputed` is waiting on them too — the PR's move on both is to wait.
+     * The `prSignedAt` guard covers the gap where a row still reads `sent`
+     * but a signature has already landed on it.
+     */
+    canSign: v.status === 'sent' && !v.prSignedAt,
     statusMeta: statusMeta(v),
     net: Math.round(net * 100) / 100,
     wages: Math.round(wages * 100) / 100,
