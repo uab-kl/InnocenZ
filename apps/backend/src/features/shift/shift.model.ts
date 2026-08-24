@@ -71,6 +71,18 @@ export const ShiftTable = MainSchema.table('shift', {
    */
   templateId: uuid('template_id'),
   languages: varchar('languages', { length: 255 }),
+  /**
+   * What the venue asked people to WEAR (0132) — free text with five
+   * suggestions, not a controlled vocabulary, because the composer's "Other"
+   * exists so the list does not bound it.
+   *
+   * Same 60 as `shift_template.dress_code`: a template's dress code is this
+   * same fact one step earlier, and the composer copies it straight across, so
+   * two widths for one value would make a template that saves fine into a shift
+   * that will not post. NULL means "none was given", which is a different fact
+   * from "no particular dress code" — the screens print nothing for it.
+   */
+  dressCode: varchar('dress_code', { length: 60 }),
   quantity: integer('quantity').notNull().default(0),
   filled: integer('filled').notNull().default(0),
   preferredRating: integer('preferred_rating'),

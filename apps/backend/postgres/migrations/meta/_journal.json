@@ -925,6 +925,13 @@
       "when": 1790600000000,
       "tag": "0131_shift_pr_request",
       "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1790700000000,
+      "tag": "0132_shift_dress_code",
+      "breakpoints": true
     }
   ]
 }

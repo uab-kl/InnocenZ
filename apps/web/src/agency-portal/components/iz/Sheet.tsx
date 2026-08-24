@@ -22,28 +22,62 @@ function sheetVariantClass(mode: MountMode, variant: SheetVariant) {
 	return " iz-sheet--dialog";
 }
 
+/**
+ * How many sheets currently hold the scroll lock, and how to undo the FIRST one.
+ *
+ * ⚠️ THIS COUNTER IS THE WHOLE FIX. Every sheet used to save and restore the
+ * overflow it happened to find, which is only correct while exactly one sheet
+ * exists. Two can: the roster keeps `demandDay` and `assignTarget` in separate
+ * state, so a day sheet and an assign sheet are open together, and the second
+ * one to mount saved "hidden" — the value the FIRST one had just written. Close
+ * them in the order that unmounts the outer sheet first and the inner one
+ * "restores" hidden onto a page with no sheet left on it. The page is then
+ * locked with nothing on screen to explain why, and only a reload clears it.
+ *
+ * Refcounted, so the state is captured by whoever locks FIRST and restored by
+ * whoever unlocks LAST — the order the sheets close in stops mattering.
+ */
+let scrollLockDepth = 0;
+let releaseScrollLock: (() => void) | null = null;
+
 function lockScroll() {
-	const targets: HTMLElement[] = [];
-	for (const sel of [".iz-portal-viewport", ".iz-viewport", ".iz-phone"]) {
-		const el = document.querySelector(sel);
-		if (el instanceof HTMLElement) targets.push(el);
-	}
-	const saved = targets.map((el) => ({
-		el,
-		overflow: el.style.overflow,
-		top: el.scrollTop,
-	}));
-	targets.forEach((el) => {
-		el.style.overflow = "hidden";
-	});
-	const bodyOverflow = document.body.style.overflow;
-	document.body.style.overflow = "hidden";
-	return () => {
-		saved.forEach(({ el, overflow, top }) => {
-			el.style.overflow = overflow;
-			el.scrollTop = top;
+	scrollLockDepth += 1;
+	if (scrollLockDepth === 1) {
+		const targets: HTMLElement[] = [];
+		for (const sel of [".iz-portal-viewport", ".iz-viewport", ".iz-phone"]) {
+			const el = document.querySelector(sel);
+			if (el instanceof HTMLElement) targets.push(el);
+		}
+		const saved = targets.map((el) => ({
+			el,
+			overflow: el.style.overflow,
+			top: el.scrollTop,
+		}));
+		targets.forEach((el) => {
+			el.style.overflow = "hidden";
 		});
-		document.body.style.overflow = bodyOverflow;
+		const bodyOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+		releaseScrollLock = () => {
+			saved.forEach(({ el, overflow, top }) => {
+				el.style.overflow = overflow;
+				el.scrollTop = top;
+			});
+			document.body.style.overflow = bodyOverflow;
+		};
+	}
+	// Guarded against a second call: React re-invokes an effect's cleanup in
+	// StrictMode, and a cleanup that decremented twice would drop the count
+	// below the sheets still on screen and unlock the page under them.
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		scrollLockDepth = Math.max(0, scrollLockDepth - 1);
+		if (scrollLockDepth === 0 && releaseScrollLock) {
+			releaseScrollLock();
+			releaseScrollLock = null;
+		}
 	};
 }
 

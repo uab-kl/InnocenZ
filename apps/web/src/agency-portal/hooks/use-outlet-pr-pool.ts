@@ -68,15 +68,41 @@ function averageStarsByPrId(
  * leaving the outlet to guess (see `emptyHint` on DraftPrPicker).
  *
  * Shares `useOutletToday`'s PR query key so the two screens hit one cache entry.
+ *
+ * `agencyIds` narrows the pool to the agencies the job is being sent to — the
+ * "Send to" tick boxes. Post Job passes them because a PR named from an agency
+ * the shift does not invite is DROPPED when the shift is created, so listing
+ * her offered the venue a pick it was never going to get. Omit (or pass an
+ * empty list) for every agency the venue can book from; the server reads the
+ * two the same way and intersects whatever arrives with its own approved links.
  */
-export function useOutletPrPool(): UseOutletPrPool {
+export function useOutletPrPool(agencyIds?: string[]): UseOutletPrPool {
 	const { logout } = useAuth();
 	const backed = getOutletIdentity() !== null;
 	const { ratings } = useOutletRatings();
 
+	// Sorted + deduped so ticking A then B and B then A are ONE cache entry, and
+	// so a caller re-creating the array each render does not refetch.
+	const agencyKey = useMemo(
+		() => [...new Set(agencyIds ?? [])].sort().join(","),
+		[agencyIds],
+	);
+
 	const prsQuery = useQuery({
-		queryKey: ["outlet", "today", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		// The unfiltered pool KEEPS the shared key — Today and History read it too,
+		// and forking their cache to carry a filter neither of them applies would
+		// cost both screens a second request. A filtered pool is different data and
+		// gets its own key rather than overwriting theirs.
+		queryKey: agencyKey
+			? ["outlet", "post-job", "pr-pool", agencyKey]
+			: ["outlet", "today", "prs"],
+		queryFn: () =>
+			fetchPrPersonnel(
+				agencyKey
+					? { pageSize: 500, agencyIds: agencyKey.split(",") }
+					: { pageSize: 500 },
+				logout,
+			),
 		enabled: backed,
 		staleTime: 60_000,
 	});

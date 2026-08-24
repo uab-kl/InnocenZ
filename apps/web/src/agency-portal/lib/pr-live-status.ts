@@ -86,6 +86,57 @@ export function windowsOverlapPadded(
 	return false;
 }
 
+/** `2026-08-25` → `2026-08-24`. UTC arithmetic, so no zone can shift the day. */
+export function previousDayIso(dateIso: string): string {
+	const d = new Date(`${dateIso}T00:00:00Z`);
+	d.setUTCDate(d.getUTCDate() - 1);
+	return d.toISOString().slice(0, 10);
+}
+
+/** 240 → `"04:00"`. */
+function hhmm(minutes: number): string {
+	const h = Math.floor(minutes / 60);
+	const m = minutes % 60;
+	return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * The windows a PR is actually busy for ON `dateIso` — the ones stamped with
+ * that date, PLUS the spill of any overnight window stamped the day BEFORE.
+ *
+ * A shift carries only its START date (`shift.shift_date`), so a 22:00 - 04:00
+ * booking on the 24th is absent from the 25th's bucket while genuinely
+ * occupying its first four hours. Every busy PREVIEW fetched and bucketed by
+ * exact date and so could never see it, while the assign guard reads every
+ * assignment with NO date window and refuses anyway — the preview warned LESS
+ * than the guard it previews, which is how a venue books someone still on
+ * another floor at 02:00 (proven live 24 Aug 2026 with
+ * `_probe-overnight-busy-window-carry.ts`).
+ *
+ * The spill is REBASED into the target day's own frame — 22:00 - 04:00 on the
+ * 24th becomes 00:00 - 04:00 on the 25th — rather than handed over raw. Raw
+ * would appear to work, because `windowsOverlapPadded` already tries a ±1440
+ * shift; but that same shift would also match YESTERDAY's ordinary
+ * 10:00 - 12:00 against TODAY's 10:00 - 12:00 and invent a clash out of two
+ * different days. Only a window that truly wraps may cross midnight, and only
+ * as far as it actually reaches.
+ */
+export function windowsEffectiveOn(
+	byDate: ReadonlyMap<string, string[]> | undefined,
+	dateIso: string,
+): string[] {
+	if (!byDate) return [];
+	const spill: string[] = [];
+	for (const w of byDate.get(previousDayIso(dateIso)) ?? []) {
+		const m = windowMinutes(w);
+		// `windowMinutes` pushes the end past 1440 only when the window wraps,
+		// so this is exactly "did last night reach today".
+		if (!m || m[1] <= 1440) continue;
+		spill.push(`00:00 - ${hhmm(m[1] - 1440)}`);
+	}
+	return [...spill, ...(byDate.get(dateIso) ?? [])];
+}
+
 /** Is this instant (minutes from the day's midnight) inside the window? */
 export function windowContains(win: string, minutes: number): boolean {
 	const w = windowMinutes(win);

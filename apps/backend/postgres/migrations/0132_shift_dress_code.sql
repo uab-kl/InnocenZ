@@ -1,0 +1,36 @@
+-- WHAT THE VENUE ASKED PEOPLE TO WEAR FINALLY REACHES THE PEOPLE.
+--
+-- Post Job has always had a Dress code field. It was required (posting refuses
+-- an "Other" with no text), it was carried on every draft, and it was thrown
+-- away at the mapper — `shift` had no column for it, so the value died in the
+-- browser. Three screens already rendered `shift.dressCode` and simply never
+-- drew the row, because on a real session the field was always undefined:
+-- the outlet's own shift detail, the agency's briefing line, and the PR brief.
+-- A field that is validated on the way in and dropped on the way out is worse
+-- than an absent one — the venue believes it told somebody.
+--
+-- ── WHY A COLUMN AND NOT A LOOKUP TABLE ─────────────────────────────────────
+-- Dress code is free text with five suggestions, not a controlled vocabulary:
+-- the composer's "Other" lets a venue write its own, and the whole point of
+-- that escape hatch is that the list does not bound it. A `dress_code` table
+-- would need a row per distinct phrase per venue and would buy nothing back —
+-- nothing joins on it, nothing aggregates it, and no other table needs to
+-- reference it. Same call `languages` already made one column above.
+--
+-- ── WHY 60, AND WHY THE SAME 60 ─────────────────────────────────────────────
+-- `shift_template.dress_code` (0128) is varchar(60), and a template's dress
+-- code is the SAME fact one step earlier — the composer copies it straight into
+-- the draft when a venue posts from an event card. Two widths for one value is
+-- how a template that saves fine becomes a shift that will not post, so this
+-- matches it exactly. The zod schema and the composer's own input carry the
+-- same 60 for the same reason.
+--
+-- NULLable and no default: a shift posted before today genuinely has no dress
+-- code, which is a different fact from "no particular dress code", and only
+-- NULL can say so. The screens read it as "print nothing".
+--
+-- Hand-written and idempotent because `drizzle-kit generate` cannot run in this
+-- repo (parent-snapshot collision across 0065-0070); see 0080/0129/0130.
+
+ALTER TABLE "main"."shift"
+  ADD COLUMN IF NOT EXISTS "dress_code" varchar(60);

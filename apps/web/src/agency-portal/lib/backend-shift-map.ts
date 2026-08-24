@@ -13,9 +13,7 @@ import {
 	payTierDisplayOrder,
 	postJobPayTierIdForOutletTier,
 } from "@agency-portal/lib/post-job-pay-tiers";
-import {
-	shiftStartInstant,
-} from "@agency-portal/lib/shift-window";
+import { shiftStartInstant } from "@agency-portal/lib/shift-window";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 import type {
 	CreateShiftInput,
@@ -386,6 +384,10 @@ export function shiftRequestFromBackendShift(input: {
 		// backend has ever incremented it.
 		filled: staffing.length,
 		languages: shift.languages ?? "",
+		// The venue's dress code, back from the shift row (0132). Undefined rather
+		// than "" when absent: every reader gates on truthiness to decide whether
+		// to draw the row at all, and an empty string would print an empty label.
+		dressCode: shift.dressCode ?? undefined,
 		event: shift.eventName ?? "Shift",
 		eventKind: shift.eventKind,
 		templateId: shift.templateId ?? undefined,
@@ -424,6 +426,8 @@ export interface OutletShiftPostItem {
 	shift: string;
 	quantity: number;
 	languages: string;
+	/** Resolved dress code — the picked option, or the venue's own "Other" text. */
+	dressCode?: string;
 	event: string;
 	eventKind?: ShiftEventKind;
 	/** Event template this shift was posted from (0128). */
@@ -560,6 +564,13 @@ export function createShiftInputFromPost(
 		eventKind: item.eventKind,
 		templateId: item.templateId,
 		languages: item.languages.trim() || undefined,
+		// 0132. This mapper used to drop the dress code on the floor — the field
+		// was collected, VALIDATED (posting refuses an "Other" with no text) and
+		// then discarded, so three screens that already render it never drew a
+		// row. Trimmed to the column's 60 rather than refused: the value has
+		// already passed the composer's own limit, and a post that dies at the
+		// server over a long dress code would lose the whole shift.
+		dressCode: item.dressCode?.trim().slice(0, 60) || undefined,
 		quantity: nonNegative(Math.round(item.quantity)),
 		preferredRating: clampRating(item.preferredRating),
 		payPerHour: nonNegative(item.payPerHour),

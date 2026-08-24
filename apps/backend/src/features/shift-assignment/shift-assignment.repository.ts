@@ -1248,6 +1248,19 @@ export class ShiftAssignmentRepositoryClass {
          * in the database (defaults to 'normal').
          */
         eventKind: string;
+        /**
+         * WHAT TO WEAR and WHICH LANGUAGES ARE WANTED — the venue's own asks,
+         * read straight off the shift (0132 / `shift.languages`).
+         *
+         * Carried on the PR's feed because the person actually turning up is
+         * who the answer is FOR: the dress code was collected on Post Job,
+         * validated there, and then had nowhere to go, so the venue was
+         * telling nobody. Null when the shift carries none — a shift posted
+         * before this existed genuinely has no answer, which the card prints
+         * as nothing rather than as a blank requirement.
+         */
+        dressCode: string | null;
+        languages: string | null;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -1283,6 +1296,19 @@ export class ShiftAssignmentRepositoryClass {
          * in the database (defaults to 'normal').
          */
         eventKind: string;
+        /**
+         * WHAT TO WEAR and WHICH LANGUAGES ARE WANTED — the venue's own asks,
+         * read straight off the shift (0132 / `shift.languages`).
+         *
+         * Carried on the PR's feed because the person actually turning up is
+         * who the answer is FOR: the dress code was collected on Post Job,
+         * validated there, and then had nowhere to go, so the venue was
+         * telling nobody. Null when the shift carries none — a shift posted
+         * before this existed genuinely has no answer, which the card prints
+         * as nothing rather than as a blank requirement.
+         */
+        dressCode: string | null;
+        languages: string | null;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -1317,6 +1343,19 @@ export class ShiftAssignmentRepositoryClass {
          * in the database (defaults to 'normal').
          */
         eventKind: string;
+        /**
+         * WHAT TO WEAR and WHICH LANGUAGES ARE WANTED — the venue's own asks,
+         * read straight off the shift (0132 / `shift.languages`).
+         *
+         * Carried on the PR's feed because the person actually turning up is
+         * who the answer is FOR: the dress code was collected on Post Job,
+         * validated there, and then had nowhere to go, so the venue was
+         * telling nobody. Null when the shift carries none — a shift posted
+         * before this existed genuinely has no answer, which the card prints
+         * as nothing rather than as a blank requirement.
+         */
+        dressCode: string | null;
+        languages: string | null;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -1351,6 +1390,9 @@ export class ShiftAssignmentRepositoryClass {
           slot: ShiftTable.slot,
           eventName: ShiftTable.eventName,
           eventKind: ShiftTable.eventKind,
+          // The venue's asks, off the shift row already joined here.
+          dressCode: ShiftTable.dressCode,
+          languages: ShiftTable.languages,
           payPerHour: ShiftTable.payPerHour,
           outletId: ShiftTable.outletId,
           outletName: OutletTable.name,
@@ -1436,6 +1478,8 @@ export class ShiftAssignmentRepositoryClass {
           slot: row.slot,
           eventName: row.eventName,
           eventKind: row.eventKind,
+          dressCode: row.dressCode,
+          languages: row.languages,
           payPerHour: row.payPerHour,
           outletId: row.outletId,
           outletName: row.outletName,

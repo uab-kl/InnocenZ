@@ -33,14 +33,5 @@ router.get(
   prAvailabilityController.listCommittedForAgency.bind(prAvailabilityController),
 );
 
-// The OUTLET's half of the busy rule (0131 companion): bare windows for the
-// pool it may post jobs to — times only, no agency, no venue. A narrower
-// read than '/committed' with its own scope, which is why it is a separate
-// route rather than a widened gate on the agency one.
-router.get(
-  '/committed-outlet',
-  requireRole('admin', 'outlet'),
-  prAvailabilityController.listCommittedForOutlet.bind(prAvailabilityController),
-);
 
 export default router;

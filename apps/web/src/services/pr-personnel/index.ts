@@ -108,6 +108,14 @@ export interface PrPersonnelQueryParams {
 	name?: string;
 	// Admin-only; agency callers are pinned to their own agency server-side.
 	agencyId?: string;
+	/**
+	 * Outlet callers only — narrow the pool to these agencies' rosters.
+	 *
+	 * A PREFERENCE, not a grant: the server intersects it with the venue's own
+	 * approved links, so an id the outlet may not book is dropped rather than
+	 * honoured. Omit for every agency the venue can book from.
+	 */
+	agencyIds?: string[];
 	page?: number;
 	pageSize?: number;
 }
@@ -177,6 +185,12 @@ export async function fetchPrPersonnel(
 		tier: params.tier,
 		name: params.name,
 		agencyId: params.agencyId,
+		// Comma-joined: express reads one repeated key as an array and one joined
+		// value as a string, and the server accepts both — this is the shape that
+		// keeps the URL (and therefore the query cache key) short and stable.
+		agencyIds: params.agencyIds?.length
+			? params.agencyIds.join(",")
+			: undefined,
 		page: params.page,
 		pageSize: params.pageSize,
 	});
