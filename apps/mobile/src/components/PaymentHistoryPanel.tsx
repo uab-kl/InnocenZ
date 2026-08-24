@@ -628,7 +628,12 @@ function WeekCard({
               scroll past a table, and find a button whose label says nothing
               about signing. The action a filtered list exists for should not be
               three steps further in. */}
-          {week.status === 'pending' && (
+          {/* `canSign`, NOT `status === 'pending'`. The badge collapses three
+              states into "Pending" and only one of them — `sent` — is the PR's
+              move. Gating on the badge put "Sign this week" directly under this
+              card's own line reading "Waiting for your agency to issue": an
+              offer to sign a voucher that had never been handed over. */}
+          {week.canSign && (
             <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
               <IzButton
                 label="Sign this week"
@@ -736,12 +741,17 @@ function WeekCard({
                 than pulling the signature pad in here: one signing path, on the
                 PV detail screen, where the full breakdown is in front of her
                 when she signs for the money. */}
-            {week.status === 'pending' && (
+            {/* Same gate as the collapsed card — see the note there. */}
+            {week.canSign && (
               <IzButton label="Sign" small fullWidth={false} onPress={onOpenPv} />
             )}
+            {/* Open PV is soft only while it is the SECONDARY action. With no
+                Sign button beside it, it is the only thing to press and should
+                look it — the variant followed the badge, so an un-issued week
+                quietly demoted its own single action. */}
             <IzButton
               label="Open PV"
-              variant={week.status === 'pending' ? 'soft' : undefined}
+              variant={week.canSign ? 'soft' : undefined}
               small
               fullWidth={false}
               onPress={onOpenPv}

@@ -1,6 +1,9 @@
 import {
 	derivePrLiveStatus,
 	type PrLiveStatus,
+	previousDayIso,
+	windowMinutes,
+	windowsEffectiveOn,
 } from "@agency-portal/lib/pr-live-status";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -40,7 +43,15 @@ export function useAgencyPrLiveStatus(
 		queryFn: async () => {
 			const [assignments, committed, blocked] = await Promise.all([
 				fetchShiftAssignments({ pageSize: 500 }, logout),
-				fetchPrCommittedWindows({ from: todayIso, to: todayIso }, logout),
+				// FROM YESTERDAY. A shift carries only its start date, so a
+				// 22:00-04:00 booking is stamped with the night before and a
+				// same-day read cannot see it — at 02:00 the PR is on a floor and
+				// the pill read "available". The blocked-days read stays on today:
+				// a self-declared day off does not run past midnight.
+				fetchPrCommittedWindows(
+					{ from: previousDayIso(todayIso), to: todayIso },
+					logout,
+				),
 				fetchPrAvailability({ from: todayIso, to: todayIso }, logout),
 			]);
 			return { assignments: assignments.data ?? [], committed, blocked };
@@ -56,19 +67,38 @@ export function useAgencyPrLiveStatus(
 
 		const ownOnDuty = new Set<string>();
 		const ownBooked = new Set<string>();
+		const yesterdayIso = previousDayIso(todayIso);
 		for (const a of data.assignments) {
-			if (a.shiftDate?.slice(0, 10) !== todayIso) continue;
+			const day = a.shiftDate?.slice(0, 10);
+			// YESTERDAY counts too, but only for a shift that actually runs past
+			// midnight. Checked in at 22:00 and never checked out IS on duty at
+			// 02:00 — dropping the row for being dated yesterday is what let the
+			// pill call someone standing on a floor "available".
+			const carries =
+				day === yesterdayIso &&
+				!!a.slot &&
+				(windowMinutes(a.slot)?.[1] ?? 0) > 1440;
+			if (day !== todayIso && !carries) continue;
 			if (NON_STAFFING.has(a.status)) continue;
 			const person = a.prId;
 			ownBooked.add(person);
 			if (a.checkInAt && !a.checkOutAt) ownOnDuty.add(person);
 		}
 		const committedByUser = new Map<string, string[]>();
+		const committedByUserDate = new Map<string, Map<string, string[]>>();
 		for (const w of data.committed) {
 			if (!w.slot) continue;
-			const arr = committedByUser.get(w.userId) ?? [];
-			arr.push(w.slot);
-			committedByUser.set(w.userId, arr);
+			const byDate = committedByUserDate.get(w.userId) ?? new Map();
+			const day = w.date.slice(0, 10);
+			byDate.set(day, [...(byDate.get(day) ?? []), w.slot]);
+			committedByUserDate.set(w.userId, byDate);
+		}
+		// Folded to TODAY's frame — yesterday's overnight tail arrives rebased as
+		// `00:00 - 04:00`, so `windowContains(now)` inside `derivePrLiveStatus`
+		// asks the right question at 02:00.
+		for (const [userId, byDate] of committedByUserDate) {
+			const eff = windowsEffectiveOn(byDate, todayIso);
+			if (eff.length > 0) committedByUser.set(userId, eff);
 		}
 		const blockedUsers = new Set(data.blocked.map((b) => b.userId));
 

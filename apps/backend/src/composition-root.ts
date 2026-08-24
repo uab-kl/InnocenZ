@@ -409,7 +409,6 @@ export const prAvailabilityController = new PrAvailabilityControllerClass(
   agencyMemberRepository,
   authRepository,
   outletMemberRepository,
-  agencyOutletRepository,
 );
 export const cutlostRepository = new CutlostRepositoryClass();
 export const cutlostController = new CutlostControllerClass(

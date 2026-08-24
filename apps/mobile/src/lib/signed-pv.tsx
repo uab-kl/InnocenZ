@@ -132,6 +132,12 @@ function buildSignedWeek(input: {
     shifts: Math.max(1, shifts),
     issued: stamp.split(' · ')[0] ?? stamp,
     status: 'signed',
+    // This builder exists BECAUSE the PR just signed it, so there is nothing
+    // left to offer. `canSign` is required rather than optional on the type on
+    // purpose: optional would have let this second construction site keep
+    // silently returning `undefined`, and the button would have disappeared
+    // here for the right reason by accident.
+    canSign: false,
     statusMeta: `Signed ${stamp}`,
     net: Math.round(net * 100) / 100,
     wages: Math.round(wages * 100) / 100,

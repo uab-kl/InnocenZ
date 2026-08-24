@@ -138,9 +138,23 @@ function PostJobPage() {
 	// otherwise every cap silently reads zero and never triggers.
 	const capShifts = backed ? bookedShifts : shifts;
 
+	/**
+	 * Which approved agencies this post goes to (0124). Applies to the WHOLE
+	 * batch, not per draft: an operator composing a week of shifts is choosing a
+	 * staffing partner for that week, and a per-row picker would ask the same
+	 * question a dozen times. Seeded by the picker itself to "all approved".
+	 *
+	 * Declared HERE, above the PR pool, because the pool is now derived from it —
+	 * "Send to" chooses the rosters, and Select PRs may only offer those.
+	 */
+	const [postAgencyIds, setPostAgencyIds] = useState<string[]>([]);
+
 	// Same story for the "Select PRs" list: the demo `prs` slice is blanked for a
 	// real login, so the picker needs the backend pool or it shows nobody.
-	const prPool = useOutletPrPool();
+	//
+	// Scoped to the ticked agencies: an empty selection already means "all
+	// approved" to both the picker and the server, so the default is unchanged.
+	const prPool = useOutletPrPool(postAgencyIds);
 	// Same again for the price list: the Workspace page reads the outlet's real
 	// `outlet_drink_menu`, so Post Job must too or the two screens disagree.
 	const backedWorkspace = useOutletWorkspace();
@@ -207,13 +221,6 @@ function PostJobPage() {
 	};
 
 	const [draftShifts, setDraftShifts] = useState<DraftShift[]>([]);
-	/**
-	 * Which approved agencies this post goes to (0124). Applies to the WHOLE
-	 * batch, not per draft: an operator composing a week of shifts is choosing a
-	 * staffing partner for that week, and a per-row picker would ask the same
-	 * question a dozen times. Seeded by the picker itself to "all approved".
-	 */
-	const [postAgencyIds, setPostAgencyIds] = useState<string[]>([]);
 	// Whether this venue may post at all. Same hook the "Send to" picker reads, so
 	// the button and the picker cannot disagree about it.
 	const agencyLinks = useOutletAgencyLinks();
@@ -247,6 +254,38 @@ function PostJobPage() {
 		);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- sync post-job drafts when workspace rates are saved
 	}, [workspaceRatesKey]);
+
+	// A NAMED PICK MUST NOT OUTLIVE ITS AGENCY BEING UNTICKED.
+	//
+	// Select PRs now lists only the ticked agencies' rosters, so unticking one
+	// takes its people off the list — but ids already sitting on a draft stayed
+	// behind, and the summary printed them as raw uuids (`formatDraftPrNames`
+	// falls back to the id for anyone not in the pool). The server would have
+	// dropped them anyway: shift creation keeps only requests addressed to an
+	// invited agency. So the venue was shown, and counted, a name it was never
+	// going to get.
+	//
+	// People needed is deliberately NOT lowered here. The outlet did not take
+	// these heads off the shift — the change of agency did — and the slots still
+	// have to be filled, now by whoever remains.
+	useEffect(() => {
+		// A demo session has no backend pool at all, and an empty or still-loading
+		// one must never be read as "nobody qualifies" — that would wipe every pick
+		// on each refetch.
+		if (!prPool.backed || prPool.isLoading || prPool.prs.length === 0) return;
+		const allowed = new Set(prPool.prs.map((pr) => pr.id));
+		const keep = (ids: string[]) => ids.filter((id) => allowed.has(id));
+		setComposer((c) =>
+			keep(c.prIds).length === c.prIds.length
+				? c
+				: { ...c, prIds: keep(c.prIds) },
+		);
+		setDraftShifts((cur) =>
+			cur.some((d) => keep(d.prIds).length !== d.prIds.length)
+				? cur.map((d) => ({ ...d, prIds: keep(d.prIds) }))
+				: cur,
+		);
+	}, [prPool.prs, prPool.backed, prPool.isLoading]);
 
 	const namedPrsOnDate = (jobDate: Date, excludeShiftId?: string) => {
 		const iso = isoFromJobDate(jobDate);
@@ -673,8 +712,9 @@ function PostJobPage() {
 
 		// Real session → persist to the backend; the outletId and routed agency are
 		// resolved server-side. Pay-tier rows are persisted as per-shift rate
-		// overrides; the remaining demo-only fields in postItems (drink menus,
-		// dress code, star tiers, named PRs) are dropped by the mapper.
+		// overrides, named PRs as shift_pr_request rows (0131), and the dress code
+		// as shift.dress_code (0132). Still demo-only in postItems: drink menus and
+		// star tiers, which have no column behind them yet.
 		if (backed) {
 			postShifts(postItems, postAgencyIds)
 				.then(() => {

@@ -398,7 +398,16 @@ export function OutletShiftDetailPanel({
 						</p>
 					)}
 				</div>
-				{(shift.dressCode || staffingAgency) && (
+				{/*
+					The venue's own asks, read back off the shift. This row existed
+					before the data did: `dressCode` had no column behind it (0132), so
+					on a real session it was always undefined and the line never drew —
+					the code looked finished and the screen showed nothing. Languages
+					joins it here because the two are one thought ("who am I asking for,
+					and how should they turn up"), and because this panel is where the
+					venue checks what it actually posted.
+				*/}
+				{(shift.dressCode || shift.languages || staffingAgency) && (
 					<p className="iz-tiny iz-muted2 mt-0.5">
 						{shift.dressCode && (
 							<>
@@ -408,7 +417,18 @@ export function OutletShiftDetailPanel({
 								{dressCodeLabel(shift.dressCode, t)}
 							</>
 						)}
-						{shift.dressCode && staffingAgency ? " · " : null}
+						{shift.dressCode && shift.languages ? " · " : null}
+						{shift.languages && (
+							<>
+								<span className="text-[var(--iz-muted)]">
+									{t.today.languagesLabel}{" "}
+								</span>
+								{shift.languages}
+							</>
+						)}
+						{(shift.dressCode || shift.languages) && staffingAgency
+							? " · "
+							: null}
 						{staffingAgency}
 					</p>
 				)}

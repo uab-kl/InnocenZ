@@ -132,13 +132,6 @@ const en = {
 		dashboard: "Dashboard",
 	},
 	agencyHome: {
-		pvTodoSignTitle: "Last week's vouchers need your signature",
-		pvTodoReviewTitle: "Last week's vouchers need your review",
-		pvTodoBothTitle: "Last week's vouchers need review or signature",
-		pvTodoSign: "waiting for a finance signature",
-		pvTodoReview: "waiting for day-by-day review",
-		pvTodoBlocked: "Until this is done, the PR sees nothing for last week.",
-		pvTodoCta: "Open Payroll & PV",
 		totalPr: "Total PR",
 		totalOutlets: "Total outlets",
 		prNeeded: "PR needed today",
@@ -315,8 +308,6 @@ const en = {
 		searchPrPlaceholder: "Search by nickname",
 		// "Scheduled", not "On duty": a drafted time is the future, and only a
 		// check-in stamp may claim on-duty (owner's rule, 23 Aug 2026).
-		busyBadge: "Scheduled",
-		busyTitle: "Booked {time} — pick another face or another hour.",
 		searchPrLabel: "Search PRs by nickname",
 		searchPrClear: "Clear search",
 		noPrMatches: "No PR in your pool matches “{q}”.",
@@ -409,7 +400,7 @@ const en = {
 		helpPeopleNeeded:
 			"How many PRs this shift needs. The pay table splits this number across tiers, and Select PRs can name who you want.",
 		helpSelectPrs:
-			"Optional — name PRs who have worked at your venue before. Slots you leave unnamed are staffed by your agency. Clear all removes every pick.",
+			"Optional — this list is the roster of the agencies you are posting to. Naming a PR is a request, not a guarantee: the agency decides who it sends, and a request only reaches an agency you posted to. Adding or removing names moves People needed up and down with the list. Slots you leave unnamed are staffed by your agency, and Clear all removes every pick.",
 		helpPrices:
 			"Drink and service prices come from your Workspace and apply to every normal event. Use the links to change them there.",
 		helpTierGrid:
@@ -420,7 +411,7 @@ const en = {
 		canDoPostJob2:
 			"Set pay per PR tier, or keep following your Workspace rates",
 		canDoPostJob3:
-			"Name PRs who worked here before, or let the agency staff it",
+			"Request PRs from your agencies' rosters, or let the agency staff it",
 		canDoPostJob4: "Give a special event its own price list",
 		canDoPostJob5: "Add another shift and post them together",
 		canDoPostJob6: "Pick which linked agencies receive the job",
@@ -534,11 +525,7 @@ const en = {
 			"Breaches this week has already earned. Recording them turns each into a charge you can add to a voucher.",
 		couldNotLoadPenalties: "Could not load this week’s penalties.",
 		/** "Record penalties for last week" — the week is appended at the call site. */
-		recordPenaltiesFor: "Record penalties for",
-		thisWeekFallback: "this week",
 		thisWeeksPenalties: "This week's penalties",
-		recording: "Recording…",
-		couldNotRecordPenalties: "Could not record penalties",
 		addToVoucher: "Add to voucher",
 		adding: "Adding…",
 		carriedOver: "Carried over",
@@ -582,12 +569,10 @@ const en = {
 		saved: "Saved",
 		outletFallback: "Outlet",
 		inProgressNotClosed: "in progress · not yet closed",
-		signedVouchersPrefix: "Signed vouchers",
-		andEarlier: "and earlier",
+		/** Payment Week holds every UNPAID voucher now, not a date range. */
+		outstandingVouchersPrefix: "Every voucher still outstanding",
 		readyToPay: "ready to pay",
 		notSignedYet: "not signed yet",
-		thisWeekLower: "this week",
-		lastWeekLower: "last week",
 		signedCountSuffix: "signed",
 		useToRecordTransfer: "to record each bank transfer",
 		paidInHistory: "paid in History",
@@ -670,12 +655,28 @@ const en = {
 		openDemandRow: "Open demand",
 		openDemandCell: "{n} open · waiting to assign",
 		openDemandCount: "{n} open",
-		demandMore: "+{n} more",
+		/**
+		 * The two refusals the assign sheet can hit, kept APART.
+		 *
+		 * Saying "already staffed" over a tier refusal was false on a half-empty
+		 * shift and sent the agency to raise a headcount, which adds unallocated
+		 * seats and opens no tier seat at all.
+		 */
+		everyShiftStaffedFor:
+			"Every shift this day is already staffed for {name} — raise a headcount, or pick another day.",
+		everyShiftTierFull:
+			"The {tier} seats are taken on every shift this day, so {name} cannot take one. The seats still open are for other tiers — the venue sets that mix when it posts the job.",
+		/** The band's own headline: how big the pile is, in one line. */
+		openDemandSummary: "{shifts} shifts · {seats} seats to fill",
+		openDemandOneShift: "1 shift · {seats} seats to fill",
+		openDemandNone: "Nothing waiting to be assigned this week",
+		openDemandEnded: "Ended",
+		autoAssignWorkedHere: "Worked here",
 		demandFilled: "{n}/{total} filled",
 		demandCartHeading: "Requested by the venue",
 		demandBookedHeading: "Booked",
 		demandNoBooked: "Nobody booked yet",
-		demandLess: "Show less",
+		demandCoverZoom: "Open the shift picture full screen",
 		demandFor: "for {names}",
 		swapPending: "Swap pending",
 		lateFlag: "Late flag",
@@ -994,7 +995,7 @@ const en = {
 		activePrs: "Active PRs",
 		unavailablePrs: "Unavailable PRs",
 		estPayout: "Est payout",
-		shiftsThisWeek: "Shifts this week",
+		prsRosteredThisWeek: "PRs rostered this week",
 		estLabourCost: "Est labour cost",
 		liveGps: "Live GPS",
 		prSwapRequests: "PR swap requests",
@@ -2102,6 +2103,7 @@ const en = {
 		eventTypePrefix: "Event type ·",
 		serviceEntitlement: "Service Entitlement",
 		dressCodeLabel: "Dress Code:",
+		languagesLabel: "Languages:",
 		statusSealed: "Sealed",
 		sales: "Sales",
 		laborCost: "Labor cost",
@@ -3008,13 +3010,6 @@ const zh: PortalTranslations = {
 		dashboard: "仪表板",
 	},
 	agencyHome: {
-		pvTodoSignTitle: "上周的付款单等待您签名",
-		pvTodoReviewTitle: "上周的付款单等待您审核",
-		pvTodoBothTitle: "上周的付款单需要审核或签名",
-		pvTodoSign: "等待财务签名",
-		pvTodoReview: "等待逐日审核",
-		pvTodoBlocked: "在完成之前，PR 看不到上周的任何款项。",
-		pvTodoCta: "打开薪资与付款单",
 		totalPr: "PR 总数",
 		totalOutlets: "门店总数",
 		prNeeded: "今日需要 PR",
@@ -3173,8 +3168,6 @@ const zh: PortalTranslations = {
 		tapToAdd: "点击添加",
 		selectedOfCap: "已选 {n}/{cap}",
 		searchPrPlaceholder: "搜索昵称",
-		busyBadge: "已排班",
-		busyTitle: "已有安排 {time} — 请另选 PR 或调整时间。",
 		searchPrLabel: "按昵称搜索 PR",
 		searchPrClear: "清除搜索",
 		noPrMatches: "你的 PR 名单中没有匹配“{q}”的人。",
@@ -3260,7 +3253,7 @@ const zh: PortalTranslations = {
 		helpPeopleNeeded:
 			"本班次所需的 PR 人数。下方薪酬表会把这个人数分配到各等级，「选择 PR」可指定想要的人。",
 		helpSelectPrs:
-			"可选 — 指定曾在本店工作过的 PR。未指定的名额由经纪公司安排。「全部清除」可移除所有已选。",
+			"可选 — 此列表来自您要发布给的经纪公司名册。指定 PR 只是请求，并不保证一定安排到：最终由经纪公司决定派谁，且请求只会送达您已发布的经纪公司。增加或移除指定的人，「所需人数」会随之增减。未指定的名额由经纪公司安排，「全部清除」可移除所有已选。",
 		helpPrices:
 			"酒水与服务价格来自您的工作区，适用于所有普通活动。可通过链接前往修改。",
 		helpTierGrid:
@@ -3269,7 +3262,7 @@ const zh: PortalTranslations = {
 		canDoPostJob1:
 			"发布一个班次，或一次发布多晚 — 在日期选择器中用「3 天 / 1 周」",
 		canDoPostJob2: "按 PR 等级设置薪酬，或继续沿用工作区费率",
-		canDoPostJob3: "指定曾在本店工作过的 PR，或交由经纪公司安排",
+		canDoPostJob3: "从经纪公司名册中请求 PR，或交由经纪公司安排",
 		canDoPostJob4: "为特别活动设置专属价格表",
 		canDoPostJob5: "添加多个班次后一起发布",
 		canDoPostJob6: "选择将职位发送给哪些已关联的经纪公司",
@@ -3363,11 +3356,7 @@ const zh: PortalTranslations = {
 		notYetRecorded: "尚未登记",
 		notYetRecordedHint: "本周已产生的违规。登记后即可作为扣款加入付款凭单。",
 		couldNotLoadPenalties: "无法加载本周的罚款。",
-		recordPenaltiesFor: "登记罚款：",
-		thisWeekFallback: "本周",
 		thisWeeksPenalties: "本周罚款",
-		recording: "登记中…",
-		couldNotRecordPenalties: "罚款登记失败",
 		addToVoucher: "加入付款单",
 		adding: "添加中…",
 		carriedOver: "已结转",
@@ -3405,12 +3394,9 @@ const zh: PortalTranslations = {
 		saved: "已保存",
 		outletFallback: "门店",
 		inProgressNotClosed: "进行中 · 尚未结算",
-		signedVouchersPrefix: "已签署付款单",
-		andEarlier: "及更早",
+		outstandingVouchersPrefix: "所有未结付款单",
 		readyToPay: "可付款",
 		notSignedYet: "张尚未签署",
-		thisWeekLower: "本周",
-		lastWeekLower: "上周",
 		signedCountSuffix: "张已签署",
 		useToRecordTransfer: "登记每笔银行转账",
 		paidInHistory: "张已付款（见历史记录）",
@@ -3473,12 +3459,20 @@ const zh: PortalTranslations = {
 		openDemandRow: "待分配需求",
 		openDemandCell: "空缺 {n} · 待分配",
 		openDemandCount: "空缺 {n}",
-		demandMore: "还有 {n} 个",
+		everyShiftStaffedFor:
+			"当天所有班次都已排满 {name} — 请增加人数，或改选其他日期。",
+		everyShiftTierFull:
+			"当天每个班次的{tier}名额都已排满，{name} 无法加入。仍有空缺的名额属于其他等级 — 该等级组合由门店发布职位时设定。",
+		openDemandSummary: "{shifts} 个班次 · 待补 {seats} 人",
+		openDemandOneShift: "1 个班次 · 待补 {seats} 人",
+		openDemandNone: "本周没有待分配的需求",
+		openDemandEnded: "已结束",
+		autoAssignWorkedHere: "曾在此工作",
 		demandFilled: "已排 {n}/{total}",
 		demandCartHeading: "门店点名",
 		demandBookedHeading: "已预订",
 		demandNoBooked: "尚未预订",
-		demandLess: "收起",
+		demandCoverZoom: "全屏查看班次图片",
 		demandFor: "点名 {names}",
 		swapPending: "换班待处理",
 		lateFlag: "迟到标记",
@@ -3773,7 +3767,7 @@ const zh: PortalTranslations = {
 		activePrs: "在岗 PR",
 		unavailablePrs: "不可排班 PR",
 		estPayout: "预计支出",
-		shiftsThisWeek: "本周班次",
+		prsRosteredThisWeek: "本周已排班 PR",
 		estLabourCost: "预计人力成本",
 		liveGps: "实时定位",
 		prSwapRequests: "PR 换班申请",
@@ -4761,6 +4755,7 @@ const zh: PortalTranslations = {
 		eventTypePrefix: "活动类型 ·",
 		serviceEntitlement: "服务项目",
 		dressCodeLabel: "着装要求：",
+		languagesLabel: "语言：",
 		statusSealed: "已封存",
 		sales: "销售额",
 		laborCost: "人力成本",

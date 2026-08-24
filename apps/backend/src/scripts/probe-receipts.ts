@@ -58,8 +58,13 @@ async function main() {
   console.log('\nLINES WITH NO RECEIPT, BY COMPONENT:');
   for (const r of orphans.rows) console.log(JSON.stringify(r));
 
-  // What `/payment-voucher/mine/history` would and would not return: it filters
-  // to signed+paid, so a week still under review is invisible to History.
+  // What `/payment-voucher/mine/history` returns. It does NOT filter by status
+  // any more — the handler asks for all five (pending_review, sent, signed,
+  // paid, disputed) and excludes only the week still running. This comment used
+  // to say it filtered to signed+paid, which was true of an older handler and
+  // then outlived it: a PR does see a week still under agency review, badged
+  // "Waiting for your agency to issue". A stale note in a diagnostic is worse
+  // than none — it is read precisely when someone is trying to establish facts.
   const vouchers = await db.execute(sql`
     select v.voucher_no, v.status, v.week_start, v.week_end, v.net,
            v.pr_signed_at, v.paid_at, p.name as pr_name,

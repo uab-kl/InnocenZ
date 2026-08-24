@@ -1005,6 +1005,14 @@ export type ShiftAssignmentRecord = {
   eventName: string | null;
   /** `shift.event_kind` — 'normal' | 'special'. Never null (DB default). */
   eventKind: string;
+  /**
+   * WHAT TO WEAR (0132) and WHICH LANGUAGES the venue asked for — its own asks,
+   * off the shift row. Optional so a backend that has not restarted yet reads
+   * as "not said" rather than crashing the card; null when the shift carries
+   * none, which the card prints as nothing.
+   */
+  dressCode?: string | null;
+  languages?: string | null;
   payPerHour: string;
   outletName: string | null;
   /**

@@ -65,6 +65,8 @@ export const CreateShiftSchema = z.object({
   /** The event template this shift was posted from (0128) — optional. */
   templateId: z.string().uuid('Invalid template ID').optional(),
   languages: z.string().max(255, 'Languages is too long').optional(),
+  // 60 to match the column AND `shift_template.dress_code` — see 0132.
+  dressCode: z.string().max(60, 'Dress code is too long').optional(),
   quantity: z.number().int().nonnegative().optional(),
   filled: z.number().int().nonnegative().optional(),
   preferredRating: z.number().int().min(0).max(5).optional(),

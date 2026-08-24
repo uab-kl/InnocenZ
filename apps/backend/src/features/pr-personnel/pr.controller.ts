@@ -161,6 +161,36 @@ function parsePaging(req: Request): { page: number; pageSize: number } {
   return { page, pageSize };
 }
 
+/**
+ * Narrow an outlet's bookable agencies to the ones the caller asked for.
+ *
+ * INTERSECTION, never assignment. The request is a PREFERENCE and the bookable
+ * set is the PERMISSION, so an agency the venue has no approved link with is
+ * dropped rather than honoured — naming one can never widen a caller's own
+ * scope. That is also what sanitises the input: only ids that already matched a
+ * real bookable uuid reach the query, so a junk value can neither cast-error
+ * the SQL nor be smuggled through.
+ *
+ * Exported only so `_probe-post-job-pr-pool-scope.ts` can fire the REAL rule
+ * rather than a copy of it — a probe that restates the logic it is testing can
+ * certify a bug as correct.
+ *
+ * An explicit ask that intersects to NOTHING stays empty, and the repository
+ * reads an empty list as "matches nobody". That is the honest answer to "who is
+ * on the roster of an agency you cannot book from" — falling back to the full
+ * set would answer a question nobody asked with data the caller filtered out.
+ */
+export function narrowToRequestedAgencies(bookable: string[], raw: unknown): string[] {
+  const requested = (
+    typeof raw === 'string' ? raw.split(',') : Array.isArray(raw) ? raw : []
+  )
+    .map((id) => String(id).trim())
+    .filter(Boolean);
+  if (requested.length === 0) return bookable;
+  const asked = new Set(requested);
+  return bookable.filter((id) => asked.has(id));
+}
+
 export class PrControllerClass {
   constructor(
     private prRepository: PrRepositoryClass,
@@ -518,8 +548,20 @@ export class PrControllerClass {
         // A PR under an approved agency is bookable by that agency's outlets,
         // so the pool is the union of those rosters. A person on two of them
         // still appears ONCE: `dedupeByPerson` covers this filter too.
+        //
+        // Post Job narrows this again with `agencyIds`: the picker must list only
+        // the rosters of the agencies the operator ticked in "Send to", because a
+        // request addressed to an agency that is not invited on the shift is
+        // DROPPED on create (see shift.controller) — so naming one was a pick the
+        // venue was never going to get. Narrowing here also settles which
+        // membership a multi-agency PR's card carries: the dedupe keeps one row
+        // per person, and with the un-ticked agencies filtered out the surviving
+        // `agency_id` is always one the shift actually invites.
         agencyIdsIn: isOutletCaller
-          ? await this.resolveBookableAgencyIds(scope.outletIds)
+          ? narrowToRequestedAgencies(
+              await this.resolveBookableAgencyIds(scope.outletIds),
+              req.query.agencyIds,
+            )
           : undefined,
         // Same rule as the agency branch above, for the outlet caller. Admins
         // keep the unfiltered view — the admin PR screen is where an applicant

@@ -1,7 +1,9 @@
+import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
 import {
 	PrComcardIdentity,
 	toComcardPreview,
 } from "@agency-portal/components/agency/PrComcardIdentity";
+import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { formatRM } from "@agency-portal/components/iz/ui";
 import type {
@@ -10,12 +12,18 @@ import type {
 } from "@agency-portal/lib/agency-demo";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
+	ASSIGNABLE_SHIFT_STATUSES,
 	bucketForPrTier,
 	mergeCrossAgencyStaffing,
 	type ShiftBlockReason,
 	shiftBlockedFor,
 	tierLabel,
 } from "@agency-portal/lib/auto-assign";
+import {
+	previousDayIso,
+	windowMinutes,
+	windowsEffectiveOn,
+} from "@agency-portal/lib/pr-live-status";
 import { managedPrFromBackend } from "@agency-portal/lib/pr-personnel-map";
 import { getPrScheduleState } from "@agency-portal/lib/roster-availability";
 import {
@@ -33,21 +41,25 @@ import {
 	shiftBlockLong,
 	shiftBlockShort,
 } from "@agency-portal/lib/shift-block-label";
-import { hasShiftEnded } from "@agency-portal/lib/shift-window";
+import {
+	hasShiftEnded,
+	isEndedAndUnworked,
+	shiftEndDayIso,
+} from "@agency-portal/lib/shift-window";
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
-import { fetchOutletSwaps } from "@/services/outlet-swap";
-import { windowMinutes } from "@agency-portal/lib/pr-live-status";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { dressCodeLabel } from "@/lib/portal-i18n/language-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchOutlets } from "@/services/outlet/outlet";
+import { fetchOutletSwaps } from "@/services/outlet-swap";
 import {
 	blockedDatesByPr,
 	blockedReasonKey,
@@ -250,16 +262,14 @@ export function RosterBackendTimetable({
 		dateIso: string;
 	} | null>(null);
 
-	// Which demand-row days are expanded past their first two cards — a busy
-	// Saturday can hold six posted jobs, and six full cards would make the
-	// header row taller than the roster under it.
-	const [expandedDemandDays, setExpandedDemandDays] = useState<Set<string>>(
-		new Set(),
-	);
-
 	// A tapped demand card opens the whole day: every live shift, who the
 	// venue put in its cart, who is actually booked.
-	const [demandDay, setDemandDay] = useState<string | null>(null);
+	const [demandShift, setDemandShift] = useState<{
+		shiftId: string;
+		dateIso: string;
+	} | null>(null);
+	/** The cover being viewed full-screen; its resolved URL, or null for none. */
+	const [coverZoom, setCoverZoom] = useState<string | null>(null);
 
 	const days = useMemo(() => weekDayIsos(weekStartIso), [weekStartIso]);
 	const fromDate = days[0] ?? weekStartIso;
@@ -293,15 +303,35 @@ export function RosterBackendTimetable({
 	 * can, and flattening the two would undo the rule change.
 	 */
 	const committedQuery = useQuery({
-		queryKey: ["roster", "committed", fromDate, toDate],
+		// FROM ONE DAY EARLIER than the grid shows. A shift is stamped with its
+		// START date, so the week's first column could not otherwise see a
+		// 22:00-04:00 booking that began the night before and is still running.
+		// `windowsEffectiveOn` rebases it into the day it spills into.
+		queryKey: ["roster", "committed", previousDayIso(fromDate), toDate],
 		queryFn: () =>
-			fetchPrCommittedWindows({ from: fromDate, to: toDate }, logout),
+			fetchPrCommittedWindows(
+				{ from: previousDayIso(fromDate), to: toDate },
+				logout,
+			),
 		staleTime: 30_000,
 	});
 	const committedWindows = useMemo(
 		() => committedWindowsByPr(committedQuery.data ?? []),
 		[committedQuery.data],
 	);
+	/**
+	 * The busy windows the assign sheet shows — computed through the SAME
+	 * `windowsEffectiveOn` the grid cell behind it uses, so the sheet and the
+	 * cell cannot disagree about who is free on an overnight.
+	 */
+	const assignSheetBusyWindows = useMemo(() => {
+		if (!assignTarget) return null;
+		const w = windowsEffectiveOn(
+			committedWindows.get(assignTarget.pr.id),
+			assignTarget.dateIso,
+		);
+		return w.length > 0 ? w : null;
+	}, [assignTarget, committedWindows]);
 	// The PR's own words for why. Optional — most blocks carry none.
 	const blockedReasons = useMemo(
 		() => blockedReasonsByPr(availabilityQuery.data ?? []),
@@ -351,11 +381,22 @@ export function RosterBackendTimetable({
 		() => new Map((outletsQuery.data?.data ?? []).map((o) => [o.id, o.name])),
 		[outletsQuery.data],
 	);
+	// The venue's own mark, off the SAME read as its name — no extra request for
+	// the demand band's logos. R2 object keys; `OutletLogoTile` owns the resolver
+	// and the map-pin fallback for the venues that never uploaded one.
+	const outletLogoById = useMemo(
+		() =>
+			new Map(
+				(outletsQuery.data?.data ?? []).map((o) => [o.id, o.logoImage ?? null]),
+			),
+		[outletsQuery.data],
+	);
 
 	// The venue's named asks, keyed pr -> day (0131). Server-scoped to this
 	// agency, so every row here is addressed to us; the outlet NAME may show
 	// (it is our client asking), unlike the anonymous busy windows below.
 	const requestedByPrDate = useMemo(() => {
+		const now = new Date();
 		const map = new Map<
 			string,
 			Map<string, { outlet: string; slot: string | null; shiftId: string }[]>
@@ -363,6 +404,32 @@ export function RosterBackendTimetable({
 		for (const shift of shiftsQuery.data?.data ?? []) {
 			const rows = shift.requestedPrs ?? [];
 			if (rows.length === 0) continue;
+			// A MARKER MUST NOT OUTLIVE THE QUESTION IT ASKS (owner, 24 Aug 2026:
+			// "when they have assigned for all the slots with non-requested pr then
+			// it should make the Outlet Request disappear", and then "as the shift is
+			// closed now the Outlet Request here should also be closed").
+			//
+			// TWO ways the ask stops being answerable, and the first fix only had
+			// one of them — a SEALED shift sat at 6/0, so "is it full" said no and
+			// the chips stayed on a night nobody could be booked onto any more.
+			// Ask the question the agency is actually being asked: can I still act
+			// on this? That is status first, seats second.
+			//
+			// Same ASSIGNABLE_SHIFT_STATUSES the assign guard and the planner read,
+			// never a local "anything except sealed" — that private copy is exactly
+			// what once had two screens disagreeing about the same shift.
+			//
+			// The request ROW is untouched either way: what the venue asked for
+			// stays true whoever ended up working the night.
+			if (!ASSIGNABLE_SHIFT_STATUSES.includes(shift.status)) continue;
+			if ((shift.quantity ?? 0) - (shift.staffedCount ?? 0) <= 0) continue;
+			// THE THIRD way it stops being answerable (owner, 24 Aug 2026: "the
+			// roster down here should also be hidden when the shift is hidden").
+			// The night is over and nobody worked it, so the demand band drops the
+			// card — and a request chip pointing at a shift that is no longer
+			// listed anywhere is a question with no subject. Same predicate as the
+			// band's, so the two cannot disagree about what "hidden" means.
+			if (isEndedAndUnworked(shift, now)) continue;
 			const outlet = outletNameById.get(shift.outletId) ?? "";
 			for (const r of rows) {
 				const byDate =
@@ -557,14 +624,24 @@ export function RosterBackendTimetable({
 		const todayLocal = now.toLocaleDateString("en-CA");
 		for (const s of shiftsQuery.data?.data ?? []) {
 			if (s.status === "sealed") continue;
-			// TODAY's clock-ended shifts STAY (owner, 23 Aug 2026: "the outlet
-			// posted the shift earlier why after check out then agency cannot
-			// assign again"). Stamps and decisions resolve bookings, not clocks
-			// — the demand a venue posted stands for the rest of its day, and a
-			// late assign is a late check-in the phone already allows. Prior
-			// days keep the exclusion: yesterday is genuinely gone.
-			if (s.shiftDate !== todayLocal && hasShiftEnded(s.shiftDate, s.slot, now))
-				continue;
+			// A clock-ended shift STAYS for the rest of the day it ENDED on
+			// (owner, 23 Aug 2026: "the outlet posted the shift earlier why
+			// after check out then agency cannot assign again"). Stamps and
+			// decisions resolve bookings, not clocks — the demand a venue posted
+			// stands until that day is done. Earlier days are genuinely gone.
+			//
+			// ⚠️ Keyed on the END day, not on `shiftDate` (owner, 24 Aug 2026).
+			// The original `s.shiftDate !== todayLocal` measured the day the
+			// shift STARTED, so a 22:00-04:00 posted Monday was dropped at 04:00
+			// Tuesday — the very instant it ended — and the ENDED state could
+			// never render for it. That silently excluded the majority: 21 of
+			// the 40 live rows cross midnight. Now Monday's overnight stays
+			// through Tuesday, exactly as a 14:00 shift stays through Monday.
+			//
+			// A slot with no window yields null and is KEPT, unchanged from
+			// before: `hasShiftEnded` failed open on it too.
+			const endDay = shiftEndDayIso(s.shiftDate, s.slot);
+			if (endDay && endDay < todayLocal) continue;
 			const outletName = outletNameById.get(s.outletId) ?? s.outletId;
 			if (filters.outlet && outletName !== filters.outlet) continue;
 			const list = map[s.shiftDate];
@@ -573,6 +650,40 @@ export function RosterBackendTimetable({
 		}
 		return map;
 	}, [shiftsQuery.data, outletNameById, filters.outlet]);
+
+	/**
+	 * WHICH of those shifts are over. The clock is read ONCE for the whole grid,
+	 * so the demand band, the + buttons and the assign sheet cannot disagree —
+	 * and so the answer cannot drift between three reads taken milliseconds
+	 * apart on either side of an end time.
+	 *
+	 * Ended shifts deliberately STAY in `openShiftsByDay`: c800d5e stopped them
+	 * vanishing, because a venue's unfilled demand disappearing at its own end
+	 * time is how the agency lost sight of it. They are shown, greyed and
+	 * refused — not hidden.
+	 */
+	const endedShiftIds = useMemo(() => {
+		const now = new Date();
+		const set = new Set<string>();
+		for (const list of Object.values(openShiftsByDay)) {
+			for (const s of list) {
+				if (hasShiftEnded(s.shiftDate, s.slot, now)) set.add(s.id);
+			}
+		}
+		return set;
+	}, [openShiftsByDay]);
+
+	/**
+	 * What the assign sheet may offer: the day's open shifts minus the ended
+	 * ones. The server refuses those with a 409, so listing them would only
+	 * manufacture a refusal the agency could have been spared.
+	 */
+	const assignableShiftsForTarget = useMemo(() => {
+		if (!assignTarget) return [];
+		return (openShiftsByDay[assignTarget.dateIso] ?? []).filter(
+			(s) => !endedShiftIds.has(s.id),
+		);
+	}, [assignTarget, openShiftsByDay, endedShiftIds]);
 
 	// Row filter mirrors the demo timetable's filterTimetablePrs, adapted to
 	// backend PRs: name/nickname search, the scheduled/free toggle, and — when
@@ -608,11 +719,300 @@ export function RosterBackendTimetable({
 			.sort((a, b) => a.name.localeCompare(b.name));
 	}, [prsQuery.data, roster, days, filters, shiftFiltersOn]);
 
+	/**
+	 * THE WEEK'S OPEN DEMAND, flattened.
+	 *
+	 * This used to be the grid's first ROW — one cell per day, cards stacked
+	 * inside. Stacking is why it had to hide everything past the second card
+	 * behind a "+2 more": a Saturday with six posted jobs made the header taller
+	 * than the roster beneath it, and the row grew downward without limit.
+	 *
+	 * One entry per SHIFT, carrying its own day, lets the band scroll sideways
+	 * instead. Height is then fixed no matter how much demand there is, nothing
+	 * is hidden behind a toggle, and the grid starts where the roster starts.
+	 *
+	 * Same `openShiftsByDay` the assign dialog reads, so the two can never
+	 * disagree about what is still open. Sealed shifts are gone from that map;
+	 * ENDED ones are NOT — they stay, and this band is the one place that shows
+	 * them, greyed and labelled. The assign dialog subtracts them instead
+	 * (`assignableShiftsForTarget`), which is the whole point: the demand is
+	 * still reportable after its end time even though it is no longer fillable.
+	 */
+	const openDemand = useMemo(() => {
+		const demandNow = new Date();
+		const cards = days.flatMap((dateIso) =>
+			(openShiftsByDay[dateIso] ?? [])
+				.map((shift) => ({
+					shift,
+					dateIso,
+					open: (shift.quantity ?? 0) - (shift.staffedCount ?? 0),
+					// ENDED, not gone (owner, 24 Aug 2026). c800d5e stopped hiding
+					// today's finished shifts because a venue's unfilled demand
+					// vanishing at its own end time is how the agency lost track of
+					// it. It still does not vanish — it goes grey and says so — but
+					// the server now refuses to staff it, so the card must stop
+					// looking like work someone can pick up.
+					ended: endedShiftIds.has(shift.id),
+				}))
+				.filter((d) => d.open > 0)
+				// Nothing left to chase and nobody to pay — see `isEndedAndUnworked`,
+				// the same predicate the grid's request markers read.
+				.filter((d) => !isEndedAndUnworked(d.shift, demandNow)),
+		);
+		// Chronological across the whole week — the same rule the request markers
+		// use, so a card's position means the same thing in both places.
+		cards.sort(
+			(x, y) =>
+				x.dateIso.localeCompare(y.dateIso) ||
+				(windowMinutes(x.shift.slot ?? "")?.[0] ?? 1e9) -
+					(windowMinutes(y.shift.slot ?? "")?.[0] ?? 1e9),
+		);
+		/*
+		 * ONE ROW PER OUTLET (owner, 24 Aug 2026).
+		 *
+		 * A single sideways rail mixed every venue together, so reading "what
+		 * does JK House still need" meant scanning the whole week's cards for a
+		 * repeated name. Grouping first makes the venue the row label, which is
+		 * also why the card below no longer prints the outlet: the row already
+		 * said it, and the space buys the bigger type the owner asked for.
+		 *
+		 * `cards` is already chronological, so each group inherits that order and
+		 * `rows[0]` is that venue's next open shift.
+		 */
+		const byOutlet = new Map<string, typeof cards>();
+		for (const card of cards) {
+			const arr = byOutlet.get(card.shift.outletId) ?? [];
+			arr.push(card);
+			byOutlet.set(card.shift.outletId, arr);
+		}
+		const groups = [...byOutlet.entries()].map(([outletId, rows]) => ({
+			outletId,
+			name: outletNameById.get(outletId) ?? outletId,
+			logo: outletLogoById.get(outletId) ?? null,
+			rows,
+			seats: rows.reduce((sum, d) => sum + d.open, 0),
+		}));
+		// Soonest need first — the venue whose next open shift comes up first
+		// leads, so the band reads as a queue rather than an alphabet.
+		groups.sort(
+			(a, b) =>
+				a.rows[0].dateIso.localeCompare(b.rows[0].dateIso) ||
+				(windowMinutes(a.rows[0].shift.slot ?? "")?.[0] ?? 1e9) -
+					(windowMinutes(b.rows[0].shift.slot ?? "")?.[0] ?? 1e9) ||
+				a.name.localeCompare(b.name),
+		);
+		return {
+			cards,
+			groups,
+			// Seats, not shifts: "3 shifts" understates a night that needs 18 people.
+			seats: cards.reduce((sum, d) => sum + d.open, 0),
+		};
+	}, [days, openShiftsByDay, outletNameById, outletLogoById, endedShiftIds]);
+
+	/**
+	 * The ONE shift the day sheet is open on (owner, 24 Aug 2026: clicking a card
+	 * shows "only the details of the shift that was clicked"). It used to key off
+	 * the DATE and list every open shift that day, so clicking Emhub also showed
+	 * JK House and the reader had to find the card they had just pressed.
+	 *
+	 * Resolved from `openShiftsByDay` rather than captured at click time, so a
+	 * refetch that fills or ends the shift closes the sheet instead of leaving a
+	 * stale copy of it on screen.
+	 */
+	const demandShiftRow = useMemo(() => {
+		if (!demandShift) return null;
+		return (
+			(openShiftsByDay[demandShift.dateIso] ?? []).find(
+				(s) => s.id === demandShift.shiftId,
+			) ?? null
+		);
+	}, [demandShift, openShiftsByDay]);
+
+	/**
+	 * Everything the sheet prints about that one shift, folded here so the JSX
+	 * below is flat. It used to be computed inside a `.map` over the day's
+	 * shifts; with a single shift there is nothing to map over.
+	 */
+	const demandDetail = useMemo(() => {
+		const s = demandShiftRow;
+		if (!s) return null;
+		const booked = bookedByShift.get(s.id) ?? [];
+		const bookedIds = new Set(booked.map((b) => b.prId));
+		return {
+			shift: s,
+			// The SHIFT's own template picture — a different asset space from the
+			// venue's logo beside it, hence the different resolver.
+			cover: apiAssetUrl(s.templateCoverImage),
+			outlet: outletNameById.get(s.outletId) ?? "",
+			logo: outletLogoById.get(s.outletId) ?? null,
+			booked,
+			cart: (s.requestedPrs ?? []).map((r) => ({
+				userId: r.userId,
+				name: prNameById.get(r.userId) ?? "PR",
+				booked: bookedIds.has(r.userId),
+			})),
+			open: (s.quantity ?? 0) - (s.staffedCount ?? 0),
+		};
+	}, [
+		demandShiftRow,
+		bookedByShift,
+		outletNameById,
+		outletLogoById,
+		prNameById,
+	]);
+
 	const weekLabel = weekRangeLabel(weekStartIso);
 	const loading = prsQuery.isLoading || shiftsQuery.isLoading;
 
 	return (
 		<>
+			{/*
+				OPEN DEMAND, lifted out of the grid.
+				
+				It sits ABOVE the roster because it is the question the roster is the
+				answer to — "who still needs covering" read before "who is free". In
+				the grid it was a row like any other, which meant it scrolled away the
+				moment the agency looked down the PR list, and it stole height from the
+				thing it was asking about.
+				
+				The strip scrolls SIDEWAYS and never wraps. That is the whole point: a
+				week with twenty open shifts is a longer scroll, never a taller page,
+				so the roster below always starts in the same place.
+			*/}
+			{openDemand.cards.length > 0 && (
+				<section
+					className="iz-roster-demand-band"
+					aria-label={t.rosterGrid.openDemandRow}
+				>
+					<div className="iz-roster-demand-band-head">
+						<span className="iz-roster-demand-band-title">
+							{t.rosterGrid.openDemandRow}
+						</span>
+						{/* Seats, not just shifts — the number that says how much work
+						    this is. One shift reads as a sentence, not "1 shifts". */}
+						<span className="iz-roster-demand-band-count">
+							{openDemand.cards.length === 1
+								? fill(t.rosterGrid.openDemandOneShift, {
+										seats: openDemand.seats,
+									})
+								: fill(t.rosterGrid.openDemandSummary, {
+										shifts: openDemand.cards.length,
+										seats: openDemand.seats,
+									})}
+						</span>
+					</div>
+
+					{/* One row per venue. Each keeps its OWN sideways rail, so the
+					    band still grows rightwards with the week rather than
+					    downwards — a venue with nine open shifts is a longer scroll
+					    on its own line, not nine lines. */}
+					<div className="iz-roster-demand-outlets">
+						{openDemand.groups.map((group) => (
+							<div className="iz-roster-demand-outlet" key={group.outletId}>
+								<div className="iz-roster-demand-outlet-head">
+									{/* The venue's real mark. Shared tile, so a missing logo
+									    falls back to the map pin the rest of the portal uses
+									    instead of an empty square that reads as a bug. */}
+									{/* Pin sized for the 40px tile — a 14px icon inside it reads
+									    as a mistake rather than as "no logo on file". */}
+									<OutletLogoTile
+										logo={group.logo}
+										className="iz-roster-demand-outlet-logo"
+										iconClassName="h-5 w-5"
+									/>
+									<span className="iz-roster-demand-outlet-name">
+										{group.name}
+									</span>
+									{/* Same two keys as the band total, scoped to this venue —
+									    one shift reads as a sentence, not "1 shifts". */}
+									<span className="iz-roster-demand-outlet-count">
+										{group.rows.length === 1
+											? fill(t.rosterGrid.openDemandOneShift, {
+													seats: group.seats,
+												})
+											: fill(t.rosterGrid.openDemandSummary, {
+													shifts: group.rows.length,
+													seats: group.seats,
+												})}
+									</span>
+								</div>
+
+								<div className="iz-roster-demand-band-rail">
+									{group.rows.map(({ shift, dateIso, open, ended }) => {
+										const { dow, dom } = dayColumnLabel(dateIso);
+										const requested = shift.requestedPrs ?? [];
+										// Two names, then a count. A venue that asked for six
+										// people must not make its card six times taller than its
+										// neighbours — the sheet behind the card lists them all.
+										const shownNames = requested.slice(0, 2);
+										const restNames = requested.length - shownNames.length;
+										return (
+											<button
+												type="button"
+												key={shift.id}
+												className={cn(
+													"iz-roster-demand-card iz-roster-demand-card--rail",
+													todayIso === dateIso && "is-today",
+													ended && "is-ended",
+												)}
+												onClick={() =>
+													setDemandShift({ shiftId: shift.id, dateIso })
+												}
+												title={[
+													group.name,
+													shift.slot,
+													fill(t.rosterGrid.openDemandCell, { n: open }),
+												]
+													.filter(Boolean)
+													.join(" · ")}
+											>
+												<span className="day">
+													{dow} {dom}
+												</span>
+												{shift.slot && (
+													<span className="slot">{shift.slot}</span>
+												)}
+												<span className="count">
+													{fill(t.rosterGrid.openDemandCount, { n: open })}
+												</span>
+												{/* Says the seats are unfillable, not that they were
+												    filled — the count above still reads "6 open"
+												    because six people never turned up. */}
+												{ended && (
+													<span className="ended">
+														{t.rosterGrid.openDemandEnded}
+													</span>
+												)}
+												{/* WHO the venue asked for — its SELECT PRS picks.
+												    Only requests addressed to THIS agency arrive, so
+												    every chip is ours to act on. */}
+												{requested.length > 0 && (
+													<div className="iz-roster-demand-names">
+														{shownNames.map((r) => (
+															<span
+																key={r.userId}
+																className="iz-roster-demand-chip"
+															>
+																{prNameById.get(r.userId) ?? "PR"}
+															</span>
+														))}
+														{restNames > 0 && (
+															<span className="iz-roster-demand-chip">
+																+{restNames}
+															</span>
+														)}
+													</div>
+												)}
+											</button>
+										);
+									})}
+								</div>
+							</div>
+						))}
+					</div>
+				</section>
+			)}
+
 			<div className="iz-roster-week">
 				<div className="iz-roster-week-head">
 					<button
@@ -668,132 +1068,6 @@ export function RosterBackendTimetable({
 							</tr>
 						</thead>
 						<tbody>
-							{/* THE VENUE'S DEMAND, without anyone tapping anything (owner:
-							    "if got outlet demand just show at the time table waiting
-							    for agency assign"). Every posted shift with open seats,
-							    per day, in the pending tone — the same openShiftsByDay
-							    the assign dialog reads, so the two can never disagree
-							    about what is still open. Sealed and ended shifts are
-							    already gone from that map. */}
-							{days.some(
-								(d) =>
-									(openShiftsByDay[d] ?? []).some(
-										(s) => (s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
-									),
-							) && (
-								<tr>
-									<th scope="row" className="iz-roster-week-pr">
-										<div className="iz-roster-week-pr-inner">
-											<span className="text-[10px] font-bold uppercase tracking-wide text-[var(--iz-amber)]">
-												{t.rosterGrid.openDemandRow}
-											</span>
-										</div>
-									</th>
-									{days.map((dateIso) => {
-										const demands = (openShiftsByDay[dateIso] ?? [])
-											.filter(
-												(s) =>
-													(s.quantity ?? 0) - (s.staffedCount ?? 0) > 0,
-											)
-											// Chronological, same rule as the request markers.
-											.sort(
-												(a, b) =>
-													(windowMinutes(a.slot ?? "")?.[0] ?? 1e9) -
-													(windowMinutes(b.slot ?? "")?.[0] ?? 1e9),
-											);
-										// MANY demands, one day (owner: "if that day many demand
-										// how design"): cards go DENSE (no covers), only the first
-										// two show, and a +N more toggle expands the day. One
-										// demand keeps its full card, picture and all.
-										const expanded = expandedDemandDays.has(dateIso);
-										const visibleDemands = expanded
-											? demands
-											: demands.slice(0, 2);
-										const hiddenCount = demands.length - visibleDemands.length;
-										const dense = demands.length > 1;
-										return (
-											<td key={`demand-${dateIso}`} className="iz-roster-week-td">
-												{visibleDemands.map((s) => {
-													const open =
-														(s.quantity ?? 0) - (s.staffedCount ?? 0);
-													const outlet =
-														outletNameById.get(s.outletId) ?? "";
-													const cover = apiAssetUrl(s.templateCoverImage);
-													return (
-														<button
-															type="button"
-															key={s.id}
-															className="iz-roster-demand-card"
-															onClick={() => setDemandDay(dateIso)}
-															title={[
-																outlet,
-																s.slot,
-																fill(t.rosterGrid.openDemandCell, {
-																	n: open,
-																}),
-															]
-																.filter(Boolean)
-																.join(" · ")}
-														>
-															{cover && !dense && (
-																<img
-																	src={cover}
-																	alt=""
-																	className="iz-roster-demand-cover"
-																/>
-															)}
-															<span className="outlet">{outlet}</span>
-															{s.slot && (
-																<span className="slot">{s.slot}</span>
-															)}
-															<span className="count">
-																{fill(t.rosterGrid.openDemandCount, {
-																	n: open,
-																})}
-															</span>
-															{/* WHO the venue asked for — its SELECT PRS picks,
-															    one chip each. Only requests addressed to THIS
-															    agency arrive, so every chip is ours to act on. */}
-															{(s.requestedPrs ?? []).length > 0 && (
-																<div className="iz-roster-demand-names">
-																	{(s.requestedPrs ?? []).map((r) => (
-																		<span
-																			key={r.userId}
-																			className="iz-roster-demand-chip"
-																		>
-																			{prNameById.get(r.userId) ?? "PR"}
-																		</span>
-																	))}
-																</div>
-															)}
-														</button>
-													);
-												})}
-												{(hiddenCount > 0 || expanded) && (
-													<button
-														type="button"
-														className="iz-roster-demand-more"
-														onClick={() =>
-															setExpandedDemandDays((prev) => {
-																const next = new Set(prev);
-																if (next.has(dateIso)) next.delete(dateIso);
-																else next.add(dateIso);
-																return next;
-															})
-														}
-													>
-														{expanded
-															? t.rosterGrid.demandLess
-															: fill(t.rosterGrid.demandMore, {
-																	n: hiddenCount,
-																})}
-													</button>
-												)}
-											</td>
-										);
-									})}
-								</tr>
-							)}
 							{prRows.length === 0 ? (
 								<tr>
 									<td
@@ -842,7 +1116,14 @@ export function RosterBackendTimetable({
 														!shiftFiltersOn || timetableSlotMatches(s, filters),
 												);
 												const open = openShiftsByDay[dateIso] ?? [];
-												const hasOpen = open.length > 0;
+												// ENDED shifts stay in openShiftsByDay so the demand
+												// band can paint them grey, but they are not work
+												// anyone can be given — the server refuses them with
+												// a 409 — so the + must not invite the attempt.
+												const assignable = open.filter(
+													(s2) => !endedShiftIds.has(s2.id),
+												);
+												const hasOpen = assignable.length > 0;
 												// The PR blocked this day. A distinct state from the
 												// "Off" a cancelled assignment paints — that one means
 												// a booking was called off, this one means the person
@@ -865,8 +1146,16 @@ export function RosterBackendTimetable({
 												 * so the roster can be planned around it; who booked her
 												 * is a rival's business and stays out of the payload.
 												 */
+												// `windowsEffectiveOn`, not a bare `.get(dateIso)`: a
+												// shift is stamped with its START date, so last
+												// night's 22:00-04:00 is filed under yesterday while
+												// still occupying this morning.
+												const effectiveBusy = windowsEffectiveOn(
+													committedWindows.get(pr.id),
+													dateIso,
+												);
 												const busyWindows =
-													committedWindows.get(pr.id)?.get(dateIso) ?? null;
+													effectiveBusy.length > 0 ? effectiveBusy : null;
 												// The venue asked for THIS person on THIS day — the
 												// "waiting for agency to approve" state the owner
 												// wants visible on the planning grid.
@@ -941,9 +1230,10 @@ export function RosterBackendTimetable({
 																		.join(" · ")}
 																	disabled={!canAssign}
 																	onClick={() => {
-																		const assignmentId = assignmentIdByPrShift.get(
-																			`${pr.id}|${r.shiftId}`,
-																		);
+																		const assignmentId =
+																			assignmentIdByPrShift.get(
+																				`${pr.id}|${r.shiftId}`,
+																			);
 																		if (assignmentId) onEditSlot(assignmentId);
 																		else setAssignTarget({ pr, dateIso });
 																	}}
@@ -1089,9 +1379,10 @@ export function RosterBackendTimetable({
 																	.join(" · ")}
 																disabled={!canAssign}
 																onClick={() => {
-																	const assignmentId = assignmentIdByPrShift.get(
-																		`${pr.id}|${r.shiftId}`,
-																	);
+																	const assignmentId =
+																		assignmentIdByPrShift.get(
+																			`${pr.id}|${r.shiftId}`,
+																		);
 																	if (assignmentId) onEditSlot(assignmentId);
 																	else setAssignTarget({ pr, dateIso });
 																}}
@@ -1144,60 +1435,87 @@ export function RosterBackendTimetable({
 				</div>
 			</div>
 
-			{demandDay && (
-				<IzSheet open onClose={() => setDemandDay(null)}>
+			{demandShift && demandDetail && (
+				<IzSheet open onClose={() => setDemandShift(null)}>
 					<div className="iz-sheet-head">
 						<div>
 							<p className="iz-tiny iz-muted2 uppercase tracking-widest">
 								{t.rosterGrid.openDemandRow}
 							</p>
-							<h3>{demandDay}</h3>
+							<h3>{demandShift.dateIso}</h3>
 						</div>
 						<button
 							type="button"
 							className="iz-sheet-close"
-							onClick={() => setDemandDay(null)}
+							onClick={() => setDemandShift(null)}
 							aria-label={t.common.close}
 						>
 							<X className="h-4 w-4" />
 						</button>
 					</div>
 					<div className="mt-3 space-y-3">
-						{(openShiftsByDay[demandDay] ?? []).map((s) => {
-							const cover = apiAssetUrl(s.templateCoverImage);
-							const outlet = outletNameById.get(s.outletId) ?? "";
-							const booked = bookedByShift.get(s.id) ?? [];
-							const bookedIds = new Set(booked.map((b) => b.prId));
-							const cart = (s.requestedPrs ?? []).map((r) => ({
-								userId: r.userId,
-								name: prNameById.get(r.userId) ?? "PR",
-								booked: bookedIds.has(r.userId),
-							}));
-							const open = (s.quantity ?? 0) - (s.staffedCount ?? 0);
+						{(() => {
+							const {
+								shift: s,
+								cover,
+								outlet,
+								logo,
+								booked,
+								cart,
+								open,
+							} = demandDetail;
 							return (
-								<div
-									key={s.id}
-									className="rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg-2)] p-3"
-								>
-									<div className="flex items-center gap-3">
-										{cover && (
-											<img
-												src={cover}
-												alt=""
-												className="h-12 w-16 shrink-0 rounded-lg object-cover"
-											/>
+								<div key={s.id} className="iz-demand-sheet-card">
+									{/*
+										The shift's own cover runs the full width of the sheet as
+										a header image, with the venue's mark badged onto its
+										corner. Two 40-odd-pixel tiles side by side next to the
+										text is what made this read as a list row; one picture at
+										a size worth looking at is what makes it read as the
+										night itself. The badge also puts the venue's identity ON
+										the picture, so the pairing needs no caption.
+									*/}
+									<div className="iz-demand-sheet-art">
+										{cover ? (
+											// Zoomable, through the SAME viewer the proof photos use —
+											// it is portalled to <body> at z-300 precisely so it can
+											// escape a translucent transformed sheet like this one. A
+											// shift cover carries the dress the venue wants and the
+											// room it wants it in, and neither survives 146px.
+											<button
+												type="button"
+												className="iz-demand-sheet-cover-btn"
+												onClick={() => setCoverZoom(cover)}
+												aria-label={t.rosterGrid.demandCoverZoom}
+											>
+												<img
+													src={cover}
+													alt=""
+													className="iz-demand-sheet-cover"
+												/>
+												<span className="iz-demand-sheet-zoom-hint" aria-hidden>
+													<Maximize2 className="h-3.5 w-3.5" />
+												</span>
+											</button>
+										) : (
+											<div className="iz-demand-sheet-cover is-empty" />
 										)}
-										<div className="min-w-0 flex-1">
-											<p className="truncate text-sm font-bold text-[var(--iz-txt)]">
-												{outlet}
-											</p>
-											<p className="iz-tiny iz-muted2">
-												{s.slot ?? ""}
-												{s.eventName ? ` · ${s.eventName}` : ""}
-											</p>
+										<OutletLogoTile
+											logo={logo}
+											className="iz-demand-sheet-logo"
+											iconClassName="h-5 w-5"
+										/>
+									</div>
+									<div className="iz-demand-sheet-top">
+										<div className="iz-demand-sheet-titles">
+											<p className="iz-demand-sheet-outlet">{outlet}</p>
+											<p className="iz-demand-sheet-slot">{s.slot ?? ""}</p>
+											{s.eventName && (
+												<p className="iz-demand-sheet-event">{s.eventName}</p>
+											)}
 										</div>
 										<span
-											className={`iz-pill ${open > 0 ? "iz-pill-amber" : "iz-pill-green"} !text-[10px]`}
+											className={`iz-pill ${open > 0 ? "iz-pill-amber" : "iz-pill-green"} iz-demand-sheet-pill`}
 										>
 											{fill(t.rosterGrid.demandFilled, {
 												n: s.staffedCount ?? 0,
@@ -1206,15 +1524,15 @@ export function RosterBackendTimetable({
 										</span>
 									</div>
 									{cart.length > 0 && (
-										<div className="mt-2">
-											<p className="iz-tiny iz-muted2 uppercase tracking-wide">
+										<div className="iz-demand-sheet-section">
+											<p className="iz-demand-sheet-heading">
 												{t.rosterGrid.demandCartHeading}
 											</p>
-											<div className="mt-1 flex flex-wrap gap-1.5">
+											<div className="iz-demand-sheet-pills">
 												{cart.map((c) => (
 													<span
 														key={c.userId}
-														className={`iz-pill ${c.booked ? "iz-pill-green" : "iz-pill-amber"} !text-[10px]`}
+														className={`iz-pill ${c.booked ? "iz-pill-green" : "iz-pill-amber"} iz-demand-sheet-pill`}
 													>
 														{c.name}
 														{" · "}
@@ -1226,20 +1544,20 @@ export function RosterBackendTimetable({
 											</div>
 										</div>
 									)}
-									<div className="mt-2">
-										<p className="iz-tiny iz-muted2 uppercase tracking-wide">
+									<div className="iz-demand-sheet-section">
+										<p className="iz-demand-sheet-heading">
 											{t.rosterGrid.demandBookedHeading}
 										</p>
 										{booked.length === 0 ? (
-											<p className="iz-tiny iz-muted mt-1">
+											<p className="iz-demand-sheet-empty">
 												{t.rosterGrid.demandNoBooked}
 											</p>
 										) : (
-											<div className="mt-1 flex flex-wrap gap-1.5">
+											<div className="iz-demand-sheet-pills">
 												{booked.map((b) => (
 													<span
 														key={b.prId}
-														className="iz-pill iz-pill-green !text-[10px]"
+														className="iz-pill iz-pill-green iz-demand-sheet-pill"
 													>
 														{b.name}
 													</span>
@@ -1249,24 +1567,32 @@ export function RosterBackendTimetable({
 									</div>
 								</div>
 							);
-						})}
+						})()}
 					</div>
 				</IzSheet>
+			)}
+			{/*
+				OUTSIDE the sheet, and kept in its own state rather than derived from
+				`demandDetail`, so closing the zoom returns you to the sheet you were
+				reading instead of dismissing both.
+			*/}
+			{coverZoom && (
+				<PhotoLightbox
+					photo={coverZoom}
+					alt={demandDetail?.outlet ?? t.rosterGrid.openDemandRow}
+					onClose={() => setCoverZoom(null)}
+				/>
 			)}
 			{assignTarget && (
 				<AssignBackendCellSheet
 					pr={assignTarget.pr}
 					dateIso={assignTarget.dateIso}
-					shifts={openShiftsByDay[assignTarget.dateIso] ?? []}
+					shifts={assignableShiftsForTarget}
 					staffingByShift={staffingByShift}
 					outletNameById={outletNameById}
 					// The same windows the grid greys behind this sheet, so the two
 					// cannot disagree about who is free.
-					busyWindows={
-						committedWindows
-							.get(assignTarget.pr.id)
-							?.get(assignTarget.dateIso) ?? null
-					}
+					busyWindows={assignSheetBusyWindows}
 					onAssign={onAssign}
 					onClose={() => setAssignTarget(null)}
 				/>
@@ -1592,6 +1918,40 @@ function AssignBackendCellSheet({
 													? t.rosterGrid.specialEvent
 													: t.rosterGrid.normalShift}
 											</p>
+											{/*
+												WHAT THE VENUE ASKED FOR — the dress code (0132) and the
+												languages it would like. The agency is the one choosing
+												WHO goes, so this is the only screen where the ask can
+												still change the answer; by the time the PR reads it on
+												her own card the decision has been made for her.
+												Both are optional, and a shift that names neither draws
+												no row rather than an empty one.
+											*/}
+											{/*
+												A ROW EACH (owner, 24 Aug 2026). Sharing one truncated
+												line meant the dress code always won and the languages
+												were cut mid-word — "Languages: Cant…" — so the half the
+												agency is meant to act on was the half that never
+												survived. Languages WRAPS rather than truncating: a
+												venue asking for three of them is asking for all three,
+												and an ellipsis hides which.
+											*/}
+											{shift.dressCode?.trim() && (
+												<p className="iz-tiny iz-muted2 mt-0.5 truncate">
+													<span className="iz-muted">
+														{t.today.dressCodeLabel}
+													</span>{" "}
+													{dressCodeLabel(shift.dressCode, t)}
+												</p>
+											)}
+											{shift.languages?.trim() && (
+												<p className="iz-tiny iz-muted2 mt-0.5 leading-snug">
+													<span className="iz-muted">
+														{t.today.languagesLabel}
+													</span>{" "}
+													{shift.languages}
+												</p>
+											)}
 											<p
 												className={cn(
 													"iz-tiny mt-1",
@@ -1674,9 +2034,31 @@ function AssignBackendCellSheet({
 					    otherwise reads as a broken screen. */}
 					{selectable.length === 0 && (
 						<p className="iz-tiny iz-muted2 mt-3 leading-snug">
-							Every shift this day is already staffed for{" "}
-							{formatPayeeLabel(pr.nickname, pr.name)} — raise a headcount, or
-							pick another day.
+							{/*
+								WHICH RULE REFUSED — read, not guessed at.
+
+								This sentence said "already staffed, raise a headcount" for every
+								refusal there is. On a 2/6 shift that is false, and it names a
+								remedy that cannot work: raising the headcount adds UNALLOCATED
+								seats, it does not open a Tier I seat. The agency is sent to argue
+								with the wrong number.
+
+								`shiftBlockedFor` already separates the two — it reports `full`
+								before `tier-full` — so the reason only had to be read.
+							*/}
+							{shifts.length > 0 &&
+							shifts.every(
+								(s) =>
+									blockedById.get(s.id)?.kind === "tier-full" ||
+									unavailableById.get(s.id),
+							)
+								? fill(t.rosterGrid.everyShiftTierFull, {
+										name: formatPayeeLabel(pr.nickname, pr.name),
+										tier: tierLabel(pr.tier),
+									})
+								: fill(t.rosterGrid.everyShiftStaffedFor, {
+										name: formatPayeeLabel(pr.nickname, pr.name),
+									})}
 						</p>
 					)}
 

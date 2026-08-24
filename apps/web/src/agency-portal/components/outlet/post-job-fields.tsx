@@ -85,8 +85,6 @@ import {
 	workspaceTierRatesSignature,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import { formatStars } from "@agency-portal/lib/pr-rating-summary";
-import { useOutletBusyWindows } from "@agency-portal/hooks/use-outlet-busy-windows";
-import { windowsOverlapPadded } from "@agency-portal/lib/pr-live-status";
 import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -1159,7 +1157,6 @@ export type DraftPrCandidate = {
 
 export function DraftPrPicker({
 	candidates: candidatesProp,
-	busyByUserId,
 	emptyHint,
 	selected,
 	onSelectedChange,
@@ -1173,7 +1170,6 @@ export function DraftPrPicker({
 	/** Real signed-in outlets pass their backend PR pool; demo sessions omit it. */
 	candidates?: DraftPrCandidate[];
 	/** Windows overlapping the drafted time, per user — the On-duty badge. */
-	busyByUserId?: Map<string, string[]>;
 	/** Replaces the bare "No PRs available" line with why the pool is empty. */
 	emptyHint?: string;
 	selected: string[];
@@ -1344,16 +1340,17 @@ export function DraftPrPicker({
 											name={p.name}
 											pr={"comcard" in p ? p.comcard : undefined}
 										/>
-										{p.userId && busyByUserId?.get(p.userId) && (
-											<span
-												className="iz-pill iz-pill-amber absolute right-1 top-1 !py-0 !text-[9px]"
-												title={fill(t.postJob.busyTitle, {
-													time: (busyByUserId.get(p.userId) ?? []).join(", "),
-												})}
-											>
-												{t.postJob.busyBadge}
-											</span>
-										)}
+										{/*
+											NO BUSY BADGE HERE (owner, 24 Aug 2026), reversing the
+											23 Aug call that a venue "must learn the PR is taken".
+											Naming this list is a REQUEST, not a booking — the
+											agency decides who actually goes — so "already
+											scheduled" answers a question the venue does not get to
+											ask, and bare times still tell it she is working
+											somewhere tonight. The agency keeps its own busy marker
+											on the roster grid, where the person doing the staffing
+											can act on it.
+										*/}
 									</div>
 									<div className="mt-1.5 truncate text-xs font-semibold text-[var(--iz-txt)]">
 										{p.name}
@@ -1607,28 +1604,6 @@ export function DraftShiftEditor({
 				: storeWorkspace,
 		[storeWorkspace, workspaceRates],
 	);
-	// WHEN the pool is spoken for on the drafted dates — bare windows, no
-	// venue, no agency (the cross-agency busy rule). A card whose PR is taken
-	// during the drafted time wears an On-duty badge, so the outlet knows to
-	// pick another face or another hour before the agency has to refuse.
-	const busyWindows = useOutletBusyWindows(shift.selectedDateIsos);
-	const busyByUserId = useMemo(() => {
-		const map = new Map<string, string[]>();
-		if (!shift.shiftTime) return map;
-		for (const [userId, byDate] of busyWindows.byUser) {
-			const hits: string[] = [];
-			for (const iso of shift.selectedDateIsos) {
-				for (const w of byDate.get(iso) ?? []) {
-					// Padded by the travel cooldown: a shift ending 19:00 still
-					// blocks a 19:15 draft — she cannot teleport between venues.
-					if (windowsOverlapPadded(w, shift.shiftTime)) hits.push(w);
-				}
-			}
-			if (hits.length > 0) map.set(userId, hits);
-		}
-		return map;
-	}, [busyWindows.byUser, shift.selectedDateIsos, shift.shiftTime]);
-
 	const workspaceRatesKey = workspaceTierRatesSignature(
 		outletWorkspace.tierRates,
 	);
@@ -1721,6 +1696,9 @@ export function DraftShiftEditor({
 		peopleRemaining !== undefined
 			? peopleRemaining
 			: subscriptionPlan.prPerDayMax;
+	// The stepper's own floor, shared so un-naming a PR can never push People
+	// needed below what the stepper itself would let the outlet type.
+	const minPeople = maxPeople > 0 ? 1 : 0;
 	const dateLabel = formatJobDates(shift.selectedDateIsos, t);
 	const peopleNeededHint = formatOutletPlanDailyHeadcountHint(
 		subscriptionPlan,
@@ -1826,6 +1804,45 @@ export function DraftShiftEditor({
 			tierRates,
 			payPerHour: basePayFromPayTierRows(payTierRows),
 			prIds: shift.prIds.slice(0, capped),
+		});
+	};
+
+	// PEOPLE NEEDED FOLLOWS THE NAMED LIST BOTH WAYS.
+	//
+	// It only ever tracked the way UP: naming past the count raised it, but
+	// un-naming left the count stranded a slot too high, so the venue kept asking
+	// for a head it had just taken off the list — and the day's plan cap, the
+	// tier split and the posted quantity were all charged for it.
+	//
+	// The two rules mirror each other on purpose. The count moves only while the
+	// list is at or past it, which is exactly when naming moves it up, so a
+	// partly-named shift (3 named of 6 needed) is left alone in both directions.
+	// The tier rows are re-split the same way the stepper re-splits them, because
+	// the tier total — not this number — is what the summary and the post read.
+	const updateSelectedPrs = (prIds: string[]) => {
+		const removed = shift.prIds.length - prIds.length;
+		const nextQuantity =
+			prIds.length > shift.quantity
+				? prIds.length
+				: removed > 0 && shift.prIds.length >= shift.quantity
+					? Math.max(minPeople, shift.quantity - removed)
+					: shift.quantity;
+		if (nextQuantity === shift.quantity) {
+			onChange({ prIds });
+			return;
+		}
+		// prIds is NOT re-sliced here — this handler's input IS the list the outlet
+		// just edited, and trimming it would silently undo the click that fired it.
+		const payTierRows = adjustPayTierRowsToTotal(
+			shift.payTierRows,
+			nextQuantity,
+		);
+		onChange({
+			prIds,
+			quantity: nextQuantity,
+			payTierRows,
+			tierRates: syncTierRatesFromPayTierRows(payTierRows, shift.tierRates),
+			payPerHour: basePayFromPayTierRows(payTierRows),
 		});
 	};
 
@@ -1996,7 +2013,7 @@ export function DraftShiftEditor({
 						<QuantityStepper
 							value={shift.quantity}
 							onChange={updatePeopleNeeded}
-							min={maxPeople > 0 ? 1 : 0}
+							min={minPeople}
 							max={maxPeople > 0 ? maxPeople : 0}
 							suffix={t.postJob.prsUnit}
 						/>
@@ -2017,15 +2034,9 @@ export function DraftShiftEditor({
 					) : (
 						<DraftPrPicker
 							candidates={prCandidates}
-					busyByUserId={busyByUserId}
 							emptyHint={prEmptyHint}
 							selected={shift.prIds}
-							onSelectedChange={(prIds) =>
-								onChange({
-									prIds,
-									quantity: Math.max(shift.quantity, prIds.length),
-								})
-							}
+							onSelectedChange={updateSelectedPrs}
 							quantity={shift.quantity}
 							poolSize={subscriptionPlan.prPoolSize}
 							maxSelect={subscriptionPlan.prSelectMax}
@@ -2080,6 +2091,11 @@ export function DraftShiftEditor({
 								className="iz-job-posting-control iz-job-posting-input w-full min-w-0 text-sm"
 								placeholder={t.postJob.nameDressCodeField}
 								aria-label={t.postJob.customDressCode}
+								// The column's own width (0132), enforced where the venue can SEE
+								// the limit. Without it a long line typed here would be silently
+								// clipped by the mapper on the way out, and the venue would read
+								// its own half-sentence back off the PR's card.
+								maxLength={60}
 								value={shift.customDressCode ?? ""}
 								onChange={(e) => onChange({ customDressCode: e.target.value })}
 							/>

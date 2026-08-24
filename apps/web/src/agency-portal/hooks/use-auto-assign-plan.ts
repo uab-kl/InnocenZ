@@ -12,6 +12,7 @@ import {
 	getLiveTodayIso,
 	getPayrollWeekSundayIso,
 } from "@agency-portal/lib/demo-clock";
+import { hasShiftEnded } from "@agency-portal/lib/shift-window";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -148,11 +149,31 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		return map;
 	}, [shiftsQuery.data]);
 
+	/**
+	 * The week's shifts MINUS the ones that are over (owner, 24 Aug 2026: "this
+	 * part should also hide the shifts that have ended already").
+	 *
+	 * The server now refuses to staff an ended shift with a 409, so proposing
+	 * one is exactly the failure the `blockedDatesByPr` note below describes —
+	 * a preview that promises what the write cannot deliver. Worse here,
+	 * because the planner proposes in BULK: one ended shift in the list turns a
+	 * single Confirm into a partial success the agency then has to unpick.
+	 *
+	 * `hasShiftEnded`, never a date comparison — 21 of the live rows cross
+	 * midnight, and a 22:00-04:00 shift is perfectly staffable at 01:00.
+	 */
+	const liveWeekShifts = useMemo(() => {
+		const now = new Date();
+		return (shiftsQuery.data?.data ?? []).filter(
+			(s) => !hasShiftEnded(s.shiftDate, s.slot, now),
+		);
+	}, [shiftsQuery.data]);
+
 	const plan = useMemo<AutoAssignPlan>(() => {
 		if (!backed) return EMPTY_AUTO_ASSIGN_PLAN;
 		const outlets = outletsQuery.data?.data ?? [];
 		return buildAutoAssignPlan({
-			weekShifts: shiftsQuery.data?.data ?? [],
+			weekShifts: liveWeekShifts,
 			weekAssignments: assignmentsQuery.data?.data ?? [],
 			prs: prsQuery.data?.data ?? [],
 			outletNameById: new Map(outlets.map((o) => [o.id, o.name])),
@@ -179,13 +200,13 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		});
 	}, [
 		backed,
-		shiftsQuery.data,
 		assignmentsQuery.data,
 		prsQuery.data,
 		outletsQuery.data,
 		availabilityQuery.data,
 		targetDates,
 		requestedPrIdsByShift,
+		liveWeekShifts,
 	]);
 
 	/**

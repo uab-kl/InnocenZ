@@ -39,6 +39,8 @@ export interface Shift {
 	/** That template's cover picture (R2 key), joined server-side. */
 	templateCoverImage?: string | null;
 	languages: string | null;
+	/** What the venue asked people to wear (0132); null when it gave no answer. */
+	dressCode?: string | null;
 	quantity: number;
 	filled: number;
 	preferredRating: number | null;
@@ -153,6 +155,8 @@ export interface CreateShiftInput {
 	/** The event template this shift was posted from (0128). */
 	templateId?: string;
 	languages?: string;
+	/** Max 60 — the column's own width, and the template's (0132). */
+	dressCode?: string;
 	quantity?: number;
 	filled?: number;
 	preferredRating?: number;

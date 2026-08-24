@@ -86,6 +86,14 @@ export type DemoShift = {
    * it; callers fall back to 'Normal shift', which is also the column default.
    */
   eventKind?: string;
+  /**
+   * What the venue asked people to WEAR (0132), and the languages it would
+   * like. Optional: the fixtures below predate both, and a shift posted before
+   * the column existed genuinely has no answer. The card draws nothing for a
+   * missing one rather than an empty requirement.
+   */
+  dressCode?: string | null;
+  languages?: string | null;
   date: Ymd;
   time: string;
   /** RM — shown on its own strip; the event moved to the card header. */

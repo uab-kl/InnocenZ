@@ -10740,8 +10740,13 @@ button.iz-pr-offer-row:hover {
 	height: 30px;
 	padding: 0 8px 0 6px;
 	border-radius: 10px;
-	border: 1px solid var(--iz-line);
-	background: var(--iz-glass2);
+	/* No box. The pill's border + fill read as a black square parked in the
+	   top-left corner of every page, which is chrome competing with the page
+	   title beside it. The arrow and the word are the control. Kept
+	   transparent rather than removed so the hover state has something to
+	   paint into and the metrics do not shift by a pixel. */
+	border: 1px solid transparent;
+	background: transparent;
 	color: var(--iz-muted);
 	font-family: "Sora", sans-serif;
 	font-size: 11px;
@@ -10755,7 +10760,9 @@ button.iz-pr-offer-row:hover {
 		background 0.15s;
 }
 .iz-topbar-back:hover {
-	border-color: var(--iz-line2);
+	/* Brightening the label is the whole affordance now — restoring a border
+	   on hover would put the square back for exactly as long as the pointer
+	   is over it. */
 	color: var(--iz-txt);
 	background: rgba(255, 255, 255, 0.05);
 }
@@ -13351,7 +13358,20 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-page .iz-outlet-detail-section__badge {
 	font-size: 15px;
 }
-.iz-outlet-detail-back {
+/*
+ * The roomier back pill — Manage Outlet's, and now Payroll's PV detail.
+ *
+ * TWO names, ONE rule, on purpose. The owner asked for the PV Return to copy
+ * this exact design; copying the VALUES would have made a second definition of
+ * the same look, free to drift the moment either page is restyled. The outlet
+ * keeps its historical class name so its markup needs no edit.
+ *
+ * It re-declares border and background, which is why it still reads as a pill
+ * after the base .iz-topbar-back went transparent: the plain control lost its
+ * box, this one never had the plain box to begin with.
+ */
+.iz-outlet-detail-back,
+.iz-topbar-back--pill {
 	display: inline-flex;
 	align-self: flex-start;
 	align-items: center;
@@ -15683,9 +15703,11 @@ button.iz-pr-offer-row:hover {
 	cursor: pointer;
 	display: flex;
 	flex-direction: column;
-	gap: 3px;
+	gap: 4px;
 	width: 100%;
-	padding: 6px 7px;
+	/* Padding follows the type — 6px/7px was set for 9px text and reads as a
+	   squeeze once the same box holds 14px. */
+	padding: 9px 11px;
 	border-radius: 10px;
 	border: 1px dashed rgba(232, 194, 122, 0.55);
 	background: linear-gradient(
@@ -15705,8 +15727,11 @@ button.iz-pr-offer-row:hover {
 	border-radius: 7px;
 	margin-bottom: 1px;
 }
+/* Type went up a notch when the band was grouped by venue, and up again on 24
+   Aug 2026 when the owner said it was still too small. The slot is the fact
+   the agency actually reads off a card, so it carries the largest step. */
 .iz-roster-demand-card .outlet {
-	font-size: 11px;
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	max-width: 100%;
@@ -15715,56 +15740,379 @@ button.iz-pr-offer-row:hover {
 	white-space: nowrap;
 }
 .iz-roster-demand-card .slot {
-	font-size: 10px;
+	font-size: 14px;
+	font-weight: 600;
 	color: var(--iz-gold-l);
 	font-variant-numeric: tabular-nums;
 }
 .iz-roster-demand-card .count {
 	align-self: flex-start;
-	font-size: 9px;
+	font-size: 12px;
 	font-weight: 800;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
 	color: #241806;
 	background: var(--iz-gold-l);
 	border-radius: 999px;
-	padding: 2px 7px;
+	padding: 3px 10px;
 }
-.iz-roster-demand-more {
-	width: 100%;
-	margin-top: 4px;
-	padding: 3px 0;
-	border-radius: 8px;
-	border: 1px dashed rgba(232, 194, 122, 0.35);
-	background: transparent;
-	color: var(--iz-gold-l);
-	font-size: 9px;
+/* ENDED (owner, 24 Aug 2026). The card stays — an unfilled shift the venue
+   never got staff for is a fact the agency needs — but it must stop reading as
+   available work: the colour drains out, the gold seat-count goes neutral, and
+   a plain chip says why. Deliberately NOT `opacity` on the whole card, which
+   would take the request chips down with it and make the names hard to read at
+   the very moment someone is working out what went wrong. */
+.iz-roster-demand-card.is-ended {
+	border-color: var(--iz-line);
+	background: rgba(255, 255, 255, 0.02);
+}
+.iz-roster-demand-card.is-ended .day,
+.iz-roster-demand-card.is-ended .slot {
+	color: var(--iz-muted2);
+}
+.iz-roster-demand-card.is-ended .count {
+	background: rgba(255, 255, 255, 0.1);
+	color: var(--iz-muted);
+}
+.iz-roster-demand-card .ended {
+	align-self: flex-start;
+	font-size: 11px;
 	font-weight: 800;
-	letter-spacing: 0.05em;
 	text-transform: uppercase;
-	cursor: pointer;
-}
-.iz-roster-demand-more:hover {
-	background: rgba(232, 194, 122, 0.08);
+	letter-spacing: 0.07em;
+	color: var(--iz-muted);
+	border: 1px solid var(--iz-line);
+	border-radius: 999px;
+	padding: 2px 8px;
 }
 
 .iz-roster-demand-names {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 3px;
+	gap: 4px;
 }
 .iz-roster-demand-chip {
-	font-size: 9px;
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-gold-l);
 	border: 1px solid rgba(232, 194, 122, 0.45);
 	background: rgba(232, 194, 122, 0.1);
 	border-radius: 999px;
-	padding: 1px 6px;
+	padding: 2px 8px;
 	max-width: 100%;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* OPEN DEMAND BAND — the week's unassigned shifts, lifted out of the grid.
+
+   The rail scrolls SIDEWAYS and never wraps, which is the whole reason this
+   left the table: as a row it grew downward with every extra posted job and
+   pushed the roster off the screen, so the cards past the second had to hide
+   behind a "+N more". Height here is fixed by the card, not by the count.
+
+   Same dashed gold language as the cards had in the grid — nothing is
+   committed until the agency assigns somebody. */
+.iz-roster-demand-band {
+	margin-bottom: 10px;
+	padding: 10px 12px;
+	border-radius: 14px;
+	border: 1px solid rgba(232, 194, 122, 0.28);
+	background:
+		linear-gradient(
+			160deg,
+			rgba(232, 194, 122, 0.08),
+			rgba(232, 194, 122, 0.02)
+		),
+		var(--iz-card);
+}
+.iz-roster-demand-band-head {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-bottom: 8px;
+}
+.iz-roster-demand-band-title {
+	font-size: 13px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--iz-amber);
+}
+.iz-roster-demand-band-count {
+	font-size: 14px;
+	color: var(--iz-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ONE ROW PER VENUE (owner, 24 Aug 2026).
+
+   The band used to be a single rail with every venue's cards mixed together, so
+   "what does JK House still need" meant scanning the week for a repeated name.
+   Each venue now owns a line: its logo and name label it once on the left, and
+   its own rail carries its shifts.
+
+   The rail stays HORIZONTAL inside each row on purpose. That is what keeps the
+   original promise — a venue with nine open shifts is a longer sideways scroll
+   on its line, never nine more lines pushing the roster off the screen. */
+.iz-roster-demand-outlets {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.iz-roster-demand-outlet {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 9px;
+	border-radius: 11px;
+	border: 1px solid rgba(232, 194, 122, 0.16);
+	background: rgba(255, 255, 255, 0.015);
+	/* The row is its own scroll context, so one venue's overflow cannot drag
+	   its neighbours sideways with it. */
+	min-width: 0;
+}
+.iz-roster-demand-outlet-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+/* Sized and tinted here; `OutletLogoTile` only says what goes inside it, and
+   falls back to the portal's map pin for a venue with no mark on file.
+
+   40px, not the 26px this shipped at (owner, 24 Aug 2026: "the logo is too
+   small"). A 26px square is a favicon — too small to recognise a venue by,
+   which is the only job it has in a row that already spells the name. */
+.iz-roster-demand-outlet-logo {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	flex: 0 0 40px;
+	border-radius: 11px;
+	border: 1px solid rgba(232, 194, 122, 0.34);
+	background: rgba(232, 194, 122, 0.1);
+	color: var(--iz-gold-l);
+}
+.iz-roster-demand-outlet-name {
+	font-family: "Sora", sans-serif;
+	font-size: 17px;
+	font-weight: 800;
+	color: var(--iz-txt);
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.iz-roster-demand-outlet-count {
+	flex: 0 0 auto;
+	font-size: 13px;
+	color: var(--iz-muted);
+	font-variant-numeric: tabular-nums;
+}
+/* THE OPEN-DEMAND SHEET (owner, 24 Aug 2026: "the images and the fonts look
+   very small").
+
+   It was built out of Tailwind micro-classes — `h-12 w-16` for the cover, two
+   ~40px tiles side by side, `iz-tiny` body copy and `!text-[10px]` pills that
+   overrode `.iz-pill`'s own 15px down to almost nothing. At that scale the
+   sheet read as a denser copy of the list row it came from, which is the one
+   thing a detail view must not do.
+
+   The picture now runs the full width as a header image with the venue's mark
+   badged into its corner, and every size is named here instead of being spelt
+   out at each call site. */
+.iz-demand-sheet-card {
+	border-radius: 16px;
+	border: 1px solid var(--iz-line);
+	background: var(--iz-bg-2);
+	overflow: hidden;
+}
+.iz-demand-sheet-art {
+	position: relative;
+	line-height: 0;
+}
+/* The cover is a BUTTON that opens the full-screen viewer — reset the UA button
+   chrome, and make the whole picture the hit area rather than a small corner
+   icon: the affordance people try first on a photo is the photo. */
+.iz-demand-sheet-cover-btn {
+	display: block;
+	position: relative;
+	width: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	cursor: zoom-in;
+	line-height: 0;
+}
+.iz-demand-sheet-cover {
+	display: block;
+	width: 100%;
+	height: 150px;
+	object-fit: cover;
+}
+/* A quiet corner glyph so the picture reads as openable without a caption. It
+   is `aria-hidden` — the button's own label carries the meaning. */
+.iz-demand-sheet-zoom-hint {
+	position: absolute;
+	right: 10px;
+	top: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 9px;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	background: rgba(14, 11, 22, 0.7);
+	color: #fff;
+	opacity: 0.85;
+	transition: opacity 0.15s ease;
+}
+.iz-demand-sheet-cover-btn:hover .iz-demand-sheet-zoom-hint,
+.iz-demand-sheet-cover-btn:focus-visible .iz-demand-sheet-zoom-hint {
+	opacity: 1;
+}
+/* A shift with no template picture still needs the header's height, or the
+   badge would hang off a zero-height box. Quiet gold, not a broken frame. */
+.iz-demand-sheet-cover.is-empty {
+	background: linear-gradient(
+		160deg,
+		rgba(232, 194, 122, 0.16),
+		rgba(232, 194, 122, 0.03)
+	);
+}
+/* Badged onto the picture rather than placed beside it: the logo IS the
+   caption, so it needs no room of its own. The ring keeps a pale wordmark
+   legible over a bright photo. */
+.iz-demand-sheet-logo {
+	position: absolute;
+	left: 12px;
+	bottom: 12px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 52px;
+	height: 52px;
+	border-radius: 13px;
+	border: 1px solid rgba(232, 194, 122, 0.45);
+	background: rgba(14, 11, 22, 0.82);
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+	color: var(--iz-gold-l);
+	line-height: 1;
+}
+.iz-demand-sheet-top {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 14px 14px 0;
+}
+.iz-demand-sheet-titles {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+.iz-demand-sheet-outlet {
+	font-family: "Sora", sans-serif;
+	font-size: 19px;
+	font-weight: 800;
+	line-height: 1.25;
+	color: var(--iz-txt);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.iz-demand-sheet-slot {
+	margin-top: 3px;
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--iz-gold-l);
+	font-variant-numeric: tabular-nums;
+}
+.iz-demand-sheet-event {
+	margin-top: 2px;
+	font-size: 13.5px;
+	color: var(--iz-muted2);
+	line-height: 1.4;
+}
+.iz-demand-sheet-pill {
+	flex: 0 0 auto;
+	/* `.iz-pill` is 15px/6px-12px by default and the old markup crushed it to
+	   10px with a `!text-[10px]`. This is a real step down from the pill's own
+	   size, not a whisper. */
+	font-size: 12.5px !important;
+	padding: 4px 10px;
+}
+.iz-demand-sheet-section {
+	padding: 0 14px;
+	margin-top: 14px;
+}
+.iz-demand-sheet-section:last-child {
+	padding-bottom: 14px;
+}
+.iz-demand-sheet-heading {
+	font-size: 11.5px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.09em;
+	color: var(--iz-muted);
+}
+.iz-demand-sheet-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 7px;
+}
+.iz-demand-sheet-empty {
+	margin-top: 6px;
+	font-size: 13.5px;
+	color: var(--iz-muted2);
+}
+.iz-roster-demand-band-rail {
+	display: flex;
+	gap: 8px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	padding-bottom: 4px;
+	/* Cards keep their own width instead of being squeezed by the flex row —
+	   without this a tenth card makes all ten unreadable rather than starting
+	   a scroll. */
+	scroll-snap-type: x proximity;
+}
+.iz-roster-demand-band-rail::-webkit-scrollbar {
+	height: 6px;
+}
+.iz-roster-demand-band-rail::-webkit-scrollbar-thumb {
+	background: rgba(232, 194, 122, 0.28);
+	border-radius: 999px;
+}
+/* The rail's card: fixed width, so the strip reads as a row of equals and the
+   scroll distance is predictable. `margin-top` from the stacked-card rule
+   below would misalign them, hence the reset. */
+.iz-roster-demand-card--rail {
+	/* 150px originally, 172px when the type first went up, 200px now that it
+	   went up again — the width has to follow the type or three request chips
+	   stop fitting on one line. The outlet name moved out to the row header, so
+	   all of it goes to the slot and the chips. */
+	width: 200px;
+	flex: 0 0 200px;
+	scroll-snap-align: start;
+	margin-top: 0 !important;
+}
+.iz-roster-demand-card--rail.is-today {
+	border-style: solid;
+	border-color: rgba(232, 194, 122, 0.85);
+}
+.iz-roster-demand-card--rail .day {
+	font-size: 12px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	color: var(--iz-amber);
 }
 
 .iz-roster-week-cell--live {
@@ -18687,7 +19035,7 @@ html:has(.iz-pr-app) {
 }
 .iz-portal-main .iz-portal-kpi .n,
 .iz-portal > main .iz-portal-kpi .n {
-	font-size: 28px;
+	font-size: var(--iz-kpi-num);
 }
 .iz-portal-main .iz-time-picker-btn,
 .iz-portal > main .iz-time-picker-btn {
@@ -19197,19 +19545,41 @@ html:has(.iz-pr-app) {
 
 .iz-portal-kpi-grid {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	/* One row for the whole strip. auto-fit rather than a hard repeat(4),
+	   because "PR needed today" unmounts for finance and whenever nothing is
+	   open — a fixed four-track grid would leave a hole where that tile was.
+	   The 190px floor is the give-up point: below it the strip wraps rather
+	   than squeeze the money tile into a column that cannot hold it. */
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 	gap: 12px;
 	margin-bottom: 20px;
 }
 
 .iz-portal-kpi {
+	/* Column flex so a caption can be pushed to the tile floor — that keeps
+	   every headline number on one baseline across the row, whether or not
+	   its own tile carries a caption underneath. */
+	display: flex;
+	flex-direction: column;
+	/* Query container so `.n` can size against its own tile, not the viewport.
+	   Four tiles in a row means a 1280px window gives each ~239px, and at a
+	   flat 28px "RM 123,456.78" wraps onto a second line there. One variable
+	   for all three `.n` size rules below, so the tile keeps a single answer
+	   to "how big is the number" no matter which of them wins the cascade. */
+	container-type: inline-size;
+	--iz-kpi-num: clamp(18px, 11cqi, 28px);
 	border-radius: 16px;
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
-	padding: 20px 22px;
+	padding: 18px 20px;
 	box-shadow:
 		inset 0 2px 0 rgba(227, 184, 119, 0.32),
 		inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.iz-portal-kpi > p:last-child {
+	margin-top: auto;
+	padding-top: 6px;
 }
 
 .iz-portal-kpi-payout {
@@ -19246,7 +19616,7 @@ html:has(.iz-pr-app) {
 
 .iz-portal-kpi .n {
 	font-family: "Sora", sans-serif;
-	font-size: 28px;
+	font-size: var(--iz-kpi-num);
 	font-weight: 800;
 	margin-top: 8px;
 	letter-spacing: -0.5px;
@@ -20135,7 +20505,7 @@ html:has(.iz-pr-app) {
 	font-size: 12px;
 }
 [data-portal="agency"] .iz-portal-main .iz-portal-kpi .n {
-	font-size: 28px;
+	font-size: var(--iz-kpi-num);
 }
 [data-portal="agency"] .iz-portal-main .iz-data-table {
 	font-size: 18px;

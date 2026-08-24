@@ -18,7 +18,7 @@ import {
 	IzPageTitle,
 	IzPill,
 } from "@agency-portal/components/iz/ui";
-import { AppTopbar } from "@agency-portal/components/Nav";
+import { PortalBackButton } from "@agency-portal/components/Nav";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { PrSignaturePad } from "@agency-portal/components/pr/PrSignaturePad";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
@@ -434,11 +434,33 @@ function AgencyPV() {
 				lastLastWeekBounds.weekStartIso,
 			),
 		);
+		/*
+		 * EVERYTHING still outstanding, not just the signed ones (owner, 24 Aug).
+		 *
+		 * The rescue used to read `status === "SIGNED"`, which caught the vouchers
+		 * that were already payable and dropped every other kind on the floor.
+		 * A voucher that had been SENT but not yet signed, from a week older than
+		 * this window, matched no tab at all: not This Week, not Last Week, not
+		 * here — because all three test containment on `weekStartIso` and it had
+		 * simply aged past the last of them. PV-000006 (02–08 Aug, RM 3,708.20)
+		 * was visible on 20 Aug, when this window WAS 02–08 Aug, and vanished when
+		 * the window rolled forward on Sunday. DISPUTED and PENDING_REVIEW aged
+		 * out the same way. The one voucher the page most wants chased is the
+		 * overdue unsigned one, and it was the one that disappeared.
+		 *
+		 * So the queue now holds every voucher that is not finished. `status` is
+		 * not tested at all: `payrollActivePvs` has already dropped PAID, and PAID
+		 * is precisely what "resolved" means here — a voucher leaves this tab by
+		 * being paid, never by growing old.
+		 *
+		 * In-window first, everything else after, so the week this tab is named
+		 * for still reads as its subject rather than being lost in the queue.
+		 * Duplication across tabs is deliberate and pre-existing: an agency
+		 * looking for a voucher by the week it was WORKED still finds it there.
+		 */
 		const seen = new Set(inWindow.map((p) => p.id));
-		const signedElsewhere = payrollActivePvs.filter(
-			(p) => p.status === "SIGNED" && !seen.has(p.id),
-		);
-		return [...inWindow, ...signedElsewhere];
+		const stillOutstanding = payrollActivePvs.filter((p) => !seen.has(p.id));
+		return [...inWindow, ...stillOutstanding];
 	}, [
 		payrollActivePvs,
 		lastWeekBounds.weekStartIso,
@@ -465,6 +487,25 @@ function AgencyPV() {
 		(status: PrPvStatus): PayrollWeekTab | null => {
 			const holds = (list: PrPaymentVoucher[]) =>
 				list.some((p) => p.status === status);
+			if (holds(thisWeekPvs)) return "this_week";
+			if (holds(lastWeekPvs)) return "last_week";
+			if (holds(lastLastWeekPvs)) return "last_last_week";
+			return null;
+		},
+		[thisWeekPvs, lastWeekPvs, lastLastWeekPvs],
+	);
+
+	/**
+	 * Which tab's list actually holds THIS voucher.
+	 *
+	 * Membership is not re-derived here: it asks the same three lists the tabs
+	 * render, so a voucher can never be "in" a week the tab would not show it
+	 * in. `pvBelongsToPayrollWeek` stays the single authority.
+	 */
+	const tabHoldingPv = useCallback(
+		(pvId: string): PayrollWeekTab | null => {
+			const holds = (list: PrPaymentVoucher[]) =>
+				list.some((p) => p.id === pvId);
 			if (holds(thisWeekPvs)) return "this_week";
 			if (holds(lastWeekPvs)) return "last_week";
 			if (holds(lastLastWeekPvs)) return "last_last_week";
@@ -508,7 +549,27 @@ function AgencyPV() {
 		} else if (statusFromSearch && statusFromSearch !== "PAID") {
 			setStatusFilter(statusFromSearch);
 		}
-		if (pvFromSearch) setDetailId(pvFromSearch);
+		if (pvFromSearch) {
+			setDetailId(pvFromSearch);
+			/*
+			 * The week tab follows the VOUCHER, overriding the status-derived pick
+			 * above.
+			 *
+			 * `?status=` says which KIND of voucher the caller meant; the voucher
+			 * itself says which WEEK it belongs to, and only the second one is a
+			 * fact about the thing on screen. The agency home links carry both, and
+			 * with only the status consulted the tab landed on whichever week held
+			 * *a* voucher of that status — This Week, for anything pending review.
+			 * The detail then covered the wrong list, and pressing Return revealed
+			 * it: a Last Week voucher closed onto the This Week tab.
+			 *
+			 * Left alone when the voucher is in none of the three lists, so an
+			 * unresolvable id keeps the deliberate status pick rather than
+			 * snapping somewhere arbitrary.
+			 */
+			const pvTab = tabHoldingPv(pvFromSearch);
+			if (pvTab) setPayrollWeekTab(pvTab);
+		}
 		// tabHoldingStatus is a dependency on purpose: on first paint the vouchers
 		// have not arrived, so the pick above would fall back and stick. Re-running
 		// once they load is what makes it land on the right tab — and it cannot then
@@ -522,6 +583,10 @@ function AgencyPV() {
 		tabFromSearch,
 		navigate,
 		tabHoldingStatus,
+		// Same reason as tabHoldingStatus: the lists are empty on first paint, so
+		// the voucher resolves to no tab until they load. Re-running once they do
+		// is what makes the tab land under the open detail.
+		tabHoldingPv,
 	]);
 
 	const latestIssuedMs = useMemo(
@@ -761,9 +826,22 @@ function AgencyPV() {
 	if (detail) {
 		return (
 			<div className="iz-screen">
-				<AppTopbar
+				{/* The back control ALONE, exactly as Manage Outlet does it.
+
+				    The lingering black box was never the button — it was `AppTopbar`,
+				    which wraps whatever it is given in a `<header class="iz-topbar">`
+				    carrying a gradient, a bottom border and 14px of padding. That
+				    header exists to hold an avatar and identity beside the back pill;
+				    here it held nothing else, so it rendered as a dark strip with one
+				    small button parked in it. Manage Outlet never had the box because
+				    it never mounted the header — it renders the button directly, which
+				    is what this now does too.
+
+				    `--lg` supplies the 42px height, `--pill` the 999px radius, brighter
+				    border and brighter label. */}
+				<PortalBackButton
 					onBack={() => setDetailId(null)}
-					backLabel={t.payroll.pvList}
+					className="iz-topbar-back--lg iz-topbar-back--pill"
 				/>
 				<PvDetail
 					pv={detail}
@@ -832,10 +910,12 @@ function AgencyPV() {
 					? `${thisWeekBounds.cycle} · ${t.payroll.inProgressNotClosed}`
 					: payrollWeekTab === "last_week"
 						? `${lastWeekBounds.cycle} · ${t.payroll.pendingPrReviewOrDispute}`
-						: // Not a single week any more: this tab now also holds every
-							// SIGNED voucher from any week, so naming one date range would
-							// describe a list it no longer matches. Say what the list IS.
-							`${t.payroll.signedVouchersPrefix} · ${lastLastWeekBounds.cycle} ${t.payroll.andEarlier} · ${
+						: // Not a week at all any more, and no longer only the signed ones:
+							// this tab holds EVERY voucher that is not yet paid, from any
+							// week, until it is. Naming a date range described a list it had
+							// stopped matching, and "Signed vouchers" now describes a subset
+							// of what is on screen. Say what the list actually is.
+							`${t.payroll.outstandingVouchersPrefix} · ${
 								unsignedPaymentWeekPvs.length > 0
 									? `${unsignedPaymentWeekPvs.length} ${t.payroll.notSignedYet}`
 									: t.payroll.readyToPay
@@ -892,11 +972,6 @@ function AgencyPV() {
 					    stays owner-only — that is policy, this is bookkeeping. */}
 					<UnchargedFeesPanel
 						canMark={can("raisePv")}
-						weekLabel={
-							payrollWeekTab === "this_week"
-								? t.payroll.thisWeekLower
-								: t.payroll.lastWeekLower
-						}
 						weekStart={
 							payrollWeekTab === "this_week"
 								? thisWeekBounds.weekStartIso
