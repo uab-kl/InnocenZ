@@ -41,7 +41,7 @@ export function ShiftStatusPanel({
   checkOutAt,
   dutyWagesRm,
   targetSalesRm,
-  dayKey,
+  dayKeys,
 }: {
   checkedOut: boolean;
   /** Real attendance stamps from the backend assignment. */
@@ -51,10 +51,17 @@ export function ShiftStatusPanel({
   dutyWagesRm: number;
   /** This tier's real sales target (RM) at this outlet, or null when unset. */
   targetSalesRm?: number | null;
-  /** Scope the receipt rows to this day (YYYY-MM-DD) so the panel shows only
-   * THIS shift's earnings — and its total reconciles with the Payment
-   * "This week" column for the same day. */
-  dayKey?: string;
+  /**
+   * Scope the receipt rows to THIS SHIFT's day(s) (YYYY-MM-DD) so the panel
+   * shows only this shift's earnings — and its total reconciles with the
+   * Payment "This week" column for the same day.
+   *
+   * A LIST, not one day: a night shift crosses midnight and the server dates
+   * each line by when it was logged, so one shift routinely writes into two
+   * dates. A single key dropped everything logged on the other side of
+   * midnight — see the note where CheckInScreen builds these.
+   */
+  dayKeys?: string[];
 }) {
   const { openScan } = usePrNav();
   // Receipt rows come from the backend current-week draft voucher, scoped to
@@ -75,8 +82,8 @@ export function ShiftStatusPanel({
    * all there is to go on.
    */
   const logs = useMemo(() => {
-    const byDay = dayKey
-      ? allLogs.filter((l) => l.lineDate === dayKey)
+    const byDay = dayKeys?.length
+      ? allLogs.filter((l) => dayKeys.includes(l.lineDate ?? ''))
       : allLogs;
     const startedAt = checkInAt ? new Date(checkInAt).getTime() : null;
     if (startedAt === null || Number.isNaN(startedAt)) return byDay;
@@ -84,7 +91,7 @@ export function ShiftStatusPanel({
       const loggedAt = new Date(l.at).getTime();
       return Number.isNaN(loggedAt) ? true : loggedAt >= startedAt;
     });
-  }, [allLogs, dayKey, checkInAt]);
+  }, [allLogs, dayKeys, checkInAt]);
   // Every proof photo the PR snapped for this shift's self-logs, each carrying
   // its owning line + index so it can be removed. Shown as an editable gallery
   // under the totals so the PR can confirm / add / remove what they uploaded.

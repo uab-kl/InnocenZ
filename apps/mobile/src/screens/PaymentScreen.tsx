@@ -1580,6 +1580,14 @@ export function PaymentScreen({
                               styles.statusPill,
                               d.status === 'pending' &&
                                 styles.statusPillPending,
+                              // Last week collapses 'approved' into VERIFIED
+                              // (see the label above), so this row's green is
+                              // real settlement — but it used to arrive by
+                              // inheriting the base. Named explicitly now that
+                              // the base is amber; there is deliberately no
+                              // APPROVED branch here, because no day in a
+                              // closed week can carry that label.
+                              label === 'VERIFIED' && styles.statusPillVerified,
                               label === 'DISPUTED' && styles.statusPillDisputed,
                               label === 'DEDUCTED' && styles.statusPillDeducted,
                               d.status === 'empty' && { color: C.muted2 },
@@ -1591,7 +1599,9 @@ export function PaymentScreen({
                       );
                     })}
                     <View style={styles.gridCol}>
-                      <Text style={styles.statusPill}>
+                      {/* Counts settled days in a closed week — green, and now
+                          said out loud rather than inherited from the base. */}
+                      <Text style={[styles.statusPill, styles.statusPillVerified]}>
                         {verifiedDays} verified
                       </Text>
                     </View>
@@ -1965,6 +1975,12 @@ export function PaymentScreen({
                               styles.statusPill,
                               d.status === 'pending' &&
                                 styles.statusPillPending,
+                              // APPROVED is amber like PENDING, by the owner's
+                              // rule: mid-week sign-off is a checkpoint, not
+                              // settlement — the Dispute button on this very
+                              // day is still live. Without this branch it fell
+                              // to the base colour, which was green.
+                              label === 'APPROVED' && styles.statusPillApproved,
                               label === 'DISPUTED' && styles.statusPillDisputed,
                               label === 'VERIFIED' && styles.statusPillVerified,
                               label === 'DEDUCTED' && styles.statusPillDeducted,
@@ -1977,12 +1993,12 @@ export function PaymentScreen({
                       );
                     })}
                     <View style={styles.gridCol}>
-                      <Text
-                        style={[
-                          styles.statusPill,
-                          thisPendingDays > 0 && styles.statusPillPending,
-                        ]}
-                      >
+                      {/* BOTH halves are waiting states, so both are amber and
+                          the base carries them: an open week's days top out at
+                          APPROVED, which is a checkpoint, not settlement. No
+                          green belongs in this column — the explicit pending
+                          override it used to carry only restated the base. */}
+                      <Text style={styles.statusPill}>
                         {thisPendingDays > 0
                           ? `${thisPendingDays} pending`
                           : `${thisApprovedDays} approved`}
@@ -3183,15 +3199,36 @@ const styles = StyleSheet.create({
   // DEDUCTED is a settled state, not a warning — but it is still money off, so
   // it keeps the deduction colour rather than borrowing VERIFIED's green.
   statusPillDeducted: { color: C.red },
+  /*
+   * THE BASE IS AMBER — waiting — and green is never inherited.
+   *
+   * Green is the owner's rule for settled money only (23 Aug 2026: "all
+   * verified will green, approved yellow warning colour same with Pending").
+   * Green used to be the base here, and This week's chain has no branch of its
+   * own for APPROVED — so an approved day inherited VERIFIED's green and read
+   * as settled money while its Dispute button was still live. The redundant
+   * `statusPillVerified` in that same chain is what hid the miss: the explicit
+   * green and the inherited one looked identical on screen.
+   *
+   * Every green is now claimed by name — including Last week's, which had been
+   * riding the base. Anything unhandled falls to waiting, which is the safe
+   * direction to fail: a settled day shown as waiting is a question, a waiting
+   * day shown as settled is a wrong answer about money.
+   */
   statusPill: {
     fontFamily: F.sora,
     fontSize: 8,
     fontWeight: '800',
     letterSpacing: 0.3,
-    color: C.green,
+    color: C.amber,
     textAlign: 'center',
   },
   statusPillPending: { color: C.amber },
+  /**
+   * Signed off mid-week, but more receipts can still land on that day and the
+   * PR can still contest it — waiting, deliberately the same amber as PENDING.
+   */
+  statusPillApproved: { color: C.amber },
   statusPillDisputed: { color: C.red },
   /** A day whose claim has been ANSWERED — settled, not merely approved. */
   statusPillVerified: { color: C.green },
