@@ -350,14 +350,14 @@ shift's own span (`shiftDayKeys`) — see the §10 row for 2026-08-24.
 both stamps at 22:12, so zero minutes fell inside the window and the server sealed a pro-rated
 RM 0.00. Only the commission was wrong.
 
-### ▶ 🟡 OT IS RECORDED AND INVISIBLE ON PAYMENT (found 24 Aug 2026, NOT fixed)
+### ▶ ✅ CLOSED — OT was recorded and invisible on Payment (24 Aug 2026)
 
-Check-In says **"+1m OT recorded"**; the Payment grid's Others cell for that day is a dash, and
-nothing anywhere on Payment says why. The dash is CORRECT — `overtime-line.ts:1-10`: overtime is
-never auto-paid, a check-out records the minutes and an agency owner/finance user approves them,
-and only then does a `component='ot'` line appear. But a PR reading only Payment cannot tell
-"recorded and waiting on my agency" from "nothing happened". Surface the pending minutes the way
-the pending-receipt caption already surfaces waiting paper.
+Check-In said **"+1m OT recorded"**; the Payment grid's Others cell for that day was a dash and
+nothing on the screen said why. The dash was CORRECT — overtime is never auto-paid — but a PR
+reading only Payment could not tell "recorded and waiting on my agency" from "nothing happened".
+An amber caption now sits under the review caption: *"1m on Sun 23 — overtime recorded at
+check-out, waiting on your agency. It is not in the figures above."* See the §10 row for
+2026-08-24 (d).
 
 ### ▶ 🔴 RECEIPT STATUS LIFECYCLE — owner's spec, 23 Aug 2026 (00:40)
 
@@ -2147,6 +2147,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-24 (d) | **Overtime was recorded at check-out and then invisible on the one screen a PR opens to find out what they are owed.** Check-In said "+1m OT recorded"; Payment's Others cell for that day was a dash with no explanation anywhere. The dash itself is CORRECT and was left alone — `overtime-line.ts`: *"Overtime is NEVER auto-paid. A check-out records the minutes, an agency owner/finance user approves them, and only then does a line appear here."* The defect was silence: a PR could not tell "recorded and waiting on my agency" from "nothing happened". An amber caption now sits directly under the receipt-review caption — **"1m on Sun 23 — overtime recorded at check-out, waiting on your agency. It is not in the figures above."** Amber because it is waiting money, the same colour the Status pills use for pending and approved, deliberately not green. It is DERIVED, never stored: minutes on the shift, and no `component='ot'` line on that day yet — so the moment the agency approves, the line lands in Others, the cell stops being a dash and the caption removes itself. No second source of truth about whether the claim is open. Keyed on `component` rather than the sign or wording of the line, because 'ot', 'deduction' and 'other' all collapse into the PR-facing 'others' bucket and only `component` tells overtime from a fine. ⚠️ **The first cut of this was wrong and is worth recording:** it derived the minutes client-side with `overtimeHours` (worked minus scheduled) and rendered NOTHING for the very shift that prompted the request — booked 20:30-21:00 and stamped 22:12 to 22:12, that formula gives max(0, 1 - 30) = 0, while the server had recorded 1 minute because the whole stamp fell OUTSIDE the window. Two implementations of one rule, and the phone's was wrong on exactly the case the feature exists for. It now READS the server's `overtimeMinutes` off `PrCurrentWeek.shifts` — the same field `CellEvidenceSheet` already reads one tap away, so the two cannot drift — and the `useActiveShift` / `overtimeHours` imports the first cut needed were removed again. | PR app | ✅ mobile `tsc --noEmit -p tsconfig.app.json` exit 0; verified live at localhost:8081 — the caption renders in amber under "3 verified of 3 entries" reading exactly **"1m on Sun 23"**, matching the server's "+1m OT recorded" on the same shift, and Others correctly stays a dash |
 
 | 2026-08-24 (c) | **Check-In badged a VERIFIED receipt "Approved" — the weaker word, on the screen the PR reads first.** `ShiftStatusPanel` printed `reviewed ? 'Approved' : 'Matched'`, and `reviewed` is `isReceiptLocked` — which is `approved || verified`, because its job is deciding whether the edit controls are hidden, not naming a state. So the same paper read **VERIFIED** on Payment's day sheet and **Approved** on Check-In. Not an edge case: a scan verifies at CREATION (`payment-voucher.controller.ts:2571` — `source === 'manual' ? 'pending' : 'verified'`, the owner's 23 Aug rule that a scan carries machine evidence on its face and never waits on a review), so *every scanned receipt* was mislabelled, and the label understated the PR's position — approved is still contestable, verified is settled. It also made PENDING → APPROVED → VERIFIED look stalled a step early. The badge now reads the row's own `receiptStatus`: **Verified** (green), **Approved** (amber), **Matched** when there is no receipt behind the row and nobody has ruled on it. `isReceiptLocked` keeps its real job one line below, hiding edit/delete. New `badgeApproved` / `badgeApprovedText` styles rather than reusing `badgePending` — approved wears pending's amber by the owner's colour rule, but a style called "pending" on an approved row is how the two states get conflated again. | PR app | ✅ mobile `tsc --noEmit -p tsconfig.app.json` exit 0. ⚠️ **Typecheck- and read-verified only — NOT seen on screen.** The only surface that renders this badge is Check-In's STATUS panel, which needs a pinned shift; the 12-hour pin on the 23 Aug shift expired at 10:12 today, mid-session, and Check-In went idle. Confirm on the next completed shift: a scanned receipt must read **Verified** in green, a self-log the agency has approved must read **Approved** in amber |
 
