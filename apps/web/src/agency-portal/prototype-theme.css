@@ -15756,6 +15756,36 @@ button.iz-pr-offer-row:hover {
 	border-radius: 999px;
 	padding: 3px 10px;
 }
+/* ENDED (owner, 24 Aug 2026). The card stays — an unfilled shift the venue
+   never got staff for is a fact the agency needs — but it must stop reading as
+   available work: the colour drains out, the gold seat-count goes neutral, and
+   a plain chip says why. Deliberately NOT `opacity` on the whole card, which
+   would take the request chips down with it and make the names hard to read at
+   the very moment someone is working out what went wrong. */
+.iz-roster-demand-card.is-ended {
+	border-color: var(--iz-line);
+	background: rgba(255, 255, 255, 0.02);
+}
+.iz-roster-demand-card.is-ended .day,
+.iz-roster-demand-card.is-ended .slot {
+	color: var(--iz-muted2);
+}
+.iz-roster-demand-card.is-ended .count {
+	background: rgba(255, 255, 255, 0.1);
+	color: var(--iz-muted);
+}
+.iz-roster-demand-card .ended {
+	align-self: flex-start;
+	font-size: 11px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	color: var(--iz-muted);
+	border: 1px solid var(--iz-line);
+	border-radius: 999px;
+	padding: 2px 8px;
+}
+
 .iz-roster-demand-names {
 	display: flex;
 	flex-wrap: wrap;

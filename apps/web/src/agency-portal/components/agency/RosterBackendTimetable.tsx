@@ -41,7 +41,10 @@ import {
 	shiftBlockLong,
 	shiftBlockShort,
 } from "@agency-portal/lib/shift-block-label";
-import { hasShiftEnded } from "@agency-portal/lib/shift-window";
+import {
+	hasShiftEnded,
+	isEndedAndUnworked,
+} from "@agency-portal/lib/shift-window";
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Maximize2, Plus, X } from "lucide-react";
@@ -392,6 +395,7 @@ export function RosterBackendTimetable({
 	// agency, so every row here is addressed to us; the outlet NAME may show
 	// (it is our client asking), unlike the anonymous busy windows below.
 	const requestedByPrDate = useMemo(() => {
+		const now = new Date();
 		const map = new Map<
 			string,
 			Map<string, { outlet: string; slot: string | null; shiftId: string }[]>
@@ -418,6 +422,13 @@ export function RosterBackendTimetable({
 			// stays true whoever ended up working the night.
 			if (!ASSIGNABLE_SHIFT_STATUSES.includes(shift.status)) continue;
 			if ((shift.quantity ?? 0) - (shift.staffedCount ?? 0) <= 0) continue;
+			// THE THIRD way it stops being answerable (owner, 24 Aug 2026: "the
+			// roster down here should also be hidden when the shift is hidden").
+			// The night is over and nobody worked it, so the demand band drops the
+			// card — and a request chip pointing at a shift that is no longer
+			// listed anywhere is a question with no subject. Same predicate as the
+			// band's, so the two cannot disagree about what "hidden" means.
+			if (isEndedAndUnworked(shift, now)) continue;
 			const outlet = outletNameById.get(shift.outletId) ?? "";
 			for (const r of rows) {
 				const byDate =
@@ -629,6 +640,40 @@ export function RosterBackendTimetable({
 		return map;
 	}, [shiftsQuery.data, outletNameById, filters.outlet]);
 
+	/**
+	 * WHICH of those shifts are over. The clock is read ONCE for the whole grid,
+	 * so the demand band, the + buttons and the assign sheet cannot disagree —
+	 * and so the answer cannot drift between three reads taken milliseconds
+	 * apart on either side of an end time.
+	 *
+	 * Ended shifts deliberately STAY in `openShiftsByDay`: c800d5e stopped them
+	 * vanishing, because a venue's unfilled demand disappearing at its own end
+	 * time is how the agency lost sight of it. They are shown, greyed and
+	 * refused — not hidden.
+	 */
+	const endedShiftIds = useMemo(() => {
+		const now = new Date();
+		const set = new Set<string>();
+		for (const list of Object.values(openShiftsByDay)) {
+			for (const s of list) {
+				if (hasShiftEnded(s.shiftDate, s.slot, now)) set.add(s.id);
+			}
+		}
+		return set;
+	}, [openShiftsByDay]);
+
+	/**
+	 * What the assign sheet may offer: the day's open shifts minus the ended
+	 * ones. The server refuses those with a 409, so listing them would only
+	 * manufacture a refusal the agency could have been spared.
+	 */
+	const assignableShiftsForTarget = useMemo(() => {
+		if (!assignTarget) return [];
+		return (openShiftsByDay[assignTarget.dateIso] ?? []).filter(
+			(s) => !endedShiftIds.has(s.id),
+		);
+	}, [assignTarget, openShiftsByDay, endedShiftIds]);
+
 	// Row filter mirrors the demo timetable's filterTimetablePrs, adapted to
 	// backend PRs: name/nickname search, the scheduled/free toggle, and — when
 	// any shift filter is active — keep only PRs with a matching slot or a free
@@ -676,18 +721,32 @@ export function RosterBackendTimetable({
 	 * is hidden behind a toggle, and the grid starts where the roster starts.
 	 *
 	 * Same `openShiftsByDay` the assign dialog reads, so the two can never
-	 * disagree about what is still open; sealed and ended shifts are already
-	 * gone from that map.
+	 * disagree about what is still open. Sealed shifts are gone from that map;
+	 * ENDED ones are NOT — they stay, and this band is the one place that shows
+	 * them, greyed and labelled. The assign dialog subtracts them instead
+	 * (`assignableShiftsForTarget`), which is the whole point: the demand is
+	 * still reportable after its end time even though it is no longer fillable.
 	 */
 	const openDemand = useMemo(() => {
+		const demandNow = new Date();
 		const cards = days.flatMap((dateIso) =>
 			(openShiftsByDay[dateIso] ?? [])
 				.map((shift) => ({
 					shift,
 					dateIso,
 					open: (shift.quantity ?? 0) - (shift.staffedCount ?? 0),
+					// ENDED, not gone (owner, 24 Aug 2026). c800d5e stopped hiding
+					// today's finished shifts because a venue's unfilled demand
+					// vanishing at its own end time is how the agency lost track of
+					// it. It still does not vanish — it goes grey and says so — but
+					// the server now refuses to staff it, so the card must stop
+					// looking like work someone can pick up.
+					ended: endedShiftIds.has(shift.id),
 				}))
-				.filter((d) => d.open > 0),
+				.filter((d) => d.open > 0)
+				// Nothing left to chase and nobody to pay — see `isEndedAndUnworked`,
+				// the same predicate the grid's request markers read.
+				.filter((d) => !isEndedAndUnworked(d.shift, demandNow)),
 		);
 		// Chronological across the whole week — the same rule the request markers
 		// use, so a card's position means the same thing in both places.
@@ -737,7 +796,7 @@ export function RosterBackendTimetable({
 			// Seats, not shifts: "3 shifts" understates a night that needs 18 people.
 			seats: cards.reduce((sum, d) => sum + d.open, 0),
 		};
-	}, [days, openShiftsByDay, outletNameById, outletLogoById]);
+	}, [days, openShiftsByDay, outletNameById, outletLogoById, endedShiftIds]);
 
 	/**
 	 * The ONE shift the day sheet is open on (owner, 24 Aug 2026: clicking a card
@@ -868,7 +927,7 @@ export function RosterBackendTimetable({
 								</div>
 
 								<div className="iz-roster-demand-band-rail">
-									{group.rows.map(({ shift, dateIso, open }) => {
+									{group.rows.map(({ shift, dateIso, open, ended }) => {
 										const { dow, dom } = dayColumnLabel(dateIso);
 										const requested = shift.requestedPrs ?? [];
 										// Two names, then a count. A venue that asked for six
@@ -883,6 +942,7 @@ export function RosterBackendTimetable({
 												className={cn(
 													"iz-roster-demand-card iz-roster-demand-card--rail",
 													todayIso === dateIso && "is-today",
+													ended && "is-ended",
 												)}
 												onClick={() =>
 													setDemandShift({ shiftId: shift.id, dateIso })
@@ -904,6 +964,14 @@ export function RosterBackendTimetable({
 												<span className="count">
 													{fill(t.rosterGrid.openDemandCount, { n: open })}
 												</span>
+												{/* Says the seats are unfillable, not that they were
+												    filled — the count above still reads "6 open"
+												    because six people never turned up. */}
+												{ended && (
+													<span className="ended">
+														{t.rosterGrid.openDemandEnded}
+													</span>
+												)}
 												{/* WHO the venue asked for — its SELECT PRS picks.
 												    Only requests addressed to THIS agency arrive, so
 												    every chip is ours to act on. */}
@@ -1037,7 +1105,14 @@ export function RosterBackendTimetable({
 														!shiftFiltersOn || timetableSlotMatches(s, filters),
 												);
 												const open = openShiftsByDay[dateIso] ?? [];
-												const hasOpen = open.length > 0;
+												// ENDED shifts stay in openShiftsByDay so the demand
+												// band can paint them grey, but they are not work
+												// anyone can be given — the server refuses them with
+												// a 409 — so the + must not invite the attempt.
+												const assignable = open.filter(
+													(s2) => !endedShiftIds.has(s2.id),
+												);
+												const hasOpen = assignable.length > 0;
 												// The PR blocked this day. A distinct state from the
 												// "Off" a cancelled assignment paints — that one means
 												// a booking was called off, this one means the person
@@ -1501,7 +1576,7 @@ export function RosterBackendTimetable({
 				<AssignBackendCellSheet
 					pr={assignTarget.pr}
 					dateIso={assignTarget.dateIso}
-					shifts={openShiftsByDay[assignTarget.dateIso] ?? []}
+					shifts={assignableShiftsForTarget}
 					staffingByShift={staffingByShift}
 					outletNameById={outletNameById}
 					// The same windows the grid greys behind this sheet, so the two

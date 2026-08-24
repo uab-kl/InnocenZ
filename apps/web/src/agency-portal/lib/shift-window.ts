@@ -124,3 +124,33 @@ export function hasShiftEnded(
 	if (!end) return false;
 	return end.getTime() <= now.getTime();
 }
+
+/**
+ * A shift that is OVER and that nobody worked — HIDDEN, everywhere (owner,
+ * 24 Aug 2026: "it should just be hidden if no one was assigned", then "the
+ * roster down here should also be hidden when the shift is hidden").
+ *
+ * ONE predicate, because two screens answering "is this hidden" differently is
+ * how a request chip ends up pointing at a card that is not on the page. The
+ * roster's demand band and its grid request markers both read this.
+ *
+ * The staffed test comes FIRST, and is what keeps this narrow: an ended shift
+ * people DID work stays visible, greyed and labelled ENDED. Its unfilled seats
+ * are a fact about the night the agency may have to answer for, and c800d5e
+ * exists precisely because demand that silently disappears is demand the agency
+ * loses track of. Only the shift nobody turned up to is pure noise.
+ *
+ * Inherits `hasShiftEnded`'s fail-OPEN: a shift whose slot carries no window is
+ * never hidden, because nothing here can know whether it is over.
+ */
+export function isEndedAndUnworked(
+	shift: {
+		shiftDate: string | null | undefined;
+		slot: string | null | undefined;
+		staffedCount?: number | null;
+	},
+	now: Date,
+): boolean {
+	if ((shift.staffedCount ?? 0) > 0) return false;
+	return hasShiftEnded(shift.shiftDate, shift.slot, now);
+}

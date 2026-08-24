@@ -50,7 +50,7 @@ import {
   resolveTierWageOutcome,
   resolveTierWageOutcomesForShifts,
 } from './resolve-tier-wages';
-import { shiftDayKey, shiftsOverlap } from '@/util/slot-window';
+import { shiftDayKey, shiftsOverlap, shiftWindowInstants } from '@/util/slot-window';
 import { assignmentHistoryReason } from './assignment-history-guard';
 import { foreignTravelBlock, PR_UNAVAILABLE_THEN, travelWarningFor } from './travel-gap';
 import {
@@ -1753,6 +1753,31 @@ export class ShiftAssignmentControllerClass {
       // re-assignment the release existed to make possible. A row is closed when
       // it has a check-out stamp, and a stamp is a fact about the past — it
       // cannot collide with work not yet done.
+      // THE SHIFT IS OVER (owner, 24 Aug 2026: "if the time is already passed
+      // the shift end time then the agency should not be able to assign PRs to
+      // the shift anymore").
+      //
+      // ⚠️ This deliberately narrows c800d5e, which kept today's ended shifts
+      // assignable so a venue's unfilled demand would not vanish at the stroke
+      // of its end time. The demand still does not vanish — the roster now
+      // paints it as ENDED rather than hiding it — but it can no longer be
+      // staffed. Nobody can work a shift that has finished.
+      //
+      // Instants, not clock times, through the shared `shiftWindowInstants`:
+      // it reads the window in the VENUE's timezone and carries an overnight
+      // end into the next day, so a 22:00-04:00 shift is still assignable at
+      // 01:00. A label-only slot ("Late night") yields null and is NOT refused
+      // — nothing here can know when it ends, and failing closed would block
+      // legitimate assignments on a shift whose time was never typed.
+      const scheduled = shiftWindowInstants(shift.shiftDate, shift.slot);
+      if (scheduled && scheduled.end.getTime() <= Date.now()) {
+        return res.status(409).json({
+          success: false,
+          message: 'This shift has already ended and can no longer be staffed.',
+          data: null,
+        });
+      }
+
       raceCtx = {
         shiftId: shift.id,
         prId: pr.id,

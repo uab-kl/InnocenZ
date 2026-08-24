@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
 	hasShiftEnded,
+	isEndedAndUnworked,
 	isShiftLiveNow,
 	parseSlotRange,
 	shiftEndInstant,
@@ -181,5 +182,76 @@ describe("isShiftLiveNow", () => {
 			const ended = hasShiftEnded(day, "22:00 - 04:00", now);
 			expect(live && ended).toBe(false);
 		}
+	});
+});
+
+describe("isEndedAndUnworked", () => {
+	// 24 Aug 2026, 14:43 local — the instant the owner asked the question.
+	const now = new Date("2026-08-24T14:43:00");
+
+	test("hides a shift that is over and that nobody worked", () => {
+		expect(
+			isEndedAndUnworked(
+				{ shiftDate: "2026-08-24", slot: "13:00 - 14:00", staffedCount: 0 },
+				now,
+			),
+		).toBe(true);
+	});
+
+	test("KEEPS an ended shift that somebody worked", () => {
+		// The narrow half. Real people worked it, so the unfilled seats are a
+		// fact about the night, not noise — it stays, greyed and labelled ENDED.
+		expect(
+			isEndedAndUnworked(
+				{ shiftDate: "2026-08-24", slot: "13:00 - 14:00", staffedCount: 2 },
+				now,
+			),
+		).toBe(false);
+	});
+
+	test("KEEPS an unstaffed shift that has not ended yet", () => {
+		expect(
+			isEndedAndUnworked(
+				{ shiftDate: "2026-08-24", slot: "18:00 - 20:00", staffedCount: 0 },
+				now,
+			),
+		).toBe(false);
+	});
+
+	test("KEEPS an overnight shift still running past midnight", () => {
+		// 22:00 - 04:00 started on the 23rd: at 14:43 on the 24th it is long
+		// over, but the SAME slot posted for tonight is not.
+		expect(
+			isEndedAndUnworked(
+				{ shiftDate: "2026-08-24", slot: "22:00 - 04:00", staffedCount: 0 },
+				now,
+			),
+		).toBe(false);
+		expect(
+			isEndedAndUnworked(
+				{ shiftDate: "2026-08-23", slot: "22:00 - 04:00", staffedCount: 0 },
+				now,
+			),
+		).toBe(true);
+	});
+
+	test("KEEPS a shift whose slot carries no window", () => {
+		// Fails open, inherited from hasShiftEnded: nothing here can know when
+		// "Late night" finishes, so it must not silently disappear.
+		expect(
+			isEndedAndUnworked(
+				{ shiftDate: "2026-08-24", slot: "Late night", staffedCount: 0 },
+				now,
+			),
+		).toBe(false);
+	});
+
+	test("treats a null staffedCount as nobody", () => {
+		expect(
+			isEndedAndUnworked(
+				{ shiftDate: "2026-08-24", slot: "13:00 - 14:00", staffedCount: null },
+				now,
+			),
+		).toBe(true);
 	});
 });
