@@ -364,6 +364,17 @@ function AgencyRoster() {
 		outletWorkspace.happyHourStart,
 		outletWorkspace.happyHourEnd,
 	]);
+	/**
+	 * PRs ROSTERED this week — assignment rows, not posted shifts.
+	 *
+	 * The tile above read "Shifts this week" until 24 Aug 2026, which is a
+	 * different number and a much more obvious one: a week holding two posted
+	 * shifts with ten open seats and nobody booked showed 0, and the owner
+	 * reasonably read that as broken. It was right — `agencyRoster` is
+	 * `backendRoster.slots`, and a slot is a shift_assignment. Renamed rather
+	 * than recounted: "how much of this week have we actually staffed" is the
+	 * useful question, it just had to say so.
+	 */
 	const weekScheduled = useMemo(
 		() =>
 			agencyRoster.filter(
@@ -520,7 +531,10 @@ function AgencyRoster() {
 					<>
 						<div className="iz-roster-kpi">
 							<span className="n">{weekScheduled.length}</span>
-							<LabelWithIcon label={t.roster.shiftsThisWeek} className="l" />
+							<LabelWithIcon
+								label={t.roster.prsRosteredThisWeek}
+								className="l"
+							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n gold">{formatRM(estLabour)}</span>

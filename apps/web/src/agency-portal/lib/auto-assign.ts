@@ -134,6 +134,13 @@ export interface AutoAssignPair {
 	 * surfaced first: "the pr of the day waiting for agency to approve".
 	 */
 	requestedByVenue?: boolean;
+	/**
+	 * This PR has worked at THIS outlet before (owner, 24 Aug 2026). Surfaced,
+	 * not just applied: a ranking nobody can see is a ranking nobody trusts,
+	 * and the agency has to be able to tell a familiar face from a high tier at
+	 * a glance.
+	 */
+	workedHereBefore?: boolean;
 }
 
 export interface AutoAssignPlan {
@@ -514,6 +521,37 @@ export function buildAutoAssignPlan(params: {
 	// an overnight 22:00–04:00 at one venue and an 05:00 start at another are two
 	// different `shiftDate`s and read as two free days.
 	const shiftRowById = new Map(weekShifts.map((s) => [s.id, s]));
+
+	/**
+	 * WHICH VENUES EACH PR HAS ALREADY WORKED (owner, 24 Aug 2026: "prioritise
+	 * PRs who have worked with the outlet before").
+	 *
+	 * A venue that has had someone on its floor knows whether they were any
+	 * good, and the PR knows the room — so familiarity is a real signal, not a
+	 * tie-break. It ranks BELOW the venue's explicit request (naming someone
+	 * for this shift says more than having met them) and ABOVE tier.
+	 *
+	 * ⚠️ Above tier is a deliberate trade: a Tier II regular now outranks a
+	 * Tier I stranger. The tier QUOTA is untouched — `fitsTarget` still refuses
+	 * a PR the shift has no seat for — so this only reorders candidates the
+	 * shift would accept either way.
+	 *
+	 * `weekAssignments` is the agency's WHOLE assignment history (the hook pages
+	 * it to exhaustion with no date filter, whatever the parameter name says),
+	 * which is exactly what "before" needs. `outletId` comes off the list
+	 * endpoint's join; a backend too old to send it falls back to the shift row,
+	 * and a row that resolves to neither simply contributes no history rather
+	 * than a wrong one.
+	 */
+	const outletsWorkedByPr = new Map<string, Set<string>>();
+	for (const a of weekAssignments) {
+		if (NON_STAFFING_STATUSES.includes(a.status)) continue;
+		const outletId = a.outletId ?? shiftRowById.get(a.shiftId)?.outletId;
+		if (!outletId) continue;
+		const seen = outletsWorkedByPr.get(a.prId) ?? new Set<string>();
+		seen.add(outletId);
+		outletsWorkedByPr.set(a.prId, seen);
+	}
 	const occupiedByPr = new Map<string, OccupiedWindow[]>();
 	if (outletPinById) {
 		for (const a of weekAssignments) {
@@ -643,6 +681,10 @@ export function buildAutoAssignPlan(params: {
 			const isRequested = (p: PrPersonnel) =>
 				!!requestedHere &&
 				(requestedHere.has(p.userId ?? p.id) || requestedHere.has(p.id));
+			// Keyed on `p.id`, matching `outletsWorkedByPr`, which is built from
+			// `assignment.prId` — and post-0089 that column IS the user id.
+			const hasWorkedHere = (p: PrPersonnel) =>
+				outletsWorkedByPr.get(p.id)?.has(target.outletId) ?? false;
 			const pick = activePrs
 				.filter(
 					(p) =>
@@ -655,9 +697,13 @@ export function buildAutoAssignPlan(params: {
 						// fill by hand, and be warned about at that moment.
 						!travelBlocked(p.id, target),
 				)
+				// KNOWN FACE AT THIS VENUE. Second only to being named for the
+				// shift, and above tier — see `outletsWorkedByPr` for why that
+				// trade is deliberate and what it does not touch.
 				.sort(
 					(a, b) =>
 						Number(isRequested(b)) - Number(isRequested(a)) ||
+						Number(hasWorkedHere(b)) - Number(hasWorkedHere(a)) ||
 						tierRank(a.tier) - tierRank(b.tier) ||
 						load(a.id) - load(b.id) ||
 						prDisplayName(a).localeCompare(prDisplayName(b)),
@@ -714,6 +760,7 @@ export function buildAutoAssignPlan(params: {
 				eventName: target.eventName,
 				shiftsThisWeek: weekCountByPr.get(pick.id) ?? 0,
 				requestedByVenue: isRequested(pick),
+				workedHereBefore: hasWorkedHere(pick),
 			});
 		}
 	}

@@ -231,11 +231,21 @@ export function AutoAssignSheet({
 									{pair.prName}
 									<span className="iz-tiny iz-muted2 ml-2 font-normal">
 										{tierLabel(pair.prTier)}
-								{pair.requestedByVenue && (
-									<span className="iz-pill iz-pill-amber !py-0 !text-[9px]">
-										{t.rosterGrid.outletRequest}
-									</span>
-								)} ·{" "}
+										{pair.requestedByVenue && (
+											<span className="iz-pill iz-pill-amber !py-0 !text-[9px]">
+												{t.rosterGrid.outletRequest}
+											</span>
+										)}
+										{/* Why this row sits where it does. Drawn only when the venue
+								    did NOT name them: a requested PR is already at the top for
+								    a stronger reason, and two chips on one line would bury the
+								    name they belong to. */}
+										{!pair.requestedByVenue && pair.workedHereBefore && (
+											<span className="iz-pill iz-pill-green !py-0 !text-[9px]">
+												{t.rosterGrid.autoAssignWorkedHere}
+											</span>
+										)}{" "}
+										·{" "}
 										{fill(
 											pair.shiftsThisWeek === 1
 												? t.rosterGrid.autoAssignShiftsThisWeekOne
