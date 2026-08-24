@@ -44,6 +44,7 @@ import {
 import {
 	hasShiftEnded,
 	isEndedAndUnworked,
+	shiftEndDayIso,
 } from "@agency-portal/lib/shift-window";
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -623,14 +624,24 @@ export function RosterBackendTimetable({
 		const todayLocal = now.toLocaleDateString("en-CA");
 		for (const s of shiftsQuery.data?.data ?? []) {
 			if (s.status === "sealed") continue;
-			// TODAY's clock-ended shifts STAY (owner, 23 Aug 2026: "the outlet
-			// posted the shift earlier why after check out then agency cannot
-			// assign again"). Stamps and decisions resolve bookings, not clocks
-			// — the demand a venue posted stands for the rest of its day, and a
-			// late assign is a late check-in the phone already allows. Prior
-			// days keep the exclusion: yesterday is genuinely gone.
-			if (s.shiftDate !== todayLocal && hasShiftEnded(s.shiftDate, s.slot, now))
-				continue;
+			// A clock-ended shift STAYS for the rest of the day it ENDED on
+			// (owner, 23 Aug 2026: "the outlet posted the shift earlier why
+			// after check out then agency cannot assign again"). Stamps and
+			// decisions resolve bookings, not clocks — the demand a venue posted
+			// stands until that day is done. Earlier days are genuinely gone.
+			//
+			// ⚠️ Keyed on the END day, not on `shiftDate` (owner, 24 Aug 2026).
+			// The original `s.shiftDate !== todayLocal` measured the day the
+			// shift STARTED, so a 22:00-04:00 posted Monday was dropped at 04:00
+			// Tuesday — the very instant it ended — and the ENDED state could
+			// never render for it. That silently excluded the majority: 21 of
+			// the 40 live rows cross midnight. Now Monday's overnight stays
+			// through Tuesday, exactly as a 14:00 shift stays through Monday.
+			//
+			// A slot with no window yields null and is KEPT, unchanged from
+			// before: `hasShiftEnded` failed open on it too.
+			const endDay = shiftEndDayIso(s.shiftDate, s.slot);
+			if (endDay && endDay < todayLocal) continue;
 			const outletName = outletNameById.get(s.outletId) ?? s.outletId;
 			if (filters.outlet && outletName !== filters.outlet) continue;
 			const list = map[s.shiftDate];

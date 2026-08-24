@@ -4,6 +4,7 @@ import {
 	isEndedAndUnworked,
 	isShiftLiveNow,
 	parseSlotRange,
+	shiftEndDayIso,
 	shiftEndInstant,
 	shiftStartInstant,
 } from "./shift-window";
@@ -253,5 +254,33 @@ describe("isEndedAndUnworked", () => {
 				now,
 			),
 		).toBe(true);
+	});
+});
+
+describe("shiftEndDayIso", () => {
+	test("a same-day shift ends on its own date", () => {
+		expect(shiftEndDayIso("2026-08-24", "13:00 - 14:00")).toBe("2026-08-24");
+	});
+
+	test("an overnight shift ends on the NEXT date", () => {
+		// The whole reason this exists: keyed on shiftDate, Monday's 22:00-04:00
+		// was treated as yesterday's business from 04:00 Tuesday — the instant it
+		// ended — so it could never render as ENDED.
+		expect(shiftEndDayIso("2026-08-24", "22:00 - 04:00")).toBe("2026-08-25");
+	});
+
+	test("a shift ending exactly at midnight rolls to the next date", () => {
+		expect(shiftEndDayIso("2026-08-24", "22:00 - 00:00")).toBe("2026-08-25");
+	});
+
+	test("crosses a month boundary", () => {
+		expect(shiftEndDayIso("2026-08-31", "22:00 - 04:00")).toBe("2026-09-01");
+	});
+
+	test("null for a slot that carries no window", () => {
+		// Callers keep such a shift rather than dropping it — nothing here can
+		// know when "Late night" is over.
+		expect(shiftEndDayIso("2026-08-24", "Late night")).toBeNull();
+		expect(shiftEndDayIso("2026-08-24", null)).toBeNull();
 	});
 });

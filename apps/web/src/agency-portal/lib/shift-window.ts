@@ -126,6 +126,26 @@ export function hasShiftEnded(
 }
 
 /**
+ * The local calendar date the shift ENDS on — the day AFTER `shiftDate` for an
+ * overnight. `null` when the slot carries no window.
+ *
+ * This is what "is it still today's business" has to be keyed on. Keying it on
+ * `shiftDate` instead meant an ended shift survived only for the rest of the
+ * day it STARTED, so a 22:00-04:00 posted on Monday was dropped at 04:00
+ * Tuesday — the exact instant it ended — and the ENDED state could never
+ * render for it. That is the majority case here, not an edge one: 21 of the 40
+ * live rows cross midnight (owner, 24 Aug 2026, on being shown the gap).
+ */
+export function shiftEndDayIso(
+	shiftDate: string | null | undefined,
+	slot: string | null | undefined,
+): string | null {
+	const end = shiftEndInstant(shiftDate, slot);
+	if (!end) return null;
+	return end.toLocaleDateString("en-CA");
+}
+
+/**
  * A shift that is OVER and that nobody worked — HIDDEN, everywhere (owner,
  * 24 Aug 2026: "it should just be hidden if no one was assigned", then "the
  * roster down here should also be hidden when the shift is hidden").
