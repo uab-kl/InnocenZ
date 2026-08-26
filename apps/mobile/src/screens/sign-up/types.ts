@@ -163,17 +163,13 @@ function parseOptionalMeasure(
 	min: number,
 	max: number,
 	label: string,
-	template?: string,
+	template: string,
 ): string | null {
 	const digits = raw.replace(/\D/g, '');
 	if (!digits) return null;
 	const n = Number(digits);
 	if (!Number.isFinite(n) || n < min || n > max) {
-		return formatMessage(template ?? '{label} must be between {min} and {max}.', {
-			label,
-			min,
-			max,
-		});
+		return formatMessage(template, { label, min, max });
 	}
 	return null;
 }
@@ -184,175 +180,126 @@ export function validateStep(
 	draft: Draft,
 	localDigits: string,
 	/**
-	 * Localised copy — pass `t.signup` from the wizard. Every English string
-	 * below it is a last-resort fallback for a caller that has no dictionary.
+	 * Localised copy — pass `t.signup`. REQUIRED and deliberately without a
+	 * default: an English fallback here would silently pin one locale forever
+	 * for any caller that forgot the dictionary, and tsc could not see it.
 	 */
-	copy?: Partial<SignupFieldCopy>,
+	copy: SignupFieldCopy,
 ): StepValidation {
 	const fields: FieldErrors = {};
 
 	if (step === 1) {
 		if (!draft.floorNickname.trim()) {
-			fields.floorNickname = copy?.nicknameRequired ?? 'Nickname is required.';
+			fields.floorNickname = copy.nicknameRequired;
 		}
 		if (!draft.fullName.trim()) {
-			fields.fullName = copy?.fullNameRequired ?? 'Full name is required.';
+			fields.fullName = copy.fullNameRequired;
 		}
 		if (!draft.phoneCountryCode) {
-			fields.phoneCountryCode =
-				copy?.dialRequired ?? 'Please choose a country dial code.';
+			fields.phoneCountryCode = copy.dialRequired;
 		}
 		if (localDigits.length < 9) {
-			fields.phone = copy?.phoneShort ?? 'That mobile number looks too short.';
+			fields.phone = copy.phoneShort;
 		}
 		if (!draft.nationality.trim()) {
-			fields.nationality = copy?.nationalityRequired ?? 'Nationality is required.';
+			fields.nationality = copy.nationalityRequired;
 		}
 		if (!draft.idType) {
-			fields.idType = copy?.idTypeRequired ?? 'Please select an ID type.';
+			fields.idType = copy.idTypeRequired;
 		} else if (
 			draft.idType === 'NRIC' &&
 			draft.nationality.trim() !== MALAYSIAN_NATIONALITY
 		) {
-			fields.idType =
-				copy?.nricMalaysianOnly ?? 'NRIC is only for Malaysian nationality.';
+			fields.idType = copy.nricMalaysianOnly;
 		}
 		if (!draft.dob.trim()) {
-			fields.dob = copy?.dobRequired ?? 'Date of birth is required.';
+			fields.dob = copy.dobRequired;
 		}
 		if (!draft.idType) {
-			fields.idNo = copy?.idNoSelectFirst ?? 'Please select ID type first.';
+			fields.idNo = copy.idNoSelectFirst;
 		} else if (!draft.idNo.trim()) {
-			fields.idNo = copy?.idNoRequired ?? 'ID number is required.';
+			fields.idNo = copy.idNoRequired;
 		} else if (
 			draft.idType === 'NRIC' &&
 			draft.nationality.trim() === MALAYSIAN_NATIONALITY
 		) {
 			if (!isValidNricFormat(draft.idNo)) {
-				fields.idNo = formatMessage(
-					copy?.nricFormat ??
-						'NRIC must be {n} digits like 1234881234 (no dashes).',
-					{ n: NRIC_LENGTH },
-				);
+				fields.idNo = formatMessage(copy.nricFormat, { n: NRIC_LENGTH });
 			} else if (draft.dob && !nricMatchesDob(draft.idNo, draft.dob)) {
-				fields.idNo =
-					copy?.nricDobPrefix ??
-					'First 6 digits must match the date of birth as YYMMDD (e.g. 030704…).';
+				fields.idNo = copy.nricDobPrefix;
 			}
 		}
 		// Height / weight / BWH are optional — only validate when the PR typed something.
-		const range = copy?.measureRange;
-		const heightErr = parseOptionalMeasure(
-			draft.heightCm,
-			100,
-			250,
-			copy?.height ?? 'Height',
-			range,
-		);
+		const range = copy.measureRange;
+		const heightErr = parseOptionalMeasure(draft.heightCm, 100, 250, copy.height, range);
 		if (heightErr) fields.heightCm = heightErr;
-		const weightErr = parseOptionalMeasure(
-			draft.weightKg,
-			25,
-			250,
-			copy?.weight ?? 'Weight',
-			range,
-		);
+		const weightErr = parseOptionalMeasure(draft.weightKg, 25, 250, copy.weight, range);
 		if (weightErr) fields.weightKg = weightErr;
-		const bustErr = parseOptionalMeasure(
-			draft.bustCm,
-			40,
-			200,
-			copy?.bust ?? 'Bust',
-			range,
-		);
+		const bustErr = parseOptionalMeasure(draft.bustCm, 40, 200, copy.bust, range);
 		if (bustErr) fields.bustCm = bustErr;
-		const waistErr = parseOptionalMeasure(
-			draft.waistCm,
-			40,
-			200,
-			copy?.waist ?? 'Waist',
-			range,
-		);
+		const waistErr = parseOptionalMeasure(draft.waistCm, 40, 200, copy.waist, range);
 		if (waistErr) fields.waistCm = waistErr;
-		const hipErr = parseOptionalMeasure(
-			draft.hipCm,
-			40,
-			200,
-			copy?.hip ?? 'Hip',
-			range,
-		);
+		const hipErr = parseOptionalMeasure(draft.hipCm, 40, 200, copy.hip, range);
 		if (hipErr) fields.hipCm = hipErr;
 		if (draft.languages.length === 0) {
-			fields.languages =
-				copy?.languagesRequired ?? 'Pick at least one preferred language.';
+			fields.languages = copy.languagesRequired;
 		}
 	} else if (step === 2) {
 		if (!draft.addressLine1.trim()) {
-			fields.addressLine1 =
-				copy?.addressLine1Required ?? 'Address line 1 is required.';
+			fields.addressLine1 = copy.addressLine1Required;
 		}
 		if (!draft.city.trim()) {
-			fields.city = copy?.cityRequired ?? 'City is required.';
+			fields.city = copy.cityRequired;
 		}
 		if (!draft.postcode.trim()) {
-			fields.postcode = copy?.postcodeRequired ?? 'Postcode is required.';
+			fields.postcode = copy.postcodeRequired;
 		}
 		if (!draft.state.trim()) {
-			fields.state = copy?.stateRequired ?? 'Please choose a state.';
+			fields.state = copy.stateRequired;
 		}
 		if (!draft.country.trim()) {
-			fields.country = copy?.countryRequired ?? 'Please choose a country.';
+			fields.country = copy.countryRequired;
 		}
 	} else if (step === 3) {
 		if (draft.underAgency === null) {
-			fields.underAgency =
-				copy?.joiningRequired ?? 'Please tell us whether an agency referred you.';
+			fields.underAgency = copy.joiningRequired;
 		} else if (draft.underAgency === true && !draft.agencyId) {
-			fields.agencyId =
-				copy?.agencyRequired ?? 'Please pick the agency that added you.';
+			fields.agencyId = copy.agencyRequired;
 		}
 	} else if (step === 4) {
 		const passportOnly = draft.idType === 'Passport';
 		if (!draft.idPhotoFrontUri.trim()) {
 			fields.idPhotoFrontUri = passportOnly
-				? (copy?.idPassportPageRequired ?? 'Capture the passport photo page.')
-				: (copy?.idFrontRequired ?? 'Capture the front of your ID.');
+				? copy.idPassportPageRequired
+				: copy.idFrontRequired;
 		} else if (!draft.idFrontOcrOk) {
 			fields.idPhotoFrontUri = passportOnly
-				? (copy?.idPassportOcrFail ??
-					'Passport number on the photo must match what you entered. Retake.')
-				: (copy?.idFrontOcrFail ??
-					'Front photo must be the front of your ID and show the correct ID number. Retake.');
+				? copy.idPassportOcrFail
+				: copy.idFrontOcrFail;
 		}
 		// Passport is one page only — no back. NRIC / work permit still need both sides.
 		if (!passportOnly) {
 			if (!draft.idPhotoBackUri.trim()) {
-				fields.idPhotoBackUri =
-					copy?.idBackRequired ?? 'Capture the back of your ID.';
+				fields.idPhotoBackUri = copy.idBackRequired;
 			} else if (!draft.idBackOcrOk) {
-				fields.idPhotoBackUri =
-					copy?.idBackOcrFail ??
-					'Back photo must be the back of your ID and show the correct ID number. Retake.';
+				fields.idPhotoBackUri = copy.idBackOcrFail;
 			}
 		}
 	} else if (step === 5) {
 		if (!draft.profileImageUri.trim() || !draft.profileImageFile) {
-			fields.profileImageUri = copy?.profileRequired ?? 'Add a profile photo.';
+			fields.profileImageUri = copy.profileRequired;
 		}
 		if (!draft.password.trim()) {
-			fields.password = copy?.passwordRequired ?? 'Password is required.';
+			fields.password = copy.passwordRequired;
 		} else if (draft.password.length < MIN_PASSWORD) {
-			fields.password =
-				copy?.passwordMin ??
-				`Password must be at least ${MIN_PASSWORD} characters.`;
+			fields.password = copy.passwordMin;
 		}
 		if (!draft.confirm.trim()) {
-			fields.confirm = copy?.confirmRequired ?? 'Confirm your password.';
+			fields.confirm = copy.confirmRequired;
 		} else if (draft.password !== draft.confirm) {
-			fields.confirm = copy?.passwordMismatch ?? 'Both passwords must match.';
+			fields.confirm = copy.passwordMismatch;
 		}
-		const ackMsg =
-			copy?.ackRequired ?? 'Please acknowledge the Personal Information Disclaimer.';
+		const ackMsg = copy.ackRequired;
 		if (!draft.ackPersonalInfo) {
 			fields.ackPersonalInfo = ackMsg;
 		}
@@ -370,12 +317,7 @@ export function validateStep(
 	const messages = Object.values(fields).filter(Boolean) as string[];
 	if (!messages.length) return { fields: {}, toast: null };
 
-	const toast =
-		messages.length === 1
-			? messages[0]
-			: (copy?.fixHighlighted ??
-				`Please fix ${messages.length} fields before continuing.`);
+	const toast = messages.length === 1 ? messages[0] : copy.fixHighlighted;
 
 	return { fields, toast };
 }
-

@@ -92,11 +92,10 @@ function SignUpScreenInner({
 	}, []);
 
 	const agencyFetched = useRef(false);
-	const current = STEPS[step - 1];
-	const stepCopy = t.signup.steps[step - 1] ?? {
-		title: current.title,
-		subtitle: current.subtitle,
-	};
+	// STEPS carries only the icons; the title/subtitle come from the dictionary,
+	// so there is no English copy to fall back to and no locale to pin.
+	const StepIcon = STEPS[step - 1];
+	const stepCopy = t.signup.steps[step - 1];
 	const patch = (part: Partial<Draft>) => setDraft((d) => ({ ...d, ...part }));
 	const clearFieldError = useCallback((key: keyof FieldErrors) => {
 		setFieldErrors((prev) => {
@@ -117,8 +116,9 @@ function SignUpScreenInner({
 
 	useEffect(() => {
 		if (resendIn <= 0) return;
-		const t = setInterval(() => setResendIn((s) => (s <= 1 ? 0 : s - 1)), 1000);
-		return () => clearInterval(t);
+		// NOT `t` — that shadows the locale dictionary inside this effect.
+		const timer = setInterval(() => setResendIn((s) => (s <= 1 ? 0 : s - 1)), 1000);
+		return () => clearInterval(timer);
 	}, [resendIn]);
 
 	useEffect(() => {
@@ -463,7 +463,7 @@ function SignUpScreenInner({
 					{formatMessage(t.signup.stepOf, { step, total: STEPS.length })}
 				</Text>
 				<View style={styles.titleRow}>
-					<current.icon size={19} color={C.accent} strokeWidth={2.2} />
+					<StepIcon size={19} color={C.accent} strokeWidth={2.2} />
 					<Text style={styles.title}>{stepCopy.title}</Text>
 				</View>
 				<Text style={styles.subtitle}>{stepCopy.subtitle}</Text>

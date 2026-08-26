@@ -12,13 +12,18 @@ import { STATES_BY_COUNTRY, statesForCountry } from './imi-states';
 
 export { STATES_BY_COUNTRY, statesForCountry };
 
-export const STEPS: { title: string; subtitle: string; icon: IconComponent }[] = [
-	{ title: 'Persona', subtitle: 'Your details', icon: UserIcon },
-	{ title: 'Address', subtitle: 'Where you live', icon: MapPin },
-	{ title: 'Agency', subtitle: 'Optional tie', icon: Building2 },
-	{ title: 'Verify', subtitle: 'ID verification', icon: Shield },
-	{ title: 'Summary', subtitle: 'Photos & review', icon: ClipboardList },
-	{ title: 'OTP', subtitle: 'Verify your mobile', icon: Phone },
+/**
+ * Wizard step icons, in order. The step TITLE and SUBTITLE are rendered from
+ * `t.signup.steps[i]` — they are not kept here, because an English copy beside
+ * the icon is a fallback that quietly ships English when the dictionary moves.
+ */
+export const STEPS: IconComponent[] = [
+	UserIcon,
+	MapPin,
+	Building2,
+	Shield,
+	ClipboardList,
+	Phone,
 ];
 
 export type CountryDialOption = {
@@ -104,35 +109,6 @@ export const COUNTRY_DIAL_OPTIONS: CountryDialOption[] = [...countries]
 export const COUNTRY_BY_CODE: Record<string, CountryDialOption> = Object.fromEntries(
 	COUNTRY_DIAL_OPTIONS.map((c) => [c.countryCode, c]),
 );
-
-/**
- * Address / residence country picker — country names (Malaysia, …).
- * @deprecated English-only. Use `countryPickerOptions(t.signup)` so the label
- * follows the locale while `value` stays the stored English name.
- */
-export const COUNTRY_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
-	value: c.name,
-	label: `${c.flag ? `${c.flag} ` : ''}${c.name}`,
-	flag: c.flag,
-	name: c.name,
-}));
-
-/**
- * Nationality picker — demonyms (Malaysian, …) for user_profile.nationality.
- * @deprecated English-only. Use `nationalityPickerOptions(t.signup)`.
- */
-export const NATIONALITY_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => {
-	const demonym = NATIONALITY_BY_COUNTRY_CODE[c.countryCode] ?? c.name;
-	return {
-		value: demonym,
-		label: `${c.flag ? `${c.flag} ` : ''}${demonym}`,
-		flag: c.flag,
-		name: demonym,
-	};
-});
-
-/** @deprecated Use COUNTRY_OPTIONS / NATIONALITY_OPTIONS. */
-export const NATIONALITIES = COUNTRY_DIAL_OPTIONS.map((c) => c.name);
 
 /**
  * Locale copy the option-label resolvers below need. Every list above holds the

@@ -127,10 +127,12 @@ export function historyShiftsFromPayWeek(
       tips: 0,
       others: 0,
     };
-    const t = line.type.toLowerCase();
-    if (t.includes('wage')) bucket.wages += line.amount;
-    else if (t.includes('drink')) bucket.drinks += line.amount;
-    else if (t.includes('tip')) bucket.tips += line.amount;
+    // NOT `t` — that is the dictionary in this function, and a local of the
+    // same name would shadow it for anything moved inside this loop.
+    const kind = line.type.toLowerCase();
+    if (kind.includes('wage')) bucket.wages += line.amount;
+    else if (kind.includes('drink')) bucket.drinks += line.amount;
+    else if (kind.includes('tip')) bucket.tips += line.amount;
     else bucket.others += line.amount;
     byDate.set(dateIso, bucket);
   }
@@ -145,7 +147,10 @@ export function historyShiftsFromPayWeek(
         outlet: b.outlet,
         dateLabel: fmtDFriendly(y, m, d, t),
         dateIso,
-        time: 'Per PV week breakdown',
+        // The History card's TIME slot, where a clock reading would go — this
+        // row was rebuilt from the voucher, so it has none. Rendered only;
+        // nothing parses or stores it.
+        time: t.payHistory.perPvWeekBreakdown,
         payout,
         wages: b.wages,
         drinks: b.drinks,

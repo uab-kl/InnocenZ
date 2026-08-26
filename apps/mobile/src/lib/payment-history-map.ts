@@ -305,12 +305,15 @@ export function historyVoucherToShifts(
   // never gave; the caption below says which of the two sealed cases it is.
   const payStatus = historyVoucherToPayWeek(v).status;
   const status: DemoHistoryShift['status'] = payStatus === 'signed' ? 'signed' : 'sealed';
+  // Rendered copy, not data: it fills the History card's TIME slot, exactly
+  // where a live week shows `t.schedule.sealedPendingPv`. Nothing compares or
+  // stores it — the `payStatus` it is chosen by is the value, and that stays.
   const timeLabel =
     payStatus === 'paid'
-      ? 'Paid · sealed'
+      ? t.payHistory.shiftPaidSealed
       : payStatus === 'signed'
-        ? 'Sealed · signed PV'
-        : 'Sealed · PV not signed yet';
+        ? t.payHistory.shiftSealedSignedPv
+        : t.payHistory.shiftSealedPvUnsigned;
   return [...byDate.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([dateIso, b]) => {

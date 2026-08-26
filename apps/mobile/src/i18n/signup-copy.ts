@@ -42,6 +42,13 @@ export type SignupFieldCopy = {
    * (`user_profile.nationality`). Unmapped demonyms pass through.
    */
   nationalityNames: Record<string, string>;
+  /**
+   * Rendered language names, keyed by the STORED English name from
+   * `PR_LANGUAGE_OPTIONS` (the value posted as `user_profile.languages`).
+   * A language the PR typed in themselves is not in the map and passes
+   * through exactly as they wrote it.
+   */
+  languageNames: Record<string, string>;
   dob: string;
   dobPlaceholder: string;
   idNo: string;
@@ -322,6 +329,20 @@ const en: SignupFieldCopy = {
     Turkmen: 'Turkmen',
     Uzbek: 'Uzbek',
     Vietnamese: 'Vietnamese',
+  },
+  languageNames: {
+    English: 'English',
+    Mandarin: 'Mandarin',
+    Cantonese: 'Cantonese',
+    Malay: 'Malay',
+    Japanese: 'Japanese',
+    Korean: 'Korean',
+    Thai: 'Thai',
+    Hindi: 'Hindi',
+    Tagalog: 'Tagalog',
+    Vietnamese: 'Vietnamese',
+    Tamil: 'Tamil',
+    Hokkien: 'Hokkien',
   },
   dob: 'Date of birth*',
   dobPlaceholder: 'YYYY-MM-DD',
@@ -616,6 +637,20 @@ const zh: SignupFieldCopy = {
     Uzbek: '乌兹别克斯坦籍',
     Vietnamese: '越南籍',
   },
+  languageNames: {
+    English: '英语',
+    Mandarin: '华语',
+    Cantonese: '粤语',
+    Malay: '马来语',
+    Japanese: '日语',
+    Korean: '韩语',
+    Thai: '泰语',
+    Hindi: '印地语',
+    Tagalog: '他加禄语',
+    Vietnamese: '越南语',
+    Tamil: '淡米尔语',
+    Hokkien: '福建话',
+  },
   dob: '出生日期*',
   dobPlaceholder: 'YYYY-MM-DD',
   idNo: '证件号码*',
@@ -892,6 +927,20 @@ const zhHant: SignupFieldCopy = {
     Turkmen: '土庫曼斯坦籍',
     Uzbek: '烏茲別克斯坦籍',
     Vietnamese: '越南籍',
+  },
+  languageNames: {
+    English: '英語',
+    Mandarin: '華語',
+    Cantonese: '粵語',
+    Malay: '馬來語',
+    Japanese: '日語',
+    Korean: '韓語',
+    Thai: '泰語',
+    Hindi: '印地語',
+    Tagalog: '他加祿語',
+    Vietnamese: '越南語',
+    Tamil: '淡米爾語',
+    Hokkien: '福建話',
   },
   dob: '出生日期*',
   idNo: '證件號碼*',

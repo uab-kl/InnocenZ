@@ -1272,8 +1272,15 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           ) : (
             <View style={styles.langChips}>
               {languages.map((l) => (
+                // Keyed on the STORED English value, never the label, so the
+                // chips do not remount when the locale switches.
                 <View key={l} style={styles.langPill}>
-                  <Text style={styles.langPillText}>{l}</Text>
+                  {/* Edit mode resolves these through LanguageMultiPicker; the
+                      read-only half has to use the same map, or one section of
+                      one screen disagrees with itself about a language's name. */}
+                  <Text style={styles.langPillText}>
+                    {t.signup.languageNames[l] ?? l}
+                  </Text>
                 </View>
               ))}
             </View>

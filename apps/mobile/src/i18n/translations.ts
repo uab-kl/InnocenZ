@@ -1147,6 +1147,14 @@ export type AppTranslations = {
     lineDrinks: string;
     lineTips: string;
     lineOthers: string;
+    /** Stands in for a shift's clock time on a History card rebuilt from a PAID voucher. Sits in the same slot as schedule.sealedPendingPv and uses its 已封存 wording. zh and zh-Hant are identical on purpose — no character differs between the scripts. The `status` it is chosen by stays English. */
+    shiftPaidSealed: string;
+    /** Same slot as payHistory.shiftPaidSealed, for a voucher the PR has signed. PV = payment voucher, rendered with the dictionary's existing 结算单 / 結算單 wording. */
+    shiftSealedSignedPv: string;
+    /** Same slot again — the wage is sealed but the week's voucher is still unsigned. Spelled out in full rather than appending a negation to shiftSealedSignedPv. */
+    shiftSealedPvUnsigned: string;
+    /** A History card's TIME slot when the row was rebuilt from a voucher and has no clock reading of its own. Matches payHistory.weekBreakdown (周明细 / 週明細). */
+    perPvWeekBreakdown: string;
   };
   pv: {
     /** Week-grid row label. The row's `key` ('wages') is a GridBucket and stays English. */
@@ -2292,6 +2300,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       lineDrinks: 'Drinks commission',
       lineTips: 'Tips commission',
       lineOthers: 'Others',
+      shiftPaidSealed: 'Paid · sealed',
+      shiftSealedSignedPv: 'Sealed · signed PV',
+      shiftSealedPvUnsigned: 'Sealed · PV not signed yet',
+      perPvWeekBreakdown: 'Per PV week breakdown',
     },
     pv: {
       rowWages: 'Daily wages',
@@ -3331,6 +3343,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       lineDrinks: '酒水提成',
       lineTips: '小费提成',
       lineOthers: '其他',
+      shiftPaidSealed: '已支付 · 已封存',
+      shiftSealedSignedPv: '已封存 · 结算单已签署',
+      shiftSealedPvUnsigned: '已封存 · 结算单尚未签署',
+      perPvWeekBreakdown: '按结算单周明细',
     },
     pv: {
       rowWages: '日薪工资',
@@ -4370,6 +4386,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       lineDrinks: '酒水提成',
       lineTips: '小費提成',
       lineOthers: '其他',
+      shiftPaidSealed: '已支付 · 已封存',
+      shiftSealedSignedPv: '已封存 · 結算單已簽署',
+      shiftSealedPvUnsigned: '已封存 · 結算單尚未簽署',
+      perPvWeekBreakdown: '按結算單週明細',
     },
     pv: {
       rowWages: '日薪工資',

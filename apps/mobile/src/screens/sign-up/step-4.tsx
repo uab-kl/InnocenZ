@@ -281,7 +281,7 @@ export function Step4VerifyPhotos({
     draft.idFrontOcrOk && draft.idPhotoFrontUri
       ? {
           status: 'matched',
-          seen: draft.idNo.trim() || 'OK',
+          seen: draft.idNo.trim() || t.signup.idNoEmpty,
           side: draft.idType === 'Passport' ? 'unknown' : 'front',
           rawText: `__kept_front__:${draft.idPhotoFrontUri}`,
         }
@@ -291,7 +291,7 @@ export function Step4VerifyPhotos({
     draft.idBackOcrOk && draft.idPhotoBackUri
       ? {
           status: 'matched',
-          seen: draft.idNo.trim() || 'OK',
+          seen: draft.idNo.trim() || t.signup.idNoEmpty,
           side: 'back',
           rawText: `__kept_back__:${draft.idPhotoBackUri}`,
         }
@@ -480,7 +480,7 @@ export function Step4VerifyPhotos({
       : draft.idFrontOcrOk && draft.idPhotoFrontUri
         ? {
             status: 'matched',
-            seen: draft.idNo.trim() || 'OK',
+            seen: draft.idNo.trim() || t.signup.idNoEmpty,
             side: passportOnly ? 'unknown' : 'front',
             rawText: '',
           }
@@ -491,7 +491,7 @@ export function Step4VerifyPhotos({
       : draft.idBackOcrOk && draft.idPhotoBackUri
         ? {
             status: 'matched',
-            seen: draft.idNo.trim() || 'OK',
+            seen: draft.idNo.trim() || t.signup.idNoEmpty,
             side: 'back',
             rawText: '',
           }

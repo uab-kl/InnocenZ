@@ -554,7 +554,13 @@ export function Step5Summary({
 				/>
 				<Fact
 					label={t.signup.languages}
-					value={draft.languages.length ? draft.languages.join(', ') : '—'}
+					value={
+						draft.languages.length
+							? draft.languages
+									.map((lang) => t.signup.languageNames[lang] ?? lang)
+									.join(', ')
+							: '—'
+					}
 				/>
 			</View>
 

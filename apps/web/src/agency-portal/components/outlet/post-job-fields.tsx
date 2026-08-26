@@ -102,7 +102,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import { dressCodeLabel, languageLabel } from "@/lib/portal-i18n/language-label";
+import {
+	dressCodeLabel,
+	languageLabel,
+} from "@/lib/portal-i18n/language-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const DEFAULT_DRAFT_TIER_BASE: OutletTierRateSettings = {
@@ -718,9 +721,7 @@ export function JobDateRangePicker({
 							: "iz-pill-ink",
 					)}
 				>
-					{span === "3d"
-						? t.outletPanels.span3Days
-						: t.outletPanels.span1Week}
+					{span === "3d" ? t.outletPanels.span3Days : t.outletPanels.span1Week}
 				</button>
 			))}
 			<OutletDateRangePopover
