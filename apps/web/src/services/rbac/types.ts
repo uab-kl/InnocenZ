@@ -30,6 +30,14 @@ export interface RbacRole {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	/**
+	 * Seeded roles are recreated by the backend on every boot, so they cannot be
+	 * deleted — the server refuses, and the UI hides the button. Computed
+	 * server-side from SEEDED_PORTAL_ROLES; the web deliberately does NOT keep
+	 * its own copy of that list. Defaults false against an older backend, which
+	 * only means the button shows and the server then refuses it.
+	 */
+	isSeeded: boolean;
 }
 
 export interface RbacModule {

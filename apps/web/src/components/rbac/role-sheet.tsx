@@ -70,6 +70,13 @@ interface RoleSheetProps {
 	isSubmitting: boolean;
 	error: Error | null;
 	onRefreshFail: () => void;
+	/**
+	 * Ask to delete this role. Absent, or a seeded role, and no button renders —
+	 * see the footer. The sheet only ASKS; the page owns the confirm dialog and
+	 * the mutation, because a Radix Dialog nested inside this Radix Sheet fights
+	 * the sheet's own focus trap.
+	 */
+	onDelete?: () => void;
 }
 
 export function RoleSheet({
@@ -82,6 +89,7 @@ export function RoleSheet({
 	isSubmitting,
 	error,
 	onRefreshFail,
+	onDelete,
 }: RoleSheetProps) {
 	const { t } = usePortalLocale();
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -536,6 +544,31 @@ export function RoleSheet({
 					</ScrollArea>
 
 					<SheetFooter className="flex-row justify-end gap-2 border-t border-border">
+						{/*
+						 * DELETE — in the footer beside Close and Save, but pushed to the
+						 * far edge with mr-auto so the destructive control is not adjacent
+						 * to the primary one. Same row, opposite end of it.
+						 *
+						 * `type="button"` is load-bearing: this footer sits INSIDE the
+						 * form, and an untyped Button submits it — clicking Delete would
+						 * SAVE, the exact opposite of the intent. Close carries the same
+						 * guard for the same reason.
+						 *
+						 * Hidden for a seeded role rather than disabled: the backend
+						 * recreates those on every boot, so deleting one is not a thing
+						 * that can succeed, and a permanently dead control teaches nothing.
+						 */}
+						{isManage && role && onDelete && !role.isSeeded ? (
+							<Button
+								type="button"
+								variant="destructive"
+								className="mr-auto"
+								onClick={onDelete}
+								disabled={isBusy}
+							>
+								{t.rbac.deleteRole}
+							</Button>
+						) : null}
 						<Button
 							type="button"
 							variant="outline"

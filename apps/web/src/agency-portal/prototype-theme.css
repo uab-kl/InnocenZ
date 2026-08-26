@@ -5393,9 +5393,14 @@
 	height: 1px;
 	background: var(--iz-line);
 }
+/* Card WIDTH is the lever here, not aspect-ratio: the picture is width:100% at
+   a fixed 16/10, so widening the track grows the image and leaves the crop
+   alone — changing the ratio would have made it taller by cropping instead.
+   132px -> 168px (owner, 24 Aug: "bigger a bit"). auto-fill still reflows, so
+   a narrow window simply gets fewer columns rather than a squashed card. */
 .iz-event-picker__row {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
 	gap: 10px;
 	margin-top: 10px;
 }

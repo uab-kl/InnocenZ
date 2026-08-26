@@ -119,6 +119,30 @@ export async function deactivateRole(
 	};
 }
 
+/**
+ * Hard-delete a role. The server refuses unless it is BOTH custom and
+ * unreferenced, answering 409 with a sentence naming what is in the way — so
+ * the caller must surface `message` rather than a generic failure.
+ *
+ * Returns no role: the row is gone, so there is nothing to map.
+ */
+export async function deleteRole(
+	roleId: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.delete<{
+		success: boolean;
+		message: string;
+		data: null;
+	}>(`/rbac/role/${roleId}`);
+
+	return {
+		success: response.data.success,
+		message: response.data.message,
+	};
+}
+
 export async function getRoleIdByName(
 	roleName: string,
 	onRefreshFail: () => void,

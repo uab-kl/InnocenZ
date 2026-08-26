@@ -15,6 +15,8 @@ export interface BackendRole {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	/** Absent on a backend that has not restarted yet — treat as "not seeded". */
+	isSeeded?: boolean;
 }
 
 export interface BackendModule {
@@ -77,6 +79,7 @@ export function mapRole(
 		updatedAt: role.updatedAt,
 		createdBy: role.createdBy,
 		updatedBy: role.updatedBy,
+		isSeeded: role.isSeeded === true,
 	};
 }
 

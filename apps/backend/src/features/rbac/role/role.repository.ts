@@ -80,6 +80,92 @@ export class RoleRepositoryClass {
     }
   }
 
+  /** portalId to portal code, for stamping a whole list in one round trip. */
+  async getPortalCodeMap(): Promise<Map<string, string>> {
+    const portals = await db
+      .select({ id: PortalTable.id, code: PortalTable.code })
+      .from(PortalTable);
+    return new Map(portals.map((p) => [p.id, p.code]));
+  }
+
+  /** The portal CODE behind a role's portalId — null for an unassigned role. */
+  async getPortalCodeForRole(portalId: string | null): Promise<string | null> {
+    if (portalId == null || portalId === '') return null;
+    const [portal] = await db
+      .select({ code: PortalTable.code })
+      .from(PortalTable)
+      .where(eq(PortalTable.id, portalId))
+      .limit(1);
+    return portal?.code ?? null;
+  }
+
+  /**
+   * Delete a role, but ONLY if nothing references it — counted and deleted in
+   * ONE transaction.
+   *
+   * Why the counts live in here rather than the controller: three of the four
+   * foreign keys pointing at role(id) are ON DELETE NO ACTION, so a grant landing
+   * between a separate check and the delete would surface as a raw 23503. The
+   * fourth is the dangerous one — `subscription.role_id` is ON DELETE SET NULL,
+   * so it does NOT block: without an explicit count, deleting a role would
+   * silently null the role a paid plan grants, with no error and no audit trail.
+   * Counting inside the transaction closes that window for all four.
+   *
+   * ⚠️ This THROWS on a database error, deliberately. The existing
+   * `countUsersWithRole` returns 0 on failure, which fails CLOSED for the revoke
+   * guard it was written for (`holders <= 1` refuses) and would fail OPEN here —
+   * a blip would read as "nobody holds it, go ahead". A delete must refuse when
+   * it cannot prove the role is unused.
+   */
+  async deleteRoleIfUnreferenced(roleId: string): Promise<
+    | { ok: true }
+    | {
+        ok: false;
+        blockers: {
+          holders: number;
+          permissions: number;
+          invites: number;
+          subscriptions: number;
+        };
+      }
+  > {
+    logger.info('[RoleRepository.deleteRoleIfUnreferenced] Checking references...');
+    return await db.transaction(async (tx) => {
+      const result = await tx.execute(sql`
+        select
+          (select count(distinct user_id) from main.user_role where role_id = ${roleId})::int as holders,
+          (select count(*) from main.role_permission where role_id = ${roleId})::int as permissions,
+          (select count(*) from main.org_member_invite where role_id = ${roleId})::int as invites,
+          (select count(*) from main.subscription where role_id = ${roleId})::int as subscriptions
+      `);
+      const rows = (Array.isArray(result)
+        ? result
+        : ((result as { rows?: unknown[] }).rows ?? [])) as Array<{
+        holders: number;
+        permissions: number;
+        invites: number;
+        subscriptions: number;
+      }>;
+      const counts = rows[0];
+      if (!counts) {
+        // The count query answering NOTHING is not the same as answering zero.
+        throw new Error('Could not read this role references');
+      }
+      const blockers = {
+        holders: Number(counts.holders) || 0,
+        permissions: Number(counts.permissions) || 0,
+        invites: Number(counts.invites) || 0,
+        subscriptions: Number(counts.subscriptions) || 0,
+      };
+      if (Object.values(blockers).some((n) => n > 0)) {
+        return { ok: false as const, blockers };
+      }
+      await tx.delete(RoleTable).where(eq(RoleTable.id, roleId));
+      logger.info('[RoleRepository.deleteRoleIfUnreferenced] Role deleted');
+      return { ok: true as const };
+    });
+  }
+
   async getAllRoles(): Promise<RoleType[]> {
     try {
       const roles = await db.select().from(RoleTable);

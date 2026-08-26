@@ -9,13 +9,20 @@ import { Shield } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
-import { RoleSheet, type RoleStatusFilter, RolesGrid } from "@/components/rbac";
+import {
+	ConfirmDialog,
+	RoleSheet,
+	type RoleStatusFilter,
+	RolesGrid,
+} from "@/components/rbac";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import {
 	type CreateRoleInput,
 	createRole,
+	deleteRole,
 	fetchRoles,
 	type RbacRole,
 	type RolesQueryParams,
@@ -41,6 +48,9 @@ function RolePage() {
 	const [sheetOpen, setSheetOpen] = useState(false);
 	const [sheetMode, setSheetMode] = useState<"create" | "manage">("create");
 	const [selectedRole, setSelectedRole] = useState<RbacRole | null>(null);
+	// The confirm lives at PAGE level, a sibling of the sheet — a Radix Dialog
+	// nested inside the open Radix Sheet fights the sheet's focus trap.
+	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
 	const queryParams: RolesQueryParams = {
 		page: currentPage,
@@ -91,11 +101,39 @@ function RolePage() {
 		},
 	});
 
+	/**
+	 * Delete, and say what the SERVER said.
+	 *
+	 * The refusals are the point: a seeded role, or one anything still
+	 * references, comes back 409 with a sentence naming the way out ("3 accounts
+	 * hold it"). Showing a generic "failed" would throw away the only useful part
+	 * of the answer, so both paths surface `message`.
+	 */
+	const deleteMutation = useMutation({
+		mutationFn: (roleId: string) => deleteRole(roleId, logout),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["rbac-roles"] });
+			queryClient.invalidateQueries({ queryKey: ["rbac-role-permissions"] });
+			setDeleteConfirmOpen(false);
+			closeSheet();
+			toast.success(response.message || t.rbac.roleDeleted);
+		},
+		onError: (err) => {
+			setDeleteConfirmOpen(false);
+			toast.error(
+				toMutationError(err, t.rbac.roleDeleteFailed)?.message ??
+					t.rbac.roleDeleteFailed,
+			);
+		},
+	});
+
 	const closeSheet = () => {
 		setSheetOpen(false);
 		setSelectedRole(null);
+		setDeleteConfirmOpen(false);
 		createMutation.reset();
 		saveManageMutation.reset();
+		deleteMutation.reset();
 	};
 
 	const sheetError = toMutationError(
@@ -152,9 +190,29 @@ function RolePage() {
 						permissionIds,
 					});
 				}}
-				isSubmitting={createMutation.isPending || saveManageMutation.isPending}
+				isSubmitting={
+					createMutation.isPending ||
+					saveManageMutation.isPending ||
+					deleteMutation.isPending
+				}
 				error={sheetError}
 				onRefreshFail={logout}
+				onDelete={() => setDeleteConfirmOpen(true)}
+			/>
+
+			<ConfirmDialog
+				open={deleteConfirmOpen}
+				onOpenChange={setDeleteConfirmOpen}
+				title={t.rbac.deleteRoleConfirmTitle}
+				description={fill(t.rbac.deleteRoleConfirmBody, {
+					name: selectedRole?.roleName ?? "",
+				})}
+				confirmLabel={t.rbac.deleteRole}
+				isPending={deleteMutation.isPending}
+				onConfirm={() => {
+					if (!selectedRole) return;
+					deleteMutation.mutate(selectedRole.roleId);
+				}}
 			/>
 		</PageShell>
 	);

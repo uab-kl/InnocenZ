@@ -81,6 +81,35 @@ export const SEEDED_PORTAL_ROLES: ReadonlyArray<{
   { roleName: portalRoleName.PR, portal: null },
 ];
 
+/**
+ * Is this role one the backend RE-CREATES on every boot?
+ *
+ * The only correct test, and it must be keyed on BOTH name and portal: Owner,
+ * Finance, Director and Guarantor each exist twice — once for agency, once for
+ * outlet — which is legal because the unique index is lower(role_name) +
+ * portal_id. A name-only test would call outlet Owner seeded because agency
+ * Owner is, or miss one entirely.
+ *
+ * ⚠️ Do NOT be tempted to test `created_by === 'system'` instead. On the live
+ * database agency Finance and outlet Ops Head both carry a USER uuid there and
+ * are seeded regardless, so that guard permits deleting two seeded roles while
+ * blocking nothing useful.
+ *
+ * Why it matters for deletion: `initRoles()` re-inserts any missing seeded role
+ * on every backend start, with a NEW uuid. Deleting one does not remove it — it
+ * swaps its identity, orphaning every row that referenced the old id, and the
+ * operator sees the role reappear as though nothing happened. Refusing is the
+ * only honest answer.
+ */
+export function isSeededRole(roleName: string, portalCode: string | null): boolean {
+  const name = roleName.trim().toLowerCase();
+  return SEEDED_PORTAL_ROLES.some(
+    (seed) =>
+      seed.roleName.trim().toLowerCase() === name &&
+      (seed.portal ?? null) === (portalCode ?? null),
+  );
+}
+
 /** Legacy snake_case names — delete via remove-specialized-portal-roles.ts only. */
 export const LEGACY_SPECIALIZED_ROLE_NAMES = [
   'agency_owner',
