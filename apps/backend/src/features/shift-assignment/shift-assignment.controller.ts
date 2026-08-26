@@ -14,6 +14,7 @@ import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository';
+import { PrAvailabilityRepositoryClass } from '@/features/pr-availability/pr-availability.repository';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -73,6 +74,13 @@ const PG_UNIQUE_VIOLATION = '23505';
 /** MC / leave proof bounds — the phone downscales, the server still enforces. */
 const MAX_LEAVE_PHOTOS = 5;
 const MAX_LEAVE_PHOTO_CHARS = 3_000_000;
+/**
+ * What an auto-blocked MC day says on every agency's roster grid.
+ *
+ * Fixed and neutral on purpose — see `blockLeaveDay`. It must never carry the
+ * PR's own medical text, and must never name the agency that approved it.
+ */
+const LEAVE_APPROVED_BLOCK_REASON = 'MC / leave approved';
 
 /**
  * A caller is scoped one of three ways: admin (everything), agency member
@@ -149,6 +157,13 @@ export class ShiftAssignmentControllerClass {
     // says who was invited when the shift was posted and is never revoked, by
     // design, so it cannot be asked this.
     private agencyOutletRepository: AgencyOutletRepository,
+    /**
+     * Approving an MC blocks the whole DAY, not just the shift it was filed
+     * against — see `approveLeave`. Injected because the block has to be
+     * written through the repository that owns the upsert and its unique
+     * (user_id, date) key; a second insert path here would be a second answer.
+     */
+    private prAvailabilityRepository: PrAvailabilityRepositoryClass,
   ) {}
 
   /**
@@ -834,6 +849,14 @@ export class ShiftAssignmentControllerClass {
         updatedBy: actor,
       });
       res.status(200).json({ success: true, message: 'Leave approved — the PR is excused from this shift', data: assignment });
+
+      // Sick for the shift is sick for the DAY. Close the rest of it — for
+      // every agency — before anything books into the hours just freed.
+      void this.blockLeaveDay({
+        userId: existing.userId ?? existing.prId,
+        shiftId: existing.shiftId,
+        actor,
+      });
 
       // The slot is now open. Say so, rather than leaving it to be noticed.
       const excusedPr = await this.prRepository.getById(existing.prId);
@@ -2116,6 +2139,77 @@ export class ShiftAssignmentControllerClass {
    * telling it to replace someone who may well be working that night. Cover is
    * raised afterwards by approveLeave, and only if it approves.
    */
+  /**
+   * An approved MC takes the whole DAY off the PR's calendar, not just the one
+   * shift it was filed against.
+   *
+   * Being unfit to work 22:00-04:00 at one venue does not become fitness to
+   * work 20:00-02:00 at another, but that is exactly what the system believed:
+   * `leave_approved` is a NON_STAFFING status, so the excused hours stopped
+   * counting as a clash and the freed window read as ordinary free time to
+   * EVERY agency — including the one that had just granted the leave. The PR
+   * could not close it themselves either: `blockMine` refuses a day they are
+   * still rostered on, so a second agency REJECTING the same MC was enough to
+   * lock them out of the only switch that blocks a day across all agencies.
+   *
+   * Blocks `shift_date` — the day the shift STARTS — because that is the exact
+   * key the assign guard compares against (`unavailable_date = shift.shift_date`
+   * in `ShiftAssignmentRepository.create`). An overnight therefore blocks the
+   * night it opens and not the calendar day it spills into: blocking both would
+   * take out the FOLLOWING night's work, which no MC was filed for.
+   *
+   * ⚠️ Deliberately does NOT touch another agency's existing assignment that
+   * day. The block stops NEW bookings; releasing a shift agency B is still
+   * counting on is B's decision, and letting agency A's approval cancel it would
+   * hand one agency authority over another's roster. B's shift stays live and
+   * the PR is still expected on it — which is why the mobile calendar was
+   * changed to keep showing it rather than paint the day blocked.
+   *
+   * ⚠️ NEVER THROWS. Called with `void` after the response has gone: the
+   * approval succeeded and must stand. Any failure here leaves the pre-existing
+   * behaviour — shift excused, day still open — which is where this path has
+   * been all along.
+   */
+  private async blockLeaveDay(input: {
+    userId: string;
+    shiftId: string;
+    actor: string;
+  }): Promise<void> {
+    try {
+      const shift = await this.shiftRepository.getById(input.shiftId);
+      if (!shift?.shiftDate) return;
+      /**
+       * ⚠️ NOT ON A DAY THEY ARE STILL WORKING.
+       *
+       * The split decision is the whole reason this guard exists: agency A
+       * approves the MC and agency B rejects it, so B's shift stays live and
+       * the PR is still expected on it. Writing a day-block there states the
+       * opposite of the truth — they are not unavailable, they are working —
+       * and it cannot be undone by anyone: `blockMine` only ever DELETES the
+       * caller's own row through a calendar cell that a live shift hides, and
+       * there is no agency or admin write route on `pr_availability` at all.
+       * The PR would be locked out of their own date until it passed, or until
+       * they cancelled the surviving shift and paid the fee for it.
+       *
+       * `hasLiveAssignmentOn` skips NON_STAFFING_STATUSES, so the row that was
+       * just excused does not count as work and cannot veto its own block.
+       */
+      const stillWorking = await this.prAvailabilityRepository.hasLiveAssignmentOn({
+        userId: input.userId,
+        date: shift.shiftDate,
+      });
+      if (stillWorking) return;
+      await this.prAvailabilityRepository.block({
+        userId: input.userId,
+        unavailableDate: shift.shiftDate,
+        reason: LEAVE_APPROVED_BLOCK_REASON,
+        actor: input.actor,
+      });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.blockLeaveDay] Error:', error);
+    }
+  }
+
   private async notifyAgencyLeaveRequested(input: {
     agencyId: string;
     assignmentId: string;

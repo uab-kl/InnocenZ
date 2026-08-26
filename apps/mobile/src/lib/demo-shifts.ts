@@ -355,7 +355,14 @@ export function buildScheduleDays(
   while (cursor <= toIso) {
     let kind: ScheduleDayKind = 'open';
     if (cursor < baselineIso) kind = 'past';
-    else if (blocked.has(cursor)) kind = 'unavailable';
+    // A LIVE shift OUTRANKS a blocked day. The two genuinely coexist now that
+    // an approved MC blocks the whole date server-side (`blockLeaveDay`): one
+    // agency excuses its night and closes the day, while ANOTHER agency's shift
+    // on that same date — a rejected MC reverts to `assigned` — is still owed.
+    // Painting the day "Not available" would hide the one obligation the PR must
+    // still turn up for, and a no-show is the most expensive thing this calendar
+    // can cause. `byDate` holds live rows only (leave_approved, cancelled and
+    // no_show are filtered out upstream), so reaching here means a real shift.
     else if (byDate.has(cursor)) {
       const rows = byDate.get(cursor)!;
       if (rows.some((r) => r.checkInAt && !r.checkOutAt)) kind = 'active';
@@ -369,7 +376,7 @@ export function buildScheduleDays(
       )
         kind = 'pending';
       else kind = 'assigned';
-    }
+    } else if (blocked.has(cursor)) kind = 'unavailable';
     days.push({ dateIso: cursor, kind });
     cursor = addDaysIso(cursor, 1);
   }

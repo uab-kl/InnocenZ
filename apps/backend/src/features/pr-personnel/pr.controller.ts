@@ -1309,6 +1309,10 @@ export class PrControllerClass {
       const grace = graceMinutesFor(rules);
       const window = await this.shiftAssignmentRepository.attendanceWindow({
         prId,
+        // Same agency whose rules are being applied ten lines above — judging a
+        // PR by one agency's bands against another agency's conduct is exactly
+        // the mismatch `resolvePrForCaller` exists to prevent.
+        agencyId: resolved.agencyId,
         weekStart,
         weekEnd,
         graceMinutes: grace ?? 0,

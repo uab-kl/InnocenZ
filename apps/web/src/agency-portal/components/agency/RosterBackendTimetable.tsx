@@ -71,6 +71,7 @@ import {
 import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts, type Shift } from "@/services/shift";
 import {
+	fetchBackfillSlots,
 	fetchShiftAssignments,
 	fetchWagePreview,
 	type ShiftAssignmentStatus,
@@ -289,6 +290,26 @@ export function RosterBackendTimetable({
 		() => blockedDatesByPr(availabilityQuery.data ?? []),
 		[availabilityQuery.data],
 	);
+
+	/*
+	 * Drop-outs the agency has NOT yet answered.
+	 *
+	 * Same ["roster", "backfill"] key BackfillPanel uses, so this reads that
+	 * already-loaded cache rather than firing a second request, and the roster
+	 * mutations invalidate both together. The BACKEND decides what "unanswered"
+	 * means (a replacement assigned after the release) — asking it here is what
+	 * stops the grid and the worklist disagreeing about whether a night still
+	 * needs somebody.
+	 */
+	const backfillQuery = useQuery({
+		queryKey: ["roster", "backfill"],
+		queryFn: () => fetchBackfillSlots(logout),
+		staleTime: 15_000,
+	});
+	const unansweredDropouts = useMemo(
+		() => new Set((backfillQuery.data ?? []).map((r) => r.assignmentId)),
+		[backfillQuery.data],
+	);
 	/*
 	 * WHEN this roster is committed to ANOTHER agency — times only.
 	 *
@@ -432,6 +453,21 @@ export function RosterBackendTimetable({
 			if (isEndedAndUnworked(shift, now)) continue;
 			const outlet = outletNameById.get(shift.outletId) ?? "";
 			for (const r of rows) {
+				// THE FOURTH way it stops being answerable — and the only one that is
+				// about the PERSON rather than the shift. The other three ask whether
+				// the NIGHT can still take anybody; this asks whether the one human
+				// the venue actually named can still work it.
+				//
+				// An approved MC now blocks the whole day (backend `blockLeaveDay`), so
+				// the cell already renders UNAVAILABLE — and printed "Outlet request"
+				// directly beneath it, asking the agency to book someone the same grid
+				// had just said is off. A request naming Vicky is not answered by
+				// booking Alice; it is answered by nobody, and it should stop asking.
+				//
+				// Reads the SAME `blockedDates` the UNAVAILABLE cell reads, so the two
+				// cannot disagree about who is off. The request ROW is untouched: what
+				// the venue asked for stays true even once it cannot be granted.
+				if (blockedDates.get(r.userId)?.has(shift.shiftDate)) continue;
 				const byDate =
 					map.get(r.userId) ??
 					new Map<
@@ -456,7 +492,7 @@ export function RosterBackendTimetable({
 			}
 		}
 		return map;
-	}, [shiftsQuery.data, outletNameById]);
+	}, [shiftsQuery.data, outletNameById, blockedDates]);
 
 	const shiftFiltersOn = rosterShiftFiltersActive(filters);
 
@@ -1109,11 +1145,48 @@ export function RosterBackendTimetable({
 											{days.map((dateIso) => {
 												const rawSlots =
 													slotsByPrDay.get(`${pr.id}__${dateIso}`) ?? [];
+												// The PR blocked this day. A distinct state from the "Off" a
+												// cancelled assignment paints — that one means a booking was
+												// called off, this one means the person is not available at
+												// all — and the agency has to be able to tell them apart.
+												const prBlocked =
+													blockedDates.get(pr.id)?.has(dateIso) ?? false;
 												// Slots that fail the active filters read as free, so
 												// the outlet/status/payout/time filters narrow the grid.
 												const daySlots = rawSlots.filter(
 													(s) =>
-														!shiftFiltersOn || timetableSlotMatches(s, filters),
+														(!shiftFiltersOn || timetableSlotMatches(s, filters)) &&
+														// An EXCUSED shift that somebody has since COVERED stops
+														// occupying the PR's day. Until a replacement exists the red
+														// card is the reminder that this night lost someone; once it is
+														// covered that reminder has been answered, and all that stays
+														// true of the PR is that they are unavailable — which the
+														// blocked-day cell already says, with the reason on it.
+														// Emptying this list is what lets that cell through.
+														//
+														// leave_approved, cancelled and no_show ALL arrive here as the
+														// single UI status "unavailable" (backend-shift-map), so the
+														// status alone cannot say which one this is. noShowFlag and
+														// cancelledAt are the discriminators the slot already carries,
+														// and both must be excluded: a NO-SHOW is an attendance fact
+														// the agency bills and rates on, and a cancellation is a
+														// booking called off rather than a person excused. What is left
+														// is an approved MC, which is the only case this hides.
+														//
+														// prBlocked is NOT the discriminator — pr_availability rows are
+														// mostly the PR's OWN self-declared days and blockLeaveDay is
+														// just one more writer, so leaning on it would have hidden a
+														// no-show on any day the PR had blocked themselves. It stays as
+														// the precondition for the fall-through: the blocked-day cell is
+														// what replaces the card, and without a block there is nothing
+														// for the emptied list to fall through TO.
+														!(
+															prBlocked &&
+															s.status === "unavailable" &&
+															!s.noShowFlag &&
+															!s.cancelledAt &&
+															!unansweredDropouts.has(s.id)
+														),
 												);
 												const open = openShiftsByDay[dateIso] ?? [];
 												// ENDED shifts stay in openShiftsByDay so the demand
@@ -1129,8 +1202,7 @@ export function RosterBackendTimetable({
 												// a booking was called off, this one means the person
 												// is not available at all — and the agency has to be
 												// able to tell them apart.
-												const prBlocked =
-													blockedDates.get(pr.id)?.has(dateIso) ?? false;
+												// (declared above daySlots — it decides what that list keeps)
 												/*
 												 * BUSY ELSEWHERE — a THIRD state, and not a fourth
 												 * flavour of the two above.

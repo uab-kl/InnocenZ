@@ -1748,6 +1748,11 @@ export class ShiftAssignmentRepositoryClass {
           prName: prDisplayNameSql,
           status: ShiftAssignmentTable.status,
           notes: ShiftAssignmentTable.notes,
+          // Both stamps the release time is derived from — see `releaseAt`
+          // below, which decides between them on `status` rather than trusting
+          // `leave_decided_at` to mean what its name suggests.
+          leaveDecidedAt: ShiftAssignmentTable.leaveDecidedAt,
+          updatedAt: ShiftAssignmentTable.updatedAt,
           shiftId: ShiftTable.id,
           shiftDate: ShiftTable.shiftDate,
           slot: ShiftTable.slot,
@@ -1768,10 +1773,13 @@ export class ShiftAssignmentRepositoryClass {
       if (released.length === 0) return [];
 
       const shiftIds = [...new Set(released.map((r) => r.shiftId))];
-      const staffedRows = await db
+      // ROWS, not a COUNT. A drop-out is answered by somebody assigned AFTER
+      // it, so the timestamps have to come back; the headcount is derived from
+      // the same rows, which is what stops the two from ever disagreeing.
+      const liveRows = await db
         .select({
           shiftId: ShiftAssignmentTable.shiftId,
-          staffed: sql<number>`count(*)::int`,
+          createdAt: ShiftAssignmentTable.createdAt,
         })
         .from(ShiftAssignmentTable)
         .where(
@@ -1779,18 +1787,79 @@ export class ShiftAssignmentRepositoryClass {
             inArray(ShiftAssignmentTable.shiftId, shiftIds),
             notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
           ),
-        )
-        .groupBy(ShiftAssignmentTable.shiftId);
-      const staffedByShift = new Map(
-        staffedRows.map((r) => [r.shiftId, r.staffed]),
-      );
+        );
+      const liveByShift = new Map<string, Date[]>();
+      for (const row of liveRows) {
+        const list = liveByShift.get(row.shiftId) ?? [];
+        list.push(row.createdAt);
+        liveByShift.set(row.shiftId, list);
+      }
+
+      /**
+       * WHICH DROP-OUTS ARE STILL UNANSWERED (owner's call, 26 Aug 2026).
+       *
+       * "Still short-staffed" was the wrong test on its own. A 6-seat shift
+       * that only ever had one PR stays below quantity no matter who you
+       * assign, so replacing the person who dropped out never cleared their
+       * card — the agency picked a replacement and the card kept asking, with
+       * the original PR's name still on it.
+       *
+       * A drop-out is ANSWERED by somebody assigned after it happened. The
+       * remaining seats on an under-staffed shift are ordinary demand, which
+       * the roster's Open Demand band already shows; this list is only about
+       * seats that were LOST.
+       *
+       * Paired in order, never counted: two drop-outs need two replacements,
+       * and matching each release to the earliest assignment that post-dates it
+       * means one replacement cannot silently answer both. An assignment made
+       * BEFORE the release is not a replacement — it is one of the people who
+       * were already there.
+       */
+      /**
+       * WHEN the seat was given up.
+       *
+       * ⚠️ `leave_decided_at` is the release moment ONLY while the row is still
+       * excused. `rejectLeave` also stamps it and puts the row back to
+       * `assigned`, and nothing clears it afterwards — so a row that was later
+       * CANCELLED can still carry a decision stamp from a rejection weeks
+       * earlier. Preferring it unconditionally moved the release BACKWARD,
+       * which is the direction that HIDES a card: every ordinary assignment
+       * made between that old rejection and the real cancellation then
+       * qualified as a "replacement", and the vacated seat never reached the
+       * worklist. Status decides which stamp means what.
+       */
+      const releaseAt = (r: {
+        status: ShiftAssignmentStatus;
+        leaveDecidedAt: Date | null;
+        updatedAt: Date;
+      }) =>
+        (r.status === 'leave_approved' && r.leaveDecidedAt
+          ? r.leaveDecidedAt
+          : r.updatedAt
+        ).getTime();
+      const answered = new Set<string>();
+      for (const shiftId of shiftIds) {
+        const replacements = [...(liveByShift.get(shiftId) ?? [])].sort(
+          (a, b) => a.getTime() - b.getTime(),
+        );
+        const dropouts = released
+          .filter((r) => r.shiftId === shiftId)
+          .sort((a, b) => releaseAt(a) - releaseAt(b));
+        for (const r of dropouts) {
+          const at = releaseAt(r);
+          const idx = replacements.findIndex((c) => c.getTime() > at);
+          if (idx === -1) continue;
+          replacements.splice(idx, 1);
+          answered.add(r.assignmentId);
+        }
+      }
 
       return released
         .map((r) => ({
           ...r,
-          staffedCount: staffedByShift.get(r.shiftId) ?? 0,
+          staffedCount: liveByShift.get(r.shiftId)?.length ?? 0,
         }))
-        .filter((r) => r.staffedCount < r.quantity);
+        .filter((r) => !answered.has(r.assignmentId) && r.staffedCount < r.quantity);
     } catch (error) {
       logger.error(
         '[ShiftAssignmentRepository.listBackfillSlots] Error:',
@@ -2710,6 +2779,24 @@ export class ShiftAssignmentRepositoryClass {
    */
   async attendanceWindow(input: {
     prId: string;
+    /**
+     * REQUIRED, and required on purpose (26 Aug 2026).
+     *
+     * One person holds an `agency_pr` row per agency, so a PR on four rosters
+     * has four separate attendance records. Without this term every figure
+     * below counted EVERY agency: `max_mc_per_month` fined a PR for MCs a
+     * DIFFERENT agency had approved (and printed the count in the fine), while
+     * `min_shifts_per_week` quietly let one agency's shifts satisfy another's
+     * minimum. Both callers were already agency-scoped when picking WHICH PRs
+     * to judge, which is exactly what hid it — the right people were measured
+     * against the wrong window.
+     *
+     * Not optional: an optional scope is one a future caller forgets, and the
+     * omission type-checks. `pr-stats.ts` states the same rule for the same
+     * table — "querying without the agency predicate would show each agency the
+     * other's numbers" — and this is its sibling finally applying it.
+     */
+    agencyId: string;
     weekStart: string;
     weekEnd: string;
     graceMinutes: number;
@@ -2722,7 +2809,7 @@ export class ShiftAssignmentRepositoryClass {
     mcThisMonth: number;
   }> {
     try {
-      const { prId, weekStart, weekEnd, graceMinutes } = input;
+      const { prId, agencyId, weekStart, weekEnd, graceMinutes } = input;
       const result = await db.execute(sql`
         with wk as (
           select sa.status, sa.check_in_at, s.shift_date, s.slot,
@@ -2730,6 +2817,7 @@ export class ShiftAssignmentRepositoryClass {
           from main.shift_assignment sa
           join main.shift s on s.id = sa.shift_id
           where sa.pr_id = ${prId}
+            and sa.agency_id = ${agencyId}
             and s.shift_date between ${weekStart} and ${weekEnd}
         ),
         mth as (
@@ -2737,6 +2825,7 @@ export class ShiftAssignmentRepositoryClass {
           from main.shift_assignment sa
           join main.shift s on s.id = sa.shift_id
           where sa.pr_id = ${prId}
+            and sa.agency_id = ${agencyId}
             and sa.status = 'leave_approved'
             and date_trunc('month', s.shift_date::date)
                 = date_trunc('month', ${weekStart}::date)

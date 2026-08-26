@@ -2778,6 +2778,11 @@ const en = {
 		groupPr: "PR",
 		groupOutlet: "Outlet",
 		agencyTied: "Agency-Tied",
+		/* The last sub-filter chip. It reads "History" on the tabs whose record is
+		   CLOSED business — a decided MC, an approved or refused departure — and
+		   "All" only on Agency-Tied, where the same list still holds live members
+		   the agency acts on. Owner's call, 26 Aug 2026. */
+		history: "History",
 		cutlost: "Cutlost",
 		mcLeaves: "MC/Leaves",
 		addPr: "Add PR",
@@ -5402,6 +5407,7 @@ const zh: PortalTranslations = {
 		addPr: "添加 PR",
 		adding: "添加中…",
 		current: "待处理",
+		history: "历史记录",
 		cancelAgency: "解约申请",
 		joinRequest: "加入申请",
 		joinRejected: "加入已拒绝",
