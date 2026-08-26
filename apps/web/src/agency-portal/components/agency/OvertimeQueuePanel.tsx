@@ -279,21 +279,27 @@ export function OvertimeQueuePanel({
 				)}
 
 				{claims.length > 0 && (
-					<div className="space-y-3">
+					<>
 						<p className="iz-tiny iz-muted">
 							Each claim holds its own payroll week until it is decided. The
 							amount shown is what the approval writes onto the voucher.
 						</p>
-						{claims.map((c) => (
-							<OvertimeRow
-								key={c.assignmentId}
-								claim={c}
-								canDecide={canDecide}
-								busy={isDeciding}
-								onDecide={(decision) => handle(c, decision)}
-							/>
-						))}
-					</div>
+						{/* Two columns from `xl`, matching the Disputes and Receipts
+						    queues on this page — one claim is a short card, and a column
+						    of them across a portal-width screen was mostly margin.
+						    `items-start` keeps each card at its own height. */}
+						<div className="mt-3 grid items-start gap-3 xl:grid-cols-2">
+							{claims.map((c) => (
+								<OvertimeRow
+									key={c.assignmentId}
+									claim={c}
+									canDecide={canDecide}
+									busy={isDeciding}
+									onDecide={(decision) => handle(c, decision)}
+								/>
+							))}
+						</div>
+					</>
 				)}
 			</IzCard>
 		</>

@@ -26,12 +26,9 @@ import {
 	shiftSpecialEventLabel,
 } from "@agency-portal/lib/outlet-demo";
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
+import { pickLiveShift } from "@agency-portal/lib/outlet-live-shift";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { PR_AGENCY_TIED_OFFERS } from "@agency-portal/lib/pr-features";
-import {
-	hasShiftEnded,
-	shiftEndInstant,
-} from "@agency-portal/lib/shift-window";
 import { specialServicesForOutlet } from "@agency-portal/lib/special-service-actions";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { ChevronDown } from "lucide-react";
@@ -77,73 +74,20 @@ export function OutletBookings({
 			}),
 		[shifts, outletWorkspace, agencyRoster, outletCommissionRules],
 	);
-
-	// TODAY MEANS TODAY. This used to match on the human label (`date ===
-	// "Tonight"`) and then fall back to `find(confirmed)` — ANY confirmed shift in
-	// the 14-day window — so with nothing on tonight the home page promoted
-	// tomorrow's, or next week's, and captioned it as the live shift. It now
-	// matches on the real date, and the fallback is gone.
-	//
-	// Rollover needs no special case: a shift dated today stays here until the
-	// DATE itself moves on, at which point tomorrow's shift is today's. Preferring
-	// one that is still running keeps the right card up when a venue runs two in a
-	// day; `hasShiftEnded` is overnight-aware, so a 22:00–04:00 shift is not
-	// "ended" at 01:00 even though the calendar date has changed.
-	const liveShift = useMemo(() => {
-		const todayIso = getLiveTodayIso();
-		const now = new Date();
-		const todays = visibleShifts.filter(
-			(s) =>
-				s.status === "confirmed" &&
-				resolveOutletShiftDateIso(s.date, s.dateIso, todayIso) === todayIso,
-		);
-		// A CLOCK-ENDED SHIFT WITH AN OPEN BOOKING IS NOT OVER (owner, 23 Aug
-		// 2026: "the pr not yet end why show another shift"). Vicky booked
-		// 20:30-21:00, never checked in or out — and at 21:52 this card had
-		// already moved on to the 21:30 shift, hiding the one booking that
-		// still needed the venue's attention. The clock ends the WINDOW; only
-		// the people resolve the SHIFT: every booked slot checked out (or
-		// cancelled) is what "over" means here.
-		const hasOpenBooking = (s2: (typeof todays)[number], dIso: string) =>
-			agencyRoster.some(
-				(slot) =>
-					slot.dateIso === dIso &&
-					slot.shift === s2.shift &&
-					// The STAMP is the fact — the status vocabulary has no
-					// "checked-out" value (it folds back into scheduled). Cancelled,
-					// no-show and approved-leave rows map to "unavailable", which is
-					// an absence, not an open booking — they must not hold the card.
-					!slot.checkedOutAt &&
-					slot.status !== "unavailable",
-			);
-		return (
-			todays.find((s) => {
-				const dIso = resolveOutletShiftDateIso(s.date, s.dateIso, todayIso);
-				return !hasShiftEnded(dIso, s.shift, now) || hasOpenBooking(s, dIso);
-			}) ??
-			// ⚠️ NO FALLBACK TO AN ENDED SHIFT.
-			//
-			// This was `?? todays[0]`, which on a day whose shifts have all finished
-			// promoted the FIRST of them and captioned it as the live one: a venue
-			// whose 11:00–12:00 ended at noon was still being shown that shift, badged
-			// "Live", at half past seven in the evening — with its PR long since
-			// checked out. `todays[0]` is only a sensible answer while something is
-			// still running, and the `find` above already covers that case.
-			//
-			// Keeping a shift with NO window is deliberate: `hasShiftEnded` returns
-			// false when it cannot parse one, and a label-only shift ("Late night")
-			// has no end to be past. Better to leave that card up than to blank a
-			// venue's home page over a slot nobody gave a time to.
-			todays.find(
-				(s) =>
-					!shiftEndInstant(
-						resolveOutletShiftDateIso(s.date, s.dateIso, todayIso),
-						s.shift,
-					),
-			) ??
-			null
-		);
-	}, [visibleShifts, agencyRoster]);
+	// TODAY MEANS TODAY, and the RUNNING shift is the live one — the ranking and
+	// every reason behind it live in `pickLiveShift`, which is unit-tested because
+	// this rule has now been wrong three times and each wrong answer looked
+	// perfectly plausible on screen.
+	const liveShift = useMemo(
+		() =>
+			pickLiveShift({
+				shifts: visibleShifts,
+				roster: agencyRoster,
+				todayIso: getLiveTodayIso(),
+				now: new Date(),
+			}),
+		[visibleShifts, agencyRoster],
+	);
 
 	const futureShifts = liveShift
 		? visibleShifts.filter((s) => s.id !== liveShift.id)

@@ -864,7 +864,23 @@ export function AgencyReceiptsPanel({
 											{formatRM(total)}
 										</p>
 									</div>
-									<div className="space-y-2">
+									{/*
+									 * TWO COLUMNS from `xl` up — a receipt card holds a fixed
+									 * amount of content and a portal-width screen fits two of
+									 * them side by side, which halves the scrolling on a day
+									 * with six.
+									 *
+									 * `items-start` is load-bearing: grid items stretch by
+									 * default, so one row with its editor open would drag its
+									 * neighbour to the same height and leave a tall empty card
+									 * beside it. Each card keeps its own height instead.
+									 *
+									 * Nothing inside truncates — the one `truncate` in this
+									 * whole tree (the editor's item name) now wraps, because at
+									 * half width it would have hidden the very words a reviewer
+									 * checks against the paper.
+									 */}
+									<div className="grid items-start gap-2 xl:grid-cols-2">
 										{rows.map((receipt) => (
 											<div
 												key={receipt.id}

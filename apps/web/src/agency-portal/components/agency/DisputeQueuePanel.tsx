@@ -12,7 +12,14 @@ import {
 import { receiptStatusTag } from "@agency-portal/lib/receipt-status";
 import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
-import { Check, ImageOff, Paperclip, Pencil, X } from "lucide-react";
+import {
+	Check,
+	ChevronDown,
+	ImageOff,
+	Paperclip,
+	Pencil,
+	X,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import type {
@@ -277,6 +284,8 @@ function DisputeRow({
 	const { t } = usePortalLocale();
 	const [note, setNote] = useState("");
 	const [rejecting, setRejecting] = useState(false);
+	/** Undecided claims open themselves — see the header button below. */
+	const [open, setOpen] = useState(!dispute.outcome);
 	const proof = dispute.proofPhotos ?? [];
 
 	const submit = (outcome: "accepted" | "rejected") => {
@@ -291,24 +300,55 @@ function DisputeRow({
 
 	return (
 		<div className="rounded-xl border border-[var(--iz-line)] p-3">
-			<div className="flex flex-wrap items-start justify-between gap-2">
-				<div>
-					{/* The SHARED formatter, not a second copy — formatting the label here
+			{/*
+			 * THE WHOLE CARD FOLDS, and the outcome decides how it starts.
+			 *
+			 * A settled claim is a record: shift block, both figures, the reason,
+			 * the proof, the receipt behind it and the editor — a screen and a half
+			 * of evidence about a decision nobody can change. Undecided ones open
+			 * themselves, because that IS the work; the same rule the Receipts feed
+			 * applies to a receipt still waiting on the agency.
+			 */}
+			<button
+				type="button"
+				className="flex w-full flex-wrap items-start justify-between gap-2 text-left"
+				onClick={() => setOpen((v) => !v)}
+				aria-expanded={open}
+			>
+				<div className="flex min-w-0 items-start gap-1.5">
+					<ChevronDown
+						className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)] transition-transform${
+							open ? "" : " -rotate-90"
+						}`}
+						aria-hidden
+					/>
+					<div className="min-w-0">
+						{/* The SHARED formatter, not a second copy — formatting the label here
 					    by hand is exactly how this row ended up without a nickname while
 					    the voucher card had one. */}
-					<div className="text-sm font-semibold">
-						{formatPayeeLabel(
-							dispute.voucher.prNickname,
-							dispute.voucher.prName,
-						) || t.receipts.unknownPr}{" "}
-						· {t.money[DISPUTE_COMPONENT_LABEL[dispute.component]]}
+						<div className="text-sm font-semibold">
+							{formatPayeeLabel(
+								dispute.voucher.prNickname,
+								dispute.voucher.prName,
+							) || t.receipts.unknownPr}{" "}
+							· {t.money[DISPUTE_COMPONENT_LABEL[dispute.component]]}
+						</div>
+						<p className="iz-tiny iz-muted mt-0.5">
+							{formatDay(dispute.disputeDate)}
+							{dispute.voucher.weekStart && dispute.voucher.weekEnd
+								? ` · week ${dispute.voucher.weekStart} to ${dispute.voucher.weekEnd}`
+								: ""}
+						</p>
+						{/* THE CONTESTED FIGURE, on the header line — a folded card that
+					    named a person and a bucket but no money made the reviewer open
+					    every one to find the big ones. */}
+						<p className="iz-tiny iz-muted2 mt-0.5 font-mono">
+							{formatRM(dispute.disputedAmount)}
+							{dispute.claimedAmount !== null
+								? ` → ${formatRM(dispute.claimedAmount)}`
+								: ""}
+						</p>
 					</div>
-					<p className="iz-tiny iz-muted mt-0.5">
-						{formatDay(dispute.disputeDate)}
-						{dispute.voucher.weekStart && dispute.voucher.weekEnd
-							? ` · week ${dispute.voucher.weekStart} to ${dispute.voucher.weekEnd}`
-							: ""}
-					</p>
 				</div>
 				{/* The row used to hardcode t.payroll.open — true only because the panel could
 				    not fetch anything else. Now that settled claims are listed, the
@@ -334,106 +374,118 @@ function DisputeRow({
 						{t.payroll.open}
 					</span>
 				)}
-			</div>
+			</button>
 
-			{/* WHICH SHIFT this money is about — above the figures, because the
+			{!open ? null : (
+				<>
+					{/* WHICH SHIFT this money is about — above the figures, because the
 			    answer to "is this claim right" starts with which night it was. */}
-			<DisputeShiftFacts dispute={dispute} />
+					<DisputeShiftFacts dispute={dispute} />
 
-			<div className="mt-2 flex flex-wrap gap-4 text-sm">
-				<span>
-					<span className="iz-tiny iz-muted block">
-						{t.payroll.voucherSaysLabel}
-					</span>
-					<span className="font-mono">{formatRM(dispute.disputedAmount)}</span>
-				</span>
-				{dispute.claimedAmount !== null && (
-					<span>
-						<span className="iz-tiny iz-muted block">{t.payroll.prClaims}</span>
-						<span className="font-mono">{formatRM(dispute.claimedAmount)}</span>
-					</span>
-				)}
-			</div>
-
-			{dispute.reason && (
-				<p className="iz-tiny mt-2">
-					<span className="iz-muted">{t.payroll.reasonLabel} </span>
-					{dispute.reason}
-				</p>
-			)}
-			{dispute.note && <p className="iz-tiny iz-muted2 mt-1">{dispute.note}</p>}
-
-			<div className="mt-2 flex items-center gap-1.5">
-				{proof.length > 0 ? (
-					<>
-						<Paperclip className="h-3.5 w-3.5" />
-						<span className="iz-tiny">
-							What the PR attached · {proof.length} image
-							{proof.length > 1 ? "s" : ""}
+					<div className="mt-2 flex flex-wrap gap-4 text-sm">
+						<span>
+							<span className="iz-tiny iz-muted block">
+								{t.payroll.voucherSaysLabel}
+							</span>
+							<span className="font-mono">
+								{formatRM(dispute.disputedAmount)}
+							</span>
 						</span>
-					</>
-				) : (
-					<>
-						<ImageOff className="h-3.5 w-3.5 opacity-60" />
-						{/* Not a defect: a "missing record" claim has nothing to photograph. */}
-						<span className="iz-tiny iz-muted2">
-							{t.receipts.noProofAttached}
-						</span>
-					</>
-				)}
-			</div>
-			<ProofPhotos photos={proof} label={t.payroll.prProof} />
+						{dispute.claimedAmount !== null && (
+							<span>
+								<span className="iz-tiny iz-muted block">
+									{t.payroll.prClaims}
+								</span>
+								<span className="font-mono">
+									{formatRM(dispute.claimedAmount)}
+								</span>
+							</span>
+						)}
+					</div>
 
-			<DisputeEvidence dispute={dispute} receipts={receipts} />
+					{dispute.reason && (
+						<p className="iz-tiny mt-2">
+							<span className="iz-muted">{t.payroll.reasonLabel} </span>
+							{dispute.reason}
+						</p>
+					)}
+					{dispute.note && (
+						<p className="iz-tiny iz-muted2 mt-1">{dispute.note}</p>
+					)}
 
-			{/* A DECIDED claim is read-only. The server refuses a second decision, so
+					<div className="mt-2 flex items-center gap-1.5">
+						{proof.length > 0 ? (
+							<>
+								<Paperclip className="h-3.5 w-3.5" />
+								<span className="iz-tiny">
+									What the PR attached · {proof.length} image
+									{proof.length > 1 ? "s" : ""}
+								</span>
+							</>
+						) : (
+							<>
+								<ImageOff className="h-3.5 w-3.5 opacity-60" />
+								{/* Not a defect: a "missing record" claim has nothing to photograph. */}
+								<span className="iz-tiny iz-muted2">
+									{t.receipts.noProofAttached}
+								</span>
+							</>
+						)}
+					</div>
+					<ProofPhotos photos={proof} label={t.payroll.prProof} />
+
+					<DisputeEvidence dispute={dispute} receipts={receipts} />
+
+					{/* A DECIDED claim is read-only. The server refuses a second decision, so
 			    offering Accept/Reject on one already settled is a button that can
 			    only fail — and worse, it invites the reviewer to think the outcome is
 			    still theirs to change. What they need instead is the record: what was
 			    decided, and what was said to the PR. */}
-			{dispute.outcome ? (
-				dispute.resolutionNote && (
-					<p className="iz-tiny iz-muted mt-3">
-						<span className="iz-muted2">{t.payroll.toldThePr} </span>
-						{dispute.resolutionNote}
-					</p>
-				)
-			) : (
-				<>
-					<textarea
-						className="iz-field-input mt-3 w-full"
-						rows={2}
-						placeholder={t.payroll.noteToPrRequired}
-						value={note}
-						onChange={(e) => {
-							setNote(e.target.value);
-							if (e.target.value.trim()) setRejecting(false);
-						}}
-					/>
-					{rejecting && (
-						<p className="iz-tiny mt-1 text-[var(--iz-amber,#d9b97a)]">
-							Tell the PR why this was rejected.
-						</p>
-					)}
+					{dispute.outcome ? (
+						dispute.resolutionNote && (
+							<p className="iz-tiny iz-muted mt-3">
+								<span className="iz-muted2">{t.payroll.toldThePr} </span>
+								{dispute.resolutionNote}
+							</p>
+						)
+					) : (
+						<>
+							<textarea
+								className="iz-field-input mt-3 w-full"
+								rows={2}
+								placeholder={t.payroll.noteToPrRequired}
+								value={note}
+								onChange={(e) => {
+									setNote(e.target.value);
+									if (e.target.value.trim()) setRejecting(false);
+								}}
+							/>
+							{rejecting && (
+								<p className="iz-tiny mt-1 text-[var(--iz-amber,#d9b97a)]">
+									Tell the PR why this was rejected.
+								</p>
+							)}
 
-					<div className="mt-2 flex gap-2">
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary flex items-center gap-1.5"
-							disabled={busy}
-							onClick={() => submit("accepted")}
-						>
-							<Check className="h-4 w-4" /> Accept
-						</button>
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft flex items-center gap-1.5"
-							disabled={busy}
-							onClick={() => submit("rejected")}
-						>
-							<X className="h-4 w-4" /> Reject
-						</button>
-					</div>
+							<div className="mt-2 flex gap-2">
+								<button
+									type="button"
+									className="iz-btn iz-btn-primary flex items-center gap-1.5"
+									disabled={busy}
+									onClick={() => submit("accepted")}
+								>
+									<Check className="h-4 w-4" /> Accept
+								</button>
+								<button
+									type="button"
+									className="iz-btn iz-btn-soft flex items-center gap-1.5"
+									disabled={busy}
+									onClick={() => submit("rejected")}
+								>
+									<X className="h-4 w-4" /> Reject
+								</button>
+							</div>
+						</>
+					)}
 				</>
 			)}
 		</div>
@@ -668,22 +720,28 @@ export function DisputeQueuePanel({
 				)}
 
 				{disputes.length > 0 && (
-					<div className="space-y-3">
+					<>
 						<p className="iz-tiny iz-muted">
 							Accepting records the decision and tells the PR. It does not
 							change the money on its own — correct the receipt below first if
 							the PR is right, then accept.
 						</p>
-						{disputes.map((d) => (
-							<DisputeRow
-								key={d.id}
-								dispute={d}
-								busy={isResolving}
-								receipts={receipts}
-								onResolve={(outcome, note) => handle(d, outcome, note)}
-							/>
-						))}
-					</div>
+						{/* Two columns from `xl`, same as the Receipts feed. `items-start`
+						    so an expanded claim does not stretch the settled one beside it;
+						    the sentence above stays full width because it is about the
+						    whole queue, not about any one card. */}
+						<div className="mt-3 grid items-start gap-3 xl:grid-cols-2">
+							{disputes.map((d) => (
+								<DisputeRow
+									key={d.id}
+									dispute={d}
+									busy={isResolving}
+									receipts={receipts}
+									onResolve={(outcome, note) => handle(d, outcome, note)}
+								/>
+							))}
+						</div>
+					</>
 				)}
 			</IzCard>
 		</>

@@ -814,6 +814,9 @@ const en = {
 		noOpenShiftsThisDay: "No open shifts this day",
 		busyElsewhereAt: "{name} is not available {time}",
 		unavailableAtTime: "Unavailable",
+		/** The PR already holds a seat on this very shift — the server 409s on it. */
+		alreadyOnThisShift: "{name} is already on this shift",
+		alreadyOnShiftShort: "Already on this shift",
 		noShiftsPostedThisDay: "No shifts posted for this day.",
 		openShiftsCount: "Open shifts · {n}",
 		openCount: "{n} open",
@@ -3605,6 +3608,8 @@ const zh: PortalTranslations = {
 		noOpenShiftsThisDay: "当天没有空缺班次",
 		busyElsewhereAt: "{name} 在 {time} 不可排班",
 		unavailableAtTime: "不可排班",
+		alreadyOnThisShift: "{name} 已在此班次上",
+		alreadyOnShiftShort: "已在此班次",
 		noShiftsPostedThisDay: "当天没有发布班次。",
 		openShiftsCount: "空缺班次 · {n}",
 		openCount: "{n} 个空缺",
