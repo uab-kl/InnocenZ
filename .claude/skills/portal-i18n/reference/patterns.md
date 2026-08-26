@@ -179,6 +179,65 @@ mid-sentence. Say so on the option's doc comment.
 - **CJK line breaking.** No word boundaries — buttons need
   `white-space: nowrap` (already on `.iz-btn`).
 
+## 7b. An OPTIONAL `t` is a default, and a default pins a locale forever
+
+Caught three separate times in one campaign, in three different files, by three
+different agents — and `tsc` was green for all three:
+
+```ts
+// WRONG — a caller that forgets gets English, silently, forever
+function summary(row: Row, t: PortalTranslations = translations.en) { … }
+function validateStep(s, draft, digits, copy?: Partial<SignupFieldCopy>) {
+  return copy?.nameRequired ?? "Name is required";   // the `??` IS the leak
+}
+
+// RIGHT — LAST, and REQUIRED
+function summary(row: Row, t: PortalTranslations) { … }
+```
+
+`formatPayTierRowSummary` shipped English pay-tier lines into a Chinese portal
+this way. `validateStep` did it across all 39 signup validation messages.
+`shiftDurationLabel` did it for every duration on mobile.
+
+The rule: **an exported helper takes the dictionary LAST and WITHOUT a default.**
+Then a caller that forgets is a compile error instead of a silent English string.
+When you add `t` to a shared helper, expect to fix every call site — that work
+is the feature, not an inconvenience.
+
+## 8a. The icon-by-text trap fires at SCALE, and nothing catches it
+
+This was already written down in §8 below, and a later pass still walked into it
+at **32 sites**, because the failure is invisible: `iconForNav(label)` matches on
+English text and ALWAYS returns something, so a translated title degrades to a
+plausible-looking `CircleHelp` "?" glyph. `iconForTitle` (via `TitleWithIcon`,
+which derives its key from the rendered *children*) returns null instead, and the
+icon just disappears. No error, no blank, nothing for `tsc` or biome to see.
+
+Writing the warning down was not enough. **Run the check** — the risk set is any
+file that both passes a translated label AND uses a text-matched lookup:
+
+```bash
+comm -12 \
+  <(rg 'title=\{t\.|eyebrow=\{t\.|label=\{t\.' apps/web/src -g '*.tsx' -l | sort) \
+  <(rg -l 'OutletSection|OutletPageHeader|TitleWithIcon|iconForNav|iconForLabel' apps/web/src -g '*.tsx' | sort)
+```
+
+Then check each hit carries an escape: `grep -iq 'iconkey=\|icon='`. **Case-
+insensitive matters** — the eyebrow escape is `eyebrowIconKey`, and a
+case-sensitive `iconKey=` reports an already-fixed file as broken. Piping the
+first `rg` into `xargs rg` instead of `comm` silently returns nothing on Windows
+paths, which reads as "all clear" — verify the halves return non-zero counts
+before believing an empty intersection.
+
+Every hit needs an explicit English `iconKey` (or `icon={iconForNav("…")}`).
+Recover the English from git — `git log -S <key> -- <file>`, then read the literal
+out of the parent commit — never guess it. A wrong key reproduces the identical
+silent "?".
+
+If a component derives an icon from a prop and offers no escape hatch, ADD one
+before fixing its callers; `OutletPageHeader`'s `iconKey` guarded only `title`
+and not `eyebrow`, which blocked three fixes until the prop existed.
+
 ## 8b. A stored string can be a MATCHING KEY, not just a value
 
 The strongest version of the one rule, and the one that is easiest to miss:
