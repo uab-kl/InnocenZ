@@ -92,6 +92,9 @@ export class AgencyPenaltyRuleControllerClass {
     for (const prId of prIds) {
       const window = await this.shiftAssignmentRepository.attendanceWindow({
         prId,
+        // This agency only. The PR list above is already agency-scoped; the
+        // WINDOW was not, so every rule was judged on four agencies of history.
+        agencyId,
         weekStart,
         weekEnd,
         graceMinutes: grace ?? 0,

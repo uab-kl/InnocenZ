@@ -380,6 +380,7 @@ export const paymentVoucherController = new PaymentVoucherControllerClass(
 // Takes agencyPrRepository (declared far above) because assigning a shift must
 // check the agency has APPROVED that PR, and only agency_pr holds that per
 // membership — the synthetic PR reports its oldest agency's answer.
+export const prAvailabilityRepository = new PrAvailabilityRepositoryClass();
 export const shiftAssignmentController = new ShiftAssignmentControllerClass(
   shiftAssignmentRepository,
   shiftRepository,
@@ -391,6 +392,7 @@ export const shiftAssignmentController = new ShiftAssignmentControllerClass(
   agencyPenaltyRuleRepository,
   agencyPrRepository,
   agencyOutletRepository,
+  prAvailabilityRepository,
 );
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
@@ -403,7 +405,6 @@ export const outletSwapController = new OutletSwapControllerClass(
   authRepository,
   outletMemberRepository,
 );
-export const prAvailabilityRepository = new PrAvailabilityRepositoryClass();
 export const prAvailabilityController = new PrAvailabilityControllerClass(
   prAvailabilityRepository,
   agencyMemberRepository,

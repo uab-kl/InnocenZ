@@ -458,7 +458,12 @@ export function AgencyReceiptEditor({
 										: ""
 								}`}
 							>
-								<span className="truncate" title={line.description}>
+								{/* WRAPS, never truncates. This editor now opens inside a
+								    half-width column, and the item name is the one thing a
+								    reviewer must read in full to check it against the paper —
+								    "Heradura anejo ult…" is not a line anybody can verify. A
+								    second line costs 18px; a hidden name costs the check. */}
+								<span className="break-words" title={line.description}>
 									{line.description}
 								</span>
 								<input

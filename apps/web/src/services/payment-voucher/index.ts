@@ -512,6 +512,26 @@ export interface AgencyReceiptLine {
 }
 
 /**
+ * A PR's claim against one receipt, as the receipts feed reports it.
+ *
+ * A trimmed `PaymentVoucherDispute` — enough to badge a row and say what is
+ * being argued, not enough to decide it. Deciding happens in the dispute queue,
+ * which fetches the full record with its proof and its money.
+ *
+ * `outcome === null` is the whole point: that is an OPEN claim, the one state
+ * `receipt.status` has no way to express.
+ */
+export interface AgencyReceiptDispute {
+	id: string;
+	/** The contested shift day, yyyy-MM-dd. */
+	disputeDate: string;
+	component: DisputeComponent;
+	reason: string | null;
+	raisedAt: string;
+	outcome: DisputeOutcome | null;
+}
+
+/**
  * One receipt in the agency's CROSS-VOUCHER feed (`GET /payment-voucher/receipts`).
  *
  * Distinct from `PaymentVoucherReceipt`, which rides on one voucher's detail and
@@ -552,6 +572,19 @@ export interface AgencyReceipt {
 	 * "no shift happened".
 	 */
 	shift: DisputeShift | null;
+	/**
+	 * Every claim the PR has raised against this paper, open and settled.
+	 *
+	 * Server-derived (`listAgencyReceipts`), never re-derived here: a dispute
+	 * that names no receipt covers a whole day and bucket, and a second copy of
+	 * that rule on the client is how a "Disputed" badge and the dispute queue
+	 * come to disagree about the same receipt.
+	 *
+	 * OPTIONAL only because a backend that has not restarted yet omits it —
+	 * absent means "we cannot say", which is why the readers in
+	 * `receipt-disputes.ts` treat it separately from an empty array.
+	 */
+	disputes?: AgencyReceiptDispute[];
 	lines: AgencyReceiptLine[];
 }
 

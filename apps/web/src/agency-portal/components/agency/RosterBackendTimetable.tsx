@@ -71,6 +71,7 @@ import {
 import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts, type Shift } from "@/services/shift";
 import {
+	fetchBackfillSlots,
 	fetchShiftAssignments,
 	fetchWagePreview,
 	type ShiftAssignmentStatus,
@@ -289,6 +290,26 @@ export function RosterBackendTimetable({
 		() => blockedDatesByPr(availabilityQuery.data ?? []),
 		[availabilityQuery.data],
 	);
+
+	/*
+	 * Drop-outs the agency has NOT yet answered.
+	 *
+	 * Same ["roster", "backfill"] key BackfillPanel uses, so this reads that
+	 * already-loaded cache rather than firing a second request, and the roster
+	 * mutations invalidate both together. The BACKEND decides what "unanswered"
+	 * means (a replacement assigned after the release) — asking it here is what
+	 * stops the grid and the worklist disagreeing about whether a night still
+	 * needs somebody.
+	 */
+	const backfillQuery = useQuery({
+		queryKey: ["roster", "backfill"],
+		queryFn: () => fetchBackfillSlots(logout),
+		staleTime: 15_000,
+	});
+	const unansweredDropouts = useMemo(
+		() => new Set((backfillQuery.data ?? []).map((r) => r.assignmentId)),
+		[backfillQuery.data],
+	);
 	/*
 	 * WHEN this roster is committed to ANOTHER agency — times only.
 	 *
@@ -432,6 +453,21 @@ export function RosterBackendTimetable({
 			if (isEndedAndUnworked(shift, now)) continue;
 			const outlet = outletNameById.get(shift.outletId) ?? "";
 			for (const r of rows) {
+				// THE FOURTH way it stops being answerable — and the only one that is
+				// about the PERSON rather than the shift. The other three ask whether
+				// the NIGHT can still take anybody; this asks whether the one human
+				// the venue actually named can still work it.
+				//
+				// An approved MC now blocks the whole day (backend `blockLeaveDay`), so
+				// the cell already renders UNAVAILABLE — and printed "Outlet request"
+				// directly beneath it, asking the agency to book someone the same grid
+				// had just said is off. A request naming Vicky is not answered by
+				// booking Alice; it is answered by nobody, and it should stop asking.
+				//
+				// Reads the SAME `blockedDates` the UNAVAILABLE cell reads, so the two
+				// cannot disagree about who is off. The request ROW is untouched: what
+				// the venue asked for stays true even once it cannot be granted.
+				if (blockedDates.get(r.userId)?.has(shift.shiftDate)) continue;
 				const byDate =
 					map.get(r.userId) ??
 					new Map<
@@ -456,7 +492,7 @@ export function RosterBackendTimetable({
 			}
 		}
 		return map;
-	}, [shiftsQuery.data, outletNameById]);
+	}, [shiftsQuery.data, outletNameById, blockedDates]);
 
 	const shiftFiltersOn = rosterShiftFiltersActive(filters);
 
@@ -684,6 +720,40 @@ export function RosterBackendTimetable({
 			(s) => !endedShiftIds.has(s.id),
 		);
 	}, [assignTarget, openShiftsByDay, endedShiftIds]);
+
+	/**
+	 * SHIFTS THIS PR IS ALREADY ON — the one refusal no shift-side rule can see.
+	 *
+	 * Every filter above judges the SHIFT: sealed, past its day, over by the
+	 * clock, full, wrong tier. None of them knows anything about the person the
+	 * sheet was opened for, so a shift the PR already holds a seat on stayed
+	 * offered, and Schedule PR could only come back 409 "PR is already assigned
+	 * to this shift".
+	 *
+	 * It shows on a HALF-FILLED shift, which is why it survived: 1 of 2 seats
+	 * taken is a real open seat and the card belongs in the list — it is this PR
+	 * who cannot take it.
+	 *
+	 * A CHECKED-OUT booking still counts. The server's `alreadyHere` pre-check
+	 * ignores `checkOutAt`, unlike its overlap guard, which skips a PR who has
+	 * left: leaving early frees somebody for OTHER shifts, never for a second
+	 * seat on the one they just worked.
+	 *
+	 * Matched on `prId` alone, which is the whole identity here: post-cutover
+	 * `shift_assignment.pr_id` IS the user id, and the row shape carries no
+	 * separate `userId` to disagree with it.
+	 */
+	const alreadyOnShiftIds = useMemo(() => {
+		const set = new Set<string>();
+		const target = assignTarget?.pr;
+		if (!target) return set;
+		for (const a of assignmentsQuery.data?.data ?? []) {
+			if (NON_STAFFING_ASSIGNMENT_STATUSES.includes(a.status)) continue;
+			if (a.prId !== target.id) continue;
+			set.add(a.shiftId);
+		}
+		return set;
+	}, [assignTarget, assignmentsQuery.data]);
 
 	// Row filter mirrors the demo timetable's filterTimetablePrs, adapted to
 	// backend PRs: name/nickname search, the scheduled/free toggle, and — when
@@ -1109,11 +1179,49 @@ export function RosterBackendTimetable({
 											{days.map((dateIso) => {
 												const rawSlots =
 													slotsByPrDay.get(`${pr.id}__${dateIso}`) ?? [];
+												// The PR blocked this day. A distinct state from the "Off" a
+												// cancelled assignment paints — that one means a booking was
+												// called off, this one means the person is not available at
+												// all — and the agency has to be able to tell them apart.
+												const prBlocked =
+													blockedDates.get(pr.id)?.has(dateIso) ?? false;
 												// Slots that fail the active filters read as free, so
 												// the outlet/status/payout/time filters narrow the grid.
 												const daySlots = rawSlots.filter(
 													(s) =>
-														!shiftFiltersOn || timetableSlotMatches(s, filters),
+														(!shiftFiltersOn ||
+															timetableSlotMatches(s, filters)) &&
+														// An EXCUSED shift that somebody has since COVERED stops
+														// occupying the PR's day. Until a replacement exists the red
+														// card is the reminder that this night lost someone; once it is
+														// covered that reminder has been answered, and all that stays
+														// true of the PR is that they are unavailable — which the
+														// blocked-day cell already says, with the reason on it.
+														// Emptying this list is what lets that cell through.
+														//
+														// leave_approved, cancelled and no_show ALL arrive here as the
+														// single UI status "unavailable" (backend-shift-map), so the
+														// status alone cannot say which one this is. noShowFlag and
+														// cancelledAt are the discriminators the slot already carries,
+														// and both must be excluded: a NO-SHOW is an attendance fact
+														// the agency bills and rates on, and a cancellation is a
+														// booking called off rather than a person excused. What is left
+														// is an approved MC, which is the only case this hides.
+														//
+														// prBlocked is NOT the discriminator — pr_availability rows are
+														// mostly the PR's OWN self-declared days and blockLeaveDay is
+														// just one more writer, so leaning on it would have hidden a
+														// no-show on any day the PR had blocked themselves. It stays as
+														// the precondition for the fall-through: the blocked-day cell is
+														// what replaces the card, and without a block there is nothing
+														// for the emptied list to fall through TO.
+														!(
+															prBlocked &&
+															s.status === "unavailable" &&
+															!s.noShowFlag &&
+															!s.cancelledAt &&
+															!unansweredDropouts.has(s.id)
+														),
 												);
 												const open = openShiftsByDay[dateIso] ?? [];
 												// ENDED shifts stay in openShiftsByDay so the demand
@@ -1129,8 +1237,7 @@ export function RosterBackendTimetable({
 												// a booking was called off, this one means the person
 												// is not available at all — and the agency has to be
 												// able to tell them apart.
-												const prBlocked =
-													blockedDates.get(pr.id)?.has(dateIso) ?? false;
+												// (declared above daySlots — it decides what that list keeps)
 												/*
 												 * BUSY ELSEWHERE — a THIRD state, and not a fourth
 												 * flavour of the two above.
@@ -1593,6 +1700,9 @@ export function RosterBackendTimetable({
 					// The same windows the grid greys behind this sheet, so the two
 					// cannot disagree about who is free.
 					busyWindows={assignSheetBusyWindows}
+					// The person-side fact the windows cannot carry: they are times,
+					// and "already on this one" is an identity.
+					alreadyOnShiftIds={alreadyOnShiftIds}
 					onAssign={onAssign}
 					onClose={() => setAssignTarget(null)}
 				/>
@@ -1650,6 +1760,7 @@ function AssignBackendCellSheet({
 	staffingByShift,
 	outletNameById,
 	busyWindows,
+	alreadyOnShiftIds,
 	onAssign,
 	onClose,
 }: {
@@ -1669,6 +1780,8 @@ function AssignBackendCellSheet({
 	 * "unavailable", exactly as the grid behind it does.
 	 */
 	busyWindows?: string[] | null;
+	/** Shift ids this PR already holds a staffing seat on — see the parent memo. */
+	alreadyOnShiftIds?: Set<string>;
 	onAssign: (
 		shiftId: string,
 		prId: string,
@@ -1732,9 +1845,12 @@ function AssignBackendCellSheet({
 	const selectable = useMemo(
 		() =>
 			shifts.filter(
-				(s) => !blockedById.get(s.id) && !unavailableById.get(s.id),
+				(s) =>
+					!blockedById.get(s.id) &&
+					!unavailableById.get(s.id) &&
+					!alreadyOnShiftIds?.has(s.id),
 			),
-		[shifts, blockedById, unavailableById],
+		[shifts, blockedById, unavailableById, alreadyOnShiftIds],
 	);
 
 	// Would this shift take this PR's tier AT ALL, ignoring how full it is?
@@ -1860,7 +1976,13 @@ function AssignBackendCellSheet({
 								// shift-side rules do — the agency should not have to pick a
 								// shift and press the button to be told.
 								const unavailableAt = unavailableById.get(shift.id) ?? null;
-								const off = Boolean(blocked) || Boolean(unavailableAt);
+								// Already seated here. Greyed rather than hidden, for the
+								// reason the full ones are: a card that vanishes is
+								// indistinguishable from a shift the venue never posted,
+								// and this one is worth seeing — it is where the PR IS.
+								const alreadyOn = alreadyOnShiftIds?.has(shift.id) ?? false;
+								const off =
+									Boolean(blocked) || Boolean(unavailableAt) || alreadyOn;
 								const staffed = staffingByShift.get(shift.id)?.staffed ?? 0;
 								return (
 									<button
@@ -1875,14 +1997,18 @@ function AssignBackendCellSheet({
 										disabled={busy || off}
 										aria-disabled={off}
 										title={
-											unavailableAt
-												? fill(t.rosterGrid.busyElsewhereAt, {
+											alreadyOn
+												? fill(t.rosterGrid.alreadyOnThisShift, {
 														name: pr.name,
-														time: unavailableAt,
 													})
-												: blocked
-													? shiftBlockLong(blocked, t)
-													: undefined
+												: unavailableAt
+													? fill(t.rosterGrid.busyElsewhereAt, {
+															name: pr.name,
+															time: unavailableAt,
+														})
+													: blocked
+														? shiftBlockLong(blocked, t)
+														: undefined
 										}
 									>
 										{/* The event picture — the card this shift was posted from (0128). */}
@@ -1961,13 +2087,18 @@ function AssignBackendCellSheet({
 												{/* Says only that the PR is unavailable — never that
 												    there is other work on, which would name a rival by
 												    elimination. Same word the grid behind uses. */}
-												{unavailableAt
-													? `${t.rosterGrid.unavailableAtTime} · ${unavailableAt}`
-													: blocked
-														? shiftBlockShort(blocked, t)
-														: fill(t.rosterGrid.openCount, {
-																n: shift.quantity - staffed,
-															})}{" "}
+												{/* FIRST, because it is the most specific answer and
+												    the only one that is about this PR by name rather
+												    than about the shift. */}
+												{alreadyOn
+													? t.rosterGrid.alreadyOnShiftShort
+													: unavailableAt
+														? `${t.rosterGrid.unavailableAtTime} · ${unavailableAt}`
+														: blocked
+															? shiftBlockShort(blocked, t)
+															: fill(t.rosterGrid.openCount, {
+																	n: shift.quantity - staffed,
+																})}{" "}
 												·{" "}
 												{/* NOT `shift.payPerHour`: that is the shift's own
 												    figure and does not move when you pick a different

@@ -130,7 +130,12 @@ export function pickProofPhotos(
   const input = doc.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
-  input.capture = 'environment';
+  // ONLY for the camera source. `capture` is not a hint — it tells the browser
+  // to go straight to the camera and REMOVES the file browser, so the web
+  // branch was ignoring `source: library` entirely and a PR with a photo of
+  // their MC already in their phone had no way to send it. The native branch
+  // has honoured `source` since it was written; only this half had not.
+  if (source === 'camera') input.capture = 'environment';
   input.multiple = multiple;
   input.onchange = () => {
     const files = input.files

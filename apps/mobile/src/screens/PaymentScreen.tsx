@@ -1896,13 +1896,29 @@ export function PaymentScreen({
                         </Text>
                         {thisGrid.map((d) => {
                           const amount = cellAmount(d, row.key);
+                          const key = `${d.dateIso}-${row.key}`;
+                          /*
+                           * THE SAME SET the Last-week grid and the Status row
+                           * read — it was simply never consulted here, so a
+                           * contested figure on THIS week stayed settled-green
+                           * while the Status cell under it read DISPUTED and
+                           * the header said DISPUTED. Two surfaces out of three
+                           * agreed and the third was the money.
+                           *
+                           * `disputedCells`, not `cellReviewTone`, because it
+                           * also holds the claim the PR raised SECONDS ago,
+                           * before any refetch — the cell has to turn red on
+                           * submit, not on the next poll.
+                           */
+                          const isDisputed = disputedCells.has(key);
                           const canTap = amount !== 0 && d.status !== 'empty';
                           return (
                             <Pressable
-                              key={`${d.dateIso}-${row.key}`}
+                              key={key}
                               style={[
                                 styles.gridCol,
                                 canTap && styles.gridColTap,
+                                isDisputed && styles.gridColDisputed,
                               ]}
                               onPress={() =>
                                 canTap && openEvidence(d, row, 'current')
@@ -1929,6 +1945,10 @@ export function PaymentScreen({
                                     'verified' && styles.gridValVerified,
                                   cellReviewTone(current, d.dateIso, row.key) ===
                                     'warning' && styles.gridValPending,
+                                  // LAST of the tones, so red wins: an open
+                                  // claim outranks whatever the agency's review
+                                  // said about the paper behind it.
+                                  isDisputed && styles.gridValDisputed,
                                   // Only the real figure goes red. Colouring the
                                   // whole row painted the empty days' dashes red
                                   // too, so a week with one fine looked like six.
@@ -1963,7 +1983,11 @@ export function PaymentScreen({
                                 ) ? (
                                   <Flag
                                     size={9}
-                                    color={C.muted2}
+                                    // Red once the claim is live, matching the
+                                    // Last-week grid — the flag is the control
+                                    // that raised it, so it should not stay
+                                    // grey beside a figure it turned red.
+                                    color={isDisputed ? C.red : C.muted2}
                                     style={{ marginTop: 2 }}
                                   />
                                 ) : (

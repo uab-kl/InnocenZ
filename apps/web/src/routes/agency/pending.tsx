@@ -1225,6 +1225,13 @@ function LeaveDetailPanel({
 	const { t } = usePortalLocale();
 	const prName = req.prName ?? "PR";
 	const mcPhotos = req.leaveProofPhotos ?? [];
+	// The MC opens IN PLACE. It used to be an <a target="_blank"> to the raw
+	// file, which threw the reviewer out of the portal onto a bare image and
+	// lost the request they were deciding — and a phone photo of a clinic slip
+	// is exactly the thing you need to zoom into, which a browser tab does
+	// badly. `PhotoLightbox` is already the answer everywhere else evidence is
+	// reviewed (receipts, disputes, payroll), and it was already imported here.
+	const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
 	const prPhoto = usePrPhotoById()(req.prId, req.prName);
 
 	return (
@@ -1303,23 +1310,34 @@ function LeaveDetailPanel({
 				) : (
 					<div className="mt-2 flex flex-wrap gap-2">
 						{mcPhotos.map((src, i) => (
-							<a
+							<button
 								key={`${req.id}-mc-${src}`}
-								href={resolveProofPhotoUrl(src)}
-								target="_blank"
-								rel="noreferrer"
+								type="button"
+								// RESOLVED here, not inside the viewer. `PhotoLightbox` renders
+								// `photo` straight into `src` — an R2 KEY handed to it draws a
+								// broken image, which on this screen reads as "the MC is missing"
+								// on the very evidence the decision rests on.
+								onClick={() => setZoomPhoto(resolveProofPhotoUrl(src))}
 								title={t.approvals.openFullSize}
+								className="cursor-zoom-in rounded-lg"
 							>
 								<img
 									src={resolveProofPhotoUrl(src)}
 									alt={`MC document ${i + 1} from ${prName}`}
 									className="h-32 w-32 rounded-lg border border-white/10 object-cover transition hover:brightness-110"
 								/>
-							</a>
+							</button>
 						))}
 					</div>
 				)}
 			</div>
+			{zoomPhoto ? (
+				<PhotoLightbox
+					photo={zoomPhoto}
+					alt={`MC document from ${prName}`}
+					onClose={() => setZoomPhoto(null)}
+				/>
+			) : null}
 
 			<div className="iz-approvals-info-grid">
 				<div className="iz-approvals-info-card">
@@ -1785,7 +1803,11 @@ function AgencyPending() {
 											],
 											[
 												"all",
-												`${t.common.all} (${
+												// Two tabs, one tuple-map: on Cancel Agency every row is a
+												// settled departure, so the chip is the record and reads
+												// "History". Agency-Tied keeps "All" — its list still holds
+												// live members the agency acts on, which is not history.
+												`${tab === "cancel" ? t.approvals.history : t.common.all} (${
 													(
 														tab === "cancel"
 															? tiedCounts.leaveCurrent
@@ -1958,7 +1980,7 @@ function AgencyPending() {
 											],
 											[
 												"all",
-												`${t.common.all} (${leaveRequests.length + leaveHistory.length})`,
+												`${t.approvals.history} (${leaveRequests.length + leaveHistory.length})`,
 											],
 										] as const
 									).map(([value, label]) => (

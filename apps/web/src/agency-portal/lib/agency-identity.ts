@@ -15,6 +15,13 @@ import type { AgencyMembership, AgencyUserSubRole } from "@/services/agency";
  * after every blank reset (buildBlankPortalReset wipes agencyOwner on mount).
  */
 export interface AgencySessionIdentity {
+	/**
+	 * WHO this identity was derived for — the signed-in `user.id`. Same reason as
+	 * the outlet twin: the cache is tab-scoped but seeded from localStorage, so a
+	 * new tab can inherit another account's agency and lane, and the mount path
+	 * prefers the cache over re-deriving. See `OutletSessionIdentity.userId`.
+	 */
+	userId: string;
 	agencyId: string;
 	orgName: string;
 	agencyCode: string;
@@ -42,9 +49,12 @@ const KNOWN_AGENCY_SUB_ROLES: ReadonlySet<AgencySubRole> =
 export function agencySubRoleFromBackend(
 	subRole: AgencyUserSubRole,
 ): AgencySubRole {
-	// Every lane must be named. This function ENDS on "agency_owner", so a lane
-	// it does not recognise is handed the owner's rights — a view-only Director
-	// arriving as `director` would have been able to raise payment vouchers.
+	// EVERY KNOWN LANE IS NAMED, the owner included — the same miss as the outlet
+	// twin: this comment describes a fallback of "agency_owner" that an `owner`
+	// membership used to ride to the right answer, and once the fallback became
+	// least privilege every OWNER was quietly resolved as a view-only Director.
+	// Module grants hide it on almost every screen, so it does not fail loudly.
+	if (subRole === "owner") return "agency_owner";
 	if (subRole === "finance") return "agency_finance";
 	if (subRole === "director") return "agency_director";
 	if (subRole === "guarantor") return "agency_guarantor";
@@ -77,6 +87,9 @@ export function identityFromMembership(
 	m: AgencyMembership,
 ): AgencySessionIdentity {
 	return {
+		// Straight off the membership row, so the stamp cannot disagree with the
+		// lane beside it: both describe the same `agency_user` record.
+		userId: m.userId,
 		agencyId: m.agencyId,
 		orgName: m.agencyName,
 		agencyCode: m.agencyCode,
@@ -91,7 +104,16 @@ export function saveAgencyIdentity(identity: AgencySessionIdentity): void {
 	writeTabScoped(IDENTITY_KEY, JSON.stringify(identity));
 }
 
-export function getAgencyIdentity(): AgencySessionIdentity | null {
+/**
+ * The cached identity, or null when it cannot be trusted — the outlet twin's
+ * rule, applied to the console: pass `expectedUserId` wherever the signed-in
+ * account is known, and a cache naming a different user (or naming nobody, as
+ * every cache written before this stamp existed does) is refused so the caller
+ * re-derives from that account's own memberships.
+ */
+export function getAgencyIdentity(
+	expectedUserId?: string,
+): AgencySessionIdentity | null {
 	try {
 		const raw = readTabScoped(IDENTITY_KEY);
 		if (!raw) return null;
@@ -102,7 +124,11 @@ export function getAgencyIdentity(): AgencySessionIdentity | null {
 		) {
 			return null;
 		}
+		// An unstamped cache is an ANONYMOUS one, not a valid one.
+		if (typeof parsed.userId !== "string" || parsed.userId === "") return null;
+		if (expectedUserId && parsed.userId !== expectedUserId) return null;
 		return {
+			userId: parsed.userId,
 			agencyId: parsed.agencyId,
 			orgName: parsed.orgName,
 			agencyCode:

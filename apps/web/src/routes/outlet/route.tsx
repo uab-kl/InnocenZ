@@ -56,12 +56,21 @@ function OutletLayout() {
 				// The blank reset wipes outletOwner / sub-role to demo defaults every
 				// mount; re-apply the real identity so it survives reloads.
 				//
-				// The stored value is only a CACHE. When this tab has none — a fresh
-				// tab, or one whose cache a sign-out elsewhere cleared — re-derive from
-				// the signed-in account's own memberships. That ties the identity to
-				// the token rather than to whatever another tab last wrote, and it
-				// self-heals a stale value with no re-login.
-				let identity = getOutletIdentity();
+				// The stored value is only a CACHE, and it is only this account's cache
+				// when it SAYS SO. A new tab seeds itself from localStorage, so the
+				// venue and lane sitting there may belong to whoever last signed in on
+				// this machine — an Owner inheriting a Director cache kept every
+				// module-granted screen (Post Job, Workspace) and silently lost the
+				// matrix-only ones, Reduce cutlost among them. So the cache is accepted
+				// only for the signed-in user, and only once we KNOW who that is:
+				// before the profile arrives there is nothing to check against, and a
+				// moment of least privilege is recoverable where a moment of someone
+				// else's lane is not. The effect re-runs on `profile.id`.
+				//
+				// A refused cache is not a dead end: re-derive from the account's own
+				// memberships and write it back, so a stale lane self-heals with no
+				// re-login.
+				let identity = profile?.id ? getOutletIdentity(profile.id) : null;
 				if (!identity && profile?.id) {
 					identity = await resolveOutletIdentityForUser(profile.id);
 					if (cancelled) return;

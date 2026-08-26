@@ -3,6 +3,10 @@ import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyPvReceiptReview } from "@agency-portal/hooks/use-agency-pv-receipt-review";
 import { useAgencyPvEvidence } from "@agency-portal/hooks/use-agency-pvs";
+import {
+	RECEIPT_STATUS_LABEL,
+	RECEIPT_STATUS_VARIANT,
+} from "@agency-portal/lib/receipt-status";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import {
 	Check,
@@ -19,7 +23,6 @@ import type {
 	PaymentVoucherComponent,
 	PaymentVoucherLine,
 	PaymentVoucherReceipt,
-	PaymentVoucherReceiptStatus,
 } from "@/services/payment-voucher";
 
 // Dictionary KEYS — module scope, where the locale hook cannot run. Record keys
@@ -55,23 +58,10 @@ function sourceLabel(
 	return t.receipts.checkIn;
 }
 
-const STATUS_LABEL: Record<
-	PaymentVoucherReceiptStatus,
-	keyof PortalTranslations["receipts"]
-> = {
-	pending: "waitingOnYou",
-	approved: "approved",
-	verified: "verified",
-};
-
-const STATUS_PILL: Record<PaymentVoucherReceiptStatus, string> = {
-	// The owner's platform colour code: amber = waiting (pending AND
-	// approved share it), green = settled. Same map as AgencyReceiptsPanel
-	// and the PR app — one receipt, one colour everywhere.
-	pending: "iz-pill-amber",
-	approved: "iz-pill-amber",
-	verified: "iz-pill-green",
-};
+// The label and the colour come from `lib/receipt-status.ts` — one receipt, one
+// tag, on all three panels that draw it. This panel reads the VOUCHER DETAIL's
+// receipt shape, which carries no dispute link, so it can only ever show the
+// review state; the two feeds that do carry one show "Disputed" instead.
 
 /**
  * A proof photo is stored as an opaque string — the PR app sends a data URL, but
@@ -131,16 +121,27 @@ function ReceiptRow({
 	const [editing, setEditing] = useState(false);
 
 	const proofPhotos = receipt.proofPhotos ?? [];
-	// Verified means the week is closed. Nothing on it may be re-decided or
-	// re-priced — the server refuses both, and offering the buttons anyway would
-	// just produce a 409 the agency has to interpret.
-	//
-	// A PR-SIGNED voucher is the same situation and was missing here: every one
-	// of these paths — reviewReceipt, editReceiptLine, addReceiptLine,
-	// editReceipt — refuses on `prSignedAt`, so the buttons were offered for
-	// writes that could only 409. Re-pricing behind a signature is exactly what
-	// that refusal exists to stop.
-	const editable = canReview && receipt.status !== "verified" && !voucherSigned;
+	/*
+	 * TWO DIFFERENT LOCKS, and one flag that conflated them.
+	 *
+	 * DECIDING (approve / withdraw approval) still stops at 'verified' — the
+	 * server refuses to re-decide one, so offering the button would only produce
+	 * a 409 the agency has to interpret.
+	 *
+	 * CORRECTING does not, and has not since the owner's rule of 23 Aug 2026: a
+	 * scan verifies AT CREATION, so a verified-blocks-edit test hid the editor on
+	 * every scanned receipt and made OCR mistakes permanently uncorrectable. The
+	 * server was relaxed then; this panel was not, so its Edit button vanished on
+	 * exactly the receipts most likely to need it. Whether the paper was scanned
+	 * or self-logged has never been part of either rule.
+	 *
+	 * A PR-SIGNED voucher stops BOTH: reviewReceipt, editReceiptLine,
+	 * addReceiptLine and editReceipt all refuse on `prSignedAt`, and re-pricing
+	 * behind a signature is what that refusal exists to prevent.
+	 */
+	const decidable =
+		canReview && receipt.status !== "verified" && !voucherSigned;
+	const correctable = canReview && !voucherSigned;
 
 	return (
 		<div className="border-b border-[var(--iz-line)] py-2.5 last:border-0">
@@ -154,9 +155,9 @@ function ReceiptRow({
 						{sourceLabel(receipt.source, t)}
 					</span>
 					<span
-						className={`iz-pill !text-[10px] ${STATUS_PILL[receipt.status]}`}
+						className={`iz-pill !text-[10px] iz-pill-${RECEIPT_STATUS_VARIANT[receipt.status]}`}
 					>
-						{t.receipts[STATUS_LABEL[receipt.status]]}
+						{t.receipts[RECEIPT_STATUS_LABEL[receipt.status]]}
 					</span>
 				</div>
 				<span className="font-medium">{money(sum(lines))}</span>
@@ -213,35 +214,40 @@ function ReceiptRow({
 				</p>
 			)}
 
-			{editable && (
-				<>
-					<div className="mt-1.5 flex flex-wrap gap-2">
-						{receipt.status === "pending" ? (
-							<button
-								type="button"
-								className="iz-btn iz-btn-soft !h-7 !px-2.5 !text-[11px]"
-								disabled={busy}
-								onClick={onApprove}
-							>
-								<Check className="mr-1 h-3 w-3" /> Approve
-							</button>
-						) : (
-							<button
-								type="button"
-								className="iz-btn iz-btn-ghost !h-7 !px-2.5 !text-[11px]"
-								disabled={busy}
-								onClick={onWithdraw}
-							>
-								<RotateCcw className="mr-1 h-3 w-3" /> Withdraw approval
-							</button>
-						)}
-					</div>
+			{decidable && (
+				<div className="mt-1.5 flex flex-wrap gap-2">
+					{receipt.status === "pending" ? (
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !h-7 !px-2.5 !text-[11px]"
+							disabled={busy}
+							onClick={onApprove}
+						>
+							<Check className="mr-1 h-3 w-3" /> Approve
+						</button>
+					) : (
+						<button
+							type="button"
+							className="iz-btn iz-btn-ghost !h-7 !px-2.5 !text-[11px]"
+							disabled={busy}
+							onClick={onWithdraw}
+						>
+							<RotateCcw className="mr-1 h-3 w-3" /> Withdraw approval
+						</button>
+					)}
+				</div>
+			)}
 
-					{/*
-					 * Under Approve, not beside it: approving is the common move and
-					 * correcting is the exception, and a row of equal buttons would make
-					 * the two read as alternatives of the same weight.
-					 */}
+			{/*
+			 * Under Approve, not beside it: approving is the common move and
+			 * correcting is the exception, and a row of equal buttons would make
+			 * the two read as alternatives of the same weight.
+			 *
+			 * Outside the decide block on purpose — a verified receipt has nothing
+			 * left to approve but can still be corrected.
+			 */}
+			{correctable && (
+				<>
 					<div className="mt-1.5">
 						<button
 							type="button"

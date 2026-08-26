@@ -529,6 +529,11 @@ const en = {
 		addToVoucher: "Add to voucher",
 		adding: "Adding…",
 		carriedOver: "Carried over",
+		/* The three group headings on that panel. They were hardcoded English
+		   inside the component while the headings around them came from here. */
+		weeklyPenalties: "Weekly penalties",
+		cancellationFees: "Cancellation fees",
+		carriedOverFromOtherWeeks: "Carried over from other weeks",
 		nothingWasAdded: "Nothing was added — these may already be on a voucher.",
 		couldNotAddToVoucher: "Could not add to the voucher",
 		paidPvs: "Paid PVs",
@@ -809,6 +814,9 @@ const en = {
 		noOpenShiftsThisDay: "No open shifts this day",
 		busyElsewhereAt: "{name} is not available {time}",
 		unavailableAtTime: "Unavailable",
+		/** The PR already holds a seat on this very shift — the server 409s on it. */
+		alreadyOnThisShift: "{name} is already on this shift",
+		alreadyOnShiftShort: "Already on this shift",
 		noShiftsPostedThisDay: "No shifts posted for this day.",
 		openShiftsCount: "Open shifts · {n}",
 		openCount: "{n} open",
@@ -2652,6 +2660,11 @@ const en = {
 		pending: "Pending",
 		approved: "Approved",
 		verified: "Verified",
+		/**
+		 * NOT a review state — it is what the PR says about one, and it can sit on
+		 * a receipt in any of the three above. Red, per the platform colour code.
+		 */
+		disputed: "Disputed",
 		reviewed: "Reviewed",
 		/** "Reviewed by Sarah" — the name is appended at the call site. */
 		reviewedBy: "Reviewed by",
@@ -2778,6 +2791,11 @@ const en = {
 		groupPr: "PR",
 		groupOutlet: "Outlet",
 		agencyTied: "Agency-Tied",
+		/* The last sub-filter chip. It reads "History" on the tabs whose record is
+		   CLOSED business — a decided MC, an approved or refused departure — and
+		   "All" only on Agency-Tied, where the same list still holds live members
+		   the agency acts on. Owner's call, 26 Aug 2026. */
+		history: "History",
 		cutlost: "Cutlost",
 		mcLeaves: "MC/Leaves",
 		addPr: "Add PR",
@@ -3360,6 +3378,9 @@ const zh: PortalTranslations = {
 		addToVoucher: "加入付款单",
 		adding: "添加中…",
 		carriedOver: "已结转",
+		weeklyPenalties: "每周罚款",
+		cancellationFees: "取消费用",
+		carriedOverFromOtherWeeks: "从其他周结转",
 		nothingWasAdded: "未添加任何项目 — 这些可能已在某张付款单上。",
 		couldNotAddToVoucher: "加入付款单失败",
 		paidPvs: "已付款单",
@@ -3587,6 +3608,8 @@ const zh: PortalTranslations = {
 		noOpenShiftsThisDay: "当天没有空缺班次",
 		busyElsewhereAt: "{name} 在 {time} 不可排班",
 		unavailableAtTime: "不可排班",
+		alreadyOnThisShift: "{name} 已在此班次上",
+		alreadyOnShiftShort: "已在此班次",
 		noShiftsPostedThisDay: "当天没有发布班次。",
 		openShiftsCount: "空缺班次 · {n}",
 		openCount: "{n} 个空缺",
@@ -5281,6 +5304,7 @@ const zh: PortalTranslations = {
 		pending: "待处理",
 		approved: "已批准",
 		verified: "已核实",
+		disputed: "有争议",
 		reviewed: "已审核",
 		reviewedBy: "审核人",
 		scanned: "扫描上传",
@@ -5402,6 +5426,7 @@ const zh: PortalTranslations = {
 		addPr: "添加 PR",
 		adding: "添加中…",
 		current: "待处理",
+		history: "历史记录",
 		cancelAgency: "解约申请",
 		joinRequest: "加入申请",
 		joinRejected: "加入已拒绝",

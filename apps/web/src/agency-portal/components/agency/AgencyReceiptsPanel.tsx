@@ -10,6 +10,12 @@ import {
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import {
+	DISPUTE_COMPONENT_LABEL,
+	isDisputed,
+	openDisputesFor,
+} from "@agency-portal/lib/receipt-disputes";
+import { receiptStatusTag } from "@agency-portal/lib/receipt-status";
 import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import {
@@ -45,34 +51,20 @@ const SOURCE_LABEL: Record<
 	checkin: "checkIn",
 };
 
+// The status label and its colour moved to `lib/receipt-status.ts` — three
+// panels drew this pill and the dispute queue's copy had drifted to a different
+// colour and a different word for the same receipt.
+
 /**
- * "Waiting on you", not "Pending" — the label states whose move it is. A pending
- * receipt is the reason a voucher will not send, so the word has to carry that.
+ * "disputed" is deliberately NOT a `PaymentVoucherReceiptStatus`.
+ *
+ * The three real statuses describe the AGENCY's review; a dispute is what the
+ * PR says about it, and the two coexist — a verified receipt can be under a live
+ * claim, which is exactly the case that used to render as a plain green
+ * "Verified". Modelling it as a fourth status would force one to overwrite the
+ * other and lose whichever fact came second.
  */
-const STATUS_LABEL: Record<
-	PaymentVoucherReceiptStatus,
-	keyof PortalTranslations["receipts"]
-> = {
-	pending: "waitingOnYou",
-	approved: "approved",
-	verified: "verified",
-};
-
-// The owner's platform colour code (23 Aug 2026): green = settled
-// (verified), amber = waiting — and PENDING and APPROVED deliberately
-// share it ("approved yellow warning colour same with Pending"; the word
-// carries the difference), red = disputed. Same map as the PR app, because
-// the two screens describe the same receipt.
-const STATUS_VARIANT: Record<
-	PaymentVoucherReceiptStatus,
-	"amber" | "green" | "ink"
-> = {
-	pending: "amber",
-	approved: "amber",
-	verified: "green",
-};
-
-type StatusFilter = "all" | PaymentVoucherReceiptStatus;
+type StatusFilter = "all" | PaymentVoucherReceiptStatus | "disputed";
 
 const sumLines = (receipt: AgencyReceipt) =>
 	receipt.lines.reduce((total, line) => total + Number(line.amount || 0), 0);
@@ -170,9 +162,22 @@ function ReceiptRow({
 	onOpenPv?: (voucherId: string) => void;
 }) {
 	const { t } = usePortalLocale();
+	/**
+	 * The claims the PR has open on this paper.
+	 *
+	 * Read off the feed, not derived here — the server decides which receipts a
+	 * claim reaches, so this list and the dispute queue's evidence block are the
+	 * same fact rather than two guesses at it.
+	 */
+	const claims = openDisputesFor(receipt);
+	const tag = receiptStatusTag(receipt);
 	// Pending rows open themselves: the whole point of the row is the decision,
-	// and a decision behind a click is one the reviewer can walk past.
-	const [open, setOpen] = useState(receipt.status === "pending");
+	// and a decision behind a click is one the reviewer can walk past. A DISPUTED
+	// row opens for the same reason — somebody is waiting on an answer, and the
+	// claim is worth less folded away than the approval it is arguing with.
+	const [open, setOpen] = useState(
+		receipt.status === "pending" || claims.length > 0,
+	);
 	// The enlarge overlay that lived here is gone — ProofPhotoViewer owns it now,
 	// with zoom and pan this one never had.
 	// Closed by default. The editor states what a correction costs and carries
@@ -185,10 +190,24 @@ function ReceiptRow({
 	// Approve/withdraw stop at VERIFIED — the server refuses to re-decide it.
 	// EDITING no longer stops there (owner's rule, 23 Aug 2026): scans verify
 	// at creation and a correction verifies the receipt, so verified means
-	// CHECKED, not closed. The PR's signature is the real lock, and the
-	// server still refuses edits past it with a message the editor surfaces.
+	// CHECKED, not closed.
 	const decidable = canReview && receipt.status !== "verified";
-	const canEdit = canReview;
+	/*
+	 * WHAT CORRECTING A RECEIPT DEPENDS ON — and what it deliberately does not.
+	 *
+	 * Not the source: a scanned paper and a self-logged one are corrected under
+	 * the same rule, which is what lets the agency fix an OCR misread and a PR's
+	 * typo with one button. Not the review state either: a receipt still WAITING
+	 * on the agency is editable — that is the whole point of the wait — and a
+	 * verified one stays editable because the PR may still be disputing it.
+	 *
+	 * The PR's signature is the only lock, matching every one of the four write
+	 * endpoints. `voucherStatus` stands in for `prSignedAt`, which this feed does
+	 * not carry.
+	 */
+	const signedOff =
+		receipt.voucherStatus === "signed" || receipt.voucherStatus === "paid";
+	const canEdit = canReview && !signedOff;
 
 	return (
 		<div className="rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)]/40">
@@ -211,11 +230,9 @@ function ReceiptRow({
 							>
 								{t.receipts[SOURCE_LABEL[receipt.source]]}
 							</IzPill>
-							<IzPill
-								variant={STATUS_VARIANT[receipt.status]}
-								className="!text-[10px]"
-							>
-								{t.receipts[STATUS_LABEL[receipt.status]]}
+							{/* ONE tag, and an open claim owns it — see `receiptStatusTag`. */}
+							<IzPill variant={tag.variant} className="!text-[10px]">
+								{t.receipts[tag.labelKey]}
 							</IzPill>
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
@@ -265,6 +282,32 @@ function ReceiptRow({
 
 			{open && (
 				<div className="border-t border-[var(--iz-line)] px-3 py-2.5">
+					{/* WHAT IS BEING ARGUED, above the figures being argued about.
+					    Correcting the lines below does NOT settle a claim — accepting
+					    or rejecting it is a separate decision, taken in the dispute
+					    queue — so the row says so rather than letting a reviewer
+					    assume a saved edit closed it. */}
+					{claims.length > 0 && (
+						<div className="mb-2 rounded-lg border border-[rgba(192,85,79,.4)] bg-[rgba(192,85,79,.08)] px-2 py-1.5">
+							<p className="iz-tiny font-bold text-[var(--iz-red,#c0554f)]">
+								{claims.length === 1
+									? "The PR is disputing this receipt"
+									: `The PR has ${claims.length} open claims on this receipt`}
+							</p>
+							{claims.map((claim) => (
+								<p key={claim.id} className="iz-tiny iz-muted2 mt-0.5">
+									{t.money[DISPUTE_COMPONENT_LABEL[claim.component]]} ·{" "}
+									{formatDay(claim.disputeDate)}
+									{claim.reason ? ` · ${claim.reason}` : ""}
+								</p>
+							))}
+							<p className="iz-tiny iz-muted2 mt-0.5">
+								Correct the figures here if the PR is right, then accept or
+								reject the claim under Disputes — an edit alone does not settle
+								it.
+							</p>
+						</div>
+					)}
 					{receipt.lines.length === 0 ? (
 						// Not cosmetic: a receipt with no lines contributes nothing to the
 						// voucher, so printing RM 0.00 alone would read as a free receipt
@@ -376,6 +419,13 @@ function ReceiptRow({
 							</button>
 						</div>
 					)}
+					{/* An absent button explains nothing — say which rule removed it. */}
+					{canReview && signedOff && (
+						<p className="iz-tiny iz-muted2 mt-1.5">
+							The PR has signed this voucher — its figures can no longer be
+							corrected.
+						</p>
+					)}
 
 					{canEdit && editing && (
 						<AgencyReceiptEditor receipt={receipt} lines={receipt.lines} />
@@ -460,13 +510,39 @@ export function AgencyReceiptsPanel({
 	);
 	const offWeekCount = receipts.length - weekReceipts.length;
 
-	const statusCounts = useMemo(
-		() => ({
+	/**
+	 * EXCLUSIVE buckets (owner, 26 Aug 2026) — the four chips partition the week:
+	 * pending + approved + verified + disputed = all.
+	 *
+	 * A disputed receipt is COUNTED only as disputed because it is TAGGED only as
+	 * disputed. They overlapped at first, and the result was a row filed under
+	 * "Verified (3)" whose own pill read "Disputed" — sending anyone who trusted
+	 * the chips to the wrong list to find it.
+	 */
+	const statusCounts = useMemo(() => {
+		const review = (status: PaymentVoucherReceiptStatus) =>
+			weekReceipts.filter((r) => r.status === status && !isDisputed(r)).length;
+		return {
 			all: weekReceipts.length,
-			pending: weekReceipts.filter((r) => r.status === "pending").length,
-			approved: weekReceipts.filter((r) => r.status === "approved").length,
-			verified: weekReceipts.filter((r) => r.status === "verified").length,
-		}),
+			pending: review("pending"),
+			approved: review("approved"),
+			verified: review("verified"),
+			disputed: weekReceipts.filter(isDisputed).length,
+		};
+	}, [weekReceipts]);
+
+	/**
+	 * EVERY pending receipt, disputed or not — what "Approve all" actually
+	 * touches.
+	 *
+	 * Deliberately not `statusCounts.pending`. The server's sweep is
+	 * `status = 'pending'` and knows nothing about claims, so a banner reading
+	 * the exclusive chip count would promise to approve two and approve three.
+	 * The chip counts what is SHOWN under it; this counts what the BUTTON does,
+	 * and one number cannot answer both questions.
+	 */
+	const pendingAll = useMemo(
+		() => weekReceipts.filter((r) => r.status === "pending").length,
 		[weekReceipts],
 	);
 
@@ -499,7 +575,14 @@ export function AgencyReceiptsPanel({
 	const filtered = useMemo(() => {
 		const needle = search.trim().toLowerCase();
 		return weekReceipts.filter((r) => {
-			if (status !== "all" && r.status !== status) return false;
+			// The chips partition the week, so a review bucket EXCLUDES anything
+			// under a live claim — the same rule the counts above use, because a
+			// chip whose count and whose list disagree is worse than either.
+			if (status === "disputed") {
+				if (!isDisputed(r)) return false;
+			} else if (status !== "all" && (r.status !== status || isDisputed(r))) {
+				return false;
+			}
 			if (prId && r.prId !== prId) return false;
 			if (outlet && receiptOutlet(r) !== outlet) return false;
 			if (source && r.source !== source) return false;
@@ -592,12 +675,12 @@ export function AgencyReceiptsPanel({
 						</IzCard>
 						<IzCard
 							flat
-							className={`!mb-0${statusCounts.pending > 0 ? " border-[rgba(244,183,64,.4)]" : ""}`}
+							className={`!mb-0${pendingAll > 0 ? " border-[rgba(244,183,64,.4)]" : ""}`}
 						>
 							<p
-								className={`font-sora text-lg font-extrabold${statusCounts.pending > 0 ? " text-[var(--iz-amber,#d9b97a)]" : ""}`}
+								className={`font-sora text-lg font-extrabold${pendingAll > 0 ? " text-[var(--iz-amber,#d9b97a)]" : ""}`}
 							>
-								{statusCounts.pending}
+								{pendingAll}
 							</p>
 							<p className="iz-tiny iz-muted2">{t.receipts.waitingOnYou}</p>
 						</IzCard>
@@ -609,14 +692,21 @@ export function AgencyReceiptsPanel({
 						</IzCard>
 					</div>
 
-					{statusCounts.pending > 0 && (
+					{pendingAll > 0 && (
 						<IzCard
 							flat
 							className="mt-2 border-[rgba(244,183,64,.4)] bg-[rgba(244,183,64,.08)]"
 						>
 							<p className="iz-sm font-bold text-[var(--iz-amber)]">
-								{statusCounts.pending} receipt
-								{statusCounts.pending === 1 ? "" : "s"} awaiting your approval
+								{pendingAll} receipt
+								{pendingAll === 1 ? "" : "s"} awaiting your approval
+								{/* Says out loud why this number can exceed the "Waiting on
+								    you" chip: the chip files a disputed receipt under
+								    Disputed, the sweep below still approves it. Without the
+								    clause the two numbers look like a bug. */}
+								{pendingAll > statusCounts.pending
+									? ` · ${pendingAll - statusCounts.pending} of them disputed`
+									: ""}
 							</p>
 							<p className="iz-tiny iz-muted2 mt-0.5">
 								A voucher cannot be sent while one of its receipts is pending —
@@ -634,7 +724,7 @@ export function AgencyReceiptsPanel({
 									onClick={() => void handleApproveAll()}
 								>
 									<Check className="mr-1 h-3.5 w-3.5" />
-									{t.receipts.approveAll} ({statusCounts.pending})
+									{t.receipts.approveAll} ({pendingAll})
 								</button>
 							)}
 						</IzCard>
@@ -655,12 +745,17 @@ export function AgencyReceiptsPanel({
 								["pending", t.receipts.waitingOnYou],
 								["approved", t.receipts.approved],
 								["verified", t.receipts.verified],
+								["disputed", t.receipts.disputed],
 							] as [StatusFilter, string][]
 						).map(([value, label]) => (
 							<button
 								key={value}
 								type="button"
-								className={`iz-payroll-tab !flex-none !px-2.5 !text-[11px]${status === value ? " on" : ""}`}
+								// The space before `${` is deliberate: Tailwind v4 drops an
+								// arbitrary-value class glued to an interpolation, and
+								// `!text-[11px]` only survives here because other panels
+								// happen to use it in a plain string.
+								className={`iz-payroll-tab !flex-none !px-2.5 !text-[11px] ${status === value ? "on" : ""}`}
 								onClick={() => setStatus(value)}
 							>
 								{label} ({statusCounts[value]})
@@ -769,7 +864,23 @@ export function AgencyReceiptsPanel({
 											{formatRM(total)}
 										</p>
 									</div>
-									<div className="space-y-2">
+									{/*
+									 * TWO COLUMNS from `xl` up — a receipt card holds a fixed
+									 * amount of content and a portal-width screen fits two of
+									 * them side by side, which halves the scrolling on a day
+									 * with six.
+									 *
+									 * `items-start` is load-bearing: grid items stretch by
+									 * default, so one row with its editor open would drag its
+									 * neighbour to the same height and leave a tall empty card
+									 * beside it. Each card keeps its own height instead.
+									 *
+									 * Nothing inside truncates — the one `truncate` in this
+									 * whole tree (the editor's item name) now wraps, because at
+									 * half width it would have hidden the very words a reviewer
+									 * checks against the paper.
+									 */}
+									<div className="grid items-start gap-2 xl:grid-cols-2">
 										{rows.map((receipt) => (
 											<div
 												key={receipt.id}

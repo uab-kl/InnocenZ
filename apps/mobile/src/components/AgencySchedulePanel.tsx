@@ -20,6 +20,7 @@ import {
   CalendarDays,
   ChevronDown,
   Clock,
+  Camera,
   ImagePlus,
   MapPin,
   Shield,
@@ -1057,23 +1058,42 @@ export function AgencySchedulePanel() {
               <Text style={styles.cancelFieldLabel}>
                 MC / document photo (required)
               </Text>
-              <Pressable
-                style={styles.mcPickBtn}
-                onPress={() =>
-                  pickProofPhotos((urls) =>
-                    setLeavePhotos((prev) =>
-                      [...prev, ...urls].slice(0, MAX_MC_PHOTOS),
-                    ),
-                  )
-                }
-              >
-                <ImagePlus size={16} color={C.goldL} />
-                <Text style={styles.mcPickText}>
-                  {leavePhotos.length === 0
-                    ? 'Snap / upload MC photo'
-                    : 'Add another photo'}
-                </Text>
-              </Pressable>
+              {/* TWO actions, because an MC is usually already IN the phone —
+                  photographed at the clinic, or sent by the doctor. The single
+                  button said "Snap / upload" and only ever opened the camera,
+                  so the upload half was a promise the sheet never kept. */}
+              <View style={styles.mcPickRow}>
+                <Pressable
+                  style={styles.mcPickBtn}
+                  onPress={() =>
+                    pickProofPhotos(
+                      (urls) =>
+                        setLeavePhotos((prev) =>
+                          [...prev, ...urls].slice(0, MAX_MC_PHOTOS),
+                        ),
+                      { source: 'camera', multiple: false },
+                    )
+                  }
+                >
+                  <Camera size={16} color={C.goldL} />
+                  <Text style={styles.mcPickText}>Take photo</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.mcPickBtn}
+                  onPress={() =>
+                    pickProofPhotos(
+                      (urls) =>
+                        setLeavePhotos((prev) =>
+                          [...prev, ...urls].slice(0, MAX_MC_PHOTOS),
+                        ),
+                      { source: 'library' },
+                    )
+                  }
+                >
+                  <ImagePlus size={16} color={C.goldL} />
+                  <Text style={styles.mcPickText}>Upload photo</Text>
+                </Pressable>
+              </View>
               {leavePhotos.length > 0 && (
                 <View style={styles.mcThumbRow}>
                   {leavePhotos.map((uri, i) => (
@@ -1579,7 +1599,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: C.red,
   },
+  // The two pick actions share a line and split it evenly; `flex: 1` on the
+  // buttons is what keeps "Take photo" and "Upload photo" the same size
+  // rather than sized by their own text.
+  mcPickRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   mcPickBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1713,6 +1741,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+    // A long agency name pushed the status pill off the right edge — "WHY WE
+    // MET AGENCY" is already long enough to do it, and a PR on four rosters
+    // sees the longest name every time. Wrapping drops the pill onto its own
+    // line instead of clipping it.
+    flexWrap: 'wrap',
+    // Was `marginBottom` on the badge itself, which is a child of this row: it
+    // spaced the header from the shift below, but once the row wraps a child
+    // margin also prises the two LINES apart. Owned by the row now, so `gap`
+    // is the only thing between the name and the pill.
+    marginBottom: 10,
   },
   ttMainRow: {
     flexDirection: 'row',
@@ -1751,6 +1789,10 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
+    // Lets a truly long name give ground rather than overflow. It WRAPS rather
+    // than ellipsizing on purpose: which agency booked the night is the one
+    // fact this badge exists to state, and "WHY WE MET A…" states it wrongly.
+    flexShrink: 1,
     gap: 5,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -1758,9 +1800,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(183,156,232,0.14)',
     borderWidth: 1,
     borderColor: 'rgba(183,156,232,0.3)',
-    marginBottom: 10,
   },
   agencyBadgeText: {
+    // Without this the Text refuses to give ground and the badge overflows its
+    // own pill — `flexShrink` on the parent alone is not enough in RN.
+    flexShrink: 1,
     fontFamily: F.sora,
     fontSize: 10,
     fontWeight: '700',

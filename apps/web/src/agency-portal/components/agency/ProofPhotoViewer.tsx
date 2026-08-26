@@ -1,5 +1,11 @@
 import { Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 
@@ -60,6 +66,12 @@ export function PhotoLightbox({
 		null,
 	);
 
+	// The wheel handler needs the CURRENT zoom without re-binding a native
+	// listener on every zoom change, so it reads this rather than the state.
+	const zoomRef = useRef(1);
+	zoomRef.current = zoom;
+	const surfaceRef = useRef<HTMLDivElement | null>(null);
+
 	const zoomTo = useCallback((next: number) => {
 		const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
 		setZoom(clamped);
@@ -67,6 +79,29 @@ export function PhotoLightbox({
 		// off-screen from an earlier pan, which looks like a failed load.
 		if (clamped === MIN_ZOOM) setOffset({ x: 0, y: 0 });
 	}, []);
+
+	/**
+	 * Scroll-wheel zoom, on a NATIVE listener rather than React's `onWheel`.
+	 *
+	 * React registers wheel handlers passively, so `preventDefault` inside one
+	 * is ignored and warns — the photo would zoom AND the page behind the
+	 * backdrop would scroll away underneath it. `{ passive: false }` is the
+	 * whole reason this is not a JSX prop.
+	 *
+	 * Exponential rather than a fixed step: a trackpad emits many small deltas
+	 * and a mouse wheel a few large ones, and multiplying keeps both feeling
+	 * like the same gesture. The buttons keep their coarse 0.5 step.
+	 */
+	useEffect(() => {
+		const el = surfaceRef.current;
+		if (!el) return;
+		const onWheel = (e: WheelEvent) => {
+			e.preventDefault();
+			zoomTo(zoomRef.current * Math.exp(-e.deltaY * 0.0015));
+		};
+		el.addEventListener("wheel", onWheel, { passive: false });
+		return () => el.removeEventListener("wheel", onWheel);
+	}, [zoomTo]);
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
@@ -93,6 +128,7 @@ export function PhotoLightbox({
 			role="dialog"
 			aria-modal="true"
 			aria-label={alt}
+			ref={surfaceRef}
 			className="fixed inset-0 z-[300] flex flex-col bg-black/85 backdrop-blur-sm"
 			// Backdrop click closes; clicks on the image itself must not, or a pan
 			// ending over the backdrop would dismiss the viewer mid-drag.
@@ -151,7 +187,12 @@ export function PhotoLightbox({
 				// bound in the effect at the top of this component.
 				role="none"
 				className="flex flex-1 items-center justify-center overflow-hidden"
-				onWheel={(e) => zoomTo(zoom + (e.deltaY < 0 ? STEP : -STEP))}
+				// NO onWheel HERE. There used to be one, stepping by a flat ±0.5, and
+				// the native listener at the top of this component now owns the wheel.
+				// Both fired for the same event — React delegates wheel at the root, so
+				// the surface listener ran first with its exponential step and this one
+				// then overwrote the result with the coarse one, making a trackpad
+				// gesture jump half a zoom level per tick.
 				onMouseDown={(e) => {
 					if (zoom > MIN_ZOOM) {
 						setDragFrom({ x: e.clientX - offset.x, y: e.clientY - offset.y });
