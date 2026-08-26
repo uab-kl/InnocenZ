@@ -169,7 +169,11 @@ function WorkforceRow({
 			<td className="iz-portal-table-meta">
 				{onOpenEarningsSheet && slot ? (
 					<RosterAmountButton
-						label="drinks"
+						// Lands mid-sentence in the button's accessible name, so it has
+						// to arrive ALREADY TRANSLATED — the same word the column header
+						// above uses. The "drinks" passed to onOpenEarningsSheet below is
+						// the sheet's kind and stays English.
+						label={t.money.drinks}
 						stopRowNavigation
 						onClick={() => onOpenEarningsSheet("drinks", slot)}
 					>
@@ -182,7 +186,7 @@ function WorkforceRow({
 			<td className="iz-portal-table-meta">
 				{onOpenEarningsSheet && slot ? (
 					<RosterAmountButton
-						label="tips"
+						label={t.money.tips}
 						stopRowNavigation
 						onClick={() => onOpenEarningsSheet("tips", slot)}
 					>

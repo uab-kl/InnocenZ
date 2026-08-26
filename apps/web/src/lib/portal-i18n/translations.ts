@@ -2605,6 +2605,8 @@ const en = {
 		confirm: "Confirm",
 		roleAdminAccess: "admin access",
 		rolePrAccess: "PR access",
+		/** Stands in for the audit row's entity when it carries none. A UI fallback, not a recorded value — the entity itself is the stored table name and renders verbatim. Same distinction as adminAudit.systemActor. */
+		dashEntityFallback: "record",
 	},
 	/** Admin → RBAC: the Roles grid, the Modules table and Pending Approvals. */
 	rbac: {
@@ -3474,6 +3476,12 @@ const en = {
 		staffedOf: "{staffed} of {quantity} staffed",
 		unassignExplain: "Unassign {name} from this shift. The assignment is deleted and the slot reopens — use this to undo an assignment, not to cancel a confirmed shift.",
 		unassignConfirmBody: "{name} at {outlet} · {date} · {shift}. The assignment row is deleted and the slot reopens. This cannot be undone.",
+		/** Demo penalty-breach heading, keyed on the stored PenaltyRuleId `minShiftsPerWeek`. Same wording evaluatePrPenalties hard-codes; only the display moves. */
+		breachBelowMinShifts: "Below minimum shifts",
+		/** Demo penalty-breach heading for the stored rule id `maxMcPerMonth`. */
+		breachMcCapExceeded: "MC cap exceeded",
+		/** Demo penalty-breach heading for the stored rule id `latePerWeek`. */
+		breachLateTooOften: "Late too often",
 	},
 	adminRequests: {
 		/** Admin → Service → Plan Request: the page header blurb. */
@@ -4347,6 +4355,10 @@ const en = {
 		editingWhat: "Editing {what}",
 		/** Postcode field placeholder. The digits are a Malaysian example, not data. */
 		postcodeExample: "e.g. 50450",
+		/** Topbar fallback identity NAME when nobody is signed in — describes the ROLE, never a company. Same term as agencyNoun / portalNameAgency. */
+		roleNameAgency: "Agency",
+		/** Topbar role line for a PR tied to an agency. "PR" stays English in every locale; zh reuses the established 签约 PR from the Agency-Tied filter. */
+		rolePrAgencyTied: "PR · Agency-Tied",
 	},
 	ssPortal: {
 		/** Rendered name for the stored offer id `leave_agency`. The other nine offer ids reuse `adminService.cat*`. */
@@ -7618,6 +7630,7 @@ const zh: PortalTranslations = {
 		confirm: "确认",
 		roleAdminAccess: "管理员权限",
 		rolePrAccess: "PR 权限",
+		dashEntityFallback: "记录",
 	},
 	rbac: {
 		sectionRbacTitle: "权限管理",
@@ -8351,6 +8364,9 @@ const zh: PortalTranslations = {
 		staffedOf: "已配 {staffed}/{quantity} 人",
 		unassignExplain: "将 {name} 从此班次移除。该排班记录会被删除，空位重新开放 —— 用于撤销指派，不是取消已确认的班次。",
 		unassignConfirmBody: "{name} · {outlet} · {date} · {shift}。该排班记录将被删除，空位重新开放。此操作无法撤销。",
+		breachBelowMinShifts: "低于每周最少班次",
+		breachMcCapExceeded: "超出每月病假上限",
+		breachLateTooOften: "迟到次数过多",
 	},
 	adminRequests: {
 		pageDescription: "这里汇总两类申请：门店申请 Integrate with POS 报价，以及经纪公司重新协商 Custom（151+ PV）档位。处理前可协商或修改预估价 —— 一经处理，价格即为最终价。",
@@ -8935,6 +8951,8 @@ const zh: PortalTranslations = {
 		agencyNoun: "经纪公司",
 		editingWhat: "正在编辑 {what}",
 		postcodeExample: "例如 50450",
+		roleNameAgency: "经纪公司",
+		rolePrAgencyTied: "签约 PR",
 	},
 	ssPortal: {
 		offerLeaveAgency: "离开经纪公司",

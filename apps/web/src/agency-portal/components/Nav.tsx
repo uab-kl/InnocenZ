@@ -15,6 +15,7 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export interface NavItem {
 	to: string;
@@ -78,35 +79,47 @@ export function BottomNav({
  * a right one.
  *
  * A fallback may describe the ROLE. It may never name a company or a person.
+ *
+ * `name` and `label` are RESOLVERS, not strings: both are rendered, and a
+ * module-scope map cannot call a hook to read the dictionary. The record KEYS
+ * are the internal role discriminators (`host`, `vendor`, \u2026) and never move.
+ * "PR" itself stays English in every locale \u2014 it is the product's term for the
+ * role and the word the database stores, so translating it on screen alone
+ * would make the portal and the data disagree.
  */
 const ROLE_LABELS: Record<
 	string,
-	{ name: string; label: string; av: string; gradient: string }
+	{
+		name: (t: PortalTranslations) => string;
+		label: (t: PortalTranslations) => string;
+		av: string;
+		gradient: string;
+	}
 > = {
 	host: {
-		name: "PR",
-		label: "PR",
+		name: () => "PR",
+		label: () => "PR",
 		av: "P",
 		gradient: "linear-gradient(135deg,#6b7280,#374151)",
 	},
 
 	host_tied: {
-		name: "PR",
-		label: "PR \u00b7 Agency-Tied",
+		name: () => "PR",
+		label: (t) => t.portalShell.rolePrAgencyTied,
 		av: "P",
 		gradient: "linear-gradient(135deg,#C99B4E,#8a5e22)",
 	},
 
 	agency: {
-		name: "Agency",
-		label: "PR Agency",
+		name: (t) => t.portalShell.roleNameAgency,
+		label: (t) => t.portalUi.portalNameAgency,
 		av: "A",
 		gradient: "var(--iz-grad)",
 	},
 
 	vendor: {
-		name: "Outlet",
-		label: "Outlet",
+		name: (t) => t.portalUi.portalNameOutlet,
+		label: (t) => t.portalUi.portalNameOutlet,
 		av: "O",
 		gradient: "linear-gradient(135deg,#39D98A,#1f8f5c)",
 	},
@@ -239,7 +252,7 @@ export function AppTopbar({
 
 	const meta = ROLE_LABELS[role];
 
-	const displayName = prDisplayName ?? meta.name;
+	const displayName = prDisplayName ?? meta.name(t);
 
 	const displayAv = displayName.trim()[0]?.toUpperCase() ?? meta.av;
 
@@ -250,7 +263,7 @@ export function AppTopbar({
 			? OUTLET_SUB_ROLE_LABELS[outletSubRole](t)
 			: pathname.startsWith("/agency") && agencySubRole
 				? AGENCY_SUB_ROLE_LABELS[agencySubRole](t)
-				: meta.label;
+				: meta.label(t);
 
 	const resolvedBackTo = backTo ?? getAutoBackTo(pathname);
 	const isPortalShell =
@@ -313,7 +326,7 @@ export function AppTopbar({
 /** Standalone back row below topbar (detail overlays, sheets) */
 
 export function BackBar({
-	label = "Back",
+	label,
 
 	onBack,
 
@@ -325,7 +338,12 @@ export function BackBar({
 
 	to?: string;
 }) {
+	const { t } = usePortalLocale();
 	const navigate = useNavigate();
+
+	// A default parameter value is evaluated before any hook runs, so it cannot
+	// read the dictionary — the fallback has to be resolved here in the body.
+	const resolvedLabel = label ?? t.common.back;
 
 	return (
 		<button
@@ -338,7 +356,7 @@ export function BackBar({
 		>
 			<ArrowLeft className="h-3.5 w-3.5" />
 
-			{label}
+			{resolvedLabel}
 		</button>
 	);
 }
@@ -352,6 +370,8 @@ export function AppHeader({
 
 	right,
 
+	iconKey,
+
 	...topbar
 }: AppTopbarProps & {
 	title: string;
@@ -359,6 +379,15 @@ export function AppHeader({
 	subtitle?: string;
 
 	right?: ReactNode;
+
+	/**
+	 * ENGLISH lookup key for the title's icon. `TitleWithIcon` otherwise scrapes
+	 * the key out of the rendered `title`, and that table is keyed on English —
+	 * a translated title resolves to no icon at all, with nothing thrown and
+	 * nothing logged. Any caller whose `title` comes from the dictionary MUST
+	 * pass this, holding the key's `en` value.
+	 */
+	iconKey?: string;
 }) {
 	return (
 		<>
@@ -375,7 +404,7 @@ export function AppHeader({
 					<div className="flex items-start justify-between gap-2">
 						{title ? (
 							<h1 className="font-sora text-[22px] font-extrabold tracking-tight text-[var(--iz-txt)]">
-								<TitleWithIcon>{title}</TitleWithIcon>
+								<TitleWithIcon iconKey={iconKey}>{title}</TitleWithIcon>
 							</h1>
 						) : (
 							<span />

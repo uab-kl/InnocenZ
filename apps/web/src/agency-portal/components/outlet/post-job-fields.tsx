@@ -1538,7 +1538,10 @@ export function DraftShiftSummary({
 							key={row.id}
 							className="text-[11px] leading-snug text-[var(--iz-txt)]"
 						>
-							{formatPayTierRowSummary(row)}
+							{/* `t` is optional on the helper and falls back to English, so
+							    omitting it here printed the one English line on a Chinese
+							    summary card — and nothing warned. */}
+							{formatPayTierRowSummary(row, t)}
 						</p>
 					))}
 				</div>

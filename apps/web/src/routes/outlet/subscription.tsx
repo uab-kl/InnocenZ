@@ -358,8 +358,13 @@ function OutletSubscriptionPage() {
 			detail: inv.detail,
 			dateLabel: inv.issueDate,
 			amountRm: inv.amount,
+			// The stored status is compared; only the badge WORD is looked up. The
+			// union is exactly SETTLED | PENDING, so the else-branch is Unpaid
+			// rather than the raw enum it used to print.
 			statusLabel:
-				inv.status === "SETTLED" ? t.outletSubscription.paid : inv.status,
+				inv.status === "SETTLED"
+					? t.outletSubscription.paid
+					: t.subscription.statusUnpaid,
 			tone: inv.status === "SETTLED" ? "green" : "amber",
 		}));
 	}, [backend.backed, backend.billingHistory, demoBilling, t]);

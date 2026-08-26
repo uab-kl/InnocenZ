@@ -114,6 +114,37 @@ function penaltyRuleTypeLabel(raw: string, t: PortalTranslations): string {
 }
 
 /**
+ * The DEMO evaluator's breach headings.
+ *
+ * `evaluatePrPenalties` (pr-penalties.ts) hands back `label` as a finished
+ * English string — it is a module-scope helper with no hook to translate with —
+ * so the word is resolved here instead, keyed on the STORED `ruleId`, exactly as
+ * the backend proposals above are keyed on `rule_type`. The KEYS are
+ * `PenaltyRuleId` values and are never translated.
+ *
+ * The breach's `detail` is deliberately left as that helper writes it, for the
+ * same reason the backend proposal's own `detail` is: it is the evaluator's
+ * sentence about the numbers, not this screen's copy.
+ *
+ * Falls through to the breach's own label, so a rule added over there still
+ * reads as something rather than blanking the row.
+ */
+const PENALTY_BREACH_LABELS: Record<string, (t: PortalTranslations) => string> =
+	{
+		minShiftsPerWeek: (t) => t.agencyPrs.breachBelowMinShifts,
+		maxMcPerMonth: (t) => t.agencyPrs.breachMcCapExceeded,
+		latePerWeek: (t) => t.agencyPrs.breachLateTooOften,
+	};
+
+function penaltyBreachLabel(
+	ruleId: string,
+	fallback: string,
+	t: PortalTranslations,
+): string {
+	return PENALTY_BREACH_LABELS[ruleId]?.(t) ?? fallback;
+}
+
+/**
  * The outcome pill on a past shift.
  *
  * Keyed on the STORED assignment status, same split as above. `shiftOutcomeLabel`
@@ -554,7 +585,7 @@ function AgencyManagePRs() {
 											>
 												<span className="iz-sm leading-snug">
 													<span className="text-[var(--iz-muted)]">
-														{b.label}
+														{penaltyBreachLabel(b.ruleId, b.label, t)}
 													</span>
 													<span className="iz-muted2"> · {b.detail}</span>
 												</span>
@@ -1112,9 +1143,12 @@ function AgencyPrDetail({
 					>
 						{isAgencyPrActive(detail) ? t.managePr.active : t.managePr.inactive}
 					</IzPill>
-					{/* Blank fields say so. "IC  · not rated yet" read as a broken line. */}
+					{/* Blank fields say so. "IC  · not rated yet" read as a broken line.
+					    The word in front of the NUMBER is copy — the number itself is the
+					    stored IC and never moves. `agencyMisc.ic` is the dictionary's own
+					    bare form, reused rather than spelled a second time. */}
 					<p className="iz-tiny iz-muted">
-						IC {detail.ic || "—"} ·{" "}
+						{t.agencyMisc.ic} {detail.ic || "—"} ·{" "}
 						{averageRating === null
 							? t.managePr.notRatedYet
 							: fill(t.agencyPrs.starsAvg, {
@@ -1231,7 +1265,7 @@ function AgencyPrDetail({
 								>
 									<div className="flex items-center justify-between gap-2">
 										<span className="text-sm font-semibold text-[var(--iz-txt)]">
-											{b.label}
+											{penaltyBreachLabel(b.ruleId, b.label, t)}
 										</span>
 										<span className="shrink-0 text-sm font-semibold tabular-nums text-[var(--iz-red,#e5484d)]">
 											{b.fineRm > 0 ? `RM ${b.fineRm}` : t.managePr.warning}
@@ -1379,7 +1413,7 @@ function AgencyPrDetail({
 									<b>{display.email || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
-									<span className="iz-muted">IC</span>
+									<span className="iz-muted">{t.agencyMisc.ic}</span>
 									<b>{detail.ic || "—"}</b>
 								</div>
 							</div>

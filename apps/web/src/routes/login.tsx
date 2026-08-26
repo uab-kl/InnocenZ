@@ -78,15 +78,13 @@ type LoginError =
  * fall through to the server's own text, because a half-guessed translation of
  * a sentence carrying a number is worse than an English one that is correct.
  */
-const SERVER_MESSAGE_LABELS: Record<
-	string,
-	(t: PortalTranslations) => string
-> = {
-	"This account is not registered yet.": (t) =>
-		t.authPages.errorAccountNotRegistered,
-	"This account is inactive.": (t) => t.authPages.errorAccountInactive,
-	"Wrong password": (t) => t.authPages.errorWrongPassword,
-};
+const SERVER_MESSAGE_LABELS: Record<string, (t: PortalTranslations) => string> =
+	{
+		"This account is not registered yet.": (t) =>
+			t.authPages.errorAccountNotRegistered,
+		"This account is inactive.": (t) => t.authPages.errorAccountInactive,
+		"Wrong password": (t) => t.authPages.errorWrongPassword,
+	};
 
 function loginErrorText(error: LoginError, t: PortalTranslations): string {
 	switch (error.kind) {

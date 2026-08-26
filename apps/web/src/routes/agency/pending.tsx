@@ -54,7 +54,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import { raceLabel } from "@/lib/portal-i18n/language-label";
+import { languageListLabel, raceLabel } from "@/lib/portal-i18n/language-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import type { AgencyOutletApproveStatus } from "@/services/agency-outlet";
@@ -299,6 +299,26 @@ function pendingLegalIcName(signup: PendingPR) {
 	if (legal.toLowerCase() === pendingFloorNickname(signup).toLowerCase())
 		return "";
 	return legal;
+}
+
+/**
+ * The applicant's spoken languages, in the reader's language.
+ *
+ * `PendingPR.languages` is DATA, not copy: `use-agency-pending-prs` joins the
+ * STORED English values with ", " because the profile picker parses that string
+ * back apart. Rendering it raw left "English, Mandarin" sitting in a Chinese
+ * panel while Manage PR — reading the same profile — showed 英语 · 华语. Split it
+ * back into the stored values and run each through the shared resolver, which
+ * falls through to the raw word for a hand-typed language.
+ */
+function pendingLanguagesLabel(signup: PendingPR, t: PortalTranslations) {
+	return languageListLabel(
+		signup.languages
+			.split(",")
+			.map((l) => l.trim())
+			.filter(Boolean),
+		t,
+	);
 }
 
 /**
@@ -914,7 +934,7 @@ function SignupDetailPanel({
 							</p>
 						)}
 						<p className="iz-approvals-detail-meta">
-							{signup.languages}
+							{pendingLanguagesLabel(signup, t)}
 							{signup.submittedAt
 								? fill(t.approvals.appliedOn, { date: signup.submittedAt })
 								: ""}
@@ -1940,7 +1960,7 @@ function AgencyPending() {
 															{legalName
 																? `${t.agencyPending.legal} · ${legalName} · `
 																: ""}
-															{p.languages}
+															{pendingLanguagesLabel(p, t)}
 														</span>
 														<span className="badges">
 															{/* WHICH WAY the request runs — approving a
