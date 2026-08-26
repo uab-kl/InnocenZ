@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
-import { MONTH_LABELS, todayYmd, ymdToIso } from '../lib/demo-shifts';
+import { todayYmd, ymdToIso } from '../lib/demo-shifts';
 import {
   calendarNavYears,
   dateFromIsoKey,
@@ -12,8 +12,56 @@ import {
   isoKeyFromDate,
   isDateSelectableForFilter,
 } from '../lib/hist-date-time-filters';
+import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { Calendar, ChevronDown, Clock } from './icons';
-const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
+
+/**
+ * Calendar names, resolved by INDEX. Each entry is a FUNCTION — module scope
+ * runs before any hook, so a plain string array would freeze whichever locale
+ * loaded first. The index is the stored fact (`Date#getDay()`, month 0-11) and
+ * never moves, so it also gives every row a React key that survives a language
+ * switch.
+ */
+const DOW_INITIAL: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.dowSun,
+  (t) => t.schedule.dowMon,
+  (t) => t.schedule.dowTue,
+  (t) => t.schedule.dowWed,
+  (t) => t.schedule.dowThu,
+  (t) => t.schedule.dowFri,
+  (t) => t.schedule.dowSat,
+];
+
+const MONTH_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monShortJan,
+  (t) => t.schedule.monShortFeb,
+  (t) => t.schedule.monShortMar,
+  (t) => t.schedule.monShortApr,
+  (t) => t.schedule.monShortMay,
+  (t) => t.schedule.monShortJun,
+  (t) => t.schedule.monShortJul,
+  (t) => t.schedule.monShortAug,
+  (t) => t.schedule.monShortSep,
+  (t) => t.schedule.monShortOct,
+  (t) => t.schedule.monShortNov,
+  (t) => t.schedule.monShortDec,
+];
+
+const MONTH_LONG: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monLongJan,
+  (t) => t.schedule.monLongFeb,
+  (t) => t.schedule.monLongMar,
+  (t) => t.schedule.monLongApr,
+  (t) => t.schedule.monLongMay,
+  (t) => t.schedule.monLongJun,
+  (t) => t.schedule.monLongJul,
+  (t) => t.schedule.monLongAug,
+  (t) => t.schedule.monLongSep,
+  (t) => t.schedule.monLongOct,
+  (t) => t.schedule.monLongNov,
+  (t) => t.schedule.monLongDec,
+];
+
 type TimePeriod = 'AM' | 'PM';
 type Time12Parts = { hour12: number; minute: number; period: TimePeriod };
 const HOURS_12 = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
@@ -33,10 +81,16 @@ function formatTime24(parts: Time12Parts): string {
   if (parts.period === 'PM') h24 += 12;
   return `${String(h24).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
 }
-function formatTimeLabel(hhmm: string): string {
+/**
+ * "9:30 PM" in the active language. `period` stays the stored 'AM' / 'PM'
+ * value; only the READING is translated, and it goes through one template
+ * because Chinese puts 下午 in front of the clock instead of after it.
+ */
+function formatTimeLabel(hhmm: string, t: AppTranslations): string {
   if (!hhmm.trim()) return '';
   const { hour12, minute, period } = parseTime12(hhmm);
-  return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+  const time = `${hour12}:${String(minute).padStart(2, '0')}`;
+  return formatMessage(period === 'AM' ? t.jobs.timeAm : t.jobs.timePm, { time });
 }
 function TimePickerColumn<T extends string | number>({
   items,
@@ -92,15 +146,16 @@ export function HistTimeInput({
   disabled?: boolean;
   label: string;
 }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const hasValue = Boolean(value?.trim());
   const draft = useMemo(() => parseTime12(hasValue ? value : '12:00'), [value, hasValue]);
   const apply = (next: Time12Parts) => onChange(formatTime24(next));
   const display = disabled
-    ? 'Pick date first'
+    ? t.history.pickDateFirst
     : hasValue
-      ? formatTimeLabel(value)
-      : 'Tap to choose';
+      ? formatTimeLabel(value, t)
+      : t.history.tapToChoose;
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
       <Text style={styles.filterFieldLabel}>{label}</Text>
@@ -152,11 +207,11 @@ export function HistTimeInput({
                   items={PERIODS}
                   value={draft.period}
                   onChange={(period) => apply({ ...draft, period })}
-                  formatItem={(p) => p}
+                  formatItem={(p) => (p === 'AM' ? t.jobs.am : t.jobs.pm)}
                 />
               </View>
               <Pressable style={styles.timeDone} onPress={() => setOpen(false)}>
-                <Text style={styles.timeDoneText}>Done</Text>
+                <Text style={styles.timeDoneText}>{t.history.done}</Text>
               </Pressable>
             </Pressable>
           </Pressable>
@@ -241,6 +296,7 @@ export function HistDateCalendar({
   workDayKeys: string[];
   onSelect: (iso: string) => void;
 }) {
+  const { t } = useLocale();
   const today = todayYmd();
   const todayIso = ymdToIso(...today);
   const workDays = useMemo(() => new Set(workDayKeys), [workDayKeys]);
@@ -267,13 +323,13 @@ export function HistDateCalendar({
     <View style={styles.cal}>
       <View style={styles.calNav}>
         <View style={styles.navField}>
-          <Text style={styles.navLabel}>MONTH</Text>
+          <Text style={styles.navLabel}>{t.schedule.monthLabel}</Text>
           <Pressable
             style={[styles.select, navOpen === 'month' && styles.selectOpen]}
             onPress={() => setNavOpen((o) => (o === 'month' ? null : 'month'))}
           >
             <Text style={styles.selectText} numberOfLines={1}>
-              {MONTH_LABELS[month]}
+              {MONTH_LONG[month](t)}
             </Text>
             <ChevronDown
               size={14}
@@ -283,7 +339,7 @@ export function HistDateCalendar({
           </Pressable>
         </View>
         <View style={styles.navField}>
-          <Text style={styles.navLabel}>YEAR</Text>
+          <Text style={styles.navLabel}>{t.schedule.yearLabel}</Text>
           <Pressable
             style={[styles.select, navOpen === 'year' && styles.selectOpen]}
             onPress={() => setNavOpen((o) => (o === 'year' ? null : 'year'))}
@@ -304,9 +360,13 @@ export function HistDateCalendar({
           style={styles.chipScroll}
           contentContainerStyle={styles.chipRow}
         >
-          {MONTH_LABELS.map((label, i) => (
+          {/* Keyed by the month INDEX, never by the label — a label key would
+              remount every chip on a language switch. The short month comes
+              from the dictionary rather than slicing the long one: "1月" must
+              not be cut down. */}
+          {MONTH_SHORT.map((monthName, i) => (
             <Pressable
-              key={label}
+              key={`mon-${i}`}
               style={[styles.chip, i === month && styles.chipOn]}
               onPress={() => {
                 setViewMonth(new Date(year, i, 1));
@@ -314,7 +374,7 @@ export function HistDateCalendar({
               }}
             >
               <Text style={[styles.chipText, i === month && styles.chipTextOn]}>
-                {label.slice(0, 3)}
+                {monthName(t)}
               </Text>
             </Pressable>
           ))}
@@ -342,9 +402,9 @@ export function HistDateCalendar({
         </ScrollView>
       )}
       <View style={styles.weekdays}>
-        {WEEKDAYS.map((w) => (
-          <View key={w} style={styles.weekdayCell}>
-            <Text style={styles.weekday}>{w}</Text>
+        {DOW_INITIAL.map((dow, i) => (
+          <View key={`dow-${i}`} style={styles.weekdayCell}>
+            <Text style={styles.weekday}>{dow(t)}</Text>
           </View>
         ))}
       </View>
@@ -367,9 +427,9 @@ export function HistDateCalendar({
       <View style={styles.legend}>
         <View style={styles.legendRow}>
           <View style={styles.legendDot} />
-          <Text style={styles.legendText}>Worked · has record</Text>
+          <Text style={styles.legendText}>{t.history.calLegendWorked}</Text>
         </View>
-        <Text style={styles.legendNote}>Any date up to today · empty days show no rows.</Text>
+        <Text style={styles.legendNote}>{t.history.calLegendNote}</Text>
       </View>
     </View>
   );
@@ -390,7 +450,8 @@ export function HistDateField({
   onDateChange: (iso: string) => void;
   onClearSideEffects?: () => void;
 }) {
-  const dateLabel = date ? formatHistDateKey(date) : 'Any date';
+  const { t } = useLocale();
+  const dateLabel = date ? formatHistDateKey(date, t) : t.history.anyDate;
   const clearDate = () => {
     onDateChange('');
     onClearSideEffects?.();
@@ -403,7 +464,7 @@ export function HistDateField({
         style={[styles.filterField, calendarOpen && styles.filterFieldOpen]}
         onPress={() => onCalendarOpenChange(!calendarOpen)}
       >
-        <Text style={styles.filterFieldLabel}>DATE</Text>
+        <Text style={styles.filterFieldLabel}>{t.history.filterDate}</Text>
         <View style={styles.filterFieldValueRow}>
           <Calendar size={12} color={C.muted2} />
           <Text style={[styles.filterFieldValue, !date && { color: C.muted2 }]} numberOfLines={1}>
@@ -469,6 +530,7 @@ export function HistDateTimeFilter({
   onCalendarOpenChange: (open: boolean) => void;
   activityKind?: 'shift' | 'payment';
 }) {
+  const { t } = useLocale();
   return (
     <View style={styles.root}>
       <HistDateField
@@ -485,13 +547,13 @@ export function HistDateTimeFilter({
 
       <View style={styles.timeRow}>
         <HistTimeInput
-          label="FROM TIME"
+          label={t.history.fromTime}
           value={timeFrom}
           onChange={onTimeFromChange}
           disabled={!date}
         />
         <HistTimeInput
-          label="TO TIME"
+          label={t.history.toTime}
           value={timeTo}
           onChange={onTimeToChange}
           disabled={!date}

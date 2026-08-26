@@ -1,6 +1,7 @@
 import type { DemoHistoryShift } from './demo-shifts';
-import { fmtDFriendly, isoToYmd, todayYmd, ymdToIso } from './demo-shifts';
+import { isoToYmd, todayYmd, ymdToIso } from './demo-shifts';
 import type { HistPayWeek } from './demo-payment-history';
+import { formatMessage, type AppTranslations } from '../i18n';
 
 export type DayTimeFilter = {
   date: string;
@@ -40,10 +41,63 @@ export function isoKeyFromDate(date: Date) {
   return ymdToIso(date.getFullYear(), date.getMonth() + 1, date.getDate());
 }
 
-export function formatHistDateKey(key: string): string {
+/**
+ * Calendar names, resolved by INDEX.
+ *
+ * `DAY_NAMES` / `MONTH_NAMES` in `demo-shifts` are hardcoded English arrays
+ * shared with modules this file does not own, so the translation happens here
+ * and those arrays keep their meaning as data. Each entry is a FUNCTION — this
+ * is module scope, where no hook has run, and a plain string array would freeze
+ * whichever locale loaded first. The index is the stored fact (`Date#getDay()`,
+ * month 0-11) and never moves.
+ */
+const DAY_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.daySun,
+  (t) => t.schedule.dayMon,
+  (t) => t.schedule.dayTue,
+  (t) => t.schedule.dayWed,
+  (t) => t.schedule.dayThu,
+  (t) => t.schedule.dayFri,
+  (t) => t.schedule.daySat,
+];
+
+const MONTH_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monShortJan,
+  (t) => t.schedule.monShortFeb,
+  (t) => t.schedule.monShortMar,
+  (t) => t.schedule.monShortApr,
+  (t) => t.schedule.monShortMay,
+  (t) => t.schedule.monShortJun,
+  (t) => t.schedule.monShortJul,
+  (t) => t.schedule.monShortAug,
+  (t) => t.schedule.monShortSep,
+  (t) => t.schedule.monShortOct,
+  (t) => t.schedule.monShortNov,
+  (t) => t.schedule.monShortDec,
+];
+
+/**
+ * "Sun · 19 Jul 2026" — `fmtDFriendly`'s output, in the active language.
+ *
+ * Built from ONE template rather than glued together here: Chinese writes the
+ * year first and the weekday last, so the order has to belong to the string.
+ */
+export function formatHistDateKey(
+  key: string,
+  /**
+   * The dictionary, LAST and with no default — an exported formatter that
+   * defaulted it would pin one locale for every screen that forgot to pass it.
+   */
+  t: AppTranslations,
+): string {
   if (!key) return '';
   const [y, m, d] = isoToYmd(key);
-  return fmtDFriendly(y, m, d);
+  return formatMessage(t.schedule.dateFriendly, {
+    dow: DAY_SHORT[new Date(y, m - 1, d).getDay()](t),
+    d: String(d).padStart(2, '0'),
+    mon: MONTH_SHORT[m - 1](t),
+    y,
+  });
 }
 
 export function parseDateInputMs(dateIso: string, time = '00:00'): number | null {
@@ -185,7 +239,16 @@ export function collectPaymentWeekDateKeys(week: HistPayWeek): string[] {
   return payWeekDateKeys(week);
 }
 
-export function buildDateOptionsFromKeys(keys: string[]): { key: string; label: string }[] {
+export function buildDateOptionsFromKeys(
+  keys: string[],
+  /**
+   * The dictionary. Optional ONLY because the sole caller today
+   * (`PaymentHistoryPanel`) maps straight to `key` and never renders `label`;
+   * omitting it falls back to the raw ISO key, never to English copy, so no
+   * locale is ever pinned. Pass `t` wherever the label is actually shown.
+   */
+  t?: AppTranslations,
+): { key: string; label: string }[] {
   const uniq = [...new Set(keys.filter(Boolean))].sort((a, b) => b.localeCompare(a));
-  return uniq.map((key) => ({ key, label: formatHistDateKey(key) }));
+  return uniq.map((key) => ({ key, label: t ? formatHistDateKey(key, t) : key }));
 }

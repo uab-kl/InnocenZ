@@ -22,19 +22,30 @@ import type { PrWeekShift } from '../lib/api';
 import { resolveProofPhotoUri } from '../lib/proof-photo';
 import { ImageLightbox, ZoomHint } from './ImageLightbox';
 import type { ReceiptClaimState } from '../lib/receipt-review';
+import { formatMessage, useLocale } from '../i18n';
+import type { AppTranslations } from '../i18n';
 
-const KIND_LABEL: Record<CellEvidence['kind'], string> = {
-  wages: 'Daily wages',
-  drinks: 'Drinks',
-  tips: 'Tips',
-  others: 'OT / Other',
-  deductions: 'Deductions',
+/*
+ * The RECORD KEYS are the stored bucket names — they match `GridBucket` and must
+ * never move. Only the value is copy, and it is held as a function because this
+ * map is built at module scope, before any hook can hand it a dictionary.
+ *
+ * Drinks and Tips borrow the Check-In table's own labels rather than naming the
+ * same two things a second time.
+ */
+const KIND_LABEL: Record<CellEvidence['kind'], (t: AppTranslations) => string> = {
+  wages: (t) => t.evidence.kindWages,
+  drinks: (t) => t.shiftStatus.drinks,
+  tips: (t) => t.shiftStatus.tips,
+  others: (t) => t.evidence.kindOthers,
+  deductions: (t) => t.evidence.kindDeductions,
 };
 
-const SOURCE_LABEL: Record<string, string> = {
-  scan: 'Scanned',
-  manual: 'Self-logged',
-  checkin: 'Sealed at check-out',
+/** Keys are the stored `receipt.source` values; only the label is translated. */
+const SOURCE_LABEL: Record<string, (t: AppTranslations) => string> = {
+  scan: (t) => t.evidence.sourceScanned,
+  manual: (t) => t.evidence.sourceSelfLogged,
+  checkin: (t) => t.evidence.sourceSealed,
 };
 
 /** Column widths — same fixed-width table as ShiftStatusPanel's STATUS grid. */
@@ -46,23 +57,34 @@ function money(n: number) {
   return `RM ${n.toFixed(2)}`;
 }
 
+/*
+ * The calendar's OWN weekday and month words, addressed by index.
+ *
+ * These arrays hold DICTIONARY KEYS, never the words — the schedule section
+ * already names every weekday and month in all three locales, and a second copy
+ * here would be a second thing to keep in step. The order is the JS Date order
+ * and is data, so it never changes with the locale; only the words it points at
+ * do. The sentence ORDER lives in the template (Chinese leads with the month),
+ * so nothing here is glued together from fragments.
+ */
+const WEEKDAY_KEYS = [
+  'daySun', 'dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat',
+] as const;
+const MONTH_SHORT_KEYS = [
+  'monShortJan', 'monShortFeb', 'monShortMar', 'monShortApr', 'monShortMay', 'monShortJun',
+  'monShortJul', 'monShortAug', 'monShortSep', 'monShortOct', 'monShortNov', 'monShortDec',
+] as const;
+
 /** "Tue 4 Aug" from a YYYY-MM-DD. Parsed as UTC to match the grid's bucketing. */
-function dayLabel(iso: string): string {
+function dayLabel(iso: string, t: AppTranslations): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
-  const mo = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ][d.getUTCMonth()];
-  return `${wd} ${d.getUTCDate()} ${mo}`;
+  return formatMessage(t.evidence.dayShort, {
+    dow: t.schedule[WEEKDAY_KEYS[d.getUTCDay()]],
+    d: d.getUTCDate(),
+    mon: t.schedule[MONTH_SHORT_KEYS[d.getUTCMonth()]],
+  });
 }
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
 
 /**
  * "Thu 6 Aug 2026" from a YYYY-MM-DD shift date — the same line the agency
@@ -72,12 +94,16 @@ const MONTHS = [
  * day, and handing 'YYYY-MM-DD' to `new Date()` parses it as UTC midnight,
  * which in Asia/KL renders the previous day. Formatted by hand it cannot drift.
  */
-function longShiftDay(iso: string | null | undefined): string {
+function longShiftDay(iso: string | null | undefined, t: AppTranslations): string {
   if (!iso) return '';
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
-  const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return `${weekday} ${d} ${MONTHS[m - 1]} ${y}`;
+  return formatMessage(t.evidence.dayLong, {
+    dow: t.schedule[WEEKDAY_KEYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]],
+    d,
+    mon: t.schedule[MONTH_SHORT_KEYS[m - 1]],
+    y,
+  });
 }
 
 /** A shift the PR dropped. Its evidence is the cancellation, not attendance. */
@@ -93,7 +119,7 @@ function isCancelled(shift: PrWeekShift): boolean {
  * it is spelled out rather than shown as a minus sign the PR has to interpret.
  * Null (no sealed notice) returns null so the caller can print an em-dash.
  */
-function noticeLabel(hours: string | null | undefined): string | null {
+function noticeLabel(hours: string | null | undefined, t: AppTranslations): string | null {
   if (hours === null || hours === undefined) return null;
   const value = Number(hours);
   if (!Number.isFinite(value)) return null;
@@ -101,8 +127,15 @@ function noticeLabel(hours: string | null | undefined): string | null {
   const total = Math.round(Math.abs(value) * 60);
   const h = Math.floor(total / 60);
   const m = total % 60;
-  const span = h > 0 ? `${h} h${m ? ` ${m} m` : ''}` : `${m} m`;
-  return late ? `${span} AFTER it started` : `${span} before it started`;
+  // Three spelled-out spans rather than one built by appending a minutes
+  // fragment — Chinese has no such fragment to append.
+  const span =
+    h > 0
+      ? m > 0
+        ? formatMessage(t.evidence.noticeSpanHoursMinutes, { h, m })
+        : formatMessage(t.evidence.noticeSpanHours, { h })
+      : formatMessage(t.evidence.noticeSpanMinutes, { m });
+  return formatMessage(late ? t.evidence.noticeAfter : t.evidence.noticeBefore, { span });
 }
 
 /** A finished shift — tapped out and sealed. These are the ones that collapse. */
@@ -136,15 +169,14 @@ function ShiftHead({
   expanded?: boolean;
   onToggle?: () => void;
 }) {
+  const { t } = useLocale();
   const shift = group.shift;
   if (!shift) {
     return (
       <View style={s.shiftCard}>
-        <Text style={s.shiftTitle}>Not linked to a shift</Text>
+        <Text style={s.shiftTitle}>{t.evidence.notLinked}</Text>
         <Text style={s.shiftNote}>
-          {shiftsKnown
-            ? 'This was logged without an open shift, so there is no check-in to show. The receipt below is still the proof.'
-            : 'Shift times are unavailable right now. The receipt below is still the proof.'}
+          {shiftsKnown ? t.evidence.noShiftNote : t.evidence.shiftTimesUnavailable}
         </Text>
       </View>
     );
@@ -160,7 +192,7 @@ function ShiftHead({
    * cards. The outlet moves to the line beneath: a PR checking a figure still
    * needs to know where they were, just not as the only thing they are told.
    */
-  const shiftTitle = shift.eventName ?? shift.outletName ?? 'Shift';
+  const shiftTitle = shift.eventName ?? shift.outletName ?? t.evidence.shiftFallback;
   const shiftVenue = shift.eventName ? shift.outletName : null;
   /*
    * SPECIAL only. `event_kind` defaults to 'normal', so tagging every card
@@ -185,10 +217,10 @@ function ShiftHead({
    * happened. One tag, the one that matters here.
    */
   const eventKindLabel = isCancelled(shift)
-    ? 'Cancelled'
+    ? t.schedule.outcomeCancelled
     : shift.eventKind === 'special'
-      ? 'Special event'
-      : 'Normal shift';
+      ? t.shifts.specialEvent
+      : t.shifts.normalShift;
   const collapsible = typeof expanded === 'boolean' && !!onToggle;
   if (collapsible && !expanded) {
     /*
@@ -203,7 +235,7 @@ function ShiftHead({
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: false }}
-        accessibilityLabel={`${shiftTitle} — tap to see check-in, receipts and items`}
+        accessibilityLabel={formatMessage(t.evidence.expandA11y, { title: shiftTitle })}
       >
         <View style={s.shiftHeadText}>
           <View style={s.shiftTitleRow}>
@@ -213,10 +245,10 @@ function ShiftHead({
           <Text style={s.shiftSlot}>
             {shiftVenue ? `${shiftVenue} · ` : ''}
             {shift.slot ? `${shift.slot} · ` : ''}
-            {shiftDurationLabel(shift.checkInAt, shift.checkOutAt)}
+            {shiftDurationLabel(shift.checkInAt, shift.checkOutAt, t)}
           </Text>
-          <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
-          <Text style={s.shiftMore}>Tap to see details</Text>
+          <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate, t)}</Text>
+          <Text style={s.shiftMore}>{t.evidence.tapForDetails}</Text>
         </View>
         <View style={s.shiftHeadRight}>
           <Text style={s.shiftSubtotal}>{money(group.subtotal)}</Text>
@@ -252,8 +284,8 @@ function ShiftHead({
                 {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
               </Text>
             )}
-            <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
-            <Text style={s.shiftMore}>Tap to collapse</Text>
+            <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate, t)}</Text>
+            <Text style={s.shiftMore}>{t.common.tapToCollapse}</Text>
           </View>
           <Text style={[s.chevron, s.chevronOpen]}>⌄</Text>
         </Pressable>
@@ -268,7 +300,7 @@ function ShiftHead({
               {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
             </Text>
           )}
-          <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
+          <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate, t)}</Text>
         </>
       )}
       {isCancelled(shift) ? (
@@ -283,29 +315,37 @@ function ShiftHead({
         <>
           <View style={s.stampRow}>
             <View style={s.stampCol}>
-              <Text style={s.stampK}>SHIFT WAS</Text>
-              <Text style={s.stampV}>{shift.slot ?? 'Time not set'}</Text>
+              <Text style={s.stampK}>{t.evidence.shiftWas}</Text>
+              <Text style={s.stampV}>{shift.slot ?? t.evidence.timeNotSet}</Text>
             </View>
             <View style={s.stampCol}>
-              <Text style={s.stampK}>YOU CANCELLED</Text>
+              <Text style={s.stampK}>{t.evidence.youCancelled}</Text>
               {/* Reconstructed from the sealed notice, good to the minute. Null
                   reads as "Not recorded" — never a guessed time. */}
               <Text style={s.stampV}>
-                {shift.cancelledAt ? fmtAttendanceStamp(shift.cancelledAt) : 'Not recorded'}
+                {shift.cancelledAt
+                  ? fmtAttendanceStamp(shift.cancelledAt)
+                  : t.evidence.notRecorded}
               </Text>
             </View>
           </View>
           <View style={s.stampRow}>
             <View style={s.stampCol}>
-              <Text style={s.stampK}>NOTICE GIVEN</Text>
-              <Text style={s.stampV}>{noticeLabel(shift.cancelNoticeHours) ?? '—'}</Text>
+              <Text style={s.stampK}>{t.evidence.noticeGiven}</Text>
+              <Text style={s.stampV}>{noticeLabel(shift.cancelNoticeHours, t) ?? '—'}</Text>
             </View>
             {shift.cancelFeePct ? (
               <View style={s.stampCol}>
-                <Text style={s.stampK}>FEE BAND</Text>
+                <Text style={s.stampK}>{t.evidence.feeBand}</Text>
+                {/* Two spelled-out sentences, not a percentage with a money
+                    fragment stapled on — the RM sits elsewhere in Chinese. */}
                 <Text style={s.stampV}>
-                  {shift.cancelFeePct}% of this shift
-                  {shift.cancelFeeRm ? ` · RM ${shift.cancelFeeRm}` : ''}
+                  {shift.cancelFeeRm
+                    ? formatMessage(t.evidence.feePctWithRm, {
+                        pct: shift.cancelFeePct,
+                        rm: shift.cancelFeeRm,
+                      })
+                    : formatMessage(t.evidence.feePctOfShift, { pct: shift.cancelFeePct })}
                 </Text>
               </View>
             ) : null}
@@ -315,22 +355,30 @@ function ShiftHead({
         <>
           <View style={s.stampRow}>
             <View style={s.stampCol}>
-              <Text style={s.stampK}>CHECK-IN</Text>
+              <Text style={s.stampK}>{t.shiftStatus.checkInHead}</Text>
               <Text style={s.stampV}>{fmtAttendanceStamp(shift.checkInAt)}</Text>
             </View>
             <View style={s.stampCol}>
-              <Text style={s.stampK}>SHIFT END</Text>
+              <Text style={s.stampK}>{t.evidence.shiftEnd}</Text>
               <Text style={s.stampV}>
-                {shift.checkOutAt ? fmtAttendanceStamp(shift.checkOutAt) : 'Still on duty'}
+                {shift.checkOutAt
+                  ? fmtAttendanceStamp(shift.checkOutAt)
+                  : t.evidence.stillOnDuty}
               </Text>
             </View>
           </View>
           <View style={s.stampRow}>
             <View style={s.stampCol}>
-              <Text style={s.stampK}>DURATION</Text>
+              <Text style={s.stampK}>{t.shiftStatus.duration}</Text>
+              {/* The OT note wraps the whole duration rather than being appended
+                  to it — Chinese puts the bracketed note in its own place. */}
               <Text style={s.stampV}>
-                {shiftDurationLabel(shift.checkInAt, shift.checkOutAt)}
-                {shift.overtimeMinutes ? ` · +${shift.overtimeMinutes}m OT recorded` : ''}
+                {shift.overtimeMinutes
+                  ? formatMessage(t.evidence.durationWithOtRecorded, {
+                      base: shiftDurationLabel(shift.checkInAt, shift.checkOutAt, t),
+                      ot: shift.overtimeMinutes,
+                    })
+                  : shiftDurationLabel(shift.checkInAt, shift.checkOutAt, t)}
               </Text>
             </View>
           </View>
@@ -359,6 +407,7 @@ export function CellEvidenceSheet({
   /** Omitted on This-week, where there is no issued voucher to contest yet. */
   onDispute?: () => void;
 }) {
+  const { t } = useLocale();
   /** The receipt photo being viewed full-size, or null. */
   const [zoom, setZoom] = useState<string | null>(null);
   /*
@@ -479,13 +528,10 @@ export function CellEvidenceSheet({
         <Pressable style={s.backdropTap} onPress={onClose} />
         <View style={[s.sheet, { paddingBottom: 16 + insets.bottom }]}>
           <Text style={s.title}>
-            {KIND_LABEL[evidence.kind]} · {dayLabel(evidence.dateIso)}
+            {KIND_LABEL[evidence.kind](t)} · {dayLabel(evidence.dateIso, t)}
           </Text>
           <Text style={s.total}>{money(evidence.total)}</Text>
-          <Text style={s.hint}>
-            Everything that added up to this figure. Check the order number against your
-            paper receipt.
-          </Text>
+          <Text style={s.hint}>{t.evidence.hint}</Text>
 
           {/*
             A mismatch means lines were dropped from this list while the cell
@@ -495,8 +541,10 @@ export function CellEvidenceSheet({
           {!balanced && (
             <View style={s.warn}>
               <Text style={s.warnText}>
-                This list adds up to {money(evidence.total)} but the grid shows{' '}
-                {money(cellAmount)}. Report this — do not sign it off.
+                {formatMessage(t.evidence.mismatch, {
+                  listed: money(evidence.total),
+                  grid: money(cellAmount),
+                })}
               </Text>
             </View>
           )}
@@ -525,14 +573,14 @@ export function CellEvidenceSheet({
           {cellWide === 'open' && (
             <View style={[s.cellClaim, s.cellClaimOpen]}>
               <Text style={[s.cellClaimText, s.claimTagOpen]}>
-                You have an open dispute covering this WHOLE day — every shift below is part of it.
+                {t.evidence.openDisputeWholeDay}
               </Text>
             </View>
           )}
 
           <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
             {evidence.groups.length === 0 && (
-              <Text style={s.empty}>Nothing was logged for this day.</Text>
+              <Text style={s.empty}>{t.evidence.nothingLogged}</Text>
             )}
 
             {evidence.groups.map((group, gi) => {
@@ -555,7 +603,7 @@ export function CellEvidenceSheet({
                 {expanded && group.receipts.map((receipt, ri) => (
                   <View key={receipt.receiptNo ?? `r-${ri}`} style={s.receipt}>
                     <View style={s.receiptHead}>
-                      <Text style={s.orderNo}>{receipt.orderNo ?? 'No order number'}</Text>
+                      <Text style={s.orderNo}>{receipt.orderNo ?? t.evidence.noOrderNo}</Text>
                       <Text style={s.receiptNo}>{receipt.receiptNo ?? '—'}</Text>
                       {/*
                         * WHICH shift is under argument.
@@ -567,30 +615,49 @@ export function CellEvidenceSheet({
                         * go looking for the answer.
                         */}
                       {claimOf(receipt) === 'open' && (
-                        <Text style={[s.claimTag, s.claimTagOpen]}>DISPUTED</Text>
+                        <Text style={[s.claimTag, s.claimTagOpen]}>
+                          {t.evidence.tagDisputed}
+                        </Text>
                       )}
                       {claimOf(receipt) === 'verified' && (
-                        <Text style={[s.claimTag, s.claimTagSettled]}>VERIFIED</Text>
+                        <Text style={[s.claimTag, s.claimTagSettled]}>
+                          {t.evidence.tagVerified}
+                        </Text>
                       )}
                       {claimOf(receipt) === 'settled' && (
-                        <Text style={[s.claimTag, s.claimTagPlain]}>SETTLED</Text>
+                        <Text style={[s.claimTag, s.claimTagPlain]}>
+                          {t.evidence.tagSettled}
+                        </Text>
                       )}
                     </View>
+                    {/* A ' · ' list of independent facts, not one sentence — each
+                        segment is a whole phrase from the dictionary. */}
                     <Text style={s.receiptMeta}>
-                      {SOURCE_LABEL[receipt.source] ?? receipt.source}
-                      {receipt.receiptDate
-                        ? ` · printed ${receipt.receiptDate}${receipt.receiptTime ? ` ${receipt.receiptTime}` : ''}`
-                        : ''}
-                      {receipt.pending ? ' · waiting on your agency' : ''}
+                      {[
+                        SOURCE_LABEL[receipt.source]?.(t) ?? receipt.source,
+                        receipt.receiptDate
+                          ? receipt.receiptTime
+                            ? formatMessage(t.evidence.printedAt, {
+                                date: receipt.receiptDate,
+                                time: receipt.receiptTime,
+                              })
+                            : formatMessage(t.evidence.printedOn, { date: receipt.receiptDate })
+                          : null,
+                        receipt.pending ? t.evidence.waitingOnAgency : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </Text>
 
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <View>
                         <View style={s.tr}>
-                          <Text style={[s.th, { width: COL_ITEM }]}>ITEM</Text>
-                          <Text style={[s.th, { width: COL_QTY }]}>QTY</Text>
+                          <Text style={[s.th, { width: COL_ITEM }]}>
+                            {t.shiftStatus.colItem}
+                          </Text>
+                          <Text style={[s.th, { width: COL_QTY }]}>{t.shiftStatus.colQty}</Text>
                           <Text style={[s.th, { width: COL_COMM, textAlign: 'right' }]}>
-                            COMM.
+                            {t.shiftStatus.colComm}
                           </Text>
                         </View>
                         {receipt.lines.map((line) => (
@@ -624,7 +691,7 @@ export function CellEvidenceSheet({
                               key={`${i}-${src.slice(0, 24)}`}
                               onPress={() => setZoom(src)}
                               accessibilityRole="imagebutton"
-                              accessibilityLabel="Open the receipt photo full size"
+                              accessibilityLabel={t.evidence.openPhotoA11y}
                             >
                               {/* `src` may be an R2 key — resolve for display only;
                                   keys, dedupe and zoom state stay on the raw string. */}
@@ -641,7 +708,11 @@ export function CellEvidenceSheet({
                 {/* Collapsed, the subtotal has already moved up into the header
                     row, so printing it again here would read as a second figure. */}
                 {expanded && (
-                  <Text style={s.groupTotal}>Shift subtotal · {money(group.subtotal)}</Text>
+                  <Text style={s.groupTotal}>
+                    {formatMessage(t.evidence.shiftSubtotal, {
+                      amount: money(group.subtotal),
+                    })}
+                  </Text>
                 )}
               </View>
               );
@@ -661,11 +732,11 @@ export function CellEvidenceSheet({
           <View style={s.footer}>
             {onDispute && (
               <Pressable style={s.actBtn} onPress={onDispute}>
-                <Text style={s.actBtnText}>Dispute this amount</Text>
+                <Text style={s.actBtnText}>{t.evidence.disputeAmount}</Text>
               </Pressable>
             )}
             <Pressable style={s.closeBtn} onPress={onClose}>
-              <Text style={s.closeBtnText}>Close</Text>
+              <Text style={s.closeBtnText}>{t.common.close}</Text>
             </Pressable>
           </View>
 

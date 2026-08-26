@@ -177,7 +177,7 @@ function LoginScreenInner({
               source={LOGO}
               style={[styles.logo, keyboardHeight > 0 && styles.logoCompact]}
               resizeMode="contain"
-              accessibilityLabel="InnocenZ logo"
+              accessibilityLabel={t.login.logoAlt}
             />
             <Text style={[styles.wordmark, keyboardHeight > 0 && styles.wordmarkCompact]}>
               InnocenZ

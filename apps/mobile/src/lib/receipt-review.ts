@@ -13,6 +13,7 @@
 import type { PrCurrentWeek, PrReceiptLine, PrWeekDispute } from './api';
 import type { GridBucket } from './week-pay-grid';
 import type { WeeklyDayPay } from './demo-shifts';
+import { formatMessage, type AppTranslations } from '../i18n';
 
 /** The grid's own per-day state — see `WeeklyDayPay.status` for what each means. */
 type DayGridStatus = WeeklyDayPay['status'];
@@ -145,15 +146,32 @@ export function dayReceiptSummary(
   };
 }
 
-const CAPTION_DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/**
+ * Indexed by `Date#getUTCDay()`, so the ORDER is data and must stay Sun-first.
+ * Holds resolvers, not strings: this is module scope, where no hook has run —
+ * a plain array would be built once, in whatever locale loaded first.
+ */
+const CAPTION_DAY_ABBR: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.daySun,
+  (t) => t.schedule.dayMon,
+  (t) => t.schedule.dayTue,
+  (t) => t.schedule.dayWed,
+  (t) => t.schedule.dayThu,
+  (t) => t.schedule.dayFri,
+  (t) => t.schedule.daySat,
+];
 
 /** "Thu 20" from a lineDate — the shift the PR knows the entry by. All-UTC
- * like the grid, so the named day is the column the money sits under. */
-function captionDay(iso: string | null): string | null {
+ * like the grid, so the named day is the column the money sits under. The
+ * weekday/number ORDER lives in the template: Chinese puts the number first. */
+function captionDay(iso: string | null, t: AppTranslations): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
   if (!m) return null;
   const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-  return `${CAPTION_DAY_ABBR[d.getUTCDay()]} ${d.getUTCDate()}`;
+  return formatMessage(t.receipt.captionDay, {
+    dow: CAPTION_DAY_ABBR[d.getUTCDay()](t),
+    d: d.getUTCDate(),
+  });
 }
 
 /**
@@ -164,28 +182,47 @@ function captionDay(iso: string | null): string | null {
  */
 export function receiptReviewCaption(
   week: PrCurrentWeek | null,
+  /**
+   * The dictionary, LAST and with no default — an exported formatter that
+   * defaulted it would pin one locale for every screen that forgot to pass it.
+   */
+  t: AppTranslations,
 ): string | null {
   const { waiting, approved, verified } = receiptReviewCounts(week);
   const total = waiting + approved + verified;
   if (total === 0) return null;
   const settledParts: string[] = [];
-  if (verified > 0) settledParts.push(`${verified} verified`);
-  if (approved > 0) settledParts.push(`${approved} approved`);
+  if (verified > 0)
+    settledParts.push(formatMessage(t.receipt.captionVerified, { n: verified }));
+  if (approved > 0)
+    settledParts.push(formatMessage(t.receipt.captionApproved, { n: approved }));
+  // "of {total} entries" WRAPS the parts in Chinese instead of trailing them,
+  // so the whole clause is one key and the joined list goes in as a value.
   const head =
     settledParts.length > 0
-      ? `${settledParts.join(' · ')} of ${total} ${total === 1 ? 'entry' : 'entries'}`
+      ? formatMessage(
+          total === 1 ? t.receipt.captionOfOne : t.receipt.captionOfMany,
+          { parts: settledParts.join(' · '), total },
+        )
       : null;
   if (waiting === 0) return head;
   const pendingDays = [
     ...new Set(
       (week?.lines ?? [])
         .filter((line) => line.receiptStatus === 'pending')
-        .map((line) => captionDay(line.lineDate))
+        .map((line) => captionDay(line.lineDate, t))
         .filter((d): d is string => d !== null),
     ),
   ];
-  const where = pendingDays.length > 0 ? ` (${pendingDays.join(', ')})` : '';
-  const tail = `${waiting} waiting on your agency${where}`;
+  // Two whole sentences rather than splicing a parenthesised fragment on —
+  // the bracket and its spacing are punctuation, and Chinese uses its own.
+  const tail =
+    pendingDays.length > 0
+      ? formatMessage(t.receipt.captionWaitingOn, {
+          n: waiting,
+          days: pendingDays.join(', '),
+        })
+      : formatMessage(t.receipt.captionWaiting, { n: waiting });
   return head ? `${head} · ${tail}` : tail;
 }
 
@@ -353,6 +390,34 @@ export const DISPUTE_PRESETS = [
   'Others',
 ] as const;
 
+export type DisputePreset = (typeof DISPUTE_PRESETS)[number];
+
+/**
+ * The CHIP a PR reads, for each preset they can pick.
+ *
+ * ⚠️ The record KEYS above are DATA and stay English: the chosen preset is
+ * posted verbatim as the dispute's `reason` (PaymentScreen → `reason:
+ * disputePreset`), and the agency reads it in the web portal. Translating the
+ * VALUE would send the agency a reason in a language they did not pick, and
+ * would break any grouping the portal does on it. Only the label moves.
+ *
+ * Resolvers, not strings — module scope runs before any hook, so a plain map
+ * would freeze whichever locale loaded first. Call it as
+ * `DISPUTE_PRESET_LABELS[preset](t)` inside a component.
+ */
+export const DISPUTE_PRESET_LABELS: Record<
+  DisputePreset,
+  (t: AppTranslations) => string
+> = {
+  'Wrong commission': (t) => t.receipt.presetWrongCommission,
+  'Wrong quantity': (t) => t.receipt.presetWrongQuantity,
+  'Counted twice': (t) => t.receipt.presetCountedTwice,
+  'Missing from my PV': (t) => t.receipt.presetMissingFromPv,
+  'Wrong rate': (t) => t.receipt.presetWrongRate,
+  'Not my shift': (t) => t.receipt.presetNotMyShift,
+  Others: (t) => t.receipt.presetOthers,
+};
+
 /** How a claim ended. `withdrawn` never reaches here — `isLive` drops it. */
 export type SettledOutcome = 'accepted' | 'rejected';
 
@@ -452,6 +517,31 @@ export function openDisputeKeys(week: PrCurrentWeek | null): Set<string> {
  */
 export type DayStatusLabel =
   'PENDING' | 'APPROVED' | 'DISPUTED' | 'VERIFIED' | 'DEDUCTED' | '—';
+
+/**
+ * The Status pill's TEXT for each `dayStatusLabel()` answer.
+ *
+ * ⚠️ The record KEYS — and `dayStatusLabel`'s return — stay English because
+ * they are DATA: PaymentScreen tests `label === 'VERIFIED'` / `'DISPUTED'` /
+ * `'APPROVED'` / `'DEDUCTED'` to pick the pill's colour, and the project's
+ * status colour code (green settled, amber waiting, white mixed, red disputed)
+ * is fixed. Translate the pill, never the value it is chosen by.
+ *
+ * '—' resolves to itself: an em dash is the same glyph in every locale.
+ *
+ * Resolvers rather than strings, for the module-scope reason above.
+ */
+export const DAY_STATUS_LABELS: Record<
+  DayStatusLabel,
+  (t: AppTranslations) => string
+> = {
+  PENDING: (t) => t.receipt.statusPending,
+  APPROVED: (t) => t.receipt.statusApproved,
+  DISPUTED: (t) => t.receipt.statusDisputed,
+  VERIFIED: (t) => t.receipt.statusVerified,
+  DEDUCTED: (t) => t.receipt.statusDeducted,
+  '—': () => '—',
+};
 
 /**
  * THIS WEEK tops out at APPROVED — VERIFIED is earned, not granted.

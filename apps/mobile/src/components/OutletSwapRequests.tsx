@@ -12,6 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 // lucide — there is no arrow-swap glyph, so the venue icon carries the meaning.
 import { Store } from './icons';
 import { C, F } from '../theme/theme';
+import { useLocale } from '../i18n';
 import { IzButton } from './ui';
 import type { OutletSwapRecord } from '../lib/api';
 import type { OutletSwapsState } from '../lib/outlet-swaps';
@@ -71,17 +72,18 @@ function SwapCard({
   disabled: boolean;
   onRespond: (accept: boolean) => void;
 }) {
+  const { t } = useLocale();
   return (
     <View style={styles.card}>
       <View style={styles.head}>
         <Store size={14} color={C.violet} />
-        <Text style={styles.headText}>OUTLET SWAP REQUEST</Text>
+        <Text style={styles.headText}>{t.swaps.header}</Text>
       </View>
 
       <Text style={styles.move}>
-        {swap.fromOutletName ?? 'Your outlet'}
+        {swap.fromOutletName ?? t.swaps.fromFallback}
         <Text style={styles.arrow}> → </Text>
-        {swap.toOutletName ?? 'New outlet'}
+        {swap.toOutletName ?? t.swaps.toFallback}
       </Text>
 
       <Text style={styles.meta}>
@@ -94,13 +96,11 @@ function SwapCard({
         <Text style={styles.note}>&ldquo;{swap.agencyNote}&rdquo;</Text>
       ) : null}
 
-      <Text style={styles.hint}>
-        Your shift moves to this outlet only if you approve.
-      </Text>
+      <Text style={styles.hint}>{t.swaps.hint}</Text>
 
       <View style={styles.actions}>
         <IzButton
-          label="Decline"
+          label={t.swaps.decline}
           variant="soft"
           small
           fullWidth={false}
@@ -109,7 +109,7 @@ function SwapCard({
           style={styles.action}
         />
         <IzButton
-          label={busy ? 'Sending…' : 'Approve'}
+          label={busy ? t.swaps.sending : t.swaps.approve}
           small
           fullWidth={false}
           disabled={busy || disabled}

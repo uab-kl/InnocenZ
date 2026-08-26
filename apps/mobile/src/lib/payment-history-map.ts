@@ -2,6 +2,7 @@
  * Map backend payment_voucher history → History UI shapes.
  * Source of truth is the DB — no demo seed weeks/amounts.
  */
+import { formatMessage, type AppTranslations } from '../i18n';
 import type { PrHistoryVoucher, PrReceiptLine } from './api';
 import type { HistPayLine, HistPayStatus, HistPayWeek } from './demo-payment-history';
 import {
@@ -90,6 +91,42 @@ function statusMeta(v: PrHistoryVoucher): string {
   return 'Waiting for your agency to issue';
 }
 
+/**
+ * The RENDER-side twin of `statusMeta` above — call it where the string is
+ * drawn, never where it is built.
+ *
+ * `statusMeta` stays English at BOTH producers on purpose. A week signed on the
+ * phone is PERSISTED as this string by `signed-pv.tsx` and then regex-migrated
+ * on read by `normalizeHistPayWeek`, so translating it at the source would bake
+ * one locale into storage and leave the migration unable to recognise its own
+ * rows. This parses the stored English back into its parts and rebuilds the
+ * sentence in the active locale instead. An unrecognised string — an older
+ * stored wording — falls through unchanged rather than rendering blank.
+ *
+ * The date/time tail is passed through as it stands: it is the same "5 Aug 2026"
+ * form the card already prints beside it for `issued`.
+ */
+export function localizePayStatusMeta(meta: string, t: AppTranslations): string {
+  const trimmed = (meta ?? '').trim();
+  if (!trimmed) return trimmed;
+  if (trimmed === 'Disputed — waiting on your agency') return t.payHistory.metaDisputed;
+  if (trimmed === 'Waiting for your signature') return t.payHistory.metaAwaitingSignature;
+  if (trimmed === 'Waiting for your agency to issue') return t.payHistory.metaAwaitingIssue;
+  const paid = /^Paid(?:\s+(.+))?$/.exec(trimmed);
+  if (paid) {
+    return paid[1]
+      ? formatMessage(t.payHistory.metaPaidOn, { when: paid[1] })
+      : t.payHistory.statusPaid;
+  }
+  const signed = /^Signed(?:\s+(.+))?$/.exec(trimmed);
+  if (signed) {
+    return signed[1]
+      ? formatMessage(t.payHistory.metaSignedOn, { when: signed[1] })
+      : t.payHistory.statusSigned;
+  }
+  return trimmed;
+}
+
 /** Short aggregate label — "(2)-outlet" instead of the long "Multi-outlet (2)". */
 function outletLabel(v: PrHistoryVoucher): string {
   if (v.outlet) return v.outlet;
@@ -101,11 +138,43 @@ function outletLabel(v: PrHistoryVoucher): string {
   return 'Outlet';
 }
 
+/**
+ * Render-side label for the aggregate form of `outletLabel`.
+ *
+ * The STORED value keeps its `(2)-outlet` shape: it is compared against the
+ * outlet filter, and `paymentHistoryOutlets` recognises it by that exact form to
+ * keep the aggregate out of the outlet dropdown. A real venue name is a name and
+ * passes straight through.
+ */
+export function localizePayOutlet(outlet: string, t: AppTranslations): string {
+  const aggregate = /^\((\d+)\)-outlet$/.exec(outlet ?? '');
+  return aggregate
+    ? formatMessage(t.payHistory.multiOutlet, { n: aggregate[1]! })
+    : outlet;
+}
+
 function lineTypeLabel(kind: PrReceiptLine['kind']): string {
   if (kind === 'wages') return 'Daily wages';
   if (kind === 'drinks') return 'Drinks commission';
   if (kind === 'tips') return 'Tips commission';
   return 'Others';
+}
+
+/**
+ * Render-side label for a stored line `type`.
+ *
+ * `HistPayLine.type` is DATA once written: `normalizeHistPayWeek` and
+ * `historyShiftsFromPayWeek` split wages from commission by testing this string,
+ * and a signed week carries it into localStorage. So the stored value stays
+ * English and the match here mirrors those same tests.
+ */
+export function localizePayLineType(type: string, t: AppTranslations): string {
+  const kind = (type ?? '').toLowerCase();
+  if (kind.includes('wage')) return t.payHistory.lineWages;
+  if (kind.includes('drink')) return t.payHistory.lineDrinks;
+  if (kind.includes('tip')) return t.payHistory.lineTips;
+  if (kind === 'others') return t.payHistory.lineOthers;
+  return type;
 }
 
 function toHistPayLines(lines: PrReceiptLine[]): HistPayLine[] {

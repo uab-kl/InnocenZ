@@ -48,7 +48,7 @@ const SKIP_DIR =
  * phantom hits in the two files that are already finished.
  */
 const SKIP_FILE =
-	/routeTree\.gen\.|[\\/]lib[\\/](portal-i18n|landing-i18n)[\\/]|[\\/]src[\\/]i18n[\\/]/;
+	/routeTree\.gen\.|[\\/]lib[\\/](portal-i18n|landing-i18n)[\\/]|[\\/]src[\\/]i18n[\\/]|\.(test|spec)\.[jt]sx?$/;
 
 /**
  * Values that LOOK like prose but are class names, format strings, enum

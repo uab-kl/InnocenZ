@@ -63,6 +63,8 @@ export type AppTranslations = {
     tooManyAttempts: string;
     newHere: string;
     createAccount: string;
+    /** Screen-reader label on the brand logo image. */
+    logoAlt: string;
   };
   forgot: {
     title: string;
@@ -82,6 +84,10 @@ export type AppTranslations = {
     doneTitle: string;
     doneBody: string;
     backToSignIn: string;
+    /** Deliberately non-committal — never confirms whether the number exists. */
+    codeSentInfo: string;
+    invalidCode: string;
+    resetFailed: string;
   };
   topbar: {
     prAgencyTied: string;
@@ -123,6 +129,73 @@ export type AppTranslations = {
     /** The caption under the button in that same case — never "Saved to profile". */
     comcardUnavailableHint: string;
     comcardHint: string;
+    /** Eyebrow above the profile hero card. */
+    accountEyebrow: string;
+    editingBadge: string;
+    /** Hero badge. The comcard's own printed content stays English — this is screen chrome. */
+    comcardIcBadge: string;
+    floorNickname: string;
+    legalIcName: string;
+    agencies: string;
+    selectAgencies: string;
+    agencyTied: string;
+    awaitingApproval: string;
+    departureWaiting: string;
+    icNumber: string;
+    agencyLockedJoin: string;
+    agencyLockedLeave: string;
+    /** One key, not a name plus an appended English suffix. */
+    agencyDeparturePending: string;
+    leaveConfirm: string;
+    requestToLeave: string;
+    keep: string;
+    departureRequested: string;
+    departureFailed: string;
+    nicknameLength: string;
+    icNameRequired: string;
+    languageRequired: string;
+    emailInvalid: string;
+    profileSaved: string;
+    saveFailed: string;
+    comcardUpdated: string;
+    /** The expo command is a literal and stays English. */
+    galleryUnavailable: string;
+    imageTooLarge: string;
+    avatarUpdated: string;
+    avatarUploadFailed: string;
+    portfolioUploadFailed: string;
+    someImagesSkipped: string;
+    removePhotoTitle: string;
+    /** {label} is the two-digit slot number, e.g. 03. */
+    removePhotoBody: string;
+    portfolioRemoveFailed: string;
+    savingArrangement: string;
+    rearrangeFailed: string;
+    portfolioRearranged: string;
+    portfolio: string;
+    portfolioDragHint: string;
+    portfolioShowcase: string;
+    /** No plural form — one key, count filled by formatMessage. */
+    portfolioCount: string;
+    /** Names the Edit-profile button; keep in step with profile.editProfile. */
+    noLanguages: string;
+    /** Rendered label for pr_tier 'tier_1'. The enum value itself never changes. */
+    tier1: string;
+    tier2: string;
+    tier3: string;
+    tier4: string;
+    tier5: string;
+    tierServant: string;
+    tierCommissionOnly: string;
+    slotTapToSwap: string;
+    slotDragHint: string;
+    /** The ✕ close button of the shared full-image viewer (ImageLightbox). */
+    viewerReturn: string;
+    /** Names the ✕ Return button — keep in step with profile.viewerReturn. */
+    viewerHint: string;
+    /** Placeholder inside the empty signature pad. */
+    signHere: string;
+    clearSignature: string;
   };
   security: {
     title: string;
@@ -143,6 +216,26 @@ export type AppTranslations = {
     phoneUpdated: string;
     sendOtp: string;
     verifyOtp: string;
+    eyebrow: string;
+    intro: string;
+    /** `{phone}` = the account's stored phone number. Appended after security.intro. */
+    currentPhone: string;
+    changePhoneHint: string;
+    newMobileNumber: string;
+    sendWhatsappCode: string;
+    /** `{phone}` = dial code + local digits of the NEW number. */
+    codeSentTo: string;
+    /** Title of the change-phone OTP sheet. */
+    otpTitle: string;
+    otpHint: string;
+    /** Field label above the 6-digit OTP input. */
+    otpLabel: string;
+    verifyAndSave: string;
+    updatePasswordFailed: string;
+    /** Shared by SecurityScreen change-phone and ForgotPasswordModal. */
+    sendCodeFailed: string;
+    updatePhoneFailed: string;
+    deleteAccountFailed: string;
   };
   shifts: {
     pageEyebrow: string;
@@ -208,15 +301,275 @@ export type AppTranslations = {
     back: string;
     enableLocation: string;
     continueWithoutGps: string;
+    /** Status value shown for phase 'booked'. The PHASE STRING itself stays English. zh and zh-Hant are identical on purpose — no character differs between the scripts. */
+    booked: string;
+    /** Status value shown when there is no actionable assignment at all. */
+    noShift: string;
+    /** Last-resort error when check-in/check-out throws something that is not an Error. A real backend message keeps its own wording. */
+    attendanceFailed: string;
+    /** Amber banner shown while the screen is pinned to a finished shift and a live one is waiting. */
+    viewingEarlier: string;
+    loadingShift: string;
+    idleEmpty: string;
+    /** Shown in place of the event name when the assignment has none. zh and zh-Hant are identical on purpose — no character differs. */
+    eventFallback: string;
+    /** FIELD LABEL in the expanded shift brief; its value is the formatted date. */
+    dayAndDate: string;
+    /** Shown until the first GPS fix arrives. zh and zh-Hant are identical on purpose — no character differs. */
+    locating: string;
+    /** Inside the geofence. `{m}` = metres, `{name}` = outlet name. One key, filled by formatMessage — Chinese puts the venue before the distance. */
+    metresFrom: string;
+    /** Outside the geofence. Also the Check-in button's label while the gate blocks. `{m}` = metres. */
+    metresAway: string;
+    /** Whole sentence in one key — never the radius clause and the privacy tail glued together. `{m}` = fence radius, `{name}` = outlet. */
+    gpsNote: string;
+    /** The GPS_BYPASS variant of checkin.gpsNote. Same placeholders. */
+    gpsNoteBypass: string;
+    /** `{d}` is the already-localised label from shiftDurationLabel(). */
+    duration: string;
+    /** Must NOT read as a filed claim — nothing is sent. `{h}` = hours (1 dp), `{amount}` = pre-formatted RM. */
+    otEstimate: string;
+    cancelWarning: string;
+    /** TextInput placeholder in the cancel sheet. The reason the PR types is their own text and is never translated. */
+    reasonPlaceholder: string;
+    /** Body of the styled permission explainer shown BEFORE the bare OS popup. "InnocenZ" is the brand and stays English. */
+    locationExplainer: string;
+    /** Permission-explainer checklist line. The leading ✓ is a bullet glyph rendered by the JSX, not part of this value. */
+    locCheckRadius: string;
+    /** Permission-explainer checklist line; the ✓ bullet is added by the JSX. */
+    locCheckStamp: string;
+    /** Permission-explainer checklist line; the ✓ bullet is added by the JSX. */
+    locCheckNoTracking: string;
+    /** Press-and-hold progress on the check-in / check-out button. `{p}` = percent. zh and zh-Hant are identical on purpose — no character differs. */
+    holding: string;
+    /** SINGULAR of the check-out refusal. Spelled out as its own key because Chinese has no plural fragment to append; the zh/zh-Hant text is the same as missingPhotoMany by design. */
+    missingPhotoOne: string;
+    /** PLURAL of the check-out refusal. See missingPhotoOne. */
+    missingPhotoMany: string;
+    /** Check-out refusal when the shift is completely empty. */
+    nothingLogged: string;
+    /** Error banner after the "Refresh GPS" link is tapped and permission is still refused. */
+    locPermissionOff: string;
+    /** Error banner when the "Refresh GPS" one-shot read throws. */
+    gpsReadFailed: string;
+    /** lib/device-location.ts refusal, reason 'denied'. The reason CODE stays English — it is compared, not shown. */
+    locationDenied: string;
+    /** lib/device-location.ts refusal, reason 'disabled'. */
+    locationDisabled: string;
+    /** lib/device-location.ts refusal, reason 'timeout' — no fresh fix and no usable last-known one. */
+    locationTimeout: string;
+    /** lib/device-location.ts fallback when the thrown value carries no message of its own. A real expo Error keeps its own English text. */
+    locationUnknown: string;
   };
   payment: {
     title: string;
     history: string;
+    /** Week tab. */
+    lastWeek: string;
+    /** Week tab. */
+    thisWeek: string;
+    /** Caps section header above the last-week grid. */
+    lastWeekTitle: string;
+    /** Caps section header above the this-week grid. */
+    thisWeekTitle: string;
+    lastWeekRange: string;
+    verifiedDays: string;
+    approvedDays: string;
+    /** Shown when a voucher carries no agency name. */
+    agencyFallback: string;
+    /** Pay-grid total column heading. */
+    gridTotal: string;
+    /** Second line of the total column heading. */
+    gridTotalSub: string;
+    rowWages: string;
+    rowDrinks: string;
+    rowTips: string;
+    rowOthers: string;
+    rowDeductions: string;
+    nVerified: string;
+    nApproved: string;
+    nPending: string;
+    /** Status word — day pills, receipt rows, voucher pills and penalty rows all read from this one vocabulary. */
+    statusPending: string;
+    statusApproved: string;
+    statusDisputed: string;
+    statusVerified: string;
+    statusDeducted: string;
+    statusPaid: string;
+    statusSigned: string;
+    statusSent: string;
+    disputeOpen: string;
+    disputeOpenNamed: string;
+    disputeBannerHint: string;
+    /** {red} is replaced at render time by the word below, drawn in red. Keep the placeholder. */
+    tapHint: string;
+    /** The one word inside payment.tapHint that is drawn in red. */
+    redWord: string;
+    /** The week total follows this line, styled. */
+    pvIssuedSunday: string;
+    /** {day} is drawn in bold at render time. Keep the placeholder. */
+    pvOnDay: string;
+    totalLower: string;
+    noLastWeekPv: string;
+    checkOutToSeal: string;
+    reviewSign: string;
+    reviewSignNamed: string;
+    whatYouDisputed: string;
+    receiptsThisDay: string;
+    /** Receipt count for one day. */
+    nTotal: string;
+    receiptCounts: string;
+    /** A dispute nobody has answered yet. */
+    claimOpen: string;
+    claimAccepted: string;
+    claimRejected: string;
+    claimWithdrawn: string;
+    voucherSaid: string;
+    raisedAt: string;
+    filedWholeDay: string;
+    /** Heading for a shift the outlet never named. */
+    shiftFallback: string;
+    shiftTimeUnknown: string;
+    inOutWindow: string;
+    noOrderNo: string;
+    wholeReceipt: string;
+    noReceiptBehind: string;
+    agencyAnswer: string;
+    cancelThisDispute: string;
+    cancelling: string;
+    durationUnknown: string;
+    hours: string;
+    hoursMinutes: string;
+    minutes: string;
+    withOvertime: string;
+    /** One entry in the pending-overtime caption. {day} stays the English column abbreviation so it names the grid column it points at. */
+    otOnDay: string;
+    otPending: string;
+    withdrawDisputeTitle: string;
+    disputeThisAmount: string;
+    whichOneWrong: string;
+    /** Why a shift chip cannot be picked. */
+    alreadyDisputed: string;
+    /** Note on a shift chip whose receipt the agency has not looked at. */
+    notReviewedYetShort: string;
+    /** Appended to a chip's accessibilityLabel. */
+    selected: string;
+    pickShift: string;
+    disputingOf: string;
+    whichItem: string;
+    pickOneItem: string;
+    quickReason: string;
+    /** Face of the DISPUTE_PRESETS value 'Wrong commission'; the posted reason stays English. */
+    reasonWrongCommission: string;
+    reasonWrongQuantity: string;
+    reasonCountedTwice: string;
+    reasonMissingFromPv: string;
+    reasonWrongRate: string;
+    reasonNotMyShift: string;
+    reasonOthers: string;
+    notePlaceholder: string;
+    attachImages: string;
+    optional: string;
+    /** Singular half of a pair — Chinese has no plural, so both halves read the same there. */
+    imagesAttachedOne: string;
+    imagesAttachedMany: string;
+    proofOptional: string;
+    submitting: string;
+    submitDispute: string;
+    withdrawSub: string;
+    proofCleared: string;
+    withdrawing: string;
+    withdrawDispute: string;
+    notDisputedHereTitle: string;
+    notDisputedHereBody: string;
+    notReviewedTitle: string;
+    notReviewedBody: string;
+    openDayFirstTitle: string;
+    openDayFirstBody: string;
+    couldNotCancel: string;
+    tryAgain: string;
+    cancelConfirmTitle: string;
+    cancelConfirmBody: string;
+    keepIt: string;
+    cancelDispute: string;
+    pickShiftFirstTitle: string;
+    pickShiftFirstBody: string;
+    noVoucherTitle: string;
+    noVoucherLast: string;
+    noVoucherThis: string;
+    disputeFailed: string;
+    nVouchersThisWeek: string;
+    multiAgencyHint: string;
+    notYetNumbered: string;
+    penaltiesThisWeek: string;
+    cancelledShift: string;
+    pctOfDailyWage: string;
+    /** Penalty rule type min_shifts_per_week. */
+    ruleMinShifts: string;
+    /** Penalty rule type max_mc_per_month. */
+    ruleMaxMc: string;
+    /** Penalty rule type late_per_week. */
+    ruleLate: string;
+    /** Penalty rule type cancellation. */
+    ruleCancellation: string;
   };
   history: {
     title: string;
     shifts: string;
     payments: string;
+    /** Summary tile — everything earned by the shifts the filters currently keep. */
+    earnedInRange: string;
+    /** Uppercase summary-tile header — distinct from history.metricWages ('Wages'), the sentence-case metric label. */
+    wagesTotal: string;
+    /** Uppercase heading over the filter block on the Shifts sub-tab. */
+    shiftHistory: string;
+    searchPlaceholder: string;
+    /** Uppercase filter caption — distinct from t.common.outlet ('Outlet'). */
+    filterOutlet: string;
+    /** Uppercase filter caption. */
+    filterStatus: string;
+    /** Uppercase filter caption on the shared History date field. Identical in both Chinese scripts. */
+    filterDate: string;
+    /** Unfiltered value of the outlet picker — the option id stays the English 'all'. */
+    anyOutlet: string;
+    /** Unfiltered value of the status picker — the option id stays the English 'any'. */
+    anyStatus: string;
+    /** Date field with nothing picked. Identical in both Chinese scripts. */
+    anyDate: string;
+    /** Status-filter option AND the amber pill on the current-week card — the week whose voucher is still a live draft. */
+    statusCurrent: string;
+    /** Status-filter option and shift pill — the PR has signed that week's payment voucher. */
+    statusSigned: string;
+    /** Singular half of the week-card count; Chinese has no plural form, so the count picks the whole string rather than appending an 's'. */
+    shiftCountOne: string;
+    /** Plural half of the week-card count. */
+    shiftCountMany: string;
+    /** Week-card money line; both values arrive already formatted as RM x.xx. */
+    weekEarnLine: string;
+    /** Empty body of one expanded week card — THAT week, which may be a past one, so it is not t.schedule.noShiftsThisWeek. */
+    noShiftsInWeek: string;
+    noShiftsMatch: string;
+    /** Clears every filter at once — stronger than t.jobs.clearFilters ('Clear filters'). */
+    resetFilters: string;
+    /** {amount} is already formatted as RM x.xx. */
+    totalPayout: string;
+    cancelledNoPayout: string;
+    /** Sentence-case metric label on a shift card — distinct from history.wagesTotal, the uppercase summary header. */
+    metricWages: string;
+    /** Metric label for the 'others' money kind (overtime and the like). Identical in both Chinese scripts. */
+    metricOthers: string;
+    /** Value of the FROM/TO time fields while they are disabled because no date is chosen. */
+    pickDateFirst: string;
+    /** Value of an enabled but empty time field. */
+    tapToChoose: string;
+    /** Uppercase caption AND the time picker's own modal title. */
+    fromTime: string;
+    toTime: string;
+    /** Closes the time picker. Identical in both Chinese scripts. */
+    done: string;
+    /** Calendar legend for the gold dot under a day that has rows. */
+    calLegendWorked: string;
+    calLegendNote: string;
   };
   signup: {
     title: string;
@@ -548,6 +901,486 @@ export type AppTranslations = {
     /** Used when the day holds more than one shift. */
     missedNoteMany: string;
   };
+  receipt: {
+    /** A pending day named inside the review caption. {dow} short weekday, {d} day-of-month — Chinese puts the number first, so the ORDER lives in the template. Identical in both Chinese scripts. */
+    captionDay: string;
+    /** One half of the settled list in the receipt-review caption; joined with ' · ' to the approved half. */
+    captionVerified: string;
+    captionApproved: string;
+    /** {parts} is the already-joined verified/approved list. Chinese WRAPS the total around it instead of trailing it, so the whole clause is one key. Singular half — Chinese has no plural, so zh/zh-Hant match captionOfMany. */
+    captionOfOne: string;
+    captionOfMany: string;
+    /** Tail of the review caption when no pending day could be named. */
+    captionWaiting: string;
+    /** Same sentence with the pending days named. Spelled out in full rather than splicing a parenthesised fragment on — the brackets are punctuation and Chinese uses its own. */
+    captionWaitingOn: string;
+    /** Dispute quick-reason CHIP. The preset VALUE stays English — it is posted verbatim as the dispute's `reason` and read by the agency's web portal. */
+    presetWrongCommission: string;
+    presetWrongQuantity: string;
+    presetCountedTwice: string;
+    /** PV = payment voucher, rendered with the dictionary's existing 结算单 / 結算單 wording. */
+    presetMissingFromPv: string;
+    presetWrongRate: string;
+    /** zh and zh-Hant are identical on purpose — no character differs between the scripts. */
+    presetNotMyShift: string;
+    /** Identical in both scripts — no character differs. */
+    presetOthers: string;
+    /** Day Status pill. English is UPPERCASE because it is a pill, and it is a LABEL only — dayStatusLabel() still returns the English 'PENDING', which PaymentScreen compares to pick the pill's colour. */
+    statusPending: string;
+    /** Amber, deliberately sharing the waiting colour with PENDING. Identical in both scripts. */
+    statusApproved: string;
+    statusDisputed: string;
+    statusVerified: string;
+    /** Identical in both scripts — no character differs. */
+    statusDeducted: string;
+    /** Default title of ScannedReceiptsCard, on the Scan page and Check-In. */
+    scannedThisShift: string;
+    /** Photo-group heading covering line kinds 'tips' and 'others'. The kinds themselves stay English. */
+    groupTipsService: string;
+    /** Singular half — Chinese has no plural, so zh/zh-Hant match pictureMany. */
+    pictureOne: string;
+    pictureMany: string;
+    /** Singular half — Chinese has no plural, so zh/zh-Hant match itemLoggedMany. */
+    itemLoggedOne: string;
+    itemLoggedMany: string;
+  };
+  evidence: {
+    /** Payment-grid row label for the `wages` bucket. The bucket KEY stays the English 'wages'. */
+    kindWages: string;
+    /** Grid row label for the `others` bucket (overtime and anything else). */
+    kindOthers: string;
+    /** Grid row label for the `deductions` bucket. */
+    kindDeductions: string;
+    /** Receipt meta label for source === 'scan'. The stored value stays English. */
+    sourceScanned: string;
+    /** Receipt meta label for source === 'manual'. */
+    sourceSelfLogged: string;
+    /** Receipt meta label for source === 'checkin' — the wage seal written at check-out. */
+    sourceSealed: string;
+    /** Sheet title date, no year. {dow} short weekday, {d} day, {mon} short month — Chinese leads with the month, so the order lives here. */
+    dayShort: string;
+    /** The shift card's calendar date, with year. Same placeholders as dayShort plus {y}. */
+    dayLong: string;
+    /** Card title when a cell's lines carry no shift link. */
+    notLinked: string;
+    /** Body of that card when the week DID ship shifts — so the absence is real, not unknown. */
+    noShiftNote: string;
+    /** Body of that card when the week shipped no `shifts` array at all. */
+    shiftTimesUnavailable: string;
+    /** Card title when the shift carries neither an event name nor an outlet name. */
+    shiftFallback: string;
+    /** accessibilityLabel on a collapsed shift row. {title} is the shift's own name — never translated. */
+    expandA11y: string;
+    /** Hint under a COLLAPSED shift row. Its expanded twin is common.tapToCollapse. */
+    tapForDetails: string;
+    /** Stamp key on a CANCELLED shift; its value is the shift's scheduled slot. */
+    shiftWas: string;
+    /** Stamp key on a cancelled shift; its value is the cancellation timestamp. */
+    youCancelled: string;
+    /** Stamp key for how much notice the PR gave before cancelling. */
+    noticeGiven: string;
+    /** Stamp key for the cancellation-fee band that the notice selected. */
+    feeBand: string;
+    /** Fee band with no RM figure sealed yet. {pct} is a whole-number percent. */
+    feePctOfShift: string;
+    /** Fee band with the sealed money. Spelled out in full rather than appending the RM to feePctOfShift. */
+    feePctWithRm: string;
+    /** Stamp key for check_out_at. Deliberately NOT 'you tapped out at' — the stamp is clamped to the scheduled end. */
+    shiftEnd: string;
+    /** SHIFT END value while the PR has not checked out. */
+    stillOnDuty: string;
+    /** Duration stamp when overtime was recorded. {base} is the shiftDurationLabel output, {ot} = overtime minutes. */
+    durationWithOtRecorded: string;
+    /** SHIFT WAS value when the shift carries no slot. */
+    timeNotSet: string;
+    /** YOU CANCELLED value when no cancellation timestamp was sealed — never a guessed time. */
+    notRecorded: string;
+    /** Notice span with both parts. Spelled out separately because Chinese has no minutes fragment to append. */
+    noticeSpanHoursMinutes: string;
+    /** Notice span, whole hours. */
+    noticeSpanHours: string;
+    /** Notice span under one hour. */
+    noticeSpanMinutes: string;
+    /** Notice given ahead of the shift. {span} is one of the three noticeSpan* strings. */
+    noticeBefore: string;
+    /** Notice given AFTER the shift began — the costliest band, so it is spelled out rather than shown as a minus sign. */
+    noticeAfter: string;
+    /** Sub-title under the cell total, telling the PR what the sheet is for. */
+    hint: string;
+    /** Red warning when the evidence does not add up to the grid cell. {listed} and {grid} are already formatted as RM x.xx. */
+    mismatch: string;
+    /** Banner shown only while a whole-day claim is still OPEN. */
+    openDisputeWholeDay: string;
+    /** Empty state when the cell has no groups. */
+    nothingLogged: string;
+    /** Per-receipt tag: a claim on THIS shift is open. Uppercase in English to match the pill styling. */
+    tagDisputed: string;
+    /** Per-receipt tag: a claim on this shift was raised and answered. The only green one. */
+    tagVerified: string;
+    /** Per-receipt tag: approved and unargued — the quiet state. */
+    tagSettled: string;
+    /** Shown where the ORD number would be when the receipt carried none. */
+    noOrderNo: string;
+    /** Receipt meta segment when only a printed date is known. {date} is the receipt's own stored text. */
+    printedOn: string;
+    /** Receipt meta segment with both date and time, both the receipt's own stored text. */
+    printedAt: string;
+    /** Receipt meta segment while the receipt is still PENDING agency review. */
+    waitingOnAgency: string;
+    /** accessibilityLabel on a receipt-photo thumbnail. */
+    openPhotoA11y: string;
+    /** Per-group total under an expanded shift. {amount} is already formatted as RM x.xx. */
+    shiftSubtotal: string;
+    /** Footer action button; absent on This-week, where no voucher has been issued. */
+    disputeAmount: string;
+  };
+  swaps: {
+    /** Eyebrow above a pending swap card. Uppercase in English lives in the string (no textTransform); Chinese has no case. */
+    header: string;
+    /** Stand-in for the origin venue when the swap row carries no fromOutletName. Real outlet names are never translated. */
+    fromFallback: string;
+    /** Stand-in for the destination venue when the swap row carries no toOutletName. */
+    toFallback: string;
+    /** Caption under the move line — approving is the only action in the app that relocates a booked shift. */
+    hint: string;
+    /** Refuse-the-swap button. Imperative form of jobs.statusDeclined (已婉拒); no character differs between the two scripts. */
+    decline: string;
+    /** Accept-the-swap button; pairs with swaps.hint's 同意后. No character differs between the two scripts. */
+    approve: string;
+    /** Approve button while the answer is in flight. Same wording as forgot.sending. */
+    sending: string;
+    /** Fallback only — a real server refusal message is shown raw (backend English). */
+    loadFailed: string;
+    /** Fallback only for a non-Error throw while answering; a 409 from the server is shown raw. */
+    respondFailed: string;
+  };
+  payHistory: {
+    /** Section eyebrow above the payment-history list. */
+    heading: string;
+    filter: string;
+    searchPlaceholder: string;
+    /** Uppercase field label — `common.outlet` is the sentence-case form. */
+    outletLabel: string;
+    /** The 'all' option of the outlet filter. The stored filter value stays 'all'. */
+    anyOutlet: string;
+    fromTime: string;
+    toTime: string;
+    chipAll: string;
+    /** Status chip for the `pending` filter — the only state the PR can act on. */
+    chipToSign: string;
+    /** Badge + chip label for `status === 'paid'`. The status value itself stays English. */
+    statusPaid: string;
+    statusSigned: string;
+    statusPending: string;
+    clearAllFilters: string;
+    /** Stat-tile label — how many payroll weeks the filter matched. */
+    weeks: string;
+    totalNet: string;
+    paidSummary: string;
+    signedSummary: string;
+    excelOpening: string;
+    excelOpenFailed: string;
+    excelDownloaded: string;
+    excelDownloadFailed: string;
+    pdfDownloading: string;
+    voucherOpenFailed: string;
+    pdfOpened: string;
+    pdfOpenFailed: string;
+    noPayments: string;
+    noMatches: string;
+    /** Empty-state button — jumps to the Payment tab. */
+    openPayment: string;
+    sheetTitle: string;
+    statusLabel: string;
+    /** RM is the currency code and stays as-is in every locale. */
+    netPaidLabel: string;
+    netPaidPlaceholder: string;
+    applyFilters: string;
+    clearAndClose: string;
+    /** Singular half of the shift count — Chinese has no plural, so both keys share one wording. */
+    cardMetaOne: string;
+    cardMetaMany: string;
+    signThisWeek: string;
+    metricWages: string;
+    metricCommission: string;
+    metricEarlyWithdrawal: string;
+    weekBreakdown: string;
+    pvIssuedSunday: string;
+    colDate: string;
+    colType: string;
+    colAmount: string;
+    netPayable: string;
+    bankRef: string;
+    sign: string;
+    openPv: string;
+    /** Rebuilt at RENDER time from the stored English `statusMeta`; `{when}` is the untouched date/time tail. */
+    metaPaidOn: string;
+    /** Same render-side rebuild — the stored string keeps its English 'Signed <date> · <time>' form for the localStorage migration. */
+    metaSignedOn: string;
+    metaDisputed: string;
+    metaAwaitingSignature: string;
+    metaAwaitingIssue: string;
+    /** Render-side label for the aggregate outlet; the stored value keeps its exact '(2)-outlet' shape. */
+    multiOutlet: string;
+    /** Render-side label for a stored `HistPayLine.type` — the stored value stays English. */
+    lineWages: string;
+    lineDrinks: string;
+    lineTips: string;
+    lineOthers: string;
+  };
+  pv: {
+    /** Week-grid row label. The row's `key` ('wages') is a GridBucket and stays English. */
+    rowWages: string;
+    /** Week-grid row label for the 'others' bucket (overtime and the rest). */
+    rowOthers: string;
+    /** Week-grid row label. Deductions is a fifth ROW, not a fifth kind of income. No character differs between the scripts. */
+    rowDeductions: string;
+    /** The week-total column header in the grid. Kept very short — the column is 56px. */
+    total: string;
+    /** Uppercase card heading over the day-by-day money grid. */
+    weekSummary: string;
+    /** Day-status cell — the agency has signed this day off. Uppercase in English; same word as shiftStatus.verified, which is title case and belongs to a different surface. */
+    dayVerified: string;
+    /** Day-status cell — still waiting on the agency. */
+    dayPending: string;
+    /** Day-status cell — the PR has an open claim on one of the day's amounts. */
+    dayDisputed: string;
+    /** Day-status cell — a day holding nothing but a charged fine; settled, not waiting. No character differs between the scripts. */
+    dayDeducted: string;
+    /** The grid's total column on the Status row; {n} = number of verified days. */
+    verifiedCount: string;
+    /** Hint under the grid. `{red}` marks where the red-inked word goes — the screen splits on it rather than gluing three fragments, so each language keeps its own word order. */
+    tapHint: string;
+    /** The single word inked red inside pv.tapHint. */
+    tapHintRed: string;
+    /** Header pill and dispute-banner title when the server holds an open claim on this voucher. */
+    disputeOpen: string;
+    /** Body of that banner. 'Payment' here names the Payment tab (t.nav.payment). */
+    disputeBannerBody: string;
+    /** Header pill and banner title while the voucher is sent and unsigned. */
+    pendingYourReview: string;
+    /** Banner title when the agency has not issued the voucher yet. */
+    waitingForAgency: string;
+    /** Banner body while the voucher can be signed. */
+    reviewThenSign: string;
+    /** Banner body when the voucher is still pending_review at the agency — the server would refuse a signature. */
+    notIssuedYet: string;
+    /** Rendered statusLabel of a live unsigned voucher. The sibling `status: 'awaiting_pr'` is the compared value and stays English. */
+    awaitingSignature: string;
+    /** Rendered statusLabel written when the server accepts the signature. `status: 'signed'` beside it is what anything compares. */
+    signed: string;
+    /** Summary card caption above the voucher's net. */
+    netPayable: string;
+    /** Summary card caption above the payee line. */
+    payee: string;
+    /** The PR's role on the voucher — payee line and signature card. 'PR' itself stays English, as everywhere else in the dictionary. */
+    prPersonnel: string;
+    /** Uppercase heading over the linked drink/tip lines. Deliberately not 'receipts' — a self-log and a check-out seal reach this list too. */
+    drinkTipRecords: string;
+    /** Collapse action on that heading while the list is open. */
+    hide: string;
+    /** Expand action on that heading, and the per-row link into the receipt sheet. */
+    details: string;
+    /** Row headline for a line whose receipt was scanned. `PrReceiptSource` value 'scan' stays English. */
+    sourceScan: string;
+    /** Row headline for a line the PR logged themselves ('manual'). */
+    sourceManual: string;
+    /** Row headline for a line sealed by check-out ('checkin'). */
+    sourceCheckin: string;
+    /** A receipt line's date. {d} day, {mon} short month (t.schedule.monShort*), {y} year — Chinese writes the year first, so the order lives in the template. */
+    lineDate: string;
+    /** Title of the receipt-details bottom sheet. */
+    receiptDetails: string;
+    /** Uppercase field caption in that sheet. */
+    detailDateTime: string;
+    /** Uppercase field caption — the uppercase set it belongs to is why this is not t.common.outlet. */
+    detailOutlet: string;
+    /** Uppercase field caption above the receipt number and its origin. */
+    detailReceipt: string;
+    /** Uppercase field caption above the commission. No character differs between the scripts. */
+    detailCommission: string;
+    /** Green banner in the receipt sheet. PV = payment voucher, rendered with the dictionary's existing 结算单 wording. */
+    matchedToThisPv: string;
+    /** The same banner when the parent receipt is still awaiting agency review. */
+    pendingAgencyVerify: string;
+    /** Uppercase heading of the signature card. */
+    yourSignature: string;
+    /** Signature card while the pad is still to be used. NOT shiftStatus.pending — that one means 'waiting on the agency to review a receipt'. */
+    signaturePending: string;
+    /** Signature card once sealed and the account has a username; {name} is the account's own name and is never translated. */
+    signedWithName: string;
+    /** Same line with no name to show. Spelled out in full rather than splicing a fragment into the sentence above. */
+    signedSealed: string;
+    /** Signature card when the voucher is not the PR's move yet. */
+    notSentYet: string;
+    /** The primary button, and the signature sheet's title. */
+    signVoucher: string;
+    /** Green box on a paid voucher; {amount} arrives already formatted as RM x.xx. */
+    paidInBank: string;
+    /** Soft link back to the History tab after signing. */
+    viewInHistory: string;
+    /** Hint under the signature sheet's title. */
+    signSheetHint: string;
+    /** Field caption above the signed-in account's name. The name itself is the account's and is never translated. */
+    signingAs: string;
+    /** Stand-in shown where the username would be when the session carries none. */
+    thisAccount: string;
+    /** Field caption above the signature pad. */
+    signatureField: string;
+    /** Confirm button in the signature sheet. */
+    confirmSignature: string;
+    /** Alert title when Confirm is pressed with an empty pad. */
+    drawSignatureTitle: string;
+    /** Body of that alert. */
+    drawSignatureBody: string;
+    /** Alert title when this page holds no voucher id the server would accept. */
+    noVoucherTitle: string;
+    /** Body of that alert. 'Payment' names the Payment tab. */
+    noVoucherBody: string;
+    /** Alert title when the sign request fails. */
+    notSignedTitle: string;
+    /** Body of that alert. {reason} is the server's own refusal, shown raw (backend English), or pv.couldNotReachAgency. One template, because Chinese would not take the tail sentence in the same place. */
+    notSignedBody: string;
+    /** Fallback for {reason} above when the thrown value carries no message of its own. */
+    couldNotReachAgency: string;
+  };
+  scan: {
+    /** Page title when editId is set (either mode). */
+    titleEdit: string;
+    /** Page title for the tips self-log. Spelled out per category because English lowercased a label into the sentence and Chinese has no case. */
+    titleSelfLogTips: string;
+    titleSelfLogDrinks: string;
+    titleScanTips: string;
+    titleScanDrinks: string;
+    /** Rendered noun only — the scan category value stays the English 'tips'. Singular form. */
+    itemNounTip: string;
+    /** Plural half — Chinese has no plural, so it matches itemNounTip on purpose. */
+    itemNounTipPlural: string;
+    /** Rendered noun only — the scan category value stays the English 'drinks'. No character differs between the scripts. */
+    itemNounDrink: string;
+    /** Plural half; Chinese has no plural so it matches itemNounDrink. */
+    itemNounDrinkPlural: string;
+    subEdit: string;
+    subScanWindow: string;
+    gateTitle: string;
+    gateBody: string;
+    goToCheckIn: string;
+    /** {outlet} is the venue's own name — never translated. */
+    activeShift: string;
+    /** Label; the bold PV id follows it in its own <Text>. */
+    belongsTo: string;
+    receiptsLogged: string;
+    timeIn: string;
+    pointAndSnap: string;
+    scanningOcr: string;
+    ocrExtracted: string;
+    /** {v} is the order number OCR read off the paper — data, shown raw. */
+    ocrOrderNo: string;
+    /** No character differs between the two scripts. */
+    ocrDate: string;
+    ocrTime: string;
+    ocrOutlet: string;
+    ocrDetectedAsRead: string;
+    /** No character differs between the two scripts. */
+    eachPrice: string;
+    wasHappyHour: string;
+    /** {noun} is already the singular/plural form picked by the item count. */
+    detectedSummary: string;
+    /** Both the review-phase hint and the matching thrown Error. */
+    setQuantityAtLeastOne: string;
+    saving: string;
+    confirmAndLog: string;
+    scanNow: string;
+    manualPill: string;
+    keyInAmount: string;
+    ocrMatchesCatalog: string;
+    /** {raw} is the literal text OCR read off the paper — never translated. */
+    dateIgnored: string;
+    /** Singular half of the OCR line count; Chinese has no plural so it matches ocrLinesMany. */
+    ocrLinesOne: string;
+    ocrLinesMany: string;
+    /** {lines} is the already-formatted ocrLinesOne/Many string. */
+    showOcrText: string;
+    hideOcrText: string;
+    ocrRawHint: string;
+    notFoundOnScan: string;
+    eachPriceNotRead: string;
+    addItem: string;
+    onlyAddWhatShows: string;
+    /** {noun} is the plural form. */
+    pointOcrLists: string;
+    /** {noun} is the singular form. */
+    scanAgainCatch: string;
+    /** Self-log scanbox button; {noun} is the plural form. */
+    scanItems: string;
+    scanAgain: string;
+    ocrDetectedAdjust: string;
+    noQtyPrinted: string;
+    selfLogSummary: string;
+    /** Label; the bold RM figure follows it in its own <Text>. */
+    commissionPreview: string;
+    /** RM is a currency code — never translated. */
+    tipAmountRm: string;
+    drinkAmountRm: string;
+    proofRetakeTitle: string;
+    proofRequiredTitle: string;
+    proofRetakeHint: string;
+    proofRequiredHint: string;
+    /** No character differs between the two scripts. */
+    retakeAgain: string;
+    /** No character differs between the two scripts. */
+    retakePhoto: string;
+    addAnotherPhoto: string;
+    takeOrAttachPhoto: string;
+    snapToEnableSubmit: string;
+    noteOptional: string;
+    noteRequired: string;
+    notePlaceholder: string;
+    updateSelfLog: string;
+    /** Disabled-button label; {noun} is the plural form. */
+    submitScanFirst: string;
+    writeNoteToSubmit: string;
+    submitSelfLogAmount: string;
+    snapProofToSubmit: string;
+    submitSelfLog: string;
+    receiptLogged: string;
+    addedToStatus: string;
+    /** Label; the bold PV id follows it in its own <Text>. */
+    belongsToPv: string;
+    /** {no} is the database-generated RCP-… number. */
+    receiptRef: string;
+    /** {no} is the order number OCR read off the paper. */
+    orderRef: string;
+    scanAnother: string;
+    backToCheckIn: string;
+    /** First half of the footer tip; the bold middle is the Check-In button's name (scan.scanAgain). */
+    wrongScanPrefix: string;
+    wrongScanSuffix: string;
+    /** No character differs between the two scripts. */
+    backToAttendance: string;
+    ocrUnavailable: string;
+    /** Appended after scan.couldNotReadFields with a joining space. */
+    dateDroppedNote: string;
+    /** {wanted} is a comma-joined list of the outlet's own item names — data, never translated. */
+    noneMatchedWithList: string;
+    /** Used when the outlet has no catalogue to list. */
+    noneMatched: string;
+    /** Fragment joined by scan.andJoin into scan.couldNotReadFields — a rendered field NAME, not the OCR matcher keyword (those live in lib/receipt-parser.ts and stay English). */
+    fieldOrderNo: string;
+    /** No character differs between the two scripts. */
+    fieldDate: string;
+    fieldTime: string;
+    /** Joiner between the missing-field names above. English keeps its surrounding spaces; Chinese uses the enumeration comma. No character differs between the two scripts. */
+    andJoin: string;
+    couldNotReadFields: string;
+    /** Fallback only — a real server refusal message is shown raw (backend English). */
+    couldNotSave: string;
+    /** Thrown Error, rendered in the submit-error line; {noun} is the singular form. */
+    setQuantityFirst: string;
+    snapProofFirst: string;
+    setQuantityAtLeastOneNoun: string;
+    setAmountFirst: string;
+  };
 };
 
 export const translations: Record<AppLocale, AppTranslations> = {
@@ -603,6 +1436,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tooManyAttempts: 'Too many failed attempts. Try again in {m} minutes.',
       newHere: 'New here?',
       createAccount: 'Create an account',
+      logoAlt: 'InnocenZ logo',
     },
     forgot: {
       title: 'Reset password',
@@ -622,6 +1456,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       doneTitle: 'Password updated',
       doneBody: 'You can sign in with your new password.',
       backToSignIn: 'Back to sign in',
+      codeSentInfo: 'If that number is registered, a WhatsApp code was sent.',
+      invalidCode: 'Invalid code',
+      resetFailed: 'Could not reset password',
     },
     topbar: {
       prAgencyTied: 'PR · Agency-Tied',
@@ -660,6 +1497,62 @@ export const translations: Record<AppLocale, AppTranslations> = {
       comcardUnavailableHint:
         'Saved to your profile. The image is not loading on this device.',
       comcardHint: 'Save to share with agencies and outlets.',
+      accountEyebrow: 'ACCOUNT',
+      editingBadge: 'Editing',
+      comcardIcBadge: 'Photo Comcard · IC',
+      floorNickname: 'Floor nickname',
+      legalIcName: 'Legal IC name',
+      agencies: 'Agencies',
+      selectAgencies: 'Select agencies…',
+      agencyTied: 'Agency-Tied · {names}',
+      awaitingApproval: 'Awaiting approval · {names}',
+      departureWaiting: 'Departure waiting for {names} to approve',
+      icNumber: 'IC {ic}',
+      agencyLockedJoin: 'Waiting for {names} to approve — you cannot change agencies until they approve or reject.',
+      agencyLockedLeave: 'Departure waiting for {names} to approve — you cannot change agencies until it is decided.',
+      agencyDeparturePending: '{name} · departure pending',
+      leaveConfirm: 'Leave {name}? Pay and shifts must be settled, and they must approve.',
+      requestToLeave: 'Request to leave',
+      keep: 'Keep',
+      departureRequested: 'Departure requested — waiting for {name} to approve',
+      departureFailed: 'Could not request the departure',
+      nicknameLength: 'Floor nickname must be 2–20 characters',
+      icNameRequired: 'Enter your legal IC name',
+      languageRequired: 'Select at least one language',
+      emailInvalid: 'Enter a valid email address',
+      profileSaved: 'Profile saved',
+      saveFailed: 'Could not save profile',
+      comcardUpdated: 'Comcard updated',
+      galleryUnavailable: 'Could not open the gallery — rebuild the dev app (expo run:android).',
+      imageTooLarge: 'Image must be under 5 MB',
+      avatarUpdated: 'Profile photo updated',
+      avatarUploadFailed: 'Could not upload photo',
+      portfolioUploadFailed: 'Could not upload portfolio photo',
+      someImagesSkipped: 'Some images were over 5 MB and were skipped',
+      removePhotoTitle: 'Remove photo?',
+      removePhotoBody: 'Remove portfolio photo {label}? This deletes it from your profile.',
+      portfolioRemoveFailed: 'Could not remove portfolio photo',
+      savingArrangement: 'Saving arrangement…',
+      rearrangeFailed: 'Could not rearrange portfolio',
+      portfolioRearranged: 'Portfolio rearranged',
+      portfolio: 'Portfolio',
+      portfolioDragHint: 'Hold to drag · drop to swap',
+      portfolioShowcase: 'Showcase photos',
+      portfolioCount: '{n} of {total} photos',
+      noLanguages: 'No languages yet — tap Edit profile to add them.',
+      tier1: 'TIER I',
+      tier2: 'TIER II',
+      tier3: 'TIER III',
+      tier4: 'TIER IV',
+      tier5: 'TIER V',
+      tierServant: 'SERVANT',
+      tierCommissionOnly: 'COMMISSION ONLY',
+      slotTapToSwap: 'Tap another slot to swap · tap again to cancel',
+      slotDragHint: 'Hold to drag · drag to top/bottom edge to scroll · drop to swap',
+      viewerReturn: 'Return',
+      viewerHint: 'Pinch or double-tap to zoom · drag to move · close with ✕ Return',
+      signHere: 'Sign here with your finger',
+      clearSignature: 'Clear',
     },
     security: {
       title: 'Security',
@@ -681,6 +1574,21 @@ export const translations: Record<AppLocale, AppTranslations> = {
       phoneUpdated: 'Phone updated',
       sendOtp: 'Send code',
       verifyOtp: 'Verify code',
+      eyebrow: 'ACCOUNT',
+      intro: 'Change password with your current one, or change phone via WhatsApp OTP.',
+      currentPhone: 'Current: {phone}',
+      changePhoneHint: 'Enter the new number. We will send a WhatsApp code to verify it.',
+      newMobileNumber: 'New mobile number',
+      sendWhatsappCode: 'Send WhatsApp code',
+      codeSentTo: 'Code sent on WhatsApp to {phone}',
+      otpTitle: 'Verify OTP',
+      otpHint: 'Enter the 6-digit code sent on WhatsApp to {phone}',
+      otpLabel: 'OTP',
+      verifyAndSave: 'Verify & save',
+      updatePasswordFailed: 'Could not update password',
+      sendCodeFailed: 'Could not send code',
+      updatePhoneFailed: 'Could not update phone',
+      deleteAccountFailed: 'Could not delete account',
     },
     shifts: {
       pageEyebrow: 'AGENCY SHIFTS',
@@ -738,15 +1646,198 @@ export const translations: Record<AppLocale, AppTranslations> = {
       back: 'Back',
       enableLocation: 'Enable Location Access',
       continueWithoutGps: 'Continue Without GPS',
+      booked: 'Booked',
+      noShift: 'No shift',
+      attendanceFailed: 'Attendance failed',
+      viewingEarlier: 'Viewing an earlier shift · tap to go to your current shift',
+      loadingShift: 'Loading your shift…',
+      idleEmpty: 'Your agency will assign your shift — check in when assigned.',
+      eventFallback: 'Shift',
+      dayAndDate: 'Day & date',
+      locating: 'Locating…',
+      metresFrom: '{m} m from {name}',
+      metresAway: '{m} m away — move closer',
+      gpsNote: 'Check-in is only allowed within {m}m of {name}. Your phone shares its location for this stamp only.',
+      gpsNoteBypass: 'Check-in is only allowed within {m}m of {name} — GPS temporarily bypassed for demo.',
+      duration: 'Duration {d}',
+      otEstimate: 'Overtime {h}h (about {amount}) — our estimate from your stamps · not sent to the agency, not in your payout. Raise it with them if it should be paid.',
+      cancelWarning: 'Agency-assigned shift — cancellation may affect wages.',
+      reasonPlaceholder: 'Why are you cancelling?',
+      locationExplainer: 'InnocenZ uses your location for one thing only — proving you are at the venue when you check in.',
+      locCheckRadius: 'Check-in unlocks within 50 m of the venue',
+      locCheckStamp: 'One location stamp per check-in and check-out',
+      locCheckNoTracking: 'No background tracking — ever',
+      holding: 'Holding {p}%',
+      missingPhotoOne: '{n} logged action has no picture — tap the red camera on that row to scan again, or remove the row, before you can check out.',
+      missingPhotoMany: '{n} logged actions have no picture — tap the red camera on that row to scan again, or remove the row, before you can check out.',
+      nothingLogged: 'Nothing logged yet. Scan a receipt or self-log at least one drink or tip — with its picture — before you check out. Once the shift closes, that commission cannot be claimed.',
+      locPermissionOff: 'Location permission is off — allow it to check in.',
+      gpsReadFailed: 'Could not read GPS — check location permission and try again.',
+      locationDenied: 'InnocenZ needs location access to check you in at the venue. Turn it on in Settings > InnocenZ > Location, then try again.',
+      locationDisabled: 'Location services are off on this phone. Turn on GPS / Location, then try again.',
+      locationTimeout: 'Could not get a GPS fix. Step outside or near a window and try again.',
+      locationUnknown: 'Could not read your location.',
     },
     payment: {
       title: 'Payment',
       history: 'Payment history',
+      lastWeek: 'Last week',
+      thisWeek: 'This week',
+      lastWeekTitle: 'LAST WEEK',
+      thisWeekTitle: 'THIS WEEK',
+      lastWeekRange: 'Last week {range}',
+      verifiedDays: 'Verified days {n}/7',
+      approvedDays: 'Approved days',
+      agencyFallback: 'Agency',
+      gridTotal: 'TOTAL',
+      gridTotalSub: 'week',
+      rowWages: 'Daily wages',
+      rowDrinks: 'Drinks',
+      rowTips: 'Tips',
+      rowOthers: 'Others',
+      rowDeductions: 'Deductions',
+      nVerified: '{n} verified',
+      nApproved: '{n} approved',
+      nPending: '{n} pending',
+      statusPending: 'PENDING',
+      statusApproved: 'APPROVED',
+      statusDisputed: 'DISPUTED',
+      statusVerified: 'VERIFIED',
+      statusDeducted: 'DEDUCTED',
+      statusPaid: 'PAID',
+      statusSigned: 'SIGNED',
+      statusSent: 'SENT',
+      disputeOpen: 'Dispute open · agency reviewing',
+      disputeOpenNamed: '{agency} · dispute open · agency reviewing',
+      disputeBannerHint: 'Tap any amount to see its receipts, then withdraw this dispute.',
+      tapHint: 'Tap any amount to see the order number, shift and items behind it — dispute it from there · tap a {red} amount to withdraw a mistaken dispute.',
+      redWord: 'red',
+      pvIssuedSunday: 'PV issued every Sunday · Total',
+      pvOnDay: 'PV on {day}',
+      totalLower: 'total',
+      noLastWeekPv: 'No PV for last week yet — this week’s PV is issued next Sunday.',
+      checkOutToSeal: 'Check out from Attendance to seal today’s wages and commissions here for this week’s PV.',
+      reviewSign: 'Review & sign · {amount}',
+      reviewSignNamed: 'Review & sign · {agency} · {amount}',
+      whatYouDisputed: 'What you disputed',
+      receiptsThisDay: 'Receipts this day',
+      nTotal: '{n} total',
+      receiptCounts: '{v} verified · {a} approved · {p} pending',
+      claimOpen: 'OPEN',
+      claimAccepted: 'ACCEPTED',
+      claimRejected: 'REJECTED',
+      claimWithdrawn: 'WITHDRAWN',
+      voucherSaid: 'Voucher said {amount}',
+      raisedAt: 'Raised {when}',
+      filedWholeDay: 'Filed against the whole day — it covered both shifts below.',
+      shiftFallback: 'Shift',
+      shiftTimeUnknown: 'shift time unknown',
+      inOutWindow: 'In {inAt} · Out {outAt} · {window}',
+      noOrderNo: 'No order no',
+      wholeReceipt: 'The whole receipt',
+      noReceiptBehind: 'No receipt behind this — it is calculated from your check-in and check-out times.',
+      agencyAnswer: 'Agency: {note}',
+      cancelThisDispute: 'Cancel this dispute',
+      cancelling: 'Cancelling…',
+      durationUnknown: 'duration unknown',
+      hours: '{h}h',
+      hoursMinutes: '{h}h {m}m',
+      minutes: '{m}m',
+      withOvertime: '{base} · +{m}m OT',
+      otOnDay: '{mins} on {day}',
+      otPending: '{parts} — overtime recorded at check-out, waiting on your agency. It is not in the figures above.',
+      withdrawDisputeTitle: 'Withdraw dispute?',
+      disputeThisAmount: 'Dispute this amount',
+      whichOneWrong: 'Which one is wrong?',
+      alreadyDisputed: 'already disputed',
+      notReviewedYetShort: 'not reviewed yet',
+      selected: 'selected',
+      pickShift: 'Pick the shift you are disputing.',
+      disputingOf: 'Disputing {picked} of this day’s {day}.',
+      whichItem: 'Which item?',
+      pickOneItem: 'Pick at least one item.',
+      quickReason: 'Quick reason',
+      reasonWrongCommission: 'Wrong commission',
+      reasonWrongQuantity: 'Wrong quantity',
+      reasonCountedTwice: 'Counted twice',
+      reasonMissingFromPv: 'Missing from my PV',
+      reasonWrongRate: 'Wrong rate',
+      reasonNotMyShift: 'Not my shift',
+      reasonOthers: 'Others',
+      notePlaceholder: 'Add detail for your agency…',
+      attachImages: 'Attach files (images)',
+      optional: 'optional',
+      imagesAttachedOne: '{n} image attached as proof',
+      imagesAttachedMany: '{n} images attached as proof',
+      proofOptional: 'Proof images are optional — attach a receipt photo if you have one.',
+      submitting: 'Submitting…',
+      submitDispute: 'Submit dispute',
+      withdrawSub: 'Flagged this amount by mistake? Withdraw and it returns to verified.',
+      proofCleared: '{n} proof image(s) will be cleared.',
+      withdrawing: 'Withdrawing…',
+      withdrawDispute: 'Withdraw dispute',
+      notDisputedHereTitle: 'Not disputed here',
+      notDisputedHereBody: '{row} is calculated from your check-in and check-out times, not from a receipt. If it looks wrong, ask your agency to correct the shift record for {day}.',
+      notReviewedTitle: 'Not reviewed yet',
+      notReviewedBody: 'Your agency is still checking the receipt behind {row} on {day}. Once they approve it you can dispute the amount here.',
+      openDayFirstTitle: 'Open the day first',
+      openDayFirstBody: 'That day has money from more than one agency, so this claim cannot be matched to a voucher from here. Open the day, pick the shift, and withdraw it there.',
+      couldNotCancel: 'Could not cancel',
+      tryAgain: 'Please try again.',
+      cancelConfirmTitle: 'Cancel this dispute?',
+      cancelConfirmBody: 'Your agency will stop reviewing it. You can raise it again later if you still disagree.',
+      keepIt: 'Keep it',
+      cancelDispute: 'Cancel dispute',
+      pickShiftFirstTitle: 'Pick the shift first',
+      pickShiftFirstBody: 'That day has money from more than one agency. Open the day, choose the shift you want to dispute, then try again.',
+      noVoucherTitle: 'No voucher to dispute yet',
+      noVoucherLast: 'Last week’s payment voucher hasn’t been issued yet — there’s nothing to dispute.',
+      noVoucherThis: 'This week’s voucher hasn’t been opened yet — log a shift first, then you can dispute an amount on it.',
+      disputeFailed: 'Dispute failed',
+      nVouchersThisWeek: '{n} PAYMENT VOUCHERS THIS WEEK',
+      multiAgencyHint: 'You worked for more than one agency. Each pays and is signed separately.',
+      notYetNumbered: 'Not yet numbered',
+      penaltiesThisWeek: 'PENALTIES THIS WEEK',
+      cancelledShift: 'Cancelled shift',
+      pctOfDailyWage: '{pct}% of daily wage',
+      ruleMinShifts: 'Min shifts per week',
+      ruleMaxMc: 'Max MC per month',
+      ruleLate: 'Late per week',
+      ruleCancellation: 'Cancellation',
     },
     history: {
       title: 'History',
       shifts: 'Shifts',
       payments: 'Payments',
+      earnedInRange: 'EARNED IN RANGE',
+      wagesTotal: 'WAGES',
+      shiftHistory: 'SHIFT HISTORY',
+      searchPlaceholder: 'Search wages, sales, others, drinks…',
+      filterOutlet: 'OUTLET',
+      filterStatus: 'STATUS',
+      filterDate: 'DATE',
+      anyOutlet: 'Any outlet',
+      anyStatus: 'Any status',
+      anyDate: 'Any date',
+      statusCurrent: 'Current',
+      statusSigned: 'Signed',
+      shiftCountOne: '{n} shift',
+      shiftCountMany: '{n} shifts',
+      weekEarnLine: '{earned} earned · {wages} wages',
+      noShiftsInWeek: 'No shifts in this week',
+      noShiftsMatch: 'No shifts match these filters',
+      resetFilters: 'Reset filters',
+      totalPayout: '{amount} total payout',
+      cancelledNoPayout: 'Shift cancelled — no payout',
+      metricWages: 'Wages',
+      metricOthers: 'Others',
+      pickDateFirst: 'Pick date first',
+      tapToChoose: 'Tap to choose',
+      fromTime: 'FROM TIME',
+      toTime: 'TO TIME',
+      done: 'Done',
+      calLegendWorked: 'Worked · has record',
+      calLegendNote: 'Any date up to today · empty days show no rows.',
     },
     signup: {
       title: 'Create account',
@@ -1007,6 +2098,310 @@ export const translations: Record<AppLocale, AppTranslations> = {
       missedNoteOne: 'No check-in was recorded for this shift, and no MC / leave or cancellation is on file. Contact your agency if this is wrong.',
       missedNoteMany: 'No check-in was recorded for the shift marked above, and no MC / leave or cancellation is on file. Contact your agency if this is wrong.',
     },
+    receipt: {
+      captionDay: '{dow} {d}',
+      captionVerified: '{n} verified',
+      captionApproved: '{n} approved',
+      captionOfOne: '{parts} of {total} entry',
+      captionOfMany: '{parts} of {total} entries',
+      captionWaiting: '{n} waiting on your agency',
+      captionWaitingOn: '{n} waiting on your agency ({days})',
+      presetWrongCommission: 'Wrong commission',
+      presetWrongQuantity: 'Wrong quantity',
+      presetCountedTwice: 'Counted twice',
+      presetMissingFromPv: 'Missing from my PV',
+      presetWrongRate: 'Wrong rate',
+      presetNotMyShift: 'Not my shift',
+      presetOthers: 'Others',
+      statusPending: 'PENDING',
+      statusApproved: 'APPROVED',
+      statusDisputed: 'DISPUTED',
+      statusVerified: 'VERIFIED',
+      statusDeducted: 'DEDUCTED',
+      scannedThisShift: 'Scanned receipts · this shift',
+      groupTipsService: 'Tips / Service',
+      pictureOne: '{n} picture',
+      pictureMany: '{n} pictures',
+      itemLoggedOne: '{n} item logged',
+      itemLoggedMany: '{n} items logged',
+    },
+    evidence: {
+      kindWages: 'Daily wages',
+      kindOthers: 'OT / Other',
+      kindDeductions: 'Deductions',
+      sourceScanned: 'Scanned',
+      sourceSelfLogged: 'Self-logged',
+      sourceSealed: 'Sealed at check-out',
+      dayShort: '{dow} {d} {mon}',
+      dayLong: '{dow} {d} {mon} {y}',
+      notLinked: 'Not linked to a shift',
+      noShiftNote: 'This was logged without an open shift, so there is no check-in to show. The receipt below is still the proof.',
+      shiftTimesUnavailable: 'Shift times are unavailable right now. The receipt below is still the proof.',
+      shiftFallback: 'Shift',
+      expandA11y: '{title} — tap to see check-in, receipts and items',
+      tapForDetails: 'Tap to see details',
+      shiftWas: 'SHIFT WAS',
+      youCancelled: 'YOU CANCELLED',
+      noticeGiven: 'NOTICE GIVEN',
+      feeBand: 'FEE BAND',
+      feePctOfShift: '{pct}% of this shift',
+      feePctWithRm: '{pct}% of this shift · RM {rm}',
+      shiftEnd: 'SHIFT END',
+      stillOnDuty: 'Still on duty',
+      durationWithOtRecorded: '{base} · +{ot}m OT recorded',
+      timeNotSet: 'Time not set',
+      notRecorded: 'Not recorded',
+      noticeSpanHoursMinutes: '{h} h {m} m',
+      noticeSpanHours: '{h} h',
+      noticeSpanMinutes: '{m} m',
+      noticeBefore: '{span} before it started',
+      noticeAfter: '{span} AFTER it started',
+      hint: 'Everything that added up to this figure. Check the order number against your paper receipt.',
+      mismatch: 'This list adds up to {listed} but the grid shows {grid}. Report this — do not sign it off.',
+      openDisputeWholeDay: 'You have an open dispute covering this WHOLE day — every shift below is part of it.',
+      nothingLogged: 'Nothing was logged for this day.',
+      tagDisputed: 'DISPUTED',
+      tagVerified: 'VERIFIED',
+      tagSettled: 'SETTLED',
+      noOrderNo: 'No order number',
+      printedOn: 'printed {date}',
+      printedAt: 'printed {date} {time}',
+      waitingOnAgency: 'waiting on your agency',
+      openPhotoA11y: 'Open the receipt photo full size',
+      shiftSubtotal: 'Shift subtotal · {amount}',
+      disputeAmount: 'Dispute this amount',
+    },
+    swaps: {
+      header: 'OUTLET SWAP REQUEST',
+      fromFallback: 'Your outlet',
+      toFallback: 'New outlet',
+      hint: 'Your shift moves to this outlet only if you approve.',
+      decline: 'Decline',
+      approve: 'Approve',
+      sending: 'Sending…',
+      loadFailed: 'Could not load your swap requests',
+      respondFailed: 'Could not send your answer',
+    },
+    payHistory: {
+      heading: 'PAYMENT HISTORY',
+      filter: 'Filter',
+      searchPlaceholder: 'Search PV ID, outlet, week, bank ref…',
+      outletLabel: 'OUTLET',
+      anyOutlet: 'Any outlet',
+      fromTime: 'FROM TIME',
+      toTime: 'TO TIME',
+      chipAll: 'All',
+      chipToSign: 'To sign',
+      statusPaid: 'Paid',
+      statusSigned: 'Signed',
+      statusPending: 'Pending',
+      clearAllFilters: 'Clear all filters',
+      weeks: 'Weeks',
+      totalNet: 'Total net',
+      paidSummary: '{n} paid · {amount}',
+      signedSummary: '{n} signed · {amount}',
+      excelOpening: 'Excel opening in your browser — check Downloads',
+      excelOpenFailed: 'Could not open the Excel — try again',
+      excelDownloaded: 'Payment voucher Excel downloaded',
+      excelDownloadFailed: 'Could not download the Excel — try again',
+      pdfDownloading: 'PDF downloading — open it from your notifications',
+      voucherOpenFailed: 'Could not open the voucher — try again',
+      pdfOpened: 'Payment voucher PDF opened',
+      pdfOpenFailed: 'Could not open the PDF — try again',
+      noPayments: 'No payments yet',
+      noMatches: 'No payments match your filters.',
+      openPayment: 'Open Payment',
+      sheetTitle: 'Filter payment history',
+      statusLabel: 'Status',
+      netPaidLabel: 'NET PAID (RM)',
+      netPaidPlaceholder: 'e.g. 898',
+      applyFilters: 'Apply filters',
+      clearAndClose: 'Clear & close',
+      cardMetaOne: '{n} shift · Issued {date}',
+      cardMetaMany: '{n} shifts · Issued {date}',
+      signThisWeek: 'Sign this week',
+      metricWages: 'Wages',
+      metricCommission: 'Commission',
+      metricEarlyWithdrawal: 'Early withdrawal',
+      weekBreakdown: 'WEEK BREAKDOWN',
+      pvIssuedSunday: 'PV issued every Sunday',
+      colDate: 'Date',
+      colType: 'Type',
+      colAmount: 'Amount',
+      netPayable: 'Net payable',
+      bankRef: 'Bank ref: {ref}',
+      sign: 'Sign',
+      openPv: 'Open PV',
+      metaPaidOn: 'Paid {when}',
+      metaSignedOn: 'Signed {when}',
+      metaDisputed: 'Disputed — waiting on your agency',
+      metaAwaitingSignature: 'Waiting for your signature',
+      metaAwaitingIssue: 'Waiting for your agency to issue',
+      multiOutlet: '({n})-outlet',
+      lineWages: 'Daily wages',
+      lineDrinks: 'Drinks commission',
+      lineTips: 'Tips commission',
+      lineOthers: 'Others',
+    },
+    pv: {
+      rowWages: 'Daily wages',
+      rowOthers: 'Others',
+      rowDeductions: 'Deductions',
+      total: 'TOT',
+      weekSummary: 'WEEK SUMMARY',
+      dayVerified: 'VERIFIED',
+      dayPending: 'PENDING',
+      dayDisputed: 'DISPUTED',
+      dayDeducted: 'DEDUCTED',
+      verifiedCount: '{n} verified',
+      tapHint: 'Tap a drinks or tips amount to dispute it on the Payment page — a {red} amount already has an open dispute.',
+      tapHintRed: 'red',
+      disputeOpen: 'Dispute open',
+      disputeBannerBody: 'Your agency is reviewing the flagged amounts — see Payment for the details.',
+      pendingYourReview: 'Pending your review',
+      waitingForAgency: 'Waiting for your agency',
+      reviewThenSign: 'Review each day, then sign to confirm this week’s earnings.',
+      notIssuedYet: 'Your agency has not issued this voucher yet — you can review it, but there is nothing to sign until they send it.',
+      awaitingSignature: 'Awaiting signature',
+      signed: 'Signed',
+      netPayable: 'Net payable',
+      payee: 'Payee',
+      prPersonnel: 'PR Personnel',
+      drinkTipRecords: 'DRINK & TIP RECORDS',
+      hide: 'Hide',
+      details: 'Details',
+      sourceScan: 'Scanned receipt',
+      sourceManual: 'Self-logged',
+      sourceCheckin: 'Auto-sealed on check-out',
+      lineDate: '{d} {mon} {y}',
+      receiptDetails: 'Receipt details',
+      detailDateTime: 'DATE & TIME',
+      detailOutlet: 'OUTLET',
+      detailReceipt: 'RECEIPT',
+      detailCommission: 'COMMISSION',
+      matchedToThisPv: 'Matched to this PV',
+      pendingAgencyVerify: 'Pending agency verify',
+      yourSignature: 'YOUR SIGNATURE',
+      signaturePending: 'Pending',
+      signedWithName: 'Signed · {name} — Dual-signed · transfer processing',
+      signedSealed: 'Signed — Dual-signed · transfer processing',
+      notSentYet: 'Not sent to you yet — waiting for your agency',
+      signVoucher: 'Sign payment voucher',
+      paidInBank: 'PAID · {amount} in your bank',
+      viewInHistory: 'View in History · Payment history',
+      signSheetHint: 'Draw your signature with your finger — it is stored on the voucher and printed on the PDF.',
+      signingAs: 'Signing as',
+      thisAccount: 'this account',
+      signatureField: 'Signature',
+      confirmSignature: 'Confirm signature',
+      drawSignatureTitle: 'Draw your signature',
+      drawSignatureBody: 'Sign in the pad with your finger before confirming.',
+      noVoucherTitle: 'No voucher to sign yet',
+      noVoucherBody: 'This voucher is not on the server — go back, refresh Payment, and try again.',
+      notSignedTitle: 'Not signed',
+      notSignedBody: '{reason}\n\nNothing was saved — try again when you have signal.',
+      couldNotReachAgency: 'Could not reach the agency.',
+    },
+    scan: {
+      titleEdit: 'Edit self-log',
+      titleSelfLogTips: 'Self-log tips',
+      titleSelfLogDrinks: 'Self-log drinks',
+      titleScanTips: 'Scan tips receipt',
+      titleScanDrinks: 'Scan drinks receipt',
+      itemNounTip: 'tip / service item',
+      itemNounTipPlural: 'tip / service items',
+      itemNounDrink: 'drink',
+      itemNounDrinkPlural: 'drinks',
+      subEdit: 'Edit — agency re-verifies.',
+      subScanWindow: "Scans between Time-In and Time-Out go to this shift's PV.",
+      gateTitle: 'Check in first',
+      gateBody: 'Check in on Attendance before scanning receipts.',
+      goToCheckIn: 'Go to Check-In',
+      activeShift: 'Active shift · {outlet}',
+      belongsTo: 'Belongs to',
+      receiptsLogged: '{n} receipt(s) logged',
+      timeIn: 'Time-In {time}',
+      pointAndSnap: 'Point at the receipt and snap',
+      scanningOcr: 'Scanning… reading OCR fields',
+      ocrExtracted: '— OCR EXTRACTED —',
+      ocrOrderNo: 'Order No: {v}',
+      ocrDate: 'Date: {v}',
+      ocrTime: 'Time: {v}',
+      ocrOutlet: 'Outlet: {v}',
+      ocrDetectedAsRead: 'OCR detected · as read from the receipt',
+      eachPrice: '{price} each',
+      wasHappyHour: '(was {price} · HH −{pct}%)',
+      detectedSummary: '{items} {noun} · {units} unit(s) · {total} · Est. commission {commission}',
+      setQuantityAtLeastOne: 'Set a quantity for at least one item.',
+      saving: 'Saving…',
+      confirmAndLog: 'Confirm & log receipt',
+      scanNow: 'Scan receipt now',
+      manualPill: 'Manual self-log',
+      keyInAmount: 'Key in the amount · agency verifies.',
+      ocrMatchesCatalog: "OCR reads the receipt & matches this outlet's {n} {noun}",
+      dateIgnored: 'ignored “{raw}” → {parsed} · {days} days from this shift ({shift})',
+      ocrLinesOne: '{n} line',
+      ocrLinesMany: '{n} lines',
+      showOcrText: 'Show what OCR read ({lines})',
+      hideOcrText: 'Hide what OCR read ({lines})',
+      ocrRawHint: 'An item is only found when its name is on one of these lines. If a name is missing or misspelt here, the paper or the photo is the problem — scan again, flatter and closer.',
+      notFoundOnScan: 'NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER',
+      eachPriceNotRead: '{price} each · OCR did not read this one',
+      addItem: '+ Add',
+      onlyAddWhatShows: 'Only add what the receipt actually shows — the agency checks these against your photo.',
+      pointOcrLists: 'Point at the receipt — OCR lists the {noun} it reads',
+      scanAgainCatch: 'Scan again to catch a {noun} OCR missed',
+      scanItems: 'Scan {noun}',
+      scanAgain: 'Scan again',
+      ocrDetectedAdjust: 'OCR DETECTED · ADJUST QUANTITY',
+      noQtyPrinted: 'Receipt printed no quantity — check this one',
+      selfLogSummary: '{items} {noun} · {units} unit(s)',
+      commissionPreview: 'Commission preview:',
+      tipAmountRm: 'Tip amount (RM)',
+      drinkAmountRm: 'Drink amount (RM)',
+      proofRetakeTitle: 'Proof photo · retake to replace',
+      proofRequiredTitle: 'Proof photo · required',
+      proofRetakeHint: 'Snap again — the new picture replaces the one saved with this log.',
+      proofRequiredHint: 'Snap the receipt as proof — agency verifies against it.',
+      retakeAgain: 'Retake again',
+      retakePhoto: 'Retake photo',
+      addAnotherPhoto: 'Add another photo',
+      takeOrAttachPhoto: 'Take / attach photo',
+      snapToEnableSubmit: '⚠ Snap a photo to enable Submit.',
+      noteOptional: 'Note for agency (optional)',
+      noteRequired: 'Note for agency (required)',
+      notePlaceholder: 'Unclear quantity / price / date on the receipt? Explain — or confirm all match.',
+      updateSelfLog: 'Update self-log',
+      submitScanFirst: 'Submit self-log · scan {noun}',
+      writeNoteToSubmit: 'Write the agency note to submit',
+      submitSelfLogAmount: 'Submit self-log · {amount}',
+      snapProofToSubmit: 'Snap proof to submit',
+      submitSelfLog: 'Submit self-log',
+      receiptLogged: 'Receipt logged',
+      addedToStatus: 'Added to Check-In STATUS · pending until agency verifies.',
+      belongsToPv: 'Belongs to PV:',
+      receiptRef: 'Receipt {no}',
+      orderRef: 'Order {no}',
+      scanAnother: 'Scan another',
+      backToCheckIn: 'Back to Check-In',
+      wrongScanPrefix: 'Wrong scan? Check-In →',
+      wrongScanSuffix: '· pending self-logs can be edited or deleted.',
+      backToAttendance: 'Back to attendance',
+      ocrUnavailable: 'On-phone OCR needs the dev app build. Photo kept as proof — self-log the items instead.',
+      dateDroppedNote: 'It did read “{raw}” ({parsed}), but that is {days} days from this shift on {shift} — too far to be this receipt’s date, so it was dropped rather than logged against the wrong week.',
+      noneMatchedWithList: 'OCR read the photo but found none of {outlet}’s {noun} — it looks for: {wanted}. Scan a receipt printing one of those, or self-log below (photo kept as proof).',
+      noneMatched: 'OCR read the photo but found none of {outlet}’s {noun}. Scan a receipt printing one of them, or self-log below (photo kept as proof).',
+      fieldOrderNo: 'order number',
+      fieldDate: 'date',
+      fieldTime: 'time',
+      andJoin: ' and ',
+      couldNotReadFields: 'OCR couldn’t read the receipt’s {fields} yet — get closer to that part of the paper (flat, no glare) and scan again. Fields already read are kept.',
+      couldNotSave: 'Could not save. Try again.',
+      setQuantityFirst: 'Set a {noun} quantity first.',
+      snapProofFirst: 'Snap a proof photo before you submit.',
+      setQuantityAtLeastOneNoun: 'Set a quantity for at least one {noun}.',
+      setAmountFirst: 'Set an amount first.',
+    },
   },
   zh: {
     lang: {
@@ -1060,6 +2455,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tooManyAttempts: '尝试次数过多。请在 {m} 分钟后再试。',
       newHere: '还没有账号？',
       createAccount: '创建账号',
+      logoAlt: 'InnocenZ 标志',
     },
     forgot: {
       title: '重置密码',
@@ -1079,6 +2475,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       doneTitle: '密码已更新',
       doneBody: '你可以使用新密码登录。',
       backToSignIn: '返回登录',
+      codeSentInfo: '如果该号码已注册，验证码已通过 WhatsApp 发送。',
+      invalidCode: '验证码无效',
+      resetFailed: '无法重置密码',
     },
     topbar: {
       prAgencyTied: 'PR · 经纪公司',
@@ -1116,6 +2515,62 @@ export const translations: Record<AppLocale, AppTranslations> = {
       comcardUnavailable: '已保存 — 此处无法加载',
       comcardUnavailableHint: '已保存到资料。图片在本设备上无法加载。',
       comcardHint: '保存后可分享给经纪公司与门店。',
+      accountEyebrow: '账户',
+      editingBadge: '编辑中',
+      comcardIcBadge: '照片名片卡 · 身份证',
+      floorNickname: '现场昵称',
+      legalIcName: '身份证姓名',
+      agencies: '经纪公司',
+      selectAgencies: '选择经纪公司…',
+      agencyTied: '经纪公司 · {names}',
+      awaitingApproval: '等待审批 · {names}',
+      departureWaiting: '离开申请等待 {names} 审批',
+      icNumber: '身份证 {ic}',
+      agencyLockedJoin: '等待 {names} 审批 — 在他们批准或拒绝前，无法更改经纪公司。',
+      agencyLockedLeave: '离开申请等待 {names} 审批 — 在有结果前，无法更改经纪公司。',
+      agencyDeparturePending: '{name} · 离开待审批',
+      leaveConfirm: '离开 {name}？薪资与班次必须结清，并需对方批准。',
+      requestToLeave: '申请离开',
+      keep: '保留',
+      departureRequested: '已提交离开申请 — 等待 {name} 审批',
+      departureFailed: '无法提交离开申请',
+      nicknameLength: '现场昵称需为 2–20 个字符',
+      icNameRequired: '请输入身份证姓名',
+      languageRequired: '请至少选择一种语言',
+      emailInvalid: '请输入有效的电子邮箱',
+      profileSaved: '资料已保存',
+      saveFailed: '无法保存资料',
+      comcardUpdated: '名片卡已更新',
+      galleryUnavailable: '无法打开相册 — 请重新构建开发版应用（expo run:android）。',
+      imageTooLarge: '图片需小于 5 MB',
+      avatarUpdated: '头像已更新',
+      avatarUploadFailed: '无法上传照片',
+      portfolioUploadFailed: '无法上传作品集照片',
+      someImagesSkipped: '部分图片超过 5 MB，已跳过',
+      removePhotoTitle: '移除照片？',
+      removePhotoBody: '移除作品集照片 {label}？这会从你的资料中删除它。',
+      portfolioRemoveFailed: '无法移除作品集照片',
+      savingArrangement: '正在保存排列…',
+      rearrangeFailed: '无法重新排列作品集',
+      portfolioRearranged: '作品集已重新排列',
+      portfolio: '作品集',
+      portfolioDragHint: '长按拖动 · 放开交换',
+      portfolioShowcase: '展示照片',
+      portfolioCount: '照片 {n} / {total}',
+      noLanguages: '尚未添加语言 — 点击「编辑资料」添加。',
+      tier1: '一级',
+      tier2: '二级',
+      tier3: '三级',
+      tier4: '四级',
+      tier5: '五级',
+      tierServant: '服务生',
+      tierCommissionOnly: '纯佣金',
+      slotTapToSwap: '点击另一个位置交换 · 再次点击取消',
+      slotDragHint: '长按拖动 · 拖到上下边缘可滚动 · 放开交换',
+      viewerReturn: '返回',
+      viewerHint: '双指缩放或双击放大 · 拖动移动 · 点 ✕ 返回 关闭',
+      signHere: '用手指在此签名',
+      clearSignature: '清除',
     },
     security: {
       title: '安全',
@@ -1137,6 +2592,21 @@ export const translations: Record<AppLocale, AppTranslations> = {
       phoneUpdated: '手机号已更新',
       sendOtp: '发送验证码',
       verifyOtp: '验证验证码',
+      eyebrow: '账号',
+      intro: '使用当前密码修改密码，或通过 WhatsApp 验证码更换手机号。',
+      currentPhone: '当前：{phone}',
+      changePhoneHint: '请输入新手机号。我们将通过 WhatsApp 发送验证码进行验证。',
+      newMobileNumber: '新手机号码',
+      sendWhatsappCode: '发送 WhatsApp 验证码',
+      codeSentTo: '验证码已通过 WhatsApp 发送至 {phone}',
+      otpTitle: '验证码验证',
+      otpHint: '请输入通过 WhatsApp 发送至 {phone} 的 6 位验证码',
+      otpLabel: '验证码',
+      verifyAndSave: '验证并保存',
+      updatePasswordFailed: '无法更新密码',
+      sendCodeFailed: '无法发送验证码',
+      updatePhoneFailed: '无法更新手机号',
+      deleteAccountFailed: '无法删除账号',
     },
     shifts: {
       pageEyebrow: '经纪排班',
@@ -1194,15 +2664,198 @@ export const translations: Record<AppLocale, AppTranslations> = {
       back: '返回',
       enableLocation: '开启定位权限',
       continueWithoutGps: '不使用定位继续',
+      booked: '已排班',
+      noShift: '无班次',
+      attendanceFailed: '出勤操作失败',
+      viewingEarlier: '正在查看较早的班次 · 点按前往当前班次',
+      loadingShift: '正在加载你的班次…',
+      idleEmpty: '经纪公司会为你安排班次 — 安排后即可签到。',
+      eventFallback: '班次',
+      dayAndDate: '星期与日期',
+      locating: '定位中…',
+      metresFrom: '距离 {name} {m} 米',
+      metresAway: '距离 {m} 米 — 请再靠近一些',
+      gpsNote: '只有在距离 {name} {m} 米以内才能签到。手机仅为本次出勤记录分享位置。',
+      gpsNoteBypass: '只有在距离 {name} {m} 米以内才能签到 — 演示期间暂时跳过定位。',
+      duration: '时长 {d}',
+      otEstimate: '加班 {h} 小时（约 {amount}）— 这是我们根据你的签到签退时间估算的 · 未发送给经纪公司，也不计入本次收入。如应支付，请与他们沟通。',
+      cancelWarning: '经纪公司指派的班次 — 取消可能影响薪资。',
+      reasonPlaceholder: '你为什么要取消？',
+      locationExplainer: 'InnocenZ 仅将你的位置用于一件事 — 证明你签到时确实在门店。',
+      locCheckRadius: '距离门店 50 米内即可签到',
+      locCheckStamp: '签到与签退各记录一次位置',
+      locCheckNoTracking: '绝不进行后台追踪',
+      holding: '按住中 {p}%',
+      missingPhotoOne: '有 {n} 条记录缺少照片 — 请点按该行的红色相机重新拍摄，或删除该行，然后才能签退。',
+      missingPhotoMany: '有 {n} 条记录缺少照片 — 请点按该行的红色相机重新拍摄，或删除该行，然后才能签退。',
+      nothingLogged: '尚未记录任何项目。请在签退前扫描收据，或自行记录至少一笔酒水或小费 — 并附上照片。班次一旦结束，该笔佣金将无法再申报。',
+      locPermissionOff: '定位权限已关闭 — 请允许后再签到。',
+      gpsReadFailed: '无法读取定位 — 请检查定位权限后重试。',
+      locationDenied: 'InnocenZ 需要定位权限才能在门店为你签到。请在 设置 > InnocenZ > 位置 中开启，然后重试。',
+      locationDisabled: '本机的定位服务已关闭。请开启 GPS／定位后重试。',
+      locationTimeout: '无法获取定位。请到户外或窗边后重试。',
+      locationUnknown: '无法读取你的位置。',
     },
     payment: {
       title: '结算',
       history: '结算记录',
+      lastWeek: '上周',
+      thisWeek: '本周',
+      lastWeekTitle: '上周',
+      thisWeekTitle: '本周',
+      lastWeekRange: '上周 {range}',
+      verifiedDays: '已核实天数 {n}/7',
+      approvedDays: '已批准天数',
+      agencyFallback: '经纪公司',
+      gridTotal: '合计',
+      gridTotalSub: '本周',
+      rowWages: '日薪',
+      rowDrinks: '酒水',
+      rowTips: '小费',
+      rowOthers: '其他',
+      rowDeductions: '扣款',
+      nVerified: '{n} 已核实',
+      nApproved: '{n} 已批准',
+      nPending: '{n} 待处理',
+      statusPending: '待处理',
+      statusApproved: '已批准',
+      statusDisputed: '争议中',
+      statusVerified: '已核实',
+      statusDeducted: '已扣除',
+      statusPaid: '已付款',
+      statusSigned: '已签名',
+      statusSent: '已发出',
+      disputeOpen: '争议处理中 · 经纪公司审核中',
+      disputeOpenNamed: '{agency} · 争议处理中 · 经纪公司审核中',
+      disputeBannerHint: '点按任一金额可查看其收据，并在那里撤回此争议。',
+      tapHint: '点按任一金额可查看其单号、班次与项目，并在那里提出争议 · 点按{red}金额可撤回误报的争议。',
+      redWord: '红色',
+      pvIssuedSunday: '结算单每周日发放 · 合计',
+      pvOnDay: '结算单 {day} 发放',
+      totalLower: '合计',
+      noLastWeekPv: '上周暂无结算单 — 本周结算单将于下周日发放。',
+      checkOutToSeal: '请在出勤页签退，将今日薪资与佣金封存到本周结算单。',
+      reviewSign: '审阅并签名 · {amount}',
+      reviewSignNamed: '审阅并签名 · {agency} · {amount}',
+      whatYouDisputed: '你提出的争议',
+      receiptsThisDay: '当日收据',
+      nTotal: '共 {n} 张',
+      receiptCounts: '{v} 已核实 · {a} 已批准 · {p} 待处理',
+      claimOpen: '处理中',
+      claimAccepted: '已接受',
+      claimRejected: '已拒绝',
+      claimWithdrawn: '已撤回',
+      voucherSaid: '结算单金额为 {amount}',
+      raisedAt: '提出于 {when}',
+      filedWholeDay: '针对整天提出 — 涵盖下方两个班次。',
+      shiftFallback: '班次',
+      shiftTimeUnknown: '班次时间未知',
+      inOutWindow: '签到 {inAt} · 签退 {outAt} · {window}',
+      noOrderNo: '无单号',
+      wholeReceipt: '整张收据',
+      noReceiptBehind: '此项没有收据 — 它由你的签到与签退时间计算得出。',
+      agencyAnswer: '经纪公司：{note}',
+      cancelThisDispute: '撤回此争议',
+      cancelling: '撤回中…',
+      durationUnknown: '时长未知',
+      hours: '{h} 小时',
+      hoursMinutes: '{h} 小时 {m} 分钟',
+      minutes: '{m} 分钟',
+      withOvertime: '{base} · 加班 +{m} 分钟',
+      otOnDay: '{day} {mins}',
+      otPending: '{parts} — 加班已在签退时记录，正在等待经纪公司处理。以上金额未包含这部分。',
+      withdrawDisputeTitle: '撤回争议？',
+      disputeThisAmount: '对此金额提出争议',
+      whichOneWrong: '哪一笔有误？',
+      alreadyDisputed: '已提出争议',
+      notReviewedYetShort: '尚未审核',
+      selected: '已选择',
+      pickShift: '请选择你要提出争议的班次。',
+      disputingOf: '正在对当日 {day} 中的 {picked} 提出争议。',
+      whichItem: '哪一项？',
+      pickOneItem: '请至少选择一项。',
+      quickReason: '快速原因',
+      reasonWrongCommission: '佣金有误',
+      reasonWrongQuantity: '数量有误',
+      reasonCountedTwice: '重复计算',
+      reasonMissingFromPv: '结算单中缺少',
+      reasonWrongRate: '费率有误',
+      reasonNotMyShift: '不是我的班次',
+      reasonOthers: '其他',
+      notePlaceholder: '为经纪公司补充说明…',
+      attachImages: '附加文件（图片）',
+      optional: '选填',
+      imagesAttachedOne: '已附上 {n} 张图片作为证据',
+      imagesAttachedMany: '已附上 {n} 张图片作为证据',
+      proofOptional: '证据图片为选填 — 如有收据照片可一并附上。',
+      submitting: '提交中…',
+      submitDispute: '提交争议',
+      withdrawSub: '误标了此金额？撤回后它将恢复为已核实。',
+      proofCleared: '将清除 {n} 张证据图片。',
+      withdrawing: '撤回中…',
+      withdrawDispute: '撤回争议',
+      notDisputedHereTitle: '此处不可提出争议',
+      notDisputedHereBody: '{row} 由你的签到与签退时间计算得出，并非来自收据。如有误，请让经纪公司更正 {day} 的班次记录。',
+      notReviewedTitle: '尚未审核',
+      notReviewedBody: '经纪公司仍在核对 {day} 的 {row} 收据。审核通过后，你即可在此对该金额提出争议。',
+      openDayFirstTitle: '请先打开该日',
+      openDayFirstBody: '该日的金额来自多家经纪公司，因此无法在此把这项争议匹配到结算单。请打开该日，选择班次，并在那里撤回。',
+      couldNotCancel: '无法撤回',
+      tryAgain: '请重试。',
+      cancelConfirmTitle: '撤回此争议？',
+      cancelConfirmBody: '经纪公司将停止审核。如仍有异议，你之后可以再次提出。',
+      keepIt: '保留',
+      cancelDispute: '撤回争议',
+      pickShiftFirstTitle: '请先选择班次',
+      pickShiftFirstBody: '该日的金额来自多家经纪公司。请打开该日，选择要提出争议的班次，然后重试。',
+      noVoucherTitle: '暂无可提出争议的结算单',
+      noVoucherLast: '上周的结算单尚未发放 — 暂时没有可提出争议的内容。',
+      noVoucherThis: '本周的结算单尚未开立 — 请先记录一个班次，之后才能对其中的金额提出争议。',
+      disputeFailed: '争议提交失败',
+      nVouchersThisWeek: '本周有 {n} 张结算单',
+      multiAgencyHint: '你为多家经纪公司工作。每家分别付款并单独签名。',
+      notYetNumbered: '尚未编号',
+      penaltiesThisWeek: '本周罚款',
+      cancelledShift: '已取消的班次',
+      pctOfDailyWage: '日薪的 {pct}%',
+      ruleMinShifts: '每周最少班次',
+      ruleMaxMc: '每月最多病假',
+      ruleLate: '每周迟到次数',
+      ruleCancellation: '取消班次',
     },
     history: {
       title: '记录',
       shifts: '班次',
       payments: '结算',
+      earnedInRange: '所选范围收入',
+      wagesTotal: '工资',
+      shiftHistory: '班次记录',
+      searchPlaceholder: '搜索工资、销售、其他、酒水…',
+      filterOutlet: '门店',
+      filterStatus: '状态',
+      filterDate: '日期',
+      anyOutlet: '全部门店',
+      anyStatus: '全部状态',
+      anyDate: '全部日期',
+      statusCurrent: '本周',
+      statusSigned: '已签署',
+      shiftCountOne: '{n} 个班次',
+      shiftCountMany: '{n} 个班次',
+      weekEarnLine: '收入 {earned} · 工资 {wages}',
+      noShiftsInWeek: '该周暂无班次',
+      noShiftsMatch: '没有符合筛选条件的班次',
+      resetFilters: '重置筛选',
+      totalPayout: '{amount} 总收入',
+      cancelledNoPayout: '班次已取消 — 无收入',
+      metricWages: '工资',
+      metricOthers: '其他',
+      pickDateFirst: '请先选择日期',
+      tapToChoose: '点按选择',
+      fromTime: '开始时间',
+      toTime: '结束时间',
+      done: '完成',
+      calLegendWorked: '已出勤 · 有记录',
+      calLegendNote: '可选至今天为止的任意日期 · 无记录的日期不会显示内容。',
     },
     signup: {
       title: '创建账号',
@@ -1463,6 +3116,310 @@ export const translations: Record<AppLocale, AppTranslations> = {
       missedNoteOne: '这个班次没有签到记录，也没有病假 / 请假或取消记录。如有出入，请联系你的经纪公司。',
       missedNoteMany: '上方标记的班次没有签到记录，也没有病假 / 请假或取消记录。如有出入，请联系你的经纪公司。',
     },
+    receipt: {
+      captionDay: '{d}日 {dow}',
+      captionVerified: '{n} 项已核实',
+      captionApproved: '{n} 项已批准',
+      captionOfOne: '共 {total} 项：{parts}',
+      captionOfMany: '共 {total} 项：{parts}',
+      captionWaiting: '{n} 项待经纪公司处理',
+      captionWaitingOn: '{n} 项待经纪公司处理（{days}）',
+      presetWrongCommission: '佣金有误',
+      presetWrongQuantity: '数量有误',
+      presetCountedTwice: '重复计算',
+      presetMissingFromPv: '结算单中缺失',
+      presetWrongRate: '费率有误',
+      presetNotMyShift: '不是我的班次',
+      presetOthers: '其他',
+      statusPending: '待审核',
+      statusApproved: '已批准',
+      statusDisputed: '有异议',
+      statusVerified: '已核实',
+      statusDeducted: '已扣款',
+      scannedThisShift: '本班次已扫描的收据',
+      groupTipsService: '小费 / 服务',
+      pictureOne: '{n} 张照片',
+      pictureMany: '{n} 张照片',
+      itemLoggedOne: '已记录 {n} 项',
+      itemLoggedMany: '已记录 {n} 项',
+    },
+    evidence: {
+      kindWages: '日薪',
+      kindOthers: '加班 / 其他',
+      kindDeductions: '扣款',
+      sourceScanned: '已扫描',
+      sourceSelfLogged: '自行记录',
+      sourceSealed: '签退时封存',
+      dayShort: '{mon}{d}日 {dow}',
+      dayLong: '{y}年{mon}{d}日 {dow}',
+      notLinked: '未关联班次',
+      noShiftNote: '这笔记录是在没有开班的情况下登记的，因此没有签到记录可显示。下方的收据仍是凭证。',
+      shiftTimesUnavailable: '目前无法获取班次时间。下方的收据仍是凭证。',
+      shiftFallback: '班次',
+      expandA11y: '{title} — 点击查看签到、收据与项目',
+      tapForDetails: '点击查看详情',
+      shiftWas: '原定时间',
+      youCancelled: '你取消的时间',
+      noticeGiven: '提前通知',
+      feeBand: '费用档次',
+      feePctOfShift: '本班次的 {pct}%',
+      feePctWithRm: '本班次的 {pct}% · RM {rm}',
+      shiftEnd: '班次结束',
+      stillOnDuty: '仍在值班',
+      durationWithOtRecorded: '{base} · 已记录加班 +{ot} 分钟',
+      timeNotSet: '未设定时间',
+      notRecorded: '未记录',
+      noticeSpanHoursMinutes: '{h} 小时 {m} 分',
+      noticeSpanHours: '{h} 小时',
+      noticeSpanMinutes: '{m} 分',
+      noticeBefore: '班次开始前 {span}',
+      noticeAfter: '班次开始后 {span}',
+      hint: '构成这个金额的全部明细。请用纸质收据核对订单号。',
+      mismatch: '此清单合计为 {listed}，但表格显示 {grid}。请上报此问题 — 不要签字确认。',
+      openDisputeWholeDay: '你有一项未结的争议涵盖这一整天 — 下方每个班次都包含在内。',
+      nothingLogged: '这一天没有任何记录。',
+      tagDisputed: '有争议',
+      tagVerified: '已核实',
+      tagSettled: '已结清',
+      noOrderNo: '无订单号',
+      printedOn: '打印于 {date}',
+      printedAt: '打印于 {date} {time}',
+      waitingOnAgency: '等待经纪公司处理',
+      openPhotoA11y: '全屏查看收据照片',
+      shiftSubtotal: '班次小计 · {amount}',
+      disputeAmount: '对此金额提出争议',
+    },
+    swaps: {
+      header: '门店换班请求',
+      fromFallback: '你的门店',
+      toFallback: '新门店',
+      hint: '只有你同意后，班次才会改到该门店。',
+      decline: '婉拒',
+      approve: '同意',
+      sending: '发送中…',
+      loadFailed: '无法加载你的换班请求',
+      respondFailed: '无法发送你的回复',
+    },
+    payHistory: {
+      heading: '结算记录',
+      filter: '筛选',
+      searchPlaceholder: '搜索结算单号、门店、周次、银行参考号…',
+      outletLabel: '门店',
+      anyOutlet: '所有门店',
+      fromTime: '起始时间',
+      toTime: '结束时间',
+      chipAll: '全部',
+      chipToSign: '待签署',
+      statusPaid: '已支付',
+      statusSigned: '已签署',
+      statusPending: '待处理',
+      clearAllFilters: '清除所有筛选',
+      weeks: '周数',
+      totalNet: '净额合计',
+      paidSummary: '{n} 周已支付 · {amount}',
+      signedSummary: '{n} 周已签署 · {amount}',
+      excelOpening: 'Excel 正在浏览器中打开 — 请查看下载内容',
+      excelOpenFailed: '无法打开 Excel — 请重试',
+      excelDownloaded: '结算单 Excel 已下载',
+      excelDownloadFailed: '无法下载 Excel — 请重试',
+      pdfDownloading: 'PDF 下载中 — 请从通知栏打开',
+      voucherOpenFailed: '无法打开结算单 — 请重试',
+      pdfOpened: '结算单 PDF 已打开',
+      pdfOpenFailed: '无法打开 PDF — 请重试',
+      noPayments: '暂无结算记录',
+      noMatches: '没有符合筛选条件的结算记录。',
+      openPayment: '打开结算',
+      sheetTitle: '筛选结算记录',
+      statusLabel: '状态',
+      netPaidLabel: '实付净额（RM）',
+      netPaidPlaceholder: '例如 898',
+      applyFilters: '应用筛选',
+      clearAndClose: '清除并关闭',
+      cardMetaOne: '{n} 个班次 · 签发于 {date}',
+      cardMetaMany: '{n} 个班次 · 签发于 {date}',
+      signThisWeek: '签署此周',
+      metricWages: '工资',
+      metricCommission: '提成',
+      metricEarlyWithdrawal: '提前提现',
+      weekBreakdown: '周明细',
+      pvIssuedSunday: '结算单每周日签发',
+      colDate: '日期',
+      colType: '类型',
+      colAmount: '金额',
+      netPayable: '应付净额',
+      bankRef: '银行参考号：{ref}',
+      sign: '签署',
+      openPv: '打开结算单',
+      metaPaidOn: '已于 {when} 支付',
+      metaSignedOn: '已于 {when} 签署',
+      metaDisputed: '有争议 — 等待经纪公司处理',
+      metaAwaitingSignature: '等待你签署',
+      metaAwaitingIssue: '等待经纪公司签发',
+      multiOutlet: '{n} 家门店',
+      lineWages: '每日工资',
+      lineDrinks: '酒水提成',
+      lineTips: '小费提成',
+      lineOthers: '其他',
+    },
+    pv: {
+      rowWages: '日薪工资',
+      rowOthers: '其他',
+      rowDeductions: '扣款',
+      total: '合计',
+      weekSummary: '本周汇总',
+      dayVerified: '已核实',
+      dayPending: '待审核',
+      dayDisputed: '有异议',
+      dayDeducted: '已扣款',
+      verifiedCount: '已核实 {n} 天',
+      tapHint: '点击酒水或小费金额可在结算页提出异议 — {red}金额表示已有未结异议。',
+      tapHintRed: '红色',
+      disputeOpen: '异议处理中',
+      disputeBannerBody: '经纪公司正在复核被标记的金额 — 详情请见结算页。',
+      pendingYourReview: '待你审阅',
+      waitingForAgency: '等待经纪公司',
+      reviewThenSign: '请逐日核对，然后签名确认本周收入。',
+      notIssuedYet: '经纪公司尚未发出此结算单 — 你可以先查看，但在他们发出前无需签名。',
+      awaitingSignature: '待签名',
+      signed: '已签名',
+      netPayable: '应付净额',
+      payee: '收款人',
+      prPersonnel: 'PR 人员',
+      drinkTipRecords: '酒水与小费记录',
+      hide: '收起',
+      details: '详情',
+      sourceScan: '扫描收据',
+      sourceManual: '自行记录',
+      sourceCheckin: '签退时自动封存',
+      lineDate: '{y}年{mon}{d}日',
+      receiptDetails: '收据详情',
+      detailDateTime: '日期与时间',
+      detailOutlet: '门店',
+      detailReceipt: '收据',
+      detailCommission: '佣金',
+      matchedToThisPv: '已匹配到此结算单',
+      pendingAgencyVerify: '待经纪公司核实',
+      yourSignature: '你的签名',
+      signaturePending: '待签名',
+      signedWithName: '已签名 · {name} — 双方已签 · 转账处理中',
+      signedSealed: '已签名 — 双方已签 · 转账处理中',
+      notSentYet: '尚未发送给你 — 等待经纪公司',
+      signVoucher: '签署结算单',
+      paidInBank: '已支付 · {amount} 已到账',
+      viewInHistory: '在记录中查看 · 结算记录',
+      signSheetHint: '用手指绘制签名 — 签名会保存在结算单上，并打印在 PDF 中。',
+      signingAs: '签署人',
+      thisAccount: '此账号',
+      signatureField: '签名',
+      confirmSignature: '确认签名',
+      drawSignatureTitle: '请绘制签名',
+      drawSignatureBody: '请先用手指在签名区签名，再确认。',
+      noVoucherTitle: '暂无可签署的结算单',
+      noVoucherBody: '此结算单不在服务器上 — 请返回结算页刷新后重试。',
+      notSignedTitle: '未签名',
+      notSignedBody: '{reason}\n\n未保存任何内容 — 有信号时请重试。',
+      couldNotReachAgency: '无法连接经纪公司。',
+    },
+    scan: {
+      titleEdit: '编辑自行记录',
+      titleSelfLogTips: '自行记录小费',
+      titleSelfLogDrinks: '自行记录酒水',
+      titleScanTips: '扫描小费收据',
+      titleScanDrinks: '扫描酒水收据',
+      itemNounTip: '小费 / 服务项目',
+      itemNounTipPlural: '小费 / 服务项目',
+      itemNounDrink: '酒水',
+      itemNounDrinkPlural: '酒水',
+      subEdit: '编辑后经纪公司会重新核实。',
+      subScanWindow: '签到与签退之间扫描的收据计入本班次的结算单。',
+      gateTitle: '请先签到',
+      gateBody: '请先在出勤页签到，再扫描收据。',
+      goToCheckIn: '前往签到',
+      activeShift: '当前班次 · {outlet}',
+      belongsTo: '归属',
+      receiptsLogged: '已记录 {n} 张收据',
+      timeIn: '签到 {time}',
+      pointAndSnap: '对准收据拍照',
+      scanningOcr: '扫描中…正在读取 OCR 字段',
+      ocrExtracted: '— OCR 读取结果 —',
+      ocrOrderNo: '订单号：{v}',
+      ocrDate: '日期：{v}',
+      ocrTime: '时间：{v}',
+      ocrOutlet: '门店：{v}',
+      ocrDetectedAsRead: 'OCR 识别结果 · 按收据原样读取',
+      eachPrice: '每件 {price}',
+      wasHappyHour: '（原价 {price} · 欢乐时光 −{pct}%）',
+      detectedSummary: '{items} 项{noun} · {units} 件 · {total} · 预计佣金 {commission}',
+      setQuantityAtLeastOne: '请至少为一个项目设置数量。',
+      saving: '保存中…',
+      confirmAndLog: '确认并记录收据',
+      scanNow: '立即扫描收据',
+      manualPill: '手动自行记录',
+      keyInAmount: '输入金额 · 由经纪公司核实。',
+      ocrMatchesCatalog: 'OCR 读取收据并匹配本门店的 {n} 项{noun}',
+      dateIgnored: '已忽略“{raw}” → {parsed} · 与本班次相差 {days} 天（{shift}）',
+      ocrLinesOne: '{n} 行',
+      ocrLinesMany: '{n} 行',
+      showOcrText: '查看 OCR 读到的内容（{lines}）',
+      hideOcrText: '隐藏 OCR 读到的内容（{lines}）',
+      ocrRawHint: '只有当项目名称出现在以上某一行时才会被识别。如果这里缺少名称或名称有误，问题出在纸质收据或照片上 — 请把收据放平、靠近后重新扫描。',
+      notFoundOnScan: '扫描未识别 · 若收据上有请手动添加',
+      eachPriceNotRead: '每件 {price} · OCR 未读到此项',
+      addItem: '+ 添加',
+      onlyAddWhatShows: '只添加收据上确实有的项目 — 经纪公司会对照你的照片核实。',
+      pointOcrLists: '对准收据 — OCR 会列出读到的{noun}',
+      scanAgainCatch: '再扫描一次，补上 OCR 漏掉的{noun}',
+      scanItems: '扫描{noun}',
+      scanAgain: '重新扫描',
+      ocrDetectedAdjust: 'OCR 已识别 · 调整数量',
+      noQtyPrinted: '收据上没有印数量 — 请核对这一项',
+      selfLogSummary: '{items} 项{noun} · {units} 件',
+      commissionPreview: '佣金预览：',
+      tipAmountRm: '小费金额（RM）',
+      drinkAmountRm: '酒水金额（RM）',
+      proofRetakeTitle: '证明照片 · 重拍即可替换',
+      proofRequiredTitle: '证明照片 · 必填',
+      proofRetakeHint: '重新拍一张 — 新照片会替换此记录已保存的照片。',
+      proofRequiredHint: '拍下收据作为证明 — 经纪公司会据此核实。',
+      retakeAgain: '再重拍一次',
+      retakePhoto: '重拍照片',
+      addAnotherPhoto: '再添加一张照片',
+      takeOrAttachPhoto: '拍照 / 上传照片',
+      snapToEnableSubmit: '⚠ 拍一张照片后才能提交。',
+      noteOptional: '给经纪公司的备注（选填）',
+      noteRequired: '给经纪公司的备注（必填）',
+      notePlaceholder: '收据上的数量 / 价格 / 日期不清楚？请说明 — 或确认全部一致。',
+      updateSelfLog: '更新自行记录',
+      submitScanFirst: '提交自行记录 · 请先扫描{noun}',
+      writeNoteToSubmit: '填写给经纪公司的备注后才能提交',
+      submitSelfLogAmount: '提交自行记录 · {amount}',
+      snapProofToSubmit: '拍下证明照片后提交',
+      submitSelfLog: '提交自行记录',
+      receiptLogged: '收据已记录',
+      addedToStatus: '已加入签到页状态 · 待经纪公司核实。',
+      belongsToPv: '归属结算单：',
+      receiptRef: '收据 {no}',
+      orderRef: '订单 {no}',
+      scanAnother: '再扫描一张',
+      backToCheckIn: '返回签到',
+      wrongScanPrefix: '扫错了？签到页 →',
+      wrongScanSuffix: '· 待审核的自行记录可以编辑或删除。',
+      backToAttendance: '返回出勤',
+      ocrUnavailable: '手机端 OCR 需要开发版应用。照片已保留作为证明 — 请改用自行记录。',
+      dateDroppedNote: '它确实读到了“{raw}”（{parsed}），但与本班次（{shift}）相差 {days} 天 — 距离太远，不可能是这张收据的日期，因此被丢弃，以免记到错误的周次。',
+      noneMatchedWithList: 'OCR 读取了照片，但没有找到 {outlet} 的任何{noun} — 它查找的是：{wanted}。请扫描印有其中项目的收据，或在下方自行记录（照片已保留作为证明）。',
+      noneMatched: 'OCR 读取了照片，但没有找到 {outlet} 的任何{noun}。请扫描印有这些项目的收据，或在下方自行记录（照片已保留作为证明）。',
+      fieldOrderNo: '订单号',
+      fieldDate: '日期',
+      fieldTime: '时间',
+      andJoin: '、',
+      couldNotReadFields: 'OCR 还读不到收据上的{fields} — 请靠近收据的那一部分（放平、避免反光）后重新扫描。已读到的字段会保留。',
+      couldNotSave: '保存失败，请重试。',
+      setQuantityFirst: '请先设置{noun}的数量。',
+      snapProofFirst: '提交前请先拍一张证明照片。',
+      setQuantityAtLeastOneNoun: '请至少为一项{noun}设置数量。',
+      setAmountFirst: '请先输入金额。',
+    },
   },
   'zh-Hant': {
     lang: {
@@ -1516,6 +3473,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tooManyAttempts: '嘗試次數過多。請在 {m} 分鐘後再試。',
       newHere: '還沒有帳號？',
       createAccount: '建立帳號',
+      logoAlt: 'InnocenZ 標誌',
     },
     forgot: {
       title: '重設密碼',
@@ -1535,6 +3493,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       doneTitle: '密碼已更新',
       doneBody: '你可以使用新密碼登入。',
       backToSignIn: '返回登入',
+      codeSentInfo: '如果該號碼已註冊，驗證碼已透過 WhatsApp 傳送。',
+      invalidCode: '驗證碼無效',
+      resetFailed: '無法重設密碼',
     },
     topbar: {
       prAgencyTied: 'PR · 經紀公司',
@@ -1572,6 +3533,62 @@ export const translations: Record<AppLocale, AppTranslations> = {
       comcardUnavailable: '已儲存 — 此處無法載入',
       comcardUnavailableHint: '已儲存到資料。圖片在本裝置上無法載入。',
       comcardHint: '儲存後可分享給經紀公司與門店。',
+      accountEyebrow: '帳戶',
+      editingBadge: '編輯中',
+      comcardIcBadge: '照片名片卡 · 身分證',
+      floorNickname: '現場暱稱',
+      legalIcName: '身分證姓名',
+      agencies: '經紀公司',
+      selectAgencies: '選擇經紀公司…',
+      agencyTied: '經紀公司 · {names}',
+      awaitingApproval: '等待審批 · {names}',
+      departureWaiting: '離開申請等待 {names} 審批',
+      icNumber: '身分證 {ic}',
+      agencyLockedJoin: '等待 {names} 審批 — 在他們批准或拒絕前，無法更改經紀公司。',
+      agencyLockedLeave: '離開申請等待 {names} 審批 — 在有結果前，無法更改經紀公司。',
+      agencyDeparturePending: '{name} · 離開待審批',
+      leaveConfirm: '離開 {name}？薪資與班次必須結清，並需對方批准。',
+      requestToLeave: '申請離開',
+      keep: '保留',
+      departureRequested: '已提交離開申請 — 等待 {name} 審批',
+      departureFailed: '無法提交離開申請',
+      nicknameLength: '現場暱稱需為 2–20 個字元',
+      icNameRequired: '請輸入身分證姓名',
+      languageRequired: '請至少選擇一種語言',
+      emailInvalid: '請輸入有效的電子郵箱',
+      profileSaved: '資料已儲存',
+      saveFailed: '無法儲存資料',
+      comcardUpdated: '名片卡已更新',
+      galleryUnavailable: '無法開啟相簿 — 請重新建置開發版應用（expo run:android）。',
+      imageTooLarge: '圖片需小於 5 MB',
+      avatarUpdated: '頭像已更新',
+      avatarUploadFailed: '無法上傳照片',
+      portfolioUploadFailed: '無法上傳作品集照片',
+      someImagesSkipped: '部分圖片超過 5 MB，已略過',
+      removePhotoTitle: '移除照片？',
+      removePhotoBody: '移除作品集照片 {label}？這會從你的資料中刪除它。',
+      portfolioRemoveFailed: '無法移除作品集照片',
+      savingArrangement: '正在儲存排列…',
+      rearrangeFailed: '無法重新排列作品集',
+      portfolioRearranged: '作品集已重新排列',
+      portfolio: '作品集',
+      portfolioDragHint: '長按拖動 · 放開交換',
+      portfolioShowcase: '展示照片',
+      portfolioCount: '照片 {n} / {total}',
+      noLanguages: '尚未新增語言 — 點擊「編輯資料」新增。',
+      tier1: '一級',
+      tier2: '二級',
+      tier3: '三級',
+      tier4: '四級',
+      tier5: '五級',
+      tierServant: '服務生',
+      tierCommissionOnly: '純佣金',
+      slotTapToSwap: '點擊另一個位置交換 · 再次點擊取消',
+      slotDragHint: '長按拖動 · 拖到上下邊緣可捲動 · 放開交換',
+      viewerReturn: '返回',
+      viewerHint: '雙指縮放或雙擊放大 · 拖動移動 · 點 ✕ 返回 關閉',
+      signHere: '用手指在此簽名',
+      clearSignature: '清除',
     },
     security: {
       title: '安全',
@@ -1593,6 +3610,21 @@ export const translations: Record<AppLocale, AppTranslations> = {
       phoneUpdated: '手機號已更新',
       sendOtp: '傳送驗證碼',
       verifyOtp: '驗證驗證碼',
+      eyebrow: '帳號',
+      intro: '使用目前密碼修改密碼，或透過 WhatsApp 驗證碼更換手機號。',
+      currentPhone: '目前：{phone}',
+      changePhoneHint: '請輸入新手機號。我們將透過 WhatsApp 傳送驗證碼進行驗證。',
+      newMobileNumber: '新手機號碼',
+      sendWhatsappCode: '傳送 WhatsApp 驗證碼',
+      codeSentTo: '驗證碼已透過 WhatsApp 傳送至 {phone}',
+      otpTitle: '驗證碼驗證',
+      otpHint: '請輸入透過 WhatsApp 傳送至 {phone} 的 6 位驗證碼',
+      otpLabel: '驗證碼',
+      verifyAndSave: '驗證並儲存',
+      updatePasswordFailed: '無法更新密碼',
+      sendCodeFailed: '無法傳送驗證碼',
+      updatePhoneFailed: '無法更新手機號',
+      deleteAccountFailed: '無法刪除帳號',
     },
     shifts: {
       pageEyebrow: '經紀排班',
@@ -1650,15 +3682,198 @@ export const translations: Record<AppLocale, AppTranslations> = {
       back: '返回',
       enableLocation: '開啟定位權限',
       continueWithoutGps: '不使用定位繼續',
+      booked: '已排班',
+      noShift: '無班次',
+      attendanceFailed: '出勤操作失敗',
+      viewingEarlier: '正在查看較早的班次 · 點按前往目前班次',
+      loadingShift: '正在載入你的班次…',
+      idleEmpty: '經紀公司會為你安排班次 — 安排後即可簽到。',
+      eventFallback: '班次',
+      dayAndDate: '星期與日期',
+      locating: '定位中…',
+      metresFrom: '距離 {name} {m} 米',
+      metresAway: '距離 {m} 米 — 請再靠近一些',
+      gpsNote: '只有在距離 {name} {m} 米以內才能簽到。手機僅為本次出勤紀錄分享位置。',
+      gpsNoteBypass: '只有在距離 {name} {m} 米以內才能簽到 — 示範期間暫時略過定位。',
+      duration: '時長 {d}',
+      otEstimate: '加班 {h} 小時（約 {amount}）— 這是我們根據你的簽到簽退時間估算的 · 未傳送給經紀公司，也不計入本次收入。如應支付，請與他們溝通。',
+      cancelWarning: '經紀公司指派的班次 — 取消可能影響薪資。',
+      reasonPlaceholder: '你為什麼要取消？',
+      locationExplainer: 'InnocenZ 僅將你的位置用於一件事 — 證明你簽到時確實在門店。',
+      locCheckRadius: '距離門店 50 米內即可簽到',
+      locCheckStamp: '簽到與簽退各紀錄一次位置',
+      locCheckNoTracking: '絕不進行背景追蹤',
+      holding: '按住中 {p}%',
+      missingPhotoOne: '有 {n} 筆紀錄缺少照片 — 請點按該列的紅色相機重新拍攝，或刪除該列，然後才能簽退。',
+      missingPhotoMany: '有 {n} 筆紀錄缺少照片 — 請點按該列的紅色相機重新拍攝，或刪除該列，然後才能簽退。',
+      nothingLogged: '尚未記錄任何項目。請在簽退前掃描收據，或自行記錄至少一筆酒水或小費 — 並附上照片。班次一旦結束，該筆佣金將無法再申報。',
+      locPermissionOff: '定位權限已關閉 — 請允許後再簽到。',
+      gpsReadFailed: '無法讀取定位 — 請檢查定位權限後重試。',
+      locationDenied: 'InnocenZ 需要定位權限才能在門店為你簽到。請在 設定 > InnocenZ > 位置 中開啟，然後重試。',
+      locationDisabled: '本機的定位服務已關閉。請開啟 GPS／定位後重試。',
+      locationTimeout: '無法取得定位。請到戶外或窗邊後重試。',
+      locationUnknown: '無法讀取你的位置。',
     },
     payment: {
       title: '結算',
       history: '結算紀錄',
+      lastWeek: '上週',
+      thisWeek: '本週',
+      lastWeekTitle: '上週',
+      thisWeekTitle: '本週',
+      lastWeekRange: '上週 {range}',
+      verifiedDays: '已核實天數 {n}/7',
+      approvedDays: '已批准天數',
+      agencyFallback: '經紀公司',
+      gridTotal: '合計',
+      gridTotalSub: '本週',
+      rowWages: '日薪',
+      rowDrinks: '酒水',
+      rowTips: '小費',
+      rowOthers: '其他',
+      rowDeductions: '扣款',
+      nVerified: '{n} 已核實',
+      nApproved: '{n} 已批准',
+      nPending: '{n} 待處理',
+      statusPending: '待處理',
+      statusApproved: '已批准',
+      statusDisputed: '爭議中',
+      statusVerified: '已核實',
+      statusDeducted: '已扣除',
+      statusPaid: '已付款',
+      statusSigned: '已簽名',
+      statusSent: '已發出',
+      disputeOpen: '爭議處理中 · 經紀公司審核中',
+      disputeOpenNamed: '{agency} · 爭議處理中 · 經紀公司審核中',
+      disputeBannerHint: '點按任一金額可查看其收據，並在那裡撤回此爭議。',
+      tapHint: '點按任一金額可查看其單號、班次與項目，並在那裡提出爭議 · 點按{red}金額可撤回誤報的爭議。',
+      redWord: '紅色',
+      pvIssuedSunday: '結算單每週日發放 · 合計',
+      pvOnDay: '結算單 {day} 發放',
+      totalLower: '合計',
+      noLastWeekPv: '上週暫無結算單 — 本週結算單將於下週日發放。',
+      checkOutToSeal: '請在出勤頁簽退，將今日薪資與佣金封存到本週結算單。',
+      reviewSign: '審閱並簽名 · {amount}',
+      reviewSignNamed: '審閱並簽名 · {agency} · {amount}',
+      whatYouDisputed: '你提出的爭議',
+      receiptsThisDay: '當日收據',
+      nTotal: '共 {n} 張',
+      receiptCounts: '{v} 已核實 · {a} 已批准 · {p} 待處理',
+      claimOpen: '處理中',
+      claimAccepted: '已接受',
+      claimRejected: '已拒絕',
+      claimWithdrawn: '已撤回',
+      voucherSaid: '結算單金額為 {amount}',
+      raisedAt: '提出於 {when}',
+      filedWholeDay: '針對整天提出 — 涵蓋下方兩個班次。',
+      shiftFallback: '班次',
+      shiftTimeUnknown: '班次時間未知',
+      inOutWindow: '簽到 {inAt} · 簽退 {outAt} · {window}',
+      noOrderNo: '無單號',
+      wholeReceipt: '整張收據',
+      noReceiptBehind: '此項沒有收據 — 它由你的簽到與簽退時間計算得出。',
+      agencyAnswer: '經紀公司：{note}',
+      cancelThisDispute: '撤回此爭議',
+      cancelling: '撤回中…',
+      durationUnknown: '時長未知',
+      hours: '{h} 小時',
+      hoursMinutes: '{h} 小時 {m} 分鐘',
+      minutes: '{m} 分鐘',
+      withOvertime: '{base} · 加班 +{m} 分鐘',
+      otOnDay: '{day} {mins}',
+      otPending: '{parts} — 加班已在簽退時記錄，正在等待經紀公司處理。以上金額未包含這部分。',
+      withdrawDisputeTitle: '撤回爭議？',
+      disputeThisAmount: '對此金額提出爭議',
+      whichOneWrong: '哪一筆有誤？',
+      alreadyDisputed: '已提出爭議',
+      notReviewedYetShort: '尚未審核',
+      selected: '已選擇',
+      pickShift: '請選擇你要提出爭議的班次。',
+      disputingOf: '正在對當日 {day} 中的 {picked} 提出爭議。',
+      whichItem: '哪一項？',
+      pickOneItem: '請至少選擇一項。',
+      quickReason: '快速原因',
+      reasonWrongCommission: '佣金有誤',
+      reasonWrongQuantity: '數量有誤',
+      reasonCountedTwice: '重複計算',
+      reasonMissingFromPv: '結算單中缺少',
+      reasonWrongRate: '費率有誤',
+      reasonNotMyShift: '不是我的班次',
+      reasonOthers: '其他',
+      notePlaceholder: '為經紀公司補充說明…',
+      attachImages: '附加檔案（圖片）',
+      optional: '選填',
+      imagesAttachedOne: '已附上 {n} 張圖片作為證據',
+      imagesAttachedMany: '已附上 {n} 張圖片作為證據',
+      proofOptional: '證據圖片為選填 — 如有收據照片可一併附上。',
+      submitting: '提交中…',
+      submitDispute: '提交爭議',
+      withdrawSub: '誤標了此金額？撤回後它將恢復為已核實。',
+      proofCleared: '將清除 {n} 張證據圖片。',
+      withdrawing: '撤回中…',
+      withdrawDispute: '撤回爭議',
+      notDisputedHereTitle: '此處不可提出爭議',
+      notDisputedHereBody: '{row} 由你的簽到與簽退時間計算得出，並非來自收據。如有誤，請讓經紀公司更正 {day} 的班次紀錄。',
+      notReviewedTitle: '尚未審核',
+      notReviewedBody: '經紀公司仍在核對 {day} 的 {row} 收據。審核通過後，你即可在此對該金額提出爭議。',
+      openDayFirstTitle: '請先打開該日',
+      openDayFirstBody: '該日的金額來自多家經紀公司，因此無法在此把這項爭議匹配到結算單。請打開該日，選擇班次，並在那裡撤回。',
+      couldNotCancel: '無法撤回',
+      tryAgain: '請重試。',
+      cancelConfirmTitle: '撤回此爭議？',
+      cancelConfirmBody: '經紀公司將停止審核。如仍有異議，你之後可以再次提出。',
+      keepIt: '保留',
+      cancelDispute: '撤回爭議',
+      pickShiftFirstTitle: '請先選擇班次',
+      pickShiftFirstBody: '該日的金額來自多家經紀公司。請打開該日，選擇要提出爭議的班次，然後重試。',
+      noVoucherTitle: '暫無可提出爭議的結算單',
+      noVoucherLast: '上週的結算單尚未發放 — 暫時沒有可提出爭議的內容。',
+      noVoucherThis: '本週的結算單尚未開立 — 請先記錄一個班次，之後才能對其中的金額提出爭議。',
+      disputeFailed: '爭議提交失敗',
+      nVouchersThisWeek: '本週有 {n} 張結算單',
+      multiAgencyHint: '你為多家經紀公司工作。每家分別付款並單獨簽名。',
+      notYetNumbered: '尚未編號',
+      penaltiesThisWeek: '本週罰款',
+      cancelledShift: '已取消的班次',
+      pctOfDailyWage: '日薪的 {pct}%',
+      ruleMinShifts: '每週最少班次',
+      ruleMaxMc: '每月最多病假',
+      ruleLate: '每週遲到次數',
+      ruleCancellation: '取消班次',
     },
     history: {
       title: '紀錄',
       shifts: '班次',
       payments: '結算',
+      earnedInRange: '所選範圍收入',
+      wagesTotal: '工資',
+      shiftHistory: '班次紀錄',
+      searchPlaceholder: '搜尋工資、銷售、其他、酒水…',
+      filterOutlet: '門店',
+      filterStatus: '狀態',
+      filterDate: '日期',
+      anyOutlet: '全部門店',
+      anyStatus: '全部狀態',
+      anyDate: '全部日期',
+      statusCurrent: '本週',
+      statusSigned: '已簽署',
+      shiftCountOne: '{n} 個班次',
+      shiftCountMany: '{n} 個班次',
+      weekEarnLine: '收入 {earned} · 工資 {wages}',
+      noShiftsInWeek: '該週暫無班次',
+      noShiftsMatch: '沒有符合篩選條件的班次',
+      resetFilters: '重置篩選',
+      totalPayout: '{amount} 總收入',
+      cancelledNoPayout: '班次已取消 — 無收入',
+      metricWages: '工資',
+      metricOthers: '其他',
+      pickDateFirst: '請先選擇日期',
+      tapToChoose: '點按選擇',
+      fromTime: '開始時間',
+      toTime: '結束時間',
+      done: '完成',
+      calLegendWorked: '已出勤 · 有紀錄',
+      calLegendNote: '可選至今天為止的任意日期 · 無紀錄的日期不會顯示內容。',
     },
     signup: {
       title: '建立帳號',
@@ -1918,6 +4133,310 @@ export const translations: Record<AppLocale, AppTranslations> = {
       outcomeNotStarted: '已排班 — 尚未開始',
       missedNoteOne: '這個班次沒有簽到紀錄，也沒有病假 / 請假或取消紀錄。如有出入，請聯絡你的經紀公司。',
       missedNoteMany: '上方標記的班次沒有簽到紀錄，也沒有病假 / 請假或取消紀錄。如有出入，請聯絡你的經紀公司。',
+    },
+    receipt: {
+      captionDay: '{d}日 {dow}',
+      captionVerified: '{n} 項已核實',
+      captionApproved: '{n} 項已批准',
+      captionOfOne: '共 {total} 項：{parts}',
+      captionOfMany: '共 {total} 項：{parts}',
+      captionWaiting: '{n} 項待經紀公司處理',
+      captionWaitingOn: '{n} 項待經紀公司處理（{days}）',
+      presetWrongCommission: '佣金有誤',
+      presetWrongQuantity: '數量有誤',
+      presetCountedTwice: '重複計算',
+      presetMissingFromPv: '結算單中缺失',
+      presetWrongRate: '費率有誤',
+      presetNotMyShift: '不是我的班次',
+      presetOthers: '其他',
+      statusPending: '待審核',
+      statusApproved: '已批准',
+      statusDisputed: '有異議',
+      statusVerified: '已核實',
+      statusDeducted: '已扣款',
+      scannedThisShift: '本班次已掃描的收據',
+      groupTipsService: '小費 / 服務',
+      pictureOne: '{n} 張照片',
+      pictureMany: '{n} 張照片',
+      itemLoggedOne: '已記錄 {n} 項',
+      itemLoggedMany: '已記錄 {n} 項',
+    },
+    evidence: {
+      kindWages: '日薪',
+      kindOthers: '加班 / 其他',
+      kindDeductions: '扣款',
+      sourceScanned: '已掃描',
+      sourceSelfLogged: '自行記錄',
+      sourceSealed: '簽退時封存',
+      dayShort: '{mon}{d}日 {dow}',
+      dayLong: '{y}年{mon}{d}日 {dow}',
+      notLinked: '未關聯班次',
+      noShiftNote: '這筆紀錄是在沒有開班的情況下登記的，因此沒有簽到紀錄可顯示。下方的收據仍是憑證。',
+      shiftTimesUnavailable: '目前無法取得班次時間。下方的收據仍是憑證。',
+      shiftFallback: '班次',
+      expandA11y: '{title} — 點擊查看簽到、收據與項目',
+      tapForDetails: '點擊查看詳情',
+      shiftWas: '原定時間',
+      youCancelled: '你取消的時間',
+      noticeGiven: '提前通知',
+      feeBand: '費用檔次',
+      feePctOfShift: '本班次的 {pct}%',
+      feePctWithRm: '本班次的 {pct}% · RM {rm}',
+      shiftEnd: '班次結束',
+      stillOnDuty: '仍在值班',
+      durationWithOtRecorded: '{base} · 已記錄加班 +{ot} 分鐘',
+      timeNotSet: '未設定時間',
+      notRecorded: '未記錄',
+      noticeSpanHoursMinutes: '{h} 小時 {m} 分',
+      noticeSpanHours: '{h} 小時',
+      noticeSpanMinutes: '{m} 分',
+      noticeBefore: '班次開始前 {span}',
+      noticeAfter: '班次開始後 {span}',
+      hint: '構成這個金額的全部明細。請用紙本收據核對訂單號。',
+      mismatch: '此清單合計為 {listed}，但表格顯示 {grid}。請回報此問題 — 不要簽名確認。',
+      openDisputeWholeDay: '你有一項未結的爭議涵蓋這一整天 — 下方每個班次都包含在內。',
+      nothingLogged: '這一天沒有任何紀錄。',
+      tagDisputed: '有爭議',
+      tagVerified: '已核實',
+      tagSettled: '已結清',
+      noOrderNo: '無訂單號',
+      printedOn: '列印於 {date}',
+      printedAt: '列印於 {date} {time}',
+      waitingOnAgency: '等待經紀公司處理',
+      openPhotoA11y: '全螢幕檢視收據照片',
+      shiftSubtotal: '班次小計 · {amount}',
+      disputeAmount: '對此金額提出爭議',
+    },
+    swaps: {
+      header: '門店換班請求',
+      fromFallback: '你的門店',
+      toFallback: '新門店',
+      hint: '只有你同意後，班次才會改到該門店。',
+      decline: '婉拒',
+      approve: '同意',
+      sending: '傳送中…',
+      loadFailed: '無法載入你的換班請求',
+      respondFailed: '無法傳送你的回覆',
+    },
+    payHistory: {
+      heading: '結算紀錄',
+      filter: '篩選',
+      searchPlaceholder: '搜尋結算單號、門店、週次、銀行參考號…',
+      outletLabel: '門店',
+      anyOutlet: '所有門店',
+      fromTime: '起始時間',
+      toTime: '結束時間',
+      chipAll: '全部',
+      chipToSign: '待簽署',
+      statusPaid: '已支付',
+      statusSigned: '已簽署',
+      statusPending: '待處理',
+      clearAllFilters: '清除所有篩選',
+      weeks: '週數',
+      totalNet: '淨額合計',
+      paidSummary: '{n} 週已支付 · {amount}',
+      signedSummary: '{n} 週已簽署 · {amount}',
+      excelOpening: 'Excel 正在瀏覽器中開啟 — 請查看下載內容',
+      excelOpenFailed: '無法開啟 Excel — 請重試',
+      excelDownloaded: '結算單 Excel 已下載',
+      excelDownloadFailed: '無法下載 Excel — 請重試',
+      pdfDownloading: 'PDF 下載中 — 請從通知欄開啟',
+      voucherOpenFailed: '無法開啟結算單 — 請重試',
+      pdfOpened: '結算單 PDF 已開啟',
+      pdfOpenFailed: '無法開啟 PDF — 請重試',
+      noPayments: '暫無結算紀錄',
+      noMatches: '沒有符合篩選條件的結算紀錄。',
+      openPayment: '開啟結算',
+      sheetTitle: '篩選結算紀錄',
+      statusLabel: '狀態',
+      netPaidLabel: '實付淨額（RM）',
+      netPaidPlaceholder: '例如 898',
+      applyFilters: '套用篩選',
+      clearAndClose: '清除並關閉',
+      cardMetaOne: '{n} 個班次 · 簽發於 {date}',
+      cardMetaMany: '{n} 個班次 · 簽發於 {date}',
+      signThisWeek: '簽署此週',
+      metricWages: '工資',
+      metricCommission: '提成',
+      metricEarlyWithdrawal: '提前提現',
+      weekBreakdown: '週明細',
+      pvIssuedSunday: '結算單每週日簽發',
+      colDate: '日期',
+      colType: '類型',
+      colAmount: '金額',
+      netPayable: '應付淨額',
+      bankRef: '銀行參考號：{ref}',
+      sign: '簽署',
+      openPv: '開啟結算單',
+      metaPaidOn: '已於 {when} 支付',
+      metaSignedOn: '已於 {when} 簽署',
+      metaDisputed: '有爭議 — 等待經紀公司處理',
+      metaAwaitingSignature: '等待你簽署',
+      metaAwaitingIssue: '等待經紀公司簽發',
+      multiOutlet: '{n} 家門店',
+      lineWages: '每日工資',
+      lineDrinks: '酒水提成',
+      lineTips: '小費提成',
+      lineOthers: '其他',
+    },
+    pv: {
+      rowWages: '日薪工資',
+      rowOthers: '其他',
+      rowDeductions: '扣款',
+      total: '合計',
+      weekSummary: '本週彙總',
+      dayVerified: '已核實',
+      dayPending: '待審核',
+      dayDisputed: '有異議',
+      dayDeducted: '已扣款',
+      verifiedCount: '已核實 {n} 天',
+      tapHint: '點擊酒水或小費金額可在結算頁提出異議 — {red}金額表示已有未結異議。',
+      tapHintRed: '紅色',
+      disputeOpen: '異議處理中',
+      disputeBannerBody: '經紀公司正在複核被標記的金額 — 詳情請見結算頁。',
+      pendingYourReview: '待你審閱',
+      waitingForAgency: '等待經紀公司',
+      reviewThenSign: '請逐日核對，然後簽名確認本週收入。',
+      notIssuedYet: '經紀公司尚未發出此結算單 — 你可以先查看，但在他們發出前無需簽名。',
+      awaitingSignature: '待簽名',
+      signed: '已簽名',
+      netPayable: '應付淨額',
+      payee: '收款人',
+      prPersonnel: 'PR 人員',
+      drinkTipRecords: '酒水與小費紀錄',
+      hide: '收起',
+      details: '詳情',
+      sourceScan: '掃描收據',
+      sourceManual: '自行記錄',
+      sourceCheckin: '簽退時自動封存',
+      lineDate: '{y}年{mon}{d}日',
+      receiptDetails: '收據詳情',
+      detailDateTime: '日期與時間',
+      detailOutlet: '門店',
+      detailReceipt: '收據',
+      detailCommission: '佣金',
+      matchedToThisPv: '已匹配到此結算單',
+      pendingAgencyVerify: '待經紀公司核實',
+      yourSignature: '你的簽名',
+      signaturePending: '待簽名',
+      signedWithName: '已簽名 · {name} — 雙方已簽 · 轉帳處理中',
+      signedSealed: '已簽名 — 雙方已簽 · 轉帳處理中',
+      notSentYet: '尚未傳送給你 — 等待經紀公司',
+      signVoucher: '簽署結算單',
+      paidInBank: '已支付 · {amount} 已到帳',
+      viewInHistory: '在紀錄中查看 · 結算紀錄',
+      signSheetHint: '用手指繪製簽名 — 簽名會儲存在結算單上，並列印在 PDF 中。',
+      signingAs: '簽署人',
+      thisAccount: '此帳號',
+      signatureField: '簽名',
+      confirmSignature: '確認簽名',
+      drawSignatureTitle: '請繪製簽名',
+      drawSignatureBody: '請先用手指在簽名區簽名，再確認。',
+      noVoucherTitle: '暫無可簽署的結算單',
+      noVoucherBody: '此結算單不在伺服器上 — 請返回結算頁重新整理後再試。',
+      notSignedTitle: '未簽名',
+      notSignedBody: '{reason}\n\n未儲存任何內容 — 有訊號時請重試。',
+      couldNotReachAgency: '無法連線經紀公司。',
+    },
+    scan: {
+      titleEdit: '編輯自行記錄',
+      titleSelfLogTips: '自行記錄小費',
+      titleSelfLogDrinks: '自行記錄酒水',
+      titleScanTips: '掃描小費收據',
+      titleScanDrinks: '掃描酒水收據',
+      itemNounTip: '小費 / 服務項目',
+      itemNounTipPlural: '小費 / 服務項目',
+      itemNounDrink: '酒水',
+      itemNounDrinkPlural: '酒水',
+      subEdit: '編輯後經紀公司會重新核實。',
+      subScanWindow: '簽到與簽退之間掃描的收據計入本班次的結算單。',
+      gateTitle: '請先簽到',
+      gateBody: '請先在出勤頁簽到，再掃描收據。',
+      goToCheckIn: '前往簽到',
+      activeShift: '目前班次 · {outlet}',
+      belongsTo: '歸屬',
+      receiptsLogged: '已記錄 {n} 張收據',
+      timeIn: '簽到 {time}',
+      pointAndSnap: '對準收據拍照',
+      scanningOcr: '掃描中…正在讀取 OCR 欄位',
+      ocrExtracted: '— OCR 讀取結果 —',
+      ocrOrderNo: '訂單號：{v}',
+      ocrDate: '日期：{v}',
+      ocrTime: '時間：{v}',
+      ocrOutlet: '門店：{v}',
+      ocrDetectedAsRead: 'OCR 辨識結果 · 按收據原樣讀取',
+      eachPrice: '每件 {price}',
+      wasHappyHour: '（原價 {price} · 歡樂時光 −{pct}%）',
+      detectedSummary: '{items} 項{noun} · {units} 件 · {total} · 預計佣金 {commission}',
+      setQuantityAtLeastOne: '請至少為一個項目設定數量。',
+      saving: '儲存中…',
+      confirmAndLog: '確認並記錄收據',
+      scanNow: '立即掃描收據',
+      manualPill: '手動自行記錄',
+      keyInAmount: '輸入金額 · 由經紀公司核實。',
+      ocrMatchesCatalog: 'OCR 讀取收據並比對本門店的 {n} 項{noun}',
+      dateIgnored: '已忽略「{raw}」 → {parsed} · 與本班次相差 {days} 天（{shift}）',
+      ocrLinesOne: '{n} 行',
+      ocrLinesMany: '{n} 行',
+      showOcrText: '查看 OCR 讀到的內容（{lines}）',
+      hideOcrText: '隱藏 OCR 讀到的內容（{lines}）',
+      ocrRawHint: '只有當項目名稱出現在以上某一行時才會被辨識。如果這裡缺少名稱或名稱有誤，問題出在紙本收據或照片上 — 請把收據放平、靠近後重新掃描。',
+      notFoundOnScan: '掃描未辨識 · 若收據上有請手動新增',
+      eachPriceNotRead: '每件 {price} · OCR 未讀到此項',
+      addItem: '+ 新增',
+      onlyAddWhatShows: '只新增收據上確實有的項目 — 經紀公司會對照你的照片核實。',
+      pointOcrLists: '對準收據 — OCR 會列出讀到的{noun}',
+      scanAgainCatch: '再掃描一次，補上 OCR 漏掉的{noun}',
+      scanItems: '掃描{noun}',
+      scanAgain: '重新掃描',
+      ocrDetectedAdjust: 'OCR 已辨識 · 調整數量',
+      noQtyPrinted: '收據上沒有印數量 — 請核對這一項',
+      selfLogSummary: '{items} 項{noun} · {units} 件',
+      commissionPreview: '佣金預覽：',
+      tipAmountRm: '小費金額（RM）',
+      drinkAmountRm: '酒水金額（RM）',
+      proofRetakeTitle: '證明照片 · 重拍即可取代',
+      proofRequiredTitle: '證明照片 · 必填',
+      proofRetakeHint: '重新拍一張 — 新照片會取代此紀錄已儲存的照片。',
+      proofRequiredHint: '拍下收據作為證明 — 經紀公司會據此核實。',
+      retakeAgain: '再重拍一次',
+      retakePhoto: '重拍照片',
+      addAnotherPhoto: '再新增一張照片',
+      takeOrAttachPhoto: '拍照 / 上傳照片',
+      snapToEnableSubmit: '⚠ 拍一張照片後才能提交。',
+      noteOptional: '給經紀公司的備註（選填）',
+      noteRequired: '給經紀公司的備註（必填）',
+      notePlaceholder: '收據上的數量 / 價格 / 日期不清楚？請說明 — 或確認全部一致。',
+      updateSelfLog: '更新自行記錄',
+      submitScanFirst: '提交自行記錄 · 請先掃描{noun}',
+      writeNoteToSubmit: '填寫給經紀公司的備註後才能提交',
+      submitSelfLogAmount: '提交自行記錄 · {amount}',
+      snapProofToSubmit: '拍下證明照片後提交',
+      submitSelfLog: '提交自行記錄',
+      receiptLogged: '收據已記錄',
+      addedToStatus: '已加入簽到頁狀態 · 待經紀公司核實。',
+      belongsToPv: '歸屬結算單：',
+      receiptRef: '收據 {no}',
+      orderRef: '訂單 {no}',
+      scanAnother: '再掃描一張',
+      backToCheckIn: '返回簽到',
+      wrongScanPrefix: '掃錯了？簽到頁 →',
+      wrongScanSuffix: '· 待審核的自行記錄可以編輯或刪除。',
+      backToAttendance: '返回出勤',
+      ocrUnavailable: '手機端 OCR 需要開發版應用。照片已保留作為證明 — 請改用自行記錄。',
+      dateDroppedNote: '它確實讀到了「{raw}」（{parsed}），但與本班次（{shift}）相差 {days} 天 — 距離太遠，不可能是這張收據的日期，因此被丟棄，以免記到錯誤的週次。',
+      noneMatchedWithList: 'OCR 讀取了照片，但沒有找到 {outlet} 的任何{noun} — 它查找的是：{wanted}。請掃描印有其中項目的收據，或在下方自行記錄（照片已保留作為證明）。',
+      noneMatched: 'OCR 讀取了照片，但沒有找到 {outlet} 的任何{noun}。請掃描印有這些項目的收據，或在下方自行記錄（照片已保留作為證明）。',
+      fieldOrderNo: '訂單號',
+      fieldDate: '日期',
+      fieldTime: '時間',
+      andJoin: '、',
+      couldNotReadFields: 'OCR 還讀不到收據上的{fields} — 請靠近收據的那一部分（放平、避免反光）後重新掃描。已讀到的欄位會保留。',
+      couldNotSave: '儲存失敗，請重試。',
+      setQuantityFirst: '請先設定{noun}的數量。',
+      snapProofFirst: '提交前請先拍一張證明照片。',
+      setQuantityAtLeastOneNoun: '請至少為一項{noun}設定數量。',
+      setAmountFirst: '請先輸入金額。',
     },
   },
 };

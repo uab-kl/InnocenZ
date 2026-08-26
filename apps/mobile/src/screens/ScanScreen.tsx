@@ -54,6 +54,7 @@ import {
 } from '../components/icons';
 import { pickProofPhotos } from '../lib/proof-photo';
 import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
+import { useLocale, formatMessage } from '../i18n';
 
 type Phase = 'idle' | 'scanning' | 'review' | 'manual' | 'logged';
 
@@ -75,6 +76,7 @@ export function ScanScreen({
   mode: ScanMode;
   editId?: string;
 }) {
+  const { t } = useLocale();
   const { goBack, setTab } = usePrNav();
   // Detail screen outside the tab shell — the back row must clear the status bar.
   const insets = useSafeAreaInsets();
@@ -178,14 +180,25 @@ export function ScanScreen({
     () => menuForScanCategory(drinkMenu, category),
     [drinkMenu, category],
   );
-  const categoryLabel = category === 'tips' ? 'Tips' : 'Drinks';
-  const itemNoun = category === 'tips' ? 'tip / service item' : 'drink';
+  // Rendered nouns only — `category` itself stays the English 'tips' / 'drinks'
+  // value the menu slice and the wire payload are keyed on. Chinese has no
+  // plural, so the two forms are spelled out and picked by count rather than
+  // built by appending an 's'.
+  const itemNoun =
+    category === 'tips' ? t.scan.itemNounTip : t.scan.itemNounDrink;
+  const itemNounPlural =
+    category === 'tips' ? t.scan.itemNounTipPlural : t.scan.itemNounDrinkPlural;
+  const nounFor = (n: number) => (n === 1 ? itemNoun : itemNounPlural);
 
   const pageTitle = editId
-    ? 'Edit self-log'
+    ? t.scan.titleEdit
     : phase === 'manual' && mode === 'selflog'
-      ? `Self-log ${categoryLabel.toLowerCase()}`
-      : `Scan ${categoryLabel.toLowerCase()} receipt`;
+      ? category === 'tips'
+        ? t.scan.titleSelfLogTips
+        : t.scan.titleSelfLogDrinks
+      : category === 'tips'
+        ? t.scan.titleScanTips
+        : t.scan.titleScanDrinks;
 
   const [drinkQtys, setDrinkQtys] = useState<Record<string, number>>({});
   // What the LAST real OCR pass read off the receipt.
@@ -331,6 +344,10 @@ export function ScanScreen({
     (s, d) => s + (drinkQtys[d.id] ?? 0),
     0,
   );
+  /** How many distinct catalog items carry a quantity — picks the noun's form. */
+  const detectedItemCount = detected.filter(
+    (d) => (drinkQtys[d.id] ?? 0) > 0,
+  ).length;
   const detectedCommission = detected.reduce(
     (s, d) => s + commissionForItem(d, salesFor(d, drinkQtys[d.id] ?? 0)),
     0,
@@ -343,6 +360,14 @@ export function ScanScreen({
   // Proto-style self-log: item rows appear only AFTER a scan pass (except in
   // edit mode, where the whole list shows so quantities can be adjusted).
   const manualRows = editId ? categoryMenu : detected;
+  /** Rows carrying a quantity — the count that picks the noun's form. */
+  const manualItemCount = manualRows.filter(
+    (d) => (drinkQtys[d.id] ?? 0) > 0,
+  ).length;
+  const manualUnitCount = manualRows.reduce(
+    (n, d) => n + (drinkQtys[d.id] ?? 0),
+    0,
+  );
   const manualScanAttempted = receiptShot != null || detectedIds.length > 0;
   /**
    * This outlet's items that the scan did NOT find.
@@ -403,9 +428,7 @@ export function ScanScreen({
     const text = await recognizeReceiptText(shot.uri);
     if (text == null) {
       // OCR engine not in this build (web preview / Expo Go — needs the dev app).
-      setScanIssue(
-        'On-phone OCR needs the dev app build. Photo kept as proof — self-log the items instead.',
-      );
+      setScanIssue(t.scan.ocrUnavailable);
       keepAsProof(shot.dataUrl);
       setPhase('manual');
       return;
@@ -427,11 +450,15 @@ export function ScanScreen({
     setDateRejected((prev) =>
       mergedDate ? null : (parsed.dateRejected ?? prev),
     );
-    const rejectedNote = mergedDate
-      ? ''
-      : parsed.dateRejected
-        ? ` It did read “${parsed.dateRejected.raw}” (${parsed.dateRejected.parsed}), but that is ${parsed.dateRejected.driftDays} days from this shift on ${shiftDateIso} — too far to be this receipt's date, so it was dropped rather than logged against the wrong week.`
-        : '';
+    const rejectedNote =
+      mergedDate || !parsed.dateRejected
+        ? ''
+        : ` ${formatMessage(t.scan.dateDroppedNote, {
+            raw: parsed.dateRejected.raw,
+            parsed: parsed.dateRejected.parsed,
+            days: parsed.dateRejected.driftDays,
+            shift: shiftDateIso,
+          })}`;
     // Captured BEFORE the early returns below: a scan that found nothing is
     // exactly the one whose text needs looking at.
     setOcrLines(parsed.lines);
@@ -439,16 +466,23 @@ export function ScanScreen({
       // Name what the matcher was hunting for — "matched none" without the
       // list reads like a scanner fault when the paper simply doesn't print
       // any of this outlet's configured items.
-      const wanted = categoryMenu
-        .slice(0, 4)
-        .map((d) => d.name)
-        .join(', ');
+      // Item names are the outlet's own data — never translated, only listed.
+      const wanted =
+        categoryMenu
+          .slice(0, 4)
+          .map((d) => d.name)
+          .join(', ') + (categoryMenu.length > 4 ? ', …' : '');
       setScanIssue(
-        `OCR read the photo but found none of ${outlet}'s ${itemNoun}s` +
-          (wanted
-            ? ` — it looks for: ${wanted}${categoryMenu.length > 4 ? ', …' : ''}.`
-            : '.') +
-          ` Scan a receipt printing one of those, or self-log below (photo kept as proof).`,
+        wanted
+          ? formatMessage(t.scan.noneMatchedWithList, {
+              outlet,
+              noun: itemNounPlural,
+              wanted,
+            })
+          : formatMessage(t.scan.noneMatched, {
+              outlet,
+              noun: itemNounPlural,
+            }),
       );
       keepAsProof(shot.dataUrl);
       setPhase('manual');
@@ -459,14 +493,15 @@ export function ScanScreen({
     // Self-log records whatever was read but is never blocked by it.
     if (target === 'review' && (!mergedDate || !mergedOrderNo || !mergedTime)) {
       const missing = [
-        !mergedOrderNo ? 'order number' : null,
-        !mergedDate ? 'date' : null,
-        !mergedTime ? 'time' : null,
+        !mergedOrderNo ? t.scan.fieldOrderNo : null,
+        !mergedDate ? t.scan.fieldDate : null,
+        !mergedTime ? t.scan.fieldTime : null,
       ]
         .filter(Boolean)
-        .join(' and ');
+        .join(t.scan.andJoin);
       setScanIssue(
-        `OCR couldn't read the receipt's ${missing} yet — get closer to that part of the paper (flat, no glare) and scan again. Fields already read are kept.${rejectedNote}`,
+        formatMessage(t.scan.couldNotReadFields, { fields: missing }) +
+          rejectedNote,
       );
       setPhase('idle');
       return;
@@ -513,9 +548,7 @@ export function ScanScreen({
       await fn();
       setPhase('logged');
     } catch (e) {
-      setSubmitError(
-        e instanceof Error ? e.message : 'Could not save. Try again.',
-      );
+      setSubmitError(e instanceof Error ? e.message : t.scan.couldNotSave);
     } finally {
       setSubmitting(false);
     }
@@ -550,8 +583,7 @@ export function ScanScreen({
   const confirmOcr = () =>
     void runSubmit(async () => {
       const items = buildReceiptItems(detected);
-      if (items.length === 0)
-        throw new Error('Set a quantity for at least one item.');
+      if (items.length === 0) throw new Error(t.scan.setQuantityAtLeastOne);
       /*
        * RE-SCAN of an existing row: the SERVER swaps it, in ONE call.
        *
@@ -594,7 +626,9 @@ export function ScanScreen({
           // Menu edit: recompute from the (restored, then adjusted) quantities.
           const items = categoryMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
           if (items.length === 0)
-            throw new Error(`Set a ${itemNoun} quantity first.`);
+            throw new Error(
+              formatMessage(t.scan.setQuantityFirst, { noun: itemNoun }),
+            );
           const [first, ...rest] = items;
           const firstQty = drinkQtys[first.id] ?? 0;
           const firstAmt = salesFor(first, firstQty);
@@ -648,13 +682,17 @@ export function ScanScreen({
       // is already gated on this; this is the backstop so it can never persist
       // without it).
       if (proofRequired && proofForSubmit.length === 0) {
-        throw new Error('Snap a proof photo before you submit.');
+        throw new Error(t.scan.snapProofFirst);
       }
       const proof = proofForSubmit.length ? proofForSubmit : undefined;
       if (showItemMenu) {
         const items = buildReceiptItems(categoryMenu);
         if (items.length === 0) {
-          throw new Error(`Set a quantity for at least one ${itemNoun}.`);
+          throw new Error(
+            formatMessage(t.scan.setQuantityAtLeastOneNoun, {
+              noun: itemNoun,
+            }),
+          );
         }
         // The whole self-log saves as ONE receipt (source 'manual' — agency
         // verifies it), items FK-linked, scan photo attached as the proof.
@@ -672,7 +710,7 @@ export function ScanScreen({
         setServerReceiptNo(receipt.receiptNo);
       } else {
         const amt = Number(amount) || 0;
-        if (amt <= 0) throw new Error('Set an amount first.');
+        if (amt <= 0) throw new Error(t.scan.setAmountFirst);
         await logLine({
           kind: category,
           source: 'manual',
@@ -697,37 +735,39 @@ export function ScanScreen({
         <Text style={styles.pageTitle}>{pageTitle}</Text>
       </View>
       <Text style={styles.pageSub}>
-        {editId
-          ? 'Edit — agency re-verifies.'
-          : "Scans between Time-In and Time-Out go to this shift's PV."}
+        {editId ? t.scan.subEdit : t.scan.subScanWindow}
       </Text>
 
       {!onDuty ? (
         <View style={styles.gate}>
           <Shield size={22} color={C.muted} />
-          <Text style={styles.gateTitle}>Check in first</Text>
-          <Text style={styles.gateBody}>
-            Check in on Attendance before scanning receipts.
-          </Text>
+          <Text style={styles.gateTitle}>{t.scan.gateTitle}</Text>
+          <Text style={styles.gateBody}>{t.scan.gateBody}</Text>
           <Pressable
             style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
             onPress={() => setTab('checkin')}
           >
             <Text style={[styles.primaryText, { color: '#241a08' }]}>
-              Go to Check-In
+              {t.scan.goToCheckIn}
             </Text>
           </Pressable>
         </View>
       ) : (
         <>
           <View style={styles.activeCard}>
-            <Text style={styles.activeTitle}>Active shift · {outlet}</Text>
+            <Text style={styles.activeTitle}>
+              {formatMessage(t.scan.activeShift, { outlet })}
+            </Text>
             <Text style={styles.activeMeta}>
-              Belongs to <Text style={styles.activeBold}>{pvId}</Text>
+              {t.scan.belongsTo} <Text style={styles.activeBold}>{pvId}</Text>
               {' · '}
-              {receiptLines.length} receipt(s) logged
+              {formatMessage(t.scan.receiptsLogged, {
+                n: receiptLines.length,
+              })}
               {' · '}
-              Time-In {fmtAttendanceStamp(checkedInAt)}
+              {formatMessage(t.scan.timeIn, {
+                time: fmtAttendanceStamp(checkedInAt),
+              })}
             </Text>
           </View>
 
@@ -740,7 +780,7 @@ export function ScanScreen({
                       <Text style={styles.scanIssueText}>{scanIssue}</Text>
                     )}
                     <Text style={styles.scanIdleHint}>
-                      Point at the receipt and snap
+                      {t.scan.pointAndSnap}
                     </Text>
                   </>
                 )}
@@ -748,7 +788,7 @@ export function ScanScreen({
                   <>
                     <ActivityIndicator color={C.violetL} size="large" />
                     <Text style={styles.scanScanning}>
-                      Scanning… reading OCR fields
+                      {t.scan.scanningOcr}
                     </Text>
                   </>
                 )}
@@ -758,18 +798,28 @@ export function ScanScreen({
             {phase === 'review' && (
               <>
                 <View style={styles.ocrBlock}>
-                  <Text style={styles.ocrHead}>— OCR EXTRACTED —</Text>
-                  <Text style={styles.ocrLine}>Order No: {receiptNo}</Text>
-                  <Text style={styles.ocrLine}>Date: {receiptDate}</Text>
-                  <Text style={styles.ocrLine}>Time: {receiptTime}</Text>
-                  <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
+                  <Text style={styles.ocrHead}>{t.scan.ocrExtracted}</Text>
+                  <Text style={styles.ocrLine}>
+                    {formatMessage(t.scan.ocrOrderNo, {
+                      v: receiptNo ?? '—',
+                    })}
+                  </Text>
+                  <Text style={styles.ocrLine}>
+                    {formatMessage(t.scan.ocrDate, { v: receiptDate ?? '—' })}
+                  </Text>
+                  <Text style={styles.ocrLine}>
+                    {formatMessage(t.scan.ocrTime, { v: receiptTime ?? '—' })}
+                  </Text>
+                  <Text style={styles.ocrLine}>
+                    {formatMessage(t.scan.ocrOutlet, { v: outlet })}
+                  </Text>
                 </View>
 
                 {/* A pure OCR scan is untouchable: what the receipt says is what
                     logs — no quantity edits, no manual additions. Wrong read?
                     The PR uses Self-log from Check-In instead. */}
                 <Text style={styles.fieldLabel}>
-                  OCR detected · as read from the receipt
+                  {t.scan.ocrDetectedAsRead}
                 </Text>
                 {detected.map((d) => {
                   const qty = drinkQtys[d.id] ?? 0;
@@ -778,9 +828,14 @@ export function ScanScreen({
                       <View style={{ flex: 1 }}>
                         <Text style={styles.drinkName}>{d.name}</Text>
                         <Text style={styles.drinkUnit}>
-                          {formatRM(unitPriceFor(d))} each
+                          {formatMessage(t.scan.eachPrice, {
+                            price: formatRM(unitPriceFor(d)),
+                          })}
                           {discountActive && d.category === 'drink'
-                            ? ` (was ${formatRM(d.priceRm)} · HH −${discountPct}%)`
+                            ? ` ${formatMessage(t.scan.wasHappyHour, {
+                                price: formatRM(d.priceRm),
+                                pct: discountPct,
+                              })}`
                             : ''}
                           {qty > 0
                             ? ` · ${formatRM(unitPriceFor(d))} × ${qty} = ${formatRM(salesFor(d, qty))}`
@@ -794,8 +849,14 @@ export function ScanScreen({
 
                 <Text style={styles.cardMeta}>
                   {detectedUnits > 0
-                    ? `${detected.filter((d) => (drinkQtys[d.id] ?? 0) > 0).length} ${itemNoun}(s) · ${detectedUnits} unit(s) · ${formatRM(detectedTotal)} · Est. commission ${formatRM(detectedCommission)}`
-                    : 'Set a quantity for at least one item.'}
+                    ? formatMessage(t.scan.detectedSummary, {
+                        items: detectedItemCount,
+                        noun: nounFor(detectedItemCount),
+                        units: detectedUnits,
+                        total: formatRM(detectedTotal),
+                        commission: formatRM(detectedCommission),
+                      })
+                    : t.scan.setQuantityAtLeastOne}
                 </Text>
                 <Pressable
                   style={[
@@ -808,7 +869,7 @@ export function ScanScreen({
                 >
                   <Camera size={16} color="#241a08" />
                   <Text style={[styles.primaryText, { color: '#241a08' }]}>
-                    {submitting ? 'Saving…' : 'Confirm & log receipt'}
+                    {submitting ? t.scan.saving : t.scan.confirmAndLog}
                   </Text>
                 </Pressable>
                 {submitError && (
@@ -829,7 +890,7 @@ export function ScanScreen({
               >
                 <Camera size={16} color="#241a08" />
                 <Text style={[styles.primaryText, { color: '#241a08' }]}>
-                  Scan receipt now
+                  {t.scan.scanNow}
                 </Text>
               </Pressable>
             )}
@@ -837,15 +898,13 @@ export function ScanScreen({
             {phase === 'manual' && (
               <View>
                 <View style={styles.manualPill}>
-                  <Text style={styles.manualPillText}>Manual self-log</Text>
+                  <Text style={styles.manualPillText}>{t.scan.manualPill}</Text>
                 </View>
                 {scanIssue && (
                   <Text style={styles.scanIssueText}>{scanIssue}</Text>
                 )}
                 {!showItemMenu && (
-                  <Text style={styles.scanIdleHint}>
-                    Key in the amount · agency verifies.
-                  </Text>
+                  <Text style={styles.scanIdleHint}>{t.scan.keyInAmount}</Text>
                 )}
                 {showItemMenu ? (
                   <>
@@ -856,36 +915,50 @@ export function ScanScreen({
                           {outlet.toUpperCase()}
                         </Text>
                         <Text style={styles.selfLogHeadSub}>
-                          OCR reads the receipt & matches this outlet's{' '}
-                          {categoryMenu.length} {itemNoun}
-                          {categoryMenu.length === 1 ? '' : 's'}
+                          {formatMessage(t.scan.ocrMatchesCatalog, {
+                            n: categoryMenu.length,
+                            noun: nounFor(categoryMenu.length),
+                          })}
                         </Text>
                       </View>
                     </View>
 
                     {!editId && manualScanAttempted && (
                       <View style={[styles.ocrBlock, { marginTop: 10 }]}>
-                        <Text style={styles.ocrHead}>— OCR EXTRACTED —</Text>
-                        <Text style={styles.ocrLine}>
-                          Order No: {receiptNo ?? '—'}
+                        <Text style={styles.ocrHead}>
+                          {t.scan.ocrExtracted}
                         </Text>
                         <Text style={styles.ocrLine}>
-                          Date: {receiptDate ?? '—'}
+                          {formatMessage(t.scan.ocrOrderNo, {
+                            v: receiptNo ?? '—',
+                          })}
+                        </Text>
+                        <Text style={styles.ocrLine}>
+                          {formatMessage(t.scan.ocrDate, {
+                            v: receiptDate ?? '—',
+                          })}
                         </Text>
                         {/* Why the date is blank when the paper clearly printed
                             one — otherwise this reads as an OCR failure and the
                             PR re-photographs a part that was never the problem. */}
                         {!receiptDate && dateRejected && (
                           <Text style={styles.ocrLineDropped}>
-                            ignored “{dateRejected.raw}” → {dateRejected.parsed}{' '}
-                            · {dateRejected.driftDays} days from this shift (
-                            {shiftDateIso})
+                            {formatMessage(t.scan.dateIgnored, {
+                              raw: dateRejected.raw,
+                              parsed: dateRejected.parsed,
+                              days: dateRejected.driftDays,
+                              shift: shiftDateIso,
+                            })}
                           </Text>
                         )}
                         <Text style={styles.ocrLine}>
-                          Time: {receiptTime ?? '—'}
+                          {formatMessage(t.scan.ocrTime, {
+                            v: receiptTime ?? '—',
+                          })}
                         </Text>
-                        <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
+                        <Text style={styles.ocrLine}>
+                          {formatMessage(t.scan.ocrOutlet, { v: outlet })}
+                        </Text>
                         {ocrLines.length > 0 && (
                           <>
                             <Pressable
@@ -893,9 +966,19 @@ export function ScanScreen({
                               hitSlop={8}
                             >
                               <Text style={styles.ocrToggle}>
-                                {showOcrText ? 'Hide' : 'Show'} what OCR read (
-                                {ocrLines.length} line
-                                {ocrLines.length === 1 ? '' : 's'})
+                                {formatMessage(
+                                  showOcrText
+                                    ? t.scan.hideOcrText
+                                    : t.scan.showOcrText,
+                                  {
+                                    lines: formatMessage(
+                                      ocrLines.length === 1
+                                        ? t.scan.ocrLinesOne
+                                        : t.scan.ocrLinesMany,
+                                      { n: ocrLines.length },
+                                    ),
+                                  },
+                                )}
                               </Text>
                             </Pressable>
                             {showOcrText && (
@@ -909,10 +992,7 @@ export function ScanScreen({
                                   </Text>
                                 ))}
                                 <Text style={styles.ocrRawHint}>
-                                  An item is only found when its name is on one
-                                  of these lines. If a name is missing or
-                                  misspelt here, the paper or the photo is the
-                                  problem — scan again, flatter and closer.
+                                  {t.scan.ocrRawHint}
                                 </Text>
                               </View>
                             )}
@@ -926,28 +1006,30 @@ export function ScanScreen({
                       missingRows.length > 0 && (
                         <View style={styles.missingBlock}>
                           <Text style={styles.fieldLabel}>
-                            NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER
+                            {t.scan.notFoundOnScan}
                           </Text>
                           {missingRows.map((d) => (
                             <View key={d.id} style={styles.drinkRow}>
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.drinkName}>{d.name}</Text>
                                 <Text style={styles.drinkUnit}>
-                                  {formatRM(unitPriceFor(d))} each · OCR did not
-                                  read this one
+                                  {formatMessage(t.scan.eachPriceNotRead, {
+                                    price: formatRM(unitPriceFor(d)),
+                                  })}
                                 </Text>
                               </View>
                               <Pressable
                                 style={styles.missingAddBtn}
                                 onPress={() => addMissingItem(d.id)}
                               >
-                                <Text style={styles.missingAddText}>+ Add</Text>
+                                <Text style={styles.missingAddText}>
+                                  {t.scan.addItem}
+                                </Text>
                               </Pressable>
                             </View>
                           ))}
                           <Text style={styles.missingHint}>
-                            Only add what the receipt actually shows — the
-                            agency checks these against your photo.
+                            {t.scan.onlyAddWhatShows}
                           </Text>
                         </View>
                       )}
@@ -957,8 +1039,12 @@ export function ScanScreen({
                         <Camera size={28} color={C.goldL} />
                         <Text style={styles.selfLogScanHint}>
                           {manualRows.length === 0
-                            ? `Point at the receipt — OCR lists the ${itemNoun}s it reads`
-                            : `Scan again to catch a ${itemNoun} OCR missed`}
+                            ? formatMessage(t.scan.pointOcrLists, {
+                                noun: itemNounPlural,
+                              })
+                            : formatMessage(t.scan.scanAgainCatch, {
+                                noun: itemNoun,
+                              })}
                         </Text>
                         <Pressable
                           style={styles.selfLogScanBtn}
@@ -967,8 +1053,10 @@ export function ScanScreen({
                           <Camera size={14} color="#241a08" />
                           <Text style={styles.selfLogScanBtnText}>
                             {manualRows.length === 0
-                              ? `Scan ${itemNoun}s`
-                              : 'Scan again'}
+                              ? formatMessage(t.scan.scanItems, {
+                                  noun: itemNounPlural,
+                                })
+                              : t.scan.scanAgain}
                           </Text>
                         </Pressable>
                       </View>
@@ -976,7 +1064,7 @@ export function ScanScreen({
 
                     {manualRows.length > 0 && (
                       <Text style={styles.fieldLabel}>
-                        OCR DETECTED · ADJUST QUANTITY
+                        {t.scan.ocrDetectedAdjust}
                       </Text>
                     )}
                     {manualRows.map((d) => (
@@ -984,9 +1072,14 @@ export function ScanScreen({
                         <View style={{ flex: 1 }}>
                           <Text style={styles.drinkName}>{d.name}</Text>
                           <Text style={styles.drinkUnit}>
-                            {formatRM(unitPriceFor(d))} each
+                            {formatMessage(t.scan.eachPrice, {
+                              price: formatRM(unitPriceFor(d)),
+                            })}
                             {discountActive && d.category === 'drink'
-                              ? ` (was ${formatRM(d.priceRm)} · HH −${discountPct}%)`
+                              ? ` ${formatMessage(t.scan.wasHappyHour, {
+                                  price: formatRM(d.priceRm),
+                                  pct: discountPct,
+                                })}`
                               : ''}
                             {(drinkQtys[d.id] ?? 0) > 0
                               ? ` · × ${drinkQtys[d.id]} = ${formatRM(salesFor(d, drinkQtys[d.id] ?? 0))}`
@@ -994,7 +1087,7 @@ export function ScanScreen({
                           </Text>
                           {assumedQtyIds.has(d.id) && (
                             <Text style={styles.qtyAssumed}>
-                              Receipt printed no quantity — check this one
+                              {t.scan.noQtyPrinted}
                             </Text>
                           )}
                         </View>
@@ -1031,25 +1124,18 @@ export function ScanScreen({
                       <View style={styles.selfLogSummary}>
                         <View style={styles.selfLogSummaryRow}>
                           <Text style={styles.selfLogSummaryLabel}>
-                            {
-                              manualRows.filter(
-                                (d) => (drinkQtys[d.id] ?? 0) > 0,
-                              ).length
-                            }{' '}
-                            {itemNoun}
-                            {manualRows.length === 1 ? '' : 's'} ·{' '}
-                            {manualRows.reduce(
-                              (n, d) => n + (drinkQtys[d.id] ?? 0),
-                              0,
-                            )}{' '}
-                            unit(s)
+                            {formatMessage(t.scan.selfLogSummary, {
+                              items: manualItemCount,
+                              noun: nounFor(manualItemCount),
+                              units: manualUnitCount,
+                            })}
                           </Text>
                           <Text style={styles.selfLogSummaryTotal}>
                             {formatRM(menuTotal)}
                           </Text>
                         </View>
                         <Text style={styles.selfLogSummaryComm}>
-                          Commission preview:{' '}
+                          {t.scan.commissionPreview}{' '}
                           <Text style={styles.activeBold}>
                             {formatRM(menuCommission)}
                           </Text>
@@ -1061,8 +1147,8 @@ export function ScanScreen({
                   <>
                     <Text style={styles.fieldLabel}>
                       {category === 'tips'
-                        ? 'Tip amount (RM)'
-                        : 'Drink amount (RM)'}
+                        ? t.scan.tipAmountRm
+                        : t.scan.drinkAmountRm}
                     </Text>
                     <TextInput
                       value={amount}
@@ -1079,14 +1165,14 @@ export function ScanScreen({
                       <Camera size={16} color={C.goldL} />
                       <Text style={styles.proofTitle}>
                         {editId
-                          ? 'Proof photo · retake to replace'
-                          : 'Proof photo · required'}
+                          ? t.scan.proofRetakeTitle
+                          : t.scan.proofRequiredTitle}
                       </Text>
                     </View>
                     <Text style={styles.proofHint}>
                       {editId
-                        ? 'Snap again — the new picture replaces the one saved with this log.'
-                        : 'Snap the receipt as proof — agency verifies against it.'}
+                        ? t.scan.proofRetakeHint
+                        : t.scan.proofRequiredHint}
                     </Text>
                     <Pressable
                       style={styles.proofBtn}
@@ -1108,11 +1194,11 @@ export function ScanScreen({
                       <Text style={styles.proofBtnText}>
                         {editId
                           ? proofPhotos.length
-                            ? 'Retake again'
-                            : 'Retake photo'
+                            ? t.scan.retakeAgain
+                            : t.scan.retakePhoto
                           : proofPhotos.length
-                            ? 'Add another photo'
-                            : 'Take / attach photo'}
+                            ? t.scan.addAnotherPhoto
+                            : t.scan.takeOrAttachPhoto}
                       </Text>
                     </Pressable>
                     {proofPhotos.length > 0 ? (
@@ -1142,20 +1228,20 @@ export function ScanScreen({
                       </View>
                     ) : editId ? null : (
                       <Text style={styles.proofReminder}>
-                        ⚠ Snap a photo to enable Submit.
+                        {t.scan.snapToEnableSubmit}
                       </Text>
                     )}
                   </View>
                 )}
 
                 <Text style={styles.fieldLabel}>
-                  Note for agency {editId ? '(optional)' : '(required)'}
+                  {editId ? t.scan.noteOptional : t.scan.noteRequired}
                 </Text>
                 <TextInput
                   value={note}
                   onChangeText={setNote}
                   style={styles.input}
-                  placeholder="Unclear quantity / price / date on the receipt? Explain — or confirm all match."
+                  placeholder={t.scan.notePlaceholder}
                   placeholderTextColor={C.muted2}
                 />
                 <Pressable
@@ -1182,20 +1268,24 @@ export function ScanScreen({
                   <Pencil size={16} color="#241a08" />
                   <Text style={[styles.primaryText, { color: '#241a08' }]}>
                     {submitting
-                      ? 'Saving…'
+                      ? t.scan.saving
                       : editId
-                        ? 'Update self-log'
+                        ? t.scan.updateSelfLog
                         : showItemMenu
                           ? menuTotal <= 0
-                            ? `Submit self-log · scan ${itemNoun}s`
+                            ? formatMessage(t.scan.submitScanFirst, {
+                                noun: itemNounPlural,
+                              })
                             : manualNoteMissing
-                              ? 'Write the agency note to submit'
-                              : `Submit self-log · ${formatRM(menuTotal)}`
+                              ? t.scan.writeNoteToSubmit
+                              : formatMessage(t.scan.submitSelfLogAmount, {
+                                  amount: formatRM(menuTotal),
+                                })
                           : missingProof
-                            ? 'Snap proof to submit'
+                            ? t.scan.snapProofToSubmit
                             : manualNoteMissing
-                              ? 'Write the agency note to submit'
-                              : 'Submit self-log'}
+                              ? t.scan.writeNoteToSubmit
+                              : t.scan.submitSelfLog}
                   </Text>
                 </Pressable>
                 {submitError && (
@@ -1208,15 +1298,20 @@ export function ScanScreen({
               <View>
                 <View style={styles.okRow}>
                   <Check size={20} color={C.green} />
-                  <Text style={styles.okTitle}>Receipt logged</Text>
+                  <Text style={styles.okTitle}>{t.scan.receiptLogged}</Text>
                 </View>
-                <Text style={styles.scanIdleHint}>
-                  Added to Check-In STATUS · pending until agency verifies.
-                </Text>
+                <Text style={styles.scanIdleHint}>{t.scan.addedToStatus}</Text>
                 <Text style={styles.activeMeta}>
-                  Belongs to PV: <Text style={styles.activeBold}>{pvId}</Text>
-                  {serverReceiptNo ? ` · Receipt ${serverReceiptNo}` : ''}
-                  {receiptNo ? ` · Order ${receiptNo}` : ''}
+                  {t.scan.belongsToPv}{' '}
+                  <Text style={styles.activeBold}>{pvId}</Text>
+                  {serverReceiptNo
+                    ? ` · ${formatMessage(t.scan.receiptRef, {
+                        no: serverReceiptNo,
+                      })}`
+                    : ''}
+                  {receiptNo
+                    ? ` · ${formatMessage(t.scan.orderRef, { no: receiptNo })}`
+                    : ''}
                 </Text>
                 <View style={styles.loggedActions}>
                   {!editId && (
@@ -1233,7 +1328,7 @@ export function ScanScreen({
                         setPhase('idle');
                       }}
                     >
-                      <Text style={styles.softText}>Scan another</Text>
+                      <Text style={styles.softText}>{t.scan.scanAnother}</Text>
                     </Pressable>
                   )}
                   <Pressable
@@ -1245,7 +1340,7 @@ export function ScanScreen({
                     onPress={goBack}
                   >
                     <Text style={[styles.primaryText, { color: '#241a08' }]}>
-                      Back to Check-In
+                      {t.scan.backToCheckIn}
                     </Text>
                   </Pressable>
                 </View>
@@ -1255,17 +1350,19 @@ export function ScanScreen({
 
           <View style={styles.tipCard}>
             <Shield size={12} color={C.muted} />
+            {/* The bold middle is the NAME of the Check-In button, so it stays a
+                separate piece; the two halves around it are whole clauses. */}
             <Text style={styles.tipText}>
-              Wrong scan? Check-In →{' '}
-              <Text style={styles.activeBold}>Scan again</Text> · pending
-              self-logs can be edited or deleted.
+              {t.scan.wrongScanPrefix}{' '}
+              <Text style={styles.activeBold}>{t.scan.scanAgain}</Text>{' '}
+              {t.scan.wrongScanSuffix}
             </Text>
           </View>
 
           <ScannedReceiptsCard lines={todayReceiptLines} />
 
           <Pressable style={styles.softBtn} onPress={goBack}>
-            <Text style={styles.softText}>Back to attendance</Text>
+            <Text style={styles.softText}>{t.scan.backToAttendance}</Text>
           </Pressable>
         </>
       )}

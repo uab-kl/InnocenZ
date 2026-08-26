@@ -56,12 +56,14 @@ import {
   receiptReviewCaption,
   thisWeekDayStatus,
   weekDisputable,
+  type DayStatusLabel,
 } from '../lib/receipt-review';
 import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useViewportSize } from '../lib/viewport';
-import { useLocale } from '../i18n';
+import { useLocale, formatMessage } from '../i18n';
+import type { AppTranslations } from '../i18n';
 import { IzButton, Pill } from '../components/ui';
 import {
   ChevronDown,
@@ -83,7 +85,11 @@ type DisputeTarget = {
   dayLabel: string;
   dateNum: number;
   incomeKey: IncomeKey;
-  incomeLabel: string;
+  /**
+   * NO `incomeLabel` here on purpose. A rendered label frozen into state goes
+   * stale the moment the PR switches language with the sheet open, so the row
+   * name is derived from `incomeKey` at render time (`incomeRowLabel`).
+   */
   amount: number;
   /**
    * WHICH WEEK's voucher this claim is against.
@@ -112,12 +118,96 @@ type DisputeTarget = {
 const pickDisputeImages = (onPicked: (urls: string[]) => void) =>
   pickProofPhotos(onPicked, { multiple: true, source: 'library' });
 
-const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
-  { key: 'wages', label: 'Daily wages' },
-  { key: 'drinks', label: 'Drinks' },
-  { key: 'tips', label: 'Tips' },
-  { key: 'others', label: 'Others' },
+/**
+ * The four earning buckets.
+ *
+ * `key` is the STORED value — it is a voucher line's `kind` and a claim's
+ * `component`, sent to the server and compared against, so it never moves.
+ * `label` is a FUNCTION of the dictionary rather than a string, because this
+ * list is built at module scope, before any hook can run.
+ *
+ * `noteLabel` is the English name, kept for the one place a row name is not
+ * rendered but TRANSMITTED: the pre-filled dispute note that lands in the
+ * agency's inbox (`openDispute`). That prose is posted to the server, so it
+ * stays in one language whatever the PR's phone is set to.
+ */
+type IncomeRow = {
+  key: IncomeKey;
+  noteLabel: string;
+  label: (t: AppTranslations) => string;
+};
+
+const INCOME_ROWS: IncomeRow[] = [
+  { key: 'wages', noteLabel: 'Daily wages', label: (t) => t.payment.rowWages },
+  { key: 'drinks', noteLabel: 'Drinks', label: (t) => t.payment.rowDrinks },
+  { key: 'tips', noteLabel: 'Tips', label: (t) => t.payment.rowTips },
+  { key: 'others', noteLabel: 'Others', label: (t) => t.payment.rowOthers },
 ];
+
+/** One income row's name, resolved from the stored bucket key. */
+function incomeRowLabel(key: string, t: AppTranslations): string {
+  return INCOME_ROWS.find((r) => r.key === key)?.label(t) ?? key;
+}
+
+/**
+ * The dispute reasons, worded for the reader.
+ *
+ * The KEYS are `DISPUTE_PRESETS` verbatim — that string is what `raiseMyDispute`
+ * posts as `reason` and what the agency's own screens match on, so it must not
+ * move. Only the chip's face is translated, and an unknown reason coming back
+ * from the server falls through to itself rather than rendering blank.
+ */
+const PRESET_LABELS: Record<string, (t: AppTranslations) => string> = {
+  'Wrong commission': (t) => t.payment.reasonWrongCommission,
+  'Wrong quantity': (t) => t.payment.reasonWrongQuantity,
+  'Counted twice': (t) => t.payment.reasonCountedTwice,
+  'Missing from my PV': (t) => t.payment.reasonMissingFromPv,
+  'Wrong rate': (t) => t.payment.reasonWrongRate,
+  'Not my shift': (t) => t.payment.reasonNotMyShift,
+  Others: (t) => t.payment.reasonOthers,
+};
+
+function presetLabel(reason: string, t: AppTranslations): string {
+  return PRESET_LABELS[reason]?.(t) ?? reason;
+}
+
+/**
+ * The Status cell's word.
+ *
+ * `dayStatusLabel` keeps returning its English token because the render below
+ * COMPARES on it to pick a colour; this map is only what the PR reads.
+ */
+const DAY_STATUS_LABELS: Record<DayStatusLabel, (t: AppTranslations) => string> =
+  {
+    PENDING: (t) => t.payment.statusPending,
+    APPROVED: (t) => t.payment.statusApproved,
+    DISPUTED: (t) => t.payment.statusDisputed,
+    VERIFIED: (t) => t.payment.statusVerified,
+    DEDUCTED: (t) => t.payment.statusDeducted,
+    '—': () => '—',
+  };
+
+/** A receipt's own review state — the stored value stays, the word changes. */
+const RECEIPT_STATUS_LABELS: Record<
+  'pending' | 'approved' | 'verified',
+  (t: AppTranslations) => string
+> = {
+  pending: (t) => t.payment.statusPending,
+  approved: (t) => t.payment.statusApproved,
+  verified: (t) => t.payment.statusVerified,
+};
+
+/**
+ * The penalty rule a charge came from. Keys are the backend enum
+ * (`penaltyRuleTypeValues`); an unknown one falls back to its own humanised
+ * form rather than disappearing.
+ */
+const PENALTY_RULE_LABELS: Record<string, (t: AppTranslations) => string> = {
+  min_shifts_per_week: (t) => t.payment.ruleMinShifts,
+  max_mc_per_month: (t) => t.payment.ruleMaxMc,
+  late_per_week: (t) => t.payment.ruleLate,
+  cancellation: (t) => t.payment.ruleCancellation,
+};
 
 /**
  * Every row the grid DRAWS — the four earning buckets plus Deductions.
@@ -126,9 +216,17 @@ const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
  * and contest. Anything asking "was this day's money disputed?" must keep
  * reading INCOME_ROWS: a deduction is not income and is not disputable.
  */
-const GRID_ROWS: { key: GridBucket; label: string }[] = [
+const GRID_ROWS: {
+  key: GridBucket;
+  noteLabel: string;
+  label: (t: AppTranslations) => string;
+}[] = [
   ...INCOME_ROWS,
-  { key: 'deductions', label: 'Deductions' },
+  {
+    key: 'deductions',
+    noteLabel: 'Deductions',
+    label: (t) => t.payment.rowDeductions,
+  },
 ];
 
 const OT_DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -143,11 +241,13 @@ function otDayLabel(iso: string): string {
 }
 
 /** Minutes as the PR would say them: "45m", "1h", "2h 30m". */
-function otMinutesLabel(mins: number): string {
-  if (mins < 60) return `${mins}m`;
+function otMinutesLabel(mins: number, t: AppTranslations): string {
+  if (mins < 60) return formatMessage(t.payment.minutes, { m: mins });
   const h = Math.floor(mins / 60);
   const r = mins % 60;
-  return r === 0 ? `${h}h` : `${h}h ${r}m`;
+  return r === 0
+    ? formatMessage(t.payment.hours, { h })
+    : formatMessage(t.payment.hoursMinutes, { h, m: r });
 }
 
 function cellAmount(day: WeeklyDayPay, key: GridBucket): number {
@@ -261,24 +361,31 @@ function shiftWindowLabel(
   checkInAt: string | null,
   checkOutAt: string | null,
   overtimeMinutes: number | null,
+  t: AppTranslations,
 ): string {
-  if (!checkInAt || !checkOutAt) return 'duration unknown';
+  if (!checkInAt || !checkOutAt) return t.payment.durationUnknown;
   const start = new Date(checkInAt).getTime();
   const end = new Date(checkOutAt).getTime();
   if (Number.isNaN(start) || Number.isNaN(end) || end < start)
-    return 'duration unknown';
+    return t.payment.durationUnknown;
   const mins = Math.round((end - start) / 60_000);
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  const base = m > 0 ? `${h}h ${m}m` : `${h}h`;
+  const base =
+    m > 0
+      ? formatMessage(t.payment.hoursMinutes, { h, m })
+      : formatMessage(t.payment.hours, { h });
   return overtimeMinutes && overtimeMinutes > 0
-    ? `${base} · +${overtimeMinutes}m OT`
+    ? formatMessage(t.payment.withOvertime, { base, m: overtimeMinutes })
     : base;
 }
 
 /** "Special event" / "Normal shift" — the outlet's own toggle, worded as the agency words it. */
-function eventKindLabel(kind: string | null | undefined): string {
-  return kind === 'special' ? 'Special event' : 'Normal shift';
+function eventKindLabel(
+  kind: string | null | undefined,
+  t: AppTranslations,
+): string {
+  return kind === 'special' ? t.shifts.specialEvent : t.shifts.normalShift;
 }
 
 /** "4 Aug, 11:29 am" — the stamp, short enough to sit on a claim row. */
@@ -388,17 +495,23 @@ function statusOfVoucher(
  * one-voucher and two-voucher renders cannot drift into different vocabularies
  * for the same status — these words are what a PR quotes back at their agency.
  */
-function voucherPill(status: string | null): {
+function voucherPill(
+  status: string | null,
+  t: AppTranslations,
+): {
   variant: 'green' | 'amber' | 'red';
   label: string;
 } {
-  if (status === 'disputed') return { variant: 'red', label: 'DISPUTED' };
-  if (status === 'paid') return { variant: 'green', label: 'PAID' };
-  if (status === 'signed') return { variant: 'green', label: 'SIGNED' };
+  if (status === 'disputed')
+    return { variant: 'red', label: t.payment.statusDisputed };
+  if (status === 'paid')
+    return { variant: 'green', label: t.payment.statusPaid };
+  if (status === 'signed')
+    return { variant: 'green', label: t.payment.statusSigned };
   if (status && VERIFIED_STATUSES.includes(status)) {
-    return { variant: 'green', label: 'SENT' };
+    return { variant: 'green', label: t.payment.statusSent };
   }
-  return { variant: 'amber', label: 'PENDING' };
+  return { variant: 'amber', label: t.payment.statusPending };
 }
 
 // buildWeekGridFromLines moved to lib/week-pay-grid so PvDetailScreen renders
@@ -434,8 +547,8 @@ export function PaymentScreen({
   // moment every day got approved.
   const hasThisWeekRows = thisGrid.some((d) => d.status !== 'empty');
   const thisReviewCaption = useMemo(
-    () => receiptReviewCaption(current),
-    [current],
+    () => receiptReviewCaption(current, t),
+    [current, t],
   );
   /**
    * OVERTIME THE PR HAS EARNED THE RIGHT TO ASK FOR — which this screen used to
@@ -483,9 +596,14 @@ export function PaymentScreen({
     if (byDay.size === 0) return null;
     const parts = [...byDay.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([iso, mins]) => `${otMinutesLabel(mins)} on ${otDayLabel(iso)}`);
-    return `${parts.join(' · ')} — overtime recorded at check-out, waiting on your agency. It is not in the figures above.`;
-  }, [current]);
+      .map(([iso, mins]) =>
+        formatMessage(t.payment.otOnDay, {
+          mins: otMinutesLabel(mins, t),
+          day: otDayLabel(iso),
+        }),
+      );
+    return formatMessage(t.payment.otPending, { parts: parts.join(' · ') });
+  }, [current, t]);
 
   // Last week's voucher comes from the same backend as this week — real data,
   // no demo grid. Fetched once on mount (it rarely changes mid-session).
@@ -493,8 +611,8 @@ export function PaymentScreen({
   // Same caption, last week: the owner asked for the counts where the money
   // is being read, and after Sunday 00:00 that is the Last week card.
   const lastReviewCaption = useMemo(
-    () => receiptReviewCaption(lastWeek),
-    [lastWeek],
+    () => receiptReviewCaption(lastWeek, t),
+    [lastWeek, t],
   );
   useEffect(() => {
     if (!token) return;
@@ -618,6 +736,14 @@ export function PaymentScreen({
   const lastLabel = weekRangeLabelFromIso(lastWeek?.weekStart) ?? weekRangeLabel(1);
   const thisLabel = weekRangeLabelFromIso(current?.weekStart) ?? weekRangeLabel(0);
   const issueDay = weekPvIssueDayLabel(0);
+  /*
+   * Two sentences that carry ONE styled word inside them. Each stays a SINGLE
+   * dictionary entry — the placeholder is split apart at render time rather
+   * than the sentence being glued back together from fragments, because
+   * Chinese puts the coloured word in a different place than English does.
+   */
+  const tapHintParts = t.payment.tapHint.split('{red}');
+  const pvOnDayParts = t.payment.pvOnDay.split('{day}');
   const grid = useMemo(() => buildWeekGridFromLines(lastWeek), [lastWeek]);
   const weekTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
   /*
@@ -827,13 +953,19 @@ export function PaymentScreen({
       // changes nothing and the actual route is the attendance record.
       if (!kindDisputable(row.key)) {
         Alert.alert(
-          'Not disputed here',
-          `${row.label} is calculated from your check-in and check-out times, not from a receipt. If it looks wrong, ask your agency to correct the shift record for ${day.day} ${day.date}.`,
+          t.payment.notDisputedHereTitle,
+          formatMessage(t.payment.notDisputedHereBody, {
+            row: row.label(t),
+            day: `${day.day} ${day.date}`,
+          }),
         );
       } else {
         Alert.alert(
-          'Not reviewed yet',
-          `Your agency is still checking the receipt behind ${row.label.toLowerCase()} on ${day.day} ${day.date}. Once they approve it you can dispute the amount here.`,
+          t.payment.notReviewedTitle,
+          formatMessage(t.payment.notReviewedBody, {
+            row: row.label(t),
+            day: `${day.day} ${day.date}`,
+          }),
         );
       }
       return;
@@ -845,7 +977,6 @@ export function PaymentScreen({
       dayLabel: day.day,
       dateNum: day.date,
       incomeKey: row.key,
-      incomeLabel: row.label,
       amount,
       week,
     };
@@ -858,8 +989,11 @@ export function PaymentScreen({
     } else {
       setDisputeMode('dispute');
       setDisputePreset(DISPUTE_PRESETS[0]);
+      // ENGLISH ON PURPOSE — this is the note POSTED to the agency, not a label.
+      // `noteLabel`, not `label(t)`: the claim reads the same in the agency's
+      // inbox whatever language the PR's phone is set to.
       setDisputeNote(
-        `${row.label} · ${day.day} ${day.date} · ${formatRM(amount)} — please verify`,
+        `${row.noteLabel} · ${day.day} ${day.date} · ${formatRM(amount)} — please verify`,
       );
       setDisputePhotos([]);
     }
@@ -975,13 +1109,13 @@ export function PaymentScreen({
            * yet, which is worth knowing before arguing about the figure on it.
            */
           blockedNote: openClaimOn(r)
-            ? 'already disputed'
+            ? t.payment.alreadyDisputed
             : receiptDisputable(r)
               ? null
-              : 'not reviewed yet',
+              : t.payment.notReviewedYetShort,
         })),
     );
-  }, [disputeTarget, lastWeek, current]);
+  }, [disputeTarget, lastWeek, current, t]);
 
   /*
    * Default to ALL of them — narrowing is the exception, and a chooser that
@@ -1099,10 +1233,7 @@ export function PaymentScreen({
       // is RESOLVED, it can legitimately come back null — a legacy claim carrying no
       // receiptId, on a day two agencies both have money in — and a Withdraw button
       // that silently does nothing reads as a broken app, not as a refusal.
-      Alert.alert(
-        'Open the day first',
-        'That day has money from more than one agency, so this claim cannot be matched to a voucher from here. Open the day, pick the shift, and withdraw it there.',
-      );
+      Alert.alert(t.payment.openDayFirstTitle, t.payment.openDayFirstBody);
       return;
     }
     const go = async () => {
@@ -1129,25 +1260,21 @@ export function PaymentScreen({
         setClaimDay(null);
       } catch (e) {
         Alert.alert(
-          'Could not cancel',
-          e instanceof Error ? e.message : 'Please try again.',
+          t.payment.couldNotCancel,
+          e instanceof Error ? e.message : t.payment.tryAgain,
         );
       } finally {
         setDisputeBusy(false);
       }
     };
-    Alert.alert(
-      'Cancel this dispute?',
-      'Your agency will stop reviewing it. You can raise it again later if you still disagree.',
-      [
-        { text: 'Keep it', style: 'cancel' },
-        {
-          text: 'Cancel dispute',
-          style: 'destructive',
-          onPress: () => void go(),
-        },
-      ],
-    );
+    Alert.alert(t.payment.cancelConfirmTitle, t.payment.cancelConfirmBody, [
+      { text: t.payment.keepIt, style: 'cancel' },
+      {
+        text: t.payment.cancelDispute,
+        style: 'destructive',
+        onPress: () => void go(),
+      },
+    ]);
   };
 
   const closeDispute = () => {
@@ -1194,18 +1321,13 @@ export function PaymentScreen({
       // Two agencies hold money in that cell and nothing narrows it to one. The
       // claim is genuinely ambiguous, and picking either would file it against an
       // agency the PR did not mean.
-      Alert.alert(
-        'Pick the shift first',
-        'That day has money from more than one agency. Open the day, choose the shift you want to dispute, then try again.',
-      );
+      Alert.alert(t.payment.pickShiftFirstTitle, t.payment.pickShiftFirstBody);
       return;
     }
     if (!token || !voucherId) {
       Alert.alert(
-        'No voucher to dispute yet',
-        forLast
-          ? 'Last week’s payment voucher hasn’t been issued yet — there’s nothing to dispute.'
-          : 'This week’s voucher hasn’t been opened yet — log a shift first, then you can dispute an amount on it.',
+        t.payment.noVoucherTitle,
+        forLast ? t.payment.noVoucherLast : t.payment.noVoucherThis,
       );
       return;
     }
@@ -1305,8 +1427,8 @@ export function PaymentScreen({
       closeDispute();
     } catch (error) {
       Alert.alert(
-        'Dispute failed',
-        error instanceof Error ? error.message : 'Please try again.',
+        t.payment.disputeFailed,
+        error instanceof Error ? error.message : t.payment.tryAgain,
       );
     } finally {
       setDisputeBusy(false);
@@ -1335,7 +1457,7 @@ export function PaymentScreen({
               weekTab === 'last' && { color: C.txt },
             ]}
           >
-            Last week
+            {t.payment.lastWeek}
           </Text>
           <Text style={styles.weekTabSub}>{lastLabel}</Text>
         </Pressable>
@@ -1349,7 +1471,7 @@ export function PaymentScreen({
               weekTab === 'current' && { color: C.txt },
             ]}
           >
-            This week
+            {t.payment.thisWeek}
           </Text>
           <Text style={styles.weekTabSub}>{thisLabel}</Text>
         </Pressable>
@@ -1363,7 +1485,9 @@ export function PaymentScreen({
           >
             <View style={{ flex: 1 }}>
               <View style={styles.sectionTitleRow}>
-                <Text style={styles.sectionTitle}>LAST WEEK</Text>
+                <Text style={styles.sectionTitle}>
+                  {t.payment.lastWeekTitle}
+                </Text>
                 {/*
                  * THE PILL IS THE VOUCHER'S STATE, NOT THE DAY COUNT.
                  *
@@ -1387,22 +1511,22 @@ export function PaymentScreen({
                  */}
                 {lastWeekVouchers.length > 1 ? (
                   lastWeekVouchers.map((v) => {
-                    const pill = voucherPill(v.status);
+                    const pill = voucherPill(v.status, t);
                     return (
                       <Pill key={v.id} variant={pill.variant}>
-                        {`${(v.agencyName ?? 'Agency').toUpperCase()} · ${pill.label}`}
+                        {`${(v.agencyName ?? t.payment.agencyFallback).toUpperCase()} · ${pill.label}`}
                       </Pill>
                     );
                   })
                 ) : lastWeek?.status ? (
-                  <Pill variant={voucherPill(lastWeek.status).variant}>
-                    {voucherPill(lastWeek.status).label}
+                  <Pill variant={voucherPill(lastWeek.status, t).variant}>
+                    {voucherPill(lastWeek.status, t).label}
                   </Pill>
                 ) : null}
                 <Text style={styles.sectionFrac}>{verifiedDays}/7</Text>
               </View>
               <Text style={styles.sectionAction}>
-                {lastOpen ? 'Tap to collapse' : 'Tap to expand'}
+                {lastOpen ? t.common.tapToCollapse : t.common.tapToExpand}
               </Text>
             </View>
             <ChevronDown
@@ -1416,9 +1540,11 @@ export function PaymentScreen({
 
           {lastOpen && (
             <View style={styles.sectionBody}>
-              <Text style={styles.weekCaption}>Last week {lastLabel}</Text>
+              <Text style={styles.weekCaption}>
+                {formatMessage(t.payment.lastWeekRange, { range: lastLabel })}
+              </Text>
               <Text style={styles.verified}>
-                Verified days {verifiedDays}/7
+                {formatMessage(t.payment.verifiedDays, { n: verifiedDays })}
               </Text>
 
               {/* Receipt-level counts — what is verified, what is approved,
@@ -1458,8 +1584,10 @@ export function PaymentScreen({
                        * (WED / 5) instead of a lone abbreviation. 5 chars at
                        * 10px bold clears the 56px column.
                        */}
-                      <Text style={styles.gridDay}>TOTAL</Text>
-                      <Text style={styles.gridDate}>week</Text>
+                      <Text style={styles.gridDay}>{t.payment.gridTotal}</Text>
+                      <Text style={styles.gridDate}>
+                        {t.payment.gridTotalSub}
+                      </Text>
                     </View>
                   </View>
 
@@ -1481,7 +1609,7 @@ export function PaymentScreen({
                             isDeduction && styles.gridLabelDeduction,
                           ]}
                         >
-                          {row.label}
+                          {row.label(t)}
                         </Text>
                         {grid.map((d) => {
                           const amount = cellAmount(d, row.key);
@@ -1603,7 +1731,7 @@ export function PaymentScreen({
                   })}
 
                   <View style={styles.gridRow}>
-                    <Text style={styles.gridLabel}>Status</Text>
+                    <Text style={styles.gridLabel}>{t.checkin.status}</Text>
                     {grid.map((d) => {
                       const dayDisputed = INCOME_ROWS.some((r) =>
                         disputedCells.has(`${d.dateIso}-${r.key}`),
@@ -1661,7 +1789,7 @@ export function PaymentScreen({
                               d.status === 'empty' && { color: C.muted2 },
                             ]}
                           >
-                            {label}
+                            {DAY_STATUS_LABELS[label](t)}
                           </Text>
                         </Pressable>
                       );
@@ -1670,7 +1798,9 @@ export function PaymentScreen({
                       {/* Counts settled days in a closed week — green, and now
                           said out loud rather than inherited from the base. */}
                       <Text style={[styles.statusPill, styles.statusPillVerified]}>
-                        {verifiedDays} verified
+                        {formatMessage(t.payment.nVerified, {
+                          n: verifiedDays,
+                        })}
                       </Text>
                     </View>
                   </View>
@@ -1688,8 +1818,10 @@ export function PaymentScreen({
                 <View key={v.id || 'headline'} style={styles.disputeBanner}>
                   <Text style={styles.disputeBannerTitle}>
                     {disputedVouchers.length > 1 || lastWeekVouchers.length > 1
-                      ? `${v.agencyName ?? 'Agency'} · dispute open · agency reviewing`
-                      : 'Dispute open · agency reviewing'}
+                      ? formatMessage(t.payment.disputeOpenNamed, {
+                          agency: v.agencyName ?? t.payment.agencyFallback,
+                        })
+                      : t.payment.disputeOpen}
                   </Text>
                   {lastWeek?.disputeReason ? (
                     <Text style={styles.disputeBannerBody}>
@@ -1698,8 +1830,7 @@ export function PaymentScreen({
                     </Text>
                   ) : null}
                   <Text style={styles.disputeBannerHint}>
-                    Tap any amount to see its receipts, then withdraw this
-                    dispute.
+                    {t.payment.disputeBannerHint}
                   </Text>
                 </View>
               ))}
@@ -1707,14 +1838,13 @@ export function PaymentScreen({
               {hasLastWeekRows ? (
                 <>
                   <Text style={styles.disputeHint}>
-                    Tap any amount to see the order number, shift and items
-                    behind it — dispute it from there · tap a{' '}
-                    <Text style={{ color: C.red }}>red</Text> amount to withdraw
-                    a mistaken dispute.
+                    {tapHintParts[0]}
+                    <Text style={{ color: C.red }}>{t.payment.redWord}</Text>
+                    {tapHintParts[1] ?? ''}
                   </Text>
 
                   <Text style={styles.footNote}>
-                    PV issued every Sunday · Total{' '}
+                    {t.payment.pvIssuedSunday}{' '}
                     <Text style={styles.footTotal}>
                       {formatRM(reviewAmount)}
                     </Text>
@@ -1722,8 +1852,7 @@ export function PaymentScreen({
                 </>
               ) : (
                 <Text style={styles.emptyWeekHint}>
-                  No PV for last week yet — this week’s PV is issued next
-                  Sunday.
+                  {t.payment.noLastWeekPv}
                 </Text>
               )}
 
@@ -1742,8 +1871,13 @@ export function PaymentScreen({
                   key={v.id}
                   label={
                     awaitingVouchers.length > 1
-                      ? `Review & sign · ${v.agencyName ?? 'Agency'} · ${formatRM(v.net)}`
-                      : `Review & sign · ${formatRM(reviewAmount)}`
+                      ? formatMessage(t.payment.reviewSignNamed, {
+                          agency: v.agencyName ?? t.payment.agencyFallback,
+                          amount: formatRM(v.net),
+                        })
+                      : formatMessage(t.payment.reviewSign, {
+                          amount: formatRM(reviewAmount),
+                        })
                   }
                   small
                   onPress={() => openPv(v.id)}
@@ -1761,7 +1895,9 @@ export function PaymentScreen({
           >
             <View style={{ flex: 1 }}>
               <View style={styles.sectionTitleRow}>
-                <Text style={styles.sectionTitle}>THIS WEEK</Text>
+                <Text style={styles.sectionTitle}>
+                  {t.payment.thisWeekTitle}
+                </Text>
                 {/*
                  * The voucher-level fact, stated once.
                  *
@@ -1785,16 +1921,18 @@ export function PaymentScreen({
                       .filter((v) => v.status === 'disputed')
                       .map((v) => (
                         <Text key={v.id} style={styles.disputePill}>
-                          {`${(v.agencyName ?? 'Agency').toUpperCase()} · DISPUTED`}
+                          {`${(v.agencyName ?? t.payment.agencyFallback).toUpperCase()} · ${t.payment.statusDisputed}`}
                         </Text>
                       ))
                   : current?.status === 'disputed' && (
-                      <Text style={styles.disputePill}>DISPUTED</Text>
+                      <Text style={styles.disputePill}>
+                        {t.payment.statusDisputed}
+                      </Text>
                     )}
                 <Text style={styles.sectionFrac}>{thisApprovedDays}/7</Text>
               </View>
               <Text style={styles.sectionAction}>
-                {thisOpen ? 'Tap to collapse' : 'Tap to expand'}
+                {thisOpen ? t.common.tapToCollapse : t.common.tapToExpand}
               </Text>
             </View>
             <ChevronDown
@@ -1810,13 +1948,15 @@ export function PaymentScreen({
             <View style={styles.sectionBody}>
               <View style={styles.thisHead}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.weekCaption}>This week</Text>
+                  <Text style={styles.weekCaption}>{t.payment.thisWeek}</Text>
                   <Text style={styles.weekCaptionRange}>{thisLabel}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   {/* "Approved", not "Verified": verification is the Monday
                       rollover, and this week has not had one. */}
-                  <Text style={styles.verifiedTiny}>Approved days</Text>
+                  <Text style={styles.verifiedTiny}>
+                    {t.payment.approvedDays}
+                  </Text>
                   <Text style={styles.sectionFrac}>{thisApprovedDays}/7</Text>
                 </View>
               </View>
@@ -1861,8 +2001,10 @@ export function PaymentScreen({
                        * (WED / 5) instead of a lone abbreviation. 5 chars at
                        * 10px bold clears the 56px column.
                        */}
-                      <Text style={styles.gridDay}>TOTAL</Text>
-                      <Text style={styles.gridDate}>week</Text>
+                      <Text style={styles.gridDay}>{t.payment.gridTotal}</Text>
+                      <Text style={styles.gridDate}>
+                        {t.payment.gridTotalSub}
+                      </Text>
                     </View>
                   </View>
 
@@ -1892,7 +2034,7 @@ export function PaymentScreen({
                             isDeduction && styles.gridLabelDeduction,
                           ]}
                         >
-                          {row.label}
+                          {row.label(t)}
                         </Text>
                         {thisGrid.map((d) => {
                           const amount = cellAmount(d, row.key);
@@ -2024,7 +2166,7 @@ export function PaymentScreen({
                   })}
 
                   <View style={styles.gridRow}>
-                    <Text style={styles.gridLabel}>Status</Text>
+                    <Text style={styles.gridLabel}>{t.checkin.status}</Text>
                     {thisGrid.map((d) => {
                       /*
                        * Marked from the DAY's own claims, not the voucher flag.
@@ -2088,7 +2230,7 @@ export function PaymentScreen({
                               d.status === 'empty' && { color: C.muted2 },
                             ]}
                           >
-                            {label}
+                            {DAY_STATUS_LABELS[label](t)}
                           </Text>
                         </Pressable>
                       );
@@ -2101,8 +2243,12 @@ export function PaymentScreen({
                           override it used to carry only restated the base. */}
                       <Text style={styles.statusPill}>
                         {thisPendingDays > 0
-                          ? `${thisPendingDays} pending`
-                          : `${thisApprovedDays} approved`}
+                          ? formatMessage(t.payment.nPending, {
+                              n: thisPendingDays,
+                            })
+                          : formatMessage(t.payment.nApproved, {
+                              n: thisApprovedDays,
+                            })}
                       </Text>
                     </View>
                   </View>
@@ -2110,7 +2256,9 @@ export function PaymentScreen({
               </ScrollView>
 
               <Text style={styles.footNote} numberOfLines={1}>
-                PV on <Text style={styles.footBold}>{issueDay}</Text> · total{' '}
+                {pvOnDayParts[0]}
+                <Text style={styles.footBold}>{issueDay}</Text>
+                {pvOnDayParts[1] ?? ''} · {t.payment.totalLower}{' '}
                 <Text style={styles.footTotal}>{formatRM(thisWeekTotal)}</Text>
               </Text>
 
@@ -2123,8 +2271,7 @@ export function PaymentScreen({
 
               {!hasThisWeekRows && (
                 <Text style={styles.emptyWeekHint}>
-                  Check out from Attendance to seal today’s wages and
-                  commissions here for this week’s PV.
+                  {t.payment.checkOutToSeal}
                 </Text>
               )}
             </View>
@@ -2168,12 +2315,12 @@ export function PaymentScreen({
                   week,
                   claimDay.dateIso,
                 );
-                const labelOf = (k: string) =>
-                  INCOME_ROWS.find((r) => r.key === k)?.label ?? k;
                 return (
                   <>
                     <Text style={styles.claimTitle}>
-                      {rows.length > 0 ? 'What you disputed' : 'Receipts this day'}
+                      {rows.length > 0
+                        ? t.payment.whatYouDisputed
+                        : t.payment.receiptsThisDay}
                     </Text>
                     <Text style={styles.claimDay}>
                       {longDay(claimDay.dateIso)}
@@ -2203,20 +2350,24 @@ export function PaymentScreen({
                         <View style={styles.claimRow}>
                           <View style={styles.claimHead}>
                             <Text style={styles.claimComponent}>
-                              Receipts this day
+                              {t.payment.receiptsThisDay}
                             </Text>
                             {/* claimState carries no colour of its own —
                                 the dispute rows always pair it with a status
                                 colour, and without one this printed near-black
                                 on the dark card (owner: "this in white"). */}
                             <Text style={[styles.claimState, { color: C.txt }]}>
-                              {dayReceipts.total} total
+                              {formatMessage(t.payment.nTotal, {
+                                n: dayReceipts.total,
+                              })}
                             </Text>
                           </View>
                           <Text style={styles.claimMeta}>
-                            {dayReceipts.verified.length} verified ·{' '}
-                            {dayReceipts.approved.length} approved ·{' '}
-                            {dayReceipts.pending.length} pending
+                            {formatMessage(t.payment.receiptCounts, {
+                              v: dayReceipts.verified.length,
+                              a: dayReceipts.approved.length,
+                              p: dayReceipts.pending.length,
+                            })}
                           </Text>
                           {[
                             ...dayReceipts.pending,
@@ -2241,7 +2392,7 @@ export function PaymentScreen({
                                       styles.statusPillVerified,
                                   ]}
                                 >
-                                  {r.status.toUpperCase()}
+                                  {RECEIPT_STATUS_LABELS[r.status](t)}
                                 </Text>
                               </View>
                               <Text style={styles.claimShiftMeta}>
@@ -2257,7 +2408,7 @@ export function PaymentScreen({
                           <View key={d.id} style={styles.claimRow}>
                             <View style={styles.claimHead}>
                               <Text style={styles.claimComponent}>
-                                {labelOf(d.component)}
+                                {incomeRowLabel(d.component, t)}
                               </Text>
                               <Text
                                 style={[
@@ -2269,18 +2420,25 @@ export function PaymentScreen({
                                 ]}
                               >
                                 {d.outcome === null
-                                  ? 'OPEN'
+                                  ? t.payment.claimOpen
                                   : d.outcome === 'accepted'
-                                    ? 'ACCEPTED'
+                                    ? t.payment.claimAccepted
                                     : d.outcome === 'rejected'
-                                      ? 'REJECTED'
-                                      : 'WITHDRAWN'}
+                                      ? t.payment.claimRejected
+                                      : t.payment.claimWithdrawn}
                               </Text>
                             </View>
                             <Text style={styles.claimMeta}>
-                              Voucher said{' '}
-                              {formatRM(Number(d.disputedAmount ?? 0))}
-                              {d.reason ? ` · ${d.reason}` : ''}
+                              {formatMessage(t.payment.voucherSaid, {
+                                amount: formatRM(
+                                  Number(d.disputedAmount ?? 0),
+                                ),
+                              })}
+                              {/* The stored reason is one of DISPUTE_PRESETS —
+                                  shown through the same label map the chips
+                                  use, so the PR reads back the words they
+                                  tapped. */}
+                              {d.reason ? ` · ${presetLabel(d.reason, t)}` : ''}
                             </Text>
                             {/*
                              * WHEN it was raised. An open claim with no date on it
@@ -2290,7 +2448,9 @@ export function PaymentScreen({
                              * sheet to answer.
                              */}
                             <Text style={styles.claimMeta}>
-                              Raised {shortStamp(d.raisedAt)}
+                              {formatMessage(t.payment.raisedAt, {
+                                when: shortStamp(d.raisedAt),
+                              })}
                             </Text>
 
                             {/*
@@ -2313,8 +2473,7 @@ export function PaymentScreen({
                              */}
                             {!d.receiptRefs?.length && shifts.length > 1 && (
                               <Text style={styles.claimNote}>
-                                Filed against the whole day — it covered both
-                                shifts below.
+                                {t.payment.filedWholeDay}
                               </Text>
                             )}
                             {shifts.length > 0 ? (
@@ -2334,29 +2493,35 @@ export function PaymentScreen({
                                    */}
                                   <View style={styles.claimShiftTitleRow}>
                                     <Text style={styles.claimShiftHead}>
-                                      {s.eventName ?? s.outletName ?? 'Shift'}
+                                      {s.eventName ??
+                                        s.outletName ??
+                                        t.payment.shiftFallback}
                                     </Text>
                                     <Text style={styles.claimEventTag}>
-                                      {eventKindLabel(s.eventKind)}
+                                      {eventKindLabel(s.eventKind, t)}
                                     </Text>
                                   </View>
                                   <Text style={styles.claimShiftMeta}>
                                     {s.eventName && s.outletName
                                       ? `${s.outletName} · `
                                       : ''}
-                                    {s.slot ?? 'shift time unknown'}
+                                    {s.slot ?? t.payment.shiftTimeUnknown}
                                   </Text>
                                   <Text style={styles.claimShiftMeta}>
-                                    In {shortStamp(s.checkInAt)} · Out{' '}
-                                    {shortStamp(s.checkOutAt)} ·{' '}
-                                    {shiftWindowLabel(
-                                      s.checkInAt,
-                                      s.checkOutAt,
-                                      s.overtimeMinutes,
-                                    )}
+                                    {formatMessage(t.payment.inOutWindow, {
+                                      inAt: shortStamp(s.checkInAt),
+                                      outAt: shortStamp(s.checkOutAt),
+                                      window: shiftWindowLabel(
+                                        s.checkInAt,
+                                        s.checkOutAt,
+                                        s.overtimeMinutes,
+                                        t,
+                                      ),
+                                    })}
                                   </Text>
                                   <Text style={styles.claimShiftMeta}>
-                                    {s.orderNo ?? 'No order no'} · {s.receiptNo}
+                                    {s.orderNo ?? t.payment.noOrderNo} ·{' '}
+                                    {s.receiptNo}
                                   </Text>
                                   {/*
                                    * WHAT was claimed, from the snapshot taken when
@@ -2377,7 +2542,7 @@ export function PaymentScreen({
                                     ))
                                   ) : (
                                     <Text style={styles.claimShiftMeta}>
-                                      The whole receipt
+                                      {t.payment.wholeReceipt}
                                     </Text>
                                   )}
                                 </View>
@@ -2387,8 +2552,7 @@ export function PaymentScreen({
                               // — a wages/OT claim, which is derived from the
                               // attendance stamps and has no paper behind it.
                               <Text style={styles.claimNote}>
-                                No receipt behind this — it is calculated from
-                                your check-in and check-out times.
+                                {t.payment.noReceiptBehind}
                               </Text>
                             )}
 
@@ -2402,7 +2566,9 @@ export function PaymentScreen({
                              */}
                             {!!d.resolutionNote && (
                               <Text style={styles.claimAnswer}>
-                                Agency: {d.resolutionNote}
+                                {formatMessage(t.payment.agencyAnswer, {
+                                  note: d.resolutionNote,
+                                })}
                               </Text>
                             )}
 
@@ -2427,8 +2593,8 @@ export function PaymentScreen({
                               >
                                 <Text style={styles.claimCancelText}>
                                   {disputeBusy
-                                    ? 'Cancelling…'
-                                    : 'Cancel this dispute'}
+                                    ? t.payment.cancelling
+                                    : t.payment.cancelThisDispute}
                                 </Text>
                               </Pressable>
                             )}
@@ -2442,7 +2608,9 @@ export function PaymentScreen({
                       style={styles.sheetCloseBtn}
                       onPress={() => setClaimDay(null)}
                     >
-                      <Text style={styles.sheetCloseText}>Close</Text>
+                      <Text style={styles.sheetCloseText}>
+                        {t.common.close}
+                      </Text>
                     </Pressable>
                   </>
                 );
@@ -2563,14 +2731,14 @@ export function PaymentScreen({
             >
               <Text style={styles.sheetTitle}>
                 {disputeMode === 'withdraw'
-                  ? 'Withdraw dispute?'
-                  : 'Dispute this amount'}
+                  ? t.payment.withdrawDisputeTitle
+                  : t.payment.disputeThisAmount}
               </Text>
               {disputeTarget && (
                 <View style={styles.targetPill}>
                   <Text style={styles.targetPillText}>
                     {disputeTarget.dayLabel} {disputeTarget.dateNum} ·{' '}
-                    {disputeTarget.incomeLabel} ·{' '}
+                    {incomeRowLabel(disputeTarget.incomeKey, t)} ·{' '}
                     {formatRM(disputeTarget.amount)}
                   </Text>
                 </View>
@@ -2596,7 +2764,9 @@ export function PaymentScreen({
                    */}
                   {disputeReceipts.length > 1 && (
                     <>
-                      <Text style={styles.fieldLabel}>Which one is wrong?</Text>
+                      <Text style={styles.fieldLabel}>
+                        {t.payment.whichOneWrong}
+                      </Text>
                       <View style={styles.presetWrap}>
                         {disputeReceipts.map((r) => {
                           const on = disputePickedReceipt === r.receiptNo;
@@ -2621,9 +2791,9 @@ export function PaymentScreen({
                                 selected: on,
                                 disabled: !r.disputable,
                               }}
-                              accessibilityLabel={`${r.label}${on ? ', selected' : ''}${
-                                r.blockedNote ? `, ${r.blockedNote}` : ''
-                              }`}
+                              accessibilityLabel={`${r.label}${
+                                on ? `, ${t.payment.selected}` : ''
+                              }${r.blockedNote ? `, ${r.blockedNote}` : ''}`}
                             >
                               {/*
                                * A TICKED BOX, not a tinted outline.
@@ -2675,8 +2845,11 @@ export function PaymentScreen({
                       </View>
                       <Text style={styles.pickedHint}>
                         {disputePickedReceipt === null
-                          ? 'Pick the shift you are disputing.'
-                          : `Disputing ${formatRM(disputePickedSubtotal)} of this day's ${formatRM(disputeTarget?.amount ?? 0)}.`}
+                          ? t.payment.pickShift
+                          : formatMessage(t.payment.disputingOf, {
+                              picked: formatRM(disputePickedSubtotal),
+                              day: formatRM(disputeTarget?.amount ?? 0),
+                            })}
                       </Text>
                     </>
                   )}
@@ -2696,7 +2869,9 @@ export function PaymentScreen({
                    */}
                   {disputeItems.length > 1 && (
                     <>
-                      <Text style={styles.fieldLabel}>Which item?</Text>
+                      <Text style={styles.fieldLabel}>
+                        {t.payment.whichItem}
+                      </Text>
                       <View style={styles.presetWrap}>
                         {disputeItems.map((it) => {
                           const on = disputePickedItems.includes(it.id);
@@ -2738,13 +2913,15 @@ export function PaymentScreen({
                       </View>
                       {disputePickedItems.length === 0 && (
                         <Text style={styles.pickedHint}>
-                          Pick at least one item.
+                          {t.payment.pickOneItem}
                         </Text>
                       )}
                     </>
                   )}
 
-                  <Text style={styles.fieldLabel}>Quick reason</Text>
+                  <Text style={styles.fieldLabel}>
+                    {t.payment.quickReason}
+                  </Text>
                   <View style={styles.presetWrap}>
                     {DISPUTE_PRESETS.map((p) => (
                       <Pressable
@@ -2761,7 +2938,9 @@ export function PaymentScreen({
                             disputePreset === p && { color: C.violetL },
                           ]}
                         >
-                          {p}
+                          {/* `p` stays the stored/posted reason; only its face
+                              is translated. */}
+                          {presetLabel(p, t)}
                         </Text>
                       </Pressable>
                     ))}
@@ -2778,7 +2957,7 @@ export function PaymentScreen({
                       },
                     ]}
                     multiline
-                    placeholder="Add detail for your agency…"
+                    placeholder={t.payment.notePlaceholder}
                     placeholderTextColor={C.muted2}
                   />
 
@@ -2794,9 +2973,11 @@ export function PaymentScreen({
                   >
                     <ImagePlus size={14} color={C.txt} />
                     <Text style={styles.attachBtnText}>
-                      Attach files (images)
+                      {t.payment.attachImages}
                     </Text>
-                    <Text style={styles.attachOptional}>optional</Text>
+                    <Text style={styles.attachOptional}>
+                      {t.payment.optional}
+                    </Text>
                   </Pressable>
 
                   {disputePhotos.length > 0 && (
@@ -2835,14 +3016,21 @@ export function PaymentScreen({
                   )}
 
                   <Text style={styles.attachHint}>
+                    {/* Two spelled-out keys rather than an appended "s":
+                        Chinese has no plural form to build. */}
                     {disputePhotos.length > 0
-                      ? `${disputePhotos.length} image${disputePhotos.length === 1 ? '' : 's'} attached as proof`
-                      : 'Proof images are optional — attach a receipt photo if you have one.'}
+                      ? formatMessage(
+                          disputePhotos.length === 1
+                            ? t.payment.imagesAttachedOne
+                            : t.payment.imagesAttachedMany,
+                          { n: disputePhotos.length },
+                        )
+                      : t.payment.proofOptional}
                   </Text>
 
                   <View style={styles.sheetActions}>
                     <Pressable style={styles.backBtn} onPress={closeDispute}>
-                      <Text style={styles.backBtnText}>Back</Text>
+                      <Text style={styles.backBtnText}>{t.common.back}</Text>
                     </Pressable>
                     <Pressable
                       style={[
@@ -2860,7 +3048,9 @@ export function PaymentScreen({
                       disabled={disputeBusy || noReceiptPicked}
                     >
                       <Text style={styles.primaryText}>
-                        {disputeBusy ? 'Submitting…' : 'Submit dispute'}
+                        {disputeBusy
+                          ? t.payment.submitting
+                          : t.payment.submitDispute}
                       </Text>
                     </Pressable>
                   </View>
@@ -2868,10 +3058,11 @@ export function PaymentScreen({
               ) : (
                 <>
                   <Text style={styles.sheetSub}>
-                    Flagged this amount by mistake? Withdraw and it returns to
-                    verified.
+                    {t.payment.withdrawSub}
                     {disputeTarget && disputePhotoMap[disputeTarget.key]?.length
-                      ? ` · ${disputePhotoMap[disputeTarget.key].length} proof image(s) will be cleared.`
+                      ? ` · ${formatMessage(t.payment.proofCleared, {
+                          n: disputePhotoMap[disputeTarget.key].length,
+                        })}`
                       : ''}
                   </Text>
                   <Pressable
@@ -2880,11 +3071,13 @@ export function PaymentScreen({
                     disabled={disputeBusy}
                   >
                     <Text style={styles.dangerBtnText}>
-                      {disputeBusy ? 'Withdrawing…' : 'Withdraw dispute'}
+                      {disputeBusy
+                        ? t.payment.withdrawing
+                        : t.payment.withdrawDispute}
                     </Text>
                   </Pressable>
                   <Pressable style={styles.cancel} onPress={closeDispute}>
-                    <Text style={styles.cancelText}>Back</Text>
+                    <Text style={styles.cancelText}>{t.common.back}</Text>
                   </Pressable>
                 </>
               )}
@@ -2914,33 +3107,38 @@ export function PaymentScreen({
  * that the PR has no vouchers.
  */
 function WeekVouchers({ week }: { week: PrCurrentWeek | null }) {
+  const { t } = useLocale();
   const vouchers = week?.vouchers ?? [];
   if (vouchers.length < 2) return null;
 
   return (
     <View style={voucherStyles.card}>
       <Text style={voucherStyles.title}>
-        {vouchers.length} PAYMENT VOUCHERS THIS WEEK
+        {formatMessage(t.payment.nVouchersThisWeek, { n: vouchers.length })}
       </Text>
-      <Text style={voucherStyles.hint}>
-        You worked for more than one agency. Each pays and is signed separately.
-      </Text>
+      <Text style={voucherStyles.hint}>{t.payment.multiAgencyHint}</Text>
       {vouchers.map((v) => (
         <View key={v.id} style={voucherStyles.row}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={voucherStyles.agency} numberOfLines={1}>
-              {v.agencyName ?? 'Agency'}
+              {v.agencyName ?? t.payment.agencyFallback}
             </Text>
             <Text style={voucherStyles.no}>
-              {v.voucherNo ?? 'Not yet numbered'}
+              {v.voucherNo ?? t.payment.notYetNumbered}
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={voucherStyles.amount}>
               {formatRM(Number(v.net ?? 0))}
             </Text>
+            {/*
+             * The stored status, said in the same words the header pills use.
+             * It used to print the raw enum with its underscores swapped for
+             * spaces, which cannot be translated at all — and left one screen
+             * calling `awaiting_pr` two different things.
+             */}
             <Text style={voucherStyles.state}>
-              {(v.status ?? 'pending').replace(/_/g, ' ')}
+              {voucherPill(v.status ?? null, t).label}
             </Text>
           </View>
         </View>
@@ -2997,6 +3195,7 @@ const voucherStyles = StyleSheet.create({
  * that in front of the worker would announce money they may never lose.
  */
 function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
+  const { t } = useLocale();
   const { token } = useSession();
   const [data, setData] = useState<MyPenaltiesWeek | null>(null);
 
@@ -3022,7 +3221,7 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
   return (
     <View style={penaltyStyles.card}>
       <View style={penaltyStyles.head}>
-        <Text style={penaltyStyles.title}>PENALTIES THIS WEEK</Text>
+        <Text style={penaltyStyles.title}>{t.payment.penaltiesThisWeek}</Text>
         <Text style={penaltyStyles.total}>
           −{formatRM(Number(data.totalRm))}
         </Text>
@@ -3031,7 +3230,8 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
         <View key={p.id} style={penaltyStyles.row}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={penaltyStyles.label}>
-              {p.ruleType.replace(/_/g, ' ')}
+              {PENALTY_RULE_LABELS[p.ruleType]?.(t) ??
+                p.ruleType.replace(/_/g, ' ')}
             </Text>
             <Text style={penaltyStyles.detail}>{p.detail}</Text>
           </View>
@@ -3040,7 +3240,9 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
               −{formatRM(Number(p.fineRm))}
             </Text>
             <Text style={penaltyStyles.state}>
-              {p.chargedAt ? 'deducted' : 'pending'}
+              {p.chargedAt
+                ? t.payment.statusDeducted
+                : t.payment.statusPending}
             </Text>
           </View>
         </View>
@@ -3048,11 +3250,11 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
       {data.cancellations.map((c) => (
         <View key={c.assignmentId} style={penaltyStyles.row}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={penaltyStyles.label}>Cancelled shift</Text>
+            <Text style={penaltyStyles.label}>{t.payment.cancelledShift}</Text>
             <Text style={penaltyStyles.detail}>
               {String(c.shiftDate ?? '').slice(0, 10)}
-              {c.outletName ? ` · ${c.outletName}` : ''} · {c.feePct ?? 0}% of
-              daily wage
+              {c.outletName ? ` · ${c.outletName}` : ''} ·{' '}
+              {formatMessage(t.payment.pctOfDailyWage, { pct: c.feePct ?? 0 })}
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
@@ -3060,7 +3262,9 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
               −{formatRM(Number(c.feeRm ?? 0))}
             </Text>
             <Text style={penaltyStyles.state}>
-              {c.chargedAt ? 'deducted' : 'pending'}
+              {c.chargedAt
+                ? t.payment.statusDeducted
+                : t.payment.statusPending}
             </Text>
           </View>
         </View>

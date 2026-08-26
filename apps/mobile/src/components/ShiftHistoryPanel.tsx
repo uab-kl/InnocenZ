@@ -23,6 +23,7 @@ import {
   historyVoucherToShifts,
 } from '../lib/payment-history-map';
 import { useShiftSession } from '../lib/shift-session';
+import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { HistDateTimeFilter } from './HistDateTimeFilter';
 import { IzButton, Pill } from './ui';
 import {
@@ -38,22 +39,32 @@ import {
 type StatusFilter = 'any' | 'sealed' | 'signed' | 'cancelled' | 'current';
 type SelectKind = 'outlet' | 'status' | null;
 
-const STATUS_OPTIONS: { id: StatusFilter; label: string }[] = [
-  { id: 'any', label: 'Any status' },
-  { id: 'current', label: 'Current' },
-  { id: 'sealed', label: 'Sealed' },
-  { id: 'signed', label: 'Signed' },
-  { id: 'cancelled', label: 'Cancelled' },
+/**
+ * `id` is the STORED status — it is compared against `shift.status` and is the
+ * React key of the picker row — so it stays English. Only `label` is copy, and
+ * it holds a FUNCTION: this map is built at module scope, before any hook has
+ * run, so a plain string would freeze whichever locale loaded first.
+ */
+const STATUS_OPTIONS: { id: StatusFilter; label: (t: AppTranslations) => string }[] = [
+  { id: 'any', label: (t) => t.history.anyStatus },
+  { id: 'current', label: (t) => t.history.statusCurrent },
+  { id: 'sealed', label: (t) => t.shiftStatus.sealed },
+  { id: 'signed', label: (t) => t.history.statusSigned },
+  { id: 'cancelled', label: (t) => t.schedule.outcomeCancelled },
 ];
 
-function statusPill(status: DemoHistoryShift['status']): {
+function statusPill(
+  status: DemoHistoryShift['status'],
+  /** The dictionary, LAST and with no default — a default would pin one locale. */
+  t: AppTranslations,
+): {
   variant: 'green' | 'amber' | 'red';
   label: string;
 } {
-  if (status === 'cancelled') return { variant: 'red', label: 'Cancelled' };
-  if (status === 'signed') return { variant: 'amber', label: 'Signed' };
-  if (status === 'current') return { variant: 'amber', label: 'Pending' };
-  return { variant: 'green', label: 'Sealed' };
+  if (status === 'cancelled') return { variant: 'red', label: t.schedule.outcomeCancelled };
+  if (status === 'signed') return { variant: 'amber', label: t.history.statusSigned };
+  if (status === 'current') return { variant: 'amber', label: t.shiftStatus.pending };
+  return { variant: 'green', label: t.shiftStatus.sealed };
 }
 
 /**
@@ -69,6 +80,9 @@ function weekRecordsFromLines(lines: PrReceiptLine[]): WeekPayRecord[] {
   for (const l of lines) {
     const dateIso = l.lineDate?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
     if (!dateIso) continue;
+    // A VALUE, not copy: this stands in for the venue's name, is joined into
+    // `outlet`, becomes an id in the outlet picker and is compared against the
+    // outlet filter. Translating it would split one venue into three.
     const outlet = l.outlet?.trim() || 'Outlet';
     const rec =
       byDate.get(dateIso) ??
@@ -112,6 +126,7 @@ function weekRecordsFromLines(lines: PrReceiptLine[]): WeekPayRecord[] {
 }
 
 export function ShiftHistoryPanel() {
+  const { t } = useLocale();
   const { closedShift, checkedInAt, checkedOutAt } = useShiftSession();
   const { current, lines } = usePrEarnings();
   const { vouchers } = usePaymentHistory();
@@ -211,13 +226,13 @@ export function ShiftHistoryPanel() {
     <View>
       <View style={styles.summary}>
         <View style={[styles.summaryCol, styles.summaryColLeft]}>
-          <Text style={styles.summaryLabel}>EARNED IN RANGE</Text>
+          <Text style={styles.summaryLabel}>{t.history.earnedInRange}</Text>
           <Text style={styles.summaryVal} adjustsFontSizeToFit minimumFontScale={0.65} numberOfLines={1}>
             {formatRM(earned)}
           </Text>
         </View>
         <View style={styles.summaryCol}>
-          <Text style={styles.summaryLabel}>WAGES</Text>
+          <Text style={styles.summaryLabel}>{t.history.wagesTotal}</Text>
           <Text style={styles.summaryVal} adjustsFontSizeToFit minimumFontScale={0.65} numberOfLines={1}>
             {formatRM(wagesTotal)}
           </Text>
@@ -225,7 +240,7 @@ export function ShiftHistoryPanel() {
       </View>
 
       <View style={styles.filterHead}>
-        <Text style={styles.filterTitle}>SHIFT HISTORY</Text>
+        <Text style={styles.filterTitle}>{t.history.shiftHistory}</Text>
       </View>
 
       <View style={styles.search}>
@@ -233,7 +248,7 @@ export function ShiftHistoryPanel() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search wages, sales, others, drinks…"
+          placeholder={t.history.searchPlaceholder}
           placeholderTextColor={C.muted2}
           style={styles.searchInput}
         />
@@ -242,8 +257,8 @@ export function ShiftHistoryPanel() {
       <View style={styles.filterRow}>
         <FilterField
           icon={House}
-          label="OUTLET"
-          value={outlet === 'all' ? 'Any outlet' : outlet}
+          label={t.history.filterOutlet}
+          value={outlet === 'all' ? t.history.anyOutlet : outlet}
           onPress={() => {
             setOpenSelect((s) => (s === 'outlet' ? null : 'outlet'));
             setCalendarOpen(false);
@@ -251,8 +266,8 @@ export function ShiftHistoryPanel() {
         />
         <FilterField
           icon={Briefcase}
-          label="STATUS"
-          value={STATUS_OPTIONS.find((o) => o.id === status)?.label ?? 'Any status'}
+          label={t.history.filterStatus}
+          value={STATUS_OPTIONS.find((o) => o.id === status)?.label(t) ?? t.history.anyStatus}
           onPress={() => {
             setOpenSelect((s) => (s === 'status' ? null : 'status'));
             setCalendarOpen(false);
@@ -262,7 +277,11 @@ export function ShiftHistoryPanel() {
 
       {openSelect === 'outlet' && (
         <SelectList
-          options={[{ id: 'all', label: 'Any outlet' }, ...outlets.map((o) => ({ id: o, label: o }))]}
+          options={[
+            { id: 'all', label: t.history.anyOutlet },
+            // Outlet NAMES are data — the venue is called what it is called.
+            ...outlets.map((o) => ({ id: o, label: o })),
+          ]}
           selected={outlet}
           onPick={(id) => {
             setOutlet(id);
@@ -272,7 +291,7 @@ export function ShiftHistoryPanel() {
       )}
       {openSelect === 'status' && (
         <SelectList
-          options={STATUS_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
+          options={STATUS_OPTIONS.map((o) => ({ id: o.id, label: o.label(t) }))}
           selected={status}
           onPick={(id) => {
             setStatus(id as StatusFilter);
@@ -327,16 +346,24 @@ export function ShiftHistoryPanel() {
                   <Text style={styles.weekTitle}>{week.title}</Text>
                   <View style={styles.weekMetaRow}>
                     {week.kind === 'current' ? (
-                      <Pill variant="amber">Current</Pill>
+                      <Pill variant="amber">{t.history.statusCurrent}</Pill>
                     ) : (
                       <Text style={styles.pvRef}>{week.pvRef}</Text>
                     )}
+                    {/* Two whole sentences, not an 's' appended to one:
+                        Chinese has no plural form to append. */}
                     <Text style={styles.weekCount}>
-                      {count} shift{count === 1 ? '' : 's'}
+                      {formatMessage(
+                        count === 1 ? t.history.shiftCountOne : t.history.shiftCountMany,
+                        { n: count },
+                      )}
                     </Text>
                   </View>
                   <Text style={styles.weekEarn}>
-                    {formatRM(weekEarned)} earned · {formatRM(weekWages)} wages
+                    {formatMessage(t.history.weekEarnLine, {
+                      earned: formatRM(weekEarned),
+                      wages: formatRM(weekWages),
+                    })}
                   </Text>
                 </View>
                 <ChevronDown
@@ -349,7 +376,7 @@ export function ShiftHistoryPanel() {
               {open && (
                 <View style={styles.weekBody}>
                   {weekShifts.length === 0 ? (
-                    <Text style={styles.emptyText}>No shifts in this week</Text>
+                    <Text style={styles.emptyText}>{t.history.noShiftsInWeek}</Text>
                   ) : (
                     weekShifts.map((row) => <ShiftCard key={row.id} shift={row} />)
                   )}
@@ -361,8 +388,8 @@ export function ShiftHistoryPanel() {
 
         {filtered.length === 0 && (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No shifts match these filters</Text>
-            <IzButton label="Reset filters" variant="soft" small onPress={clearFilters} />
+            <Text style={styles.emptyText}>{t.history.noShiftsMatch}</Text>
+            <IzButton label={t.history.resetFilters} variant="soft" small onPress={clearFilters} />
           </View>
         )}
       </View>
@@ -371,7 +398,8 @@ export function ShiftHistoryPanel() {
 }
 
 function ShiftCard({ shift }: { shift: DemoHistoryShift }) {
-  const pill = statusPill(shift.status);
+  const { t } = useLocale();
+  const pill = statusPill(shift.status, t);
   const cancelled = shift.status === 'cancelled';
 
   return (
@@ -388,16 +416,18 @@ function ShiftCard({ shift }: { shift: DemoHistoryShift }) {
 
       {!cancelled && (
         <>
-          <Text style={styles.payoutLine}>{formatRM(shift.payout)} total payout</Text>
+          <Text style={styles.payoutLine}>
+            {formatMessage(t.history.totalPayout, { amount: formatRM(shift.payout) })}
+          </Text>
           <View style={styles.metrics}>
-            <Metric icon={Wallet} label="Wages" value={shift.wages} />
-            <Metric icon={Wine} label="Drinks" value={shift.drinks} />
-            <Metric icon={Sparkles} label="Tips" value={shift.tips} />
-            <Metric icon={Briefcase} label="Others" value={shift.others} />
+            <Metric icon={Wallet} label={t.history.metricWages} value={shift.wages} />
+            <Metric icon={Wine} label={t.shiftStatus.drinks} value={shift.drinks} />
+            <Metric icon={Sparkles} label={t.shiftStatus.tips} value={shift.tips} />
+            <Metric icon={Briefcase} label={t.history.metricOthers} value={shift.others} />
           </View>
         </>
       )}
-      {cancelled && <Text style={styles.cancelledNote}>Shift cancelled — no payout</Text>}
+      {cancelled && <Text style={styles.cancelledNote}>{t.history.cancelledNoPayout}</Text>}
     </View>
   );
 }
