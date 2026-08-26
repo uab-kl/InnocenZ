@@ -15,6 +15,18 @@ import type { OutletMemberSubRole, OutletMembership } from "@/services/outlet";
  * after every blank reset (buildBlankPortalReset wipes outletOwner on mount).
  */
 export interface OutletSessionIdentity {
+	/**
+	 * WHO this identity was derived for — the signed-in `user.id`.
+	 *
+	 * The cache is tab-scoped but SEEDED from localStorage, so a brand-new tab
+	 * inherits whatever the last portal sign-in on this machine wrote, which may
+	 * be a different account entirely. Without the owner's id on it there is
+	 * nothing to check the cache against, and the mount path prefers the cache
+	 * over re-deriving — which is how an Owner ended up running on the Director
+	 * lane an earlier tab had cached. Every read that knows who is signed in now
+	 * demands a match; see `getOutletIdentity`.
+	 */
+	userId: string;
 	outletId: string;
 	outletName: string;
 	subRole: OutletSubRole;
@@ -40,11 +52,24 @@ const KNOWN_SUB_ROLES: ReadonlySet<OutletSubRole> = new Set<OutletSubRole>([
 export function outletSubRoleFromBackend(
 	subRole: OutletMemberSubRole,
 ): OutletSubRole {
+	// EVERY KNOWN LANE IS NAMED, the owner included.
+	//
+	// It was not, and the comment below still described the old fallback: when
+	// that fallback was `outlet_owner`, an `owner` membership could fall through
+	// to it and land correctly. Changing the fallback to least privilege — right
+	// on its own terms — silently re-routed every OWNER to `outlet_director`.
+	//
+	// Nothing failed loudly, because a real session's module grants answer for
+	// almost everything: Post Job, Workspace, Settings and the rest kept working
+	// off the backend grants, and only the permissions with no module mapping
+	// went missing. On this portal that is exactly one — `requestCutLoss` — so
+	// the whole symptom was "Reduce cutlost vanished from Today" for owners.
+	if (subRole === "owner") return "outlet_owner";
 	if (subRole === "finance") return "outlet_finance";
 	if (subRole === "operations_head") return "outlet_ops";
-	// Ahead of the fallback, which is "outlet_owner": a lane this function does
-	// not recognise is handed full venue rights. A Director dropping through here
-	// would be able to write everything it is defined not to.
+	// Ahead of the fallback for as long as the fallback is a WRITE lane: a
+	// Director dropping through would be able to write everything it is defined
+	// not to.
 	if (subRole === "director") return "outlet_director";
 	if (subRole === "guarantor") return "outlet_guarantor";
 	// An unrecognised lane is NOT an owner — see OUTLET_LEAST_PRIVILEGE.
@@ -81,6 +106,9 @@ export function identityFromMembership(
 	m: OutletMembership,
 ): OutletSessionIdentity {
 	return {
+		// Straight off the membership row, so the stamp cannot disagree with the
+		// lane beside it: both describe the same `outlet_user` record.
+		userId: m.userId,
 		outletId: m.outletId,
 		outletName: m.outletName,
 		subRole: outletSubRoleFromBackend(m.subRole),
@@ -94,7 +122,23 @@ export function saveOutletIdentity(identity: OutletSessionIdentity): void {
 	writeTabScoped(IDENTITY_KEY, JSON.stringify(identity));
 }
 
-export function getOutletIdentity(): OutletSessionIdentity | null {
+/**
+ * The cached identity, or null when it cannot be trusted.
+ *
+ * Pass `expectedUserId` wherever the signed-in account is known — the mount and
+ * login paths always know it. A cache that names a DIFFERENT user is refused,
+ * and so is one that names nobody: an identity written before this stamp
+ * existed could have come from any account, so it is discarded rather than
+ * believed, and the caller re-derives from the account's own memberships.
+ *
+ * Both refusals return null, which every caller already handles as "no cache" —
+ * so a stale lane self-heals on the next mount with no re-login. Reads that
+ * only want "is this a real session, and which venue" may still omit the id;
+ * the layout has corrected the cache before any of them runs.
+ */
+export function getOutletIdentity(
+	expectedUserId?: string,
+): OutletSessionIdentity | null {
 	try {
 		const raw = readTabScoped(IDENTITY_KEY);
 		if (!raw) return null;
@@ -105,7 +149,11 @@ export function getOutletIdentity(): OutletSessionIdentity | null {
 		) {
 			return null;
 		}
+		// An unstamped cache is an ANONYMOUS one, not a valid one.
+		if (typeof parsed.userId !== "string" || parsed.userId === "") return null;
+		if (expectedUserId && parsed.userId !== expectedUserId) return null;
 		return {
+			userId: parsed.userId,
 			outletId: parsed.outletId,
 			outletName: parsed.outletName,
 			// Every non-owner lane must be named here. This expression ends on

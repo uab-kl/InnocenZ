@@ -57,11 +57,15 @@ function AgencyLayout() {
 				// buildBlankPortalReset resets agencyOwner to the demo default, so
 				// re-apply the operator's real identity on every mount.
 				//
-				// The stored value is only a CACHE. When this tab has none — a fresh
-				// tab, or one whose cache a sign-out elsewhere cleared — re-derive from
-				// the signed-in account's own memberships, so the identity is tied to
-				// the token instead of to whatever another tab last wrote.
-				let identity = getAgencyIdentity();
+				// The stored value is only a CACHE, and it is only this account's cache
+				// when it SAYS SO — a new tab seeds itself from localStorage, so the
+				// agency and lane sitting there may belong to whoever last signed in on
+				// this machine. Accepted only for the signed-in user, and only once we
+				// KNOW who that is; before the profile arrives there is nothing to
+				// check against, and the effect re-runs on `profile.id`. A refused
+				// cache is re-derived from the account's own memberships and written
+				// back, so a stale lane self-heals with no re-login.
+				let identity = profile?.id ? getAgencyIdentity(profile.id) : null;
 				if (!identity && profile?.id) {
 					identity = await resolveAgencyIdentityForUser(profile.id);
 					if (cancelled) return;

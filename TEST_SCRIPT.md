@@ -325,6 +325,158 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ THE RELEASE CHARGE + GUARANTEED CUT-LOSS — SPEC'D, NOT BUILT (Phase 2; owner, 26 Aug 2026)
+
+**Decided by the owner, 26 Aug 2026:** **both** models charge the venue — best-effort **20%**,
+guaranteed **40%** of the unused wage. **The agency may not reject a guaranteed request.** The app
+does **not** decide who ends up with that money: it bills the venue and credits the agency, and
+**the agency and the PR settle the repayment between themselves**. **No subscription gating** —
+any venue may use either model.
+
+⚠️ **Start from what is built, not from the constants.** `OUTLET_CUTLOSS_*_UNUSED_SHARE`
+(0.8 / 0.6) live in `outlet-demo.ts` and are DEMO MATH ONLY. The backend has no `model` column and
+**implements neither share**: `applyApproval` seals the released PR's wage pro-rata and stops, so
+today the venue keeps **100%** of the unused wage and nobody is charged anything. Phase 2 is
+therefore not "add a second model" — it is **building the release charge for the first time**, and
+it changes what an existing, shipped button (best-effort approve) costs.
+
+#### The money, defined once
+
+Per released assignment, frozen at the moment approval is applied:
+
+- `unused_wage = day_rate_amount − sealed pay_amount` (a PR who checked in; `pay_amount` is the
+  0097 pro-rata seal), or `day_rate_amount` in full for a PR who never checked in — that row is
+  CANCELLED today and seals nothing, so the whole day is unused.
+- `release_charge = unused_wage × (1 − share)`; `share` = 0.8 best-effort / 0.6 guaranteed, so the
+  charge is 20% / 40%. **One constant, both models** — two code paths is how they drift.
+- `venue_credit = unused_wage − release_charge` — what the venue actually saves.
+- 🔴 **`day_rate_amount` NULL (sealed before 0097) → refuse the release with a 409.** A guess here
+  moves somebody's money; same doctrine as `resolveMoneyAgencyId`.
+- ⚠️ **`estimated_savings` changes meaning.** Today it is the whole unused wage, and it is the
+  number the venue is shown on the button it presses. Once a charge exists it must be the **net
+  credit**, with the charge frozen beside it — or the venue agrees to one figure and is billed
+  against another.
+
+#### Where the money goes — ONE hop, not two
+
+Venue to agency, on the existing weekly `collection_invoice`. **That is the entire machine rule.**
+Whatever the PR receives is the agency's decision, taken off-app and entered as an ordinary
+voucher line. So the app must **NOT**: auto-create a PR compensation line, hold the charge in a
+`pending`/`paid` state, or run a redeployment test that decides a payout. The owner's "if they
+cannot find another shift" is the subject of a human conversation, not a machine rule.
+
+**It must still give that conversation its facts**, or there is nothing to discuss:
+
+- **The PR sees**, on the shift they were released from: that the venue released them early, the
+  hours they were paid for, and the charge the venue paid for the rest. ⚠️ **Displayed, never
+  summed into their voucher net** — it is not their money until the agency says it is, and a
+  number inside the net reads as a promise.
+- **The agency sees** the same figure per PR on the cut-loss record, and — display only — whether
+  that PR was re-placed on an overlapping shift afterwards (same agency, not cancelled/no_show,
+  overlapping the released remainder). Evidence for the discussion, never an automatic payout.
+
+#### Tables — no new ones (rule 1)
+
+1. **`cutlost_request`**: `model varchar(20) NOT NULL DEFAULT 'best_effort'` (plain varchar, like
+   `kind`/`status` on this table), plus `release_charge_rm numeric(12,2) NOT NULL DEFAULT '0'` —
+   the request total, frozen beside `estimated_savings` for the same reason that column is frozen.
+2. **`cutlost_request_assignment`** carries the per-PR money — it is already keyed (request,
+   assignment) and holds only ids today: `unused_wage_rm`, `release_charge_rm` (both
+   `numeric(12,2)`), and optional display-only `redeployed_assignment_id uuid` pointing at
+   `shift_assignment.id` (`SET NULL`). All four audit columns are already present.
+3. **`collection_invoice`**: the week's charges fold into `amount`; `source_assignment_ids` already
+   carries traceability and `note` names them. ⚠️ There is **no invoice-line table**; itemising
+   would mean a new `collection_invoice_line`, which is a bigger decision than this feature and is
+   NOT proposed here.
+4. **`payment_voucher_line`**: nothing automatic. If the agency chooses to pay the PR, that is an
+   ordinary line the agency adds — recommend adding **`release_compensation`** to
+   `payment_voucher_component` so the payment is labelled rather than lost in `other`. ⚠️ **Never
+   add a column to this table** — `PUT /payment-voucher/:id` deletes and re-inserts every line and
+   drops anything it does not name; ids belong in the packed `ref`.
+5. Nothing else is stored: outlet, PR and agency names, shift date and slot all come by FK.
+
+#### Behaviour
+
+- **Guaranteed auto-applies**: created `approved`, `decided_at = now`,
+  `decided_by = 'system:guaranteed'`, `applyApproval` in the same request. The agency is
+  **notified, not asked** — a new notification kind (`cutlost_guaranteed_applied`), never
+  `cutlost_requested`, which means "your decision is needed".
+- **`POST /cutlost/:id/decision` 409s on `model='guaranteed'`** ("applied automatically"), and the
+  agency's Cut-loss tab renders it as a notice with no buttons. Buttons that cannot act are worse
+  than none.
+- **Best-effort keeps its veto — but approval is no longer free for the venue.** Its approve
+  button now creates a 20% charge, and every outlet "Saved RM…" figure must be re-derived from the
+  real credit instead of the 0.8 demo constant.
+- **The only two differences between the models** are the share and whether the agency may refuse.
+- **Guard-rails replacing the veto** (there is no longer anyone to say no, and no plan gate):
+  the existing lane guard (owner / finance / ops), the existing floor that quantity may not fall
+  below the PRs actually on the shift, the existing `already_closed` skip, and a new refusal to
+  raise a guaranteed request **after the shift's scheduled end**.
+
+#### Build order — one migration, then six slices
+
+1. Migration: `model` + `release_charge_rm` on the request; `unused_wage_rm` + `release_charge_rm`
+   (+ optional `redeployed_assignment_id`) on the assignment row; optional component enum value.
+2. Share constants server-side, one table for both models; the estimate path returns credit AND
+   charge, so the venue agrees to the same pair it is billed against.
+3. `applyApproval` writes the per-PR figures; guaranteed auto-approves; `decide` 409s on it.
+4. The weekly collection invoice folds the week's charges into `amount` + `note`.
+5. Read surfaces: outlet (credit + charge on the request and the receipt), agency (per-PR figures
+   + the redeploy signal), PR (released-early notice, outside the voucher net).
+6. Tests: the share math including never-checked-in and NULL day-rate; the 409 on decide; and that
+   a charge appears **once and only once** per assignment even if approval is retried.
+
+**Nothing open on the money** — all four questions were answered on 26 Aug. Worth stating plainly
+for whoever builds it: the agency now carries a venue right it cannot refuse, so every refusal
+that used to live in its approve button has to live in the guard-rails above instead.
+
+### ▶ 🔴 Agency A fines a PR for MCs that agency B approved (found 26 Aug 2026 — NOT fixed)
+
+`ShiftAssignmentRepository.attendanceWindow` filters on `sa.pr_id` and the shift date and
+carries **no `agency_id` term**. Its caller `AgencyPenaltyRuleController.evaluateWeek` IS
+agency-scoped — it picks the PR list with `listPrIdsForWeek(agencyId, …)` — which is exactly
+why the leak is invisible at the call site: the right PRs are measured against the wrong window.
+
+| Figure | Rule it feeds | What the leak does |
+|---|---|---|
+| `mcThisMonth` | `max_mc_per_month` | **Over-fires** — A fines the PR for MCs B approved, and the `detail` string ("5 MC this month · cap 2") states a count A has no right to know |
+| `lateThisWeek` | `late_per_week` | **Over-fires** — lateness at another agency's venue |
+| `assignedThisWeek` / `excusedThisWeek` / `paidCancellationsThisWeek` | `min_shifts_per_week` (opportunity) | **Under-fires** — B's shifts count toward A's minimum |
+| `shiftsThisWeek` | `min_shifts_per_week` | **Under-fires** the same way |
+
+The codebase already states the rule this breaks. `pr-stats.ts` — same table, same
+`leave_approved` concept — carries it in its own header: *"Both figures are AGENCY-SCOPED…
+querying without the agency predicate would show each agency the other's numbers."* One module
+applies it and its sibling does not, which is why nothing flags it.
+
+**Fix:** add an optional `agencyId` to `attendanceWindow`'s input and an
+`and sa.agency_id = …` term to BOTH the `wk` and `mth` CTEs, then pass it from both callers
+(`agency-penalty-rule.controller.ts:93` and `pr.controller.ts:getPenalties`). The web mirror
+`apps/web/src/agency-portal/lib/pr-penalties.ts` re-computes the same breach in the browser but
+from the number the backend hands it, so it needs no SQL change — re-check it after.
+
+⚠️ `tsc` and `check:drift` stay green on this: the repository signature is fine, only the SQL is
+missing a predicate. It needs a test, not a typecheck.
+
+### ▶ The MC day-block needs a live 2-agency click-through (26 Aug 2026)
+
+The whole-day block on MC approval (§10, 26 Aug) is proven by tsc and unit tests, not by a real
+approval. On a PR holding shifts from TWO agencies on one date: file MC on both, have one agency
+APPROVE and the other REJECT, then confirm (a) `pr_availability` carries the date with reason
+`MC / leave approved`, (b) the rejecting agency still sees and keeps its shift, (c) no agency can
+assign that PR to a NEW shift that date, and (d) the PR app paints the day amber (still booked),
+never red "Not available".
+
+
+### ▶ CONFIRM ON A LIVE OWNER SESSION — Reduce cutlost is back (26 Aug 2026)
+
+The owner-lane fix (§10, 26 Aug) is proven by tests and by re-deriving the chain, but NOT by a
+click: signing in needs a password. On `/en/outlet` as **Emhub Testing Owner**, reload once and
+check **Reduce cutlost** now sits under LABOR COST on Today, and that pressing it raises a
+request the agency can approve. Same check for an **Ops Head** login. If it is still missing,
+read `sessionStorage.getItem("iz-outlet-identity")` — it should now carry a `userId` equal to
+the signed-in account and `"subRole":"outlet_owner"`.
+
 ### ▶ ✅ CLOSED same day — an overnight booking was invisible to every busy PREVIEW the morning after
 
 **FIXED 24 Aug 2026** — see §10. One rule, `windowsEffectiveOn`, now carries a genuinely
@@ -2175,6 +2327,10 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-26 | **An approved MC excused ONE shift and left the rest of the day open — to every agency, including the one that had just granted it.** A PR on four rosters files MC per assignment, because the request lives on `shift_assignment` (0049/0112) and that row already carries `agency_id`. The WRITE path was right all along — `requestLeaveMine` notifies `existing.agencyId`, `approveLeave`/`rejectLeave` both 404 on `existing.agencyId !== scope.agencyId`, and the queue read is agency-pinned — but the CONSEQUENCE was per-shift: `leave_approved` is a `NON_STAFFING_STATUS`, so the excused hours stopped counting as a clash and read as ordinary free time to the assign guard, which is agency-agnostic by design. Being unfit for 22:00-04:00 at one venue became fitness for 20:00-02:00 at another. **The PR could not close the gap themselves**: `blockMine` refuses a day they are still rostered on, so a SECOND agency REJECTING the same MC — a rejection reverts the row to `assigned` — was enough to lock them out of `pr_availability`, the one switch that blocks a day across all agencies, and the 409 it returned named the very remedy that had just been refused ("cancel the shift or request leave instead"). **Fixed:** `approveLeave` now writes the block itself via a new `blockLeaveDay`, through the existing `PrAvailabilityRepository.block` upsert on the unique `(user_id, date)` key — no second insert path. It blocks `shift.shift_date`, the day the shift STARTS, because that is the exact key the assign guard compares against (`unavailable_date = shift.shift_date` in `ShiftAssignmentRepository.create`), so an overnight blocks the night it opens and not the calendar day it spills into — blocking both would take out the FOLLOWING night, which no MC was filed for. The reason is a FIXED neutral string, never the PR's own MC text: `pr_availability.reason` is shown to every agency on the PR's roster via `listForAgency`, so copying the medical note across would broadcast it to three agencies never told about the illness, and naming the approver would leak who else they work for. NEVER throws — `void`-called after the response has gone, failing back to the old behaviour. **Deliberately does NOT touch another agency's existing assignment that day**: the block stops NEW bookings, but releasing a shift agency B is still counting on is B's decision, and letting A's approval cancel it would hand one agency authority over another's roster. That makes a blocked day and a live shift genuinely coexist for the first time — which the PR app got wrong: `buildScheduleDays` tested `blocked` BEFORE `byDate`, so it would have painted the date red "Not available" and hidden the one shift the PR must still turn up for. A live shift now outranks the block. | backend + PR app | ✅ backend tsc 0 non-baseline · mobile tsc **0** on `tsconfig.app.json` · backend vitest **70/70** in 6 files · 3 new tests in `apps/mobile/src/lib/schedule-days.test.ts`, the first that app has ever carried, and **proven able to FAIL** — reverting the precedence flips the coexistence case to `expected "pending", received "unavailable"`. ⚠️ NOT click-verified on a live 2-agency MC (see §9) |
+
+| 2026-08-26 | **Every outlet OWNER was resolved as a view-only DIRECTOR, and exactly one feature was left to notice.** Owner screenshot: Today held a live `confirmed` shift with 6 unfilled seats and no **Reduce cutlost** section. The DB cleared the two data gates (shift `confirmed`, 6 open slots) and said the account was `Owner`, so the survivor was the permission gate — and a unit test written to pin it FAILED on the first run, which is how the real cause surfaced. `outletSubRoleFromBackend` named finance / operations_head / director / guarantor and **never named `owner`**: an owner fell through to the fallback, and its comment still described that fallback as `outlet_owner` — true once, but the fallback had since become `OUTLET_LEAST_PRIVILEGE` (= `outlet_director`). So every owner ran view-only. **It stayed invisible because module grants answer for almost everything**: `outletCan` only consults the sub-role matrix for permissions with no `OUTLET_FEATURE_MODULE` entry, and `requestCutLoss` is the ONLY outlet permission without one (deliberately — the server gates `POST /cutlost` by LANE, since outlet Finance holds no `booking` grant at all). Post Job, Workspace and Settings kept working off the grants, so one section disappeared with no error, no 403 and nothing in a log. `agencySubRoleFromBackend` carried the identical miss — there the unmapped casualty is `viewLiveFloor`. Both now name `owner` explicitly. **Hardened on top of it (the original suspicion, and a real hole either way):** `iz-outlet-identity` / `iz-agency-identity` are tab-scoped but SEEDED from localStorage, and the portal mount preferred that cache over re-deriving — so a new tab could run one account on another account's venue and lane. The identity now carries the `userId` it was derived for; `getOutletIdentity(expectedUserId)` / `getAgencyIdentity(expectedUserId)` refuse a cache naming a different user AND refuse an unstamped one (every cache written before today), and the mount waits for `profile.id` before trusting anything — least privilege until the account is known, then re-derive and write back, so a stale lane self-heals with no re-login. | outlet + agency web | ✅ web tsc 0 across 639 files (`--listFiles` proves both edited files compile), 105/105 vitest with 26 new in 3 new files — `outlet-identity.test.ts`, `agency-identity.test.ts`, `outlet-rbac.test.ts` — and the suite is proven able to FAIL: the owner-lane test caught this bug before the fix existed. Chain re-derived end to end: DB `role_name = Owner` → `laneFromRoleHints` → API `subRole: owner` → `outlet_owner` → `outletCan(requestCutLoss) = true`, matching `requireOutletSubRole(owner, finance, operations_head)` with guarantor folded into owner. The running dev server on :3000 already serves the fixed module. ⚠️ NOT click-verified on a live owner session — reload `/en/outlet` and confirm Reduce cutlost is back under LABOR COST |
 
 | 2026-08-24 | **The demand band went up again, and the shift cover is now zoomable.** (1) Owner: "the font and the logo is too small" — the band's second pass. Venue logo **26→40px** (a 26px square is a favicon; recognising a venue by its mark is the tile's only job in a row that already spells the name), its map-pin fallback `h-3.5→h-5` to match, outlet name 13→**17px** Sora, per-venue count 11.5→13px, band title 11.5→13px, band count 12.5→14px, card day 10.5→12px, **slot 11.5→14px** (the fact the agency actually reads off a card, so it takes the biggest step), count pill 10.5→12px, request chips 10.5→12px. Card padding 6/7→9/11px and rail width **172→200px**, because the width has to follow the type or three chips stop fitting on one line. Verified live: every computed size confirmed, logo box 40×40 with the real image, **zero overflowing elements** in the band, and three injected chips still on ONE row at 12px in the 200px card. (2) **The cover picture is zoomable** — reusing `PhotoLightbox` from `ProofPhotoViewer` rather than writing a second viewer. That component is already portalled to `<body>` at **z-300** *specifically* because a caller inside a sheet hits a wall otherwise (a translucent transformed ancestor becomes the containing block for `position: fixed` and traps z-index in its own stacking context) — so it worked here first time. The whole picture is the hit target with `cursor: zoom-in` and a quiet corner glyph, `aria-label` on the button, and `coverZoom` is its OWN state rather than derived from `demandDetail`, so closing the zoom returns you to the sheet instead of dismissing both. New key `demandCoverZoom` × 2 dictionaries. Verified live end to end: clicking the cover opens a dialog **portalled to body at z-index 300**, labelled "Emhub Testing", image at full resolution (399×501, `naturalWidth > 0`), controls Zoom out / Zoom in / Reset zoom / Close; two Zoom-in clicks take the transform to `matrix(1.5, …)` and the rendered box to 599×752; Close removes the lightbox and **leaves the sheet open** on the same shift. web tsc **0**, biome 3 before / 3 after (pre-existing), translations clean, no console errors. ⚠️ Worth remembering for the next browser check: React commits state asynchronously, so reading the DOM in the SAME `javascript_exec` as the `.click()` that triggered it finds the old tree — my first probe reported "lightbox did not open" and was wrong. Split the click and the read into two calls. |
 
