@@ -2512,6 +2512,12 @@ const en = {
 		roleMatrixSaved: "Role matrix saved",
 		roleUpdateFailed: "Failed to update role",
 		roleCreateFailed: "Failed to create role",
+		deleteRole: "Delete role",
+		deleteRoleConfirmTitle: "Delete this role?",
+		deleteRoleConfirmBody:
+			"{name} will be removed permanently. This cannot be undone, and it is refused if anyone still holds the role.",
+		roleDeleted: "Role deleted",
+		roleDeleteFailed: "Failed to delete role",
 
 		allStatus: "All status",
 		allStatusCaps: "All Status",
@@ -5147,6 +5153,12 @@ const zh: PortalTranslations = {
 		roleMatrixSaved: "角色权限矩阵已保存",
 		roleUpdateFailed: "角色更新失败",
 		roleCreateFailed: "角色创建失败",
+		deleteRole: "删除角色",
+		deleteRoleConfirmTitle: "确定删除此角色？",
+		deleteRoleConfirmBody:
+			"{name} 将被永久删除，且无法撤销。若仍有账号持有该角色，删除会被拒绝。",
+		roleDeleted: "角色已删除",
+		roleDeleteFailed: "角色删除失败",
 
 		allStatus: "全部状态",
 		allStatusCaps: "全部状态",
