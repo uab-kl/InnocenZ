@@ -2521,6 +2521,8 @@ const en = {
 		roleUpdateFailed: "Failed to update role",
 		roleCreateFailed: "Failed to create role",
 		deleteRole: "Delete role",
+		deleteRoleSeededHint:
+			"Built into the platform — recreated on every restart, so it cannot be deleted.",
 		deleteRoleConfirmTitle: "Delete this role?",
 		deleteRoleConfirmBody:
 			"{name} will be removed permanently. This cannot be undone, and it is refused if anyone still holds the role.",
@@ -5177,6 +5179,7 @@ const zh: PortalTranslations = {
 		roleUpdateFailed: "角色更新失败",
 		roleCreateFailed: "角色创建失败",
 		deleteRole: "删除角色",
+		deleteRoleSeededHint: "平台内置角色 — 每次重启都会重新创建，无法删除。",
 		deleteRoleConfirmTitle: "确定删除此角色？",
 		deleteRoleConfirmBody:
 			"{name} 将被永久删除，且无法撤销。若仍有账号持有该角色，删除会被拒绝。",

@@ -554,20 +554,35 @@ export function RoleSheet({
 						 * SAVE, the exact opposite of the intent. Close carries the same
 						 * guard for the same reason.
 						 *
-						 * Hidden for a seeded role rather than disabled: the backend
-						 * recreates those on every boot, so deleting one is not a thing
-						 * that can succeed, and a permanently dead control teaches nothing.
+						 * ALWAYS RENDERED in manage mode, disabled on a seeded role — this
+						 * began as hidden-when-seeded, and the owner then looked for the
+						 * button on two seeded roles in a row and read its absence as a
+						 * broken merge (26 Aug). 11 of the 12 roles are seeded, so the
+						 * hidden variant made the feature invisible almost everywhere it
+						 * could be looked for. Disabled with the reason beside it teaches
+						 * the rule instead; the backend refuses regardless.
 						 */}
-						{isManage && role && onDelete && !role.isSeeded ? (
-							<Button
-								type="button"
-								variant="destructive"
-								className="mr-auto"
-								onClick={onDelete}
-								disabled={isBusy}
-							>
-								{t.rbac.deleteRole}
-							</Button>
+						{isManage && role && onDelete ? (
+							<span className="mr-auto flex min-w-0 items-center gap-2">
+								<Button
+									type="button"
+									variant="destructive"
+									onClick={onDelete}
+									disabled={isBusy || role.isSeeded}
+									title={role.isSeeded ? t.rbac.deleteRoleSeededHint : undefined}
+								>
+									{t.rbac.deleteRole}
+								</Button>
+								{/* The hint IS the feature — truncating it to one line cut the
+								    sentence at "recreated on every r…" and the owner asked what
+								    the control even was. Wrap instead; two short lines cost
+								    nothing in a footer this wide. */}
+								{role.isSeeded ? (
+									<span className="min-w-0 text-xs leading-snug text-muted-foreground">
+										{t.rbac.deleteRoleSeededHint}
+									</span>
+								) : null}
+							</span>
 						) : null}
 						<Button
 							type="button"
