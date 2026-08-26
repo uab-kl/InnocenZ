@@ -41,7 +41,7 @@ export function ShiftStatusPanel({
   checkOutAt,
   dutyWagesRm,
   targetSalesRm,
-  dayKey,
+  dayKeys,
 }: {
   checkedOut: boolean;
   /** Real attendance stamps from the backend assignment. */
@@ -51,10 +51,17 @@ export function ShiftStatusPanel({
   dutyWagesRm: number;
   /** This tier's real sales target (RM) at this outlet, or null when unset. */
   targetSalesRm?: number | null;
-  /** Scope the receipt rows to this day (YYYY-MM-DD) so the panel shows only
-   * THIS shift's earnings — and its total reconciles with the Payment
-   * "This week" column for the same day. */
-  dayKey?: string;
+  /**
+   * Scope the receipt rows to THIS SHIFT's day(s) (YYYY-MM-DD) so the panel
+   * shows only this shift's earnings — and its total reconciles with the
+   * Payment "This week" column for the same day.
+   *
+   * A LIST, not one day: a night shift crosses midnight and the server dates
+   * each line by when it was logged, so one shift routinely writes into two
+   * dates. A single key dropped everything logged on the other side of
+   * midnight — see the note where CheckInScreen builds these.
+   */
+  dayKeys?: string[];
 }) {
   const { openScan } = usePrNav();
   // Receipt rows come from the backend current-week draft voucher, scoped to
@@ -75,8 +82,8 @@ export function ShiftStatusPanel({
    * all there is to go on.
    */
   const logs = useMemo(() => {
-    const byDay = dayKey
-      ? allLogs.filter((l) => l.lineDate === dayKey)
+    const byDay = dayKeys?.length
+      ? allLogs.filter((l) => dayKeys.includes(l.lineDate ?? ''))
       : allLogs;
     const startedAt = checkInAt ? new Date(checkInAt).getTime() : null;
     if (startedAt === null || Number.isNaN(startedAt)) return byDay;
@@ -84,7 +91,7 @@ export function ShiftStatusPanel({
       const loggedAt = new Date(l.at).getTime();
       return Number.isNaN(loggedAt) ? true : loggedAt >= startedAt;
     });
-  }, [allLogs, dayKey, checkInAt]);
+  }, [allLogs, dayKeys, checkInAt]);
   // Every proof photo the PR snapped for this shift's self-logs, each carrying
   // its owning line + index so it can be removed. Shown as an editable gallery
   // under the totals so the PR can confirm / add / remove what they uploaded.
@@ -588,14 +595,48 @@ function LogRow({
             <Text style={styles.badgePendingText}>Pending</Text>
           </View>
         ) : (
-          <View style={styles.badgeMatched}>
-            <Check size={10} color={C.green} />
-            {/* "Approved" only when a receipt actually carries that state.
-                Everything else keeps saying "Matched", which claims less: that
-                the line has a receipt behind it, not that anybody signed it
-                off. A row with no receipt has nothing to approve. */}
-            <Text style={styles.badgeMatchedText}>
-              {reviewed ? 'Approved' : 'Matched'}
+          /*
+           * THE ROW'S OWN LIFECYCLE STATE — not the lock that shares its shape.
+           *
+           * This printed `reviewed ? 'Approved' : 'Matched'`, and `reviewed` is
+           * `isReceiptLocked`: true for approved OR verified, because its job is
+           * deciding whether the edit controls are hidden. So a VERIFIED receipt
+           * was badged "Approved" — the same paper read VERIFIED on Payment's day
+           * sheet and Approved here, and the WEAKER word won on the screen the PR
+           * looks at first. Not an edge case either: a scan verifies at CREATION
+           * (payment-voucher.controller.ts:2571), so it was the common one.
+           *
+           * `isReceiptLocked` keeps its real job just below — hiding edit/delete.
+           *
+           * Colour follows the owner's rule (23 Aug): approved is AMBER, the same
+           * waiting colour as pending, because approved money can still be
+           * contested. Only verified earns green. "Matched" is neither — the row
+           * has a receipt behind it and nobody has ruled on it, which claims less
+           * than either word.
+           */
+          <View
+            style={
+              log.receiptStatus === 'approved'
+                ? styles.badgeApproved
+                : styles.badgeMatched
+            }
+          >
+            <Check
+              size={10}
+              color={log.receiptStatus === 'approved' ? C.amber : C.green}
+            />
+            <Text
+              style={
+                log.receiptStatus === 'approved'
+                  ? styles.badgeApprovedText
+                  : styles.badgeMatchedText
+              }
+            >
+              {log.receiptStatus === 'verified'
+                ? 'Verified'
+                : log.receiptStatus === 'approved'
+                  ? 'Approved'
+                  : 'Matched'}
             </Text>
           </View>
         )}
@@ -885,6 +926,30 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,198,106,0.35)',
   },
   badgePendingText: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '700',
+    color: C.amber,
+  },
+  /**
+   * Approved — decided, but still contestable, so it wears PENDING's amber
+   * rather than VERIFIED's green. Same shape as `badgePending`, named for its
+   * own state: a badge called "pending" on an approved row is how the two
+   * states get conflated again.
+   */
+  badgeApproved: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: C.amberBg,
+    borderWidth: 1,
+    borderColor: 'rgba(232,198,106,0.35)',
+  },
+  badgeApprovedText: {
     fontFamily: F.sora,
     fontSize: 10,
     fontWeight: '700',

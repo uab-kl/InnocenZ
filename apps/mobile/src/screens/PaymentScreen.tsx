@@ -131,6 +131,25 @@ const GRID_ROWS: { key: GridBucket; label: string }[] = [
   { key: 'deductions', label: 'Deductions' },
 ];
 
+const OT_DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Sun 23" from a YYYY-MM-DD — the same shape, and the same all-UTC reading,
+ * the grid's own column headers use, so the day named is the column pointed at. */
+function otDayLabel(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return `${OT_DAY_ABBR[d.getUTCDay()]} ${d.getUTCDate()}`;
+}
+
+/** Minutes as the PR would say them: "45m", "1h", "2h 30m". */
+function otMinutesLabel(mins: number): string {
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const r = mins % 60;
+  return r === 0 ? `${h}h` : `${h}h ${r}m`;
+}
+
 function cellAmount(day: WeeklyDayPay, key: GridBucket): number {
   if (key === 'wages') return day.wages;
   if (key === 'drinks') return day.drinks ?? 0;
@@ -418,6 +437,55 @@ export function PaymentScreen({
     () => receiptReviewCaption(current),
     [current],
   );
+  /**
+   * OVERTIME THE PR HAS EARNED THE RIGHT TO ASK FOR — which this screen used to
+   * say nothing about at all.
+   *
+   * A check-out RECORDS overtime minutes; it never pays them. Only an agency
+   * owner or finance user approving the claim writes the `component='ot'` line
+   * that lands in the Others row (`overtime-line.ts`: "Overtime is NEVER
+   * auto-paid"). Until then Others is a dash — correct, and indistinguishable
+   * from nothing-happened. So Check-In told the PR "+1m OT recorded" while
+   * Payment, the screen they open to find out what they are owed, showed an
+   * empty cell and no explanation.
+   *
+   * DERIVED, never stored: minutes on the assignment, and no `ot` line on that
+   * day yet. The moment the agency approves, the line appears, Others stops
+   * being a dash and this caption removes itself — so there is no second place
+   * that can disagree about whether the claim is still open.
+   *
+   * `component`, not the sign or the wording of the line: 'ot', 'deduction' and
+   * 'other' all collapse into the PR-facing 'others' bucket, and only
+   * `component` can tell overtime from a fine.
+   *
+   * 🔴 The minutes are READ from the server's `overtimeMinutes`, never recomputed
+   * here. The first cut of this caption derived them with `overtimeHours` —
+   * worked minus scheduled — and printed nothing at all for the shift that
+   * prompted it: booked 20:30-21:00 and stamped 22:12 to 22:12, that formula
+   * gives max(0, 1 - 30) = 0, while the server had recorded 1 minute because the
+   * whole stamp fell OUTSIDE the window. Two implementations of one rule, and the
+   * phone's was wrong on the very case the feature exists for. The sheet one tap
+   * away (`CellEvidenceSheet`) already reads `overtimeMinutes`; this reads the
+   * same field, so the two cannot drift.
+   */
+  const pendingOtCaption = useMemo(() => {
+    const approvedDays = new Set(
+      (current?.lines ?? [])
+        .filter((l) => l.component === 'ot' && l.lineDate)
+        .map((l) => l.lineDate as string),
+    );
+    const byDay = new Map<string, number>();
+    for (const s of current?.shifts ?? []) {
+      const mins = s.overtimeMinutes ?? 0;
+      if (mins <= 0 || approvedDays.has(s.shiftDate)) continue;
+      byDay.set(s.shiftDate, (byDay.get(s.shiftDate) ?? 0) + mins);
+    }
+    if (byDay.size === 0) return null;
+    const parts = [...byDay.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([iso, mins]) => `${otMinutesLabel(mins)} on ${otDayLabel(iso)}`);
+    return `${parts.join(' · ')} — overtime recorded at check-out, waiting on your agency. It is not in the figures above.`;
+  }, [current]);
 
   // Last week's voucher comes from the same backend as this week — real data,
   // no demo grid. Fetched once on mount (it rarely changes mid-session).
@@ -1580,6 +1648,14 @@ export function PaymentScreen({
                               styles.statusPill,
                               d.status === 'pending' &&
                                 styles.statusPillPending,
+                              // Last week collapses 'approved' into VERIFIED
+                              // (see the label above), so this row's green is
+                              // real settlement — but it used to arrive by
+                              // inheriting the base. Named explicitly now that
+                              // the base is amber; there is deliberately no
+                              // APPROVED branch here, because no day in a
+                              // closed week can carry that label.
+                              label === 'VERIFIED' && styles.statusPillVerified,
                               label === 'DISPUTED' && styles.statusPillDisputed,
                               label === 'DEDUCTED' && styles.statusPillDeducted,
                               d.status === 'empty' && { color: C.muted2 },
@@ -1591,7 +1667,9 @@ export function PaymentScreen({
                       );
                     })}
                     <View style={styles.gridCol}>
-                      <Text style={styles.statusPill}>
+                      {/* Counts settled days in a closed week — green, and now
+                          said out loud rather than inherited from the base. */}
+                      <Text style={[styles.statusPill, styles.statusPillVerified]}>
                         {verifiedDays} verified
                       </Text>
                     </View>
@@ -1750,6 +1828,15 @@ export function PaymentScreen({
                   a line about nothing is worse than no line. */}
               {thisReviewCaption && (
                 <Text style={styles.reviewCaption}>{thisReviewCaption}</Text>
+              )}
+
+              {/* Amber, because this is money that is WAITING — the same colour
+                  the Status pills use for pending and approved, and deliberately
+                  not green: nothing here is settled. */}
+              {pendingOtCaption && (
+                <Text style={[styles.reviewCaption, styles.otCaption]}>
+                  {pendingOtCaption}
+                </Text>
               )}
 
               <ScrollView
@@ -1989,6 +2076,12 @@ export function PaymentScreen({
                               styles.statusPill,
                               d.status === 'pending' &&
                                 styles.statusPillPending,
+                              // APPROVED is amber like PENDING, by the owner's
+                              // rule: mid-week sign-off is a checkpoint, not
+                              // settlement — the Dispute button on this very
+                              // day is still live. Without this branch it fell
+                              // to the base colour, which was green.
+                              label === 'APPROVED' && styles.statusPillApproved,
                               label === 'DISPUTED' && styles.statusPillDisputed,
                               label === 'VERIFIED' && styles.statusPillVerified,
                               label === 'DEDUCTED' && styles.statusPillDeducted,
@@ -2001,12 +2094,12 @@ export function PaymentScreen({
                       );
                     })}
                     <View style={styles.gridCol}>
-                      <Text
-                        style={[
-                          styles.statusPill,
-                          thisPendingDays > 0 && styles.statusPillPending,
-                        ]}
-                      >
+                      {/* BOTH halves are waiting states, so both are amber and
+                          the base carries them: an open week's days top out at
+                          APPROVED, which is a checkpoint, not settlement. No
+                          green belongs in this column — the explicit pending
+                          override it used to carry only restated the base. */}
+                      <Text style={styles.statusPill}>
                         {thisPendingDays > 0
                           ? `${thisPendingDays} pending`
                           : `${thisApprovedDays} approved`}
@@ -3137,6 +3230,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.prMuted,
   },
+  /** Waiting money, so it wears the waiting colour — see the Status pills. */
+  otCaption: { color: C.amber },
   reviewCaption: {
     marginTop: 8,
     fontFamily: F.manrope,
@@ -3207,15 +3302,36 @@ const styles = StyleSheet.create({
   // DEDUCTED is a settled state, not a warning — but it is still money off, so
   // it keeps the deduction colour rather than borrowing VERIFIED's green.
   statusPillDeducted: { color: C.red },
+  /*
+   * THE BASE IS AMBER — waiting — and green is never inherited.
+   *
+   * Green is the owner's rule for settled money only (23 Aug 2026: "all
+   * verified will green, approved yellow warning colour same with Pending").
+   * Green used to be the base here, and This week's chain has no branch of its
+   * own for APPROVED — so an approved day inherited VERIFIED's green and read
+   * as settled money while its Dispute button was still live. The redundant
+   * `statusPillVerified` in that same chain is what hid the miss: the explicit
+   * green and the inherited one looked identical on screen.
+   *
+   * Every green is now claimed by name — including Last week's, which had been
+   * riding the base. Anything unhandled falls to waiting, which is the safe
+   * direction to fail: a settled day shown as waiting is a question, a waiting
+   * day shown as settled is a wrong answer about money.
+   */
   statusPill: {
     fontFamily: F.sora,
     fontSize: 8,
     fontWeight: '800',
     letterSpacing: 0.3,
-    color: C.green,
+    color: C.amber,
     textAlign: 'center',
   },
   statusPillPending: { color: C.amber },
+  /**
+   * Signed off mid-week, but more receipts can still land on that day and the
+   * PR can still contest it — waiting, deliberately the same amber as PENDING.
+   */
+  statusPillApproved: { color: C.amber },
   statusPillDisputed: { color: C.red },
   /** A day whose claim has been ANSWERED — settled, not merely approved. */
   statusPillVerified: { color: C.green },

@@ -1,6 +1,14 @@
 import { JobPostingMicroLabel } from "@agency-portal/components/special-service/job-posting-ui";
 import { cn } from "@agency-portal/lib/utils";
-import { Calendar, ChevronRight, Info, Lock, Pencil, Plus } from "lucide-react";
+import {
+	Calendar,
+	ChevronDown,
+	ChevronRight,
+	Info,
+	Lock,
+	Pencil,
+	Plus,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -80,6 +88,9 @@ export function PostJobShiftField({
 	children,
 	className,
 	layout = "row",
+	collapsible = false,
+	defaultOpen = true,
+	summary,
 }: {
 	label: string;
 	/** Optional touch-safe help — rendered as an (i) beside the label. */
@@ -87,7 +98,72 @@ export function PostJobShiftField({
 	children: ReactNode;
 	className?: string;
 	layout?: "row" | "stack";
+	/**
+	 * Render this field as a disclosure instead of a plain field.
+	 *
+	 * OPT-IN, and it swaps the wrapper element rather than adding a button to the
+	 * existing one. The default field is a <label> wrapping its own control — see
+	 * the biome-ignore below — and a <button> inside a <label> is both invalid
+	 * nesting and a double-fire: the click toggles, then the label forwards it to
+	 * the control. The collapsible form is a <section>, so the two never mix.
+	 */
+	collapsible?: boolean;
+	defaultOpen?: boolean;
+	/**
+	 * Shown beside the label while collapsed. A disclosure that hides a choice
+	 * should still say what was chosen, or collapsing it costs the reader the
+	 * one fact they wanted.
+	 */
+	summary?: ReactNode;
 }) {
+	const { t } = usePortalLocale();
+	const [open, setOpen] = useState(defaultOpen);
+	if (collapsible) {
+		return (
+			<section
+				className={cn(
+					"iz-post-job-field",
+					layout === "row"
+						? "iz-post-job-field--row"
+						: "iz-post-job-field--stack",
+					className,
+				)}
+			>
+				<div className="flex min-w-0 flex-wrap items-center gap-1.5">
+					<button
+						type="button"
+						onClick={() => setOpen((v) => !v)}
+						aria-expanded={open}
+						title={open ? t.common.tapToCollapse : t.common.tapToExpand}
+						className="flex min-w-0 items-center gap-1.5 text-left"
+					>
+						<ChevronDown
+							className={cn(
+								"h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)] transition-transform",
+								open ? "" : "-rotate-90",
+							)}
+							aria-hidden
+						/>
+						<JobPostingMicroLabel className="iz-post-job-field__label">
+							{label}
+						</JobPostingMicroLabel>
+					</button>
+					{/* Deliberately OUTSIDE the toggle: PostJobInfoTip is itself a
+					    <button>, and nesting one button in another is invalid and
+					    unreachable by keyboard. */}
+					{info}
+					{!open && summary ? (
+						<span className="iz-tiny truncate text-[var(--iz-muted)]">
+							{summary}
+						</span>
+					) : null}
+				</div>
+				{open ? (
+					<div className="iz-post-job-field__control">{children}</div>
+				) : null}
+			</section>
+		);
+	}
 	return (
 		// biome-ignore lint/a11y/noLabelWithoutControl: the control this label wraps arrives through {children}, so biome cannot see it here; the wrapping <label> is deliberate — PostJobInfoTip above relies on a click inside the field reaching the control
 		<label

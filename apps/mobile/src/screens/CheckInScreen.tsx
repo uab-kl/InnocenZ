@@ -6,7 +6,7 @@
  * saved pin (selfie is still bypassed). Receipt logging (the on-duty status
  * panel) and the wages seal write to the backend current-week voucher.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -23,7 +23,7 @@ import {
   type Ymd,
 } from '../lib/demo-shifts';
 import { shiftDurationLabel, useShiftSession } from '../lib/shift-session';
-import { useActiveShift } from '../lib/active-shift';
+import { localDateKey, useActiveShift } from '../lib/active-shift';
 import { overtimeHours, overtimePay } from '../lib/pr-rate';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
@@ -234,9 +234,60 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    * it. Wage/check-in rows are stamped at check-in itself, so they fall on the
    * right side. With no check-in time yet (pre-duty), the day is all there is.
    */
+  /**
+   * THE LOCAL DAY(S) THIS SHIFT'S MONEY MAY BE DATED WITH.
+   *
+   * `todayKey` alone WAS the bug. `pickActive` deliberately keeps a finished
+   * shift on this screen for TWELVE HOURS because a night shift crosses
+   * midnight (active-shift.tsx) — and the moment it does, every line the PR
+   * logged last night is dated yesterday while this filter has already rolled
+   * over to today. The summary then reads RM 0.00 over an empty STATUS panel
+   * on a shift that earned RM 322.50, while Payment — asking for the SHIFT's
+   * day instead of the device's — shows the money correctly. One lane learned
+   * that a shift crosses midnight and its sibling did not.
+   *
+   * The shift's OWN span is the answer: not the device clock, and still not
+   * `shiftDate` (the seed dates some shifts a day ahead, which is exactly why
+   * the scheduled date was rejected here in the first place).
+   *
+   *   on duty  → check-in day … today, so a drink logged at 01:00 still lands
+   *   closed   → check-in day … check-out day, and NOT the day after, so a
+   *              fresh shift's receipts cannot leak into last night's summary
+   *   pre-duty → today, exactly as before
+   *
+   * ⚠️ Two days is the FLOOR, not a workaround: the server dates a line by
+   * when it was logged, so one cross-midnight shift genuinely writes into two
+   * dates. Scoping to the ASSIGNMENT would be stronger still, but the line DTO
+   * carries no assignment id yet — that is a backend slice.
+   *
+   * Capped at four days so a stamp that cannot be true cannot spin the loop.
+   */
+  const shiftDayKeys = useMemo(() => {
+    const start = active?.checkInAt ? new Date(active.checkInAt) : null;
+    if (!start || Number.isNaN(start.getTime())) return [todayKey];
+    const raw = active?.checkOutAt ? new Date(active.checkOutAt) : new Date();
+    const end =
+      !Number.isNaN(raw.getTime()) && raw.getTime() >= start.getTime()
+        ? raw
+        : start;
+    const last = localDateKey(end);
+    const keys: string[] = [];
+    const cursor = new Date(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate(),
+    );
+    for (let i = 0; i < 4; i++) {
+      const key = localDateKey(cursor);
+      keys.push(key);
+      if (key === last) break;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return keys;
+  }, [active?.checkInAt, active?.checkOutAt, todayKey]);
   const shiftStartedAt = active?.checkInAt ? new Date(active.checkInAt).getTime() : null;
   const todayReceipts = receiptLines.filter((l) => {
-    if (l.lineDate !== todayKey) return false;
+    if (!shiftDayKeys.includes(l.lineDate ?? '')) return false;
     if (shiftStartedAt === null) return true;
     const loggedAt = new Date(l.at).getTime();
     return Number.isNaN(loggedAt) ? true : loggedAt >= shiftStartedAt;
@@ -681,7 +732,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   checkOutAt={active.checkOutAt}
                   dutyWagesRm={shiftWagesRm}
                   targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
-                  dayKey={todayKey}
+                  dayKeys={shiftDayKeys}
                 />
                 <ScannedReceiptsCard lines={todayReceipts} />
                 <HoldButton
@@ -742,7 +793,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   checkOutAt={active.checkOutAt}
                   dutyWagesRm={shiftWagesRm}
                   targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
-                  dayKey={todayKey}
+                  dayKeys={shiftDayKeys}
                 />
               </>
             )}

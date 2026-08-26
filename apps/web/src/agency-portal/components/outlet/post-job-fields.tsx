@@ -2023,11 +2023,23 @@ export function DraftShiftEditor({
 					</div>
 				</PostJobShiftField>
 
+				{/* COLLAPSIBLE, because this one field is a hundred comcards tall and
+				    everything below it — languages, dress code, rates — sits under that
+				    wall. Open by default, so nothing moves for anyone who liked it as it
+				    was. The collapsed header keeps the count: `maxNamedPrSelect` is the
+				    SAME value the picker's own badge caps at — both are
+				    min(prSelectMax, namedPrRemaining), and this branch only renders when
+				    it is above zero — so the two cannot disagree. */}
 				<PostJobShiftField
 					label={t.postJob.selectPrs}
 					info={<PostJobInfoTip text={t.postJob.helpSelectPrs} />}
 					className="iz-post-job-pr-field"
 					layout="stack"
+					collapsible
+					summary={fill(t.postJob.selectedOfCap, {
+						n: shift.prIds.length,
+						cap: maxNamedPrSelect,
+					})}
 				>
 					{maxNamedPrSelect === 0 ? (
 						<p className="text-[11px] text-[var(--iz-muted)]">{prPickerHint}</p>
