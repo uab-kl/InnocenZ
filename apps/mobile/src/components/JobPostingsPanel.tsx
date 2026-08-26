@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
-import { formatRM } from '../lib/demo-shifts';
+import { DAY_SHORT, MONTH_SHORT, formatRM } from '../lib/demo-shifts';
 import {
   SERVICE_OFFERS,
   STATUS_FILTER_OPTIONS,
@@ -125,12 +125,37 @@ const INITIATED_BY_LABEL: Record<InitiatedBy, (t: AppTranslations) => string> = 
 };
 
 // English on purpose: this label doubles as the DATE FILTER's identity, so a
-// locale switch must not silently invalidate the picked filter value.
+// locale switch must not silently invalidate the picked filter value. What the
+// PR reads comes from `localDateLabel` below, which resolves it back.
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function dateLabel(d: Date): string {
   return `${DAY_LABELS[d.getDay()]} ${String(d.getDate()).padStart(2, '0')} ${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/**
+ * The same date, worded for the reader.
+ *
+ * `dateLabel` above stays the row's IDENTITY: it is the date filter's option
+ * id and the value `filters.date` is compared against, so it must not move
+ * when the language does. This resolves that identity back through the very
+ * two arrays that built it, so only the FACE of the filter chip and of the
+ * order row changes. An unrecognised shape falls through unchanged rather than
+ * rendering blank.
+ */
+function localDateLabel(label: string, t: AppTranslations): string {
+  const m = /^(\w{3}) (\d{2}) (\w{3}) (\d{4})$/.exec(label);
+  if (!m) return label;
+  const dow = DAY_LABELS.indexOf(m[1]);
+  const mon = MONTH_LABELS.indexOf(m[3]);
+  if (dow < 0 || mon < 0) return label;
+  return formatMessage(t.jobs.dateLine, {
+    dow: DAY_SHORT[dow](t),
+    d: m[2],
+    mon: MONTH_SHORT[mon](t),
+    y: m[4],
+  });
 }
 
 function hhmm(d: Date): string {
@@ -323,7 +348,11 @@ export function JobPostingsPanel({
         <View style={styles.filterGrid}>
           <FilterField
             label={t.jobs.filterDate}
-            value={filters.date === 'all' ? t.jobs.allDates : filters.date}
+            value={
+              filters.date === 'all'
+                ? t.jobs.allDates
+                : localDateLabel(filters.date, t)
+            }
             open={openSelect === 'date'}
             onToggle={() => setOpenSelect((s) => (s === 'date' ? null : 'date'))}
           />
@@ -345,7 +374,7 @@ export function JobPostingsPanel({
           <SelectList
             options={dateOptions.map((d) => ({
               id: d,
-              label: d === 'all' ? t.jobs.allDates : d,
+              label: d === 'all' ? t.jobs.allDates : localDateLabel(d, t),
             }))}
             selected={filters.date}
             onPick={(id) => {
@@ -739,7 +768,8 @@ function OrderCard({ row }: { row: ServiceOrder }) {
         </View>
         <Text style={styles.orderPr}>{row.prName}</Text>
         <Text style={styles.orderMeta}>
-          {localOfferLabel(row.serviceType, t)} · {row.outlet} · {row.date} · {row.time}
+          {localOfferLabel(row.serviceType, t)} · {row.outlet} ·{' '}
+          {localDateLabel(row.date, t)} · {row.time}
         </Text>
         <Text style={styles.orderDesc}>{row.description}</Text>
         <Text style={styles.orderMoney}>

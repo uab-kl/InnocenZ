@@ -1,4 +1,6 @@
 import { loadPhoneCountryCode } from '../../lib/phone-prefs';
+import { formatMessage } from '../../i18n';
+import type { SignupFieldCopy } from '../../i18n/signup-copy';
 import { isValidNricFormat, nricMatchesDob } from '../../lib/id-ocr';
 import {
 	COUNTRY_BY_CODE,
@@ -161,12 +163,17 @@ function parseOptionalMeasure(
 	min: number,
 	max: number,
 	label: string,
+	template?: string,
 ): string | null {
 	const digits = raw.replace(/\D/g, '');
 	if (!digits) return null;
 	const n = Number(digits);
 	if (!Number.isFinite(n) || n < min || n > max) {
-		return `${label} must be between ${min} and ${max}.`;
+		return formatMessage(template ?? '{label} must be between {min} and {max}.', {
+			label,
+			min,
+			max,
+		});
 	}
 	return null;
 }
@@ -176,39 +183,11 @@ export function validateStep(
 	step: number,
 	draft: Draft,
 	localDigits: string,
-	copy?: {
-		nicknameRequired?: string;
-		fullNameRequired?: string;
-		dialRequired?: string;
-		phoneShort?: string;
-		nationalityRequired?: string;
-		idTypeRequired?: string;
-		nricMalaysianOnly?: string;
-		dobRequired?: string;
-		idNoSelectFirst?: string;
-		idNoRequired?: string;
-		languagesRequired?: string;
-		addressLine1Required?: string;
-		cityRequired?: string;
-		postcodeRequired?: string;
-		stateRequired?: string;
-		countryRequired?: string;
-		joiningRequired?: string;
-		agencyRequired?: string;
-		profileRequired?: string;
-		idFrontRequired?: string;
-		idPassportPageRequired?: string;
-		idFrontOcrFail?: string;
-		idPassportOcrFail?: string;
-		idBackRequired?: string;
-		idBackOcrFail?: string;
-		passwordRequired?: string;
-		passwordMin?: string;
-		confirmRequired?: string;
-		passwordMismatch?: string;
-		ackRequired?: string;
-		fixHighlighted?: string;
-	},
+	/**
+	 * Localised copy — pass `t.signup` from the wizard. Every English string
+	 * below it is a last-resort fallback for a caller that has no dictionary.
+	 */
+	copy?: Partial<SignupFieldCopy>,
 ): StepValidation {
 	const fields: FieldErrors = {};
 
@@ -250,21 +229,58 @@ export function validateStep(
 			draft.nationality.trim() === MALAYSIAN_NATIONALITY
 		) {
 			if (!isValidNricFormat(draft.idNo)) {
-				fields.idNo = `NRIC must be ${NRIC_LENGTH} digits like 1234881234 (no dashes).`;
+				fields.idNo = formatMessage(
+					copy?.nricFormat ??
+						'NRIC must be {n} digits like 1234881234 (no dashes).',
+					{ n: NRIC_LENGTH },
+				);
 			} else if (draft.dob && !nricMatchesDob(draft.idNo, draft.dob)) {
-				fields.idNo = 'First 6 digits must match DOB as YYMMDD (e.g. 030704…).';
+				fields.idNo =
+					copy?.nricDobPrefix ??
+					'First 6 digits must match the date of birth as YYMMDD (e.g. 030704…).';
 			}
 		}
 		// Height / weight / BWH are optional — only validate when the PR typed something.
-		const heightErr = parseOptionalMeasure(draft.heightCm, 100, 250, 'Height');
+		const range = copy?.measureRange;
+		const heightErr = parseOptionalMeasure(
+			draft.heightCm,
+			100,
+			250,
+			copy?.height ?? 'Height',
+			range,
+		);
 		if (heightErr) fields.heightCm = heightErr;
-		const weightErr = parseOptionalMeasure(draft.weightKg, 25, 250, 'Weight');
+		const weightErr = parseOptionalMeasure(
+			draft.weightKg,
+			25,
+			250,
+			copy?.weight ?? 'Weight',
+			range,
+		);
 		if (weightErr) fields.weightKg = weightErr;
-		const bustErr = parseOptionalMeasure(draft.bustCm, 40, 200, 'Bust');
+		const bustErr = parseOptionalMeasure(
+			draft.bustCm,
+			40,
+			200,
+			copy?.bust ?? 'Bust',
+			range,
+		);
 		if (bustErr) fields.bustCm = bustErr;
-		const waistErr = parseOptionalMeasure(draft.waistCm, 40, 200, 'Waist');
+		const waistErr = parseOptionalMeasure(
+			draft.waistCm,
+			40,
+			200,
+			copy?.waist ?? 'Waist',
+			range,
+		);
 		if (waistErr) fields.waistCm = waistErr;
-		const hipErr = parseOptionalMeasure(draft.hipCm, 40, 200, 'Hip');
+		const hipErr = parseOptionalMeasure(
+			draft.hipCm,
+			40,
+			200,
+			copy?.hip ?? 'Hip',
+			range,
+		);
 		if (hipErr) fields.hipCm = hipErr;
 		if (draft.languages.length === 0) {
 			fields.languages =

@@ -265,7 +265,12 @@ export function historyVoucherToHistoryWeek(v: PrHistoryVoucher): DemoHistoryWee
 }
 
 /** One History → Shifts card per calendar day from voucher lines (matches Payment). */
-export function historyVoucherToShifts(v: PrHistoryVoucher, weekId: string): DemoHistoryShift[] {
+export function historyVoucherToShifts(
+  v: PrHistoryVoucher,
+  weekId: string,
+  /** LAST and with no default — a default would pin English for every caller. */
+  t: AppTranslations,
+): DemoHistoryShift[] {
   const byDate = new Map<
     string,
     {
@@ -318,7 +323,7 @@ export function historyVoucherToShifts(v: PrHistoryVoucher, weekId: string): Dem
       return {
         id: `pv-${v.voucherId}-${dateIso}`,
         outlet,
-        dateLabel: fmtDFriendly(y, m, d),
+        dateLabel: fmtDFriendly(y, m, d, t),
         dateIso,
         time: timeLabel,
         payout,

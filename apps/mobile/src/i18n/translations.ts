@@ -196,6 +196,10 @@ export type AppTranslations = {
     /** Placeholder inside the empty signature pad. */
     signHere: string;
     clearSignature: string;
+    /** The age line the app draws over the portfolio collage. Screen chrome, not the comcard's own printed content. One key with the number in it, because Chinese does not take a label glued in front of a value. */
+    comcardAge: string;
+    /** Unit after the age figure, in the measure grid and its edit field. The cm and kg beside it are SI symbols and stay English; "y" is an English word shortened, so it moves with the language. */
+    ageSuffix: string;
   };
   security: {
     title: string;
@@ -512,6 +516,10 @@ export type AppTranslations = {
     ruleLate: string;
     /** Penalty rule type cancellation. */
     ruleCancellation: string;
+    /** "Sun 23" — a weekday beside its day-of-month, derived from the day's own ISO date. Names a grid column: the pending-overtime caption, the two "not disputable" alerts and the dispute pill all point at one. {dow} comes from t.schedule.daySun…daySat. No character differs between the two Chinese scripts — the difference rides in {dow}. */
+    dayAndDate: string;
+    /** "4 Aug, 11:29 AM" — a raised-at / check-in / check-out stamp, short enough to sit on a claim row. {time} arrives already built by t.jobs.timeAm / timePm (Chinese puts 上午/下午 in front of the clock), {mon} from t.schedule.monShort*. Chinese writes the month first, so the order lives in the template. No character differs between the two scripts. */
+    stampShort: string;
   };
   history: {
     title: string;
@@ -665,6 +673,10 @@ export type AppTranslations = {
     durationHoursMinutes: string;
     /** {base} is one of the two duration strings above; {ot} = overtime minutes beyond the scheduled hours. */
     durationWithOt: string;
+    /** Attendance stamp before noon — "19 Jul 2026, 11:50 am". {d} day, {mon} short month (t.schedule.monShort*), {y} year, {time} the clock reading. Morning and evening are two WHOLE templates, not one sentence with an am/pm fragment spliced in: Chinese leads with the year and puts 上午 BEFORE the clock. zh and zh-Hant are identical on purpose — no character differs between the scripts. */
+    stampAm: string;
+    /** The afternoon/evening half of shiftLib.stampAm — same placeholders. Identical in both Chinese scripts; 下午 matches the wording already used by jobs.pm / jobs.timePm. */
+    stampPm: string;
   };
   jobs: {
     /** Violet banner at the top of the Job postings panel. */
@@ -762,6 +774,8 @@ export type AppTranslations = {
     offerOthersSummary: string;
     offerLeaveAgency: string;
     offerLeaveAgencySummary: string;
+    /** A service order's date, on the order row and on the date-filter chip. Deliberately not t.schedule.dateFriendly: this sits inside a ' · '-joined meta line, so it carries no separator of its own. {d} is zero-padded. The English source string stays the filter's identity — see localDateLabel in JobPostingsPanel. No character differs between the two Chinese scripts. */
+    dateLine: string;
   };
   schedule: {
     /** Calendar column header. Two-letter in English, one character in Chinese — identical in both scripts. */
@@ -900,6 +914,12 @@ export type AppTranslations = {
     missedNoteOne: string;
     /** Used when the day holds more than one shift. */
     missedNoteMany: string;
+    /** The PR top bar's date — short weekday, day, short month, NO year. Chinese leads with the month and puts the weekday last, so the ORDER lives in the template. Identical in both Chinese scripts: no character here differs, and the weekday itself (周三 / 週三) comes from daySun…daySat. */
+    dateTopbar: string;
+    /** A bare day + short month, e.g. "2 Aug" — the PV issue day in the notification sheet and on Payment. Named dateDayMonth, never dayMonth, which would read as a sibling of dayMon (Monday). Identical in both Chinese scripts. */
+    dateDayMonth: string;
+    /** Stands in for a shift's clock time in History when the wage was sealed at check-out but the week's voucher has not issued yet. PV = payment voucher, using the dictionary's existing 结算单 / 結算單 wording; "sealed" matches evidence.sourceSealed (封存). */
+    sealedPendingPv: string;
   };
   receipt: {
     /** A pending day named inside the review caption. {dow} short weekday, {d} day-of-month — Chinese puts the number first, so the ORDER lives in the template. Identical in both Chinese scripts. */
@@ -1381,6 +1401,26 @@ export type AppTranslations = {
     setQuantityAtLeastOneNoun: string;
     setAmountFirst: string;
   };
+  errors: {
+    /** fetch rejected before any status existed — `{base}` is the API base URL, never baked into the sentence. */
+    backendUnreachable: string;
+    /** Fallback when the envelope carried no message of its own — `{status}` is the HTTP code. */
+    requestFailed: string;
+    /** Same, for the multipart photo/comcard/ID endpoints — `{status}` is the HTTP code. */
+    uploadFailed: string;
+    /** Voucher PDF blob download refused — `{status}` is the HTTP code. */
+    pdfExportFailed: string;
+    /** Voucher Excel blob download refused — `{status}` is the HTTP code. */
+    excelExportFailed: string;
+    /** Multer's 5 MB cap aborts the upload mid-body; say it is the file, not the Wi-Fi. */
+    photoTooLarge: string;
+    /** Multipart upload died in transit — `{base}` is the API base, `{detail}` the underlying platform error. */
+    uploadUnreachable: string;
+    /** Lowercase on purpose: it is substituted INTO `uploadUnreachable`'s `{detail}` when the thrown cause carried no message of its own. */
+    networkError: string;
+    /** Thrown by lib/session.tsx when a profile/upload action runs with no token — Profile renders it. */
+    notSignedIn: string;
+  };
 };
 
 export const translations: Record<AppLocale, AppTranslations> = {
@@ -1553,6 +1593,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       viewerHint: 'Pinch or double-tap to zoom · drag to move · close with ✕ Return',
       signHere: 'Sign here with your finger',
       clearSignature: 'Clear',
+      comcardAge: 'Age {n}',
+      ageSuffix: 'y',
     },
     security: {
       title: 'Security',
@@ -1804,6 +1846,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       ruleMaxMc: 'Max MC per month',
       ruleLate: 'Late per week',
       ruleCancellation: 'Cancellation',
+      dayAndDate: '{dow} {d}',
+      stampShort: '{d} {mon}, {time}',
     },
     history: {
       title: 'History',
@@ -1910,6 +1954,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       durationHours: '{h}h',
       durationHoursMinutes: '{h}h {m}m',
       durationWithOt: '{base} incl. +{ot}m OT',
+      stampAm: '{d} {mon} {y}, {time} am',
+      stampPm: '{d} {mon} {y}, {time} pm',
     },
     jobs: {
       banner: 'Request transportation, makeup, wardrobe, and other services — or raise Leave agency under Service.',
@@ -1988,6 +2034,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       offerOthersSummary: 'Name your own service — describe what you need below',
       offerLeaveAgency: 'Leave agency',
       offerLeaveAgencySummary: 'Before 1 year you must raise a support ticket for early leave',
+      dateLine: '{dow} {d} {mon} {y}',
     },
     schedule: {
       dowSun: 'Su',
@@ -2097,6 +2144,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       outcomeNotStarted: 'Scheduled — not started',
       missedNoteOne: 'No check-in was recorded for this shift, and no MC / leave or cancellation is on file. Contact your agency if this is wrong.',
       missedNoteMany: 'No check-in was recorded for the shift marked above, and no MC / leave or cancellation is on file. Contact your agency if this is wrong.',
+      dateTopbar: '{dow} {d} {mon}',
+      dateDayMonth: '{d} {mon}',
+      sealedPendingPv: 'Sealed · pending PV',
     },
     receipt: {
       captionDay: '{dow} {d}',
@@ -2402,6 +2452,17 @@ export const translations: Record<AppLocale, AppTranslations> = {
       setQuantityAtLeastOneNoun: 'Set a quantity for at least one {noun}.',
       setAmountFirst: 'Set an amount first.',
     },
+    errors: {
+      backendUnreachable: 'Cannot reach the InnocenZ backend at {base}. Is it running?',
+      requestFailed: 'Request failed ({status})',
+      uploadFailed: 'Upload failed ({status})',
+      pdfExportFailed: 'PDF export failed ({status})',
+      excelExportFailed: 'Excel export failed ({status})',
+      photoTooLarge: 'That photo is too large — pick one under 5 MB',
+      uploadUnreachable: 'Upload failed — could not finish talking to {base} ({detail}). Check Wi‑Fi / that the backend is running.',
+      networkError: 'network error',
+      notSignedIn: 'Not signed in',
+    },
   },
   zh: {
     lang: {
@@ -2571,6 +2632,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       viewerHint: '双指缩放或双击放大 · 拖动移动 · 点 ✕ 返回 关闭',
       signHere: '用手指在此签名',
       clearSignature: '清除',
+      comcardAge: '年龄 {n}',
+      ageSuffix: '岁',
     },
     security: {
       title: '安全',
@@ -2822,6 +2885,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       ruleMaxMc: '每月最多病假',
       ruleLate: '每周迟到次数',
       ruleCancellation: '取消班次',
+      dayAndDate: '{dow} {d}日',
+      stampShort: '{mon}{d}日 {time}',
     },
     history: {
       title: '记录',
@@ -2928,6 +2993,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       durationHours: '{h} 小时',
       durationHoursMinutes: '{h} 小时 {m} 分',
       durationWithOt: '{base}（含加班 +{ot} 分钟）',
+      stampAm: '{y}年{mon}{d}日 上午 {time}',
+      stampPm: '{y}年{mon}{d}日 下午 {time}',
     },
     jobs: {
       banner: '可申请交通、妆发、服装等服务 — 如需离开经纪公司，请在「服务」中选择「离开经纪公司」。',
@@ -3006,6 +3073,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       offerOthersSummary: '自定义服务 — 请在下方说明你的需求',
       offerLeaveAgency: '离开经纪公司',
       offerLeaveAgencySummary: '未满一年提前离开，须提交支持工单',
+      dateLine: '{y}年{mon}{d}日 {dow}',
     },
     schedule: {
       dowSun: '日',
@@ -3115,6 +3183,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       outcomeNotStarted: '已排班 — 尚未开始',
       missedNoteOne: '这个班次没有签到记录，也没有病假 / 请假或取消记录。如有出入，请联系你的经纪公司。',
       missedNoteMany: '上方标记的班次没有签到记录，也没有病假 / 请假或取消记录。如有出入，请联系你的经纪公司。',
+      dateTopbar: '{mon}{d}日 {dow}',
+      dateDayMonth: '{mon}{d}日',
+      sealedPendingPv: '已封存 · 结算单待发放',
     },
     receipt: {
       captionDay: '{d}日 {dow}',
@@ -3420,6 +3491,17 @@ export const translations: Record<AppLocale, AppTranslations> = {
       setQuantityAtLeastOneNoun: '请至少为一项{noun}设置数量。',
       setAmountFirst: '请先输入金额。',
     },
+    errors: {
+      backendUnreachable: '无法连接 InnocenZ 服务器 {base}。请确认它是否已启动。',
+      requestFailed: '请求失败（{status}）',
+      uploadFailed: '上传失败（{status}）',
+      pdfExportFailed: 'PDF 导出失败（{status}）',
+      excelExportFailed: 'Excel 导出失败（{status}）',
+      photoTooLarge: '照片太大 — 请选择 5 MB 以下的照片',
+      uploadUnreachable: '上传失败 — 无法与 {base} 完成通信（{detail}）。请检查 Wi-Fi，并确认服务器已启动。',
+      networkError: '网络错误',
+      notSignedIn: '尚未登录',
+    },
   },
   'zh-Hant': {
     lang: {
@@ -3589,6 +3671,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       viewerHint: '雙指縮放或雙擊放大 · 拖動移動 · 點 ✕ 返回 關閉',
       signHere: '用手指在此簽名',
       clearSignature: '清除',
+      comcardAge: '年齡 {n}',
+      ageSuffix: '歲',
     },
     security: {
       title: '安全',
@@ -3840,6 +3924,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       ruleMaxMc: '每月最多病假',
       ruleLate: '每週遲到次數',
       ruleCancellation: '取消班次',
+      dayAndDate: '{dow} {d}日',
+      stampShort: '{mon}{d}日 {time}',
     },
     history: {
       title: '紀錄',
@@ -3946,6 +4032,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       durationHours: '{h} 小時',
       durationHoursMinutes: '{h} 小時 {m} 分',
       durationWithOt: '{base}（含加班 +{ot} 分鐘）',
+      stampAm: '{y}年{mon}{d}日 上午 {time}',
+      stampPm: '{y}年{mon}{d}日 下午 {time}',
     },
     jobs: {
       banner: '可申請交通、妝髮、服裝等服務 — 如需離開經紀公司，請在「服務」中選擇「離開經紀公司」。',
@@ -4024,6 +4112,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       offerOthersSummary: '自訂服務 — 請在下方說明你的需求',
       offerLeaveAgency: '離開經紀公司',
       offerLeaveAgencySummary: '未滿一年提前離開，須提交支援工單',
+      dateLine: '{y}年{mon}{d}日 {dow}',
     },
     schedule: {
       dowSun: '日',
@@ -4133,6 +4222,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       outcomeNotStarted: '已排班 — 尚未開始',
       missedNoteOne: '這個班次沒有簽到紀錄，也沒有病假 / 請假或取消紀錄。如有出入，請聯絡你的經紀公司。',
       missedNoteMany: '上方標記的班次沒有簽到紀錄，也沒有病假 / 請假或取消紀錄。如有出入，請聯絡你的經紀公司。',
+      dateTopbar: '{mon}{d}日 {dow}',
+      dateDayMonth: '{mon}{d}日',
+      sealedPendingPv: '已封存 · 結算單待發放',
     },
     receipt: {
       captionDay: '{d}日 {dow}',
@@ -4437,6 +4529,17 @@ export const translations: Record<AppLocale, AppTranslations> = {
       snapProofFirst: '提交前請先拍一張證明照片。',
       setQuantityAtLeastOneNoun: '請至少為一項{noun}設定數量。',
       setAmountFirst: '請先輸入金額。',
+    },
+    errors: {
+      backendUnreachable: '無法連線 InnocenZ 伺服器 {base}。請確認它是否已啟動。',
+      requestFailed: '請求失敗（{status}）',
+      uploadFailed: '上傳失敗（{status}）',
+      pdfExportFailed: 'PDF 匯出失敗（{status}）',
+      excelExportFailed: 'Excel 匯出失敗（{status}）',
+      photoTooLarge: '照片太大 — 請選擇 5 MB 以下的照片',
+      uploadUnreachable: '上傳失敗 — 無法與 {base} 完成通訊（{detail}）。請檢查 Wi-Fi，並確認伺服器已啟動。',
+      networkError: '網路錯誤',
+      notSignedIn: '尚未登入',
     },
   },
 };

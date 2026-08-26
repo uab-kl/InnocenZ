@@ -12,16 +12,24 @@ import { StyleSheet, Text, View } from 'react-native';
 // lucide — there is no arrow-swap glyph, so the venue icon carries the meaning.
 import { Store } from './icons';
 import { C, F } from '../theme/theme';
-import { useLocale } from '../i18n';
+import { useLocale, type AppLocale } from '../i18n';
 import { IzButton } from './ui';
 import type { OutletSwapRecord } from '../lib/api';
 import type { OutletSwapsState } from '../lib/outlet-swaps';
 
-/** "Fri, 27 Jul" from a YYYY-MM-DD shift day, parsed as a local date. */
-function formatShiftDay(ymd: string): string {
+/**
+ * "Fri, 27 Jul" from a YYYY-MM-DD shift day, parsed as a local date.
+ *
+ * The locale is a PARAMETER, and passed with no default. It used to be
+ * `undefined`, which makes Intl follow the DEVICE's language — so a PR who had
+ * switched the app to Chinese still read an English date on the one card that
+ * relocates a booked shift. `AppLocale` ('en' | 'zh' | 'zh-Hant') is a valid
+ * BCP-47 tag, so it goes straight through.
+ */
+function formatShiftDay(ymd: string, locale: AppLocale): string {
   const [y, m, d] = ymd.split('-').map(Number);
   if (!y || !m || !d) return ymd;
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+  return new Date(y, m - 1, d).toLocaleDateString(locale, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -72,7 +80,7 @@ function SwapCard({
   disabled: boolean;
   onRespond: (accept: boolean) => void;
 }) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   return (
     <View style={styles.card}>
       <View style={styles.head}>
@@ -87,7 +95,7 @@ function SwapCard({
       </Text>
 
       <Text style={styles.meta}>
-        {formatShiftDay(swap.toShiftDate)}
+        {formatShiftDay(swap.toShiftDate, locale)}
         {swap.toSlot ? ` · ${swap.toSlot}` : ''}
       </Text>
       {swap.toEventName ? <Text style={styles.event}>{swap.toEventName}</Text> : null}

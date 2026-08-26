@@ -1,5 +1,6 @@
+import { useMemo } from 'react';
 import { useLocale } from '../../i18n';
-import { COUNTRY_OPTIONS, statesForCountry } from './constants';
+import { countryPickerOptions, statesForCountry } from './constants';
 import { Field, Input, Picker } from './fields';
 import type { Draft, FieldErrors } from './types';
 
@@ -22,6 +23,9 @@ export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Pro
 	const isMalaysia = country === 'Malaysia';
 	const stateOptions = country ? [...statesForCountry(country)] : [];
 	const stateSet = new Set(stateOptions);
+	// `value` stays the English country name that is stored and that
+	// `statesForCountry` keys on — only the rendered label follows the locale.
+	const countryOptions = useMemo(() => countryPickerOptions(s), [s]);
 
 	return (
 		<>
@@ -56,7 +60,7 @@ export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Pro
 			<Field label={s.country} error={fieldErrors.country}>
 				<Picker
 					value={country || null}
-					options={COUNTRY_OPTIONS}
+					options={countryOptions}
 					onSelect={(v) => {
 						clearFieldError('country');
 						clearFieldError('state');

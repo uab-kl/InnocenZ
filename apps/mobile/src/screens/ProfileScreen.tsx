@@ -1023,7 +1023,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <View style={styles.comcardOverlayWrap} pointerEvents="none">
                   <View style={styles.comcardOverlay}>
                     <Text style={styles.comcardOverlayName}>{displayName}</Text>
-                    <Text style={styles.comcardOverlayStats}>Age {age}</Text>
+                    {/* One key with the number in it — "Age" is screen chrome
+                        the app draws over the collage, not the comcard's own
+                        printed content, and Chinese does not take a label
+                        glued in front of a value. */}
+                    <Text style={styles.comcardOverlayStats}>
+                      {formatMessage(t.profile.comcardAge, { n: age })}
+                    </Text>
                     <Text style={styles.comcardOverlayStats}>
                       {height}cm {weight}kg
                     </Text>
@@ -1087,7 +1093,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     {/* Null age = no IC and no stored DOB, which is most of the
                         roster — an em-dash, never a fabricated number. */}
                     <Text style={styles.measureValue}>{me?.profile.age ?? '—'}</Text>
-                    <Text style={styles.measureSuffix}>y</Text>
+                    {/* cm and kg beside it are SI symbols and stay; "y" is an
+                        English word shortened, so it moves with the language. */}
+                    <Text style={styles.measureSuffix}>{t.profile.ageSuffix}</Text>
                   </View>
                 </View>
               </View>
@@ -1141,7 +1149,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     the PR needs to see the number that is on their comcard. */}
                 <MeasureField
                   label={t.profile.age}
-                  suffix="y"
+                  suffix={t.profile.ageSuffix}
                   value={draft.age ? String(draft.age) : ''}
                   onChange={() => {}}
                   lockedNote={t.profile.ageFollowsIc}

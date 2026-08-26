@@ -14,6 +14,7 @@ import { distanceM } from '../lib/geo';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   cancellationRuleSummary,
+  DEFAULT_CANCELLATION_BANDS,
   GEOFENCE_METERS,
   GPS_BYPASS,
   fmtDFriendly,
@@ -675,7 +676,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     {t.checkin.dayAndDate}
                   </Text>
                   <Text style={styles.briefBodyValue}>
-                    {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'}
+                    {shiftDateYmd ? fmtDFriendly(...shiftDateYmd, t) : '—'}
                   </Text>
                   <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>
                     {t.checkin.shiftTime}
@@ -858,11 +859,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           >
             <Text style={styles.sheetTitle}>{t.checkin.cancelTitle}</Text>
             <Text style={styles.sheetMeta}>
-              {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'} · {shiftTime}
+              {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd, t) : '—'} · {shiftTime}
             </Text>
             <Text style={styles.sheetHint}>{t.checkin.cancelWarning}</Text>
             <Text style={styles.rulesTitle}>{t.checkin.cancelRules}</Text>
-            {cancellationRuleSummary().map((r) => (
+            {cancellationRuleSummary(DEFAULT_CANCELLATION_BANDS, t).map((r) => (
               <View key={r.label} style={styles.ruleRow}>
                 <Text style={styles.ruleLabel}>{r.label}</Text>
                 <Text

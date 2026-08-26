@@ -23,6 +23,7 @@ import {
 	getPrDisclaimerFromCopy,
 	type PrDisclaimerId,
 } from './acknowledgements';
+import { idTypeLabel, nationalityLabel } from './constants';
 import { Field, Input, Row } from './fields';
 import { PORTFOLIO_PHOTO_MAX, type Draft, type FieldErrors } from './types';
 
@@ -536,8 +537,11 @@ export function Step5Summary({
 
 			<View style={styles.card}>
 				<Text style={styles.cardTitle}>{t.signup.reviewIdentity}</Text>
-				<Fact label={t.signup.nationality} value={draft.nationality} />
-				<Fact label={draft.idType || 'ID'} value={draft.idNo} />
+				<Fact
+					label={t.signup.nationality}
+					value={nationalityLabel(draft.nationality, t.signup)}
+				/>
+				<Fact label={idTypeLabel(draft.idType, t.signup)} value={draft.idNo} />
 				<Fact label={t.signup.dob} value={draft.dob} />
 				<Fact label={t.signup.email} value={draft.email || '—'} />
 				<Fact

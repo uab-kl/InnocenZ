@@ -145,13 +145,16 @@ export function ShiftHistoryPanel() {
       [],
       weekRecords,
       { closedShift, checkedInAt, checkedOutAt },
+      t,
     );
     const past = vouchers.flatMap((v) => {
       const week = historyVoucherToHistoryWeek(v);
-      return historyVoucherToShifts(v, week.id);
+      return historyVoucherToShifts(v, week.id, t);
     });
     return [...currentShifts, ...past].sort((a, b) => b.dateIso.localeCompare(a.dateIso));
-  }, [weekRecords, closedShift, checkedInAt, checkedOutAt, vouchers]);
+    // `t` is READ here (the date labels are built from it), so it belongs in
+    // the deps — without it the list keeps yesterday's language after a switch.
+  }, [weekRecords, closedShift, checkedInAt, checkedOutAt, vouchers, t]);
 
   const [query, setQuery] = useState('');
   const [outlet, setOutlet] = useState('all');

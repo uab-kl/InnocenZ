@@ -16,12 +16,13 @@ import {
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
+  DAY_SHORT,
+  MONTH_SHORT,
   formatRM,
+  formatUpcomingWeekLabel,
   weekPayGridTotal,
   weekPvIssueDayLabel,
   weekRangeIso,
-  weekRangeLabel,
-  weekRangeLabelFromIso,
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { usePrEarnings } from '../lib/pr-earnings';
@@ -81,9 +82,13 @@ type IncomeKey = 'wages' | 'drinks' | 'tips' | 'others';
 
 type DisputeTarget = {
   key: string;
+  /**
+   * The day, as a DATE — no frozen `dayLabel`/`dateNum` beside it. Those were a
+   * rendered weekday and day-of-month kept in state, which went stale the
+   * moment the PR switched language with the sheet open; the pill derives both
+   * from this ISO at render time (`dayAndDateLabel`).
+   */
   dateIso: string;
-  dayLabel: string;
-  dateNum: number;
   incomeKey: IncomeKey;
   /**
    * NO `incomeLabel` here on purpose. A rendered label frozen into state goes
@@ -229,15 +234,63 @@ const GRID_ROWS: {
   },
 ];
 
-const OT_DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/**
+ * What a grid column is CALLED, from the column's own date.
+ *
+ * Deliberately NOT from `WeeklyDayPay.day`: that field is the English
+ * abbreviation `lib/week-pay-grid` stores, it is written into the signed-PV
+ * snapshot, and PaymentScreen splices it verbatim into the dispute reason it
+ * POSTS — so it is data and must stay put. `dateIso` beside it carries the same
+ * fact and nothing compares what this returns. Null on an unparseable date, so
+ * the caller can fall back to the stored abbreviation rather than render blank.
+ */
+function weekdayLabel(iso: string, t: AppTranslations): string | null {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : DAY_SHORT[d.getUTCDay()](t);
+}
 
-/** "Sun 23" from a YYYY-MM-DD — the same shape, and the same all-UTC reading,
- * the grid's own column headers use, so the day named is the column pointed at. */
-function otDayLabel(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  if (!m) return iso;
-  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-  return `${OT_DAY_ABBR[d.getUTCDay()]} ${d.getUTCDate()}`;
+/**
+ * "Sun 23" from a YYYY-MM-DD — the weekday beside its day-of-month, in the
+ * reader's own order.
+ *
+ * All-UTC, the same reading the grid's own columns use, so the day this names
+ * is the column it points at.
+ */
+function dayAndDateLabel(iso: string, t: AppTranslations): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return formatMessage(t.payment.dayAndDate, {
+    dow: DAY_SHORT[d.getUTCDay()](t),
+    d: d.getUTCDate(),
+  });
+}
+
+/**
+ * The week strip over each card, worded for the reader.
+ *
+ * Same rule as before — the VOUCHER's own `weekStart` names the week whenever
+ * the server has sent one, the device clock is only the fallback — but built
+ * through `formatUpcomingWeekLabel`. `weekRangeLabel` cannot be used for this:
+ * its output is a MATCHING KEY the signed-PV store compares against, so it
+ * stays English and would have pinned the header to one language.
+ */
+function weekStripLabel(
+  weekStart: string | null | undefined,
+  weeksAgo: number,
+  t: AppTranslations,
+): string {
+  let from = weekStart ?? '';
+  let to = '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    const end = new Date(`${from}T00:00:00Z`);
+    end.setUTCDate(end.getUTCDate() + 6);
+    to = end.toISOString().slice(0, 10);
+  } else {
+    const range = weekRangeIso(weeksAgo);
+    from = range.weekStart;
+    to = range.weekEnd;
+  }
+  return formatUpcomingWeekLabel(from, to, t);
 }
 
 /** Minutes as the PR would say them: "45m", "1h", "2h 30m". */
@@ -324,26 +377,18 @@ function claimShifts(
   );
 }
 
-/** "Tue 4 Aug 2026" — UTC-parsed to match how the grid buckets its days. */
-function longDay(iso: string): string {
+/** "Tue · 4 Aug 2026" — UTC-parsed to match how the grid buckets its days. */
+function longDay(iso: string, t: AppTranslations): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
-  const mo = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ][d.getUTCMonth()];
-  return `${wd} ${d.getUTCDate()} ${mo} ${d.getUTCFullYear()}`;
+  // One template per language, not four fragments joined: Chinese writes the
+  // year first and the weekday last.
+  return formatMessage(t.schedule.dateFriendly, {
+    dow: DAY_SHORT[d.getUTCDay()](t),
+    d: d.getUTCDate(),
+    mon: MONTH_SHORT[d.getUTCMonth()](t),
+    y: d.getUTCFullYear(),
+  });
 }
 
 /**
@@ -388,30 +433,25 @@ function eventKindLabel(
   return kind === 'special' ? t.shifts.specialEvent : t.shifts.normalShift;
 }
 
-/** "4 Aug, 11:29 am" — the stamp, short enough to sit on a claim row. */
-function shortStamp(iso: string | null): string {
+/** "4 Aug, 11:29 AM" — the stamp, short enough to sit on a claim row. */
+function shortStamp(iso: string | null, t: AppTranslations): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  const mo = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ][d.getMonth()];
   let h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, '0');
-  const ampm = h >= 12 ? 'pm' : 'am';
+  const isPm = h >= 12;
   h = h % 12 || 12;
-  return `${d.getDate()} ${mo}, ${h}:${m} ${ampm}`;
+  // The clock reading is one template (Chinese puts 上午/下午 in front of it),
+  // and the date wraps that finished string in a second one.
+  const time = formatMessage(isPm ? t.jobs.timePm : t.jobs.timeAm, {
+    time: `${h}:${m}`,
+  });
+  return formatMessage(t.payment.stampShort, {
+    d: d.getDate(),
+    mon: MONTH_SHORT[d.getMonth()](t),
+    time,
+  });
 }
 
 /**
@@ -599,7 +639,7 @@ export function PaymentScreen({
       .map(([iso, mins]) =>
         formatMessage(t.payment.otOnDay, {
           mins: otMinutesLabel(mins, t),
-          day: otDayLabel(iso),
+          day: dayAndDateLabel(iso, t),
         }),
       );
     return formatMessage(t.payment.otPending, { parts: parts.join(' · ') });
@@ -723,8 +763,8 @@ export function PaymentScreen({
   /*
    * THE WEEK THE FIGURES ARE FOR, NOT THE WEEK THE PHONE IS IN.
    *
-   * These read `weekRangeLabel(n)` off the device clock while the grid below
-   * is built from the voucher's `weekStart`. One week, two sources — so a
+   * These read the device clock while the grid below is built from the
+   * voucher's own `weekStart`. One week, two sources — so a
    * header could sit above figures from a different seven days, which is
    * exactly what happened at 01:23 on Sun 23 Aug 2026: "23 Aug – 29 Aug"
    * over columns SUN 16 … SAT 22.
@@ -733,9 +773,9 @@ export function PaymentScreen({
    * server has no voucher for — there is nothing else to name it with then,
    * and an empty grid carries no figures to contradict.
    */
-  const lastLabel = weekRangeLabelFromIso(lastWeek?.weekStart) ?? weekRangeLabel(1);
-  const thisLabel = weekRangeLabelFromIso(current?.weekStart) ?? weekRangeLabel(0);
-  const issueDay = weekPvIssueDayLabel(0);
+  const lastLabel = weekStripLabel(lastWeek?.weekStart, 1, t);
+  const thisLabel = weekStripLabel(current?.weekStart, 0, t);
+  const issueDay = weekPvIssueDayLabel(0, undefined, t);
   /*
    * Two sentences that carry ONE styled word inside them. Each stays a SINGLE
    * dictionary entry — the placeholder is split apart at render time rather
@@ -956,7 +996,7 @@ export function PaymentScreen({
           t.payment.notDisputedHereTitle,
           formatMessage(t.payment.notDisputedHereBody, {
             row: row.label(t),
-            day: `${day.day} ${day.date}`,
+            day: dayAndDateLabel(day.dateIso, t),
           }),
         );
       } else {
@@ -964,7 +1004,7 @@ export function PaymentScreen({
           t.payment.notReviewedTitle,
           formatMessage(t.payment.notReviewedBody, {
             row: row.label(t),
-            day: `${day.day} ${day.date}`,
+            day: dayAndDateLabel(day.dateIso, t),
           }),
         );
       }
@@ -974,8 +1014,6 @@ export function PaymentScreen({
     const target: DisputeTarget = {
       key,
       dateIso: day.dateIso,
-      dayLabel: day.day,
-      dateNum: day.date,
       incomeKey: row.key,
       amount,
       week,
@@ -1572,7 +1610,9 @@ export function PaymentScreen({
                     <Text style={[styles.gridCorner, styles.gridLabel]}> </Text>
                     {grid.map((d) => (
                       <View key={d.dateIso} style={styles.gridCol}>
-                        <Text style={styles.gridDay}>{d.day}</Text>
+                        <Text style={styles.gridDay}>
+                          {weekdayLabel(d.dateIso, t) ?? d.day}
+                        </Text>
                         <Text style={styles.gridDate}>{d.date}</Text>
                       </View>
                     ))}
@@ -1989,7 +2029,9 @@ export function PaymentScreen({
                     <Text style={[styles.gridCorner, styles.gridLabel]}> </Text>
                     {thisGrid.map((d) => (
                       <View key={d.dateIso} style={styles.gridCol}>
-                        <Text style={styles.gridDay}>{d.day}</Text>
+                        <Text style={styles.gridDay}>
+                          {weekdayLabel(d.dateIso, t) ?? d.day}
+                        </Text>
                         <Text style={styles.gridDate}>{d.date}</Text>
                       </View>
                     ))}
@@ -2323,7 +2365,7 @@ export function PaymentScreen({
                         : t.payment.receiptsThisDay}
                     </Text>
                     <Text style={styles.claimDay}>
-                      {longDay(claimDay.dateIso)}
+                      {longDay(claimDay.dateIso, t)}
                     </Text>
                     {/*
                      * SCROLLS, and shrinks so Close stays reachable — a day
@@ -2449,7 +2491,7 @@ export function PaymentScreen({
                              */}
                             <Text style={styles.claimMeta}>
                               {formatMessage(t.payment.raisedAt, {
-                                when: shortStamp(d.raisedAt),
+                                when: shortStamp(d.raisedAt, t),
                               })}
                             </Text>
 
@@ -2509,8 +2551,8 @@ export function PaymentScreen({
                                   </Text>
                                   <Text style={styles.claimShiftMeta}>
                                     {formatMessage(t.payment.inOutWindow, {
-                                      inAt: shortStamp(s.checkInAt),
-                                      outAt: shortStamp(s.checkOutAt),
+                                      inAt: shortStamp(s.checkInAt, t),
+                                      outAt: shortStamp(s.checkOutAt, t),
                                       window: shiftWindowLabel(
                                         s.checkInAt,
                                         s.checkOutAt,
@@ -2737,7 +2779,7 @@ export function PaymentScreen({
               {disputeTarget && (
                 <View style={styles.targetPill}>
                   <Text style={styles.targetPillText}>
-                    {disputeTarget.dayLabel} {disputeTarget.dateNum} ·{' '}
+                    {dayAndDateLabel(disputeTarget.dateIso, t)} ·{' '}
                     {incomeRowLabel(disputeTarget.incomeKey, t)} ·{' '}
                     {formatRM(disputeTarget.amount)}
                   </Text>

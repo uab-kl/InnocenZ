@@ -157,6 +157,17 @@ export type Me = {
   r2PublicUrl?: string | null;
 };
 
+/**
+ * ⚠️ `message` is ENGLISH on purpose, and stays that way.
+ *
+ * Most of the time it is the SERVER's own refusal text, which screens must show
+ * verbatim. The handful of messages this module writes itself (unreachable
+ * backend, `Request failed (…)`, the 5 MB photo cap) are English here — a
+ * developer reads them in the logs — and are turned into the reader's language
+ * at the RENDER site by `localizeApiError` in `lib/api-error-copy.ts`. This is
+ * a plain module with no React, so it cannot read the dictionary itself; add a
+ * new self-written message THERE too, or it ships English to the user's screen.
+ */
 export class ApiError extends Error {
   constructor(
     message: string,

@@ -5,7 +5,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 import {
-  MONTH_NAMES,
   TONIGHT_SHIFT,
   isoDateFromTimestamp,
   upsertWeekPayRecord,
@@ -127,16 +126,56 @@ function roundRm(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-/** e.g. "19 Jul 2026, 11:50 pm" — matches proto attendance stamps */
-export function fmtAttendanceStamp(iso: string | null | undefined): string {
+/**
+ * Short month, as RESOLVERS rather than strings: this is module scope, where no
+ * hook has run, so a plain array would be built once in whatever locale loaded
+ * first. Indexed by `Date#getMonth()`, so the ORDER is data.
+ */
+const MONTH_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monShortJan,
+  (t) => t.schedule.monShortFeb,
+  (t) => t.schedule.monShortMar,
+  (t) => t.schedule.monShortApr,
+  (t) => t.schedule.monShortMay,
+  (t) => t.schedule.monShortJun,
+  (t) => t.schedule.monShortJul,
+  (t) => t.schedule.monShortAug,
+  (t) => t.schedule.monShortSep,
+  (t) => t.schedule.monShortOct,
+  (t) => t.schedule.monShortNov,
+  (t) => t.schedule.monShortDec,
+];
+
+/**
+ * e.g. "19 Jul 2026, 11:50 pm" — the attendance stamp.
+ *
+ * Module scope, so it cannot call `useLocale` itself — the CALLER (a component,
+ * which has `t`) hands the dictionary in, exactly as `shiftDurationLabel` below
+ * does. Callers that pass nothing keep the English wording, taken from the
+ * dictionary rather than duplicated here.
+ *
+ * Morning and evening are two WHOLE templates rather than one sentence with an
+ * am/pm fragment spliced in: Chinese writes the year first and puts 上午/下午
+ * BEFORE the clock reading, so the order has to belong to the string.
+ */
+export function fmtAttendanceStamp(
+  iso: string | null | undefined,
+  t?: AppTranslations,
+): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
+  const copy = t ?? translations.en;
   let h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, '0');
-  const ampm = h >= 12 ? 'pm' : 'am';
+  const template = h >= 12 ? copy.shiftLib.stampPm : copy.shiftLib.stampAm;
   h = h % 12 || 12;
-  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}, ${h}:${m} ${ampm}`;
+  return formatMessage(template, {
+    d: d.getDate(),
+    mon: MONTH_SHORT[d.getMonth()](copy),
+    y: d.getFullYear(),
+    time: `${h}:${m}`,
+  });
 }
 
 /** Sum of receipt commissions (RM) — matches proto `shiftCommissionTotal`. */

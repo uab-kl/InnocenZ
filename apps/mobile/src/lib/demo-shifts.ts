@@ -3,8 +3,24 @@
  * `pr-features.ts`, `pr-agency-schedule.ts`) for everything the backend does not
  * model yet (agency roster/shifts, payment vouchers, notifications, history).
  * Identity data (name, avatar, agency tie) comes live from the backend.
+ *
+ * Despite the name it is also the app's shared date module, so the formatters
+ * below take the dictionary. Each one takes it LAST and with NO default: an
+ * exported formatter that defaulted `t` would silently pin one locale for every
+ * screen that forgot to pass it.
  */
+import { formatMessage, type AppTranslations } from '../i18n';
 
+/**
+ * The English calendar arrays are DATA, not copy, and stay English.
+ *
+ * `signed-pv.tsx` writes `MONTH_NAMES[…]` into the PV snapshot it persists, and
+ * `hist-date-time-filters.ts` parses that back to an ISO date through its own
+ * English `PV_MONTHS` map; `DAY_NAMES` feeds `WeeklyDayPay.day`, which is stored
+ * in that same snapshot and posted inside a dispute reason. Translating either
+ * would break a parse and rewrite stored records, so what a PR READS is resolved
+ * at the render instead — `DAY_SHORT` / `MONTH_SHORT` below.
+ */
 export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 export const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -14,6 +30,42 @@ export const MONTH_LABELS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
 
+/**
+ * Calendar names a PR reads, resolved by INDEX.
+ *
+ * Each entry is a FUNCTION — this is module scope, where no hook has run, and a
+ * plain string array would freeze whichever locale loaded first. Storing the key
+ * NAME instead would type-check and then ship "schedule.daySun" to the screen.
+ * The index is the stored fact (`Date#getDay()`, month 0-11) and never moves.
+ *
+ * Exported because `AgencySchedulePanel.tsx` and `hist-date-time-filters.ts`
+ * each carry a private copy of these two arrays; they can import these instead.
+ */
+export const DAY_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.daySun,
+  (t) => t.schedule.dayMon,
+  (t) => t.schedule.dayTue,
+  (t) => t.schedule.dayWed,
+  (t) => t.schedule.dayThu,
+  (t) => t.schedule.dayFri,
+  (t) => t.schedule.daySat,
+];
+
+export const MONTH_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monShortJan,
+  (t) => t.schedule.monShortFeb,
+  (t) => t.schedule.monShortMar,
+  (t) => t.schedule.monShortApr,
+  (t) => t.schedule.monShortMay,
+  (t) => t.schedule.monShortJun,
+  (t) => t.schedule.monShortJul,
+  (t) => t.schedule.monShortAug,
+  (t) => t.schedule.monShortSep,
+  (t) => t.schedule.monShortOct,
+  (t) => t.schedule.monShortNov,
+  (t) => t.schedule.monShortDec,
+];
+
 export type Ymd = [number, number, number];
 
 export function todayYmd(): Ymd {
@@ -21,21 +73,36 @@ export function todayYmd(): Ymd {
   return [d.getFullYear(), d.getMonth() + 1, d.getDate()];
 }
 
-export function dayName(y: number, m: number, d: number) {
-  return DAY_NAMES[new Date(y, m - 1, d).getDay()];
+/** The short weekday a PR reads, e.g. "Sun" / "周日". */
+export function dayName(y: number, m: number, d: number, t: AppTranslations) {
+  return DAY_SHORT[new Date(y, m - 1, d).getDay()](t);
 }
 
-/** e.g. "Sun · 19 Jul 2026" — shift cards */
-export function fmtDFriendly(y: number, m: number, d: number) {
-  return `${dayName(y, m, d)} · ${String(d).padStart(2, '0')} ${MONTH_NAMES[m - 1]} ${y}`;
+/**
+ * e.g. "Sun · 19 Jul 2026" — shift cards, in the active language.
+ *
+ * Built from ONE template rather than glued together here: Chinese writes the
+ * year first and the weekday last, so the order has to belong to the string.
+ */
+export function fmtDFriendly(y: number, m: number, d: number, t: AppTranslations) {
+  return formatMessage(t.schedule.dateFriendly, {
+    dow: dayName(y, m, d, t),
+    d: String(d).padStart(2, '0'),
+    mon: MONTH_SHORT[m - 1](t),
+    y,
+  });
 }
 
-/** e.g. "Sun 19 Jul" — PR topbar */
-export function fmtDTopbar(y: number, m: number, d: number) {
-  return `${dayName(y, m, d)} ${String(d).padStart(2, '0')} ${MONTH_NAMES[m - 1]}`;
+/** e.g. "Sun 19 Jul" — PR topbar. Its own template: no year, no separator. */
+export function fmtDTopbar(y: number, m: number, d: number, t: AppTranslations) {
+  return formatMessage(t.schedule.dateTopbar, {
+    dow: dayName(y, m, d, t),
+    d: String(d).padStart(2, '0'),
+    mon: MONTH_SHORT[m - 1](t),
+  });
 }
 
-/** 24h clock, e.g. "13:54" — topbar + status bar */
+/** 24h clock, e.g. "13:54" — topbar + status bar. Digits only, no copy. */
 export function fmtClock(date: Date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
@@ -239,25 +306,48 @@ export function cancellationBandsFrom(
   };
 }
 
-/** The three bands as display rows, derived from whatever the agency set. */
+/**
+ * The three bands as display rows, derived from whatever the agency set.
+ *
+ * Every hour and percentage stays a {placeholder} so the Chinese reads as a
+ * sentence instead of a formula with words wedged into it. `id` is a stable
+ * English key: the row is the same row in every language, so a list keyed on it
+ * does not remount when the PR switches language — `label` must never be the key.
+ */
 export function cancellationRuleSummary(
-  bands: CancellationBands = DEFAULT_CANCELLATION_BANDS,
-): { label: string; outcome: string; tone: 'green' | 'amber' | 'red' }[] {
+  bands: CancellationBands,
+  t: AppTranslations,
+): { id: string; label: string; outcome: string; tone: 'green' | 'amber' | 'red' }[] {
   if (!bands.enabled) {
     return [
-      { label: 'Any time before shift', outcome: 'Free cancel', tone: 'green' },
+      {
+        id: 'any',
+        label: t.schedule.ruleAnyTimeBefore,
+        outcome: t.schedule.ruleFreeCancel,
+        tone: 'green',
+      },
     ];
   }
   return [
-    { label: `> ${bands.freeCancelHours}h before`, outcome: 'Free cancel', tone: 'green' },
     {
-      label: `${bands.shortNoticeHours}–${bands.freeCancelHours}h before`,
-      outcome: `−${bands.shortNoticePct}% wages`,
+      id: 'free',
+      label: formatMessage(t.schedule.ruleOverHours, { h: bands.freeCancelHours }),
+      outcome: t.schedule.ruleFreeCancel,
+      tone: 'green',
+    },
+    {
+      id: 'short',
+      label: formatMessage(t.schedule.ruleBetweenHours, {
+        from: bands.shortNoticeHours,
+        to: bands.freeCancelHours,
+      }),
+      outcome: formatMessage(t.schedule.ruleWagesCut, { pct: bands.shortNoticePct }),
       tone: 'amber',
     },
     {
-      label: `< ${bands.shortNoticeHours}h before`,
-      outcome: `−${bands.lateCancelPct}% wages`,
+      id: 'late',
+      label: formatMessage(t.schedule.ruleUnderHours, { h: bands.shortNoticeHours }),
+      outcome: formatMessage(t.schedule.ruleWagesCut, { pct: bands.lateCancelPct }),
       tone: 'red',
     },
   ];
@@ -279,7 +369,14 @@ export function shiftEndDate(shiftDateIso: string, slot: string | null): Date | 
   return end;
 }
 
-/** Attendance label for timetable cards — stamps win over assignment.status. */
+/**
+ * Attendance label for timetable cards — stamps win over assignment.status.
+ *
+ * ⚠️ `statusLabel` STAYS ENGLISH. It is code-produced data, not copy: it is the
+ * record KEY of `TIMETABLE_STATUS` in `AgencySchedulePanel.tsx`, which is where
+ * it is resolved into the active language. Translating it here would make every
+ * one of those lookups miss and fall through to the raw label.
+ */
 export function timetableStatusFromStamps(input: {
   checkInAt?: string | null;
   checkOutAt?: string | null;
@@ -389,18 +486,40 @@ export function getUpcomingWeekRange(baselineIso = ymdToIso(...todayYmd())) {
   return { fromIso, toIso };
 }
 
-export function formatUpcomingWeekLabel(fromIso: string, toIso: string) {
+/**
+ * "19–25 Jul 2026" / "28 Jul – 3 Aug 2026" — the timetable's week strip.
+ *
+ * No `toUpperCase()` any more: the month now comes from the dictionary, Chinese
+ * has no case, and the caller uppercases the whole strip when it wants to.
+ */
+export function formatUpcomingWeekLabel(
+  fromIso: string,
+  toIso: string,
+  t: AppTranslations,
+) {
   const [fy, fm, fd] = isoToYmd(fromIso);
   const [, tm, td] = isoToYmd(toIso);
-  const startMonth = MONTH_NAMES[fm - 1].toUpperCase();
-  const endMonth = MONTH_NAMES[tm - 1].toUpperCase();
-  if (fm === tm) return `${fd}–${td} ${startMonth} ${fy}`;
-  return `${fd} ${startMonth} – ${td} ${endMonth} ${fy}`;
+  if (fm === tm) {
+    return formatMessage(t.schedule.weekRangeSameMonth, {
+      from: fd,
+      to: td,
+      mon: MONTH_SHORT[fm - 1](t),
+      y: fy,
+    });
+  }
+  return formatMessage(t.schedule.weekRangeCrossMonth, {
+    from: fd,
+    fromMon: MONTH_SHORT[fm - 1](t),
+    to: td,
+    toMon: MONTH_SHORT[tm - 1](t),
+    y: fy,
+  });
 }
 
 export function buildUpcomingWeekTimetable(
-  baselineIso = ymdToIso(...todayYmd()),
-  shifts?: ScheduleShiftLike[],
+  baselineIso: string | undefined,
+  shifts: ScheduleShiftLike[] | undefined,
+  t: AppTranslations,
 ): TimetableEntry[] {
   const { fromIso, toIso } = getUpcomingWeekRange(baselineIso);
   const source =
@@ -429,12 +548,16 @@ export function buildUpcomingWeekTimetable(
       return {
         id: s.id,
         dateIso: s.dateIso,
-        dateLabel: fmtDFriendly(y, m, d),
+        dateLabel: fmtDFriendly(y, m, d, t),
         outlet: s.outlet,
         address: s.address ?? null,
         time: s.time,
         ...stamp,
-        sourceLabel: s.agencyName?.trim() || 'Agency',
+        // The agency's own NAME is never translated — only the word that stands
+        // in for it when the assignment carries none.
+        sourceLabel: s.agencyName?.trim() || t.schedule.agencyFallback,
+        // Left English deliberately: nothing renders `sourceDetail`, so giving
+        // it a dictionary key would add a string no PR can ever read.
         sourceDetail: 'Agency assigned this shift on your roster',
         event: s.event ?? null,
         eventKind: s.eventKind ?? null,
@@ -651,6 +774,13 @@ export function historyShiftOutlets(shifts = HISTORY_SHIFTS): string[] {
   return Array.from(new Set(shifts.map((s) => s.outlet))).sort();
 }
 
+/**
+ * ⚠️ "am" / "pm" STAY ENGLISH. This feeds `DemoHistoryShift.time`, which
+ * `hist-date-time-filters.ts` parses back with `parseAmPmToken`
+ * (`/^(\d{1,2}):(\d{2})\s*(am|pm)$/i`) to run the History time filter. A
+ * translated meridiem would make every one of those parses return null and the
+ * filter would quietly stop narrowing anything.
+ */
 function fmtTimeFromIso(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
@@ -669,13 +799,14 @@ export function fmtShiftTimeRange(checkedInAt: string, checkedOutAt: string): st
 export function weekPayRecordToHistoryShift(
   rec: WeekPayRecord,
   timeRange: string,
+  t: AppTranslations,
 ): DemoHistoryShift {
   const [y, m, d] = isoToYmd(rec.dateIso);
   const payout = roundRm(rec.wages + rec.drinks + rec.tips + rec.others);
   return {
     id: `live-${rec.dateIso}`,
     outlet: rec.outlet,
-    dateLabel: fmtDFriendly(y, m, d),
+    dateLabel: fmtDFriendly(y, m, d, t),
     dateIso: rec.dateIso,
     time: timeRange,
     payout,
@@ -701,7 +832,11 @@ type SessionTimes = {
   checkedOutAt: string | null;
 };
 
-function timeRangeForRecord(rec: WeekPayRecord, session: SessionTimes | undefined): string {
+function timeRangeForRecord(
+  rec: WeekPayRecord,
+  session: SessionTimes | undefined,
+  t: AppTranslations,
+): string {
   const matchClosed =
     session?.closedShift &&
     isoDateFromTimestamp(session.closedShift.checkedInAt) === rec.dateIso;
@@ -718,7 +853,7 @@ function timeRangeForRecord(rec: WeekPayRecord, session: SessionTimes | undefine
   ) {
     return fmtShiftTimeRange(session.checkedInAt, session.checkedOutAt);
   }
-  return 'Sealed · pending PV';
+  return t.schedule.sealedPendingPv;
 }
 
 /**
@@ -728,11 +863,12 @@ function timeRangeForRecord(rec: WeekPayRecord, session: SessionTimes | undefine
 export function mergeHistoryShiftsWithWeekPay(
   base: DemoHistoryShift[],
   records: WeekPayRecord[],
-  session?: SessionTimes,
+  session: SessionTimes | undefined,
+  t: AppTranslations,
 ): DemoHistoryShift[] {
   const archived = base.filter((s) => s.weekId !== 'week-current');
   const live = records.map((rec) =>
-    weekPayRecordToHistoryShift(rec, timeRangeForRecord(rec, session)),
+    weekPayRecordToHistoryShift(rec, timeRangeForRecord(rec, session, t), t),
   );
   return [...live, ...archived].sort((a, b) => b.dateIso.localeCompare(a.dateIso));
 }
@@ -815,6 +951,9 @@ function emptyWeekSkeleton(weeksAgo: number, baseline = todayYmd()): WeeklyDayPa
     const dt = new Date(sunday);
     dt.setDate(sunday.getDate() + i);
     return {
+      // English, and left that way: `day` is stored in the signed-PV snapshot
+      // (`signed-pv.tsx`) and posted inside a dispute reason, so it is data. The
+      // grid header translates it at the render.
       day: DAY_NAMES[dt.getDay()].toUpperCase().slice(0, 3),
       date: dt.getDate(),
       dateIso: ymdToIso(dt.getFullYear(), dt.getMonth() + 1, dt.getDate()),
@@ -907,6 +1046,18 @@ export function weekRangeIso(
   return { weekStart: iso(sunday), weekEnd: iso(end) };
 }
 
+/**
+ * ⚠️ STAYS ENGLISH — this output is a MATCHING KEY, not just copy.
+ *
+ * `history-pay-sync.ts` builds it and compares it against `HistPayWeek.weekLabel`
+ * (`weekLabelsMatch`) to pair a history week with its voucher, and that
+ * `weekLabel` is persisted in the signed-PV store. Translating this would break
+ * the pairing for every week already saved, and would make the match depend on
+ * which language the PR happened to have on.
+ *
+ * The week strip a PR READS is built from `t.schedule.weekRangeSameMonth` /
+ * `weekRangeCrossMonth` instead — see `formatUpcomingWeekLabel` above.
+ */
 export function weekRangeLabel(weeksAgo: number, baseline = todayYmd()): string {
   const [y, m, d] = baseline;
   // Sunday-start weeks, matching the backend payroll cycle (weekBounds) and the
@@ -953,14 +1104,27 @@ export function weekRangeLabelFromIso(
   const b = `${String(end.getUTCDate()).padStart(2, '0')} ${MONTH_NAMES[end.getUTCMonth()]} ${end.getUTCFullYear()}`;
   return `${a} – ${b}`;
 }
-/** Next Sunday after the payroll week closes — PV issue day copy. */
-export function weekPvIssueDayLabel(weeksAgo = 0, baseline = todayYmd()): string {
-  const [y, m, d] = baseline;
+/**
+ * Next Sunday after the payroll week closes — PV issue day copy.
+ *
+ * Read only, never compared: safe to translate, unlike `weekRangeLabel` above.
+ */
+export function weekPvIssueDayLabel(
+  weeksAgo: number,
+  baseline: Ymd | undefined,
+  t: AppTranslations,
+): string {
+  const [y, m, d] = baseline ?? todayYmd();
   const sunday = new Date(y, m - 1, d);
   sunday.setDate(sunday.getDate() - sunday.getDay() - weeksAgo * 7);
   const issue = new Date(sunday);
   issue.setDate(sunday.getDate() + 7);
-  return `${issue.getDate()} ${MONTH_NAMES[issue.getMonth()]}`;
+  // `dateDayMonth`, not `dayMonth` — the latter reads as a sibling of `dayMon`,
+  // which is Monday.
+  return formatMessage(t.schedule.dateDayMonth, {
+    d: issue.getDate(),
+    mon: MONTH_SHORT[issue.getMonth()](t),
+  });
 }
 
 function weekPvIssueDate(weeksAgo: number, baseline = todayYmd()): Date {

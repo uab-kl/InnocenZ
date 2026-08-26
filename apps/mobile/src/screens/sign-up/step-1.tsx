@@ -1,14 +1,14 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import { useLocale } from '../../i18n';
 import { PR_LANGUAGE_OPTIONS } from '../../lib/demo-services';
 import { savePhoneCountryCode } from '../../lib/phone-prefs';
 import {
 	COUNTRY_BY_CODE,
-	COUNTRY_DIAL_OPTIONS,
 	MALAYSIAN_NATIONALITY,
-	NATIONALITY_OPTIONS,
-	idTypesForNationality,
+	dialPickerOptions,
+	idTypePickerOptions,
+	nationalityPickerOptions,
 } from './constants';
 import {
 	Field,
@@ -29,14 +29,6 @@ type Props = {
 	clearFieldError: (key: keyof FieldErrors) => void;
 };
 
-const DIAL_PICKER_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
-	value: c.countryCode,
-	label: c.label,
-	flag: c.flag,
-	name: c.name,
-	meta: c.dialCode,
-}));
-
 export function Step1Persona({
 	draft,
 	localDigits,
@@ -52,7 +44,14 @@ export function Step1Persona({
 	const closedDialLabel = country
 		? `${country.flag ? `${country.flag} ` : ''}${country.dialCode}`
 		: null;
-	const idTypeOptions = idTypesForNationality(draft.nationality);
+	// Option VALUES stay English (they are posted at register); only the labels
+	// follow the locale, so these rebuild when the dictionary changes.
+	const dialOptions = useMemo(() => dialPickerOptions(s), [s]);
+	const nationalityOptions = useMemo(() => nationalityPickerOptions(s), [s]);
+	const idTypeOptions = useMemo(
+		() => idTypePickerOptions(draft.nationality, s),
+		[draft.nationality, s],
+	);
 
 	const clearIdPhotos = {
 		idPhotoFrontUri: '',
@@ -93,7 +92,7 @@ export function Step1Persona({
 				<View style={styles.inline}>
 					<Picker
 						value={draft.phoneCountryCode}
-						options={DIAL_PICKER_OPTIONS}
+						options={dialOptions}
 						onSelect={(countryCode) => {
 							clearFieldError('phoneCountryCode');
 							patch({ phoneCountryCode: countryCode });
@@ -130,7 +129,7 @@ export function Step1Persona({
 			<Field label={s.nationality} error={fieldErrors.nationality}>
 				<Picker
 					value={draft.nationality || null}
-					options={NATIONALITY_OPTIONS}
+					options={nationalityOptions}
 					onSelect={(v) => {
 						clearFieldError('nationality');
 						clearFieldError('idType');
@@ -152,7 +151,7 @@ export function Step1Persona({
 				<Field label={s.idType} flex error={fieldErrors.idType}>
 					<Picker
 						value={draft.idType || null}
-						options={[...idTypeOptions]}
+						options={idTypeOptions}
 						onSelect={(v) => {
 							const idType = v as IdType;
 							clearFieldError('idType');

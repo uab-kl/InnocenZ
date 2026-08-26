@@ -697,8 +697,9 @@ export function AgencySchedulePanel() {
         scheduleShifts.filter(
           (s) => !s.checkInAt && !s.checkOutAt && s.status !== 'completed',
         ),
+        t,
       ).filter((e) => !cancelledIds.includes(e.id)),
-    [cancelledIds, scheduleShifts, todayIso],
+    [cancelledIds, scheduleShifts, todayIso, t],
   );
 
   const year = viewMonth.getFullYear();

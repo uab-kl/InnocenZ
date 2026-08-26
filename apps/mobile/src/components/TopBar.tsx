@@ -41,7 +41,7 @@ export function TopBar({
   onBack?: () => void;
 }) {
   const { me, token } = useSession();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const { openPv } = usePrNav();
   const { awaiting } = useAwaitingLastWeekPv();
   const time = useClock();
@@ -84,7 +84,10 @@ export function TopBar({
       id: r.id,
       title: r.title,
       body: r.body ?? '',
-      at: new Date(r.createdAt).toLocaleString(undefined, {
+      // `locale`, not `undefined`: passing undefined follows the DEVICE's
+      // language, so a PR who switched the app to Chinese still read an English
+      // date here. `AppLocale` ('en' | 'zh' | 'zh-Hant') is a valid BCP-47 tag.
+      at: new Date(r.createdAt).toLocaleString(locale, {
         day: 'numeric',
         month: 'short',
         hour: 'numeric',
@@ -109,7 +112,7 @@ export function TopBar({
                 ref: awaiting.todo.ref,
                 net: formatRM(awaiting.todo.net),
               }),
-              at: weekPvIssueDayLabel(1),
+              at: weekPvIssueDayLabel(1, undefined, t),
               read: false as boolean,
               pvId: awaiting.todo.pvId as string | undefined,
               backed: false,
@@ -121,7 +124,7 @@ export function TopBar({
       ...n,
       read: n.read || readIds.includes(n.id),
     }));
-  }, [rows, awaiting, readIds, t]);
+  }, [rows, awaiting, readIds, locale, t]);
   const unread = notifications.filter((n) => !n.read).length;
 
   const displayName = me?.username ?? 'PR';
@@ -200,7 +203,7 @@ export function TopBar({
           </Pressable>
         )}
         <View style={styles.datetime}>
-          <Text style={styles.date}>{fmtDTopbar(y, m, d)}</Text>
+          <Text style={styles.date}>{fmtDTopbar(y, m, d, t)}</Text>
           <Text style={styles.time}>{time}</Text>
         </View>
         <Pressable style={styles.bellBtn} onPress={() => setSheetOpen(true)}>

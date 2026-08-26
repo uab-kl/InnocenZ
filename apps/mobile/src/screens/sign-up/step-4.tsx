@@ -319,7 +319,7 @@ export function Step4VerifyPhotos({
             setResult({
               status: 'mismatch',
               seen: null,
-              expected: draft.idNo || '(empty)',
+              expected: draft.idNo || t.signup.idNoEmpty,
               rawText: '',
             });
             patch({ [okKey]: false });
@@ -329,7 +329,9 @@ export function Step4VerifyPhotos({
             setResult({
               status: 'mismatch',
               seen: null,
-              expected: `${draft.idNo} (must match DOB)`,
+              expected: formatMessage(t.signup.nricMustMatchDob, {
+                id: draft.idNo,
+              }),
               rawText: '',
             });
             patch({ [okKey]: false });
@@ -400,6 +402,7 @@ export function Step4VerifyPhotos({
       draft.idType,
       frontOcr,
       patch,
+      t.signup,
     ],
   );
 

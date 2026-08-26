@@ -707,7 +707,9 @@ function TonightCard({
           <View style={styles.shiftFacts}>
             <View style={styles.shiftFact}>
               <LabelWithIcon icon={Calendar} label={t.shifts.date} />
-              <Text style={styles.shiftFactValue}>{fmtDFriendly(...shift.date)}</Text>
+              <Text style={styles.shiftFactValue}>
+                {fmtDFriendly(...shift.date, t)}
+              </Text>
             </View>
             <View style={styles.shiftFact}>
               <LabelWithIcon icon={Clock} label={t.shifts.time} />

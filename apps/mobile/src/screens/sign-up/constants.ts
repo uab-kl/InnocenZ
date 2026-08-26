@@ -105,7 +105,11 @@ export const COUNTRY_BY_CODE: Record<string, CountryDialOption> = Object.fromEnt
 	COUNTRY_DIAL_OPTIONS.map((c) => [c.countryCode, c]),
 );
 
-/** Address / residence country picker — country names (Malaysia, …). */
+/**
+ * Address / residence country picker — country names (Malaysia, …).
+ * @deprecated English-only. Use `countryPickerOptions(t.signup)` so the label
+ * follows the locale while `value` stays the stored English name.
+ */
 export const COUNTRY_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
 	value: c.name,
 	label: `${c.flag ? `${c.flag} ` : ''}${c.name}`,
@@ -113,7 +117,10 @@ export const COUNTRY_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
 	name: c.name,
 }));
 
-/** Nationality picker — demonyms (Malaysian, …) for user_profile.nationality. */
+/**
+ * Nationality picker — demonyms (Malaysian, …) for user_profile.nationality.
+ * @deprecated English-only. Use `nationalityPickerOptions(t.signup)`.
+ */
 export const NATIONALITY_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => {
 	const demonym = NATIONALITY_BY_COUNTRY_CODE[c.countryCode] ?? c.name;
 	return {
@@ -126,6 +133,98 @@ export const NATIONALITY_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => {
 
 /** @deprecated Use COUNTRY_OPTIONS / NATIONALITY_OPTIONS. */
 export const NATIONALITIES = COUNTRY_DIAL_OPTIONS.map((c) => c.name);
+
+/**
+ * Locale copy the option-label resolvers below need. Every list above holds the
+ * VALUE that is posted to the backend (country name, demonym, ID type) and
+ * never changes; only the label rendered beside it is localised. A module-scope
+ * map cannot read the dictionary, so these take the copy as a parameter — pass
+ * `t.signup` from inside a component.
+ */
+export type SignupOptionCopy = {
+	countryNames: Record<string, string>;
+	nationalityNames: Record<string, string>;
+	idTypeNric: string;
+	idTypePassport: string;
+	idTypeWorkPermit: string;
+	idTypeFallback: string;
+};
+
+/** Rendered label for a stored country name — passes through when unmapped. */
+export function countryLabel(
+	name: string,
+	copy: Pick<SignupOptionCopy, 'countryNames'>,
+): string {
+	return copy.countryNames[name] ?? name;
+}
+
+/** Rendered label for a stored nationality demonym — passes through when unmapped. */
+export function nationalityLabel(
+	demonym: string,
+	copy: Pick<SignupOptionCopy, 'nationalityNames'>,
+): string {
+	return copy.nationalityNames[demonym] ?? demonym;
+}
+
+/** Rendered label for a stored `ID_TYPES` value. Empty falls back to a generic word. */
+export function idTypeLabel(
+	idType: string,
+	copy: Pick<
+		SignupOptionCopy,
+		'idTypeNric' | 'idTypePassport' | 'idTypeWorkPermit' | 'idTypeFallback'
+	>,
+): string {
+	if (idType === 'NRIC') return copy.idTypeNric;
+	if (idType === 'Passport') return copy.idTypePassport;
+	if (idType === 'Work permit') return copy.idTypeWorkPermit;
+	return copy.idTypeFallback;
+}
+
+/**
+ * Dial-code picker rows. `value` stays the ISO code; the English name is kept
+ * inside `label` so the search box still matches "Malaysia" in any locale.
+ */
+export function dialPickerOptions(copy: Pick<SignupOptionCopy, 'countryNames'>) {
+	return COUNTRY_DIAL_OPTIONS.map((c) => {
+		const shown = countryLabel(c.name, copy);
+		return {
+			value: c.countryCode,
+			label: shown === c.name ? c.label : `${c.label} ${shown}`,
+			flag: c.flag,
+			name: shown,
+			meta: c.dialCode,
+		};
+	});
+}
+
+/** Address country picker — `value` stays the English name that is stored. */
+export function countryPickerOptions(copy: Pick<SignupOptionCopy, 'countryNames'>) {
+	return COUNTRY_DIAL_OPTIONS.map((c) => {
+		const shown = countryLabel(c.name, copy);
+		return {
+			value: c.name,
+			label: `${c.flag ? `${c.flag} ` : ''}${shown}`,
+			flag: c.flag,
+			name: shown,
+		};
+	});
+}
+
+/** Nationality picker — `value` stays the demonym stored on `user_profile`. */
+export function nationalityPickerOptions(
+	copy: Pick<SignupOptionCopy, 'nationalityNames'>,
+) {
+	return COUNTRY_DIAL_OPTIONS.map((c) => {
+		const demonym = NATIONALITY_BY_COUNTRY_CODE[c.countryCode] ?? c.name;
+		const shown = nationalityLabel(demonym, copy);
+		return {
+			value: demonym,
+			label: `${c.flag ? `${c.flag} ` : ''}${shown}`,
+			flag: c.flag,
+			name: shown,
+		};
+	});
+}
 
 /** Malaysia states — same list as `STATES_BY_COUNTRY.Malaysia`. */
 export const MY_STATES = [...STATES_BY_COUNTRY.Malaysia];
@@ -143,6 +242,20 @@ export function idTypesForNationality(
 		return ID_TYPES;
 	}
 	return ['Passport', 'Work permit'];
+}
+
+/** ID-type picker rows — `value` stays the English enum, only the label moves. */
+export function idTypePickerOptions(
+	nationality: string | null | undefined,
+	copy: Pick<
+		SignupOptionCopy,
+		'idTypeNric' | 'idTypePassport' | 'idTypeWorkPermit' | 'idTypeFallback'
+	>,
+) {
+	return idTypesForNationality(nationality).map((value) => ({
+		value,
+		label: idTypeLabel(value, copy),
+	}));
 }
 
 export const NRIC_LENGTH = 12;
