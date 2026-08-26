@@ -198,7 +198,7 @@ export function CreateAdminSheet({
 												{t.admin.activeStatus}
 											</FieldLabel>
 											<p className="text-sm text-muted-foreground">
-												Set account as active or inactive.
+												{t.adminBits.setAccountActiveHint}
 											</p>
 										</div>
 										<Switch

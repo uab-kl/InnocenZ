@@ -263,7 +263,7 @@ export function OutletShiftLogShiftCard({ row }: { row: ShiftHistoryRow }) {
 						{formatRM(breakdown.totalPayout)}
 					</p>
 					<p className="iz-outlet-shift-log-card__hours">
-						{row.durationHours}h shift
+						{fill(t.outletPanels.hoursShift, { n: row.durationHours })}
 					</p>
 				</div>
 			</div>
@@ -354,9 +354,13 @@ export function OutletShiftLogSummaryCard({
 	return (
 		<article className="iz-outlet-shift-log-summary">
 			<p className="iz-outlet-shift-log-summary__hint">
-				{shiftCount} shift{shiftCount !== 1 ? "s" : ""} at {outletName} ·{" "}
-				{prName}
-				{agencyLabel ? ` · ${agencyLabel}` : ""}
+				{fill(
+					shiftCount === 1
+						? t.outletPanels.shiftsAtVenueOne
+						: t.outletPanels.shiftsAtVenueMany,
+					{ n: shiftCount, outlet: outletName, pr: prName },
+				)}
+				{agencyLabel ? fill(t.history.venueSuffix, { venue: agencyLabel }) : ""}
 			</p>
 			<div className="iz-outlet-shift-log-summary__metrics iz-outlet-shift-log-summary__metrics--pair">
 				<button

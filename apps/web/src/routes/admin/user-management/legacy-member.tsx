@@ -595,7 +595,9 @@ function LegacyMemberPage() {
 								    comparator switches on — labels only. */}
 								<SelectContent>
 									<SelectItem value="name">{t.admin.colName}</SelectItem>
-									<SelectItem value="createdAt">{t.admin.colCreated}</SelectItem>
+									<SelectItem value="createdAt">
+										{t.admin.colCreated}
+									</SelectItem>
 									<SelectItem value="updatedAt">
 										{t.adminUsers.colUpdated}
 									</SelectItem>
@@ -603,7 +605,9 @@ function LegacyMemberPage() {
 							</Select>
 						</div>
 						<div className="space-y-1.5">
-							<Label htmlFor="legacy-sort-order">{t.adminUsers.sortOrder}</Label>
+							<Label htmlFor="legacy-sort-order">
+								{t.adminUsers.sortOrder}
+							</Label>
 							<Select
 								value={sortOrder}
 								onValueChange={(value) => setSortOrder(value as SortOrder)}
@@ -616,7 +620,9 @@ function LegacyMemberPage() {
 								</SelectTrigger>
 								<SelectContent>
 									<SelectItem value="asc">{t.adminUsers.ascending}</SelectItem>
-									<SelectItem value="desc">{t.adminUsers.descending}</SelectItem>
+									<SelectItem value="desc">
+										{t.adminUsers.descending}
+									</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
@@ -661,7 +667,9 @@ function LegacyMemberPage() {
 									<TableHead>{t.adminUsers.colCodeId}</TableHead>
 									<TableHead>{t.adminUsers.role}</TableHead>
 									<TableHead>{t.adminUsers.colContact}</TableHead>
-									<TableHead className="w-[120px]">{t.admin.colStatus}</TableHead>
+									<TableHead className="w-[120px]">
+										{t.admin.colStatus}
+									</TableHead>
 									<TableHead className="w-[150px]">
 										{t.adminUsers.colUpdated}
 									</TableHead>

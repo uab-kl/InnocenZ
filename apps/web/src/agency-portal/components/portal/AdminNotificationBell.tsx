@@ -1,21 +1,41 @@
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzCard, IzCardTitle, IzPill } from "@agency-portal/components/iz/ui";
-import {
-	type AdminNotification,
-	type AdminNotificationKind,
-	adminNotificationKindLabel,
+import type {
+	AdminNotification,
+	AdminNotificationKind,
 } from "@agency-portal/lib/admin-notifications";
 import { useStore } from "@agency-portal/lib/store";
 import { useNavigate } from "@tanstack/react-router";
 import { Bell, Plug } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 function kindIcon(kind: AdminNotificationKind) {
 	if (kind === "pos_integration_quote") return Plug;
 	return Bell;
 }
 
+/**
+ * What the kind is CALLED, keyed on the stored enum.
+ *
+ * The record keys are `AdminNotificationKind` values and never move; only the
+ * resolver's result does. A kind added server-side misses the map and falls
+ * through to the generic label rather than rendering blank — the same posture
+ * `adminNotificationKindLabel` in `lib/admin-notifications.ts` has today, which
+ * is where this resolution would live if that module were in scope for this
+ * pass. Consolidate the two the next time that file is opened.
+ */
+const ADMIN_KIND_LABEL: Record<string, (t: PortalTranslations) => string> = {
+	pos_integration_quote: (t) => t.portalShell.adminKindPosIntegration,
+};
+
+function adminKindLabel(kind: AdminNotificationKind, t: PortalTranslations) {
+	return ADMIN_KIND_LABEL[kind]?.(t) ?? t.portalShell.adminKindAlert;
+}
+
 export function AdminNotificationBell() {
+	const { t } = usePortalLocale();
 	const notifications = useStore((s) => s.adminNotifications);
 	const markAdminNotificationRead = useStore(
 		(s) => s.markAdminNotificationRead,
@@ -38,8 +58,8 @@ export function AdminNotificationBell() {
 			<button
 				type="button"
 				className="iz-topbar-action relative"
-				title="Admin notifications"
-				aria-label={`Admin notifications${unread ? `, ${unread} unread` : ""}`}
+				title={t.portalShell.adminNotifications}
+				aria-label={`${t.portalShell.adminNotifications}${unread ? `, ${unread} ${t.notifications.unreadSuffix}` : ""}`}
 				onClick={() => setOpen(true)}
 			>
 				<Bell className="h-3.5 w-3.5" />
@@ -51,13 +71,13 @@ export function AdminNotificationBell() {
 			</button>
 
 			<IzSheet open={open} onClose={() => setOpen(false)} variant="dialog">
-				<IzCardTitle>Admin notifications</IzCardTitle>
+				<IzCardTitle>{t.portalShell.adminNotifications}</IzCardTitle>
 				<p className="iz-tiny iz-muted mt-1">
-					Outlet requests and ops alerts for InnocenZ admin
+					{t.portalShell.adminNotificationsHint}
 				</p>
 				{notifications.length === 0 ? (
 					<IzCard flat className="mt-3 text-center">
-						<p className="iz-sm iz-muted py-6">No notifications yet.</p>
+						<p className="iz-sm iz-muted py-6">{t.notifications.empty}</p>
 					</IzCard>
 				) : (
 					<div className="mt-3 space-y-2">
@@ -83,7 +103,11 @@ export function AdminNotificationBell() {
 												<p className="text-sm font-semibold text-[var(--iz-txt)]">
 													{n.title}
 												</p>
-												{!n.read && <IzPill variant="violet">New</IzPill>}
+												{!n.read && (
+													<IzPill variant="violet">
+														{t.notifications.isNew}
+													</IzPill>
+												)}
 											</div>
 											<p className="iz-tiny iz-muted mt-0.5">{n.body}</p>
 											{n.contactLine && (
@@ -92,7 +116,7 @@ export function AdminNotificationBell() {
 												</p>
 											)}
 											<p className="iz-tiny iz-muted2 mt-1">
-												{adminNotificationKindLabel(n.kind)} · {n.at}
+												{adminKindLabel(n.kind, t)} · {n.at}
 											</p>
 										</div>
 									</div>

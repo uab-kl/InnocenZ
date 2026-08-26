@@ -9,8 +9,34 @@ import {
 	privacyPolicyIntro,
 	privacyPolicySections,
 } from "@/lib/legal/privacy-policy";
+import {
+	PortalLocaleProvider,
+	usePortalLocale,
+} from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
+/**
+ * `/policy` is a PUBLIC route with no portal shell above it, so this page
+ * carries the locale provider itself — an un-provided consumer would render
+ * the chrome in English no matter what the reader picked.
+ *
+ * ⚠️ The policy BODY (`lib/legal/privacy-policy`) stays English in every
+ * locale, deliberately. It is a legal instrument: an unreviewed machine
+ * translation of it would state obligations nobody at InnocenZ has approved.
+ * Only the chrome around it — the back link, the eyebrow, the title, the dates
+ * line and the footer — follows the locale.
+ */
 export function PrivacyPolicyPage() {
+	return (
+		<PortalLocaleProvider>
+			<PrivacyPolicyBody />
+		</PortalLocaleProvider>
+	);
+}
+
+function PrivacyPolicyBody() {
+	const { t } = usePortalLocale();
+
 	return (
 		<div className="relative min-h-svh w-full overflow-x-hidden bg-background text-foreground">
 			<div
@@ -23,21 +49,23 @@ export function PrivacyPolicyPage() {
 					className="mb-8 inline-flex w-fit items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-foreground/65 transition-colors hover:text-gold-bright"
 				>
 					<ArrowLeft className="h-4 w-4" />
-					Back to home
+					{t.webShell.backToHome}
 				</Link>
 
 				<div className="mb-10 flex flex-col items-start gap-4">
 					<BrandLogo variant="stacked" size="md" showTagline />
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.2em] text-royal-gold">
-							Legal
+							{t.webShell.legalEyebrow}
 						</p>
 						<h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-							Privacy Policy
+							{t.webShell.privacyPolicyTitle}
 						</h1>
 						<p className="mt-3 text-sm text-muted-foreground">
-							Effective {PRIVACY_POLICY_EFFECTIVE_DATE} · Last updated{" "}
-							{PRIVACY_POLICY_LAST_UPDATED}
+							{fill(t.webShell.effectiveUpdated, {
+								effective: PRIVACY_POLICY_EFFECTIVE_DATE,
+								updated: PRIVACY_POLICY_LAST_UPDATED,
+							})}
 						</p>
 					</div>
 				</div>
@@ -73,7 +101,7 @@ export function PrivacyPolicyPage() {
 
 				<div className="mt-12 border-t border-border pt-8 text-sm text-muted-foreground">
 					<p>
-						Privacy contact:{" "}
+						{t.webShell.privacyContact}{" "}
 						<a
 							href={PRIVACY_CONTACT_WHATSAPP}
 							target="_blank"
@@ -84,7 +112,9 @@ export function PrivacyPolicyPage() {
 						</a>
 					</p>
 					<p className="mt-4">
-						© {new Date().getFullYear()} InnocenZ. All rights reserved.
+						{fill(t.webShell.rightsReserved, {
+							year: new Date().getFullYear(),
+						})}
 					</p>
 				</div>
 			</div>

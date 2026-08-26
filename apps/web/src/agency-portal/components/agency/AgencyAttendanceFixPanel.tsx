@@ -58,6 +58,7 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 		return (
 			<OutletSection
 				title={t.rosterGrid.checkInLocations}
+				iconKey="Check-in locations"
 				hint={t.rosterGrid.loading}
 				collapsible
 			>
@@ -72,6 +73,7 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 		return (
 			<OutletSection
 				title={t.rosterGrid.checkInLocations}
+				iconKey="Check-in locations"
 				hint={t.rosterGrid.nobodyRostered}
 				collapsible
 				defaultOpen={false}
@@ -99,6 +101,7 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 	return (
 		<OutletSection
 			title={t.rosterGrid.checkInLocations}
+			iconKey="Check-in locations"
 			hint={hint}
 			className="iz-roster-gps-section"
 			collapsible

@@ -80,7 +80,7 @@ export function ProfileLanguagePicker({
 					type="text"
 					value={otherInput}
 					maxLength={32}
-					placeholder="Other language"
+					placeholder={t.izUi.otherLanguage}
 					className="w-full rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-3 py-2.5 text-xs text-[var(--iz-txt)] outline-none placeholder:text-[var(--iz-muted)] focus:border-[var(--iz-gold-d)]"
 					onChange={(e) => setOtherInput(e.target.value)}
 					onKeyDown={(e) => {
@@ -95,7 +95,7 @@ export function ProfileLanguagePicker({
 					className="iz-btn iz-btn-soft w-full !py-2.5 !text-xs"
 					onClick={addOther}
 				>
-					<Plus className="h-3.5 w-3.5" /> Add
+					<Plus className="h-3.5 w-3.5" /> {t.izUi.add}
 				</button>
 			</div>
 		</>

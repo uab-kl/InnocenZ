@@ -245,9 +245,7 @@ function PlanPaymentPage() {
 								<Input
 									value={searchInput}
 									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder={
-										t.adminService.searchOutletOrAgencyPlaceholder
-									}
+									placeholder={t.adminService.searchOutletOrAgencyPlaceholder}
 									className="pl-8"
 									aria-label={t.adminService.searchOutletOrAgency}
 								/>

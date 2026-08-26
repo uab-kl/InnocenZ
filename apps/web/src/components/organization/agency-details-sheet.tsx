@@ -15,6 +15,8 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { formatDate } from "@/lib/utils";
 import type { Agency } from "@/services/agency";
 import {
@@ -44,6 +46,7 @@ export function AgencyDetailsSheet({
 	onSuspend,
 	actionId,
 }: AgencyDetailsSheetProps) {
+	const { t } = usePortalLocale();
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent
@@ -51,17 +54,17 @@ export function AgencyDetailsSheet({
 				className="w-full overflow-y-auto sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
 			>
 				<SheetHeader className="pb-0">
-					<SheetTitle>PR Agency Details</SheetTitle>
-					<SheetDescription>
-						Agency profile and the PRs managed under it.
-					</SheetDescription>
+					<SheetTitle>{t.adminOrg.agencyDetailsTitle}</SheetTitle>
+					<SheetDescription>{t.adminOrg.agencyDetailsHint}</SheetDescription>
 				</SheetHeader>
 
 				{agency && (
 					<div className="space-y-4 px-4 pb-6">
 						<DetailsHero
 							name={agency.name}
-							subtitle={`Agency code ${agency.agencyCode}`}
+							subtitle={fill(t.adminOrg.agencyCodeValue, {
+								code: agency.agencyCode,
+							})}
 							status={agency.status}
 							// R2 object key -> public bucket URL, the same path the
 							// agency portal's own Settings header uses. NOT `logoUrl`:
@@ -73,23 +76,24 @@ export function AgencyDetailsSheet({
 						<Tabs defaultValue="basic">
 							<TabsList className="w-full">
 								<TabsTrigger value="basic">
-									<Building2 className="h-3.5 w-3.5" /> Basic Info
+									<Building2 className="h-3.5 w-3.5" />{" "}
+									{t.adminOrg.tabBasicInfo}
 								</TabsTrigger>
 								<TabsTrigger value="prs">
-									<Users className="h-3.5 w-3.5" /> PRs
+									<Users className="h-3.5 w-3.5" /> {t.adminOrg.tabPrs}
 								</TabsTrigger>
 							</TabsList>
 
 							<TabsContent value="basic" className="space-y-3 pt-2">
-								<DetailSection title="Owner information">
+								<DetailSection title={t.agencyMisc.ownerInformation}>
 									<DetailField
 										icon={User}
-										label="Owner / contact"
+										label={t.adminOrg.ownerContact}
 										value={agency.contactName}
 									/>
 									<DetailField
 										icon={Mail}
-										label="Email"
+										label={t.admin.colEmail}
 										value={agency.contactEmail}
 										href={
 											agency.contactEmail
@@ -99,7 +103,7 @@ export function AgencyDetailsSheet({
 									/>
 									<DetailField
 										icon={Phone}
-										label="Phone"
+										label={t.adminOrg.phone}
 										value={agency.contactPhone}
 										href={
 											agency.contactPhone
@@ -109,25 +113,25 @@ export function AgencyDetailsSheet({
 									/>
 								</DetailSection>
 
-								<DetailSection title="Organization">
+								<DetailSection title={t.adminOrg.organization}>
 									<DetailField
 										icon={Building2}
-										label="Agency name"
+										label={t.adminOrg.agencyName}
 										value={agency.name}
 									/>
 									<DetailField
 										icon={Hash}
-										label="Agency code"
+										label={t.adminOrg.agencyCode}
 										value={agency.agencyCode}
 									/>
 									<DetailField
 										icon={Hash}
-										label="SSM / Org No."
+										label={t.adminOrg.ssmOrgNo}
 										value={agency.ssmNo}
 									/>
 									<DetailField
 										icon={CalendarDays}
-										label="Created"
+										label={t.admin.colCreated}
 										value={formatDate(agency.createdAt)}
 									/>
 								</DetailSection>
@@ -142,7 +146,7 @@ export function AgencyDetailsSheet({
 
 						<ApprovalStatusCard
 							status={agency.status}
-							entityLabel="agency"
+							entityLabel={t.adminOrg.entityAgency}
 							busy={actionId === agency.id}
 							onApprove={() => onApprove(agency.id)}
 							onSuspend={() => onSuspend(agency.id)}

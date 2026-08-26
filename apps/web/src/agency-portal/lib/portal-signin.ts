@@ -13,13 +13,16 @@ import type { Role } from "@agency-portal/lib/store";
 
 export type SignInPortal = "pr" | "outlet" | "agency";
 
-export const PORTAL_SIGNIN_LABELS: Record<SignInPortal, string> = {
-	pr: "PR",
-	outlet: "Outlet",
-	agency: "PR Agency",
-};
-
 export type PortalSubRoleItem = {
+	/**
+	 * The ENGLISH sub-role name — a stable key, not display copy.
+	 *
+	 * It is what `portalRoleLabel` (lib/portal-i18n/portal-role-label.ts) and
+	 * `SUB_ROLE_TITLE_ICONS` both match on, so it must stay English here. A
+	 * sign-in screen renders it as `portalRoleLabel(item.label, t)`; translating
+	 * the constant instead would break the icon lookup silently and put a second
+	 * source of truth beside `profile.roleOwner` / `roleFinance` / `roleOps`.
+	 */
 	label: string;
 	role: Role;
 	outletSubRole?: OutletSubRole;
@@ -78,8 +81,14 @@ export function resolveSignInEmail(value: string): string | null {
 	return email;
 }
 
-export const PORTAL_AUTH_TAGLINES: Record<"outlet" | "agency", string> = {
-	outlet: "Staff tonight, log sales, and seal shifts from one desktop portal.",
-	agency:
-		"Roster PRs, fill outlet demand, and sync payroll from one desktop portal.",
-};
+/*
+ * `PORTAL_SIGNIN_LABELS` and `PORTAL_AUTH_TAGLINES` were removed here.
+ *
+ * Both were module-scope English constants, so they were built before any hook
+ * could run and could never read the dictionary — which is why the sign-in hero
+ * stayed English in a Chinese session. `PortalAuthFrame` was their only reader
+ * and now resolves the same copy from `portalUi.portalName*` /
+ * `portalUi.portalTagline*` through resolver functions. Keeping the dead
+ * constants would leave a second, untranslated copy of that wording to drift
+ * against the live keys.
+ */

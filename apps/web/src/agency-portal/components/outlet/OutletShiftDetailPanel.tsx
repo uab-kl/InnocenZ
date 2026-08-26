@@ -280,7 +280,7 @@ export function OutletShiftDetailPanel({
 		prTierById,
 	);
 	const { demand: staffingDemand, supplied } = outletShiftDemandSupplied(shift);
-	const adjustmentsLabel = outletShiftCutLossAdjustmentsLabel(shift);
+	const adjustmentsLabel = outletShiftCutLossAdjustmentsLabel(shift, t);
 	const tierStaffingByPayTier = useMemo(
 		() =>
 			shiftTierStaffingByPayTier({

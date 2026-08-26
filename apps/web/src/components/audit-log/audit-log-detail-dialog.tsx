@@ -17,6 +17,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	formatAuditDate,
 	formatAuditEntity,
@@ -43,6 +44,8 @@ export function AuditLogDetailDialog({
 	open,
 	onOpenChange,
 }: AuditLogDetailDialogProps) {
+	const { t } = usePortalLocale();
+
 	if (!log) return null;
 
 	const changeKeys =
@@ -59,11 +62,14 @@ export function AuditLogDetailDialog({
 				<DialogHeader>
 					<div className="flex items-center justify-between gap-4 pr-8">
 						<div>
-							<DialogTitle className="text-2xl">Audit Log Detail</DialogTitle>
+							<DialogTitle className="text-2xl">
+								{t.adminAudit.detailTitle}
+							</DialogTitle>
 							<DialogDescription>
 								{formatAuditEntity(log.entity)}
 							</DialogDescription>
 						</div>
+						{/* The RECORDED action — reproduced verbatim, never translated. */}
 						<Badge
 							variant="outline"
 							className={getAuditActionBadgeColor(log.action)}
@@ -81,7 +87,7 @@ export function AuditLogDetailDialog({
 									<div className="flex items-center gap-2 mb-2">
 										<Clock className="h-4 w-4 text-muted-foreground" />
 										<span className="text-xs text-muted-foreground uppercase">
-											Timestamp
+											{t.adminAudit.colTimestamp}
 										</span>
 									</div>
 									<p className="text-lg font-semibold">
@@ -95,12 +101,14 @@ export function AuditLogDetailDialog({
 									<div className="flex items-center gap-2 mb-2">
 										<UserIcon className="h-4 w-4 text-muted-foreground" />
 										<span className="text-xs text-muted-foreground uppercase">
-											User
+											{t.adminAudit.colUser}
 										</span>
 									</div>
 									<p className="text-lg font-semibold">
 										{log.username ||
-											(log.userId ? truncateId(log.userId) : "System")}
+											(log.userId
+												? truncateId(log.userId)
+												: t.adminAudit.systemActor)}
 									</p>
 									{log.role && (
 										<p className="text-sm text-muted-foreground mt-1 capitalize">
@@ -115,7 +123,7 @@ export function AuditLogDetailDialog({
 									<div className="flex items-center gap-2 mb-2">
 										<Box className="h-4 w-4 text-muted-foreground" />
 										<span className="text-xs text-muted-foreground uppercase">
-											Table
+											{t.adminAudit.colTable}
 										</span>
 									</div>
 									<p className="text-lg font-semibold">
@@ -129,7 +137,7 @@ export function AuditLogDetailDialog({
 									<div className="flex items-center gap-2 mb-2">
 										<Globe className="h-4 w-4 text-muted-foreground" />
 										<span className="text-xs text-muted-foreground uppercase">
-											IP Address
+											{t.adminAudit.colIpAddress}
 										</span>
 									</div>
 									<p className="text-sm font-semibold font-mono">
@@ -143,7 +151,7 @@ export function AuditLogDetailDialog({
 									<div className="flex items-center gap-2 mb-2">
 										<Monitor className="h-4 w-4 text-muted-foreground" />
 										<span className="text-xs text-muted-foreground uppercase">
-											User Agent
+											{t.adminAudit.colUserAgent}
 										</span>
 									</div>
 									<p
@@ -157,14 +165,16 @@ export function AuditLogDetailDialog({
 						</div>
 
 						<div>
-							<h3 className="text-lg font-semibold mb-4">Changes</h3>
+							<h3 className="text-lg font-semibold mb-4">
+								{t.adminAudit.changes}
+							</h3>
 							<div className="rounded-lg border border-(--lavender-soft)/30 overflow-x-auto">
 								<Table>
 									<TableHeader>
 										<TableRow>
-											<TableHead>Field</TableHead>
-											<TableHead>Old Value</TableHead>
-											<TableHead>New Value</TableHead>
+											<TableHead>{t.adminAudit.colField}</TableHead>
+											<TableHead>{t.adminAudit.colOldValue}</TableHead>
+											<TableHead>{t.adminAudit.colNewValue}</TableHead>
 										</TableRow>
 									</TableHeader>
 									<TableBody>
@@ -177,6 +187,7 @@ export function AuditLogDetailDialog({
 
 												return (
 													<TableRow key={key}>
+														{/* Column name and both values are RECORDED data. */}
 														<TableCell>
 															<div className="flex items-center gap-2">
 																{hasChanged && (
@@ -228,7 +239,7 @@ export function AuditLogDetailDialog({
 													colSpan={3}
 													className="text-center text-muted-foreground"
 												>
-													Deleted entity data
+													{t.adminAudit.deletedEntityData}
 												</TableCell>
 											</TableRow>
 										) : log.newData ? (
@@ -237,7 +248,7 @@ export function AuditLogDetailDialog({
 													colSpan={3}
 													className="text-center text-muted-foreground"
 												>
-													Created entity data
+													{t.adminAudit.createdEntityData}
 												</TableCell>
 											</TableRow>
 										) : (
@@ -246,7 +257,7 @@ export function AuditLogDetailDialog({
 													colSpan={3}
 													className="text-center text-muted-foreground"
 												>
-													No changes data available
+													{t.adminAudit.noChangesData}
 												</TableCell>
 											</TableRow>
 										)}

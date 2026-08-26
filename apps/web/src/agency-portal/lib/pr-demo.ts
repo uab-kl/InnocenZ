@@ -21,6 +21,8 @@ import {
 } from "@agency-portal/lib/finance-head-stamp";
 import { getDrinkMenuForOutlet } from "@agency-portal/lib/outlet-drink-menu";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type { PaymentVoucherComponent } from "@/services/payment-voucher";
 
 export type PrSubRole = "pr_tied";
@@ -2032,16 +2034,37 @@ export function receiptEntryMethod(scan: PrReceiptScan): ReceiptEntryMethod {
 	return "scan";
 }
 
-export function receiptEntryMethodLabel(entry: ReceiptEntryMethod): string {
-	return entry === "manual" ? "Manual" : "Scanned";
+/**
+ * The entry-method pill. Reuses the receipts filter's own two options rather
+ * than a private pair — the pill and the `<option>` that filters on it name the
+ * same fact, and `scan` / `manual` are the stored values either way.
+ *
+ * `t` is required, not optional-with-an-English-default: an optional `t` would
+ * let a new call site compile while quietly rendering English.
+ */
+export function receiptEntryMethodLabel(
+	entry: ReceiptEntryMethod,
+	t: PortalTranslations,
+): string {
+	return entry === "manual" ? t.receipts.selfLogged : t.receipts.scanned;
 }
 
-export function receiptEntryLoggedLabel(scan: PrReceiptScan): string {
+/**
+ * "How and when this receipt was logged", as one line. `scannedAt` is a stored
+ * display stamp ("18 Jun 2026 · 22:15") and is filled into the sentence rather
+ * than glued in front of it, because Chinese puts the time on the other side.
+ */
+export function receiptEntryLoggedLabel(
+	scan: PrReceiptScan,
+	t: PortalTranslations,
+): string {
 	const entry = receiptEntryMethod(scan);
 	if (entry === "manual") {
-		return scan.scannedAt ? `Keyed ${scan.scannedAt}` : "Manual self-log";
+		return scan.scannedAt
+			? fill(t.libDemo.receiptKeyedAt, { when: scan.scannedAt })
+			: t.receipts.selfLogged;
 	}
-	return `Scanned ${scan.scannedAt}`;
+	return fill(t.libDemo.receiptScannedAt, { when: scan.scannedAt });
 }
 
 export function receiptShiftDetails(
@@ -2092,12 +2115,21 @@ export function receiptShiftDetails(
 	return { shiftTime: "—", window: "" };
 }
 
-export function receiptStatusLabel(status: ReceiptScanStatus) {
-	if (status === "attached") return "ON SHIFT";
-	if (status === "in_pv") return "IN PV";
-	if (status === "paid") return "PAID";
-	if (status === "disputed") return "DISPUTED";
-	return "PENDING";
+/**
+ * The receipt lifecycle badge. Its own keys rather than `receipts.pending` /
+ * `receipts.disputed`: those are the agency's REVIEW states on the receipts
+ * list, whereas these five are where the receipt sits in the shift → PV → paid
+ * chain, and the badge renders them in caps. The stored status is untouched.
+ */
+export function receiptStatusLabel(
+	status: ReceiptScanStatus,
+	t: PortalTranslations,
+) {
+	if (status === "attached") return t.libDemo.receiptOnShift;
+	if (status === "in_pv") return t.libDemo.receiptInPv;
+	if (status === "paid") return t.libDemo.receiptPaid;
+	if (status === "disputed") return t.libDemo.receiptDisputed;
+	return t.libDemo.receiptPending;
 }
 
 export function receiptStatusPillVariant(

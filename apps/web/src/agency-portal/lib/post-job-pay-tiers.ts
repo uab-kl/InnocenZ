@@ -7,7 +7,19 @@ import {
 	snapTierWage,
 } from "@agency-portal/lib/agency-demo";
 import type { PrPayClass } from "@agency-portal/lib/pr-penalties";
+import { fill } from "@/lib/portal-i18n/fill";
+import { tierLabel } from "@/lib/portal-i18n/language-label";
+import {
+	type PortalTranslations,
+	translations,
+} from "@/lib/portal-i18n/translations";
 
+/**
+ * The pay ladder. `id` and `outletTier` are STORED values — `outletTier` is also
+ * the key of every `tierRates` record — and `label` is the RAW ladder string
+ * those rows are matched by, not display copy. All three stay English in every
+ * locale; the rendered text is produced by `tierLabel(label, t)`.
+ */
 export const POST_JOB_PAY_TIER_OPTIONS = [
 	{ id: "tier_1", label: "Tier 1", outletTier: "Tier I" as OutletPrTier },
 	{ id: "tier_2", label: "Tier 2", outletTier: "Tier II" as OutletPrTier },
@@ -519,33 +531,77 @@ export function clampPayTierRowsToMax(
 	return adjustPayTierRowsToTotal(rows, max);
 }
 
-export function formatPayTierRowSummary(row: PostJobPayTierRow): string {
+/**
+ * One posted pay-tier row as a sentence — "Tier 1 · RM 500/shift · 10% drinks ·
+ * 15% tips · 6 PRs".
+ *
+ * The tier name goes through `tierLabel()`: `postJobPayTierLabel()` hands back
+ * the RAW ladder value ("Tier 1", "Servant", "Commission only"), which is what
+ * the saved rate rows are keyed by, so only the rendered text changes.
+ *
+ * The wage half is a PRICE, not a headcount — a row whose `prCount` is 0 still
+ * carries the rate the outlet is offering for that tier, and it keeps printing
+ * that rate here.
+ *
+ * `t` is optional ONLY so the call sites can be wired one at a time; pass it
+ * wherever the caller has a locale. Falling back to `translations.en` keeps the
+ * English in the dictionary instead of making a second copy of it here.
+ */
+export function formatPayTierRowSummary(
+	row: PostJobPayTierRow,
+	t?: PortalTranslations,
+): string {
+	const tx = t ?? translations.en;
+	const shiftWage = isCommissionOnlyPayTier(row.payTierId)
+		? 0
+		: row.wagePerHour;
 	const parts = [
-		postJobPayTierLabel(row.payTierId),
-		isCommissionOnlyPayTier(row.payTierId)
-			? "RM 0/shift"
-			: `RM ${row.wagePerHour.toLocaleString("en-MY")}/shift`,
-		`${row.drinkPct}% drinks · ${row.tipPct}% tips`,
-		row.targetSalesRm ? `Target RM ${row.targetSalesRm}` : null,
-		`${row.prCount} PR${row.prCount === 1 ? "" : "s"}`,
+		tierLabel(postJobPayTierLabel(row.payTierId), tx),
+		fill(tx.manageOutlet.perShift, {
+			wage: shiftWage.toLocaleString("en-MY"),
+		}),
+		fill(tx.libTiers.drinksTipsPct, {
+			drinks: row.drinkPct,
+			tips: row.tipPct,
+		}),
+		row.targetSalesRm
+			? fill(tx.libTiers.targetSales, { amount: row.targetSalesRm })
+			: null,
+		fill(
+			row.prCount === 1 ? tx.rosterGrid.prCountOne : tx.rosterGrid.prCountMany,
+			{ n: row.prCount },
+		),
 	].filter(Boolean);
 	return parts.join(" · ");
 }
 
-/** Short tier label for compact cards — e.g. T1, T2, Comm. */
-export function postJobPayTierShortLabel(payTierId: PostJobPayTierId): string {
-	if (isCommissionOnlyPayTier(payTierId)) return "Comm.";
+/**
+ * Short tier label for compact cards — e.g. T1, T2, Comm.
+ *
+ * "T1"…"T5" is the ladder's own numeric shorthand and reads the same in both
+ * locales; the compact card has no room for the spelled-out tier name. Servant
+ * falls through to the full resolved label.
+ */
+export function postJobPayTierShortLabel(
+	payTierId: PostJobPayTierId,
+	t?: PortalTranslations,
+): string {
+	const tx = t ?? translations.en;
+	if (isCommissionOnlyPayTier(payTierId)) return tx.libTiers.commissionShort;
 	const match = payTierId.match(/^tier_(\d)$/);
-	return match ? `T${match[1]}` : postJobPayTierLabel(payTierId);
+	return match ? `T${match[1]}` : tierLabel(postJobPayTierLabel(payTierId), tx);
 }
 
 /** Compact tier × count summary — e.g. "6× T1 · 1× T2". */
 export function formatPayTierRowsCompact(
 	rows?: PostJobPayTierRow[],
+	t?: PortalTranslations,
 ): string | null {
 	const parts = (rows ?? [])
 		.filter((row) => row.prCount > 0)
-		.map((row) => `${row.prCount}× ${postJobPayTierShortLabel(row.payTierId)}`);
+		.map(
+			(row) => `${row.prCount}× ${postJobPayTierShortLabel(row.payTierId, t)}`,
+		);
 	return parts.length ? parts.join(" · ") : null;
 }
 

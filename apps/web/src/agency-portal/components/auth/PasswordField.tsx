@@ -1,5 +1,6 @@
 import { Eye, EyeOff } from "lucide-react";
 import { useId } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function PasswordField({
 	label,
@@ -18,6 +19,7 @@ export function PasswordField({
 	onToggleShow: () => void;
 	autoComplete?: string;
 }) {
+	const { t } = usePortalLocale();
 	const inputId = useId();
 
 	return (
@@ -35,7 +37,9 @@ export function PasswordField({
 				<button
 					type="button"
 					className="iz-signin-password-toggle iz-security-field__toggle"
-					aria-label={show ? "Hide password" : "Show password"}
+					aria-label={
+						show ? t.portalUi.hidePassword : t.portalUi.showPassword
+					}
 					onClick={onToggleShow}
 				>
 					{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

@@ -928,6 +928,7 @@ function AgencySubscription() {
 
 			<OutletSection
 				title={t.agencyMisc.paymentMethod}
+				iconKey="Payment method"
 				hint={
 					sub.backed
 						? sub.card

@@ -7,6 +7,8 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import {
 	type BackfillSlot,
 	fetchBackfillSlots,
@@ -23,6 +25,7 @@ import {
  * there is no gap.
  */
 export function BackfillPanel({ canAct }: { canAct: boolean }) {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const [target, setTarget] = useState<BackfillSlot | null>(null);
 
@@ -40,23 +43,33 @@ export function BackfillPanel({ canAct }: { canAct: boolean }) {
 	return (
 		<>
 			<OutletSection
-				title="Backfill needed"
-				hint={`${slots.length} open slot${slots.length === 1 ? "" : "s"}`}
+				title={t.agencyBroadcast.backfillNeeded}
+				iconKey="Backfill needed"
+				hint={
+					slots.length === 1
+						? t.agencyBroadcast.backfillOpenSlotOne
+						: fill(t.agencyBroadcast.backfillOpenSlotMany, { n: slots.length })
+				}
 				className="!mt-4"
 			>
 				<div className="grid gap-2 md:grid-cols-2">
 					{slots.map((slot) => (
 						<IzCard key={slot.assignmentId}>
 							<p className="font-sora text-sm font-bold">
-								{slot.outletName ?? "Outlet"} · {slot.shiftDate}
+								{slot.outletName ?? t.table.outlet} · {slot.shiftDate}
 							</p>
 							<p className="iz-tiny iz-muted mt-0.5">
-								{slot.slot ?? slot.eventName ?? "Shift"} · staffed{" "}
-								{slot.staffedCount}/{slot.quantity} ·{" "}
-								{slot.status === "leave_approved"
-									? "leave approved"
-									: "cancelled"}{" "}
-								— {slot.prName}
+								{fill(t.agencyBroadcast.backfillSlotLine, {
+									slot: slot.slot ?? slot.eventName ?? t.rosterGrid.shift,
+									staffed: slot.staffedCount,
+									quantity: slot.quantity,
+									// `slot.status` is the STORED value — compared, never shown.
+									reason:
+										slot.status === "leave_approved"
+											? t.agencyBroadcast.backfillReasonLeaveApproved
+											: t.agencyBroadcast.backfillReasonCancelled,
+									name: slot.prName,
+								})}
 							</p>
 							{slot.notes && (
 								<p className="iz-tiny iz-muted mt-1 line-clamp-2">
@@ -69,7 +82,7 @@ export function BackfillPanel({ canAct }: { canAct: boolean }) {
 									className="iz-btn iz-btn-primary mt-2 w-full !py-1.5 !text-xs"
 									onClick={() => setTarget(slot)}
 								>
-									Pick replacement
+									{t.roster.pickReplacement}
 								</button>
 							)}
 						</IzCard>
@@ -91,6 +104,7 @@ function ReplacementSheet({
 	slot: BackfillSlot;
 	onClose: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const rosterMut = useRosterMutations();
 
@@ -119,8 +133,8 @@ function ReplacementSheet({
 			onClose();
 		} catch (err) {
 			setError(
-				toMutationError(err, "Couldn't assign the PR.")?.message ??
-					"Couldn't assign the PR.",
+				toMutationError(err, t.rosterGrid.couldNotAssignPr)?.message ??
+					t.rosterGrid.couldNotAssignPr,
 			);
 		}
 	};
@@ -130,10 +144,11 @@ function ReplacementSheet({
 			<div className="iz-sheet-head">
 				<div>
 					<p className="iz-tiny iz-muted2 uppercase tracking-widest">
-						Backfill · {slot.shiftDate}
+						{fill(t.agencyBroadcast.backfillEyebrow, { date: slot.shiftDate })}
 					</p>
 					<h3>
-						{slot.outletName ?? "Outlet"} · {slot.slot ?? "Shift"}
+						{slot.outletName ?? t.table.outlet} ·{" "}
+						{slot.slot ?? t.rosterGrid.shift}
 					</h3>
 				</div>
 				<button
@@ -141,7 +156,7 @@ function ReplacementSheet({
 					className="iz-sheet-close"
 					onClick={onClose}
 					disabled={busy}
-					aria-label="Close"
+					aria-label={t.common.close}
 				>
 					<X className="h-4 w-4" />
 				</button>
@@ -152,16 +167,19 @@ function ReplacementSheet({
 			)}
 
 			{candidatesQuery.isLoading ? (
-				<p className="iz-tiny iz-muted mt-4 text-center">Matching free PRs…</p>
+				<p className="iz-tiny iz-muted mt-4 text-center">
+					{t.agencyBroadcast.backfillMatching}
+				</p>
 			) : candidates.length === 0 ? (
 				<p className="iz-tiny iz-muted mt-4 rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-6 text-center">
-					No free PR available that night — every active PR already has a
-					booking on {slot.shiftDate}.
+					{fill(t.agencyBroadcast.backfillNoneFree, { date: slot.shiftDate })}
 				</p>
 			) : (
 				<>
 					<p className="iz-field-label mt-3">
-						Free that night · {candidates.length}
+						{fill(t.agencyBroadcast.backfillFreeThatNight, {
+							n: candidates.length,
+						})}
 					</p>
 					<div className="mt-1.5 grid gap-1.5">
 						{candidates.map((c) => (
@@ -173,11 +191,17 @@ function ReplacementSheet({
 									<p className="truncate font-sora text-sm font-bold text-[var(--iz-txt)]">
 										{c.prName}
 									</p>
+									{/* `c.tier` is the stored grade — the sentence around it moves
+									    with the locale, the grade itself never does. */}
 									<p className="iz-tiny iz-muted truncate">
-										{c.tier}
 										{c.timesAtOutlet > 0
-											? ` · worked here ${c.timesAtOutlet}×`
-											: " · new to this outlet"}
+											? fill(t.agencyBroadcast.backfillTierWorkedHere, {
+													tier: c.tier,
+													n: c.timesAtOutlet,
+												})
+											: fill(t.agencyBroadcast.backfillTierNewToOutlet, {
+													tier: c.tier,
+												})}
 									</p>
 								</div>
 								{/* iz-btn is width:100% globally — without iz-btn-sm/!w-auto the
@@ -188,7 +212,7 @@ function ReplacementSheet({
 									disabled={busy}
 									onClick={() => assign(c.prId, c.userId)}
 								>
-									{busy ? "Assigning…" : "Assign"}
+									{busy ? t.roster.assigning : t.roster.assign}
 								</button>
 							</div>
 						))}

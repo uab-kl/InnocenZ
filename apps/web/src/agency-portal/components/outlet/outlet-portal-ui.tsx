@@ -94,12 +94,21 @@ export function OutletPage({
 
 export function OutletPageHeader({
 	eyebrow,
+	eyebrowIconKey,
 	title,
 	iconKey,
 	hint,
 	trailing,
 }: {
 	eyebrow?: string;
+	/**
+	 * The ENGLISH eyebrow to resolve the eyebrow icon from, when `eyebrow` is
+	 * translated. Exactly like `iconKey` below, but for the eyebrow line:
+	 * `iconForNav` matches on the TEXT, so a localised eyebrow misses every
+	 * lookup and degrades to a "?" glyph with no error. Optional — callers
+	 * passing an English eyebrow (or a venue name) keep working unchanged.
+	 */
+	eyebrowIconKey?: string;
 	title: string;
 	/**
 	 * The ENGLISH title to resolve the page icon from, when `title` is
@@ -116,7 +125,7 @@ export function OutletPageHeader({
 				{eyebrow && (
 					<p className="iz-outlet-page-eyebrow">
 						<TitleWithIcon
-							icon={iconForNav(eyebrow)}
+							icon={iconForNav(eyebrowIconKey ?? eyebrow)}
 							iconClassName="iz-title-icon--eyebrow"
 						>
 							{eyebrow}

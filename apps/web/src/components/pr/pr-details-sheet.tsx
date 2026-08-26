@@ -32,6 +32,9 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { raceLabel } from "@/lib/portal-i18n/language-label";
 import { formatDate, statusColors } from "@/lib/utils";
 import type { PrUser } from "@/services/pr";
 
@@ -41,7 +44,14 @@ interface PrDetailsSheetProps {
 	onOpenChange: (open: boolean) => void;
 }
 
-function ageFromDob(dob: string | null): string | null {
+/**
+ * Whole years since `dob`, or null when there is no usable date.
+ *
+ * Returns the NUMBER, not "23 years": the unit is a translated word and this
+ * runs outside React, where the dictionary cannot be read. The caller formats
+ * it with `adminPr.ageYears`.
+ */
+function ageFromDob(dob: string | null): number | null {
 	if (!dob) return null;
 	const birth = new Date(dob);
 	if (Number.isNaN(birth.getTime())) return null;
@@ -51,7 +61,7 @@ function ageFromDob(dob: string | null): string | null {
 	if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
 		age--;
 	}
-	return age >= 0 ? `${age} years` : null;
+	return age >= 0 ? age : null;
 }
 
 export function PrDetailsSheet({
@@ -59,6 +69,9 @@ export function PrDetailsSheet({
 	open,
 	onOpenChange,
 }: PrDetailsSheetProps) {
+	const { t } = usePortalLocale();
+	const age = user ? ageFromDob(user.dob) : null;
+
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent
@@ -66,10 +79,8 @@ export function PrDetailsSheet({
 				className="w-full overflow-y-auto sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
 			>
 				<SheetHeader className="pb-0">
-					<SheetTitle>PR Details</SheetTitle>
-					<SheetDescription>
-						PR account profile and the agencies this PR is tied to.
-					</SheetDescription>
+					<SheetTitle>{t.adminPr.detailsTitle}</SheetTitle>
+					<SheetDescription>{t.adminPr.detailsSubtitle}</SheetDescription>
 				</SheetHeader>
 
 				{user && (
@@ -82,12 +93,15 @@ export function PrDetailsSheet({
 							meta={
 								user.agencies.length > 0 ? (
 									<p className="text-sm text-muted-foreground">
-										Agency-Tied ·{" "}
-										{user.agencies.map((agency) => agency.name).join(", ")}
+										{fill(t.adminPr.agencyTiedNames, {
+											names: user.agencies
+												.map((agency) => agency.name)
+												.join(", "),
+										})}
 									</p>
 								) : (
 									<p className="text-sm text-muted-foreground">
-										Not tied to any agency
+										{t.adminPr.notTiedToAnyAgency}
 									</p>
 								)
 							}
@@ -96,76 +110,82 @@ export function PrDetailsSheet({
 						<Tabs defaultValue="personal">
 							<TabsList className="w-full">
 								<TabsTrigger value="personal">
-									<User className="h-3.5 w-3.5" /> Personal Info
+									<User className="h-3.5 w-3.5" /> {t.adminPr.tabPersonal}
 								</TabsTrigger>
 								<TabsTrigger value="contact">
-									<Mail className="h-3.5 w-3.5" /> Contact
+									<Mail className="h-3.5 w-3.5" /> {t.adminPr.tabContact}
 								</TabsTrigger>
 								<TabsTrigger value="showcase">
-									<Images className="h-3.5 w-3.5" /> Showcase
+									<Images className="h-3.5 w-3.5" /> {t.adminPr.tabShowcase}
 								</TabsTrigger>
 								<TabsTrigger value="agencies">
-									<Building2 className="h-3.5 w-3.5" /> Agencies
+									<Building2 className="h-3.5 w-3.5" /> {t.adminPr.agencies}
 								</TabsTrigger>
 							</TabsList>
 
 							<TabsContent value="personal" className="space-y-3 pt-2">
-								<DetailSection title="Identity">
+								<DetailSection title={t.adminPr.sectionIdentity}>
 									<DetailField
 										icon={Megaphone}
-										label="Display name"
+										label={t.adminPr.fieldDisplayName}
 										value={user.displayName}
 									/>
 									<DetailField
 										icon={User}
-										label="Legal name"
+										label={t.adminPr.legalName}
 										value={user.legalName}
 									/>
+									{/* idType, gender and nationality are STORED values with no
+									    resolver behind them, so they render exactly as saved. */}
 									<DetailField
 										icon={IdCard}
-										label="ID type"
+										label={t.adminPr.idType}
 										value={user.idType}
 									/>
 									<DetailField
 										icon={Fingerprint}
-										label="ID number"
+										label={t.adminPr.idNumber}
 										value={user.idNo}
 									/>
 									<DetailField
 										icon={UserRound}
-										label="Gender"
+										label={t.adminPr.gender}
 										value={user.gender}
 									/>
-									<DetailField icon={Users} label="Race" value={user.race} />
+									<DetailField
+										icon={Users}
+										label={t.adminPr.race}
+										value={user.race ? raceLabel(user.race, t) : null}
+									/>
 									<DetailField
 										icon={Cake}
-										label="Date of birth"
+										label={t.adminPr.dateOfBirth}
 										value={user.dob ? formatDate(user.dob) : null}
 									/>
 									<DetailField
 										icon={Flag}
-										label="Nationality"
+										label={t.adminPr.nationality}
 										value={user.nationality}
 									/>
 									<DetailField
 										icon={CalendarDays}
-										label="Joined"
+										label={t.adminPr.joined}
 										value={formatDate(user.createdAt)}
 									/>
 								</DetailSection>
 							</TabsContent>
 
 							<TabsContent value="contact" className="space-y-3 pt-2">
-								<DetailSection title="Contact information">
+								<DetailSection title={t.adminPr.sectionContact}>
 									<DetailField
 										icon={Mail}
-										label="Email"
+										label={t.admin.colEmail}
 										value={user.email}
 										href={user.email ? `mailto:${user.email}` : undefined}
 									/>
 									<DetailField
 										icon={Phone}
-										label="Phone"
+										label={t.adminPr.phone}
 										value={user.phoneNum}
 										href={user.phoneNum ? `tel:${user.phoneNum}` : undefined}
 									/>
@@ -173,13 +193,16 @@ export function PrDetailsSheet({
 							</TabsContent>
 
 							<TabsContent value="showcase" className="space-y-3 pt-2">
+								{/* Chrome ABOUT the comcard, not the card itself — the card is
+								    not rendered here, so this follows the viewer's language.
+								    See lib/portal-i18n/comcard-locale.ts. */}
 								<DetailSection
-									title="Comcard"
-									description="Measurements shown on the PR's comcard"
+									title={t.adminPr.sectionComcard}
+									description={t.adminPr.comcardHint}
 								>
 									<DetailField
 										icon={Ruler}
-										label="Height"
+										label={t.adminPr.height}
 										value={
 											user.comcardHeightCm != null
 												? `${user.comcardHeightCm} cm`
@@ -188,7 +211,7 @@ export function PrDetailsSheet({
 									/>
 									<DetailField
 										icon={Weight}
-										label="Weight"
+										label={t.adminPr.weight}
 										value={
 											user.comcardWeightKg != null
 												? `${user.comcardWeightKg} kg`
@@ -197,18 +220,22 @@ export function PrDetailsSheet({
 									/>
 									<DetailField
 										icon={Cake}
-										label="Age"
-										value={ageFromDob(user.dob)}
+										label={t.adminPr.age}
+										value={
+											age != null ? fill(t.adminPr.ageYears, { n: age }) : null
+										}
 									/>
 								</DetailSection>
 
 								<div className="space-y-2">
 									<p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-										Portfolio gallery ({user.portfolioPhotos.length})
+										{fill(t.adminPr.portfolioGalleryCount, {
+											n: user.portfolioPhotos.length,
+										})}
 									</p>
 									{user.portfolioPhotos.length === 0 ? (
 										<p className="rounded-md border border-dashed border-(--lavender-soft)/40 px-3 py-4 text-center text-base text-muted-foreground">
-											No portfolio photos uploaded yet.
+											{t.adminPr.noPortfolioPhotos}
 										</p>
 									) : (
 										<div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -224,7 +251,9 @@ export function PrDetailsSheet({
 													>
 														<img
 															src={src}
-															alt={`Portfolio ${index + 1}`}
+															alt={fill(t.adminPr.portfolioPhotoAlt, {
+																n: index + 1,
+															})}
 															className="aspect-[3/4] w-full object-cover"
 															loading="lazy"
 															onError={(e) => {
@@ -241,11 +270,13 @@ export function PrDetailsSheet({
 
 							<TabsContent value="agencies" className="space-y-2 pt-2">
 								<p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-									Agencies ({user.agencies.length})
+									{fill(t.adminPr.agenciesCount, {
+										n: user.agencies.length,
+									})}
 								</p>
 								{user.agencies.length === 0 ? (
 									<p className="py-2 text-base text-muted-foreground">
-										This PR is not linked to any agency.
+										{t.adminPr.notLinkedToAnyAgency}
 									</p>
 								) : (
 									<ul className="space-y-1.5">
@@ -270,7 +301,7 @@ export function PrDetailsSheet({
 													variant="outline"
 													className={statusColors.active}
 												>
-													Linked
+													{t.adminPr.linked}
 												</Badge>
 											</li>
 										))}

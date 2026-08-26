@@ -4,6 +4,10 @@ import {
 	IzSelect,
 	IzTimeInput,
 } from "@agency-portal/components/iz/ui";
+import {
+	specialServiceOfferLabel,
+	specialServiceOfferSummary,
+} from "@agency-portal/components/special-service/job-posting-ui";
 import type { SpecialServiceInitiator } from "@agency-portal/lib/special-service-demo";
 import {
 	AGENCY_SPECIAL_SERVICE_OFFERS,
@@ -12,6 +16,8 @@ import {
 	specialServiceOffer,
 } from "@agency-portal/lib/special-service-demo";
 import { useId } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export type SpecialServiceOrderDraft = {
 	prId: string;
@@ -45,9 +51,11 @@ export function SpecialServiceOrderSheet({
 	showPrPicker?: boolean;
 	showAmountIn?: boolean;
 	onSubmit: () => void;
+	/** Arrives ALREADY TRANSLATED — the caller knows which action it stands for. */
 	submitLabel: string;
 	serviceOffers?: AgencySpecialServiceOffer[];
 }) {
+	const { t } = usePortalLocale();
 	const offer = specialServiceOffer(draft.serviceType);
 	const leaveRequest = isLeaveAgencyService(draft.serviceType);
 	const fieldId = useId();
@@ -64,19 +72,19 @@ export function SpecialServiceOrderSheet({
 		<>
 			<IzCardTitle>
 				{leaveRequest
-					? "Service request"
+					? t.ssPortal.serviceRequestTitle
 					: role === "agency"
-						? "Book agency service"
-						: "Order agency service"}
+						? t.ssPortal.bookAgencyService
+						: t.ssPortal.orderAgencyService}
 			</IzCardTitle>
 			<p className="iz-tiny iz-muted mb-3">
 				{leaveRequest
-					? "Before 1 year with your agency you must raise a support ticket to leave early."
+					? t.ssPortal.leaveHint
 					: role === "agency"
-						? "Book on behalf of a PR or outlet — they will be notified to accept or decline."
+						? t.ssPortal.agencyBookHint
 						: role === "outlet"
-							? "Request an add-on from your agency — transportation, delivery, wardrobe, and more."
-							: "Request an add-on service — admin will review and confirm."}
+							? t.ssPortal.outletOrderHint
+							: t.ssPortal.prOrderHint}
 			</p>
 
 			{showPrPicker !== false && (
@@ -85,7 +93,7 @@ export function SpecialServiceOrderSheet({
 						htmlFor={`${fieldId}-pr`}
 						className="iz-tiny iz-muted mb-1 block"
 					>
-						PR
+						{t.table.pr}
 					</label>
 					<IzSelect
 						block
@@ -109,7 +117,7 @@ export function SpecialServiceOrderSheet({
 						htmlFor={`${fieldId}-outlet`}
 						className="iz-tiny iz-muted mb-1 block"
 					>
-						Outlet
+						{t.table.outlet}
 					</label>
 					<IzSelect
 						block
@@ -131,7 +139,7 @@ export function SpecialServiceOrderSheet({
 				htmlFor={`${fieldId}-service`}
 				className="iz-tiny iz-muted mb-1 block"
 			>
-				Service
+				{t.ssPortal.service}
 			</label>
 			<IzSelect
 				block
@@ -142,11 +150,15 @@ export function SpecialServiceOrderSheet({
 			>
 				{serviceOffers.map((o) => (
 					<option key={o.id} value={o.id}>
-						{o.label}
+						{specialServiceOfferLabel(t, o.id)}
 					</option>
 				))}
 			</IzSelect>
-			{offer && <p className="iz-tiny iz-muted2 mb-3">{offer.summary}</p>}
+			{offer && (
+				<p className="iz-tiny iz-muted2 mb-3">
+					{specialServiceOfferSummary(t, offer.id)}
+				</p>
+			)}
 
 			{!leaveRequest && role === "agency" && (
 				<>
@@ -154,11 +166,13 @@ export function SpecialServiceOrderSheet({
 						htmlFor={`${fieldId}-amount-out`}
 						className="iz-tiny iz-muted mb-1 block"
 					>
-						Amount out (RM)
+						{t.ssPortal.amountOutRm}
 						{offer && (
 							<span className="iz-muted2">
-								{" "}
-								· default {formatRM(offer.defaultRate)}
+								{" · "}
+								{fill(t.ssPortal.defaultAmount, {
+									amount: formatRM(offer.defaultRate),
+								})}
 							</span>
 						)}
 					</label>
@@ -180,7 +194,7 @@ export function SpecialServiceOrderSheet({
 						htmlFor={`${fieldId}-amount-in`}
 						className="iz-tiny iz-muted mb-1 block"
 					>
-						Amount in (RM) · outlet recovery
+						{t.ssPortal.amountInRm}
 					</label>
 					<input
 						id={`${fieldId}-amount-in`}
@@ -188,7 +202,7 @@ export function SpecialServiceOrderSheet({
 						min={0}
 						step={5}
 						className="iz-field-input mb-3 !text-sm"
-						placeholder="0 if agency absorbs"
+						placeholder={t.ssPortal.amountInPlaceholder}
 						value={draft.amountIn}
 						onChange={(e) => onChange({ amountIn: e.target.value })}
 					/>
@@ -197,12 +211,14 @@ export function SpecialServiceOrderSheet({
 
 			{!leaveRequest && (
 				<>
-					<span className="iz-tiny iz-muted mb-1 block">Service time</span>
+					<span className="iz-tiny iz-muted mb-1 block">
+						{t.ssPortal.serviceTime}
+					</span>
 					<IzTimeInput
 						value={draft.time}
 						onChange={(time) => onChange({ time })}
 						className="mb-3 !text-sm"
-						aria-label="Service time"
+						aria-label={t.ssPortal.serviceTime}
 					/>
 				</>
 			)}
@@ -211,15 +227,15 @@ export function SpecialServiceOrderSheet({
 				htmlFor={`${fieldId}-note`}
 				className="iz-tiny iz-muted mb-1 block"
 			>
-				{leaveRequest ? "Reason" : "Notes"}
+				{leaveRequest ? t.ssPortal.reason : t.ssPortal.notes}
 			</label>
 			<textarea
 				id={`${fieldId}-note`}
 				className="iz-field-input mb-4 min-h-[72px] !text-sm"
 				placeholder={
 					leaveRequest
-						? "Reason for early leave…"
-						: "Pickup address, delivery items, outlet contact…"
+						? t.ssPortal.reasonPlaceholder
+						: t.ssPortal.notesPlaceholder
 				}
 				value={draft.note}
 				onChange={(e) => onChange({ note: e.target.value })}

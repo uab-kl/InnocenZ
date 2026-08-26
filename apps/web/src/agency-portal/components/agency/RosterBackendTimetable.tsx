@@ -56,7 +56,10 @@ import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import { dressCodeLabel } from "@/lib/portal-i18n/language-label";
+import {
+	dressCodeLabel,
+	languageLabel,
+} from "@/lib/portal-i18n/language-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import { fetchOutletSwaps } from "@/services/outlet-swap";
@@ -2075,7 +2078,18 @@ function AssignBackendCellSheet({
 													<span className="iz-muted">
 														{t.today.languagesLabel}
 													</span>{" "}
-													{shift.languages}
+													{/* The STORED string is untouched — it is a
+													    comma-joined list the venue posted and the PR
+													    profile filter matches on. Only each name's
+													    rendered label is resolved, and the separator
+													    is kept exactly as stored so the line reads the
+													    same length it always did. An unrecognised
+													    entry falls through as itself. */}
+													{shift.languages
+														.split(",")
+														.map((lang) => languageLabel(lang.trim(), t))
+														.filter(Boolean)
+														.join(", ")}
 												</p>
 											)}
 											<p

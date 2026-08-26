@@ -2,6 +2,7 @@ import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
 import { X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import type { CreatePrPersonnelInput } from "@/services/pr-personnel";
 
 interface RosterAddPrDialogProps {
@@ -16,6 +17,7 @@ interface RosterAddPrDialogProps {
  * the roster queries. The agency is inferred from the caller's scope server-side.
  */
 export function RosterAddPrDialog({ open, onClose }: RosterAddPrDialogProps) {
+	const { t } = usePortalLocale();
 	const { addPr } = useRosterMutations();
 
 	const [name, setName] = useState("");
@@ -60,82 +62,82 @@ export function RosterAddPrDialog({ open, onClose }: RosterAddPrDialogProps) {
 				<div className="iz-sheet-head">
 					<div>
 						<p className="iz-tiny iz-muted2 uppercase tracking-widest">
-							Planning
+							{t.roster.planning}
 						</p>
-						<h3>Add PR</h3>
+						<h3>{t.approvals.addPr}</h3>
 					</div>
 					<button
 						type="button"
 						className="iz-sheet-close"
 						onClick={handleClose}
 						disabled={addPr.isPending}
-						aria-label="Close"
+						aria-label={t.common.close}
 					>
 						<X className="h-4 w-4" />
 					</button>
 				</div>
 
 				<div>
-					<span className="iz-field-label">Name</span>
+					<span className="iz-field-label">{t.agencyMisc.name}</span>
 					<input
 						type="text"
 						className="iz-select iz-select-block"
 						value={name}
 						onChange={(e) => setName(e.target.value)}
-						placeholder="Full name"
-						aria-label="PR name"
+						placeholder={t.agencyMisc.fullNamePlaceholder}
+						aria-label={t.agencyRoster.prNameField}
 					/>
 				</div>
 
 				<div className="mt-4 grid grid-cols-2 gap-3">
 					<div>
-						<span className="iz-field-label">Nickname</span>
+						<span className="iz-field-label">{t.agencyRoster.nickname}</span>
 						<input
 							type="text"
 							className="iz-select iz-select-block"
 							value={nickname}
 							onChange={(e) => setNickname(e.target.value)}
-							aria-label="Nickname"
+							aria-label={t.agencyRoster.nickname}
 						/>
 					</div>
 					<div>
-						<span className="iz-field-label">IC no.</span>
+						<span className="iz-field-label">{t.agencyRoster.icNo}</span>
 						<input
 							type="text"
 							className="iz-select iz-select-block"
 							value={icNo}
 							onChange={(e) => setIcNo(e.target.value)}
-							aria-label="IC number"
+							aria-label={t.agencyRoster.icNo}
 						/>
 					</div>
 				</div>
 
 				<div className="mt-4 grid grid-cols-2 gap-3">
 					<div>
-						<span className="iz-field-label">Phone</span>
+						<span className="iz-field-label">{t.agencyRoster.phone}</span>
 						<input
 							type="tel"
 							className="iz-select iz-select-block"
 							value={phone}
 							onChange={(e) => setPhone(e.target.value)}
-							aria-label="Phone"
+							aria-label={t.agencyRoster.phone}
 						/>
 					</div>
 					<div>
-						<span className="iz-field-label">Email</span>
+						<span className="iz-field-label">{t.managePr.email}</span>
 						<input
 							type="email"
 							className="iz-select iz-select-block"
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
-							aria-label="Email"
+							aria-label={t.managePr.email}
 						/>
 					</div>
 				</div>
 
 				{addPr.isError && (
 					<p className="iz-tiny mt-3 text-[var(--iz-danger,#dc2626)]">
-						Couldn't add the PR. Please try again.
+						{t.agencyRoster.couldNotAddPr}
 					</p>
 				)}
 
@@ -144,7 +146,7 @@ export function RosterAddPrDialog({ open, onClose }: RosterAddPrDialogProps) {
 					className="iz-btn iz-btn-primary mt-5 w-full"
 					disabled={!isValid || addPr.isPending}
 				>
-					{addPr.isPending ? "Adding…" : "Add PR"}
+					{addPr.isPending ? t.approvals.adding : t.approvals.addPr}
 				</button>
 			</form>
 		</IzSheet>

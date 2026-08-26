@@ -1,8 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { FileQuestion, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function AdminNotFoundPage() {
+	// Rendered through `AdminLayout`'s Outlet, so the layout's
+	// `PortalLocaleProvider` is already above it.
+	const { t } = usePortalLocale();
+
 	return (
 		<div className="flex min-h-[60vh] items-center justify-center px-6 py-12">
 			<div className="flex w-full max-w-xl flex-col items-center text-center">
@@ -17,12 +22,11 @@ export function AdminNotFoundPage() {
 				</div>
 
 				<h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-					Page not found
+					{t.webShell.notFoundTitle}
 				</h1>
 
 				<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
-					Sorry, we couldn&apos;t find the page you&apos;re looking for. The
-					page might have been removed or the URL might be incorrect.
+					{t.webShell.notFoundBody}
 				</p>
 
 				<Button
@@ -35,7 +39,7 @@ export function AdminNotFoundPage() {
 						className="text-inherit [&_svg]:text-inherit"
 					>
 						<LayoutDashboard className="h-4 w-4" />
-						Back to dashboard
+						{t.webShell.backToDashboard}
 					</Link>
 				</Button>
 			</div>

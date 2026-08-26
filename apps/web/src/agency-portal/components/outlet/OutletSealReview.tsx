@@ -6,6 +6,7 @@ import type { ShiftRequest } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
 import { useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function OutletSealReview({
 	shift,
@@ -70,12 +71,16 @@ export function OutletSealReview({
 					<IzCard key={r.prId} flat className="!py-2.5">
 						<div className="font-sora text-sm font-bold">{r.prName}</div>
 						<div className="mt-1 grid grid-cols-3 gap-1 text-[10px] text-[var(--iz-muted)]">
-							<span>{r.hours}h</span>
-							<span>{r.drinks} drinks</span>
-							<span>{formatRM(r.tips)} tips</span>
+							<span>{fill(t.outletPanels.hoursCount, { n: r.hours })}</span>
+							<span>{fill(t.today.drinksCount, { n: r.drinks })}</span>
+							<span>
+								{fill(t.outletPanels.tipsAmount, { amount: formatRM(r.tips) })}
+							</span>
 						</div>
 						<div className="mt-1 text-xs font-semibold text-[var(--iz-gold)]">
-							{formatRM(r.payout.total)} PV est.
+							{fill(t.outletPanels.pvEstimate, {
+								amount: formatRM(r.payout.total),
+							})}
 						</div>
 					</IzCard>
 				))}

@@ -17,8 +17,24 @@ import {
 import { verifyReceiptScan } from "@agency-portal/lib/pr-shift-status";
 import type { ShiftHistoryRow } from "@agency-portal/lib/shift-history-utils";
 import { format, parseISO } from "date-fns";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
-/** Payroll week runs Sunday → Saturday; PV issues the following Sunday. */
+/**
+ * Payroll week runs Sunday → Saturday; PV issues the following Sunday.
+ *
+ * ⚠️ THESE SEVEN TOKENS ARE A MATCHING KEY, NOT A LABEL. Translating them would
+ * break three things at once, none of which raises an error:
+ *
+ *  1. `pvRowsFromWeeklySummary` writes the token onto every `PrPvRow.day`, so it
+ *     is PERSISTED on the voucher.
+ *  2. `parseDisputeDateIsoFromText` reads it back out of a stored
+ *     `prDisputeReason` with an English-only regex, to recover which day a
+ *     dispute is about.
+ *  3. `removeDisputeLinesForTargets` pairs a withdrawn dispute to its reason
+ *     block on `` `${dayLabel} ${dateLabel}` ``.
+ *
+ * So the token stays data. `weekdayShortLabel` renders it.
+ */
 export const WEEKDAY_SHORT = [
 	"Sun",
 	"Mon",
@@ -28,6 +44,31 @@ export const WEEKDAY_SHORT = [
 	"Fri",
 	"Sat",
 ] as const;
+
+/**
+ * Rendered weekday for a `WEEKDAY_SHORT` token — the render half of the split
+ * documented above, and the mirror of `weeklyIncomeLabel` in PrWeeklyPaymentGrid.
+ *
+ * Not `calendar.wd*`: those are the SHOUTED column heads of the month grid
+ * ("SUN"), and they land mid-sentence here — `prPortal.withdrawDisputeOnDay`
+ * fills `{day}` from this. An unknown token falls through to itself rather than
+ * blanking a column head.
+ */
+export function weekdayShortLabel(
+	dayLabel: string,
+	t: PortalTranslations,
+): string {
+	const map: Record<string, string> = {
+		Sun: t.libShift.weekdaySun,
+		Mon: t.libShift.weekdayMon,
+		Tue: t.libShift.weekdayTue,
+		Wed: t.libShift.weekdayWed,
+		Thu: t.libShift.weekdayThu,
+		Fri: t.libShift.weekdayFri,
+		Sat: t.libShift.weekdaySat,
+	};
+	return map[dayLabel] ?? dayLabel;
+}
 
 /** Base daily wage included in every sealed demo shift payout. */
 export const SHIFT_SEALED_BASE_WAGE = 80;
@@ -377,8 +418,10 @@ export function applyDisputeTargetsToRows(
 	year: number,
 ): PrPvRow[] {
 	if (!targets.length) return rows;
+	// `target`, not `t`: this file's `t` is now the locale, and a callback of that
+	// name would shadow it silently the moment anyone threads the dictionary in.
 	return rows.map((row) =>
-		targets.some((t) => rowMatchesDisputeTarget(row, t, year))
+		targets.some((target) => rowMatchesDisputeTarget(row, target, year))
 			? { ...row, ref: "Disputed" }
 			: row,
 	);
@@ -396,7 +439,8 @@ export function clearDisputeTargetsFromRows(
 ): PrPvRow[] {
 	if (!targets.length) return rows;
 	return rows.map((row) => {
-		if (!targets.some((t) => rowMatchesDisputeTarget(row, t, year))) return row;
+		if (!targets.some((target) => rowMatchesDisputeTarget(row, target, year)))
+			return row;
 		if (!row.ref?.toLowerCase().includes("disput")) return row;
 		return { ...row, ref: clearedRefForPvRow(row) };
 	});
@@ -424,10 +468,12 @@ export function removeDisputeLinesForTargets(
 	const blocks = reason.split(/\n{2,}/).filter((block) => {
 		const trimmed = block.trim();
 		if (!trimmed || trimmed === "---") return false;
+		// Matches the ENGLISH day, date and income words `buildWeeklyDisputeMessage`
+		// wrote into this stored reason — see the note on `rowLabels`.
 		return !targets.some(
-			(t) =>
-				trimmed.includes(`${t.dayLabel} ${t.dateLabel}`) &&
-				trimmed.includes(t.incomeLabel),
+			(target) =>
+				trimmed.includes(`${target.dayLabel} ${target.dateLabel}`) &&
+				trimmed.includes(target.incomeLabel),
 		);
 	});
 	const next = blocks.join("\n\n").trim();
@@ -659,7 +705,13 @@ export function syncWeeklyPvWithSummary(
 	const outlets = new Set(rows.map((r) => r.outlet).filter(Boolean));
 	return reconcilePvTotals({
 		...pv,
+		// `cycle` is stored on the voucher and is a DATE RANGE from `fmtDtable`.
 		cycle: summary.weekLabel.replace(/\s+\d{4}$/, ""),
+		// `outlet` is the field that otherwise holds an outlet NAME, and this
+		// stand-in is written identically by agency-payroll.ts,
+		// agency-payroll-demo-pvs.ts and history-demo-sync.ts. Translating it in
+		// one of the four would make one voucher's venue read two ways, so it
+		// stays a stored value and the PV screens render it.
 		outlet:
 			outlets.size > 1
 				? `Multi-outlet (${outlets.size})`
@@ -692,6 +744,17 @@ function mergePvRowsWithSummary(
 	});
 }
 
+/**
+ * The text the PR SENDS to the agency, so it stays English in both locales —
+ * the same standing call as `PV_DISPUTE_PRESETS[].reason`.
+ *
+ * Two independent reasons, either one sufficient. It is stored verbatim as
+ * `pv.prDisputeReason` and read back by `parseDisputeDateIsoFromText` and
+ * `removeDisputeLinesForTargets`, both of which match on the English day, month
+ * and income words this builds. And it is read by an AGENCY whose locale is not
+ * the PR's — a message composed in one language and filed as the record of the
+ * argument must not change language depending on who typed it.
+ */
 export function buildWeeklyDisputeMessage(target: WeeklyDisputeTarget): string {
 	const amt = target.amount.toFixed(2);
 	const where = target.outlet ? ` at ${target.outlet}` : "";
@@ -860,6 +923,13 @@ export function buildWeeklyPaymentSummary(opts: {
 		"tips",
 		"others",
 	];
+	// English on purpose, in BOTH locales. `row.label` becomes
+	// `WeeklyDisputeTarget.incomeLabel`, which is written into the PR's dispute
+	// text and then matched back out of it by `removeDisputeLinesForTargets` — a
+	// Chinese label would leave every withdrawn dispute's reason block behind.
+	// `weeklyIncomeLabel(row.key, row.label, t)` in PrWeeklyPaymentGrid renders
+	// the word from `row.key`, the stored identity, and falls through to these
+	// only for a key it has no name for (today: `tables`).
 	const rowLabels: Record<WeeklyIncomeRow["key"], string> = {
 		wages: "Daily wages",
 		drinks: "Drinks",
@@ -938,6 +1008,12 @@ export function pvRowsFromWeeklySummary(
 		const [y, m, d] = col.dateIso.split("-").map(Number);
 		const dateLabel = fmtDtable(y, m, d);
 		const day = WEEKDAY_SHORT[idx];
+		// `ref` and every `desc` below are STORED on the voucher row and matched
+		// back by `incomeKeyFromDesc`, `rowMatchesDisputeTarget`,
+		// `addRowToBreakdown`, `clearedRefForPvRow` and the `.includes("disput")`
+		// tests — plus `mergePvRowsWithSummary`, which pairs a saved row to a
+		// regenerated one on `r.desc === row.desc`. They are keys, not labels;
+		// the PV screens render them from the key.
 		const ref = status === "disputed" ? "Disputed" : "Verified";
 		if (wages > 0) {
 			rows.push({

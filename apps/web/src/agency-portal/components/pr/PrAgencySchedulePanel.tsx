@@ -4,7 +4,10 @@
 	isoKeyFromDate,
 } from "@agency-portal/components/iz/HistDateCalendar";
 import { PrStatusPill } from "@agency-portal/components/pr/PrOfferRow";
-import { PrShiftCancellationSheet } from "@agency-portal/components/pr/PrShiftCancellationSheet";
+import {
+	cancellationBandRows,
+	PrShiftCancellationSheet,
+} from "@agency-portal/components/pr/PrShiftCancellationSheet";
 import { Button } from "@agency-portal/components/ui/button";
 import { Calendar as CalendarUi } from "@agency-portal/components/ui/calendar";
 import type { AgencyRosterSlot } from "@agency-portal/lib/agency-demo";
@@ -24,7 +27,6 @@ import {
 import type { PrUpcomingShift } from "@agency-portal/lib/pr-features";
 import {
 	CANCEL_RULES,
-	cancellationRuleSummary,
 	evaluateShiftCancellation,
 } from "@agency-portal/lib/pr-schedule-cancellation";
 import { useStore } from "@agency-portal/lib/store";
@@ -45,20 +47,33 @@ import {
 	useState,
 } from "react";
 import type { DayButton } from "react-day-picker";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
-const MONTH_LABELS = [
-	"January",
-	"February",
-	"March",
-	"April",
-	"May",
-	"June",
-	"July",
-	"August",
-	"September",
-	"October",
-	"November",
-	"December",
+/**
+ * Month names for the picker, as READERS of the dictionary.
+ *
+ * A module-scope array of strings cannot see `t`, and storing the key path
+ * instead would ship "prPortal.monthJanuary" to the screen. Spelled out rather
+ * than derived from a date formatter, for the same reason `calendar.wdSun`…
+ * are: the grid must not fall back to English month names inside a Chinese
+ * page. The INDEX is the stable identity here — it is what the `<select>`
+ * writes — so nothing keys on the label.
+ */
+const MONTH_LABELS: ((t: PortalTranslations) => string)[] = [
+	(t) => t.prPortal.monthJanuary,
+	(t) => t.prPortal.monthFebruary,
+	(t) => t.prPortal.monthMarch,
+	(t) => t.prPortal.monthApril,
+	(t) => t.prPortal.monthMay,
+	(t) => t.prPortal.monthJune,
+	(t) => t.prPortal.monthJuly,
+	(t) => t.prPortal.monthAugust,
+	(t) => t.prPortal.monthSeptember,
+	(t) => t.prPortal.monthOctober,
+	(t) => t.prPortal.monthNovember,
+	(t) => t.prPortal.monthDecember,
 ];
 
 /** Fills each grid cell — shared CalendarDayButton uses size="icon" (36×36px) and overlaps on mobile. */
@@ -107,6 +122,7 @@ export function PrAgencySchedulePanel({
 	upcoming: PrUpcomingShift[];
 	onCancelShift: (entry: TimetableEntry, reason: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const scheduleDays = useMemo(
 		() => buildPrScheduleDays(prId, roster, upcoming),
 		[prId, roster, upcoming],
@@ -155,8 +171,17 @@ export function PrAgencySchedulePanel({
 	);
 
 	const upcomingWeekTimetable = useMemo(
-		() => buildUpcomingWeekTimetableEntries(prId, roster, upcoming),
-		[prId, roster, upcoming],
+		() =>
+			buildUpcomingWeekTimetableEntries(
+				prId,
+				roster,
+				upcoming,
+				// `undefined` selects the default baseline (today); it is the only
+				// way to reach `t`, which sits after it.
+				undefined,
+				t,
+			),
+		[prId, roster, upcoming, t],
 	);
 
 	const cancelSlot = cancelEntry?.slot;
@@ -202,7 +227,7 @@ export function PrAgencySchedulePanel({
 					<AlertTriangle className="h-4 w-4 shrink-0 text-[var(--iz-amber)]" />
 					<span className="text-left">
 						<span className="block text-xs font-bold uppercase tracking-wide text-[var(--iz-txt)]">
-							Cancellation rules
+							{t.prPortal.cancellationRules}
 						</span>
 					</span>
 					<ChevronDown
@@ -214,8 +239,8 @@ export function PrAgencySchedulePanel({
 				</button>
 				{rulesOpen && (
 					<ul className="iz-pr-schedule-rules-list">
-						{cancellationRuleSummary().map((r) => (
-							<li key={r.label} className={`tone-${r.tone}`}>
+						{cancellationBandRows(t).map((r) => (
+							<li key={r.id} className={`tone-${r.tone}`}>
 								<span className="rule-when">{r.label}</span>
 								<span className="rule-out">{r.outcome}</span>
 							</li>
@@ -227,12 +252,12 @@ export function PrAgencySchedulePanel({
 			<div className="iz-pr-schedule-cal-wrap">
 				<div className="iz-hist-cal-nav mb-2">
 					<label className="iz-hist-cal-nav-field">
-						<span className="iz-hist-cal-nav-label">Month</span>
+						<span className="iz-hist-cal-nav-label">{t.prPortal.month}</span>
 						<span className="iz-hist-cal-select-wrap">
 							<select
 								className="iz-hist-cal-select"
 								value={viewMonth.getMonth()}
-								aria-label="Choose month"
+								aria-label={t.prPortal.chooseMonth}
 								onChange={(e) =>
 									setViewMonth(
 										new Date(
@@ -244,8 +269,8 @@ export function PrAgencySchedulePanel({
 								}
 							>
 								{MONTH_LABELS.map((label, i) => (
-									<option key={label} value={i}>
-										{label}
+									<option key={`m-${i + 1}`} value={i}>
+										{label(t)}
 									</option>
 								))}
 							</select>
@@ -253,12 +278,12 @@ export function PrAgencySchedulePanel({
 						</span>
 					</label>
 					<label className="iz-hist-cal-nav-field">
-						<span className="iz-hist-cal-nav-label">Year</span>
+						<span className="iz-hist-cal-nav-label">{t.prPortal.year}</span>
 						<span className="iz-hist-cal-select-wrap">
 							<select
 								className="iz-hist-cal-select"
 								value={viewMonth.getFullYear()}
-								aria-label="Choose year"
+								aria-label={t.prPortal.chooseYear}
 								onChange={(e) =>
 									setViewMonth(
 										new Date(Number(e.target.value), viewMonth.getMonth(), 1),
@@ -333,20 +358,20 @@ export function PrAgencySchedulePanel({
 				/>
 				<div className="iz-pr-cal-legend">
 					<span>
-						<i className="sw open" /> Available
+						<i className="sw open" /> {t.prPortal.legendAvailable}
 					</span>
 					<span>
-						<i className="sw assigned" /> Scheduled
+						<i className="sw assigned" /> {t.prPortal.legendScheduled}
 					</span>
 					<span>
-						<i className="sw pending" /> Pending
+						<i className="sw pending" /> {t.prPortal.legendPending}
 					</span>
 					<span>
-						<i className="sw unavailable" /> Not available
+						<i className="sw unavailable" /> {t.prPortal.legendNotAvailable}
 					</span>
 				</div>
 				<p className="iz-tiny iz-muted2 mt-2 text-center">
-					Tap an available day to block it · tap a blocked day to reopen
+					{t.prPortal.tapDayToBlockHint}
 				</p>
 			</div>
 
@@ -354,12 +379,12 @@ export function PrAgencySchedulePanel({
 				<div className="flex items-center gap-2 mb-2">
 					<Clock className="h-4 w-4 text-[var(--iz-muted2)]" />
 					<span className="text-xs font-bold uppercase tracking-wide text-[var(--iz-muted)]">
-						Timetable · {upcomingWeekLabel}
+						{fill(t.prPortal.timetableForWeek, { week: upcomingWeekLabel })}
 					</span>
 				</div>
 				{upcomingWeekTimetable.length === 0 ? (
 					<p className="iz-tiny iz-muted2 rounded-xl border border-dashed border-[var(--iz-line)] px-3 py-5 text-center">
-						No shifts this week
+						{t.prPortal.noShiftsThisWeek}
 					</p>
 				) : (
 					<div className="iz-pr-list">
@@ -380,7 +405,7 @@ export function PrAgencySchedulePanel({
 					setCancelEntry(null);
 					setCancelReason("");
 				}}
-				title="Cancel shift"
+				title={t.prPortal.cancelShift}
 				outlet={cancelEntry?.outlet ?? ""}
 				dateLine={cancelEntry?.dateLabel ?? ""}
 				shiftLine={cancelEntry?.time}
@@ -390,8 +415,10 @@ export function PrAgencySchedulePanel({
 				onSubmit={submitCancel}
 				submitLabel={
 					cancelEval && cancelEval.deductionRm > 0
-						? `Cancel & accept −RM ${cancelEval.deductionRm}`
-						: "Cancel shift"
+						? fill(t.prPortal.cancelAndAcceptDeduction, {
+								amount: `RM ${cancelEval.deductionRm}`,
+							})
+						: t.prPortal.cancelShift
 				}
 			/>
 		</div>
@@ -405,6 +432,7 @@ function SourceBadge({
 	source: ShiftDataSource;
 	label: string;
 }) {
+	const { t } = usePortalLocale();
 	const isAgency = source === "agency";
 	return (
 		<span
@@ -415,7 +443,7 @@ function SourceBadge({
 			) : (
 				<Building2 className="h-3 w-3" />
 			)}
-			{isAgency ? "Agency" : "Outlet"} · {label}
+			{isAgency ? t.history.portalAgency : t.history.portalOutlet} · {label}
 		</span>
 	);
 }
@@ -427,6 +455,7 @@ function TimetableRow({
 	entry: TimetableEntry;
 	onCancel: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const slot = entry.slot;
 
 	return (
@@ -444,20 +473,23 @@ function TimetableRow({
 					<dl className="mt-2 space-y-1.5">
 						<div>
 							<dt className="iz-tiny iz-muted2 uppercase tracking-wide">
-								Date
+								{t.filters.date}
 							</dt>
 							<dd className="iz-tiny iz-muted mt-0.5">{entry.dateLabel}</dd>
 						</div>
 						<div>
 							<dt className="iz-tiny iz-muted2 uppercase tracking-wide">
-								Time
+								{t.postJob.time}
 							</dt>
 							<dd className="iz-tiny iz-muted mt-0.5">{entry.time}</dd>
 						</div>
 					</dl>
 					{slot?.payDeductionRm ? (
 						<p className="iz-tiny mt-2 text-[var(--iz-red)]">
-							−RM {slot.payDeductionRm} logged · {slot.cancelledAt}
+							{fill(t.prPortal.deductionLoggedAt, {
+								amount: `RM ${slot.payDeductionRm}`,
+								at: slot.cancelledAt ?? "",
+							})}
 						</p>
 					) : null}
 				</div>
@@ -468,7 +500,7 @@ function TimetableRow({
 					className="iz-btn iz-btn-danger iz-btn-sm mt-2 w-full"
 					onClick={onCancel}
 				>
-					Cancel
+					{t.common.cancel}
 				</button>
 			)}
 		</div>

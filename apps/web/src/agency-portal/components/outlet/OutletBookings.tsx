@@ -34,6 +34,7 @@ import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { ChevronDown } from "lucide-react";
 import { useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function OutletBookings({
 	variant = "home",
@@ -97,26 +98,16 @@ export function OutletBookings({
 
 	if (variant === "home" && !liveShift) {
 		return (
-			<OutletEmptyState>
-				No live shift tonight — check Calendar page for upcoming events.
-			</OutletEmptyState>
+			<OutletEmptyState>{t.outletPanels.noLiveShiftTonight}</OutletEmptyState>
 		);
 	}
 
 	if (variant === "future" && futureShifts.length === 0) {
-		return (
-			<OutletEmptyState>
-				No upcoming shifts — use Post Job to create one.
-			</OutletEmptyState>
-		);
+		return <OutletEmptyState>{t.calendar.noUpcomingShifts}</OutletEmptyState>;
 	}
 
 	if (visibleShifts.length === 0) {
-		return (
-			<OutletEmptyState>
-				No shifts yet — use Post Job to create one.
-			</OutletEmptyState>
-		);
+		return <OutletEmptyState>{t.outletPanels.noShiftsYet}</OutletEmptyState>;
 	}
 
 	const renderShiftCard = (
@@ -185,10 +176,13 @@ export function OutletBookings({
 						 */}
 						<p className="iz-tiny iz-muted mt-0.5 truncate group-open:hidden">
 							{s.date}
-							{s.shift ? ` · ${s.shift}` : ""} · {supplied}/{demand} PRs ·{" "}
+							{s.shift ? ` · ${s.shift}` : ""} ·{" "}
+							{fill(t.outletPanels.suppliedOfDemandPrs, { supplied, demand })} ·{" "}
 							{targetPay}
-							{salesTargets ? ` · ${salesTargets}` : ""} · RM{" "}
-							{displaySales.toLocaleString()} sales
+							{salesTargets ? ` · ${salesTargets}` : ""} ·{" "}
+							{fill(t.outletPanels.salesAmount, {
+								amount: `RM ${displaySales.toLocaleString()}`,
+							})}
 						</p>
 					</div>
 					<ChevronDown className="h-4 w-4 shrink-0 text-[var(--iz-muted)] transition-transform group-open:rotate-180" />

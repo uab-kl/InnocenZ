@@ -990,8 +990,7 @@ function RequestEditForm({
 								plan: requestedPlan?.name ?? t.adminRequests.fallbackItsPlan,
 							})
 						: fill(t.adminRequests.noteExitPendingTier, {
-								plan:
-									requestedPlan?.name ?? t.adminRequests.fallbackTierNamed,
+								plan: requestedPlan?.name ?? t.adminRequests.fallbackTierNamed,
 							})
 				: request.status === "resolved"
 					? isAddonRequest
@@ -1099,18 +1098,14 @@ function RequestEditForm({
 		<div className="flex min-h-0 flex-1 flex-col">
 			<SheetHeader>
 				<SheetTitle>{t.adminRequests.editRequest}</SheetTitle>
-				<SheetDescription>
-					{t.adminRequests.editRequestHint}
-				</SheetDescription>
+				<SheetDescription>{t.adminRequests.editRequestHint}</SheetDescription>
 			</SheetHeader>
 
 			<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
 				{/* Immutable record of the originating Outlet/Agency action. */}
 				<dl className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">
-							{t.adminRequests.colWho}
-						</dt>
+						<dt className="text-muted-foreground">{t.adminRequests.colWho}</dt>
 						<dd className="text-right font-medium">{request.subscriberName}</dd>
 					</div>
 					{request.contactName && (
@@ -1122,9 +1117,7 @@ function RequestEditForm({
 						</div>
 					)}
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">
-							{t.adminRequests.colRole}
-						</dt>
+						<dt className="text-muted-foreground">{t.adminRequests.colRole}</dt>
 						<dd className="text-right">
 							{request.subscriberType
 								? roleLabels[request.subscriberType](t)

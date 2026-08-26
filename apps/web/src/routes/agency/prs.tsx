@@ -1577,6 +1577,7 @@ function AgencyPrDetail({
 
 					<OutletSection
 						title={t.managePr.shiftHistory}
+						iconKey="Shift history"
 						hint={
 							shiftRows.length > SHIFT_HISTORY_ROWS
 								? fill(t.agencyPrs.lastNofM, {
@@ -1634,6 +1635,7 @@ function AgencyPrDetail({
 					{(detail.payClassHistory?.length ?? 0) > 0 && (
 						<OutletSection
 							title={t.managePr.payClassHistory}
+							iconKey="Pay class history"
 							hint={t.managePr.auditTrail}
 						>
 							<IzCard flat>
@@ -1656,6 +1658,7 @@ function AgencyPrDetail({
 
 					<OutletSection
 						title={t.managePr.ratingsFeed}
+						iconKey="Ratings feed"
 						hint={
 							ratingSummary.count > 0
 								? fill(
@@ -1682,6 +1685,7 @@ function AgencyPrDetail({
 
 					<OutletSection
 						title={t.managePr.agencyActions}
+						iconKey="Agency actions"
 						hint={t.managePr.discipline}
 					>
 						<div className="grid grid-cols-2 gap-2">

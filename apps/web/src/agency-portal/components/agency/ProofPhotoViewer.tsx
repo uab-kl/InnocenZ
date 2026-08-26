@@ -7,6 +7,7 @@ import {
 	useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 
 /**
@@ -60,6 +61,7 @@ export function PhotoLightbox({
 	 */
 	children?: ReactNode;
 }) {
+	const { t } = usePortalLocale();
 	const [zoom, setZoom] = useState(1);
 	const [offset, setOffset] = useState({ x: 0, y: 0 });
 	const [dragFrom, setDragFrom] = useState<{ x: number; y: number } | null>(
@@ -143,7 +145,7 @@ export function PhotoLightbox({
 					className="iz-btn iz-btn-soft iz-btn-sm !h-8 !px-2"
 					onClick={() => zoomTo(zoom - STEP)}
 					disabled={zoom <= MIN_ZOOM}
-					aria-label="Zoom out"
+					aria-label={t.agencyGps.zoomOut}
 				>
 					<Minus className="h-4 w-4" />
 				</button>
@@ -155,7 +157,7 @@ export function PhotoLightbox({
 					className="iz-btn iz-btn-soft iz-btn-sm !h-8 !px-2"
 					onClick={() => zoomTo(zoom + STEP)}
 					disabled={zoom >= MAX_ZOOM}
-					aria-label="Zoom in"
+					aria-label={t.agencyGps.zoomIn}
 				>
 					<Plus className="h-4 w-4" />
 				</button>
@@ -163,7 +165,7 @@ export function PhotoLightbox({
 					type="button"
 					className="iz-btn iz-btn-soft iz-btn-sm !h-8 !px-2"
 					onClick={() => zoomTo(MIN_ZOOM)}
-					aria-label="Reset zoom"
+					aria-label={t.agencyGps.resetZoom}
 				>
 					<RotateCcw className="h-4 w-4" />
 				</button>
@@ -171,7 +173,7 @@ export function PhotoLightbox({
 					type="button"
 					className="iz-btn iz-btn-soft iz-btn-sm !h-8 !px-2"
 					onClick={onClose}
-					aria-label="Close"
+					aria-label={t.common.close}
 				>
 					<X className="h-4 w-4" />
 				</button>
@@ -251,6 +253,7 @@ export function ProofPhotos({
 	photos: string[];
 	label: string;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState<string | null>(null);
 	if (photos.length === 0) return null;
 
@@ -269,7 +272,7 @@ export function ProofPhotos({
 							type="button"
 							className="group relative"
 							onClick={() => setOpen(url)}
-							title="Click to zoom"
+							title={t.agencyGps.clickToZoom}
 						>
 							<img
 								src={url}

@@ -10,6 +10,8 @@ import {
 } from "@agency-portal/lib/gps-locations";
 import type { PrShiftOffer } from "@agency-portal/lib/pr-demo";
 import { formatRMPlain } from "@agency-portal/lib/pr-demo";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type PrShiftOutletBrief = {
 	name: string;
@@ -91,8 +93,9 @@ const DEFAULT_META = {
 /** Check-in hero — agency assigns; outlets may request PRs but cannot assign directly. */
 export function getPrCheckInAssignmentLabel(
 	slot: AgencyRosterSlot | undefined,
+	t: PortalTranslations,
 ): string {
-	if (!slot) return "Tonight's shift";
+	if (!slot) return t.libShift.tonightsShift;
 	// Was a hand-rolled copy of `rosterSlotAgencyName`'s chain, minus its
 	// `agencyId` arm — so a REAL slot, which carries only an id, skipped straight
 	// to the demo literal and told the PR that Atlas had assigned them whoever
@@ -100,19 +103,26 @@ export function getPrCheckInAssignmentLabel(
 	// this now calls the rule.
 	const agency = rosterSlotAgencyName(slot);
 	if (slot.status === "outlet-pending") {
-		return "Outlet requested you · pending agency & PR approval";
+		return t.libShift.outletRequestedPendingApproval;
 	}
 	// An unnamed agency drops the suffix rather than trailing a bare separator.
-	return agency ? `Agency assigned · ${agency}` : "Agency assigned";
+	// `agency` is the supplier's own NAME — data, so it lands in the sentence
+	// untranslated while the words around it move.
+	return agency
+		? fill(t.libShift.agencyAssignedBy, { agency })
+		: t.libShift.agencyAssigned;
 }
 
 export function getPrShiftOutletBrief(
 	offer: PrShiftOffer,
-	opts?: {
-		shiftDateLabel?: string;
-		rosterSlot?: AgencyRosterSlot | null;
-		prCoord?: GeoCoord;
-	},
+	opts:
+		| {
+				shiftDateLabel?: string;
+				rosterSlot?: AgencyRosterSlot | null;
+				prCoord?: GeoCoord;
+		  }
+		| undefined,
+	t: PortalTranslations,
 ): PrShiftOutletBrief {
 	const gps = OUTLET_GPS[offer.outlet] ?? OUTLET_GPS["Velvet 23"];
 	const meta = OUTLET_META[offer.outlet] ?? DEFAULT_META;
@@ -130,11 +140,19 @@ export function getPrShiftOutletBrief(
 		streetAddress: meta.street,
 		shiftTime: offer.time,
 		shiftDate: opts?.shiftDateLabel ?? "",
+		// The STORED dress code, not a label. `dressCodeLabel()` in
+		// portal-i18n/language-label.ts renders it, the same way the outlet's own
+		// screens do — one dress code cannot read two ways.
 		dressCode: meta.dressCode,
 		distance: offer.distance,
 		mapsUrl: `https://www.google.com/maps?q=${gps.lat},${gps.lng}`,
 		directionsUrl,
-		estPayout: `${formatRMPlain(estWages)} shift pay · RM ${rule.wagePerHour.toLocaleString("en-MY")}/shift`,
+		// Both holes arrive already carrying their currency — no "RM" lives in the
+		// dictionary, so the money keeps one source of truth.
+		estPayout: fill(t.libShift.estShiftPayPerShift, {
+			pay: formatRMPlain(estWages),
+			rate: `RM ${rule.wagePerHour.toLocaleString("en-MY")}`,
+		}),
 		agencyNote: opts?.rosterSlot?.agencyAssignment?.agencyNote,
 		heroGradient: meta.gradient,
 		opsContact: meta.opsContact,

@@ -44,11 +44,29 @@ import { type ReactNode, useMemo, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 /** "2026-08-20" reads like a database row — show "Thu · 20 Aug 2026", the same
     friendly form the PR app uses. Demo labels ("Tonight") pass through. */
 function prettyShiftDate(date: string): string {
 	return /^\d{4}-\d{2}-\d{2}$/.test(date) ? fmtDateLabelFromIso(date) : date;
+}
+
+/**
+ * Display label for a shift group's day.
+ *
+ * `groupOutletShiftsTodayFuture` builds `dateLabel` in
+ * `agency-outlet-shifts.ts`, where there is no locale to read: it emits the
+ * three English sentinels below, or a date already formatted by the shared date
+ * helper. Resolving them here keeps that module free of the dictionary, and
+ * anything unrecognised — a formatted date, a demo label like "Tonight" —
+ * passes straight through rather than blanking the header.
+ */
+function outletGroupDayLabel(label: string, t: PortalTranslations): string {
+	if (label === "Today") return t.outletDetail.today;
+	if (label === "Tomorrow") return t.postJob.tomorrow;
+	if (label === "Future") return t.outletDetail.future;
+	return label;
 }
 
 type AgencyOutletDetailViewProps = {
@@ -267,7 +285,7 @@ export function AgencyOutletDetailView({
 							<div key={group.dateIso} className="iz-outlet-detail-shift-group">
 								<div className="iz-outlet-detail-group-head">
 									<span className="iz-outlet-detail-group-head__label">
-										{group.dateLabel}
+										{outletGroupDayLabel(group.dateLabel, t)}
 									</span>
 									<div className="iz-outlet-detail-group-head__stats">
 										<span className="iz-outlet-detail-group-head__stats-label">
@@ -283,7 +301,9 @@ export function AgencyOutletDetailView({
 											</span>
 											{group.openSlots > 0 ? (
 												<span className="iz-outlet-detail-group-head__stats-open">
-													· {group.openSlots} open
+													{fill(t.outletDetail.openSuffix, {
+														n: group.openSlots,
+													})}
 												</span>
 											) : (
 												group.demand > 0 && (
@@ -410,7 +430,12 @@ function OutletDemandSuppliedStat({
 			    answer to the question this screen is actually asked: did we fill it? */}
 			{openSlots != null && openSlots > 0 ? (
 				<span className="iz-outlet-detail-metric__open">
-					{openSlots} open slots
+					{fill(
+						openSlots === 1
+							? t.rosterGrid.slotCountOne
+							: t.rosterGrid.slotCountMany,
+						{ n: openSlots },
+					)}
 				</span>
 			) : (
 				demand > 0 && (
@@ -428,6 +453,7 @@ function OutletShiftTierRequestTable({
 }: {
 	shift: AgencyOutletAvailableShift;
 }) {
+	const { t } = usePortalLocale();
 	const shifts = useStore((s) => s.shifts);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
@@ -480,7 +506,9 @@ function OutletShiftTierRequestTable({
 
 	return (
 		<div className="iz-outlet-detail-pay-tiers">
-			<p className="iz-outlet-detail-pay-tiers__label">Pay & tiers</p>
+			<p className="iz-outlet-detail-pay-tiers__label">
+				{t.agencyPanels.payAndTiers}
+			</p>
 			<WorkspaceTierRatesEditor
 				tierRates={shift.tierRates}
 				commissionOnlyRates={outletWorkspace.commissionOnlyRates}
@@ -624,6 +652,7 @@ function OutletDetailTodayShiftCard({
 }: {
 	shift: AgencyOutletAvailableShift;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<details className="iz-outlet-detail-shift-card group">
 			<summary>
@@ -659,9 +688,10 @@ function OutletDetailTodayShiftCard({
 			</summary>
 
 			<div className="iz-outlet-detail-shift-card__body">
+				{/* The VALUE is the venue's own stored list — only the label moves. */}
 				{shift.languages && (
 					<p className="iz-outlet-detail-shift-meta">
-						Languages · {shift.languages}
+						{fill(t.agencyPanels.languagesLine, { langs: shift.languages })}
 					</p>
 				)}
 				<OutletShiftTierRequestTable shift={shift} />
@@ -675,6 +705,7 @@ function OutletDetailFutureShiftCard({
 }: {
 	shift: AgencyOutletAvailableShift;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<details className="iz-outlet-detail-shift-card iz-outlet-detail-shift-card--future group">
 			<summary>
@@ -687,7 +718,9 @@ function OutletDetailFutureShiftCard({
 							<p className="iz-outlet-detail-shift-future__sub">
 								{prettyShiftDate(shift.date)} · {shift.shift} ·{" "}
 								{shift.demandSlots}/{shift.suppliedSlots}
-								{shift.openSlots > 0 ? ` · ${shift.openSlots} open` : ""}
+								{shift.openSlots > 0
+									? fill(t.outletDetail.openSuffix, { n: shift.openSlots })
+									: ""}
 							</p>
 						</div>
 						<div className="iz-outlet-detail-shift-future__aside">
@@ -708,9 +741,10 @@ function OutletDetailFutureShiftCard({
 			</summary>
 
 			<div className="iz-outlet-detail-shift-card__body">
+				{/* The VALUE is the venue's own stored list — only the label moves. */}
 				{shift.languages && (
 					<p className="iz-outlet-detail-shift-meta">
-						Languages · {shift.languages}
+						{fill(t.agencyPanels.languagesLine, { langs: shift.languages })}
 					</p>
 				)}
 				<OutletShiftTierRequestTable shift={shift} />

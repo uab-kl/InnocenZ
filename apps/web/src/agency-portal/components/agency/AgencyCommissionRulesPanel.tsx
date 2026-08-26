@@ -78,8 +78,8 @@ export function AgencyCommissionRulesPanel({
 			{!tableOnly && (
 				<p className="iz-tiny iz-muted2 mb-2">
 					{syncedFromWorkspace
-						? `${tierHint} · read-only`
-						: "Outlet tier rates · read-only on agency"}
+						? fill(t.agencyPanels.syncedReadOnly, { hint: tierHint })
+						: t.agencyPanels.outletTierRatesReadOnly}
 				</p>
 			)}
 
@@ -99,10 +99,17 @@ export function AgencyCommissionRulesPanel({
 			{!tableOnly && syncedFromWorkspace && drinkRange && (
 				<IzCard flat className="mt-3 !py-3">
 					<p className="iz-tiny iz-muted2 mb-1.5">
-						Drink prices · synced from outlet
+						{t.agencyPanels.drinkPricesSynced}
 					</p>
+					{/* The same summary line the outlet's own Workspace screen prints,
+					    from the one key — two spellings of "{n} drinks · RM x–y" is how
+					    the two portals start disagreeing about the same menu. */}
 					<p className="iz-tiny iz-muted mb-2">
-						{drinkMenu.length} drinks · RM {drinkRange.min}–{drinkRange.max}
+						{fill(t.workspace.drinksSummary, {
+							n: drinkMenu.length,
+							min: drinkRange.min,
+							max: drinkRange.max,
+						})}
 					</p>
 					<div className="flex flex-wrap gap-1.5">
 						{drinkMenu.map((drink) => (

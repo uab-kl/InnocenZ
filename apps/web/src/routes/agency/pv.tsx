@@ -1284,7 +1284,7 @@ function receiptScanStatusPill(
 			: scan.status === "in_pv"
 				? "amber"
 				: "ink";
-	return { variant, label: receiptStatusLabel(scan.status) };
+	return { variant, label: receiptStatusLabel(scan.status, t) };
 }
 
 function ReceiptScanRow({
@@ -1334,7 +1334,7 @@ function ReceiptScanRow({
 						</p>
 					)}
 					<p className="iz-tiny iz-muted2 mt-0.5">
-						{receiptEntryLoggedLabel(scan)}
+						{receiptEntryLoggedLabel(scan, t)}
 					</p>
 					<p className="iz-tiny iz-muted2">
 						{t.table.shiftDay} {d}/{m}/{y}
@@ -1346,7 +1346,7 @@ function ReceiptScanRow({
 							<IzPill variant={statusPill.variant}>{statusPill.label}</IzPill>
 						) : (
 							<IzPill variant={entry === "manual" ? "violet" : "ink"}>
-								{receiptEntryMethodLabel(entry)}
+								{receiptEntryMethodLabel(entry, t)}
 							</IzPill>
 						)}
 						<p className="iz-ledger mt-1 text-sm font-bold">
@@ -1775,6 +1775,7 @@ function PvDetail({
 			{receiptScans.length > 0 && (
 				<OutletSection
 					title={t.payroll.receiptScans}
+					iconKey="Receipt scans"
 					hint={`${receiptScans.length} ${t.payroll.onThisPv}`}
 				>
 					{receiptScans.map((scan) => (
@@ -1786,6 +1787,7 @@ function PvDetail({
 			{pv.status === "DISPUTED" && rows.length > 0 && (
 				<OutletSection
 					title={t.payroll.editLineItems}
+					iconKey="Edit line items"
 					hint={t.payroll.disputeResolution}
 					trailing={
 						<button

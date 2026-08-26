@@ -831,6 +831,7 @@ function PostJobPage() {
 			<OutletPageHeader
 				eyebrow={outletName}
 				title={t.postJob.title}
+				iconKey="Post Job"
 				hint={
 					viewOnly
 						? t.postJob.viewOnlyHint

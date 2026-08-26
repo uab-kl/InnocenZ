@@ -3,6 +3,12 @@ import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
+import {
+	PortalLocaleProvider,
+	usePortalLocale,
+} from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { portalCodeLabel } from "@/lib/portal-i18n/rbac-label";
 
 export const noAccessTitle = "No Access | Innocenz";
 
@@ -10,17 +16,31 @@ export const noAccessHead = () => ({
 	meta: [{ title: noAccessTitle }],
 });
 
-const PORTAL_LABEL: Record<string, string> = {
-	admin: "Admin",
-	agency: "Agency",
-	outlet: "Outlet",
-};
-
+/**
+ * `/no-access` is a bare route with no portal shell above it, so it carries
+ * the locale provider itself — and it must be a WRAPPER, because a component
+ * cannot consume a context it mounts. `usePortalLocale` renders English
+ * silently rather than throwing when un-provided, which is exactly the failure
+ * that would have gone unnoticed here.
+ */
 export function NoAccessPage() {
+	return (
+		<PortalLocaleProvider>
+			<NoAccessBody />
+		</PortalLocaleProvider>
+	);
+}
+
+function NoAccessBody() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuthActions();
 	const { user } = useCurrentUser();
 	const { needs, link } = Route.useSearch();
-	const needsLabel = needs ? PORTAL_LABEL[needs] : undefined;
+	// `needs` stays the stored portal code — it is what `validateSearch`
+	// narrows and what the URL carries. Only the LABEL follows the locale, via
+	// the same resolver the RBAC screens use, so "Agency" cannot mean one thing
+	// here and another there.
+	const needsLabel = needs ? portalCodeLabel(needs, t) : undefined;
 
 	/*
 	 * Two different situations share this page.
@@ -35,8 +55,6 @@ export function NoAccessPage() {
 	 *
 	 * NO PORTAL AT ALL — the original case: an account with no web portal.
 	 */
-	const wrongPortal = Boolean(needsLabel);
-
 	return (
 		<div className="fixed inset-0 z-50 flex min-h-svh w-full items-center justify-center bg-background px-6">
 			<div className="flex w-full max-w-xl flex-col items-center text-center">
@@ -45,37 +63,35 @@ export function NoAccessPage() {
 				</div>
 
 				<h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-					{wrongPortal
-						? `This link needs the ${needsLabel} portal`
-						: "You cannot access this web portal"}
+					{needsLabel
+						? fill(t.invitePages.linkNeedsPortal, { portal: needsLabel })
+						: t.invitePages.noPortalTitle}
 				</h1>
 
-				{wrongPortal ? (
+				{needsLabel ? (
 					<>
 						<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
-							You are signed in as{" "}
+							{t.invitePages.signedInAs}{" "}
 							<span className="font-semibold text-foreground">
-								{user?.email ?? "this account"}
+								{user?.email ?? t.invitePages.thisAccount}
 							</span>
-							, which does not have access to the {needsLabel} portal. Your role
-							has not changed — this browser is simply signed in to a different
-							account.
+						</p>
+						<p className="mt-2 max-w-md text-base leading-relaxed text-muted-foreground">
+							{fill(t.invitePages.wrongPortalBody, { portal: needsLabel })}
 						</p>
 						{link ? (
 							<p className="mt-2 max-w-md break-all text-sm text-muted-foreground">
-								Link you opened: <span className="font-mono">{link}</span>
+								{t.invitePages.linkYouOpened}{" "}
+								<span className="font-mono">{link}</span>
 							</p>
 						) : null}
 						<p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-							Sign out and sign in with the {needsLabel} account to open it. A
-							link cannot carry a sign-in between browsers — if it could, anyone
-							who received it would be signed in as you.
+							{fill(t.invitePages.wrongPortalHint, { portal: needsLabel })}
 						</p>
 					</>
 				) : (
 					<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
-						Your account role does not have a web portal on InnocenZ yet. Please
-						contact support if you believe this is a mistake.
+						{t.invitePages.noPortalBody}
 					</p>
 				)}
 
@@ -84,7 +100,9 @@ export function NoAccessPage() {
 					className="mt-8 h-11 gap-2.5 px-8 text-white dark:text-[#1a1726]"
 					onClick={() => logout()}
 				>
-					{wrongPortal ? "Sign out and switch account" : "Back to login"}
+					{needsLabel
+						? t.invitePages.signOutSwitchAccount
+						: t.invitePages.backToLogin}
 				</Button>
 			</div>
 		</div>

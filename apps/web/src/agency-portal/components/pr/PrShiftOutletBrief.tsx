@@ -10,6 +10,9 @@ import {
 	Star,
 } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { dressCodeLabel } from "@/lib/portal-i18n/language-label";
 
 export function PrShiftOutletBriefCard({
 	brief,
@@ -24,6 +27,7 @@ export function PrShiftOutletBriefCard({
 	pageLabel?: string;
 	statusLabel?: string;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(defaultOpen);
 	const initial = brief.name.trim()[0]?.toUpperCase() ?? "O";
 	const shiftMeta = [brief.shiftDate, brief.shiftTime]
@@ -49,7 +53,9 @@ export function PrShiftOutletBriefCard({
 						)}
 						{statusLabel && (
 							<div className="iz-pr-outlet-brief__status-block">
-								<span className="iz-pr-outlet-brief__status-k">Status</span>
+								<span className="iz-pr-outlet-brief__status-k">
+									{t.table.status}
+								</span>
 								<span className="iz-pr-outlet-brief__status-v">
 									{statusLabel}
 								</span>
@@ -72,14 +78,14 @@ export function PrShiftOutletBriefCard({
 							<div className="iz-pr-outlet-brief__hero-badges">
 								{brief.vip && (
 									<IzPill variant="amber" className="!text-[9px]">
-										<Sparkles className="h-3 w-3" /> VIP night
+										<Sparkles className="h-3 w-3" /> {t.prPortal.vipNight}
 									</IzPill>
 								)}
 							</div>
 						</div>
 						<p className="iz-pr-outlet-brief__event">{brief.event}</p>
 						<span className="iz-pr-outlet-brief__action">
-							{open ? "Tap to collapse" : "Tap to expand"}
+							{open ? t.common.tapToCollapse : t.common.tapToExpand}
 						</span>
 					</div>
 					<div className="iz-pr-outlet-brief__hero-mark">{initial}</div>
@@ -91,36 +97,44 @@ export function PrShiftOutletBriefCard({
 					<div className="iz-pr-outlet-brief__row">
 						<MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
 						<div className="min-w-0">
-							<p className="iz-pr-outlet-brief__row-label">Address</p>
+							<p className="iz-pr-outlet-brief__row-label">
+								{t.approvals.address}
+							</p>
 							<p className="iz-pr-outlet-brief__row-value">
 								{brief.streetAddress}
 							</p>
 							<p className="iz-tiny iz-muted2 mt-0.5">
-								{brief.address} · {brief.distance} away
+								{fill(t.prPortal.addressDistanceAway, {
+									address: brief.address,
+									distance: brief.distance,
+								})}
 							</p>
 						</div>
 					</div>
 
 					<div className="iz-pr-outlet-brief__grid">
 						<div>
-							<p className="iz-pr-outlet-brief__meta-k">Shift</p>
+							<p className="iz-pr-outlet-brief__meta-k">{t.rosterGrid.shift}</p>
 							<p className="iz-pr-outlet-brief__meta-v">{brief.shiftDate}</p>
 							<p className="iz-tiny iz-muted2">{brief.shiftTime}</p>
 						</div>
 						<div>
-							<p className="iz-pr-outlet-brief__meta-k">Dress code</p>
+							<p className="iz-pr-outlet-brief__meta-k">{t.postJob.dressCode}</p>
 							<p className="iz-pr-outlet-brief__meta-v flex items-center gap-1">
 								<Shirt className="h-3 w-3 text-[var(--iz-violet-l)]" />
-								{brief.dressCode}
+								{dressCodeLabel(brief.dressCode, t)}
 							</p>
 						</div>
 						<div>
-							<p className="iz-pr-outlet-brief__meta-k">Est. payout</p>
+							<p className="iz-pr-outlet-brief__meta-k">
+								{t.prPortal.estPayout}
+							</p>
 							<p className="iz-pr-outlet-brief__meta-v text-[var(--iz-gold-l)]">
 								{brief.estPayout}
 							</p>
 							<p className="iz-tiny iz-muted2 flex items-center gap-1">
-								<Star className="h-3 w-3" /> {brief.rating} outlet
+								<Star className="h-3 w-3" />{" "}
+								{fill(t.prPortal.outletRating, { rating: brief.rating })}
 							</p>
 						</div>
 					</div>
@@ -129,7 +143,9 @@ export function PrShiftOutletBriefCard({
 						<div className="iz-pr-outlet-brief__row !mt-2">
 							<Building2 className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
 							<div>
-								<p className="iz-pr-outlet-brief__row-label">Outlet contact</p>
+								<p className="iz-pr-outlet-brief__row-label">
+									{t.prPortal.outletContact}
+								</p>
 								<p className="iz-pr-outlet-brief__row-value">
 									{brief.opsContact}
 								</p>
@@ -147,7 +163,8 @@ export function PrShiftOutletBriefCard({
 						rel="noreferrer"
 						className="iz-outlet-quick-chip mt-3 inline-flex w-full justify-center"
 					>
-						<ExternalLink className="h-3 w-3" /> Open directions in Maps
+						<ExternalLink className="h-3 w-3" />{" "}
+						{t.prPortal.openDirectionsInMaps}
 					</a>
 				</div>
 			)}

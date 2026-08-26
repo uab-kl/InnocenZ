@@ -5,14 +5,21 @@ import {
 import { cn } from "@agency-portal/lib/utils";
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 import * as React from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
-const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
-	<nav
-		aria-label="pagination"
-		className={cn("mx-auto flex w-full justify-center", className)}
-		{...props}
-	/>
-);
+const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => {
+	const { t } = usePortalLocale();
+
+	return (
+		<nav
+			// Before the spread: the landmark's default name, still overridable by
+			// a consumer that has a better one.
+			aria-label={t.portalUi.pagination}
+			className={cn("mx-auto flex w-full justify-center", className)}
+			{...props}
+		/>
+	);
+};
 Pagination.displayName = "Pagination";
 
 const PaginationContent = React.forwardRef<
@@ -63,48 +70,60 @@ PaginationLink.displayName = "PaginationLink";
 const PaginationPrevious = ({
 	className,
 	...props
-}: React.ComponentProps<typeof PaginationLink>) => (
-	<PaginationLink
-		aria-label="Go to previous page"
-		size="default"
-		className={cn("gap-1 pl-2.5", className)}
-		{...props}
-	>
-		<ChevronLeft className="h-4 w-4" />
-		<span>Previous</span>
-	</PaginationLink>
-);
+}: React.ComponentProps<typeof PaginationLink>) => {
+	const { t } = usePortalLocale();
+
+	return (
+		<PaginationLink
+			aria-label={t.portalUi.goToPreviousPage}
+			size="default"
+			className={cn("gap-1 pl-2.5", className)}
+			{...props}
+		>
+			<ChevronLeft className="h-4 w-4" />
+			<span>{t.portalUi.previous}</span>
+		</PaginationLink>
+	);
+};
 PaginationPrevious.displayName = "PaginationPrevious";
 
 const PaginationNext = ({
 	className,
 	...props
-}: React.ComponentProps<typeof PaginationLink>) => (
-	<PaginationLink
-		aria-label="Go to next page"
-		size="default"
-		className={cn("gap-1 pr-2.5", className)}
-		{...props}
-	>
-		<span>Next</span>
-		<ChevronRight className="h-4 w-4" />
-	</PaginationLink>
-);
+}: React.ComponentProps<typeof PaginationLink>) => {
+	const { t } = usePortalLocale();
+
+	return (
+		<PaginationLink
+			aria-label={t.portalUi.goToNextPage}
+			size="default"
+			className={cn("gap-1 pr-2.5", className)}
+			{...props}
+		>
+			<span>{t.portalUi.next}</span>
+			<ChevronRight className="h-4 w-4" />
+		</PaginationLink>
+	);
+};
 PaginationNext.displayName = "PaginationNext";
 
 const PaginationEllipsis = ({
 	className,
 	...props
-}: React.ComponentProps<"span">) => (
-	<span
-		aria-hidden
-		className={cn("flex h-9 w-9 items-center justify-center", className)}
-		{...props}
-	>
-		<MoreHorizontal className="h-4 w-4" />
-		<span className="sr-only">More pages</span>
-	</span>
-);
+}: React.ComponentProps<"span">) => {
+	const { t } = usePortalLocale();
+
+	return (
+		<span
+			aria-hidden
+			className={cn("flex h-9 w-9 items-center justify-center", className)}
+			{...props}
+		>
+			<MoreHorizontal className="h-4 w-4" />
+			<span className="sr-only">{t.portalUi.morePages}</span>
+		</span>
+	);
+};
 PaginationEllipsis.displayName = "PaginationEllipsis";
 
 export {

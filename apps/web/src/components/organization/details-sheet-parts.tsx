@@ -13,12 +13,14 @@ import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { env } from "@/env";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { getR2PublicBase } from "@/lib/proof-photo";
 import { formatDate } from "@/lib/utils";
 import {
 	type OrgStatus,
 	orgStatusBadgeColors,
-	orgStatusLabels,
+	orgStatusLabel,
 } from "./org-status";
 
 const DEFAULT_PROFILE_IMAGE = "/img/blank-profile-picture.png";
@@ -62,11 +64,12 @@ export function DetailsHero({
 	meta?: ReactNode;
 	imageUrl?: string;
 }) {
+	const { t } = usePortalLocale();
 	const initial = name.trim().charAt(0).toUpperCase() || "?";
 	const badgeClass =
 		orgStatusBadgeColors[status as OrgStatus] ??
 		"border-muted-foreground/30 bg-muted text-muted-foreground";
-	const badgeLabel = orgStatusLabels[status as OrgStatus] ?? status;
+	const badgeLabel = orgStatusLabel(status, t);
 	const [broken, setBroken] = useState(false);
 	const showImage = Boolean(imageUrl) && !broken;
 
@@ -80,7 +83,7 @@ export function DetailsHero({
 			{showImage ? (
 				<img
 					src={imageUrl}
-					alt={`${name} profile`}
+					alt={fill(t.adminOrg.profilePhotoAlt, { name })}
 					onError={() => setBroken(true)}
 					className="h-28 w-28 rounded-full border border-(--lavender-soft)/40 bg-black object-contain p-1.5"
 				/>
@@ -181,31 +184,32 @@ export function SystemInfoCard({
 	updatedBy: string | null | undefined;
 	updatedAt: string | null | undefined;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="space-y-3 rounded-lg border border-(--lavender-soft)/30 bg-card p-5">
 			<div className="flex items-center gap-2 text-base font-bold">
 				<Info className="h-5 w-5 text-lavender" />
-				System Information
+				{t.adminOrg.systemInformation}
 			</div>
 			<div className="grid grid-cols-1 gap-5 rounded-md bg-muted/30 px-5 py-5 sm:grid-cols-2">
 				<DetailField
 					icon={UserRound}
-					label="Created by"
+					label={t.adminOrg.createdBy}
 					value={formatActor(createdBy)}
 				/>
 				<DetailField
 					icon={CalendarDays}
-					label="Created at"
+					label={t.adminOrg.createdAt}
 					value={createdAt ? formatDate(createdAt) : null}
 				/>
 				<DetailField
 					icon={UserCog}
-					label="Updated by"
+					label={t.adminOrg.updatedBy}
 					value={formatActor(updatedBy)}
 				/>
 				<DetailField
 					icon={Clock}
-					label="Updated at"
+					label={t.adminOrg.updatedAt}
 					value={updatedAt ? formatDate(updatedAt) : null}
 				/>
 			</div>
@@ -213,29 +217,18 @@ export function SystemInfoCard({
 	);
 }
 
-const approvalStatusCopy: Record<
-	OrgStatus,
-	{ title: string; className: string }
-> = {
-	pending_review: {
-		title: "Pending review",
-		className:
-			"border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-	},
-	active: {
-		title: "Active",
-		className:
-			"border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-	},
-	suspended: {
-		title: "Suspended",
-		className:
-			"border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400",
-	},
-	inactive: {
-		title: "Inactive",
-		className: "border-muted-foreground/30 bg-muted text-muted-foreground",
-	},
+/**
+ * Colour only. The card's heading is `orgStatusLabel`, so the badge in the hero
+ * and the heading here cannot drift into two wordings for one status.
+ */
+const approvalStatusClass: Record<OrgStatus, string> = {
+	pending_review:
+		"border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+	active:
+		"border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+	suspended:
+		"border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400",
+	inactive: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
 export function ApprovalStatusCard({
@@ -246,29 +239,37 @@ export function ApprovalStatusCard({
 	onSuspend,
 }: {
 	status: OrgStatus;
+	/**
+	 * The word for the kind of organisation, landing MID-sentence in all four
+	 * descriptions below. It must arrive already translated — the call site
+	 * passes `t.adminOrg.entityAgency` / `t.adminOrg.entityOutlet`, never the
+	 * stored "agency" / "outlet".
+	 */
 	entityLabel: string;
 	busy: boolean;
 	onApprove: () => void;
 	onSuspend: () => void;
 }) {
-	const copy = approvalStatusCopy[status];
+	const { t } = usePortalLocale();
 	const description =
 		status === "pending_review"
-			? `Waiting for admin approval before this ${entityLabel} goes live.`
+			? fill(t.adminOrg.approvalPendingBody, { entity: entityLabel })
 			: status === "active"
-				? `This ${entityLabel} is live on the platform.`
+				? fill(t.adminOrg.approvalActiveBody, { entity: entityLabel })
 				: status === "suspended"
-					? `This ${entityLabel} has been suspended by an admin.`
-					: `This ${entityLabel} is inactive.`;
+					? fill(t.adminOrg.approvalSuspendedBody, { entity: entityLabel })
+					: fill(t.adminOrg.approvalInactiveBody, { entity: entityLabel });
 
 	return (
 		<div className="space-y-3 rounded-lg border-l-4 border-(--lavender-soft) bg-card p-4">
 			<div className="flex items-center gap-2 text-base font-bold">
 				<CircleCheckBig className="h-5 w-5 text-lavender" />
-				Approval Status
+				{t.adminOrg.approvalStatus}
 			</div>
-			<div className={`rounded-md border px-4 py-3 ${copy.className}`}>
-				<div className="text-base font-bold">{copy.title}</div>
+			<div
+				className={`rounded-md border px-4 py-3 ${approvalStatusClass[status]}`}
+			>
+				<div className="text-base font-bold">{orgStatusLabel(status, t)}</div>
 				<div className="text-sm opacity-90">{description}</div>
 			</div>
 			<div className="flex flex-wrap gap-2 pt-1">
@@ -279,7 +280,7 @@ export function ApprovalStatusCard({
 						) : (
 							<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
 						)}
-						Approve
+						{t.common.approve}
 					</Button>
 				)}
 				{status === "active" && (
@@ -294,7 +295,7 @@ export function ApprovalStatusCard({
 						) : (
 							<Ban className="mr-1 h-3.5 w-3.5" />
 						)}
-						Suspend
+						{t.adminOrg.suspend}
 					</Button>
 				)}
 				{status === "suspended" && (
@@ -304,13 +305,13 @@ export function ApprovalStatusCard({
 						) : (
 							<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
 						)}
-						Reactivate
+						{t.adminUsers.reactivate}
 					</Button>
 				)}
 				{status === "pending_review" && (
 					<span className="flex items-center gap-1 text-sm text-muted-foreground">
 						<Clock className="h-4 w-4" />
-						Submitted signup awaiting first approval
+						{t.adminOrg.awaitingFirstApproval}
 					</span>
 				)}
 			</div>

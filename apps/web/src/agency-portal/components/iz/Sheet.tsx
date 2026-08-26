@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 type MountMode = "phone" | "overlay";
 export type SheetVariant = "bottom" | "dialog" | "side";
@@ -100,6 +101,7 @@ function SheetContent({
 	comcard?: boolean;
 	liveSales?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === "Escape") onClose();
@@ -118,7 +120,7 @@ function SheetContent({
 			<button
 				type="button"
 				className="iz-sheet-bg"
-				aria-label="Close"
+				aria-label={t.common.close}
 				onClick={onClose}
 			/>
 			{/*

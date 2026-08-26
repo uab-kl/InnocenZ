@@ -41,6 +41,7 @@ import {
 } from "@agency-portal/lib/post-job-pay-tiers";
 import { type PrPayClass, prPayClass } from "@agency-portal/lib/pr-penalties";
 import { fill } from "@/lib/portal-i18n/fill";
+import { planDescription } from "@/lib/portal-i18n/plan-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type ShiftDestination = "agency" | "marketplace" | "both";
@@ -217,6 +218,12 @@ export function shiftDrinkMenuDetailLines(
 	}));
 }
 
+/**
+ * The STORED tag, not a label: the chip the outlet taps is written straight
+ * onto the rating (`ratePr(..., tags)`) and read back by the agency, so
+ * translating this array would file 守时 into a column holding "Punctual".
+ * Rendering these in Chinese needs a resolver at the chip, keyed on the value.
+ */
 export const PR_RATING_TAGS = [
 	"Punctual",
 	"Friendly",
@@ -226,12 +233,23 @@ export const PR_RATING_TAGS = [
 	"Needs coaching",
 ] as const;
 
-export const PR_RATING_NOTE_PLACEHOLDERS: Record<1 | 2 | 3 | 4 | 5, string> = {
-	1: "Serious issue — late, attitude, guest complaint, or floor impact…",
-	2: "Below standard — drinks, upsell, dress code, or table engagement…",
-	3: "Acceptable shift — one coaching note for next booking…",
-	4: "Good shift — what would make this a 5 next time?",
-	5: "Standout moment — VIP upsell, bottle push, teamwork, or vibe…",
+/*
+ * Functions, not strings: a module-scope map cannot read `t`, and storing the
+ * key NAME here would ship "libDemo.ratingNotePlaceholder1" to the screen. The
+ * record KEY is the star count and never changes.
+ *
+ * Unlike PR_RATING_TAGS above, nothing here is stored — it is the empty
+ * textarea's prompt, replaced the moment the rater types.
+ */
+export const PR_RATING_NOTE_PLACEHOLDERS: Record<
+	1 | 2 | 3 | 4 | 5,
+	(t: PortalTranslations) => string
+> = {
+	1: (t) => t.libDemo.ratingNotePlaceholder1,
+	2: (t) => t.libDemo.ratingNotePlaceholder2,
+	3: (t) => t.libDemo.ratingNotePlaceholder3,
+	4: (t) => t.libDemo.ratingNotePlaceholder4,
+	5: (t) => t.libDemo.ratingNotePlaceholder5,
 };
 
 export type OutletSubmittedRating = {
@@ -1361,29 +1379,65 @@ export function getOutletSubscriptionPlan(
 	);
 }
 
+/**
+ * How many PRs this plan lets a venue name, in words.
+ *
+ * Built from the plan's own NUMBERS, never from `plan.description` — that
+ * string is English prose on a data record and cannot be translated where it is
+ * rendered. The renegotiated plan has no numbers to state, so it borrows the
+ * plan catalogue's own resolver, which falls through to the record's English
+ * when a plan id is added later.
+ *
+ * `t` is required, not optional-with-an-English-default: an optional `t` would
+ * let a new call site compile while quietly rendering English.
+ */
 export function formatOutletPlanPrPickerRule(
 	plan: OutletSubscriptionPlan,
+	t: PortalTranslations,
 ): string {
-	if (plan.renegotiate) return plan.description;
-	if (plan.id === "premier") return "Choose more than 100 PRs";
-	return `Choose ${plan.prSelectMax} from ${plan.prPoolSize} PRs`;
+	if (plan.renegotiate)
+		return planDescription("outlet", plan.id, plan.description, t);
+	if (plan.id === "premier") return t.outletSubscription.pickerRulePremier;
+	return fill(t.outletSubscription.pickerRule, {
+		select: plan.prSelectMax,
+		pool: plan.prPoolSize,
+	});
 }
 
+/**
+ * Daily headcount left on the plan, for one date.
+ *
+ * Says WHICH counter this is. Bare "45 available" next to the picker's "49
+ * named PR slots left" read as the same ledger disagreeing with itself — this
+ * one is total headcount (agency fill included), the named limit is not.
+ *
+ * `plan.label` is the plan NAME and stays English by the owner's instruction,
+ * so it is filled into the sentence rather than translated. `dateLabel` arrives
+ * already formatted for the active locale.
+ */
 export function formatOutletPlanDailyHeadcountHint(
 	plan: OutletSubscriptionPlan,
 	remaining: number,
 	dateLabel: string,
+	t: PortalTranslations,
 ): string {
 	if (remaining <= 0) {
-		return `${plan.label} plan · ${plan.prPerDayMax} PRs/day limit reached for ${dateLabel}`;
+		return fill(t.libDemo.planDayLimitReached, {
+			plan: plan.label,
+			max: plan.prPerDayMax,
+			date: dateLabel,
+		});
 	}
 	const band = plan.prPerDayMin
 		? `${plan.prPerDayMin}–${plan.prPerDayMax}`
 		: String(plan.prPerDayMax);
-	// Says WHICH counter this is. Bare "45 available" next to the picker's "49
-	// named PR slots left" read as the same ledger disagreeing with itself —
-	// this one is total headcount (agency fill included), the named limit is not.
-	return `${plan.label} plan · ${band} PRs/day · ${remaining} of ${plan.prPerDayMax} headcount available on ${dateLabel}`;
+	return fill(t.libDemo.planDayHeadcountAvailable, {
+		plan: plan.label,
+		band,
+		remaining,
+		max: plan.prPerDayMax,
+		date: dateLabel,
+	});
 }
 
 /**
@@ -2404,17 +2458,32 @@ export function outletUnfilledDemandSlots(
 	return outletShiftDemandSupplied(shift).openSlots;
 }
 
-export function outletShiftCutLossAdjustmentsLabel(shift: {
-	releasedEarlyPrIds?: string[];
-	demandCut?: number;
-	salesTargetPct?: number;
-}): string | null {
+/**
+ * What has been trimmed off this shift, as one line — "3 released early · 2
+ * demand cut · 80% target".
+ *
+ * Each part is a whole template with its own hole rather than a number glued to
+ * a noun: Chinese puts the measure word after the count and the percentage
+ * after the word "target", which fragment order cannot express. The separator
+ * stays " · ", the same one every other composed line on these screens uses.
+ */
+export function outletShiftCutLossAdjustmentsLabel(
+	shift: {
+		releasedEarlyPrIds?: string[];
+		demandCut?: number;
+		salesTargetPct?: number;
+	},
+	t: PortalTranslations,
+): string | null {
 	const parts: string[] = [];
 	const released = outletShiftReleasedEarlyIds(shift).length;
-	if (released > 0) parts.push(`${released} released early`);
-	if ((shift.demandCut ?? 0) > 0) parts.push(`${shift.demandCut} demand cut`);
+	const demandCut = shift.demandCut ?? 0;
+	if (released > 0)
+		parts.push(fill(t.libDemo.cutLossReleasedEarly, { n: released }));
+	if (demandCut > 0)
+		parts.push(fill(t.libDemo.cutLossDemandCut, { n: demandCut }));
 	const pct = shift.salesTargetPct ?? 100;
-	if (pct < 100) parts.push(`${pct}% target`);
+	if (pct < 100) parts.push(fill(t.libDemo.cutLossTargetPct, { pct }));
 	return parts.length ? parts.join(" · ") : null;
 }
 

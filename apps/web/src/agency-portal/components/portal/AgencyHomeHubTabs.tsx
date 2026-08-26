@@ -228,7 +228,13 @@ export function AgencyHomeHubTabs({
 
 	const defaultTab = tabs[0]?.id ?? "on-duty";
 	const [tab, setTab] = useState<HubTab>(defaultTab);
-	const activeTab = tabs.some((t) => t.id === tab) ? tab : defaultTab;
+	// `tabItem`, not `t`: this callback parameter used to shadow the locale
+	// dictionary that the whole component reads. It happened to be harmless while
+	// the body only touched `.id`, but the next line added inside it that wanted a
+	// translated string would have silently read the tab object instead.
+	const activeTab = tabs.some((tabItem) => tabItem.id === tab)
+		? tab
+		: defaultTab;
 
 	const workforce = useMemo(
 		() =>
@@ -279,12 +285,12 @@ export function AgencyHomeHubTabs({
 	return (
 		<section className="iz-portal-panel iz-agency-home-hub">
 			<div className="iz-agency-home-tabs">
-				{tabs.map((t) => (
+				{tabs.map((tabItem) => (
 					<button
-						key={t.id}
+						key={tabItem.id}
 						type="button"
-						className={`iz-agency-home-tab${activeTab === t.id ? " on" : ""}`}
-						onClick={() => setTab(t.id)}
+						className={`iz-agency-home-tab${activeTab === tabItem.id ? " on" : ""}`}
+						onClick={() => setTab(tabItem.id)}
 					>
 						{/* The label carries the colour too, but only for the four that
 						    stop money — see HUB_TAB_URGENT. Applied even on the OPEN tab,
@@ -293,12 +299,12 @@ export function AgencyHomeHubTabs({
 						    tab is open. */}
 						<div
 							className={`l${
-								HUB_TAB_URGENT.has(t.id) && counts[t.id] > 0
-									? ` ${HUB_TAB_ALERT_COLOR[t.id]}`
+								HUB_TAB_URGENT.has(tabItem.id) && counts[tabItem.id] > 0
+									? ` ${HUB_TAB_ALERT_COLOR[tabItem.id]}`
 									: ""
 							}`}
 						>
-							{t.label}
+							{tabItem.label}
 						</div>
 						{/* A lookup, not a ternary chain. This was four nested conditionals
 						    for four tabs; at six it stops being readable, and the next
@@ -306,13 +312,13 @@ export function AgencyHomeHubTabs({
 						    chain it belongs rather than just naming its colour. */}
 						<div
 							className={`n${
-								counts[t.id] > 0 &&
-								(HUB_TAB_URGENT.has(t.id) || activeTab !== t.id)
-									? ` ${HUB_TAB_ALERT_COLOR[t.id]}`
+								counts[tabItem.id] > 0 &&
+								(HUB_TAB_URGENT.has(tabItem.id) || activeTab !== tabItem.id)
+									? ` ${HUB_TAB_ALERT_COLOR[tabItem.id]}`
 									: ""
 							}`}
 						>
-							{counts[t.id]}
+							{counts[tabItem.id]}
 						</div>
 					</button>
 				))}

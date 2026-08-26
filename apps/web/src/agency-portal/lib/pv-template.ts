@@ -1,3 +1,22 @@
+/**
+ * ── LOCALE BOUNDARY: everything this module emits is printed on the payment
+ * voucher, and the voucher is ENGLISH in every UI locale. The reasoning lives in
+ * the header of `pv-pdf.ts`. ──
+ *
+ * The three things here most likely to be mistaken for missed translations:
+ *
+ * - `PV_TEMPLATE_DISCLAIMER` — printed on the document, and the PR's copy
+ *   carries the same English sentence from the backend exporter.
+ * - `LINE_DAY_MONTHS` / `MONTH_NAMES` — date FORMATTING, deliberately the twin
+ *   of the backend's `dayMonth()` and `klStamp()`. `formatPvSignStamp` also
+ *   feeds on-screen text in `routes/agency/pv.tsx`, and must keep printing the
+ *   same stamp on the screen as on the paper, so it is not locale-aware either.
+ * - `MONTH_MAP` — a PARSER keyed on stored and demo-store strings. Its keys are
+ *   data, matched against input, and never rendered.
+ *
+ * `PV_TEMPLATE_ISSUER` and the payee/line builders return DATA — names, IC,
+ * bank details, line descriptions — never labels.
+ */
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
 	PR_PROFILES,

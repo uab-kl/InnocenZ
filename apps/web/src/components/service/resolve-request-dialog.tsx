@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { AdminRequest } from "@/services/admin-request";
 
 interface ResolveRequestDialogProps {
@@ -29,13 +31,17 @@ export function ResolveRequestDialog({
 	onOpenChange,
 	onConfirm,
 }: ResolveRequestDialogProps) {
+	const { t } = usePortalLocale();
 	const [quote, setQuote] = useState("");
-	const [error, setError] = useState<string | null>(null);
+	// A FLAG, not the sentence: holding the resolved string here would freeze the
+	// locale it was in when the click happened, and the message would stay in the
+	// old language after a switch.
+	const [isInvalid, setIsInvalid] = useState(false);
 
 	useEffect(() => {
 		if (open && request) {
 			setQuote(request.quotedAmount ?? "");
-			setError(null);
+			setIsInvalid(false);
 		}
 	}, [open, request]);
 
@@ -47,7 +53,7 @@ export function ResolveRequestDialog({
 		}
 		const parsed = Number(trimmed);
 		if (Number.isNaN(parsed) || parsed < 0) {
-			setError("Enter a valid non-negative amount in RM");
+			setIsInvalid(true);
 			return;
 		}
 		onConfirm(parsed);
@@ -59,10 +65,9 @@ export function ResolveRequestDialog({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
-					<DialogTitle>Set negotiated quote</DialogTitle>
+					<DialogTitle>{t.adminBits.setNegotiatedQuote}</DialogTitle>
 					<DialogDescription>
-						Users who click “negotiate price” land here as a Plan Request. Enter
-						the settled price, then resolve.
+						{t.adminBits.setNegotiatedQuoteHint}
 					</DialogDescription>
 				</DialogHeader>
 
@@ -70,24 +75,28 @@ export function ResolveRequestDialog({
 					<div className="rounded-lg border border-(--lavender-soft)/30 bg-muted/30 px-3 py-2 text-sm">
 						<p className="font-medium">{request.subscriberName}</p>
 						<p className="text-muted-foreground">
-							{planName !== "—" ? `Plan: ${planName}` : "No current plan"}
+							{/* "—" is the caller's own no-plan sentinel, and the plan NAME
+							    stays English in every locale. */}
+							{planName !== "—"
+								? fill(t.adminBits.planNamed, { name: planName })
+								: t.adminBits.noCurrentPlan}
 							{request.message ? ` · ${request.message}` : ""}
 						</p>
 					</div>
 
 					<div className="space-y-2">
-						<Label htmlFor="quoted-amount">Quoted price (RM)</Label>
+						<Label htmlFor="quoted-amount">{t.adminBits.quotedPriceRm}</Label>
 						<Input
 							id="quoted-amount"
 							type="number"
 							min={0}
 							step="0.01"
 							inputMode="decimal"
-							placeholder="e.g. 4500"
+							placeholder={t.adminBits.quotePlaceholder}
 							value={quote}
 							onChange={(e) => {
 								setQuote(e.target.value);
-								setError(null);
+								setIsInvalid(false);
 							}}
 							onKeyDown={(e) => {
 								if (e.key === "Enter") {
@@ -97,11 +106,13 @@ export function ResolveRequestDialog({
 							}}
 							autoFocus
 						/>
-						{error ? (
-							<p className="text-xs text-destructive">{error}</p>
+						{isInvalid ? (
+							<p className="text-xs text-destructive">
+								{t.adminBits.enterValidAmountRm}
+							</p>
 						) : (
 							<p className="text-xs text-muted-foreground">
-								Leave blank to resolve without recording a price.
+								{t.adminBits.leaveBlankNoPrice}
 							</p>
 						)}
 					</div>
@@ -113,10 +124,10 @@ export function ResolveRequestDialog({
 						disabled={isSubmitting}
 						onClick={() => onOpenChange(false)}
 					>
-						Cancel
+						{t.common.cancel}
 					</Button>
 					<Button disabled={isSubmitting} onClick={handleConfirm}>
-						{isSubmitting ? "Saving…" : "Save quote & resolve"}
+						{isSubmitting ? t.common.saving : t.adminBits.saveQuoteAndResolve}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

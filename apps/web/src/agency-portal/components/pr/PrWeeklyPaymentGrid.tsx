@@ -7,6 +7,33 @@ import type {
 	WeeklyPaymentSummary,
 } from "@agency-portal/lib/pr-weekly-payment";
 import { Flag } from "lucide-react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+
+/**
+ * Display name for one income row.
+ *
+ * `row.key` is the stored identity — it keys `totals`, `disputedLines` and the
+ * dispute target that goes back to the agency — so only the rendered word
+ * changes. The four buckets already have names in `money`, shared with the PR
+ * app so a dispute reads the same on both sides of the argument; an unmapped
+ * key (today: `tables`) falls through to the label the builder supplied rather
+ * than blanking the row.
+ */
+export function weeklyIncomeLabel(
+	key: WeeklyIncomeRow["key"],
+	fallback: string,
+	t: PortalTranslations,
+): string {
+	const map: Partial<Record<WeeklyIncomeRow["key"], string>> = {
+		wages: t.money.dailyWages,
+		drinks: t.money.drinks,
+		tips: t.money.tips,
+		others: t.money.others,
+	};
+	return map[key] ?? fallback;
+}
 
 function weekTotalRm(summary: WeeklyPaymentSummary): number {
 	const n = summary.totals.net;
@@ -34,10 +61,11 @@ function statusClass(status: WeeklyDayStatus) {
 	return "iz-pr-week-pay__cell--empty";
 }
 
-function statusLabel(status: WeeklyDayStatus) {
-	if (status === "disputed") return "Disputed";
-	if (status === "pending") return "Pending verification";
-	if (status === "verified") return "Verified";
+/** Keyed by the STORED day status; only the word a human reads changes. */
+function statusLabel(status: WeeklyDayStatus, t: PortalTranslations) {
+	if (status === "disputed") return t.receipts.disputed;
+	if (status === "pending") return t.prPortal.pendingVerification;
+	if (status === "verified") return t.receipts.verified;
 	return "—";
 }
 
@@ -65,6 +93,7 @@ export function PrWeeklyPaymentGrid({
 	/** Highlights the cell the user tapped to dispute */
 	activeDisputeKey?: string | null;
 }) {
+	const { t } = usePortalLocale();
 	const canInteract = Boolean(interactive && (onDisputeDay || onWithdrawDay));
 
 	const buildTarget = (
@@ -117,15 +146,18 @@ export function PrWeeklyPaymentGrid({
 									<span className="n">{col.dayNum}</span>
 								</th>
 							))}
-							<th className="iz-pr-week-pay__total-h">Total</th>
+							<th className="iz-pr-week-pay__total-h">
+								{t.reports.colTotal}
+							</th>
 						</tr>
 					</thead>
 					<tbody>
 						{summary.rows.map((row, rowIdx) => {
 							const rowTotal = row.cells.reduce((s, v) => s + v, 0);
+							const rowLabel = weeklyIncomeLabel(row.key, row.label, t);
 							return (
 								<tr key={row.key}>
-									<th className="iz-pr-week-pay__row-label">{row.label}</th>
+									<th className="iz-pr-week-pay__row-label">{rowLabel}</th>
 									{row.cells.map((value, idx) => {
 										const cellKey = `${summary.columns[idx].dateIso}-${row.key}`;
 										const isActive = activeDisputeKey === cellKey;
@@ -148,8 +180,13 @@ export function PrWeeklyPaymentGrid({
 														className="iz-pr-week-pay__cell-btn"
 														title={
 															isDisputed
-																? `Withdraw dispute on ${summary.columns[idx].dayLabel} ${summary.columns[idx].dayNum}`
-																: `Dispute ${row.label} on ${summary.columns[idx].dayLabel} ${summary.columns[idx].dayNum}`
+																? fill(t.prPortal.withdrawDisputeOnDay, {
+																		day: `${summary.columns[idx].dayLabel} ${summary.columns[idx].dayNum}`,
+																	})
+																: fill(t.prPortal.disputeAmountOnDay, {
+																		component: rowLabel,
+																		day: `${summary.columns[idx].dayLabel} ${summary.columns[idx].dayNum}`,
+																	})
 														}
 														onClick={() => handleCellTap(idx, row, isDisputed)}
 													>
@@ -186,7 +223,7 @@ export function PrWeeklyPaymentGrid({
 							);
 						})}
 						<tr className="iz-pr-week-pay__status-row">
-							<th className="iz-pr-week-pay__row-label">Status</th>
+							<th className="iz-pr-week-pay__row-label">{t.table.status}</th>
 							{summary.dayStatus.map((status, idx) => (
 								<td
 									key={`st-${summary.columns[idx].dateIso}`}
@@ -195,12 +232,14 @@ export function PrWeeklyPaymentGrid({
 									<span
 										className={`iz-pr-week-pay__status-pill${status === "disputed" ? " text-[var(--iz-red)]" : ""}`}
 									>
-										{statusLabel(status)}
+										{statusLabel(status, t)}
 									</span>
 								</td>
 							))}
 							<td className="iz-pr-week-pay__row-total iz-tiny">
-								{summary.verifiedDayCount} verified
+								{fill(t.prPortal.verifiedDayCount, {
+									n: summary.verifiedDayCount,
+								})}
 							</td>
 						</tr>
 					</tbody>
@@ -208,7 +247,7 @@ export function PrWeeklyPaymentGrid({
 						<tr>
 							<td colSpan={summary.columns.length + 1}>
 								<span className="iz-pr-week-pay__foot-note">
-									PV issued every Sunday
+									{t.prPortal.pvIssuedEverySunday}
 								</span>
 							</td>
 							<td className="iz-pr-week-pay__net font-sora font-extrabold text-[var(--iz-gold)]">
@@ -219,10 +258,11 @@ export function PrWeeklyPaymentGrid({
 				</table>
 			</div>
 			{canInteract && (
+				/* One sentence, one key. It used to be three JSX fragments around a
+				   red <span>, which no language can reorder — and the colour cue it
+				   carried is already on the cells themselves. */
 				<p className="iz-pr-week-pay__hint">
-					Tap any amount to dispute · tap a{" "}
-					<span className="text-[var(--iz-red)]">red</span> amount to withdraw a
-					mistaken dispute.
+					{t.prPortal.tapAmountToDisputeHint}
 				</p>
 			)}
 		</div>

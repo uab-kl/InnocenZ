@@ -18,6 +18,8 @@ import { getPrRosterId } from "@agency-portal/lib/pr-demo";
 import { cn } from "@agency-portal/lib/utils";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 const OUTLET_MAP_HEIGHT = 168;
 
@@ -34,6 +36,7 @@ export function AgencyGpsPanel({
 	prCheckInMeta?: { gpsFallback?: boolean };
 	prSubRole?: "pr_tied" | null;
 }) {
+	const { t } = usePortalLocale();
 	const activePrId = prSubRole ? getPrRosterId(prSubRole) : undefined;
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -71,20 +74,26 @@ export function AgencyGpsPanel({
 	const gpsHintNode = (
 		<span className="inline-flex items-center gap-1.5">
 			<span className="iz-roster-gps-live-dot" aria-hidden />
-			{`${outletCount} outlets · ${inRangeCount}/${rows.length} in geofence`}
+			{fill(
+				outletCount === 1
+					? t.agencyGps.outletsWithinFenceOne
+					: t.agencyGps.outletsWithinFenceMany,
+				{ n: outletCount, inRange: inRangeCount, total: rows.length },
+			)}
 		</span>
 	);
 
 	if (rows.length === 0) {
 		return (
 			<OutletSection
-				title="Live GPS"
-				hint="No active PRs to track"
+				title={t.roster.liveGps}
+				iconKey="Live GPS"
+				hint={t.agencyGps.noActivePrs}
 				collapsible
 				defaultOpen={false}
 			>
 				<p className="iz-tiny iz-muted rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-6 text-center">
-					PR locations appear when someone is on duty today.
+					{t.agencyGps.locationsWhenOnDuty}
 				</p>
 			</OutletSection>
 		);
@@ -92,7 +101,8 @@ export function AgencyGpsPanel({
 
 	return (
 		<OutletSection
-			title="Live GPS"
+			title={t.roster.liveGps}
+			iconKey="Live GPS"
 			hint={gpsHintNode}
 			className="iz-roster-gps-section"
 			collapsible
@@ -136,8 +146,16 @@ export function AgencyGpsPanel({
 											</span>
 											<span className="iz-roster-gps-outlet-meta">
 												{pin.unpinned
-													? "No map pin — not fenced"
-													: `${outletInRange}/${outletRows.length} in geofence · ${pin.radiusM ?? GEOFENCE_METERS} m`}
+													? t.rosterGrid.noMapPin
+													: // "within fence", NOT "within {radius} m": the pass test is
+														// the radius PLUS up to 30 m of accuracy, so a fix can sit
+														// outside the bare radius and still legitimately pass. The
+														// pin's radius is printed beside it, never instead of it.
+														fill(t.rosterGrid.withinFencePin, {
+															inRange: outletInRange,
+															total: outletRows.length,
+															radius: pin.radiusM ?? GEOFENCE_METERS,
+														})}
 											</span>
 										</div>
 										<a
@@ -147,7 +165,7 @@ export function AgencyGpsPanel({
 											className="iz-roster-gps-maps-link"
 										>
 											<ExternalLink className="h-3 w-3" />
-											Maps
+											{t.rosterGrid.maps}
 										</a>
 									</div>
 									<div className="iz-roster-gps-rows">
@@ -180,7 +198,7 @@ export function AgencyGpsPanel({
 																	variant="green"
 																	className="iz-roster-gps-row-pill"
 																>
-																	On duty
+																	{t.roster.onDuty}
 																</IzPill>
 															</div>
 															<span className="iz-roster-gps-row-meta">
@@ -192,17 +210,18 @@ export function AgencyGpsPanel({
                                   reported as in or out of it.
                                 */}
 																{row.estimated
-																	? "No GPS recorded"
+																	? t.agencyGps.noGpsRecorded
 																	: `${Math.round(row.meters)} m`}
+																{" · "}
 																{row.estimated
-																	? " · Estimated"
+																	? t.agencyGps.estimated
 																	: row.gpsFallback
-																		? " · Fallback"
+																		? t.agencyGps.fallback
 																		: row.outletUnpinned
-																			? " · Venue not pinned"
+																			? t.rosterGrid.notFenced
 																			: row.inRange
-																				? " · In geofence"
-																				: " · Outside"}
+																				? t.rosterGrid.withinFence
+																				: t.rosterGrid.outsideFence}
 																{!row.estimated && row.accuracyM
 																	? ` · ±${Math.round(row.accuracyM)} m`
 																	: ""}

@@ -25,6 +25,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /** Normalize HH:MM (or H:MM) for native `type="time"` inputs */
 export function normalizeTimeValue(v: string): string {
@@ -341,8 +342,11 @@ export function IzTimeInput({
 	onChange,
 	className,
 	showIcon = true,
-	placeholder = "Tap to choose",
-	disabledPlaceholder = "Pick date first",
+	// No default value here: a default parameter is evaluated before the
+	// component body runs, so it cannot read the dictionary. Both placeholders
+	// fall back to `t` below instead.
+	placeholder,
+	disabledPlaceholder,
 	...props
 }: {
 	value: string;
@@ -354,6 +358,7 @@ export function IzTimeInput({
 	disabled?: boolean;
 	"aria-label"?: string;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const hasValue = Boolean(value?.trim());
 	const disabled = Boolean(props.disabled);
@@ -368,10 +373,10 @@ export function IzTimeInput({
 	}, [open, value, hasValue]);
 
 	const label = disabled
-		? disabledPlaceholder
+		? (disabledPlaceholder ?? t.izUi.pickDateFirst)
 		: hasValue
 			? formatTimeLabel(normalizeTimeValue(value))
-			: placeholder;
+			: (placeholder ?? t.izUi.tapToChooseTime);
 
 	const applyDraft = (next: Time12Parts) => {
 		setDraft(next);
@@ -390,7 +395,7 @@ export function IzTimeInput({
 							disabled && "is-disabled",
 						)}
 						disabled={disabled}
-						aria-label={props["aria-label"] ?? "Choose time"}
+						aria-label={props["aria-label"] ?? t.izUi.chooseTime}
 					>
 						{showIcon && (
 							<Clock className="h-4 w-4 shrink-0 text-[var(--iz-muted2)]" />
@@ -409,7 +414,7 @@ export function IzTimeInput({
 					<button
 						type="button"
 						className="iz-time-picker-clear"
-						aria-label="Clear time"
+						aria-label={t.izUi.clearTime}
 						onClick={(e) => {
 							e.stopPropagation();
 							onChange("");

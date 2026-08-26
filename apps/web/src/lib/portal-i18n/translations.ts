@@ -113,6 +113,88 @@ const en = {
 		kindPvDayReviewPending: "Day review",
 		kindLeave: "MC / leave",
 		kindUnknown: "Update",
+		/** PR push title when a shift lands on them. */
+		shiftAssignedTitle: "Shift assigned",
+		/** Fallback body when the caller supplies no detail line of its own. */
+		shiftAssignedPrBody: "{outlet} — confirm on Shifts home",
+		assignmentTitle: "Assignment · {name}",
+		assignmentAgencyBody: "Shift at {outlet} — awaiting PR confirm",
+		shiftUpdatedTitle: "Shift updated",
+		rosterEditTitle: "Roster edit · {name}",
+		/** Swap titles are WHOLE per status — Chinese puts the state before the noun. */
+		swapApprovedTitle: "Swap approved",
+		swapDeclinedTitle: "Swap declined",
+		swapPendingTitle: "Swap pending",
+		/** Sent to the PR being asked to cover. */
+		swapCoverageOfferTitle: "Swap coverage offer",
+		/** Neutral PR title when the replacement declined — the body says which way it went. */
+		swapUpdateTitle: "Swap update",
+		swapOfferSentTitle: "Swap offer sent",
+		swapReplacementDeclinedTitle: "Replacement declined swap",
+		/** Stands in for a missing requesting-PR name inside swapOfferPrBody. */
+		aPr: "A PR",
+		swapOfferPrBody: "{name} needs cover at {outlet} — accept or decline on Shifts",
+		swapApprovedPrBody: "{outlet} — coverage confirmed",
+		/** The quoted reason, when present, is appended as punctuation at the call site. */
+		swapReplacementDeclinedBody: "{name} declined cover for {other} · {outlet}",
+		swapOfferAgencyBody: "{name} offered cover for {other} · {outlet}",
+		checkedInBody: "{name} checked in",
+		/** A whole sentence, not a "(late)" suffix — Chinese needs its own brackets. */
+		checkedInLateBody: "{name} checked in (late)",
+		checkInConfirmedTitle: "Check-in confirmed",
+		prOnFloorTitle: "PR on floor",
+		sosSentTitle: "SOS sent",
+		/** Shared by the agency and outlet SOS pushes. */
+		sosNamedTitle: "SOS · {name}",
+		sosAgencyBody: "Agency-tied at {outlet} — {note}",
+		sosOutletBody: "Duty manager alert — {note}",
+		pvReadyForReviewTitle: "PV ready for review",
+		pvGeneratedTitle: "Shift PV generated",
+		/** {amount} arrives already formatted by the locale money helper. */
+		pvPreSignedBody: "{id} · {amount} net — Finance Head pre-signed",
+		pvRaisedTitle: "PV raised · {name}",
+		pvPrSignedTitle: "PR signed · {name}",
+		pvQueuedTransferBody: "{id} · {amount} — queued for Friday transfer",
+		paymentReceivedTitle: "Payment received",
+		paymentInBankBody: "{id} · {amount} in your bank",
+		paidTitle: "Paid · {name}",
+		paidTransferredBody: "{id} · {amount} transferred",
+		disputeSubmittedTitle: "Dispute submitted",
+		disputeHeldBody: "{id} held — agency verifying with {outlet}",
+		disputeNamedTitle: "Dispute · {name}",
+		disputeResolveWindowBody: "{id} at {outlet} — 7 days to resolve",
+		disputePvNamedTitle: "PV dispute · {name}",
+		disputeVerifyBody: "{id} — agency may contact you to verify",
+		rateYourPrsTitle: "Rate your PRs",
+		ratePostSealBody: "{name} · {outlet} — post-seal window",
+		reconciliationDueTitle: "Reconciliation due",
+		reconciliationAgencyBody: "Confirm today's figures vs {outlet} sales",
+		reconciliationWeekTitle: "End-of-week reconciliation",
+		reconciliationOutletBody: "Review sealed totals vs live sales",
+		/** The agency name is a value — demo fixtures pass "Atlas Agency". */
+		paymentReminderTitle: "Payment reminder · {agency}",
+		collectionDueBody: "{outlet}: {amount} due {date} · {id}",
+		reportReadyTitle: "Report ready",
+		jobPostingRequestTitle: "Job posting request",
+		agencyServiceBookingTitle: "Agency service booking",
+		/** {service} is the ordered service's own name, supplied by the caller. */
+		serviceForPrBody: "{service} for {name} — accept or decline",
+		serviceOutletRequestedBody: "{outlet} requested {service} for you — accept or decline",
+		serviceAgencyBookedBody: "Agency booked {service} at {outlet} — accept or decline",
+		serviceAtOutletBody: "{service} at {outlet} — accept or decline",
+		outletServiceRequestTitle: "Outlet service request",
+		serviceConfirmedForBody: "{service} confirmed for {name}",
+		serviceAcceptedBody: "{service} accepted",
+		serviceDeclinedBody: "{service} declined",
+		/** One title for all three audiences — the body says what changed. */
+		jobPostingUpdateTitle: "Job posting update",
+		selfLogNamedTitle: "Self-log · {name}",
+		/** {category} is the stored receipt category and passes through untranslated. */
+		selfLogVerifyBody: "{category} {amount} at {outlet} — verify manual entry ({ref})",
+		selfLogVerifiedTitle: "Self-log verified",
+		selfLogRejectedTitle: "Self-log rejected",
+		selfLogApprovedBody: "Agency approved your manual receipt log · {amount}",
+		selfLogRejectedBody: "Agency rejected your manual receipt log · {amount} — contact agency",
 	},
 	nav: {
 		today: "Today",
@@ -3531,6 +3613,1693 @@ const en = {
 		toastRemarksUpdated: "Remarks updated",
 		toastRemarksUpdateFailed: "Failed to update remarks",
 	},
+	agencySpecial: {
+		/** Header of the special-service filter card (hidden in the inline job-posting layout). */
+		filterBookings: "Filter bookings",
+		/** Result count pill: matched rows out of all rows. */
+		countOfTotal: "{n} of {total}",
+		/** Hint under the date picker; mirrors agencyMisc.dotsMarkRosterDays. */
+		dotsMarkBookingDays: "Dots mark days with bookings.",
+		/** Short form of the service-type filter label, used in the compact (phone) layout. */
+		service: "Service",
+		serviceType: "Service type",
+		/** The empty service-type filter; the stored value stays "". */
+		allServices: "All services",
+		/** The "all" status option; the stored value stays "all". */
+		allStatuses: "All statuses",
+		/** Label for the stored status `pending_admin`; the record key never changes. */
+		statusPendingAdmin: "Pending review",
+		/** Label for the stored status `accepted`. */
+		statusAccepted: "Accepted",
+		/** Label for the stored status `rejected` — admin's refusal, distinct from a PR/outlet `declined`. */
+		statusRejected: "Rejected",
+		/** Label for the stored status `pending_agency`. */
+		statusPendingAgency: "Pending agency",
+		/** Label for the stored status `pending_pr`. */
+		statusPendingPr: "Awaiting PR",
+		/** Label for the stored status `pending_outlet`. */
+		statusPendingOutlet: "Awaiting outlet",
+		/** Label for the stored status `pending_both`. */
+		statusPendingBoth: "Awaiting PR & outlet",
+		/** Label for the stored status `confirmed`. */
+		statusConfirmed: "Confirmed",
+		/** Label for the stored status `declined`. */
+		statusDeclined: "Declined",
+		/** Label for the stored status `paid`. */
+		statusPaid: "Paid",
+		/** Micro-label above the job-posting composer. */
+		newJob: "New job",
+		/** Micro-label above the queue of jobs not yet posted. */
+		queuedJobs: "Queued jobs",
+		/** Queue count pill. Chinese has no plural — two keys rather than an appended "s". */
+		jobCountOne: "{n} job",
+		jobCountMany: "{n} jobs",
+		addJob: "Add job",
+		addAnotherJob: "Add another job",
+		/** Composer heading while editing the nth queued job (1-based). */
+		editJobN: "Edit job {n}",
+		/** Submit button with an empty queue — no count to show. */
+		postJobsForReview: "Post jobs for admin review",
+		/** Submit button; {n} counts job × date, so it can exceed the queue length. */
+		postJobCountOneForReview: "Post {n} job for admin review",
+		postJobCountManyForReview: "Post {n} jobs for admin review",
+		/** Micro-label above the agency's own posted jobs. */
+		yourJobPostings: "Your job postings",
+		/** Warn toast: a queued job has no outletId, so the server would file it against no venue. */
+		chooseVenueForEveryJob: "Choose a venue for every job before submitting",
+		jobPostingSubmitted: "Job posting submitted for admin review",
+		jobPostingSubmitFailed: "Could not submit job posting — try again",
+	},
+	agencyGps: {
+		/** Live GPS section hint when nobody is on duty. */
+		noActivePrs: "No active PRs to track",
+		locationsWhenOnDuty: "PR locations appear when someone is on duty today.",
+		/** Live GPS header, one outlet. Chinese has no plural — same string as the Many form. */
+		outletsWithinFenceOne: "{n} outlet · {inRange}/{total} within fence",
+		outletsWithinFenceMany: "{n} outlets · {inRange}/{total} within fence",
+		/** The row is estimated — no device fix sits behind it, so no distance may be printed. */
+		noGpsRecorded: "No GPS recorded",
+		estimated: "Estimated",
+		/** The fix came from a coarse fallback source, not a real GPS reading — it can never count as in-fence. */
+		fallback: "Fallback",
+		zoomIn: "Zoom in",
+		zoomOut: "Zoom out",
+		resetZoom: "Reset zoom",
+		/** Proof-photo thumbnail tooltip. */
+		clickToZoom: "Click to zoom",
+		/** The road-map's layer chip. A visible label, not the tile-layer id. */
+		layerMap: "Map",
+		dragMapHint: "Drag map · tap a pin or row",
+		/** Tile attribution — provider names stay verbatim in both locales. */
+		mapAttribution: "Map © OpenStreetMap · CARTO",
+	},
+	agencyBroadcast: {
+		/** Sheet title, exactly one recipient. */
+		titleOne: "Broadcast to 1 PR",
+		/** Sheet title for 0 or 2+ recipients — Chinese has no plural, so this is a separate key rather than a trailing "s". */
+		titleMany: "Broadcast to {n} PRs",
+		hint: "Sends a free-text notice to their InnocenZ inbox. There is nothing for them to accept — post a shift if you need an answer back.",
+		/** Heading over the recipient chips. English is upper-case in the copy itself (no CSS uppercase on that element). */
+		recipientsHeading: "RECIPIENTS",
+		/** Collapses recipients past the sixth chip. */
+		plusNMore: "+{n} more",
+		/** The * marks the field required; kept inside the string so the label is one literal. */
+		subjectLabel: "Subject *",
+		messageLabel: "Message *",
+		subjectPlaceholder: "e.g. Roster reminder",
+		/** Placeholder only — the body the agency types is content and is never translated. */
+		bodyPlaceholder: "Your message to selected PRs…",
+		sendMessage: "Send message",
+		/** Field error under Subject. */
+		enterSubject: "Enter a subject",
+		/** Field error under Message. */
+		enterMessage: "Enter your message",
+		/** Form-level alert when validation fails. */
+		completeBeforeSending: "Complete subject and message before sending.",
+		/** Fallback when the broadcast request fails with no server message. */
+		couldNotSend: "Could not send — please retry",
+		/** Thrown before the request when no agency is active; surfaced on the sheet, not the console. */
+		noActiveAgency: "No active agency — sign in again and retry",
+		/** Success toast, exactly one recipient. */
+		sentToOne: "Message sent to 1 PR",
+		/** Success toast for any count other than 1. `n` is the server's `sent`, not the selection size. */
+		sentToMany: "Message sent to {n} PRs",
+		/** Roster section heading over the backfill worklist. */
+		backfillNeeded: "Backfill needed",
+		backfillOpenSlotOne: "1 open slot",
+		backfillOpenSlotMany: "{n} open slots",
+		/** One backfill row's detail line. `reason` arrives already translated; `slot` and `name` are data. */
+		backfillSlotLine: "{slot} · staffed {staffed}/{quantity} · {reason} — {name}",
+		/** Rendered label for the stored status `leave_approved` — mid-sentence, hence lower case in English. */
+		backfillReasonLeaveApproved: "leave approved",
+		/** Rendered label for a released slot that was cancelled rather than excused. */
+		backfillReasonCancelled: "cancelled",
+		/** Eyebrow over the replacement sheet. Rendered through CSS uppercase, so no case is baked in. */
+		backfillEyebrow: "Backfill · {date}",
+		backfillMatching: "Matching free PRs…",
+		backfillNoneFree: "No free PR available that night — every active PR already has a booking on {date}.",
+		/** Heading over the ranked replacement candidates. */
+		backfillFreeThatNight: "Free that night · {n}",
+		/** Candidate subtitle. `tier` is the stored grade and passes through untranslated. */
+		backfillTierWorkedHere: "{tier} · worked here {n}×",
+		backfillTierNewToOutlet: "{tier} · new to this outlet",
+	},
+	agencyPvReview: {
+		/** Section heading on the PV day-review panel. Same wording as `notifications.kindPvDayReviewPending`, which announces the same thing. */
+		dayReview: "Day review",
+		/** A day the agency has refused for now. The pill and the stamp line both use it; `holdAction` is the verb on the button. */
+		held: "Held",
+		/** Stamp line on a day nobody has decided yet. */
+		notReviewed: "Not reviewed",
+		/** Suffix on a day's stamp when the decision came from the bulk button rather than the day's own chip. */
+		viaApproveAll: "approve-all",
+		/** Pill on an undecided day. NOT `payroll.open`, which means a dispute still unresolved. */
+		statusOpen: "Open",
+		/** Pill on a day whose total moved after it was reviewed. */
+		statusChanged: "Changed",
+		/** {approved} and {now} arrive already formatted by the caller — no currency lives in this key. */
+		staleWithApproved: "This day changed after it was reviewed — signed off at {approved}, now {now}. The earlier decision no longer counts; review it again.",
+		/** Same as staleWithApproved when no signed-off total was recorded. {now} arrives formatted. */
+		staleWithoutApproved: "This day changed after it was reviewed — now {now}. The earlier decision no longer counts; review it again.",
+		/** In front of the reason stored on a held day. */
+		noteLabel: "Note:",
+		holdNotePlaceholder: "Why is this day on hold? (optional, but the PR chases what it cannot see)",
+		/** The button. `held` is the resulting state. */
+		holdAction: "Hold",
+		confirmHold: "Confirm hold",
+		/** Clears this day's decision back to undecided. */
+		clearDecision: "Clear",
+		loadingDays: "Loading this week's days…",
+		noDatedLines: "No dated lines on this voucher, so there is no day to review. It can be sent as it stands.",
+		/** Per-day, deliberately: the gate reads each day's own status, never an aggregate. */
+		approveEachDayHint: "Approve each day before this voucher goes to the PR. Holding a day blocks the send — including the Monday payout run — until it is approved or cleared.",
+		approvingDayApprovesReceipts: "Approving a day also approves the receipts on that day. A receipt spanning two days waits until both are approved.",
+		everyDayDecided: "Every day is decided — this voucher can be sent.",
+		/** {reason} is built by use-agency-pv-day-review.ts and is still English — see the report's notes. */
+		notReadyToSend: "Not ready to send: {reason}.",
+		/** "day(s)" kept as one form, matching `agencyPv.daysLeftToAdjust`. */
+		staleDaysNeedAnotherLook: "{n} day(s) changed since they were reviewed and need another look.",
+		approveRemainingDays: "Approve the {n} remaining day(s)",
+		readOnlyDays: "Your agency role can see these decisions but not make them — owner and finance approve days.",
+		toastDayApproved: "Day approved",
+		toastDayHeld: "Day held — this voucher cannot be sent until it is cleared",
+		toastDecisionCleared: "Decision cleared",
+		couldNotApproveRemaining: "Could not approve the remaining days",
+		/** Mid-line on a receipt's meta row. The order number itself is data. */
+		orderNoValue: "order {no}",
+		/** Chinese has no plural — the two keys carry the same string on purpose. */
+		lineCountOne: "{n} line",
+		lineCountMany: "{n} lines",
+		proofPhotoCountOne: "{n} proof photo",
+		proofPhotoCountMany: "{n} proof photos",
+		/** Stands where a reviewed-at date would be, on rows older than the review lane. */
+		beforeReviewExisted: "before this review existed",
+		/** Accessible label on a receipt's proof photos. {no} is the receipt number. */
+		receiptScanLabel: "{no} scan",
+		prSignedLocked: "The PR has signed this voucher — receipts on it can no longer be approved or corrected.",
+		withdrawApproval: "Withdraw approval",
+		unbackedCommissionOne: "{n} commission line has no receipt",
+		unbackedCommissionMany: "{n} commission lines have no receipt",
+		/** {amount} arrives already formatted — no currency in the key. */
+		selfDeclaredWarning: "{amount} was self-declared with nothing to check it against. Confirm with the outlet before issuing.",
+		everyCommissionBacked: "Every commission line on this voucher is backed by a receipt.",
+		unclassifiedExplainer: "Unclassified lines predate component tracking — they are counted in the totals but cannot be disputed per component.",
+		/** Count form of `receipts.waitingOnYou`; Chinese needs the measure word, so it cannot be built by gluing the count in front. */
+		pendingWaitingOnYou: "{n} waiting on you",
+		pendingReceiptsBlockSend: "This voucher cannot be sent until each of these is approved — and the PR cannot dispute the money behind one until you have.",
+		/** AgencyReceiptsPanel.tsx carries the same English sentence — see the report's notes if that owner files it too. */
+		readOnlyReceipts: "Your agency role can see these receipts but not approve them — owner and finance review receipts.",
+	},
+	agencyPanels: {
+		/** NOT "checked out" — the stored stamp is clamped to the scheduled end, so calling it a check-out would assert a time that never happened. */
+		shiftEnd: "Shift end",
+		/** Derived from the two attendance stamps only — never a second guess at overtime. */
+		duration: "Duration",
+		/** Stands in for a missing check-out stamp. A DIFFERENT fact from "not checked in", and neither is a dash — the reviewer is about to approve or reject money. */
+		stillOnDuty: "Still on duty",
+		/** Appended to the shift-end stamp. {n} is the server's overtime_minutes. */
+		otSuffix: " · +{n}m OT",
+		dateTimeRange: "Date & time range",
+		fromDate: "From date",
+		toDate: "To date",
+		fromTime: "From time",
+		toTime: "To time",
+		clearRange: "Clear range",
+		/** Default footnote of the payroll range filter card. Resolved in the component BODY — a default parameter value is evaluated before any hook runs. */
+		rangeHint: "Filters by issue date on PVs & invoices · receipt scans use scan time when set.",
+		/** {hint} is outletDetail.syncedFromWorkspace, already filled — the agency mirrors the outlet's own rate card and cannot edit it. */
+		syncedReadOnly: "{hint} · read-only",
+		outletTierRatesReadOnly: "Outlet tier rates · read-only on agency",
+		/** Heading only. The prices themselves are the outlet's, and drinks vs services are split by a category column — this card shows the drinks half. */
+		drinkPricesSynced: "Drink prices · synced from outlet",
+		/** Heads the per-shift tier table. A pay-tier row asking for zero is a PRICE, not a quota, so the heading names pay and tier — never a count. */
+		payAndTiers: "Pay & tiers",
+		/** {langs} is the venue's own stored list on the shift — only the label is translated. */
+		languagesLine: "Languages · {langs}",
+	},
+	agencyReceipts: {
+		/** Editor header. {receiptNo} is the stored receipt number and is never translated. */
+		correctingReceipt: "Correcting {receiptNo}",
+		/** Count of LINES on a receipt. Chinese has no plural, so the two forms are spelled out. */
+		itemCountOne: "{n} item",
+		itemCountMany: "{n} items",
+		savingReopensHint: "Saving re-opens this receipt, and any change to the money makes that day's approval stale.",
+		/** The <summary> of the collapsed explainer under savingReopensHint. */
+		whatThatMeans: "What that means",
+		editCostExplainer: "An approved receipt drops back to waiting on you. A quantity, a commission, a new line or a change of date all move money, so the day has to be approved again before the voucher can be sent. Correcting only the order number moves no money — only the receipt re-opens.",
+		/** Heading over the editable line list. */
+		items: "Items",
+		unsavedCount: "{n} unsaved",
+		noLinesYet: "Nothing is logged against this receipt yet — add the drinks or tips the paper shows below.",
+		/** Line-table column header. */
+		colItem: "Item",
+		/** Line-table column header; also the add-form's Qty placeholder. */
+		colQty: "Qty",
+		/** Line-table column header. The PR's cut, not the outlet's selling price. */
+		colCommission: "Commission",
+		/** Discards an unsaved line draft. Nothing is written. */
+		undo: "Undo",
+		commissionIsPrCut: "Commission is the PR's cut, not the price printed on the paper.",
+		/** The link that opens the collapsed add-a-line form. */
+		paperShowsMissingItem: "The paper shows an item this list is missing",
+		addMissingLine: "Add a missing line",
+		/** aria-label on the drinks/tips picker. Its VALUES stay the API's own kinds. */
+		category: "Category",
+		/** The add-a-line button. */
+		add: "Add",
+		/** aria-label on the item picker. {outlet} is the venue name, or theOutlet when unknown. */
+		itemFromOutletList: "Item from {outlet}'s list",
+		/** Mid-sentence fallback when the catalogue has not named the venue yet. */
+		theOutlet: "the outlet",
+		/** Sentence-INITIAL form of the same fallback — English needs both, Chinese does not change. */
+		thisOutlet: "This outlet",
+		loadingOutletList: "Loading the outlet's list…",
+		nothingToPick: "Nothing to pick",
+		pickItemOffPaper: "Pick the item off the paper…",
+		/** Introduces the venue's SELLING price beside each option — a different figure from the commission the reviewer types. The RM and the number stay in the JSX. */
+		outletPriceLabel: "outlet",
+		/** aria-label on the add-form's qty box (colQty is the short visible form). */
+		quantity: "Quantity",
+		/** aria-label. RM names the FIELD's unit here, not a formatted value. */
+		commissionInRm: "Commission in RM",
+		noListConfigured: "{outlet} has no {list} configured, so a line cannot be verified — ask the outlet to set it up first.",
+		/** Fills {list} in noListConfigured for a drinks receipt. */
+		drinksList: "drinks list",
+		/** Fills {list} for a tips receipt. Keeps workspace.serviceEntitlement's 服务项目. */
+		serviceEntitlementList: "Service Entitlement list",
+		/** Last-resort fallback; the server's own message is preferred when it has one. */
+		outletListUnavailable: "The outlet's list is not available, so a line cannot be verified.",
+		outletPriceVsCommission: "The RM beside each item is {outlet}'s selling price, for matching against the paper. The box you fill in is the PR's commission — a different figure, and yours to state.",
+		/** {kind} arrives already translated (money.drinks / money.tips). */
+		lockedKindHint: "This is a {kind} receipt, so a line added here is {kind} — one paper is one kind.",
+		drinksAndTipsOnly: "Drinks and tips only — wages and overtime come from the check-in and check-out stamps, so those are fixed on the attendance record.",
+		/** Heading over the order-no / date / time fields. */
+		theReceiptItself: "The receipt itself",
+		orderNoOnPaper: "Order no on the paper",
+		/** Placeholder only — never a value that is stored. */
+		egOrderNo: "e.g. ORD1111",
+		/** Label on the date box. The browser renders the date in its own locale, so the label is the only thing saying which date it is. */
+		receiptDate: "Receipt date",
+		/** The clock printed on the paper. Unlike the date this moves no money. */
+		timePrinted: "Time printed",
+		saveReceipt: "Save receipt",
+		orderDateSaveHint: "Clearing the order number removes it. Changing the date MOVES this receipt's money onto that day — the day it left and the day it lands on both need approving again, and the date must fall inside this voucher's week.",
+		/** Client-side refusal, matching the server's own rule. */
+		quantityRange: "Quantity has to be a whole number from 1 to 999.",
+		/** Blank is NOT zero: a cleared field would post a real instruction to pay nothing. No currency in the key. */
+		commissionMinLeaveFilled: "Commission has to be 0.00 or more — leave it filled in.",
+		/** Same rule on the add form, where nothing is being cleared. */
+		commissionMin: "Commission has to be 0.00 or more.",
+		/** {item} is the line description as stored by the outlet. */
+		nothingChangedOn: "Nothing changed on \"{item}\".",
+		orderDateTimeUnchanged: "The order number, the date and the time are all unchanged.",
+		/** Appended after the server's own message when a date change moved lines. */
+		linesMovedOne: "{n} line moved to {date}",
+		linesMovedMany: "{n} lines moved to {date}",
+		pickFromOutletList: "Pick the item from the outlet's list — a line has to name something that outlet sells.",
+		/** Screen-reader label on a per-line qty box. */
+		quantityForItem: "Quantity for {item}",
+		/** Screen-reader label on a per-line commission box. */
+		commissionRmForItem: "Commission in RM for {item}",
+		/** Mid-line on the receipt row, after the PR and the outlet. */
+		orderNoInline: "order {no}",
+		/** {when} is already formatted by the row's own date helper. NOT table.logged, which is a column header meaning entry METHOD. */
+		loggedAt: "Logged {when}",
+		/** The clock printed on the paper, mid-line after loggedAt. */
+		printedAt: "printed {time}",
+		photoCountOne: "{n} photo",
+		photoCountMany: "{n} photos",
+		/** Mid-line form. receipts.noProofAttached is the standalone sentence beside the ImageOff icon. */
+		noPhoto: "no photo",
+		disputingOne: "The PR is disputing this receipt",
+		disputingMany: "The PR has {n} open claims on this receipt",
+		correctThenSettleHint: "Correct the figures here if the PR is right, then accept or reject the claim under Disputes — an edit alone does not settle it.",
+		noLineItemsOnReceipt: "No line items on this receipt — it adds nothing to the voucher.",
+		/** Passed INTO the shared proof-photo viewer, so it must arrive translated. */
+		receiptScanLabel: "{receiptNo} scan",
+		/** Stands in for a review date on rows decided before the review lane shipped. */
+		beforeThisReviewExisted: "before this review existed",
+		/** Sends an approved receipt back to pending. Refused once VERIFIED. */
+		withdrawApproval: "Withdraw approval",
+		/** Jumps to the payment voucher this receipt sits on. */
+		openPv: "Open PV",
+		/** Says which rule removed the Edit button. */
+		prSignedNoCorrections: "The PR has signed this voucher — its figures can no longer be corrected.",
+		toastApproved: "{receiptNo} approved",
+		toastBackToPending: "{receiptNo} back to pending",
+		couldNotLoadReceipts: "Could not load receipts. Check the backend is running, then reload.",
+		/** Counts what the Approve-all sweep TOUCHES, which can exceed the Waiting-on-you chip. */
+		awaitingApprovalOne: "{n} receipt awaiting your approval",
+		awaitingApprovalMany: "{n} receipts awaiting your approval",
+		/** Explains why the banner count can exceed the chip count. */
+		ofThemDisputed: "{n} of them disputed",
+		voucherBlockedHint: "A voucher cannot be sent while one of its receipts is pending — and the PR cannot dispute the money behind it until you decide.",
+		/** Per-day subtotal beside the day's money. */
+		receiptCountOne: "{n} receipt",
+		receiptCountMany: "{n} receipts",
+		/** The week tab is a FILTER, so what it hides is stated rather than left to look like absence. */
+		offWeekOne: "{n} more receipt sits in other payroll weeks — switch the week tab above to review them.",
+		offWeekMany: "{n} more receipts sit in other payroll weeks — switch the week tab above to review them.",
+		roleCannotApprove: "Your agency role can see these receipts but not approve them — owner and finance review receipts.",
+	},
+	agencyRoster: {
+		/** Accessible name on a tappable roster amount. {label} arrives ALREADY translated from the call site — it lands mid-sentence, so it cannot be a key. */
+		viewBreakdownAria: "View {label} breakdown",
+		/** Shift-table hint, clause 1 — follows rosterGrid.tapA + rosterGrid.comcard. */
+		hintIdentifyPrs: "to identify PRs",
+		/** The three tappable money columns named in one run. A template, not three glued words: Chinese joins with 、and needs no "or". */
+		hintAmounts: "{drinks}, {tips}, or {payout}",
+		/** Shift-table hint, clause 2 — follows agencyRoster.hintAmounts. */
+		hintForBreakdown: "for shift breakdown",
+		/** Check-in stamp on the mobile roster card. {time} is formatted by formatAttendanceStamp. */
+		checkedInAtTime: "In {time}",
+		/** Outlet-swap note on the mobile roster card. Reader is the agency, hence 待你审批 — same voice as rosterGrid.leaveAwaitingAgency. */
+		prSwapAwaitingAgency: "PR swap to {outlet} — awaiting agency",
+		/** Add-PR field label. Same fact (and same zh) as managePr.floorNickname, which is the longer Manage-PR spelling. */
+		nickname: "Nickname",
+		/** Add-PR field label for the IC number. */
+		icNo: "IC no.",
+		/** Add-PR field label. Same zh as managePr.mobile — one Chinese term for the number, two English spellings already in the product. */
+		phone: "Phone",
+		/** Accessible name for the Add-PR legal-name input, whose visible label is just "Name". */
+		prNameField: "PR name",
+		/** Add-PR dialog write failure. */
+		couldNotAddPr: "Couldn't add the PR. Please try again.",
+		/** Title of the roster earnings sheet opened from the Drinks amount. */
+		drinksBreakdown: "Drinks breakdown",
+		/** Title of the roster earnings sheet opened from the Tips amount. */
+		tipsBreakdown: "Tips breakdown",
+		/** Title of the roster earnings sheet opened from the Est. payout amount. */
+		estPayoutBreakdown: "Est. payout breakdown",
+		/** Empty state of the drinks breakdown table. */
+		noDrinkSalesThisShift: "No drink sales logged for this shift yet.",
+		/** Empty state of the tips breakdown table. */
+		noTipsThisShift: "No tips logged for this shift yet.",
+		/** Foot-meta row under the drinks breakdown. {amount} arrives already formatted by formatRM. */
+		floorDrinksTotal: "Floor drinks {amount}",
+		/** Accessible name of the planning date trigger in weekly mode. Same zh as roster.pickWeek, which is the trigger's visible placeholder. */
+		chooseWeek: "Choose week",
+	},
+	agencyQueues: {
+		/** Section label above the agency dispute queue when nothing is open. */
+		disputesTitle: "Disputes",
+		/** Same label carrying the undecided count. */
+		disputesTitleOpen: "Disputes ({n} open)",
+		shiftNotLinked: "Which shift · not linked — this claim names no receipt, or the receipt has no shift record.",
+		/** Plural of payroll.claimCoversWholeDay, which stays the 1-shift wording. */
+		claimCoversWholeDayMany: "This claim covers the whole day — {n} shifts worked",
+		noReceiptBehindWagesOt: "No receipt behind this — daily wages and OT are calculated from the check-in and check-out stamps, so the correction is to the shift record.",
+		noReceiptForDayBucket: "No receipt found for this day and bucket. It may have been removed since the dispute was raised.",
+		receiptBehindFigureOne: "The receipt behind this figure — correct it here if the PR is right.",
+		receiptBehindFigureMany: "The {n} receipts behind this figure — correct them here if the PR is right.",
+		theScannedReceipt: "The scanned receipt",
+		/** {time} is the printed time off the paper, formatted upstream. */
+		theScannedReceiptPrinted: "The scanned receipt · printed {time}",
+		/** Alt/accessible name for one scanned-receipt thumbnail. */
+		receiptScanAlt: "{no} scan",
+		noPhotoSelfLogged: "No photo on this receipt — it was self-logged without one.",
+		signedCannotCorrect: "The PR has signed this voucher — its figures can no longer be corrected.",
+		roleCannotCorrectReceipt: "Your agency role can see this receipt but not correct it — owner and finance edit receipts.",
+		/** The two dates arrive as yyyy-MM-dd. Used on the dispute header line and as the hover title on an uncharged penalty's week cell. */
+		weekFromTo: "week {from} – {to}",
+		/** Outcome pill for the stored dispute outcome 'rejected'; the stored value is untouched. */
+		rejected: "Rejected",
+		prAttachedOne: "What the PR attached · {n} image",
+		prAttachedMany: "What the PR attached · {n} images",
+		/** Dispute scope chip. The chip's stored scope value stays 'resolved'. */
+		scopeResolved: "Resolved",
+		openDisputesElsewhereOne: "{n} open dispute in another week — switch weeks above to decide it.",
+		openDisputesElsewhereMany: "{n} open disputes in another week — switch weeks above to decide them.",
+		nothingMatchesAny: "Nothing matches “{q}” in any dispute.",
+		nothingMatchesOpen: "Nothing matches “{q}” in open disputes.",
+		nothingMatchesResolved: "Nothing matches “{q}” in resolved disputes.",
+		nothingWaitingOne: "Nothing waiting on you — {n} already settled. Switch to Resolved to see it.",
+		nothingWaitingMany: "Nothing waiting on you — {n} already settled. Switch to Resolved to see them.",
+		noneSettledYet: "None settled yet.",
+		acceptingRecordsDecision: "Accepting records the decision and tells the PR. It does not change the money on its own — correct the receipt below first if the PR is right, then accept.",
+		/** Toast. */
+		disputeAccepted: "Dispute accepted",
+		/** Toast. */
+		disputeRejected: "Dispute rejected",
+		/** Section label with a count; the bare word reuses payroll.overtime. */
+		overtimeTitleCount: "Overtime ({n})",
+		/** Pill on an undecided overtime claim — it blocks its week from being sent. */
+		holdingPayroll: "Holding payroll",
+		overtimeHoldsWeek: "Overtime is paid on the voucher for the week it was worked, so this claim holds w/c {week} from being sent until it is decided.",
+		overtimeHoldsItsWeek: "Overtime is paid on the voucher for the week it was worked, so this claim holds its week from being sent until it is decided.",
+		/** Recorded overtime minutes, formatted for display only — never a step toward pricing. */
+		durationHoursMinutes: "{h}h {m}m",
+		durationHours: "{h}h",
+		durationMinutes: "{m}m",
+		/** Second click on Approve. {amount} arrives already carrying RM. */
+		confirmPayAmount: "Confirm · pay {amount}",
+		approveAddsToVoucher: "{amount} is added to {name}'s voucher. This cannot be undone.",
+		/** Mid-sentence fallback when an overtime claim carries no PR name. */
+		thePr: "the PR",
+		onlyOwnerFinanceDecideOvertime: "Only the agency owner or finance can decide overtime.",
+		overtimeElsewhereOne: "{n} claim in another week still undecided — switch weeks above to decide it.",
+		overtimeElsewhereMany: "{n} claims in another week still undecided — switch weeks above to decide them.",
+		overtimeQueueHint: "Each claim holds its own payroll week until it is decided. The amount shown is what the approval writes onto the voucher.",
+		cancellationFeeOnVoucherOne: "Cancellation fee on this voucher",
+		cancellationFeeOnVoucherMany: "Cancellation fees on this voucher",
+		waiveBeforeSendHint: "Charged automatically when the PR cancelled. Waive one to take it off this voucher before you send it.",
+		voucherSentCannotWaive: "This voucher has been sent, so these can no longer be taken off it. Credit the PR on next week's voucher instead.",
+		waiveThisCharge: "Waive this charge",
+		whyWaiving: "Why are you waiving this? (optional)",
+		/** Written in the agency's own voice — 'we', not 'the agency'. */
+		waiveReasonPlaceholder: "e.g. hospital admission, or we stood them down ourselves",
+		keepTheCharge: "Keep the charge",
+		waive: "Waive",
+		waiving: "Waiving…",
+		couldNotWaive: "Could not waive this charge. Try again in a moment.",
+		couldNotLoadUncharged: "Could not load uncharged fees — the agency uncharged endpoint failed.",
+		/** Fallback detail when a cancellation carries neither slot nor outlet name. */
+		cancelledShift: "cancelled shift",
+		/** How a cancellation fee was priced. {wage} arrives already carrying RM. */
+		feePctOfWage: "{pct}% of {wage}",
+		/** Notice band when the PR cancelled after the shift had begun. */
+		cancelledAfterStart: "after start",
+		noticeHours: "{n}h notice",
+		/** {amount} arrives already carrying RM. */
+		notYetBilledOutstanding: "{n} not yet billed · {amount} outstanding",
+		/** Both amounts arrive already carrying RM. */
+		weeklyPlusCancellations: "({weekly} weekly + {cancellations} cancellations)",
+		/** The ⚠ glyph stays in the JSX. */
+		addBeforeSendingPv: "Add these before sending the PV",
+		/** {amount} arrives already carrying RM. */
+		selectedTotal: "{n} selected · {amount}",
+	},
+	izUi: {
+		/** IzTimeInput placeholder when no time is set yet. */
+		tapToChooseTime: "Tap to choose",
+		/** IzTimeInput placeholder while the control is disabled pending a date. */
+		pickDateFirst: "Pick date first",
+		/** Screen-reader label on the IzTimeInput trigger button. */
+		chooseTime: "Choose time",
+		/** Screen-reader label on the IzTimeInput clear (x) button. */
+		clearTime: "Clear time",
+		/** ProfileLanguagePicker free-text input placeholder for a language not in the preset list. */
+		otherLanguage: "Other language",
+		/** ProfileLanguagePicker button that commits the typed language. */
+		add: "Add",
+		/** Second sentence of the payment-method note, after subscription.cardPrivacyNote. */
+		cardNotChargedYet: "InnocenZ records the card; charging it needs a payment gateway, which is not connected yet.",
+	},
+	prMedia: {
+		/** Banner over the capture box when the PR keyed the receipt in by hand. */
+		manualEntryBanner: "— MANUAL ENTRY —",
+		/** Banner over the capture box when the figures came from the scan. */
+		ocrExtractedBanner: "— OCR EXTRACTED —",
+		/** Colon baked in; the reference itself follows in code. */
+		receiptIdLabel: "Receipt ID:",
+		/** Colon form of table.outlet — the slip renders label + value on one line. */
+		outletLabel: "Outlet:",
+		/** "PR" stays PR; only the word ID is translated. */
+		prIdLabel: "PR ID:",
+		/** Foot of the captured slip. The RM amount is formatted in code. */
+		totalLoggedLabel: "Total logged:",
+		/** Heading over the commission table on a receipt slip. */
+		commissionPvCalc: "Commission (PV calc)",
+		/** Commission table column: which rule paid this line. */
+		colRule: "Rule",
+		/** Commission table column: how the line was worked out. */
+		colCalc: "Calc",
+		/** Drinks commission working. {rate} arrives already carrying RM, so the currency is not a second source of truth here. */
+		drinkUnitsCalc: "{n} units × {rate}",
+		/** Tips commission working — the whole logged tip goes to the PR. */
+		tipRuleCalc: "100% of tip logged",
+		/** Commission table footer label. */
+		totalCommission: "Total commission",
+		/** Sub-line under the outlet name on the drink self-log sheet. */
+		menuHint: "{n} drinks on menu · tap +/− for each item sold",
+		/** Unit price under a drink name. {price} is formatted in code. */
+		eachPrice: "{price} each",
+		/** Accessible name on the − button. {name} is the outlet's own menu item and stays untranslated. */
+		decreaseNamed: "Decrease {name}",
+		/** Accessible name on the + button. */
+		increaseNamed: "Increase {name}",
+		/** Spelled out per number rather than spliced with an "s" — Chinese has no plural. */
+		drinkCountOne: "{n} drink",
+		/** Plural counterpart of drinkCountOne; identical in Chinese by design. */
+		drinkCountMany: "{n} drinks",
+		/** Label before the estimated commission on a self-log. Not yet money. */
+		commissionPreview: "Commission preview:",
+		/** Empty state on the self-log sheet before anything is counted. */
+		pickAtLeastOneDrink: "Set quantity for at least one drink to submit",
+		/** Label over the self-log free-text note. */
+		noteForAgency: "Note for agency (optional)",
+		/** Example reason shown as placeholder text, never submitted. */
+		notePlaceholder: "Receipt water-damaged / OCR unreadable",
+		/** Warning when the picked portfolio file is not an image. */
+		chooseImageFile: "Please choose an image file",
+		/** Warning when a portfolio photo exceeds the upload cap. */
+		imageTooLarge: "Image must be under 5 MB",
+		/** Accessible name on a FILLED portfolio slot. */
+		photoNamed: "Portfolio photo {n}",
+		/** Accessible name on an EMPTY portfolio slot. */
+		addPhotoNamed: "Add portfolio photo {n}",
+		/** Accessible name on the × over a filled portfolio slot. */
+		removePhoto: "Remove photo",
+		/** Alt text on a saved comcard image. Not copy ON the card — a screen reader announces it to THIS viewer, so it follows their language. */
+		prComcardAlt: "PR comcard",
+		/** Picker empty state when a PR has neither a saved comcard nor 3 portfolio photos to build one from. */
+		noComcardYet: "No comcard yet",
+	},
+	izPv: {
+		/** PV summary grid — who the voucher pays. */
+		payee: "Payee",
+		/** The payee's own code on the voucher. Short on purpose: the grid label column is narrow. */
+		payeeCode: "Code",
+		/** Same 身份证 wording as adminService.prIc. */
+		icPassport: "IC / Passport",
+		phone: "Phone",
+		/** Label over pv.cycle — the week the voucher covers. */
+		week: "Week",
+		dueSignBy: "Due (sign-by)",
+		weekTotal: "Week total",
+		/** Both the summary-grid row and the line-items table heading — one key so they cannot drift apart. */
+		breakdown: "Breakdown",
+		/** One whole line: the amounts sit MID-line and Chinese orders label and figure differently, so this cannot be glued from payroll.wagesShort + agencyPv.commissionShort. Amounts arrive already formatted by formatRM. */
+		breakdownWagesComm: "Wages {wages} · Comm {comm}",
+		shift: "Shift",
+		timeIn: "Time-In",
+		timeOut: "Time-Out",
+		/** Value beside payroll.receiptScans on a WEEKLY voucher. */
+		receiptsThisWeek: "{n} this week",
+		/** Same row on a single-shift voucher. */
+		receiptsOnThisShift: "{n} on this shift",
+		/** Same term as outletSettings.financeHead / adminService.financeHead. */
+		financeHead: "Finance Head",
+		/** Grid row label; same wording as agencyPv.stepPrSigned, which is the workflow-rail step. */
+		prSigned: "PR signed",
+		/** Short form of payroll.bankReference, for the narrow summary grid. */
+		bankRef: "Bank ref",
+		/** Heading over the issuer method + payee bank details, which stay as stored. */
+		paymentTo: "Payment to",
+		/** Line-items column head. Same 描述 as adminService.colDescription. */
+		description: "Description",
+		/** Line-items column head. Prints the stored ref verbatim — the money component is DERIVED from it in the repository, never here. */
+		ref: "Ref",
+		/** Line-items column head. No currency in the key — formatRM supplies it. */
+		amount: "Amount",
+		/** Whole sentence: {total} is formatted by formatRM, {days} by verifiedDayOne/Many, {day} is the already-formatted issue day. */
+		weeklyNote: "Week total {total} · {days} · PV on {day} (Sun)",
+		/** Chinese has no plural — the two forms are spelled out rather than appending an s. */
+		verifiedDayOne: "{n} verified day",
+		verifiedDayMany: "{n} verified days",
+		/** History calendar's month/year header. */
+		month: "Month",
+		year: "Year",
+		/** aria-label on the month <select>. */
+		chooseMonth: "Choose month",
+		chooseYear: "Choose year",
+		/** Month <option> LABELS only. The option value stays the month index, which is what the select writes back. */
+		monthJanuary: "January",
+		monthFebruary: "February",
+		monthMarch: "March",
+		monthApril: "April",
+		monthMay: "May",
+		monthJune: "June",
+		monthJuly: "July",
+		monthAugust: "August",
+		monthSeptember: "September",
+		monthOctober: "October",
+		monthNovember: "November",
+		monthDecember: "December",
+		/** Compact date-picker placeholder — no date chosen, so nothing is filtered. */
+		anyDate: "Any date",
+		/** Full-size placeholder on the same picker. */
+		tapToChooseDate: "Tap to choose a date",
+		/** Label AND aria-label on the PV time filter's first clock. */
+		fromTime: "From time",
+		toTime: "To time",
+		pickDateFirstHint: "Pick a date first to narrow by time within that shift day.",
+		selectDateAboveHint: "Select a date above — then tap From/To time to open the clock.",
+		/** {date} is a display label; the ISO key behind it is what actually filters. */
+		matchedByTimeInOrReceipt: "Matched by shift Time-In or receipt scan on {date}.",
+		/** One sentence rather than fragments glued around two <b> tags. */
+		tapFromOrToTimeHint: "Tap From time or To time to open the clock picker.",
+		/** Duration under a shift-history card's payout. */
+		hoursShift: "{n}h shift",
+		/** Venue sheet eyebrow when no agency could be named from the rows beneath it. */
+		prBreakdown: "PR breakdown",
+		/** Same eyebrow, naming the agencies present in exactly those rows. */
+		prBreakdownBy: "PR breakdown · {agency}",
+		/** {shifts} arrives from rosterGrid.shiftCountOne/Many; Chinese needs the name first, which glued fragments could not express. */
+		shiftsAtVenueForPr: "{shifts} at {venue} · {name}",
+	},
+	portalUi: {
+		/** SidebarTrigger's sr-only label and SidebarRail's aria-label + title. Distinct from shell.expandSidebar / shell.collapseSidebar: this control flips, it does not name a direction. */
+		toggleSidebar: "Toggle Sidebar",
+		/** Screen-reader-only title of the mobile sidebar Sheet. */
+		sidebar: "Sidebar",
+		/** Screen-reader-only description of the mobile sidebar Sheet. */
+		sidebarSrHint: "Displays the mobile sidebar.",
+		/** Accessible name of the <nav> landmark in the Pagination primitive. */
+		pagination: "Pagination",
+		/** Visible label on PaginationPrevious. */
+		previous: "Previous",
+		/** Visible label on PaginationNext. */
+		next: "Next",
+		/** aria-label on PaginationPrevious — longer than the visible word on purpose. */
+		goToPreviousPage: "Go to previous page",
+		/** aria-label on PaginationNext. */
+		goToNextPage: "Go to next page",
+		/** Screen-reader-only text behind the pagination ellipsis. */
+		morePages: "More pages",
+		/** Default aria-label on the carousel region; a consumer can still override it. */
+		carousel: "Carousel",
+		/** aria-roledescription on the carousel region. Announced aloud, so it is localised; lower-case in English by ARIA convention. */
+		carouselRole: "carousel",
+		/** aria-roledescription on one carousel item. */
+		slideRole: "slide",
+		/** Screen-reader-only label on the carousel's previous button. */
+		previousSlide: "Previous slide",
+		/** Screen-reader-only label on the carousel's next button. */
+		nextSlide: "Next slide",
+		/** PasswordField's eye toggle while the value is masked. */
+		showPassword: "Show password",
+		/** PasswordField's eye toggle while the value is visible. */
+		hidePassword: "Hide password",
+		/** aria-label on the 6-digit OTP input. The code itself is data and never translated. */
+		oneTimePassword: "One-time password",
+		/** OtpVerifySheet's default confirm label, read in the body because a default parameter cannot see the dictionary. Callers that pass verifyLabel still win. */
+		verifyOtp: "Verify OTP",
+		/** OtpVerifySheet's secondary button. Channel-neutral on purpose — this sheet serves the email lane (agency/outlet) and the WhatsApp lane alike. */
+		resendOtp: "Resend OTP",
+		/** Placeholder under a member's name when the membership row carries no email. */
+		noEmail: "no email",
+		/** OrgMembersPanel, kind === "agency": the invite dropdown fell back to FALLBACK_SUB_ROLES. */
+		rolesLoadFailedAgency: "Could not load agency portal roles — using defaults.",
+		/** OrgMembersPanel, kind === "outlet". Two whole sentences rather than one with {kind} filled in — `kind` is the stored value. */
+		rolesLoadFailedOutlet: "Could not load outlet portal roles — using defaults.",
+		/** OrgMembersPanel: the server saved the invite but the mailer did not fire. The accept URL is rendered after this sentence, outside the template. */
+		inviteSavedNoEmail: "The invitation for {email} was saved but no email went out. Send them this link — it expires in 7 days:",
+		/** The outlet portal's own name on the sign-in hero. Mirrors PORTAL_SIGNIN_LABELS.outlet, which is module-scope and cannot read the dictionary. */
+		portalNameOutlet: "Outlet",
+		/** The agency portal's own name on the sign-in hero. "PR" stays English — it is the product's term for the role and it is in the DB. */
+		portalNameAgency: "PR Agency",
+		/** The small line above the sign-in headline: portal name plus the word for portal. */
+		portalSuffixed: "{portal} portal",
+		/** Prefix of the sign-in headline. Split from the portal name because the name is its own inline element carrying the portal icon. */
+		signInTo: "Sign in to",
+		/** Outlet sign-in tagline. Mirrors PORTAL_AUTH_TAGLINES.outlet. */
+		portalTaglineOutlet: "Staff tonight, log sales, and seal shifts from one desktop portal.",
+		/** Agency sign-in tagline. Mirrors PORTAL_AUTH_TAGLINES.agency. */
+		portalTaglineAgency: "Roster PRs, fill outlet demand, and sync payroll from one desktop portal.",
+	},
+	portalShell: {
+		/** Live-workforce row pill for the `out` status — the PR is not on the floor. Sentence case; `pillOut` is the same fact shouted. */
+		statusOut: "Out",
+		/** Compact status pill on the outlet roster list. Shouted in English, terse in Chinese — the stored status stays "on-duty". */
+		pillOnDuty: "ON-DUTY",
+		pillEnRoute: "EN-ROUTE",
+		pillBooked: "BOOKED",
+		/** The `checked-out` status seen from the floor: the PR stamped out and went home. */
+		pillReleased: "RELEASED",
+		pillOut: "OUT",
+		/** Whole sentence, not fragments: the component splits it on its own two placeholders so Drinks/Tips keep their gold emphasis while the translator keeps the word order. */
+		tapDrinksOrTipsHint: "Tap {drinks} or {tips} for shift breakdown.",
+		/** Heading of the outlet portal's compact roster card. */
+		prRosterTonight: "PR roster — tonight",
+		/** Count line under that heading. Chinese takes the measure word after the number, matching outletHome.onDuty / booked. */
+		onFloorAndBooked: "{onFloor} on floor · {booked} booked",
+		noPrsBookedYet: "No PRs booked yet.",
+		/** The admin bell's tooltip, its aria-label stem, and its sheet title. */
+		adminNotifications: "Admin notifications",
+		adminNotificationsHint: "Outlet requests and ops alerts for InnocenZ admin",
+		/** Rendered label for the stored kind `pos_integration_quote`. The enum value itself never moves. */
+		adminKindPosIntegration: "POS integration",
+		/** Fallback label for any admin notification kind the map does not know — a kind added server-side still renders. */
+		adminKindAlert: "Admin alert",
+		/** Red banner on profile/settings while the org is suspended. */
+		suspendedTitle: "Suspended.",
+		/** {kind} is portalShell.outletNoun / agencyNoun — the RENDERED noun, never the "outlet"/"agency" discriminator the caller passes. */
+		suspendedBody: "Your {kind} access is limited to this profile. Contact InnocenZ to restore full portal features.",
+		/** Amber banner on profile/settings while the org awaits admin approval. */
+		pendingReviewTitle: "Pending review.",
+		pendingReviewBody: "Your {kind} is awaiting InnocenZ admin approval. You can update your profile here — other portal features unlock after approval.",
+		/** Lowercase mid-sentence noun for the two banners above. Not the stored value "outlet". */
+		outletNoun: "outlet",
+		/** Mid-sentence counterpart of outletNoun. Same term as notifications.agencyLabel. */
+		agencyNoun: "agency",
+		/** Profile edit banner. {what} lands mid-sentence and must arrive already translated from the caller. */
+		editingWhat: "Editing {what}",
+		/** Postcode field placeholder. The digits are a Malaysian example, not data. */
+		postcodeExample: "e.g. 50450",
+	},
+	ssPortal: {
+		/** Rendered name for the stored offer id `leave_agency`. The other nine offer ids reuse `adminService.cat*`. */
+		offerLeaveAgency: "Leave agency",
+		/** The `others` offer once the requester has named their own service; the name is their content. */
+		othersNamed: "Others - {name}",
+		/** Blurb under the offer picker. The offer's own `summary` is POSTED as the description and stays English at the source. */
+		offerTransportationSummary: "Shift pickup, late-night return, and outlet transfers",
+		offerDeliverySummary: "Outfits, heels, props, and supplies sent to venue",
+		offerWardrobeSummary: "Gown rental, dress code sourcing, and styling coordination",
+		offerMakeupSummary: "Professional makeup before VIP or launch events",
+		offerVipEscortSummary: "Premium table hosting and high-value guest coverage",
+		offerUniformSummary: "Uniform handling, badge printing, and compliance docs",
+		offerEmergencyCoverSummary: "Last-minute replacement PR sourcing and dispatch",
+		offerTrainingSummary: "Tier upgrades, coaching sessions, and certification fees",
+		offerOthersSummary: "Name your own service — describe what you need below",
+		offerLeaveAgencySummary: "Before 1 year you must raise a support ticket for early leave",
+		/** Remark placeholder for the stored offer id `transportation`. */
+		hintTransportation: "Pickup location and destination",
+		hintDelivery: "What to deliver and delivery address",
+		hintWardrobe: "Outfit or item needed, size, and occasion",
+		hintMakeup: "Event, start time, and look required",
+		hintVipEscort: "Guest or table, venue, and coverage hours",
+		hintUniform: "Uniform or document type and quantity",
+		hintEmergencyCover: "Outlet, shift time, and PRs needed",
+		hintTraining: "PR name and training topic or tier goal",
+		hintOthers: "Details for your custom service",
+		hintLeaveAgency: "Reason and intended last working date",
+		/** Label for the stored order status `pending_admin`; the value itself is untouched. */
+		statusPendingAdmin: "Pending Admin Review",
+		statusAccepted: "Accepted",
+		statusRejected: "Rejected",
+		statusPendingAgency: "Pending agency",
+		statusAwaitingPr: "Awaiting PR",
+		statusAwaitingOutlet: "Awaiting outlet",
+		statusAwaitingBoth: "Awaiting PR & outlet",
+		statusConfirmed: "Confirmed",
+		statusDeclined: "Declined",
+		statusPaid: "Paid",
+		/** Admin/PR/outlet acceptance of a service order — a different action from `common.approve`, which the agency uses. */
+		accept: "Accept",
+		/** Money the agency pays out on the order. The figure beside it is formatted by formatRM. */
+		out: "Out",
+		inAmount: "In {amount}",
+		/** Whole line, not glued fragments — Chinese reorders the parts around the same three holes. */
+		orderMoneyLine: "In {inAmt} · Out {outAmt} · Raised by {who}",
+		/** Same line when no cost has been set yet — a separate sentence rather than a substituted amount. */
+		orderMoneyPendingLine: "In {inAmt} · Cost pending admin · Raised by {who}",
+		supportTicketRaisedBy: "Support ticket · Raised by {who}",
+		acceptedAt: "Accepted {when}",
+		agencyApprovedAt: "Agency approved {when}",
+		/** Stands in for the cost figure before admin sets one. */
+		tbc: "TBC",
+		/** Pill on a leave-agency record, which is a support ticket rather than a billable service. */
+		support: "Support",
+		serviceRequestTitle: "Service request",
+		bookAgencyService: "Book agency service",
+		orderAgencyService: "Order agency service",
+		leaveHint: "Before 1 year with your agency you must raise a support ticket to leave early.",
+		agencyBookHint: "Book on behalf of a PR or outlet — they will be notified to accept or decline.",
+		outletOrderHint: "Request an add-on from your agency — transportation, delivery, wardrobe, and more.",
+		prOrderHint: "Request an add-on service — admin will review and confirm.",
+		/** Field label over the offer picker. */
+		service: "Service",
+		amountOutRm: "Amount out (RM)",
+		/** Beside the amount field — the offer's default rate, formatted by formatRM at the call site. */
+		defaultAmount: "default {amount}",
+		amountInRm: "Amount in (RM) · outlet recovery",
+		amountInPlaceholder: "0 if agency absorbs",
+		serviceTime: "Service time",
+		reason: "Reason",
+		notes: "Notes",
+		reasonPlaceholder: "Reason for early leave…",
+		notesPlaceholder: "Pickup address, delivery items, outlet contact…",
+		/** Toast when a leave-agency request is submitted with an empty reason. */
+		enterReasonForEarlyLeave: "Enter a reason for early leave",
+		/** Chinese has no plural — two keys rather than an appended "s". */
+		bookingsNeedResponseOne: "{n} booking needs your response",
+		bookingsNeedResponseMany: "{n} bookings need your response",
+		outletBanner: "Order agency add-ons for your venue — delivery, emergency cover, styling, and more.",
+		prBannerWithLeave: "Request transportation, makeup, wardrobe, and other services — or raise Leave agency under Service.",
+		prBanner: "Request transportation, makeup, wardrobe, and other services for your shifts.",
+		/** Whole sentence: the stored `leave` / `transfer` discriminant picks the key, it is never spliced mid-line. */
+		leaveTicketSubmitted: "Leave ticket submitted {when}",
+		transferRequestSubmitted: "Transfer request submitted {when}",
+		orderService: "Order service",
+		yourServiceOrders: "Your service orders",
+		recordCountOne: "{n} record",
+		recordCountMany: "{n} records",
+		noServiceOrders: "No service orders yet",
+		raiseSupportTicket: "Raise support ticket",
+		submitToAdmin: "Submit to admin",
+		/** Column head and the budget input's accessible name. */
+		budget: "Budget",
+		/** The composer's field caption, which declares the unit the poster types in. */
+		budgetRm: "Budget (RM)",
+		/** Job-posting column head and field caption. Same Chinese as `ssPortal.notes`, which is the order sheet's word for the same kind of free text. */
+		remark: "Remark",
+		/** Column head — what the service costs the agency, as opposed to the budget the outlet set. */
+		cost: "Cost",
+		/** aria-label on the composer's and the queue row's remove button. */
+		removeJob: "Remove job",
+		editJob: "Edit job",
+		enterAmount: "Enter amount",
+		/** The outlet picker's empty option. Its VALUE stays "". */
+		selectVenue: "Select a venue…",
+		loadingVenues: "Loading your venues…",
+		venuesLoadFailed: "Could not load your venues — reload the page and try again.",
+		noLinkedVenues: "No linked venues yet — link an outlet before posting a job.",
+		serviceType: "Service type",
+		nameYourService: "Name your service",
+		customServiceName: "Custom service name",
+		/** Badge on a job still in the local queue, not yet posted. */
+		queued: "Queued",
+		noJobPostingsMatch: "No job postings match this filter",
+	},
+	outletPanels: {
+		/** Hours worked on one seal-review row. */
+		hoursCount: "{n}h",
+		tipsAmount: "{amount} tips",
+		/** Estimated payment-voucher total for one PR, before the shift is sealed. */
+		pvEstimate: "{amount} PV est.",
+		/** Marks the tier the other tiers' multipliers are measured against. */
+		baseTier: "base",
+		weekRangeTargets: "Week range · {range}",
+		noLiveShiftTonight: "No live shift tonight — check Calendar page for upcoming events.",
+		noShiftsYet: "No shifts yet — use Post Job to create one.",
+		suppliedOfDemandPrs: "{supplied}/{demand} PRs",
+		/** The amount arrives already formatted with its currency — never bake RM into the key. */
+		salesAmount: "{amount} sales",
+		savedPill: "Saved {amount}",
+		awaitingAgencyRequest: "Awaiting agency · {title} · ~{amount} savings",
+		alreadyApplied: "Already applied · {detail}",
+		bestEffortIntro: "Optimized for {event} — release PRs at current time ({clock}). They are paid for hours worked plus commissions; unused wage share ({pct}%) is estimated savings. If not reassigned by agency, they are sent home.",
+		bestEffortSaveLine: "~{amount} save ({pct}% of {unused} unused wages)",
+		releaseNamesEarly: "Release {names} early",
+		demandPrNeeded: "Demand · {n} PR needed",
+		suppliedOfDemand: "{supplied}/{demand} supplied",
+		slotsPosted: "{n} slots posted",
+		prsOnShiftBooked: "PRs on shift · {n} booked",
+		noPrsBookedYet: "No PRs booked yet — {detail}",
+		/** Lands mid-sentence inside noPrsBookedYet — keep it lower-case in English. */
+		openForApplications: "open for applications",
+		applicantsCount: "Applicants · {n}",
+		/** Commission a pay-tier row carries. The % is common to the tier, never per item. */
+		commissionDrinksAndTips: "+ drinks & tips",
+		commissionDrinksOnly: "+ drinks",
+		commissionTipsOnly: "+ tips",
+		editNamed: "Edit {name}",
+		couldNotSaveTemplate: "Could not save",
+		couldNotDeleteTemplate: "Could not delete",
+		hoursShift: "{n}h shift",
+		shiftsAtVenueOne: "{n} shift at {outlet} · {pr}",
+		shiftsAtVenueMany: "{n} shifts at {outlet} · {pr}",
+		/** Quick-span pill in the date pickers. The span id ("3d") is what drives selection. */
+		span3Days: "3 days",
+		span1Week: "1 week",
+		bookingsNeedResponseOne: "{n} booking needs your response",
+		bookingsNeedResponseMany: "{n} bookings need your response",
+		newJob: "New job",
+		editJobN: "Edit job {n}",
+		addJob: "Add job",
+		addAnotherJob: "Add another job",
+		queuedJobs: "Queued jobs",
+		jobCountOne: "{n} job",
+		jobCountMany: "{n} jobs",
+		/** Submit button before anything is queued — no count to show yet. */
+		postJobsForReviewEmpty: "Post jobs for admin review",
+		postJobsForReviewOne: "Post {n} job for admin review",
+		postJobsForReviewMany: "Post {n} jobs for admin review",
+		yourJobPostings: "Your job postings",
+		countOfTotal: "{n} of {total}",
+		noServiceOrdersMatch: "No service orders match this filter",
+		serviceOrderSubmitted: "Service order submitted for admin review",
+		couldNotSubmitServiceOrder: "Could not submit service order — try again",
+	},
+	prPortal: {
+		/** Heading over the three notice bands. Shown on the schedule panel and inside the cancel sheet. */
+		cancellationRules: "Cancellation rules",
+		month: "Month",
+		year: "Year",
+		chooseMonth: "Choose month",
+		chooseYear: "Choose year",
+		/** Month picker. Spelled out rather than derived from a date formatter, for the same reason calendar.wdSun… are. */
+		monthJanuary: "January",
+		monthFebruary: "February",
+		monthMarch: "March",
+		monthApril: "April",
+		monthMay: "May",
+		monthJune: "June",
+		monthJuly: "July",
+		monthAugust: "August",
+		monthSeptember: "September",
+		monthOctober: "October",
+		monthNovember: "November",
+		monthDecember: "December",
+		/** Schedule calendar legend — the PR's own day state, not a shift status. */
+		legendAvailable: "Available",
+		legendScheduled: "Scheduled",
+		legendPending: "Pending",
+		legendNotAvailable: "Not available",
+		tapDayToBlockHint: "Tap an available day to block it · tap a blocked day to reopen",
+		/** {week} arrives already formatted by formatUpcomingWeekLabel(). */
+		timetableForWeek: "Timetable · {week}",
+		noShiftsThisWeek: "No shifts this week",
+		/** {amount} arrives already carrying its currency — no RM lives in the dictionary. */
+		deductionLoggedAt: "−{amount} logged · {at}",
+		/** A PR can only CANCEL a shift — never accept or decline one. */
+		cancelShift: "Cancel shift",
+		cancelAndAcceptDeduction: "Cancel & accept −{amount}",
+		/** Replaces copy that named the DEMO agency "Atlas" and told PRs they could decline. */
+		assignedByAgencyNote: "Shifts are assigned by your agency only — outlets may request you, but your agency confirms every assignment. Cancelling notifies your agency.",
+		reasonRequired: "Reason (required)",
+		cancelReasonPlaceholder: "Describe why you cannot work this shift",
+		/** The single band shown when the agency's cancellation rule is DISABLED. */
+		bandAnyTimeLabel: "Any time before shift",
+		bandAnyTimeOutcome: "Free cancel — your agency charges no cancellation fee",
+		/** Every hour and percentage in the band rows is a hole filled from the agency's own rule — never baked into the copy. */
+		bandFreeLabel: "{free}h+ before shift",
+		bandFreeOutcome: "Cancel or mark unavailable — no deduction",
+		bandShortLabel: "{short}h – {free}h before",
+		bandLateLabel: "<{short}h before OR {min}+ min late",
+		/** Shared by the short-notice and late bands — they differ only in {pct}. */
+		bandWagePctOutcome: "−{pct}% daily wages on next PV",
+		cancelOnTimeHeadline: "On time notice — no pay deduction",
+		cancelOnTimeDetail: "{hours}h+ before shift · your agency will reassign coverage.",
+		/** A DISABLED rule is not "0% everywhere" — it is no cancellation charge at all. */
+		cancelNoChargeDetail: "Your agency does not charge for cancellations.",
+		cancelShortNoticeHeadline: "Short notice — −{amount} from next PV",
+		cancelShortNoticeDetail: "Less than {free}h but more than {short}h before start.",
+		cancelLateHeadline: "Late cancel — −{amount} from next PV",
+		cancelLateDetailBefore: "Less than {short}h before start · same rule as arriving {min}+ min late.",
+		cancelLateDetailStarted: "Shift already started or passed · same rule as arriving {min}+ min late.",
+		/** Weekly grid day status. receipts.pending is a receipt review state and is deliberately not reused here. */
+		pendingVerification: "Pending verification",
+		verifiedDayCount: "{n} verified",
+		pvIssuedEverySunday: "PV issued every Sunday",
+		withdrawDisputeOnDay: "Withdraw dispute on {day}",
+		/** One dispute per day PER COMPONENT — {component} is the income row, already translated at the call site. */
+		disputeAmountOnDay: "Dispute {component} on {day}",
+		tapAmountToDisputeHint: "Tap any amount to dispute · tap a red amount to withdraw a mistaken dispute.",
+		weekCollapsedHint: "{week} · {total} · {verified}/7 verified",
+		verifiedDays: "Verified days",
+		pvWillBeSentOn: "PV will be sent on {day} after this week ends",
+		/** {total} arrives already formatted by formatRM. */
+		runningTotal: "Running total {total}",
+		weekTotal: "Total {total}",
+		reviewAndSignTotal: "Review & sign · {total}",
+		/** PV workflow states as the PR reads them — keyed by the API enum. Deliberately NOT payroll.status*, which is the agency's wording for the same states. */
+		pvStatusPendingReview: "Pending review",
+		pvStatusSent: "Awaiting your review",
+		pvStatusSigned: "Signed",
+		pvStatusPaid: "Paid",
+		pvStatusDisputed: "Disputed",
+		/** Proof is mandatory on a dispute. */
+		attachImages: "Attach files (images)",
+		removeImage: "Remove image",
+		quickReason: "Quick reason",
+		/** Chip CAPTION only. PV_DISPUTE_PRESETS[].label stays English — the code matches on it — and .reason stays English because it is the text sent to the agency. */
+		presetUnmatchCommission: "Unmatch commission",
+		presetMissingRecord: "Missing record",
+		presetUnmatchWages: "Unmatch wages",
+		presetRepeatedRecord: "Repeated record",
+		presetOthers: "Others",
+		disputeDetailPlaceholder: "Add detail for your agency…",
+		disputeReason: "Dispute reason",
+		withdrawDisputeTitle: "Withdraw dispute?",
+		disputeThisAmount: "Dispute this amount",
+		raiseDispute: "Raise dispute",
+		withdrawExplainer: "Flagged this amount by mistake? Withdraw the dispute and it returns to verified.",
+		withdrawDispute: "Withdraw dispute",
+		submitDispute: "Submit dispute",
+		vipNight: "VIP night",
+		addressDistanceAway: "{address} · {distance} away",
+		/** The PR's own take-home. NOT rosterGrid.estPayout, whose zh is 预计支出 — the agency's spend on the same shift. */
+		estPayout: "Est. payout",
+		outletRating: "{rating} outlet",
+		outletContact: "Outlet contact",
+		openDirectionsInMaps: "Open directions in Maps",
+		/** Badge on the payroll week the PR is inside now. approvals.current is NOT reusable — its zh reads 待处理. */
+		currentWeek: "Current",
+	},
+	adminAudit: {
+		/** Audit Log role picker — the page head under the shared "Audit Log" title. */
+		pickerSubtitle: "Select a user type to view its activity log.",
+		chooseRole: "Choose Role",
+		chooseRoleHint: "Open the audit log for admin, PR, outlet, agency, or others.",
+		/** The five role TABS. The stored key (admin/pr/outlet/agency/others) and the route slug are untouched — only the card label is resolved. */
+		roleAdmin: "Admin",
+		roleAdminHint: "View activity from platform administrators.",
+		/** "PR" is the product's term for the role and is in the DB — English in every locale. */
+		rolePr: "PR",
+		rolePrHint: "View activity from PR representatives.",
+		roleOutlet: "Outlet",
+		roleOutletHint: "View activity from outlet users.",
+		roleAgency: "Agency",
+		roleAgencyHint: "View activity from agency users.",
+		roleOthers: "Others",
+		roleOthersHint: "View activity from other user types.",
+		/** {role} arrives already translated via auditLogRoleLabel(). */
+		roleAuditLogTitle: "{role} Audit Log",
+		roleActivity: "{role} Activity",
+		auditedActionsBy: "Audited actions performed by {role} users",
+		/** The two date-range filter labels. */
+		dateFrom: "From",
+		dateTo: "To",
+		/** The unfiltered option's LABEL. Its value stays "all", and each recorded action code (CREATE, UPDATE, …) renders verbatim. */
+		allActions: "All Actions",
+		allTables: "All Tables",
+		/** Log table column headers, reused as the detail dialog's card captions. */
+		colTimestamp: "Timestamp",
+		colUser: "User",
+		colAction: "Action",
+		colTable: "Table",
+		colIpAddress: "IP Address",
+		colDetail: "Detail",
+		colUserAgent: "User Agent",
+		/** aria-label on the row's eye button. */
+		viewDetail: "View audit log detail",
+		/** Shown in place of a user when the log row has no userId. A UI fallback, not a recorded value. */
+		systemActor: "System",
+		loadingLogs: "Loading audit logs…",
+		loadFailed: "Failed to load audit logs",
+		noLogsFound: "No audit logs found.",
+		showingEntries: "Showing {from} - {to} of {total} entries",
+		/** aria-labels on the pager arrows. */
+		previousPage: "Previous page",
+		nextPage: "Next page",
+		detailTitle: "Audit Log Detail",
+		/** Heading over the before/after diff table. */
+		changes: "Changes",
+		/** Diff table captions only — the column name and both values below them are recorded data and stay verbatim. */
+		colField: "Field",
+		colOldValue: "Old Value",
+		colNewValue: "New Value",
+		deletedEntityData: "Deleted entity data",
+		createdEntityData: "Created entity data",
+		noChangesData: "No changes data available",
+	},
+	webUi: {
+		/** PasswordInput's reveal toggle — aria-label only, no visible text. */
+		showPassword: "Show password",
+		/** PasswordInput's toggle once the value is revealed. */
+		hidePassword: "Hide password",
+		/** SidebarTrigger / SidebarRail. Distinct from shell.expandSidebar / shell.collapseSidebar, which are direction-aware labels on the portal shell's own button; these two controls only toggle. */
+		toggleSidebar: "Toggle sidebar",
+		/** Screen-reader-only SheetTitle on the mobile sidebar sheet (Radix requires a title). */
+		sidebar: "Sidebar",
+		/** Screen-reader-only SheetDescription paired with webUi.sidebar. */
+		sidebarMobileHint: "Displays the mobile sidebar.",
+		/** DonutChart's aria-label when every slice is zero. */
+		chartNoData: "No data yet",
+	},
+	adminSubscription: {
+		/** Card title over the plan catalogue table. */
+		plansTitle: "Plans",
+		/** Card description under plansTitle. */
+		plansHint: "Manage plans and billing cycles",
+		/** Billing-cycle filter: the "all" OPTION LABEL and its placeholder. The stored value stays "all". */
+		allCycles: "All Cycles",
+		/** aria-label on the billing-cycle filter trigger. */
+		filterByBillingCycle: "Filter by billing cycle",
+		/** Toolbar button, sheet title on create, and the create submit button — one label for one action. */
+		createPlan: "Create Plan",
+		/** Column head and the matching field label in the plan editor. */
+		colAudience: "Audience",
+		/** Column head and field label. formatPrice emits no symbol, so this is the only place the currency is named. */
+		colPrice: "Price (RM)",
+		/** Column head and field label for the plan's volume tier. */
+		colCoverage: "Coverage",
+		/** Column head over the plan's updatedAt. */
+		colLastEdited: "Last edited",
+		loadingPlans: "Loading plans…",
+		plansLoadFailed: "Failed to load plans",
+		noPlansFound: "No plans found",
+		/** aria-label on the per-row edit button; {name} is the plan name, which stays English. */
+		editPlanNamed: "Edit {name}",
+		/** Coverage cell on the POS add-on row — longer than plans.posAddonCapacity, which the plan cards use. */
+		posSyncAddon: "POS sync add-on",
+		/** Pagination summary; mirrors adminBusiness.showingSubscriptions. */
+		showingPlans: "Showing {from} - {to} of {total} plans",
+		/** Rendered label for a stored subscriptionType of "agency" — resolved by planAudienceLabel. The stored value never changes. */
+		audienceAgency: "Agency",
+		/** Rendered label for a stored subscriptionType of "outlet" — resolved by planAudienceLabel. */
+		audienceOutlet: "Outlet",
+		/** Plan editor sheet title when editing. */
+		editPlan: "Edit Plan",
+		editPlanHint: "Update the plan details.",
+		/** Kept faithful to the existing English, which predates the audience selector — see notes. */
+		createPlanHint: "Add a new plan for agencies.",
+		/** Field label. The NAME itself is data the admin types here and stays English. */
+		planName: "Plan Name",
+		/** The examples are plan names, so they stay English inside the translated hint. */
+		planNamePlaceholder: "e.g. Basic, Pro, Enterprise",
+		planNameRequired: "Plan name is required",
+		priceMinimum: "Price must be 0 or more",
+		selectAudience: "Select audience",
+		selectBillingCycle: "Select billing cycle",
+		/** aria-label on the coverage number input. */
+		coverageAmount: "Coverage amount",
+		/** aria-label on the PRs / PV picker. The units themselves are stored and stay English. */
+		coverageUnit: "Coverage unit",
+		/** aria-label on the day / week / month / year picker. */
+		coveragePeriod: "Coverage period",
+		/** Coverage-period OPTION LABEL for the stored value "day". The other three periods reuse subscription.billedWeekly / billedMonthly / billedAnnually. */
+		periodDaily: "Daily",
+		/** {value} is the composed coverage string (e.g. "5 PRs/day") and is never translated. */
+		shownOnPlanAs: "Shown on the plan as {value}.",
+		coverageHint: "Volume tier shown on the plan. Optional.",
+		activeStatus: "Active Status",
+		activeStatusHint: "Set plan as active or inactive.",
+		/** aria-label on the status Switch. */
+		toggleActiveStatus: "Toggle subscription active status",
+		/** Submit button when editing; matches rbac.saveChanges word-for-word in both locales. */
+		saveChanges: "Save Changes",
+	},
+	adminBits: {
+		/** Multi-day filter's empty label when the caller passes none. Chinese has no plural, so it matches adminService.selectDate. */
+		selectDates: "Select date(s)",
+		/** Only rendered for three dates or more — one and two are spelled out as the dates themselves. */
+		datesSelected: "{n} dates selected",
+		clearDates: "Clear dates",
+		clearDate: "Clear date",
+		/** aria-label on a filter's clear button; {label} arrives already translated from the calling page. */
+		clearNamed: "Clear {label}",
+		setAccountActiveHint: "Set account as active or inactive.",
+		setModuleActiveHint: "Set module as active or inactive.",
+		/** The example key stays English — moduleKey is a stored value the admin types verbatim. */
+		moduleKeyPlaceholder: "e.g. payment_voucher",
+		/** Spoken form of the stored permissionType `create`, for the C/R/U matrix aria-labels. Matches rbac.cCreate's wording. */
+		permCreate: "Create",
+		permRead: "Read",
+		permUpdate: "Update",
+		/** aria-label on one C/R/U checkbox; mirrors rbac.allFor. {name} is a moduleName and stays as stored. */
+		permFor: "{perm} for {name}",
+		/** Placeholder body on the not-yet-built RBAC and Business section pages. */
+		connectApiHint: "Connect your {name} API to populate this section.",
+		connectUserApiHint: "Connect your {name} user API to populate this section.",
+		/** Card title on the generic user-type placeholder page. */
+		namedUsers: "{name} users",
+		setNegotiatedQuote: "Set negotiated quote",
+		setNegotiatedQuoteHint: "Users who click “negotiate price” land here as a Plan Request. Enter the settled price, then resolve.",
+		/** {name} is a plan name and stays English — standing owner decision. */
+		planNamed: "Plan: {name}",
+		noCurrentPlan: "No current plan",
+		quotedPriceRm: "Quoted price (RM)",
+		quotePlaceholder: "e.g. 4500",
+		leaveBlankNoPrice: "Leave blank to resolve without recording a price.",
+		enterValidAmountRm: "Enter a valid non-negative amount in RM",
+		saveQuoteAndResolve: "Save quote & resolve",
+	},
+	adminPr: {
+		/** Admin → User management → PR. Card title over the PR accounts table. */
+		title: "PR accounts",
+		/** Card blurb. Says the Agencies column is a LIST, because a PR can hold a different tier at each agency. */
+		subtitle: "Platform users with the PR role. Agencies column shows every agency a PR belongs to.",
+		searchPlaceholder: "Search PRs…",
+		/** Accessible name for the PR search box. */
+		searchAria: "Search PRs by name, email, or agency",
+		/** Table column AND detail field for user.legalName. Same zh as managePr.legalIcName — one Chinese term for the name on the IC. */
+		legalName: "Legal name",
+		/** Table column AND detail field for user.phoneNum. Same zh as managePr.mobile. */
+		phone: "Phone",
+		/** The Agencies table column and the Agencies tab of the detail sheet. */
+		agencies: "Agencies",
+		loadingPrs: "Loading PR users…",
+		prsLoadFailed: "Failed to load PR users",
+		noPrsFound: "No PR users found",
+		/** Takes the PR role back; the account survives. Not a delete. */
+		removePr: "Remove PR",
+		/** Pagination summary. Mirrors admin.showingAdmins. */
+		showingPrs: "Showing {from} - {to} of {total} PRs",
+		/** The agency combobox's unfiltered option. The stored filter value stays "all". */
+		allAgencies: "All agencies",
+		/** Combobox trigger label when the selected agency id is not in the loaded list. */
+		agencyFallback: "Agency",
+		filterByAgency: "Filter by agency",
+		searchAgenciesPlaceholder: "Search agencies…",
+		searchAgenciesAria: "Search agencies",
+		noAgenciesFound: "No agencies found",
+		/** Heading over the agency list — the row popover and the Agencies tab. */
+		agenciesCount: "Agencies ({n})",
+		/** Accessible name for the Agencies-cell popover, singular. Chinese has no plural, so this and showAgenciesForPr share one zh. */
+		showAgencyForPr: "Show {n} agency for this PR",
+		/** Plural half of showAgencyForPr — two whole sentences, not one with a noun swapped in. */
+		showAgenciesForPr: "Show {n} agencies for this PR",
+		/** Title of the admin PR detail sheet. */
+		detailsTitle: "PR Details",
+		detailsSubtitle: "PR account profile and the agencies this PR is tied to.",
+		/** Hero meta line. {names} is the joined list of agency names — a stored fact, never translated. */
+		agencyTiedNames: "Agency-Tied · {names}",
+		notTiedToAnyAgency: "Not tied to any agency",
+		tabPersonal: "Personal Info",
+		tabContact: "Contact",
+		tabShowcase: "Showcase",
+		sectionIdentity: "Identity",
+		/** Detail-field label. Kept apart from admin.colDisplayName ("Display Name"), which is the table column header. */
+		fieldDisplayName: "Display name",
+		/** Label only. The value (user.idType) is a stored code and renders as saved. */
+		idType: "ID type",
+		idNumber: "ID number",
+		/** Label only. user.gender is a stored value with no resolver, so it renders as saved. */
+		gender: "Gender",
+		/** Label only. The value goes through raceLabel(), which falls through on free-text entries. */
+		race: "Race",
+		dateOfBirth: "Date of birth",
+		/** Label only. The value is free text and renders as saved. */
+		nationality: "Nationality",
+		/** When the PR account was created. */
+		joined: "Joined",
+		sectionContact: "Contact information",
+		/** Admin chrome ABOUT the comcard — the card itself is not rendered here, so this follows the viewer's language. Same zh as approvals.comcard. */
+		sectionComcard: "Comcard",
+		comcardHint: "Measurements shown on the PR's comcard",
+		/** Same zh as managePr.statHeight. The unit (cm) rides on the value. */
+		height: "Height",
+		/** Same zh as managePr.statWeight. The unit (kg) rides on the value. */
+		weight: "Weight",
+		age: "Age",
+		/** Age formatted at the call site — ageFromDob() runs outside React and returns the number only. */
+		ageYears: "{n} years",
+		/** Same noun as managePr.portfolioGallery, with the count. */
+		portfolioGalleryCount: "Portfolio gallery ({n})",
+		noPortfolioPhotos: "No portfolio photos uploaded yet.",
+		/** alt text on a portfolio thumbnail — read aloud, so it follows the viewer's language. */
+		portfolioPhotoAlt: "Portfolio {n}",
+		notLinkedToAnyAgency: "This PR is not linked to any agency.",
+		/** Badge on an agency row in the detail sheet. Display only — nothing is stored under this word. */
+		linked: "Linked",
+	},
+	webShell: {
+		/** Brand splash shown while client-side portal auth resolves. */
+		gettingReady: "Getting things ready…",
+		/** aria-label on the splash's live region. No ellipsis — a screen reader announces this, it does not read it. */
+		loadingLabel: "Loading",
+		/** Stands in for the admin header's displayName when the profile has no name yet. */
+		userFallback: "User",
+		notFoundTitle: "Page not found",
+		notFoundBody: "Sorry, we couldn't find the page you're looking for. The page might have been removed or the URL might be incorrect.",
+		/** Same 仪表板 as admin.navDashboard — one word for the same destination. */
+		backToDashboard: "Back to dashboard",
+		/** Back link on the two public legal pages. */
+		backToHome: "Back to home",
+		/** Eyebrow above the title on /policy and /delete-account. */
+		legalEyebrow: "Legal",
+		/** The /policy heading AND the link to it from /delete-account — one key so they cannot drift. */
+		privacyPolicyTitle: "Privacy Policy",
+		deleteAccountTitle: "Delete your account",
+		/** Whole sentence: both dates arrive as stored English constants from lib/legal, and Chinese orders label and date differently. */
+		effectiveUpdated: "Effective {effective} · Last updated {updated}",
+		/** Colon baked in; the WhatsApp link follows in code. */
+		privacyContact: "Privacy contact:",
+		/** Colon baked in; the WhatsApp link follows in code. */
+		supportContact: "Support:",
+		/** Footer of /policy. {year} is computed in code; InnocenZ is the brand and stays. 版权所有 matches the landing dictionary's wording. */
+		rightsReserved: "© {year} InnocenZ. All rights reserved.",
+	},
+	adminOrg: {
+		/** Admin → User management → PR Agency: the table card's own title. */
+		agencyOrganizations: "PR Agency organizations",
+		agencyOrganizationsHint: "Click a row to open agency details and linked PRs. Search agencies or filter by status.",
+		searchAgenciesPlaceholder: "Search agencies…",
+		/** aria-label on the agency search box. */
+		searchAgenciesAria: "Search agencies by name",
+		/** Agency-table column head over agency_code. The VALUE stays as stored. */
+		colCode: "Code",
+		failedToLoadAgencies: "Failed to load agencies",
+		noAgenciesFound: "No agencies found",
+		/** aria-label on an agency row's eye button. */
+		viewAgencyDetails: "View agency details",
+		/** Sub-label under an agency's name. SSM is the Malaysian registrar's own acronym and is identical in both locales — the template exists only so the row is not half raw English. */
+		ssmValue: "SSM {no}",
+		/** Pagination footer. Same shape as admin.showingAdmins so Chinese can reorder the figures. */
+		showingAgencies: "Showing {from} - {to} of {total} agencies",
+		showingOutlets: "Showing {from} - {to} of {total} outlets",
+		/** Row / card action. 暂停 (not 停用) so it pairs with admin.statusSuspended 已暂停 — 停用 is already 'inactive'. */
+		suspend: "Suspend",
+		agencyDetailsTitle: "PR Agency Details",
+		agencyDetailsHint: "Agency profile and the PRs managed under it.",
+		/** Hero subtitle. {code} is the stored agency_code and is never translated. */
+		agencyCodeValue: "Agency code {code}",
+		/** Tab LABEL only — the Tabs value stays "basic". */
+		tabBasicInfo: "Basic Info",
+		/** Tab LABEL only (value stays "prs"). "PR" stays "PR"; Chinese has no plural, so the s is dropped rather than transliterated. */
+		tabPrs: "PRs",
+		/** Field label over agency.contactName. */
+		ownerContact: "Owner / contact",
+		/** Field label over an organisation's contact number — 电话 rather than 手机号, because an org line may not be a mobile. */
+		phone: "Phone",
+		/** Section heading on the agency sheet. Not agencyMisc.organization, whose zh is 公司名称 (the NAME field, a different fact). */
+		organization: "Organization",
+		/** Field LABEL. The name itself is a record the admin edits and stays as typed. */
+		agencyName: "Agency name",
+		agencyCode: "Agency code",
+		ssmOrgNo: "SSM / Org No.",
+		outletDetailsTitle: "Outlet Details",
+		outletDetailsHint: "Venue profile, location, and team — as submitted by the outlet.",
+		/** Tab LABEL only — the Tabs value stays "business". */
+		tabBusiness: "Business",
+		/** Tab LABEL only — the Tabs value stays "location". */
+		tabLocation: "Location",
+		/** Tab LABEL only — the Tabs value stays "team". */
+		tabTeam: "Team",
+		businessInformation: "Business information",
+		/** Field label over outlet.name. */
+		venue: "Venue",
+		ssmNo: "SSM No.",
+		businessLicense: "Business license",
+		venueLocation: "Venue location",
+		/** Label over the raw lat, lng pair — the figures themselves are never localised. */
+		coordinates: "Coordinates",
+		/** Read-only admin label. geofence.radius is the outlet's own editable field; this is the longer admin spelling of the same fact. */
+		geoFenceRadius: "Geo-fence radius",
+		linkedAgencies: "Linked agencies",
+		linkedAgenciesHint: "The agencies this venue works with. The outlet requests a link in its Settings and each agency accepts or declines — an admin does not set this.",
+		noAgenciesLinked: "No agencies linked. This venue cannot post a shift until it links one in Settings and that agency approves it.",
+		noAgencyApprovedYet: "No agency has approved yet — every Post Job attempt from this venue is refused until one does.",
+		/** Rendered label for a stored agency_outlet.approve_status of "approved". */
+		linkWorkingWithVenue: "Working with this venue",
+		/** approve_status "pending". */
+		linkAwaitingAgency: "Awaiting the agency's decision",
+		/** approve_status "rejected" — never accepted in the first place. */
+		linkDeclinedByAgency: "Declined by the agency",
+		/** approve_status "ended". Kept distinct from "declined": these two DID work together, which is a different support conversation. */
+		linkPartnershipEnded: "Worked together — partnership ended",
+		/** {date} arrives already formatted by formatDate against the active locale. */
+		joinedOn: "Joined {date}",
+		/** Catch-all section for sub-roles TEAM_GROUPS does not name. */
+		otherMembers: "Other members",
+		teamOwnerHint: "Venue owner · signs up the outlet and manages settings",
+		/** The admin sheet's shorter spelling; outletSettings.financeHeadHint is the outlet's own longer one and carries the Sunday due date. */
+		teamFinanceHint: "Weekly reconciliation · billing sign-off",
+		teamGuarantorHint: "Stands in for the owner · same rights while the owner is away",
+		teamDirectorHint: "View only · reads every screen, changes nothing",
+		loadingPrs: "Loading PRs…",
+		/** Spelled out as a second key rather than appending "matching" — Chinese cannot glue that clause on. */
+		prsCount: "PRs ({n})",
+		prsCountMatching: "PRs ({n} matching)",
+		searchPrsPlaceholder: "Search PRs…",
+		searchPrsAria: "Search PRs under this agency",
+		noPrsMatchSearch: "No PRs match this search.",
+		noPrsLinked: "No PRs linked to this agency yet.",
+		/** Rendered label for a stored agency_pr.approve_status of "approved". */
+		prStatusApproved: "Approved",
+		/** approve_status "rejected". */
+		prStatusRejected: "Rejected",
+		/** approve_status "leave_pending" — the PR asked to leave the agency and the request is undecided. */
+		prStatusLeavePending: "Leave pending",
+		/** approve_status "left". */
+		prStatusLeft: "Left",
+		/** alt text on the details hero image. */
+		profilePhotoAlt: "{name} profile",
+		systemInformation: "System Information",
+		createdBy: "Created by",
+		createdAt: "Created at",
+		updatedBy: "Updated by",
+		updatedAt: "Updated at",
+		approvalStatus: "Approval Status",
+		awaitingFirstApproval: "Submitted signup awaiting first approval",
+		/** {entity} is adminOrg.entityAgency / entityOutlet — already translated, because it lands mid-sentence. */
+		approvalPendingBody: "Waiting for admin approval before this {entity} goes live.",
+		approvalActiveBody: "This {entity} is live on the platform.",
+		approvalSuspendedBody: "This {entity} has been suspended by an admin.",
+		approvalInactiveBody: "This {entity} is inactive.",
+		/** Lower-case on purpose: it lands MID-sentence in the four approval bodies. Not the stored "agency" value, which is never rendered. */
+		entityAgency: "agency",
+		/** Mid-sentence noun for the four approval bodies. Never compared or sent. */
+		entityOutlet: "outlet",
+	},
+	libTiers: {
+		/** Commission halves of one pay-tier row. Both percentages are the tier's own rate — drinks vs services are split by a category column elsewhere, so this is never a per-item figure. */
+		drinksTipsPct: "{drinks}% drinks · {tips}% tips",
+		/** Optional sales target on a pay-tier row. */
+		targetSales: "Target RM {amount}",
+		/** Compact-card shorthand for the commission-only column, beside T1…T5. */
+		commissionShort: "Comm.",
+	},
+	webLib: {
+		/** Forgot-password result when the server returns no message of its own. */
+		passwordResetLinkSent: "If that email is registered, a reset link is on its way.",
+		/** Fallback when POST /auth/forgot-password fails without a server message. */
+		passwordResetLinkFailed: "Could not send the reset link",
+		/** Fallback when POST /auth/reset-password fails without a server message. */
+		passwordResetFailed: "Could not reset password",
+		/** Fallback when PATCH /user/:id rejects a display-name change silently. */
+		displayNameUpdateFailed: "Failed to update display name",
+		/** Thrown when a profile-image upload is attempted with no access token. */
+		notSignedIn: "Not signed in",
+		/** Thrown when the profile-image upload answers 401. */
+		sessionExpired: "Session expired",
+	},
+	libShift: {
+		/** Check-in hero when no roster slot resolves. */
+		tonightsShift: "Tonight's shift",
+		/** Check-in hero for an `outlet-pending` slot. */
+		outletRequestedPendingApproval: "Outlet requested you · pending agency & PR approval",
+		/** {agency} is the supplier's own NAME — data, inserted untranslated. */
+		agencyAssignedBy: "Agency assigned · {agency}",
+		/** Same fact with no agency named — the suffix leaves with its separator rather than trailing a bare dot. */
+		agencyAssigned: "Agency assigned",
+		/** Both holes arrive already carrying their currency — no RM lives in the dictionary. */
+		estShiftPayPerShift: "{pay} shift pay · {rate}/shift",
+		/** Replaces copy that told PRs to "approve or decline" — a PR can only CANCEL. */
+		eventAgencyAssignment: "Agency assignment — see it in your schedule",
+		/** {note} is the agency's own free text when it has one, else libShift.swapRequestFromAgency. */
+		swapMoveToOutlet: "Move to {outlet} — {note}",
+		/** Lands mid-sentence inside swapMoveToOutlet, hence lowercase in English. */
+		swapRequestFromAgency: "agency swap request",
+		outletMustConfirmSlot: "{outlet} must confirm your slot on their roster",
+		swapAwaitingOutlet: "Swap in progress — awaiting outlet confirmation",
+		scheduledOnAgencyRoster: "Scheduled on agency roster",
+		outletConfirmedOnBookings: "{outlet} confirmed you on their bookings roster",
+		/** Names the ROLE, not the demo agency: the two English strings this replaces both said "Atlas". */
+		agencyProposedNotConfirmed: "Your agency proposed this shift — the outlet has not confirmed yet",
+		/** Timetable pill. NOT today.awaitingAgencyConfirm, whose English is "Awaiting agency confirm". */
+		awaitingAgency: "Awaiting agency",
+		/** Timetable pill. Same term as roster.requestOutletSwap (申请换店). */
+		outletSwap: "Outlet swap",
+		/** Sentence case. portalShell.pillEnRoute is the same fact SHOUTED for the outlet roster pill. */
+		enRoute: "En route",
+		/** Replaces copy naming the demo agency ("Atlas confirmed"). */
+		outletRequestedAgencyConfirmed: "{outlet} requested you — your agency confirmed",
+		/** Replaces copy naming the demo agency ("Atlas assigned you"). */
+		agencyAssignedCancelPolicy: "Your agency assigned you — cancel per agency policy if needed",
+		agencyAssignedOnYourRoster: "Agency assigned this shift on your roster",
+		liveShiftFromOutletCheckIn: "Live shift from outlet check-in roster",
+		/** Catch-all source line. Replaces "Atlas agency roster". */
+		agencyRoster: "Agency roster",
+		/** Rendered weekday for a WEEKDAY_SHORT token. The token itself stays English — it is persisted on PrPvRow.day and parsed back out of stored dispute text. NOT calendar.wdSun, which is the SHOUTED month-grid head; these land mid-sentence in prPortal.withdrawDisputeOnDay. */
+		weekdaySun: "Sun",
+		weekdayMon: "Mon",
+		weekdayTue: "Tue",
+		weekdayWed: "Wed",
+		weekdayThu: "Thu",
+		weekdayFri: "Fri",
+		weekdaySat: "Sat",
+	},
+	libDemo: {
+		/** Receipt slip line — self-logged receipt that DOES carry a stamp. {when} is the stored display stamp ("18 Jun 2026 · 22:15"), filled in rather than glued in front. */
+		receiptKeyedAt: "Keyed {when}",
+		/** Same line for an OCR-scanned receipt. Same 扫描上传 as receipts.scanned, so the pill and this line cannot drift apart. */
+		receiptScannedAt: "Scanned {when}",
+		/** Receipt lifecycle badge for the stored status `attached`. Its own key rather than receipts.pending/disputed: those five are the agency's REVIEW states, these are where the receipt sits in the shift → PV → paid chain, and the badge renders in caps. */
+		receiptOnShift: "ON SHIFT",
+		/** Same badge, stored status `in_pv`. */
+		receiptInPv: "IN PV",
+		/** Same badge, stored status `paid`. Same 已付款 as payroll.statusPaid. */
+		receiptPaid: "PAID",
+		/** Same badge, stored status `disputed`. Same 有争议 as receipts.disputed. */
+		receiptDisputed: "DISPUTED",
+		/** Same badge, the remaining stored statuses. Same 待处理 as receipts.pending. */
+		receiptPending: "PENDING",
+		/** Remark-field placeholder for a service offer this build has never seen. The known offers keep their own hints (ssPortal.hint*), so only this generic default is here. */
+		addJobDetails: "Add job details…",
+		/** One part of the outlet shift's adjustments line. 提前放行 matches outletPanels/postJob, not agencyPanels' 提前放班. */
+		cutLossReleasedEarly: "{n} released early",
+		/** Same line — headcount slots removed from the shift. 名额 is the dictionary's word for a PR headcount slot. */
+		cutLossDemandCut: "{n} demand cut",
+		/** Same line — sales target dialled below 100%. Chinese puts the percentage after the word, which glued fragments could not express. */
+		cutLossTargetPct: "{pct}% target",
+		/** Post Job headcount hint when the day is full. {plan} is the plan NAME and stays English by the owner's instruction; {date} arrives already formatted for the active locale. */
+		planDayLimitReached: "{plan} plan · {max} PRs/day limit reached for {date}",
+		/** Same hint with room left. Says WHICH counter this is — total headcount including agency fill, unlike the picker's named-PR limit beside it. */
+		planDayHeadcountAvailable: "{plan} plan · {band} PRs/day · {remaining} of {max} headcount available on {date}",
+		/** Outlet's PR-rating note placeholder at 1 star. Placeholder only — nothing here is stored (unlike PR_RATING_TAGS, which is). */
+		ratingNotePlaceholder1: "Serious issue — late, attitude, guest complaint, or floor impact…",
+		/** Same placeholder at 2 stars. 着装要求 is the dictionary's term for dress code. */
+		ratingNotePlaceholder2: "Below standard — drinks, upsell, dress code, or table engagement…",
+		ratingNotePlaceholder3: "Acceptable shift — one coaching note for next booking…",
+		ratingNotePlaceholder4: "Good shift — what would make this a 5 next time?",
+		ratingNotePlaceholder5: "Standout moment — VIP upsell, bottle push, teamwork, or vibe…",
+	},
+	invitePages: {
+		/** The /invite/org-member page heading. */
+		joinTheTeam: "Join the team",
+		acceptToGetStarted: "Accept your invitation to get started.",
+		/** The ?token= search param is absent. The token itself is data and is never translated. */
+		missingToken: "This invite link is missing a token. Open the link from your email.",
+		checkingInvitation: "Checking invitation…",
+		/** Heading of the preview-failed card; the server's own message renders beneath it. */
+		inviteUnavailable: "Invitation unavailable",
+		/** OUR stand-in when the API answered success:false with no message of its own. A message the server did send wins over this and stays as sent. */
+		notFound: "Invitation not found",
+		/** Stand-in for a bare 404 with no server message. */
+		notFoundAskOwner: "Invitation not found or already used — ask the owner to send a new invite",
+		/** Last-resort body when the thrown Error carries an empty message. */
+		notFoundOrUsed: "This invitation was not found or was already used.",
+		/** Stand-in when the accept POST answered success:false with no message. */
+		couldNotAccept: "Could not accept invitation",
+		/** Success banner. {org} is the org's own name and is never translated; no space before it in Chinese, which is how a Latin name reads correctly there. */
+		youJoined: "You joined {org}",
+		/** Fills {org} in youJoined when the accept response carried no orgName. Lands mid-sentence, hence lower case in English. */
+		theTeam: "the team",
+		/** {portal} arrives ALREADY translated from orgKindLabel — the zh portal labels already carry 端, so no second 门户 is glued on. */
+		accountReadySignIn: "Your account is ready. Sign in to open the {portal} portal.",
+		/** Fills {portal} in accountReadySignIn when the response kind is neither outlet nor agency (the caller's own fallback word). Lands mid-sentence, hence lower case in English. */
+		organisation: "organisation",
+		/** Link to /login from both the success card and an already-active membership. */
+		goToSignIn: "Go to sign in",
+		/** Whole sentence: Chinese puts the role BEFORE the org, so this cannot be glued from fragments. {org} is the stored org name; {role} arrives already resolved by portalRoleLabel. */
+		invitedToJoin: "You are invited to join {org} as {role}.",
+		inviteExpired: "This invitation has expired. Ask the owner to send a new invite.",
+		membershipAlreadyActive: "This membership is already active. You can sign in now.",
+		setUpAccountHint: "Set up your account to accept. You can change the email if needed.",
+		/** Field label on the accept form. The value typed here is POSTED and stays as typed. */
+		name: "Name",
+		email: "Email",
+		phone: "Phone",
+		/** Qualifier rendered inside the Phone label in its own lighter span. Parentheses baked in because the Chinese ones are full-width. */
+		optional: "(optional)",
+		password: "Password",
+		confirmPassword: "Confirm password",
+		/** Client-side validation message shown above the submit button. */
+		enterYourName: "Enter your name",
+		enterYourEmail: "Enter your email",
+		/** Not profile.passwordsDoNotMatch, which says NEW passwords — this form has no current password. */
+		passwordsDoNotMatch: "Passwords do not match",
+		creatingAccount: "Creating account…",
+		createAccountAndJoin: "Create account & join",
+		/** /no-access heading in the WRONG-PORTAL case. {portal} arrives already translated from portalCodeLabel; the stored code stays in the URL. */
+		linkNeedsPortal: "This link needs the {portal} portal",
+		/** /no-access heading in the other case — an account with no web portal at all. */
+		noPortalTitle: "You cannot access this web portal",
+		/** Colon baked in; the signed-in email follows in code, emphasised. Same shape as webShell.privacyContact. */
+		signedInAs: "Signed in as:",
+		/** Stands in for the email when /auth/me has not answered yet. */
+		thisAccount: "this account",
+		wrongPortalBody: "This account does not have access to the {portal} portal. Your role has not changed — this browser is simply signed in to a different account.",
+		/** Colon baked in; the same-origin path follows in a mono span, verbatim. */
+		linkYouOpened: "Link you opened:",
+		wrongPortalHint: "Sign out and sign in with the {portal} account to open it. A link cannot carry a sign-in between browsers — if it could, anyone who received it would be signed in as you.",
+		noPortalBody: "Your account role does not have a web portal on InnocenZ yet. Please contact support if you believe this is a mistake.",
+		/** /no-access primary button in the wrong-portal case. */
+		signOutSwitchAccount: "Sign out and switch account",
+		/** Same button in the no-portal case — it also signs out, then lands on /login. */
+		backToLogin: "Back to login",
+	},
+	authPages: {
+		/** Field label over the email input on /login and /forgot-password. */
+		emailLabel: "Email address",
+		/** Client-side validation on both the sign-in zod schema and the forgot-password form. */
+		emailInvalid: "Please enter a valid email address",
+		/** Field label over the sign-in password input. */
+		passwordLabel: "Password",
+		/** Placeholder in the sign-in password input. */
+		passwordPlaceholder: "Enter your password",
+		/** Sign-in zod message for an empty password. Worded differently from passwordPlaceholder on purpose — one asks, the other refuses. */
+		passwordRequired: "Password is required",
+		/** Follows "© {year} InnocenZ." in code — the year and the gold wordmark are their own nodes, so only this clause is a string. Same shape as the landing dictionary's signup footer. */
+		rightsReserved: "All rights reserved.",
+		/** Link back to /login from the forgot-password footer. */
+		backToSignIn: "Back to sign in",
+		/** The pitch paragraph in the sign-in page's left column. */
+		loginAsideDescription: "The workforce operating platform for nightlife industry. Manage rosters, track shifts, and run payroll from one secure portal.",
+		/** First line of the /login h1. loginHeadingAccent finishes the sentence in the royal gradient, and it trails the phrase in both languages. */
+		loginHeadingLine1: "Sign in to your",
+		/** Second, gradient-filled line of the /login h1 — reads as one sentence with loginHeadingLine1. */
+		loginHeadingAccent: "portal",
+		/** Sub-line under the /login h1. */
+		loginSubheading: "Enter your credentials to continue.",
+		/** aria-label on the sign-in <form>. Announced, never displayed. */
+		loginFormLabel: "Sign in form",
+		/** Link beside the sign-in password label, carrying the typed email to /forgot-password. */
+		forgotPasswordLink: "Forgot password?",
+		/** The /login submit button at rest. */
+		signIn: "Sign in",
+		/** The /login submit button while the request is in flight. */
+		signingIn: "Signing in…",
+		/** Lead-in before the sign-up link at the foot of /login. */
+		needAccount: "Need an account?",
+		/** Link from /login to /signup. "PR" is the product's own term for the role and stays English in both. */
+		signUpCta: "Sign up as Outlet or PR Agency",
+		/** Lead-in before the support mailto at the foot of /login. */
+		needHelp: "Need help?",
+		/** The support mailto's link text. 客服支持 matches webShell.supportContact. */
+		contactSupport: "Contact support",
+		/** Sign-in banner when the request never reached a response at all. */
+		errorNetwork: "Internal server error.",
+		/** Sign-in banner when the server rejected the attempt without sending a message of its own. */
+		errorInvalidCredentials: "Invalid email or password. Please try again.",
+		/** Sign-in banner for a thrown value that is not an Error and not an axios failure. */
+		errorUnexpected: "An unexpected error occurred. Please try again.",
+		/** Rendered in place of the identical English sentence the backend sends. The backend's wording is the map KEY in login.tsx and stays untranslated — change this pair together if auth.controller's message changes. */
+		errorAccountNotRegistered: "This account is not registered yet.",
+		/** Display side of the backend's "This account is inactive." login refusal. See errorAccountNotRegistered. */
+		errorAccountInactive: "This account is inactive.",
+		/** Display side of the backend's "Wrong password" login refusal. See errorAccountNotRegistered. */
+		errorWrongPassword: "Wrong password",
+		/** First line of the /forgot-password h1; forgotHeadingAccent finishes it. */
+		forgotHeading: "Forgot your",
+		/** Gradient second line of the /forgot-password h1 — one sentence with forgotHeading. */
+		forgotHeadingAccent: "password?",
+		/** Sub-line under the /forgot-password h1. */
+		forgotSubheading: "Enter the email on your account and we'll send you a reset link.",
+		/** aria-label on the /forgot-password <form>. Announced, never displayed. */
+		forgotFormLabel: "Forgot password form",
+		/** The /forgot-password submit button at rest. */
+		sendResetLink: "Send reset link",
+		/** The /forgot-password submit button while the request is in flight. */
+		sending: "Sending…",
+		/** Last-resort banner when the throw carried no message at all — password-api normally supplies one via apiErrorCopy(). */
+		resetLinkSendFailed: "Could not send the reset link. Please try again.",
+		/** First line of the /forgot-password success h1; checkInboxAccent finishes it. */
+		checkInboxHeading: "Check your",
+		/** Gradient second line of the /forgot-password success h1 — one sentence with checkInboxHeading. */
+		checkInboxAccent: "inbox",
+		/** Sub-line after the request is accepted. Says IF on purpose — the endpoint answers identically whether or not the address exists, and this copy must not leak that. */
+		checkInboxSubheading: "If that email is registered, a reset link is on its way.",
+		/** Whole sentence with the address as a hole. forgot-password.tsx splits it at {email} so the address keeps its gold highlight — a prefix/suffix pair would force English word order. */
+		resetLinkSentTo: "We sent a password reset link to {email}.",
+		/** Fine print under the /forgot-password confirmation. */
+		resetLinkExpiryHint: "The link expires in 1 hour. If it does not arrive, check your spam folder — or make sure that address has an InnocenZ account.",
+		/** Ghost button that returns the /forgot-password confirmation to the form. */
+		useDifferentEmail: "Use a different email",
+		/** Lead-in before the back-to-sign-in link at the foot of /forgot-password. */
+		rememberedIt: "Remembered it?",
+		/** First line of the /reset-password h1; resetHeadingAccent finishes it (设置新 + 密码). */
+		resetHeading: "Choose a new",
+		/** Gradient second line of the /reset-password h1 — one sentence with resetHeading. */
+		resetHeadingAccent: "password",
+		/** Sub-line under the /reset-password h1. */
+		resetSubheading: "Pick something you have not used on this account before.",
+		/** aria-label on the /reset-password <form>. Announced, never displayed. */
+		resetFormLabel: "Reset password form",
+		/** The /reset-password submit button at rest. The in-flight label reuses common.saving. */
+		saveNewPassword: "Save new password",
+		/** {min} is MIN_PASSWORD_LENGTH, which mirrors the backend schema — filled in code so the number cannot drift from the constant. Chinese has no plural, so no "s" is appended anywhere. */
+		passwordMinLength: "New password must be at least {min} characters",
+		/** /reset-password confirmation mismatch. Kept separate from profile.passwordsDoNotMatch, whose English says "New passwords" — that sheet compares against a current password, this page does not. */
+		passwordsDoNotMatch: "Passwords do not match",
+		/** Last-resort banner when the throw carried no message — the server's own "Reset link is invalid or has expired." is shown verbatim when it arrives. */
+		resetFailed: "Could not reset your password. Please try again.",
+		/** First line of the h1 shown when /reset-password is opened with no token; linkIncompleteAccent finishes it. */
+		linkIncompleteHeading: "This link is",
+		/** Gradient second line — one sentence with linkIncompleteHeading (该链接 + 不完整). */
+		linkIncompleteAccent: "incomplete",
+		/** Sub-line for the tokenless /reset-password state. */
+		linkIncompleteSubheading: "The reset link is missing its token.",
+		/** Body copy for the tokenless /reset-password state. */
+		linkIncompleteHint: "Open the link straight from the email, or request a new one.",
+		/** Button back to /forgot-password from the tokenless state. */
+		requestNewLink: "Request a new link",
+		/** First line of the /reset-password success h1; passwordUpdatedAccent finishes it (密码 + 已更新). */
+		passwordUpdatedHeading: "Password",
+		/** Gradient second line — one sentence with passwordUpdatedHeading. */
+		passwordUpdatedAccent: "updated",
+		/** Sub-line under the /reset-password success h1. */
+		passwordUpdatedSubheading: "You can now sign in with your new password.",
+		/** Body copy on the /reset-password success state. */
+		resetLinkUsedUp: "The reset link has been used up and will not work again.",
+		/** Button to /login from the /reset-password success state. Distinct from backToSignIn, which is a "return" after an aborted attempt. */
+		goToSignIn: "Go to sign in",
+	},
 } as const;
 
 /**
@@ -3624,6 +5393,74 @@ const zh: PortalTranslations = {
 		kindPvDayReviewPending: "每日复核",
 		kindLeave: "病假 / 请假",
 		kindUnknown: "更新",
+		shiftAssignedTitle: "已派班",
+		shiftAssignedPrBody: "{outlet} —— 请在班次首页确认",
+		assignmentTitle: "派班 · {name}",
+		assignmentAgencyBody: "{outlet} 的班次 —— 等待 PR 确认",
+		shiftUpdatedTitle: "班次已更新",
+		rosterEditTitle: "排班调整 · {name}",
+		swapApprovedTitle: "换班已批准",
+		swapDeclinedTitle: "换班已拒绝",
+		swapPendingTitle: "换班待处理",
+		swapCoverageOfferTitle: "代班邀约",
+		swapUpdateTitle: "换班更新",
+		swapOfferSentTitle: "代班邀约已发出",
+		swapReplacementDeclinedTitle: "顶班人已拒绝代班",
+		aPr: "有位 PR",
+		swapOfferPrBody: "{name} 需要 {outlet} 的代班 —— 请在班次页接受或拒绝",
+		swapApprovedPrBody: "{outlet} —— 代班已确认",
+		swapReplacementDeclinedBody: "{name} 拒绝为 {other} 代班 · {outlet}",
+		swapOfferAgencyBody: "{name} 提出为 {other} 代班 · {outlet}",
+		checkedInBody: "{name} 已签到",
+		checkedInLateBody: "{name} 已签到（迟到）",
+		checkInConfirmedTitle: "签到已确认",
+		prOnFloorTitle: "PR 已在现场",
+		sosSentTitle: "紧急求助已发出",
+		sosNamedTitle: "紧急求助 · {name}",
+		sosAgencyBody: "经纪公司直属 · {outlet} —— {note}",
+		sosOutletBody: "值班经理警报 —— {note}",
+		pvReadyForReviewTitle: "薪资单待复核",
+		pvGeneratedTitle: "班次薪资单已生成",
+		pvPreSignedBody: "{id} · 净额 {amount} —— 财务主管已预先签署",
+		pvRaisedTitle: "薪资单已开立 · {name}",
+		pvPrSignedTitle: "PR 已签署 · {name}",
+		pvQueuedTransferBody: "{id} · {amount} —— 已排入周五转账",
+		paymentReceivedTitle: "已收到款项",
+		paymentInBankBody: "{id} · {amount} 已到账",
+		paidTitle: "已付款 · {name}",
+		paidTransferredBody: "{id} · {amount} 已转账",
+		disputeSubmittedTitle: "争议已提交",
+		disputeHeldBody: "{id} 已暂缓 —— 经纪公司正在与 {outlet} 核实",
+		disputeNamedTitle: "争议 · {name}",
+		disputeResolveWindowBody: "{id} · {outlet} —— 须在 7 天内解决",
+		disputePvNamedTitle: "薪资单争议 · {name}",
+		disputeVerifyBody: "{id} —— 经纪公司可能会联系您核实",
+		rateYourPrsTitle: "为 PR 评价",
+		ratePostSealBody: "{name} · {outlet} —— 封存后评价窗口",
+		reconciliationDueTitle: "对账到期",
+		reconciliationAgencyBody: "请核对今日数据与 {outlet} 的销售额",
+		reconciliationWeekTitle: "周末对账",
+		reconciliationOutletBody: "复核已封存总额与实时销售额",
+		paymentReminderTitle: "付款提醒 · {agency}",
+		collectionDueBody: "{outlet}：{amount} 于 {date} 到期 · {id}",
+		reportReadyTitle: "报表已就绪",
+		jobPostingRequestTitle: "职位发布请求",
+		agencyServiceBookingTitle: "经纪公司服务预订",
+		serviceForPrBody: "{name} 的 {service} —— 请接受或拒绝",
+		serviceOutletRequestedBody: "{outlet} 为您申请了 {service} —— 请接受或拒绝",
+		serviceAgencyBookedBody: "经纪公司在 {outlet} 为您预订了 {service} —— 请接受或拒绝",
+		serviceAtOutletBody: "{outlet} 的 {service} —— 请接受或拒绝",
+		outletServiceRequestTitle: "门店服务申请",
+		serviceConfirmedForBody: "{name} 的 {service} 已确认",
+		serviceAcceptedBody: "{service} 已接受",
+		serviceDeclinedBody: "{service} 已拒绝",
+		jobPostingUpdateTitle: "职位发布更新",
+		selfLogNamedTitle: "自行记录 · {name}",
+		selfLogVerifyBody: "{category} {amount} · {outlet} —— 请核实手动录入（{ref}）",
+		selfLogVerifiedTitle: "自行记录已核实",
+		selfLogRejectedTitle: "自行记录被驳回",
+		selfLogApprovedBody: "经纪公司已批准您的手动收据记录 · {amount}",
+		selfLogRejectedBody: "经纪公司已驳回您的手动收据记录 · {amount} —— 请联系经纪公司",
 	},
 	nav: {
 		today: "今天",
@@ -6640,6 +8477,1118 @@ const zh: PortalTranslations = {
 		toastPlanChangeDeclineFailed: "拒绝套餐变更失败",
 		toastRemarksUpdated: "备注已更新",
 		toastRemarksUpdateFailed: "更新备注失败",
+	},
+	agencySpecial: {
+		filterBookings: "筛选预约",
+		countOfTotal: "{n} / {total}",
+		dotsMarkBookingDays: "圆点表示当天有预约。",
+		service: "服务",
+		serviceType: "服务类型",
+		allServices: "全部服务",
+		allStatuses: "全部状态",
+		statusPendingAdmin: "待审核",
+		statusAccepted: "已接受",
+		statusRejected: "已驳回",
+		statusPendingAgency: "待经纪公司确认",
+		statusPendingPr: "待 PR 确认",
+		statusPendingOutlet: "待门店确认",
+		statusPendingBoth: "待 PR 与门店确认",
+		statusConfirmed: "已确认",
+		statusDeclined: "已拒绝",
+		statusPaid: "已付款",
+		newJob: "新建工作",
+		queuedJobs: "待提交工作",
+		jobCountOne: "{n} 个工作",
+		jobCountMany: "{n} 个工作",
+		addJob: "添加工作",
+		addAnotherJob: "再添加一个工作",
+		editJobN: "编辑工作 {n}",
+		postJobsForReview: "提交工作供管理员审核",
+		postJobCountOneForReview: "提交 {n} 个工作供管理员审核",
+		postJobCountManyForReview: "提交 {n} 个工作供管理员审核",
+		yourJobPostings: "你发布的工作",
+		chooseVenueForEveryJob: "提交前请为每个工作选择门店",
+		jobPostingSubmitted: "工作发布已提交管理员审核",
+		jobPostingSubmitFailed: "无法提交工作发布 —— 请重试",
+	},
+	agencyGps: {
+		noActivePrs: "没有可追踪的在岗 PR",
+		locationsWhenOnDuty: "当天有 PR 在岗时，这里会显示他们的位置。",
+		outletsWithinFenceOne: "{n} 家门店 · 围栏内 {inRange}/{total}",
+		outletsWithinFenceMany: "{n} 家门店 · 围栏内 {inRange}/{total}",
+		noGpsRecorded: "未记录 GPS 位置",
+		estimated: "估算位置",
+		fallback: "备用定位",
+		zoomIn: "放大",
+		zoomOut: "缩小",
+		resetZoom: "重置缩放",
+		clickToZoom: "点击放大",
+		layerMap: "地图",
+		dragMapHint: "拖动地图 · 点选图钉或列表行",
+		mapAttribution: "地图 © OpenStreetMap · CARTO",
+	},
+	agencyBroadcast: {
+		titleOne: "群发给 1 位 PR",
+		titleMany: "群发给 {n} 位 PR",
+		hint: "将一条自由文本通知发送到他们的 InnocenZ 收件箱。这条通知无需 PR 确认 —— 如果需要对方回复，请发布班次。",
+		recipientsHeading: "收件人",
+		plusNMore: "另有 {n} 位",
+		subjectLabel: "主题 *",
+		messageLabel: "消息内容 *",
+		subjectPlaceholder: "例如：排班提醒",
+		bodyPlaceholder: "发给所选 PR 的消息…",
+		sendMessage: "发送消息",
+		enterSubject: "请填写主题",
+		enterMessage: "请填写消息内容",
+		completeBeforeSending: "发送前请填写主题和消息内容。",
+		couldNotSend: "发送失败 —— 请重试",
+		noActiveAgency: "未选定经纪公司 —— 请重新登录后重试",
+		sentToOne: "消息已发送给 1 位 PR",
+		sentToMany: "消息已发送给 {n} 位 PR",
+		backfillNeeded: "需要补位",
+		backfillOpenSlotOne: "1 个空缺岗位",
+		backfillOpenSlotMany: "{n} 个空缺岗位",
+		backfillSlotLine: "{slot} · 已配 {staffed}/{quantity} 人 · {reason} —— {name}",
+		backfillReasonLeaveApproved: "请假已批准",
+		backfillReasonCancelled: "已取消",
+		backfillEyebrow: "补位 · {date}",
+		backfillMatching: "正在匹配空闲 PR…",
+		backfillNoneFree: "当晚没有空闲 PR —— 所有在职 PR 在 {date} 都已有排班。",
+		backfillFreeThatNight: "当晚空闲 · {n} 位",
+		backfillTierWorkedHere: "{tier} · 曾在此门店工作 {n} 次",
+		backfillTierNewToOutlet: "{tier} · 首次来此门店",
+	},
+	agencyPvReview: {
+		dayReview: "每日复核",
+		held: "已暂缓",
+		notReviewed: "未审核",
+		viaApproveAll: "批量批准",
+		statusOpen: "待审核",
+		statusChanged: "已变动",
+		staleWithApproved: "此日在审核后发生变动 — 当时按 {approved} 通过，现为 {now}。此前的决定已失效，请重新审核。",
+		staleWithoutApproved: "此日在审核后发生变动 — 现为 {now}。此前的决定已失效，请重新审核。",
+		noteLabel: "备注：",
+		holdNotePlaceholder: "为什么暂缓这一天？（选填，但 PR 看不到原因就会来追问）",
+		holdAction: "暂缓",
+		confirmHold: "确认暂缓",
+		clearDecision: "清除",
+		loadingDays: "正在加载本周各日…",
+		noDatedLines: "此付款单没有带日期的明细，因此没有需要复核的日期。可以直接发送。",
+		approveEachDayHint: "在把此付款单发送给 PR 之前，请逐日批准。只要有一天被暂缓，发送就会被拦截（包括周一的自动付款任务），直到该日被批准或清除决定为止。",
+		approvingDayApprovesReceipts: "批准某一天，也就同时批准了该日的收据。跨两天的收据要等两天都获批才算通过。",
+		everyDayDecided: "每一天都已有决定 — 此付款单可以发送。",
+		notReadyToSend: "尚不能发送：{reason}。",
+		staleDaysNeedAnotherLook: "有 {n} 天在审核后发生变动，需要重新查看。",
+		approveRemainingDays: "批准剩余的 {n} 天",
+		readOnlyDays: "您的经纪公司角色可以查看这些决定，但无权作出决定 — 每日复核由东主和财务批准。",
+		toastDayApproved: "该日已批准",
+		toastDayHeld: "该日已暂缓 — 在清除该决定之前，此付款单无法发送",
+		toastDecisionCleared: "决定已清除",
+		couldNotApproveRemaining: "无法批准剩余的日期",
+		orderNoValue: "订单号 {no}",
+		lineCountOne: "{n} 项明细",
+		lineCountMany: "{n} 项明细",
+		proofPhotoCountOne: "{n} 张凭证照片",
+		proofPhotoCountMany: "{n} 张凭证照片",
+		beforeReviewExisted: "早于本审核功能上线",
+		receiptScanLabel: "{no} 扫描件",
+		prSignedLocked: "PR 已签署此付款单 — 单上的收据不能再批准或修改。",
+		withdrawApproval: "撤回批准",
+		unbackedCommissionOne: "{n} 条提成明细没有收据",
+		unbackedCommissionMany: "{n} 条提成明细没有收据",
+		selfDeclaredWarning: "{amount} 为自行申报，没有任何凭证可供核对。开具前请与门店确认。",
+		everyCommissionBacked: "此付款单上的每一条提成明细都有收据支持。",
+		unclassifiedExplainer: "未分类的明细产生于款项类别功能之前 — 它们计入总额，但无法按款项类别提出争议。",
+		pendingWaitingOnYou: "{n} 张待您处理",
+		pendingReceiptsBlockSend: "在这些收据全部获批之前，此付款单无法发送 — 在您批准之前，PR 也无法对其背后的金额提出争议。",
+		readOnlyReceipts: "您的经纪公司角色可以查看这些收据，但无权批准 — 收据由东主和财务审核。",
+	},
+	agencyPanels: {
+		shiftEnd: "班次结束",
+		duration: "时长",
+		stillOnDuty: "仍在值班",
+		otSuffix: " · 加班 +{n} 分钟",
+		dateTimeRange: "日期与时间范围",
+		fromDate: "起始日期",
+		toDate: "结束日期",
+		fromTime: "起始时间",
+		toTime: "结束时间",
+		clearRange: "清除范围",
+		rangeHint: "按付款单与发票的开具日期筛选 · 收据扫描件若有扫描时间，则按扫描时间筛选。",
+		syncedReadOnly: "{hint} · 只读",
+		outletTierRatesReadOnly: "门店等级费率 · 经纪公司端只读",
+		drinkPricesSynced: "酒水价格 · 已从门店同步",
+		payAndTiers: "薪酬与等级",
+		languagesLine: "语言 · {langs}",
+	},
+	agencyReceipts: {
+		correctingReceipt: "正在更正 {receiptNo}",
+		itemCountOne: "{n} 个项目",
+		itemCountMany: "{n} 个项目",
+		savingReopensHint: "保存后此收据会重新回到待处理状态；任何金额改动都会使当天的批准失效。",
+		whatThatMeans: "这是什么意思",
+		editCostExplainer: "已批准的收据会退回到待您处理。数量、提成、新增明细或更改日期都会改动金额，因此该日期必须重新批准后才能发送付款单。仅更正订单号不涉及金额 — 只有收据会重新打开。",
+		items: "项目明细",
+		unsavedCount: "{n} 项未保存",
+		noLinesYet: "此收据尚未记录任何明细 — 请在下方添加单据上显示的酒水或小费。",
+		colItem: "项目",
+		colQty: "数量",
+		colCommission: "提成",
+		undo: "撤销",
+		commissionIsPrCut: "提成是 PR 的分成，不是单据上打印的售价。",
+		paperShowsMissingItem: "单据上有此清单缺少的项目",
+		addMissingLine: "添加遗漏的明细",
+		category: "类别",
+		add: "添加",
+		itemFromOutletList: "来自 {outlet} 清单的项目",
+		theOutlet: "该门店",
+		thisOutlet: "该门店",
+		loadingOutletList: "正在加载门店清单…",
+		nothingToPick: "无可选项目",
+		pickItemOffPaper: "请选择单据上的项目…",
+		outletPriceLabel: "门店价",
+		quantity: "数量",
+		commissionInRm: "提成金额（RM）",
+		noListConfigured: "{outlet}尚未配置{list}，因此无法核实明细 — 请先请门店完成设置。",
+		drinksList: "酒水清单",
+		serviceEntitlementList: "服务项目清单",
+		outletListUnavailable: "门店清单不可用，因此无法核实明细。",
+		outletPriceVsCommission: "每个项目旁的 RM 是{outlet}的售价，用于与单据核对。您填写的是 PR 的提成 — 那是另一个数字，由您填写。",
+		lockedKindHint: "这是一张{kind}收据，因此在此添加的明细也属于{kind} — 一张单据只对应一种类别。",
+		drinksAndTipsOnly: "仅限酒水与小费 — 工资和加班来自签到与签退记录，以考勤记录为准。",
+		theReceiptItself: "收据本身",
+		orderNoOnPaper: "单据上的订单号",
+		egOrderNo: "例如 ORD1111",
+		receiptDate: "收据日期",
+		timePrinted: "单据打印时间",
+		saveReceipt: "保存收据",
+		orderDateSaveHint: "清空订单号即删除该订单号。更改日期会把此收据的金额移到该日期 — 移出日和移入日都需要重新批准，且日期必须落在此付款单所属的周内。",
+		quantityRange: "数量必须是 1 至 999 之间的整数。",
+		commissionMinLeaveFilled: "提成必须为 0.00 或以上 — 请勿留空。",
+		commissionMin: "提成必须为 0.00 或以上。",
+		nothingChangedOn: "「{item}」没有任何改动。",
+		orderDateTimeUnchanged: "订单号、日期和时间均未改动。",
+		linesMovedOne: "{n} 条明细已移至 {date}",
+		linesMovedMany: "{n} 条明细已移至 {date}",
+		pickFromOutletList: "请从门店清单中选择项目 — 明细必须对应该门店实际销售的商品。",
+		quantityForItem: "{item} 的数量",
+		commissionRmForItem: "{item} 的提成金额（RM）",
+		orderNoInline: "订单号 {no}",
+		loggedAt: "记录于 {when}",
+		printedAt: "打印于 {time}",
+		photoCountOne: "{n} 张照片",
+		photoCountMany: "{n} 张照片",
+		noPhoto: "无照片",
+		disputingOne: "PR 正在对此收据提出争议",
+		disputingMany: "PR 对此收据提出了 {n} 项未解决的申诉",
+		correctThenSettleHint: "如果 PR 的说法属实，请在此更正金额，然后到「争议」中接受或驳回该申诉 — 仅修改金额并不会结案。",
+		noLineItemsOnReceipt: "此收据没有任何明细 — 不会计入付款单。",
+		receiptScanLabel: "{receiptNo} 扫描件",
+		beforeThisReviewExisted: "早于本审核功能上线",
+		withdrawApproval: "撤回批准",
+		openPv: "打开付款单",
+		prSignedNoCorrections: "PR 已签署此付款单 — 其金额不能再更正。",
+		toastApproved: "{receiptNo} 已批准",
+		toastBackToPending: "{receiptNo} 已退回待处理",
+		couldNotLoadReceipts: "无法加载收据。请确认后端服务已启动后重新加载。",
+		awaitingApprovalOne: "{n} 张收据待您批准",
+		awaitingApprovalMany: "{n} 张收据待您批准",
+		ofThemDisputed: "其中 {n} 张有争议",
+		voucherBlockedHint: "只要还有收据处于待处理状态，付款单就无法发送 — 在您做出决定前，PR 也无法对相关金额提出争议。",
+		receiptCountOne: "{n} 张收据",
+		receiptCountMany: "{n} 张收据",
+		offWeekOne: "另有 {n} 张收据属于其他结算周 — 请切换上方的周标签查看。",
+		offWeekMany: "另有 {n} 张收据属于其他结算周 — 请切换上方的周标签查看。",
+		roleCannotApprove: "您的经纪公司角色可以查看这些收据，但无权批准 — 收据由负责人和财务审核。",
+	},
+	agencyRoster: {
+		viewBreakdownAria: "查看{label}明细",
+		hintIdentifyPrs: "可识别 PR 身份",
+		hintAmounts: "{drinks}、{tips}或{payout}",
+		hintForBreakdown: "可查看该班次明细",
+		checkedInAtTime: "签到 {time}",
+		prSwapAwaitingAgency: "PR 申请换店至 {outlet} —— 待你审批",
+		nickname: "花名",
+		icNo: "身份证号",
+		phone: "手机号",
+		prNameField: "PR 姓名",
+		couldNotAddPr: "添加 PR 失败，请重试。",
+		drinksBreakdown: "酒水明细",
+		tipsBreakdown: "小费明细",
+		estPayoutBreakdown: "预计支出明细",
+		noDrinkSalesThisShift: "该班次尚未记录酒水销售。",
+		noTipsThisShift: "该班次尚未记录小费。",
+		floorDrinksTotal: "现场酒水 {amount}",
+		chooseWeek: "选择周次",
+	},
+	agencyQueues: {
+		disputesTitle: "争议",
+		disputesTitleOpen: "争议（{n} 项未解决）",
+		shiftNotLinked: "对应班次 · 未关联 —— 此争议未指明收据，或该收据没有班次记录。",
+		claimCoversWholeDayMany: "此申诉涵盖全天 — 共 {n} 个班次",
+		noReceiptBehindWagesOt: "此项没有对应收据 —— 日薪与加班按签到、签退时间计算，应更正的是班次记录。",
+		noReceiptForDayBucket: "未找到该日期、该款项类别的收据。可能在争议提出后已被删除。",
+		receiptBehindFigureOne: "该金额对应的收据 —— 若 PR 有理，可在此更正。",
+		receiptBehindFigureMany: "该金额对应的 {n} 张收据 —— 若 PR 有理，可在此更正。",
+		theScannedReceipt: "收据扫描件",
+		theScannedReceiptPrinted: "收据扫描件 · 打印时间 {time}",
+		receiptScanAlt: "{no} 扫描件",
+		noPhotoSelfLogged: "此收据没有照片 —— 由 PR 自行填报且未附照片。",
+		signedCannotCorrect: "PR 已签署此付款单 —— 单上的金额无法再更正。",
+		roleCannotCorrectReceipt: "你的角色可以查看此收据，但无法更正 —— 只有负责人与财务可编辑收据。",
+		weekFromTo: "{from} – {to} 那一周",
+		rejected: "已驳回",
+		prAttachedOne: "PR 上传的凭证 · {n} 张图片",
+		prAttachedMany: "PR 上传的凭证 · {n} 张图片",
+		scopeResolved: "已解决",
+		openDisputesElsewhereOne: "另有 {n} 项未解决的争议属于其他周 —— 请在上方切换周次处理。",
+		openDisputesElsewhereMany: "另有 {n} 项未解决的争议属于其他周 —— 请在上方切换周次处理。",
+		nothingMatchesAny: "所有争议中都没有与“{q}”匹配的内容。",
+		nothingMatchesOpen: "未解决的争议中没有与“{q}”匹配的内容。",
+		nothingMatchesResolved: "已解决的争议中没有与“{q}”匹配的内容。",
+		nothingWaitingOne: "暂无待你处理的争议 —— 已处理 {n} 项。切换到「已解决」即可查看。",
+		nothingWaitingMany: "暂无待你处理的争议 —— 已处理 {n} 项。切换到「已解决」即可查看。",
+		noneSettledYet: "尚未处理任何争议。",
+		acceptingRecordsDecision: "接受会记录该决定并通知 PR，但本身不会改动金额 —— 若 PR 有理，请先在下方更正收据，再接受。",
+		disputeAccepted: "已接受争议",
+		disputeRejected: "已驳回争议",
+		overtimeTitleCount: "加班（{n}）",
+		holdingPayroll: "暂扣薪资周",
+		overtimeHoldsWeek: "加班计入实际工作那一周的付款单，因此在此申请处理前，{week} 起的那一周无法发送。",
+		overtimeHoldsItsWeek: "加班计入实际工作那一周的付款单，因此在此申请处理前，其所属周次无法发送。",
+		durationHoursMinutes: "{h} 小时 {m} 分",
+		durationHours: "{h} 小时",
+		durationMinutes: "{m} 分钟",
+		confirmPayAmount: "确认 · 支付 {amount}",
+		approveAddsToVoucher: "{amount} 将加入 {name} 的付款单。此操作无法撤销。",
+		thePr: "该 PR",
+		onlyOwnerFinanceDecideOvertime: "只有经纪公司负责人或财务可以审批加班。",
+		overtimeElsewhereOne: "另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
+		overtimeElsewhereMany: "另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
+		overtimeQueueHint: "每项申请在处理前都会暂扣其所属的薪资周。所示金额即批准后写入付款单的金额。",
+		cancellationFeeOnVoucherOne: "此付款单上的取消费用",
+		cancellationFeeOnVoucherMany: "此付款单上的取消费用",
+		waiveBeforeSendHint: "PR 取消班次时已自动收取。发送付款单前可豁免，将其从单上移除。",
+		voucherSentCannotWaive: "此付款单已发送，这些费用无法再移除。请改在下周的付款单上退还给 PR。",
+		waiveThisCharge: "豁免此项收费",
+		whyWaiving: "豁免原因？（选填）",
+		waiveReasonPlaceholder: "例如：住院，或我们自己临时取消了该班次",
+		keepTheCharge: "保留收费",
+		waive: "豁免",
+		waiving: "豁免中…",
+		couldNotWaive: "豁免失败，请稍后再试。",
+		couldNotLoadUncharged: "无法加载未入账费用 —— 未入账费用接口请求失败。",
+		cancelledShift: "已取消的班次",
+		feePctOfWage: "日薪 {wage} 的 {pct}%",
+		cancelledAfterStart: "开工后取消",
+		noticeHours: "提前 {n} 小时通知",
+		notYetBilledOutstanding: "{n} 项尚未入账 · 未收 {amount}",
+		weeklyPlusCancellations: "（每周罚款 {weekly} + 取消费用 {cancellations}）",
+		addBeforeSendingPv: "请在发送付款单前加入这些费用",
+		selectedTotal: "已选 {n} 项 · {amount}",
+	},
+	izUi: {
+		tapToChooseTime: "点击选择时间",
+		pickDateFirst: "请先选择日期",
+		chooseTime: "选择时间",
+		clearTime: "清除时间",
+		otherLanguage: "其他语言",
+		add: "添加",
+		cardNotChargedYet: "InnocenZ 仅记录此卡；实际扣款需要支付网关，目前尚未接入。",
+	},
+	prMedia: {
+		manualEntryBanner: "— 手动录入 —",
+		ocrExtractedBanner: "— OCR 识别 —",
+		receiptIdLabel: "收据编号：",
+		outletLabel: "门店：",
+		prIdLabel: "PR 编号：",
+		totalLoggedLabel: "记录总额：",
+		commissionPvCalc: "提成（付款单计算）",
+		colRule: "规则",
+		colCalc: "计算",
+		drinkUnitsCalc: "{n} 件 × {rate}",
+		tipRuleCalc: "已记录小费的 100%",
+		totalCommission: "提成合计",
+		menuHint: "菜单共 {n} 款酒水 · 逐项点击 +/− 记录售出数量",
+		eachPrice: "单价 {price}",
+		decreaseNamed: "减少 {name}",
+		increaseNamed: "增加 {name}",
+		drinkCountOne: "{n} 款酒水",
+		drinkCountMany: "{n} 款酒水",
+		commissionPreview: "提成预估：",
+		pickAtLeastOneDrink: "至少为一款酒水填写数量才能提交",
+		noteForAgency: "给经纪公司的备注（选填）",
+		notePlaceholder: "收据被水浸湿 / OCR 无法识别",
+		chooseImageFile: "请选择图片文件",
+		imageTooLarge: "图片必须小于 5 MB",
+		photoNamed: "作品集照片 {n}",
+		addPhotoNamed: "添加作品集照片 {n}",
+		removePhoto: "删除照片",
+		prComcardAlt: "PR 模卡",
+		noComcardYet: "尚未有模卡",
+	},
+	izPv: {
+		payee: "收款人",
+		payeeCode: "编号",
+		icPassport: "身份证 / 护照",
+		phone: "电话",
+		week: "周次",
+		dueSignBy: "签署截止",
+		weekTotal: "本周合计",
+		breakdown: "明细",
+		breakdownWagesComm: "工资 {wages} · 提成 {comm}",
+		shift: "班次",
+		timeIn: "签到时间",
+		timeOut: "签退时间",
+		receiptsThisWeek: "本周 {n} 张",
+		receiptsOnThisShift: "本班次 {n} 张",
+		financeHead: "财务主管",
+		prSigned: "PR 已签署",
+		bankRef: "银行流水号",
+		paymentTo: "付款至",
+		description: "描述",
+		ref: "参考编号",
+		amount: "金额",
+		weeklyNote: "本周合计 {total} · {days} · 付款单开具于 {day}（周日）",
+		verifiedDayOne: "{n} 天已核实",
+		verifiedDayMany: "{n} 天已核实",
+		month: "月份",
+		year: "年份",
+		chooseMonth: "选择月份",
+		chooseYear: "选择年份",
+		monthJanuary: "一月",
+		monthFebruary: "二月",
+		monthMarch: "三月",
+		monthApril: "四月",
+		monthMay: "五月",
+		monthJune: "六月",
+		monthJuly: "七月",
+		monthAugust: "八月",
+		monthSeptember: "九月",
+		monthOctober: "十月",
+		monthNovember: "十一月",
+		monthDecember: "十二月",
+		anyDate: "任意日期",
+		tapToChooseDate: "点击选择日期",
+		fromTime: "起始时间",
+		toTime: "结束时间",
+		pickDateFirstHint: "请先选择日期，才能按当班日内的时间进一步筛选。",
+		selectDateAboveHint: "请先在上方选择日期 —— 然后点击起始/结束时间打开时钟。",
+		matchedByTimeInOrReceipt: "按 {date} 的班次签到时间或收据扫描时间匹配。",
+		tapFromOrToTimeHint: "点击「起始时间」或「结束时间」即可打开时钟选择器。",
+		hoursShift: "{n} 小时班次",
+		prBreakdown: "PR 明细",
+		prBreakdownBy: "PR 明细 · {agency}",
+		shiftsAtVenueForPr: "{name} 在 {venue} 的 {shifts}",
+	},
+	portalUi: {
+		toggleSidebar: "切换侧栏",
+		sidebar: "侧栏",
+		sidebarSrHint: "显示移动端侧栏。",
+		pagination: "分页",
+		previous: "上一页",
+		next: "下一页",
+		goToPreviousPage: "转到上一页",
+		goToNextPage: "转到下一页",
+		morePages: "更多页",
+		carousel: "轮播",
+		carouselRole: "轮播",
+		slideRole: "幻灯片",
+		previousSlide: "上一张",
+		nextSlide: "下一张",
+		showPassword: "显示密码",
+		hidePassword: "隐藏密码",
+		oneTimePassword: "一次性验证码",
+		verifyOtp: "验证",
+		resendOtp: "重新发送验证码",
+		noEmail: "无邮箱",
+		rolesLoadFailedAgency: "无法加载经纪公司端角色 —— 使用默认值。",
+		rolesLoadFailedOutlet: "无法加载门店端角色 —— 使用默认值。",
+		inviteSavedNoEmail: "给 {email} 的邀请已保存，但邮件未发出。请把此链接发给对方 —— 链接 7 天后失效：",
+		portalNameOutlet: "门店",
+		portalNameAgency: "PR 经纪公司",
+		portalSuffixed: "{portal}端",
+		signInTo: "登录",
+		portalTaglineOutlet: "在一个桌面端安排今晚人手、记录销售、结束班次。",
+		portalTaglineAgency: "在一个桌面端排 PR 班表、满足门店用人需求、同步薪资。",
+	},
+	portalShell: {
+		statusOut: "未在岗",
+		pillOnDuty: "在岗",
+		pillEnRoute: "在途",
+		pillBooked: "已预订",
+		pillReleased: "已签退",
+		pillOut: "未在岗",
+		tapDrinksOrTipsHint: "点击{drinks}或{tips}查看该班次明细。",
+		prRosterTonight: "今晚 PR 排班",
+		onFloorAndBooked: "{onFloor} 人在场 · {booked} 人已预订",
+		noPrsBookedYet: "尚未预订任何 PR。",
+		adminNotifications: "管理员通知",
+		adminNotificationsHint: "面向 InnocenZ 管理员的门店申请与运营提醒",
+		adminKindPosIntegration: "POS 系统对接",
+		adminKindAlert: "管理员提醒",
+		suspendedTitle: "已暂停。",
+		suspendedBody: "你的{kind}权限目前仅限于此资料页。请联系 InnocenZ 恢复完整门户功能。",
+		pendingReviewTitle: "待审核。",
+		pendingReviewBody: "你的{kind}正在等待 InnocenZ 管理员审批。你可以在此更新资料 —— 其他门户功能将在审批通过后开放。",
+		outletNoun: "门店",
+		agencyNoun: "经纪公司",
+		editingWhat: "正在编辑 {what}",
+		postcodeExample: "例如 50450",
+	},
+	ssPortal: {
+		offerLeaveAgency: "离开经纪公司",
+		othersNamed: "其他 - {name}",
+		offerTransportationSummary: "班次接送、深夜返程与门店转场",
+		offerDeliverySummary: "将服装、鞋子、道具与物资送到场地",
+		offerWardrobeSummary: "礼服租借、着装要求采购与造型协调",
+		offerMakeupSummary: "VIP 或发布活动前的专业妆容",
+		offerVipEscortSummary: "高端桌台接待与重要客户陪同",
+		offerUniformSummary: "制服处理、工牌打印与合规文件",
+		offerEmergencyCoverSummary: "临时替补 PR 的寻找与派遣",
+		offerTrainingSummary: "等级晋升、辅导课程与认证费用",
+		offerOthersSummary: "自定义服务 —— 请在下方说明你的需求",
+		offerLeaveAgencySummary: "未满一年提前离开，须提交支持工单",
+		hintTransportation: "接送地点与目的地",
+		hintDelivery: "配送物品与配送地址",
+		hintWardrobe: "所需服装或物品、尺码与场合",
+		hintMakeup: "活动、开始时间与所需妆容",
+		hintVipEscort: "客户或桌台、场地与陪同时长",
+		hintUniform: "制服或文件类型与数量",
+		hintEmergencyCover: "门店、班次时间与所需 PR 人数",
+		hintTraining: "PR 姓名与培训主题或目标等级",
+		hintOthers: "自定义服务的详细说明",
+		hintLeaveAgency: "原因与预计最后工作日期",
+		statusPendingAdmin: "待管理员审核",
+		statusAccepted: "已接受",
+		statusRejected: "已拒绝",
+		statusPendingAgency: "待经纪公司处理",
+		statusAwaitingPr: "待 PR 处理",
+		statusAwaitingOutlet: "待门店处理",
+		statusAwaitingBoth: "待 PR 与门店处理",
+		statusConfirmed: "已确认",
+		statusDeclined: "已婉拒",
+		statusPaid: "已支付",
+		accept: "接受",
+		out: "支出",
+		inAmount: "收入 {amount}",
+		orderMoneyLine: "收入 {inAmt} · 支出 {outAmt} · 由 {who} 提出",
+		orderMoneyPendingLine: "收入 {inAmt} · 成本待管理员确定 · 由 {who} 提出",
+		supportTicketRaisedBy: "支持工单 · 由 {who} 提出",
+		acceptedAt: "已接受 {when}",
+		agencyApprovedAt: "经纪公司已批准 {when}",
+		tbc: "待定",
+		support: "支持",
+		serviceRequestTitle: "服务申请",
+		bookAgencyService: "代订经纪公司服务",
+		orderAgencyService: "申请经纪公司服务",
+		leaveHint: "与经纪公司签约未满一年，提前离开须提交支持工单。",
+		agencyBookHint: "代 PR 或门店预订 —— 系统会通知对方接受或婉拒。",
+		outletOrderHint: "向经纪公司申请附加服务 —— 交通接送、配送、服装等。",
+		prOrderHint: "申请附加服务 —— 管理员将审核并确认。",
+		service: "服务",
+		amountOutRm: "支出金额（RM）",
+		defaultAmount: "默认 {amount}",
+		amountInRm: "收入金额（RM） · 门店回收",
+		amountInPlaceholder: "若由经纪公司承担则填 0",
+		serviceTime: "服务时间",
+		reason: "原因",
+		notes: "备注",
+		reasonPlaceholder: "提前离开的原因…",
+		notesPlaceholder: "接送地址、配送物品、门店联系人…",
+		enterReasonForEarlyLeave: "请填写提前离开的原因",
+		bookingsNeedResponseOne: "{n} 条预约等待你回复",
+		bookingsNeedResponseMany: "{n} 条预约等待你回复",
+		outletBanner: "为你的场地申请经纪公司附加服务 —— 配送、紧急替班、造型等。",
+		prBannerWithLeave: "可申请交通接送、妆发、服装等服务 —— 如需离开经纪公司，请在「服务」中选择「离开经纪公司」。",
+		prBanner: "为你的班次申请交通接送、妆发、服装等服务。",
+		leaveTicketSubmitted: "离职工单已于 {when} 提交",
+		transferRequestSubmitted: "转会申请已于 {when} 提交",
+		orderService: "申请服务",
+		yourServiceOrders: "你的服务订单",
+		recordCountOne: "{n} 条记录",
+		recordCountMany: "{n} 条记录",
+		noServiceOrders: "暂无服务订单",
+		raiseSupportTicket: "提交支持工单",
+		submitToAdmin: "提交给管理员",
+		budget: "预算",
+		budgetRm: "预算（RM）",
+		remark: "备注",
+		cost: "成本",
+		removeJob: "移除工作",
+		editJob: "编辑工作",
+		enterAmount: "输入金额",
+		selectVenue: "选择场地…",
+		loadingVenues: "正在加载你的场地…",
+		venuesLoadFailed: "无法加载你的场地 —— 请刷新页面后重试。",
+		noLinkedVenues: "尚未关联场地 —— 请先关联门店再发布工作。",
+		serviceType: "服务类型",
+		nameYourService: "为你的服务命名",
+		customServiceName: "自定义服务名称",
+		queued: "排队中",
+		noJobPostingsMatch: "没有符合此筛选条件的工作发布",
+	},
+	outletPanels: {
+		hoursCount: "{n} 小时",
+		tipsAmount: "小费 {amount}",
+		pvEstimate: "薪资单预估 {amount}",
+		baseTier: "基准",
+		weekRangeTargets: "本周区间 · {range}",
+		noLiveShiftTonight: "今晚没有进行中的班次 —— 请到日历页面查看即将到来的活动。",
+		noShiftsYet: "还没有班次 —— 请用「发布职位」创建。",
+		suppliedOfDemandPrs: "PR {supplied}/{demand}",
+		salesAmount: "销售额 {amount}",
+		savedPill: "已省 {amount}",
+		awaitingAgencyRequest: "等待经纪公司 · {title} · 预计省 {amount}",
+		alreadyApplied: "已生效 · {detail}",
+		bestEffortIntro: "针对 {event} 优化 —— 在当前时间（{clock}）提前放行 PR。她们按实际工时结算工资并保留抽成；未使用工资的 {pct}% 计为预计节省。若经纪公司未另行派班，她们将直接下班回家。",
+		bestEffortSaveLine: "约省 {amount}（未使用工资 {unused} 的 {pct}%）",
+		releaseNamesEarly: "提前放行 {names}",
+		demandPrNeeded: "需求 · 需要 {n} 位 PR",
+		suppliedOfDemand: "已配置 {supplied}/{demand}",
+		slotsPosted: "已发布 {n} 个名额",
+		prsOnShiftBooked: "当班 PR · 已预订 {n} 位",
+		noPrsBookedYet: "尚未预订 PR —— {detail}",
+		openForApplications: "开放申请中",
+		applicantsCount: "申请人 · {n}",
+		commissionDrinksAndTips: "+ 酒水与小费",
+		commissionDrinksOnly: "+ 酒水",
+		commissionTipsOnly: "+ 小费",
+		editNamed: "编辑 {name}",
+		couldNotSaveTemplate: "保存失败",
+		couldNotDeleteTemplate: "删除失败",
+		hoursShift: "{n} 小时班次",
+		shiftsAtVenueOne: "在 {outlet} 的 {n} 个班次 · {pr}",
+		shiftsAtVenueMany: "在 {outlet} 的 {n} 个班次 · {pr}",
+		span3Days: "3 天",
+		span1Week: "1 周",
+		bookingsNeedResponseOne: "有 {n} 个预订等待你回应",
+		bookingsNeedResponseMany: "有 {n} 个预订等待你回应",
+		newJob: "新工作",
+		editJobN: "编辑第 {n} 项工作",
+		addJob: "添加工作",
+		addAnotherJob: "再添加一项工作",
+		queuedJobs: "待提交的工作",
+		jobCountOne: "{n} 项工作",
+		jobCountMany: "{n} 项工作",
+		postJobsForReviewEmpty: "提交工作供管理员审核",
+		postJobsForReviewOne: "提交 {n} 项工作供管理员审核",
+		postJobsForReviewMany: "提交 {n} 项工作供管理员审核",
+		yourJobPostings: "你发布的工作",
+		countOfTotal: "{n} / 共 {total}",
+		noServiceOrdersMatch: "没有符合此筛选条件的增值服务订单",
+		serviceOrderSubmitted: "增值服务订单已提交管理员审核",
+		couldNotSubmitServiceOrder: "增值服务订单提交失败 —— 请重试",
+	},
+	prPortal: {
+		cancellationRules: "取消班次规则",
+		month: "月份",
+		year: "年份",
+		chooseMonth: "选择月份",
+		chooseYear: "选择年份",
+		monthJanuary: "1月",
+		monthFebruary: "2月",
+		monthMarch: "3月",
+		monthApril: "4月",
+		monthMay: "5月",
+		monthJune: "6月",
+		monthJuly: "7月",
+		monthAugust: "8月",
+		monthSeptember: "9月",
+		monthOctober: "10月",
+		monthNovember: "11月",
+		monthDecember: "12月",
+		legendAvailable: "可接班",
+		legendScheduled: "已排班",
+		legendPending: "待确认",
+		legendNotAvailable: "不可接班",
+		tapDayToBlockHint: "点击可接班的日期即可标记为不可接班 · 再次点击可恢复",
+		timetableForWeek: "班表 · {week}",
+		noShiftsThisWeek: "本周暂无班次",
+		deductionLoggedAt: "已记录扣款 −{amount} · {at}",
+		cancelShift: "取消班次",
+		cancelAndAcceptDeduction: "取消并接受扣款 −{amount}",
+		assignedByAgencyNote: "班次只由你的经纪公司安排 —— 门店可以指名要你，但每一次派班都由经纪公司确认。取消会通知你的经纪公司。",
+		reasonRequired: "原因（必填）",
+		cancelReasonPlaceholder: "说明你无法出勤的原因",
+		bandAnyTimeLabel: "班次开始前任意时间",
+		bandAnyTimeOutcome: "免费取消 —— 你的经纪公司不收取消费用",
+		bandFreeLabel: "班次开始前 {free} 小时以上",
+		bandFreeOutcome: "取消或标记不可接班 —— 不扣款",
+		bandShortLabel: "班次开始前 {short}–{free} 小时",
+		bandLateLabel: "班次开始前不足 {short} 小时，或迟到 {min} 分钟以上",
+		bandWagePctOutcome: "下一张付款单扣日薪的 {pct}%",
+		cancelOnTimeHeadline: "提前通知 —— 不扣工资",
+		cancelOnTimeDetail: "距离班次开始还有 {hours} 小时以上 · 你的经纪公司会另行安排人手。",
+		cancelNoChargeDetail: "你的经纪公司不收取取消费用。",
+		cancelShortNoticeHeadline: "临时通知 —— 下一张付款单扣 {amount}",
+		cancelShortNoticeDetail: "距离班次开始不足 {free} 小时，但仍超过 {short} 小时。",
+		cancelLateHeadline: "临时取消 —— 下一张付款单扣 {amount}",
+		cancelLateDetailBefore: "距离班次开始不足 {short} 小时 · 与迟到 {min} 分钟以上适用同一规则。",
+		cancelLateDetailStarted: "班次已开始或已结束 · 与迟到 {min} 分钟以上适用同一规则。",
+		pendingVerification: "待核实",
+		verifiedDayCount: "已核实 {n} 天",
+		pvIssuedEverySunday: "付款单每周日出具",
+		withdrawDisputeOnDay: "撤回 {day} 的争议",
+		disputeAmountOnDay: "对 {day} 的{component}提出争议",
+		tapAmountToDisputeHint: "点击任意金额即可提出争议 · 点击红色金额可撤回误报的争议。",
+		weekCollapsedHint: "{week} · {total} · 已核实 {verified}/7 天",
+		verifiedDays: "已核实天数",
+		pvWillBeSentOn: "本周结束后，付款单将于 {day} 发出",
+		runningTotal: "累计 {total}",
+		weekTotal: "合计 {total}",
+		reviewAndSignTotal: "查看并签署 · {total}",
+		pvStatusPendingReview: "待审核",
+		pvStatusSent: "待你审核",
+		pvStatusSigned: "已签署",
+		pvStatusPaid: "已付款",
+		pvStatusDisputed: "有争议",
+		attachImages: "添加图片凭证",
+		removeImage: "移除图片",
+		quickReason: "快捷原因",
+		presetUnmatchCommission: "提成不符",
+		presetMissingRecord: "记录缺失",
+		presetUnmatchWages: "工资不符",
+		presetRepeatedRecord: "记录重复",
+		presetOthers: "其他",
+		disputeDetailPlaceholder: "补充说明，供经纪公司查看…",
+		disputeReason: "争议原因",
+		withdrawDisputeTitle: "撤回争议？",
+		disputeThisAmount: "对该金额提出争议",
+		raiseDispute: "提出争议",
+		withdrawExplainer: "误标了这笔金额？撤回争议后它会恢复为已核实。",
+		withdrawDispute: "撤回争议",
+		submitDispute: "提交争议",
+		vipNight: "VIP 之夜",
+		addressDistanceAway: "{address} · 距离 {distance}",
+		estPayout: "预计收入",
+		outletRating: "门店评分 {rating}",
+		outletContact: "门店联系人",
+		openDirectionsInMaps: "在地图中查看路线",
+		currentWeek: "本周",
+	},
+	adminAudit: {
+		pickerSubtitle: "选择一种用户类型以查看其活动日志。",
+		chooseRole: "选择角色",
+		chooseRoleHint: "打开管理员、PR、门店、经纪公司或其他角色的审计日志。",
+		roleAdmin: "管理员",
+		roleAdminHint: "查看平台管理员的活动。",
+		rolePr: "PR",
+		rolePrHint: "查看 PR 代表的活动。",
+		roleOutlet: "门店",
+		roleOutletHint: "查看门店用户的活动。",
+		roleAgency: "经纪公司",
+		roleAgencyHint: "查看经纪公司用户的活动。",
+		roleOthers: "其他",
+		roleOthersHint: "查看其他用户类型的活动。",
+		roleAuditLogTitle: "{role} 审计日志",
+		roleActivity: "{role} 活动",
+		auditedActionsBy: "由 {role} 用户执行的受审计操作",
+		dateFrom: "从",
+		dateTo: "至",
+		allActions: "全部操作",
+		allTables: "全部数据表",
+		colTimestamp: "时间戳",
+		colUser: "用户",
+		colAction: "操作",
+		colTable: "数据表",
+		colIpAddress: "IP 地址",
+		colDetail: "详情",
+		colUserAgent: "用户代理",
+		viewDetail: "查看审计日志详情",
+		systemActor: "系统",
+		loadingLogs: "正在加载审计日志…",
+		loadFailed: "加载审计日志失败",
+		noLogsFound: "未找到审计日志。",
+		showingEntries: "显示第 {from} - {to} 条，共 {total} 条",
+		previousPage: "上一页",
+		nextPage: "下一页",
+		detailTitle: "审计日志详情",
+		changes: "变更内容",
+		colField: "字段",
+		colOldValue: "旧值",
+		colNewValue: "新值",
+		deletedEntityData: "已删除记录数据",
+		createdEntityData: "新建记录数据",
+		noChangesData: "无变更数据",
+	},
+	webUi: {
+		showPassword: "显示密码",
+		hidePassword: "隐藏密码",
+		toggleSidebar: "切换侧栏",
+		sidebar: "侧栏",
+		sidebarMobileHint: "显示移动端侧栏导航。",
+		chartNoData: "暂无数据",
+	},
+	adminSubscription: {
+		plansTitle: "套餐",
+		plansHint: "管理套餐与计费周期",
+		allCycles: "全部计费周期",
+		filterByBillingCycle: "按计费周期筛选",
+		createPlan: "新建套餐",
+		colAudience: "适用对象",
+		colPrice: "价格（RM）",
+		colCoverage: "额度",
+		colLastEdited: "最后编辑",
+		loadingPlans: "正在加载套餐…",
+		plansLoadFailed: "套餐加载失败",
+		noPlansFound: "未找到套餐",
+		editPlanNamed: "编辑 {name}",
+		posSyncAddon: "POS 同步增值服务",
+		showingPlans: "显示第 {from} - {to} 项，共 {total} 个套餐",
+		audienceAgency: "经纪公司",
+		audienceOutlet: "门店",
+		editPlan: "编辑套餐",
+		editPlanHint: "更新此套餐的详情。",
+		createPlanHint: "为经纪公司新增一个套餐。",
+		planName: "套餐名称",
+		planNamePlaceholder: "例如 Basic、Pro、Enterprise",
+		planNameRequired: "请填写套餐名称",
+		priceMinimum: "价格不能小于 0",
+		selectAudience: "选择适用对象",
+		selectBillingCycle: "选择计费周期",
+		coverageAmount: "额度数值",
+		coverageUnit: "额度单位",
+		coveragePeriod: "额度周期",
+		periodDaily: "按天",
+		shownOnPlanAs: "在套餐上显示为 {value}。",
+		coverageHint: "在套餐上显示的用量档位。选填。",
+		activeStatus: "启用状态",
+		activeStatusHint: "将此套餐设为启用或停用。",
+		toggleActiveStatus: "切换订阅套餐的启用状态",
+		saveChanges: "保存更改",
+	},
+	adminBits: {
+		selectDates: "选择日期",
+		datesSelected: "已选择 {n} 个日期",
+		clearDates: "清除日期",
+		clearDate: "清除日期",
+		clearNamed: "清除{label}",
+		setAccountActiveHint: "设置账号为启用或停用。",
+		setModuleActiveHint: "设置模块为启用或停用。",
+		moduleKeyPlaceholder: "例如 payment_voucher",
+		permCreate: "新增",
+		permRead: "查看",
+		permUpdate: "修改",
+		permFor: "{name} {perm}",
+		connectApiHint: "接入{name}接口后，此处即可显示数据。",
+		connectUserApiHint: "接入{name}用户接口后，此处即可显示数据。",
+		namedUsers: "{name}用户",
+		setNegotiatedQuote: "设置议价金额",
+		setNegotiatedQuoteHint: "点击「议价」的用户会以套餐申请的形式进入此处。请输入最终敲定的价格，然后处理。",
+		planNamed: "套餐：{name}",
+		noCurrentPlan: "暂无当前套餐",
+		quotedPriceRm: "报价金额（RM）",
+		quotePlaceholder: "例如 4500",
+		leaveBlankNoPrice: "留空则在处理时不记录价格。",
+		enterValidAmountRm: "请输入有效的非负金额（RM）",
+		saveQuoteAndResolve: "保存报价并处理",
+	},
+	adminPr: {
+		title: "PR 账户",
+		subtitle: "拥有 PR 角色的平台用户。“经纪公司”列显示该 PR 所属的全部经纪公司。",
+		searchPlaceholder: "搜索 PR…",
+		searchAria: "按姓名、电子邮箱或经纪公司搜索 PR",
+		legalName: "身份证姓名",
+		phone: "手机号",
+		agencies: "经纪公司",
+		loadingPrs: "正在加载 PR 用户…",
+		prsLoadFailed: "PR 用户加载失败",
+		noPrsFound: "未找到 PR 用户",
+		removePr: "移除 PR",
+		showingPrs: "显示第 {from} - {to} 项，共 {total} 位 PR",
+		allAgencies: "全部经纪公司",
+		agencyFallback: "经纪公司",
+		filterByAgency: "按经纪公司筛选",
+		searchAgenciesPlaceholder: "搜索经纪公司…",
+		searchAgenciesAria: "搜索经纪公司",
+		noAgenciesFound: "未找到经纪公司",
+		agenciesCount: "经纪公司（{n}）",
+		showAgencyForPr: "显示该 PR 的 {n} 家经纪公司",
+		showAgenciesForPr: "显示该 PR 的 {n} 家经纪公司",
+		detailsTitle: "PR 详情",
+		detailsSubtitle: "PR 账户资料，以及该 PR 绑定的经纪公司。",
+		agencyTiedNames: "已绑定经纪公司 · {names}",
+		notTiedToAnyAgency: "未绑定任何经纪公司",
+		tabPersonal: "个人信息",
+		tabContact: "联系方式",
+		tabShowcase: "展示",
+		sectionIdentity: "身份信息",
+		fieldDisplayName: "显示名称",
+		idType: "证件类型",
+		idNumber: "证件号码",
+		gender: "性别",
+		race: "种族",
+		dateOfBirth: "出生日期",
+		nationality: "国籍",
+		joined: "加入时间",
+		sectionContact: "联系方式",
+		sectionComcard: "模卡",
+		comcardHint: "该 PR 模卡上显示的身材信息",
+		height: "身高",
+		weight: "体重",
+		age: "年龄",
+		ageYears: "{n} 岁",
+		portfolioGalleryCount: "作品集相册（{n}）",
+		noPortfolioPhotos: "尚未上传作品集照片。",
+		portfolioPhotoAlt: "作品集照片 {n}",
+		notLinkedToAnyAgency: "该 PR 未关联任何经纪公司。",
+		linked: "已关联",
+	},
+	webShell: {
+		gettingReady: "正在准备…",
+		loadingLabel: "加载中",
+		userFallback: "用户",
+		notFoundTitle: "页面未找到",
+		notFoundBody: "抱歉，找不到您要访问的页面。该页面可能已被移除，或网址有误。",
+		backToDashboard: "返回仪表板",
+		backToHome: "返回首页",
+		legalEyebrow: "法律条款",
+		privacyPolicyTitle: "隐私政策",
+		deleteAccountTitle: "删除您的账户",
+		effectiveUpdated: "生效日期 {effective} · 最后更新 {updated}",
+		privacyContact: "隐私事务联系方式：",
+		supportContact: "客服支持：",
+		rightsReserved: "© {year} InnocenZ。版权所有。",
+	},
+	adminOrg: {
+		agencyOrganizations: "PR 经纪公司机构",
+		agencyOrganizationsHint: "点击某一行可查看经纪公司详情及其名下 PR。可搜索经纪公司或按状态筛选。",
+		searchAgenciesPlaceholder: "搜索经纪公司…",
+		searchAgenciesAria: "按名称搜索经纪公司",
+		colCode: "代码",
+		failedToLoadAgencies: "加载经纪公司失败",
+		noAgenciesFound: "未找到经纪公司",
+		viewAgencyDetails: "查看经纪公司详情",
+		ssmValue: "SSM {no}",
+		showingAgencies: "显示第 {from} - {to} 项，共 {total} 家经纪公司",
+		showingOutlets: "显示第 {from} - {to} 项，共 {total} 家门店",
+		suspend: "暂停",
+		agencyDetailsTitle: "PR 经纪公司详情",
+		agencyDetailsHint: "经纪公司资料，以及其名下管理的 PR。",
+		agencyCodeValue: "公司代码 {code}",
+		tabBasicInfo: "基本信息",
+		tabPrs: "PR",
+		ownerContact: "东主 / 联系人",
+		phone: "电话",
+		organization: "机构资料",
+		agencyName: "经纪公司名称",
+		agencyCode: "公司代码",
+		ssmOrgNo: "SSM / 机构编号",
+		outletDetailsTitle: "门店详情",
+		outletDetailsHint: "场所资料、位置与团队 —— 均由门店自行提交。",
+		tabBusiness: "业务",
+		tabLocation: "位置",
+		tabTeam: "团队",
+		businessInformation: "业务信息",
+		venue: "场所",
+		ssmNo: "SSM 编号",
+		businessLicense: "营业执照",
+		venueLocation: "场所位置",
+		coordinates: "坐标",
+		geoFenceRadius: "定位围栏半径",
+		linkedAgencies: "已关联的经纪公司",
+		linkedAgenciesHint: "该场所合作的经纪公司。门店在「设置」中发起关联申请，由每家经纪公司自行接受或拒绝 —— 管理员不能代为设置。",
+		noAgenciesLinked: "尚未关联任何经纪公司。该场所须先在「设置」中关联一家并获其批准，才能发布班次。",
+		noAgencyApprovedYet: "还没有经纪公司通过审批 —— 在此之前，该场所的每一次发布工作都会被拒绝。",
+		linkWorkingWithVenue: "正在与该场所合作",
+		linkAwaitingAgency: "等待经纪公司决定",
+		linkDeclinedByAgency: "经纪公司已拒绝",
+		linkPartnershipEnded: "曾经合作 —— 合作已结束",
+		joinedOn: "加入于 {date}",
+		otherMembers: "其他成员",
+		teamOwnerHint: "场所东主 · 注册门店并管理设置",
+		teamFinanceHint: "每周对账 · 账单签核",
+		teamGuarantorHint: "代东主行事 · 东主不在时享有同等权限",
+		teamDirectorHint: "仅查看 · 可浏览所有页面，不能作任何更改",
+		loadingPrs: "正在加载 PR…",
+		prsCount: "PR（{n}）",
+		prsCountMatching: "PR（{n} 项匹配）",
+		searchPrsPlaceholder: "搜索 PR…",
+		searchPrsAria: "在该经纪公司名下搜索 PR",
+		noPrsMatchSearch: "没有符合此搜索的 PR。",
+		noPrsLinked: "该经纪公司名下还没有 PR。",
+		prStatusApproved: "已批准",
+		prStatusRejected: "已拒绝",
+		prStatusLeavePending: "退出待审批",
+		prStatusLeft: "已退出",
+		profilePhotoAlt: "{name} 的资料照片",
+		systemInformation: "系统信息",
+		createdBy: "创建人",
+		createdAt: "创建时间",
+		updatedBy: "更新人",
+		updatedAt: "更新时间",
+		approvalStatus: "审批状态",
+		awaitingFirstApproval: "注册申请已提交，等待首次审批",
+		approvalPendingBody: "等待管理员审批，通过后该{entity}才会上线。",
+		approvalActiveBody: "该{entity}已在平台上线。",
+		approvalSuspendedBody: "该{entity}已被管理员暂停。",
+		approvalInactiveBody: "该{entity}目前处于停用状态。",
+		entityAgency: "经纪公司",
+		entityOutlet: "门店",
+	},
+	libTiers: {
+		drinksTipsPct: "酒水 {drinks}% · 小费 {tips}%",
+		targetSales: "目标 RM {amount}",
+		commissionShort: "抽成",
+	},
+	webLib: {
+		passwordResetLinkSent: "如果该邮箱已注册，重置链接稍后送达。",
+		passwordResetLinkFailed: "无法发送重置链接",
+		passwordResetFailed: "无法重置密码",
+		displayNameUpdateFailed: "显示名称更新失败",
+		notSignedIn: "尚未登录",
+		sessionExpired: "登录已过期",
+	},
+	libShift: {
+		tonightsShift: "今晚的班次",
+		outletRequestedPendingApproval: "门店已指名要你 · 等待经纪公司与 PR 确认",
+		agencyAssignedBy: "经纪公司派班 · {agency}",
+		agencyAssigned: "经纪公司派班",
+		estShiftPayPerShift: "班次工资 {pay} · 每班 {rate}",
+		eventAgencyAssignment: "经纪公司派班 —— 可在班表中查看",
+		swapMoveToOutlet: "调往 {outlet} —— {note}",
+		swapRequestFromAgency: "经纪公司换班申请",
+		outletMustConfirmSlot: "{outlet} 需在其排班表上确认你的班次",
+		swapAwaitingOutlet: "换班处理中 —— 等待门店确认",
+		scheduledOnAgencyRoster: "已列入经纪公司排班表",
+		outletConfirmedOnBookings: "{outlet} 已在其预订班表上确认你",
+		agencyProposedNotConfirmed: "你的经纪公司已提出此班次 —— 门店尚未确认",
+		awaitingAgency: "等待经纪公司",
+		outletSwap: "换店",
+		enRoute: "在途",
+		outletRequestedAgencyConfirmed: "{outlet} 指名要你 —— 你的经纪公司已确认",
+		agencyAssignedCancelPolicy: "你的经纪公司已为你派班 —— 如需取消，请按经纪公司规定办理",
+		agencyAssignedOnYourRoster: "经纪公司已在你的班表上安排此班次",
+		liveShiftFromOutletCheckIn: "来自门店签到表的实时班次",
+		agencyRoster: "经纪公司排班表",
+		weekdaySun: "周日",
+		weekdayMon: "周一",
+		weekdayTue: "周二",
+		weekdayWed: "周三",
+		weekdayThu: "周四",
+		weekdayFri: "周五",
+		weekdaySat: "周六",
+	},
+	libDemo: {
+		receiptKeyedAt: "手动录入 {when}",
+		receiptScannedAt: "扫描上传 {when}",
+		receiptOnShift: "当班中",
+		receiptInPv: "已入付款单",
+		receiptPaid: "已付款",
+		receiptDisputed: "有争议",
+		receiptPending: "待处理",
+		addJobDetails: "填写工作详情…",
+		cutLossReleasedEarly: "{n} 人提前放行",
+		cutLossDemandCut: "削减 {n} 个名额",
+		cutLossTargetPct: "目标 {pct}%",
+		planDayLimitReached: "{plan} 套餐 · {date} 已达每日 {max} 位 PR 上限",
+		planDayHeadcountAvailable: "{plan} 套餐 · 每日 {band} 位 PR · {date} 可用人数 {remaining}/{max}",
+		ratingNotePlaceholder1: "严重问题 —— 迟到、态度、客人投诉或影响现场…",
+		ratingNotePlaceholder2: "低于标准 —— 酒水、加单、着装要求或桌台互动…",
+		ratingNotePlaceholder3: "表现合格 —— 给下次排班留一条改进建议…",
+		ratingNotePlaceholder4: "表现良好 —— 下次怎样才能拿到 5 星？",
+		ratingNotePlaceholder5: "亮眼表现 —— VIP 加单、开瓶、团队配合或现场气氛…",
+	},
+	invitePages: {
+		joinTheTeam: "加入团队",
+		acceptToGetStarted: "接受邀请即可开始使用。",
+		missingToken: "此邀请链接缺少令牌。请从邮件中打开该链接。",
+		checkingInvitation: "正在核对邀请…",
+		inviteUnavailable: "邀请不可用",
+		notFound: "未找到该邀请",
+		notFoundAskOwner: "未找到该邀请，或该邀请已被使用 —— 请联系东主重新发送邀请",
+		notFoundOrUsed: "未找到该邀请，或该邀请已被使用。",
+		couldNotAccept: "接受邀请失败",
+		youJoined: "您已加入{org}",
+		theTeam: "该团队",
+		accountReadySignIn: "您的账号已就绪。请登录以打开{portal}。",
+		organisation: "该机构",
+		goToSignIn: "前往登录",
+		invitedToJoin: "您受邀以{role}的身份加入{org}。",
+		inviteExpired: "该邀请已过期。请联系东主重新发送邀请。",
+		membershipAlreadyActive: "该成员身份已生效，您现在即可登录。",
+		setUpAccountHint: "请设置账号以接受邀请。如有需要，可以修改邮箱。",
+		name: "姓名",
+		email: "邮箱",
+		phone: "手机号",
+		optional: "（选填）",
+		password: "密码",
+		confirmPassword: "确认密码",
+		enterYourName: "请输入您的姓名",
+		enterYourEmail: "请输入您的邮箱",
+		passwordsDoNotMatch: "两次输入的密码不一致",
+		creatingAccount: "正在创建账号…",
+		createAccountAndJoin: "创建账号并加入",
+		linkNeedsPortal: "此链接需要{portal}权限",
+		noPortalTitle: "您无法访问此网页门户",
+		signedInAs: "登录账号：",
+		thisAccount: "当前账号",
+		wrongPortalBody: "该账号没有{portal}的访问权限。您的角色没有变化 —— 此浏览器只是登录了另一个账号。",
+		linkYouOpened: "您打开的链接：",
+		wrongPortalHint: "请退出登录，改用{portal}的账号登录后再打开此链接。链接无法在浏览器之间传递登录状态 —— 否则任何拿到该链接的人都会以您的身份登录。",
+		noPortalBody: "您的账号角色在 InnocenZ 上暂时没有网页门户。如果您认为这是误判，请联系客服。",
+		signOutSwitchAccount: "退出登录并切换账号",
+		backToLogin: "返回登录页",
+	},
+	authPages: {
+		emailLabel: "电子邮箱",
+		emailInvalid: "请输入有效的电子邮箱地址",
+		passwordLabel: "密码",
+		passwordPlaceholder: "请输入密码",
+		passwordRequired: "密码不能为空",
+		rightsReserved: "版权所有。",
+		backToSignIn: "返回登录",
+		loginAsideDescription: "面向夜生活行业的劳动力运营平台。在同一个安全门户中管理排班、追踪班次并发放薪资。",
+		loginHeadingLine1: "登录您的",
+		loginHeadingAccent: "门户",
+		loginSubheading: "请输入您的登录信息以继续。",
+		loginFormLabel: "登录表单",
+		forgotPasswordLink: "忘记密码？",
+		signIn: "登录",
+		signingIn: "登录中…",
+		needAccount: "还没有账户？",
+		signUpCta: "注册为门店或 PR 经纪公司",
+		needHelp: "需要帮助？",
+		contactSupport: "联系客服支持",
+		errorNetwork: "服务器内部错误。",
+		errorInvalidCredentials: "邮箱或密码有误，请重试。",
+		errorUnexpected: "发生意外错误，请重试。",
+		errorAccountNotRegistered: "该账户尚未注册。",
+		errorAccountInactive: "该账户已停用。",
+		errorWrongPassword: "密码错误",
+		forgotHeading: "忘记您的",
+		forgotHeadingAccent: "密码？",
+		forgotSubheading: "请输入您账户绑定的邮箱，我们会向您发送重置链接。",
+		forgotFormLabel: "忘记密码表单",
+		sendResetLink: "发送重置链接",
+		sending: "发送中…",
+		resetLinkSendFailed: "无法发送重置链接，请重试。",
+		checkInboxHeading: "请查收您的",
+		checkInboxAccent: "邮箱",
+		checkInboxSubheading: "如果该邮箱已注册，重置链接即将送达。",
+		resetLinkSentTo: "我们已向 {email} 发送密码重置链接。",
+		resetLinkExpiryHint: "链接 1 小时后失效。如果没有收到，请查看垃圾邮件文件夹，或确认该邮箱已注册 InnocenZ 账户。",
+		useDifferentEmail: "换一个邮箱",
+		rememberedIt: "想起密码了？",
+		resetHeading: "设置新",
+		resetHeadingAccent: "密码",
+		resetSubheading: "请设置一个此账户未使用过的密码。",
+		resetFormLabel: "重置密码表单",
+		saveNewPassword: "保存新密码",
+		passwordMinLength: "新密码至少需要 {min} 个字符",
+		passwordsDoNotMatch: "两次输入的密码不一致",
+		resetFailed: "无法重置密码，请重试。",
+		linkIncompleteHeading: "该链接",
+		linkIncompleteAccent: "不完整",
+		linkIncompleteSubheading: "该重置链接缺少令牌。",
+		linkIncompleteHint: "请直接从邮件中打开链接，或重新申请一个。",
+		requestNewLink: "重新申请链接",
+		passwordUpdatedHeading: "密码",
+		passwordUpdatedAccent: "已更新",
+		passwordUpdatedSubheading: "现在可以使用新密码登录了。",
+		resetLinkUsedUp: "该重置链接已被使用，无法再次使用。",
+		goToSignIn: "前往登录",
 	},
 };
 

@@ -24,6 +24,7 @@ import { useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
+import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchAgencyInviteRoles } from "@/services/agency";
 import { fetchOutletInviteRoles } from "@/services/outlet";
@@ -324,13 +325,15 @@ export function OrgMembersPanel({
 									)}
 								</div>
 								<div className="iz-tiny iz-muted truncate">
-									{member.email ?? "no email"}
+									{member.email ?? t.portalUi.noEmail}
 								</div>
 							</div>
 
 							{member.status !== "active" && (
 								<span className="iz-pill iz-pill-amber shrink-0 !text-[10px]">
-									{member.status}
+									{/* Display only — `member.status` itself is never touched, and
+									    a value this resolver has not seen falls through raw. */}
+									{recordStatusLabel(member.status, t)}
 								</span>
 							)}
 
@@ -393,7 +396,12 @@ export function OrgMembersPanel({
 						</AlertDialogTitle>
 						<AlertDialogDescription>
 							{memberToRemove
-								? `Remove ${memberToRemove.username || memberToRemove.email || "this member"} from the team? They will lose portal access for this organisation.`
+								? fill(t.profile.removeFromTeamConfirm, {
+										name:
+											memberToRemove.username ||
+											memberToRemove.email ||
+											t.profile.thisMemberFallback,
+									})
 								: t.profile.removeThisMemberConfirm}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
@@ -455,13 +463,18 @@ export function OrgMembersPanel({
 						</div>
 						{rolesQuery.isError && (
 							<p className="iz-tiny text-[var(--iz-danger)] mt-2">
-								Could not load {kind} portal roles — using defaults.
+								{/* Two whole sentences rather than one with the org kind
+								    filled in: `kind` is the stored value, and gluing a
+								    translated noun into an English frame is what leaves half
+								    a sentence in the wrong language. */}
+								{kind === "agency"
+									? t.portalUi.rolesLoadFailedAgency
+									: t.portalUi.rolesLoadFailedOutlet}
 							</p>
 						)}
 						{manualLink && (
 							<p className="iz-tiny iz-muted mt-2 break-all">
-								The invitation for {manualLink.to} was saved but no email went
-								out. Send them this link — it expires in 7 days:{" "}
+								{fill(t.portalUi.inviteSavedNoEmail, { email: manualLink.to })}{" "}
 								<span className="text-[var(--iz-txt)]">{manualLink.url}</span>
 							</p>
 						)}

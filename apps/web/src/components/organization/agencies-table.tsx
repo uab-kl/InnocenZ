@@ -33,13 +33,15 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { Agency, AgencyPagination } from "@/services/agency";
 import {
 	ORG_STATUSES,
 	type OrgStatusFilter,
 	orgStatusBadgeColors,
-	orgStatusLabels,
+	orgStatusLabel,
 } from "./org-status";
 
 interface AgenciesTableProps {
@@ -83,6 +85,7 @@ export function AgenciesTable({
 	onSelect,
 	actionId,
 }: AgenciesTableProps) {
+	const { t } = usePortalLocale();
 	const showLoading = isLoading && agencies.length === 0;
 
 	return (
@@ -91,14 +94,13 @@ export function AgenciesTable({
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
 						<CardTitle className="flex items-center gap-2">
-							PR Agency organizations
+							{t.adminOrg.agencyOrganizations}
 							{isFetching && !showLoading && (
 								<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 							)}
 						</CardTitle>
 						<CardDescription>
-							Click a row to open agency details and linked PRs. Search agencies
-							or filter by status.
+							{t.adminOrg.agencyOrganizationsHint}
 						</CardDescription>
 					</div>
 
@@ -108,9 +110,9 @@ export function AgenciesTable({
 							<Input
 								value={search}
 								onChange={(e) => onSearchChange(e.target.value)}
-								placeholder="Search agencies…"
+								placeholder={t.adminOrg.searchAgenciesPlaceholder}
 								className="pl-8"
-								aria-label="Search agencies by name"
+								aria-label={t.adminOrg.searchAgenciesAria}
 							/>
 						</div>
 						<Select
@@ -119,14 +121,17 @@ export function AgenciesTable({
 								onStatusFilterChange(value as OrgStatusFilter)
 							}
 						>
-							<SelectTrigger className="sm:w-48" aria-label="Filter by status">
-								<SelectValue placeholder="Filter by status" />
+							<SelectTrigger
+								className="sm:w-48"
+								aria-label={t.admin.filterByStatus}
+							>
+								<SelectValue placeholder={t.admin.filterByStatus} />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="all">All Status</SelectItem>
+								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 								{ORG_STATUSES.map((status) => (
 									<SelectItem key={status} value={status}>
-										{orgStatusLabels[status]}
+										{orgStatusLabel(status, t)}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -141,12 +146,16 @@ export function AgenciesTable({
 						<TableHeader>
 							<TableRow>
 								<TableHead className="w-10" />
-								<TableHead>Name</TableHead>
-								<TableHead>Code</TableHead>
-								<TableHead>Contact</TableHead>
-								<TableHead className="w-[140px]">Status</TableHead>
-								<TableHead className="w-[140px]">Created</TableHead>
-								<TableHead className="w-[200px]">Actions</TableHead>
+								<TableHead>{t.admin.colName}</TableHead>
+								<TableHead>{t.adminOrg.colCode}</TableHead>
+								<TableHead>{t.adminUsers.colContact}</TableHead>
+								<TableHead className="w-[140px]">{t.admin.colStatus}</TableHead>
+								<TableHead className="w-[140px]">
+									{t.admin.colCreated}
+								</TableHead>
+								<TableHead className="w-[200px]">
+									{t.admin.colActions}
+								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -155,7 +164,7 @@ export function AgenciesTable({
 									<TableCell colSpan={7} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
-											<span>Loading agencies…</span>
+											<span>{t.agencyLinks.loading}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -165,14 +174,14 @@ export function AgenciesTable({
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
-												Failed to load agencies
+												{t.adminOrg.failedToLoadAgencies}
 											</p>
 											<p className="text-sm text-muted-foreground">
 												{getErrorMessage(error)}
 											</p>
 											<Button variant="outline" size="sm" onClick={onRetry}>
 												<RefreshCw className="mr-2 h-4 w-4" />
-												Try Again
+												{t.admin.tryAgain}
 											</Button>
 										</div>
 									</TableCell>
@@ -182,7 +191,7 @@ export function AgenciesTable({
 									<TableCell colSpan={7} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Building2 className="h-6 w-6" />
-											<span>No agencies found</span>
+											<span>{t.adminOrg.noAgenciesFound}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -200,7 +209,7 @@ export function AgenciesTable({
 													variant="ghost"
 													size="icon"
 													className="h-8 w-8"
-													aria-label="View agency details"
+													aria-label={t.adminOrg.viewAgencyDetails}
 													onClick={(e) => {
 														e.stopPropagation();
 														onSelect(agency);
@@ -214,7 +223,7 @@ export function AgenciesTable({
 													{agency.name}
 												</div>
 												<div className="text-sm text-muted-foreground">
-													SSM {agency.ssmNo}
+													{fill(t.adminOrg.ssmValue, { no: agency.ssmNo })}
 												</div>
 											</TableCell>
 											<TableCell className="font-mono text-base">
@@ -235,7 +244,7 @@ export function AgenciesTable({
 													variant="outline"
 													className={`text-sm ${orgStatusBadgeColors[agency.status]}`}
 												>
-													{orgStatusLabels[agency.status]}
+													{orgStatusLabel(agency.status, t)}
 												</Badge>
 											</TableCell>
 											<TableCell className="text-base text-muted-foreground">
@@ -254,7 +263,7 @@ export function AgenciesTable({
 															) : (
 																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
 															)}
-															Approve
+															{t.common.approve}
 														</Button>
 													)}
 													{agency.status === "active" && (
@@ -269,7 +278,7 @@ export function AgenciesTable({
 															) : (
 																<Ban className="mr-1 h-3.5 w-3.5" />
 															)}
-															Suspend
+															{t.adminOrg.suspend}
 														</Button>
 													)}
 													{agency.status === "suspended" && (
@@ -283,7 +292,7 @@ export function AgenciesTable({
 															) : (
 																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
 															)}
-															Reactivate
+															{t.adminUsers.reactivate}
 														</Button>
 													)}
 												</div>
@@ -299,16 +308,11 @@ export function AgenciesTable({
 				{pagination && pagination.totalCount > 0 && (
 					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 						<div>
-							Showing{" "}
-							<span className="font-medium">
-								{(pagination.page - 1) * pageSize + 1}
-							</span>{" "}
-							-{" "}
-							<span className="font-medium">
-								{Math.min(pagination.page * pageSize, pagination.totalCount)}
-							</span>{" "}
-							of <span className="font-medium">{pagination.totalCount}</span>{" "}
-							agencies
+							{fill(t.adminOrg.showingAgencies, {
+								from: (pagination.page - 1) * pageSize + 1,
+								to: Math.min(pagination.page * pageSize, pagination.totalCount),
+								total: pagination.totalCount,
+							})}
 						</div>
 						<div className="flex items-center gap-2">
 							<Button
@@ -317,10 +321,13 @@ export function AgenciesTable({
 								disabled={!pagination.hasPrevPage || isFetching}
 								onClick={() => onPageChange(page - 1)}
 							>
-								Previous
+								{t.admin.previous}
 							</Button>
 							<span>
-								Page {pagination.page} of {pagination.totalPages}
+								{fill(t.admin.pageOf, {
+									page: pagination.page,
+									total: pagination.totalPages,
+								})}
 							</span>
 							<Button
 								variant="outline"
@@ -328,7 +335,7 @@ export function AgenciesTable({
 								disabled={!pagination.hasNextPage || isFetching}
 								onClick={() => onPageChange(page + 1)}
 							>
-								Next
+								{t.admin.next}
 							</Button>
 						</div>
 					</div>

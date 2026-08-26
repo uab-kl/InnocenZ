@@ -102,7 +102,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import { dressCodeLabel } from "@/lib/portal-i18n/language-label";
+import { dressCodeLabel, languageLabel } from "@/lib/portal-i18n/language-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const DEFAULT_DRAFT_TIER_BASE: OutletTierRateSettings = {
@@ -123,9 +123,6 @@ const DRAFT_SPECIAL_EVENT_DEFAULTS: Record<ShiftSpecialEventType, string> = {
 	corporate: "Corporate table event",
 	other: "",
 };
-
-/** Only used where a kind has no suggested name of its own to show greyed out. */
-const DRAFT_EVENT_FALLBACK_PLACEHOLDER = "Name your event";
 
 const DRAFT_EVENT_PRESETS = new Set([
 	DRAFT_NORMAL_EVENT_DEFAULT,
@@ -148,11 +145,16 @@ export function defaultDraftEventName(
  */
 export function draftEventPlaceholder(
 	eventKind: ShiftEventKind,
+	t: PortalTranslations,
 	specialEventType?: string,
 ): string {
+	// The suggestion itself stays English: it is the literal `resolveDraftEventName`
+	// posts if the outlet types nothing, so a translated hint would promise a name
+	// the shift would not carry. Only the LAST-RESORT prompt — shown when a kind
+	// suggests nothing at all — is real UI copy.
 	return (
 		defaultDraftEventName(eventKind, specialEventType) ||
-		DRAFT_EVENT_FALLBACK_PLACEHOLDER
+		t.postJob.nameYourEvent
 	);
 }
 
@@ -716,7 +718,9 @@ export function JobDateRangePicker({
 							: "iz-pill-ink",
 					)}
 				>
-					{span === "3d" ? "3 days" : "1 week"}
+					{span === "3d"
+						? t.outletPanels.span3Days
+						: t.outletPanels.span1Week}
 				</button>
 			))}
 			<OutletDateRangePopover
@@ -729,7 +733,7 @@ export function JobDateRangePicker({
 			/>
 			{!embedded && dayCount > 1 && (
 				<span className="iz-tiny iz-muted2 whitespace-nowrap px-0.5">
-					{dayCount} days
+					{fill(t.reports.daysCount, { n: dayCount })}
 				</span>
 			)}
 		</>
@@ -773,8 +777,8 @@ export function JobMultiDatePicker({
 				compact
 				quickSpans={{
 					spans: [
-						{ id: "3d", label: "3 days" },
-						{ id: "week", label: "1 week" },
+						{ id: "3d", label: t.outletPanels.span3Days },
+						{ id: "week", label: t.outletPanels.span1Week },
 					],
 					isActive: (spanAnchor, spanId) =>
 						jobSpanMatchesSelection(
@@ -788,7 +792,7 @@ export function JobMultiDatePicker({
 			/>
 			{!embedded && selectedDateIsos.length > 1 && (
 				<span className="iz-tiny iz-muted2 whitespace-nowrap px-0.5">
-					{selectedDateIsos.length} days
+					{fill(t.reports.daysCount, { n: selectedDateIsos.length })}
 				</span>
 			)}
 		</>
@@ -877,7 +881,10 @@ function PostJobLanguagePicker({
 							selected.includes(l) && "is-active",
 						)}
 					>
-						{l}
+						{/* The English name is the STORED value — it is what `selected`
+						    compares against and what the post carries. Only the words on
+						    the pill change; a hand-typed language falls through as-is. */}
+						{languageLabel(l, t)}
 					</button>
 				))}
 				<button
@@ -981,7 +988,7 @@ export function JobLanguagePicker({
 							selected.includes(l) && "is-active",
 						)}
 					>
-						{l}
+						{languageLabel(l, t)}
 					</button>
 				))}
 			</div>
@@ -1512,7 +1519,14 @@ export function DraftShiftSummary({
 			/>
 			<SummaryLine
 				label={t.postJob.languages}
-				value={buildLanguagesLabel(shift.langs, shift.otherLang) || "—"}
+				/* Display only — the label that gets POSTED is built from the raw
+				   stored names by the composer route, never from this line. */
+				value={
+					buildLanguagesLabel(
+						shift.langs.map((lang) => languageLabel(lang, t)),
+						shift.otherLang,
+					) || "—"
+				}
 			/>
 			<div className="border-b border-[var(--iz-line)] py-2.5 last:border-0">
 				<span className="text-xs text-[var(--iz-muted)]">
@@ -1690,7 +1704,11 @@ export function DraftShiftEditor({
 					plan: subscriptionPlan.label,
 					max: subscriptionPlan.prPerDayMax,
 				})
-			: `${subscriptionPlan.label} plan · ${formatOutletPlanPrPickerRule(subscriptionPlan)} · ${namedPrRemaining} named PR slot${namedPrRemaining === 1 ? "" : "s"} left today`;
+			: fill(t.postJob.planPickerRule, {
+					plan: subscriptionPlan.label,
+					rule: formatOutletPlanPrPickerRule(subscriptionPlan, t),
+					left: namedPrRemaining,
+				});
 
 	const maxPeople =
 		peopleRemaining !== undefined
@@ -1704,6 +1722,7 @@ export function DraftShiftEditor({
 		subscriptionPlan,
 		maxPeople,
 		dateLabel,
+		t,
 	);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: runs only when plan/date capacity moves — it writes shift.quantity/prIds/payTierRows through onChange, so depending on those makes the clamp re-fire on its own write.
@@ -1988,6 +2007,7 @@ export function DraftShiftEditor({
 									? t.postJob.clickToPutEventName
 									: draftEventPlaceholder(
 											shift.eventKind ?? "normal",
+											t,
 											shift.specialEventType,
 										)
 							}

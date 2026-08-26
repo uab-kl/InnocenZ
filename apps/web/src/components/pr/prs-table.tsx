@@ -41,6 +41,9 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
 import { formatDate, getErrorMessage, statusColors } from "@/lib/utils";
 import type { Agency } from "@/services/agency";
 import type { PrPagination, PrUser } from "@/services/pr";
@@ -100,6 +103,7 @@ export function PrsTable({
 	onRetry,
 	onSelect,
 }: PrsTableProps) {
+	const { t } = usePortalLocale();
 	const showLoading = isLoading && users.length === 0;
 
 	return (
@@ -108,15 +112,12 @@ export function PrsTable({
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
 						<CardTitle className="flex items-center gap-2">
-							PR accounts
+							{t.adminPr.title}
 							{isFetching && !showLoading && (
 								<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 							)}
 						</CardTitle>
-						<CardDescription>
-							Platform users with the PR role. Agencies column shows every
-							agency a PR belongs to.
-						</CardDescription>
+						<CardDescription>{t.adminPr.subtitle}</CardDescription>
 					</div>
 
 					<div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -125,9 +126,9 @@ export function PrsTable({
 							<Input
 								value={search}
 								onChange={(e) => onSearchChange(e.target.value)}
-								placeholder="Search PRs…"
+								placeholder={t.adminPr.searchPlaceholder}
 								className="pl-8"
-								aria-label="Search PRs by name, email, or agency"
+								aria-label={t.adminPr.searchAria}
 							/>
 						</div>
 						<AgencyFilterCombobox
@@ -141,13 +142,18 @@ export function PrsTable({
 								onStatusFilterChange(value as PrStatusFilter)
 							}
 						>
-							<SelectTrigger className="sm:w-40" aria-label="Filter by status">
-								<SelectValue placeholder="Filter by status" />
+							<SelectTrigger
+								className="sm:w-40"
+								aria-label={t.admin.filterByStatus}
+							>
+								<SelectValue placeholder={t.admin.filterByStatus} />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="all">All Status</SelectItem>
-								<SelectItem value="active">Active</SelectItem>
-								<SelectItem value="inactive">Inactive</SelectItem>
+								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+								<SelectItem value="active">{t.admin.statusActive}</SelectItem>
+								<SelectItem value="inactive">
+									{t.admin.statusInactive}
+								</SelectItem>
 							</SelectContent>
 						</Select>
 					</div>
@@ -159,14 +165,18 @@ export function PrsTable({
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Display Name</TableHead>
-								<TableHead>Legal name</TableHead>
-								<TableHead>Email</TableHead>
-								<TableHead>Phone</TableHead>
-								<TableHead>Agencies</TableHead>
-								<TableHead className="w-[120px]">Status</TableHead>
-								<TableHead className="w-[180px]">Created</TableHead>
-								<TableHead className="w-[220px] text-right">Actions</TableHead>
+								<TableHead>{t.admin.colDisplayName}</TableHead>
+								<TableHead>{t.adminPr.legalName}</TableHead>
+								<TableHead>{t.admin.colEmail}</TableHead>
+								<TableHead>{t.adminPr.phone}</TableHead>
+								<TableHead>{t.adminPr.agencies}</TableHead>
+								<TableHead className="w-[120px]">{t.admin.colStatus}</TableHead>
+								<TableHead className="w-[180px]">
+									{t.admin.colCreated}
+								</TableHead>
+								<TableHead className="w-[220px] text-right">
+									{t.admin.colActions}
+								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -175,7 +185,7 @@ export function PrsTable({
 									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
-											<span>Loading PR users…</span>
+											<span>{t.adminPr.loadingPrs}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -185,14 +195,14 @@ export function PrsTable({
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
-												Failed to load PR users
+												{t.adminPr.prsLoadFailed}
 											</p>
 											<p className="text-sm text-muted-foreground">
 												{getErrorMessage(error)}
 											</p>
 											<Button variant="outline" size="sm" onClick={onRetry}>
 												<RefreshCw className="mr-2 h-4 w-4" />
-												Try Again
+												{t.admin.tryAgain}
 											</Button>
 										</div>
 									</TableCell>
@@ -202,7 +212,7 @@ export function PrsTable({
 									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Megaphone className="h-6 w-6" />
-											<span>No PR users found</span>
+											<span>{t.adminPr.noPrsFound}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -252,7 +262,7 @@ export function PrsTable({
 												) : (
 													<XCircle className="h-3.5 w-3.5" />
 												)}
-												{user.status}
+												{recordStatusLabel(user.status, t)}
 											</Badge>
 										</TableCell>
 										<TableCell className="text-base text-muted-foreground">
@@ -276,7 +286,9 @@ export function PrsTable({
 														)
 													}
 												>
-													{user.status === "active" ? "Disable" : "Enable"}
+													{user.status === "active"
+														? t.admin.disable
+														: t.admin.enable}
 												</Button>
 												<Button
 													variant="outline"
@@ -285,7 +297,7 @@ export function PrsTable({
 													disabled={busyUserId === user.id}
 													onClick={() => onRevokeRole?.(user)}
 												>
-													Remove PR
+													{t.adminPr.removePr}
 												</Button>
 											</div>
 										</TableCell>
@@ -299,16 +311,11 @@ export function PrsTable({
 				{pagination && pagination.totalCount > 0 && (
 					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 						<div>
-							Showing{" "}
-							<span className="font-medium">
-								{(pagination.page - 1) * pageSize + 1}
-							</span>{" "}
-							-{" "}
-							<span className="font-medium">
-								{Math.min(pagination.page * pageSize, pagination.totalCount)}
-							</span>{" "}
-							of <span className="font-medium">{pagination.totalCount}</span>{" "}
-							PRs
+							{fill(t.adminPr.showingPrs, {
+								from: (pagination.page - 1) * pageSize + 1,
+								to: Math.min(pagination.page * pageSize, pagination.totalCount),
+								total: pagination.totalCount,
+							})}
 						</div>
 						<div className="flex items-center gap-2">
 							<Button
@@ -317,10 +324,13 @@ export function PrsTable({
 								disabled={!pagination.hasPrevPage || isFetching}
 								onClick={() => onPageChange(page - 1)}
 							>
-								Previous
+								{t.admin.previous}
 							</Button>
 							<span>
-								Page {pagination.page} of {pagination.totalPages}
+								{fill(t.admin.pageOf, {
+									page: pagination.page,
+									total: pagination.totalPages,
+								})}
 							</span>
 							<Button
 								variant="outline"
@@ -328,7 +338,7 @@ export function PrsTable({
 								disabled={!pagination.hasNextPage || isFetching}
 								onClick={() => onPageChange(page + 1)}
 							>
-								Next
+								{t.admin.next}
 							</Button>
 						</div>
 					</div>
@@ -349,11 +359,15 @@ function AgencyFilterCombobox({
 	value: string;
 	onChange: (value: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
 
 	const selected = agencies.find((agency) => agency.id === value);
-	const label = value === "all" ? "All agencies" : (selected?.name ?? "Agency");
+	const label =
+		value === "all"
+			? t.adminPr.allAgencies
+			: (selected?.name ?? t.adminPr.agencyFallback);
 
 	const needle = query.trim().toLowerCase();
 	const filtered = needle
@@ -383,7 +397,7 @@ function AgencyFilterCombobox({
 					variant="outline"
 					role="combobox"
 					aria-expanded={open}
-					aria-label="Filter by agency"
+					aria-label={t.adminPr.filterByAgency}
 					className="justify-between font-normal sm:w-52"
 				>
 					<span className="truncate">{label}</span>
@@ -397,9 +411,9 @@ function AgencyFilterCombobox({
 						<Input
 							value={query}
 							onChange={(e) => setQuery(e.target.value)}
-							placeholder="Search agencies…"
+							placeholder={t.adminPr.searchAgenciesPlaceholder}
 							className="h-8 pl-7"
-							aria-label="Search agencies"
+							aria-label={t.adminPr.searchAgenciesAria}
 						/>
 					</div>
 				</div>
@@ -410,7 +424,7 @@ function AgencyFilterCombobox({
 							onClick={() => pick("all")}
 							className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
 						>
-							All agencies
+							{t.adminPr.allAgencies}
 							{value === "all" && <Check className="h-4 w-4 shrink-0" />}
 						</button>
 					</li>
@@ -433,7 +447,7 @@ function AgencyFilterCombobox({
 					))}
 					{filtered.length === 0 && (
 						<li className="px-2 py-3 text-center text-sm text-muted-foreground">
-							No agencies found
+							{t.adminPr.noAgenciesFound}
 						</li>
 					)}
 				</ul>
@@ -445,20 +459,29 @@ function AgencyFilterCombobox({
 // The Agencies column truncates long names, so every PR gets a dropdown button
 // that reveals the full name + code of each agency it belongs to.
 function PrAgenciesCell({ agencies }: { agencies: PrUser["agencies"] }) {
+	const { t } = usePortalLocale();
+
 	if (agencies.length === 0) {
 		return <span className="text-sm text-muted-foreground">—</span>;
 	}
 
 	const [first] = agencies;
 	const extra = agencies.length - 1;
-	const plural = agencies.length === 1 ? "agency" : "agencies";
+	// Chinese has no plural, so the two English forms are two whole sentences
+	// rather than one sentence with a noun swapped into it.
+	const openLabel = fill(
+		agencies.length === 1
+			? t.adminPr.showAgencyForPr
+			: t.adminPr.showAgenciesForPr,
+		{ n: agencies.length },
+	);
 
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
 				<button
 					type="button"
-					aria-label={`Show ${agencies.length} ${plural} for this PR`}
+					aria-label={openLabel}
 					className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1 text-sm transition-colors hover:bg-muted"
 				>
 					<span className="truncate">{first.name}</span>
@@ -472,7 +495,7 @@ function PrAgenciesCell({ agencies }: { agencies: PrUser["agencies"] }) {
 			</PopoverTrigger>
 			<PopoverContent align="start" className="w-72 p-2">
 				<p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-					Agencies ({agencies.length})
+					{fill(t.adminPr.agenciesCount, { n: agencies.length })}
 				</p>
 				<ul className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
 					{agencies.map((agency) => (

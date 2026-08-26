@@ -124,7 +124,7 @@ export function AccountAvatarCard() {
 					style={{ color: "var(--iz-green, #6ee7a8)" }}
 				>
 					<Check className="h-3.5 w-3.5 shrink-0" />
-					Photo uploaded successfully
+					{t.profile.photoUploaded}
 				</output>
 			)}
 		</div>

@@ -39,6 +39,7 @@ import {
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
+import { iconForLabel } from "@agency-portal/lib/lucide-label-icons";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
@@ -520,21 +521,42 @@ function AgencyRoster() {
 			<div className={`iz-roster-kpis${viewMode === "live" ? " cols-4" : ""}`}>
 				{viewMode === "live" ? (
 					<>
+						{/* `LabelWithIcon` with no `icon` resolves one from the rendered
+						    text, which is now translated — every KPI glyph would vanish
+						    outside English. Resolve from the ENGLISH label instead.
+						    `iconForLabel`, not `iconForNav`: a miss must stay iconless the
+						    way it is today, never degrade to a "?". */}
 						<div className="iz-roster-kpi">
 							<span className="n">{plannedCount}</span>
-							<LabelWithIcon label={t.roster.plannedPrs} className="l" />
+							<LabelWithIcon
+								label={t.roster.plannedPrs}
+								icon={iconForLabel("Planned PRs")}
+								className="l"
+							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n">{activeCount}</span>
-							<LabelWithIcon label={t.roster.activePrs} className="l" />
+							<LabelWithIcon
+								label={t.roster.activePrs}
+								icon={iconForLabel("Active PRs")}
+								className="l"
+							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n">{unavailableCount}</span>
-							<LabelWithIcon label={t.roster.unavailablePrs} className="l" />
+							<LabelWithIcon
+								label={t.roster.unavailablePrs}
+								icon={iconForLabel("Unavailable PRs")}
+								className="l"
+							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n gold">{formatRM(estPayoutLive)}</span>
-							<LabelWithIcon label={t.roster.estPayout} className="l" />
+							<LabelWithIcon
+								label={t.roster.estPayout}
+								icon={iconForLabel("Est payout")}
+								className="l"
+							/>
 						</div>
 					</>
 				) : (
@@ -543,12 +565,17 @@ function AgencyRoster() {
 							<span className="n">{weekScheduled.length}</span>
 							<LabelWithIcon
 								label={t.roster.prsRosteredThisWeek}
+								icon={iconForLabel("PRs rostered this week")}
 								className="l"
 							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n gold">{formatRM(estLabour)}</span>
-							<LabelWithIcon label={t.roster.estLabourCost} className="l" />
+							<LabelWithIcon
+								label={t.roster.estLabourCost}
+								icon={iconForLabel("Est labour cost")}
+								className="l"
+							/>
 						</div>
 					</>
 				)}
@@ -656,6 +683,7 @@ function AgencyRoster() {
 			{canAssign && pendingPrSwaps.length > 0 && (
 				<OutletSection
 					title={t.roster.prSwapRequests}
+					iconKey="PR swap requests"
 					hint={fill(t.agencyPrs.pendingCount, {
 						n: pendingPrSwaps.length,
 					})}
@@ -724,6 +752,7 @@ function AgencyRoster() {
 			{viewMode === "live" && (
 				<OutletSection
 					title={t.roster.shifts}
+					iconKey="Shifts"
 					hint={t.roster.shiftsHint}
 					className="!mt-4"
 				>

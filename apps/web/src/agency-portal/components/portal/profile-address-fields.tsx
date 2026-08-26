@@ -91,7 +91,7 @@ export function ProfileAddressFields({
 					value={value.postcode}
 					onChange={(v) => onChange({ postcode: v })}
 					mode={mode}
-					placeholder="e.g. 50450"
+					placeholder={t.portalShell.postcodeExample}
 				/>
 			</div>
 			<div className="grid gap-0 sm:grid-cols-2">

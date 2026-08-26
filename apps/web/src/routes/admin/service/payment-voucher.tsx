@@ -155,16 +155,12 @@ function PaymentVoucherPage() {
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
 							</CardTitle>
-							<CardDescription>
-								{t.adminService.pvReadOnlyHint}
-							</CardDescription>
+							<CardDescription>{t.adminService.pvReadOnlyHint}</CardDescription>
 						</div>
 
 						<div className="flex flex-col gap-3 sm:flex-row sm:items-end">
 							<div className="space-y-1.5">
-								<Label htmlFor="pv-search">
-									{t.adminService.searchPrName}
-								</Label>
+								<Label htmlFor="pv-search">{t.adminService.searchPrName}</Label>
 								<Input
 									id="pv-search"
 									placeholder={t.adminService.searchPrNamePlaceholder}
@@ -495,7 +491,9 @@ function VoucherDetail({
 						<p className="font-medium text-rose-600 dark:text-rose-400">
 							{t.adminService.legacyDisputeNote}
 						</p>
-						<p className="mt-1 text-muted-foreground">{voucher.disputeReason}</p>
+						<p className="mt-1 text-muted-foreground">
+							{voucher.disputeReason}
+						</p>
 						{voucher.disputeNote && (
 							<p className="mt-2 text-xs text-muted-foreground">
 								{t.adminService.noteLabel} {voucher.disputeNote}
@@ -722,7 +720,9 @@ function VoucherDisputes({
 	if (disputesQuery.isLoading) {
 		return (
 			<div>
-				<h3 className="mb-2 text-sm font-semibold">{t.adminService.disputes}</h3>
+				<h3 className="mb-2 text-sm font-semibold">
+					{t.adminService.disputes}
+				</h3>
 				<p className="text-sm text-muted-foreground">
 					{t.payroll.loadingDisputes}
 				</p>
@@ -815,9 +815,8 @@ function VoucherDisputes({
 										<img
 											src={resolveProofPhotoUrl(src)}
 											alt={fill(t.adminService.proofForDispute, {
-												component: DISPUTE_COMPONENT_LABEL[dispute.component](
-													t,
-												),
+												component:
+													DISPUTE_COMPONENT_LABEL[dispute.component](t),
 												date: dispute.disputeDate,
 											})}
 											className="h-20 w-20 rounded border object-cover transition hover:brightness-110"

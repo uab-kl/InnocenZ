@@ -14,6 +14,7 @@ import {
 } from "@agency-portal/lib/gps-locations";
 import { Layers, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 const TILE_SIZE = 256;
 const TILE_URL =
@@ -98,6 +99,7 @@ export function GpsRoadMap({
 	height?: number;
 	dark?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const frameRef = useRef<HTMLDivElement>(null);
 	const tilesRef = useRef<HTMLDivElement>(null);
 	const dragRef = useRef<{
@@ -375,7 +377,7 @@ export function GpsRoadMap({
 					onClick={() =>
 						setZoomOverride((z) => Math.min(18, (z ?? effectiveZoom) + 1))
 					}
-					aria-label="Zoom in"
+					aria-label={t.agencyGps.zoomIn}
 				>
 					<Plus className="h-3.5 w-3.5" />
 				</button>
@@ -385,14 +387,14 @@ export function GpsRoadMap({
 					onClick={() =>
 						setZoomOverride((z) => Math.max(12, (z ?? effectiveZoom) - 1))
 					}
-					aria-label="Zoom out"
+					aria-label={t.agencyGps.zoomOut}
 				>
 					<Minus className="h-3.5 w-3.5" />
 				</button>
 			</div>
 
 			<div className="iz-gmaps-layer-chip">
-				<Layers className="h-3 w-3" /> Map
+				<Layers className="h-3 w-3" /> {t.agencyGps.layerMap}
 			</div>
 
 			{selected ? (
@@ -402,7 +404,9 @@ export function GpsRoadMap({
 					</p>
 					<p className="text-[10px] text-[#5f6368]">
 						{selected.outlet} · {selected.meters} m ·{" "}
-						{selected.inRange ? "In geofence" : "Outside geofence"}
+						{selected.inRange
+							? t.rosterGrid.withinFence
+							: t.rosterGrid.outsideFence}
 					</p>
 				</div>
 			) : (
@@ -411,12 +415,12 @@ export function GpsRoadMap({
 					aria-hidden
 				>
 					<p className="text-[10px] text-[#5f6368]">
-						Drag map · tap a pin or row
+						{t.agencyGps.dragMapHint}
 					</p>
 				</div>
 			)}
 
-			<p className="iz-gmaps-attrib">Map © OpenStreetMap · CARTO</p>
+			<p className="iz-gmaps-attrib">{t.agencyGps.mapAttribution}</p>
 		</div>
 	);
 }

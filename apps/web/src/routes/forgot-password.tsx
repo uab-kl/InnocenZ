@@ -10,6 +10,11 @@ import {
 	InputGroupInput,
 } from "@/components/ui/input-group";
 import { requestPasswordReset } from "@/lib/auth/password-api";
+import {
+	PortalLocaleProvider,
+	usePortalLocale,
+} from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export const Route = createFileRoute("/forgot-password")({
 	validateSearch: (search: Record<string, unknown>): { email?: string } => {
@@ -18,6 +23,10 @@ export const Route = createFileRoute("/forgot-password")({
 		return email ? { email } : {};
 	},
 	component: ForgotPasswordPage,
+	/**
+	 * ⚠️ English in every locale. `head()` is evaluated OUTSIDE React, so there
+	 * is no provider above it and no hook to read the locale from.
+	 */
 	head: () => ({
 		meta: [
 			{ title: "Forgot password — InnocenZ" },
@@ -31,10 +40,49 @@ export const Route = createFileRoute("/forgot-password")({
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * An address SHAPE, not a sentence — deliberately NOT in the dictionary. It
+ * reads identically in either language.
+ */
+const EMAIL_PLACEHOLDER = "you@example.com";
+
+/**
+ * Held as a CAUSE, not a sentence.
+ *
+ * `message` carries what the SERVER said — `password-api` already resolves its
+ * own fallbacks through `apiErrorCopy()`, so anything arriving here is either
+ * localised upstream or is the backend's own wording. Either way it is passed
+ * through untouched: re-translating a message this page did not write would be
+ * guessing at its meaning.
+ */
+type ForgotError = { kind: "invalidEmail" } | { kind: "message"; text: string };
+
+function forgotErrorText(error: ForgotError, t: PortalTranslations): string {
+	return error.kind === "invalidEmail" ? t.authPages.emailInvalid : error.text;
+}
+
+/**
+ * `/forgot-password` is a PUBLIC route with no portal shell above it, so it
+ * mounts the locale provider itself.
+ *
+ * ⚠️ Wrapper and body MUST stay separate components: `usePortalLocale` reads
+ * context from ABOVE, so the component that mounts the provider cannot consume
+ * it. It would quietly get the English fallback instead of throwing. Same split
+ * as `components/legal/PrivacyPolicyPage`.
+ */
 function ForgotPasswordPage() {
+	return (
+		<PortalLocaleProvider>
+			<ForgotPasswordBody />
+		</PortalLocaleProvider>
+	);
+}
+
+function ForgotPasswordBody() {
+	const { t } = usePortalLocale();
 	const { email: prefillEmail } = Route.useSearch();
 	const [email, setEmail] = useState(prefillEmail ?? "");
-	const [error, setError] = useState("");
+	const [error, setError] = useState<ForgotError | null>(null);
 	const [sending, setSending] = useState(false);
 	/**
 	 * Set once the server has accepted the request. It says nothing about
@@ -49,44 +97,55 @@ function ForgotPasswordPage() {
 
 		const value = email.trim();
 		if (!EMAIL_RE.test(value)) {
-			setError("Please enter a valid email address");
+			setError({ kind: "invalidEmail" });
 			return;
 		}
 
-		setError("");
+		setError(null);
 		setSending(true);
 		try {
 			await requestPasswordReset(value);
 			setSentTo(value);
 		} catch (err) {
-			setError(
-				err instanceof Error && err.message
-					? err.message
-					: "Could not send the reset link. Please try again.",
-			);
+			setError({
+				kind: "message",
+				text:
+					err instanceof Error && err.message
+						? err.message
+						: t.authPages.resetLinkSendFailed,
+			});
 		} finally {
 			setSending(false);
 		}
 	};
 
 	if (sentTo) {
+		/**
+		 * One WHOLE sentence in the dictionary, split at its `{email}` hole so the
+		 * address keeps its gold highlight. A pair of prefix/suffix keys would
+		 * force English word order on every language; Chinese puts the address
+		 * earlier in the sentence, and only a full template can say that.
+		 */
+		const [beforeEmail, afterEmail] =
+			t.authPages.resetLinkSentTo.split("{email}");
+
 		return (
 			<AuthCardShell
-				heading="Check your"
-				accent="inbox"
-				subheading="If that email is registered, a reset link is on its way."
+				heading={t.authPages.checkInboxHeading}
+				accent={t.authPages.checkInboxAccent}
+				subheading={t.authPages.checkInboxSubheading}
 			>
 				<div className="flex flex-col items-center gap-5 text-center">
 					<span className="flex h-16 w-16 items-center justify-center rounded-full border border-royal-gold/30 bg-royal-gold/10">
 						<MailCheck className="h-8 w-8 text-royal-gold" strokeWidth={1.75} />
 					</span>
 					<p className="login-subheading text-foreground/85">
-						We sent a password reset link to{" "}
-						<span className="font-semibold text-gold-bright">{sentTo}</span>.
+						{beforeEmail}
+						<span className="font-semibold text-gold-bright">{sentTo}</span>
+						{afterEmail}
 					</p>
 					<p className="login-support text-muted-foreground">
-						The link expires in 1 hour. If it does not arrive, check your spam
-						folder — or make sure that address has an InnocenZ account.
+						{t.authPages.resetLinkExpiryHint}
 					</p>
 					<Button
 						type="button"
@@ -94,7 +153,7 @@ function ForgotPasswordPage() {
 						className="login-support text-gold-bright hover:text-gold"
 						onClick={() => setSentTo(null)}
 					>
-						Use a different email
+						{t.authPages.useDifferentEmail}
 					</Button>
 				</div>
 			</AuthCardShell>
@@ -103,25 +162,25 @@ function ForgotPasswordPage() {
 
 	return (
 		<AuthCardShell
-			heading="Forgot your"
-			accent="password?"
-			subheading="Enter the email on your account and we'll send you a reset link."
+			heading={t.authPages.forgotHeading}
+			accent={t.authPages.forgotHeadingAccent}
+			subheading={t.authPages.forgotSubheading}
 			footer={
 				<p className="login-support mt-8 text-center text-muted-foreground">
-					Remembered it?{" "}
+					{t.authPages.rememberedIt}{" "}
 					<Link
 						to="/login"
 						className="text-gold-bright underline underline-offset-4 hover:text-gold"
 					>
-						Back to sign in
+						{t.authPages.backToSignIn}
 					</Link>
 				</p>
 			}
 		>
-			<form onSubmit={submit} aria-label="Forgot password form">
+			<form onSubmit={submit} aria-label={t.authPages.forgotFormLabel}>
 				<Field>
 					<FieldLabel htmlFor="forgot-email" className="login-field-label">
-						Email address
+						{t.authPages.emailLabel}
 					</FieldLabel>
 					<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 						<InputGroupAddon align="inline-start">
@@ -135,7 +194,7 @@ function ForgotPasswordPage() {
 							id="forgot-email"
 							name="email"
 							type="email"
-							placeholder="you@example.com"
+							placeholder={EMAIL_PLACEHOLDER}
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
 							disabled={sending}
@@ -151,7 +210,7 @@ function ForgotPasswordPage() {
 						className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-xl text-destructive"
 					>
 						<AlertCircle className="mt-0.5 h-6 w-6 shrink-0" />
-						<span>{error}</span>
+						<span>{forgotErrorText(error, t)}</span>
 					</div>
 				)}
 
@@ -164,10 +223,10 @@ function ForgotPasswordPage() {
 					{sending ? (
 						<>
 							<Loader2 className="h-6 w-6 animate-spin" />
-							Sending…
+							{t.authPages.sending}
 						</>
 					) : (
-						"Send reset link"
+						t.authPages.sendResetLink
 					)}
 				</Button>
 			</form>

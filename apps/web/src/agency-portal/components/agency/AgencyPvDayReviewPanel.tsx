@@ -4,6 +4,8 @@ import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Check, Hand, RotateCcw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PaymentVoucherDayReview } from "@/services/payment-voucher";
 
 const moneyFromCents = (cents: number) => `RM ${(cents / 100).toFixed(2)}`;
@@ -50,6 +52,7 @@ function DayRow({
 		note: string,
 	) => Promise<void> | void;
 }) {
+	const { t } = usePortalLocale();
 	const [note, setNote] = useState(day.note ?? "");
 	const [holding, setHolding] = useState(false);
 
@@ -63,23 +66,31 @@ function DayRow({
 					<div className="text-sm font-semibold">{formatDay(day.date)}</div>
 					<p className="iz-tiny iz-muted mt-0.5">
 						{day.reviewedAt && day.status
-							? `${approved ? "Approved" : "Held"} ${formatStamp(day.reviewedAt)}${day.bulk ? " · approve-all" : ""}`
-							: "Not reviewed"}
+							? `${held ? t.agencyPvReview.held : t.receipts.approved} ${formatStamp(day.reviewedAt)}${day.bulk ? ` · ${t.agencyPvReview.viaApproveAll}` : ""}`
+							: t.agencyPvReview.notReviewed}
 					</p>
 				</div>
 				<div className="flex items-center gap-2">
 					<b className="iz-ledger">{moneyFromCents(day.totalCents)}</b>
 					{approved && (
-						<span className="iz-pill iz-pill-green !text-[10px]">Approved</span>
+						<span className="iz-pill iz-pill-green !text-[10px]">
+							{t.receipts.approved}
+						</span>
 					)}
 					{held && (
-						<span className="iz-pill iz-pill-red !text-[10px]">Held</span>
+						<span className="iz-pill iz-pill-red !text-[10px]">
+							{t.agencyPvReview.held}
+						</span>
 					)}
 					{!day.status && !day.stale && (
-						<span className="iz-pill iz-pill-ink !text-[10px]">Open</span>
+						<span className="iz-pill iz-pill-ink !text-[10px]">
+							{t.agencyPvReview.statusOpen}
+						</span>
 					)}
 					{day.stale && (
-						<span className="iz-pill iz-pill-amber !text-[10px]">Changed</span>
+						<span className="iz-pill iz-pill-amber !text-[10px]">
+							{t.agencyPvReview.statusChanged}
+						</span>
 					)}
 				</div>
 			</div>
@@ -90,17 +101,22 @@ function DayRow({
 				<p className="iz-tiny mt-1.5 flex items-start gap-1.5 text-[var(--iz-amber)]">
 					<TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
 					<span>
-						This day changed after it was reviewed —{" "}
 						{day.approvedTotalCents !== null
-							? `signed off at ${moneyFromCents(day.approvedTotalCents)}, now ${moneyFromCents(day.totalCents)}`
-							: `now ${moneyFromCents(day.totalCents)}`}
-						. The earlier decision no longer counts; review it again.
+							? fill(t.agencyPvReview.staleWithApproved, {
+									approved: moneyFromCents(day.approvedTotalCents),
+									now: moneyFromCents(day.totalCents),
+								})
+							: fill(t.agencyPvReview.staleWithoutApproved, {
+									now: moneyFromCents(day.totalCents),
+								})}
 					</span>
 				</p>
 			)}
 
 			{day.note && !holding && (
-				<p className="iz-tiny iz-muted2 mt-1">Note: {day.note}</p>
+				<p className="iz-tiny iz-muted2 mt-1">
+					{t.agencyPvReview.noteLabel} {day.note}
+				</p>
 			)}
 
 			{canReview && (
@@ -109,7 +125,7 @@ function DayRow({
 						<textarea
 							className="iz-field-input mt-2 w-full"
 							rows={2}
-							placeholder="Why is this day on hold? (optional, but the PR chases what it cannot see)"
+							placeholder={t.agencyPvReview.holdNotePlaceholder}
 							value={note}
 							onChange={(e) => setNote(e.target.value)}
 						/>
@@ -129,7 +145,7 @@ function DayRow({
 								void onDecide("approved", "");
 							}}
 						>
-							<Check className="mr-1 inline h-3 w-3" /> Approve
+							<Check className="mr-1 inline h-3 w-3" /> {t.common.approve}
 						</button>
 						<button
 							type="button"
@@ -145,7 +161,9 @@ function DayRow({
 							}}
 						>
 							<Hand className="mr-1 inline h-3 w-3" />{" "}
-							{holding ? "Confirm hold" : "Hold"}
+							{holding
+								? t.agencyPvReview.confirmHold
+								: t.agencyPvReview.holdAction}
 						</button>
 						{(approved || held) && (
 							<button
@@ -158,7 +176,8 @@ function DayRow({
 									void onDecide(null, "");
 								}}
 							>
-								<RotateCcw className="mr-1 inline h-3 w-3" /> Clear
+								<RotateCcw className="mr-1 inline h-3 w-3" />{" "}
+								{t.agencyPvReview.clearDecision}
 							</button>
 						)}
 					</div>
@@ -187,6 +206,7 @@ export function AgencyPvDayReviewPanel({
 }: {
 	voucherId: string | null;
 }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	// Mirrors the server's agencyOwnerOrFinance guard on the two write routes.
 	// The READ is deliberately open: seeing what was decided is not the same
@@ -209,9 +229,9 @@ export function AgencyPvDayReviewPanel({
 	if (isLoading) {
 		return (
 			<>
-				<IzSectionLabel>Day review</IzSectionLabel>
+				<IzSectionLabel>{t.agencyPvReview.dayReview}</IzSectionLabel>
 				<IzCard>
-					<p className="iz-tiny iz-muted">Loading this week's days…</p>
+					<p className="iz-tiny iz-muted">{t.agencyPvReview.loadingDays}</p>
 				</IzCard>
 			</>
 		);
@@ -226,14 +246,14 @@ export function AgencyPvDayReviewPanel({
 			await reviewDay({ date, status, note: note || undefined });
 			toast(
 				status === "approved"
-					? "Day approved"
+					? t.agencyPvReview.toastDayApproved
 					: status === "held"
-						? "Day held — this voucher cannot be sent until it is cleared"
-						: "Decision cleared",
+						? t.agencyPvReview.toastDayHeld
+						: t.agencyPvReview.toastDecisionCleared,
 				"success",
 			);
 		} catch {
-			toast("Could not record that decision", "warn");
+			toast(t.receipts.couldNotRecordDecision, "warn");
 		}
 	};
 
@@ -244,7 +264,7 @@ export function AgencyPvDayReviewPanel({
 			const result = await approveAll();
 			toast(result.message, "success");
 		} catch {
-			toast("Could not approve the remaining days", "warn");
+			toast(t.agencyPvReview.couldNotApproveRemaining, "warn");
 		}
 	};
 
@@ -253,22 +273,18 @@ export function AgencyPvDayReviewPanel({
 	return (
 		<>
 			<IzSectionLabel>
-				Day review{days.length > 0 ? ` (${decidedCount}/${days.length})` : ""}
+				{t.agencyPvReview.dayReview}
+				{days.length > 0 ? ` (${decidedCount}/${days.length})` : ""}
 			</IzSectionLabel>
 			<IzCard>
 				{days.length === 0 ? (
 					// Not an error: week-level lines belong to no day, so there is
 					// genuinely nothing to sign off and the send is not blocked.
-					<p className="iz-tiny iz-muted">
-						No dated lines on this voucher, so there is no day to review. It can
-						be sent as it stands.
-					</p>
+					<p className="iz-tiny iz-muted">{t.agencyPvReview.noDatedLines}</p>
 				) : (
 					<>
 						<p className="iz-tiny iz-muted">
-							Approve each day before this voucher goes to the PR. Holding a day
-							blocks the send — including the Monday payout run — until it is
-							approved or cleared.
+							{t.agencyPvReview.approveEachDayHint}
 						</p>
 						{/* Said out loud, because it is an attestation the reviewer makes
 						    without opening the receipts panel. A day's total IS the sum of
@@ -276,24 +292,26 @@ export function AgencyPvDayReviewPanel({
 						    right — the PR is then told so, and may dispute them. Silent
 						    would make it a trap. */}
 						<p className="iz-tiny iz-muted mt-1">
-							Approving a day also approves the receipts on that day. A receipt
-							spanning two days waits until both are approved.
+							{t.agencyPvReview.approvingDayApprovesReceipts}
 						</p>
 
 						{sendGate.allowed ? (
 							<p className="iz-tiny mt-1.5 text-[var(--iz-green)]">
-								Every day is decided — this voucher can be sent.
+								{t.agencyPvReview.everyDayDecided}
 							</p>
 						) : (
 							<p className="iz-tiny mt-1.5 text-[var(--iz-amber)]">
-								Not ready to send: {sendGate.reason}.
+								{fill(t.agencyPvReview.notReadyToSend, {
+									reason: sendGate.reason ?? "",
+								})}
 							</p>
 						)}
 
 						{staleCount > 0 && (
 							<p className="iz-tiny iz-muted2 mt-1">
-								{staleCount} day(s) changed since they were reviewed and need
-								another look.
+								{fill(t.agencyPvReview.staleDaysNeedAnotherLook, {
+									n: staleCount,
+								})}
 							</p>
 						)}
 
@@ -316,15 +334,14 @@ export function AgencyPvDayReviewPanel({
 								disabled={isSaving}
 								onClick={() => void handleApproveAll()}
 							>
-								<Check className="h-4 w-4" /> Approve the {undecided} remaining
-								day(s)
+								<Check className="h-4 w-4" />{" "}
+								{fill(t.agencyPvReview.approveRemainingDays, { n: undecided })}
 							</button>
 						)}
 
 						{!canReview && (
 							<p className="iz-tiny iz-muted2 mt-2">
-								Your agency role can see these decisions but not make them —
-								owner and finance approve days.
+								{t.agencyPvReview.readOnlyDays}
 							</p>
 						)}
 					</>

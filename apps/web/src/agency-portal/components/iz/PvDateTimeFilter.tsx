@@ -10,6 +10,7 @@ import {
 import { Calendar, ChevronDown, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function DatePickerField({
 	value,
@@ -63,7 +64,7 @@ function DatePickerField({
 				htmlFor={dateButtonId}
 				className={compact ? "!text-[10px]" : undefined}
 			>
-				Date
+				{t.filters.date}
 			</label>
 			<button
 				id={dateButtonId}
@@ -78,8 +79,8 @@ function DatePickerField({
 					{value
 						? (selectedLabel ?? value)
 						: compact
-							? "Any date"
-							: "Tap to choose a date"}
+							? t.izPv.anyDate
+							: t.izPv.tapToChooseDate}
 				</span>
 				{value ? (
 					// biome-ignore lint/a11y/useSemanticElements: this clear control lives INSIDE the trigger <button>, and `.iz-hist-clear` is one of its flex children — a real <button> here would nest a button in a button, which the HTML parser splits apart on SSR and would break the trigger's layout.
@@ -87,7 +88,7 @@ function DatePickerField({
 						role="button"
 						tabIndex={0}
 						className="iz-hist-clear"
-						aria-label="Clear date"
+						aria-label={t.history.clearDate}
 						onClick={(e) => {
 							e.stopPropagation();
 							onChange("");
@@ -151,6 +152,7 @@ export function PvDateTimeFilter({
 	compact?: boolean;
 	timeHint?: string;
 }) {
+	const { t } = usePortalLocale();
 	const clearDate = () => {
 		onDateChange("");
 		onTimeFromChange("");
@@ -176,45 +178,43 @@ export function PvDateTimeFilter({
 				<div className="iz-field !mb-0">
 					{/* biome-ignore lint/a11y/noLabelWithoutControl: caption only — IzTimeInput renders its own <button> and already carries the matching aria-label, and it exposes no `id`, so an htmlFor here would dangle. It stays a <label> because `.iz-field label` in prototype-theme.css is an ELEMENT selector: a <span> would silently drop the uppercase 10.5px Sora typography. */}
 					<label className={compact ? "!text-[10px]" : undefined}>
-						From time
+						{t.izPv.fromTime}
 					</label>
 					<IzTimeInput
 						value={timeFrom}
 						onChange={onTimeFromChange}
 						disabled={!date}
-						aria-label="From time"
+						aria-label={t.izPv.fromTime}
 					/>
 				</div>
 				<div className="iz-field !mb-0">
 					{/* biome-ignore lint/a11y/noLabelWithoutControl: caption only — IzTimeInput renders its own <button> and already carries the matching aria-label, and it exposes no `id`, so an htmlFor here would dangle. It stays a <label> because `.iz-field label` in prototype-theme.css is an ELEMENT selector: a <span> would silently drop the uppercase 10.5px Sora typography. */}
 					<label className={compact ? "!text-[10px]" : undefined}>
-						To time
+						{t.izPv.toTime}
 					</label>
 					<IzTimeInput
 						value={timeTo}
 						onChange={onTimeToChange}
 						disabled={!date}
-						aria-label="To time"
+						aria-label={t.izPv.toTime}
 					/>
 				</div>
 			</div>
 			{!date && (timeFrom || timeTo) ? (
-				<p className="iz-tiny iz-muted2">
-					Pick a date first to narrow by time within that shift day.
-				</p>
+				<p className="iz-tiny iz-muted2">{t.izPv.pickDateFirstHint}</p>
 			) : !date ? (
-				<p className="iz-tiny iz-muted2">
-					Select a date above — then tap From/To time to open the clock.
-				</p>
+				<p className="iz-tiny iz-muted2">{t.izPv.selectDateAboveHint}</p>
 			) : date && (timeFrom || timeTo) ? (
 				<p className="iz-tiny iz-muted2">
+					{/* `timeHint` is supplied by the caller and arrives already
+					    translated — it lands here whole, never mid-sentence. */}
 					{timeHint ??
-						`Matched by shift Time-In or receipt scan on ${dateOptions.find((o) => o.key === date)?.label ?? date}.`}
+						fill(t.izPv.matchedByTimeInOrReceipt, {
+							date: dateOptions.find((o) => o.key === date)?.label ?? date,
+						})}
 				</p>
 			) : date ? (
-				<p className="iz-tiny iz-muted2">
-					Tap <b>From time</b> or <b>To time</b> to open the clock picker.
-				</p>
+				<p className="iz-tiny iz-muted2">{t.izPv.tapFromOrToTimeHint}</p>
 			) : null}
 		</div>
 	);

@@ -25,6 +25,7 @@ import { useAgencyRatings } from "@agency-portal/hooks/use-agency-ratings";
 import { useOutletHistory } from "@agency-portal/hooks/use-outlet-history";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
+import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { shiftHistoryForOutlet } from "@agency-portal/lib/portal-sync";
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
 import { shiftHistorySubline } from "@agency-portal/lib/shift-history";
@@ -362,8 +363,16 @@ export function ShiftHistoryLog({
 			 * two different looks on neighbouring tabs of the same page — see the
 			 * note on `.iz-txn-filter-heading`.
 			 */}
+			{/*
+			 * The icon is pinned to the ENGLISH key, not scraped from the children:
+			 * `t.history.filterBy` is "Filter by" only in the en dictionary, and
+			 * TitleWithIcon's fallback lookup would miss in zh and silently drop
+			 * the icon. Same for the transaction-log headings below.
+			 */}
 			<p className="iz-txn-filter-heading mt-4">
-				<TitleWithIcon>{t.history.filterBy}</TitleWithIcon>
+				<TitleWithIcon icon={iconForNav("Filter by")}>
+					{t.history.filterBy}
+				</TitleWithIcon>
 			</p>
 			<div className="iz-txn-filters">
 				<HistSelectField
@@ -430,11 +439,15 @@ export function ShiftHistoryLog({
 				>
 					{outletStyleLayout ? (
 						<div className="iz-outlet-hist-section-label">
-							<TitleWithIcon>{t.history.transactionLog}</TitleWithIcon>
+							<TitleWithIcon icon={iconForNav("Transaction log")}>
+								{t.history.transactionLog}
+							</TitleWithIcon>
 						</div>
 					) : portal === "agency" ? (
 						<div className="iz-outlet-hist-section-label">
-							<TitleWithIcon>{t.history.transactionLog}</TitleWithIcon>
+							<TitleWithIcon icon={iconForNav("Transaction log")}>
+								{t.history.transactionLog}
+							</TitleWithIcon>
 						</div>
 					) : (
 						<IzSectionLabel className="!mb-0">
@@ -517,8 +530,8 @@ export function ShiftHistoryLog({
 								}
 							>
 								{portal === "outlet" || !detailPrVenue
-									? "← Return"
-									: "← All outlets"}
+									? `← ${t.common.back}`
+									: `← ${t.filters.allOutlets}`}
 							</button>
 							<p className="iz-tiny iz-muted2 uppercase">
 								{portal === "outlet" || detailPrVenue
@@ -577,9 +590,16 @@ export function ShiftHistoryLog({
 						<>
 							<IzCard flat className="!mb-3">
 								<p className="iz-tiny iz-muted">
-									{detailPrVenueShifts.length} shift
-									{detailPrVenueShifts.length !== 1 ? "s" : ""} at{" "}
-									{detailPrVenue} · {detailPr.prName}
+									{fill(t.izPv.shiftsAtVenueForPr, {
+										shifts: fill(
+											detailPrVenueShifts.length === 1
+												? t.rosterGrid.shiftCountOne
+												: t.rosterGrid.shiftCountMany,
+											{ n: detailPrVenueShifts.length },
+										),
+										venue: detailPrVenue,
+										name: detailPr.prName,
+									})}
 								</p>
 								<ShiftHistoryExpandableMoneyBlock
 									className="mt-2"
@@ -650,8 +670,12 @@ export function ShiftHistoryLog({
 													{rollup.venue}
 												</p>
 												<span className="iz-tiny iz-muted2 flex items-center gap-1">
-													{rollup.shiftCount} shift
-													{rollup.shiftCount !== 1 ? "s" : ""}
+													{fill(
+														rollup.shiftCount === 1
+															? t.rosterGrid.shiftCountOne
+															: t.rosterGrid.shiftCountMany,
+														{ n: rollup.shiftCount },
+													)}
 													<ChevronRight className="h-3.5 w-3.5" aria-hidden />
 												</span>
 											</div>
@@ -686,12 +710,14 @@ export function ShiftHistoryLog({
 								className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
 								onClick={() => setDetailVenue(null)}
 							>
-								← Return
+								← {t.common.back}
 							</button>
 							<p className="iz-tiny iz-muted2 uppercase">
 								{detailOutletAgencyLabel
-									? `PR breakdown · ${detailOutletAgencyLabel}`
-									: "PR breakdown"}
+									? fill(t.izPv.prBreakdownBy, {
+											agency: detailOutletAgencyLabel,
+										})
+									: t.izPv.prBreakdown}
 							</p>
 							<h3>{detailOutletRollup.venue}</h3>
 						</div>
@@ -707,10 +733,20 @@ export function ShiftHistoryLog({
 
 					<IzCard flat className="!mb-3">
 						<p className="iz-tiny iz-muted">
-							{detailOutletRollup.shiftCount} shift
-							{detailOutletRollup.shiftCount !== 1 ? "s" : ""} ·{" "}
-							{detailOutletPrRollups.length} PR
-							{detailOutletPrRollups.length !== 1 ? "s" : ""}
+							{fill(t.history.countPair, {
+								a: fill(
+									detailOutletRollup.shiftCount === 1
+										? t.rosterGrid.shiftCountOne
+										: t.rosterGrid.shiftCountMany,
+									{ n: detailOutletRollup.shiftCount },
+								),
+								b: fill(
+									detailOutletPrRollups.length === 1
+										? t.rosterGrid.prCountOne
+										: t.rosterGrid.prCountMany,
+									{ n: detailOutletPrRollups.length },
+								),
+							})}
 						</p>
 						<ShiftHistoryExpandableMoneyBlock
 							className="mt-2"
@@ -724,9 +760,17 @@ export function ShiftHistoryLog({
 								<div className="iz-between items-start gap-2">
 									<p className="font-sora text-sm font-bold">{rollup.prName}</p>
 									<span className="iz-tiny iz-muted2">
-										{rollup.shiftCount} shift
-										{rollup.shiftCount !== 1 ? "s" : ""} · Latest{" "}
-										{rollup.latestDateDisplay}
+										{fill(t.history.countPair, {
+											a: fill(
+												rollup.shiftCount === 1
+													? t.rosterGrid.shiftCountOne
+													: t.rosterGrid.shiftCountMany,
+												{ n: rollup.shiftCount },
+											),
+											b: fill(t.history.latestPlain, {
+												date: rollup.latestDateDisplay,
+											}),
+										})}
 									</span>
 								</div>
 								<ShiftTxnMetricsRow
@@ -756,6 +800,7 @@ function ShiftHistoryShiftCard({
 	row: ShiftHistoryRow;
 	portal?: "agency" | "outlet";
 }) {
+	const { t } = usePortalLocale();
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const perDrinkRm = useStore((s) => s.outletWorkspace.perDrinkRm);
@@ -783,7 +828,9 @@ function ShiftHistoryShiftCard({
 					<div className="font-sora text-sm font-bold text-[var(--iz-gold-l)]">
 						{formatRM(breakdown.totalPayout)}
 					</div>
-					<p className="iz-tiny iz-muted2">{row.durationHours}h shift</p>
+					<p className="iz-tiny iz-muted2">
+						{fill(t.izPv.hoursShift, { n: row.durationHours })}
+					</p>
 				</div>
 			</div>
 			<ShiftHistoryExpandableMoneyBlock
@@ -883,9 +930,11 @@ export function OutletPrShiftHistorySheet({
 						className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
 						onClick={onClose}
 					>
-						← Return
+						← {t.common.back}
 					</button>
-					<p className="iz-tiny iz-muted2 uppercase">Shift log · {prName}</p>
+					<p className="iz-tiny iz-muted2 uppercase">
+						{fill(t.history.shiftLogFor, { name: prName })}
+					</p>
 					<h3>{outletName}</h3>
 				</div>
 				<button
@@ -971,9 +1020,16 @@ function VenueHistoryCard({
 				<div className="flex shrink-0 items-center gap-1.5">
 					<div className="text-right">
 						<div className="font-sora text-sm font-bold text-[var(--iz-gold-l)]">
-							{rollup.shiftCount} shift{rollup.shiftCount !== 1 ? "s" : ""}
+							{fill(
+								rollup.shiftCount === 1
+									? t.rosterGrid.shiftCountOne
+									: t.rosterGrid.shiftCountMany,
+								{ n: rollup.shiftCount },
+							)}
 						</div>
-						<p className="iz-tiny iz-muted2">Latest {latest?.dateDisplay}</p>
+						<p className="iz-tiny iz-muted2">
+							{fill(t.history.latestPlain, { date: latest?.dateDisplay ?? "" })}
+						</p>
 					</div>
 					{onTap && (
 						<ChevronRight
@@ -1041,10 +1097,15 @@ function PrHistoryCard({
 				<div className="flex shrink-0 items-center gap-1.5">
 					<div className="text-right">
 						<div className="font-sora text-sm font-bold text-[var(--iz-gold-l)]">
-							{rollup.shiftCount} shift{rollup.shiftCount !== 1 ? "s" : ""}
+							{fill(
+								rollup.shiftCount === 1
+									? t.rosterGrid.shiftCountOne
+									: t.rosterGrid.shiftCountMany,
+								{ n: rollup.shiftCount },
+							)}
 						</div>
 						<p className="iz-tiny iz-muted2">
-							Latest {rollup.latestDateDisplay}
+							{fill(t.history.latestPlain, { date: rollup.latestDateDisplay })}
 						</p>
 					</div>
 					{onTap && (

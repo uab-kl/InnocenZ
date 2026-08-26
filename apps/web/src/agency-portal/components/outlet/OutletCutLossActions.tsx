@@ -88,7 +88,7 @@ export function OutletCutLossActions({
 	const [bestEffortOpen, setBestEffortOpen] = useState(false);
 	const [open, setOpen] = useState(false);
 	const { demand, supplied, openSlots } = outletShiftDemandSupplied(shift);
-	const adjustments = outletShiftCutLossAdjustmentsLabel(shift);
+	const adjustments = outletShiftCutLossAdjustmentsLabel(shift, t);
 	const perSlotLabor = outletShiftPlannedLaborPerSlot(
 		shift,
 		tierRates,
@@ -254,7 +254,9 @@ export function OutletCutLossActions({
 						)}
 						{savedCredited > 0 && (
 							<IzPill variant="green" className="shrink-0 !py-0.5 !text-[11px]">
-								Saved {formatRm(savedCredited)}
+								{fill(t.outletPanels.savedPill, {
+									amount: formatRm(savedCredited),
+								})}
 							</IzPill>
 						)}
 						{pendingRequest && (
@@ -272,14 +274,16 @@ export function OutletCutLossActions({
 				{pendingRequest && (
 					<p className="mt-2 flex items-center gap-1.5 rounded-lg border border-[rgba(244,183,64,.28)] bg-[rgba(244,183,64,.08)] px-2.5 py-2 text-xs text-[var(--iz-amber)]">
 						<Clock className="h-3.5 w-3.5 shrink-0" />
-						Awaiting agency · {cutlostRequestTitle(pendingRequest)} · ~
-						{formatRm(pendingRequest.estimatedSavings)} savings
+						{fill(t.outletPanels.awaitingAgencyRequest, {
+							title: cutlostRequestTitle(pendingRequest),
+							amount: formatRm(pendingRequest.estimatedSavings),
+						})}
 					</p>
 				)}
 
 				{adjustments && (
 					<p className="mt-1 text-xs text-[var(--iz-muted2)]">
-						Already applied · {adjustments}
+						{fill(t.outletPanels.alreadyApplied, { detail: adjustments })}
 					</p>
 				)}
 
@@ -335,10 +339,11 @@ export function OutletCutLossActions({
 					{t.today.bestEffortCutLost}
 				</IzCardTitle>
 				<p className="iz-tiny iz-muted mt-1">
-					Optimized for {shift.event} — release PRs at current time (
-					{releaseAtClock}). They are paid for hours worked plus commissions;
-					unused wage share ({bestEffortPct}%) is estimated savings. If not
-					reassigned by agency, they are sent home.
+					{fill(t.outletPanels.bestEffortIntro, {
+						event: shift.event,
+						clock: releaseAtClock,
+						pct: bestEffortPct,
+					})}
 				</p>
 				{bestEffortPlan ? (
 					<>
@@ -350,14 +355,21 @@ export function OutletCutLossActions({
 							) ?? formatRm(0)}
 						</p>
 						<p className="iz-tiny iz-muted2 mt-0.5">
-							~{formatRm(bestEffortPlan.estimatedSavings)} save ({bestEffortPct}
-							% of {formatRm(bestEffortPlan.unusedWages)} unused wages)
+							{fill(t.outletPanels.bestEffortSaveLine, {
+								amount: formatRm(bestEffortPlan.estimatedSavings),
+								pct: bestEffortPct,
+								unused: formatRm(bestEffortPlan.unusedWages),
+							})}
 						</p>
 						<div className="mt-4 space-y-2 rounded-xl border border-[var(--iz-line)] bg-white/[0.02] p-3">
 							{bestEffortPlan.prNames.length > 0 && (
 								<div className="flex items-start gap-2 text-sm">
 									<UserMinus className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-gold)]" />
-									<span>Release {bestEffortPlan.prNames.join(", ")} early</span>
+									<span>
+										{fill(t.outletPanels.releaseNamesEarly, {
+											names: bestEffortPlan.prNames.join(", "),
+										})}
+									</span>
 								</div>
 							)}
 						</div>

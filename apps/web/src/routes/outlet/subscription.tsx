@@ -893,6 +893,7 @@ function OutletSubscriptionPage() {
 
 			<OutletSection
 				title={t.agencyMisc.paymentMethod}
+				iconKey="Payment method"
 				hint={
 					backend.backed
 						? backend.card

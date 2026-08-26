@@ -12,6 +12,8 @@ import {
 } from "@agency-portal/lib/pr-demo";
 import type { PrUpcomingShift } from "@agency-portal/lib/pr-features";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 /** Atlas payroll cycle window — agency publishes shifts here (live Sun through +3 weeks). */
 export function getAgencyScheduleFromIso(): string {
@@ -42,12 +44,20 @@ function ymdFromIso(iso: string): [number, number, number] {
 	return [y, m, d];
 }
 
-/** Future shifts — roster assignments, swaps, bookings + outlet-confirmed upcoming list. */
+/**
+ * Future shifts — roster assignments, swaps, bookings + outlet-confirmed upcoming list.
+ *
+ * `kind` is the machine-readable state and is what callers branch on; `detail`
+ * is the sentence the PR reads. Only `detail` moves with the locale — a status
+ * is data and the words are presentation, and only one of the two may ever be
+ * compared.
+ */
 export function buildPrUpcomingEvents(
 	prId: string,
 	roster: AgencyRosterSlot[],
 	upcoming: PrUpcomingShift[],
 	baselineIso = getLiveTodayIso(),
+	t: PortalTranslations,
 ): PrUpcomingEvent[] {
 	const events: PrUpcomingEvent[] = [];
 	const covered = new Set<string>();
@@ -70,9 +80,15 @@ export function buildPrUpcomingEvents(
 				date: dateYmd,
 				time: slot.shift,
 				kind: "assignment",
+				// `agencyNote` is the agency's own free text — data, so it is shown
+				// verbatim; only the fallback sentence is copy.
+				// ⚠️ The fallback said "approve or decline in schedule". A PR can do
+				// neither — they can only CANCEL (see the pr-cannot-accept-decline
+				// rule, and rosterGrid.leaveAwaitingAgency, which was corrected for
+				// naming the same wrong party). Translating that verbatim would have
+				// shipped the wrong instruction in a second language.
 				detail:
-					slot.agencyAssignment.agencyNote ??
-					"Agency assignment — approve or decline in schedule",
+					slot.agencyAssignment.agencyNote ?? t.libShift.eventAgencyAssignment,
 			});
 			covered.add(key);
 			continue;
@@ -85,7 +101,10 @@ export function buildPrUpcomingEvents(
 				date: dateYmd,
 				time: slot.shift,
 				kind: "swap",
-				detail: `Move to ${slot.outletSwap.targetOutlet} — ${slot.outletSwap.agencyNote ?? "agency swap request"}`,
+				detail: fill(t.libShift.swapMoveToOutlet, {
+					outlet: slot.outletSwap.targetOutlet,
+					note: slot.outletSwap.agencyNote ?? t.libShift.swapRequestFromAgency,
+				}),
 			});
 			covered.add(key);
 			continue;
@@ -98,7 +117,9 @@ export function buildPrUpcomingEvents(
 				date: dateYmd,
 				time: slot.shift,
 				kind: "pending",
-				detail: `${slot.outlet} must confirm your slot on their roster`,
+				detail: fill(t.libShift.outletMustConfirmSlot, {
+					outlet: slot.outlet,
+				}),
 			});
 			covered.add(key);
 			continue;
@@ -118,8 +139,8 @@ export function buildPrUpcomingEvents(
 					kind: slot.status === "swap-pending" ? "pending" : "confirmed",
 					detail:
 						slot.status === "swap-pending"
-							? "Swap in progress — awaiting outlet confirmation"
-							: "Scheduled on agency roster",
+							? t.libShift.swapAwaitingOutlet
+							: t.libShift.scheduledOnAgencyRoster,
 				});
 				covered.add(key);
 			}
@@ -142,10 +163,13 @@ export function buildPrUpcomingEvents(
 			date: up.date,
 			time: up.time,
 			kind: up.status === "confirmed" ? "confirmed" : "pending",
+			// The "not confirmed" arm named the DEMO agency ("Atlas proposed"), so a
+			// real PR was told a company they have never worked for booked them.
+			// It now names the role, the way prPortal.assignedByAgencyNote does.
 			detail:
 				up.status === "confirmed"
-					? `${up.outlet} confirmed you on their bookings roster`
-					: "Atlas proposed — outlet has not confirmed yet",
+					? fill(t.libShift.outletConfirmedOnBookings, { outlet: up.outlet })
+					: t.libShift.agencyProposedNotConfirmed,
 		});
 	}
 
@@ -164,9 +188,19 @@ export type TimetableEntry = {
 	dateLabel: string;
 	outlet: string;
 	time: string;
+	/**
+	 * The rendered word only. `statusVariant` is the machine-readable half and is
+	 * the one to branch on — comparing `statusLabel` to anything would work in
+	 * English and quietly stop matching in Chinese, which is how the outlet
+	 * staffing tags lost their colours (see OutletShiftStaffingSection).
+	 *
+	 * The catch-all arm is the one exception: a status this builder does not
+	 * recognise falls through to the raw stored value rather than blanking a pill.
+	 */
 	statusLabel: string;
 	statusVariant: "green" | "amber" | "red" | "ink";
 	source: ShiftDataSource;
+	/** An outlet or agency NAME — data, never translated. */
 	sourceLabel: string;
 	sourceDetail: string;
 	slot?: AgencyRosterSlot;
@@ -298,7 +332,10 @@ function dedupeTimetableEntries(entries: TimetableEntry[]): TimetableEntry[] {
 	});
 }
 
-function resolveSlotEntry(slot: AgencyRosterSlot): TimetableEntry {
+function resolveSlotEntry(
+	slot: AgencyRosterSlot,
+	t: PortalTranslations,
+): TimetableEntry {
 	const [y, m, d] = slot.dateIso.split("-").map(Number);
 	// The third copy of `rosterSlotAgencyName`'s chain, and like the other two it
 	// omitted the `agencyId` arm — so a real backend slot, which carries only an
@@ -314,15 +351,19 @@ function resolveSlotEntry(slot: AgencyRosterSlot): TimetableEntry {
 			dateLabel: fmtHistDate(y, m, d),
 			outlet: slot.outlet,
 			time: slot.shift,
-			statusLabel: "Scheduled",
+			statusLabel: t.roster.scheduled,
 			statusVariant: "green",
 			source: outletRequested ? "outlet" : "agency",
 			sourceLabel: outletRequested ? slot.outlet : agency,
+			// Both fallbacks named the DEMO agency. On a real session the PR was
+			// told "Atlas confirmed" about a company that never touched the slot.
 			sourceDetail:
 				slot.agencyAssignment?.agencyNote ??
 				(outletRequested
-					? `${slot.outlet} requested you — Atlas confirmed`
-					: "Atlas assigned you — cancel per agency policy if needed"),
+					? fill(t.libShift.outletRequestedAgencyConfirmed, {
+							outlet: slot.outlet,
+						})
+					: t.libShift.agencyAssignedCancelPolicy),
 			slot,
 		};
 	}
@@ -334,11 +375,13 @@ function resolveSlotEntry(slot: AgencyRosterSlot): TimetableEntry {
 			dateLabel: fmtHistDate(y, m, d),
 			outlet: slot.outlet,
 			time: slot.shift,
-			statusLabel: "Awaiting agency",
+			statusLabel: t.libShift.awaitingAgency,
 			statusVariant: "amber",
 			source: "outlet",
 			sourceLabel: slot.outlet,
-			sourceDetail: `${slot.outlet} must confirm your slot on their roster`,
+			sourceDetail: fill(t.libShift.outletMustConfirmSlot, {
+				outlet: slot.outlet,
+			}),
 			slot,
 		};
 	}
@@ -350,11 +393,14 @@ function resolveSlotEntry(slot: AgencyRosterSlot): TimetableEntry {
 			dateLabel: fmtHistDate(y, m, d),
 			outlet: slot.outlet,
 			time: slot.shift,
-			statusLabel: "Outlet swap",
+			statusLabel: t.libShift.outletSwap,
 			statusVariant: "amber",
 			source: "agency",
 			sourceLabel: agency,
-			sourceDetail: `Move to ${slot.outletSwap.targetOutlet} — ${slot.outletSwap.agencyNote ?? "agency request"}`,
+			sourceDetail: fill(t.libShift.swapMoveToOutlet, {
+				outlet: slot.outletSwap.targetOutlet,
+				note: slot.outletSwap.agencyNote ?? t.libShift.swapRequestFromAgency,
+			}),
 			slot,
 		};
 	}
@@ -366,11 +412,11 @@ function resolveSlotEntry(slot: AgencyRosterSlot): TimetableEntry {
 			dateLabel: fmtHistDate(y, m, d),
 			outlet: slot.outlet,
 			time: slot.shift,
-			statusLabel: "Scheduled",
+			statusLabel: t.roster.scheduled,
 			statusVariant: "green",
 			source: "agency",
 			sourceLabel: agency,
-			sourceDetail: "Agency assigned this shift on your roster",
+			sourceDetail: t.libShift.agencyAssignedOnYourRoster,
 			slot,
 		};
 	}
@@ -382,11 +428,13 @@ function resolveSlotEntry(slot: AgencyRosterSlot): TimetableEntry {
 			dateLabel: fmtHistDate(y, m, d),
 			outlet: slot.outlet,
 			time: slot.shift,
-			statusLabel: slot.status === "on-duty" ? "On duty" : "En route",
+			// Branch on the STORED status, render the translated word.
+			statusLabel:
+				slot.status === "on-duty" ? t.roster.onDuty : t.libShift.enRoute,
 			statusVariant: "green",
 			source: "outlet",
 			sourceLabel: slot.outlet,
-			sourceDetail: "Live shift from outlet check-in roster",
+			sourceDetail: t.libShift.liveShiftFromOutletCheckIn,
 			slot,
 		};
 	}
@@ -397,16 +445,22 @@ function resolveSlotEntry(slot: AgencyRosterSlot): TimetableEntry {
 		dateLabel: fmtHistDate(y, m, d),
 		outlet: slot.outlet,
 		time: slot.shift,
+		// A status this builder does not know about — the RAW stored value, on
+		// purpose. There is no key to look up for a status added server-side, and
+		// showing it beats blanking the pill; see the `statusLabel` doc above.
 		statusLabel: slot.status,
 		statusVariant: "ink",
 		source: "agency",
 		sourceLabel: agency,
-		sourceDetail: "Atlas agency roster",
+		sourceDetail: t.libShift.agencyRoster,
 		slot,
 	};
 }
 
-function resolveUpcomingEntry(up: PrUpcomingShift): TimetableEntry {
+function resolveUpcomingEntry(
+	up: PrUpcomingShift,
+	t: PortalTranslations,
+): TimetableEntry {
 	const [y, m, d] = up.date;
 	const dateIso = dateKeyFromTuple(up.date);
 	const confirmed = up.status === "confirmed";
@@ -417,13 +471,16 @@ function resolveUpcomingEntry(up: PrUpcomingShift): TimetableEntry {
 		dateLabel: fmtHistDate(y, m, d),
 		outlet: up.outlet,
 		time: up.time,
-		statusLabel: confirmed ? "Scheduled" : "Awaiting agency",
+		statusLabel: confirmed ? t.roster.scheduled : t.libShift.awaitingAgency,
 		statusVariant: confirmed ? "green" : "amber",
 		source: "agency",
 		sourceLabel: DEFAULT_PR_AGENCY_NAME,
+		// Shares `agencyProposedNotConfirmed` with buildPrUpcomingEvents — one fact
+		// said twice was one fact that could drift into two translations. It also
+		// drops the demo agency's name, which a real PR should never read.
 		sourceDetail: confirmed
-			? `${up.outlet} confirmed you on their bookings roster`
-			: "Atlas proposed this shift — outlet has not confirmed yet",
+			? fill(t.libShift.outletConfirmedOnBookings, { outlet: up.outlet })
+			: t.libShift.agencyProposedNotConfirmed,
 		upcoming: up,
 	};
 }
@@ -439,6 +496,13 @@ export function getUpcomingWeekRange(baselineIso = getLiveTodayIso()): {
 	};
 }
 
+/**
+ * A DATE RANGE, not copy — no `t`, deliberately. It is built from `fmtHistDate`,
+ * the shared date helper that already formats against the active locale, and a
+ * dictionary key that baked in a month name would be a second source of truth
+ * for dates. Its one consumer drops it into `prPortal.timetableForWeek`, whose
+ * `{week}` hole is documented as arriving already formatted.
+ */
 export function formatUpcomingWeekLabel(
 	fromIso: string,
 	toIso: string,
@@ -460,6 +524,7 @@ export function buildTimetableEntriesInRange(
 	fromIso: string,
 	toIso: string,
 	baselineIso = DEFAULT_ROSTER_DATE_ISO,
+	t: PortalTranslations,
 ): TimetableEntry[] {
 	const slots = roster.filter((s) => {
 		if (
@@ -471,14 +536,18 @@ export function buildTimetableEntriesInRange(
 		return s.dateIso >= fromIso && s.dateIso <= toIso;
 	});
 
-	const entries: TimetableEntry[] = slots.map(resolveSlotEntry);
+	// Named `slot`, not `t` — a map callback called `t` would shadow the locale
+	// and every label in `resolveSlotEntry` would read off the wrong object.
+	const entries: TimetableEntry[] = slots.map((slot) =>
+		resolveSlotEntry(slot, t),
+	);
 
 	for (const up of upcoming) {
 		const covered = slots.some((s) => slotHasRosterCoverage(s, up));
 		if (covered) continue;
 		const dateIso = dateKeyFromTuple(up.date);
 		if (dateIso < baselineIso || dateIso < fromIso || dateIso > toIso) continue;
-		entries.push(resolveUpcomingEntry(up));
+		entries.push(resolveUpcomingEntry(up, t));
 	}
 
 	return dedupeTimetableEntries(
@@ -494,6 +563,7 @@ export function buildUpcomingWeekTimetableEntries(
 	roster: AgencyRosterSlot[],
 	upcoming: PrUpcomingShift[],
 	baselineIso = getLiveTodayIso(),
+	t: PortalTranslations,
 ): TimetableEntry[] {
 	const { fromIso, toIso } = getUpcomingWeekRange(baselineIso);
 	return buildTimetableEntriesInRange(
@@ -503,6 +573,7 @@ export function buildUpcomingWeekTimetableEntries(
 		fromIso,
 		toIso,
 		baselineIso,
+		t,
 	);
 }
 

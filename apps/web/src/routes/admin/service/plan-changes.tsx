@@ -346,7 +346,9 @@ function PlanChangesPage() {
 		}) => approvePlanChange(id, quotedAmount, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || t.adminRequests.toastPlanChangeApproved);
+			toast.success(
+				response.message || t.adminRequests.toastPlanChangeApproved,
+			);
 		},
 		onError: (error) => {
 			toast.error(
@@ -360,7 +362,9 @@ function PlanChangesPage() {
 		mutationFn: (id: string) => declineRequest(id, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || t.adminRequests.toastPlanChangeDeclined);
+			toast.success(
+				response.message || t.adminRequests.toastPlanChangeDeclined,
+			);
 		},
 		onError: (error) => {
 			toast.error(
@@ -819,9 +823,7 @@ function PlanChangeEditForm({
 				{/* Immutable record of the originating Outlet/Agency action. */}
 				<dl className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">
-							{t.adminRequests.colWho}
-						</dt>
+						<dt className="text-muted-foreground">{t.adminRequests.colWho}</dt>
 						<dd className="text-right font-medium">{request.subscriberName}</dd>
 					</div>
 					{request.contactName && (
@@ -833,9 +835,7 @@ function PlanChangeEditForm({
 						</div>
 					)}
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">
-							{t.adminRequests.colRole}
-						</dt>
+						<dt className="text-muted-foreground">{t.adminRequests.colRole}</dt>
 						<dd className="text-right">
 							{request.subscriberType
 								? roleLabels[request.subscriberType](t)

@@ -32,6 +32,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { ChevronRight, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 const DEFAULT_OUTLET = OUTLET_NAMES[0] ?? "Velvet 23";
 
@@ -140,7 +141,7 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 			 */
 			const unassigned = queuedJobs.filter((job) => !job.outletId);
 			if (unassigned.length > 0) {
-				toast("Choose a venue for every job before submitting", "warn");
+				toast(t.agencySpecial.chooseVenueForEveryJob, "warn");
 				return;
 			}
 			const jobs = queuedJobs
@@ -163,12 +164,8 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 			if (jobs.length > 0) {
 				backend
 					.postJobs(jobs)
-					.then(() =>
-						toast("Job posting submitted for admin review", "success"),
-					)
-					.catch(() =>
-						toast("Could not submit job posting — try again", "warn"),
-					);
+					.then(() => toast(t.agencySpecial.jobPostingSubmitted, "success"))
+					.catch(() => toast(t.agencySpecial.jobPostingSubmitFailed, "warn"));
 			}
 			resetComposer();
 			return;
@@ -211,13 +208,28 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 		Boolean(parseJobPostingDraft(composer)) &&
 		composer.selectedDateIsos.length > 0;
 
+	/*
+	 * One whole sentence per case instead of "Post" + count + "job"/"jobs" +
+	 * "for admin review". Chinese has no plural and puts the measure word after
+	 * the number, so glued fragments cannot be reordered into it.
+	 */
+	const submitLabel =
+		queuedJobs.length === 0
+			? t.agencySpecial.postJobsForReview
+			: fill(
+					queuedOrderCount === 1
+						? t.agencySpecial.postJobCountOneForReview
+						: t.agencySpecial.postJobCountManyForReview,
+					{ n: queuedOrderCount },
+				);
+
 	return (
 		<div className="iz-agency-job-posting mt-2">
 			{canBook && (
 				<section className="iz-job-posting-form-section">
 					<div className="iz-job-posting-form-card">
 						<JobPostingMicroLabel className="mb-3 block">
-							New job
+							{t.agencySpecial.newJob}
 						</JobPostingMicroLabel>
 						{editingId ? (
 							<JobPostingComposer
@@ -230,7 +242,9 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 									)
 								}
 								offers={serviceOffers}
-								title={`Edit job ${queuedJobs.findIndex((j) => j.id === editingId) + 1}`}
+								title={fill(t.agencySpecial.editJobN, {
+									n: queuedJobs.findIndex((j) => j.id === editingId) + 1,
+								})}
 								onRemove={() => removeFromQueue(editingId)}
 								showRemove
 								onDone={() => setEditingId(null)}
@@ -265,7 +279,9 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 								className="iz-btn iz-btn-soft iz-job-posting-add-btn mt-3 w-full disabled:opacity-40"
 							>
 								<Plus className="h-4 w-4" />
-								{queuedJobs.length === 0 ? "Add job" : "Add another job"}
+								{queuedJobs.length === 0
+									? t.agencySpecial.addJob
+									: t.agencySpecial.addAnotherJob}
 							</button>
 						)}
 					</div>
@@ -273,9 +289,16 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 					{queuedJobs.length > 0 && !editingId && (
 						<div className="mt-3">
 							<div className="mb-2 flex items-center justify-between gap-2">
-								<JobPostingMicroLabel>Queued jobs</JobPostingMicroLabel>
+								<JobPostingMicroLabel>
+									{t.agencySpecial.queuedJobs}
+								</JobPostingMicroLabel>
 								<span className="iz-job-posting-count-pill">
-									{queuedJobs.length} job{queuedJobs.length !== 1 ? "s" : ""}
+									{fill(
+										queuedJobs.length === 1
+											? t.agencySpecial.jobCountOne
+											: t.agencySpecial.jobCountMany,
+										{ n: queuedJobs.length },
+									)}
 								</span>
 							</div>
 							<JobQueueTable
@@ -292,8 +315,7 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 						disabled={queuedJobs.length === 0}
 						className="iz-btn iz-btn-primary iz-job-posting-submit-btn mt-3 w-full disabled:opacity-40"
 					>
-						Post{queuedJobs.length > 0 ? ` ${queuedOrderCount}` : ""} job
-						{queuedOrderCount !== 1 ? "s" : ""} for admin review
+						{submitLabel}
 						<ChevronRight className="h-4 w-4" />
 					</button>
 				</section>
@@ -301,9 +323,14 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 
 			<section className="iz-job-posting-list-section">
 				<div className="iz-job-posting-list-head">
-					<JobPostingMicroLabel>Your job postings</JobPostingMicroLabel>
+					<JobPostingMicroLabel>
+						{t.agencySpecial.yourJobPostings}
+					</JobPostingMicroLabel>
 					<span className="iz-job-posting-count-pill">
-						{filtered.length} of {agencyPosted.length}
+						{fill(t.agencySpecial.countOfTotal, {
+							n: filtered.length,
+							total: agencyPosted.length,
+						})}
 					</span>
 				</div>
 
@@ -323,7 +350,7 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 				<div className="mt-2.5">
 					<JobPostingsTable
 						rows={filtered}
-						statusLabel={agencyJobPostingInzLabel}
+						statusLabel={(row) => agencyJobPostingInzLabel(row, t)}
 						statusTone={agencyJobPostingStatusTone}
 					/>
 				</div>
