@@ -96,7 +96,7 @@ export function BootSplash() {
               source={LOGO}
               style={styles.logo}
               resizeMode="contain"
-              accessibilityLabel="InnocenZ logo"
+              accessibilityLabel={t.common.brandLogo}
             />
           </Animated.View>
         </View>

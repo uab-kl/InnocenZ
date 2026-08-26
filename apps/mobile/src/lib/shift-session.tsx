@@ -12,6 +12,7 @@ import {
   type DemoShift,
   type WeekPayRecord,
 } from './demo-shifts';
+import { formatMessage, translations, type AppTranslations } from '../i18n';
 
 const SESSION_KEY = 'iz-pr-shift-session-v2';
 const WEEK_PAY_KEY = 'iz-pr-week-pay-v1';
@@ -148,23 +149,36 @@ export function shiftPayoutTotal(baseWages: number, logs: ReceiptLog[]): number 
   return Math.round((baseWages + shiftCommissionTotal(logs)) * 100) / 100;
 }
 
-/** Elapsed check-in → check-out label, with OT beyond scheduled hours when known. */
+/**
+ * Elapsed check-in → check-out label, with OT beyond scheduled hours when known.
+ *
+ * Module scope, so it cannot call `useLocale` itself — the CALLER (a component,
+ * which has `t`) hands the dictionary in. Callers that pass nothing keep the
+ * English wording, taken from the dictionary rather than duplicated here.
+ */
 export function shiftDurationLabel(
   checkedInAt: string | null | undefined,
   checkedOutAt: string | null | undefined,
+  t?: AppTranslations,
   scheduledHours = 6,
 ): string {
   if (!checkedInAt || !checkedOutAt) return '—';
   const start = new Date(checkedInAt).getTime();
   const end = new Date(checkedOutAt).getTime();
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '—';
+  const copy = t ?? translations.en;
   const totalMins = Math.round((end - start) / 60_000);
   const h = Math.floor(totalMins / 60);
   const m = totalMins % 60;
-  const base = m > 0 ? `${h}h ${m}m` : `${h}h`;
+  // Two spelled-out templates rather than one built by appending a minutes
+  // fragment — Chinese has no such fragment to append.
+  const base =
+    m > 0
+      ? formatMessage(copy.shiftLib.durationHoursMinutes, { h, m })
+      : formatMessage(copy.shiftLib.durationHours, { h });
   const otMins = Math.max(0, totalMins - scheduledHours * 60);
   if (otMins <= 0) return base;
-  return `${base} incl. +${otMins}m OT`;
+  return formatMessage(copy.shiftLib.durationWithOt, { base, ot: otMins });
 }
 
 const DEFAULT: Persisted = {

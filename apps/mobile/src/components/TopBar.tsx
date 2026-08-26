@@ -227,9 +227,7 @@ export function TopBar({
           <Pressable style={styles.backdropTap} onPress={() => setSheetOpen(false)} />
           <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
             <Text style={styles.sheetTitle}>{t.topbar.notifications}</Text>
-            <Text style={styles.sheetHint}>
-              Assignments, swaps, PVs, and SOS receipts — tap to open the screen.
-            </Text>
+            <Text style={styles.sheetHint}>{t.topbar.notificationsHint}</Text>
             {/*
               * MARK ALL READ — real, one POST per unread row.
               *
@@ -301,7 +299,7 @@ export function TopBar({
                   </View>
                   {!n.read && (
                     <View style={styles.newPill}>
-                      <Text style={styles.newPillText}>New</Text>
+                      <Text style={styles.newPillText}>{t.common.newBadge}</Text>
                     </View>
                   )}
                 </View>

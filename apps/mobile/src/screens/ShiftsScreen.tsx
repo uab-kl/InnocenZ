@@ -20,7 +20,7 @@ import {
 import { useSession } from '../lib/session';
 import { assetUrl, type ShiftAssignmentRecord } from '../lib/api';
 import { useViewportSize } from '../lib/viewport';
-import { useLocale } from '../i18n';
+import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { Section } from '../components/Section';
 import { ImageLightbox, ZoomHint } from '../components/ImageLightbox';
 import { AgencySchedulePanel } from '../components/AgencySchedulePanel';
@@ -52,8 +52,16 @@ function ymdFromIso(iso: string): Ymd {
   return [y, m, d];
 }
 
-/** Backend shift assignment -> the DemoShift shape the cards render. */
-function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
+/**
+ * Backend shift assignment -> the DemoShift shape the cards render.
+ *
+ * Takes `t` because it runs at module scope: the two fallbacks it fills in
+ * ("Outlet", "No event name") are COPY on the card, so they have to come from
+ * the active locale rather than being baked in here. `eventKind` stays the
+ * English discriminator DemoShift documents — TonightCard translates it at
+ * render, and the special-event style still tests it.
+ */
+function assignmentToShift(a: ShiftAssignmentRecord, t: AppTranslations): DemoShift {
   // Attendance stamps win: checked out → Complete, checked in → On duty.
   const status: DemoShift['status'] =
     a.checkOutAt || a.status === 'completed'
@@ -65,11 +73,11 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
           : 'scheduled';
   return {
     id: a.id,
-    outlet: a.outletName ?? 'Outlet',
+    outlet: a.outletName ?? t.common.outlet,
     address: a.outletAddress,
     // `event_name` is nullable; an unnamed shift says so rather than borrowing
     // the generic word "Shift", which read as a real event name on the card.
-    event: a.eventName?.trim() || 'No event name',
+    event: a.eventName?.trim() || t.shifts.noEventName,
     eventKind: a.eventKind === 'special' ? 'Special event' : 'Normal shift',
     // The venue's asks. Trimmed to null so the card can gate on truthiness —
     // an empty string would draw a labelled row with nothing after it.
@@ -146,7 +154,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
         // Excused via approved MC/leave — drops off the upcoming list.
         a.status !== 'leave_approved',
     )
-    .map(assignmentToShift);
+    .map((a) => assignmentToShift(a, t));
 
   // Today lists EVERY shift the PR works today: at most one still
   // pending/on-duty (the check-in target) plus any already checked-out. A
@@ -182,7 +190,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     .map((a) => {
       const d = new Date(a.checkOutAt as string);
       return {
-        ...assignmentToShift(a),
+        ...assignmentToShift(a, t),
         // Show the worked (check-out) day on the card, not the seed shift_date.
         date: [d.getFullYear(), d.getMonth() + 1, d.getDate()] as Ymd,
       };
@@ -255,21 +263,23 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   // summary; that fallback is now gone (active-shift.tsx, pickActive), but the
   // scoping stays — this header must describe today, not whatever card another
   // screen happens to be holding.
-  const todayStatus = tonightShift
+  // A CODE, never the label — the green/gold test below reads it, so it must
+  // not move with the locale. `todayStatusLabel` is the only thing rendered.
+  const todayStatus: 'on-duty' | 'tonight' | 'complete' | 'off' = tonightShift
     ? tonightShift.status === 'on-duty'
-      ? 'On duty'
-      : 'Tonight'
+      ? 'on-duty'
+      : 'tonight'
     : completedToday.length > 0
-      ? 'Complete'
-      : 'Off';
+      ? 'complete'
+      : 'off';
   const todayStatusLabel =
-    todayStatus === 'On duty'
+    todayStatus === 'on-duty'
       ? t.shifts.onDuty
-      : todayStatus === 'Tonight'
+      : todayStatus === 'tonight'
         ? t.shifts.tonight
-        : todayStatus === 'Complete'
+        : todayStatus === 'complete'
           ? t.shifts.complete
-          : todayStatus;
+          : t.shifts.off;
 
   // CTA per card, not per global phase — a completed card always offers its
   // summary even while a fresh same-day shift owns the Check in button.
@@ -299,7 +309,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
             <HubTab
               label={t.shifts.today}
               value={todayStatusLabel}
-              valueColor={todayStatus === 'Complete' ? C.green : C.goldL}
+              valueColor={todayStatus === 'complete' ? C.green : C.goldL}
               on={open.today}
               onPress={() => toggleHubSection('today')}
             />
@@ -321,7 +331,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
 
           <View style={styles.sections}>
             <Section
-              title="Today"
+              title={t.shifts.today}
               icon={House}
               open={open.today}
               onToggle={(next) => toggleSection('today', next)}
@@ -334,12 +344,12 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                       shift={s}
                       eyebrow={
                         s.status === 'on-duty'
-                          ? 'ON DUTY'
+                          ? t.shifts.onDuty
                           : i === 0
-                            ? 'TONIGHT'
-                            : 'ALSO TODAY'
+                            ? t.shifts.tonight
+                            : t.shifts.alsoToday
                       }
-                      cta={s.status === 'on-duty' ? 'Attendance' : 'Check in'}
+                      cta={s.status === 'on-duty' ? t.shifts.attendance : t.shifts.checkIn}
                       // Cards start collapsed — the PR taps one open to see
                       // the details they want.
                       defaultOpen={false}
@@ -357,12 +367,12 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                       shift={s}
                       eyebrow={
                         ymdToIso(...s.date) !== todayIso
-                          ? 'LAST NIGHT · COMPLETE'
+                          ? t.shifts.lastNightComplete
                           : tonightShift
-                            ? 'EARLIER TODAY · COMPLETE'
-                            : 'COMPLETE'
+                            ? t.shifts.earlierTodayComplete
+                            : t.shifts.complete
                       }
-                      cta="View summary"
+                      cta={t.shifts.viewSummary}
                       // Collapsed by default while a live shift owns the page;
                       // the lone just-finished shift stays expanded.
                       defaultOpen={false}
@@ -375,12 +385,12 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                   ))}
                 </View>
               ) : (
-                <EmptyDashed>No shift scheduled for today.</EmptyDashed>
+                <EmptyDashed>{t.shifts.noShiftToday}</EmptyDashed>
               )}
             </Section>
 
             <Section
-              title="To-do"
+              title={t.shifts.todo}
               icon={ClipboardList}
               open={open.todo}
               onToggle={(next) => toggleSection('todo', next)}
@@ -424,7 +434,9 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                     <View style={styles.todoIcon}>
                       <Clock size={16} color={C.amber} />
                     </View>
-                    <Text style={[styles.todoTitle, { flex: 1 }]}>Forgot to check out?</Text>
+                    <Text style={[styles.todoTitle, { flex: 1 }]}>
+                      {t.shifts.forgotCheckOut}
+                    </Text>
                     <ChevronDown
                       size={16}
                       color={C.amber}
@@ -445,22 +457,23 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                         */}
                       <View style={styles.overdueFacts}>
                         <View style={styles.overdueRow}>
-                          <Text style={styles.overdueKey}>WHERE</Text>
+                          <Text style={styles.overdueKey}>{t.shifts.where}</Text>
                           <Text style={styles.overdueVal}>
-                            {overdueCheckout.assignment.outletName ?? 'Outlet'}
+                            {overdueCheckout.assignment.outletName ?? t.common.outlet}
                           </Text>
                         </View>
                         <View style={styles.overdueRow}>
-                          <Text style={styles.overdueKey}>SHIFT ENDED</Text>
+                          <Text style={styles.overdueKey}>{t.shifts.shiftEnded}</Text>
                           <Text style={styles.overdueVal}>{overdueEndHm}</Text>
                         </View>
                       </View>
+                      {/* One sentence, one key — the time is a placeholder, not
+                          a fragment glued between two halves of English. */}
                       <Text style={styles.overdueWarn}>
-                        Your pay stops at {overdueEndHm} whenever you tap out — check out now to
-                        close the shift.
+                        {formatMessage(t.shifts.payStopsAt, { time: overdueEndHm })}
                       </Text>
                       <IzButton
-                        label="Check out"
+                        label={t.shifts.checkOut}
                         onPress={() => {
                           focus(null);
                           onNavigate('checkin');
@@ -473,7 +486,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               )}
               <OutletSwapRequests swaps={outletSwaps} />
               {todoItems.length === 0 && outletSwaps.pending.length === 0 && !overdueCheckout ? (
-                <EmptyDashed>Nothing to do</EmptyDashed>
+                <EmptyDashed>{t.shifts.nothingToDo}</EmptyDashed>
               ) : (
                 <View style={{ gap: 10 }}>
                   {todoItems.map((todo) => {
@@ -527,15 +540,15 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                               */}
                             <View style={styles.overdueFacts}>
                               <View style={styles.overdueRow}>
-                                <Text style={styles.overdueKey}>WHERE</Text>
+                                <Text style={styles.overdueKey}>{t.shifts.where}</Text>
                                 <Text style={styles.overdueVal}>{todo.outlet}</Text>
                               </View>
                               <View style={styles.overdueRow}>
-                                <Text style={styles.overdueKey}>VOUCHER</Text>
+                                <Text style={styles.overdueKey}>{t.shifts.voucher}</Text>
                                 <Text style={styles.overdueVal}>{todo.ref}</Text>
                               </View>
                               <View style={styles.overdueRow}>
-                                <Text style={styles.overdueKey}>NET PAY</Text>
+                                <Text style={styles.overdueKey}>{t.shifts.netPay}</Text>
                                 <Text style={styles.overdueVal}>{formatRM(todo.net)}</Text>
                               </View>
                             </View>
@@ -554,7 +567,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
             </Section>
 
             <Section
-              title="Agency schedule"
+              title={t.shifts.agencySchedule}
               icon={Calendar}
               open={open.agency}
               onToggle={(next) => toggleSection('agency', next)}
@@ -609,9 +622,17 @@ function TonightCard({
   /** "Earlier today" summaries start collapsed; the live shift starts open. */
   defaultOpen?: boolean;
 }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(defaultOpen);
   /** Full-size viewer for the event picture / outlet logo (owner: PR can zoom). */
   const [zoomUri, setZoomUri] = useState<string | null>(null);
+  /*
+   * `shift.eventKind` is the English discriminator DemoShift carries
+   * ('Special event' | 'Normal shift'), which the badge style below still
+   * tests. It is never printed raw — this is the label that reaches the PR.
+   */
+  const eventKindLabel =
+    shift.eventKind === 'Special event' ? t.shifts.specialEvent : t.shifts.normalShift;
   return (
     <View style={[styles.shiftCard, grad(GRADIENTS.shiftCard, 'rgba(232,194,122,0.08)')]}>
       <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
@@ -643,7 +664,7 @@ function TonightCard({
                   shift.eventKind === 'Special event' && styles.shiftHeroBadgeTextSpecial,
                 ]}
               >
-                {shift.eventKind ?? 'Normal shift'}
+                {eventKindLabel}
               </Text>
             </View>
             <ZoomHint />
@@ -667,10 +688,10 @@ function TonightCard({
             ) : null}
           </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <LabelWithIcon icon={Store} label="Outlet name" />
+            <LabelWithIcon icon={Store} label={t.shifts.outletName} />
             <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
             <Text style={styles.shiftEventLine} numberOfLines={1}>
-              {shift.event} · {shift.eventKind ?? 'Normal shift'}
+              {shift.event} · {eventKindLabel}
             </Text>
             {open && shift.address ? (
               <View style={styles.shiftAddrRow}>
@@ -685,11 +706,11 @@ function TonightCard({
         <>
           <View style={styles.shiftFacts}>
             <View style={styles.shiftFact}>
-              <LabelWithIcon icon={Calendar} label="Date" />
+              <LabelWithIcon icon={Calendar} label={t.shifts.date} />
               <Text style={styles.shiftFactValue}>{fmtDFriendly(...shift.date)}</Text>
             </View>
             <View style={styles.shiftFact}>
-              <LabelWithIcon icon={Clock} label="Time" />
+              <LabelWithIcon icon={Clock} label={t.shifts.time} />
               <Text style={styles.shiftFactValue}>{shift.time}</Text>
             </View>
             {/*
@@ -709,13 +730,13 @@ function TonightCard({
             */}
             {shift.dressCode ? (
               <View style={styles.shiftFact}>
-                <LabelWithIcon icon={Shirt} label="Dress code" />
+                <LabelWithIcon icon={Shirt} label={t.shifts.dressCode} />
                 <Text style={styles.shiftFactValue}>{shift.dressCode}</Text>
               </View>
             ) : null}
             {shift.languages ? (
               <View style={styles.shiftFact}>
-                <LabelWithIcon icon={Languages} label="Preferred languages" />
+                <LabelWithIcon icon={Languages} label={t.shifts.preferredLanguages} />
                 <Text style={styles.shiftFactValue}>{shift.languages}</Text>
               </View>
             ) : null}
@@ -898,6 +919,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.1,
     color: C.muted2,
+    // The eyebrows used to be typed in caps here ('ON DUTY', 'TONIGHT'). They
+    // now come from the dictionary, where the same phrases are Title Case and
+    // shared with the hub strip, so the CAPS is styling — where it belongs.
+    // A no-op on Chinese, which has no letter case.
+    textTransform: 'uppercase',
   },
   shiftVenue: {
     flexDirection: 'row',

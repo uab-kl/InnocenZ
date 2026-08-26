@@ -32,15 +32,13 @@ import {
   DEFAULT_CANCELLATION_BANDS,
   type CancellationBands,
   cancellationBandsFrom,
-  cancellationRuleSummary,
-  DAY_NAMES,
+  // Kept ONLY as the stable English id behind each month chip's React key —
+  // the label a PR reads comes from `MONTH_LONG` / `MONTH_SHORT` below. Keying
+  // on the rendered label would remount all twelve chips on a language switch.
   MONTH_LABELS,
-  MONTH_NAMES,
   buildScheduleDays,
   buildUpcomingWeekTimetable,
-  fmtDFriendly,
   formatRM,
-  formatUpcomingWeekLabel,
   getUpcomingWeekRange,
   isoToYmd,
   shiftEndDate,
@@ -49,6 +47,7 @@ import {
   todayYmd,
   ymdToIso,
 } from '../lib/demo-shifts';
+import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { shiftStartDate } from '../lib/venue-time';
 import { useActiveShift } from '../lib/active-shift';
 import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
@@ -70,7 +69,186 @@ const LEAVE_REJECTED_PREFIX = '[Leave rejected]';
 /** Matches the server's cap on shift_assignment.leave_proof_photos. */
 const MAX_MC_PHOTOS = 5;
 
+/**
+ * The seven column ids of the calendar header — English, and NOT what a PR
+ * reads: they are the React keys, so the grid does not remount when the
+ * language changes. The visible initial comes from `DOW_INITIAL[i]`.
+ */
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
+
+/*
+ * Calendar names, resolved by INDEX.
+ *
+ * `DAY_NAMES` / `MONTH_NAMES` / `MONTH_LABELS` in `lib/demo-shifts` are
+ * hardcoded English arrays shared with screens this panel does not own, so the
+ * translation happens here, at the render, and the arrays keep their meaning as
+ * data. Each entry is a FUNCTION — a module-scope map cannot read the
+ * dictionary, and storing the key name instead would ship "schedule.daySun" to
+ * the screen. The index is the stored fact (`Date#getDay()`, month 0-11) and
+ * never moves.
+ */
+const DOW_INITIAL: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.dowSun,
+  (t) => t.schedule.dowMon,
+  (t) => t.schedule.dowTue,
+  (t) => t.schedule.dowWed,
+  (t) => t.schedule.dowThu,
+  (t) => t.schedule.dowFri,
+  (t) => t.schedule.dowSat,
+];
+
+const DAY_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.daySun,
+  (t) => t.schedule.dayMon,
+  (t) => t.schedule.dayTue,
+  (t) => t.schedule.dayWed,
+  (t) => t.schedule.dayThu,
+  (t) => t.schedule.dayFri,
+  (t) => t.schedule.daySat,
+];
+
+const MONTH_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monShortJan,
+  (t) => t.schedule.monShortFeb,
+  (t) => t.schedule.monShortMar,
+  (t) => t.schedule.monShortApr,
+  (t) => t.schedule.monShortMay,
+  (t) => t.schedule.monShortJun,
+  (t) => t.schedule.monShortJul,
+  (t) => t.schedule.monShortAug,
+  (t) => t.schedule.monShortSep,
+  (t) => t.schedule.monShortOct,
+  (t) => t.schedule.monShortNov,
+  (t) => t.schedule.monShortDec,
+];
+
+const MONTH_LONG: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monLongJan,
+  (t) => t.schedule.monLongFeb,
+  (t) => t.schedule.monLongMar,
+  (t) => t.schedule.monLongApr,
+  (t) => t.schedule.monLongMay,
+  (t) => t.schedule.monLongJun,
+  (t) => t.schedule.monLongJul,
+  (t) => t.schedule.monLongAug,
+  (t) => t.schedule.monLongSep,
+  (t) => t.schedule.monLongOct,
+  (t) => t.schedule.monLongNov,
+  (t) => t.schedule.monLongDec,
+];
+
+/**
+ * "Sun · 19 Jul 2026" — `fmtDFriendly`'s output, in the active language.
+ *
+ * Built from ONE template rather than glued together here: Chinese writes the
+ * year first and the weekday last, so the order has to belong to the string.
+ */
+function friendlyDate(t: AppTranslations, y: number, m: number, d: number) {
+  return formatMessage(t.schedule.dateFriendly, {
+    dow: DAY_SHORT[new Date(y, m - 1, d).getDay()](t),
+    d: String(d).padStart(2, '0'),
+    mon: MONTH_SHORT[m - 1](t),
+    y,
+  });
+}
+
+/** "19–25 JUL 2026" / "28 JUL – 3 AUG 2026" — the timetable's week strip. */
+function weekRangeLabel(t: AppTranslations, fromIso: string, toIso: string) {
+  const [fy, fm, fd] = isoToYmd(fromIso);
+  const [, tm, td] = isoToYmd(toIso);
+  if (fm === tm) {
+    return formatMessage(t.schedule.weekRangeSameMonth, {
+      from: fd,
+      to: td,
+      mon: MONTH_SHORT[fm - 1](t),
+      y: fy,
+    });
+  }
+  return formatMessage(t.schedule.weekRangeCrossMonth, {
+    from: fd,
+    fromMon: MONTH_SHORT[fm - 1](t),
+    to: td,
+    toMon: MONTH_SHORT[tm - 1](t),
+    y: fy,
+  });
+}
+
+/**
+ * The timetable pill's label.
+ *
+ * The record KEY is the English string `timetableStatusFromStamps` computes —
+ * code-produced data, not copy — so it stays put; only what it resolves to
+ * moves with the language. An unrecognised label falls through unchanged
+ * rather than rendering blank.
+ */
+const TIMETABLE_STATUS: Record<string, (t: AppTranslations) => string> = {
+  Complete: (t) => t.shifts.complete,
+  'On duty': (t) => t.shifts.onDuty,
+  'Leave pending': (t) => t.schedule.statusLeavePending,
+  'Leave approved': (t) => t.schedule.statusLeaveApproved,
+  Pending: (t) => t.schedule.statusPending,
+  Scheduled: (t) => t.schedule.statusScheduled,
+};
+
+function timetableStatusLabel(t: AppTranslations, label: string) {
+  return TIMETABLE_STATUS[label]?.(t) ?? label;
+}
+
+/**
+ * The three cancellation bands as display rows.
+ *
+ * Derived here rather than taken from `cancellationRuleSummary`, whose strings
+ * are English templates: every hour and percentage stays a {placeholder} so the
+ * Chinese reads as a sentence instead of a formula with words wedged into it.
+ * `id` is a stable English key — the row is the same row in every language.
+ */
+type RuleRow = {
+  id: string;
+  label: (t: AppTranslations) => string;
+  outcome: (t: AppTranslations) => string;
+  tone: 'green' | 'amber' | 'red';
+};
+
+function cancellationRules(b: CancellationBands): RuleRow[] {
+  if (!b.enabled) {
+    return [
+      {
+        id: 'any',
+        label: (t) => t.schedule.ruleAnyTimeBefore,
+        outcome: (t) => t.schedule.ruleFreeCancel,
+        tone: 'green',
+      },
+    ];
+  }
+  return [
+    {
+      id: 'free',
+      label: (t) =>
+        formatMessage(t.schedule.ruleOverHours, { h: b.freeCancelHours }),
+      outcome: (t) => t.schedule.ruleFreeCancel,
+      tone: 'green',
+    },
+    {
+      id: 'short',
+      label: (t) =>
+        formatMessage(t.schedule.ruleBetweenHours, {
+          from: b.shortNoticeHours,
+          to: b.freeCancelHours,
+        }),
+      outcome: (t) =>
+        formatMessage(t.schedule.ruleWagesCut, { pct: b.shortNoticePct }),
+      tone: 'amber',
+    },
+    {
+      id: 'late',
+      label: (t) =>
+        formatMessage(t.schedule.ruleUnderHours, { h: b.shortNoticeHours }),
+      outcome: (t) =>
+        formatMessage(t.schedule.ruleWagesCut, { pct: b.lateCancelPct }),
+      tone: 'red',
+    },
+  ];
+}
 
 const KIND_STYLE: Record<
   ScheduleDayKind,
@@ -117,17 +295,20 @@ const KIND_STYLE: Record<
  * which is exactly why `missedByIso` excludes those statuses too.
  */
 function checkInOutcome(
+  t: AppTranslations,
   a: ShiftAssignmentRecord,
   missed: boolean,
 ): string {
-  if (a.status === 'cancelled') return 'Cancelled';
-  if (a.status === 'no_show') return 'Marked no-show';
-  if (a.status === 'leave_approved') return 'Leave approved';
-  if (a.status === 'leave_pending') return 'Leave requested';
-  if (missed) return 'No check-in recorded';
-  if (a.checkOutAt) return 'Checked in and out';
-  if (a.checkInAt) return 'Checked in';
-  return 'Scheduled — not started';
+  // The compared values are the backend's `shift_assignment.status` — data, and
+  // untouched. Only the sentence the PR reads about them moves.
+  if (a.status === 'cancelled') return t.schedule.outcomeCancelled;
+  if (a.status === 'no_show') return t.schedule.outcomeNoShow;
+  if (a.status === 'leave_approved') return t.schedule.statusLeaveApproved;
+  if (a.status === 'leave_pending') return t.schedule.outcomeLeaveRequested;
+  if (missed) return t.schedule.outcomeNoCheckIn;
+  if (a.checkOutAt) return t.schedule.outcomeCheckedInOut;
+  if (a.checkInAt) return t.schedule.outcomeCheckedIn;
+  return t.schedule.outcomeNotStarted;
 }
 
 const MISSED_STYLE = {
@@ -136,7 +317,16 @@ const MISSED_STYLE = {
   color: '#f07171',
 };
 
-type CancelPenalty = { pct: number; amount: number; tierLabel: string };
+type CancelPenalty = {
+  pct: number;
+  amount: number;
+  /**
+   * Rendered at CALL time, not at compute time. The penalty is held in state
+   * while the cancel sheet is open, and a baked-in string would keep speaking
+   * the language the sheet was opened in after the PR switches.
+   */
+  tierLabel: (t: AppTranslations) => string;
+};
 
 /*
  * ⚠️ `shiftStartDate` USED TO LIVE HERE, built with `new Date(y, m, d, hh, mm)`.
@@ -171,33 +361,45 @@ function cancelPenalty(
   const start = shiftStartDate(assignment.shiftDate, assignment.slot);
   // A disabled rule is no cancellation charge at all — not 0% of the bands.
   if (!b.enabled)
-    return { pct: 0, amount: 0, tierLabel: 'No cancellation fee' };
+    return { pct: 0, amount: 0, tierLabel: (t) => t.schedule.tierNoFee };
   // No readable window, no quoted fee — matching the server, which returns
   // RM 0.00 rather than pricing an unknown schedule at the late band.
-  if (!start) return { pct: 0, amount: 0, tierLabel: 'No cancellation fee' };
+  if (!start)
+    return { pct: 0, amount: 0, tierLabel: (t) => t.schedule.tierNoFee };
   const hoursUntil = (start.getTime() - now.getTime()) / 3_600_000;
   if (hoursUntil >= b.freeCancelHours) {
     return {
       pct: 0,
       amount: 0,
-      tierLabel: `${b.freeCancelHours}h+ before — no deduction`,
+      tierLabel: (t) =>
+        formatMessage(t.schedule.tierFree, { h: b.freeCancelHours }),
     };
   }
   if (hoursUntil >= b.shortNoticeHours) {
     return {
       pct: b.shortNoticePct,
       amount: Math.round(dailyWage * b.shortNoticePct) / 100,
-      tierLabel: `Short notice (${b.shortNoticeHours}–${b.freeCancelHours}h) — ${b.shortNoticePct}% of daily wages`,
+      tierLabel: (t) =>
+        formatMessage(t.schedule.tierShortNotice, {
+          from: b.shortNoticeHours,
+          to: b.freeCancelHours,
+          pct: b.shortNoticePct,
+        }),
     };
   }
   return {
     pct: b.lateCancelPct,
     amount: Math.round(dailyWage * b.lateCancelPct) / 100,
-    tierLabel: `Late cancel (<${b.shortNoticeHours}h) — ${b.lateCancelPct}% of daily wages`,
+    tierLabel: (t) =>
+      formatMessage(t.schedule.tierLate, {
+        h: b.shortNoticeHours,
+        pct: b.lateCancelPct,
+      }),
   };
 }
 
 export function AgencySchedulePanel() {
+  const { t } = useLocale();
   const today = todayYmd();
   const { me, agencies, token } = useSession();
   const { assignments, refresh } = useActiveShift();
@@ -293,17 +495,17 @@ export function AgencySchedulePanel() {
     if (!leaveTarget || leaveBusy) return;
     const reason = leaveReason.trim();
     if (!reason) {
-      setLeaveError('Please describe your MC / leave reason.');
+      setLeaveError(t.schedule.leaveReasonMissing);
       return;
     }
     // The agency approves an excused absence off this picture — no photo, no
     // request (the server enforces the same rule).
     if (leavePhotos.length === 0) {
-      setLeaveError('Please attach a photo of your MC / supporting document.');
+      setLeaveError(t.schedule.leavePhotoMissing);
       return;
     }
     if (!token) {
-      setLeaveError('Not signed in.');
+      setLeaveError(t.schedule.notSignedIn);
       return;
     }
     setLeaveBusy(true);
@@ -314,8 +516,10 @@ export function AgencySchedulePanel() {
       setLeavePhotos([]);
       void refresh();
     } catch (e) {
+      // The server's own refusal wins when there is one — it is the specific
+      // reason, and translating it is the backend's job, not this screen's.
       setLeaveError(
-        e instanceof Error ? e.message : 'Could not submit. Try again.',
+        e instanceof Error ? e.message : t.schedule.leaveSubmitFailed,
       );
     } finally {
       setLeaveBusy(false);
@@ -338,11 +542,11 @@ export function AgencySchedulePanel() {
     if (!cancelTarget || cancelBusy) return;
     const reason = cancelReason.trim();
     if (!reason) {
-      setCancelError('Please describe why you cannot work this shift.');
+      setCancelError(t.schedule.cancelReasonMissing);
       return;
     }
     if (!token) {
-      setCancelError('Not signed in.');
+      setCancelError(t.schedule.notSignedIn);
       return;
     }
     setCancelBusy(true);
@@ -353,9 +557,7 @@ export function AgencySchedulePanel() {
       setCancelTarget(null);
       void refresh();
     } catch (e) {
-      setCancelError(
-        e instanceof Error ? e.message : 'Could not cancel. Try again.',
-      );
+      setCancelError(e instanceof Error ? e.message : t.schedule.cancelFailed);
     } finally {
       setCancelBusy(false);
     }
@@ -377,7 +579,8 @@ export function AgencySchedulePanel() {
    * it was a wrong answer wearing a fallback's clothes.
    */
   const soleAgencyName = agencies.length === 1 ? agencies[0]?.agencyName : null;
-  const fallbackAgencyName = soleAgencyName ?? me?.username ?? 'Agency';
+  const fallbackAgencyName =
+    soleAgencyName ?? me?.username ?? t.schedule.agencyFallback;
   const todayIso = ymdToIso(...today);
 
   const scheduleShifts = useMemo(
@@ -393,7 +596,7 @@ export function AgencySchedulePanel() {
         .map((a) => ({
           id: a.id,
           dateIso: a.shiftDate,
-          outlet: a.outletName ?? 'Outlet',
+          outlet: a.outletName ?? t.common.outlet,
           address: a.outletAddress,
           time: a.slot ?? '—',
           checkInAt: a.checkInAt,
@@ -410,7 +613,7 @@ export function AgencySchedulePanel() {
           logoPath: a.outletLogo ?? null,
           eventPhotoPath: a.templateCoverImage ?? null,
         })),
-    [assignments, fallbackAgencyName],
+    [assignments, fallbackAgencyName, t.common.outlet],
   );
 
   const days = useMemo(
@@ -479,7 +682,8 @@ export function AgencySchedulePanel() {
   const [navOpen, setNavOpen] = useState<'month' | 'year' | null>(null);
 
   const weekRange = useMemo(() => getUpcomingWeekRange(todayIso), [todayIso]);
-  const weekLabel = formatUpcomingWeekLabel(
+  const weekLabel = weekRangeLabel(
+    t,
     weekRange.fromIso,
     weekRange.toIso,
   ).toUpperCase();
@@ -571,11 +775,7 @@ export function AgencySchedulePanel() {
       setBlocked((prev) =>
         block ? prev.filter((x) => x !== iso) : [...prev, iso],
       );
-      setBlockError(
-        e instanceof Error
-          ? e.message
-          : 'Could not update that day. Try again.',
-      );
+      setBlockError(e instanceof Error ? e.message : t.schedule.blockDayFailed);
       // Keep the sheet open on failure so the typed reason is not lost — the
       // commonest refusal here ("you are already rostered that day") is one the
       // PR reads and then closes deliberately.
@@ -592,7 +792,7 @@ export function AgencySchedulePanel() {
           onPress={() => setRulesOpen((o) => !o)}
         >
           <AlertTriangle size={16} color={C.amber} />
-          <Text style={styles.rulesTitle}>Cancellation rules</Text>
+          <Text style={styles.rulesTitle}>{t.checkin.cancelRules}</Text>
           <ChevronDown
             size={16}
             color={C.muted}
@@ -603,9 +803,9 @@ export function AgencySchedulePanel() {
         </Pressable>
         {rulesOpen && (
           <View style={styles.rulesList}>
-            {cancellationRuleSummary(cancelBands).map((r) => (
-              <View key={r.label} style={styles.ruleRow}>
-                <Text style={styles.ruleWhen}>{r.label}</Text>
+            {cancellationRules(cancelBands).map((r) => (
+              <View key={r.id} style={styles.ruleRow}>
+                <Text style={styles.ruleWhen}>{r.label(t)}</Text>
                 <Text
                   style={[
                     styles.ruleOut,
@@ -619,7 +819,7 @@ export function AgencySchedulePanel() {
                     },
                   ]}
                 >
-                  {r.outcome}
+                  {r.outcome(t)}
                 </Text>
               </View>
             ))}
@@ -630,19 +830,19 @@ export function AgencySchedulePanel() {
       <View style={styles.calWrap}>
         <View style={styles.calNav}>
           <View style={styles.navField}>
-            <Text style={styles.navLabel}>MONTH</Text>
+            <Text style={styles.navLabel}>{t.schedule.monthLabel}</Text>
             <Pressable
               style={styles.select}
               onPress={() =>
                 setNavOpen((o) => (o === 'month' ? null : 'month'))
               }
             >
-              <Text style={styles.selectText}>{MONTH_LABELS[month]}</Text>
+              <Text style={styles.selectText}>{MONTH_LONG[month](t)}</Text>
               <ChevronDown size={14} color={C.muted} />
             </Pressable>
           </View>
           <View style={styles.navField}>
-            <Text style={styles.navLabel}>YEAR</Text>
+            <Text style={styles.navLabel}>{t.schedule.yearLabel}</Text>
             <Pressable
               style={styles.select}
               onPress={() => setNavOpen((o) => (o === 'year' ? null : 'year'))}
@@ -691,7 +891,7 @@ export function AgencySchedulePanel() {
                     i === month && { color: C.txt },
                   ]}
                 >
-                  {label.slice(0, 3)}
+                  {MONTH_SHORT[i](t)}
                 </Text>
               </Pressable>
             ))}
@@ -699,9 +899,9 @@ export function AgencySchedulePanel() {
         )}
 
         <View style={styles.weekdays}>
-          {WEEKDAYS.map((w) => (
+          {WEEKDAYS.map((w, i) => (
             <Text key={w} style={styles.weekday}>
-              {w}
+              {DOW_INITIAL[i](t)}
             </Text>
           ))}
         </View>
@@ -761,12 +961,20 @@ export function AgencySchedulePanel() {
         </View>
 
         <View style={styles.legend}>
-          <LegendSwatch color="rgba(232,224,245,0.35)" label="Available" />
-          <LegendSwatch color={C.green} label="Scheduled / Complete" />
-          <LegendSwatch color={C.accentL} label="On duty" />
-          <LegendSwatch color={C.amber} label="Pending" />
-          <LegendSwatch color={C.red} label="Not available" />
-          <LegendSwatch color="#f07171" label="Missed check-in" />
+          {/* The LABEL of each day-state moves with the language; the state
+              itself (`ScheduleDayKind`) never does. */}
+          <LegendSwatch
+            color="rgba(232,224,245,0.35)"
+            label={t.schedule.legendAvailable}
+          />
+          <LegendSwatch
+            color={C.green}
+            label={t.schedule.legendScheduledComplete}
+          />
+          <LegendSwatch color={C.accentL} label={t.shifts.onDuty} />
+          <LegendSwatch color={C.amber} label={t.schedule.statusPending} />
+          <LegendSwatch color={C.red} label={t.schedule.legendNotAvailable} />
+          <LegendSwatch color="#f07171" label={t.schedule.missedCheckIn} />
         </View>
 
         {/* The server refused the change — most often "you are already rostered
@@ -779,18 +987,20 @@ export function AgencySchedulePanel() {
       <View style={styles.timetable}>
         <View style={styles.ttHead}>
           <Clock size={16} color={C.muted2} />
-          <Text style={styles.ttTitle}>Timetable · {weekLabel}</Text>
+          <Text style={styles.ttTitle}>
+            {formatMessage(t.schedule.timetableTitle, { range: weekLabel })}
+          </Text>
           <Pressable
             onPress={() => void refresh()}
             hitSlop={8}
             style={{ marginLeft: 'auto' }}
           >
-            <Text style={styles.refreshText}>Refresh</Text>
+            <Text style={styles.refreshText}>{t.schedule.refresh}</Text>
           </Pressable>
         </View>
         {timetable.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No shifts this week</Text>
+            <Text style={styles.emptyText}>{t.schedule.noShiftsThisWeek}</Text>
           </View>
         ) : (
           <View style={{ gap: 10 }}>
@@ -837,22 +1047,23 @@ export function AgencySchedulePanel() {
             <View style={styles.cancelHandle} />
             <View style={styles.cancelHeaderRow}>
               <CalendarDays size={20} color={C.goldL} />
-              <Text style={styles.cancelHeaderTitle}>Mark unavailable</Text>
+              <Text style={styles.cancelHeaderTitle}>
+                {t.schedule.markUnavailable}
+              </Text>
             </View>
             {reasonTarget && (
               <Text style={styles.cancelHeaderSub}>
-                {fmtDFriendly(...isoToYmd(reasonTarget))}
+                {friendlyDate(t, ...isoToYmd(reasonTarget))}
               </Text>
             )}
             <Text style={[styles.cancelNote, { marginTop: 12 }]}>
-              Your agency sees this day blocked on their roster and will not put
-              you on a shift. Adding a reason is optional.
+              {t.schedule.markUnavailableNote}
             </Text>
             <TextInput
               style={styles.reasonInput}
               value={reasonDraft}
               onChangeText={setReasonDraft}
-              placeholder="Reason (optional) — e.g. family event"
+              placeholder={t.schedule.reasonOptionalPlaceholder}
               placeholderTextColor={C.prMuted2}
               maxLength={200}
               multiline
@@ -864,7 +1075,7 @@ export function AgencySchedulePanel() {
                 onPress={() => setReasonTarget(null)}
                 disabled={blockingIso != null}
               >
-                <Text style={styles.reasonCancelText}>Cancel</Text>
+                <Text style={styles.reasonCancelText}>{t.common.cancel}</Text>
               </Pressable>
               <Pressable
                 style={styles.reasonConfirmBtn}
@@ -878,7 +1089,9 @@ export function AgencySchedulePanel() {
                 }
               >
                 <Text style={styles.reasonConfirmText}>
-                  {blockingIso != null ? 'Saving…' : 'Mark unavailable'}
+                  {blockingIso != null
+                    ? t.profile.saving
+                    : t.schedule.markUnavailable}
                 </Text>
               </Pressable>
             </View>
@@ -901,11 +1114,14 @@ export function AgencySchedulePanel() {
             <View style={styles.cancelHandle} />
             <View style={styles.cancelHeaderRow}>
               <Briefcase size={20} color={C.goldL} />
-              <Text style={styles.cancelHeaderTitle}>Cancel shift</Text>
+              <Text style={styles.cancelHeaderTitle}>
+                {t.checkin.cancelShift}
+              </Text>
             </View>
             {cancelTarget && (
               <Text style={styles.cancelHeaderSub}>
-                {cancelTarget.entry.outlet} · {cancelTarget.entry.dateLabel} ·{' '}
+                {cancelTarget.entry.outlet} ·{' '}
+                {friendlyDate(t, ...isoToYmd(cancelTarget.entry.dateIso))} ·{' '}
                 {cancelTarget.entry.time}
               </Text>
             )}
@@ -914,10 +1130,7 @@ export function AgencySchedulePanel() {
               showsVerticalScrollIndicator={false}
               style={{ marginTop: 12 }}
             >
-              <Text style={styles.cancelNote}>
-                Shifts are assigned by your agency — cancelling notifies your
-                agency straight away.
-              </Text>
+              <Text style={styles.cancelNote}>{t.schedule.cancelNote}</Text>
               {cancelTarget && (
                 <View
                   style={[
@@ -929,22 +1142,28 @@ export function AgencySchedulePanel() {
                 >
                   <Text style={styles.penaltyBannerTitle}>
                     {cancelTarget.penalty.amount > 0
-                      ? `Penalty — (−${formatRM(cancelTarget.penalty.amount)}) from next PV`
-                      : 'No deduction'}
+                      ? formatMessage(t.schedule.penaltyFromNextPv, {
+                          amount: formatRM(cancelTarget.penalty.amount),
+                        })
+                      : t.schedule.noDeduction}
                   </Text>
                   <Text style={styles.penaltyBannerBody}>
-                    {cancelTarget.penalty.tierLabel}
+                    {cancelTarget.penalty.tierLabel(t)}
                   </Text>
                 </View>
               )}
               <View style={styles.rulesCard}>
                 <View style={styles.rulesCardHead}>
                   <AlertTriangle size={14} color={C.amber} />
-                  <Text style={styles.rulesCardTitle}>CANCELLATION RULES</Text>
+                  {/* The card draws its title in caps itself — `rulesCardTitle`
+                      carries no textTransform. A no-op on Chinese. */}
+                  <Text style={styles.rulesCardTitle}>
+                    {t.checkin.cancelRules.toUpperCase()}
+                  </Text>
                 </View>
-                {cancellationRuleSummary(cancelBands).map((r) => (
+                {cancellationRules(cancelBands).map((r) => (
                   <View
-                    key={r.label}
+                    key={r.id}
                     style={[
                       styles.ruleCardRow,
                       {
@@ -957,7 +1176,7 @@ export function AgencySchedulePanel() {
                       },
                     ]}
                   >
-                    <Text style={styles.ruleCardWhen}>{r.label}</Text>
+                    <Text style={styles.ruleCardWhen}>{r.label(t)}</Text>
                     <Text
                       style={[
                         styles.ruleCardOut,
@@ -971,17 +1190,19 @@ export function AgencySchedulePanel() {
                         },
                       ]}
                     >
-                      {r.outcome}
+                      {r.outcome(t)}
                     </Text>
                   </View>
                 ))}
               </View>
-              <Text style={styles.cancelFieldLabel}>Reason (required)</Text>
+              <Text style={styles.cancelFieldLabel}>
+                {t.checkin.reasonRequired}
+              </Text>
               <TextInput
                 value={cancelReason}
                 onChangeText={setCancelReason}
                 style={styles.cancelInput}
-                placeholder="Describe why you cannot work this shift"
+                placeholder={t.schedule.cancelReasonPlaceholder}
                 placeholderTextColor={C.muted2}
                 multiline
               />
@@ -995,17 +1216,19 @@ export function AgencySchedulePanel() {
               >
                 <Text style={styles.cancelAcceptText}>
                   {cancelBusy
-                    ? 'Cancelling…'
+                    ? t.schedule.cancelling
                     : cancelTarget && cancelTarget.penalty.amount > 0
-                      ? `Cancel & accept (−${formatRM(cancelTarget.penalty.amount)})`
-                      : 'Cancel & accept'}
+                      ? formatMessage(t.schedule.cancelAcceptWithFee, {
+                          amount: formatRM(cancelTarget.penalty.amount),
+                        })
+                      : t.schedule.cancelAccept}
                 </Text>
               </Pressable>
               <Pressable
                 style={styles.cancelBackBtn}
                 onPress={() => setCancelTarget(null)}
               >
-                <Text style={styles.cancelBackText}>Back</Text>
+                <Text style={styles.cancelBackText}>{t.common.back}</Text>
               </Pressable>
             </ScrollView>
           </Pressable>
@@ -1027,11 +1250,12 @@ export function AgencySchedulePanel() {
             <View style={styles.cancelHandle} />
             <View style={styles.cancelHeaderRow}>
               <CalendarDays size={20} color={C.goldL} />
-              <Text style={styles.cancelHeaderTitle}>MC / Leave</Text>
+              <Text style={styles.cancelHeaderTitle}>{t.schedule.mcLeave}</Text>
             </View>
             {leaveTarget && (
               <Text style={styles.cancelHeaderSub}>
-                {leaveTarget.outlet} · {leaveTarget.dateLabel} ·{' '}
+                {leaveTarget.outlet} ·{' '}
+                {friendlyDate(t, ...isoToYmd(leaveTarget.dateIso))} ·{' '}
                 {leaveTarget.time}
               </Text>
             )}
@@ -1040,23 +1264,17 @@ export function AgencySchedulePanel() {
               showsVerticalScrollIndicator={false}
               style={{ marginTop: 12 }}
             >
-              <Text style={styles.cancelNote}>
-                Unable to work this shift due to MC or personal leave? Send the
-                request to your agency — you stay scheduled until they approve
-                it.
-              </Text>
+              <Text style={styles.cancelNote}>{t.schedule.mcLeaveNote}</Text>
               <View style={[styles.penaltyBanner, styles.penaltyBannerOk]}>
                 <Text style={styles.penaltyBannerTitle}>
-                  No penalty when approved
+                  {t.schedule.noPenaltyWhenApproved}
                 </Text>
                 <Text style={styles.penaltyBannerBody}>
-                  An approved MC / leave excuses this shift with no deduction.
-                  If rejected, the shift stays yours — cancelling instead
-                  follows the cancellation rules.
+                  {t.schedule.noPenaltyWhenApprovedBody}
                 </Text>
               </View>
               <Text style={styles.cancelFieldLabel}>
-                MC / document photo (required)
+                {t.schedule.mcPhotoRequired}
               </Text>
               {/* TWO actions, because an MC is usually already IN the phone —
                   photographed at the clinic, or sent by the doctor. The single
@@ -1076,7 +1294,7 @@ export function AgencySchedulePanel() {
                   }
                 >
                   <Camera size={16} color={C.goldL} />
-                  <Text style={styles.mcPickText}>Take photo</Text>
+                  <Text style={styles.mcPickText}>{t.schedule.takePhoto}</Text>
                 </Pressable>
                 <Pressable
                   style={styles.mcPickBtn}
@@ -1091,7 +1309,9 @@ export function AgencySchedulePanel() {
                   }
                 >
                   <ImagePlus size={16} color={C.goldL} />
-                  <Text style={styles.mcPickText}>Upload photo</Text>
+                  <Text style={styles.mcPickText}>
+                    {t.schedule.uploadPhoto}
+                  </Text>
                 </Pressable>
               </View>
               {leavePhotos.length > 0 && (
@@ -1124,17 +1344,17 @@ export function AgencySchedulePanel() {
                 </View>
               )}
               {leavePhotos.length === 0 && (
-                <Text style={styles.mcHint}>
-                  Your agency reviews this photo before approving the leave.
-                </Text>
+                <Text style={styles.mcHint}>{t.schedule.mcPhotoHint}</Text>
               )}
 
-              <Text style={styles.cancelFieldLabel}>Reason (required)</Text>
+              <Text style={styles.cancelFieldLabel}>
+                {t.checkin.reasonRequired}
+              </Text>
               <TextInput
                 value={leaveReason}
                 onChangeText={setLeaveReason}
                 style={styles.cancelInput}
-                placeholder="e.g. MC — fever, clinic visit tomorrow morning"
+                placeholder={t.schedule.leaveReasonPlaceholder}
                 placeholderTextColor={C.muted2}
                 multiline
               />
@@ -1151,17 +1371,17 @@ export function AgencySchedulePanel() {
               >
                 <Text style={styles.leaveSubmitText}>
                   {leaveBusy
-                    ? 'Submitting…'
+                    ? t.schedule.submitting
                     : leavePhotos.length === 0
-                      ? 'Attach MC photo to submit'
-                      : 'Submit leave request'}
+                      ? t.schedule.attachMcToSubmit
+                      : t.schedule.submitLeave}
                 </Text>
               </Pressable>
               <Pressable
                 style={styles.cancelBackBtn}
                 onPress={() => setLeaveTarget(null)}
               >
-                <Text style={styles.cancelBackText}>Back</Text>
+                <Text style={styles.cancelBackText}>{t.common.back}</Text>
               </Pressable>
             </ScrollView>
           </Pressable>
@@ -1198,19 +1418,19 @@ export function AgencySchedulePanel() {
               />
               <Text style={styles.cancelHeaderTitle}>
                 {missedTarget?.rows.some((a) => missedIds.has(a.id))
-                  ? 'Missed check-in'
-                  : 'Shifts this day'}
+                  ? t.schedule.missedCheckIn
+                  : t.schedule.shiftsThisDay}
               </Text>
             </View>
             {missedTarget && (
               <>
                 <Text style={styles.missedDate}>
-                  {fmtDFriendly(...isoToYmd(missedTarget.iso))}
+                  {friendlyDate(t, ...isoToYmd(missedTarget.iso))}
                 </Text>
                 {missedTarget.rows.map((a) => (
                   <View key={a.id} style={styles.missedRow}>
                     <Text style={styles.missedOutlet}>
-                      {a.outletName ?? 'Outlet'}
+                      {a.outletName ?? t.common.outlet}
                     </Text>
                     <Text style={styles.missedMeta}>{a.slot ?? '—'}</Text>
                     {/* WHAT HAPPENED, per shift. A day can hold one shift she
@@ -1229,7 +1449,7 @@ export function AgencySchedulePanel() {
                         },
                       ]}
                     >
-                      {checkInOutcome(a, missedIds.has(a.id))}
+                      {checkInOutcome(t, a, missedIds.has(a.id))}
                     </Text>
                     {a.outletAddress ? (
                       <Text style={styles.missedMeta}>{a.outletAddress}</Text>
@@ -1243,14 +1463,14 @@ export function AgencySchedulePanel() {
                     recorded for this shift" sitting directly under a row reading
                     "Checked in and out", on the screen a PR opens to find out
                     which of the two is true. */}
+                {/* Two whole sentences, not one with a fragment spliced into
+                    it: "the shift marked above" lands in a different place in
+                    a Chinese sentence than it does in an English one. */}
                 {missedTarget.rows.some((a) => missedIds.has(a.id)) && (
                   <Text style={styles.missedNote}>
-                    No check-in was recorded for{' '}
                     {missedTarget.rows.length > 1
-                      ? 'the shift marked above'
-                      : 'this shift'}
-                    , and no MC / leave or cancellation is on file. Contact your
-                    agency if this is wrong.
+                      ? t.schedule.missedNoteMany
+                      : t.schedule.missedNoteOne}
                   </Text>
                 )}
               </>
@@ -1288,8 +1508,9 @@ function TimetableRow({
   onCancel: () => void;
   onLeave: () => void;
 }) {
+  const { t } = useLocale();
   const [y, m, d] = isoToYmd(entry.dateIso);
-  const dateFriendly = `${DAY_NAMES[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, '0')} ${MONTH_NAMES[m - 1]} ${y}`;
+  const dateFriendly = friendlyDate(t, y, m, d);
   // No collapse here (owner, 20 Aug 2026): Cancel and MC/Leave are the card's
   // point — money actions a PR must never have to discover behind a tap.
   const [zoomUri, setZoomUri] = useState<string | null>(null);
@@ -1306,10 +1527,16 @@ function TimetableRow({
         <View style={styles.agencyBadge}>
           <Shield size={12} color={C.violetL} />
           <Text style={styles.agencyBadgeText}>
-            AGENCY · {entry.sourceLabel.toUpperCase()}
+            {formatMessage(t.schedule.agencyBadge, {
+              // The agency's own NAME is never translated — only the word in
+              // front of it.
+              name: entry.sourceLabel.toUpperCase(),
+            })}
           </Text>
         </View>
-        <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
+        <Pill variant={entry.statusVariant}>
+          {timetableStatusLabel(t, entry.statusLabel)}
+        </Pill>
       </View>
       <View style={styles.ttMainRow}>
         {heroUri ? (
@@ -1345,7 +1572,8 @@ function TimetableRow({
           </Text>
           {entry.event ? (
             <Text style={styles.ttEventLine} numberOfLines={1}>
-              {entry.event} · {isSpecial ? 'Special event' : 'Normal shift'}
+              {entry.event} ·{' '}
+              {isSpecial ? t.shifts.specialEvent : t.shifts.normalShift}
             </Text>
           ) : null}
           <Text style={styles.ttWhenLine} numberOfLines={1}>
@@ -1365,7 +1593,7 @@ function TimetableRow({
         <View style={styles.leaveRejectedNote}>
           <AlertTriangle size={13} color={C.red} />
           <Text style={styles.leaveRejectedText}>
-            Leave request rejected — you are still on this shift.
+            {t.schedule.leaveRejectedNote}
           </Text>
         </View>
       ) : null}
@@ -1373,7 +1601,7 @@ function TimetableRow({
         <View style={styles.leavePendingNote}>
           <Clock size={13} color={C.amber} />
           <Text style={styles.leavePendingText}>
-            MC / Leave submitted — awaiting agency review.
+            {t.schedule.leavePendingNote}
           </Text>
         </View>
       ) : !entry.canCancel && !entry.canLeave ? null : (
@@ -1384,7 +1612,7 @@ function TimetableRow({
               style={[styles.cancelBtn, styles.actionBtn]}
             >
               <Text style={styles.cancelText} numberOfLines={1}>
-                Cancel
+                {t.common.cancel}
               </Text>
               {penalty && penalty.amount > 0 ? (
                 <Text style={styles.cancelPenaltyText} numberOfLines={1}>
@@ -1398,7 +1626,7 @@ function TimetableRow({
               onPress={onLeave}
               style={[styles.leaveBtn, styles.actionBtn]}
             >
-              <Text style={styles.leaveText}>MC / Leave</Text>
+              <Text style={styles.leaveText}>{t.schedule.mcLeave}</Text>
             </Pressable>
           ) : null}
         </View>
