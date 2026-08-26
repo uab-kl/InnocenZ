@@ -479,7 +479,7 @@ function AgencyProfile() {
 						/>
 						<ProfileSettingsField
 							icon={Shield}
-							label="IC"
+							label={t.agencyMisc.ic}
 							value={finance.ic}
 							onChange={(v) => updateFinance({ ic: v })}
 							mode={fieldMode}

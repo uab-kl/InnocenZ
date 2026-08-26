@@ -17,6 +17,11 @@ import { getUserTypeByKey } from "@/constants/user-types";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import {
+	adminNavLabel,
+	userTypeDescription,
+} from "@/lib/portal-i18n/admin-nav-label";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import {
 	type AgenciesQueryParams,
 	approveAgency,
 	fetchAgencies,
@@ -28,6 +33,11 @@ export const Route = createFileRoute("/admin/user-management/agency")({
 	component: AgencyOrgsPage,
 	validateSearch: (search: Record<string, unknown>): { focus?: string } =>
 		typeof search.focus === "string" ? { focus: search.focus } : {},
+	/*
+	 * Document title stays ENGLISH — the same reason as the outlet tab: `head()`
+	 * is route metadata, evaluated outside React, so there is no locale context
+	 * to read and no hook that could reach one.
+	 */
 	head: () => ({
 		meta: [{ title: "Agency Organizations — Innocenz Admin" }],
 	}),
@@ -36,6 +46,7 @@ export const Route = createFileRoute("/admin/user-management/agency")({
 const PAGE_SIZE = 10;
 
 function AgencyOrgsPage() {
+	const { t } = usePortalLocale();
 	const type = getUserTypeByKey("agency")!;
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
@@ -99,12 +110,12 @@ function AgencyOrgsPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["agencies"] });
 			queryClient.invalidateQueries({ queryKey: ["agency-by-id"] });
-			toast.success(response.message || "Agency approved");
+			toast.success(response.message || t.adminUsers.agencyApproved);
 		},
 		onError: (err) => {
 			toast.error(
-				toMutationError(err, "Failed to approve agency")?.message ??
-					"Failed to approve agency",
+				toMutationError(err, t.adminUsers.agencyApproveFailed)?.message ??
+					t.adminUsers.agencyApproveFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -116,12 +127,12 @@ function AgencyOrgsPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["agencies"] });
 			queryClient.invalidateQueries({ queryKey: ["agency-by-id"] });
-			toast.success(response.message || "Agency suspended");
+			toast.success(response.message || t.adminUsers.agencySuspended);
 		},
 		onError: (err) => {
 			toast.error(
-				toMutationError(err, "Failed to suspend agency")?.message ??
-					"Failed to suspend agency",
+				toMutationError(err, t.adminUsers.agencySuspendFailed)?.message ??
+					t.adminUsers.agencySuspendFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -131,8 +142,8 @@ function AgencyOrgsPage() {
 		<PageShell>
 			<PageHeader
 				icon={type.icon}
-				title={type.title}
-				description={type.description}
+				title={adminNavLabel(`sidebar-user-${type.key}`, type.title, t)}
+				description={userTypeDescription(type.key, type.description, t)}
 			/>
 
 			<AgenciesTable

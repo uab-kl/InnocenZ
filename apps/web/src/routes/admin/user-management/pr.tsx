@@ -6,7 +6,12 @@ import { PrDetailsSheet, type PrStatusFilter, PrsTable } from "@/components/pr";
 import { getUserTypeByKey } from "@/constants/user-types";
 import { useAccountActions } from "@/hooks/use-account-actions";
 import { useAuth } from "@/lib/auth-context";
+import {
+	adminNavLabel,
+	userTypeDescription,
+} from "@/lib/portal-i18n/admin-nav-label";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchAgencies } from "@/services/agency";
 import {
 	fetchPrUsers,
@@ -23,12 +28,19 @@ export const Route = createFileRoute("/admin/user-management/pr")({
 
 const PAGE_SIZE = 10;
 
-const toTarget = (user: PrUser) => ({
+// `t` is threaded in rather than read here: this is module scope, where no hook
+// can run, and the last fallback is the only part of the target that is COPY
+// rather than data. The three before it are the account's own stored names.
+const toTarget = (user: PrUser, t: PortalTranslations) => ({
 	id: user.id,
 	// The legal name is the one an admin can act on with confidence; the display
 	// name is whatever the PR chose. Fall back rather than render an empty
 	// confirm — a sentence about nobody is worse than a clumsy one.
-	name: user.legalName || user.displayName || user.email || "This account",
+	name:
+		user.legalName ||
+		user.displayName ||
+		user.email ||
+		t.adminUsers.thisAccount,
 	status: user.status,
 });
 
@@ -94,8 +106,8 @@ function PrUsersPage() {
 		<PageShell>
 			<PageHeader
 				icon={type.icon}
-				title={type.title}
-				description={type.description}
+				title={adminNavLabel(`sidebar-user-${type.key}`, type.title, t)}
+				description={userTypeDescription(type.key, type.description, t)}
 			/>
 
 			<PrsTable
@@ -125,9 +137,9 @@ function PrUsersPage() {
 				onSelect={(user) => setSelectedId(user.id)}
 				busyUserId={accountActions.busyUserId}
 				onSetStatus={(user, next) =>
-					accountActions.askSetStatus(toTarget(user), next)
+					accountActions.askSetStatus(toTarget(user, t), next)
 				}
-				onRevokeRole={(user) => accountActions.askRevokeRole(toTarget(user))}
+				onRevokeRole={(user) => accountActions.askRevokeRole(toTarget(user, t))}
 			/>
 
 			{accountActions.dialog}

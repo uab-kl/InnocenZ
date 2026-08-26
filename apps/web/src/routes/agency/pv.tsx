@@ -99,6 +99,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 export const Route = createFileRoute("/agency/pv")({
 	component: AgencyPV,
@@ -1094,20 +1095,24 @@ function AgencyPV() {
 								flat
 								className="!mb-2.5 border-[rgba(244,183,64,.4)] bg-[rgba(244,183,64,.08)]"
 							>
+								{/* Two whole sentences rather than an "s"/"is"/"are" the code
+								    splices in: Chinese has no plural and no verb agreement, so a
+								    template stitched out of English inflections cannot be
+								    translated at all — only the English can be repaired. */}
 								<p className="iz-sm font-bold text-[var(--iz-amber)]">
-									{unsignedPaymentWeekPvs.length} voucher
-									{unsignedPaymentWeekPvs.length === 1 ? "" : "s"} in this week
-									{unsignedPaymentWeekPvs.length === 1 ? " is" : " are"} still
-									not signed
+									{fill(
+										unsignedPaymentWeekPvs.length === 1
+											? t.agencyPv.unsignedVoucherOne
+											: t.agencyPv.unsignedVoucherMany,
+										{ n: unsignedPaymentWeekPvs.length },
+									)}
 								</p>
 								{/* The whole reason this card exists: by the payment week a voucher
 								    should already be signed, so one that is not has fallen out of
 								    the flow — and before this tab showed it, nothing anywhere in
 								    the product would ever have mentioned it again. */}
 								<p className="iz-tiny iz-muted2 mt-0.5">
-									These are overdue — a PR cannot sign a voucher that was never
-									sent. Review each day, then send it, and it moves to the
-									PR&apos;s Payment screen to e-sign.
+									{t.agencyPv.overdueUnsignedHint}
 								</p>
 								<ul className="mt-1.5 space-y-0.5">
 									{unsignedPaymentWeekPvs.map((p) => (
@@ -1195,10 +1200,12 @@ function AgencyPV() {
 											{resolvePvPrLabel(pv, agencyPRs)} · {pv.outlet}
 										</p>
 										{pv.prIc && (
-											<p className="iz-tiny iz-muted2">IC {pv.prIc}</p>
+											<p className="iz-tiny iz-muted2">
+												{t.outletSettings.ic} {pv.prIc}
+											</p>
 										)}
 										<p className="iz-tiny iz-muted2 mt-0.5">
-											Cycle: {pv.cycle}
+											{t.history.cycleLabel}: {pv.cycle}
 										</p>
 										{/* A backend voucher's own week runs Mon–Sun while these tabs
 										    are Sun–Sat, so the tab heading is one day out from the
@@ -1206,20 +1213,21 @@ function AgencyPV() {
 										    range rather than letting the heading speak for it. */}
 										{pvOwnWeekLabel(pv) && (
 											<p className="iz-tiny iz-muted2">
-												Week worked: {pvOwnWeekLabel(pv)}
+												{t.agencyPv.weekWorked}: {pvOwnWeekLabel(pv)}
 											</p>
 										)}
 										<p className="iz-tiny iz-muted2">
-											Issued {pv.issued} · Due {resolvePvPayByDue(pv)}
+											{t.history.issued} {pv.issued} · {t.agencyHome.payBy}{" "}
+											{resolvePvPayByDue(pv)}
 											{parsePvIssuedMs(pv.issued) >= latestIssuedMs &&
 												latestIssuedMs > 0 && (
 													<span className="ml-1 text-[var(--iz-violet)]">
-														· Latest
+														· {t.agencyPv.latest}
 													</span>
 												)}
 										</p>
 										<p className="iz-tiny text-[var(--iz-gold-l)] mt-0.5">
-											Sales {formatRM(getPvSalesTotal(pv))}
+											{t.history.sales} {formatRM(getPvSalesTotal(pv))}
 										</p>
 									</div>
 									<div className="shrink-0 text-right">
@@ -1320,12 +1328,16 @@ function ReceiptScanRow({
 							{scan.manualReason}
 						</p>
 					)}
-					{scan.prId && <p className="iz-tiny iz-muted2">PR ID {scan.prId}</p>}
+					{scan.prId && (
+						<p className="iz-tiny iz-muted2">
+							{t.agencyPv.prIdLabel} {scan.prId}
+						</p>
+					)}
 					<p className="iz-tiny iz-muted2 mt-0.5">
 						{receiptEntryLoggedLabel(scan)}
 					</p>
 					<p className="iz-tiny iz-muted2">
-						Shift date {d}/{m}/{y}
+						{t.table.shiftDay} {d}/{m}/{y}
 					</p>
 				</div>
 				<div className="flex shrink-0 items-start gap-2 text-right">
@@ -1341,7 +1353,7 @@ function ReceiptScanRow({
 							{formatRM(scan.totalLogged)}
 						</p>
 						<p className="iz-tiny iz-muted2">
-							Comm {formatRM(scan.totalCommission)}
+							{t.agencyPv.commissionShort} {formatRM(scan.totalCommission)}
 						</p>
 					</div>
 					{onClick && !pendingSelfLog && (
@@ -1378,7 +1390,7 @@ function ReceiptScanRow({
 						className="iz-btn iz-btn-primary flex-1 !py-1.5 !text-xs"
 						onClick={() => onVerify(scan.id, "approved")}
 					>
-						<CheckCircle2 className="h-3 w-3" /> Verify self-log
+						<CheckCircle2 className="h-3 w-3" /> {t.agencyPv.verifySelfLog}
 					</button>
 				</div>
 			)}
@@ -1400,7 +1412,31 @@ function ReceiptScanRow({
 	return body;
 }
 
+/**
+ * The rail's captions, keyed by the STEP's own key.
+ *
+ * `PV_WORKFLOW_STEPS` is a module-scope const in `pv-breakdown`, so its `label`
+ * is a finished English string it has no hook to translate. Resolving here — by
+ * key, through a FUNCTION of the dictionary — leaves the order and the enum
+ * where they belong and puts only the words under the locale. Holding a key
+ * *name* instead would type-check and render "stepRaisePv" on screen.
+ *
+ * Falls through to the step's own label, so a step added over there still shows
+ * something rather than blanking the rail.
+ */
+const PV_WORKFLOW_STEP_LABELS: Record<
+	string,
+	(t: PortalTranslations) => string
+> = {
+	raise: (t) => t.agencyPv.stepRaisePv,
+	finance: (t) => t.payroll.financeSign,
+	sent: (t) => t.agencyPv.stepSentToPr,
+	signed: (t) => t.agencyPv.stepPrSigned,
+	paid: (t) => t.agencyPv.stepPaid,
+};
+
 function PvWorkflowRail({ status }: { status: PrPvStatus }) {
+	const { t } = usePortalLocale();
 	const active = pvWorkflowStepIndex(status);
 	return (
 		<div className="mb-2.5 flex gap-1 overflow-x-auto pb-1">
@@ -1418,7 +1454,9 @@ function PvWorkflowRail({ status }: { status: PrPvStatus }) {
 									: "border-[var(--iz-line)] text-[var(--iz-muted)]"
 						}`}
 					>
-						<p className="iz-tiny font-semibold">{step.label}</p>
+						<p className="iz-tiny font-semibold">
+							{PV_WORKFLOW_STEP_LABELS[step.key]?.(t) ?? step.label}
+						</p>
 					</div>
 				);
 			})}
@@ -1428,21 +1466,35 @@ function PvWorkflowRail({ status }: { status: PrPvStatus }) {
 
 function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
 	const { t } = usePortalLocale();
+	// `key` is the bucket, not the label. Keying a row on its own translated text
+	// remounts every row the moment the locale changes.
 	const rows = [
-		{ label: t.money.dailyWages, value: breakdown.wages },
-		{ label: t.payroll.drinkCommissions, value: breakdown.drinks },
-		{ label: t.payroll.tipCommissions, value: breakdown.tips },
-		{ label: t.payroll.overtimeCheckOut, value: breakdown.overtime },
+		{ key: "wages", label: t.money.dailyWages, value: breakdown.wages },
+		{
+			key: "drinks",
+			label: t.payroll.drinkCommissions,
+			value: breakdown.drinks,
+		},
+		{ key: "tips", label: t.payroll.tipCommissions, value: breakdown.tips },
+		{
+			key: "overtime",
+			label: t.payroll.overtimeCheckOut,
+			value: breakdown.overtime,
+		},
 	].filter((r) => r.value > 0);
 	if (breakdown.other > 0)
-		rows.push({ label: "Other", value: breakdown.other });
+		rows.push({ key: "other", label: t.payroll.other, value: breakdown.other });
 	return (
 		<IzCard flat className="mb-2.5">
-			<p className="iz-tiny iz-muted2 mb-2 tracking-wide">
-				4-PART EARNINGS BREAKDOWN
+			{/* `uppercase` carries the heading's shouty look, which used to be baked
+			    into the literal. Chinese has no case, so the class is a no-op there —
+			    a second all-caps key would have been a second term for a heading the
+			    dictionary already names. */}
+			<p className="iz-tiny iz-muted2 mb-2 tracking-wide uppercase">
+				{t.payroll.fourPartBreakdown}
 			</p>
 			{rows.map((r) => (
-				<div key={r.label} className="iz-v-sum">
+				<div key={r.key} className="iz-v-sum">
 					<span className="iz-muted">{r.label}</span>
 					<b>{formatRM(r.value)}</b>
 				</div>
@@ -1602,7 +1654,7 @@ function PvDetail({
 					<span className="iz-pv-detail-id">{pv.id}</span>
 				</div>
 				<button type="button" className="iz-chip" onClick={onClose}>
-					Close
+					{t.common.close}
 				</button>
 			</div>
 
@@ -1611,11 +1663,11 @@ function PvDetail({
 			<IzCard flat className="mb-2">
 				<p className="iz-tiny iz-muted2">{t.payroll.dualSignPv}</p>
 				<p className="iz-tiny mt-1">
-					1st · {FINANCE_HEAD_LABEL}:{" "}
+					{t.agencyPv.signerFirst} · {FINANCE_HEAD_LABEL}:{" "}
 					<b className="text-[var(--iz-txt)]">{v.financeHeadName}</b>
 					{v.financeHeadSignedAt
 						? ` · ${formatPvSignStamp(v.financeHeadSignedAt)}`
-						: " · pending"}
+						: ` · ${t.agencyPv.pendingSignature}`}
 				</p>
 				{/* The drawn mark, read from the voucher's own `finance_head_signature`.
 				    Reads `v`, not `pv` — the ink rides on the DETAIL fetch, and the list
@@ -1627,28 +1679,34 @@ function PvDetail({
 						{v.financeHeadSignatureInk ? (
 							<SignatureInkMark
 								ink={v.financeHeadSignatureInk}
-								label={`${v.financeHeadName} signature`}
+								label={fill(t.agencyPv.signatureOf, {
+									name: v.financeHeadName,
+								})}
 							/>
 						) : v.financeHeadSignatureDataUrl ? (
 							<img
 								src={v.financeHeadSignatureDataUrl}
-								alt={`${v.financeHeadName} signature`}
+								alt={fill(t.agencyPv.signatureOf, {
+									name: v.financeHeadName,
+								})}
 							/>
 						) : null}
 					</div>
 				)}
 				<p className="iz-tiny iz-muted mt-2">
-					2nd · PR ({pv.prName}):
+					{t.agencyPv.signerSecond} · PR ({pv.prName}):
 					{prHasSigned ? (
 						<>
 							{" "}
 							<b className="text-[var(--iz-txt)]">{pv.prName}</b>
 							{v.prSignedAt ? ` · ${formatPvSignStamp(v.prSignedAt)}` : ""}
 							{" · "}
-							<span className="text-[var(--iz-green)]">e-sign on file ✓</span>
+							<span className="text-[var(--iz-green)]">
+								{t.agencyPv.eSignOnFile} ✓
+							</span>
 						</>
 					) : pv.status === "SENT" || pv.status === "PENDING_REVIEW" ? (
-						" awaiting manual sign"
+						` ${t.agencyPv.awaitingManualSign}`
 					) : (
 						" —"
 					)}
@@ -1658,10 +1716,13 @@ function PvDetail({
 						{v.prSignatureInk ? (
 							<SignatureInkMark
 								ink={v.prSignatureInk}
-								label={`${pv.prName} signature`}
+								label={fill(t.agencyPv.signatureOf, { name: pv.prName })}
 							/>
 						) : (
-							<img src={prSigPreview} alt={`${pv.prName} signature`} />
+							<img
+								src={prSigPreview}
+								alt={fill(t.agencyPv.signatureOf, { name: pv.prName })}
+							/>
 						)}
 					</div>
 				)}
@@ -1675,19 +1736,21 @@ function PvDetail({
 						{t.payroll.prDisputeResolveWithin}
 					</p>
 					{pv.disputedAt && (
-						<p className="iz-tiny iz-muted2 mt-0.5">Raised {pv.disputedAt}</p>
+						<p className="iz-tiny iz-muted2 mt-0.5">
+							{t.agencyPv.raised} {pv.disputedAt}
+						</p>
 					)}
 					{disputeDays !== null && (
 						<p className="iz-tiny flex items-center gap-1 text-[var(--iz-amber)] mt-1">
 							<Clock className="h-3 w-3" />
 							{disputeDays > 0
-								? `${disputeDays} day(s) left to adjust + re-send`
+								? fill(t.agencyPv.daysLeftToAdjust, { n: disputeDays })
 								: t.payroll.past7DaysFollowUp}
 						</p>
 					)}
 					{pv.disputeUpdatedAt && (
 						<p className="iz-tiny text-[var(--iz-amber)]">
-							PR updated {pv.disputeUpdatedAt}
+							{t.agencyPv.prUpdated} {pv.disputeUpdatedAt}
 						</p>
 					)}
 					{pv.prDisputeReason && (
@@ -1712,7 +1775,7 @@ function PvDetail({
 			{receiptScans.length > 0 && (
 				<OutletSection
 					title={t.payroll.receiptScans}
-					hint={`${receiptScans.length} logged on this PV`}
+					hint={`${receiptScans.length} ${t.payroll.onThisPv}`}
 				>
 					{receiptScans.map((scan) => (
 						<ReceiptScanRow key={scan.id} scan={scan} />
@@ -1731,7 +1794,7 @@ function PvDetail({
 							onClick={() => setEditing(!editing)}
 						>
 							<Pencil className="mr-1 inline h-3 w-3" />{" "}
-							{editing ? "Cancel" : "Edit"}
+							{editing ? t.common.cancel : t.common.edit}
 						</button>
 					}
 				>
@@ -1830,13 +1893,12 @@ function PvDetail({
 			{!pvIssuer.issuer && (
 				<p className="iz-tiny iz-muted2 mt-1.5 text-center">
 					{pvIssuer.status === "loading"
-						? "Loading your agency's letterhead…"
-						: "Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload the page or check your connection."}
+						? t.agencyPv.loadingLetterhead
+						: t.agencyPv.letterheadUnavailable}
 				</p>
 			)}
 			<p className="iz-tiny iz-muted2 mt-1.5 text-center">
-				PDF and Excel match the official voucher layout · duplicate payment
-				blocked on send.
+				{t.agencyPv.printLayoutNote}
 			</p>
 
 			{/* `pr-demo`'s plain-text receipt, not the letterhead PDF — same name,
@@ -1856,7 +1918,7 @@ function PvDetail({
 						toast(t.payroll.receiptDownloaded, "success");
 					}}
 				>
-					<Receipt className="h-4 w-4" /> Download payment receipt
+					<Receipt className="h-4 w-4" /> {t.payroll.downloadPaymentReceipt}
 				</button>
 			)}
 
@@ -1873,15 +1935,15 @@ function PvDetail({
 					{!financeSigned && weekStillOpen && (
 						<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
 							<p className="iz-sm font-bold">
-								Signing opens when the week closes
+								{t.agencyPv.signingOpensWhenWeekCloses}
 							</p>
+							{/* Split around the bold tab NAME, not mid-sentence by accident:
+							    the cycle rides in as a {cycle} slot so each language can put
+							    it where its own grammar wants, and the two halves meet either
+							    side of the one word that must stay emphasised. */}
 							<p className="iz-tiny iz-muted2 mt-0.5">
-								This voucher is on the week still in progress ({thisWeekCycle}),
-								so its figures can still move — a shift tonight, a receipt
-								tomorrow, a penalty recorded before the send. A signature
-								attests to a total, and there is no final total to attest to
-								yet. It appears under <b>{t.payroll.lastWeek}</b> once the cycle
-								closes, and signs from there.
+								{fill(t.agencyPv.weekStillOpenBody, { cycle: thisWeekCycle })}{" "}
+								<b>{t.payroll.lastWeek}</b> {t.agencyPv.weekStillOpenTail}
 							</p>
 						</div>
 					)}
@@ -1892,8 +1954,7 @@ function PvDetail({
 								{t.payroll.financeSignatureRequired}
 							</p>
 							<p className="iz-tiny iz-muted2 mt-0.5">
-								Sign to attest these figures. The PR counter-signs what you sign
-								here, so it comes before the voucher is sent.
+								{t.agencyPv.signToAttest}
 							</p>
 							{signError && (
 								<p className="iz-tiny mt-1.5 text-[var(--iz-red,#c0554f)]">
@@ -1946,7 +2007,7 @@ function PvDetail({
 										disabled={isSigning}
 										onClick={() => setSignOpen(true)}
 									>
-										Draw a different signature
+										{t.agencyPv.drawDifferentSignature}
 									</button>
 								</>
 							) : (
@@ -1957,10 +2018,10 @@ function PvDetail({
 										disabled={isSigning}
 										onClick={() => setSignOpen(true)}
 									>
-										<Pencil className="h-4 w-4" /> Sign this voucher
+										<Pencil className="h-4 w-4" /> {t.agencyPv.signThisVoucher}
 									</button>
 									<p className="iz-tiny iz-muted2 mt-1 text-center">
-										Save a signature in Settings to sign with one tap next time.
+										{t.agencyPv.saveSignatureHint}
 									</p>
 								</>
 							)}
@@ -1985,11 +2046,11 @@ function PvDetail({
 								disabled={!sendGate.allowed || !financeSigned}
 								onClick={() => sendToPr(pv.id)}
 							>
-								<Send className="h-4 w-4" /> Send to PR for e-sign
+								<Send className="h-4 w-4" /> {t.agencyPv.sendToPrForESign}
 							</button>
 							{!financeSigned && (
 								<p className="iz-tiny iz-muted2 mt-1 text-center">
-									Sign above first — the PR counter-signs your signature.
+									{t.agencyPv.signAboveFirst}
 								</p>
 							)}
 						</>
@@ -1998,9 +2059,11 @@ function PvDetail({
 						    disabled with no caption — a reason would be a guess. The day
 						    review is retired, so the pointer goes to the Receipts section
 						    where the approve action now lives. */}
+					{/* `sendGate.reason` still arrives in English from the hook; only the
+						    pointer after it is under the locale here. */}
 					{!sendGate.allowed && sendGate.pendingReceipts.length > 0 && (
 						<p className="iz-tiny iz-muted2 mt-1 text-center">
-							{sendGate.reason} — approve them in Payroll › Receipts.
+							{sendGate.reason} — {t.agencyPv.approveInPayrollReceipts}
 						</p>
 					)}
 				</>
@@ -2012,7 +2075,7 @@ function PvDetail({
 					className="iz-btn iz-btn-soft mt-2 w-full"
 					onClick={() => resend(pv.id)}
 				>
-					Re-send to PR
+					{t.agencyPv.resendToPr}
 				</button>
 			)}
 
@@ -2022,7 +2085,7 @@ function PvDetail({
 					className="iz-btn iz-btn-primary mt-2"
 					onClick={() => resolveDispute(pv.id)}
 				>
-					Resolve dispute &amp; reassign
+					{t.agencyPv.resolveDisputeAndReassign}
 				</button>
 			)}
 
@@ -2040,10 +2103,7 @@ function PvDetail({
 			{pv.status === "SIGNED" && can("raisePv") && (
 				<div className="mt-2 rounded-xl border border-[rgba(93,217,160,.35)] p-3">
 					<p className="iz-sm font-bold">{t.payroll.recordPayment}</p>
-					<p className="iz-tiny iz-muted2 mt-0.5">
-						Marks this voucher paid and moves it to History. The paid date is
-						stamped once — recording twice cannot re-date a transfer.
-					</p>
+					<p className="iz-tiny iz-muted2 mt-0.5">{t.agencyPv.markPaidHint}</p>
 					<input
 						type="text"
 						className="mt-2 w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-2 py-1.5 text-xs"
@@ -2058,13 +2118,17 @@ function PvDetail({
 						onClick={() => {
 							markPaid(pv.id, bankRef.trim() || undefined);
 							setBankRef("");
+							// The amount arrives as a SLOT, already run through formatRM —
+							// baking "RM" into a key would give the currency a second home.
 							toast(
-								`${formatRM(getPvNetTotal(pv))} recorded as paid`,
+								fill(t.agencyPv.recordedAsPaid, {
+									amount: formatRM(getPvNetTotal(pv)),
+								}),
 								"success",
 							);
 						}}
 					>
-						<CheckCircle2 className="h-4 w-4" /> Mark as paid
+						<CheckCircle2 className="h-4 w-4" /> {t.agencyPv.markAsPaid}
 					</button>
 				</div>
 			)}
@@ -2072,8 +2136,11 @@ function PvDetail({
 			{pv.overrideAudit && (
 				<IzCard flat className="mt-2 border-[var(--iz-amber)]">
 					<p className="iz-tiny flex items-center gap-1 text-[var(--iz-amber)]">
-						<Shield className="h-3 w-3" /> Overridden by {pv.overrideAudit.by} ·{" "}
-						{pv.overrideAudit.at}
+						<Shield className="h-3 w-3" />{" "}
+						{fill(t.agencyPv.overriddenByAt, {
+							by: pv.overrideAudit.by,
+							at: pv.overrideAudit.at,
+						})}
 					</p>
 					<p className="iz-tiny iz-muted mt-1">{pv.overrideAudit.reason}</p>
 				</IzCard>
@@ -2085,16 +2152,13 @@ function PvDetail({
 					className="iz-btn iz-btn-ghost mt-2 w-full"
 					onClick={() => setOverrideOpen(true)}
 				>
-					Override signed PV (audit logged)
+					{t.agencyPv.overrideSignedPvAuditLogged}
 				</button>
 			)}
 
 			<IzSheet open={overrideOpen} onClose={() => setOverrideOpen(false)}>
 				<IzCardTitle>{t.payroll.overrideSignedPv}</IzCardTitle>
-				<p className="iz-tiny iz-muted mb-3">
-					Finance may override with a mandatory audit reason — PV re-opens for
-					PR review
-				</p>
+				<p className="iz-tiny iz-muted mb-3">{t.agencyPv.overrideExplainer}</p>
 				<textarea
 					className="iz-field-input min-h-[80px]"
 					value={overrideReason}
@@ -2111,7 +2175,7 @@ function PvDetail({
 						setOverrideReason("");
 					}}
 				>
-					Confirm override
+					{t.agencyPv.confirmOverride}
 				</button>
 			</IzSheet>
 
@@ -2131,7 +2195,7 @@ function PvDetail({
 				className="iz-btn iz-btn-soft mt-2"
 				onClick={onClose}
 			>
-				Return
+				{t.common.back}
 			</button>
 		</>
 	);

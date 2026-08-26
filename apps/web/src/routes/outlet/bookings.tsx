@@ -882,8 +882,8 @@ function PostJobPage() {
 					</p>
 					<p className="iz-tiny iz-muted mt-1">
 						{agencyLinks.awaitingApproval
-							? "You have asked to work with an agency and they have not decided yet. Once one accepts, you can post shifts to them."
-							: "Shifts are filled by PR agencies, so this venue needs at least one. Add one in Settings — they choose whether to accept."}
+							? t.outletRoutes.awaitingAgencyDecision
+							: t.outletRoutes.noAgencyAddInSettings}
 					</p>
 					{!agencyLinks.awaitingApproval && (
 						<Link
@@ -988,11 +988,17 @@ function PostJobPage() {
 											<>
 												<div className="mt-4 flex items-center justify-between">
 													<IzSectionLabel>
-														Shifts for {sectionDate.toLowerCase()}
+														{fill(t.outletRoutes.shiftsForDate, {
+															date: sectionDate.toLowerCase(),
+														})}
 													</IzSectionLabel>
 													<span className="text-[10px] text-[var(--iz-muted)]">
-														{draftShifts.length} slot
-														{draftShifts.length !== 1 ? "s" : ""}
+														{fill(
+															draftShifts.length === 1
+																? t.outletRoutes.slotCountOne
+																: t.outletRoutes.slotCountMany,
+															{ n: draftShifts.length },
+														)}
 													</span>
 												</div>
 												<div className="mt-3 flex flex-col gap-4">

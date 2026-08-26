@@ -23,7 +23,6 @@ import {
 	AgencyDetailsSheet,
 	OutletDetailsSheet,
 	orgStatusBadgeColors,
-	orgStatusLabels,
 } from "@/components/organization";
 import { PrDetailsSheet } from "@/components/pr";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +55,13 @@ import { getUserTypeByKey } from "@/constants/user-types";
 import { useAccountActions } from "@/hooks/use-account-actions";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import {
+	adminNavLabel,
+	userTypeDescription,
+} from "@/lib/portal-i18n/admin-nav-label";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
 	type Agency,
@@ -98,10 +104,22 @@ type LegacyRow = {
 	updatedAt: string;
 };
 
-const roleLabels: Record<Exclude<LegacyRoleFilter, "all">, string> = {
-	agency: "Agency",
-	outlet: "Outlet",
-	pr: "PR",
+/**
+ * The role a legacy row belongs to, as the badge and the Role filter render it.
+ *
+ * The record KEYS are the stored roles — they are what the filter compares and
+ * what `LegacyRow.role` switches on — so only the label moves. It holds
+ * FUNCTIONS rather than strings because this is module scope, where no hook can
+ * run: storing `"adminUsers.roleAgency"` here would type-check and then print
+ * the key name into the badge.
+ */
+const roleLabels: Record<
+	Exclude<LegacyRoleFilter, "all">,
+	(t: PortalTranslations) => string
+> = {
+	agency: (t) => t.adminUsers.roleAgency,
+	outlet: (t) => t.adminUsers.roleOutlet,
+	pr: (t) => t.adminUsers.rolePr,
 };
 
 const roleBadgeColors: Record<Exclude<LegacyRoleFilter, "all">, string> = {
@@ -160,7 +178,17 @@ async function fetchAllInactivePrs(
 	return rows;
 }
 
-function mapAgencyRow(agency: Agency): LegacyRow {
+/*
+ * The three mappers take `t` for ONE field: `statusLabel`, which is the only
+ * piece of a row that is copy rather than stored data. Everything else here is
+ * a name, a code or a contact detail the record itself carries, and stays
+ * exactly as the API returned it.
+ *
+ * `orgStatusLabels` is deliberately not used for it any more — that map is a
+ * module-scope English record shared with the org tables, so reading it here
+ * would have pinned this page's status column to English no matter the locale.
+ */
+function mapAgencyRow(agency: Agency, t: PortalTranslations): LegacyRow {
 	return {
 		id: agency.id,
 		role: "agency",
@@ -170,14 +198,14 @@ function mapAgencyRow(agency: Agency): LegacyRow {
 		detail: [agency.contactEmail, agency.contactPhone]
 			.filter(Boolean)
 			.join(" · "),
-		statusLabel: orgStatusLabels.suspended,
+		statusLabel: t.admin.statusSuspended,
 		statusClass: orgStatusBadgeColors.suspended,
 		createdAt: agency.createdAt,
 		updatedAt: agency.updatedAt,
 	};
 }
 
-function mapOutletRow(outlet: Outlet): LegacyRow {
+function mapOutletRow(outlet: Outlet, t: PortalTranslations): LegacyRow {
 	const place = [outlet.state, outlet.country].filter(Boolean).join(", ");
 	return {
 		id: outlet.id,
@@ -186,14 +214,14 @@ function mapOutletRow(outlet: Outlet): LegacyRow {
 		code: outlet.ssmNo || outlet.businessLicense || "—",
 		contact: place || "—",
 		detail: [outlet.addressLine1, outlet.postcode].filter(Boolean).join(", "),
-		statusLabel: orgStatusLabels.suspended,
+		statusLabel: t.admin.statusSuspended,
 		statusClass: orgStatusBadgeColors.suspended,
 		createdAt: outlet.createdAt,
 		updatedAt: outlet.updatedAt,
 	};
 }
 
-function mapPrRow(user: PrUser): LegacyRow {
+function mapPrRow(user: PrUser, t: PortalTranslations): LegacyRow {
 	return {
 		id: user.id,
 		role: "pr",
@@ -201,7 +229,7 @@ function mapPrRow(user: PrUser): LegacyRow {
 		code: user.idNo || "—",
 		contact: user.displayName || "—",
 		detail: [user.email, user.phoneNum].filter(Boolean).join(" · "),
-		statusLabel: "Inactive",
+		statusLabel: t.admin.statusInactive,
 		statusClass: orgStatusBadgeColors.inactive,
 		createdAt: user.createdAt,
 		updatedAt: user.updatedAt,
@@ -209,6 +237,7 @@ function mapPrRow(user: PrUser): LegacyRow {
 }
 
 function LegacyMemberPage() {
+	const { t } = usePortalLocale();
 	const type = getUserTypeByKey("legacy-member")!;
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
@@ -302,17 +331,17 @@ function LegacyMemberPage() {
 	const list: LegacyRow[] = [];
 	if (needAgency) {
 		for (const agency of agencyQuery.data ?? []) {
-			list.push(mapAgencyRow(agency));
+			list.push(mapAgencyRow(agency, t));
 		}
 	}
 	if (needOutlet) {
 		for (const outlet of outletQuery.data ?? []) {
-			list.push(mapOutletRow(outlet));
+			list.push(mapOutletRow(outlet, t));
 		}
 	}
 	if (needPr) {
 		for (const user of prQuery.data ?? []) {
-			list.push(mapPrRow(user));
+			list.push(mapPrRow(user, t));
 		}
 	}
 
@@ -402,13 +431,13 @@ function LegacyMemberPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["legacy-members"] });
 			queryClient.invalidateQueries({ queryKey: ["agencies"] });
-			toast.success(response.message || "Agency reactivated");
+			toast.success(response.message || t.adminUsers.agencyReactivated);
 			setSelected(null);
 		},
 		onError: (err) => {
 			toast.error(
-				toMutationError(err, "Failed to reactivate agency")?.message ??
-					"Failed to reactivate agency",
+				toMutationError(err, t.adminUsers.agencyReactivateFailed)?.message ??
+					t.adminUsers.agencyReactivateFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -420,13 +449,13 @@ function LegacyMemberPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["legacy-members"] });
 			queryClient.invalidateQueries({ queryKey: ["outlets"] });
-			toast.success(response.message || "Outlet reactivated");
+			toast.success(response.message || t.adminUsers.outletReactivated);
 			setSelected(null);
 		},
 		onError: (err) => {
 			toast.error(
-				toMutationError(err, "Failed to reactivate outlet")?.message ??
-					"Failed to reactivate outlet",
+				toMutationError(err, t.adminUsers.outletReactivateFailed)?.message ??
+					t.adminUsers.outletReactivateFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -443,8 +472,11 @@ function LegacyMemberPage() {
 	 * place an account could arrive and never leave.
 	 */
 	const accountActions = useAccountActions({
+		// `roleName` is the STORED role sent to the revoke endpoint; `roleLabel` is
+		// the same fact as a phrase, and the hook drops it mid-sentence, so it has
+		// to arrive already translated.
 		roleName: "pr",
-		roleLabel: "PR access",
+		roleLabel: t.admin.rolePrAccess,
 		queryKeys: ["legacy-members", "pr-users"],
 	});
 
@@ -458,20 +490,19 @@ function LegacyMemberPage() {
 		<PageShell>
 			<PageHeader
 				icon={type.icon}
-				title={type.title}
-				description={type.description}
+				title={adminNavLabel(`sidebar-user-${type.key}`, type.title, t)}
+				description={userTypeDescription(type.key, type.description, t)}
 			/>
 
 			<div className="rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
 				<div className="flex items-start gap-2">
 					<Info className="mt-0.5 h-4 w-4 shrink-0" />
 					<div>
-						<p className="font-medium text-sky-50">About Legacy Member</p>
+						<p className="font-medium text-sky-50">
+							{t.adminUsers.aboutLegacyMember}
+						</p>
 						<p className="mt-1 text-sky-100/85">
-							This list shows suspended Agency and Outlet organizations, plus
-							inactive PR accounts. Filter by Role (not Rank). Reactivating an
-							agency or outlet restores the organization; reactivating a PR
-							re-enables the person's account so they can sign in again.
+							{t.adminUsers.aboutLegacyMemberBody}
 						</p>
 					</div>
 				</div>
@@ -480,95 +511,112 @@ function LegacyMemberPage() {
 			<Card className="border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
 					<CardTitle className="flex items-center gap-2">
-						Search Filters
+						{t.adminUsers.searchFilters}
 						{isFetching && !showLoading && (
 							<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 						)}
 					</CardTitle>
-					<CardDescription>
-						Find suspended records by name, code, contact, and role.
-					</CardDescription>
+					<CardDescription>{t.adminUsers.searchFiltersHint}</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 						<div className="space-y-1.5">
-							<Label htmlFor="legacy-name">Name</Label>
+							<Label htmlFor="legacy-name">{t.admin.colName}</Label>
 							<div className="relative">
 								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 								<Input
 									id="legacy-name"
 									value={nameFilter}
 									onChange={(e) => setNameFilter(e.target.value)}
-									placeholder="Full name / org name"
+									placeholder={t.adminUsers.placeholderName}
 									className="pl-8"
 								/>
 							</div>
 						</div>
 						<div className="space-y-1.5">
-							<Label htmlFor="legacy-code">Code / ID</Label>
+							<Label htmlFor="legacy-code">{t.adminUsers.colCodeId}</Label>
 							<Input
 								id="legacy-code"
 								value={codeFilter}
 								onChange={(e) => setCodeFilter(e.target.value)}
-								placeholder="Agency code, SSM, ID no."
+								placeholder={t.adminUsers.placeholderCode}
 							/>
 						</div>
 						<div className="space-y-1.5">
-							<Label htmlFor="legacy-contact">Contact</Label>
+							<Label htmlFor="legacy-contact">{t.adminUsers.colContact}</Label>
 							<Input
 								id="legacy-contact"
 								value={contactFilter}
 								onChange={(e) => setContactFilter(e.target.value)}
-								placeholder="Email, phone, place"
+								placeholder={t.adminUsers.placeholderContact}
 							/>
 						</div>
 						<div className="space-y-1.5">
-							<Label htmlFor="legacy-role">Role</Label>
+							<Label htmlFor="legacy-role">{t.adminUsers.role}</Label>
 							<Select
 								value={roleFilter}
 								onValueChange={(value) =>
 									setRoleFilter(value as LegacyRoleFilter)
 								}
 							>
-								<SelectTrigger id="legacy-role" aria-label="Filter by role">
-									<SelectValue placeholder="Role" />
+								<SelectTrigger
+									id="legacy-role"
+									aria-label={t.adminUsers.filterByRole}
+								>
+									<SelectValue placeholder={t.adminUsers.role} />
 								</SelectTrigger>
+								{/* Every `value` here is the stored role the filter compares
+								    against — only the labels move. */}
 								<SelectContent>
-									<SelectItem value="all">All Roles</SelectItem>
-									<SelectItem value="agency">Agency</SelectItem>
-									<SelectItem value="outlet">Outlet</SelectItem>
-									<SelectItem value="pr">PR</SelectItem>
+									<SelectItem value="all">{t.adminUsers.allRoles}</SelectItem>
+									<SelectItem value="agency">
+										{t.adminUsers.roleAgency}
+									</SelectItem>
+									<SelectItem value="outlet">
+										{t.adminUsers.roleOutlet}
+									</SelectItem>
+									<SelectItem value="pr">{t.adminUsers.rolePr}</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
 						<div className="space-y-1.5">
-							<Label htmlFor="legacy-sort-by">Sort By</Label>
+							<Label htmlFor="legacy-sort-by">{t.adminUsers.sortBy}</Label>
 							<Select
 								value={sortBy}
 								onValueChange={(value) => setSortBy(value as SortBy)}
 							>
-								<SelectTrigger id="legacy-sort-by" aria-label="Sort by">
+								<SelectTrigger
+									id="legacy-sort-by"
+									aria-label={t.adminUsers.sortBy}
+								>
 									<SelectValue />
 								</SelectTrigger>
+								{/* `name` / `createdAt` / `updatedAt` are the sort keys the
+								    comparator switches on — labels only. */}
 								<SelectContent>
-									<SelectItem value="name">Name</SelectItem>
-									<SelectItem value="createdAt">Created</SelectItem>
-									<SelectItem value="updatedAt">Updated</SelectItem>
+									<SelectItem value="name">{t.admin.colName}</SelectItem>
+									<SelectItem value="createdAt">{t.admin.colCreated}</SelectItem>
+									<SelectItem value="updatedAt">
+										{t.adminUsers.colUpdated}
+									</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
 						<div className="space-y-1.5">
-							<Label htmlFor="legacy-sort-order">Sort Order</Label>
+							<Label htmlFor="legacy-sort-order">{t.adminUsers.sortOrder}</Label>
 							<Select
 								value={sortOrder}
 								onValueChange={(value) => setSortOrder(value as SortOrder)}
 							>
-								<SelectTrigger id="legacy-sort-order" aria-label="Sort order">
+								<SelectTrigger
+									id="legacy-sort-order"
+									aria-label={t.adminUsers.sortOrder}
+								>
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="asc">Ascending</SelectItem>
-									<SelectItem value="desc">Descending</SelectItem>
+									<SelectItem value="asc">{t.adminUsers.ascending}</SelectItem>
+									<SelectItem value="desc">{t.adminUsers.descending}</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
@@ -581,13 +629,13 @@ function LegacyMemberPage() {
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 						<div>
 							<CardTitle className="flex items-center gap-2">
-								Suspended & inactive records
+								{t.adminUsers.suspendedInactiveRecords}
 								{isFetching && !showLoading && (
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
 							</CardTitle>
 							<CardDescription>
-								Segmented by role. Click a row or View to open details.
+								{t.adminUsers.suspendedInactiveHint}
 							</CardDescription>
 						</div>
 						<Button
@@ -599,7 +647,7 @@ function LegacyMemberPage() {
 							<RefreshCw
 								className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`}
 							/>
-							Refresh
+							{t.adminUsers.refresh}
 						</Button>
 					</div>
 				</CardHeader>
@@ -609,13 +657,17 @@ function LegacyMemberPage() {
 							<TableHeader>
 								<TableRow>
 									<TableHead className="w-10" />
-									<TableHead>Name</TableHead>
-									<TableHead>Code / ID</TableHead>
-									<TableHead>Role</TableHead>
-									<TableHead>Contact</TableHead>
-									<TableHead className="w-[120px]">Status</TableHead>
-									<TableHead className="w-[150px]">Updated</TableHead>
-									<TableHead className="w-[220px]">Actions</TableHead>
+									<TableHead>{t.admin.colName}</TableHead>
+									<TableHead>{t.adminUsers.colCodeId}</TableHead>
+									<TableHead>{t.adminUsers.role}</TableHead>
+									<TableHead>{t.adminUsers.colContact}</TableHead>
+									<TableHead className="w-[120px]">{t.admin.colStatus}</TableHead>
+									<TableHead className="w-[150px]">
+										{t.adminUsers.colUpdated}
+									</TableHead>
+									<TableHead className="w-[220px]">
+										{t.admin.colActions}
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -634,14 +686,14 @@ function LegacyMemberPage() {
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="text-sm text-muted-foreground">
 													{getErrorMessage(error as Error | null) ||
-														"Failed to load legacy members"}
+														t.adminUsers.legacyLoadFailed}
 												</p>
 												<Button
 													variant="outline"
 													size="sm"
 													onClick={refetchAll}
 												>
-													Retry
+													{t.common.retry}
 												</Button>
 											</div>
 										</TableCell>
@@ -653,7 +705,9 @@ function LegacyMemberPage() {
 										<TableCell colSpan={8} className="h-40 text-center">
 											<div className="flex flex-col items-center gap-2 text-muted-foreground">
 												<Archive className="h-8 w-8 opacity-50" />
-												<p className="text-sm">No suspended records found.</p>
+												<p className="text-sm">
+													{t.adminUsers.noSuspendedRecords}
+												</p>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -680,7 +734,9 @@ function LegacyMemberPage() {
 															e.stopPropagation();
 															setSelected({ role: row.role, id: row.id });
 														}}
-														aria-label={`View ${row.name}`}
+														aria-label={fill(t.adminUsers.viewNamed, {
+															name: row.name,
+														})}
 													>
 														<Eye className="h-4 w-4" />
 													</Button>
@@ -701,7 +757,7 @@ function LegacyMemberPage() {
 														variant="outline"
 														className={roleBadgeColors[row.role]}
 													>
-														{roleLabels[row.role]}
+														{roleLabels[row.role](t)}
 													</Badge>
 												</TableCell>
 												<TableCell>{row.contact}</TableCell>
@@ -741,7 +797,7 @@ function LegacyMemberPage() {
 																) : (
 																	<CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
 																)}
-																Reactivate
+																{t.adminUsers.reactivate}
 															</Button>
 														)}
 														{row.role === "pr" && (
@@ -761,7 +817,7 @@ function LegacyMemberPage() {
 																}
 															>
 																<CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-																Reactivate
+																{t.adminUsers.reactivate}
 															</Button>
 														)}
 														<Button
@@ -772,7 +828,7 @@ function LegacyMemberPage() {
 															}
 														>
 															<Eye className="mr-1.5 h-3.5 w-3.5" />
-															View
+															{t.adminUsers.view}
 														</Button>
 													</div>
 												</TableCell>
@@ -785,18 +841,20 @@ function LegacyMemberPage() {
 
 					{totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+							{/* One whole-sentence template, the same shape the admins table
+							    and the roles grid already use. The three numbers were bold
+							    spans glued between English fragments, which is a sentence
+							    that cannot be reordered — Chinese puts the total last and
+							    the measure word after the number. `formatNumber` still runs
+							    on each value, so the grouping stays locale-correct. */}
 							<div>
-								Showing{" "}
-								<span className="font-medium">
-									{formatNumber((currentPage - 1) * PAGE_SIZE + 1)}
-								</span>{" "}
-								-{" "}
-								<span className="font-medium">
-									{formatNumber(Math.min(currentPage * PAGE_SIZE, totalCount))}
-								</span>{" "}
-								of{" "}
-								<span className="font-medium">{formatNumber(totalCount)}</span>{" "}
-								records
+								{fill(t.adminUsers.showingRecords, {
+									from: formatNumber((currentPage - 1) * PAGE_SIZE + 1),
+									to: formatNumber(
+										Math.min(currentPage * PAGE_SIZE, totalCount),
+									),
+									total: formatNumber(totalCount),
+								})}
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
@@ -805,10 +863,13 @@ function LegacyMemberPage() {
 									disabled={currentPage <= 1 || isFetching}
 									onClick={() => setPage((value) => value - 1)}
 								>
-									Previous
+									{t.admin.previous}
 								</Button>
 								<span>
-									Page {currentPage} of {totalPages}
+									{fill(t.admin.pageOf, {
+										page: currentPage,
+										total: totalPages,
+									})}
 								</span>
 								<Button
 									variant="outline"
@@ -816,7 +877,7 @@ function LegacyMemberPage() {
 									disabled={currentPage >= totalPages || isFetching}
 									onClick={() => setPage((value) => value + 1)}
 								>
-									Next
+									{t.admin.next}
 								</Button>
 							</div>
 						</div>

@@ -2,6 +2,7 @@ import { IzCard } from "@agency-portal/components/iz/ui";
 import { OUTLET_SERVICES_ENABLED } from "@agency-portal/lib/phase-flags";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export const Route = createFileRoute("/outlet/special-service")({
 	component: OutletSpecialServiceRedirect,
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/outlet/special-service")({
  * which reads as a permissions problem to a role that holds the permission.
  */
 function OutletSpecialServiceRedirect() {
+	const { t } = usePortalLocale();
 	const can = useOutletCan();
 
 	// Phase check BEFORE the role check. Telling someone their role is wrong is
@@ -25,13 +27,12 @@ function OutletSpecialServiceRedirect() {
 			<div className="iz-screen">
 				<header>
 					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-						Not available yet
+						{t.postJob.notAvailableYet}
 					</h2>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
-						Ordering agency services is coming in a later release. Nothing needs
-						changing on your account.
+						{t.outletRoutes.specialServiceComingLater}
 					</p>
 				</IzCard>
 			</div>
@@ -43,12 +44,12 @@ function OutletSpecialServiceRedirect() {
 			<div className="iz-screen">
 				<header>
 					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-						Access restricted
+						{t.postJob.accessRestricted}
 					</h2>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
-						Your outlet role cannot access job postings.
+						{t.outletRoutes.roleCannotAccessPostings}
 					</p>
 				</IzCard>
 			</div>

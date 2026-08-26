@@ -64,6 +64,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import {
 	formatDate,
 	formatNumber,
@@ -88,6 +91,10 @@ import {
 
 export const Route = createFileRoute("/admin/service/other")({
 	component: SpecialServicesPage,
+	/*
+	 * Document title stays ENGLISH — `head()` is route metadata evaluated
+	 * outside React, so there is no hook to read the locale from.
+	 */
 	head: () => ({
 		meta: [{ title: "Jobs & Special Services — Innocenz Admin" }],
 	}),
@@ -120,24 +127,35 @@ const CATEGORIES: SpecialServiceCategory[] = [
 	"others",
 ];
 
-const categoryLabels: Record<SpecialServiceCategory, string> = {
-	transportation: "Transportation",
-	delivery: "Deliveries",
-	wardrobe: "Wardrobe & styling",
-	makeup: "Makeup & grooming",
-	vip_escort: "VIP escort",
-	uniform: "Uniform & documents",
-	emergency_cover: "Emergency cover",
-	training: "Training top-up",
-	others: "Others",
+/*
+ * The record KEYS are the stored category / status values and never change —
+ * only the words a human reads do, so each entry holds a LOOKUP rather than a
+ * string. A module-scope map cannot call a hook, so `t` is passed in.
+ */
+const categoryLabels: Record<
+	SpecialServiceCategory,
+	(t: PortalTranslations) => string
+> = {
+	transportation: (t) => t.adminService.catTransportation,
+	delivery: (t) => t.adminService.catDelivery,
+	wardrobe: (t) => t.adminService.catWardrobe,
+	makeup: (t) => t.adminService.catMakeup,
+	vip_escort: (t) => t.adminService.catVipEscort,
+	uniform: (t) => t.adminService.catUniform,
+	emergency_cover: (t) => t.adminService.catEmergencyCover,
+	training: (t) => t.adminService.catTraining,
+	others: (t) => t.adminService.catOthers,
 };
 
-const statusLabels: Record<SpecialServiceStatus, string> = {
-	open: "Open",
-	assigned: "Assigned",
-	in_progress: "In progress",
-	completed: "Completed",
-	cancelled: "Cancelled",
+const statusLabels: Record<
+	SpecialServiceStatus,
+	(t: PortalTranslations) => string
+> = {
+	open: (t) => t.admin.jobOpen,
+	assigned: (t) => t.admin.jobAssigned,
+	in_progress: (t) => t.admin.jobInProgress,
+	completed: (t) => t.admin.jobCompleted,
+	cancelled: (t) => t.admin.jobCancelled,
 };
 
 const statusBadgeColors: Record<SpecialServiceStatus, string> = {
@@ -157,13 +175,22 @@ const sourceNameOf = (record: SpecialService) =>
 			? record.postingPrName || ""
 			: record.outletName;
 
-const roleLabelOf = (initiatedBy: SpecialServiceInitiatedBy) =>
-	initiatedBy === "agency" ? "Agency" : initiatedBy === "pr" ? "PR" : "Outlet";
+/** "PR" is the product's own term for the role and stays PR in every locale. */
+const roleLabelOf = (
+	initiatedBy: SpecialServiceInitiatedBy,
+	t: PortalTranslations,
+) =>
+	initiatedBy === "agency"
+		? t.adminService.agency
+		: initiatedBy === "pr"
+			? t.table.pr
+			: t.table.outlet;
 
 const formatBudget = (budget: string | null) =>
 	budget != null && budget.trim() !== "" ? `RM ${formatPrice(budget)}` : "—";
 
 function SpecialServicesPage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -243,12 +270,12 @@ function SpecialServicesPage() {
 		}) => updateSpecialServiceStatus(id, status, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["special-services"] });
-			toast.success(response.message || "Status updated");
+			toast.success(response.message || t.adminService.statusUpdated);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to update status")?.message ??
-					"Failed to update status",
+				toMutationError(error, t.adminService.statusUpdateFailed)?.message ??
+					t.adminService.statusUpdateFailed,
 			);
 		},
 	});
@@ -258,12 +285,12 @@ function SpecialServicesPage() {
 		onMutate: (id) => setActionId(id),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["special-services"] });
-			toast.success(response.message || "Job posting approved");
+			toast.success(response.message || t.adminService.jobApproved);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to approve job")?.message ??
-					"Failed to approve job",
+				toMutationError(error, t.adminService.jobApproveFailed)?.message ??
+					t.adminService.jobApproveFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -274,12 +301,12 @@ function SpecialServicesPage() {
 		onMutate: (id) => setActionId(id),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["special-services"] });
-			toast.success(response.message || "Job posting declined");
+			toast.success(response.message || t.adminService.jobDeclined);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to decline job")?.message ??
-					"Failed to decline job",
+				toMutationError(error, t.adminService.jobDeclineFailed)?.message ??
+					t.adminService.jobDeclineFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -293,12 +320,12 @@ function SpecialServicesPage() {
 			updateSpecialService(id, input, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["special-services"] });
-			toast.success(response.message || "Order updated");
+			toast.success(response.message || t.adminService.orderUpdated);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to update order")?.message ??
-					"Failed to update order",
+				toMutationError(error, t.adminService.orderUpdateFailed)?.message ??
+					t.adminService.orderUpdateFailed,
 			);
 		},
 	});
@@ -310,18 +337,18 @@ function SpecialServicesPage() {
 	const pendingCount = pendingCountQuery.data?.pagination.totalCount ?? 0;
 
 	const summaryCards: Array<{ key: SpecialServiceStatus; label: string }> = [
-		{ key: "open", label: "Open" },
-		{ key: "assigned", label: "Assigned" },
-		{ key: "in_progress", label: "In progress" },
-		{ key: "completed", label: "Completed" },
+		{ key: "open", label: t.admin.jobOpen },
+		{ key: "assigned", label: t.admin.jobAssigned },
+		{ key: "in_progress", label: t.admin.jobInProgress },
+		{ key: "completed", label: t.admin.jobCompleted },
 	];
 
 	return (
 		<PageShell>
 			<PageHeader
 				icon={LayoutGrid}
-				title="Jobs & Special Services"
-				description="Browse orders and agency jobs. Click a row to open the editor and update details or status. Use the filters to narrow by source, category, or status."
+				title={t.adminService.jobsTitle}
+				description={t.adminService.jobsSubtitle}
 			/>
 
 			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -333,7 +360,7 @@ function SpecialServicesPage() {
 					}}
 				>
 					<CardHeader className="pb-2">
-						<CardDescription>Pending review</CardDescription>
+						<CardDescription>{t.adminService.pendingReview}</CardDescription>
 						<CardTitle className="text-2xl text-amber-600 dark:text-amber-400">
 							{formatNumber(pendingCount)}
 						</CardTitle>
@@ -356,15 +383,17 @@ function SpecialServicesPage() {
 					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
-								{isPendingView ? "Agency job postings" : "All orders"}
+								{isPendingView
+									? t.adminService.agencyJobPostings
+									: t.adminService.allOrders}
 								{servicesQuery.isFetching && !showLoading && (
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
 							</CardTitle>
 							<CardDescription>
 								{isPendingView
-									? "Agency-submitted posts awaiting admin approve or decline"
-									: "Outlet orders and agency jobs — status and assignment"}
+									? t.adminService.agencyJobPostingsHint
+									: t.adminService.allOrdersHint}
 							</CardDescription>
 						</div>
 
@@ -373,11 +402,11 @@ function SpecialServicesPage() {
 								<>
 									<div className="space-y-1.5 sm:mr-auto">
 										<Label htmlFor="ss-id-search" className="sr-only">
-											Search special service ID
+											{t.adminService.searchServiceId}
 										</Label>
 										<Input
 											id="ss-id-search"
-											placeholder="Search special service ID…"
+											placeholder={t.adminService.searchServiceIdPlaceholder}
 											className="font-mono text-xs sm:w-72"
 											value={idSearch}
 											onChange={(event) => {
@@ -404,13 +433,18 @@ function SpecialServicesPage() {
 									setPage(1);
 								}}
 							>
-								<SelectTrigger className="sm:w-48" aria-label="View mode">
+								<SelectTrigger
+									className="sm:w-48"
+									aria-label={t.adminService.viewMode}
+								>
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">All orders</SelectItem>
+									<SelectItem value="all">
+										{t.adminService.allOrders}
+									</SelectItem>
 									<SelectItem value="pending_review">
-										Pending review
+										{t.adminService.pendingReview}
 										{pendingCount > 0 ? ` (${pendingCount})` : ""}
 									</SelectItem>
 								</SelectContent>
@@ -427,15 +461,17 @@ function SpecialServicesPage() {
 									>
 										<SelectTrigger
 											className="sm:w-40"
-											aria-label="Filter by category"
+											aria-label={t.adminService.filterByCategory}
 										>
-											<SelectValue placeholder="All Categories" />
+											<SelectValue placeholder={t.adminService.allCategories} />
 										</SelectTrigger>
 										<SelectContent>
-											<SelectItem value="all">All Categories</SelectItem>
+											<SelectItem value="all">
+												{t.adminService.allCategories}
+											</SelectItem>
 											{CATEGORIES.map((category) => (
 												<SelectItem key={category} value={category}>
-													{categoryLabels[category]}
+													{categoryLabels[category](t)}
 												</SelectItem>
 											))}
 										</SelectContent>
@@ -450,15 +486,15 @@ function SpecialServicesPage() {
 									>
 										<SelectTrigger
 											className="sm:w-40"
-											aria-label="Filter by status"
+											aria-label={t.admin.filterByStatus}
 										>
-											<SelectValue placeholder="All Status" />
+											<SelectValue placeholder={t.admin.allStatus} />
 										</SelectTrigger>
 										<SelectContent>
-											<SelectItem value="all">All Status</SelectItem>
+											<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 											{STATUSES.map((status) => (
 												<SelectItem key={status} value={status}>
-													{statusLabels[status]}
+													{statusLabels[status](t)}
 												</SelectItem>
 											))}
 										</SelectContent>
@@ -472,8 +508,8 @@ function SpecialServicesPage() {
 									setScheduledDates(dates);
 									setPage(1);
 								}}
-								ariaLabel="Filter by scheduled date"
-								emptyLabel="Scheduled for"
+								ariaLabel={t.adminService.filterByScheduledDate}
+								emptyLabel={t.adminService.scheduledFor}
 							/>
 							<DateMultiFilter
 								selectedDates={requestedDates}
@@ -481,8 +517,8 @@ function SpecialServicesPage() {
 									setRequestedDates(dates);
 									setPage(1);
 								}}
-								ariaLabel="Filter by requested date"
-								emptyLabel="Requested time"
+								ariaLabel={t.adminService.filterByRequestedDate}
+								emptyLabel={t.adminService.requestedTime}
 							/>
 						</div>
 					</div>
@@ -494,15 +530,21 @@ function SpecialServicesPage() {
 							<TableHeader>
 								<TableRow>
 									<TableHead className="w-[220px]">
-										Special Service ID
+										{t.adminService.colServiceId}
 									</TableHead>
-									<TableHead>Title</TableHead>
-									<TableHead>Source</TableHead>
-									<TableHead className="w-[160px]">Category</TableHead>
-									<TableHead className="min-w-[200px]">Description</TableHead>
-									<TableHead>Budget</TableHead>
-									<TableHead>Third Party</TableHead>
-									<TableHead className="w-[150px]">Scheduled For</TableHead>
+									<TableHead>{t.adminService.colTitle}</TableHead>
+									<TableHead>{t.filters.source}</TableHead>
+									<TableHead className="w-[160px]">
+										{t.adminService.colCategory}
+									</TableHead>
+									<TableHead className="min-w-[200px]">
+										{t.adminService.colDescription}
+									</TableHead>
+									<TableHead>{t.adminService.colBudget}</TableHead>
+									<TableHead>{t.adminService.colThirdParty}</TableHead>
+									<TableHead className="w-[150px]">
+										{t.adminService.scheduledFor}
+									</TableHead>
 									<TableHead className="w-[160px]">
 										<button
 											type="button"
@@ -515,11 +557,11 @@ function SpecialServicesPage() {
 											}}
 											aria-label={
 												sortOrder === "desc"
-													? "Sorted by requested time, newest first — click for oldest first"
-													: "Sorted by requested time, oldest first — click for newest first"
+													? t.adminService.sortedNewestFirst
+													: t.adminService.sortedOldestFirst
 											}
 										>
-											Requested Time
+											{t.adminService.requestedTime}
 											{sortOrder === "desc" ? (
 												<ArrowDown className="h-3.5 w-3.5" />
 											) : (
@@ -528,9 +570,13 @@ function SpecialServicesPage() {
 										</button>
 									</TableHead>
 									{isPendingView ? (
-										<TableHead className="w-[200px]">Actions</TableHead>
+										<TableHead className="w-[200px]">
+											{t.admin.colActions}
+										</TableHead>
 									) : (
-										<TableHead className="w-[170px]">Status</TableHead>
+										<TableHead className="w-[170px]">
+											{t.admin.colStatus}
+										</TableHead>
 									)}
 								</TableRow>
 							</TableHeader>
@@ -540,7 +586,7 @@ function SpecialServicesPage() {
 										<TableCell colSpan={10} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
-												<span>Loading…</span>
+												<span>{t.common.loading}</span>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -550,7 +596,7 @@ function SpecialServicesPage() {
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
-													Failed to load
+													{t.adminService.failedToLoad}
 												</p>
 												<p className="text-sm text-muted-foreground">
 													{getErrorMessage(servicesQuery.error)}
@@ -561,7 +607,7 @@ function SpecialServicesPage() {
 													onClick={() => servicesQuery.refetch()}
 												>
 													<RefreshCw className="mr-2 h-4 w-4" />
-													Try Again
+													{t.admin.tryAgain}
 												</Button>
 											</div>
 										</TableCell>
@@ -573,8 +619,8 @@ function SpecialServicesPage() {
 												<LayoutGrid className="h-6 w-6" />
 												<span>
 													{isPendingView
-														? "No job postings pending review"
-														: "No special services found"}
+														? t.adminService.noPendingJobs
+														: t.adminService.noServicesFound}
 												</span>
 											</div>
 										</TableCell>
@@ -608,7 +654,7 @@ function SpecialServicesPage() {
 															variant="outline"
 															className="w-fit text-muted-foreground"
 														>
-															{roleLabelOf(record.initiatedBy)}
+															{roleLabelOf(record.initiatedBy, t)}
 														</Badge>
 													</div>
 												</TableCell>
@@ -617,7 +663,8 @@ function SpecialServicesPage() {
 														variant="outline"
 														className="w-fit border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender"
 													>
-														{categoryLabels[record.category] ?? record.category}
+														{categoryLabels[record.category]?.(t) ??
+															record.category}
 													</Badge>
 												</TableCell>
 												<TableCell className="max-w-[280px] text-sm text-muted-foreground">
@@ -664,7 +711,7 @@ function SpecialServicesPage() {
 																) : (
 																	<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
 																)}
-																Approve
+																{t.common.approve}
 															</Button>
 															<Button
 																size="sm"
@@ -679,7 +726,7 @@ function SpecialServicesPage() {
 																) : (
 																	<XCircle className="mr-1 h-3.5 w-3.5" />
 																)}
-																Decline
+																{t.common.decline}
 															</Button>
 														</div>
 													) : (
@@ -688,13 +735,15 @@ function SpecialServicesPage() {
 																variant="outline"
 																className={`${statusBadgeColors[record.status]} w-fit`}
 															>
-																{statusLabels[record.status]}
+																{statusLabels[record.status](t)}
 															</Badge>
 															<Button
 																size="icon"
 																variant="ghost"
 																className="h-8 w-8"
-																aria-label={`Edit ${record.title}`}
+																aria-label={fill(t.adminService.editNamed, {
+																	title: record.title,
+																})}
 																onClick={() => setEditRecord(record)}
 															>
 																<Pencil className="h-4 w-4" />
@@ -713,24 +762,21 @@ function SpecialServicesPage() {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
 							<div>
-								Showing{" "}
-								<span className="font-medium">
-									{formatNumber((pagination.page - 1) * PAGE_SIZE + 1)}
-								</span>{" "}
-								-{" "}
-								<span className="font-medium">
-									{formatNumber(
-										Math.min(
-											pagination.page * PAGE_SIZE,
-											pagination.totalCount,
+								{fill(
+									isPendingView
+										? t.adminService.showingJobs
+										: t.adminService.showingOrders,
+									{
+										from: formatNumber((pagination.page - 1) * PAGE_SIZE + 1),
+										to: formatNumber(
+											Math.min(
+												pagination.page * PAGE_SIZE,
+												pagination.totalCount,
+											),
 										),
-									)}
-								</span>{" "}
-								of{" "}
-								<span className="font-medium">
-									{formatNumber(pagination.totalCount)}
-								</span>{" "}
-								{isPendingView ? "jobs" : "orders"}
+										total: formatNumber(pagination.totalCount),
+									},
+								)}
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
@@ -739,10 +785,13 @@ function SpecialServicesPage() {
 									disabled={!pagination.hasPrevPage || servicesQuery.isFetching}
 									onClick={() => setPage((value) => value - 1)}
 								>
-									Previous
+									{t.admin.previous}
 								</Button>
 								<span>
-									Page {pagination.page} of {pagination.totalPages}
+									{fill(t.admin.pageOf, {
+										page: pagination.page,
+										total: pagination.totalPages,
+									})}
 								</span>
 								<Button
 									variant="outline"
@@ -750,7 +799,7 @@ function SpecialServicesPage() {
 									disabled={!pagination.hasNextPage || servicesQuery.isFetching}
 									onClick={() => setPage((value) => value + 1)}
 								>
-									Next
+									{t.admin.next}
 								</Button>
 							</div>
 						</div>
@@ -806,6 +855,7 @@ function OrderEditForm({
 	onSaveStatus,
 	onDone,
 }: OrderEditFormProps) {
+	const { t } = usePortalLocale();
 	const [title, setTitle] = useState(record.title);
 	const [category, setCategory] = useState<SpecialServiceCategory>(
 		record.category,
@@ -831,7 +881,7 @@ function OrderEditForm({
 
 		const trimmedTitle = title.trim();
 		if (!trimmedTitle) {
-			toast.error("Title is required");
+			toast.error(t.adminService.titleRequired);
 			return;
 		}
 		if (trimmedTitle !== record.title) input.title = trimmedTitle;
@@ -850,7 +900,7 @@ function OrderEditForm({
 			} else {
 				const parsed = Number(rawBudget);
 				if (Number.isNaN(parsed) || parsed < 0) {
-					toast.error("Enter a valid non-negative budget");
+					toast.error(t.adminService.budgetInvalid);
 					return;
 				}
 				input.budget = parsed;
@@ -887,15 +937,13 @@ function OrderEditForm({
 	return (
 		<form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
 			<SheetHeader>
-				<SheetTitle>Edit order</SheetTitle>
-				<SheetDescription>
-					Update the order details or status, then save your changes.
-				</SheetDescription>
+				<SheetTitle>{t.adminService.editOrder}</SheetTitle>
+				<SheetDescription>{t.adminService.editOrderHint}</SheetDescription>
 			</SheetHeader>
 
 			<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
 				<div className="space-y-1.5">
-					<Label htmlFor="order-id">Special Service ID</Label>
+					<Label htmlFor="order-id">{t.adminService.colServiceId}</Label>
 					<Input
 						id="order-id"
 						value={record.id}
@@ -906,7 +954,7 @@ function OrderEditForm({
 				</div>
 
 				<div className="space-y-1.5">
-					<Label htmlFor="order-title">Title</Label>
+					<Label htmlFor="order-title">{t.adminService.colTitle}</Label>
 					<Input
 						id="order-title"
 						value={title}
@@ -917,17 +965,19 @@ function OrderEditForm({
 				<div className="space-y-1.5">
 					<div className="grid grid-cols-2 gap-3">
 						<div className="space-y-1.5">
-							<Label htmlFor="order-role">Role</Label>
+							<Label htmlFor="order-role">{t.adminService.role}</Label>
 							<Input
 								id="order-role"
-								value={roleLabelOf(record.initiatedBy)}
+								value={roleLabelOf(record.initiatedBy, t)}
 								readOnly
 								disabled
 							/>
 						</div>
 						<div className="space-y-1.5">
 							<Label htmlFor="order-source-name">
-								{`${roleLabelOf(record.initiatedBy)} name`}
+								{fill(t.adminService.sourceNameLabel, {
+									role: roleLabelOf(record.initiatedBy, t),
+								})}
 							</Label>
 							<Input
 								id="order-source-name"
@@ -938,13 +988,12 @@ function OrderEditForm({
 						</div>
 					</div>
 					<p className="text-sm text-muted-foreground">
-						Role and requester name are set by whoever submitted the order and
-						cannot be changed.
+						{t.adminService.roleNameLocked}
 					</p>
 				</div>
 
 				<div className="space-y-1.5">
-					<Label htmlFor="order-category">Category</Label>
+					<Label htmlFor="order-category">{t.adminService.colCategory}</Label>
 					<Select
 						value={category}
 						onValueChange={(value) =>
@@ -957,7 +1006,7 @@ function OrderEditForm({
 						<SelectContent>
 							{CATEGORIES.map((option) => (
 								<SelectItem key={option} value={option}>
-									{categoryLabels[option]}
+									{categoryLabels[option](t)}
 								</SelectItem>
 							))}
 						</SelectContent>
@@ -966,13 +1015,14 @@ function OrderEditForm({
 
 				<div className="space-y-1.5">
 					<Label htmlFor="order-description">
-						Description
-						{category === "others" ? " (required for “Others”)" : ""}
+						{category === "others"
+							? t.adminService.descriptionRequiredForOthers
+							: t.adminService.colDescription}
 					</Label>
 					<Textarea
 						id="order-description"
 						rows={3}
-						placeholder="PR / outlet note for this order…"
+						placeholder={t.adminService.descriptionPlaceholder}
 						value={description}
 						onChange={(e) => setDescription(e.target.value)}
 					/>
@@ -980,7 +1030,9 @@ function OrderEditForm({
 
 				<div className="grid grid-cols-2 gap-3">
 					<div className="space-y-1.5">
-						<Label htmlFor="order-budget">Budget (RM)</Label>
+						<Label htmlFor="order-budget">
+							{t.adminService.colBudget} (RM)
+						</Label>
 						<Input
 							id="order-budget"
 							type="number"
@@ -993,7 +1045,7 @@ function OrderEditForm({
 						/>
 					</div>
 					<div className="space-y-1.5">
-						<Label htmlFor="order-status">Status</Label>
+						<Label htmlFor="order-status">{t.admin.colStatus}</Label>
 						<Select
 							value={status}
 							onValueChange={(value) =>
@@ -1006,7 +1058,7 @@ function OrderEditForm({
 							<SelectContent>
 								{STATUSES.map((option) => (
 									<SelectItem key={option} value={option}>
-										{statusLabels[option]}
+										{statusLabels[option](t)}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -1015,31 +1067,35 @@ function OrderEditForm({
 				</div>
 
 				<div className="space-y-1.5">
-					<Label htmlFor="order-third-party">Third party (optional)</Label>
+					<Label htmlFor="order-third-party">
+						{t.adminService.thirdPartyOptional}
+					</Label>
 					<Input
 						id="order-third-party"
-						placeholder="Who's supporting this — vendor or partner name…"
+						placeholder={t.adminService.thirdPartyPlaceholder}
 						value={thirdParty}
 						onChange={(e) => setThirdParty(e.target.value)}
 					/>
 					<p className="text-sm text-muted-foreground">
-						Who you found to support this category. Leave blank if none yet.
+						{t.adminService.thirdPartyHint}
 					</p>
 				</div>
 
 				<div className="space-y-1.5">
-					<Label>Scheduled for</Label>
+					<Label>{t.adminService.scheduledFor}</Label>
 					<DateSingleFilter
 						value={scheduledFor}
 						onChange={setScheduledFor}
-						ariaLabel="Scheduled for date"
-						emptyLabel="Select date"
+						ariaLabel={t.adminService.scheduledFor}
+						emptyLabel={t.adminService.selectDate}
 					/>
 				</div>
 
 				<dl className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Requested time</dt>
+						<dt className="text-muted-foreground">
+							{t.adminService.requestedTime}
+						</dt>
 						<dd className="text-right">{formatDate(record.createdAt)}</dd>
 					</div>
 				</dl>
@@ -1048,12 +1104,12 @@ function OrderEditForm({
 			<SheetFooter className="flex-row justify-end gap-2">
 				<SheetClose asChild>
 					<Button type="button" variant="outline">
-						Cancel
+						{t.common.cancel}
 					</Button>
 				</SheetClose>
 				<Button type="submit" disabled={isSaving}>
 					{isSaving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-					Save changes
+					{t.admin.setSaveChanges}
 				</Button>
 			</SheetFooter>
 		</form>

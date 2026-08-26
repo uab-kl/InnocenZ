@@ -41,10 +41,12 @@ import {
 } from "@agency-portal/lib/agency-demo";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
+	CONSECUTIVE_LOW_SUSPEND_COUNT,
 	getAgencyPrFlags,
 	isAgencyPrActive,
+	prTiedSinceMs,
+	RATING_SUSPEND_SHIFT_THRESHOLD,
 	RATING_WARN_THRESHOLD,
-	tiedMonthsLabel,
 } from "@agency-portal/lib/agency-pr-flags";
 import { shiftHistoryForPr } from "@agency-portal/lib/portal-sync";
 import {
@@ -82,9 +84,69 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { languageLabel, raceLabel } from "@/lib/portal-i18n/language-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 /** How many shifts the card shows. Content, not styling — leave it at 3. */
 const SHIFT_HISTORY_ROWS = 3;
+
+/**
+ * Display name for a backend penalty rule type.
+ *
+ * The record KEYS are the stored `rule_type` values the proposals endpoint
+ * returns — they are compared and must never be translated. Only the rendered
+ * text changes, and it reuses the same four headings the rules editor shows, so
+ * a breach and the rule that produced it cannot be worded two different ways.
+ * An unknown type falls through to the old underscore-stripped spelling rather
+ * than blanking the row.
+ */
+const PENALTY_RULE_TYPE_LABELS: Record<
+	string,
+	(t: PortalTranslations) => string
+> = {
+	min_shifts_per_week: (t) => t.penalties.minShiftsTitle,
+	max_mc_per_month: (t) => t.penalties.mcCapTitle,
+	late_per_week: (t) => t.penalties.latenessTitle,
+	cancellation: (t) => t.penalties.cancellationTitle,
+};
+
+function penaltyRuleTypeLabel(raw: string, t: PortalTranslations): string {
+	return PENALTY_RULE_TYPE_LABELS[raw]?.(t) ?? raw.replace(/_/g, " ");
+}
+
+/**
+ * The outcome pill on a past shift.
+ *
+ * Keyed on the STORED assignment status, same split as above. `shiftOutcomeLabel`
+ * still decides WHETHER a pill shows and in which tone — this only supplies the
+ * word, so the two can never disagree about which statuses are worth flagging.
+ */
+const SHIFT_OUTCOME_LABELS: Record<string, (t: PortalTranslations) => string> =
+	{
+		no_show: (t) => t.rosterGrid.noShow,
+		cancelled: (t) => t.agencyPrs.outcomeCancelled,
+		leave_approved: (t) => t.agencyPrs.outcomeLeave,
+		leave_pending: (t) => t.agencyPrs.outcomeLeavePending,
+	};
+
+/**
+ * How long a PR has been tied to this agency, in the reader's language.
+ *
+ * `tiedMonthsLabel` builds "8 mo" / "1 yr" in English only; the arithmetic is
+ * shared through `prTiedSinceMs` so the two cannot drift on the number itself.
+ */
+function tiedDurationLabel(
+	pr: AgencyManagedPR,
+	t: PortalTranslations,
+	now = Date.now(),
+): string {
+	const months = Math.max(
+		0,
+		Math.floor((now - prTiedSinceMs(pr)) / (30 * 86400000)),
+	);
+	return months < 12
+		? fill(t.agencyPrs.tiedMonths, { n: months })
+		: fill(t.agencyPrs.tiedYears, { n: Math.floor(months / 12) });
+}
 
 const KPI_TIER_OPTIONS = ["A", "B", "C"] as const;
 const TRAINING_TIER_OPTIONS = [
@@ -354,7 +416,7 @@ function AgencyManagePRs() {
 						}}
 					>
 						<MousePointerClick className="h-4 w-4" />
-						{selectMode ? "Cancel" : t.managePr.select}
+						{selectMode ? t.common.cancel : t.managePr.select}
 					</button>
 					<button
 						type="button"
@@ -385,15 +447,33 @@ function AgencyManagePRs() {
 					{backendProposals.backed
 						? backendProposals.count > 0 && (
 								<span className="iz-tiny iz-muted2">
-									· {backendProposals.count} breach
-									{backendProposals.count > 1 ? "es" : ""} · RM{" "}
-									{backendProposals.totalRm} total
+									·{" "}
+									{fill(
+										backendProposals.count === 1
+											? t.agencyPrs.penaltyBreachOne
+											: t.agencyPrs.penaltyBreachMany,
+										{
+											n: backendProposals.count,
+											amount: `RM ${backendProposals.totalRm}`,
+										},
+									)}
 								</span>
 							)
 						: penalizedPrs.length > 0 && (
 								<span className="iz-tiny iz-muted2">
-									· {penalizedPrs.length} PR{penalizedPrs.length > 1 ? "s" : ""}{" "}
-									· RM {penalizedPrs.reduce((s, x) => s + x.total, 0)} total
+									·{" "}
+									{fill(
+										penalizedPrs.length === 1
+											? t.agencyPrs.penaltyPrOne
+											: t.agencyPrs.penaltyPrMany,
+										{
+											n: penalizedPrs.length,
+											amount: `RM ${penalizedPrs.reduce(
+												(s, x) => s + x.total,
+												0,
+											)}`,
+										},
+									)}
 								</span>
 							)}
 				</button>
@@ -431,14 +511,14 @@ function AgencyManagePRs() {
 									</span>
 								</div>
 								<div className="iz-tiny iz-muted2">
-									{p.ruleType.replace(/_/g, " ")} · {p.detail}
+									{penaltyRuleTypeLabel(p.ruleType, t)} · {p.detail}
 								</div>
 								{/* Recorded vs still just a finding — a proposal corrects
 								    itself as the week goes on, a recorded charge does not. */}
 								<div className="iz-tiny iz-muted2">
 									{p.sealed
-										? "recorded as owed — see Payroll & PV"
-										: "not recorded yet · record it on Payroll & PV"}
+										? t.agencyPrs.penaltyRecorded
+										: t.agencyPrs.penaltyNotRecorded}
 								</div>
 							</div>
 						))}
@@ -514,7 +594,7 @@ function AgencyManagePRs() {
 				{penaltyRulesOpen && !rawPenaltyRules && (
 					<p className="iz-sm mt-2 text-[var(--iz-red,#e5484d)]">
 						{backendPenalties.isError
-							? "Could not load penalty rules — the agency penalty-rules endpoint failed."
+							? t.agencyPrs.penaltyRulesLoadFailed
 							: t.managePr.loadingPenaltyRules}
 					</p>
 				)}
@@ -667,7 +747,12 @@ function AgencyManagePRs() {
 			<section className="mt-4">
 				<div className="iz-pr-manage-stats">
 					<span className="iz-pr-manage-stats__count">
-						{filtered.length} PR{filtered.length !== 1 ? "S" : ""}
+						{fill(
+							filtered.length === 1
+								? t.rosterGrid.prCountOne
+								: t.rosterGrid.prCountMany,
+							{ n: filtered.length },
+						)}
 					</span>
 					<span className="iz-pr-manage-stats__active">
 						{activeCount} {t.managePr.active}
@@ -1032,7 +1117,9 @@ function AgencyPrDetail({
 						IC {detail.ic || "—"} ·{" "}
 						{averageRating === null
 							? t.managePr.notRatedYet
-							: `${formatStars(averageRating)} ★ avg`}
+							: fill(t.agencyPrs.starsAvg, {
+									stars: formatStars(averageRating),
+								})}
 					</p>
 				</div>
 			</header>
@@ -1177,10 +1264,10 @@ function AgencyPrDetail({
 				{detail.comcardImageUrl ||
 				canGeneratePortfolioComcard(detail.portfolioPhotos ?? [])
 					? t.managePr.photoComcard
-					: "3D Comcard"}
+					: t.agencyPrs.comcard3d}
 				{editing && (
 					<span className="ml-auto text-[var(--iz-gold-l)] normal-case tracking-normal">
-						Editable
+						{t.agencyPrs.editable}
 					</span>
 				)}
 			</IzSectionLabel>
@@ -1210,7 +1297,7 @@ function AgencyPrDetail({
 							value={draft.age}
 							blankZero
 							onChange={() => {}}
-							lockedNote="Age follows the PR's IC — it updates from their identity, not here."
+							lockedNote={t.agencyPrs.ageFollowsIc}
 						/>
 					</div>
 				) : (
@@ -1441,7 +1528,7 @@ function AgencyPrDetail({
 					<div className="flex flex-wrap gap-1.5">
 						{display.languages.map((l) => (
 							<IzPill key={l} variant="violet">
-								{l}
+								{languageLabel(l, t)}
 							</IzPill>
 						))}
 					</div>
@@ -1453,7 +1540,7 @@ function AgencyPrDetail({
 					{detail.suspended && (
 						<IzCard flat className="mt-2.5 border-[var(--iz-red)]">
 							<p className="iz-tiny text-[var(--iz-red)]">
-								Suspended — shifts paused
+								{t.agencyPrs.suspendedShiftsPaused}
 							</p>
 						</IzCard>
 					)}
@@ -1461,23 +1548,29 @@ function AgencyPrDetail({
 						<IzCard flat className="mt-2.5 border-[var(--iz-amber)]">
 							<p className="iz-tiny flex items-center gap-1 text-[var(--iz-amber)]">
 								<AlertTriangle className="h-3 w-3" />
-								Warn · average {formatStars(averageRating)}★ is below{" "}
-								{RATING_WARN_THRESHOLD}★ — monitor performance
+								{fill(t.agencyPrs.warnBelowAverage, {
+									stars: formatStars(averageRating),
+									threshold: RATING_WARN_THRESHOLD,
+								})}
 							</p>
 						</IzCard>
 					)}
 					{flags.suspendStreak && !detail.suspended && (
 						<IzCard flat className="mt-2.5 border-[var(--iz-red)]">
 							<p className="iz-tiny text-[var(--iz-red)]">
-								Auto-flag · {flags.suspendLabel} — consider suspend
+								{fill(t.agencyPrs.autoFlagConsiderSuspend, {
+									n: CONSECUTIVE_LOW_SUSPEND_COUNT,
+									stars: RATING_SUSPEND_SHIFT_THRESHOLD,
+								})}
 							</p>
 						</IzCard>
 					)}
 					{tiedUnderOneYear && (
 						<IzCard flat className="mt-2.5 border-[var(--iz-violet)]">
 							<p className="iz-tiny text-[var(--iz-violet-l)]">
-								Tied {tiedMonthsLabel(detail)} · detach requires InnocenZ admin
-								approval
+								{fill(t.agencyPrs.tiedDetachNeedsAdmin, {
+									duration: tiedDurationLabel(detail, t),
+								})}
 							</p>
 						</IzCard>
 					)}
@@ -1486,7 +1579,10 @@ function AgencyPrDetail({
 						title={t.managePr.shiftHistory}
 						hint={
 							shiftRows.length > SHIFT_HISTORY_ROWS
-								? `Last ${SHIFT_HISTORY_ROWS} of ${shiftRows.length}`
+								? fill(t.agencyPrs.lastNofM, {
+										n: SHIFT_HISTORY_ROWS,
+										total: shiftRows.length,
+									})
 								: undefined
 						}
 					>
@@ -1511,7 +1607,8 @@ function AgencyPrDetail({
 														variant={outcome.tone}
 														className="shrink-0 !py-0.5 !text-[9px]"
 													>
-														{outcome.label}
+														{SHIFT_OUTCOME_LABELS[h.status]?.(t) ??
+															outcome.label}
 													</IzPill>
 												)}
 											</div>
@@ -1526,7 +1623,9 @@ function AgencyPrDetail({
 							    omitted on purpose — see useAgencyPrShiftHistory. */}
 							{shiftRows.length === 0 && (
 								<p className="iz-tiny iz-muted">
-									{shiftHistoryLoading ? "Loading…" : t.managePr.noShiftsYet}
+									{shiftHistoryLoading
+										? t.common.loading
+										: t.managePr.noShiftsYet}
 								</p>
 							)}
 						</IzCard>
@@ -1545,7 +1644,9 @@ function AgencyPrDetail({
 											key={`${c.fromIso}-${c.payClass}`}
 											className="iz-v-sum border-t border-[var(--iz-line)] py-1.5 first:border-0 first:pt-0"
 										>
-											<span className="iz-muted">From {c.fromIso}</span>
+											<span className="iz-muted">
+												{fill(t.agencyPrs.fromDate, { date: c.fromIso })}
+											</span>
 											<b>{PR_PAY_CLASS_LABELS[c.payClass](t)}</b>
 										</div>
 									))}
@@ -1557,7 +1658,12 @@ function AgencyPrDetail({
 						title={t.managePr.ratingsFeed}
 						hint={
 							ratingSummary.count > 0
-								? `${ratingSummary.count} rating${ratingSummary.count > 1 ? "s" : ""}`
+								? fill(
+										ratingSummary.count === 1
+											? t.agencyPrs.ratingCountOne
+											: t.agencyPrs.ratingCountMany,
+										{ n: ratingSummary.count },
+									)
 								: undefined
 						}
 					>
@@ -1610,14 +1716,14 @@ function AgencyPrDetail({
 							className="iz-btn iz-btn-primary"
 							onClick={saveEdit}
 						>
-							Save profile
+							{t.agencyPrs.saveProfile}
 						</button>
 						<button
 							type="button"
 							className="iz-btn iz-btn-soft mt-2.5"
 							onClick={cancelEdit}
 						>
-							Cancel
+							{t.common.cancel}
 						</button>
 					</>
 				) : (
@@ -1632,10 +1738,11 @@ function AgencyPrDetail({
 			</div>
 
 			<IzSheet open={suspendOpen} onClose={() => setSuspendOpen(false)}>
-				<IzCardTitle>Suspend {detail.name}?</IzCardTitle>
+				<IzCardTitle>
+					{fill(t.agencyPrs.suspendNamed, { name: detail.name })}
+				</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3 leading-relaxed">
-					This pauses all shift offers and check-ins for this PR until you lift
-					the suspension. Pending roster slots may need to be reassigned.
+					{t.agencyPrs.suspendBody}
 				</p>
 				<div className="iz-grid2">
 					<button
@@ -1643,36 +1750,33 @@ function AgencyPrDetail({
 						className="iz-btn iz-btn-ghost"
 						onClick={() => setSuspendOpen(false)}
 					>
-						Cancel
+						{t.common.cancel}
 					</button>
 					<button
 						type="button"
 						className="iz-btn iz-btn-primary"
 						onClick={confirmSuspend}
 					>
-						Confirm suspend
+						{t.agencyPrs.confirmSuspend}
 					</button>
 				</div>
 			</IzSheet>
 
 			<IzSheet open={detachOpen} onClose={() => setDetachOpen(false)}>
 				<IzCardTitle>
-					{tiedUnderOneYear ? t.managePr.requestDetach : t.managePr.detach}{" "}
-					{detail.name}?
+					{fill(
+						tiedUnderOneYear
+							? t.agencyPrs.requestDetachNamed
+							: t.agencyPrs.detachNamed,
+						{ name: detail.name },
+					)}
 				</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3 leading-relaxed">
-					{tiedUnderOneYear ? (
-						<>
-							This PR has been tied for {tiedMonthsLabel(detail)} (under 1
-							year). Direct detach is blocked — submit a request for InnocenZ
-							admin to review.
-						</>
-					) : (
-						<>
-							Detach removes this PR from your agency roster. They will no
-							longer receive tied shifts or payroll from your agency.
-						</>
-					)}
+					{tiedUnderOneYear
+						? fill(t.agencyPrs.detachTiedBody, {
+								duration: tiedDurationLabel(detail, t),
+							})
+						: t.agencyPrs.detachBody}
 				</p>
 				<div className="iz-grid2">
 					<button
@@ -1680,7 +1784,7 @@ function AgencyPrDetail({
 						className="iz-btn iz-btn-ghost"
 						onClick={() => setDetachOpen(false)}
 					>
-						Cancel
+						{t.common.cancel}
 					</button>
 					{tiedUnderOneYear ? (
 						<button
@@ -1688,7 +1792,7 @@ function AgencyPrDetail({
 							className="iz-btn iz-btn-primary"
 							onClick={requestAdminDetach}
 						>
-							Submit admin request
+							{t.agencyPrs.submitAdminRequest}
 						</button>
 					) : (
 						<button
@@ -1696,7 +1800,7 @@ function AgencyPrDetail({
 							className="iz-btn iz-btn-primary"
 							onClick={confirmDetach}
 						>
-							Confirm detach
+							{t.agencyPrs.confirmDetach}
 						</button>
 					)}
 				</div>
@@ -1707,25 +1811,29 @@ function AgencyPrDetail({
 				onClose={() => setPayClassConfirm(null)}
 			>
 				<IzCardTitle>{t.managePr.changePayClass}</IzCardTitle>
+				{/* One whole-sentence template rather than fragments around two <b>s:
+				    Chinese puts the pay classes in a different order, which a
+				    fragment-glued sentence cannot express. */}
 				<p className="iz-tiny iz-muted mb-3 leading-relaxed">
-					{detail.name} moves from{" "}
-					<b>{PR_PAY_CLASS_LABELS[prPayClass(detail)](t)}</b> to{" "}
-					<b>
-						{payClassConfirm
+					{fill(t.agencyPrs.payClassChangeBody, {
+						name: detail.name,
+						from: PR_PAY_CLASS_LABELS[prPayClass(detail)](t),
+						to: payClassConfirm
 							? PR_PAY_CLASS_LABELS[payClassConfirm.next](t)
-							: ""}
-					</b>
-					, effective {DEFAULT_ROSTER_DATE_ISO}. Shifts already worked or booked
-					keep their original pay; new shifts use the new class.
+							: "",
+						date: DEFAULT_ROSTER_DATE_ISO,
+					})}
 				</p>
 				{payClassConfirm && payClassConfirm.conflicts > 0 && (
 					<IzCard flat className="mb-3 border-[var(--iz-amber)]">
 						<p className="iz-tiny flex items-start gap-1 text-[var(--iz-amber)]">
 							<AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-							{payClassConfirm.conflicts} upcoming booked shift
-							{payClassConfirm.conflicts === 1 ? " is" : "s are"} not
-							commission-only. Commission-only PRs may only work commission-only
-							shifts — review or reassign these bookings.
+							{fill(
+								payClassConfirm.conflicts === 1
+									? t.agencyPrs.payClassConflictOne
+									: t.agencyPrs.payClassConflictMany,
+								{ n: payClassConfirm.conflicts },
+							)}
 						</p>
 					</IzCard>
 				)}
@@ -1735,14 +1843,14 @@ function AgencyPrDetail({
 						className="iz-btn iz-btn-ghost"
 						onClick={() => setPayClassConfirm(null)}
 					>
-						Cancel
+						{t.common.cancel}
 					</button>
 					<button
 						type="button"
 						className="iz-btn iz-btn-primary"
 						onClick={commitPayClassChange}
 					>
-						Confirm change
+						{t.agencyPrs.confirmChange}
 					</button>
 				</div>
 			</IzSheet>
@@ -1784,7 +1892,10 @@ function AgencyComcardInput({
 		// that a sighted user sees a greyed box and a screen-reader user hears
 		// "Age, dimmed" — both need the label tied to the control to get the
 		// explanation, which rides on aria-describedby below.
-		const fieldId = `comcard-locked-${label.replace(/\W+/g, "-").toLowerCase()}`;
+		// From useId, NOT from the label: the label is translated now, and
+		// `"年龄".replace(/\W+/g, "-")` collapses to nothing — every locked field
+		// in a Chinese session would have shared the id "comcard-locked-".
+		const fieldId = plainFieldId;
 		return (
 			<div className="iz-comcard-field iz-comcard-field--locked">
 				<label htmlFor={fieldId}>

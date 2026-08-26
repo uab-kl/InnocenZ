@@ -18,6 +18,7 @@ import {
 } from "@/components/subscription/subscriptions-table";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	type CreateSubscriptionInput,
 	createSubscription,
@@ -37,6 +38,7 @@ export const Route = createFileRoute("/admin/business/plan")({
 const PAGE_SIZE = 10;
 
 function PlanPage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -79,7 +81,7 @@ function PlanPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
 			setPlanFormOpen(false);
-			toast.success(response.message || "Plan created successfully");
+			toast.success(response.message || t.adminBusiness.planCreated);
 		},
 	});
 
@@ -89,7 +91,7 @@ function PlanPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
 			setPlanFormOpen(false);
-			toast.success(response.message || "Plan updated successfully");
+			toast.success(response.message || t.adminBusiness.planUpdated);
 		},
 	});
 
@@ -97,15 +99,17 @@ function PlanPage() {
 		createPlanMutation.isPending || updatePlanMutation.isPending;
 	const planMutationError = toMutationError(
 		planEditTarget ? updatePlanMutation.error : createPlanMutation.error,
-		planEditTarget ? "Failed to update plan" : "Failed to create plan",
+		planEditTarget
+			? t.adminBusiness.planUpdateFailed
+			: t.adminBusiness.planCreateFailed,
 	);
 
 	return (
 		<PageShell>
 			<PageHeader
 				icon={CreditCard}
-				title="Plan"
-				description="Manage agency and outlet plans and billing cycles."
+				title={t.admin.navPlan}
+				description={t.adminBusiness.planSubtitle}
 			/>
 
 			<SubscriptionsTable

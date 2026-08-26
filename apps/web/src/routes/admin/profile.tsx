@@ -23,6 +23,7 @@ import {
 } from "@/lib/auth/profile-api";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { profileQueryKey } from "@/lib/auth/use-profile";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { getErrorMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/profile")({
@@ -36,6 +37,7 @@ const ACCEPTED_TYPES = "image/jpeg,image/png,image/webp";
 const MAX_BYTES = 5 * 1024 * 1024;
 
 function ProfilePage() {
+	const { t } = usePortalLocale();
 	const queryClient = useQueryClient();
 	const { user, isLoading, isError, error } = useCurrentUser();
 	const fileInputId = useId();
@@ -73,11 +75,11 @@ function ProfilePage() {
 	function onPickFile(file: File | undefined) {
 		if (!file) return;
 		if (!ACCEPTED_TYPES.split(",").includes(file.type)) {
-			toast.error("Only JPG, PNG, and WebP images are allowed");
+			toast.error(t.adminProfile.onlyJpgPngWebp);
 			return;
 		}
 		if (file.size > MAX_BYTES) {
-			toast.error("Image must be 5 MB or smaller");
+			toast.error(t.adminProfile.imageMax5Mb);
 			return;
 		}
 		if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -103,7 +105,7 @@ function ProfilePage() {
 				await updateMyDisplayName(user.id, nextName);
 			}
 			await queryClient.invalidateQueries({ queryKey: profileQueryKey });
-			toast.success("Profile saved");
+			toast.success(t.adminProfile.profileSaved);
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
@@ -115,13 +117,13 @@ function ProfilePage() {
 		<PageShell>
 			<PageHeader
 				icon={UserIcon}
-				title="Profile"
-				description="Your signed-in admin account details."
+				title={t.admin.navProfile}
+				description={t.adminProfile.subtitle}
 				actions={
 					<Button asChild variant="outline">
 						<Link to="/admin/settings">
 							<Settings className="h-4 w-4" />
-							Platform settings
+							{t.adminProfile.platformSettings}
 						</Link>
 					</Button>
 				}
@@ -129,17 +131,14 @@ function ProfilePage() {
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
-					<CardTitle>Account</CardTitle>
-					<CardDescription>
-						Update your display name and profile picture. Changes are saved to
-						your account.
-					</CardDescription>
+					<CardTitle>{t.adminProfile.account}</CardTitle>
+					<CardDescription>{t.adminProfile.accountHint}</CardDescription>
 				</CardHeader>
 				<CardContent>
 					{isLoading ? (
 						<div className="flex items-center gap-2 text-sm text-muted-foreground">
 							<Loader2 className="h-4 w-4 animate-spin" />
-							Loading profile…
+							{t.adminProfile.loadingProfile}
 						</div>
 					) : isError ? (
 						<p className="text-sm text-destructive">{getErrorMessage(error)}</p>
@@ -151,7 +150,7 @@ function ProfilePage() {
 										<Avatar className="h-24 w-24 ring-2 ring-(--lavender-soft)/40">
 											<AvatarImage
 												src={avatarSrc}
-												alt={displayName || "Profile"}
+												alt={displayName || t.admin.navProfile}
 											/>
 											<AvatarFallback className="text-2xl">
 												{displayName.trim().charAt(0).toUpperCase() || (
@@ -166,7 +165,7 @@ function ProfilePage() {
 											className="absolute -right-1 -bottom-1 h-9 w-9 rounded-full shadow-md"
 											disabled={saving}
 											onClick={() => fileInputRef.current?.click()}
-											aria-label="Upload profile picture"
+											aria-label={t.adminProfile.uploadPictureAria}
 										>
 											<Camera className="h-4 w-4" />
 										</Button>
@@ -183,31 +182,37 @@ function ProfilePage() {
 										}}
 									/>
 									<p className="max-w-[12rem] text-center text-xs text-muted-foreground">
-										JPG, PNG or WebP · max 5 MB
+										{t.adminProfile.fileHint}
 									</p>
 								</div>
 
 								<div className="grid flex-1 gap-4 sm:grid-cols-2">
 									<div className="space-y-2 sm:col-span-1">
-										<Label htmlFor="admin-display-name">Display name</Label>
+										<Label htmlFor="admin-display-name">
+											{t.adminProfile.displayName}
+										</Label>
 										<Input
 											id="admin-display-name"
 											value={displayName}
 											onChange={(e) => setDisplayName(e.target.value)}
-											placeholder="Your display name"
+											placeholder={t.adminProfile.yourDisplayName}
 											maxLength={100}
 											disabled={saving}
 											className="max-w-xs"
 										/>
 									</div>
 									<div>
-										<dt className="text-sm text-muted-foreground">Email</dt>
+										<dt className="text-sm text-muted-foreground">
+											{t.admin.colEmail}
+										</dt>
 										<dd className="mt-1 text-base font-medium">
 											{user?.email || "—"}
 										</dd>
 									</div>
 									<div>
-										<dt className="text-sm text-muted-foreground">Role</dt>
+										<dt className="text-sm text-muted-foreground">
+											{t.adminProfile.role}
+										</dt>
 										<dd className="mt-1">
 											<Badge variant="outline" className="capitalize">
 												{roleLabel}
@@ -215,7 +220,9 @@ function ProfilePage() {
 										</dd>
 									</div>
 									<div className="sm:col-span-2">
-										<dt className="text-sm text-muted-foreground">User ID</dt>
+										<dt className="text-sm text-muted-foreground">
+											{t.adminProfile.userId}
+										</dt>
 										<dd className="mt-1 font-mono text-sm text-muted-foreground">
 											{user?.id || "—"}
 										</dd>
@@ -237,11 +244,11 @@ function ProfilePage() {
 										}
 									}}
 								>
-									Reset
+									{t.adminProfile.reset}
 								</Button>
 								<Button type="button" disabled={!canSave} onClick={handleSave}>
 									{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-									Save changes
+									{t.adminProfile.saveChanges}
 								</Button>
 							</div>
 						</div>
