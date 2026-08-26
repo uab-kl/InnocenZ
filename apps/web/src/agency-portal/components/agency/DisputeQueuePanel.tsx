@@ -5,31 +5,20 @@ import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import {
+	DISPUTE_COMPONENT_LABEL,
+	receiptsForDispute,
+} from "@agency-portal/lib/receipt-disputes";
+import { receiptStatusTag } from "@agency-portal/lib/receipt-status";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Check, ImageOff, Paperclip, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	AgencyReceipt,
 	PaymentVoucherDispute,
 } from "@/services/payment-voucher";
-
-/**
- * The PR app's own words for each bucket, so both sides read the same.
- *
- * Dictionary KEYS — this is module scope, where the locale hook cannot run.
- * Record keys stay the API's component values.
- */
-const COMPONENT_LABEL: Record<
-	PaymentVoucherDispute["component"],
-	keyof PortalTranslations["money"]
-> = {
-	wages: "dailyWages",
-	drinks: "drinks",
-	tips: "tips",
-	others: "others",
-};
 
 function formatRM(value: string | null): string {
 	const n = Number(value ?? 0);
@@ -47,43 +36,15 @@ function formatDay(iso: string): string {
 	});
 }
 
-/**
- * The receipts a dispute is actually ABOUT.
+/*
+ * `receiptsForDispute` now lives in `lib/receipt-disputes.ts`.
  *
- * A dispute MAY name one receipt (`receiptId`, migration 0088) and when it does
- * that is the answer — exactly one paper, no derivation. The old docstring here
- * said "never a receipt", which stopped being true at 0088; deriving anyway is
- * how a two-shift night showed BOTH shifts' receipts as the evidence for a
- * claim about one of them, directly contradicting the shift block above.
- *
- * With no `receiptId` the claim covers the whole day, so fall back to how the
- * cell was built: lines on that date, in that bucket. A receipt qualifies if it
- * carries even one such line.
- *
- * Matched on `voucherId` as well as the date, because two PRs can work the same
- * night and `lineDate` alone would pull in somebody else's paper.
- *
- * `kind` is optional on the feed's line shape (a backend that has not restarted
- * yet omits it). Missing kind means the line cannot be attributed to a bucket,
- * so it is NOT matched — showing an unrelated receipt as "the evidence" is worse
- * than showing none and saying so.
+ * It used to derive the dispute→receipt link here, privately, and the Receipts
+ * sub-tab had no idea any of it existed — which is how a receipt could read a
+ * plain green "Verified" over there while this queue showed an open claim
+ * against the same paper. The link is one server-derived fact now, and both
+ * screens read it through that module.
  */
-function receiptsForDispute(
-	dispute: PaymentVoucherDispute,
-	receipts: AgencyReceipt[],
-): AgencyReceipt[] {
-	if (dispute.receiptId) {
-		return receipts.filter((r) => r.id === dispute.receiptId);
-	}
-	return receipts.filter(
-		(r) =>
-			r.voucherId === dispute.voucherId &&
-			r.lines.some(
-				(l) =>
-					l.lineDate === dispute.disputeDate && l.kind === dispute.component,
-			),
-	);
-}
 
 /** What this receipt contributed to the disputed cell — not its whole total. */
 function disputedSubtotal(
@@ -159,6 +120,11 @@ function DisputeEvidence({
 }) {
 	const { t } = usePortalLocale();
 	const [openId, setOpenId] = useState<string | null>(null);
+	// The same permission the Receipts sub-tab checks, because it is the same
+	// write: `PATCH /receipts/:id/lines/:lineId` carries `agencyOwnerOrFinance`.
+	// This card offered Edit to anybody who could open the queue, so a director
+	// was shown a button that could only come back 403.
+	const canEdit = useAgencyCan()("raisePv");
 	const matches = receiptsForDispute(dispute, receipts);
 
 	if (matches.length === 0) {
@@ -181,10 +147,28 @@ function DisputeEvidence({
 			</p>
 			{matches.map((receipt) => {
 				const editing = openId === receipt.id;
-				// Verified means the week closed and the server refuses to re-decide
-				// it, so the editor is withheld rather than offered and answered
-				// with a 409 — same rule the Receipts sub-tab applies.
-				const editable = receipt.status !== "verified";
+				/*
+				 * WHAT ACTUALLY LOCKS A RECEIPT: the PR's signature, nothing else.
+				 *
+				 * This read `status !== "verified"`, which was the rule until the
+				 * owner reversed it on 23 Aug 2026 — a scan verifies AT CREATION, so
+				 * that test hid the editor on every scanned receipt and made OCR
+				 * mistakes permanently uncorrectable. The Receipts sub-tab and the
+				 * server were both updated; this card was not, so the one place a
+				 * reviewer settles a claim was the one place they could not correct
+				 * the paper the claim is about. Source never mattered: a self-logged
+				 * receipt and a scanned one obey the same rule.
+				 *
+				 * `voucherStatus` stands in for `prSignedAt`, which the feed does not
+				 * carry. It cannot be wrong for an OPEN claim — signing is refused
+				 * while one stands — and for a settled claim it stops the card
+				 * offering an edit the server would answer with a 409.
+				 */
+				const signedOff =
+					receipt.voucherStatus === "signed" ||
+					receipt.voucherStatus === "paid";
+				const editable = canEdit && !signedOff;
+				const tag = receiptStatusTag(receipt);
 				return (
 					<div
 						key={receipt.id}
@@ -196,25 +180,16 @@ function DisputeEvidence({
 							</span>
 							<span className="iz-tiny iz-muted2">{receipt.receiptNo}</span>
 							{/*
-							 * The RECEIPT's own review state. The dispute's state is the
-							 * amber "Open" pill on the row above — two different facts,
-							 * and a reviewer settling a claim needs both: whether they
-							 * already approved this paper, and whether the claim stands.
+							 * THE SAME TAG the Receipts sub-tab draws, from the same
+							 * function. This card had its own spelling of it — `approved`
+							 * painted GREEN and `pending` called "Pending" — so one
+							 * receipt wore two colours and two words depending on which
+							 * screen you read it on. An open claim owns the tag here too
+							 * (owner, 26 Aug 2026); the review state is stated in words
+							 * under the editor rather than competing for the pill.
 							 */}
-							<span
-								className={`iz-pill !text-[10px] ${
-									receipt.status === "approved"
-										? "iz-pill-green"
-										: receipt.status === "verified"
-											? "iz-pill-green"
-											: "iz-pill-amber"
-								}`}
-							>
-								{receipt.status === "pending"
-									? t.receipts.pending
-									: receipt.status === "verified"
-										? t.receipts.verified
-										: t.receipts.approved}
+							<span className={`iz-pill !text-[10px] iz-pill-${tag.variant}`}>
+								{t.receipts[tag.labelKey]}
 							</span>
 							<span className="iz-tiny ml-auto font-mono">
 								{formatRM(disputedSubtotal(receipt, dispute).toFixed(2))}
@@ -245,6 +220,16 @@ function DisputeEvidence({
 							</p>
 						)}
 
+						{/* Why the editor is not here — an absent button explains nothing,
+						    and this card's whole job is to let a reviewer correct the
+						    paper before they accept the claim. */}
+						{!editable && (
+							<p className="iz-tiny iz-muted2 mt-1.5">
+								{signedOff
+									? "The PR has signed this voucher — its figures can no longer be corrected."
+									: "Your agency role can see this receipt but not correct it — owner and finance edit receipts."}
+							</p>
+						)}
 						{editable && (
 							<button
 								type="button"
@@ -316,7 +301,7 @@ function DisputeRow({
 							dispute.voucher.prNickname,
 							dispute.voucher.prName,
 						) || t.receipts.unknownPr}{" "}
-						· {t.money[COMPONENT_LABEL[dispute.component]]}
+						· {t.money[DISPUTE_COMPONENT_LABEL[dispute.component]]}
 					</div>
 					<p className="iz-tiny iz-muted mt-0.5">
 						{formatDay(dispute.disputeDate)}

@@ -63,7 +63,25 @@ export function cellReviewTone(
   week: PrCurrentWeek | null,
   dateIso: string,
   kind: PrReceiptLine['kind'] | 'deductions',
-): 'verified' | 'warning' | 'mixed' | null {
+): 'verified' | 'warning' | 'mixed' | 'disputed' | null {
+  /*
+   * AN OPEN CLAIM OUTRANKS THE REVIEW STATE — checked first, and it wins.
+   *
+   * This read `receiptStatus` alone, and that column says pending → approved →
+   * verified: the AGENCY's review, with nowhere in it for what the PR thinks.
+   * So the PR raised a claim, the header went DISPUTED, the Status row went
+   * DISPUTED — and the contested figure itself stayed settled-GREEN, because
+   * the paper behind it had been verified. The one cell the whole argument was
+   * about was the one cell that looked fine.
+   *
+   * Open claims only, and through `openDisputeKeys` rather than a second walk
+   * of `week.disputes` — one rule, so the figure and the Status row above it
+   * cannot reach different conclusions about the same cell. A claim that was
+   * accepted, rejected or withdrawn is history; painting it red forever would
+   * leave a permanent warning on a figure nobody is arguing about any more.
+   */
+  if (openDisputeKeys(week).has(`${dateIso}-${kind}`)) return 'disputed';
+
   const statuses = new Set<string>();
   for (const line of week?.lines ?? []) {
     if (line.lineDate !== dateIso || line.kind !== kind) continue;

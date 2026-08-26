@@ -2856,6 +2856,53 @@ export class PaymentVoucherControllerClass {
         ]),
       );
 
+      /*
+       * WHICH CLAIMS EACH RECEIPT IS UNDER — the fact this feed could not state.
+       *
+       * `payment_voucher_receipt.status` describes the AGENCY's review (pending
+       * → approved → verified) and has no room for what the PR thinks, so a
+       * verified receipt with a live claim against it rendered as a plain green
+       * "Verified": the receipts list said settled while the dispute queue said
+       * open, about the same paper. A claim is a SEPARATE fact and is sent as
+       * one rather than folded into the status.
+       *
+       * Derived HERE, once. Two clients each deriving "is this disputed" from
+       * the raw dispute list is how a badge and a queue come to disagree.
+       *
+       * Two ways a claim reaches a receipt, and they are not the same rule:
+       *   - it NAMES one (`receipt_id`, migration 0088) — that is the answer,
+       *     no derivation;
+       *   - it names none, so it covers the whole DAY + bucket, and every
+       *     receipt carrying a line of that date and kind is under it.
+       * Matched on the voucher as well as the date, because two PRs work the
+       * same night and a date alone would pull in somebody else's paper.
+       */
+      const disputeRows =
+        await this.paymentVoucherDisputeRepository.listForVouchers(
+          rows.map((r) => r.voucherId),
+        );
+      const disputesForReceipt = (row: (typeof rows)[number]) =>
+        disputeRows
+          .filter((d) =>
+            d.receiptId
+              ? d.receiptId === row.receipt.id
+              : d.voucherId === row.voucherId &&
+                row.lines.some(
+                  (l) =>
+                    l.lineDate === d.disputeDate &&
+                    lineKind(l, decodeRef(l.ref).kind) === d.component,
+                ),
+          )
+          .map((d) => ({
+            id: d.id,
+            disputeDate: d.disputeDate,
+            component: d.component,
+            /** null = nobody has decided it yet. That is what makes it OPEN. */
+            outcome: d.outcome,
+            reason: d.reason,
+            raisedAt: d.raisedAt,
+          }));
+
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -2892,6 +2939,10 @@ export class PaymentVoucherControllerClass {
           // or when the id does not resolve to THIS PR, which fails closed.
           shift:
             receiptShiftById.get(r.receipt.shiftAssignmentId ?? '') ?? null,
+          // THE PR'S OWN CLAIMS about this paper — see `disputesForReceipt`.
+          // Always an array: an empty one says "checked, none", which is a
+          // different statement from a missing field.
+          disputes: disputesForReceipt(r),
           lines: r.lines.map((l) => ({
             id: l.id,
             lineDate: l.lineDate,

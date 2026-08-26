@@ -224,6 +224,34 @@ export class PaymentVoucherDisputeRepositoryClass {
     }
   }
 
+  /**
+   * Every dispute raised against a SET of vouchers, in one query.
+   *
+   * For the receipts feed, which spans every voucher an agency owns and has to
+   * say which of its receipts a PR is contesting. Bounded by the voucher ids
+   * handed in rather than by a `limit`, deliberately: a cap here would badge
+   * some receipts and silently leave others unbadged, which reads as "nobody
+   * disputed this" — the one thing the badge exists to disprove.
+   *
+   * Settled disputes come back too. Whether a claim is still open is the
+   * reader's decision (`outcome === null`), and a feed that dropped decided ones
+   * could never show that a receipt HAD been argued about.
+   */
+  async listForVouchers(voucherIds: string[]): Promise<PaymentVoucherDispute[]> {
+    const ids = [...new Set(voucherIds.filter((id) => id))];
+    if (ids.length === 0) return [];
+    try {
+      return await db
+        .select()
+        .from(PaymentVoucherDisputeTable)
+        .where(inArray(PaymentVoucherDisputeTable.voucherId, ids))
+        .orderBy(desc(PaymentVoucherDisputeTable.raisedAt));
+    } catch (error) {
+      logger.error('[PaymentVoucherDisputeRepository.listForVouchers] Error:', error);
+      return [];
+    }
+  }
+
   /** Open = still awaiting agency review, i.e. no outcome recorded yet. */
   async listOpenForVoucher(voucherId: string): Promise<PaymentVoucherDispute[]> {
     try {
