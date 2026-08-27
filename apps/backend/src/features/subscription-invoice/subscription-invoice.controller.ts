@@ -98,6 +98,40 @@ export class SubscriptionInvoiceControllerClass {
           data: null,
         });
       }
+      /**
+       * ?groupBy=subscriber — one entry per ORG instead of one per invoice.
+       *
+       * Deliberately a mode on THIS endpoint rather than a route of its own, so
+       * it cannot drift from `scopedFilter` above: that is what stops an agency
+       * reading a rival's charges, and a second route would be a second place to
+       * remember it. Everything else — filters, search, the pager's shape — is
+       * shared by construction.
+       *
+       * `pagination.totalCount` counts ORGS here, not invoices, because that is
+       * what the page now lists. Same field, honest denominator.
+       */
+      if (req.query.groupBy === 'subscriber') {
+        const { groups, totalCount: orgCount } = await this.repository.listGroupedBySubscriber({
+          filter,
+          page,
+          pageSize,
+        });
+        const orgPages = Math.max(1, Math.ceil(orgCount / pageSize));
+        return res.status(200).json({
+          success: true,
+          message: 'OK',
+          data: groups,
+          pagination: {
+            page,
+            pageSize,
+            totalCount: orgCount,
+            totalPages: orgPages,
+            hasNextPage: page < orgPages,
+            hasPrevPage: page > 1,
+          },
+        });
+      }
+
       const { records, totalCount } = await this.repository.listPaginated({
         filter,
         page,

@@ -3424,6 +3424,20 @@ const en = {
 		attemptRefunded: "Refunded",
 		attemptVoided: "Withdrawn",
 		showingBillingPeriods: "Showing {from} - {to} of {total} billing periods",
+		/**
+		 * The Plan Payment list counts ORGS now, not periods — it shows one row per
+		 * outlet/agency with its periods nested under it, so the old wording would
+		 * report a smaller number than the page holds.
+		 */
+		showingSubscribers:
+			"Showing {from} - {to} of {total} outlets & agencies",
+		/** The chevron on an org's row. The row itself opens the detail panel. */
+		expandPeriods: "Show billing periods",
+		collapsePeriods: "Hide billing periods",
+		/** Summary cells on an org's row, standing in for one period's detail. */
+		periodsCount: "{n} periods",
+		unpaidOfTotal: "{unpaid} of {total} unpaid",
+		paidCount: "{n} paid",
 	},
 	agencyPending: {
 		/** Prefix before the applicant's legal IC name, beside their floor nickname. */
@@ -8659,6 +8673,12 @@ const zh: PortalTranslations = {
 		attemptRefunded: "已退款",
 		attemptVoided: "已撤回",
 		showingBillingPeriods: "显示第 {from} - {to} 项，共 {total} 个计费周期",
+		showingSubscribers: "显示第 {from} - {to} 项，共 {total} 个门店与经纪公司",
+		expandPeriods: "展开计费周期",
+		collapsePeriods: "收起计费周期",
+		periodsCount: "{n} 个周期",
+		unpaidOfTotal: "{total} 个中 {unpaid} 个未付",
+		paidCount: "{n} 个已付",
 	},
 	agencyPending: {
 		legal: "证件姓名",

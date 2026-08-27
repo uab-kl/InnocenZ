@@ -8,6 +8,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { format, parse } from "date-fns";
 import {
 	AlertCircle,
+	ChevronDown,
+	ChevronRight,
 	CreditCard,
 	Loader2,
 	RefreshCw,
@@ -51,9 +53,11 @@ import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { formatDate, formatPrice, getErrorMessage } from "@/lib/utils";
 import {
-	fetchSubscriptionInvoices,
+	fetchSubscriptionInvoiceGroups,
 	generateSubscriptionInvoices,
 	type SubscriberType,
+	type SubscriptionInvoice,
+	type SubscriptionInvoiceGroup,
 	type SubscriptionInvoiceQueryParams,
 	type SubscriptionInvoiceStatus,
 	setSubscriptionInvoiceStatus,
@@ -83,6 +87,36 @@ const PAGE_SIZE = 10;
 function periodDay(day: string): string {
 	const parsed = parse(day, "yyyy-MM-dd", new Date());
 	return Number.isNaN(parsed.getTime()) ? day : format(parsed, "d MMM yyyy");
+}
+
+/**
+ * What one org owes, across every lane it holds.
+ *
+ * Summed from the group's OWN invoices rather than re-queried, because the
+ * server already sent every period for the orgs on this page — see
+ * `fetchSubscriptionInvoiceGroups` on why the grouping cannot happen here.
+ *
+ * `lanes` is what makes the plan / Custom / POS combination legible: an org on
+ * Enterprise with a POS add-on is billed on two lanes, each opening its own
+ * invoice, and a card that showed one figure with no explanation would look
+ * like an arithmetic error. Deduplicated by name — the same lane repeats once
+ * per period, and listing it once per week is the "doubles" this page exists
+ * to remove.
+ */
+function summarise(group: SubscriptionInvoiceGroup) {
+	let owed = 0;
+	let paidCount = 0;
+	for (const invoice of group.invoices) {
+		if (invoice.status === "paid") paidCount += 1;
+		else owed += Number(invoice.amount);
+	}
+	return {
+		periods: group.invoices.length,
+		paidCount,
+		unpaidCount: group.invoices.length - paidCount,
+		owed,
+		lanes: [...new Set(group.invoices.map((invoice) => invoice.planName))],
+	};
 }
 
 /*
@@ -174,12 +208,25 @@ function PlanPaymentPage() {
 	if (roleFilter !== "all") queryParams.subscriberType = roleFilter;
 
 	const invoicesQuery = useQuery({
-		queryKey: ["subscription-invoices", queryParams],
-		queryFn: () => fetchSubscriptionInvoices(queryParams, logout),
+		queryKey: ["subscription-invoices", "by-subscriber", queryParams],
+		queryFn: () => fetchSubscriptionInvoiceGroups(queryParams, logout),
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
 		retry: 2,
 	});
+
+	/**
+	 * Which orgs are open. Ids, not indexes — a filter change reorders the page,
+	 * and an index would carry the open state onto whoever now sits in that slot.
+	 */
+	const [expanded, setExpanded] = useState<Set<string>>(new Set());
+	const toggleExpanded = (subscriberId: string) =>
+		setExpanded((prev) => {
+			const next = new Set(prev);
+			if (next.has(subscriberId)) next.delete(subscriberId);
+			else next.add(subscriberId);
+			return next;
+		});
 
 	const statusMutation = useMutation({
 		mutationFn: ({
@@ -224,9 +271,9 @@ function PlanPaymentPage() {
 		},
 	});
 
-	const records = invoicesQuery.data?.data ?? [];
+	const groups = invoicesQuery.data?.data ?? [];
 	const pagination = invoicesQuery.data?.pagination;
-	const showLoading = invoicesQuery.isLoading && records.length === 0;
+	const showLoading = invoicesQuery.isLoading && groups.length === 0;
 	const isSaving = statusMutation.isPending || generateMutation.isPending;
 
 	return (
@@ -371,7 +418,7 @@ function PlanPaymentPage() {
 											</Button>
 										</TableCell>
 									</TableRow>
-								) : records.length === 0 ? (
+								) : groups.length === 0 ? (
 									<TableRow>
 										<TableCell
 											colSpan={8}
@@ -381,14 +428,131 @@ function PlanPaymentPage() {
 										</TableCell>
 									</TableRow>
 								) : (
-									records.map((invoice) => (
+									groups.flatMap((group) => {
+										const summary = summarise(group);
+										const isOpen = expanded.has(group.subscriberId);
+										/*
+										 * ONE ROW PER ORG, its periods nested under it.
+										 *
+										 * The header carries what an admin came to find — how many
+										 * periods, how much is outstanding, and which lanes the org
+										 * is billed on — so the common question is answered without
+										 * opening anything. The periods themselves are the detail,
+										 * and each keeps its own Mark paid, because settling is per
+										 * period and always was.
+										 */
+										/*
+										 * TWO ACTIONS ON ONE ROW, deliberately separated.
+										 *
+										 * The chevron expands the periods inline; the rest of the row
+										 * opens the right-hand panel, which is where "all the details
+										 * and the current state" live — every billing lane with the
+										 * live one ringed, the payment methods on file, and every
+										 * attempt made against the period.
+										 *
+										 * The panel is keyed on an INVOICE, so the newest period is
+										 * what it is handed: it is the one an admin is answering
+										 * questions about, and the panel widens from there to the
+										 * org's other lanes by itself.
+										 */
+										const newest = group.invoices[0];
+										const header = (
+											<TableRow
+												key={`group-${group.subscriberId}`}
+												className="cursor-pointer bg-muted/30 hover:bg-muted/50"
+												onClick={() => newest && setDetailId(newest.id)}
+											>
+												<TableCell className="text-base font-medium">
+													<span className="flex items-center gap-2">
+														<button
+															type="button"
+															aria-expanded={isOpen}
+															aria-label={
+																isOpen
+																	? t.adminService.collapsePeriods
+																	: t.adminService.expandPeriods
+															}
+															className="-m-1 rounded p-1 text-muted-foreground hover:text-foreground"
+															onClick={(event) => {
+																// Without this the row's own handler fires too and
+																// the panel slides over the rows just revealed.
+																event.stopPropagation();
+																toggleExpanded(group.subscriberId);
+															}}
+														>
+															{isOpen ? (
+																<ChevronDown className="h-4 w-4 shrink-0" />
+															) : (
+																<ChevronRight className="h-4 w-4 shrink-0" />
+															)}
+														</button>
+														{group.subscriberName}
+													</span>
+												</TableCell>
+												<TableCell>
+													<Badge
+														variant="outline"
+														className={`${roleBadgeColors[group.subscriberType]} w-fit`}
+													>
+														{roleLabels[group.subscriberType](t)}
+													</Badge>
+												</TableCell>
+												{/* Every lane the org is billed on — plan, Custom, POS —
+												    named once rather than once per period. */}
+												<TableCell className="text-base">
+													{summary.lanes.join(" · ")}
+												</TableCell>
+												<TableCell className="text-base whitespace-nowrap text-muted-foreground">
+													{fill(t.adminService.periodsCount, {
+														n: summary.periods,
+													})}
+												</TableCell>
+												<TableCell className="text-base font-medium whitespace-nowrap">
+													{formatPrice(summary.owed)}
+												</TableCell>
+												<TableCell>
+													{summary.unpaidCount === 0 ? (
+														<Badge
+															variant="outline"
+															className={`${statusBadgeColors.paid} w-fit`}
+														>
+															{statusLabels.paid(t)}
+														</Badge>
+													) : (
+														<Badge
+															variant="outline"
+															className={`${statusBadgeColors.unpaid} w-fit`}
+														>
+															{fill(t.adminService.unpaidOfTotal, {
+																unpaid: summary.unpaidCount,
+																total: summary.periods,
+															})}
+														</Badge>
+													)}
+												</TableCell>
+												<TableCell className="text-base whitespace-nowrap text-muted-foreground">
+													{summary.paidCount > 0
+														? fill(t.adminService.paidCount, {
+																n: summary.paidCount,
+															})
+														: "—"}
+												</TableCell>
+												<TableCell />
+											</TableRow>
+										);
+										if (!isOpen) return [header];
+										return [
+											header,
+											...group.invoices.map((invoice: SubscriptionInvoice) => (
 										<TableRow
 											key={invoice.id}
 											className="cursor-pointer"
 											onClick={() => setDetailId(invoice.id)}
 										>
 											<TableCell className="text-base font-medium">
-												{invoice.subscriberName}
+												<span className="pl-6 text-muted-foreground">
+													{periodDay(invoice.periodStart)}
+												</span>
 											</TableCell>
 											<TableCell>
 												<Badge
@@ -526,7 +690,9 @@ function PlanPaymentPage() {
 												)}
 											</TableCell>
 										</TableRow>
-									))
+											)),
+										];
+									})
 								)}
 							</TableBody>
 						</Table>
@@ -535,7 +701,7 @@ function PlanPaymentPage() {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 							<span>
-								{fill(t.adminService.showingBillingPeriods, {
+								{fill(t.adminService.showingSubscribers, {
 									from: (pagination.page - 1) * pagination.pageSize + 1,
 									to: Math.min(
 										pagination.page * pagination.pageSize,
