@@ -438,17 +438,10 @@ function AgencyManagePRs() {
 					<p className="iz-tiny iz-muted mt-0.5">{t.managePr.subtitle}</p>
 				</div>
 				<div className="iz-pr-manage-header__actions">
-					<button
-						type="button"
-						className={`iz-pr-manage-header__btn${selectMode ? " iz-pr-manage-header__btn--active" : ""}`}
-						onClick={() => {
-							setSelectMode(!selectMode);
-							setSelected(new Set());
-						}}
-					>
-						<MousePointerClick className="h-4 w-4" />
-						{selectMode ? t.common.cancel : t.managePr.select}
-					</button>
+					{/* Select moved DOWN to the "5 PRs" stats row (owner, 27 Aug) — it
+					    acts on the cards directly under that heading, and up here it sat
+					    a whole filter bar away from what it selects. Broadcast stays: it
+					    opens a sheet, not a mode on the grid. */}
 					<button
 						type="button"
 						className="iz-pr-manage-header__btn iz-pr-manage-header__btn--primary"
@@ -788,6 +781,21 @@ function AgencyManagePRs() {
 					<span className="iz-pr-manage-stats__active">
 						{activeCount} {t.managePr.active}
 					</span>
+					{/* The row is `align-items: baseline` for the count/active pair —
+					    right for text, wrong for a pill button, hence self-center. Same
+					    class as it wore in the header, so nothing about it changes but
+					    where it is. */}
+					<button
+						type="button"
+						className={`iz-pr-manage-header__btn ml-auto self-center${selectMode ? " iz-pr-manage-header__btn--active" : ""}`}
+						onClick={() => {
+							setSelectMode(!selectMode);
+							setSelected(new Set());
+						}}
+					>
+						<MousePointerClick className="h-4 w-4" />
+						{selectMode ? t.common.cancel : t.managePr.select}
+					</button>
 				</div>
 				{selectMode && (
 					<p className="iz-tiny iz-muted2 mb-2">

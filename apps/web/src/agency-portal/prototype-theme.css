@@ -5585,9 +5585,11 @@
 	font-weight: 700;
 	cursor: pointer;
 }
+/* Same hover as .iz-topbar-back:hover  one Return look means hover too. */
 .iz-post-job-return:hover {
-	border-color: var(--iz-violet);
-	color: var(--iz-violet-l);
+	color: var(--iz-txt);
+	border-color: var(--iz-line);
+	background: rgba(255, 255, 255, 0.07);
 }
 .iz-chosen-event-bar {
 	display: flex;
@@ -10740,22 +10742,23 @@ button.iz-pr-offer-row:hover {
 .iz-topbar-back {
 	display: inline-flex;
 	align-items: center;
-	gap: 3px;
+	gap: 6px;
 	flex-shrink: 0;
-	height: 30px;
-	padding: 0 8px 0 6px;
-	border-radius: 10px;
-	/* No box. The pill's border + fill read as a black square parked in the
-	   top-left corner of every page, which is chrome competing with the page
-	   title beside it. The arrow and the word are the control. Kept
-	   transparent rather than removed so the hover state has something to
-	   paint into and the metrics do not shift by a pixel. */
-	border: 1px solid transparent;
-	background: transparent;
-	color: var(--iz-muted);
+	min-height: 34px;
+	padding: 7px 14px 7px 12px;
+	border-radius: 999px;
+	/* THE ONE RETURN LOOK  the rounded pill, on every portal (owner, 27 Aug,
+	   reversing the earlier "no box" call of 20 Aug: two looks had crept in,
+	   pill on some pages and a bare label on the rest, and the owner picked
+	   the pill for ALL of them). This base class is rendered by the shared
+	   TopbarBack, so changing it here restyles every role's Return at once 
+	   do not fork per-page variants again; that is how the drift started. */
+	border: 1px solid var(--iz-line2);
+	background: rgba(255, 255, 255, 0.03);
+	color: var(--iz-txt);
 	font-family: "Sora", sans-serif;
-	font-size: 11px;
-	font-weight: 600;
+	font-size: 12px;
+	font-weight: 700;
 	letter-spacing: 0.12px;
 	cursor: pointer;
 	text-decoration: none;
@@ -10765,11 +10768,9 @@ button.iz-pr-offer-row:hover {
 		background 0.15s;
 }
 .iz-topbar-back:hover {
-	/* Brightening the label is the whole affordance now — restoring a border
-	   on hover would put the square back for exactly as long as the pointer
-	   is over it. */
 	color: var(--iz-txt);
-	background: rgba(255, 255, 255, 0.05);
+	border-color: var(--iz-line);
+	background: rgba(255, 255, 255, 0.07);
 }
 .iz-topbar-back-label {
 	white-space: nowrap;
@@ -10788,7 +10789,7 @@ button.iz-pr-offer-row:hover {
 	min-height: 42px;
 	gap: 7px;
 	padding: 0 16px 0 13px;
-	border-radius: 13px;
+	border-radius: 999px;
 	font-size: 15px;
 }
 /* Larger Cancel edit control on Settings / Profile */
@@ -10797,7 +10798,7 @@ button.iz-pr-offer-row:hover {
 	min-height: 42px;
 	padding: 0 14px 0 12px;
 	gap: 6px;
-	border-radius: 12px;
+	border-radius: 999px;
 	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -10815,8 +10816,8 @@ button.iz-pr-offer-row:hover {
 }
 @media (max-width: 380px) {
 	.iz-topbar-back {
-		width: 30px;
-		max-width: 30px;
+		width: 34px;
+		max-width: 34px;
 		padding: 0;
 		justify-content: center;
 	}
@@ -13376,20 +13377,11 @@ button.iz-pr-offer-row:hover {
  * box, this one never had the plain box to begin with.
  */
 .iz-outlet-detail-back,
+/* Layout-only now: the pill LOOK moved into the base .iz-topbar-back, so a
+   page can no longer look different by forgetting the modifier. */
 .iz-topbar-back--pill {
-	display: inline-flex;
 	align-self: flex-start;
-	align-items: center;
-	gap: 6px;
 	margin-bottom: 8px;
-	padding: 7px 14px;
-	border-radius: 999px;
-	border: 1px solid var(--iz-line2);
-	background: rgba(255, 255, 255, 0.03);
-	color: var(--iz-txt);
-	font-size: 12px;
-	font-weight: 700;
-	cursor: pointer;
 }
 .iz-outlet-detail-head {
 	display: flex;
@@ -19447,6 +19439,21 @@ html:has(.iz-pr-app) {
 	}
 
 	/* Sidebar already shows identity — slim topbar: back + actions only */
+		/* The MINIMAL topbar is just the floating Return pill. The sticky glass
+	   above is sized by its grid to full width on real topbars  but minimal
+	   is inline-flex, so the glass shrank to the button and rendered as a
+	   dark box parked behind the pill (owner's screenshot, 27 Aug). Two
+	   classes outrank --minimal's one, so undo the glass here, in the same
+	   media query that paints it. */
+	.iz-portal .iz-topbar--minimal {
+		position: static;
+		margin: 0;
+		padding: 6px 0 2px;
+		background: transparent;
+		backdrop-filter: none;
+		border-bottom: 0;
+	}
+
 	.iz-portal .iz-topbar-identity {
 		display: none;
 	}
