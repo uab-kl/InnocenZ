@@ -30,14 +30,24 @@ function pvBreakdownDisplayRows(
 	breakdown: PvEarningsBreakdown,
 	t: PortalTranslations,
 ) {
+	// Keyed on the BUCKET, not on the label: a row keyed by its translated text
+	// remounts every row the moment the locale is switched.
 	const rows = [
-		{ label: t.money.dailyWages, value: breakdown.wages },
-		{ label: t.payroll.drinkCommissions, value: breakdown.drinks },
-		{ label: t.payroll.tipCommissions, value: breakdown.tips },
-		{ label: t.payroll.overtimeCheckOut, value: breakdown.overtime },
+		{ key: "wages", label: t.money.dailyWages, value: breakdown.wages },
+		{
+			key: "drinks",
+			label: t.payroll.drinkCommissions,
+			value: breakdown.drinks,
+		},
+		{ key: "tips", label: t.payroll.tipCommissions, value: breakdown.tips },
+		{
+			key: "overtime",
+			label: t.payroll.overtimeCheckOut,
+			value: breakdown.overtime,
+		},
 	].filter((r) => r.value > 0);
 	if (breakdown.other > 0)
-		rows.push({ label: t.payroll.other, value: breakdown.other });
+		rows.push({ key: "other", label: t.payroll.other, value: breakdown.other });
 	return rows;
 }
 
@@ -75,7 +85,7 @@ export function AgencyPaidPvDetail({
 			<IzCard flat className="mb-2">
 				<p className="iz-tiny iz-muted2">{t.payroll.fourPartBreakdown}</p>
 				{breakdownRows.map((r) => (
-					<div key={r.label} className="iz-v-sum">
+					<div key={r.key} className="iz-v-sum">
 						<span className="iz-muted">{r.label}</span>
 						<b>{formatRM(r.value)}</b>
 					</div>
@@ -91,6 +101,7 @@ export function AgencyPaidPvDetail({
 			{receiptScans.length > 0 && (
 				<OutletSection
 					title={t.payroll.receiptScans}
+					iconKey="Receipt scans"
 					hint={`${receiptScans.length} ${t.payroll.onThisPv}`}
 				>
 					{receiptScans.map((scan) => (
@@ -144,8 +155,8 @@ export function AgencyPaidPvDetail({
 			{!pvIssuer.issuer && (
 				<p className="iz-tiny iz-muted2 mt-1.5 text-center">
 					{pvIssuer.status === "loading"
-						? "Loading your agency's letterhead…"
-						: "Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload the page or check your connection."}
+						? t.agencyPv.loadingLetterhead
+						: t.agencyPv.letterheadUnavailable}
 				</p>
 			)}
 

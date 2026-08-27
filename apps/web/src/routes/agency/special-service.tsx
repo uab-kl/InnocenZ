@@ -4,6 +4,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/agency/special-service")({
 	component: AgencySpecialService,
@@ -21,9 +22,7 @@ function AgencySpecialService() {
 					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
-					<p className="iz-sm iz-muted">
-						You do not have access to job postings.
-					</p>
+					<p className="iz-sm iz-muted">{t.agencyMisc.noAccessJobPostings}</p>
 				</IzCard>
 			</div>
 		);
@@ -34,7 +33,9 @@ function AgencySpecialService() {
 			<header>
 				<IzPageTitle>{t.agencyMisc.jobPosting}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">
-					{agencyOwner.orgName} · book services for PRs & outlets
+					{fill(t.agencyMisc.bookServicesSubtitle, {
+						org: agencyOwner.orgName,
+					})}
 				</p>
 			</header>
 

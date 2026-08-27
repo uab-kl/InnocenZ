@@ -12,6 +12,19 @@
 import type { PrCurrentWeek, PrReceiptKind, PrReceiptLine } from './api';
 import type { WeeklyDayPay } from './demo-shifts';
 
+/**
+ * ⚠️ STAYS ENGLISH — `WeeklyDayPay.day` is data, not copy.
+ *
+ * It is written into the signed-PV snapshot that `signed-pv.tsx` persists
+ * (`linesFromGrid` copies `d.day` onto every stored line), and it is spliced
+ * into the dispute reason PaymentScreen POSTs for the agency's web portal to
+ * read. Translating it here would rewrite stored records and send Chinese into
+ * a field the agency reads in English.
+ *
+ * The column header a PR reads is translated at the RENDER instead: derive the
+ * weekday from the row's own `dateIso` and resolve it through `DAY_SHORT` in
+ * `lib/demo-shifts.ts` (`t.schedule.daySun` … `daySat`).
+ */
 const WEEKDAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 /**

@@ -1,8 +1,10 @@
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { cn } from "@/lib/utils";
 
 export function GlobalLoadingShadow({ className }: { className?: string }) {
+	const { t } = usePortalLocale();
 	const isFetching = useIsFetching();
 	const isMutating = useIsMutating();
 	const active = isFetching + isMutating > 0;
@@ -18,7 +20,9 @@ export function GlobalLoadingShadow({ className }: { className?: string }) {
 			<div className="absolute top-4 right-4 rounded-lg border bg-card/90 px-3 py-2 shadow-sm">
 				<div className="flex items-center gap-2">
 					<div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-					<div className="text-xs text-muted-foreground">Loading…</div>
+					<div className="text-xs text-muted-foreground">
+						{t.common.loading}
+					</div>
 				</div>
 			</div>
 		</div>

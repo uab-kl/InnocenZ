@@ -2,6 +2,7 @@ import { IzSheet, type SheetVariant } from "@agency-portal/components/iz/Sheet";
 import { IzCardTitle } from "@agency-portal/components/iz/ui";
 import { verifyDemoOtp } from "@agency-portal/lib/verify-demo-otp";
 import type { ReactNode } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function isValidDemoOtp(code: string) {
 	return verifyDemoOtp(code);
@@ -16,7 +17,7 @@ export function OtpVerifySheet({
 	onOtpChange,
 	onVerify,
 	onResend,
-	verifyLabel = "Verify OTP",
+	verifyLabel,
 	variant = "dialog",
 }: {
 	open: boolean;
@@ -30,6 +31,8 @@ export function OtpVerifySheet({
 	verifyLabel?: string;
 	variant?: SheetVariant;
 }) {
+	const { t } = usePortalLocale();
+
 	return (
 		<IzSheet open={open} onClose={onClose} variant={variant}>
 			<IzCardTitle>{title}</IzCardTitle>
@@ -42,21 +45,23 @@ export function OtpVerifySheet({
 				inputMode="numeric"
 				placeholder="123456"
 				className="iz-pv-dispute-input !min-h-0 py-3 text-center font-mono text-lg tracking-[0.35em]"
-				aria-label="One-time password"
+				aria-label={t.portalUi.oneTimePassword}
 			/>
 			<button
 				type="button"
 				className="iz-btn iz-btn-primary mt-4 w-full"
 				onClick={onVerify}
 			>
-				{verifyLabel}
+				{/* Read in the BODY, not as a default parameter: a default is
+				    evaluated before any hook has run, so it cannot see `t`. */}
+				{verifyLabel ?? t.portalUi.verifyOtp}
 			</button>
 			<button
 				type="button"
 				className="iz-btn iz-btn-soft mt-2.5 w-full"
 				onClick={onResend}
 			>
-				Resend OTP
+				{t.portalUi.resendOtp}
 			</button>
 		</IzSheet>
 	);

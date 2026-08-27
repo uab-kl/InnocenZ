@@ -44,6 +44,9 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { formatDate, formatPrice, getErrorMessage } from "@/lib/utils";
 import {
 	fetchSubscriptionInvoices,
@@ -56,6 +59,10 @@ import {
 
 export const Route = createFileRoute("/admin/service/plan-payment")({
 	component: PlanPaymentPage,
+	/*
+	 * Document title stays ENGLISH — `head()` is route metadata evaluated
+	 * outside React, so it cannot read the locale context.
+	 */
 	head: () => ({ meta: [{ title: "Plan Payment — Innocenz Admin" }] }),
 });
 
@@ -76,9 +83,16 @@ function periodDay(day: string): string {
 	return Number.isNaN(parsed.getTime()) ? day : format(parsed, "d MMM yyyy");
 }
 
-const statusLabels: Record<SubscriptionInvoiceStatus, string> = {
-	unpaid: "Unpaid",
-	paid: "Paid",
+/*
+ * The record KEYS are the stored values and never change — only the words a
+ * human reads do, so each entry holds a lookup that takes `t`.
+ */
+const statusLabels: Record<
+	SubscriptionInvoiceStatus,
+	(t: PortalTranslations) => string
+> = {
+	unpaid: (t) => t.subscription.statusUnpaid,
+	paid: (t) => t.subscription.statusPaid,
 };
 
 const statusBadgeColors: Record<SubscriptionInvoiceStatus, string> = {
@@ -86,9 +100,9 @@ const statusBadgeColors: Record<SubscriptionInvoiceStatus, string> = {
 	paid: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300",
 };
 
-const roleLabels: Record<SubscriberType, string> = {
-	outlet: "Outlet",
-	agency: "Agency",
+const roleLabels: Record<SubscriberType, (t: PortalTranslations) => string> = {
+	outlet: (t) => t.table.outlet,
+	agency: (t) => t.adminService.agency,
 };
 
 const roleBadgeColors: Record<SubscriberType, string> = {
@@ -105,6 +119,7 @@ const roleBadgeColors: Record<SubscriberType, string> = {
  * admin here said so; that is the only thing this page writes.
  */
 function PlanPaymentPage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -151,12 +166,12 @@ function PlanPaymentPage() {
 		}) => setSubscriptionInvoiceStatus(id, status, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["subscription-invoices"] });
-			toast.success(response.message || "Payment status updated");
+			toast.success(response.message || t.adminService.paymentStatusUpdated);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to update payment status")?.message ??
-					"Failed to update payment status",
+				toMutationError(error, t.adminService.paymentStatusUpdateFailed)
+					?.message ?? t.adminService.paymentStatusUpdateFailed,
 			);
 		},
 	});
@@ -167,12 +182,12 @@ function PlanPaymentPage() {
 		mutationFn: () => generateSubscriptionInvoices(logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["subscription-invoices"] });
-			toast.success(response.message || "Ledger up to date");
+			toast.success(response.message || t.adminService.ledgerUpToDate);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to refresh the ledger")?.message ??
-					"Failed to refresh the ledger",
+				toMutationError(error, t.adminService.ledgerRefreshFailed)?.message ??
+					t.adminService.ledgerRefreshFailed,
 			);
 		},
 	});
@@ -186,8 +201,8 @@ function PlanPaymentPage() {
 		<PageShell>
 			<PageHeader
 				icon={CreditCard}
-				title="Plan Payment"
-				description="What each outlet and agency owes InnocenZ for its plan, period by period. Agencies are billed weekly (Sun–Sat), outlets monthly. Every period opens Unpaid until you mark it paid."
+				title={t.admin.navPlanPayment}
+				description={t.adminService.planPaymentSubtitle}
 			/>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
@@ -195,23 +210,23 @@ function PlanPaymentPage() {
 					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
-								Billing periods
+								{t.adminService.billingPeriods}
 								{invoicesQuery.isFetching && !showLoading && (
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
 							</CardTitle>
 							<CardDescription>
-								One row per period each subscriber is charged for — agencies
-								weekly (Sun–Sat), outlets monthly from the day they subscribed.
-								Generated from the subscription itself, so this is what was
-								BILLED, not what was asked for; the switches behind it live on{" "}
+								{/* Split around the inline link, not concatenated from
+								    fragments: each half is a whole clause, so Chinese can put
+								    the link where its own grammar needs it. */}
+								{t.adminService.billingPeriodsHintBefore}
 								<Link
 									to="/admin/service/plan-changes"
 									className="text-lavender underline underline-offset-2"
 								>
-									Plan Change
+									{t.admin.navPlanChange}
 								</Link>
-								. Every period opens Unpaid until you mark it paid.
+								{t.adminService.billingPeriodsHintAfter}
 							</CardDescription>
 						</div>
 
@@ -230,9 +245,9 @@ function PlanPaymentPage() {
 								<Input
 									value={searchInput}
 									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder="Search outlet or agency..."
+									placeholder={t.adminService.searchOutletOrAgencyPlaceholder}
 									className="pl-8"
-									aria-label="Search outlet or agency"
+									aria-label={t.adminService.searchOutletOrAgency}
 								/>
 							</div>
 
@@ -245,14 +260,16 @@ function PlanPaymentPage() {
 							>
 								<SelectTrigger
 									className="sm:w-36"
-									aria-label="Filter by status"
+									aria-label={t.admin.filterByStatus}
 								>
-									<SelectValue placeholder="All Status" />
+									<SelectValue placeholder={t.admin.allStatus} />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">All Status</SelectItem>
-									<SelectItem value="unpaid">Unpaid</SelectItem>
-									<SelectItem value="paid">Paid</SelectItem>
+									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+									<SelectItem value="unpaid">
+										{statusLabels.unpaid(t)}
+									</SelectItem>
+									<SelectItem value="paid">{statusLabels.paid(t)}</SelectItem>
 								</SelectContent>
 							</Select>
 
@@ -269,7 +286,7 @@ function PlanPaymentPage() {
 								) : (
 									<RefreshCw className="mr-2 h-4 w-4" />
 								)}
-								Refresh periods
+								{t.adminService.refreshPeriods}
 							</Button>
 						</div>
 					</div>
@@ -279,14 +296,24 @@ function PlanPaymentPage() {
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Who</TableHead>
-									<TableHead className="w-[100px]">Role</TableHead>
-									<TableHead>Plan</TableHead>
-									<TableHead className="w-[210px]">Billing period</TableHead>
-									<TableHead>Amount (RM)</TableHead>
-									<TableHead className="w-[110px]">Status</TableHead>
-									<TableHead className="w-[170px]">Paid on</TableHead>
-									<TableHead className="w-[130px] text-right">Action</TableHead>
+									<TableHead>{t.adminService.colWho}</TableHead>
+									<TableHead className="w-[100px]">
+										{t.adminService.role}
+									</TableHead>
+									<TableHead>{t.adminService.colPlan}</TableHead>
+									<TableHead className="w-[210px]">
+										{t.adminService.colBillingPeriod}
+									</TableHead>
+									<TableHead>{t.adminService.colAmount} (RM)</TableHead>
+									<TableHead className="w-[110px]">
+										{t.admin.colStatus}
+									</TableHead>
+									<TableHead className="w-[170px]">
+										{t.adminService.colPaidOn}
+									</TableHead>
+									<TableHead className="w-[130px] text-right">
+										{t.admin.colAction}
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -308,7 +335,7 @@ function PlanPaymentPage() {
 												className="mt-3"
 												onClick={() => invoicesQuery.refetch()}
 											>
-												Try Again
+												{t.admin.tryAgain}
 											</Button>
 										</TableCell>
 									</TableRow>
@@ -318,7 +345,7 @@ function PlanPaymentPage() {
 											colSpan={8}
 											className="py-10 text-center text-muted-foreground"
 										>
-											No billing periods match this filter.
+											{t.adminService.noBillingPeriods}
 										</TableCell>
 									</TableRow>
 								) : (
@@ -332,15 +359,15 @@ function PlanPaymentPage() {
 													variant="outline"
 													className={`${roleBadgeColors[invoice.subscriberType]} w-fit`}
 												>
-													{roleLabels[invoice.subscriberType]}
+													{roleLabels[invoice.subscriberType](t)}
 												</Badge>
 											</TableCell>
 											<TableCell>
 												{invoice.planName}
 												<span className="block text-sm text-muted-foreground">
 													{invoice.billingCycle === "weekly"
-														? "Weekly"
-														: "Monthly"}
+														? t.subscription.billedWeekly
+														: t.subscription.billedMonthly}
 												</span>
 											</TableCell>
 											<TableCell className="text-base whitespace-nowrap">
@@ -355,7 +382,7 @@ function PlanPaymentPage() {
 													variant="outline"
 													className={`${statusBadgeColors[invoice.status]} w-fit`}
 												>
-													{statusLabels[invoice.status]}
+													{statusLabels[invoice.status](t)}
 												</Badge>
 											</TableCell>
 											<TableCell className="text-base whitespace-nowrap text-muted-foreground">
@@ -382,8 +409,8 @@ function PlanPaymentPage() {
 													}
 												>
 													{invoice.status === "paid"
-														? "Mark unpaid"
-														: "Mark paid"}
+														? t.adminService.markUnpaid
+														: t.adminService.markPaid}
 												</Button>
 											</TableCell>
 										</TableRow>
@@ -396,12 +423,14 @@ function PlanPaymentPage() {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 							<span>
-								Showing {(pagination.page - 1) * pagination.pageSize + 1} -{" "}
-								{Math.min(
-									pagination.page * pagination.pageSize,
-									pagination.totalCount,
-								)}{" "}
-								of {pagination.totalCount} billing periods
+								{fill(t.adminService.showingBillingPeriods, {
+									from: (pagination.page - 1) * pagination.pageSize + 1,
+									to: Math.min(
+										pagination.page * pagination.pageSize,
+										pagination.totalCount,
+									),
+									total: pagination.totalCount,
+								})}
 							</span>
 							<div className="flex gap-2">
 								<Button
@@ -410,10 +439,13 @@ function PlanPaymentPage() {
 									disabled={!pagination.hasPrevPage || invoicesQuery.isFetching}
 									onClick={() => setPage((value) => value - 1)}
 								>
-									Previous
+									{t.admin.previous}
 								</Button>
 								<span>
-									Page {pagination.page} of {pagination.totalPages}
+									{fill(t.admin.pageOf, {
+										page: pagination.page,
+										total: pagination.totalPages,
+									})}
 								</span>
 								<Button
 									variant="outline"
@@ -421,7 +453,7 @@ function PlanPaymentPage() {
 									disabled={!pagination.hasNextPage || invoicesQuery.isFetching}
 									onClick={() => setPage((value) => value + 1)}
 								>
-									Next
+									{t.admin.next}
 								</Button>
 							</div>
 						</div>

@@ -88,8 +88,8 @@ export function ForgotPasswordModal({
 
   useEffect(() => {
     if (resendIn <= 0) return;
-    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(timer);
   }, [resendIn]);
 
   const sendCode = async () => {
@@ -101,12 +101,12 @@ export function ForgotPasswordModal({
       savePhoneCountryCode(phoneCountryCode);
       const res = await sendPrOtp(fullPhone, 'forgot_password');
       setResendIn(res.resendAfterSec ?? 60);
-      setInfo('If that number is registered, a WhatsApp code was sent.');
+      setInfo(t.forgot.codeSentInfo);
       setStep('otp');
       setOtp('');
       setVerificationId(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not send code');
+      setError(e instanceof ApiError ? e.message : t.security.sendCodeFailed);
     } finally {
       setBusy(false);
     }
@@ -122,7 +122,7 @@ export function ForgotPasswordModal({
       setStep('password');
       setInfo(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Invalid code');
+      setError(e instanceof ApiError ? e.message : t.forgot.invalidCode);
     } finally {
       setBusy(false);
     }
@@ -144,7 +144,7 @@ export function ForgotPasswordModal({
       await resetPasswordWithOtp(fullPhone, verificationId, password);
       setStep('done');
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not reset password');
+      setError(e instanceof ApiError ? e.message : t.forgot.resetFailed);
     } finally {
       setBusy(false);
     }

@@ -31,7 +31,7 @@ import {
 import { PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { pickImageFromGalleryEx, pickImagesFromGallery } from '../lib/photo-file';
 import { useSession } from '../lib/session';
-import { useLocale } from '../i18n';
+import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { Avatar, IzButton } from '../components/ui';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { PortfolioSlotGrid } from '../components/PortfolioSlotGrid';
@@ -69,15 +69,19 @@ type Draft = {
  * Every value of the backend `pr_tier` enum, spelled the way the agency portal
  * spells it. The two screens must read a tier the same way, or the PR and her
  * agency end up looking at different words for one database row.
+ *
+ * The KEYS are the database enum and never move. The values are RESOLVERS, not
+ * strings: this map is built at module scope, before any hook has run, so it
+ * cannot read the dictionary itself — the call site passes `t` in.
  */
-const TIER_LABEL: Record<string, string> = {
-  tier_1: 'TIER I',
-  tier_2: 'TIER II',
-  tier_3: 'TIER III',
-  tier_4: 'TIER IV',
-  tier_5: 'TIER V',
-  servant: 'SERVANT',
-  commission_only: 'COMMISSION ONLY',
+const TIER_LABEL: Record<string, (t: AppTranslations) => string> = {
+  tier_1: (t) => t.profile.tier1,
+  tier_2: (t) => t.profile.tier2,
+  tier_3: (t) => t.profile.tier3,
+  tier_4: (t) => t.profile.tier4,
+  tier_5: (t) => t.profile.tier5,
+  servant: (t) => t.profile.tierServant,
+  commission_only: (t) => t.profile.tierCommissionOnly,
 };
 
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
@@ -88,7 +92,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [comcardSavedHint, setComcardSavedHint] = useState<string | null>(null);
+  /**
+   * A FLAG, not a sentence. It used to hold the words "Comcard updated", which
+   * froze that line in whatever language was active when the save landed —
+   * switching locale afterwards left one English line on a Chinese screen.
+   */
+  const [comcardUpdated, setComcardUpdated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { message: toast, variant: toastVariant, showToast } = useToast();
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
@@ -124,8 +133,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    * the tiles sat in the old order until the save (plus comcard rebuild) landed.
    */
   const [pendingOrder, setPendingOrder] = useState<(string | null)[] | null>(null);
-  /** Inline status under Portfolio while rearrange / comcard rebuild is in flight. */
-  const [portfolioBusy, setPortfolioBusy] = useState<string | null>(null);
+  /**
+   * Is a rearrange / comcard rebuild in flight? A flag, not the words to show —
+   * the line itself is read from the dictionary at render time.
+   */
+  const [portfolioBusy, setPortfolioBusy] = useState(false);
 
   const displayName = editing ? draft.displayName : me?.username ?? 'PR';
   const reloadMyLinks = React.useCallback(async () => {
@@ -184,9 +196,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     const graded = myLinks.filter((l) => l.approveStatus === 'approved' && l.tier);
     const labels = graded.map((l) => ({
       agencyName: l.agencyName,
-      label: TIER_LABEL[l.tier as string] ?? (l.tier as string),
+      label: TIER_LABEL[l.tier as string]?.(t) ?? (l.tier as string),
     }));
-    const distinct = [...new Set(labels.map((t) => t.label))];
+    const distinct = [...new Set(labels.map((item) => item.label))];
     if (distinct.length === 0) return [];
     if (distinct.length === 1) return [{ agencyName: null, label: distinct[0] }];
     return labels;
@@ -330,29 +342,29 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       await requestAgencyLeave(token, leaveTarget.id);
       setAgencyMenuOpen(false);
       await reloadMyLinks();
-      showToast(`Departure requested — waiting for ${name} to approve`);
+      showToast(formatMessage(t.profile.departureRequested, { name }));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not request the departure');
+      setError(e instanceof ApiError ? e.message : t.profile.departureFailed);
     }
   };
 
   const saveEdit = async () => {
     const name = draft.displayName.trim();
     if (name.length < 2 || name.length > 20) {
-      setError('Floor nickname must be 2–20 characters');
+      setError(t.profile.nicknameLength);
       return;
     }
     if (!draft.icName.trim()) {
-      setError('Enter your legal IC name');
+      setError(t.profile.icNameRequired);
       return;
     }
     if (draft.languages.length === 0) {
-      setError('Select at least one language');
+      setError(t.profile.languageRequired);
       return;
     }
     const emailValue = draft.email.trim();
     if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
-      setError('Enter a valid email address');
+      setError(t.profile.emailInvalid);
       return;
     }
     setSaving(true);
@@ -399,7 +411,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         await reloadMyLinks();
       }
       setEditing(false);
-      showToast('Profile saved');
+      showToast(t.profile.profileSaved);
 
       // Height, weight and name are printed ON the comcard, so saving them
       // without re-rendering it leaves the saved PNG stating measurements the
@@ -414,10 +426,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       // other's fresh PNG and leave the profile pointing at a key that no
       // longer exists. The response already carries the new image.
       if (saved.profile.comcardImage && saved.profile.comcardImage !== before) {
-        setComcardSavedHint('Comcard updated');
+        setComcardUpdated(true);
       }
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not save profile');
+      setError(e instanceof ApiError ? e.message : t.profile.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -431,12 +443,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     const { status, image: picked } = await pickImageFromGalleryEx();
     if (!picked) {
       if (status === 'unavailable' && Platform.OS !== 'web') {
-        setError('Could not open the gallery — rebuild the dev app (expo run:android).');
+        setError(t.profile.galleryUnavailable);
       }
       return null;
     }
     if (picked.size != null && picked.size > 5 * 1024 * 1024) {
-      setError('Image must be under 5 MB');
+      setError(t.profile.imageTooLarge);
       return null;
     }
     return picked;
@@ -461,9 +473,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     try {
       await uploadAvatar(picked.file, picked.filename);
       // A successful upload used to look identical to doing nothing.
-      showToast('Profile photo updated');
+      showToast(t.profile.avatarUpdated);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not upload photo');
+      setError(e instanceof ApiError ? e.message : t.profile.avatarUploadFailed);
     } finally {
       setSaving(false);
     }
@@ -496,12 +508,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         }));
         try {
           await generateComcard();
-          setComcardSavedHint('Comcard updated');
+          setComcardUpdated(true);
         } catch {
           /* Non-fatal */
         }
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
+        setError(e instanceof ApiError ? e.message : t.profile.portfolioUploadFailed);
       } finally {
         if (preview) {
           setSlotPreviewUri((prev) => {
@@ -543,7 +555,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     });
 
     setSaving(true);
-    setError(skippedOversize ? 'Some images were over 5 MB and were skipped' : null);
+    setError(skippedOversize ? t.profile.someImagesSkipped : null);
     try {
       let latest = me;
       for (let i = 0; i < pickedList.length; i++) {
@@ -560,12 +572,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       }
       try {
         await generateComcard();
-        setComcardSavedHint('Comcard updated');
+        setComcardUpdated(true);
       } catch {
         /* Non-fatal — user can tap Save comcard. */
       }
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
+      setError(e instanceof ApiError ? e.message : t.profile.portfolioUploadFailed);
     } finally {
       setSlotPreviewUri((prev) => {
         const next = [...prev];
@@ -589,12 +601,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     if (!canPickImages || saving) return;
     const label = String(slot + 1).padStart(2, '0');
     Alert.alert(
-      'Remove photo?',
-      `Remove portfolio photo ${label}? This deletes it from your profile.`,
+      t.profile.removePhotoTitle,
+      formatMessage(t.profile.removePhotoBody, { label }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t.common.cancel, style: 'cancel' },
         {
-          text: 'Remove',
+          text: t.signup.remove,
           style: 'destructive',
           onPress: () => {
             void confirmRemovePortfolio(slot);
@@ -624,9 +636,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       // the server re-renders the card inside that request. Calling it again
       // would render twice, and each render prunes every object but its own —
       // interleaved, they can delete each other's fresh PNG.
-      setComcardSavedHint(next.some(Boolean) ? 'Comcard updated' : null);
+      setComcardUpdated(next.some(Boolean));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not remove portfolio photo');
+      setError(e instanceof ApiError ? e.message : t.profile.portfolioRemoveFailed);
     } finally {
       setSaving(false);
     }
@@ -657,8 +669,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
     setDraft((d) => ({ ...d, portfolio: normalized }));
     setPendingOrder(normalized);
-    setPortfolioBusy('Saving arrangement…');
-    showToast('Saving arrangement…', 'info');
+    setPortfolioBusy(true);
+    showToast(t.profile.savingArrangement, 'info');
     setSaving(true);
     setError(null);
     let saved = false;
@@ -670,8 +682,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       saved = true;
     } catch (e) {
       setDraft((d) => ({ ...d, portfolio: prev }));
-      setError(e instanceof ApiError ? e.message : 'Could not rearrange portfolio');
-      showToast('Could not rearrange portfolio', 'error');
+      setError(e instanceof ApiError ? e.message : t.profile.rearrangeFailed);
+      showToast(t.profile.rearrangeFailed, 'error');
     } finally {
       // Unlock the grid as soon as the order is persisted — comcard rebuild
       // can take seconds and must not block the next drag.
@@ -679,7 +691,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }
     if (!saved) {
       setPendingOrder(null);
-      setPortfolioBusy(null);
+      setPortfolioBusy(false);
       return;
     }
 
@@ -688,19 +700,19 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // the FIRST FOUR slots, so only a change there moves it.
     const cardChanged = [0, 1, 2, 3].some((i) => prev[i] !== normalized[i]);
     if (cardChanged && normalized.some(Boolean)) {
-      setComcardSavedHint('Comcard updated');
+      setComcardUpdated(true);
     }
 
     setPendingOrder(null);
-    setPortfolioBusy(null);
-    showToast('Portfolio rearranged');
+    setPortfolioBusy(false);
+    showToast(t.profile.portfolioRearranged);
   };
 
   const agencyLabel =
     draft.agencyIds
       .map((id) => agencyOptions.find((a) => a.id === id)?.name)
       .filter(Boolean)
-      .join(', ') || 'Select agencies';
+      .join(', ') || t.profile.selectAgencies;
 
   return (
     <View style={styles.screen}>
@@ -709,15 +721,17 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
       <View style={styles.hero}>
         <View style={styles.heroHead}>
-          <Text style={styles.eyebrow}>ACCOUNT</Text>
+          <Text style={styles.eyebrow}>{t.profile.accountEyebrow}</Text>
           <View style={styles.badges}>
             {editing && (
               <View style={[styles.badge, styles.badgeAmber]}>
-                <Text style={[styles.badgeText, { color: C.amber }]}>Editing</Text>
+                <Text style={[styles.badgeText, { color: C.amber }]}>
+                  {t.profile.editingBadge}
+                </Text>
               </View>
             )}
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>Photo Comcard · IC</Text>
+              <Text style={styles.badgeText}>{t.profile.comcardIcBadge}</Text>
             </View>
           </View>
         </View>
@@ -757,7 +771,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           <View style={styles.profileBody}>
             {editing ? (
               <>
-                <Text style={styles.fieldLabel}>Floor nickname</Text>
+                <Text style={styles.fieldLabel}>{t.profile.floorNickname}</Text>
                 <TextInput
                   value={draft.displayName}
                   onChangeText={(v) => setDraft((d) => ({ ...d, displayName: v }))}
@@ -765,14 +779,16 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   style={styles.input}
                   placeholderTextColor={C.muted2}
                 />
-                <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Legal IC name</Text>
+                <Text style={[styles.fieldLabel, { marginTop: 8 }]}>
+                  {t.profile.legalIcName}
+                </Text>
                 <TextInput
                   value={draft.icName}
                   onChangeText={(v) => setDraft((d) => ({ ...d, icName: v }))}
                   style={styles.input}
                   placeholderTextColor={C.muted2}
                 />
-                <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Email</Text>
+                <Text style={[styles.fieldLabel, { marginTop: 8 }]}>{t.signup.email}</Text>
                 <TextInput
                   value={draft.email}
                   onChangeText={(v) => setDraft((d) => ({ ...d, email: v }))}
@@ -793,40 +809,48 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             )}
 
             <View style={styles.metaRow}>
-              {tierBadges.map((t) => (
-                <View key={`${t.agencyName ?? ''}-${t.label}`} style={styles.tier}>
+              {tierBadges.map((badge) => (
+                <View key={`${badge.agencyName ?? ''}-${badge.label}`} style={styles.tier}>
                   <Star size={12} color={C.goldL} />
                   <Text style={styles.tierText}>
-                    {t.agencyName ? `${t.agencyName} · ${t.label}` : t.label}
+                    {badge.agencyName
+                      ? `${badge.agencyName} · ${badge.label}`
+                      : badge.label}
                   </Text>
                 </View>
               ))}
               {!editing && (
-                <Text style={styles.metaText}>Agency-Tied · {agencyNames}</Text>
+                <Text style={styles.metaText}>
+                  {formatMessage(t.profile.agencyTied, { names: agencyNames })}
+                </Text>
               )}
               {!editing && pendingAgencyNames.length > 0 && (
                 <Text style={styles.metaPending}>
-                  Awaiting approval · {pendingAgencyNames.join(', ')}
+                  {formatMessage(t.profile.awaitingApproval, {
+                    names: pendingAgencyNames.join(', '),
+                  })}
                 </Text>
               )}
               {!editing && departingAgencyNames.length > 0 && (
                 <Text style={styles.metaPending}>
-                  Departure waiting for {departingAgencyNames.join(', ')} to approve
+                  {formatMessage(t.profile.departureWaiting, {
+                    names: departingAgencyNames.join(', '),
+                  })}
                 </Text>
               )}
-              <Text style={styles.metaIc}>IC {ic}</Text>
+              <Text style={styles.metaIc}>{formatMessage(t.profile.icNumber, { ic })}</Text>
             </View>
 
             {editing && (
               <View style={{ marginTop: 10 }}>
-                <Text style={styles.fieldLabel}>Agencies</Text>
+                <Text style={styles.fieldLabel}>{t.profile.agencies}</Text>
                 <Pressable
                   style={[styles.agencyBtn, agencyLocked && { opacity: 0.6 }]}
                   disabled={agencyLocked}
                   onPress={() => setAgencyMenuOpen((o) => !o)}
                 >
                   <Text style={styles.agencyBtnText} numberOfLines={1}>
-                    {agencyLabel || 'Select agencies…'}
+                    {agencyLabel}
                   </Text>
                   {agencyLocked ? (
                     <Lock size={14} color={C.muted} />
@@ -837,8 +861,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 {agencyLocked && (
                   <Text style={styles.metaPending}>
                     {pendingAgencyNames.length > 0
-                      ? `Waiting for ${pendingAgencyNames.join(', ')} to approve — you cannot change agencies until they approve or reject.`
-                      : `Departure waiting for ${departingAgencyNames.join(', ')} to approve — you cannot change agencies until it is decided.`}
+                      ? formatMessage(t.profile.agencyLockedJoin, {
+                          names: pendingAgencyNames.join(', '),
+                        })
+                      : formatMessage(t.profile.agencyLockedLeave, {
+                          names: departingAgencyNames.join(', '),
+                        })}
                   </Text>
                 )}
                 {agencyMenuOpen && (
@@ -890,8 +918,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                             {on && <Check size={12} color="#241a08" />}
                           </View>
                           <Text style={[styles.agencyRowText, on && { color: C.goldL }]}>
-                            {a.name}
-                            {status === 'leave_pending' ? ' · departure pending' : ''}
+                            {status === 'leave_pending'
+                              ? formatMessage(t.profile.agencyDeparturePending, {
+                                  name: a.name,
+                                })
+                              : a.name}
                           </Text>
                         </Pressable>
                       );
@@ -901,17 +932,18 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         {/* Brief on purpose — if anything is still unsettled,
                             the server's refusal lists it in full right here. */}
                         <Text style={styles.metaPending}>
-                          Leave {leaveTarget.name}? Pay and shifts must be
-                          settled, and they must approve.
+                          {formatMessage(t.profile.leaveConfirm, {
+                            name: leaveTarget.name,
+                          })}
                         </Text>
                         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                           <IzButton
-                            label="Request to leave"
+                            label={t.profile.requestToLeave}
                             small
                             onPress={() => void confirmLeave()}
                           />
                           <IzButton
-                            label="Keep"
+                            label={t.profile.keep}
                             variant="soft"
                             small
                             onPress={() => setLeaveTarget(null)}
@@ -991,7 +1023,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <View style={styles.comcardOverlayWrap} pointerEvents="none">
                   <View style={styles.comcardOverlay}>
                     <Text style={styles.comcardOverlayName}>{displayName}</Text>
-                    <Text style={styles.comcardOverlayStats}>Age {age}</Text>
+                    {/* One key with the number in it — "Age" is screen chrome
+                        the app draws over the collage, not the comcard's own
+                        printed content, and Chinese does not take a label
+                        glued in front of a value. */}
+                    <Text style={styles.comcardOverlayStats}>
+                      {formatMessage(t.profile.comcardAge, { n: age })}
+                    </Text>
                     <Text style={styles.comcardOverlayStats}>
                       {height}cm {weight}kg
                     </Text>
@@ -1020,8 +1058,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 * an empty box — the reassurance and the evidence contradicting
                 * each other, with the reassurance winning.
                 */}
-              {comcardSavedHint ? (
-                <Text style={styles.comcardSavedHint}>{comcardSavedHint}</Text>
+              {comcardUpdated ? (
+                <Text style={styles.comcardSavedHint}>{t.profile.comcardUpdated}</Text>
               ) : !me?.profile.comcardImage ? (
                 <Text style={styles.comcardHint}>{t.profile.comcardHint}</Text>
               ) : comcardShowing ? (
@@ -1055,7 +1093,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     {/* Null age = no IC and no stored DOB, which is most of the
                         roster — an em-dash, never a fabricated number. */}
                     <Text style={styles.measureValue}>{me?.profile.age ?? '—'}</Text>
-                    <Text style={styles.measureSuffix}>y</Text>
+                    {/* cm and kg beside it are SI symbols and stay; "y" is an
+                        English word shortened, so it moves with the language. */}
+                    <Text style={styles.measureSuffix}>{t.profile.ageSuffix}</Text>
                   </View>
                 </View>
               </View>
@@ -1109,7 +1149,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     the PR needs to see the number that is on their comcard. */}
                 <MeasureField
                   label={t.profile.age}
-                  suffix="y"
+                  suffix={t.profile.ageSuffix}
                   value={draft.age ? String(draft.age) : ''}
                   onChange={() => {}}
                   lockedNote={t.profile.ageFollowsIc}
@@ -1154,15 +1194,18 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             accessibilityState={{ expanded: portfolioOpen }}
           >
             <View style={styles.galleryHeadText}>
-              <Text style={styles.sectionTitle}>Portfolio</Text>
+              <Text style={styles.sectionTitle}>{t.profile.portfolio}</Text>
               <Text style={styles.gallerySub} numberOfLines={1}>
                 {portfolioBusy
-                  ? portfolioBusy
+                  ? t.profile.savingArrangement
                   : portfolioOpen
                     ? canPickImages
-                      ? 'Hold to drag · drop to swap'
-                      : 'Showcase photos'
-                    : `${displayPortfolio.filter(Boolean).length} of ${PORTFOLIO_SLOTS} photos`}
+                      ? t.profile.portfolioDragHint
+                      : t.profile.portfolioShowcase
+                    : formatMessage(t.profile.portfolioCount, {
+                        n: displayPortfolio.filter(Boolean).length,
+                        total: PORTFOLIO_SLOTS,
+                      })}
               </Text>
             </View>
             <View style={styles.portfolioAccordRight}>
@@ -1190,7 +1233,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               {portfolioBusy ? (
                 <View style={styles.portfolioBusyRow}>
                   <ActivityIndicator size="small" color={C.violetL} />
-                  <Text style={styles.portfolioBusyText}>{portfolioBusy}</Text>
+                  <Text style={styles.portfolioBusyText}>
+                    {t.profile.savingArrangement}
+                  </Text>
                 </View>
               ) : null}
               <PortfolioSlotGrid
@@ -1223,14 +1268,19 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               />
             </View>
           ) : languages.length === 0 ? (
-            <Text style={styles.langEmptyText}>
-              No languages yet — tap Edit profile to add them.
-            </Text>
+            <Text style={styles.langEmptyText}>{t.profile.noLanguages}</Text>
           ) : (
             <View style={styles.langChips}>
               {languages.map((l) => (
+                // Keyed on the STORED English value, never the label, so the
+                // chips do not remount when the locale switches.
                 <View key={l} style={styles.langPill}>
-                  <Text style={styles.langPillText}>{l}</Text>
+                  {/* Edit mode resolves these through LanguageMultiPicker; the
+                      read-only half has to use the same map, or one section of
+                      one screen disagrees with itself about a language's name. */}
+                  <Text style={styles.langPillText}>
+                    {t.signup.languageNames[l] ?? l}
+                  </Text>
                 </View>
               ))}
             </View>

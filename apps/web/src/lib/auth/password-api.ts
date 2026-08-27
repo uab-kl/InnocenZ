@@ -14,6 +14,7 @@
  * (`POST /auth/password/reset-otp`).
  */
 import axios from "axios";
+import { apiErrorCopy } from "@/lib/auth/api-error-copy";
 import { kickToLogin } from "@/lib/auth/guards";
 import { getClient, getPublicClient } from "@/lib/axios-v1";
 
@@ -43,6 +44,10 @@ export async function changeMyPassword(input: {
 	currentPassword: string;
 	newPassword: string;
 }): Promise<void> {
+	// Same sentence the sheet already shows when nothing at all comes back, so a
+	// server that answers `success: false` with no message reads identically to
+	// one that answers nothing.
+	const failed = apiErrorCopy().profile.passwordUpdateFailed;
 	const client = getClient(kickToLogin);
 	try {
 		const response = await client.post<ApiResponse<null>>(
@@ -53,10 +58,10 @@ export async function changeMyPassword(input: {
 			},
 		);
 		if (!response.data.success) {
-			throw new Error(response.data.message || "Could not update password");
+			throw new Error(response.data.message || failed);
 		}
 	} catch (error) {
-		throw serverMessage(error, "Could not update password");
+		throw serverMessage(error, failed);
 	}
 }
 
@@ -72,12 +77,9 @@ export async function requestPasswordReset(email: string): Promise<string> {
 			"/auth/forgot-password",
 			{ email: email.trim() },
 		);
-		return (
-			response.data.message ||
-			"If that email is registered, a reset link is on its way."
-		);
+		return response.data.message || apiErrorCopy().webLib.passwordResetLinkSent;
 	} catch (error) {
-		throw serverMessage(error, "Could not send the reset link");
+		throw serverMessage(error, apiErrorCopy().webLib.passwordResetLinkFailed);
 	}
 }
 
@@ -86,6 +88,7 @@ export async function resetPasswordWithToken(input: {
 	token: string;
 	password: string;
 }): Promise<void> {
+	const failed = apiErrorCopy().webLib.passwordResetFailed;
 	const client = getPublicClient();
 	try {
 		const response = await client.post<ApiResponse<null>>(
@@ -93,9 +96,9 @@ export async function resetPasswordWithToken(input: {
 			{ token: input.token, password: input.password },
 		);
 		if (!response.data.success) {
-			throw new Error(response.data.message || "Could not reset password");
+			throw new Error(response.data.message || failed);
 		}
 	} catch (error) {
-		throw serverMessage(error, "Could not reset password");
+		throw serverMessage(error, failed);
 	}
 }

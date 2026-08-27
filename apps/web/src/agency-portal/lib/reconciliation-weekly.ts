@@ -75,15 +75,14 @@ export function formatWeekRangeLabel(
 	return `Week ${fmt(weekStartIso)} – ${fmt(weekEndIso)} ${y}`;
 }
 
-export function formatIncomeCutoffLabel(weekEndIso: string): string {
-	const d = parseIsoDateLocal(weekEndIso);
-	return d.toLocaleDateString("en-MY", {
-		weekday: "short",
-		day: "numeric",
-		month: "short",
-		year: "numeric",
-	});
-}
+/*
+ * `formatIncomeCutoffLabel` stood here and produced
+ * `PrReconciliationIncome.cutoffLabel`. An audit found that field had ZERO
+ * readers anywhere in apps/web — it formatted a date nobody ever saw — so both
+ * are gone. `cutoffIso` beside it survives: that one IS the value, and a
+ * consumer can format it against the reader's locale rather than a baked
+ * "en-MY".
+ */
 
 export interface PrReconciliationIncome {
 	prId: string;
@@ -96,7 +95,6 @@ export interface PrReconciliationIncome {
 	tablesRm: number;
 	totalRm: number;
 	cutoffIso: string;
-	cutoffLabel: string;
 	weekLabel: string;
 	pvId?: string;
 	pvStatus?: PrPvStatus;
@@ -143,7 +141,6 @@ export function buildPrReconciliationIncomes(input: {
 	weekLabel: string;
 	prConfirmedIds?: string[];
 }): PrReconciliationIncome[] {
-	const cutoffLabel = formatIncomeCutoffLabel(input.weekEndIso);
 	const byPr = new Map<string, PrReconciliationIncome>();
 
 	for (const row of input.shiftHistory) {
@@ -178,7 +175,6 @@ export function buildPrReconciliationIncomes(input: {
 				tablesRm: inc.tablesRm,
 				totalRm: inc.totalRm,
 				cutoffIso: input.weekEndIso,
-				cutoffLabel,
 				weekLabel: input.weekLabel,
 				pvId: pv?.id,
 				pvStatus: pv?.status,

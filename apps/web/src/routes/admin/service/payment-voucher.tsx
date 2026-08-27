@@ -42,10 +42,14 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import { formatDate, formatNumber, formatPrice } from "@/lib/utils";
 import {
 	type DisputeComponent,
+	type DisputeOutcome,
 	fetchDisputes,
 	fetchPaymentVoucher,
 	fetchPaymentVouchers,
@@ -59,6 +63,10 @@ import {
 
 export const Route = createFileRoute("/admin/service/payment-voucher")({
 	component: PaymentVoucherPage,
+	/*
+	 * Document title stays ENGLISH — `head()` is route metadata evaluated
+	 * outside React, so it cannot read the locale context.
+	 */
 	head: () => ({
 		meta: [{ title: "Payment Vouchers — Innocenz Admin" }],
 	}),
@@ -68,12 +76,20 @@ const PAGE_SIZE = 10;
 
 type StatusFilter = PaymentVoucherStatus | "all";
 
-const statusLabels: Record<PaymentVoucherStatus, string> = {
-	pending_review: "Pending review",
-	sent: "Sent",
-	signed: "Signed",
-	paid: "Paid",
-	disputed: "Disputed",
+/*
+ * Keyed by the API's own enum value — that never changes, only the words a
+ * human reads do. A module-scope map cannot call a hook, so each entry holds a
+ * lookup that takes `t`.
+ */
+const statusLabels: Record<
+	PaymentVoucherStatus,
+	(t: PortalTranslations) => string
+> = {
+	pending_review: (t) => t.adminService.pendingReview,
+	sent: (t) => t.adminService.pvSent,
+	signed: (t) => t.adminService.pvSigned,
+	paid: (t) => t.payroll.statusPaid,
+	disputed: (t) => t.payroll.statusDisputed,
 };
 
 const statusBadgeColors: Record<PaymentVoucherStatus, string> = {
@@ -88,14 +104,16 @@ const statusBadgeColors: Record<PaymentVoucherStatus, string> = {
 };
 
 function StatusBadge({ status }: { status: PaymentVoucherStatus }) {
+	const { t } = usePortalLocale();
 	return (
 		<Badge variant="outline" className={`${statusBadgeColors[status]} w-fit`}>
-			{statusLabels[status]}
+			{statusLabels[status](t)}
 		</Badge>
 	);
 }
 
 function PaymentVoucherPage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -123,8 +141,8 @@ function PaymentVoucherPage() {
 		<PageShell>
 			<PageHeader
 				icon={ReceiptText}
-				title="Payment Vouchers"
-				description="Weekly payment vouchers issued by agencies to their PRs. Click a row to view the voucher and its line items."
+				title={t.payroll.paymentVouchers}
+				description={t.adminService.pvSubtitle}
 			/>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
@@ -132,22 +150,20 @@ function PaymentVoucherPage() {
 					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
-								Vouchers
+								{t.adminService.vouchers}
 								{vouchersQuery.isFetching && !showLoading && (
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
 							</CardTitle>
-							<CardDescription>
-								Read-only view of every voucher persisted on the platform.
-							</CardDescription>
+							<CardDescription>{t.adminService.pvReadOnlyHint}</CardDescription>
 						</div>
 
 						<div className="flex flex-col gap-3 sm:flex-row sm:items-end">
 							<div className="space-y-1.5">
-								<Label htmlFor="pv-search">Search PR name</Label>
+								<Label htmlFor="pv-search">{t.adminService.searchPrName}</Label>
 								<Input
 									id="pv-search"
-									placeholder="e.g. Ali"
+									placeholder={t.adminService.searchPrNamePlaceholder}
 									className="sm:w-56"
 									value={search}
 									onChange={(event) => {
@@ -158,7 +174,7 @@ function PaymentVoucherPage() {
 							</div>
 
 							<div className="space-y-1.5">
-								<Label htmlFor="pv-status">Status</Label>
+								<Label htmlFor="pv-status">{t.admin.colStatus}</Label>
 								<Select
 									value={statusFilter}
 									onValueChange={(value) => {
@@ -169,19 +185,23 @@ function PaymentVoucherPage() {
 									<SelectTrigger
 										id="pv-status"
 										className="sm:w-44"
-										aria-label="Filter by status"
+										aria-label={t.admin.filterByStatus}
 									>
-										<SelectValue placeholder="All Status" />
+										<SelectValue placeholder={t.admin.allStatus} />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="all">All Status</SelectItem>
+										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 										<SelectItem value="pending_review">
-											Pending review
+											{statusLabels.pending_review(t)}
 										</SelectItem>
-										<SelectItem value="sent">Sent</SelectItem>
-										<SelectItem value="signed">Signed</SelectItem>
-										<SelectItem value="paid">Paid</SelectItem>
-										<SelectItem value="disputed">Disputed</SelectItem>
+										<SelectItem value="sent">{statusLabels.sent(t)}</SelectItem>
+										<SelectItem value="signed">
+											{statusLabels.signed(t)}
+										</SelectItem>
+										<SelectItem value="paid">{statusLabels.paid(t)}</SelectItem>
+										<SelectItem value="disputed">
+											{statusLabels.disputed(t)}
+										</SelectItem>
 									</SelectContent>
 								</Select>
 							</div>
@@ -193,12 +213,14 @@ function PaymentVoucherPage() {
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>PR name</TableHead>
-								<TableHead>Outlet</TableHead>
-								<TableHead>Cycle</TableHead>
-								<TableHead className="w-[140px]">Issued</TableHead>
-								<TableHead className="text-right">Net (RM)</TableHead>
-								<TableHead className="w-[130px]">Status</TableHead>
+								<TableHead>{t.adminService.colPrName}</TableHead>
+								<TableHead>{t.table.outlet}</TableHead>
+								<TableHead>{t.adminService.colCycle}</TableHead>
+								<TableHead className="w-[140px]">
+									{t.adminService.issued}
+								</TableHead>
+								<TableHead className="text-right">{t.table.net} (RM)</TableHead>
+								<TableHead className="w-[130px]">{t.admin.colStatus}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -214,7 +236,7 @@ function PaymentVoucherPage() {
 										colSpan={6}
 										className="h-32 text-center text-muted-foreground"
 									>
-										Failed to load vouchers. Try again.
+										{t.adminService.pvLoadFailed}
 									</TableCell>
 								</TableRow>
 							) : vouchers.length === 0 ? (
@@ -223,7 +245,7 @@ function PaymentVoucherPage() {
 										colSpan={6}
 										className="h-32 text-center text-muted-foreground"
 									>
-										No vouchers found.
+										{t.adminService.noVouchersFound}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -258,8 +280,12 @@ function PaymentVoucherPage() {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
 							<div>
-								{formatNumber(pagination.totalCount)} voucher
-								{pagination.totalCount === 1 ? "" : "s"}
+								{fill(
+									pagination.totalCount === 1
+										? t.adminService.voucherCountOne
+										: t.adminService.voucherCountMany,
+									{ n: formatNumber(pagination.totalCount) },
+								)}
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
@@ -268,10 +294,13 @@ function PaymentVoucherPage() {
 									disabled={!pagination.hasPrevPage || vouchersQuery.isFetching}
 									onClick={() => setPage((value) => value - 1)}
 								>
-									Previous
+									{t.admin.previous}
 								</Button>
 								<span>
-									Page {pagination.page} of {pagination.totalPages}
+									{fill(t.admin.pageOf, {
+										page: pagination.page,
+										total: pagination.totalPages,
+									})}
 								</span>
 								<Button
 									variant="outline"
@@ -279,7 +308,7 @@ function PaymentVoucherPage() {
 									disabled={!pagination.hasNextPage || vouchersQuery.isFetching}
 									onClick={() => setPage((value) => value + 1)}
 								>
-									Next
+									{t.admin.next}
 								</Button>
 							</div>
 						</div>
@@ -313,6 +342,7 @@ function VoucherDetail({
 	id: string;
 	onRefreshFail: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const detailQuery = useQuery({
 		queryKey: ["payment-voucher", id],
 		queryFn: () => fetchPaymentVoucher(id, onRefreshFail),
@@ -330,7 +360,7 @@ function VoucherDetail({
 	if (detailQuery.isError || !detailQuery.data) {
 		return (
 			<div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-				Failed to load voucher.
+				{t.adminService.pvDetailLoadFailed}
 			</div>
 		);
 	}
@@ -345,35 +375,62 @@ function VoucherDetail({
 					<StatusBadge status={voucher.status} />
 				</SheetTitle>
 				<SheetDescription>
-					{voucher.cycle ?? "Payment voucher"}
+					{voucher.cycle ?? t.adminService.paymentVoucher}
 					{voucher.outlet ? ` · ${voucher.outlet}` : ""}
 				</SheetDescription>
 			</SheetHeader>
 
 			<div className="space-y-6 px-4 pb-6">
 				<dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-					<DetailField label="Issued" value={fmtDate(voucher.issuedDate)} />
-					<DetailField label="Due" value={fmtDate(voucher.dueDate)} />
-					<DetailField label="Week start" value={fmtDate(voucher.weekStart)} />
-					<DetailField label="Week end" value={fmtDate(voucher.weekEnd)} />
-					<DetailField label="PR IC" value={voucher.prIc ?? "—"} />
 					<DetailField
-						label="Finance head"
+						label={t.adminService.issued}
+						value={fmtDate(voucher.issuedDate)}
+					/>
+					<DetailField
+						label={t.adminService.due}
+						value={fmtDate(voucher.dueDate)}
+					/>
+					<DetailField
+						label={t.adminService.weekStart}
+						value={fmtDate(voucher.weekStart)}
+					/>
+					<DetailField
+						label={t.adminService.weekEnd}
+						value={fmtDate(voucher.weekEnd)}
+					/>
+					<DetailField
+						label={t.adminService.prIc}
+						value={voucher.prIc ?? "—"}
+					/>
+					<DetailField
+						label={t.adminService.financeHead}
 						value={voucher.financeHeadName ?? "—"}
 					/>
-					<DetailField label="Bank ref" value={voucher.bankRef ?? "—"} />
-					<DetailField label="Paid at" value={fmtDateTime(voucher.paidAt)} />
+					<DetailField
+						label={t.adminService.bankRef}
+						value={voucher.bankRef ?? "—"}
+					/>
+					<DetailField
+						label={t.adminService.paidAt}
+						value={fmtDateTime(voucher.paidAt)}
+					/>
 				</dl>
 
 				<div>
-					<h3 className="mb-2 text-sm font-semibold">Line items</h3>
+					<h3 className="mb-2 text-sm font-semibold">
+						{t.adminService.lineItems}
+					</h3>
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Date</TableHead>
-								<TableHead>Description</TableHead>
-								<TableHead className="text-right">Qty</TableHead>
-								<TableHead className="text-right">Amount (RM)</TableHead>
+								<TableHead>{t.filters.date}</TableHead>
+								<TableHead>{t.adminService.colDescription}</TableHead>
+								<TableHead className="text-right">
+									{t.adminService.colQty}
+								</TableHead>
+								<TableHead className="text-right">
+									{t.adminService.colAmount} (RM)
+								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -383,7 +440,7 @@ function VoucherDetail({
 										colSpan={4}
 										className="h-16 text-center text-muted-foreground"
 									>
-										No line items.
+										{t.adminService.noLineItems}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -412,9 +469,12 @@ function VoucherDetail({
 				</div>
 
 				<dl className="space-y-2 border-t pt-4 text-sm">
-					<TotalRow label="Subtotal" value={voucher.subtotal} />
-					<TotalRow label="Deduction" value={voucher.deduction} />
-					<TotalRow label="Net" value={voucher.net} emphasize />
+					<TotalRow label={t.payroll.subtotal} value={voucher.subtotal} />
+					<TotalRow
+						label={t.adminService.deduction}
+						value={voucher.deduction}
+					/>
+					<TotalRow label={t.table.net} value={voucher.net} emphasize />
 				</dl>
 
 				<ReceiptEvidence receipts={voucher.receipts} />
@@ -429,14 +489,14 @@ function VoucherDetail({
 						    it cannot be resolved, and showing it as an open dispute would
 						    offer a decision that has nothing to write to. */}
 						<p className="font-medium text-rose-600 dark:text-rose-400">
-							Dispute note on the voucher record
+							{t.adminService.legacyDisputeNote}
 						</p>
 						<p className="mt-1 text-muted-foreground">
 							{voucher.disputeReason}
 						</p>
 						{voucher.disputeNote && (
 							<p className="mt-2 text-xs text-muted-foreground">
-								Note: {voucher.disputeNote}
+								{t.adminService.noteLabel} {voucher.disputeNote}
 							</p>
 						)}
 					</div>
@@ -446,26 +506,29 @@ function VoucherDetail({
 	);
 }
 
-const RECEIPT_SOURCE_LABEL: Record<PaymentVoucherReceiptSource, string> = {
-	scan: "Scanned",
-	manual: "Self-logged",
-	checkin: "Auto-sealed",
+const RECEIPT_SOURCE_LABEL: Record<
+	PaymentVoucherReceiptSource,
+	(t: PortalTranslations) => string
+> = {
+	scan: (t) => t.receipts.scanned,
+	manual: (t) => t.receipts.selfLogged,
+	checkin: (t) => t.adminService.autoSealed,
 };
 
 const RECEIPT_STATUS_TONE: Record<
 	PaymentVoucherReceiptStatus,
-	{ label: string; className: string }
+	{ label: (t: PortalTranslations) => string; className: string }
 > = {
 	pending: {
-		label: "Pending review",
+		label: (t) => t.adminService.pendingReview,
 		className: "border-amber-500/40 text-amber-600 dark:text-amber-400",
 	},
 	approved: {
-		label: "Approved",
+		label: (t) => t.receipts.approved,
 		className: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
 	},
 	verified: {
-		label: "Verified",
+		label: (t) => t.receipts.verified,
 		className: "border-sky-500/40 text-sky-600 dark:text-sky-400",
 	},
 };
@@ -487,6 +550,8 @@ function ReceiptEvidence({
 }: {
 	receipts: PaymentVoucherReceipt[] | undefined;
 }) {
+	const { t } = usePortalLocale();
+
 	// undefined = the list route, which does not return receipts. An empty array
 	// = the detail route saying there genuinely are none. Different facts.
 	if (receipts === undefined) return null;
@@ -494,12 +559,12 @@ function ReceiptEvidence({
 	return (
 		<div>
 			<h3 className="mb-2 text-sm font-semibold">
-				Receipt evidence{receipts.length > 0 ? ` (${receipts.length})` : ""}
+				{t.adminService.receiptEvidence}
+				{receipts.length > 0 ? ` (${receipts.length})` : ""}
 			</h3>
 			{receipts.length === 0 ? (
 				<p className="text-sm text-muted-foreground">
-					No receipts are attached to this voucher — any commission lines here
-					are not backed by a scanned or self-logged receipt.
+					{t.adminService.noReceiptEvidence}
 				</p>
 			) : (
 				<ul className="space-y-2">
@@ -514,11 +579,11 @@ function ReceiptEvidence({
 										{receipt.orderNo ? ` · ${receipt.orderNo}` : ""}
 									</span>
 									<Badge variant="outline" className={tone.className}>
-										{tone.label}
+										{tone.label(t)}
 									</Badge>
 								</div>
 								<p className="mt-1 text-xs text-muted-foreground">
-									{RECEIPT_SOURCE_LABEL[receipt.source]}
+									{RECEIPT_SOURCE_LABEL[receipt.source](t)}
 									{receipt.receiptDate
 										? ` · ${fmtDate(receipt.receiptDate)}`
 										: ""}
@@ -533,8 +598,14 @@ function ReceiptEvidence({
 									{/* A null reviewedAt beside `approved` means the row
 									    predates the review flow — never print a date derived
 									    from something else. */}
-									Reviewed: {fmtDateTime(receipt.reviewedAt)}
-									{receipt.reviewedBy ? ` by ${receipt.reviewedBy}` : ""}
+									{receipt.reviewedBy
+										? fill(t.adminService.reviewedAtBy, {
+												when: fmtDateTime(receipt.reviewedAt),
+												name: receipt.reviewedBy,
+											})
+										: fill(t.adminService.reviewedAt, {
+												when: fmtDateTime(receipt.reviewedAt),
+											})}
 								</p>
 								{photos.length > 0 && (
 									<div className="mt-2 flex flex-wrap gap-2">
@@ -545,11 +616,13 @@ function ReceiptEvidence({
 												href={resolveProofPhotoUrl(src)}
 												target="_blank"
 												rel="noreferrer"
-												title="Open full size"
+												title={t.adminService.openFullSize}
 											>
 												<img
 													src={resolveProofPhotoUrl(src)}
-													alt={`Proof for receipt ${receipt.receiptNo}`}
+													alt={fill(t.adminService.proofForReceipt, {
+														no: receipt.receiptNo,
+													})}
 													className="h-20 w-20 rounded border object-cover transition hover:brightness-110"
 												/>
 											</a>
@@ -565,11 +638,24 @@ function ReceiptEvidence({
 	);
 }
 
-const DISPUTE_COMPONENT_LABEL: Record<DisputeComponent, string> = {
-	wages: "Daily wages",
-	drinks: "Drinks",
-	tips: "Tips",
-	others: "Others",
+const DISPUTE_COMPONENT_LABEL: Record<
+	DisputeComponent,
+	(t: PortalTranslations) => string
+> = {
+	wages: (t) => t.money.dailyWages,
+	drinks: (t) => t.money.drinks,
+	tips: (t) => t.money.tips,
+	others: (t) => t.money.others,
+};
+
+/** The record KEY is the stored outcome; only the badge wording is translated. */
+const DISPUTE_OUTCOME_LABEL: Record<
+	DisputeOutcome,
+	(t: PortalTranslations) => string
+> = {
+	accepted: (t) => t.adminService.resolvedAccepted,
+	rejected: (t) => t.adminService.resolvedRejected,
+	withdrawn: (t) => t.adminService.resolvedWithdrawn,
 };
 
 /**
@@ -593,6 +679,7 @@ function VoucherDisputes({
 	voucherId: string;
 	onRefreshFail: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const queryClient = useQueryClient();
 	const [note, setNote] = useState("");
 	const [needsNote, setNeedsNote] = useState(false);
@@ -633,8 +720,12 @@ function VoucherDisputes({
 	if (disputesQuery.isLoading) {
 		return (
 			<div>
-				<h3 className="mb-2 text-sm font-semibold">Disputes</h3>
-				<p className="text-sm text-muted-foreground">Loading disputes…</p>
+				<h3 className="mb-2 text-sm font-semibold">
+					{t.adminService.disputes}
+				</h3>
+				<p className="text-sm text-muted-foreground">
+					{t.payroll.loadingDisputes}
+				</p>
 			</div>
 		);
 	}
@@ -658,29 +749,29 @@ function VoucherDisputes({
 	return (
 		<div>
 			<h3 className="mb-2 text-sm font-semibold">
-				Disputes ({disputes.length})
+				{t.adminService.disputes} ({disputes.length})
 			</h3>
 			<p className="mb-2 text-xs text-muted-foreground">
-				Resolving here is an escalation path for when the agency has not acted.
-				It records the decision and tells the PR; it does not change the
-				voucher's amounts.
+				{t.adminService.disputeEscalationHint}
 			</p>
 			<ul className="space-y-2">
 				{disputes.map((dispute) => (
 					<li key={dispute.id} className="rounded-md border p-3 text-sm">
 						<div className="flex flex-wrap items-center justify-between gap-2">
 							<span className="font-medium">
-								{DISPUTE_COMPONENT_LABEL[dispute.component]} ·{" "}
+								{DISPUTE_COMPONENT_LABEL[dispute.component](t)} ·{" "}
 								{fmtDate(dispute.disputeDate)}
 							</span>
 							{dispute.outcome ? (
-								<Badge variant="outline">Resolved · {dispute.outcome}</Badge>
+								<Badge variant="outline">
+									{DISPUTE_OUTCOME_LABEL[dispute.outcome](t)}
+								</Badge>
 							) : (
 								<Badge
 									variant="outline"
 									className="border-amber-500/40 text-amber-600 dark:text-amber-400"
 								>
-									Open
+									{t.payroll.open}
 								</Badge>
 							)}
 						</div>
@@ -688,7 +779,7 @@ function VoucherDisputes({
 						<div className="mt-2 flex flex-wrap gap-4 text-xs">
 							<span>
 								<span className="block text-muted-foreground">
-									Voucher says
+									{t.table.voucherSays}
 								</span>
 								<span className="tabular-nums">
 									RM {formatPrice(dispute.disputedAmount ?? "0")}
@@ -696,7 +787,9 @@ function VoucherDisputes({
 							</span>
 							{dispute.claimedAmount !== null && (
 								<span>
-									<span className="block text-muted-foreground">PR claims</span>
+									<span className="block text-muted-foreground">
+										{t.payroll.prClaims}
+									</span>
 									<span className="tabular-nums">
 										RM {formatPrice(dispute.claimedAmount)}
 									</span>
@@ -706,7 +799,7 @@ function VoucherDisputes({
 
 						{dispute.reason && (
 							<p className="mt-2 text-xs text-muted-foreground">
-								Reason: {dispute.reason}
+								{t.payroll.reasonLabel} {dispute.reason}
 							</p>
 						)}
 						{dispute.proofPhotos && dispute.proofPhotos.length > 0 ? (
@@ -717,11 +810,15 @@ function VoucherDisputes({
 										href={resolveProofPhotoUrl(src)}
 										target="_blank"
 										rel="noreferrer"
-										title="Open full size"
+										title={t.adminService.openFullSize}
 									>
 										<img
 											src={resolveProofPhotoUrl(src)}
-											alt={`Proof for the ${dispute.component} dispute on ${dispute.disputeDate}`}
+											alt={fill(t.adminService.proofForDispute, {
+												component:
+													DISPUTE_COMPONENT_LABEL[dispute.component](t),
+												date: dispute.disputeDate,
+											})}
 											className="h-20 w-20 rounded border object-cover transition hover:brightness-110"
 										/>
 									</a>
@@ -731,7 +828,7 @@ function VoucherDisputes({
 							// Not a defect: a "missing record" claim has nothing to
 							// photograph.
 							<p className="mt-2 text-xs text-muted-foreground">
-								No proof attached
+								{t.receipts.noProofAttached}
 							</p>
 						)}
 
@@ -747,7 +844,7 @@ function VoucherDisputes({
 									htmlFor={`dispute-note-${dispute.id}`}
 									className="text-xs"
 								>
-									Note to the PR (required when rejecting)
+									{t.payroll.noteToPrRequired}
 								</Label>
 								<Input
 									id={`dispute-note-${dispute.id}`}
@@ -756,11 +853,11 @@ function VoucherDisputes({
 										setNote(e.target.value);
 										if (e.target.value.trim()) setNeedsNote(false);
 									}}
-									placeholder="Why this was accepted or rejected…"
+									placeholder={t.adminService.disputeNotePlaceholder}
 								/>
 								{needsNote && (
 									<p className="text-xs text-amber-600 dark:text-amber-400">
-										Tell the PR why this was rejected.
+										{t.adminService.tellPrWhyRejected}
 									</p>
 								)}
 								<div className="flex gap-2">
@@ -769,7 +866,7 @@ function VoucherDisputes({
 										disabled={resolveMut.isPending}
 										onClick={() => submit(dispute.id, "accepted")}
 									>
-										Accept
+										{t.adminService.accept}
 									</Button>
 									<Button
 										size="sm"
@@ -777,7 +874,7 @@ function VoucherDisputes({
 										disabled={resolveMut.isPending}
 										onClick={() => submit(dispute.id, "rejected")}
 									>
-										Reject
+										{t.common.reject}
 									</Button>
 								</div>
 							</div>

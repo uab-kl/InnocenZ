@@ -13,6 +13,10 @@ import {
 import { useMemo, useState } from "react";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { AuditLogDetailDialog } from "@/components/audit-log/audit-log-detail-dialog";
+import {
+	auditLogRoleDescription,
+	auditLogRoleLabel,
+} from "@/components/audit-log/audit-log-role-copy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +47,8 @@ import {
 	type AuditLogRoleKey,
 	getAuditLogRoleByKey,
 } from "@/constants/audit-log-roles";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import {
 	formatAuditDate,
 	formatAuditEntity,
@@ -66,8 +72,10 @@ interface AuditLogTableViewProps {
 }
 
 export function AuditLogTableView({ role }: AuditLogTableViewProps) {
+	const { t } = usePortalLocale();
 	const roleMeta = getAuditLogRoleByKey(role)!;
 	const RoleIcon = roleMeta.icon;
+	const roleLabel = auditLogRoleLabel(role, roleMeta.label, t);
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
 	const [selectedAction, setSelectedAction] = useState("all");
@@ -76,6 +84,11 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 	const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
 	const [detailOpen, setDetailOpen] = useState(false);
 
+	/*
+	 * Request only — every value below is a STORED code the API filters on
+	 * ("CREATED_AT", "DESC", the role key, the raw action and entity). Nothing
+	 * here reads `t`, so `t` is deliberately absent from the dependency list.
+	 */
 	const queryParams: AuditLogsQueryParams = useMemo(() => {
 		const params: AuditLogsQueryParams = {
 			page: currentPage,
@@ -129,13 +142,13 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 		<PageShell>
 			<PageHeader
 				icon={RoleIcon}
-				title={`${roleMeta.label} Audit Log`}
-				description={roleMeta.description}
+				title={fill(t.adminAudit.roleAuditLogTitle, { role: roleLabel })}
+				description={auditLogRoleDescription(role, roleMeta.description, t)}
 				actions={
 					<Button variant="outline" size="sm" asChild>
 						<Link to="/admin/audit-log">
 							<ArrowLeft className="mr-2 h-4 w-4" />
-							Return
+							{t.common.back}
 						</Link>
 					</Button>
 				}
@@ -147,14 +160,13 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 							<div>
 								<CardTitle className="flex items-center gap-2">
-									{roleMeta.label} Activity
+									{fill(t.adminAudit.roleActivity, { role: roleLabel })}
 									{isFetching && !showTableLoading && (
 										<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 									)}
 								</CardTitle>
 								<CardDescription>
-									Audited actions performed by {roleMeta.label.toLowerCase()}{" "}
-									users
+									{fill(t.adminAudit.auditedActionsBy, { role: roleLabel })}
 								</CardDescription>
 							</div>
 						</div>
@@ -166,7 +178,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 									htmlFor="audit-date-from"
 									className="text-xs whitespace-nowrap"
 								>
-									From
+									{t.adminAudit.dateFrom}
 								</Label>
 								<Input
 									id="audit-date-from"
@@ -184,7 +196,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 									htmlFor="audit-date-to"
 									className="text-xs whitespace-nowrap"
 								>
-									To
+									{t.adminAudit.dateTo}
 								</Label>
 								<Input
 									id="audit-date-to"
@@ -205,10 +217,11 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 								}}
 							>
 								<SelectTrigger className="w-[180px]">
-									<SelectValue placeholder="All Actions" />
+									<SelectValue placeholder={t.adminAudit.allActions} />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">All Actions</SelectItem>
+									<SelectItem value="all">{t.adminAudit.allActions}</SelectItem>
+									{/* The RECORDED action codes — the value AND the label. */}
 									{uniqueActions.map((action) => (
 										<SelectItem key={action} value={action}>
 											{action}
@@ -224,10 +237,11 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 								}}
 							>
 								<SelectTrigger className="w-[180px]">
-									<SelectValue placeholder="All Tables" />
+									<SelectValue placeholder={t.adminAudit.allTables} />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">All Tables</SelectItem>
+									<SelectItem value="all">{t.adminAudit.allTables}</SelectItem>
+									{/* Table names as recorded — data on both sides. */}
 									{uniqueEntities.map((entity) => (
 										<SelectItem key={entity} value={entity}>
 											{formatAuditEntity(entity)}
@@ -244,12 +258,14 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Timestamp</TableHead>
-									<TableHead>User</TableHead>
-									<TableHead>Action</TableHead>
-									<TableHead>Table</TableHead>
-									<TableHead>IP Address</TableHead>
-									<TableHead className="w-[60px]">Detail</TableHead>
+									<TableHead>{t.adminAudit.colTimestamp}</TableHead>
+									<TableHead>{t.adminAudit.colUser}</TableHead>
+									<TableHead>{t.adminAudit.colAction}</TableHead>
+									<TableHead>{t.adminAudit.colTable}</TableHead>
+									<TableHead>{t.adminAudit.colIpAddress}</TableHead>
+									<TableHead className="w-[60px]">
+										{t.adminAudit.colDetail}
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -258,7 +274,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 										<TableCell colSpan={6} className="h-24 text-center">
 											<div className="flex items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-5 w-5 animate-spin" />
-												Loading audit logs...
+												{t.adminAudit.loadingLogs}
 											</div>
 										</TableCell>
 									</TableRow>
@@ -268,7 +284,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
-													Failed to load audit logs
+													{t.adminAudit.loadFailed}
 												</p>
 												<p className="text-sm text-muted-foreground">
 													{getErrorMessage(error)}
@@ -279,7 +295,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 													onClick={() => refetch()}
 												>
 													<RefreshCw className="mr-2 h-4 w-4" />
-													Try Again
+													{t.admin.tryAgain}
 												</Button>
 											</div>
 										</TableCell>
@@ -290,7 +306,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 											colSpan={6}
 											className="h-24 text-center text-muted-foreground"
 										>
-											No audit logs found.
+											{t.adminAudit.noLogsFound}
 										</TableCell>
 									</TableRow>
 								) : (
@@ -305,8 +321,11 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 												<div className="flex flex-col">
 													<span className="font-medium">
 														{log.username ||
-															(log.userId ? truncateId(log.userId) : "System")}
+															(log.userId
+																? truncateId(log.userId)
+																: t.adminAudit.systemActor)}
 													</span>
+													{/* The role AS RECORDED on the log row. */}
 													{log.role && (
 														<span className="text-xs text-muted-foreground capitalize">
 															{formatRoleLabel(log.role)}
@@ -334,7 +353,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 														event.stopPropagation();
 														handleViewDetail(log);
 													}}
-													aria-label="View audit log detail"
+													aria-label={t.adminAudit.viewDetail}
 												>
 													<Eye className="h-4 w-4" />
 												</Button>
@@ -349,19 +368,14 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
 							<div>
-								Showing{" "}
-								<span className="font-medium">
-									{(pagination.currentPage - 1) * PAGE_SIZE + 1}
-								</span>{" "}
-								-{" "}
-								<span className="font-medium">
-									{Math.min(
+								{fill(t.adminAudit.showingEntries, {
+									from: (pagination.currentPage - 1) * PAGE_SIZE + 1,
+									to: Math.min(
 										pagination.currentPage * PAGE_SIZE,
 										pagination.totalCount,
-									)}
-								</span>{" "}
-								of <span className="font-medium">{pagination.totalCount}</span>{" "}
-								entries
+									),
+									total: pagination.totalCount,
+								})}
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
@@ -371,12 +385,15 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 									onClick={() =>
 										setCurrentPage((page) => Math.max(1, page - 1))
 									}
-									aria-label="Previous page"
+									aria-label={t.adminAudit.previousPage}
 								>
 									<ChevronLeft className="h-4 w-4" />
 								</Button>
 								<span>
-									Page {pagination.currentPage} of {pagination.totalPages}
+									{fill(t.admin.pageOf, {
+										page: pagination.currentPage,
+										total: pagination.totalPages,
+									})}
 								</span>
 								<Button
 									variant="outline"
@@ -387,7 +404,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 											Math.min(pagination.totalPages, page + 1),
 										)
 									}
-									aria-label="Next page"
+									aria-label={t.adminAudit.nextPage}
 								>
 									<ChevronRight className="h-4 w-4" />
 								</Button>

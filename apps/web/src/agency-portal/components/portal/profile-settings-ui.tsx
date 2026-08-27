@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Camera, Check, Lock, Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /** View = read-only display · edit = editable input · locked = shown but not editable here. */
 export type ProfileFieldMode = "view" | "edit" | "locked";
@@ -61,7 +62,14 @@ export function ProfileEditingBanner({
 	what,
 	editableHint,
 }: {
-	/** Short noun: "outlet profile" / "agency profile" */
+	/**
+	 * Short noun: "outlet profile" / "agency profile".
+	 *
+	 * Lands MID-SENTENCE, so it must arrive ALREADY TRANSLATED — this component
+	 * owns the sentence around it and cannot translate a value handed in. No
+	 * caller renders this banner today; the first one that does has to pass a
+	 * dictionary string, not a literal.
+	 */
 	what: string;
 	/** What actually persists on Save (real sessions often only save the org name). */
 	editableHint?: string;
@@ -71,7 +79,9 @@ export function ProfileEditingBanner({
 		<output className="iz-profile-edit-banner">
 			<div className="iz-profile-edit-banner__dot" aria-hidden />
 			<div>
-				<p className="iz-profile-edit-banner__title">Editing {what}</p>
+				<p className="iz-profile-edit-banner__title">
+					{fill(t.portalShell.editingWhat, { what })}
+				</p>
 				<p className="iz-profile-edit-banner__body">
 					{editableHint ?? t.profile.highlightedFieldsHint}
 				</p>
@@ -104,7 +114,7 @@ export function ProfileEditDock({
 				disabled={saving}
 			>
 				<X className="h-4 w-4" />
-				Cancel
+				{t.common.cancel}
 			</button>
 			<button
 				type="button"
@@ -171,7 +181,7 @@ export function ProfilePhotoActions({
 					className="iz-profile-photo-actions__remove"
 					onClick={onRemovePhoto}
 				>
-					Remove
+					{t.profile.remove}
 				</button>
 			)}
 		</div>

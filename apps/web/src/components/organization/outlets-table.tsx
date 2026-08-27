@@ -32,13 +32,14 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { Outlet, OutletPagination } from "@/services/outlet";
 import {
 	ORG_STATUSES,
 	type OrgStatusFilter,
 	orgStatusBadgeColors,
-	orgStatusLabels,
+	orgStatusLabel,
 } from "./org-status";
 
 interface OutletsTableProps {
@@ -111,7 +112,7 @@ export function OutletsTable({
 							<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 							{ORG_STATUSES.map((status) => (
 								<SelectItem key={status} value={status}>
-									{orgStatusLabels[status]}
+									{orgStatusLabel(status, t)}
 								</SelectItem>
 							))}
 						</SelectContent>
@@ -223,7 +224,7 @@ export function OutletsTable({
 													variant="outline"
 													className={`text-sm ${orgStatusBadgeColors[outlet.status]}`}
 												>
-													{orgStatusLabels[outlet.status]}
+													{orgStatusLabel(outlet.status, t)}
 												</Badge>
 											</TableCell>
 											<TableCell className="text-base text-muted-foreground">
@@ -242,7 +243,7 @@ export function OutletsTable({
 															) : (
 																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
 															)}
-															Approve
+															{t.common.approve}
 														</Button>
 													)}
 													{outlet.status === "active" && (
@@ -257,7 +258,7 @@ export function OutletsTable({
 															) : (
 																<Ban className="mr-1 h-3.5 w-3.5" />
 															)}
-															Suspend
+															{t.adminOrg.suspend}
 														</Button>
 													)}
 													{outlet.status === "suspended" && (
@@ -271,7 +272,7 @@ export function OutletsTable({
 															) : (
 																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
 															)}
-															Reactivate
+															{t.adminUsers.reactivate}
 														</Button>
 													)}
 												</div>
@@ -287,16 +288,11 @@ export function OutletsTable({
 				{pagination && pagination.totalCount > 0 && (
 					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 						<div>
-							Showing{" "}
-							<span className="font-medium">
-								{(pagination.page - 1) * pageSize + 1}
-							</span>{" "}
-							-{" "}
-							<span className="font-medium">
-								{Math.min(pagination.page * pageSize, pagination.totalCount)}
-							</span>{" "}
-							of <span className="font-medium">{pagination.totalCount}</span>{" "}
-							outlets
+							{fill(t.adminOrg.showingOutlets, {
+								from: (pagination.page - 1) * pageSize + 1,
+								to: Math.min(pagination.page * pageSize, pagination.totalCount),
+								total: pagination.totalCount,
+							})}
 						</div>
 						<div className="flex items-center gap-2">
 							<Button
@@ -308,7 +304,10 @@ export function OutletsTable({
 								{t.admin.previous}
 							</Button>
 							<span>
-								Page {pagination.page} of {pagination.totalPages}
+								{fill(t.admin.pageOf, {
+									page: pagination.page,
+									total: pagination.totalPages,
+								})}
 							</span>
 							<Button
 								variant="outline"

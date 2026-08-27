@@ -30,6 +30,12 @@ const VENUE_UTC_OFFSET_MINUTES = 8 * 60;
  * "8pm", "20:00", "8.30pm" -> minutes since midnight, or null when not a clock
  * time. A CHARACTER-FOR-CHARACTER PORT of `clockToMinutes` in the backend's
  * `slot-window.ts`. Do not "improve" one side of it.
+ *
+ * The "am"/"pm" here are PARSER KEYWORDS matching a slot string the agency
+ * typed, not copy — this whole file renders nothing. Never localise them: the
+ * server's copy of this regex cannot change, and a slot that stops parsing on
+ * the phone quotes a cancellation fee from a different band than the one the
+ * server seals.
  */
 function clockToMinutes(token: string): number | null {
   const m = token.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i);

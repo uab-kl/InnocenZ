@@ -6,6 +6,8 @@ import { AlertTriangle } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { broadcastToPrs } from "@/services/agency";
 
 /**
@@ -81,6 +83,7 @@ export function AgencyBroadcastSheet({
 	recipients: BroadcastRecipient[];
 	onSent: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const toast = useStore((s) => s.toast);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
@@ -100,7 +103,7 @@ export function AgencyBroadcastSheet({
 			// Guarded here rather than at the button: without an agency there is
 			// no roster to scope the send to, and the server would reject it.
 			if (!activeAgencyId) {
-				throw new Error("No active agency — sign in again and retry");
+				throw new Error(t.agencyBroadcast.noActiveAgency);
 			}
 			return broadcastToPrs(
 				activeAgencyId,
@@ -110,7 +113,12 @@ export function AgencyBroadcastSheet({
 		},
 		onSuccess: (res) => {
 			const sent = res.data?.sent ?? count;
-			toast(`Message sent to ${sent} PR${sent !== 1 ? "s" : ""}`, "success");
+			toast(
+				sent === 1
+					? t.agencyBroadcast.sentToOne
+					: fill(t.agencyBroadcast.sentToMany, { n: sent }),
+				"success",
+			);
 			onSent();
 			onClose();
 		},
@@ -119,8 +127,8 @@ export function AgencyBroadcastSheet({
 			// error and toasting is how the old local-only version managed to
 			// report success for a message nobody received.
 			setFormError(
-				toMutationError(error, "Could not send — please retry")?.message ??
-					"Could not send — please retry",
+				toMutationError(error, t.agencyBroadcast.couldNotSend)?.message ??
+					t.agencyBroadcast.couldNotSend,
 			);
 		},
 	});
@@ -138,11 +146,11 @@ export function AgencyBroadcastSheet({
 
 	const validate = (): boolean => {
 		const next: Record<string, string> = {};
-		if (!message.subject.trim()) next.subject = "Enter a subject";
-		if (!message.body.trim()) next.body = "Enter your message";
+		if (!message.subject.trim()) next.subject = t.agencyBroadcast.enterSubject;
+		if (!message.body.trim()) next.body = t.agencyBroadcast.enterMessage;
 		setErrors(next);
 		if (Object.keys(next).length > 0) {
-			setFormError("Complete subject and message before sending.");
+			setFormError(t.agencyBroadcast.completeBeforeSending);
 			return false;
 		}
 		setFormError(null);
@@ -170,11 +178,12 @@ export function AgencyBroadcastSheet({
 	return (
 		<IzSheet open={open} onClose={onClose}>
 			<IzCardTitle className="[text-wrap:balance]">
-				Broadcast to {count} PR{count !== 1 ? "s" : ""}
+				{count === 1
+					? t.agencyBroadcast.titleOne
+					: fill(t.agencyBroadcast.titleMany, { n: count })}
 			</IzCardTitle>
 			<p className="iz-tiny iz-muted mb-3 [text-wrap:pretty]">
-				Sends a free-text notice to their InnocenZ inbox. There is nothing for
-				them to accept — post a shift if you need an answer back.
+				{t.agencyBroadcast.hint}
 			</p>
 
 			{/*
@@ -183,7 +192,9 @@ export function AgencyBroadcastSheet({
 			 */}
 			{count > 0 && (
 				<div className="mb-3 rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-3 py-2.5">
-					<p className="iz-tiny iz-muted2 mb-1.5 tracking-wide">RECIPIENTS</p>
+					<p className="iz-tiny iz-muted2 mb-1.5 tracking-wide">
+						{t.agencyBroadcast.recipientsHeading}
+					</p>
 					<div className="flex flex-wrap gap-1.5">
 						{shown.map((r) => (
 							<span
@@ -195,7 +206,7 @@ export function AgencyBroadcastSheet({
 						))}
 						{extra > 0 && (
 							<span className="iz-muted2 rounded-lg px-2 py-1 text-[11px] tabular-nums">
-								+{extra} more
+								{fill(t.agencyBroadcast.plusNMore, { n: extra })}
 							</span>
 						)}
 					</div>
@@ -219,7 +230,7 @@ export function AgencyBroadcastSheet({
 				<div className="iz-field !mb-0">
 					<div className="mb-[7px] flex items-baseline justify-between gap-2">
 						<label htmlFor={subjectId} className="!mb-0">
-							Subject *
+							{t.agencyBroadcast.subjectLabel}
 						</label>
 						<CharCount value={message.subject.length} max={MAX_SUBJECT} />
 					</div>
@@ -227,7 +238,7 @@ export function AgencyBroadcastSheet({
 						id={subjectId}
 						ref={subjectRef}
 						value={message.subject}
-						placeholder="e.g. Roster reminder"
+						placeholder={t.agencyBroadcast.subjectPlaceholder}
 						maxLength={MAX_SUBJECT}
 						disabled={sendMut.isPending}
 						aria-invalid={Boolean(errors.subject)}
@@ -243,7 +254,7 @@ export function AgencyBroadcastSheet({
 				<div className="iz-field !mb-0">
 					<div className="mb-[7px] flex items-baseline justify-between gap-2">
 						<label htmlFor={bodyId} className="!mb-0">
-							Message *
+							{t.agencyBroadcast.messageLabel}
 						</label>
 						<CharCount value={message.body.length} max={MAX_BODY} />
 					</div>
@@ -251,7 +262,7 @@ export function AgencyBroadcastSheet({
 						id={bodyId}
 						rows={4}
 						value={message.body}
-						placeholder="Your message to selected PRs…"
+						placeholder={t.agencyBroadcast.bodyPlaceholder}
 						maxLength={MAX_BODY}
 						disabled={sendMut.isPending}
 						aria-invalid={Boolean(errors.body)}
@@ -273,7 +284,7 @@ export function AgencyBroadcastSheet({
 					disabled={sendMut.isPending}
 					onClick={onClose}
 				>
-					Cancel
+					{t.common.cancel}
 				</button>
 				<button
 					type="button"
@@ -281,7 +292,9 @@ export function AgencyBroadcastSheet({
 					disabled={sendMut.isPending}
 					onClick={send}
 				>
-					{sendMut.isPending ? "Sending…" : "Send message"}
+					{sendMut.isPending
+						? t.roster.sending
+						: t.agencyBroadcast.sendMessage}
 				</button>
 			</div>
 		</IzSheet>

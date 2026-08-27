@@ -174,13 +174,13 @@ export function OutletShiftStaffingSection({
 				<div className="flex items-center justify-between gap-2">
 					<p className="iz-outlet-staffing-heading flex items-center gap-1.5">
 						<ClipboardList className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
-						Demand · {demand} PR needed
+						{fill(t.outletPanels.demandPrNeeded, { n: demand })}
 					</p>
 					<TrafficPill
 						level={trafficLevelForRatio(supplied, demand)}
 						className="!py-0.5 !text-[9px]"
 					>
-						{supplied}/{demand} supplied
+						{fill(t.outletPanels.suppliedOfDemand, { supplied, demand })}
 					</TrafficPill>
 				</div>
 				<div className="mt-2 space-y-1.5">
@@ -203,7 +203,9 @@ export function OutletShiftStaffingSection({
 										{row.source}
 									</p>
 								)}
-								<p className="iz-tiny iz-muted2">{row.slots} slots posted</p>
+								<p className="iz-tiny iz-muted2">
+									{fill(t.outletPanels.slotsPosted, { n: row.slots })}
+								</p>
 							</div>
 						</div>
 					))}
@@ -256,17 +258,19 @@ export function OutletShiftStaffingSection({
 			<div className="iz-outlet-staffing-block">
 				<p className="iz-outlet-staffing-heading flex items-center gap-1.5">
 					<Users className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
-					PRs on shift · {booked.length} booked
+					{fill(t.outletPanels.prsOnShiftBooked, { n: booked.length })}
 					{pendingCount > 0
 						? fill(t.today.appliedSuffix, { n: pendingCount })
 						: ""}
 				</p>
 				{booked.length === 0 ? (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-3 py-4 text-center">
-						No PRs booked yet —{" "}
-						{pendingCount > 0
-							? fill(t.today.waitingReview, { n: pendingCount })
-							: "open for applications"}
+						{fill(t.outletPanels.noPrsBookedYet, {
+							detail:
+								pendingCount > 0
+									? fill(t.today.waitingReview, { n: pendingCount })
+									: t.outletPanels.openForApplications,
+						})}
 					</p>
 				) : (
 					<div className="mt-2 space-y-1.5">
@@ -281,7 +285,7 @@ export function OutletShiftStaffingSection({
 				<div className="iz-outlet-staffing-block">
 					<p className="iz-outlet-staffing-heading flex items-center gap-1.5">
 						<UserCheck className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
-						Applicants · {applicants.length}
+						{fill(t.outletPanels.applicantsCount, { n: applicants.length })}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">{t.today.applicantsHint}</p>
 					<div className="mt-2 space-y-1.5">

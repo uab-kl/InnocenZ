@@ -14,6 +14,7 @@ import {
 	resolvePvPrId,
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
+import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import {
 	fmtDateLabelFromIso,
 	getPvNetTotal,
@@ -131,7 +132,11 @@ export function AgencyPaidPvHistory({
 			<p className="iz-tiny iz-muted mt-1">{t.history.paidPvIntro}</p>
 
 			<p className="iz-txn-filter-heading mt-4">
-				<TitleWithIcon>{t.history.filterBy}</TitleWithIcon>
+				{/* The icon table is keyed on ENGLISH; letting TitleWithIcon scrape
+				    the translated children drops the glyph with no error. */}
+				<TitleWithIcon icon={iconForNav("Filter by")}>
+					{t.history.filterBy}
+				</TitleWithIcon>
 			</p>
 			<div className="iz-txn-filters">
 				<HistSelectField
@@ -162,6 +167,7 @@ export function AgencyPaidPvHistory({
 
 			<OutletSection
 				title={t.history.paidPvSectionTitle}
+				iconKey="Paid payment vouchers"
 				hint={fill(t.history.recordsAndTotal, {
 					records: fill(
 						filtered.length === 1
@@ -191,7 +197,11 @@ export function AgencyPaidPvHistory({
 									<p className="iz-tiny iz-muted mt-0.5">
 										{resolvePvPrName(pv, agencyPRs)} · {pv.outlet}
 									</p>
-									{pv.prIc && <p className="iz-tiny iz-muted2">IC {pv.prIc}</p>}
+									{pv.prIc && (
+										<p className="iz-tiny iz-muted2">
+											{t.agencyPending.icNumber} {pv.prIc}
+										</p>
+									)}
 									<p className="iz-tiny iz-muted2 mt-0.5">
 										{t.history.cycleLabel}: {pv.cycle}
 									</p>

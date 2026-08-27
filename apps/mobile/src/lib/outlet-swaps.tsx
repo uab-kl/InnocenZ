@@ -6,6 +6,7 @@
  * MC/leave. The list is fetched on mount and re-fetched after every answer.
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useLocale } from '../i18n';
 import { useSession } from './session';
 import {
   approveOutletSwap,
@@ -44,6 +45,7 @@ export function useOutletSwaps(params?: {
   /** Called after an approval actually moves the roster, so the shift list reloads. */
   onChanged?: () => void;
 }): OutletSwapsState {
+  const { t } = useLocale();
   const onChanged = params?.onChanged;
   const { token } = useSession();
   const [pending, setPending] = useState<OutletSwapRecord[]>([]);
@@ -64,11 +66,13 @@ export function useOutletSwaps(params?: {
       setPending(list.filter((s) => s.status === 'pending_pr'));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load your swap requests');
+      // A real server message is shown raw (backend English); only the
+      // fallback for a non-Error throw is ours to translate.
+      setError(e instanceof Error ? e.message : t.swaps.loadFailed);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     refresh();
@@ -98,13 +102,13 @@ export function useOutletSwaps(params?: {
       } catch (e) {
         // A 409 here is expected, not a fault: the destination filled up or
         // the agency withdrew it. Re-fetch so the card reflects reality.
-        setActionError(e instanceof Error ? e.message : 'Could not send your answer');
+        setActionError(e instanceof Error ? e.message : t.swaps.respondFailed);
         await refresh();
       } finally {
         setBusyId(null);
       }
     },
-    [token, busyId, refresh, onChanged],
+    [token, busyId, refresh, onChanged, t],
   );
 
   return { pending, loading, error, actionError, travelWarning, busyId, respond, refresh };

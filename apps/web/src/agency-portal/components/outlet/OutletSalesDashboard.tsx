@@ -1200,8 +1200,8 @@ function CustomRangePanel({
 					compact
 					quickSpans={{
 						spans: [
-							{ id: "3d", label: "3 days" },
-							{ id: "week", label: "1 week" },
+							{ id: "3d", label: t.outletPanels.span3Days },
+							{ id: "week", label: t.outletPanels.span1Week },
 						],
 						isActive: (anchor, spanId) => {
 							const expected = reportSpanIsos(anchor, spanId as JobDateSpan);

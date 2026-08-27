@@ -12,6 +12,10 @@ import {
 	SourceToggle,
 	type SourceValue,
 } from "@/components/admin/source-toggle";
+import {
+	billingCycleLabel,
+	planAudienceLabel,
+} from "@/components/subscription/plan-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,11 +40,15 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { planCapacityLabel } from "@/lib/portal-i18n/plan-label";
+import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import {
 	formatDate,
 	formatNumber,
 	formatPrice,
-	formatRoleLabel,
 	getErrorMessage,
 	statusColors,
 } from "@/lib/utils";
@@ -64,27 +72,38 @@ function audienceFor(sub: Subscription): PlanAudience {
 // Volume tier per plan, taken from the InnocenZ prototype rate cards. Keyed by
 // audience because "Plus"/"Enterprise"/"Scale" exist for both with different
 // ranges and units: agency bills weekly on PV volume, outlet monthly on PRs/day.
-const PLAN_COVERAGE: Record<string, Record<string, string>> = {
+//
+// `id` is the plan's id in the shared catalogue, so the band is rendered by
+// `planCapacityLabel` — the same copy the agency and outlet plan cards show —
+// rather than a second translation of the same fact. `english` stays as the
+// resolver's fallback for a plan id the dictionary has never seen.
+const PLAN_COVERAGE: Record<
+	PlanAudience,
+	Record<string, { id: string; english: string }>
+> = {
 	agency: {
-		Starter: "5 PV/week",
-		Plus: "6–10 PV/week",
-		Growth: "11–25 PV/week",
-		Enterprise: "26–75 PV/week",
-		Scale: "76–150 PV/week",
-		Custom: "151+ PV/week",
+		Starter: { id: "starter", english: "5 PV/week" },
+		Plus: { id: "plus", english: "6–10 PV/week" },
+		Growth: { id: "growth", english: "11–25 PV/week" },
+		Enterprise: { id: "enterprise", english: "26–75 PV/week" },
+		Scale: { id: "scale", english: "76–150 PV/week" },
+		Custom: { id: "renego", english: "151+ PV/week" },
 	},
 	outlet: {
-		Essential: "5 PRs/day",
-		Plus: "6–10 PRs/day",
-		Pro: "11–25 PRs/day",
-		Enterprise: "26–50 PRs/day",
-		Scale: "51–100 PRs/day",
-		Premier: "101+ PRs/day",
+		Essential: { id: "starter", english: "5 PRs/day" },
+		Plus: { id: "plus", english: "6–10 PRs/day" },
+		Pro: { id: "pro", english: "11–25 PRs/day" },
+		Enterprise: { id: "enterprise", english: "26–50 PRs/day" },
+		Scale: { id: "scale", english: "51–100 PRs/day" },
+		Premier: { id: "premier", english: "101+ PRs/day" },
 	},
 };
 
-function coverageFor(sub: Subscription): string {
-	return PLAN_COVERAGE[audienceFor(sub)]?.[sub.name] ?? "—";
+function coverageFor(sub: Subscription, t: PortalTranslations): string {
+	const audience = audienceFor(sub);
+	const entry = PLAN_COVERAGE[audience]?.[sub.name];
+	if (!entry) return "—";
+	return planCapacityLabel(audience, entry.id, entry.english, t);
 }
 
 /** Agency Custom (151+ PV/week) is priced per deal — not a fixed catalog price. */
@@ -92,8 +111,8 @@ function isAgencyCustomPlan(sub: Subscription): boolean {
 	return sub.name === "Custom" && audienceFor(sub) === "agency";
 }
 
-function priceLabelFor(sub: Subscription): string {
-	if (isAgencyCustomPlan(sub)) return "Renegotiate price";
+function priceLabelFor(sub: Subscription, t: PortalTranslations): string {
+	if (isAgencyCustomPlan(sub)) return t.subscription.renegotiatePrice;
 	return formatPrice(sub.price);
 }
 
@@ -138,6 +157,7 @@ export function SubscriptionsTable({
 	onCreateClick,
 	onEditClick,
 }: SubscriptionsTableProps) {
+	const { t } = usePortalLocale();
 	const showLoading = isLoading && subscriptions.length === 0;
 
 	// Show the cheapest plan first. Sort is applied to the current page (all
@@ -155,12 +175,12 @@ export function SubscriptionsTable({
 				<div className="space-y-4">
 					<div>
 						<CardTitle className="flex items-center gap-2">
-							Plans
+							{t.adminSubscription.plansTitle}
 							{isFetching && !showLoading && (
 								<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 							)}
 						</CardTitle>
-						<CardDescription>Manage plans and billing cycles</CardDescription>
+						<CardDescription>{t.adminSubscription.plansHint}</CardDescription>
 					</div>
 
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -180,15 +200,23 @@ export function SubscriptionsTable({
 						>
 							<SelectTrigger
 								className="sm:w-40"
-								aria-label="Filter by billing cycle"
+								aria-label={t.adminSubscription.filterByBillingCycle}
 							>
-								<SelectValue placeholder="All Cycles" />
+								<SelectValue placeholder={t.adminSubscription.allCycles} />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="all">All Cycles</SelectItem>
-								<SelectItem value="weekly">Weekly</SelectItem>
-								<SelectItem value="monthly">Monthly</SelectItem>
-								<SelectItem value="annually">Annually</SelectItem>
+								<SelectItem value="all">
+									{t.adminSubscription.allCycles}
+								</SelectItem>
+								<SelectItem value="weekly">
+									{t.subscription.billedWeekly}
+								</SelectItem>
+								<SelectItem value="monthly">
+									{t.subscription.billedMonthly}
+								</SelectItem>
+								<SelectItem value="annually">
+									{t.subscription.billedAnnually}
+								</SelectItem>
 							</SelectContent>
 						</Select>
 
@@ -198,19 +226,24 @@ export function SubscriptionsTable({
 								onStatusFilterChange(value as SubscriptionStatusFilter)
 							}
 						>
-							<SelectTrigger className="sm:w-40" aria-label="Filter by status">
-								<SelectValue placeholder="Filter by status" />
+							<SelectTrigger
+								className="sm:w-40"
+								aria-label={t.admin.filterByStatus}
+							>
+								<SelectValue placeholder={t.admin.filterByStatus} />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="all">All Status</SelectItem>
-								<SelectItem value="active">Active</SelectItem>
-								<SelectItem value="inactive">Inactive</SelectItem>
+								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+								<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
+								<SelectItem value="inactive">
+									{t.rbac.statusInactive}
+								</SelectItem>
 							</SelectContent>
 						</Select>
 
 						<Button onClick={onCreateClick} className="shrink-0">
 							<Plus className="mr-2 h-4 w-4" />
-							Create Plan
+							{t.adminSubscription.createPlan}
 						</Button>
 					</div>
 				</div>
@@ -221,13 +254,15 @@ export function SubscriptionsTable({
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Audience</TableHead>
-								<TableHead>Price (RM)</TableHead>
-								<TableHead>Coverage</TableHead>
-								<TableHead>Billing Cycle</TableHead>
-								<TableHead className="w-[120px]">Status</TableHead>
-								<TableHead className="w-[180px]">Last edited</TableHead>
+								<TableHead>{t.admin.colName}</TableHead>
+								<TableHead>{t.adminSubscription.colAudience}</TableHead>
+								<TableHead>{t.adminSubscription.colPrice}</TableHead>
+								<TableHead>{t.adminSubscription.colCoverage}</TableHead>
+								<TableHead>{t.adminBusiness.colBillingCycle}</TableHead>
+								<TableHead className="w-[120px]">{t.admin.colStatus}</TableHead>
+								<TableHead className="w-[180px]">
+									{t.adminSubscription.colLastEdited}
+								</TableHead>
 								<TableHead className="w-[80px]" />
 							</TableRow>
 						</TableHeader>
@@ -237,7 +272,7 @@ export function SubscriptionsTable({
 									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
-											<span>Loading plans...</span>
+											<span>{t.adminSubscription.loadingPlans}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -247,14 +282,14 @@ export function SubscriptionsTable({
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
-												Failed to load plans
+												{t.adminSubscription.plansLoadFailed}
 											</p>
 											<p className="text-sm text-muted-foreground">
 												{getErrorMessage(error)}
 											</p>
 											<Button variant="outline" size="sm" onClick={onRetry}>
 												<RefreshCw className="mr-2 h-4 w-4" />
-												Try Again
+												{t.admin.tryAgain}
 											</Button>
 										</div>
 									</TableCell>
@@ -264,7 +299,7 @@ export function SubscriptionsTable({
 									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<CreditCard className="h-6 w-6" />
-											<span>No plans found</span>
+											<span>{t.adminSubscription.noPlansFound}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -278,7 +313,7 @@ export function SubscriptionsTable({
 													variant="outline"
 													className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
 												>
-													{formatRoleLabel(audienceFor(sub))}
+													{planAudienceLabel(audienceFor(sub), t)}
 												</Badge>
 											</TableCell>
 											<TableCell
@@ -288,13 +323,13 @@ export function SubscriptionsTable({
 														: undefined
 												}
 											>
-												{priceLabelFor(sub)}
+												{priceLabelFor(sub, t)}
 											</TableCell>
 											<TableCell className="text-sm text-muted-foreground">
-												{sub.coverage || coverageFor(sub)}
+												{sub.coverage || coverageFor(sub, t)}
 											</TableCell>
 											<TableCell className="capitalize">
-												{sub.billingCycle}
+												{billingCycleLabel(sub.billingCycle, t)}
 											</TableCell>
 											<TableCell>
 												<Badge
@@ -306,7 +341,7 @@ export function SubscriptionsTable({
 													) : (
 														<XCircle className="h-3 w-3" />
 													)}
-													{sub.status}
+													{recordStatusLabel(sub.status, t)}
 												</Badge>
 											</TableCell>
 											<TableCell className="text-muted-foreground text-sm">
@@ -317,7 +352,9 @@ export function SubscriptionsTable({
 													variant="ghost"
 													size="icon"
 													onClick={() => onEditClick(sub)}
-													aria-label={`Edit ${sub.name}`}
+													aria-label={fill(t.adminSubscription.editPlanNamed, {
+														name: sub.name,
+													})}
 												>
 													<Pencil className="h-4 w-4" />
 												</Button>
@@ -328,12 +365,12 @@ export function SubscriptionsTable({
 										<TableRow className="bg-muted/20 hover:bg-muted/20">
 											<TableCell className="font-medium">
 												<div className="flex flex-wrap items-center gap-2">
-													<span>Integrate with POS</span>
+													<span>{t.plans.posAddon}</span>
 													<Badge
 														variant="outline"
 														className="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
 													>
-														Add-on
+														{t.outletSubscription.addOn}
 													</Badge>
 												</div>
 											</TableCell>
@@ -342,14 +379,14 @@ export function SubscriptionsTable({
 													variant="outline"
 													className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
 												>
-													{formatRoleLabel("outlet")}
+													{planAudienceLabel("outlet", t)}
 												</Badge>
 											</TableCell>
 											<TableCell className="text-sm text-muted-foreground italic">
-												Call to get price
+												{t.plans.posAddonPrice}
 											</TableCell>
 											<TableCell className="text-sm text-muted-foreground">
-												POS sync add-on
+												{t.adminSubscription.posSyncAddon}
 											</TableCell>
 											<TableCell className="text-sm text-muted-foreground">
 												—
@@ -359,7 +396,7 @@ export function SubscriptionsTable({
 													variant="outline"
 													className="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
 												>
-													Add-on
+													{t.outletSubscription.addOn}
 												</Badge>
 											</TableCell>
 											<TableCell className="text-sm text-muted-foreground">
@@ -377,21 +414,13 @@ export function SubscriptionsTable({
 				{pagination && pagination.totalCount > 0 && (
 					<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
 						<div>
-							Showing{" "}
-							<span className="font-medium">
-								{formatNumber((pagination.page - 1) * pageSize + 1)}
-							</span>{" "}
-							-{" "}
-							<span className="font-medium">
-								{formatNumber(
+							{fill(t.adminSubscription.showingPlans, {
+								from: formatNumber((pagination.page - 1) * pageSize + 1),
+								to: formatNumber(
 									Math.min(pagination.page * pageSize, pagination.totalCount),
-								)}
-							</span>{" "}
-							of{" "}
-							<span className="font-medium">
-								{formatNumber(pagination.totalCount)}
-							</span>{" "}
-							plans
+								),
+								total: formatNumber(pagination.totalCount),
+							})}
 						</div>
 						<div className="flex items-center gap-2">
 							<Button
@@ -400,10 +429,13 @@ export function SubscriptionsTable({
 								disabled={!pagination.hasPrevPage || isFetching}
 								onClick={() => onPageChange(page - 1)}
 							>
-								Previous
+								{t.admin.previous}
 							</Button>
 							<span>
-								Page {pagination.page} of {pagination.totalPages}
+								{fill(t.admin.pageOf, {
+									page: pagination.page,
+									total: pagination.totalPages,
+								})}
 							</span>
 							<Button
 								variant="outline"
@@ -411,7 +443,7 @@ export function SubscriptionsTable({
 								disabled={!pagination.hasNextPage || isFetching}
 								onClick={() => onPageChange(page + 1)}
 							>
-								Next
+								{t.admin.next}
 							</Button>
 						</div>
 					</div>

@@ -35,6 +35,7 @@ import {
 	fetchAdminPendingJobs,
 	fetchSpecialServiceSummary,
 	type SpecialService,
+	type SpecialServiceCategory,
 	type SpecialServiceStatus,
 } from "@/services/special-service";
 
@@ -98,6 +99,26 @@ const ORG_STATUS_COLOR = {
 	suspended: "var(--destructive)",
 	inactive: "var(--muted-foreground)",
 } as const;
+
+// The job's stored category, as a word. The record KEY is the enum the server
+// sends and never moves; only the label is looked up. Same pairs as
+// admin/service/other.tsx and the agency job-posting card, so a category reads
+// identically wherever it is shown — this todo line used to print the raw
+// `vip_escort` / `emergency_cover` straight onto the dashboard.
+const JOB_CATEGORY_LABELS: Record<
+	SpecialServiceCategory,
+	(t: PortalTranslations) => string
+> = {
+	transportation: (t) => t.adminService.catTransportation,
+	delivery: (t) => t.adminService.catDelivery,
+	wardrobe: (t) => t.adminService.catWardrobe,
+	makeup: (t) => t.adminService.catMakeup,
+	vip_escort: (t) => t.adminService.catVipEscort,
+	uniform: (t) => t.adminService.catUniform,
+	emergency_cover: (t) => t.adminService.catEmergencyCover,
+	training: (t) => t.adminService.catTraining,
+	others: (t) => t.adminService.catOthers,
+};
 
 const JOB_STATUS_META: {
 	key: SpecialServiceStatus;
@@ -194,7 +215,13 @@ function describeActivity(
 		ACTION_VERBS[action]?.(t) ??
 		log.action?.toLowerCase() ??
 		t.admin.dashVerbChanged;
-	const entityLabel = (log.entity ?? "record").replace(/_/g, " ");
+	// The entity is the RECORDED table name and stays verbatim, exactly as the
+	// Audit Log page renders it. Only the fallback for a row that carries none is
+	// UI copy — the same distinction as adminAudit.systemActor.
+	const entityLabel = (log.entity ?? t.admin.dashEntityFallback).replace(
+		/_/g,
+		" ",
+	);
 	const who =
 		log.username ||
 		(log.role
@@ -595,7 +622,9 @@ function DashboardComponent() {
 			(job: SpecialService): TodoItem => ({
 				id: `job-${job.id}`,
 				title: fill(t.admin.todoReviewJob, { title: job.title }),
-				detail: `${job.postingAgencyName || t.admin.todoAgencyFallback} · ${job.category}`,
+				detail: `${job.postingAgencyName || t.admin.todoAgencyFallback} · ${
+					JOB_CATEGORY_LABELS[job.category]?.(t) ?? job.category
+				}`,
 				badge: t.admin.badgeJobPosting,
 				href: "/admin/service/other",
 				priority: "high",

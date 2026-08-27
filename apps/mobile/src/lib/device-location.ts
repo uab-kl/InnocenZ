@@ -13,6 +13,7 @@
  * away" into a confusing generic failure.
  */
 import * as Location from 'expo-location';
+import type { AppTranslations } from '../i18n';
 
 /** What the backend's CheckInMineSchema accepts. */
 export type DeviceFix = {
@@ -36,13 +37,6 @@ export type LocationResult =
 /** How long to wait for a fix before giving up (ms). */
 const FIX_TIMEOUT_MS = 12_000;
 
-const DENIED_MESSAGE =
-  'InnocenZ needs location access to check you in at the venue. Turn it on in Settings > InnocenZ > Location, then try again.';
-const DISABLED_MESSAGE =
-  'Location services are off on this phone. Turn on GPS / Location, then try again.';
-const TIMEOUT_MESSAGE =
-  'Could not get a GPS fix. Step outside or near a window and try again.';
-
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
     promise,
@@ -56,17 +50,22 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
  * Foreground permission only — InnocenZ reads the position at the two
  * attendance moments and never in the background. This is a snapshot, not
  * tracking, and the PR sees the prompt at the moment it is used.
+ *
+ * `t` is REQUIRED and comes from the calling component's `useLocale()`: this
+ * module runs before any hook, so it cannot read the locale itself, and a
+ * default would silently pin every refusal message to English forever. The
+ * `reason` codes stay English — they are compared, not shown.
  */
-export async function getAttendanceFix(): Promise<LocationResult> {
+export async function getAttendanceFix(t: AppTranslations): Promise<LocationResult> {
   try {
     const services = await Location.hasServicesEnabledAsync();
     if (!services) {
-      return { ok: false, reason: 'disabled', message: DISABLED_MESSAGE };
+      return { ok: false, reason: 'disabled', message: t.checkin.locationDisabled };
     }
 
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== Location.PermissionStatus.GRANTED) {
-      return { ok: false, reason: 'denied', message: DENIED_MESSAGE };
+      return { ok: false, reason: 'denied', message: t.checkin.locationDenied };
     }
 
     const position = await withTimeout(
@@ -85,7 +84,7 @@ export async function getAttendanceFix(): Promise<LocationResult> {
       // server still decides whether it is close enough.
       const last = await Location.getLastKnownPositionAsync({ maxAge: 120_000 });
       if (!last) {
-        return { ok: false, reason: 'timeout', message: TIMEOUT_MESSAGE };
+        return { ok: false, reason: 'timeout', message: t.checkin.locationTimeout };
       }
       return { ok: true, fix: toFix(last) };
     }
@@ -95,7 +94,9 @@ export async function getAttendanceFix(): Promise<LocationResult> {
     return {
       ok: false,
       reason: 'error',
-      message: error instanceof Error ? error.message : 'Could not read your location.',
+      // A real platform error keeps its own (English) wording — it is expo's
+      // text, not ours. Only the "no message at all" fallback is translated.
+      message: error instanceof Error ? error.message : t.checkin.locationUnknown,
     };
   }
 }

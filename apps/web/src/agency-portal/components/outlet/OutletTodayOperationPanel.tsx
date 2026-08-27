@@ -32,6 +32,7 @@ import {
 	splitCardLanguages,
 } from "@agency-portal/lib/agency-demo";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
+import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import {
 	OUTLET_LIVE_SALES_SECTION_ID,
 	OUTLET_OPEN_LIVE_SALES_EVENT,
@@ -605,7 +606,7 @@ export function OutletTodayOperationPanel({
 			<OutletSection
 				id={OUTLET_PR_TONIGHT_SECTION_ID}
 				title={t.outletHome.prTonight}
-				iconKey={t.today.prTonight}
+				iconKey="PR tonight"
 				hint={staffHint}
 				collapsible
 				open={prTonightOpen}
@@ -756,7 +757,9 @@ export function OutletTodayOperationPanel({
 										onClick={() => setLiveSalesPrId(pr.id)}
 										className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
 									>
-										<TitleWithIcon>{t.today.liveSales}</TitleWithIcon>
+										<TitleWithIcon icon={iconForNav("Live sales")}>
+											{t.today.liveSales}
+										</TitleWithIcon>
 									</button>
 
 									<button
@@ -764,7 +767,9 @@ export function OutletTodayOperationPanel({
 										onClick={() => setHistoryPrId(pr.id)}
 										className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
 									>
-										<TitleWithIcon>{t.today.shiftHistory}</TitleWithIcon>
+										<TitleWithIcon icon={iconForNav("Shift history")}>
+											{t.today.shiftHistory}
+										</TitleWithIcon>
 									</button>
 
 									{displayStatus === "checked-out" && (
@@ -773,7 +778,9 @@ export function OutletTodayOperationPanel({
 											onClick={() => setOpenPr(pr.id)}
 											className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
 										>
-											<TitleWithIcon>{t.today.rate}</TitleWithIcon>
+											<TitleWithIcon icon={iconForNav("Rate")}>
+												{t.today.rate}
+											</TitleWithIcon>
 										</button>
 									)}
 								</div>
@@ -784,6 +791,7 @@ export function OutletTodayOperationPanel({
 				<OutletSection
 					id={OUTLET_LIVE_SALES_SECTION_ID}
 					title={t.today.liveSales}
+					iconKey="Live sales"
 					collapsible
 					open={liveSalesOpen}
 					onOpenChange={setLiveSalesOpen}
@@ -961,7 +969,7 @@ export function OutletTodayOperationPanel({
 						<textarea
 							value={note}
 							onChange={(e) => setNote(e.target.value)}
-							placeholder={PR_RATING_NOTE_PLACEHOLDERS[stars]}
+							placeholder={PR_RATING_NOTE_PLACEHOLDERS[stars](t)}
 							className="mt-4 h-24 w-full rounded-xl border border-[var(--iz-line2)] bg-white/[0.03] p-3.5 text-sm outline-none"
 						/>
 						<button

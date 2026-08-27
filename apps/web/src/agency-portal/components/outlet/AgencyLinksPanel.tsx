@@ -23,7 +23,9 @@ import {
 import { useMemo, useState } from "react";
 import { kickToLogin } from "@/lib/auth/guards";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import {
 	type AgencyOutletApproveStatus,
@@ -85,11 +87,18 @@ const STATUS_META: Record<
  * A day, not a timestamp — "ended on 12 Aug 2026" is the whole useful fact, and
  * the minute it happened only adds noise to a line about a business decision.
  *
- * `en-GB` matches the rest of the outlet portal (see `outlet-date-popover`);
- * the surrounding sentence is translated, the date format is house style.
+ * The date follows the READER, not the house: it is spliced into a translated
+ * sentence, so an English day-month-year inside a 中文 line reads as a bug. This
+ * used to hardcode `en-GB` "to match the rest of the outlet portal" — the rest
+ * of the outlet portal now resolves the tag from the portal's own language via
+ * `dateLocaleTag`, and so does this. `en-GB` is still what English gets, so the
+ * day-before-month ordering is unchanged.
+ *
+ * `locale` is a required LAST parameter: this is module scope, it cannot call
+ * `usePortalLocale`, and a default would pin one language forever.
  */
-function formatEndedOn(iso: string): string {
-	return new Date(iso).toLocaleDateString("en-GB", {
+function formatEndedOn(iso: string, locale: PortalLocale): string {
+	return new Date(iso).toLocaleDateString(dateLocaleTag(locale), {
 		day: "numeric",
 		month: "short",
 		year: "numeric",
@@ -117,7 +126,7 @@ export function AgencyLinksPanel({
 	outletId?: string | null;
 	canManage: boolean;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const queryClient = useQueryClient();
 	const [picked, setPicked] = useState("");
 	const [saveFailed, setSaveFailed] = useState(false);
@@ -279,12 +288,12 @@ export function AgencyLinksPanel({
 										<div className="iz-tiny iz-muted mt-1">
 											{link.endedBySide === "outlet"
 												? fill(t.agencyLinks.endedByYou, {
-														date: formatEndedOn(link.endedAt),
+														date: formatEndedOn(link.endedAt, locale),
 													})
 												: link.endedBySide === "agency"
 													? fill(t.agencyLinks.endedByThem, {
 															name: link.agencyName,
-															date: formatEndedOn(link.endedAt),
+															date: formatEndedOn(link.endedAt, locale),
 														})
 													: null}
 										</div>

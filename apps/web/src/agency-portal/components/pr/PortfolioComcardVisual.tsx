@@ -6,6 +6,7 @@ import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { cn } from "@agency-portal/lib/utils";
 import { useState } from "react";
 import { COMCARD_LOCALE } from "@/lib/portal-i18n/comcard-locale";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
 /**
@@ -53,11 +54,15 @@ export function StaticComcardVisual({
 	src: string;
 	className?: string;
 }) {
+	// The card's own COPY stays English (COMCARD_LOCALE) — this alt text is not
+	// on the card. It is never screenshotted, printed or forwarded; it is what a
+	// screen reader announces to THIS viewer, so it follows their language.
+	const { t } = usePortalLocale();
 	return (
 		<div className={cn("iz-static-comcard", className)}>
 			<img
 				src={portfolioImageSrc(src)}
-				alt="PR comcard"
+				alt={t.prMedia.prComcardAlt}
 				className="iz-static-comcard__img"
 			/>
 		</div>
@@ -77,6 +82,9 @@ export function PrComcardPickerThumb({
 	/** Identity + portfolio, so a PR with no SAVED comcard still gets one built. */
 	pr?: ComcardPreviewData;
 }) {
+	// The empty state below is PICKER chrome, not comcard copy, so it reads the
+	// viewer's dictionary. Everything drawn ON the card keeps COMCARD_LOCALE.
+	const { t } = usePortalLocale();
 	if (comcardImageUrl) {
 		return (
 			<StaticComcardVisual
@@ -153,7 +161,7 @@ export function PrComcardPickerThumb({
 				{avatar}
 			</span>
 			<span className="text-[9px] leading-tight text-[var(--iz-muted)]">
-				No comcard yet
+				{t.prMedia.noComcardYet}
 			</span>
 			<span className="sr-only">{name}</span>
 		</div>

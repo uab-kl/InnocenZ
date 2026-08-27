@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import {
 	planCapacityLabel,
@@ -78,7 +79,7 @@ export const Route = createFileRoute("/agency/subscription")({
 });
 
 function AgencySubscription() {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const agencyOwner = useStore((s) => s.agencyOwner);
 	const agencySubRole = useStore((s) => s.agencySubRole);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
@@ -176,10 +177,16 @@ function AgencySubscription() {
 				detail: c.lines?.[0]?.detail ?? "",
 				dateLabel: c.issueDate,
 				amountRm: c.amount,
-				statusLabel: c.status === "SETTLED" ? "Paid" : c.status,
+				// The comparison stays on the STORED "SETTLED"; only the label the
+				// card prints is resolved. Any other status falls through to the raw
+				// value rather than blanking the pill.
+				statusLabel:
+					c.status === "SETTLED" ? t.subscription.statusPaid : c.status,
 				tone: c.status === "SETTLED" ? "green" : "amber",
 			}));
-	}, [sub.backed, sub.billingHistory, agencyCollections]);
+		// `t` is read above, so it belongs here: without it these rows keep the
+		// wording from whichever language was active when the memo last ran.
+	}, [sub.backed, sub.billingHistory, agencyCollections, t]);
 
 	/**
 	 * What this agency has asked InnocenZ for and not been answered on yet — the
@@ -304,9 +311,13 @@ function AgencySubscription() {
 	 * The real next charge, from this agency's own subscription row. The demo
 	 * clock's date sat beside it and disagreed — the screen showed "2 Aug 2026"
 	 * for an agency whose week rolls from its actual start date.
+	 *
+	 * The tag comes from the portal's language, not a hardcoded `en-GB`: this is
+	 * a rendered label with nothing downstream parsing it. English still gets
+	 * `en-GB`, so day-before-month ordering is unchanged.
 	 */
 	const realRenewalLabel = sub.nextRenewalDate
-		? sub.nextRenewalDate.toLocaleDateString("en-GB", {
+		? sub.nextRenewalDate.toLocaleDateString(dateLocaleTag(locale), {
 				day: "numeric",
 				month: "short",
 				year: "numeric",
@@ -460,7 +471,7 @@ function AgencySubscription() {
 					{sub.backed && sub.onCustom
 						? t.subscription.atAgreedPrice
 						: billing.plan.renegotiate
-							? " · contact InnocenZ admin for custom pricing"
+							? t.agencyMisc.contactAdminCustomPricing
 							: fill(
 									issuedWeeklyPv === 1
 										? t.subscription.basedOnPvOne
@@ -797,8 +808,9 @@ function AgencySubscription() {
 					{collections.drafts.length > 0 && (
 						<>
 							<p className="iz-tiny iz-muted2 mt-3 mb-1">
-								Drafts · {formatRM(collections.totals.draftRm)} · no outlet has
-								been shown these yet
+								{fill(t.agencyMisc.draftsNotShownYet, {
+									total: formatRM(collections.totals.draftRm),
+								})}
 							</p>
 							<div className="space-y-2">
 								{collections.drafts.map((inv) => (
@@ -812,8 +824,16 @@ function AgencySubscription() {
 													</p>
 													<p className="iz-tiny iz-muted">
 														{collectionWeekLabel(inv.weekStart, inv.weekEnd)} ·{" "}
-														{inv.sourceAssignmentIds.length} shift
-														{inv.sourceAssignmentIds.length === 1 ? "" : "s"}
+														{/* Same label the roster timetable prints, so it shares
+														    the key rather than growing a second wording for
+														    one fact. Chinese has no plural — the two English
+														    forms are spelled out, never an appended "s". */}
+														{fill(
+															inv.sourceAssignmentIds.length === 1
+																? t.rosterGrid.shiftCountOne
+																: t.rosterGrid.shiftCountMany,
+															{ n: inv.sourceAssignmentIds.length },
+														)}
 													</p>
 												</div>
 											</div>
@@ -913,10 +933,22 @@ function AgencySubscription() {
 
 			<OutletSection
 				title={t.agencyMisc.paymentMethod}
+				iconKey="Payment method"
 				hint={
 					sub.backed
 						? sub.card
-							? `${sub.card.brand} ···· ${sub.card.last4}${realRenewalLabel ? ` · next charge ${realRenewalLabel}` : ""}`
+							? // Two keys, not one sentence: the brand + last-4 stamp already
+								// had a key, and the charge date is an optional tail that only
+								// a saved renewal date earns.
+								fill(t.subscription.cardBrandLast4, {
+									brand: sub.card.brand,
+									last4: sub.card.last4,
+								}) +
+								(realRenewalLabel
+									? fill(t.agencyMisc.nextChargeSuffix, {
+											date: realRenewalLabel,
+										})
+									: "")
 							: t.subscription.noCardSavedYet
 						: fill(t.subscription.visaNextCharge, {
 								last4: CARD_LAST4,

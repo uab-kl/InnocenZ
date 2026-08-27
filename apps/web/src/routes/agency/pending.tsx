@@ -53,7 +53,13 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import {
+	dateLocaleTag,
+	monthShortLabel,
+	weekdayShortLabel,
+} from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import { languageListLabel, raceLabel } from "@/lib/portal-i18n/language-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import type { AgencyOutletApproveStatus } from "@/services/agency-outlet";
@@ -94,7 +100,8 @@ function comcardTabMeta(signup: PendingPR, t: PortalTranslations) {
 		return { ready: true, label: t.approvals.photoComcard };
 	if (canGeneratePortfolioComcard(signup.portfolioPhotos ?? []))
 		return { ready: true, label: t.approvals.photoComcard };
-	if (signup.name) return { ready: true, label: "3D preview" };
+	if (signup.name)
+		return { ready: true, label: t.agencyPending.comcard3dPreview };
 	return { ready: false, label: t.approvals.empty };
 }
 
@@ -170,6 +177,28 @@ const GROUP_FIRST_TAB: Record<ApprovalGroup, Tab> = {
 	outlet: "cutlost",
 };
 
+/**
+ * The owner-invite sheet's four fields, in the order they are asked for.
+ *
+ * The record KEYS are the field names on the invite object the sheet builds and
+ * POSTs, so they are DATA and never translated. Only the label beside each one
+ * is, and it is held as a FUNCTION: a module-scope map cannot call a hook, so
+ * storing the string "agencyMisc.name" here would type-check and then ship the
+ * key path to the screen. The sheet used to render the field name itself under
+ * `capitalize`, which is where the stray "Ic" heading came from.
+ */
+const INVITE_FIELDS = ["name", "ic", "mobile", "email"] as const;
+
+const INVITE_FIELD_LABEL: Record<
+	(typeof INVITE_FIELDS)[number],
+	(t: PortalTranslations) => string
+> = {
+	name: (t) => t.agencyMisc.name,
+	ic: (t) => t.agencyPending.icNumber,
+	mobile: (t) => t.agencyMisc.mobile,
+	email: (t) => t.agencyMisc.email,
+};
+
 const AVATAR_VARIANTS = ["rose", "sky", "violet", "amber", "mint"] as const;
 
 function avatarVariant(id: string) {
@@ -229,30 +258,24 @@ function pendingPrPhoto(signup: PendingPR) {
  * Built from the date PARTS, never `new Date(iso)`: a bare `YYYY-MM-DD` parses
  * as UTC midnight, which in Asia/Kuala_Lumpur renders as the PREVIOUS day. An
  * MC request for the 10th showing as the 9th is the kind of error an agency
- * acts on before anyone notices.
+ * acts on before anyone notices. The weekday is therefore derived through
+ * `Date.UTC` and read back with `getUTCDay()`, so the parts never round-trip
+ * through a local-midnight Date.
+ *
+ * Nothing stores or re-reads this string — it is drawn once beside a calendar
+ * icon — so the words come from the dictionary. `t` is a PARAMETER and comes
+ * LAST: this is module scope and cannot call a hook, and a default dictionary
+ * here would pin the panel to one language forever.
  */
-function leaveDayLabel(iso: string | null | undefined): string {
+function leaveDayLabel(
+	iso: string | null | undefined,
+	t: PortalTranslations,
+): string {
 	if (!iso) return "—";
 	const [y, m, d] = iso.split("-").map(Number);
 	if (!y || !m || !d) return iso;
-	const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-		new Date(Date.UTC(y, m - 1, d)).getUTCDay()
-	];
-	const mo = [
-		"Jan",
-		"Feb",
-		"Mar",
-		"Apr",
-		"May",
-		"Jun",
-		"Jul",
-		"Aug",
-		"Sep",
-		"Oct",
-		"Nov",
-		"Dec",
-	][m - 1];
-	return `${wd} · ${d} ${mo} ${y}`;
+	const wd = weekdayShortLabel(new Date(Date.UTC(y, m - 1, d)).getUTCDay(), t);
+	return `${wd} · ${d} ${monthShortLabel(m - 1, t)} ${y}`;
 }
 
 /** "Special event" / "Normal shift" — the outlet's toggle, worded as the PR app words it. */
@@ -275,6 +298,26 @@ function pendingLegalIcName(signup: PendingPR) {
 	if (legal.toLowerCase() === pendingFloorNickname(signup).toLowerCase())
 		return "";
 	return legal;
+}
+
+/**
+ * The applicant's spoken languages, in the reader's language.
+ *
+ * `PendingPR.languages` is DATA, not copy: `use-agency-pending-prs` joins the
+ * STORED English values with ", " because the profile picker parses that string
+ * back apart. Rendering it raw left "English, Mandarin" sitting in a Chinese
+ * panel while Manage PR — reading the same profile — showed 英语 · 华语. Split it
+ * back into the stored values and run each through the shared resolver, which
+ * falls through to the raw word for a hand-typed language.
+ */
+function pendingLanguagesLabel(signup: PendingPR, t: PortalTranslations) {
+	return languageListLabel(
+		signup.languages
+			.split(",")
+			.map((l) => l.trim())
+			.filter(Boolean),
+		t,
+	);
 }
 
 /**
@@ -350,7 +393,7 @@ function RejectSheet({
 						className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
 						onClick={onClose}
 					>
-						← Back
+						← {t.common.back}
 					</button>
 					<h3>{title}</h3>
 					{subtitle && <p className="iz-tiny iz-muted mt-1">{subtitle}</p>}
@@ -431,7 +474,7 @@ function DocPreviewSheet({
 			type="button"
 			className={cn("block w-full cursor-zoom-in", wrapClassName)}
 			onClick={() => openZoom({ kind: "img", from: preview, src, alt })}
-			aria-label={`Enlarge ${alt}`}
+			aria-label={fill(t.agencyPending.enlargeNamed, { name: alt })}
 		>
 			<img src={docImageSrc(src)} alt={alt} className={imgClassName} />
 		</button>
@@ -454,7 +497,7 @@ function DocPreviewSheet({
 						className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
 						onClick={onClose}
 					>
-						← Back
+						← {t.common.back}
 					</button>
 					<h3>{title}</h3>
 				</div>
@@ -469,18 +512,33 @@ function DocPreviewSheet({
 			</div>
 			{preview === "ic" && (
 				<div className="grid grid-cols-2 gap-3 px-4 pb-4">
+					{/* Keyed on the SIDE, not on its label: the label is translated, and
+					    keying on it would remount both cells — dropping any open zoom —
+					    the moment the reader switches language. The alt text is the
+					    dictionary's own "IC front" / "IC back" rather than the side label
+					    glued after "IC", which only reads as a phrase in English. */}
 					{(
 						[
-							{ side: t.approvals.front, src: icPhotoFront },
-							{ side: t.approvals.back, src: icPhotoBack },
+							{
+								id: "front",
+								side: t.approvals.front,
+								alt: t.approvals.icFront,
+								src: icPhotoFront,
+							},
+							{
+								id: "back",
+								side: t.approvals.back,
+								alt: t.approvals.icBack,
+								src: icPhotoBack,
+							},
 						] as const
-					).map(({ side, src }) => (
-						<div key={side} className="space-y-1">
+					).map(({ id, side, alt, src }) => (
+						<div key={id} className="space-y-1">
 							<p className="iz-tiny iz-muted2">{side}</p>
 							{src ? (
 								zoomable(
 									src,
-									`IC ${side.toLowerCase()}`,
+									alt,
 									"aspect-[3/2] w-full rounded-xl border border-[var(--iz-line)] object-cover",
 								)
 							) : (
@@ -513,7 +571,7 @@ function DocPreviewSheet({
 						>
 							{zoomable(
 								src,
-								`Portfolio ${i + 1}`,
+								fill(t.agencyPending.portfolioSlot, { n: i + 1 }),
 								"h-full w-full object-cover",
 								"h-full",
 							)}
@@ -541,7 +599,11 @@ function DocPreviewSheet({
 			    sheet's own stacking context (max in the theme is 200). */}
 			{zoom && zoom.from === preview && (
 				<PhotoLightbox
-					alt={zoom.kind === "img" ? zoom.alt : `${signup.name} · comcard`}
+					alt={
+						zoom.kind === "img"
+							? zoom.alt
+							: `${signup.name} · ${t.approvals.comcard}`
+					}
 					onClose={closeZoom}
 				>
 					{zoom.kind === "img" ? (
@@ -777,9 +839,12 @@ function DocumentPreviewStack({
 									type="button"
 									className="iz-approvals-doc-cell gallery has-photo"
 									onClick={() => onPreview("gallery")}
-									aria-label={`Portfolio ${i + 1}`}
+									aria-label={fill(t.agencyPending.portfolioSlot, { n: i + 1 })}
 								>
-									<img src={docImageSrc(src)} alt={`Portfolio ${i + 1}`} />
+									<img
+										src={docImageSrc(src)}
+										alt={fill(t.agencyPending.portfolioSlot, { n: i + 1 })}
+									/>
 								</button>
 							))
 						: galleryPlaceholders.map((slot) => (
@@ -864,32 +929,32 @@ function SignupDetailPanel({
 						</h2>
 						{pendingLegalIcName(signup) && (
 							<p className="iz-approvals-detail-meta">
-								Legal · {pendingLegalIcName(signup)}
+								{t.agencyPending.legal} · {pendingLegalIcName(signup)}
 							</p>
 						)}
 						<p className="iz-approvals-detail-meta">
-							{signup.languages}
+							{pendingLanguagesLabel(signup, t)}
 							{signup.submittedAt
 								? fill(t.approvals.appliedOn, { date: signup.submittedAt })
 								: ""}
 						</p>
 						{signup.source === "owner-invite" && (
 							<IzPill variant="amber" className="mt-1.5">
-								Owner invite
+								{t.agencyPending.ownerInvite}
 							</IzPill>
 						)}
 						<IzPill variant={isLeave ? "amber" : "violet"} className="mt-1.5">
-							{isLeave ? "Leave request" : "Join request"}
+							{isLeave ? t.approvals.leaveRequest : t.approvals.joinRequest}
 						</IzPill>
 						{decided && (
 							<p className="iz-approvals-detail-meta mt-1">
 								{signup.status === "approved"
 									? isLeave
-										? "Departure approved — no longer under this agency"
-										: "Membership approved"
+										? t.agencyPending.departureApprovedDetail
+										: t.agencyPending.membershipApproved
 									: isLeave
-										? "Departure rejected — membership continues"
-										: "Join rejected"}
+										? t.agencyPending.departureRejectedDetail
+										: t.approvals.joinRejected}
 								{signup.rejectReason ? ` · ${signup.rejectReason}` : ""}
 							</p>
 						)}
@@ -923,8 +988,16 @@ function SignupDetailPanel({
 						{t.approvals.personalInfo}
 					</h3>
 					<div className="iz-approvals-info-chips">
-						{signup.race && <IzPill variant="violet">{signup.race}</IzPill>}
-						{signup.age && <IzPill variant="violet">Age {signup.age}</IzPill>}
+						{/* The stored race code is the FILTER's value on Manage PR — only
+						    the rendered word changes, via the shared resolver. */}
+						{signup.race && (
+							<IzPill variant="violet">{raceLabel(signup.race, t)}</IzPill>
+						)}
+						{signup.age && (
+							<IzPill variant="violet">
+								{fill(t.managePr.ageLabel, { n: signup.age })}
+							</IzPill>
+						)}
 						{signup.height && (
 							<IzPill variant="violet">{signup.height} cm</IzPill>
 						)}
@@ -935,7 +1008,7 @@ function SignupDetailPanel({
 					{signup.ic && (
 						<p className="iz-approvals-info-line">
 							<Calendar className="h-3.5 w-3.5 shrink-0" />
-							IC {signup.ic}
+							{t.agencyPending.icNumber} {signup.ic}
 						</p>
 					)}
 					{pendingLegalIcName(signup) && (
@@ -1050,7 +1123,7 @@ function CutlostDetailPanel({
 						<p className="iz-approvals-detail-meta">{req.shiftEvent}</p>
 						<p className="iz-approvals-detail-meta mt-0.5">
 							<Clock className="mr-1 inline h-3 w-3" />
-							Requested {req.requestedAt}
+							{fill(t.agencyPending.requestedAt, { date: req.requestedAt })}
 						</p>
 					</div>
 				</div>
@@ -1090,11 +1163,16 @@ function CutlostDetailPanel({
 				{req.model === "best_effort" && (
 					<IzPill variant="violet">{t.approvals.bestEffort}</IzPill>
 				)}
+				{/* "RM" and the grouped number stay out of the dictionary — currency
+				    has one source of truth, and a key that baked it in would be a
+				    second one. Only the word in front of the amount is translated. */}
 				<IzPill variant="red">
-					Cutlost RM {Math.round(req.cutlostBefore).toLocaleString("en-MY")}
+					{t.approvals.cutlost} RM{" "}
+					{Math.round(req.cutlostBefore).toLocaleString("en-MY")}
 				</IzPill>
 				<IzPill variant="green">
-					Saves ~RM {Math.round(req.estimatedSavings).toLocaleString("en-MY")}
+					{t.agencyPending.saves} ~RM{" "}
+					{Math.round(req.estimatedSavings).toLocaleString("en-MY")}
 				</IzPill>
 			</div>
 
@@ -1103,8 +1181,7 @@ function CutlostDetailPanel({
 					<h3 className="iz-approvals-info-title">{t.approvals.prsAffected}</h3>
 					<p className="iz-tiny iz-muted">{req.releasedPrNames.join(", ")}</p>
 					<p className="iz-tiny iz-muted2 mt-2">
-						On approve: paid for hours worked + commissions. They are sent home
-						unless you reassign them to another outlet on the roster.
+						{t.agencyPending.releaseOnApprove}
 					</p>
 				</div>
 			) : null}
@@ -1160,10 +1237,13 @@ function LinkRequestDetailPanel({
 					<div className="min-w-0">
 						<h2 className="iz-approvals-detail-name">{link.prName}</h2>
 						<p className="iz-approvals-detail-meta">
-							Wants to link to {link.agencyName} · {link.requestedAt}
+							{fill(t.agencyPending.wantsToLinkTo, {
+								agency: link.agencyName,
+							})}{" "}
+							· {link.requestedAt}
 						</p>
 						<IzPill variant="amber" className="mt-1.5">
-							Agency-link request
+							{t.agencyPending.agencyLinkRequest}
 						</IzPill>
 					</div>
 				</div>
@@ -1173,7 +1253,7 @@ function LinkRequestDetailPanel({
 						className="iz-btn iz-btn-primary !py-2 !text-xs"
 						onClick={onApprove}
 					>
-						Approve link
+						{t.agencyPending.approveLink}
 					</button>
 					<button
 						type="button"
@@ -1190,11 +1270,13 @@ function LinkRequestDetailPanel({
 					<h3 className="iz-approvals-info-title">{t.approvals.linkRequest}</h3>
 					<p className="iz-approvals-info-line">
 						<UserPlus className="h-3.5 w-3.5 shrink-0" />
-						{link.prName} is asking to join {link.agencyName}.
+						{fill(t.agencyPending.askingToJoin, {
+							name: link.prName,
+							agency: link.agencyName,
+						})}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-1">
-						Approve to add them to your roster — they can then be scheduled like
-						any tied PR.
+						{t.agencyPending.approveToAddRoster}
 					</p>
 				</div>
 			</div>
@@ -1222,7 +1304,7 @@ function LeaveDetailPanel({
 	onApprove: () => void;
 	onReject: () => void;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const prName = req.prName ?? "PR";
 	const mcPhotos = req.leaveProofPhotos ?? [];
 	// The MC opens IN PLACE. It used to be an <a target="_blank"> to the raw
@@ -1250,7 +1332,7 @@ function LeaveDetailPanel({
 							{outletName} · {req.shiftDate ?? "—"}
 						</p>
 						<IzPill variant="amber" className="mt-1.5">
-							MC / leave request
+							{t.agencyPending.mcLeaveRequest}
 						</IzPill>
 					</div>
 				</div>
@@ -1264,14 +1346,20 @@ function LeaveDetailPanel({
 							{req.leaveStatus === "approved"
 								? t.approvals.approved
 								: t.approvals.rejected}
+							{/* The portal's language, not the BROWSER's. `undefined` here
+							    followed the machine, so a 中文 portal on an en-US browser
+							    stamped this decision in English beside translated words. */}
 							{req.leaveDecidedAt
-								? ` · ${new Date(req.leaveDecidedAt).toLocaleString(undefined, {
-										day: "2-digit",
-										month: "short",
-										year: "numeric",
-										hour: "2-digit",
-										minute: "2-digit",
-									})}`
+								? ` · ${new Date(req.leaveDecidedAt).toLocaleString(
+										dateLocaleTag(locale),
+										{
+											day: "2-digit",
+											month: "short",
+											year: "numeric",
+											hour: "2-digit",
+											minute: "2-digit",
+										},
+									)}`
 								: ""}
 						</IzPill>
 					</div>
@@ -1283,7 +1371,7 @@ function LeaveDetailPanel({
 							disabled={busy}
 							onClick={onApprove}
 						>
-							Approve · excuse shift
+							{t.agencyPending.approveExcuseShift}
 						</button>
 						<button
 							type="button"
@@ -1305,7 +1393,7 @@ function LeaveDetailPanel({
 				</h3>
 				{mcPhotos.length === 0 ? (
 					<p className="iz-tiny iz-muted2">
-						No photo attached — this request predates the MC-photo rule.
+						{t.agencyPending.noMcPhotoAttached}
 					</p>
 				) : (
 					<div className="mt-2 flex flex-wrap gap-2">
@@ -1323,7 +1411,10 @@ function LeaveDetailPanel({
 							>
 								<img
 									src={resolveProofPhotoUrl(src)}
-									alt={`MC document ${i + 1} from ${prName}`}
+									alt={fill(t.agencyPending.mcDocumentNumbered, {
+										n: i + 1,
+										name: prName,
+									})}
 									className="h-32 w-32 rounded-lg border border-white/10 object-cover transition hover:brightness-110"
 								/>
 							</button>
@@ -1334,7 +1425,7 @@ function LeaveDetailPanel({
 			{zoomPhoto ? (
 				<PhotoLightbox
 					photo={zoomPhoto}
-					alt={`MC document from ${prName}`}
+					alt={fill(t.agencyPending.mcDocumentFrom, { name: prName })}
 					onClose={() => setZoomPhoto(null)}
 				/>
 			) : null}
@@ -1368,7 +1459,7 @@ function LeaveDetailPanel({
 					)}
 					<p className="iz-approvals-info-line">
 						<Calendar className="h-3.5 w-3.5 shrink-0" />
-						{leaveDayLabel(req.shiftDate)}
+						{leaveDayLabel(req.shiftDate, t)}
 					</p>
 					<p className="iz-approvals-info-line">
 						<Clock className="h-3.5 w-3.5 shrink-0" />
@@ -1381,9 +1472,7 @@ function LeaveDetailPanel({
 						{outletName}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-2">
-						Approving excuses the PR with no penalty and leaves the shift short
-						— it shows up on the roster's backfill worklist for a replacement.
-						Rejecting puts the PR back on the shift.
+						{t.agencyPending.leaveDecisionNote}
 					</p>
 				</div>
 			</div>
@@ -1408,7 +1497,7 @@ export const Route = createFileRoute("/agency/pending")({
 });
 
 function AgencyPending() {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const { tab: tabFromSearch } = Route.useSearch();
 	const {
 		approvePendingPR,
@@ -1597,7 +1686,8 @@ function AgencyPending() {
 		[outletsQuery.data],
 	);
 	const leaveOutletName = (req: ShiftAssignment) =>
-		(req.outletId ? outletNameById.get(req.outletId) : undefined) ?? "Outlet";
+		(req.outletId ? outletNameById.get(req.outletId) : undefined) ??
+		t.table.outlet;
 	const leaveBusy =
 		rosterMut.approveLeave.isPending || rosterMut.rejectLeave.isPending;
 
@@ -1646,7 +1736,7 @@ function AgencyPending() {
 			<div className="iz-screen iz-approvals-page">
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
-						Finance role cannot approve PR sign-ups.
+						{t.agencyPending.financeCannotApprove}
 					</p>
 				</IzCard>
 			</div>
@@ -1872,8 +1962,10 @@ function AgencyPending() {
 													<div className="min-w-0 flex-1">
 														<span className="name">{floorName}</span>
 														<span className="sub">
-															{legalName ? `Legal · ${legalName} · ` : ""}
-															{p.languages}
+															{legalName
+																? `${t.agencyPending.legal} · ${legalName} · `
+																: ""}
+															{pendingLanguagesLabel(p, t)}
 														</span>
 														<span className="badges">
 															{/* WHICH WAY the request runs — approving a
@@ -1902,7 +1994,7 @@ function AgencyPending() {
 															</span>
 															<VerificationBadge
 																ok={!!p.hasIcPhotos}
-																label="IC"
+																label={t.approvals.icPhotos}
 															/>
 															<VerificationBadge
 																ok={!!p.hasSelfie}
@@ -1999,7 +2091,7 @@ function AgencyPending() {
 								</div>
 								{queue.leaveIsLoading || queue.leaveHistoryIsLoading ? (
 									<p className="iz-tiny iz-muted px-1 py-4 text-center">
-										Loading MC / leave requests…
+										{t.agencyPending.loadingLeaveRequests}
 									</p>
 								) : leaveList.length === 0 ? (
 									<p className="iz-tiny iz-muted px-1 py-4 text-center">
@@ -2048,8 +2140,11 @@ function AgencyPending() {
 													</span>
 													{req.leaveDecidedAt ? (
 														<span className="iz-tiny iz-muted">
+															{/* The portal's language, not the browser's — same
+															    reason as the decided-at stamp on the detail
+															    panel. */}
 															{new Date(req.leaveDecidedAt).toLocaleDateString(
-																undefined,
+																dateLocaleTag(locale),
 																{ day: "2-digit", month: "short" },
 															)}
 														</span>
@@ -2062,7 +2157,7 @@ function AgencyPending() {
 							</>
 						) : cutlostRequests.length === 0 ? (
 							<p className="iz-tiny iz-muted px-1 py-4 text-center">
-								No cutlost requests
+								{t.agencyPending.noCutlostRequests}
 							</p>
 						) : (
 							cutlostRequests.map((req) => (
@@ -2169,7 +2264,7 @@ function AgencyPending() {
 						) : (
 							<div className="iz-approvals-empty">
 								<p className="iz-sm iz-muted">
-									Select an MC / leave request to review
+									{t.agencyPending.selectLeaveToReview}
 								</p>
 							</div>
 						)
@@ -2204,7 +2299,7 @@ function AgencyPending() {
 					) : (
 						<div className="iz-approvals-empty">
 							<p className="iz-sm iz-muted">
-								Select a cutlost request to review
+								{t.agencyPending.selectCutlostToReview}
 							</p>
 						</div>
 					)}
@@ -2220,7 +2315,7 @@ function AgencyPending() {
 								className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
 								onClick={() => setAddOpen(false)}
 							>
-								← Back
+								← {t.common.back}
 							</button>
 							<h3>{t.approvals.ownerInitiatedOnboarding}</h3>
 						</div>
@@ -2233,12 +2328,12 @@ function AgencyPending() {
 							<X className="h-4 w-4" />
 						</button>
 					</div>
-					<p className="iz-tiny iz-muted mb-3">
-						Enter IC + contact → invite sent to complete profile
-					</p>
-					{(["name", "ic", "mobile", "email"] as const).map((field) => (
+					<p className="iz-tiny iz-muted mb-3">{t.agencyPending.inviteHint}</p>
+					{INVITE_FIELDS.map((field) => (
 						<div key={field} className="mb-2">
-							<span className="iz-field-label capitalize">{field}</span>
+							<span className="iz-field-label capitalize">
+								{INVITE_FIELD_LABEL[field](t)}
+							</span>
 							<input
 								className="iz-field-input !text-sm"
 								value={invite[field]}
@@ -2259,7 +2354,7 @@ function AgencyPending() {
 							setInvite({ name: "", ic: "", mobile: "", email: "" });
 						}}
 					>
-						Send invite
+						{t.agencyPending.sendInvite}
 					</button>
 				</IzSheet>
 			)}

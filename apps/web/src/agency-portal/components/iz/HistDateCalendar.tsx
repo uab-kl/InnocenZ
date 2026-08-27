@@ -6,21 +6,23 @@ import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import { format, parseISO } from "date-fns";
 import { ChevronDown } from "lucide-react";
 import { type ComponentProps, useCallback, useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { monthLongLabel } from "@/lib/portal-i18n/date-label";
 
-const MONTH_LABELS = [
-	"January",
-	"February",
-	"March",
-	"April",
-	"May",
-	"June",
-	"July",
-	"August",
-	"September",
-	"October",
-	"November",
-	"December",
-];
+/**
+ * The twelve month `<option>`s, as INDEXES.
+ *
+ * A module-scope array cannot read `t`, and it no longer has to: the label is
+ * resolved at the render by `monthLongLabel`, off the shared `dates`
+ * vocabulary. Two month-picker vocabularies had grown in the dictionary and
+ * spelled the same month two ways in the same portal ("一月" here, "1月" on the
+ * PR schedule picker); one vocabulary is what stops that happening again.
+ *
+ * The index is both the React key and the `<option>` VALUE — keying on the
+ * rendered label would remount all twelve on a locale switch, and the value is
+ * what the select writes back into `viewMonth`, so it must stay a number.
+ */
+export const MONTH_INDEXES = Array.from({ length: 12 }, (_, i) => i);
 
 export function dateFromIsoKey(key: string): Date | undefined {
 	if (!key) return undefined;
@@ -90,6 +92,7 @@ export function HistCalendarMonthNav({
 	startMonth: Date;
 	endMonth: Date;
 }) {
+	const { t } = usePortalLocale();
 	const minY = startMonth.getFullYear();
 	const maxY = endMonth.getFullYear();
 	const years = useMemo(
@@ -102,19 +105,19 @@ export function HistCalendarMonthNav({
 	return (
 		<div className="iz-hist-cal-nav">
 			<label className="iz-hist-cal-nav-field">
-				<span className="iz-hist-cal-nav-label">Month</span>
+				<span className="iz-hist-cal-nav-label">{t.izPv.month}</span>
 				<span className="iz-hist-cal-select-wrap">
 					<select
 						className="iz-hist-cal-select"
 						value={month}
-						aria-label="Choose month"
+						aria-label={t.izPv.chooseMonth}
 						onChange={(e) =>
 							onMonthChange(new Date(year, Number(e.target.value), 1))
 						}
 					>
-						{MONTH_LABELS.map((label, i) => (
-							<option key={label} value={i}>
-								{label}
+						{MONTH_INDEXES.map((i) => (
+							<option key={i} value={i}>
+								{monthLongLabel(i, t)}
 							</option>
 						))}
 					</select>
@@ -122,12 +125,12 @@ export function HistCalendarMonthNav({
 				</span>
 			</label>
 			<label className="iz-hist-cal-nav-field">
-				<span className="iz-hist-cal-nav-label">Year</span>
+				<span className="iz-hist-cal-nav-label">{t.izPv.year}</span>
 				<span className="iz-hist-cal-select-wrap">
 					<select
 						className="iz-hist-cal-select"
 						value={year}
-						aria-label="Choose year"
+						aria-label={t.izPv.chooseYear}
 						onChange={(e) =>
 							onMonthChange(new Date(Number(e.target.value), month, 1))
 						}

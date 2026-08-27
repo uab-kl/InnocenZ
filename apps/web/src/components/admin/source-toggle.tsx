@@ -1,24 +1,36 @@
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+
 export type SourceKey = "outlet" | "agency" | "pr";
 export type SourceValue = "all" | SourceKey;
 
+/*
+ * `label` is a RESOLVER, not a string: a dictionary key is itself a `string`,
+ * so storing one on this module-scope record type-checks and then ships the key
+ * NAME to screen. `key` and `activeClass` are untouched — `key` is the value
+ * this filter sends up to the caller and on into the query.
+ *
+ * "PR" stays "PR" in both locales: it is the product's own term for the role
+ * and what the database stores.
+ */
 const ALL_OPTIONS: {
 	key: SourceKey;
-	label: string;
+	label: (t: PortalTranslations) => string;
 	activeClass: string;
 }[] = [
 	{
 		key: "outlet",
-		label: "Outlet",
+		label: (t) => t.table.outlet,
 		activeClass: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
 	},
 	{
 		key: "agency",
-		label: "Agency",
+		label: (t) => t.adminService.agency,
 		activeClass: "bg-(--lavender-soft)/25 text-lavender",
 	},
 	{
 		key: "pr",
-		label: "PR",
+		label: (t) => t.table.pr,
 		activeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
 	},
 ];
@@ -39,6 +51,7 @@ export function SourceToggle<T extends SourceValue>({
 	className?: string;
 	sources?: SourceKey[];
 }) {
+	const { t } = usePortalLocale();
 	const options = ALL_OPTIONS.filter((option) => sources.includes(option.key));
 	return (
 		<div
@@ -58,7 +71,7 @@ export function SourceToggle<T extends SourceValue>({
 								: "text-muted-foreground hover:text-foreground"
 						}`}
 					>
-						{option.label}
+						{option.label(t)}
 					</button>
 				);
 			})}

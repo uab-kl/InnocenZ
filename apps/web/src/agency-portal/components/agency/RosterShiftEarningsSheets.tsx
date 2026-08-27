@@ -10,6 +10,9 @@ import {
 	roundRm,
 } from "@agency-portal/lib/outlet-financial-sync";
 import { useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type RosterEarningsSheetKind = "drinks" | "tips" | "payout";
 
@@ -40,6 +43,7 @@ function DrinksBreakdownTable({
 }: {
 	rows: OutletPrLiveEarningsBreakdown[];
 }) {
+	const { t } = usePortalLocale();
 	const totals = rows.reduce(
 		(acc, row) => ({
 			hh: acc.hh + row.hhCommissionRm,
@@ -54,11 +58,14 @@ function DrinksBreakdownTable({
 			<table className="iz-outlet-live-earnings-table iz-outlet-live-earnings-table--sheet">
 				<thead>
 					<tr>
+						{/* "HH" stays as it is in every locale — it is the venue's own
+						    shorthand for the happy-hour band, and it heads the same
+						    column on the outlet's floor table. */}
 						<th>
 							<LiveEarningsLabel label="HH" />
 						</th>
 						<th>
-							<LiveEarningsLabel label="Normal" />
+							<LiveEarningsLabel label={t.today.colNormal} />
 						</th>
 					</tr>
 				</thead>
@@ -66,7 +73,7 @@ function DrinksBreakdownTable({
 					{rows.length === 0 ? (
 						<tr>
 							<td colSpan={2} className="iz-outlet-live-earnings-table__empty">
-								No drink sales logged for this shift yet.
+								{t.agencyRoster.noDrinkSalesThisShift}
 							</td>
 						</tr>
 					) : (
@@ -94,7 +101,9 @@ function DrinksBreakdownTable({
 						</tr>
 						<tr className="iz-outlet-live-earnings-table__foot-meta">
 							<td colSpan={2}>
-								Floor drinks {formatRM(roundRm(totals.drinkSales))}
+								{fill(t.agencyRoster.floorDrinksTotal, {
+									amount: formatRM(roundRm(totals.drinkSales)),
+								})}
 							</td>
 						</tr>
 					</tfoot>
@@ -109,6 +118,7 @@ function TipsBreakdownTable({
 }: {
 	rows: OutletPrLiveEarningsBreakdown[];
 }) {
+	const { t } = usePortalLocale();
 	const total = roundRm(rows.reduce((sum, row) => sum + row.tipSalesRm, 0));
 
 	return (
@@ -117,7 +127,7 @@ function TipsBreakdownTable({
 				<thead>
 					<tr>
 						<th>
-							<LiveEarningsLabel label="Tips" />
+							<LiveEarningsLabel label={t.reports.colTips} />
 						</th>
 					</tr>
 				</thead>
@@ -125,7 +135,7 @@ function TipsBreakdownTable({
 					{rows.length === 0 ? (
 						<tr>
 							<td className="iz-outlet-live-earnings-table__empty">
-								No tips logged for this shift yet.
+								{t.agencyRoster.noTipsThisShift}
 							</td>
 						</tr>
 					) : (
@@ -150,10 +160,20 @@ function TipsBreakdownTable({
 	);
 }
 
-const SHEET_TITLE: Record<RosterEarningsSheetKind, string> = {
-	drinks: "Drinks breakdown",
-	tips: "Tips breakdown",
-	payout: "Est. payout breakdown",
+/**
+ * RESOLVERS, not dictionary keys.
+ *
+ * A key is itself a `string`, so storing one here would type-check and then put
+ * the key name on screen. A function cannot be rendered by accident. The record
+ * KEYS stay the sheet-kind values the caller compares on.
+ */
+const SHEET_TITLE: Record<
+	RosterEarningsSheetKind,
+	(t: PortalTranslations) => string
+> = {
+	drinks: (t) => t.agencyRoster.drinksBreakdown,
+	tips: (t) => t.agencyRoster.tipsBreakdown,
+	payout: (t) => t.agencyRoster.estPayoutBreakdown,
 };
 
 export function RosterShiftEarningsSheets({
@@ -167,6 +187,7 @@ export function RosterShiftEarningsSheets({
 	earningsContext: RosterShiftEarningsContext;
 	onClose: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const rows = useMemo(
 		() =>
 			anchorSlot && kind
@@ -181,7 +202,7 @@ export function RosterShiftEarningsSheets({
 
 	return (
 		<IzSheet open onClose={onClose} wide liveSales>
-			<IzCardTitle>{SHEET_TITLE[kind]}</IzCardTitle>
+			<IzCardTitle>{SHEET_TITLE[kind](t)}</IzCardTitle>
 			<p className="iz-sm iz-muted mt-1.5">{shiftLabel}</p>
 
 			{kind === "drinks" && <DrinksBreakdownTable rows={rows} />}
@@ -195,7 +216,7 @@ export function RosterShiftEarningsSheets({
 				className="iz-btn iz-btn-soft mt-4 w-full"
 				onClick={onClose}
 			>
-				Close
+				{t.common.close}
 			</button>
 		</IzSheet>
 	);

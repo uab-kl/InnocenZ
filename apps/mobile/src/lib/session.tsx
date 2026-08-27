@@ -157,6 +157,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async (identifier: string, password: string) => {
     const candidates = phoneCandidates(identifier);
+    // English on purpose — see the ApiError note in ./api. A seed value only:
+    // `phoneCandidates` never returns an empty list, so the loop below always
+    // replaces it with the real failure before anything is thrown.
     let lastError: unknown = new ApiError('Invalid credentials', 401);
     for (const candidate of candidates) {
       try {
@@ -194,6 +197,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = useCallback(
     async (patch: ProfileUpdate) => {
+      // 'Not signed in' DOES reach the screen — Profile renders `e.message` on
+      // every one of these. Kept English here and localised at the render site
+      // by `localizeApiError` (lib/api-error-copy.ts); do not translate it in
+      // place, a thrown message is also what a log and a bug report carry.
       if (!token || !me) throw new ApiError('Not signed in', 401);
       const updated = await updateUserProfile(token, me.id, patch);
       setMe(updated);

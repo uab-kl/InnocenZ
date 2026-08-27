@@ -27,12 +27,15 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { Plus, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function SpecialServicePortalSection({
 	role,
 }: {
 	role: "outlet" | "pr";
 }) {
+	const { t } = usePortalLocale();
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const prSubRole = useStore((s) => s.prSubRole);
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
@@ -103,7 +106,7 @@ export function SpecialServicePortalSection({
 		if (role === "pr" && isLeaveAgencyService(draft.serviceType)) {
 			const note = draft.note.trim();
 			if (!note) {
-				toast("Enter a reason for early leave", "warn");
+				toast(t.ssPortal.enterReasonForEarlyLeave, "warn");
 				return;
 			}
 			requestLeaveAgency(note);
@@ -172,8 +175,12 @@ export function SpecialServicePortalSection({
 					className="mb-3 border-[rgba(159,122,234,.35)] bg-[linear-gradient(180deg,rgba(159,122,234,.08),transparent)]"
 				>
 					<p className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
-						{pendingAction.length} booking
-						{pendingAction.length !== 1 ? "s" : ""} need your response
+						{fill(
+							pendingAction.length === 1
+								? t.ssPortal.bookingsNeedResponseOne
+								: t.ssPortal.bookingsNeedResponseMany,
+							{ n: pendingAction.length },
+						)}
 					</p>
 					<div className="mt-2 space-y-2">
 						{pendingAction.map((row) => (
@@ -196,19 +203,21 @@ export function SpecialServicePortalSection({
 				<p className="iz-tiny iz-muted2 leading-relaxed">
 					<Sparkles className="mr-1 inline h-3 w-3 text-[var(--iz-violet-l)]" />
 					{role === "outlet"
-						? "Order agency add-ons for your venue — delivery, emergency cover, styling, and more."
+						? t.ssPortal.outletBanner
 						: prTiedLocked
-							? "Request transportation, makeup, wardrobe, and other services — or raise Leave agency under Service."
-							: "Request transportation, makeup, wardrobe, and other services for your shifts."}
+							? t.ssPortal.prBannerWithLeave
+							: t.ssPortal.prBanner}
 				</p>
 			</IzCard>
 
 			{role === "pr" && prLeaveRequest && (
 				<p className="iz-tiny iz-muted2 mt-2">
-					{prLeaveRequest.type === "leave"
-						? "Leave ticket"
-						: "Transfer request"}{" "}
-					submitted {prLeaveRequest.at}
+					{fill(
+						prLeaveRequest.type === "leave"
+							? t.ssPortal.leaveTicketSubmitted
+							: t.ssPortal.transferRequestSubmitted,
+						{ when: prLeaveRequest.at },
+					)}
 				</p>
 			)}
 
@@ -226,7 +235,7 @@ export function SpecialServicePortalSection({
 						setOrderOpen(true);
 					}}
 				>
-					<Plus className="h-3.5 w-3.5" /> Order service
+					<Plus className="h-3.5 w-3.5" /> {t.ssPortal.orderService}
 				</button>
 			</div>
 
@@ -248,15 +257,21 @@ export function SpecialServicePortalSection({
 			</IzCard>
 
 			<OutletSection
-				title="Your service orders"
-				hint={`${filtered.length} record${filtered.length !== 1 ? "s" : ""}`}
+				title={t.ssPortal.yourServiceOrders}
+				iconKey="Your service orders"
+				hint={fill(
+					filtered.length === 1
+						? t.ssPortal.recordCountOne
+						: t.ssPortal.recordCountMany,
+					{ n: filtered.length },
+				)}
 				collapsible
 				defaultOpen={false}
 				className="!mt-3"
 			>
 				{filtered.length === 0 ? (
 					<IzCard flat className="text-center">
-						<p className="iz-sm iz-muted">No service orders yet</p>
+						<p className="iz-sm iz-muted">{t.ssPortal.noServiceOrders}</p>
 					</IzCard>
 				) : (
 					<div className="space-y-2">
@@ -279,8 +294,8 @@ export function SpecialServicePortalSection({
 					onSubmit={submitOrderDraft}
 					submitLabel={
 						role === "pr" && isLeaveAgencyService(draft.serviceType)
-							? "Raise support ticket"
-							: "Submit to admin"
+							? t.ssPortal.raiseSupportTicket
+							: t.ssPortal.submitToAdmin
 					}
 				/>
 			</IzSheet>

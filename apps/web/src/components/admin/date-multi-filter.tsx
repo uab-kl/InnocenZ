@@ -7,19 +7,31 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { cn } from "@/lib/utils";
 
+/**
+ * A plain function cannot call the locale hook, so the dictionary arrives as an
+ * argument. `emptyLabel` lost its default for the same reason a default
+ * parameter cannot read `t`: it is evaluated before any hook has run. The
+ * caller resolves it, or this falls back to the dictionary.
+ *
+ * The `dd MMM yyyy` patterns are date-fns FORMATS, not copy — they stay.
+ */
 export function formatSelectedDatesLabel(
 	dates: Date[],
-	emptyLabel = "Select date(s)",
+	t: PortalTranslations,
+	emptyLabel?: string,
 ): string {
-	if (dates.length === 0) return emptyLabel;
+	if (dates.length === 0) return emptyLabel ?? t.adminBits.selectDates;
 	const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
 	if (sorted.length === 1) return format(sorted[0]!, "dd MMM yyyy");
 	if (sorted.length === 2) {
 		return `${format(sorted[0]!, "dd MMM")} · ${format(sorted[1]!, "dd MMM yyyy")}`;
 	}
-	return `${sorted.length} dates selected`;
+	return fill(t.adminBits.datesSelected, { n: sorted.length });
 }
 
 export function datesToQueryParam(dates: Date[]): string | undefined {
@@ -33,6 +45,7 @@ export function datesToQueryParam(dates: Date[]): string | undefined {
 interface DateMultiFilterProps {
 	selectedDates: Date[];
 	onChange: (dates: Date[]) => void;
+	/** Already translated by the caller — it lands inside "Clear {label}". */
 	ariaLabel: string;
 	emptyLabel?: string;
 	buttonClassName?: string;
@@ -43,9 +56,10 @@ export function DateMultiFilter({
 	selectedDates,
 	onChange,
 	ariaLabel,
-	emptyLabel = "Select date(s)",
+	emptyLabel,
 	buttonClassName,
 }: DateMultiFilterProps) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="flex items-center gap-1.5">
 			<Popover>
@@ -60,7 +74,7 @@ export function DateMultiFilter({
 					>
 						<CalendarIcon className="text-muted-foreground" />
 						<span className="truncate">
-							{formatSelectedDatesLabel(selectedDates, emptyLabel)}
+							{formatSelectedDatesLabel(selectedDates, t, emptyLabel)}
 						</span>
 					</Button>
 				</PopoverTrigger>
@@ -79,7 +93,7 @@ export function DateMultiFilter({
 								className="w-full"
 								onClick={() => onChange([])}
 							>
-								Clear dates
+								{t.adminBits.clearDates}
 							</Button>
 						</div>
 					)}
@@ -89,7 +103,7 @@ export function DateMultiFilter({
 				<Button
 					variant="ghost"
 					size="icon-sm"
-					aria-label={`Clear ${ariaLabel}`}
+					aria-label={fill(t.adminBits.clearNamed, { label: ariaLabel })}
 					onClick={() => onChange([])}
 				>
 					<X className="h-4 w-4" />
@@ -102,6 +116,7 @@ export function DateMultiFilter({
 interface DateSingleFilterProps {
 	value: Date | undefined;
 	onChange: (value: Date | undefined) => void;
+	/** Already translated by the caller — it lands inside "Clear {label}". */
 	ariaLabel: string;
 	emptyLabel?: string;
 	buttonClassName?: string;
@@ -112,9 +127,11 @@ export function DateSingleFilter({
 	value,
 	onChange,
 	ariaLabel,
-	emptyLabel = "Select date",
+	emptyLabel,
 	buttonClassName,
 }: DateSingleFilterProps) {
+	const { t } = usePortalLocale();
+	const emptyText = emptyLabel ?? t.adminService.selectDate;
 	return (
 		<div className="flex items-center gap-1.5">
 			<Popover>
@@ -127,7 +144,7 @@ export function DateSingleFilter({
 					>
 						<CalendarIcon className="text-muted-foreground" />
 						<span className="truncate">
-							{value ? format(value, "dd MMM yyyy") : emptyLabel}
+							{value ? format(value, "dd MMM yyyy") : emptyText}
 						</span>
 					</Button>
 				</PopoverTrigger>
@@ -147,7 +164,7 @@ export function DateSingleFilter({
 								className="w-full"
 								onClick={() => onChange(undefined)}
 							>
-								Clear date
+								{t.adminBits.clearDate}
 							</Button>
 						</div>
 					)}
@@ -158,7 +175,7 @@ export function DateSingleFilter({
 					type="button"
 					variant="ghost"
 					size="icon-sm"
-					aria-label={`Clear ${ariaLabel}`}
+					aria-label={fill(t.adminBits.clearNamed, { label: ariaLabel })}
 					onClick={() => onChange(undefined)}
 				>
 					<X className="h-4 w-4" />

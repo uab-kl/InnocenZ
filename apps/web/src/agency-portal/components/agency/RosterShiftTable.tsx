@@ -47,6 +47,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowLeftRight, Pencil } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 type OutletShiftTierRef = {
@@ -363,24 +364,41 @@ export function RosterShiftTable({
 
 	return (
 		<>
+			{/*
+				Three clauses, each a WHOLE key. The three gold bucket names are
+				inserted into the middle clause by `fill` rather than glued around it:
+				Chinese joins a list with 、and needs no "or", which a fragment-per-word
+				sentence cannot express at all.
+
+				`rosterGrid.tapA` / `.comcard` / `.tapComcardHint` were written for this
+				very line and had never been wired to it.
+			*/}
 			<p className="iz-tiny iz-muted2 mb-2 hidden md:block">
-				Tap a <strong className="text-[var(--iz-gold-l)]">comcard</strong> to
-				identify PRs ·{" "}
-				<strong className="text-[var(--iz-gold-l)]">{t.money.drinks}</strong>,{" "}
-				<strong className="text-[var(--iz-gold-l)]">{t.money.tips}</strong>, or{" "}
+				{t.rosterGrid.tapA}{" "}
 				<strong className="text-[var(--iz-gold-l)]">
-					{t.rosterGrid.estPayout}
+					{t.rosterGrid.comcard}
 				</strong>{" "}
-				for shift breakdown ·{" "}
-				<strong className="text-[var(--iz-gold-l)]">{t.common.edit}</strong> to
-				change status, shift times, or request outlet swap.
+				{t.agencyRoster.hintIdentifyPrs} ·{" "}
+				<strong className="text-[var(--iz-gold-l)]">
+					{fill(t.agencyRoster.hintAmounts, {
+						drinks: t.money.drinks,
+						tips: t.money.tips,
+						payout: t.rosterGrid.estPayout,
+					})}
+				</strong>{" "}
+				{t.agencyRoster.hintForBreakdown} ·{" "}
+				<strong className="text-[var(--iz-gold-l)]">{t.common.edit}</strong>{" "}
+				{t.rosterGrid.tapComcardHint}
 			</p>
 
 			<div className="iz-roster-table-wrap hidden md:block">
 				<table className="iz-roster-table">
 					<thead>
 						<tr>
-							<th>PR</th>
+							{/* "PR" is the same word in both locales — it goes through the
+							    shared table key so the column head cannot drift from the
+							    one on payroll and the hub. */}
+							<th>{t.table.pr}</th>
 							<th>{t.rosterGrid.agency}</th>
 							<th>{t.filters.outlet}</th>
 							<th>{t.rosterGrid.shift}</th>
@@ -737,11 +755,13 @@ function RosterShiftCard({
 				<span>{formatRosterShiftTime(slot)}</span>
 				{slot.checkedInAt && (
 					<span>
-						In {formatAttendanceStamp(slot.checkedInAt, slot.dateIso)}
+						{fill(t.agencyRoster.checkedInAtTime, {
+							time: formatAttendanceStamp(slot.checkedInAt, slot.dateIso),
+						})}
 					</span>
 				)}
 				<span>
-					Drinks{" "}
+					{t.money.drinks}{" "}
 					{onOpenEarningsSheet ? (
 						<RosterAmountButton
 							label={t.rosterGrid.drinks}
@@ -754,7 +774,7 @@ function RosterShiftCard({
 					)}
 				</span>
 				<span>
-					Tips{" "}
+					{t.money.tips}{" "}
 					{onOpenEarningsSheet ? (
 						<RosterAmountButton
 							label={t.rosterGrid.tips}
@@ -782,7 +802,9 @@ function RosterShiftCard({
 				<div className="mt-2 rounded-lg border border-[rgba(124,107,255,.3)] bg-[rgba(124,107,255,.08)] px-2.5 py-2">
 					<p className="iz-tiny iz-muted flex items-center gap-1">
 						<ArrowLeftRight className="h-3 w-3 text-[var(--iz-violet)]" />
-						PR swap to {prSwap.targetOutlet} — awaiting agency
+						{fill(t.agencyRoster.prSwapAwaitingAgency, {
+							outlet: prSwap.targetOutlet ?? t.table.outlet,
+						})}
 					</p>
 					<button
 						type="button"

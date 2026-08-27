@@ -5,6 +5,12 @@ import { useStore } from "@agency-portal/lib/store";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import {
+	monthShortLabel,
+	weekdayDayMonthLabel,
+} from "@/lib/portal-i18n/date-label";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	PenaltyProposal,
 	UnchargedCancellation,
@@ -29,21 +35,27 @@ import type {
  * uncollected longest, which is the one most worth chasing.
  */
 
-/** Three-letter month, so a date reads as a date and not as an id. */
-const MONTH = [
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec",
-];
+/**
+ * WHICH RULE a weekly penalty is for, in the same words the penalty settings
+ * page uses — so a fine on this ledger and the rule that produced it cannot end
+ * up named two different things.
+ *
+ * A module-scope map cannot read `t`, so it holds FUNCTIONS of it. The record
+ * KEYS are the API's own `rule_type` enum values and never change. Unrecognised
+ * values fall through to the stored string with its underscores opened out —
+ * the same fallthrough every portal-i18n resolver uses, so a rule added
+ * server-side keeps rendering instead of blanking the row.
+ */
+const PENALTY_RULE_LABEL: Record<string, (t: PortalTranslations) => string> = {
+	min_shifts_per_week: (t) => t.penalties.minShiftsTitle,
+	max_mc_per_month: (t) => t.penalties.mcCapTitle,
+	late_per_week: (t) => t.penalties.latenessTitle,
+	cancellation: (t) => t.penalties.cancellationTitle,
+};
+
+function penaltyRuleLabel(ruleType: string, t: PortalTranslations): string {
+	return PENALTY_RULE_LABEL[ruleType]?.(t) ?? ruleType.replace(/_/g, " ");
+}
 
 /**
  * "2–8 Aug", or "28 Jul – 3 Aug" when the week straddles a month.
@@ -51,8 +63,18 @@ const MONTH = [
  * `week 2026-08-02 – 2026-08-08` was 25 characters of mostly-repeated digits on
  * a line of its own under every carried-over row. The ISO pair survives in the
  * cell's `title`, so nothing is lost to someone who needs the exact dates.
+ *
+ * The month keeps its three-letter shape — the reason the array it came from
+ * existed at all is that a date must read as a date and not as an id — but the
+ * word now comes from the dictionary, so the shape survives the language
+ * switch. `t` is a PARAMETER and comes LAST, with no default: this is module
+ * scope and cannot call a hook, and a default would pin one language forever.
  */
-function formatWeekRange(startIso: string, endIso: string): string {
+function formatWeekRange(
+	startIso: string,
+	endIso: string,
+	t: PortalTranslations,
+): string {
 	const s = String(startIso ?? "")
 		.slice(0, 10)
 		.split("-")
@@ -65,20 +87,25 @@ function formatWeekRange(startIso: string, endIso: string): string {
 		return String(startIso ?? "");
 	}
 	return s[0] === e[0] && s[1] === e[1]
-		? `${s[2]}–${e[2]} ${MONTH[e[1] - 1]}`
-		: `${s[2]} ${MONTH[s[1] - 1]} – ${e[2]} ${MONTH[e[1] - 1]}`;
+		? `${s[2]}–${e[2]} ${monthShortLabel(e[1] - 1, t)}`
+		: `${s[2]} ${monthShortLabel(s[1] - 1, t)} – ${e[2]} ${monthShortLabel(e[1] - 1, t)}`;
 }
 
-/** "Sat 16 Aug" — the night the shift was, not a database value. */
-function formatShiftDay(iso: string | null): string {
+/**
+ * "Sat 16 Aug" — the night the shift was, not a database value.
+ *
+ * `T00:00:00` keeps the parse LOCAL, so the night is not dragged back a day by
+ * a UTC-midnight parse; the helper is therefore called with `utc` left false.
+ * The hardcoded `"en-GB"` here pinned English on the same ledger whose month
+ * words were about to stop being pinned, so it takes `t` on the same terms as
+ * `formatWeekRange` above.
+ */
+function formatShiftDay(iso: string | null, t: PortalTranslations): string {
 	if (!iso) return "—";
 	const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
 	if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
-	return d.toLocaleDateString("en-GB", {
-		weekday: "short",
-		day: "numeric",
-		month: "short",
-	});
+	const { weekday, dayMonth } = weekdayDayMonthLabel(d, t);
+	return `${weekday} ${dayMonth}`;
 }
 
 /**
@@ -379,13 +406,16 @@ export function UnchargedFeesPanel({
 	const penaltyRow = (p: UnchargedPenalty): FeeRow => ({
 		id: p.chargeId,
 		name: p.prName ?? "PR",
-		detail: `${p.ruleType.replace(/_/g, " ")} · ${p.detail}`,
+		detail: `${penaltyRuleLabel(p.ruleType, t)} · ${p.detail}`,
 		// On EVERY row, including this week's. It was carried-over only, on the
 		// reasoning that the tab above already names the week — true, and it still
 		// left the column blank on two rows out of three and the week itself
 		// unstated beside the fine it produced.
-		when: formatWeekRange(p.weekStart, p.weekEnd),
-		whenTitle: `week ${p.weekStart} – ${p.weekEnd}`,
+		when: formatWeekRange(p.weekStart, p.weekEnd, t),
+		whenTitle: fill(t.agencyQueues.weekFromTo, {
+			from: p.weekStart,
+			to: p.weekEnd,
+		}),
 		amountRm: Number(p.fineRm ?? 0),
 		checked: selectedCharges.has(p.chargeId),
 		onToggle: () => toggleCharge(p.chargeId),
@@ -397,15 +427,21 @@ export function UnchargedFeesPanel({
 		// The night moves to the `when` column, where the penalty weeks are, so
 		// one column answers "when" for both kinds of money instead of the date
 		// hiding at the head of a sentence on one of them.
-		when: formatShiftDay(c.shiftDate),
+		when: formatShiftDay(c.shiftDate, t),
 		whenTitle: String(c.shiftDate ?? ""),
 		detail:
-			[c.slot, c.outletName].filter(Boolean).join(" · ") || "cancelled shift",
-		basis: `${c.feePct ?? 0}% of RM ${Number(c.dailyWageRm ?? 0).toFixed(2)}${
+			[c.slot, c.outletName].filter(Boolean).join(" · ") ||
+			t.agencyQueues.cancelledShift,
+		basis: `${fill(t.agencyQueues.feePctOfWage, {
+			pct: c.feePct ?? 0,
+			wage: `RM ${Number(c.dailyWageRm ?? 0).toFixed(2)}`,
+		})}${
 			c.noticeHours != null
 				? Number(c.noticeHours) < 0
-					? " · after start"
-					: ` · ${Number(c.noticeHours).toFixed(1)}h notice`
+					? ` · ${t.agencyQueues.cancelledAfterStart}`
+					: ` · ${fill(t.agencyQueues.noticeHours, {
+							n: Number(c.noticeHours).toFixed(1),
+						})}`
 				: ""
 		}`,
 		note: c.reason ? `"${c.reason}"` : undefined,
@@ -419,7 +455,7 @@ export function UnchargedFeesPanel({
 	const proposalRow = (p: PenaltyProposal): FeeRow => ({
 		id: `${p.prId}-${p.ruleType}-${p.weekStart}`,
 		name: p.prName ?? "PR",
-		detail: `${p.ruleType.replace(/_/g, " ")} · ${p.detail}`,
+		detail: `${penaltyRuleLabel(p.ruleType, t)} · ${p.detail}`,
 		amountRm: Number(p.fineRm ?? 0),
 	});
 
@@ -429,7 +465,7 @@ export function UnchargedFeesPanel({
 		return (
 			<IzCard flat className="border-[var(--iz-line2)]">
 				<p className="iz-sm text-[var(--iz-red,#e5484d)]">
-					Could not load uncharged fees — the agency uncharged endpoint failed.
+					{t.agencyQueues.couldNotLoadUncharged}
 				</p>
 			</IzCard>
 		);
@@ -571,9 +607,16 @@ export function UnchargedFeesPanel({
 					{t.payroll.unchargedPenaltiesFees}
 				</b>
 				<span className="iz-tiny iz-muted2">
-					· {count} not yet billed · RM {totalRm} outstanding
+					·{" "}
+					{fill(t.agencyQueues.notYetBilledOutstanding, {
+						n: count,
+						amount: `RM ${totalRm}`,
+					})}
 					{penalties.length > 0 && cancellations.length > 0
-						? ` (RM ${penaltiesRm} weekly + RM ${cancellationsRm} cancellations)`
+						? ` ${fill(t.agencyQueues.weeklyPlusCancellations, {
+								weekly: `RM ${penaltiesRm}`,
+								cancellations: `RM ${cancellationsRm}`,
+							})}`
 						: ""}
 					{/* Sealed and unrecorded are different debts. Summing only the
 					    sealed ones here hid the half nobody had accepted yet. */}
@@ -587,7 +630,7 @@ export function UnchargedFeesPanel({
 				    standing condition, not news, and it was costing a full line above
 				    a list whose whole problem was vertical space. */}
 				<span className="iz-tiny ml-auto shrink-0 text-[var(--iz-gold-l)]">
-					⚠ Add these before sending the PV
+					⚠ {t.agencyQueues.addBeforeSendingPv}
 				</span>
 			</button>
 
@@ -630,8 +673,10 @@ export function UnchargedFeesPanel({
 					{canMark && selected.size + selectedCharges.size > 0 && (
 						<div className="mt-2 flex items-center justify-between gap-2 border-t border-[var(--iz-line)] pt-2">
 							<span className="iz-tiny iz-muted2">
-								{selected.size + selectedCharges.size} selected · RM{" "}
-								{selectedTotal.toFixed(2)}
+								{fill(t.agencyQueues.selectedTotal, {
+									n: selected.size + selectedCharges.size,
+									amount: `RM ${selectedTotal.toFixed(2)}`,
+								})}
 							</span>
 							<button
 								type="button"

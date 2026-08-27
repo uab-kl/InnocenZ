@@ -1,6 +1,8 @@
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { cn } from "@agency-portal/lib/utils";
 import { type ReactNode, useEffect, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 
 export const INNOCENZ_LOGO_PATH = "/assets/innocenz-logo.png";
 export const INNOCENZ_LOGO_HORIZONTAL_PATH =
@@ -106,12 +108,19 @@ export function Logo({
 }
 
 function StatusBar() {
+	const { locale } = usePortalLocale();
 	const [time, setTime] = useState("9:41");
 	useEffect(() => {
 		const tick = () => {
 			const d = new Date();
+			// A TIME, not a date: the tag follows the portal's language, but
+			// `hour12: false` STAYS. It is what makes this a phone status bar
+			// rather than a clock that changes shape with the language — zh-CN
+			// and en-GB both render "9:05" / "13:45" under it, so this switch
+			// does not move the digits today. Dropping it would hand the shape
+			// to whatever a future locale's default hour cycle happens to be.
 			setTime(
-				d.toLocaleTimeString("en-GB", {
+				d.toLocaleTimeString(dateLocaleTag(locale), {
 					hour: "numeric",
 					minute: "2-digit",
 					hour12: false,
@@ -121,7 +130,7 @@ function StatusBar() {
 		tick();
 		const id = setInterval(tick, 30_000);
 		return () => clearInterval(id);
-	}, []);
+	}, [locale]);
 
 	return (
 		<div className="iz-statusbar">

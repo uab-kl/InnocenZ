@@ -92,11 +92,10 @@ function SignUpScreenInner({
 	}, []);
 
 	const agencyFetched = useRef(false);
-	const current = STEPS[step - 1];
-	const stepCopy = t.signup.steps[step - 1] ?? {
-		title: current.title,
-		subtitle: current.subtitle,
-	};
+	// STEPS carries only the icons; the title/subtitle come from the dictionary,
+	// so there is no English copy to fall back to and no locale to pin.
+	const StepIcon = STEPS[step - 1];
+	const stepCopy = t.signup.steps[step - 1];
 	const patch = (part: Partial<Draft>) => setDraft((d) => ({ ...d, ...part }));
 	const clearFieldError = useCallback((key: keyof FieldErrors) => {
 		setFieldErrors((prev) => {
@@ -117,8 +116,9 @@ function SignUpScreenInner({
 
 	useEffect(() => {
 		if (resendIn <= 0) return;
-		const t = setInterval(() => setResendIn((s) => (s <= 1 ? 0 : s - 1)), 1000);
-		return () => clearInterval(t);
+		// NOT `t` — that shadows the locale dictionary inside this effect.
+		const timer = setInterval(() => setResendIn((s) => (s <= 1 ? 0 : s - 1)), 1000);
+		return () => clearInterval(timer);
 	}, [resendIn]);
 
 	useEffect(() => {
@@ -145,46 +145,15 @@ function SignUpScreenInner({
 	const describe = (e: unknown, fallback: string) =>
 		e instanceof ApiError ? e.message : fallback;
 
-	const validationCopy = {
-		nicknameRequired: t.signup.nicknameRequired,
-		fullNameRequired: t.signup.fullNameRequired,
-		dialRequired: t.signup.dialRequired,
-		phoneShort: t.signup.phoneShort,
-		nationalityRequired: t.signup.nationalityRequired,
-		idTypeRequired: t.signup.idTypeRequired,
-		nricMalaysianOnly: t.signup.nricMalaysianOnly,
-		dobRequired: t.signup.dobRequired,
-		idNoSelectFirst: t.signup.idNoSelectFirst,
-		idNoRequired: t.signup.idNoRequired,
-		languagesRequired: t.signup.languagesRequired,
-		addressLine1Required: t.signup.addressLine1Required,
-		cityRequired: t.signup.cityRequired,
-		postcodeRequired: t.signup.postcodeRequired,
-		stateRequired: t.signup.stateRequired,
-		countryRequired: t.signup.countryRequired,
-		joiningRequired: t.signup.joiningRequired,
-		agencyRequired: t.signup.agencyRequired,
-		profileRequired: t.signup.profileRequired,
-		idFrontRequired: t.signup.idFrontRequired,
-		idPassportPageRequired: t.signup.idPassportPageRequired,
-		idFrontOcrFail: t.signup.idFrontOcrFail,
-		idPassportOcrFail: t.signup.idPassportOcrFail,
-		idBackRequired: t.signup.idBackRequired,
-		idBackOcrFail: t.signup.idBackOcrFail,
-		passwordRequired: t.signup.passwordRequired,
-		passwordMin: t.signup.passwordMin,
-		confirmRequired: t.signup.confirmRequired,
-		passwordMismatch: t.signup.passwordMismatch,
-		ackRequired: t.signup.ackRequired,
-		fixHighlighted: t.signup.fixHighlighted,
-	};
-
+	// `t.signup` IS the validation copy — validateStep takes Partial<SignupFieldCopy>,
+	// so the hand-built 31-key map is gone. It is also one stable object per locale,
+	// which the map was not: it was rebuilt every render and killed the memo below.
 	const goNext = async () => {
 		const { fields, toast: toastMsg } = validateStep(
 			step,
 			draft,
 			localDigits,
-			validationCopy,
+			t.signup,
 		);
 		if (toastMsg) {
 			setFieldErrors(fields);
@@ -245,7 +214,7 @@ function SignUpScreenInner({
 					5,
 					draft,
 					localDigits,
-					validationCopy,
+					t.signup,
 				);
 				if (toastMsg) {
 					setFieldErrors(fields);
@@ -282,7 +251,7 @@ function SignUpScreenInner({
 				setBusy(false);
 			}
 		},
-		[busy, draft, localDigits, phoneNum, fullPhone, showToast, validationCopy, t.signup],
+		[busy, draft, localDigits, phoneNum, fullPhone, showToast, t.signup],
 	);
 
 	const verifyAndSubmit = async () => {
@@ -431,7 +400,13 @@ function SignUpScreenInner({
 				// Name what actually failed. A bare "some photos didn't upload" is
 				// easy to miss and impossible to act on — an R2 outage silently ate
 				// the avatar, the IC photos and the whole gallery behind this toast.
-				showToast(`${t.signup.toastPhotosPartial} — ${uploadFailures.join(', ')}`);
+				// One sentence with a {list} slot, never a translated half plus an
+				// English tail: Chinese puts the list somewhere else.
+				showToast(
+					formatMessage(t.signup.toastPhotosPartial, {
+						list: uploadFailures.join(', '),
+					}),
+				);
 			}
 		} catch (e) {
 			if (!hasReceipt) setOtp('');
@@ -488,7 +463,7 @@ function SignUpScreenInner({
 					{formatMessage(t.signup.stepOf, { step, total: STEPS.length })}
 				</Text>
 				<View style={styles.titleRow}>
-					<current.icon size={19} color={C.accent} strokeWidth={2.2} />
+					<StepIcon size={19} color={C.accent} strokeWidth={2.2} />
 					<Text style={styles.title}>{stepCopy.title}</Text>
 				</View>
 				<Text style={styles.subtitle}>{stepCopy.subtitle}</Text>

@@ -1,6 +1,8 @@
 import { resolveRosterPrName } from "@agency-portal/lib/agency-demo";
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
+import { portalCodeLabel } from "@/lib/portal-i18n/rbac-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type SpecialServiceInitiator = "agency" | "outlet" | "pr";
 
@@ -383,8 +385,22 @@ export function specialServiceOffer(
 	return AGENCY_SPECIAL_SERVICE_OFFERS.find((s) => s.id === id);
 }
 
-export function specialServiceRemarkHint(serviceType: string): string {
-	return specialServiceOffer(serviceType)?.remarkHint ?? "Add job details…";
+/**
+ * Placeholder under the remark field.
+ *
+ * A KNOWN offer still yields the record's own English `remarkHint` on purpose:
+ * this is the fallthrough half of `specialServiceOfferRemarkHint`, whose map
+ * already answers in the reader's language for every offer it knows. Only the
+ * generic default — reached by an offer id added server-side — is translated,
+ * because that one is not an offer's own text.
+ */
+export function specialServiceRemarkHint(
+	serviceType: string,
+	t: PortalTranslations,
+): string {
+	return (
+		specialServiceOffer(serviceType)?.remarkHint ?? t.libDemo.addJobDetails
+	);
 }
 
 /** Admin-arranged service cost — never above the agency budget (amountIn). */
@@ -560,38 +576,58 @@ export function collectSpecialServiceAmountOutOptions(
 	return collectAmountMinOptions(records, "amountOut");
 }
 
+/**
+ * Rendered name for a stored `SpecialServiceStatus`. The switch arm is the
+ * stored value and never changes; only what it returns does. Every string comes
+ * from `ssPortal`, which already names these ten states on the order sheet — a
+ * private set here would let one status read two ways on two screens.
+ *
+ * `t` is required, not optional-with-an-English-default: an optional `t` would
+ * let a new call site compile while quietly rendering English.
+ */
 export function specialServiceStatusLabel(
 	status: SpecialServiceStatus,
+	t: PortalTranslations,
 ): string {
 	switch (status) {
 		case "pending_admin":
-			return "Pending Admin Review";
+			return t.ssPortal.statusPendingAdmin;
 		case "accepted":
-			return "Accepted";
+			return t.ssPortal.statusAccepted;
 		case "rejected":
-			return "Rejected";
+			return t.ssPortal.statusRejected;
 		case "pending_agency":
-			return "Pending agency";
+			return t.ssPortal.statusPendingAgency;
 		case "pending_pr":
-			return "Awaiting PR";
+			return t.ssPortal.statusAwaitingPr;
 		case "pending_outlet":
-			return "Awaiting outlet";
+			return t.ssPortal.statusAwaitingOutlet;
 		case "pending_both":
-			return "Awaiting PR & outlet";
+			return t.ssPortal.statusAwaitingBoth;
 		case "confirmed":
-			return "Confirmed";
+			return t.ssPortal.statusConfirmed;
 		case "declined":
-			return "Declined";
+			return t.ssPortal.statusDeclined;
 		case "paid":
-			return "Paid";
+			return t.ssPortal.statusPaid;
 	}
 }
 
-export function agencyJobPostingInzLabel(record: SpecialServiceRecord): string {
-	if (record.adminAccepted === "declined") return "Rejected";
-	if (record.adminAccepted === "pending") return "Pending review";
-	if (record.adminAccepted === "accepted") return "Accepted";
-	return specialServiceStatusLabel(record.status);
+/**
+ * The InnocenZ-review badge on a job posting. The pending arm reads
+ * `agencySpecial.statusPendingAdmin` ("Pending review") rather than
+ * `ssPortal.statusPendingAdmin` ("Pending Admin Review") — the shorter wording
+ * is this badge's, and the two were already different sentences in English.
+ */
+export function agencyJobPostingInzLabel(
+	record: SpecialServiceRecord,
+	t: PortalTranslations,
+): string {
+	if (record.adminAccepted === "declined") return t.ssPortal.statusRejected;
+	if (record.adminAccepted === "pending")
+		return t.agencySpecial.statusPendingAdmin;
+	if (record.adminAccepted === "accepted") return t.ssPortal.statusAccepted;
+	return specialServiceStatusLabel(record.status, t);
 }
 
 export type AgencyJobPostingStatusTone =
@@ -657,19 +693,28 @@ export function specialServiceStatusVariant(
 	}
 }
 
+/**
+ * Who raised the order. `agency` and `outlet` are portal codes, so they go
+ * through `portalCodeLabel` rather than getting a second pair of keys here.
+ * "PR" is deliberately absent from the dictionary — it is the product's term
+ * for the role, it is what the DB stores, and it reads "PR" in both locales.
+ */
 export function specialServiceInitiatorLabel(
 	initiatedBy: SpecialServiceInitiator,
+	t: PortalTranslations,
 ): string {
-	switch (initiatedBy) {
-		case "agency":
-			return "Agency";
-		case "outlet":
-			return "Outlet";
-		case "pr":
-			return "PR";
-	}
+	if (initiatedBy === "pr") return "PR";
+	return portalCodeLabel(initiatedBy, t);
 }
 
+/**
+ * ⚠️ NOT a display label, despite the name — its result is POSTED as the
+ * posting's `title` (`use-agency-special-services.ts`, `use-outlet-special-services.ts`),
+ * so a translated return would write Chinese into a column the whole platform
+ * then reads back. It is also the English fallthrough inside
+ * `specialServiceOfferLabel`, which is what actually renders an offer's name.
+ * Leave it English.
+ */
 export function specialServiceTypeLabel(
 	type: string,
 	customServiceName?: string,
@@ -685,6 +730,7 @@ export function specialServiceTypeLabel(
 	);
 }
 
+/** Record-shaped wrapper over {@link specialServiceTypeLabel} — English for the same reason. */
 export function specialServiceRecordTypeLabel(
 	record: Pick<SpecialServiceRecord, "serviceType" | "customServiceName">,
 ): string {

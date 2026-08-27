@@ -281,7 +281,7 @@ export function Step4VerifyPhotos({
     draft.idFrontOcrOk && draft.idPhotoFrontUri
       ? {
           status: 'matched',
-          seen: draft.idNo.trim() || 'OK',
+          seen: draft.idNo.trim() || t.signup.idNoEmpty,
           side: draft.idType === 'Passport' ? 'unknown' : 'front',
           rawText: `__kept_front__:${draft.idPhotoFrontUri}`,
         }
@@ -291,7 +291,7 @@ export function Step4VerifyPhotos({
     draft.idBackOcrOk && draft.idPhotoBackUri
       ? {
           status: 'matched',
-          seen: draft.idNo.trim() || 'OK',
+          seen: draft.idNo.trim() || t.signup.idNoEmpty,
           side: 'back',
           rawText: `__kept_back__:${draft.idPhotoBackUri}`,
         }
@@ -319,7 +319,7 @@ export function Step4VerifyPhotos({
             setResult({
               status: 'mismatch',
               seen: null,
-              expected: draft.idNo || '(empty)',
+              expected: draft.idNo || t.signup.idNoEmpty,
               rawText: '',
             });
             patch({ [okKey]: false });
@@ -329,7 +329,9 @@ export function Step4VerifyPhotos({
             setResult({
               status: 'mismatch',
               seen: null,
-              expected: `${draft.idNo} (must match DOB)`,
+              expected: formatMessage(t.signup.nricMustMatchDob, {
+                id: draft.idNo,
+              }),
               rawText: '',
             });
             patch({ [okKey]: false });
@@ -400,6 +402,7 @@ export function Step4VerifyPhotos({
       draft.idType,
       frontOcr,
       patch,
+      t.signup,
     ],
   );
 
@@ -477,7 +480,7 @@ export function Step4VerifyPhotos({
       : draft.idFrontOcrOk && draft.idPhotoFrontUri
         ? {
             status: 'matched',
-            seen: draft.idNo.trim() || 'OK',
+            seen: draft.idNo.trim() || t.signup.idNoEmpty,
             side: passportOnly ? 'unknown' : 'front',
             rawText: '',
           }
@@ -488,7 +491,7 @@ export function Step4VerifyPhotos({
       : draft.idBackOcrOk && draft.idPhotoBackUri
         ? {
             status: 'matched',
-            seen: draft.idNo.trim() || 'OK',
+            seen: draft.idNo.trim() || t.signup.idNoEmpty,
             side: 'back',
             rawText: '',
           }

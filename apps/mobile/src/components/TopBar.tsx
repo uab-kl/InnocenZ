@@ -16,6 +16,7 @@ import {
   type NotificationRecord,
 } from '../lib/api';
 import { ImageLightbox } from './ImageLightbox';
+import { localizeNotification } from '../lib/notification-copy';
 import { formatMessage, useLocale } from '../i18n';
 import { Avatar, IzButton } from './ui';
 import { Bell, ChevronLeft, FileText } from './icons';
@@ -41,7 +42,7 @@ export function TopBar({
   onBack?: () => void;
 }) {
   const { me, token } = useSession();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const { openPv } = usePrNav();
   const { awaiting } = useAwaitingLastWeekPv();
   const time = useClock();
@@ -80,20 +81,36 @@ export function TopBar({
   }, [token]);
 
   const notifications = useMemo(() => {
-    const real = rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      body: r.body ?? '',
-      at: new Date(r.createdAt).toLocaleString(undefined, {
-        day: 'numeric',
-        month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-      }),
-      read: r.readAt !== null,
-      pvId: typeof r.payload?.voucherId === 'string' ? r.payload.voucherId : undefined,
-      backed: true,
-    }));
+    const real = rows.map((r) => {
+      /*
+       * TITLE AND BODY ARE LOCALIZED HERE, not by the producer.
+       *
+       * The row is a PERSISTED backend record — translating it at the source
+       * would bake one language into the `notification` table and leave every
+       * existing row in the other. `localizeNotification` maps `kind` +
+       * `payload` onto the dictionary and falls back to the stored English for
+       * anything it cannot rebuild. The timestamp below is localized the same
+       * way, and was already right.
+       */
+      const copy = localizeNotification(r, locale, t);
+      return {
+        id: r.id,
+        title: copy.title,
+        body: copy.body,
+        // `locale`, not `undefined`: passing undefined follows the DEVICE's
+        // language, so a PR who switched the app to Chinese still read an English
+        // date here. `AppLocale` ('en' | 'zh' | 'zh-Hant') is a valid BCP-47 tag.
+        at: new Date(r.createdAt).toLocaleString(locale, {
+          day: 'numeric',
+          month: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        }),
+        read: r.readAt !== null,
+        pvId: typeof r.payload?.voucherId === 'string' ? r.payload.voucherId : undefined,
+        backed: true,
+      };
+    });
 
     // The awaiting-PV prompt is a stand-in for `payment_voucher_issued`. Keep it
     // only while no real row covers that ground, so a PR never loses the
@@ -109,7 +126,7 @@ export function TopBar({
                 ref: awaiting.todo.ref,
                 net: formatRM(awaiting.todo.net),
               }),
-              at: weekPvIssueDayLabel(1),
+              at: weekPvIssueDayLabel(1, undefined, t),
               read: false as boolean,
               pvId: awaiting.todo.pvId as string | undefined,
               backed: false,
@@ -121,7 +138,7 @@ export function TopBar({
       ...n,
       read: n.read || readIds.includes(n.id),
     }));
-  }, [rows, awaiting, readIds, t]);
+  }, [rows, awaiting, readIds, locale, t]);
   const unread = notifications.filter((n) => !n.read).length;
 
   const displayName = me?.username ?? 'PR';
@@ -200,7 +217,7 @@ export function TopBar({
           </Pressable>
         )}
         <View style={styles.datetime}>
-          <Text style={styles.date}>{fmtDTopbar(y, m, d)}</Text>
+          <Text style={styles.date}>{fmtDTopbar(y, m, d, t)}</Text>
           <Text style={styles.time}>{time}</Text>
         </View>
         <Pressable style={styles.bellBtn} onPress={() => setSheetOpen(true)}>
@@ -227,9 +244,7 @@ export function TopBar({
           <Pressable style={styles.backdropTap} onPress={() => setSheetOpen(false)} />
           <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
             <Text style={styles.sheetTitle}>{t.topbar.notifications}</Text>
-            <Text style={styles.sheetHint}>
-              Assignments, swaps, PVs, and SOS receipts — tap to open the screen.
-            </Text>
+            <Text style={styles.sheetHint}>{t.topbar.notificationsHint}</Text>
             {/*
               * MARK ALL READ — real, one POST per unread row.
               *
@@ -301,7 +316,7 @@ export function TopBar({
                   </View>
                   {!n.read && (
                     <View style={styles.newPill}>
-                      <Text style={styles.newPillText}>New</Text>
+                      <Text style={styles.newPillText}>{t.common.newBadge}</Text>
                     </View>
                   )}
                 </View>

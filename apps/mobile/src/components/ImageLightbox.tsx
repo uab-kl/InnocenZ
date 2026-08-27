@@ -28,6 +28,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { C, F } from '../theme/theme';
+import { useLocale } from '../i18n';
 import { XIcon, ZoomIn } from './icons';
 
 const MIN_SCALE = 1;
@@ -114,6 +115,7 @@ export function ImageLightbox({
   uri: string | null;
   onClose: () => void;
 }) {
+  const { t } = useLocale();
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
@@ -235,17 +237,18 @@ export function ImageLightbox({
     }
     pinchBase.current = null;
     if (fingers.length === 1 && scaleRef.current > MIN_SCALE) {
-      const t = fingers[0];
+      // NOT `t` — that name belongs to the locale in this component.
+      const finger = fingers[0];
       if (!panBase.current || phase === 'start') {
         panBase.current = {
-          x: t.pageX,
-          y: t.pageY,
+          x: finger.pageX,
+          y: finger.pageY,
           ox: offsetRef.current.x,
           oy: offsetRef.current.y,
         };
       }
-      const dx = t.pageX - panBase.current.x;
-      const dy = t.pageY - panBase.current.y;
+      const dx = finger.pageX - panBase.current.x;
+      const dy = finger.pageY - panBase.current.y;
       if (Math.hypot(dx, dy) > TAP_JITTER_PX) moved.current = true;
       applyOffset(panBase.current.ox + dx, panBase.current.oy + dy);
     }
@@ -375,12 +378,20 @@ export function ImageLightbox({
       }
       pinch = null;
       if (ev.touches.length === 1 && scaleRef.current > MIN_SCALE) {
-        const t = ev.touches[0];
+        // NOT `t` — that name belongs to the locale in this component.
+        const finger = ev.touches[0];
         if (!pan) {
-          pan = { x: t.pageX, y: t.pageY, ox: offsetRef.current.x, oy: offsetRef.current.y };
+          pan = {
+            x: finger.pageX,
+            y: finger.pageY,
+            ox: offsetRef.current.x,
+            oy: offsetRef.current.y,
+          };
         }
-        if (Math.hypot(t.pageX - pan.x, t.pageY - pan.y) > TAP_JITTER_PX) movedHere = true;
-        applyOffset(pan.ox + (t.pageX - pan.x), pan.oy + (t.pageY - pan.y));
+        if (Math.hypot(finger.pageX - pan.x, finger.pageY - pan.y) > TAP_JITTER_PX) {
+          movedHere = true;
+        }
+        applyOffset(pan.ox + (finger.pageX - pan.x), pan.oy + (finger.pageY - pan.y));
       }
     };
     const onTouchEnd = (ev: WebTouchEvent) => {
@@ -429,7 +440,7 @@ export function ImageLightbox({
         <View style={s.topBar} ref={attachTopBar} pointerEvents="box-none">
           <Pressable style={s.returnBtn} onPress={onClose} hitSlop={8}>
             <XIcon size={14} color={C.red} strokeWidth={2.4} />
-            <Text style={s.returnText}>Return</Text>
+            <Text style={s.returnText}>{t.profile.viewerReturn}</Text>
           </Pressable>
         </View>
         <View
@@ -486,9 +497,7 @@ export function ImageLightbox({
             <Text style={s.zoomBtnText}>+</Text>
           </Pressable>
         </View>
-        <Text style={s.hint}>
-          Pinch or double-tap to zoom · drag to move · close with ✕ Return
-        </Text>
+        <Text style={s.hint}>{t.profile.viewerHint}</Text>
       </View>
     </Modal>
   );

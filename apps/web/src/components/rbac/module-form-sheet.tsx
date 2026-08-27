@@ -180,7 +180,7 @@ export function ModuleFormSheet({
 										</FieldLabel>
 										<Input
 											id="module-key"
-											placeholder="e.g. payment_voucher"
+											placeholder={t.adminBits.moduleKeyPlaceholder}
 											value={field.state.value}
 											onBlur={field.handleBlur}
 											onChange={(event) =>
@@ -232,7 +232,7 @@ export function ModuleFormSheet({
 												{t.rbac.activeStatus}
 											</FieldLabel>
 											<p className="text-sm text-muted-foreground">
-												Set module as active or inactive.
+												{t.adminBits.setModuleActiveHint}
 											</p>
 										</div>
 										<Switch

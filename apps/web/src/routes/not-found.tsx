@@ -1,6 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { FileQuestion, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+	PortalLocaleProvider,
+	usePortalLocale,
+} from "@/lib/portal-i18n/context";
 
 export const notFoundTitle = "Not Found | Innocenz";
 
@@ -8,7 +12,29 @@ export const notFoundHead = () => ({
 	meta: [{ title: notFoundTitle }],
 });
 
+/**
+ * The root route's `notFoundComponent`, so nothing above this carries the
+ * locale — the page mounts the provider itself and consumes it one level
+ * down, the same shape `/policy` and `/delete-account` use.
+ *
+ * It has to be a wrapper: a component cannot read a context it mounts, and
+ * `usePortalLocale` does NOT throw when un-provided — it silently renders
+ * English. A consumer up here would have looked wired and never been.
+ *
+ * The copy itself is `webShell.notFound*`, shared with the admin shell's own
+ * 404 (`components/layout/admin-not-found`) so the two cannot drift.
+ */
 export function NotFoundPage() {
+	return (
+		<PortalLocaleProvider>
+			<NotFoundBody />
+		</PortalLocaleProvider>
+	);
+}
+
+function NotFoundBody() {
+	const { t } = usePortalLocale();
+
 	return (
 		<div className="fixed inset-0 z-50 flex min-h-svh w-full items-center justify-center bg-background px-6">
 			<div className="flex w-full max-w-xl flex-col items-center text-center">
@@ -23,12 +49,11 @@ export function NotFoundPage() {
 				</div>
 
 				<h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-					Page not found
+					{t.webShell.notFoundTitle}
 				</h1>
 
 				<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
-					Sorry, we couldn&apos;t find the page you&apos;re looking for. The
-					page might have been removed or the URL might be incorrect.
+					{t.webShell.notFoundBody}
 				</p>
 
 				<Button
@@ -38,7 +63,7 @@ export function NotFoundPage() {
 				>
 					<Link to="/" className="text-inherit [&_svg]:text-inherit">
 						<Home className="h-4 w-4" />
-						Back to home
+						{t.webShell.backToHome}
 					</Link>
 				</Button>
 			</div>

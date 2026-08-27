@@ -7,7 +7,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { usePrNav } from '../lib/pr-nav';
 import { useSession } from '../lib/session';
-import { useLocale } from '../i18n';
+import { formatMessage, useLocale } from '../i18n';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -66,11 +66,12 @@ export function SecurityScreen() {
   const closedDialLabel = country
     ? `${country.flag ? `${country.flag} ` : ''}${country.dialCode}`
     : null;
+  const displayPhone = `${country?.dialCode ?? ''} ${localDigits}`.trim();
 
   useEffect(() => {
     if (resendIn <= 0) return;
-    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(timer);
   }, [resendIn]);
 
   const closeAll = () => {
@@ -98,7 +99,7 @@ export function SecurityScreen() {
       setNewPw('');
       setConfirmPw('');
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not update password');
+      setError(e instanceof ApiError ? e.message : t.security.updatePasswordFailed);
     } finally {
       setBusy(false);
     }
@@ -114,9 +115,9 @@ export function SecurityScreen() {
       setResendIn(res.resendAfterSec ?? 60);
       setOtp('');
       setSheet('otp');
-      setMsg(`Code sent on WhatsApp to ${country?.dialCode ?? ''} ${localDigits}`);
+      setMsg(formatMessage(t.security.codeSentTo, { phone: displayPhone }));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not send code');
+      setError(e instanceof ApiError ? e.message : t.security.sendCodeFailed);
     } finally {
       setBusy(false);
     }
@@ -130,12 +131,12 @@ export function SecurityScreen() {
       const verified = await verifyPrOtp(fullPhone, otp, 'change_phone');
       await changePhoneWithOtp(token, fullPhone, verified.verificationId);
       await refreshMe();
-      setMsg('Phone number updated');
+      setMsg(t.security.phoneUpdated);
       setSheet('menu');
       setPhoneNumber('');
       setOtp('');
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not update phone');
+      setError(e instanceof ApiError ? e.message : t.security.updatePhoneFailed);
     } finally {
       setBusy(false);
     }
@@ -155,7 +156,7 @@ export function SecurityScreen() {
       setDeletePw('');
       await signOut();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not delete account');
+      setError(e instanceof ApiError ? e.message : t.security.deleteAccountFailed);
     } finally {
       setBusy(false);
     }
@@ -168,14 +169,16 @@ export function SecurityScreen() {
         <Text style={styles.backText}>{t.nav.profile}</Text>
       </Pressable>
 
-      <Text style={styles.eyebrow}>ACCOUNT</Text>
+      <Text style={styles.eyebrow}>{t.security.eyebrow}</Text>
       <View style={styles.titleRow}>
         <Shield size={22} color={C.accent} />
         <Text style={styles.title}>{t.security.title}</Text>
       </View>
       <Text style={styles.meta}>
-        Change password with your current one, or change phone via WhatsApp OTP.
-        {me?.phoneNum ? ` Current: ${me.phoneNum}` : ''}
+        {t.security.intro}
+        {me?.phoneNum
+          ? ` ${formatMessage(t.security.currentPhone, { phone: me.phoneNum })}`
+          : ''}
       </Text>
 
       {msg ? <Text style={styles.toast}>{msg}</Text> : null}
@@ -270,11 +273,9 @@ export function SecurityScreen() {
 
             {sheet === 'phone' && (
               <>
-                <Text style={styles.sheetTitle}>Change phone</Text>
-                <Text style={styles.sheetHint}>
-                  Enter the new number. We will send a WhatsApp code to verify it.
-                </Text>
-                <Text style={styles.fieldLabel}>New mobile number</Text>
+                <Text style={styles.sheetTitle}>{t.security.changePhone}</Text>
+                <Text style={styles.sheetHint}>{t.security.changePhoneHint}</Text>
+                <Text style={styles.fieldLabel}>{t.security.newMobileNumber}</Text>
                 <View style={styles.phoneRow}>
                   <Picker
                     value={phoneCountryCode}
@@ -284,9 +285,9 @@ export function SecurityScreen() {
                       savePhoneCountryCode(code);
                     }}
                     width={118}
-                    placeholder="Code"
+                    placeholder={t.login.dialCode}
                     displayValue={closedDialLabel}
-                    title="Country & dial code"
+                    title={t.login.dialTitle}
                     searchable
                   />
                   <TextInput
@@ -306,24 +307,23 @@ export function SecurityScreen() {
                   disabled={busy || !localDigits}
                 >
                   <Text style={styles.primaryText}>
-                    {busy ? 'Sending…' : 'Send WhatsApp code'}
+                    {busy ? t.forgot.sending : t.security.sendWhatsappCode}
                   </Text>
                 </Pressable>
                 <Pressable style={styles.sheetCancel} onPress={() => setSheet('menu')}>
-                  <Text style={styles.sheetCancelText}>Back</Text>
+                  <Text style={styles.sheetCancelText}>{t.common.back}</Text>
                 </Pressable>
               </>
             )}
 
             {sheet === 'otp' && (
               <>
-                <Text style={styles.sheetTitle}>Verify OTP</Text>
+                <Text style={styles.sheetTitle}>{t.security.otpTitle}</Text>
                 <Text style={styles.sheetHint}>
-                  Enter the 6-digit code sent on WhatsApp to {country?.dialCode ?? ''}{' '}
-                  {localDigits}
+                  {formatMessage(t.security.otpHint, { phone: displayPhone })}
                 </Text>
                 <Field
-                  label="OTP"
+                  label={t.security.otpLabel}
                   value={otp}
                   onChange={(v) => setOtp(normalizeOtpInput(v))}
                   keyboardType="number-pad"
@@ -335,7 +335,7 @@ export function SecurityScreen() {
                   disabled={busy || otp.length !== 6}
                 >
                   <Text style={styles.primaryText}>
-                    {busy ? 'Saving…' : 'Verify & save'}
+                    {busy ? t.forgot.saving : t.security.verifyAndSave}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -344,11 +344,13 @@ export function SecurityScreen() {
                   disabled={resendIn > 0 || busy}
                 >
                   <Text style={styles.sheetCancelText}>
-                    {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
+                    {resendIn > 0
+                      ? formatMessage(t.forgot.resendIn, { s: resendIn })
+                      : t.forgot.resend}
                   </Text>
                 </Pressable>
                 <Pressable style={styles.sheetCancel} onPress={() => setSheet('phone')}>
-                  <Text style={styles.sheetCancelText}>Back</Text>
+                  <Text style={styles.sheetCancelText}>{t.common.back}</Text>
                 </Pressable>
               </>
             )}

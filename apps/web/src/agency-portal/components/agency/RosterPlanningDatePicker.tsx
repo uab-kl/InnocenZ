@@ -117,7 +117,9 @@ export function RosterPlanningDatePicker({
 				className={`iz-roster-planning-date-trigger${open ? " open" : ""}`}
 				onClick={() => setOpen((o) => !o)}
 				aria-expanded={open}
-				aria-label={weekly ? "Choose week" : "Choose date"}
+				aria-label={
+					weekly ? t.agencyRoster.chooseWeek : t.history.chooseDate
+				}
 			>
 				<span
 					className={`flex min-w-0 items-center gap-1.5 truncate${value ? "" : " text-[var(--iz-muted2)]"}`}

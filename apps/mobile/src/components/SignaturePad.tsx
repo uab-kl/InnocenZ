@@ -8,6 +8,7 @@ import React, { useRef, useState } from 'react';
 import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { C } from '../theme/theme';
+import { useLocale } from '../i18n';
 
 export type SignatureInk = { w: number; h: number; strokes: [number, number][][] };
 
@@ -18,6 +19,7 @@ function toPath(stroke: [number, number][]): string {
 }
 
 export function SignaturePad({ onChange }: { onChange: (ink: SignatureInk | null) => void }) {
+  const { t } = useLocale();
   const [, setTick] = useState(0);
   const strokesRef = useRef<[number, number][][]>([]);
   const currentRef = useRef<[number, number][]>([]);
@@ -25,7 +27,8 @@ export function SignaturePad({ onChange }: { onChange: (ink: SignatureInk | null
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const redraw = () => setTick((t) => t + 1);
+  // `n`, not `t` — `t` is the locale in this component.
+  const redraw = () => setTick((n) => n + 1);
 
   const pan = useRef(
     PanResponder.create({
@@ -100,10 +103,10 @@ export function SignaturePad({ onChange }: { onChange: (ink: SignatureInk | null
             />
           ))}
         </Svg>
-        {all.length === 0 && <Text style={styles.hint}>Sign here with your finger</Text>}
+        {all.length === 0 && <Text style={styles.hint}>{t.profile.signHere}</Text>}
       </View>
       <Pressable onPress={clear} hitSlop={8} style={styles.clearBtn}>
-        <Text style={styles.clearText}>Clear</Text>
+        <Text style={styles.clearText}>{t.profile.clearSignature}</Text>
       </Pressable>
     </View>
   );

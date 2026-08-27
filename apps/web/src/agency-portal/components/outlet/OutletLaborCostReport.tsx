@@ -170,6 +170,7 @@ export function OutletLaborCostReport({
 		<OutletSection
 			id={OUTLET_LABOR_COST_SECTION_ID}
 			title={t.today.laborCost}
+			iconKey="Labor cost"
 			hint={fill(t.today.actualVsTarget, {
 				actual: formatReportRm(report.totalActualRm),
 				target: formatReportRm(report.totalBudgetRm),

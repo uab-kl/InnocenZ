@@ -41,6 +41,8 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 function formatFloorDrinks(floor: OutletPrLiveSales): string {
 	return floor.drinkSalesRm > 0 ? formatRM(floor.drinkSalesRm) : "—";
@@ -50,14 +52,25 @@ function formatFloorTips(floor: OutletPrLiveSales): string {
 	return floor.tipRm > 0 ? formatRM(floor.tipRm) : "—";
 }
 
+/**
+ * The row pill: one entry per `LiveWorkforceEntry["status"]`.
+ *
+ * `label` is a RESOLVER, not a string. The record KEYS are the statuses the
+ * store writes and must stay English; only what the operator reads moves with
+ * the locale, and a module-scope map cannot call a hook to read the dictionary
+ * itself.
+ */
 const LIVE_STATUS_LABEL: Record<
 	LiveWorkforceEntry["status"],
-	{ label: string; variant: "green" | "amber" | "red" | "violet" | "ink" }
+	{
+		label: (t: PortalTranslations) => string;
+		variant: "green" | "amber" | "red" | "violet" | "ink";
+	}
 > = {
-	"on-duty": { label: "On duty", variant: "green" },
-	"en-route": { label: "Scheduled", variant: "ink" },
-	"checked-out": { label: "Checked out", variant: "ink" },
-	out: { label: "Out", variant: "ink" },
+	"on-duty": { label: (t) => t.roster.onDuty, variant: "green" },
+	"en-route": { label: (t) => t.roster.scheduled, variant: "ink" },
+	"checked-out": { label: (t) => t.roster.checkedOut, variant: "ink" },
+	out: { label: (t) => t.portalShell.statusOut, variant: "ink" },
 };
 
 export function workforceStatusVariant(
@@ -70,14 +83,24 @@ export function workforceStatusVariant(
 	return "ink" as const;
 }
 
+/**
+ * The compact pill wording, shouted in English and terse in Chinese.
+ *
+ * `t` is OPTIONAL only because the outlet floor panel imports this helper and is
+ * not part of this file's ownership — a required parameter would have broken it
+ * from here. Every call site inside this file passes `t`; the English fallbacks
+ * exist for that one caller and should go once it is wired.
+ */
 export function workforceStatusLabel(
 	status: LiveWorkforceEntry["status"] | "scheduled" | "checked-out",
+	t?: PortalTranslations,
 ) {
-	if (status === "on-duty") return "ON-DUTY";
-	if (status === "en-route") return "EN-ROUTE";
-	if (status === "scheduled") return "BOOKED";
-	if (status === "checked-out") return "RELEASED";
-	return "OUT";
+	if (status === "on-duty") return t?.portalShell.pillOnDuty ?? "ON-DUTY";
+	if (status === "en-route") return t?.portalShell.pillEnRoute ?? "EN-ROUTE";
+	if (status === "scheduled") return t?.portalShell.pillBooked ?? "BOOKED";
+	if (status === "checked-out")
+		return t?.portalShell.pillReleased ?? "RELEASED";
+	return t?.portalShell.pillOut ?? "OUT";
 }
 
 function WorkforceRow({
@@ -100,6 +123,7 @@ function WorkforceRow({
 		slot: AgencyRosterSlot,
 	) => void;
 }) {
+	const { t } = usePortalLocale();
 	const st = LIVE_STATUS_LABEL[entry.status];
 	const previewSlot = slot ?? { prId: prId ?? entry.id, prName: entry.prName };
 	const label = agencyLabel ?? (slot ? rosterSlotAgencyName(slot) : undefined);
@@ -139,13 +163,17 @@ function WorkforceRow({
 			</td>
 			<td className="iz-portal-table-status">
 				<IzPill variant={st.variant} className="!py-0.5 !text-[9px]">
-					{st.label}
+					{st.label(t)}
 				</IzPill>
 			</td>
 			<td className="iz-portal-table-meta">
 				{onOpenEarningsSheet && slot ? (
 					<RosterAmountButton
-						label="drinks"
+						// Lands mid-sentence in the button's accessible name, so it has
+						// to arrive ALREADY TRANSLATED — the same word the column header
+						// above uses. The "drinks" passed to onOpenEarningsSheet below is
+						// the sheet's kind and stays English.
+						label={t.money.drinks}
 						stopRowNavigation
 						onClick={() => onOpenEarningsSheet("drinks", slot)}
 					>
@@ -158,7 +186,7 @@ function WorkforceRow({
 			<td className="iz-portal-table-meta">
 				{onOpenEarningsSheet && slot ? (
 					<RosterAmountButton
-						label="tips"
+						label={t.money.tips}
 						stopRowNavigation
 						onClick={() => onOpenEarningsSheet("tips", slot)}
 					>
@@ -339,25 +367,35 @@ export function LiveWorkforceTable({
 		);
 	}
 
+	// One sentence in the dictionary, split on its own placeholders so the two
+	// column names keep their gold emphasis. Splitting the ENGLISH sentence into
+	// three fragments instead would have handed the translator word order it
+	// cannot change — Chinese puts the verb and the object the other way round.
+	const [hintHead, hintAfterDrinks] =
+		t.portalShell.tapDrinksOrTipsHint.split("{drinks}");
+	const [hintMiddle, hintTail] = (hintAfterDrinks ?? "").split("{tips}");
+
 	const tableBody = (
 		<>
 			<p className="iz-tiny iz-muted2 mb-2 hidden md:block px-4 md:pr-0 md:pl-2">
-				Tap <strong className="text-[var(--iz-gold-l)]">Drinks</strong> or{" "}
-				<strong className="text-[var(--iz-gold-l)]">Tips</strong> for shift
-				breakdown.
+				{hintHead}
+				<strong className="text-[var(--iz-gold-l)]">{t.money.drinks}</strong>
+				{hintMiddle}
+				<strong className="text-[var(--iz-gold-l)]">{t.money.tips}</strong>
+				{hintTail}
 			</p>
 			<div className="iz-portal-table-wrap">
 				<table className="iz-portal-table">
 					<thead>
 						<tr>
-							<th>PR</th>
-							<th>Agency</th>
-							<th>Outlet</th>
-							<th>Shift</th>
-							<th>Check-in</th>
-							<th>Status</th>
-							<th>Drinks</th>
-							<th>Tips</th>
+							<th>{t.table.pr}</th>
+							<th>{t.rosterGrid.agency}</th>
+							<th>{t.table.outlet}</th>
+							<th>{t.rosterGrid.shift}</th>
+							<th>{t.rosterGrid.checkIn}</th>
+							<th>{t.table.status}</th>
+							<th>{t.money.drinks}</th>
+							<th>{t.money.tips}</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -433,6 +471,7 @@ export function LiveWorkforceList({
 	dateIso?: string;
 	outletName: string;
 }) {
+	const { t } = usePortalLocale();
 	const agencyRoster = useStore((s) => s.agencyRoster);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const shifts = useStore((s) => s.shifts);
@@ -542,9 +581,14 @@ export function LiveWorkforceList({
 	return (
 		<section className="iz-portal-panel">
 			<div className="iz-portal-panel-head">
-				<h3 className="font-sora text-base font-bold">PR roster — tonight</h3>
+				<h3 className="font-sora text-base font-bold">
+					{t.portalShell.prRosterTonight}
+				</h3>
 				<span className="iz-tiny iz-muted">
-					{onFloorCount} on floor · {rows.length} booked
+					{fill(t.portalShell.onFloorAndBooked, {
+						onFloor: onFloorCount,
+						booked: rows.length,
+					})}
 				</span>
 			</div>
 			<ul className="iz-portal-roster-list">
@@ -562,13 +606,13 @@ export function LiveWorkforceList({
 							variant={workforceStatusVariant(w.status)}
 							className="!py-0.5 !text-[9px]"
 						>
-							{workforceStatusLabel(w.status)}
+							{workforceStatusLabel(w.status, t)}
 						</IzPill>
 					</li>
 				))}
 				{rows.length === 0 && (
 					<li className="iz-tiny iz-muted px-4 py-5 text-center">
-						No PRs booked yet.
+						{t.portalShell.noPrsBookedYet}
 					</li>
 				)}
 			</ul>

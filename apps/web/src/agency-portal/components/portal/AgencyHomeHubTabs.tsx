@@ -22,6 +22,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { weekdayDayMonthLabel } from "@/lib/portal-i18n/date-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 type HubTab =
@@ -54,18 +55,27 @@ const HUB_TAB_ALERT_COLOR: Record<HubTab, string> = {
 };
 
 /**
- * The tabs whose backlog STOPS MONEY — which is what "urgent" means here.
+ * The tabs whose LABEL takes the count's colour — a queue, not a statistic.
  *
- * Each of these four holds a week shut: a voucher nobody reviewed cannot be
+ * Between them these hold a week shut: a voucher nobody reviewed cannot be
  * sent, a dispute cannot be paid around, a pending receipt blocks its voucher,
- * an undecided overtime claim holds the whole payroll week. So they colour
- * their LABEL as well as their number. A coloured digit under a grey label
- * reads as a statistic; these are a queue.
+ * an undecided overtime claim holds the whole payroll week, and a PR waiting on
+ * a sign-up cannot be rostered at all. A coloured digit under a grey label
+ * reads as a number somebody keeps; these are all work waiting on a person.
  *
- * `on-duty` and `approvals` are deliberately absent. PRs on the floor is good
- * news, and a pending sign-up costs nobody their wages.
+ * `approvals` was left out on the reasoning that a pending sign-up costs nobody
+ * their wages — true of the MONEY, and beside the point on screen: it sat in the
+ * same strip as four coloured queues wearing a grey word over an amber 6, which
+ * reads as a different KIND of thing rather than as a lower priority. Owner's
+ * call, 26 Aug 2026: *"make the word follow the colour like the others"*.
+ *
+ * `on-duty` stays out, and is now the only one. It is a live readout — who is on
+ * the floor this minute — not a backlog, and green is how this strip says good
+ * news; colouring its word too would dress the one tab nobody has to act on as
+ * the one that needs acting on.
  */
-const HUB_TAB_URGENT = new Set<HubTab>([
+const HUB_TAB_LABEL_FOLLOWS_COUNT = new Set<HubTab>([
+	"approvals",
 	"review",
 	"disputes",
 	"receipts",
@@ -93,15 +103,24 @@ function disputeComponentLabel(component: string, t: PortalTranslations) {
 	return key ? t.money[key] : component;
 }
 
-/** "2026-08-06" -> "Thu 6 Aug", the day the PR is contesting. */
-function formatDisputeDay(iso: string): string {
+/**
+ * "2026-08-06" -> "Thu 6 Aug", the day the PR is contesting.
+ *
+ * `T00:00:00` keeps the parse LOCAL — a bare `YYYY-MM-DD` is UTC midnight,
+ * which in Asia/Kuala_Lumpur draws the previous day — so the parts are read
+ * locally and the helper is called with `utc` left false.
+ *
+ * The words come from the dictionary rather than a hardcoded `"en-GB"`, which
+ * pinned this column to English whatever the portal was set to. Nothing reads
+ * this string back: it is drawn into a table cell and thrown away. `t` is a
+ * PARAMETER, last and with no default — module scope cannot call a hook, and a
+ * default dictionary would re-pin the language the tag just stopped pinning.
+ */
+function formatDisputeDay(iso: string, t: PortalTranslations): string {
 	const d = new Date(`${iso}T00:00:00`);
 	if (Number.isNaN(d.getTime())) return iso;
-	return d.toLocaleDateString("en-GB", {
-		weekday: "short",
-		day: "numeric",
-		month: "short",
-	});
+	const { weekday, dayMonth } = weekdayDayMonthLabel(d, t);
+	return `${weekday} ${dayMonth}`;
 }
 
 function HubPanelLink({
@@ -228,7 +247,13 @@ export function AgencyHomeHubTabs({
 
 	const defaultTab = tabs[0]?.id ?? "on-duty";
 	const [tab, setTab] = useState<HubTab>(defaultTab);
-	const activeTab = tabs.some((t) => t.id === tab) ? tab : defaultTab;
+	// `tabItem`, not `t`: this callback parameter used to shadow the locale
+	// dictionary that the whole component reads. It happened to be harmless while
+	// the body only touched `.id`, but the next line added inside it that wanted a
+	// translated string would have silently read the tab object instead.
+	const activeTab = tabs.some((tabItem) => tabItem.id === tab)
+		? tab
+		: defaultTab;
 
 	const workforce = useMemo(
 		() =>
@@ -279,26 +304,27 @@ export function AgencyHomeHubTabs({
 	return (
 		<section className="iz-portal-panel iz-agency-home-hub">
 			<div className="iz-agency-home-tabs">
-				{tabs.map((t) => (
+				{tabs.map((tabItem) => (
 					<button
-						key={t.id}
+						key={tabItem.id}
 						type="button"
-						className={`iz-agency-home-tab${activeTab === t.id ? " on" : ""}`}
-						onClick={() => setTab(t.id)}
+						className={`iz-agency-home-tab${activeTab === tabItem.id ? " on" : ""}`}
+						onClick={() => setTab(tabItem.id)}
 					>
-						{/* The label carries the colour too, but only for the four that
-						    stop money — see HUB_TAB_URGENT. Applied even on the OPEN tab,
+						{/* The label carries the colour too — see
+						    HUB_TAB_LABEL_FOLLOWS_COUNT. Applied even on the OPEN tab,
 						    unlike the number: a queue does not stop being urgent because
 						    you are looking at it, and the underline already says which
 						    tab is open. */}
 						<div
 							className={`l${
-								HUB_TAB_URGENT.has(t.id) && counts[t.id] > 0
-									? ` ${HUB_TAB_ALERT_COLOR[t.id]}`
+								HUB_TAB_LABEL_FOLLOWS_COUNT.has(tabItem.id) &&
+								counts[tabItem.id] > 0
+									? ` ${HUB_TAB_ALERT_COLOR[tabItem.id]}`
 									: ""
 							}`}
 						>
-							{t.label}
+							{tabItem.label}
 						</div>
 						{/* A lookup, not a ternary chain. This was four nested conditionals
 						    for four tabs; at six it stops being readable, and the next
@@ -306,13 +332,16 @@ export function AgencyHomeHubTabs({
 						    chain it belongs rather than just naming its colour. */}
 						<div
 							className={`n${
-								counts[t.id] > 0 &&
-								(HUB_TAB_URGENT.has(t.id) || activeTab !== t.id)
-									? ` ${HUB_TAB_ALERT_COLOR[t.id]}`
+								counts[tabItem.id] > 0 &&
+								(
+									HUB_TAB_LABEL_FOLLOWS_COUNT.has(tabItem.id) ||
+										activeTab !== tabItem.id
+								)
+									? ` ${HUB_TAB_ALERT_COLOR[tabItem.id]}`
 									: ""
 							}`}
 						>
-							{counts[t.id]}
+							{counts[tabItem.id]}
 						</div>
 					</button>
 				))}
@@ -641,7 +670,7 @@ export function AgencyHomeHubTabs({
 													</div>
 												</td>
 												<td className="iz-portal-table-meta">
-													{formatDisputeDay(d.disputeDate)}
+													{formatDisputeDay(d.disputeDate, t)}
 												</td>
 												<td className="iz-portal-table-meta">
 													{disputeComponentLabel(d.component, t)}
@@ -728,7 +757,7 @@ export function AgencyHomeHubTabs({
 												    10 Aug, so this row said "Tue 16 Jun" while Payroll
 												    filed it under "Mon 10 Aug". */}
 												<td className="iz-portal-table-meta">
-													{formatDisputeDay(workingDayIso(r))}
+													{formatDisputeDay(workingDayIso(r), t)}
 												</td>
 												<td className="iz-portal-table-status">
 													<IzPill
@@ -809,7 +838,7 @@ export function AgencyHomeHubTabs({
 												</td>
 												<td className="iz-portal-table-meta">
 													{c.shiftDate
-														? formatDisputeDay(c.shiftDate.slice(0, 10))
+														? formatDisputeDay(c.shiftDate.slice(0, 10), t)
 														: "—"}
 												</td>
 												<td className="iz-portal-table-meta">

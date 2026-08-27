@@ -1,3 +1,4 @@
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { cn, formatNumber } from "@/lib/utils";
 
 export type DonutSlice = {
@@ -31,6 +32,7 @@ export function DonutChart({
 	thickness = 18,
 	className,
 }: DonutChartProps) {
+	const { t } = usePortalLocale();
 	const total = slices.reduce((sum, s) => sum + s.value, 0);
 	const center = size / 2;
 	const radius = center - thickness / 2;
@@ -54,7 +56,7 @@ export function DonutChart({
 					role="img"
 					aria-label={
 						total === 0
-							? "No data yet"
+							? t.webUi.chartNoData
 							: slices
 									.filter((s) => s.value > 0)
 									.map((s) => `${s.label}: ${s.value}`)

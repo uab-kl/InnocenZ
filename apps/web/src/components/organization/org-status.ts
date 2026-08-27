@@ -1,3 +1,5 @@
+import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type { AgencyStatus } from "@/services/agency";
 import type { OutletStatus } from "@/services/outlet";
 
@@ -12,12 +14,35 @@ export const ORG_STATUSES: OrgStatus[] = [
 	"inactive",
 ];
 
+/**
+ * English source copy for the four org states. NOT the render path — use
+ * `orgStatusLabel(status, t)` so a badge follows the reader's locale. Kept
+ * because the strings are the reference wording the dictionary entries were
+ * written from.
+ */
 export const orgStatusLabels: Record<OrgStatus, string> = {
 	pending_review: "Pending review",
 	active: "Active",
 	suspended: "Suspended",
 	inactive: "Inactive",
 };
+
+/**
+ * The label rendered for an organisation's stored status.
+ *
+ * The VALUE is never touched: `ORG_STATUSES`, every status filter, every query
+ * param and `orgStatusBadgeColors` keep reading the raw code. `active` /
+ * `inactive` are the same two values every admin record list shows, so they
+ * come from `recordStatusLabel` rather than a second translation of one word;
+ * only the two organisation-specific states resolve here. An unrecognised
+ * status falls through to itself, so a state added server-side keeps rendering
+ * instead of blanking a badge.
+ */
+export function orgStatusLabel(status: string, t: PortalTranslations): string {
+	if (status === "pending_review") return t.adminService.pendingReview;
+	if (status === "suspended") return t.admin.statusSuspended;
+	return recordStatusLabel(status, t);
+}
 
 export const orgStatusBadgeColors: Record<OrgStatus, string> = {
 	pending_review:
@@ -47,6 +72,13 @@ export function isOrgProfileOnly(status: string | null | undefined): boolean {
 	return isOrgPendingReview(status) || isOrgSuspended(status);
 }
 
+/**
+ * Humanise a sub-role code the UI has no named group for ("operations_head" →
+ * "Operations Head"). Deliberately NOT translated: it is a stored code made
+ * readable, and the only rows that reach it are lanes nobody has named yet — a
+ * translation would have to invent a term for a value the product has not
+ * defined. The five known lanes render their dictionary labels instead.
+ */
 export function formatSubRole(subRole: string): string {
 	return subRole
 		.split("_")

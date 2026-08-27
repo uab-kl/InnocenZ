@@ -6,7 +6,10 @@ import {
 	collectionWeekLabel,
 } from "@agency-portal/lib/collections";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
-import { shouldShowWeeklyReconciliation } from "@agency-portal/lib/reconciliation-weekly";
+import {
+	parseIsoDateLocal,
+	shouldShowWeeklyReconciliation,
+} from "@agency-portal/lib/reconciliation-weekly";
 import { useStore } from "@agency-portal/lib/store";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
@@ -14,6 +17,7 @@ import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dayMonthLabel } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 
 /**
@@ -161,6 +165,29 @@ function DemoReconciliationBanner() {
 	)
 		return null;
 
+	/*
+	 * Built from the week's ISO BOUNDS, not from the stored `dateLabel` beside
+	 * them. That label is persisted through the store's `partialize`, so it stays
+	 * English on purpose — translating it at the producer would bake one language
+	 * into saved weeks and leave a switch showing half of them in the other.
+	 */
+	const startIso = agencyReconciliation.weekStartIso;
+	const endIso = agencyReconciliation.weekEndIso;
+	/*
+	 * No bounds — a week saved before they were carried — falls back to the
+	 * stored English label rather than rendering a blank or a bare year. Same
+	 * choice as the PR app's History header.
+	 */
+	const weekRange =
+		startIso && endIso
+			? fill(t.today.weekRange, {
+					range: `${dayMonthLabel(parseIsoDateLocal(startIso), t)} – ${dayMonthLabel(
+						parseIsoDateLocal(endIso),
+						t,
+					)} ${parseIsoDateLocal(endIso).getFullYear()}`,
+				})
+			: agencyReconciliation.dateLabel;
+
 	const hasVariance = agencyReconciliation.variance !== 0;
 	const summary = hasVariance
 		? fill(t.today.varianceActionNeeded, {
@@ -168,9 +195,7 @@ function DemoReconciliationBanner() {
 			})
 		: agencyReconciliation.outletConfirmed
 			? t.today.awaitingAgencyConfirm
-			: fill(t.today.confirmWeek, {
-					date: agencyReconciliation.dateLabel,
-				});
+			: fill(t.today.confirmWeek, { date: weekRange });
 
 	return (
 		<div className="mt-4 overflow-hidden rounded-2xl border border-[rgba(232,194,122,.28)] bg-[rgba(232,194,122,.06)]">
@@ -197,9 +222,11 @@ function DemoReconciliationBanner() {
 			{open && (
 				<div className="border-t border-[rgba(232,194,122,.2)] px-3.5 pb-3.5 pt-2">
 					<p className="iz-tiny iz-muted">
-						{agencyReconciliation.dateLabel} · Sales{" "}
-						{formatRM(agencyReconciliation.outletSalesTotal)} vs PV{" "}
-						{formatRM(agencyReconciliation.pvTotal)}
+						{weekRange} ·{" "}
+						{fill(t.today.salesVsPv, {
+							sales: formatRM(agencyReconciliation.outletSalesTotal),
+							pv: formatRM(agencyReconciliation.pvTotal),
+						})}
 					</p>
 					{hasVariance && !agencyReconciliation.outletConfirmed && (
 						<input

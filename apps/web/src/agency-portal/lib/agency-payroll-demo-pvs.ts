@@ -57,7 +57,35 @@ function seedPrSignature(prName: string) {
 	return { prSignatureDataUrl: buildDemoESignatureDataUrl(prName) };
 }
 
-const MONTH_NAMES = [
+/**
+ * ⚠️ STORED / PARSED KEYS, NOT LABELS — and the ONLY copy of either list.
+ *
+ * `MONTH_KEYS` is the month half of every short date this portal WRITES onto a
+ * voucher row — `fmtDtable` → `PrPvRow.date`, e.g. "18 Jul" — and it is the same
+ * table every reader PARSES that string back with, through `monthKeyIndex` in
+ * pr-demo. Four separate hand-copied month lists used to do this job (one writer
+ * and three parsers); if any of them had drifted, a stored date would have
+ * silently resolved to the wrong month or to epoch. The string it builds is also
+ * a sort key, a payroll-row grouping key and part of the `paidRefs`
+ * duplicate-payment guard, and it reaches sessionStorage through the store's
+ * `partialize`.
+ *
+ * `WEEKDAY_KEYS` is persisted on `PrPvRow.day`, read back positionally
+ * (`row.dateDisplay.split(" ")[0]` gates a duplicate-voucher check) and spliced
+ * into dispute text that `parseDisputeDateIsoFromText` re-reads with an
+ * English-only regex.
+ *
+ * Translating either list rewrites stored records and breaks those parsers at
+ * once, silently, with tsc green. To show a month or a weekday to a reader, use
+ * `monthShortLabel(i, t)` / `weekdayLabel(token, t)` from
+ * `@/lib/portal-i18n/date-label` — the render half of the split.
+ *
+ * They live in this demo-seed module purely because of the dependency direction:
+ * pr-demo imports THIS file, so this is the one place all the date-writing
+ * modules can reach without an import cycle. pr-demo re-exports both under the
+ * same names, and that is the import site everything downstream should use.
+ */
+export const MONTH_KEYS = [
 	"Jan",
 	"Feb",
 	"Mar",
@@ -72,7 +100,7 @@ const MONTH_NAMES = [
 	"Dec",
 ] as const;
 
-const DAY_NAMES_SHORT = [
+export const WEEKDAY_KEYS = [
 	"Sun",
 	"Mon",
 	"Tue",
@@ -150,8 +178,13 @@ function disputeDemoFields(_prName: string, rows: PayrollPvRow[]) {
 	};
 }
 
-function fmtRowDate(day: number, month: number): string {
-	return `${day} ${MONTH_NAMES[month - 1]}`;
+/**
+ * The seeded `PrPvRow.date` KEY — "18 Jul". Not a label: three parsers read it
+ * back (see the note on `MONTH_KEYS`), so it is built from that table and never
+ * from a dictionary.
+ */
+function rowDateKey(day: number, month: number): string {
+	return `${day} ${MONTH_KEYS[month - 1]}`;
 }
 
 function outletLabel(rows: PayrollPvRow[]): string {
@@ -198,8 +231,8 @@ function buildWeeklyRows(
 		const day = anchor.startDay + dayOff;
 		const outlet = OUTLETS[(prIndex + dayOff) % OUTLETS.length]!;
 		const date = new Date(anchor.year, anchor.month - 1, day);
-		const dayLabel = DAY_NAMES_SHORT[date.getDay()]!;
-		const dateStr = fmtRowDate(day, anchor.month);
+		const dayLabel = WEEKDAY_KEYS[date.getDay()]!;
+		const dateStr = rowDateKey(day, anchor.month);
 
 		rows.push({
 			i: i++,

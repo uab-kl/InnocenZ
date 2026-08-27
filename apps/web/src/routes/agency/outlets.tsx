@@ -222,8 +222,17 @@ function AgencyManageOutlets() {
 
 			<section className="mt-4">
 				<div className="iz-pr-manage-stats">
+					{/* Spelled out as two keys rather than appending an "S": Chinese has
+					    no plural, and the count is the whole label here. The English
+					    stays upper-case because this is the big stat line — the CSS
+					    applies no text-transform, so the caps live in the copy. */}
 					<span className="iz-pr-manage-stats__count">
-						{filtered.length} OUTLET{filtered.length !== 1 ? "S" : ""}
+						{fill(
+							filtered.length === 1
+								? t.agencyMisc.outletCountOne
+								: t.agencyMisc.outletCountMany,
+							{ n: filtered.length },
+						)}
 					</span>
 				</div>
 
@@ -246,7 +255,7 @@ function AgencyManageOutlets() {
 									className="iz-link"
 									onClick={selectAllFiltered}
 								>
-									Select all
+									{t.managePr.selectAll}
 								</button>
 							</>
 						)}
@@ -257,8 +266,8 @@ function AgencyManageOutlets() {
 						to="/agency/roster"
 						className="iz-btn iz-btn-primary mb-3 flex w-full items-center justify-center gap-1.5 !py-2.5"
 					>
-						<Users className="h-3.5 w-3.5" /> Open roster to assign (
-						{selected.size})
+						<Users className="h-3.5 w-3.5" />{" "}
+						{fill(t.agencyMisc.openRosterToAssign, { n: selected.size })}
 					</Link>
 				)}
 

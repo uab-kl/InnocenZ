@@ -7,6 +7,7 @@ export {
 	ORG_STATUSES,
 	type OrgStatusFilter,
 	orgStatusBadgeColors,
+	orgStatusLabel,
 	orgStatusLabels,
 } from "./org-status";
 export { OutletDetailsSheet } from "./outlet-details-sheet";

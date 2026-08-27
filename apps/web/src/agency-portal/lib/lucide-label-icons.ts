@@ -2,6 +2,33 @@
  * Single source of truth for Lucide icons paired with UI labels.
  * Same label → same icon everywhere (all roles, all pages).
  * Icons: https://lucide.dev/icons/
+ *
+ * THIS MODULE IS MONOLINGUAL BY DESIGN — every string in it is a LOOKUP KEY,
+ * never rendered text. The map keys, the regex patterns and the arguments passed
+ * to `iconForNav(...)` below are all matched against ENGLISH, and none of them
+ * reaches a screen. Translating any of them, or feeding a translated label in
+ * from a caller, does not throw and does not warn: the lookup simply misses and
+ * the icon vanishes (`iconForLabel` → null) or degrades to a "?" (`iconForNav` →
+ * CircleHelp). A caller that localises its title must pass the original English
+ * through an `iconKey` prop — see `OutletSection` / `OutletPageHeader`.
+ *
+ * TWO DISTINCT FAILURE MODES, and they look nothing alike on screen — expect
+ * both when auditing a locale:
+ *   1. `iconForNav` NEVER fails, it falls back to CircleHelp. A translated label
+ *      renders a plausible "?" glyph next to correct-looking copy. Nav and
+ *      sidebars go quietly generic rather than blank.
+ *   2. `iconForLabel` (alias `iconForTitle`) returns NULL on a miss, and the
+ *      caller renders nothing. The icon just DISAPPEARS.
+ * Mode 2 is the one that reaches screens by accident, because `TitleWithIcon`
+ * scrapes its lookup key out of its own RENDERED CHILDREN when no `icon`/
+ * `iconKey` prop is given. Children read from the dictionary are English only in
+ * the `en` build, so those titles lose their icons in zh while every check stays
+ * green. Fixed in `ShiftHistoryLog` ("Filter by", "Transaction log") by pinning
+ * `icon={iconForNav("<English>")}`; recover the English from the key's `en`
+ * value in translations.ts rather than guessing it.
+ *
+ * Rendered copy belongs in the dictionary and is read through resolver
+ * functions, the way `SHIFT_METRIC_DEFS` at the foot of this file does it.
  */
 import type { LucideIcon } from "lucide-react";
 import {
@@ -66,7 +93,12 @@ export function normalizeLabelKey(text: string): string {
 	return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Exact label → icon (canonical spellings used in nav, sections, metrics). */
+/**
+ * Exact label → icon (canonical spellings used in nav, sections, metrics).
+ *
+ * The KEYS are English lookup keys, not copy — leave them exactly as they are in
+ * every locale. Nothing here is displayed.
+ */
 const EXACT_LABEL_ICONS: Record<string, LucideIcon> = {
 	// Nav — shared across roles
 	home: Home,
@@ -263,12 +295,26 @@ export function iconForLabel(text: string): LucideIcon | null {
 	return null;
 }
 
-/** Nav/sidebar — always returns an icon (CircleHelp fallback). */
+/**
+ * Nav/sidebar — always returns an icon (CircleHelp fallback).
+ *
+ * `label` is an ENGLISH lookup key, never the rendered string. Because the
+ * fallback always succeeds, a translated label produces a plausible-looking "?"
+ * icon rather than an error — the failure is invisible until someone switches
+ * locale and notices the sidebar has gone blank.
+ */
 export function iconForNav(label: string): LucideIcon {
 	return iconForLabel(label) ?? CircleHelp;
 }
 
-/** @deprecated Use iconForLabel — kept for existing TitleWithIcon imports. */
+/**
+ * @deprecated Use iconForLabel — kept for existing TitleWithIcon imports.
+ *
+ * Returns NULL on a miss, so the icon vanishes rather than degrading to "?".
+ * `TitleWithIcon` calls this with a key derived from its own children when no
+ * `icon`/`iconKey` prop is passed — which is exactly how a translated title
+ * loses its icon. Pass the English key at the call site.
+ */
 export const iconForTitle = iconForLabel;
 
 export const PORTAL_TITLE_ICONS = {
@@ -277,6 +323,12 @@ export const PORTAL_TITLE_ICONS = {
 	agency: iconForNav("PR Agency"),
 } as const satisfies Record<string, LucideIcon>;
 
+/**
+ * Keyed by the ENGLISH sub-role name, which is also what `portalRoleLabel`
+ * matches on. Look the icon up by that stored name FIRST, then translate the
+ * name for display — never `SUB_ROLE_TITLE_ICONS[portalRoleLabel(role, t)]`,
+ * which misses in every locale but English and yields `undefined`.
+ */
 export const SUB_ROLE_TITLE_ICONS: Record<string, LucideIcon> = {
 	Owner: iconForNav("Owner"),
 	Finance: iconForNav("Finance"),

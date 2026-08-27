@@ -3,6 +3,8 @@ import { useAgencyReceiptEdit } from "@agency-portal/hooks/use-agency-receipt-ed
 import { useReceiptCatalogue } from "@agency-portal/hooks/use-receipt-catalogue";
 import { Plus } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type {
 	AgencyAddedLineKind,
 	PaymentVoucherReceiptStatus,
@@ -95,6 +97,7 @@ export function AgencyReceiptEditor({
 	receipt: ReceiptEditorReceipt;
 	lines: ReceiptEditorLine[];
 }) {
+	const { t } = usePortalLocale();
 	const { editLine, addLine, editReceipt, resetError, isSaving, error } =
 		useAgencyReceiptEdit();
 
@@ -174,11 +177,11 @@ export function AgencyReceiptEditor({
 		beginSave();
 		const draft = draftFor(line);
 		if (badQuantity(draft.qty)) {
-			setProblem("Quantity has to be a whole number from 1 to 999.");
+			setProblem(t.agencyReceipts.quantityRange);
 			return;
 		}
 		if (badAmount(draft.amount)) {
-			setProblem("Commission has to be RM 0.00 or more — leave it filled in.");
+			setProblem(t.agencyReceipts.commissionMinLeaveFilled);
 			return;
 		}
 		// Send only what moved: the endpoint takes quantity, amount or both, and a
@@ -190,7 +193,9 @@ export function AgencyReceiptEditor({
 		if (nextAmount.toFixed(2) !== money2(line.amount))
 			patch.amount = nextAmount;
 		if (patch.quantity === undefined && patch.amount === undefined) {
-			setProblem(`Nothing changed on "${line.description}".`);
+			setProblem(
+				fill(t.agencyReceipts.nothingChangedOn, { item: line.description }),
+			);
 			return;
 		}
 		try {
@@ -231,16 +236,22 @@ export function AgencyReceiptEditor({
 			patch.receiptDate === undefined &&
 			patch.receiptTime === undefined
 		) {
-			setProblem("The order number, the date and the time are all unchanged.");
+			setProblem(t.agencyReceipts.orderDateTimeUnchanged);
 			return;
 		}
 		try {
 			const result = await editReceipt({ receiptId: receipt.id, ...patch });
 			setNotice(
 				result.movedLines > 0
-					? `${result.message} · ${result.movedLines} line${
-							result.movedLines === 1 ? "" : "s"
-						} moved to ${receiptDate}`
+					? // The server's own sentence stays verbatim; only the moved-lines
+						// tail is ours to word — and Chinese has no plural, so the count
+						// picks between two whole sentences rather than splicing an "s".
+						`${result.message} · ${fill(
+							result.movedLines === 1
+								? t.agencyReceipts.linesMovedOne
+								: t.agencyReceipts.linesMovedMany,
+							{ n: result.movedLines, date: receiptDate },
+						)}`
 					: result.message,
 			);
 		} catch {
@@ -255,17 +266,15 @@ export function AgencyReceiptEditor({
 		if (!description) {
 			// The picker holds the outlet's own names, so this is the only way the
 			// field can be empty: nothing was chosen yet.
-			setProblem(
-				"Pick the item from the outlet's list — a line has to name something that outlet sells.",
-			);
+			setProblem(t.agencyReceipts.pickFromOutletList);
 			return;
 		}
 		if (badQuantity(newQty)) {
-			setProblem("Quantity has to be a whole number from 1 to 999.");
+			setProblem(t.agencyReceipts.quantityRange);
 			return;
 		}
 		if (badAmount(newAmount)) {
-			setProblem("Commission has to be RM 0.00 or more.");
+			setProblem(t.agencyReceipts.commissionMin);
 			return;
 		}
 		try {
@@ -321,6 +330,17 @@ export function AgencyReceiptEditor({
 	// The value actually posted. Reading `lockedKind` first means the select's
 	// leftover state can never be sent once a kind is known.
 	const addKind: AgencyAddedLineKind = lockedKind ?? kind;
+	/**
+	 * The bucket's own display word.
+	 *
+	 * Reads `money.drinks` / `money.tips` rather than a second pair of keys here:
+	 * this is the same bucket the PV breakdown, the dispute queue and the PR app
+	 * all name, and two words for one bucket is exactly the mis-bucketing the
+	 * locked picker exists to prevent. The STORED value never changes — only the
+	 * word beside it does.
+	 */
+	const kindLabel = (value: AgencyAddedLineKind): string =>
+		value === "drinks" ? t.money.drinks : t.money.tips;
 
 	/**
 	 * The items this receipt's outlet sells IN THIS BUCKET.
@@ -345,11 +365,14 @@ export function AgencyReceiptEditor({
 			? null
 			: catalogue.items.length > 0
 				? // The outlet publishes a list, just not the section this paper needs.
-					`${catalogue.outlet ?? "This outlet"} has no ${
-						addKind === "drinks" ? "drinks list" : "Service Entitlement list"
-					} configured, so a line cannot be verified — ask the outlet to set it up first.`
-				: (catalogue.message ??
-					"The outlet's list is not available, so a line cannot be verified.");
+					fill(t.agencyReceipts.noListConfigured, {
+						outlet: catalogue.outlet ?? t.agencyReceipts.thisOutlet,
+						list:
+							addKind === "drinks"
+								? t.agencyReceipts.drinksList
+								: t.agencyReceipts.serviceEntitlementList,
+					})
+				: (catalogue.message ?? t.agencyReceipts.outletListUnavailable);
 	// Nothing is posted until an item off the outlet's list is chosen — and never
 	// while the list is still loading, which is when a stale pick could slip out.
 	const canAdd =
@@ -374,11 +397,18 @@ export function AgencyReceiptEditor({
 		<div className="mt-2 rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)]/60 p-3">
 			<div className="flex flex-wrap items-baseline justify-between gap-2">
 				<p className="iz-tiny font-bold tracking-wide">
-					Correcting {receipt.receiptNo}
+					{fill(t.agencyReceipts.correctingReceipt, {
+						receiptNo: receipt.receiptNo,
+					})}
 				</p>
 				<p className="iz-tiny iz-muted2 iz-ledger">
-					{lines.length} item{lines.length === 1 ? "" : "s"} · RM{" "}
-					{linesTotal.toFixed(2)}
+					{fill(
+						lines.length === 1
+							? t.agencyReceipts.itemCountOne
+							: t.agencyReceipts.itemCountMany,
+						{ n: lines.length },
+					)}{" "}
+					· RM {linesTotal.toFixed(2)}
 				</p>
 			</div>
 
@@ -386,18 +416,14 @@ export function AgencyReceiptEditor({
 			    paragraph nobody finishes reading protects nobody — but the cost of a
 			    save is not something a reviewer should discover afterwards either. */}
 			<p className="iz-tiny iz-muted2 mt-1">
-				Saving re-opens this receipt, and any change to the money makes that
-				day's approval stale.
+				{t.agencyReceipts.savingReopensHint}
 			</p>
 			<details className="iz-tiny iz-muted2 mt-1">
 				<summary className="cursor-pointer select-none text-[var(--iz-gold-l,#d9b97a)]">
-					What that means
+					{t.agencyReceipts.whatThatMeans}
 				</summary>
 				<span className="mt-1 block">
-					An approved receipt drops back to waiting on you. A quantity, a
-					commission, a new line or a change of date all move money, so the day
-					has to be approved again before the voucher can be sent. Correcting
-					only the order number moves no money — only the receipt re-opens.
+					{t.agencyReceipts.editCostExplainer}
 				</span>
 			</details>
 
@@ -419,20 +445,17 @@ export function AgencyReceiptEditor({
 
 			<div className="mt-3 flex items-center justify-between gap-2">
 				<p className="iz-tiny iz-muted2 font-bold uppercase tracking-[0.14em]">
-					Items
+					{t.agencyReceipts.items}
 				</p>
 				{dirtyCount > 0 && (
 					<p className="iz-tiny text-[var(--iz-amber,#d9b97a)]">
-						{dirtyCount} unsaved
+						{fill(t.agencyReceipts.unsavedCount, { n: dirtyCount })}
 					</p>
 				)}
 			</div>
 
 			{lines.length === 0 ? (
-				<p className="iz-tiny iz-muted2 mt-1">
-					Nothing is logged against this receipt yet — add the drinks or tips
-					the paper shows below.
-				</p>
+				<p className="iz-tiny iz-muted2 mt-1">{t.agencyReceipts.noLinesYet}</p>
 			) : (
 				<div className="mt-1.5">
 					{/* Column headers instead of a caption underneath explaining that the
@@ -441,9 +464,11 @@ export function AgencyReceiptEditor({
 					<div
 						className={`${ROW} iz-tiny iz-muted2 border-b border-[var(--iz-line)] pb-1 uppercase tracking-[0.12em]`}
 					>
-						<span>Item</span>
-						<span className="text-center">Qty</span>
-						<span className="text-right">Commission</span>
+						<span>{t.agencyReceipts.colItem}</span>
+						<span className="text-center">{t.agencyReceipts.colQty}</span>
+						<span className="text-right">
+							{t.agencyReceipts.colCommission}
+						</span>
 						<span />
 					</div>
 					{lines.map((line) => {
@@ -471,7 +496,9 @@ export function AgencyReceiptEditor({
 									inputMode="numeric"
 									value={draft.qty}
 									onChange={(e) => putDraft(line, { qty: e.target.value })}
-									aria-label={`Quantity for ${line.description}`}
+									aria-label={fill(t.agencyReceipts.quantityForItem, {
+										item: line.description,
+									})}
 								/>
 								<div className="relative">
 									<span className="iz-muted2 pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px]">
@@ -482,7 +509,9 @@ export function AgencyReceiptEditor({
 										inputMode="decimal"
 										value={draft.amount}
 										onChange={(e) => putDraft(line, { amount: e.target.value })}
-										aria-label={`Commission in RM for ${line.description}`}
+										aria-label={fill(t.agencyReceipts.commissionRmForItem, {
+											item: line.description,
+										})}
 									/>
 								</div>
 								{/* The cell holds its width whether or not the row is dirty, so
@@ -496,14 +525,14 @@ export function AgencyReceiptEditor({
 												disabled={isSaving}
 												onClick={() => void saveLine(line)}
 											>
-												Save
+												{t.common.save}
 											</button>
 											<button
 												type="button"
 												className="iz-tiny iz-muted2 underline decoration-dotted underline-offset-2"
 												onClick={() => clearDraft(line.id)}
 											>
-												Undo
+												{t.agencyReceipts.undo}
 											</button>
 										</>
 									)}
@@ -512,7 +541,7 @@ export function AgencyReceiptEditor({
 						);
 					})}
 					<p className="iz-tiny iz-muted2 mt-1.5">
-						Commission is the PR's cut, not the price printed on the paper.
+						{t.agencyReceipts.commissionIsPrCut}
 					</p>
 				</div>
 			)}
@@ -523,14 +552,13 @@ export function AgencyReceiptEditor({
 					className="iz-tiny iz-muted2 mt-3 flex items-center gap-1 underline decoration-dotted underline-offset-2"
 					onClick={() => setAdding(true)}
 				>
-					<Plus className="h-3 w-3" /> The paper shows an item this list is
-					missing
+					<Plus className="h-3 w-3" /> {t.agencyReceipts.paperShowsMissingItem}
 				</button>
 			) : (
 				<>
 					<div className="mt-4 flex items-center justify-between gap-2">
 						<p className="iz-tiny iz-muted2 font-bold uppercase tracking-[0.14em]">
-							Add a missing line
+							{t.agencyReceipts.addMissingLine}
 						</p>
 						<button
 							type="button"
@@ -542,15 +570,18 @@ export function AgencyReceiptEditor({
 								setNewAmount("");
 							}}
 						>
-							Cancel
+							{t.common.cancel}
 						</button>
 					</div>
 					<div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-[7rem_minmax(0,1fr)_3.5rem_6.75rem_auto]">
 						{lockedKind ? (
 							// Shown, not chosen. The reviewer still needs to see which bucket the
 							// line will land in — a hidden decision is how the wrong one gets made.
-							<span className="iz-tiny iz-muted2 flex h-8 items-center rounded-lg border border-[var(--iz-line2)] px-2 capitalize">
-								{lockedKind}
+							// `capitalize` is gone with the raw value: this now prints the
+							// dictionary's own word, which is already cased in English and
+							// has no case at all in Chinese.
+							<span className="iz-tiny iz-muted2 flex h-8 items-center rounded-lg border border-[var(--iz-line2)] px-2">
+								{kindLabel(lockedKind)}
 							</span>
 						) : (
 							<IzSelect
@@ -564,10 +595,11 @@ export function AgencyReceiptEditor({
 									// — keeping it would post a name this bucket cannot verify.
 									setNewItem("");
 								}}
-								aria-label="Category"
+								aria-label={t.agencyReceipts.category}
 							>
-								<option value="drinks">Drinks</option>
-								<option value="tips">Tips</option>
+								{/* The VALUES are the API's own kinds and never move. */}
+								<option value="drinks">{t.money.drinks}</option>
+								<option value="tips">{t.money.tips}</option>
 							</IzSelect>
 						)}
 						{/* PICKED, NOT TYPED (owner, 4 Aug 2026). The outlet's price list is
@@ -580,20 +612,25 @@ export function AgencyReceiptEditor({
 							value={newItem}
 							onChange={(e) => setNewItem(e.target.value)}
 							disabled={catalogue.isLoading || options.length === 0}
-							aria-label={`Item from ${catalogue.outlet ?? "the outlet"}'s list`}
+							aria-label={fill(t.agencyReceipts.itemFromOutletList, {
+								outlet: catalogue.outlet ?? t.agencyReceipts.theOutlet,
+							})}
 						>
 							<option value="">
 								{catalogue.isLoading
-									? "Loading the outlet's list…"
+									? t.agencyReceipts.loadingOutletList
 									: options.length === 0
-										? "Nothing to pick"
-										: "Pick the item off the paper…"}
+										? t.agencyReceipts.nothingToPick
+										: t.agencyReceipts.pickItemOffPaper}
 							</option>
 							{options.map((item) => (
 								// The outlet's SELLING price beside each name, so the reviewer can
-								// match the option against the figure printed on the receipt.
+								// match the option against the figure printed on the receipt. The
+								// NAME is the outlet's own spelling and the select's value — only
+								// the word introducing the price is ours.
 								<option key={item.id} value={item.name}>
-									{item.name} · outlet RM {item.priceRm}
+									{item.name} · {t.agencyReceipts.outletPriceLabel} RM{" "}
+									{item.priceRm}
 								</option>
 							))}
 						</IzSelect>
@@ -602,8 +639,8 @@ export function AgencyReceiptEditor({
 							inputMode="numeric"
 							value={newQty}
 							onChange={(e) => setNewQty(e.target.value)}
-							placeholder="Qty"
-							aria-label="Quantity"
+							placeholder={t.agencyReceipts.colQty}
+							aria-label={t.agencyReceipts.quantity}
 						/>
 						<div className="relative">
 							<span className="iz-muted2 pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px]">
@@ -615,7 +652,7 @@ export function AgencyReceiptEditor({
 								value={newAmount}
 								onChange={(e) => setNewAmount(e.target.value)}
 								placeholder="0.00"
-								aria-label="Commission in RM"
+								aria-label={t.agencyReceipts.commissionInRm}
 							/>
 						</div>
 						<button
@@ -624,7 +661,7 @@ export function AgencyReceiptEditor({
 							disabled={isSaving || !canAdd}
 							onClick={() => void addNewLine()}
 						>
-							<Plus className="mr-1 h-3 w-3" /> Add
+							<Plus className="mr-1 h-3 w-3" /> {t.agencyReceipts.add}
 						</button>
 					</div>
 					{noOptions ? (
@@ -638,37 +675,39 @@ export function AgencyReceiptEditor({
 						// The two RM figures on this row are NOT the same money, and the only
 						// place that can be said is next to them.
 						<p className="iz-tiny iz-muted2 mt-1.5">
-							The RM beside each item is {catalogue.outlet ?? "the outlet"}'s
-							selling price, for matching against the paper. The box you fill in
-							is the PR's commission — a different figure, and yours to state.
+							{fill(t.agencyReceipts.outletPriceVsCommission, {
+								outlet: catalogue.outlet ?? t.agencyReceipts.theOutlet,
+							})}
 						</p>
 					)}
 					<p className="iz-tiny iz-muted2 mt-1.5">
 						{lockedKind
-							? `This is a ${lockedKind} receipt, so a line added here is ${lockedKind} — one paper is one kind.`
-							: "Drinks and tips only — wages and overtime come from the check-in and check-out stamps, so those are fixed on the attendance record."}
+							? fill(t.agencyReceipts.lockedKindHint, {
+									kind: kindLabel(lockedKind),
+								})
+							: t.agencyReceipts.drinksAndTipsOnly}
 					</p>
 				</>
 			)}
 
 			<p className="iz-tiny iz-muted2 mt-4 font-bold uppercase tracking-[0.14em]">
-				The receipt itself
+				{t.agencyReceipts.theReceiptItself}
 			</p>
 			{/* Labelled, because a bare date box beside a bare text box is a guess.
 			    The browser renders the date in its own locale — 06/16/2026 — so the
 			    label is the only thing saying which date this even is. */}
 			<div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7rem_auto] sm:items-end">
 				<label className="iz-tiny iz-muted2 block">
-					Order no on the paper
+					{t.agencyReceipts.orderNoOnPaper}
 					<input
 						className="iz-field-input mt-1 !h-8 !text-[12px]"
 						value={orderNo}
 						onChange={(e) => setOrderNo(e.target.value)}
-						placeholder="e.g. ORD1111"
+						placeholder={t.agencyReceipts.egOrderNo}
 					/>
 				</label>
 				<label className="iz-tiny iz-muted2 block">
-					Receipt date
+					{t.agencyReceipts.receiptDate}
 					<input
 						type="date"
 						className="iz-field-input mt-1 !h-8 !text-[12px]"
@@ -680,7 +719,7 @@ export function AgencyReceiptEditor({
 				    (owner, 4 Aug). Unlike the date this moves no money — a line's day
 				    is its own line_date — so correcting it stales nothing. */}
 				<label className="iz-tiny iz-muted2 block">
-					Time printed
+					{t.agencyReceipts.timePrinted}
 					<input
 						type="time"
 						className="iz-field-input mt-1 !h-8 !text-[12px]"
@@ -694,14 +733,11 @@ export function AgencyReceiptEditor({
 					disabled={isSaving}
 					onClick={() => void saveReceipt()}
 				>
-					Save receipt
+					{t.agencyReceipts.saveReceipt}
 				</button>
 			</div>
 			<p className="iz-tiny iz-muted2 mt-1.5">
-				Clearing the order number removes it. Changing the date MOVES this
-				receipt's money onto that day — the day it left and the day it lands on
-				both need approving again, and the date must fall inside this voucher's
-				week.
+				{t.agencyReceipts.orderDateSaveHint}
 			</p>
 		</div>
 	);

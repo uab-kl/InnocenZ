@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/table";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { getErrorMessage } from "@/lib/utils";
 import {
 	type CreateRoleInput,
@@ -54,10 +55,21 @@ import {
 } from "@/services/rbac";
 
 const CRU: PermissionType[] = ["create", "read", "update"];
-const CRU_LABEL: Record<PermissionType, string> = {
-	create: "C",
-	read: "R",
-	update: "U",
+/*
+ * `short` is the column head — a C/R/U initial that matches the legend badges
+ * (`rbac.cCreate` reads "C create" / "C 新增" in both locales), so it stays a
+ * literal. `label` is a RESOLVER for the checkbox's aria-label: a dictionary
+ * key is itself a `string`, so storing one on this module-scope record would
+ * type-check and then read the key NAME out to a screen reader. The record KEYS
+ * are the stored `permissionType` values and never move.
+ */
+const CRU_LABEL: Record<
+	PermissionType,
+	{ short: string; label: (t: PortalTranslations) => string }
+> = {
+	create: { short: "C", label: (t) => t.adminBits.permCreate },
+	read: { short: "R", label: (t) => t.adminBits.permRead },
+	update: { short: "U", label: (t) => t.adminBits.permUpdate },
 };
 
 interface RoleSheetProps {
@@ -442,7 +454,7 @@ export function RoleSheet({
 																	key={type}
 																	className="w-16 text-center"
 																>
-																	{CRU_LABEL[type]}
+																	{CRU_LABEL[type].short}
 																</TableHead>
 															))}
 															<TableHead className="w-16 text-center">
@@ -493,7 +505,13 @@ export function RoleSheet({
 																							)
 																						}
 																						disabled={isBusy}
-																						aria-label={`${mod.moduleName} ${t}`}
+																						aria-label={fill(
+																							t.adminBits.permFor,
+																							{
+																								perm: CRU_LABEL[type].label(t),
+																								name: mod.moduleName,
+																							},
+																						)}
 																					/>
 																				) : (
 																					<span className="text-muted-foreground">

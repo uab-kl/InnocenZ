@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import { auditLogRoleLabel } from "@/components/audit-log/audit-log-role-copy";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -10,8 +11,10 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { auditLogRoles } from "@/constants/audit-log-roles";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function AuditLogRolePicker() {
+	const { t } = usePortalLocale();
 	const gridRoles = auditLogRoles.slice(0, 4);
 	const lastRole = auditLogRoles[4];
 	const LastIcon = lastRole.icon;
@@ -20,16 +23,14 @@ export function AuditLogRolePicker() {
 		<PageShell>
 			<PageHeader
 				icon={FileText}
-				title="Audit Log"
-				description="Select a user type to view its activity log."
+				title={t.admin.navAuditLog}
+				description={t.adminAudit.pickerSubtitle}
 			/>
 
 			<Card className="mx-auto w-full max-w-4xl border-(--lavender-soft)/40 bg-card">
 				<CardHeader className="text-center">
-					<CardTitle>Choose Role</CardTitle>
-					<CardDescription>
-						Open the audit log for admin, PR, outlet, agency, or others.
-					</CardDescription>
+					<CardTitle>{t.adminAudit.chooseRole}</CardTitle>
+					<CardDescription>{t.adminAudit.chooseRoleHint}</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-4 px-8 pb-10">
 					<div className="grid grid-cols-2 gap-4">
@@ -47,7 +48,9 @@ export function AuditLogRolePicker() {
 										params={{ role: role.slug }}
 									>
 										<Icon className="h-6 w-6 text-lavender" />
-										<span className="text-lg font-medium">{role.label}</span>
+										<span className="text-lg font-medium">
+											{auditLogRoleLabel(role.key, role.label, t)}
+										</span>
 									</Link>
 								</Button>
 							);
@@ -65,7 +68,9 @@ export function AuditLogRolePicker() {
 								params={{ role: lastRole.slug }}
 							>
 								<LastIcon className="h-6 w-6 text-lavender" />
-								<span className="text-lg font-medium">{lastRole.label}</span>
+								<span className="text-lg font-medium">
+									{auditLogRoleLabel(lastRole.key, lastRole.label, t)}
+								</span>
 							</Link>
 						</Button>
 					</div>

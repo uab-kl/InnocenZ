@@ -2,6 +2,7 @@
  * Map backend payment_voucher history → History UI shapes.
  * Source of truth is the DB — no demo seed weeks/amounts.
  */
+import { formatMessage, type AppTranslations } from '../i18n';
 import type { PrHistoryVoucher, PrReceiptLine } from './api';
 import type { HistPayLine, HistPayStatus, HistPayWeek } from './demo-payment-history';
 import {
@@ -90,6 +91,42 @@ function statusMeta(v: PrHistoryVoucher): string {
   return 'Waiting for your agency to issue';
 }
 
+/**
+ * The RENDER-side twin of `statusMeta` above — call it where the string is
+ * drawn, never where it is built.
+ *
+ * `statusMeta` stays English at BOTH producers on purpose. A week signed on the
+ * phone is PERSISTED as this string by `signed-pv.tsx` and then regex-migrated
+ * on read by `normalizeHistPayWeek`, so translating it at the source would bake
+ * one locale into storage and leave the migration unable to recognise its own
+ * rows. This parses the stored English back into its parts and rebuilds the
+ * sentence in the active locale instead. An unrecognised string — an older
+ * stored wording — falls through unchanged rather than rendering blank.
+ *
+ * The date/time tail is passed through as it stands: it is the same "5 Aug 2026"
+ * form the card already prints beside it for `issued`.
+ */
+export function localizePayStatusMeta(meta: string, t: AppTranslations): string {
+  const trimmed = (meta ?? '').trim();
+  if (!trimmed) return trimmed;
+  if (trimmed === 'Disputed — waiting on your agency') return t.payHistory.metaDisputed;
+  if (trimmed === 'Waiting for your signature') return t.payHistory.metaAwaitingSignature;
+  if (trimmed === 'Waiting for your agency to issue') return t.payHistory.metaAwaitingIssue;
+  const paid = /^Paid(?:\s+(.+))?$/.exec(trimmed);
+  if (paid) {
+    return paid[1]
+      ? formatMessage(t.payHistory.metaPaidOn, { when: paid[1] })
+      : t.payHistory.statusPaid;
+  }
+  const signed = /^Signed(?:\s+(.+))?$/.exec(trimmed);
+  if (signed) {
+    return signed[1]
+      ? formatMessage(t.payHistory.metaSignedOn, { when: signed[1] })
+      : t.payHistory.statusSigned;
+  }
+  return trimmed;
+}
+
 /** Short aggregate label — "(2)-outlet" instead of the long "Multi-outlet (2)". */
 function outletLabel(v: PrHistoryVoucher): string {
   if (v.outlet) return v.outlet;
@@ -101,11 +138,43 @@ function outletLabel(v: PrHistoryVoucher): string {
   return 'Outlet';
 }
 
+/**
+ * Render-side label for the aggregate form of `outletLabel`.
+ *
+ * The STORED value keeps its `(2)-outlet` shape: it is compared against the
+ * outlet filter, and `paymentHistoryOutlets` recognises it by that exact form to
+ * keep the aggregate out of the outlet dropdown. A real venue name is a name and
+ * passes straight through.
+ */
+export function localizePayOutlet(outlet: string, t: AppTranslations): string {
+  const aggregate = /^\((\d+)\)-outlet$/.exec(outlet ?? '');
+  return aggregate
+    ? formatMessage(t.payHistory.multiOutlet, { n: aggregate[1]! })
+    : outlet;
+}
+
 function lineTypeLabel(kind: PrReceiptLine['kind']): string {
   if (kind === 'wages') return 'Daily wages';
   if (kind === 'drinks') return 'Drinks commission';
   if (kind === 'tips') return 'Tips commission';
   return 'Others';
+}
+
+/**
+ * Render-side label for a stored line `type`.
+ *
+ * `HistPayLine.type` is DATA once written: `normalizeHistPayWeek` and
+ * `historyShiftsFromPayWeek` split wages from commission by testing this string,
+ * and a signed week carries it into localStorage. So the stored value stays
+ * English and the match here mirrors those same tests.
+ */
+export function localizePayLineType(type: string, t: AppTranslations): string {
+  const kind = (type ?? '').toLowerCase();
+  if (kind.includes('wage')) return t.payHistory.lineWages;
+  if (kind.includes('drink')) return t.payHistory.lineDrinks;
+  if (kind.includes('tip')) return t.payHistory.lineTips;
+  if (kind === 'others') return t.payHistory.lineOthers;
+  return type;
 }
 
 function toHistPayLines(lines: PrReceiptLine[]): HistPayLine[] {
@@ -184,19 +253,35 @@ export function historyVoucherToHistoryWeek(v: PrHistoryVoucher): DemoHistoryWee
      * to tell two vouchers apart.
      */
     id: `week-${asIsoDate(v.weekStart) ?? 'na'}-${v.voucherId}`,
-    // The agency leads the title when we know it: two cards for one week are
-    // otherwise identical down to the venue, with only the PV number differing.
+    /*
+     * English FALLBACK only — the card's heading is rebuilt per-locale by
+     * `ShiftHistoryPanel` from the ISO bounds and `agencyName` below. This
+     * string is what it shows when a row has no week bounds to format from.
+     *
+     * The agency still rides the title: two cards for one week are otherwise
+     * identical down to the venue, with only the PV number differing.
+     */
     title: v.agencyName
       ? `PAYROLL WEEK · ${range} · ${v.agencyName}`
       : `PAYROLL WEEK · ${range}`,
     kind: 'payroll',
+    // ⚠️ MATCHING KEY — `weekLabelsMatch` pairs this week with its voucher on
+    // this exact English string. It is not what the card prints.
     weekLabel: range,
     pvRef: pvRefForWeek(v.weekEnd, v.voucherId, v.voucherNo),
+    weekStartIso: asIsoDate(v.weekStart) ?? undefined,
+    weekEndIso: asIsoDate(v.weekEnd) ?? undefined,
+    agencyName: v.agencyName ?? null,
   };
 }
 
 /** One History → Shifts card per calendar day from voucher lines (matches Payment). */
-export function historyVoucherToShifts(v: PrHistoryVoucher, weekId: string): DemoHistoryShift[] {
+export function historyVoucherToShifts(
+  v: PrHistoryVoucher,
+  weekId: string,
+  /** LAST and with no default — a default would pin English for every caller. */
+  t: AppTranslations,
+): DemoHistoryShift[] {
   const byDate = new Map<
     string,
     {
@@ -231,12 +316,15 @@ export function historyVoucherToShifts(v: PrHistoryVoucher, weekId: string): Dem
   // never gave; the caption below says which of the two sealed cases it is.
   const payStatus = historyVoucherToPayWeek(v).status;
   const status: DemoHistoryShift['status'] = payStatus === 'signed' ? 'signed' : 'sealed';
+  // Rendered copy, not data: it fills the History card's TIME slot, exactly
+  // where a live week shows `t.schedule.sealedPendingPv`. Nothing compares or
+  // stores it — the `payStatus` it is chosen by is the value, and that stays.
   const timeLabel =
     payStatus === 'paid'
-      ? 'Paid · sealed'
+      ? t.payHistory.shiftPaidSealed
       : payStatus === 'signed'
-        ? 'Sealed · signed PV'
-        : 'Sealed · PV not signed yet';
+        ? t.payHistory.shiftSealedSignedPv
+        : t.payHistory.shiftSealedPvUnsigned;
   return [...byDate.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([dateIso, b]) => {
@@ -249,7 +337,7 @@ export function historyVoucherToShifts(v: PrHistoryVoucher, weekId: string): Dem
       return {
         id: `pv-${v.voucherId}-${dateIso}`,
         outlet,
-        dateLabel: fmtDFriendly(y, m, d),
+        dateLabel: fmtDFriendly(y, m, d, t),
         dateIso,
         time: timeLabel,
         payout,
@@ -267,9 +355,12 @@ export function currentWeekHistoryMeta(weekStart: string, weekEnd: string): Demo
   const range = formatRangeLabel(weekStart, weekEnd);
   return {
     id: 'week-current',
+    // English FALLBACK — see `historyVoucherToHistoryWeek` above.
     title: `CURRENT WEEK · ${range}`,
     kind: 'current',
     weekLabel: range,
     pvRef: 'PV pending Sunday',
+    weekStartIso: asIsoDate(weekStart) ?? undefined,
+    weekEndIso: asIsoDate(weekEnd) ?? undefined,
   };
 }

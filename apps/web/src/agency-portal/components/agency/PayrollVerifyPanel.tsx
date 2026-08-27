@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	PaymentVoucherComponent,
@@ -165,16 +166,34 @@ function ReceiptRow({
 
 			<p className="iz-tiny iz-muted2 mt-0.5">
 				{receipt.receiptDate ?? "—"}
-				{receipt.orderNo ? ` · order ${receipt.orderNo}` : ""} · {lines.length}{" "}
-				{lines.length === 1 ? "line" : "lines"} ·{" "}
+				{receipt.orderNo
+					? ` · ${fill(t.agencyPvReview.orderNoValue, { no: receipt.orderNo })}`
+					: ""}{" "}
+				·{" "}
+				{fill(
+					lines.length === 1
+						? t.agencyPvReview.lineCountOne
+						: t.agencyPvReview.lineCountMany,
+					{ n: lines.length },
+				)}{" "}
+				·{" "}
 				{proofPhotos.length > 0
-					? `${proofPhotos.length} proof photo${proofPhotos.length === 1 ? "" : "s"}`
-					: "no proof photo"}
+					? fill(
+							proofPhotos.length === 1
+								? t.agencyPvReview.proofPhotoCountOne
+								: t.agencyPvReview.proofPhotoCountMany,
+							{ n: proofPhotos.length },
+						)
+					: t.receipts.noProofAttached}
 				{receipt.status !== "pending" &&
-					` · ${receipt.reviewedBy ? `by ${receipt.reviewedBy}` : "reviewed"} ${
+					` · ${
+						receipt.reviewedBy
+							? `${t.receipts.reviewedBy} ${receipt.reviewedBy}`
+							: t.receipts.reviewed
+					} ${
 						receipt.reviewedAt
 							? new Date(receipt.reviewedAt).toLocaleDateString()
-							: "before this review existed"
+							: t.agencyPvReview.beforeReviewExisted
 					}`}
 			</p>
 
@@ -187,7 +206,12 @@ function ReceiptRow({
 			{/* Zoomable, like the dispute queue: a 64px thumbnail of a phone photo
 			    cannot be read, and the whole point of this panel is checking the
 			    printed figures against the lines. */}
-			<ProofPhotos photos={proofPhotos} label={`${receipt.receiptNo} scan`} />
+			<ProofPhotos
+				photos={proofPhotos}
+				label={fill(t.agencyPvReview.receiptScanLabel, {
+					no: receipt.receiptNo,
+				})}
+			/>
 
 			<div className="mt-1.5">
 				{lines.map((line) => (
@@ -209,8 +233,7 @@ function ReceiptRow({
 			    reads as a permissions bug; the rule is the useful thing. */}
 			{canReview && voucherSigned && (
 				<p className="iz-tiny iz-muted2 mt-1.5">
-					The PR has signed this voucher — receipts on it can no longer be
-					approved or corrected.
+					{t.agencyPvReview.prSignedLocked}
 				</p>
 			)}
 
@@ -223,7 +246,7 @@ function ReceiptRow({
 							disabled={busy}
 							onClick={onApprove}
 						>
-							<Check className="mr-1 h-3 w-3" /> Approve
+							<Check className="mr-1 h-3 w-3" /> {t.common.approve}
 						</button>
 					) : (
 						<button
@@ -232,7 +255,8 @@ function ReceiptRow({
 							disabled={busy}
 							onClick={onWithdraw}
 						>
-							<RotateCcw className="mr-1 h-3 w-3" /> Withdraw approval
+							<RotateCcw className="mr-1 h-3 w-3" />{" "}
+							{t.agencyPvReview.withdrawApproval}
 						</button>
 					)}
 				</div>
@@ -256,7 +280,7 @@ function ReceiptRow({
 							aria-expanded={editing}
 						>
 							<Pencil className="mr-1 h-3 w-3" />{" "}
-							{editing ? t.receipts.closeEditor : "Edit"}
+							{editing ? t.receipts.closeEditor : t.common.edit}
 						</button>
 					</div>
 
@@ -355,12 +379,17 @@ export function PayrollVerifyPanel({
 						<FileWarning className="mt-0.5 h-4 w-4 text-[var(--iz-amber,#d9b97a)]" />
 						<div>
 							<div className="text-sm font-semibold">
-								{unbacked.length} commission{" "}
-								{unbacked.length === 1 ? "line has" : "lines have"} no receipt
+								{fill(
+									unbacked.length === 1
+										? t.agencyPvReview.unbackedCommissionOne
+										: t.agencyPvReview.unbackedCommissionMany,
+									{ n: unbacked.length },
+								)}
 							</div>
 							<p className="iz-tiny iz-muted mt-1">
-								{money(sum(unbacked))} was self-declared with nothing to check
-								it against. Confirm with the outlet before issuing.
+								{fill(t.agencyPvReview.selfDeclaredWarning, {
+									amount: money(sum(unbacked)),
+								})}
 							</p>
 							<ul className="mt-2 space-y-1">
 								{unbacked.map((line) => (
@@ -377,7 +406,7 @@ export function PayrollVerifyPanel({
 				<IzCard>
 					<p className="iz-tiny iz-muted">
 						{commissionLines.length > 0
-							? "Every commission line on this voucher is backed by a receipt."
+							? t.agencyPvReview.everyCommissionBacked
 							: t.payroll.noCommissionLinesToVerify}
 					</p>
 				</IzCard>
@@ -397,11 +426,17 @@ export function PayrollVerifyPanel({
 								<div className="text-sm">
 									{key === "unclassified"
 										? t.payroll.unclassified
-										: COMPONENT_LABELS[key as PaymentVoucherComponent]}
+										: t.payroll[
+												COMPONENT_LABELS[key as PaymentVoucherComponent]
+											]}
 								</div>
 								<div className="iz-tiny iz-muted2">
-									{groupLines.length}{" "}
-									{groupLines.length === 1 ? "line" : "lines"}
+									{fill(
+										groupLines.length === 1
+											? t.agencyPvReview.lineCountOne
+											: t.agencyPvReview.lineCountMany,
+										{ n: groupLines.length },
+									)}
 								</div>
 							</div>
 							<div className="font-medium">{money(sum(groupLines))}</div>
@@ -410,8 +445,7 @@ export function PayrollVerifyPanel({
 				</div>
 				{unclassified.length > 0 && (
 					<p className="iz-tiny iz-muted2 mt-2">
-						Unclassified lines predate component tracking — they are counted in
-						the totals but cannot be disputed per component.
+						{t.agencyPvReview.unclassifiedExplainer}
 					</p>
 				)}
 			</IzCard>
@@ -419,19 +453,19 @@ export function PayrollVerifyPanel({
 			<IzCard>
 				<div className="flex flex-wrap items-center justify-between gap-2">
 					<div className="flex items-center gap-2 text-sm font-semibold">
-						<Receipt className="h-4 w-4" /> Receipts ({receipts.length})
+						<Receipt className="h-4 w-4" /> {t.receipts.receipts} (
+						{receipts.length})
 					</div>
 					{pendingCount > 0 && (
 						<span className="iz-pill iz-pill-amber !text-[10px]">
-							{pendingCount} waiting on you
+							{fill(t.agencyPvReview.pendingWaitingOnYou, { n: pendingCount })}
 						</span>
 					)}
 				</div>
 
 				{pendingCount > 0 && (
 					<p className="iz-tiny iz-muted mt-1.5">
-						This voucher cannot be sent until each of these is approved — and
-						the PR cannot dispute the money behind one until you have.
+						{t.agencyPvReview.pendingReceiptsBlockSend}
 					</p>
 				)}
 
@@ -443,7 +477,7 @@ export function PayrollVerifyPanel({
 
 				{receipts.length === 0 ? (
 					<p className="iz-tiny iz-muted mt-2">
-						No receipts logged for this week.
+						{t.receipts.noReceiptsThisWeek}
 					</p>
 				) : (
 					<div className="mt-2">
@@ -468,8 +502,7 @@ export function PayrollVerifyPanel({
 
 				{!canReview && receipts.length > 0 && (
 					<p className="iz-tiny iz-muted2 mt-2">
-						Your agency role can see these receipts but not approve them — owner
-						and finance review receipts.
+						{t.agencyPvReview.readOnlyReceipts}
 					</p>
 				)}
 			</IzCard>

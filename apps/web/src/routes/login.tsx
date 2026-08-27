@@ -10,10 +10,11 @@ import {
 	Lock,
 	Mail,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { z } from "zod";
 import { BrandLogo } from "@/components/landing/BrandLogo";
 import { LoginAsideBackdrop } from "@/components/landing/LoginDecor";
+import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Button } from "@/components/ui/button";
 import {
 	Field,
@@ -31,12 +32,72 @@ import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
 import { hardNavigate } from "@/lib/hard-navigate";
+import {
+	PortalLocaleProvider,
+	usePortalLocale,
+} from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const ROLE_DASHBOARD: Record<string, string> = {
 	admin: "/admin/dashboard",
 	agency: "/agency",
 	outlet: "/outlet",
 };
+
+/**
+ * An address SHAPE, not a sentence — deliberately NOT in the dictionary. It
+ * reads identically in either language, and a translated example address would
+ * be a second answer to "what does an email look like".
+ */
+const EMAIL_PLACEHOLDER = "you@example.com";
+
+/**
+ * Auth failures, held as a CAUSE rather than a sentence.
+ *
+ * The old code called `setError("Invalid email or password…")` inside the
+ * submit handler — a place that cannot read the dictionary safely and, more to
+ * the point, freezes the language at the moment of the failure. Storing the
+ * cause and resolving it in `loginErrorText` during render means the banner
+ * follows the switcher like everything else on the page.
+ */
+type LoginError =
+	| { kind: "network" }
+	| { kind: "credentials" }
+	| { kind: "unexpected" }
+	| { kind: "server"; message: string };
+
+/**
+ * Backend auth messages mapped to dictionary keys at the RENDER site.
+ *
+ * The record KEY is the English sentence the server actually sends. It is wire
+ * data, matched verbatim, and must never be translated — translating it here
+ * would mean this map stopped matching the day the backend stayed the same.
+ *
+ * Only the STATIC messages are listed. The lockout countdown ("Try again in 3
+ * minutes") and a suspended-organisation reason are composed server-side and
+ * fall through to the server's own text, because a half-guessed translation of
+ * a sentence carrying a number is worse than an English one that is correct.
+ */
+const SERVER_MESSAGE_LABELS: Record<string, (t: PortalTranslations) => string> =
+	{
+		"This account is not registered yet.": (t) =>
+			t.authPages.errorAccountNotRegistered,
+		"This account is inactive.": (t) => t.authPages.errorAccountInactive,
+		"Wrong password": (t) => t.authPages.errorWrongPassword,
+	};
+
+function loginErrorText(error: LoginError, t: PortalTranslations): string {
+	switch (error.kind) {
+		case "network":
+			return t.authPages.errorNetwork;
+		case "credentials":
+			return t.authPages.errorInvalidCredentials;
+		case "unexpected":
+			return t.authPages.errorUnexpected;
+		default:
+			return SERVER_MESSAGE_LABELS[error.message]?.(t) ?? error.message;
+	}
+}
 
 export const Route = createFileRoute("/login")({
 	validateSearch: (
@@ -73,6 +134,12 @@ export const Route = createFileRoute("/login")({
 		};
 	},
 	component: RouteComponent,
+	/**
+	 * ⚠️ English in every locale, deliberately. `head()` runs OUTSIDE React —
+	 * there is no component around it and therefore no hook to read the locale
+	 * from. The document title is the one string on this page the switcher
+	 * cannot reach.
+	 */
 	head: () => ({
 		meta: [
 			{ title: "Sign in — InnocenZ" },
@@ -84,16 +151,45 @@ export const Route = createFileRoute("/login")({
 	}),
 });
 
-const formSchema = z.object({
-	email: z.string().email("Please enter a valid email address"),
-	password: z.string().min(1, "Password is required"),
-});
-
+/**
+ * `/login` is a PUBLIC route with no portal shell above it, so it carries the
+ * locale provider itself.
+ *
+ * ⚠️ The provider MUST sit in a component of its own. `usePortalLocale` reads
+ * from ABOVE via context, so a component that mounts the provider cannot also
+ * consume it — it would silently get the English fallback and never switch.
+ * Same wrapper/inner split as `components/legal/PrivacyPolicyPage`.
+ *
+ * No `accountLocale` is passed: nobody is signed in yet, so there is no profile
+ * to read a preference from. The provider falls back to the stored pick, then
+ * the browser's language.
+ */
 function RouteComponent() {
+	return (
+		<PortalLocaleProvider>
+			<LoginPage />
+		</PortalLocaleProvider>
+	);
+}
+
+function LoginPage() {
+	const { t } = usePortalLocale();
 	const { login } = useAuthActions();
 	const { email: prefillEmail, next: requestedNext } = Route.useSearch();
-	const [error, setError] = useState("");
+	const [error, setError] = useState<LoginError | null>(null);
 	const [showPassword, setShowPassword] = useState(false);
+
+	// Built inside the component so the validation messages come from the
+	// dictionary. A module-scope schema cannot read `t` at all, and the two
+	// sentences below are rendered under the fields like any other copy.
+	const formSchema = useMemo(
+		() =>
+			z.object({
+				email: z.string().email(t.authPages.emailInvalid),
+				password: z.string().min(1, t.authPages.passwordRequired),
+			}),
+		[t],
+	);
 
 	const form = useForm({
 		defaultValues: {
@@ -105,7 +201,7 @@ function RouteComponent() {
 			onSubmit: formSchema,
 		},
 		onSubmit: async ({ value }) => {
-			setError("");
+			setError(null);
 
 			const { startAgencyRealSession, startOutletRealSession } = await import(
 				"@/lib/auth/agency-demo-session"
@@ -236,18 +332,18 @@ function RouteComponent() {
 			} catch (err) {
 				if (axios.isAxiosError(err)) {
 					if (!err.response) {
-						setError("Internal server error.");
+						setError({ kind: "network" });
 						return;
 					}
 
-					const message =
-						(err.response?.data as { message?: string })?.message ||
-						"Invalid email or password. Please try again.";
-					setError(message);
-				} else if (err instanceof Error) {
-					setError(err.message);
+					const message = (err.response?.data as { message?: string })?.message;
+					setError(
+						message ? { kind: "server", message } : { kind: "credentials" },
+					);
+				} else if (err instanceof Error && err.message) {
+					setError({ kind: "server", message: err.message });
 				} else {
-					setError("An unexpected error occurred. Please try again.");
+					setError({ kind: "unexpected" });
 				}
 			}
 		},
@@ -263,8 +359,7 @@ function RouteComponent() {
 
 					<div className="mt-12 max-w-lg">
 						<p className="login-subheading text-foreground/80">
-							The workforce operating platform for nightlife industry. Manage
-							rosters, track shifts, and run payroll from one secure portal.
+							{t.authPages.loginAsideDescription}
 						</p>
 					</div>
 				</div>
@@ -273,26 +368,35 @@ function RouteComponent() {
 					<p className="login-footer text-center text-foreground/55 sm:text-left">
 						© {new Date().getFullYear()}{" "}
 						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
-						. All rights reserved.
+						. {t.authPages.rightsReserved}
 						{" · "}
 						<a
 							href="/policy"
 							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
 						>
-							Privacy Policy
+							{t.webShell.privacyPolicyTitle}
 						</a>
 					</p>
 				</div>
 			</aside>
 
 			<main className="relative flex min-h-svh w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20">
-				<a
-					href="/"
-					className="login-back mb-10 inline-flex w-fit items-center gap-3 font-semibold uppercase tracking-[0.12em] text-foreground/70 transition-colors hover:text-gold-bright lg:absolute lg:right-12 lg:top-12 lg:mb-0"
-				>
-					<ArrowLeft className="h-6 w-6" />
-					Back to home
-				</a>
+				{/*
+				 * The switcher rides WITH the back link instead of claiming its own
+				 * corner. This page sits outside every portal shell, so it is the only
+				 * place a first-time visitor can choose a language — before they have
+				 * an account for the preference to be remembered on.
+				 */}
+				<div className="mb-10 flex w-fit flex-wrap items-center gap-4 lg:absolute lg:right-12 lg:top-12 lg:mb-0">
+					<PortalLanguageSwitcher variant="header" />
+					<a
+						href="/"
+						className="login-back inline-flex w-fit items-center gap-3 font-semibold uppercase tracking-[0.12em] text-foreground/70 transition-colors hover:text-gold-bright"
+					>
+						<ArrowLeft className="h-6 w-6" />
+						{t.webShell.backToHome}
+					</a>
+				</div>
 
 				<div className="mx-auto w-full max-w-145">
 					<div className="mb-10 flex justify-center lg:hidden">
@@ -301,22 +405,24 @@ function RouteComponent() {
 
 					<div className="mb-8">
 						<h1 className="login-heading text-foreground">
-							<span className="login-heading-line">Sign in to your</span>
+							<span className="login-heading-line">
+								{t.authPages.loginHeadingLine1}
+							</span>
 							<span className="login-heading-line mt-1">
 								<span className="text-gradient-royal drop-shadow-[0_0_20px_color-mix(in_oklab,var(--royal-gold)_35%,transparent)]">
-									portal
+									{t.authPages.loginHeadingAccent}
 								</span>
 							</span>
 						</h1>
 						<p className="login-subheading mt-4 text-muted-foreground">
-							Enter your credentials to continue.
+							{t.authPages.loginSubheading}
 						</p>
 					</div>
 
 					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-8 shadow-glow-gold-lg backdrop-blur-md sm:p-10">
 						<form
 							id="login-form"
-							aria-label="Sign in form"
+							aria-label={t.authPages.loginFormLabel}
 							onSubmit={(e) => {
 								e.preventDefault();
 								form.handleSubmit();
@@ -334,7 +440,7 @@ function RouteComponent() {
 													htmlFor={field.name}
 													className="login-field-label"
 												>
-													Email address
+													{t.authPages.emailLabel}
 												</FieldLabel>
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
@@ -348,7 +454,7 @@ function RouteComponent() {
 														id={field.name}
 														name={field.name}
 														type="email"
-														placeholder="you@example.com"
+														placeholder={EMAIL_PLACEHOLDER}
 														value={field.state.value}
 														onBlur={field.handleBlur}
 														onChange={(e) => field.handleChange(e.target.value)}
@@ -384,7 +490,7 @@ function RouteComponent() {
 														htmlFor={field.name}
 														className="login-field-label"
 													>
-														Password
+														{t.authPages.passwordLabel}
 													</FieldLabel>
 													{/* Carries whatever is already typed in the email
 													    field so the reset page starts prefilled. */}
@@ -396,7 +502,7 @@ function RouteComponent() {
 														}}
 														className="login-support text-gold-bright underline underline-offset-4 hover:text-gold"
 													>
-														Forgot password?
+														{t.authPages.forgotPasswordLink}
 													</Link>
 												</div>
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
@@ -411,7 +517,7 @@ function RouteComponent() {
 														id={field.name}
 														name={field.name}
 														type={showPassword ? "text" : "password"}
-														placeholder="Enter your password"
+														placeholder={t.authPages.passwordPlaceholder}
 														value={field.state.value}
 														onBlur={field.handleBlur}
 														onChange={(e) => field.handleChange(e.target.value)}
@@ -426,7 +532,9 @@ function RouteComponent() {
 															type="button"
 															onClick={() => setShowPassword(!showPassword)}
 															aria-label={
-																showPassword ? "Hide password" : "Show password"
+																showPassword
+																	? t.webUi.hidePassword
+																	: t.webUi.showPassword
 															}
 															disabled={form.state.isSubmitting}
 															variant="ghost"
@@ -467,7 +575,7 @@ function RouteComponent() {
 									className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-xl text-destructive"
 								>
 									<AlertCircle className="mt-0.5 h-6 w-6 shrink-0" />
-									<span>{error}</span>
+									<span>{loginErrorText(error, t)}</span>
 								</div>
 							)}
 
@@ -485,10 +593,10 @@ function RouteComponent() {
 										{isSubmitting ? (
 											<>
 												<Loader2 className="h-6 w-6 animate-spin" />
-												Signing in…
+												{t.authPages.signingIn}
 											</>
 										) : (
-											"Sign in"
+											t.authPages.signIn
 										)}
 									</Button>
 								)}
@@ -497,35 +605,35 @@ function RouteComponent() {
 					</div>
 
 					<p className="login-support mt-8 text-center text-muted-foreground">
-						Need an account?{" "}
+						{t.authPages.needAccount}{" "}
 						<Link
 							to="/signup"
 							className="text-gold-bright underline underline-offset-4 hover:text-gold"
 						>
-							Sign up as Outlet or PR Agency
+							{t.authPages.signUpCta}
 						</Link>
 					</p>
 
 					<p className="login-support mt-3 text-center text-muted-foreground">
-						Need help?{" "}
+						{t.authPages.needHelp}{" "}
 						<a
 							href="mailto:support@innocenz.com"
 							className="text-gold-bright underline underline-offset-4 hover:text-gold"
 						>
-							Contact support
+							{t.authPages.contactSupport}
 						</a>
 					</p>
 
 					<p className="login-footer mt-10 text-center text-foreground/55 lg:hidden">
 						© {new Date().getFullYear()}{" "}
 						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
-						. All rights reserved.
+						. {t.authPages.rightsReserved}
 						{" · "}
 						<a
 							href="/policy"
 							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
 						>
-							Privacy Policy
+							{t.webShell.privacyPolicyTitle}
 						</a>
 					</p>
 				</div>

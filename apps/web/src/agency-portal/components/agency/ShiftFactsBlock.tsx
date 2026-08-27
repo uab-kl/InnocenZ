@@ -3,6 +3,8 @@ import {
 	formatShiftDuration,
 	formatStampClock,
 } from "@agency-portal/lib/agency-payroll";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { DisputeShift } from "@/services/payment-voucher";
 
 /**
@@ -23,6 +25,7 @@ import type { DisputeShift } from "@/services/payment-voucher";
  * null slot into a confident, entirely fabricated "10pm – 4am".
  */
 export function ShiftFactsBlock({ shift }: { shift: DisputeShift }) {
+	const { t, locale } = usePortalLocale();
 	const ot = shift.overtimeMinutes ?? 0;
 	return (
 		<div className="rounded-md border border-[var(--iz-line,#2a2a3a)] px-2.5 py-2">
@@ -35,11 +38,14 @@ export function ShiftFactsBlock({ shift }: { shift: DisputeShift }) {
 						shift.eventKind === "special" ? "iz-pill-amber" : "iz-pill-ink"
 					}`}
 				>
-					{shift.eventKind === "special" ? "Special event" : "Normal shift"}
+					{shift.eventKind === "special"
+						? t.rosterGrid.specialEvent
+						: t.rosterGrid.normalShift}
 				</span>
 			</div>
 			<p className="iz-tiny iz-muted mt-0.5">
-				{shift.eventName?.trim() || "No event name"} · {shift.slot || "—"}
+				{shift.eventName?.trim() || t.rosterGrid.noEventName} ·{" "}
+				{shift.slot || "—"}
 			</p>
 			{/* The shift's OWN day, with the year — a payroll queue holds claims
 			    months apart, and "Thu 6 Aug" alone reads as this year. This is
@@ -47,13 +53,13 @@ export function ShiftFactsBlock({ shift }: { shift: DisputeShift }) {
 			    when the paper was logged, which differs on a midnight-crossing
 			    shift and on a re-dated receipt. */}
 			<p className="iz-tiny iz-muted2 mt-0.5">
-				{formatShiftDayDate(shift.shiftDate)}
+				{formatShiftDayDate(shift.shiftDate, locale)}
 			</p>
 			<div className="mt-1.5 flex flex-wrap gap-4">
 				<span>
-					<span className="iz-tiny iz-muted block">Check-in</span>
+					<span className="iz-tiny iz-muted block">{t.rosterGrid.checkIn}</span>
 					<span className="font-mono text-sm">
-						{formatStampClock(shift.checkInAt, "not checked in")}
+						{formatStampClock(shift.checkInAt, t.rosterGrid.notCheckedIn)}
 					</span>
 				</span>
 				<span>
@@ -61,10 +67,12 @@ export function ShiftFactsBlock({ shift }: { shift: DisputeShift }) {
 					    the scheduled end when the PR taps out, so calling it a
 					    check-out asserts a time that never happened on every overtime
 					    shift. The real overrun is the OT beside it. */}
-					<span className="iz-tiny iz-muted block">Shift end</span>
+					<span className="iz-tiny iz-muted block">
+						{t.agencyPanels.shiftEnd}
+					</span>
 					<span className="font-mono text-sm">
-						{formatStampClock(shift.checkOutAt, "still on duty")}
-						{ot > 0 ? ` · +${ot}m OT` : ""}
+						{formatStampClock(shift.checkOutAt, t.agencyPanels.stillOnDuty)}
+						{ot > 0 ? fill(t.agencyPanels.otSuffix, { n: ot }) : ""}
 					</span>
 				</span>
 				<span>
@@ -72,7 +80,9 @@ export function ShiftFactsBlock({ shift }: { shift: DisputeShift }) {
 					    server's overtime_minutes and is the sole OT truth — this never
 					    adds a second guess at it, which is why the phone's
 					    shiftDurationLabel (hardcoded scheduledHours = 6) is not used. */}
-					<span className="iz-tiny iz-muted block">Duration</span>
+					<span className="iz-tiny iz-muted block">
+						{t.agencyPanels.duration}
+					</span>
 					<span className="font-mono text-sm">
 						{formatShiftDuration(shift.checkInAt, shift.checkOutAt)}
 					</span>

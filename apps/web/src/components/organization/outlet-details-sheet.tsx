@@ -23,6 +23,10 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 
 import {
@@ -41,43 +45,48 @@ import {
 } from "./details-sheet-parts";
 import { formatSubRole } from "./org-status";
 
+/**
+ * `subRole` is the STORED code and is what every filter below compares on;
+ * only `title` / `description` are rendered, so they are functions of the
+ * dictionary rather than strings — a module-scope map cannot read `t`.
+ */
 const TEAM_GROUPS: {
 	subRole: OutletMember["subRole"];
-	title: string;
-	description: string;
+	title: (t: PortalTranslations) => string;
+	description: (t: PortalTranslations) => string;
 }[] = [
 	{
 		subRole: "owner",
-		title: "Owner",
-		description: "Venue owner · signs up the outlet and manages settings",
+		title: (t) => t.profile.roleOwner,
+		description: (t) => t.adminOrg.teamOwnerHint,
 	},
 	{
 		subRole: "finance",
-		title: "Finance Head",
-		description: "Weekly reconciliation · billing sign-off",
+		title: (t) => t.outletSettings.financeHead,
+		description: (t) => t.adminOrg.teamFinanceHint,
 	},
 	{
 		subRole: "operations_head",
-		title: "Ops Head",
-		description: "Floor operations · shift staffing · sales logging",
+		title: (t) => t.outletSettings.opsHead,
+		description: (t) => t.outletSettings.opsHeadHint,
 	},
 	// A member whose lane is missing from this list is grouped nowhere and so
 	// vanishes from the sheet — this is the admin's view of who is at the venue,
 	// not a legend.
 	{
 		subRole: "guarantor",
-		title: "Guarantor",
-		description:
-			"Stands in for the owner · same rights while the owner is away",
+		title: (t) => t.profile.roleGuarantor,
+		description: (t) => t.adminOrg.teamGuarantorHint,
 	},
 	{
 		subRole: "director",
-		title: "Director",
-		description: "View only · reads every screen, changes nothing",
+		title: (t) => t.profile.roleDirector,
+		description: (t) => t.adminOrg.teamDirectorHint,
 	},
 ];
 
 function MemberCard({ member }: { member: OutletMember }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-3 sm:col-span-2">
 			<div className="flex flex-wrap items-center gap-2">
@@ -85,10 +94,10 @@ function MemberCard({ member }: { member: OutletMember }) {
 					{member.username || `${member.userId.slice(0, 8)}…`}
 				</span>
 				<Badge variant="outline" className="capitalize text-muted-foreground">
-					{member.status}
+					{recordStatusLabel(member.status, t)}
 				</Badge>
 				<span className="ml-auto text-sm text-muted-foreground">
-					Joined {formatDate(member.createdAt)}
+					{fill(t.adminOrg.joinedOn, { date: formatDate(member.createdAt) })}
 				</span>
 			</div>
 			<div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -105,15 +114,20 @@ function MemberCard({ member }: { member: OutletMember }) {
 	);
 }
 
-const LINK_STATUS_LABEL: Record<AgencyOutletApproveStatus, string> = {
-	approved: "Working with this venue",
-	pending: "Awaiting the agency's decision",
-	rejected: "Declined by the agency",
+// Record KEYS are the stored `agency_outlet.approve_status` values and never
+// move; the entries are functions because a module-scope map cannot read `t`.
+const LINK_STATUS_LABEL: Record<
+	AgencyOutletApproveStatus,
+	(t: PortalTranslations) => string
+> = {
+	approved: (t) => t.adminOrg.linkWorkingWithVenue,
+	pending: (t) => t.adminOrg.linkAwaitingAgency,
+	rejected: (t) => t.adminOrg.linkDeclinedByAgency,
 	// Past tense, and kept distinct from "declined": ended means the two DID
 	// work together and the arrangement is over. An admin reading a support
 	// ticket has to tell those apart — "they never accepted us" and "we stopped
 	// working together" lead to completely different next questions.
-	ended: "Worked together — partnership ended",
+	ended: (t) => t.adminOrg.linkPartnershipEnded,
 };
 
 const LINK_STATUS_CLASS: Record<AgencyOutletApproveStatus, string> = {
@@ -140,6 +154,7 @@ const LINK_STATUS_CLASS: Record<AgencyOutletApproveStatus, string> = {
  */
 function LinkedAgenciesCard({ outlet }: { outlet: Outlet }) {
 	const { logout } = useAuth();
+	const { t } = usePortalLocale();
 
 	const linksQuery = useQuery({
 		queryKey: ["agency-outlet", "outlet", outlet.id],
@@ -152,20 +167,21 @@ function LinkedAgenciesCard({ outlet }: { outlet: Outlet }) {
 
 	return (
 		<DetailSection
-			title="Linked agencies"
-			description="The agencies this venue works with. The outlet requests a link in its Settings and each agency accepts or declines — an admin does not set this."
+			title={t.adminOrg.linkedAgencies}
+			description={t.adminOrg.linkedAgenciesHint}
 		>
 			<div className="space-y-2 sm:col-span-2">
 				{linksQuery.isLoading ? (
-					<p className="text-sm text-muted-foreground">Loading agencies…</p>
+					<p className="text-sm text-muted-foreground">
+						{t.agencyLinks.loading}
+					</p>
 				) : linksQuery.isError ? (
 					<p className="text-sm text-destructive">
 						{getErrorMessage(linksQuery.error)}
 					</p>
 				) : links.length === 0 ? (
 					<p className="text-sm text-muted-foreground">
-						No agencies linked. This venue cannot post a shift until it links
-						one in Settings and that agency approves it.
+						{t.adminOrg.noAgenciesLinked}
 					</p>
 				) : (
 					<>
@@ -191,15 +207,15 @@ function LinkedAgenciesCard({ outlet }: { outlet: Outlet }) {
 									<span
 										className={`shrink-0 text-xs ${LINK_STATUS_CLASS[link.approveStatus]}`}
 									>
-										{LINK_STATUS_LABEL[link.approveStatus]}
+										{LINK_STATUS_LABEL[link.approveStatus]?.(t) ??
+											link.approveStatus}
 									</span>
 								</li>
 							))}
 						</ul>
 						{approved === 0 && (
 							<p className="text-sm text-amber-600 dark:text-amber-400">
-								No agency has approved yet — every Post Job attempt from this
-								venue is refused until one does.
+								{t.adminOrg.noAgencyApprovedYet}
 							</p>
 						)}
 					</>
@@ -227,6 +243,7 @@ export function OutletDetailsSheet({
 	actionId,
 }: OutletDetailsSheetProps) {
 	const { logout } = useAuth();
+	const { t } = usePortalLocale();
 
 	const membersQuery = useQuery({
 		queryKey: ["outlet-members", outlet?.id],
@@ -244,10 +261,8 @@ export function OutletDetailsSheet({
 				className="w-full overflow-y-auto sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
 			>
 				<SheetHeader className="pb-0">
-					<SheetTitle>Outlet Details</SheetTitle>
-					<SheetDescription>
-						Venue profile, location, and team — as submitted by the outlet.
-					</SheetDescription>
+					<SheetTitle>{t.adminOrg.outletDetailsTitle}</SheetTitle>
+					<SheetDescription>{t.adminOrg.outletDetailsHint}</SheetDescription>
 				</SheetHeader>
 
 				{outlet && (
@@ -264,36 +279,36 @@ export function OutletDetailsSheet({
 						<Tabs defaultValue="business">
 							<TabsList className="w-full">
 								<TabsTrigger value="business">
-									<Building2 className="h-3.5 w-3.5" /> Business
+									<Building2 className="h-3.5 w-3.5" /> {t.adminOrg.tabBusiness}
 								</TabsTrigger>
 								<TabsTrigger value="location">
-									<MapPin className="h-3.5 w-3.5" /> Location
+									<MapPin className="h-3.5 w-3.5" /> {t.adminOrg.tabLocation}
 								</TabsTrigger>
 								<TabsTrigger value="team">
-									<Users className="h-3.5 w-3.5" /> Team
+									<Users className="h-3.5 w-3.5" /> {t.adminOrg.tabTeam}
 								</TabsTrigger>
 							</TabsList>
 
 							<TabsContent value="business" className="space-y-3 pt-2">
-								<DetailSection title="Business information">
+								<DetailSection title={t.adminOrg.businessInformation}>
 									<DetailField
 										icon={Building2}
-										label="Venue"
+										label={t.adminOrg.venue}
 										value={outlet.name}
 									/>
 									<DetailField
 										icon={Hash}
-										label="SSM No."
+										label={t.adminOrg.ssmNo}
 										value={outlet.ssmNo}
 									/>
 									<DetailField
 										icon={FileText}
-										label="Business license"
+										label={t.adminOrg.businessLicense}
 										value={outlet.businessLicense}
 									/>
 									<DetailField
 										icon={CalendarDays}
-										label="Created"
+										label={t.admin.colCreated}
 										value={formatDate(outlet.createdAt)}
 									/>
 								</DetailSection>
@@ -302,35 +317,35 @@ export function OutletDetailsSheet({
 							</TabsContent>
 
 							<TabsContent value="location" className="space-y-3 pt-2">
-								<DetailSection title="Venue location">
+								<DetailSection title={t.adminOrg.venueLocation}>
 									<DetailField
 										icon={MapPin}
-										label="Address line 1"
+										label={t.profile.addressLine1}
 										value={outlet.addressLine1}
 									/>
 									<DetailField
 										icon={MapPin}
-										label="Address line 2"
+										label={t.profile.addressLine2}
 										value={outlet.addressLine2}
 									/>
 									<DetailField
 										icon={Hash}
-										label="Postcode"
+										label={t.profile.postcode}
 										value={outlet.postcode}
 									/>
 									<DetailField
 										icon={Globe}
-										label="State"
+										label={t.profile.state}
 										value={outlet.state}
 									/>
 									<DetailField
 										icon={Globe}
-										label="Country"
+										label={t.profile.country}
 										value={outlet.country}
 									/>
 									<DetailField
 										icon={Compass}
-										label="Coordinates"
+										label={t.adminOrg.coordinates}
 										value={
 											outlet.lat && outlet.lng
 												? `${outlet.lat}, ${outlet.lng}`
@@ -339,7 +354,7 @@ export function OutletDetailsSheet({
 									/>
 									<DetailField
 										icon={Compass}
-										label="Geo-fence radius"
+										label={t.adminOrg.geoFenceRadius}
 										value={
 											outlet.geoFenceRadius != null
 												? `${outlet.geoFenceRadius} m`
@@ -353,7 +368,7 @@ export function OutletDetailsSheet({
 								{membersQuery.isLoading ? (
 									<div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
 										<Loader2 className="h-4 w-4 animate-spin" />
-										Loading team…
+										{t.profile.loadingTeam}
 									</div>
 								) : membersQuery.isError ? (
 									<p className="py-2 text-sm text-destructive">
@@ -361,7 +376,7 @@ export function OutletDetailsSheet({
 									</p>
 								) : members.length === 0 ? (
 									<p className="py-2 text-sm text-muted-foreground">
-										No team members yet.
+										{t.profile.noTeamMembers}
 									</p>
 								) : (
 									TEAM_GROUPS.map((group) => {
@@ -372,8 +387,8 @@ export function OutletDetailsSheet({
 										return (
 											<DetailSection
 												key={group.subRole}
-												title={group.title}
-												description={group.description}
+												title={group.title(t)}
+												description={group.description(t)}
 											>
 												{groupMembers.map((member) => (
 													<MemberCard key={member.id} member={member} />
@@ -388,7 +403,7 @@ export function OutletDetailsSheet({
 										(member) =>
 											!TEAM_GROUPS.some((g) => g.subRole === member.subRole),
 									) && (
-										<DetailSection title="Other members">
+										<DetailSection title={t.adminOrg.otherMembers}>
 											{members
 												.filter(
 													(member) =>
@@ -412,7 +427,7 @@ export function OutletDetailsSheet({
 
 						<ApprovalStatusCard
 							status={outlet.status}
-							entityLabel="outlet"
+							entityLabel={t.adminOrg.entityOutlet}
 							busy={actionId === outlet.id}
 							onApprove={() => onApprove(outlet.id)}
 							onSuspend={() => onSuspend(outlet.id)}

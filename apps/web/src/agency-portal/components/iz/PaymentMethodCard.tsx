@@ -124,7 +124,11 @@ export function PaymentMethodCard({
 					</p>
 					<p className="iz-tiny iz-muted">
 						{backed && card
-							? `${billedLabel} · expires ${String(card.expMonth).padStart(2, "0")}/${String(card.expYear).slice(-2)}${card.holderName ? ` · ${card.holderName}` : ""}`
+							? `${fill(t.subscription.cardExpires, {
+									billed: billedLabel,
+									mm: String(card.expMonth).padStart(2, "0"),
+									yy: String(card.expYear).slice(-2),
+								})}${card.holderName ? ` · ${card.holderName}` : ""}`
 							: backed
 								? fill(t.subscription.addACard, { billed: billedLabel })
 								: fill(t.subscription.autoPayEnabled, { billed: billedLabel })}
@@ -200,10 +204,7 @@ export function PaymentMethodCard({
 						</p>
 					)}
 					<p className="iz-tiny iz-muted2">
-						Only the brand and the last four digits are saved — the number stays
-						in this browser and no CVV is ever asked for. InnocenZ records the
-						card; charging it needs a payment gateway, which is not connected
-						yet.
+						{t.subscription.cardPrivacyNote} {t.izUi.cardNotChargedYet}
 					</p>
 
 					<div className="flex gap-2">
@@ -213,7 +214,7 @@ export function PaymentMethodCard({
 							disabled={isSaving}
 							onClick={() => setEditing(false)}
 						>
-							Cancel
+							{t.common.cancel}
 						</button>
 						<button
 							type="button"

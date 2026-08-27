@@ -18,6 +18,12 @@ import {
 	InputGroupInput,
 } from "@/components/ui/input-group";
 import { resetPasswordWithToken } from "@/lib/auth/password-api";
+import {
+	PortalLocaleProvider,
+	usePortalLocale,
+} from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 /** Mirrors the backend ResetPasswordSchema minimum. */
 const MIN_PASSWORD_LENGTH = 6;
@@ -29,6 +35,10 @@ export const Route = createFileRoute("/reset-password")({
 		return token ? { token } : {};
 	},
 	component: ResetPasswordPage,
+	/**
+	 * ⚠️ English in every locale. `head()` is evaluated OUTSIDE React, so there
+	 * is no provider above it and no hook to read the locale from.
+	 */
 	head: () => ({
 		meta: [
 			{ title: "Reset password — InnocenZ" },
@@ -40,6 +50,37 @@ export const Route = createFileRoute("/reset-password")({
 	}),
 });
 
+/**
+ * Held as a CAUSE, not a sentence, so the banner re-renders in whatever
+ * language is active rather than in the one that was active when it failed.
+ *
+ * `message` carries the SERVER's own wording — "Reset link is invalid or has
+ * expired." is the useful half of that response and is shown untouched.
+ * `password-api` already resolves its English fallbacks through
+ * `apiErrorCopy()`, so nothing untranslated leaks through this branch.
+ */
+type ResetError =
+	| { kind: "minLength" }
+	| { kind: "mismatch" }
+	| { kind: "message"; text: string };
+
+function resetErrorText(error: ResetError, t: PortalTranslations): string {
+	switch (error.kind) {
+		case "minLength":
+			return fill(t.authPages.passwordMinLength, { min: MIN_PASSWORD_LENGTH });
+		case "mismatch":
+			return t.authPages.passwordsDoNotMatch;
+		default:
+			return error.text;
+	}
+}
+
+/**
+ * `label` and `placeholder` arrive ALREADY TRANSLATED from the caller — they
+ * are this component's copy, not its concern. The eye toggle's aria-label is
+ * read straight from the dictionary here because it belongs to the control
+ * itself and no caller should have to supply it.
+ */
 function PasswordInput({
 	id,
 	label,
@@ -55,6 +96,7 @@ function PasswordInput({
 	onChange: (next: string) => void;
 	disabled: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const [show, setShow] = useState(false);
 	return (
 		<Field>
@@ -84,7 +126,7 @@ function PasswordInput({
 					<InputGroupButton
 						type="button"
 						onClick={() => setShow((v) => !v)}
-						aria-label={show ? "Hide password" : "Show password"}
+						aria-label={show ? t.webUi.hidePassword : t.webUi.showPassword}
 						disabled={disabled}
 						variant="ghost"
 						size="icon-sm"
@@ -109,11 +151,29 @@ function PasswordInput({
 	);
 }
 
+/**
+ * `/reset-password` is a PUBLIC route opened straight from an email, with no
+ * portal shell above it, so it mounts the locale provider itself.
+ *
+ * ⚠️ Wrapper and body MUST stay separate components: `usePortalLocale` reads
+ * context from ABOVE, so the component that mounts the provider cannot consume
+ * it — it would silently get the English fallback rather than throwing. Same
+ * split as `components/legal/PrivacyPolicyPage`.
+ */
 function ResetPasswordPage() {
+	return (
+		<PortalLocaleProvider>
+			<ResetPasswordBody />
+		</PortalLocaleProvider>
+	);
+}
+
+function ResetPasswordBody() {
+	const { t } = usePortalLocale();
 	const { token } = Route.useSearch();
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
-	const [error, setError] = useState("");
+	const [error, setError] = useState<ResetError | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [done, setDone] = useState(false);
 
@@ -122,17 +182,15 @@ function ResetPasswordPage() {
 		if (saving || !token) return;
 
 		if (password.length < MIN_PASSWORD_LENGTH) {
-			setError(
-				`New password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-			);
+			setError({ kind: "minLength" });
 			return;
 		}
 		if (password !== confirmPassword) {
-			setError("Passwords do not match");
+			setError({ kind: "mismatch" });
 			return;
 		}
 
-		setError("");
+		setError(null);
 		setSaving(true);
 		try {
 			await resetPasswordWithToken({ token, password });
@@ -140,11 +198,13 @@ function ResetPasswordPage() {
 		} catch (err) {
 			// "Reset link is invalid or has expired." comes back here — the server
 			// message is the useful one, so it is shown rather than replaced.
-			setError(
-				err instanceof Error && err.message
-					? err.message
-					: "Could not reset your password. Please try again.",
-			);
+			setError({
+				kind: "message",
+				text:
+					err instanceof Error && err.message
+						? err.message
+						: t.authPages.resetFailed,
+			});
 		} finally {
 			setSaving(false);
 		}
@@ -156,9 +216,9 @@ function ResetPasswordPage() {
 	if (!token) {
 		return (
 			<AuthCardShell
-				heading="This link is"
-				accent="incomplete"
-				subheading="The reset link is missing its token."
+				heading={t.authPages.linkIncompleteHeading}
+				accent={t.authPages.linkIncompleteAccent}
+				subheading={t.authPages.linkIncompleteSubheading}
 			>
 				<div className="flex flex-col items-center gap-5 text-center">
 					<span className="flex h-16 w-16 items-center justify-center rounded-full border border-destructive/30 bg-destructive/10">
@@ -168,13 +228,13 @@ function ResetPasswordPage() {
 						/>
 					</span>
 					<p className="login-support text-muted-foreground">
-						Open the link straight from the email, or request a new one.
+						{t.authPages.linkIncompleteHint}
 					</p>
 					<Link
 						to="/forgot-password"
 						className="login-btn inline-flex w-full items-center justify-center rounded-md bg-[image:var(--gradient-royal)] font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95"
 					>
-						Request a new link
+						{t.authPages.requestNewLink}
 					</Link>
 				</div>
 			</AuthCardShell>
@@ -184,9 +244,9 @@ function ResetPasswordPage() {
 	if (done) {
 		return (
 			<AuthCardShell
-				heading="Password"
-				accent="updated"
-				subheading="You can now sign in with your new password."
+				heading={t.authPages.passwordUpdatedHeading}
+				accent={t.authPages.passwordUpdatedAccent}
+				subheading={t.authPages.passwordUpdatedSubheading}
 			>
 				<div className="flex flex-col items-center gap-5 text-center">
 					<span className="flex h-16 w-16 items-center justify-center rounded-full border border-royal-gold/30 bg-royal-gold/10">
@@ -196,13 +256,13 @@ function ResetPasswordPage() {
 						/>
 					</span>
 					<p className="login-support text-muted-foreground">
-						The reset link has been used up and will not work again.
+						{t.authPages.resetLinkUsedUp}
 					</p>
 					<Link
 						to="/login"
 						className="login-btn inline-flex w-full items-center justify-center rounded-md bg-[image:var(--gradient-royal)] font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95"
 					>
-						Go to sign in
+						{t.authPages.goToSignIn}
 					</Link>
 				</div>
 			</AuthCardShell>
@@ -211,24 +271,24 @@ function ResetPasswordPage() {
 
 	return (
 		<AuthCardShell
-			heading="Choose a new"
-			accent="password"
-			subheading="Pick something you have not used on this account before."
+			heading={t.authPages.resetHeading}
+			accent={t.authPages.resetHeadingAccent}
+			subheading={t.authPages.resetSubheading}
 		>
-			<form onSubmit={submit} aria-label="Reset password form">
+			<form onSubmit={submit} aria-label={t.authPages.resetFormLabel}>
 				<div className="flex flex-col gap-6">
 					<PasswordInput
 						id="new-password"
-						label="New password"
-						placeholder="Enter your new password"
+						label={t.profile.newPassword}
+						placeholder={t.profile.enterNewPassword}
 						value={password}
 						onChange={setPassword}
 						disabled={saving}
 					/>
 					<PasswordInput
 						id="confirm-password"
-						label="Confirm new password"
-						placeholder="Confirm your new password"
+						label={t.profile.confirmNewPassword}
+						placeholder={t.profile.confirmYourNewPassword}
 						value={confirmPassword}
 						onChange={setConfirmPassword}
 						disabled={saving}
@@ -241,7 +301,7 @@ function ResetPasswordPage() {
 						className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-xl text-destructive"
 					>
 						<AlertCircle className="mt-0.5 h-6 w-6 shrink-0" />
-						<span>{error}</span>
+						<span>{resetErrorText(error, t)}</span>
 					</div>
 				)}
 
@@ -254,10 +314,10 @@ function ResetPasswordPage() {
 					{saving ? (
 						<>
 							<Loader2 className="h-6 w-6 animate-spin" />
-							Saving…
+							{t.common.saving}
 						</>
 					) : (
-						"Save new password"
+						t.authPages.saveNewPassword
 					)}
 				</Button>
 			</form>

@@ -8,6 +8,7 @@ import {
 } from "@agency-portal/lib/agency-demo";
 import { cn } from "@agency-portal/lib/utils";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function formatTargetAmount(targetSalesRm: number): string {
 	if (targetSalesRm >= 1000) {
@@ -119,7 +120,7 @@ export function TierRatePill({
 						isBase ? "text-[var(--iz-muted)]" : "invisible",
 					)}
 				>
-					base
+					{t.outletPanels.baseTier}
 				</span>
 			</div>
 			<span className="mt-0.5 shrink-0 text-[8px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
@@ -157,9 +158,14 @@ export function ShiftTierWagesStrip({
 	compact?: boolean;
 }) {
 	const { t } = usePortalLocale();
+	// Hoisted: two separate calls to a `string | null` helper cannot narrow
+	// each other, so the guard above the JSX would not convince TS below it.
+	const salesTargetsLabel = formatTierSalesTargets(tierRates);
 	const visibleTiers = tiers?.length ? tiers : OUTLET_PR_TIERS;
+	// NOT `t` — that is the locale dictionary this component reads two lines
+	// below. A map callback named `t` shadows it and the shadow type-checks.
 	const hasSalesTargets = visibleTiers.some(
-		(t) => (tierRates[t].targetSalesRm ?? 0) > 0,
+		(tier) => (tierRates[tier].targetSalesRm ?? 0) > 0,
 	);
 
 	return (
@@ -189,9 +195,9 @@ export function ShiftTierWagesStrip({
 					/>
 				))}
 			</div>
-			{formatTierSalesTargets(tierRates) && (
+			{salesTargetsLabel && (
 				<p className="mt-1.5 text-[10px] font-medium text-[var(--iz-muted)]">
-					Week range · {formatTierSalesTargets(tierRates)}
+					{fill(t.outletPanels.weekRangeTargets, { range: salesTargetsLabel })}
 				</p>
 			)}
 		</div>

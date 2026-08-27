@@ -18,6 +18,8 @@ import { startOfToday } from "date-fns";
 import { Pencil, X } from "lucide-react";
 import { useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type JobPostingDraft = {
 	selectedDateIsos: string[];
@@ -99,26 +101,127 @@ export function daysInJobDraft(
 	return draft.selectedDateIsos.length;
 }
 
-const JOB_TABLE_HEADERS = [
-	"Date",
-	"Type",
-	"Budget",
-	"Time",
-	"Status",
-	"Remark",
-	"Cost",
-] as const;
+/**
+ * `AGENCY_SPECIAL_SERVICE_OFFERS[].id` → the name rendered for it.
+ *
+ * The id is the `serviceType` / category stored on the record and posted to the
+ * backend, and the offer's own `label` and `summary` ride along as the posting's
+ * title and description — all three are DATA at the source and stay English
+ * there. Only the copy on screen is translated, keyed on the id, which is the
+ * shape the PR app already uses. The RECORD KEYS never change.
+ */
+const OFFER_LABEL: Record<string, (t: PortalTranslations) => string> = {
+	transportation: (t) => t.adminService.catTransportation,
+	delivery: (t) => t.adminService.catDelivery,
+	wardrobe: (t) => t.adminService.catWardrobe,
+	makeup: (t) => t.adminService.catMakeup,
+	vip_escort: (t) => t.adminService.catVipEscort,
+	uniform: (t) => t.adminService.catUniform,
+	emergency_cover: (t) => t.adminService.catEmergencyCover,
+	training: (t) => t.adminService.catTraining,
+	others: (t) => t.adminService.catOthers,
+	leave_agency: (t) => t.ssPortal.offerLeaveAgency,
+};
+
+const OFFER_SUMMARY: Record<string, (t: PortalTranslations) => string> = {
+	transportation: (t) => t.ssPortal.offerTransportationSummary,
+	delivery: (t) => t.ssPortal.offerDeliverySummary,
+	wardrobe: (t) => t.ssPortal.offerWardrobeSummary,
+	makeup: (t) => t.ssPortal.offerMakeupSummary,
+	vip_escort: (t) => t.ssPortal.offerVipEscortSummary,
+	uniform: (t) => t.ssPortal.offerUniformSummary,
+	emergency_cover: (t) => t.ssPortal.offerEmergencyCoverSummary,
+	training: (t) => t.ssPortal.offerTrainingSummary,
+	others: (t) => t.ssPortal.offerOthersSummary,
+	leave_agency: (t) => t.ssPortal.offerLeaveAgencySummary,
+};
+
+const OFFER_REMARK_HINT: Record<string, (t: PortalTranslations) => string> = {
+	transportation: (t) => t.ssPortal.hintTransportation,
+	delivery: (t) => t.ssPortal.hintDelivery,
+	wardrobe: (t) => t.ssPortal.hintWardrobe,
+	makeup: (t) => t.ssPortal.hintMakeup,
+	vip_escort: (t) => t.ssPortal.hintVipEscort,
+	uniform: (t) => t.ssPortal.hintUniform,
+	emergency_cover: (t) => t.ssPortal.hintEmergencyCover,
+	training: (t) => t.ssPortal.hintTraining,
+	others: (t) => t.ssPortal.hintOthers,
+	leave_agency: (t) => t.ssPortal.hintLeaveAgency,
+};
+
+/**
+ * The offer's name on screen. An id with no entry falls through to the stored
+ * English label, so a service added server-side keeps rendering rather than
+ * blanking the cell.
+ */
+export function specialServiceOfferLabel(
+	t: PortalTranslations,
+	serviceType: string,
+	customServiceName?: string,
+): string {
+	if (isOthersService(serviceType)) {
+		const name = customServiceName?.trim();
+		return name
+			? fill(t.ssPortal.othersNamed, { name })
+			: t.adminService.catOthers;
+	}
+	return (
+		OFFER_LABEL[serviceType]?.(t) ??
+		specialServiceTypeLabel(serviceType, customServiceName)
+	);
+}
+
+export function specialServiceOfferSummary(
+	t: PortalTranslations,
+	serviceType: string,
+): string {
+	return (
+		OFFER_SUMMARY[serviceType]?.(t) ??
+		specialServiceOffer(serviceType)?.summary ??
+		""
+	);
+}
+
+export function specialServiceOfferRemarkHint(
+	t: PortalTranslations,
+	serviceType: string,
+): string {
+	return (
+		OFFER_REMARK_HINT[serviceType]?.(t) ??
+		specialServiceRemarkHint(serviceType, t)
+	);
+}
+
+/*
+ * Functions, not strings: a module-scope array cannot read `t`, and storing the
+ * key NAME here would ship "ssPortal.budget" to the screen. `id` is a stable
+ * React key so a locale switch re-renders the row instead of remounting it.
+ */
+const JOB_TABLE_HEADERS: {
+	id: string;
+	label: (t: PortalTranslations) => string;
+	alignRight?: boolean;
+}[] = [
+	{ id: "date", label: (t) => t.postJob.date },
+	{ id: "type", label: (t) => t.table.type },
+	{ id: "budget", label: (t) => t.ssPortal.budget, alignRight: true },
+	{ id: "time", label: (t) => t.postJob.time },
+	{ id: "status", label: (t) => t.table.status },
+	{ id: "remark", label: (t) => t.ssPortal.remark },
+	{ id: "cost", label: (t) => t.ssPortal.cost, alignRight: true },
+];
 
 function JobTableHead() {
+	const { t } = usePortalLocale();
 	return (
 		<thead>
 			<tr>
-				{JOB_TABLE_HEADERS.map((label, i) => (
+				{JOB_TABLE_HEADERS.map((col) => (
 					<th
-						key={label}
-						className={i === 2 || i === 6 ? "text-right" : undefined}
+						key={col.id}
+						className={col.alignRight ? "text-right" : undefined}
 					>
-						{label}
+						{col.label(t)}
 					</th>
 				))}
 			</tr>
@@ -234,6 +337,7 @@ export function JobPostingComposer({
 	/** True when the fetch failed — an empty list is not a fact then either. */
 	outletsError?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const offer = specialServiceOffer(draft.serviceType);
 
 	return (
@@ -254,7 +358,7 @@ export function JobPostingComposer({
 								onClick={onDone}
 								className="iz-chip px-2 py-1 text-[11px] font-semibold text-[var(--iz-gold)]"
 							>
-								Done
+								{t.postJob.done}
 							</button>
 						)}
 						{showRemove && onRemove && (
@@ -262,7 +366,7 @@ export function JobPostingComposer({
 								type="button"
 								onClick={onRemove}
 								className="iz-chip flex h-6 w-6 items-center justify-center !p-0 text-[var(--iz-muted)]"
-								aria-label="Remove job"
+								aria-label={t.ssPortal.removeJob}
 							>
 								<X className="h-3.5 w-3.5" />
 							</button>
@@ -272,7 +376,7 @@ export function JobPostingComposer({
 			)}
 
 			<div className="iz-job-posting-field-grid">
-				<ComposerField label="Date">
+				<ComposerField label={t.postJob.date}>
 					<div className="iz-job-posting-control">
 						<JobMultiDatePicker
 							embedded
@@ -281,39 +385,39 @@ export function JobPostingComposer({
 						/>
 					</div>
 				</ComposerField>
-				<ComposerField label="Budget (RM)">
+				<ComposerField label={t.ssPortal.budgetRm}>
 					<input
 						type="number"
 						min={0}
 						step={5}
 						className="iz-job-posting-control iz-job-posting-input block w-full min-w-0"
-						placeholder="Enter amount"
-						aria-label="Budget"
+						placeholder={t.ssPortal.enterAmount}
+						aria-label={t.ssPortal.budget}
 						value={draft.budget}
 						onChange={(e) => onChange({ budget: e.target.value })}
 					/>
 				</ComposerField>
-				<ComposerField label="Start time">
+				<ComposerField label={t.postJob.startTime}>
 					<div className="iz-job-posting-control">
 						<IzTimeInput
 							value={draft.time}
 							onChange={(time) => onChange({ time })}
 							className="iz-job-composer-slot w-full min-w-0"
-							aria-label="Start time"
+							aria-label={t.postJob.startTime}
 						/>
 					</div>
 				</ComposerField>
 			</div>
 
 			{outlets && (
-				<ComposerField label="Outlet" className="mt-3">
+				<ComposerField label={t.table.outlet} className="mt-3">
 					<select
 						className="iz-job-posting-control iz-job-posting-input block w-full min-w-0"
-						aria-label="Outlet"
+						aria-label={t.table.outlet}
 						value={draft.outletId}
 						onChange={(e) => onChange({ outletId: e.target.value })}
 					>
-						<option value="">Select a venue…</option>
+						<option value="">{t.ssPortal.selectVenue}</option>
 						{outlets.map((o) => (
 							<option key={o.id} value={o.id}>
 								{o.name}
@@ -330,16 +434,16 @@ export function JobPostingComposer({
 					{outlets.length === 0 && (
 						<p className="iz-job-posting-type-summary">
 							{outletsLoading
-								? "Loading your venues…"
+								? t.ssPortal.loadingVenues
 								: outletsError
-									? "Could not load your venues — reload the page and try again."
-									: "No linked venues yet — link an outlet before posting a job."}
+									? t.ssPortal.venuesLoadFailed
+									: t.ssPortal.noLinkedVenues}
 						</p>
 					)}
 				</ComposerField>
 			)}
 
-			<ComposerField label="Service type" className="mt-3">
+			<ComposerField label={t.ssPortal.serviceType} className="mt-3">
 				<div className="iz-job-posting-type-grid">
 					{offers.map((option) => (
 						<button
@@ -358,30 +462,32 @@ export function JobPostingComposer({
 								draft.serviceType === option.id && "is-active",
 							)}
 						>
-							{option.label}
+							{specialServiceOfferLabel(t, option.id)}
 						</button>
 					))}
 				</div>
 				{offer && (
-					<p className="iz-job-posting-type-summary">{offer.summary}</p>
+					<p className="iz-job-posting-type-summary">
+						{specialServiceOfferSummary(t, offer.id)}
+					</p>
 				)}
 				{isOthersService(draft.serviceType) && (
 					<input
 						type="text"
 						className="iz-job-posting-control iz-job-posting-input mt-2 block w-full min-w-0"
-						placeholder="Name your service"
-						aria-label="Custom service name"
+						placeholder={t.ssPortal.nameYourService}
+						aria-label={t.ssPortal.customServiceName}
 						value={draft.customServiceName}
 						onChange={(e) => onChange({ customServiceName: e.target.value })}
 					/>
 				)}
 			</ComposerField>
 
-			<ComposerField label="Remark" className="mt-3">
+			<ComposerField label={t.ssPortal.remark} className="mt-3">
 				<textarea
 					className="iz-job-posting-textarea w-full"
-					aria-label="Remark"
-					placeholder={specialServiceRemarkHint(draft.serviceType)}
+					aria-label={t.ssPortal.remark}
+					placeholder={specialServiceOfferRemarkHint(t, draft.serviceType)}
 					value={draft.remark}
 					onChange={(e) => onChange({ remark: e.target.value })}
 				/>
@@ -430,7 +536,7 @@ export function JobQueueTable({
 											type="button"
 											onClick={() => onEdit(row.id)}
 											className="iz-chip flex h-6 w-6 items-center justify-center !p-0"
-											aria-label="Edit job"
+											aria-label={t.ssPortal.editJob}
 										>
 											<Pencil className="h-3 w-3" />
 										</button>
@@ -438,7 +544,7 @@ export function JobQueueTable({
 											type="button"
 											onClick={() => onRemove(row.id)}
 											className="iz-chip flex h-6 w-6 items-center justify-center !p-0 text-[var(--iz-muted)]"
-											aria-label="Remove job"
+											aria-label={t.ssPortal.removeJob}
 										>
 											<X className="h-3 w-3" />
 										</button>
@@ -446,7 +552,8 @@ export function JobQueueTable({
 								</div>
 							</td>
 							<td className="iz-job-posting-col-type whitespace-nowrap">
-								{specialServiceTypeLabel(
+								{specialServiceOfferLabel(
+									t,
 									row.serviceType,
 									row.customServiceName,
 								)}
@@ -458,7 +565,7 @@ export function JobQueueTable({
 								{row.time}
 							</td>
 							<td>
-								<JobStatusBadge tone="queued" label="Queued" />
+								<JobStatusBadge tone="queued" label={t.ssPortal.queued} />
 							</td>
 							<td className="iz-job-posting-col-remark max-w-[180px]">
 								<span className="line-clamp-2" title={remark}>
@@ -480,13 +587,17 @@ export function JobPostingsTable({
 	rows,
 	statusLabel,
 	statusTone,
-	emptyMessage = "No job postings match this filter",
+	emptyMessage,
 }: {
 	rows: SpecialServiceRecord[];
+	/** Arrives ALREADY TRANSLATED — it lands inside the badge, mid-render. */
 	statusLabel: (row: SpecialServiceRecord) => string;
 	statusTone: (row: SpecialServiceRecord) => AgencyJobPostingStatusTone;
 	emptyMessage?: string;
 }) {
+	// Not a default parameter value: those are evaluated before the hook runs,
+	// so they cannot read the dictionary.
+	const { t } = usePortalLocale();
 	const sorted = useMemo(
 		() =>
 			[...rows].sort((a, b) => {
@@ -500,7 +611,9 @@ export function JobPostingsTable({
 	if (sorted.length === 0) {
 		return (
 			<div className="rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-8 text-center">
-				<p className="text-xs text-[var(--iz-muted)]">{emptyMessage}</p>
+				<p className="text-xs text-[var(--iz-muted)]">
+					{emptyMessage ?? t.ssPortal.noJobPostingsMatch}
+				</p>
 			</div>
 		);
 	}
@@ -515,7 +628,11 @@ export function JobPostingsTable({
 							{row.date}
 						</td>
 						<td className="iz-job-posting-col-type whitespace-nowrap">
-							{specialServiceTypeLabel(row.serviceType, row.customServiceName)}
+							{specialServiceOfferLabel(
+								t,
+								row.serviceType,
+								row.customServiceName,
+							)}
 						</td>
 						<td className="text-right whitespace-nowrap">
 							<JobBudgetCell amount={row.amountIn} />

@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
+import { useLocale, formatMessage } from '../i18n';
 import { formatRM } from '../lib/demo-shifts';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
@@ -63,6 +64,7 @@ export function ShiftStatusPanel({
    */
   dayKeys?: string[];
 }) {
+  const { t } = useLocale();
   const { openScan } = usePrNav();
   // Receipt rows come from the backend current-week draft voucher, scoped to
   // this shift's day so Check-In and Payment never disagree on the amount.
@@ -184,7 +186,7 @@ export function ShiftStatusPanel({
           ?.data?.message ??
         (error instanceof Error
           ? error.message
-          : 'Could not remove this receipt');
+          : t.shiftStatus.removeFailed);
       setRemoveError(message);
     }
   };
@@ -258,37 +260,56 @@ export function ShiftStatusPanel({
 
   const durationLabel = checkedOut
     ? shiftDurationLabel(checkedInAt, checkedOutAt)
-    : 'In progress';
+    : t.shiftStatus.inProgress;
 
+  // Chinese has no plural form, so the count picks a whole sentence rather than
+  // a trailing 's' spliced into one.
   const statusHint =
     logs.length === 0
       ? null
       : pendingCount > 0
-        ? `${pendingCount} receipt${pendingCount !== 1 ? 's' : ''} pending verification in Payment`
-        : `${logs.length} receipt${logs.length !== 1 ? 's' : ''} matched · PV ready`;
+        ? formatMessage(
+            pendingCount === 1
+              ? t.shiftStatus.pendingOne
+              : t.shiftStatus.pendingMany,
+            { n: pendingCount },
+          )
+        : formatMessage(
+            logs.length === 1
+              ? t.shiftStatus.matchedOne
+              : t.shiftStatus.matchedMany,
+            { n: logs.length },
+          );
 
   return (
     <View style={styles.root}>
       <View style={styles.times}>
         <TimeCell
           icon={MapPin}
-          label="CHECK-IN"
+          label={t.shiftStatus.checkInHead}
           value={fmtAttendanceStamp(checkedInAt)}
         />
         <TimeCell
-          label="CHECK-OUT"
-          value={checkedOut ? fmtAttendanceStamp(checkedOutAt) : 'Pending'}
+          label={t.shiftStatus.checkOutHead}
+          value={
+            checkedOut
+              ? fmtAttendanceStamp(checkedOutAt)
+              : t.shiftStatus.checkOutPending
+          }
         />
-        <TimeCell label="DURATION" value={durationLabel} />
+        <TimeCell label={t.shiftStatus.duration} value={durationLabel} />
       </View>
 
       {targetSalesRm != null && targetSalesRm > 0 && (
         <View style={styles.targets}>
-          <Text style={styles.targetsLabel}>SALES TARGET</Text>
+          <Text style={styles.targetsLabel}>{t.shiftStatus.salesTarget}</Text>
           <View style={styles.targetPrice}>
             <Text style={styles.targetV}>{formatRM(salesLogged)}</Text>
             <Text style={styles.targetT}>
-              of {formatRM(targetSalesRm)} · {targetPct}%
+              {formatMessage(t.shiftStatus.targetOf, {
+                target: formatRM(targetSalesRm),
+                pct: targetPct,
+              })}
             </Text>
           </View>
           <View style={styles.bar}>
@@ -304,13 +325,15 @@ export function ShiftStatusPanel({
 
       {!checkedOut && (
         <View style={styles.scanRows}>
+          {/* The LABEL is translated; the category passed to openScan stays the
+              stored English value ('drinks' / 'tips'). */}
           <ScanCategory
-            label="Drinks"
+            label={t.shiftStatus.drinks}
             onScan={() => openScan('drinks', 'scan')}
             onSelfLog={() => openScan('drinks', 'selflog')}
           />
           <ScanCategory
-            label="Tips"
+            label={t.shiftStatus.tips}
             onScan={() => openScan('tips', 'scan')}
             onSelfLog={() => openScan('tips', 'selflog')}
           />
@@ -323,7 +346,7 @@ export function ShiftStatusPanel({
           onPress={() => setStatusOpen((o) => !o)}
         >
           <View style={styles.statusTitleRow}>
-            <Text style={styles.statusTitle}>STATUS</Text>
+            <Text style={styles.statusTitle}>{t.shiftStatus.status}</Text>
             <HelpCircle size={14} color={C.muted2} />
           </View>
           <ChevronDown
@@ -343,12 +366,24 @@ export function ShiftStatusPanel({
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.table}>
                 <View style={styles.trHead}>
-                  <Text style={[styles.th, styles.colRef]}>REF</Text>
-                  <Text style={[styles.th, styles.colItem]}>ITEM</Text>
-                  <Text style={[styles.th, styles.colQty]}>QTY</Text>
-                  <Text style={[styles.th, styles.colSrc]}>SOURCE</Text>
-                  <Text style={[styles.th, styles.colComm]}>COMM.</Text>
-                  <Text style={[styles.th, styles.colVerify]}>VERIFY</Text>
+                  <Text style={[styles.th, styles.colRef]}>
+                    {t.shiftStatus.colRef}
+                  </Text>
+                  <Text style={[styles.th, styles.colItem]}>
+                    {t.shiftStatus.colItem}
+                  </Text>
+                  <Text style={[styles.th, styles.colQty]}>
+                    {t.shiftStatus.colQty}
+                  </Text>
+                  <Text style={[styles.th, styles.colSrc]}>
+                    {t.shiftStatus.colSource}
+                  </Text>
+                  <Text style={[styles.th, styles.colComm]}>
+                    {t.shiftStatus.colComm}
+                  </Text>
+                  <Text style={[styles.th, styles.colVerify]}>
+                    {t.shiftStatus.colVerify}
+                  </Text>
                   {!checkedOut && (
                     <Text style={[styles.th, styles.colAct]}> </Text>
                   )}
@@ -356,19 +391,23 @@ export function ShiftStatusPanel({
 
                 <View style={styles.tr}>
                   <View style={styles.colRef}>
-                    <Text style={styles.tdLabel}>Duty time</Text>
+                    <Text style={styles.tdLabel}>{t.shiftStatus.dutyTime}</Text>
                     <Text style={styles.tdDetail}>
                       {fmtAttendanceStamp(checkedInAt)}
                     </Text>
                   </View>
                   <Text style={[styles.td, styles.colItem]}>—</Text>
                   <Text style={[styles.td, styles.colQty]}>—</Text>
-                  <Text style={[styles.td, styles.colSrc]}>Check-in</Text>
+                  <Text style={[styles.td, styles.colSrc]}>
+                    {t.shiftStatus.sourceCheckIn}
+                  </Text>
                   <Text style={[styles.td, styles.colComm]}>—</Text>
                   <View style={styles.colVerify}>
                     <View style={styles.badgeSealed}>
                       <Shield size={10} color={C.violetL} />
-                      <Text style={styles.badgeSealedText}>Sealed</Text>
+                      <Text style={styles.badgeSealedText}>
+                        {t.shiftStatus.sealed}
+                      </Text>
                     </View>
                   </View>
                   {!checkedOut && <View style={styles.colAct} />}
@@ -401,9 +440,13 @@ export function ShiftStatusPanel({
 
                 <View style={styles.trFoot}>
                   <View style={styles.totalsBlock}>
-                    <Text style={styles.totalsLabel}>TOTALS</Text>
+                    <Text style={styles.totalsLabel}>
+                      {t.shiftStatus.totals}
+                    </Text>
                     <Text style={styles.totalsHint} numberOfLines={1}>
-                      wage {formatRM(dutyWagesRm)} + comm
+                      {formatMessage(t.shiftStatus.totalsHint, {
+                        wage: formatRM(dutyWagesRm),
+                      })}
                     </Text>
                   </View>
                   <Text style={[styles.td, styles.colComm, styles.totalsComm]}>
@@ -420,13 +463,15 @@ export function ShiftStatusPanel({
                 <View style={styles.galleryHead}>
                   <Camera size={13} color={C.goldL} />
                   <Text style={styles.galleryLabel}>
-                    PROOF PHOTOS · {proofItems.length}
+                    {formatMessage(t.shiftStatus.proofPhotos, {
+                      n: proofItems.length,
+                    })}
                   </Text>
                 </View>
                 <Text style={styles.gallerySub}>
                   {canEditPhotos
-                    ? 'Tap to view · ✕ removes the receipt and everything logged from it'
-                    : 'Pictures you uploaded for this shift'}
+                    ? t.shiftStatus.proofHintEditable
+                    : t.shiftStatus.proofHintLocked}
                 </Text>
                 {removeError && (
                   <Text style={[styles.gallerySub, { color: C.red }]}>
@@ -473,7 +518,9 @@ export function ShiftStatusPanel({
                   >
                     <ImagePlus size={14} color={C.txt} />
                     <Text style={styles.galleryAddText}>
-                      {photoBusy ? 'Saving…' : 'Add another photo'}
+                      {photoBusy
+                        ? t.shiftStatus.saving
+                        : t.shiftStatus.addPhoto}
                     </Text>
                   </Pressable>
                 )}
@@ -519,19 +566,20 @@ function ScanCategory({
   onScan: () => void;
   onSelfLog: () => void;
 }) {
+  const { t } = useLocale();
   return (
     <View style={styles.scanCat}>
       <Text style={styles.scanCatLabel}>{label}</Text>
       <Pressable style={styles.scanBtn} onPress={onScan}>
         <Camera size={14} color={C.txt} />
-        <Text style={styles.scanBtnText}>Scan</Text>
+        <Text style={styles.scanBtnText}>{t.shiftStatus.scan}</Text>
       </Pressable>
       <Pressable
         style={[styles.scanBtn, styles.scanBtnSelf]}
         onPress={onSelfLog}
       >
         <Pencil size={14} color={C.txt} />
-        <Text style={styles.scanBtnText}>Self-log</Text>
+        <Text style={styles.scanBtnText}>{t.shiftStatus.selfLog}</Text>
       </Pressable>
     </View>
   );
@@ -552,15 +600,22 @@ function LogRow({
   onRescan: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useLocale();
   // Check-out seals (overtime) aren't receipts — no edit/scan, shown as Sealed.
   const isSeal = log.source === 'checkin';
+  // `log.source` and `log.kind` stay the server's English values — only the
+  // LABEL rendered for them is translated.
   const sourceLabel = isSeal
-    ? 'Check-in'
+    ? t.shiftStatus.sourceCheckIn
     : log.source === 'manual'
-      ? 'Manual entry'
-      : 'Receipt scan';
+      ? t.shiftStatus.sourceManual
+      : t.shiftStatus.sourceScan;
   const refLabel =
-    log.kind === 'tips' ? 'Tip' : log.kind === 'others' ? 'OT' : 'Drink';
+    log.kind === 'tips'
+      ? t.shiftStatus.refTip
+      : log.kind === 'others'
+        ? t.shiftStatus.refOt
+        : t.shiftStatus.refDrink;
   // Once the agency has approved the receipt, this row is no longer the PR's to
   // change — the server refuses the edit and the delete, and the way back is a
   // dispute. Hiding the controls is the honest form of that: leaving them would
@@ -587,12 +642,14 @@ function LogRow({
         {isSeal ? (
           <View style={styles.badgeSealed}>
             <Shield size={10} color={C.violetL} />
-            <Text style={styles.badgeSealedText}>Sealed</Text>
+            <Text style={styles.badgeSealedText}>{t.shiftStatus.sealed}</Text>
           </View>
         ) : log.pending ? (
           <View style={styles.badgePending}>
             <Clock size={10} color={C.amber} />
-            <Text style={styles.badgePendingText}>Pending</Text>
+            <Text style={styles.badgePendingText}>
+              {t.shiftStatus.pending}
+            </Text>
           </View>
         ) : (
           /*
@@ -633,10 +690,10 @@ function LogRow({
               }
             >
               {log.receiptStatus === 'verified'
-                ? 'Verified'
+                ? t.shiftStatus.verified
                 : log.receiptStatus === 'approved'
-                  ? 'Approved'
-                  : 'Matched'}
+                  ? t.shiftStatus.approved
+                  : t.shiftStatus.matched}
             </Text>
           </View>
         )}

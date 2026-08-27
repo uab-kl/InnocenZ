@@ -1,4 +1,12 @@
-/** Shared shift transaction log — agency & outlet read the same records */
+/**
+ * Shared shift transaction log — agency & outlet read the same records
+ *
+ * NOTHING in this file is copy, so nothing here takes `t`. Every English string
+ * below is DATA: seeded PR names, venue names, agency names and `dateDisplay`
+ * stamps that `parseRowDateIso` and the payroll week matchers read back, plus
+ * `OUTLET_VENUE_NAME`, which the outlet history filters rows against. A sweep
+ * flags ~20 literals here; all of them are fixtures or match keys.
+ */
 
 import { resolveRosterPrName } from "@agency-portal/lib/agency-demo";
 import {

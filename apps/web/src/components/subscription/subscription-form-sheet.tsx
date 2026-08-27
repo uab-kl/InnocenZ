@@ -1,6 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { AlertCircle, CreditCard, Loader2 } from "lucide-react";
 import { useEffect } from "react";
+import { planAudienceLabel } from "@/components/subscription/plan-labels";
 import { Button } from "@/components/ui/button";
 import {
 	Field,
@@ -25,6 +26,9 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { getErrorMessage } from "@/lib/utils";
 import type { Subscription } from "@/services/subscription";
 import {
@@ -34,11 +38,17 @@ import {
 
 type CoveragePeriod = "day" | "week" | "month" | "year";
 
-const COVERAGE_PERIODS: Array<{ value: CoveragePeriod; label: string }> = [
-	{ value: "day", label: "Daily" },
-	{ value: "week", label: "Weekly" },
-	{ value: "month", label: "Monthly" },
-	{ value: "year", label: "Annually" },
+// `value` is composed into the stored coverage string, so it stays English.
+// `label` is a function because a module-scope map cannot read `t` — storing
+// the resolved string here would freeze it at the locale of the first render.
+const COVERAGE_PERIODS: Array<{
+	value: CoveragePeriod;
+	label: (t: PortalTranslations) => string;
+}> = [
+	{ value: "day", label: (t) => t.adminSubscription.periodDaily },
+	{ value: "week", label: (t) => t.subscription.billedWeekly },
+	{ value: "month", label: (t) => t.subscription.billedMonthly },
+	{ value: "year", label: (t) => t.subscription.billedAnnually },
 ];
 
 // Coverage is stored as one free-text string on the plan (e.g. "5 PRs/day").
@@ -86,6 +96,7 @@ export function SubscriptionFormSheet({
 	error,
 	editTarget,
 }: SubscriptionFormSheetProps) {
+	const { t } = usePortalLocale();
 	const isEditing = !!editTarget;
 
 	const form = useForm({
@@ -143,12 +154,14 @@ export function SubscriptionFormSheet({
 						</div>
 						<div className="space-y-1">
 							<SheetTitle className="text-xl">
-								{isEditing ? "Edit Plan" : "Create Plan"}
+								{isEditing
+									? t.adminSubscription.editPlan
+									: t.adminSubscription.createPlan}
 							</SheetTitle>
 							<SheetDescription>
 								{isEditing
-									? "Update the plan details."
-									: "Add a new plan for agencies."}
+									? t.adminSubscription.editPlanHint
+									: t.adminSubscription.createPlanHint}
 							</SheetDescription>
 						</div>
 					</div>
@@ -170,10 +183,12 @@ export function SubscriptionFormSheet({
 										field.state.meta.isTouched && !field.state.value.trim();
 									return (
 										<Field data-invalid={isInvalid}>
-											<FieldLabel htmlFor="sub-name">Plan Name</FieldLabel>
+											<FieldLabel htmlFor="sub-name">
+												{t.adminSubscription.planName}
+											</FieldLabel>
 											<Input
 												id="sub-name"
-												placeholder="e.g. Basic, Pro, Enterprise"
+												placeholder={t.adminSubscription.planNamePlaceholder}
 												value={field.state.value}
 												onBlur={field.handleBlur}
 												onChange={(e) => field.handleChange(e.target.value)}
@@ -182,7 +197,11 @@ export function SubscriptionFormSheet({
 											/>
 											{isInvalid && (
 												<FieldError
-													errors={[{ message: "Plan name is required" }]}
+													errors={[
+														{
+															message: t.adminSubscription.planNameRequired,
+														},
+													]}
 												/>
 											)}
 										</Field>
@@ -197,7 +216,9 @@ export function SubscriptionFormSheet({
 											field.state.meta.isTouched && field.state.value < 0;
 										return (
 											<Field data-invalid={isInvalid}>
-												<FieldLabel htmlFor="sub-price">Price (RM)</FieldLabel>
+												<FieldLabel htmlFor="sub-price">
+													{t.adminSubscription.colPrice}
+												</FieldLabel>
 												<Input
 													id="sub-price"
 													type="number"
@@ -214,7 +235,9 @@ export function SubscriptionFormSheet({
 												/>
 												{isInvalid && (
 													<FieldError
-														errors={[{ message: "Price must be 0 or more" }]}
+														errors={[
+															{ message: t.adminSubscription.priceMinimum },
+														]}
 													/>
 												)}
 											</Field>
@@ -225,7 +248,9 @@ export function SubscriptionFormSheet({
 								<form.Field name="subscriptionType">
 									{(field) => (
 										<Field>
-											<FieldLabel htmlFor="sub-audience">Audience</FieldLabel>
+											<FieldLabel htmlFor="sub-audience">
+												{t.adminSubscription.colAudience}
+											</FieldLabel>
 											<Select
 												value={field.state.value}
 												onValueChange={(value) =>
@@ -234,11 +259,17 @@ export function SubscriptionFormSheet({
 												disabled={isSubmitting}
 											>
 												<SelectTrigger id="sub-audience">
-													<SelectValue placeholder="Select audience" />
+													<SelectValue
+														placeholder={t.adminSubscription.selectAudience}
+													/>
 												</SelectTrigger>
 												<SelectContent>
-													<SelectItem value="agency">Agency</SelectItem>
-													<SelectItem value="outlet">Outlet</SelectItem>
+													<SelectItem value="agency">
+														{planAudienceLabel("agency", t)}
+													</SelectItem>
+													<SelectItem value="outlet">
+														{planAudienceLabel("outlet", t)}
+													</SelectItem>
 												</SelectContent>
 											</Select>
 										</Field>
@@ -249,7 +280,7 @@ export function SubscriptionFormSheet({
 									{(field) => (
 										<Field>
 											<FieldLabel htmlFor="sub-billing-cycle">
-												Billing Cycle
+												{t.adminBusiness.colBillingCycle}
 											</FieldLabel>
 											<Select
 												value={field.state.value}
@@ -261,12 +292,20 @@ export function SubscriptionFormSheet({
 												disabled={isSubmitting}
 											>
 												<SelectTrigger id="sub-billing-cycle">
-													<SelectValue placeholder="Select billing cycle" />
+													<SelectValue
+														placeholder={t.adminSubscription.selectBillingCycle}
+													/>
 												</SelectTrigger>
 												<SelectContent>
-													<SelectItem value="weekly">Weekly</SelectItem>
-													<SelectItem value="monthly">Monthly</SelectItem>
-													<SelectItem value="annually">Annually</SelectItem>
+													<SelectItem value="weekly">
+														{t.subscription.billedWeekly}
+													</SelectItem>
+													<SelectItem value="monthly">
+														{t.subscription.billedMonthly}
+													</SelectItem>
+													<SelectItem value="annually">
+														{t.subscription.billedAnnually}
+													</SelectItem>
 												</SelectContent>
 											</Select>
 										</Field>
@@ -293,7 +332,7 @@ export function SubscriptionFormSheet({
 									return (
 										<Field>
 											<FieldLabel htmlFor="sub-coverage-amount">
-												Coverage
+												{t.adminSubscription.colCoverage}
 											</FieldLabel>
 											<div className="flex items-center gap-2">
 												<Input
@@ -308,7 +347,7 @@ export function SubscriptionFormSheet({
 													onBlur={field.handleBlur}
 													onChange={(e) => update({ amount: e.target.value })}
 													disabled={isSubmitting}
-													aria-label="Coverage amount"
+													aria-label={t.adminSubscription.coverageAmount}
 												/>
 												<Select
 													value={parts.unit}
@@ -317,11 +356,14 @@ export function SubscriptionFormSheet({
 												>
 													<SelectTrigger
 														className="w-24"
-														aria-label="Coverage unit"
+														aria-label={t.adminSubscription.coverageUnit}
 													>
 														<SelectValue />
 													</SelectTrigger>
 													<SelectContent>
+														{/* "PRs" and "PV" are composed into the stored
+														    coverage string, so both the value and the
+														    label stay English in every locale. */}
 														<SelectItem value="PRs">PRs</SelectItem>
 														<SelectItem value="PV">PV</SelectItem>
 													</SelectContent>
@@ -336,7 +378,7 @@ export function SubscriptionFormSheet({
 												>
 													<SelectTrigger
 														className="w-36"
-														aria-label="Coverage period"
+														aria-label={t.adminSubscription.coveragePeriod}
 													>
 														<SelectValue />
 													</SelectTrigger>
@@ -346,24 +388,18 @@ export function SubscriptionFormSheet({
 																key={option.value}
 																value={option.value}
 															>
-																{option.label}
+																{option.label(t)}
 															</SelectItem>
 														))}
 													</SelectContent>
 												</Select>
 											</div>
 											<p className="text-sm text-muted-foreground">
-												{field.state.value ? (
-													<>
-														Shown on the plan as{" "}
-														<span className="font-medium text-foreground">
-															{field.state.value}
-														</span>
-														.
-													</>
-												) : (
-													"Volume tier shown on the plan. Optional."
-												)}
+												{field.state.value
+													? fill(t.adminSubscription.shownOnPlanAs, {
+															value: field.state.value,
+														})
+													: t.adminSubscription.coverageHint}
 											</p>
 										</Field>
 									);
@@ -376,10 +412,10 @@ export function SubscriptionFormSheet({
 										<div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
 											<div className="space-y-1">
 												<FieldLabel htmlFor="sub-status">
-													Active Status
+													{t.adminSubscription.activeStatus}
 												</FieldLabel>
 												<p className="text-sm text-muted-foreground">
-													Set plan as active or inactive.
+													{t.adminSubscription.activeStatusHint}
 												</p>
 											</div>
 											<Switch
@@ -389,7 +425,7 @@ export function SubscriptionFormSheet({
 													field.handleChange(checked ? "active" : "inactive")
 												}
 												disabled={isSubmitting}
-												aria-label="Toggle subscription active status"
+												aria-label={t.adminSubscription.toggleActiveStatus}
 											/>
 										</div>
 									</Field>
@@ -415,18 +451,18 @@ export function SubscriptionFormSheet({
 							onClick={() => handleOpenChange(false)}
 							disabled={isSubmitting}
 						>
-							Cancel
+							{t.common.cancel}
 						</Button>
 						<Button type="submit" disabled={isSubmitting}>
 							{isSubmitting ? (
 								<>
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									{isEditing ? "Saving..." : "Creating..."}
+									{isEditing ? t.common.saving : t.admin.creating}
 								</>
 							) : isEditing ? (
-								"Save Changes"
+								t.adminSubscription.saveChanges
 							) : (
-								"Create Plan"
+								t.adminSubscription.createPlan
 							)}
 						</Button>
 					</SheetFooter>

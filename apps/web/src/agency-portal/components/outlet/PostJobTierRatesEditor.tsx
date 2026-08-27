@@ -28,6 +28,7 @@ import { Award, Crown, Medal, Percent, Star, UserRound } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const TIER_COLUMN_ICONS = [Star, Medal, Award, Award, Crown] as const;
 
@@ -47,14 +48,30 @@ function tierColumnIconClass(payTierId: PostJobPayTierId): string {
 	return `iz-post-job-tier-col-head__icon--${Math.min(rank + 1, 5)}`;
 }
 
-function formatCommissionHint(row: PostJobPayTierRow): string {
-	if (isCommissionOnlyPayTier(row.payTierId)) return "+ drinks & tips";
-	const parts: string[] = [];
-	if (row.drinkPct > 0) parts.push("drinks");
-	if (row.tipPct > 0) parts.push("tips");
-	if (parts.length === 0) return "—";
-	if (parts.length === 1) return `+ ${parts[0]}`;
-	return `+ ${parts.join(" & ")}`;
+/**
+ * A tier row commits NO commission at all — drives the cell's "none" styling.
+ *
+ * Separate from the label below on purpose: the class used to be picked by
+ * comparing the rendered hint to "—", which is a translated string the moment
+ * this screen speaks anything but English. A state is data, its words are not.
+ */
+function hasNoCommission(row: PostJobPayTierRow): boolean {
+	if (isCommissionOnlyPayTier(row.payTierId)) return false;
+	return row.drinkPct <= 0 && row.tipPct <= 0;
+}
+
+function formatCommissionHint(
+	row: PostJobPayTierRow,
+	t: PortalTranslations,
+): string {
+	if (isCommissionOnlyPayTier(row.payTierId))
+		return t.outletPanels.commissionDrinksAndTips;
+	const hasDrinks = row.drinkPct > 0;
+	const hasTips = row.tipPct > 0;
+	if (hasDrinks && hasTips) return t.outletPanels.commissionDrinksAndTips;
+	if (hasDrinks) return t.outletPanels.commissionDrinksOnly;
+	if (hasTips) return t.outletPanels.commissionTipsOnly;
+	return "—";
 }
 
 /**
@@ -135,20 +152,26 @@ export function PostJobTierRatesEditor({
 		onChange(nextRows);
 	};
 
-	const rowLabels = commissionExpanded
-		? ([
-				t.postJob.colWages,
-				t.postJob.colDrinks,
-				t.postJob.colTips,
-				t.postJob.colTarget,
-				t.postJob.colPrCount,
-			] as const)
-		: ([
-				t.postJob.colWages,
-				t.postJob.colCommission,
-				t.postJob.colTarget,
-				t.postJob.colPrCount,
-			] as const);
+	/*
+	 * Each row carries a STABLE id beside its translated label. The label used to
+	 * be the React key, which remounts every cell in the grid — and drops focus
+	 * out of whichever rate the operator was typing — the instant the language
+	 * changes. The id never moves; only the words do.
+	 */
+	const rowLabels: { id: string; label: string }[] = commissionExpanded
+		? [
+				{ id: "wages", label: t.postJob.colWages },
+				{ id: "drinks", label: t.postJob.colDrinks },
+				{ id: "tips", label: t.postJob.colTips },
+				{ id: "target", label: t.postJob.colTarget },
+				{ id: "prCount", label: t.postJob.colPrCount },
+			]
+		: [
+				{ id: "wages", label: t.postJob.colWages },
+				{ id: "commission", label: t.postJob.colCommission },
+				{ id: "target", label: t.postJob.colTarget },
+				{ id: "prCount", label: t.postJob.colPrCount },
+			];
 
 	const commissionRowIndex = 1;
 	const drinksRowIndex = 1;
@@ -212,8 +235,8 @@ export function PostJobTierRatesEditor({
 							);
 						})}
 
-						{rowLabels.map((label, labelIndex) => (
-							<div key={label} className="contents">
+						{rowLabels.map(({ id, label }, labelIndex) => (
+							<div key={id} className="contents">
 								<div className="iz-post-job-tier-grid__row-label">{label}</div>
 								{allRows.map((row) => {
 									const commissionOnly = isCommissionOnlyPayTier(row.payTierId);
@@ -257,14 +280,15 @@ export function PostJobTierRatesEditor({
 										labelIndex === commissionRowIndex &&
 										!commissionExpanded
 									) {
-										const hint = formatCommissionHint(row);
+										const hint = formatCommissionHint(row, t);
 										return (
 											<button
 												key={`${row.id}-comm`}
 												type="button"
 												className={cn(
 													"iz-post-job-tier-comm-cell iz-post-job-tier-comm-cell--btn",
-													hint === "—" && "iz-post-job-tier-comm-cell--none",
+													hasNoCommission(row) &&
+														"iz-post-job-tier-comm-cell--none",
 												)}
 												onClick={() => setCommissionExpanded(true)}
 												title={t.postJob.tapEditDrinksTips}
@@ -282,7 +306,7 @@ export function PostJobTierRatesEditor({
 												title={t.postJob.tapEditDrinksCommission}
 											>
 												<span className="text-[9px] font-semibold text-[var(--iz-muted)]">
-													Dr
+													{t.workspace.legacyDr}
 												</span>
 												<TierPctStepper
 													value={row.drinkPct}
@@ -302,7 +326,7 @@ export function PostJobTierRatesEditor({
 												title={t.workspace.tapEditTipsCommission}
 											>
 												<span className="text-[9px] font-semibold text-[var(--iz-muted)]">
-													Tip
+													{t.workspace.legacyTip}
 												</span>
 												<TierPctStepper
 													value={row.tipPct}

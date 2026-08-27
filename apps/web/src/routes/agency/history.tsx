@@ -8,6 +8,7 @@ import {
 import { useAgencyHistory } from "@agency-portal/hooks/use-agency-history";
 import { ownedByAgency } from "@agency-portal/lib/agency-demo";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
+import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { getPrAgencyById } from "@agency-portal/lib/pr-demo";
 import { scopeShiftHistoryToAgencyName } from "@agency-portal/lib/shift-history-utils";
 import { useStore } from "@agency-portal/lib/store";
@@ -157,6 +158,7 @@ function AgencyHistory() {
 			<OutletPageHeader
 				eyebrow={orgName}
 				title={t.agencyMisc.history}
+				iconKey="History"
 				hint={summaryHint}
 			/>
 
@@ -166,14 +168,20 @@ function AgencyHistory() {
 					className={`iz-payroll-tab${tab === "shifts" ? " on" : ""}`}
 					onClick={() => setTab("shifts")}
 				>
-					<TitleWithIcon>{t.agencyMisc.byPr}</TitleWithIcon>
+					{/* `TitleWithIcon` derives its icon from the rendered children, so a
+					    translated tab label misses the lookup and drops the glyph
+					    entirely (`iconForLabel` → null, no fallback). Pass the ENGLISH
+					    key explicitly instead. */}
+					<TitleWithIcon icon={iconForNav("By PR")}>
+						{t.agencyMisc.byPr}
+					</TitleWithIcon>
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${tab === "outlets" ? " on" : ""}`}
 					onClick={() => setTab("outlets")}
 				>
-					<TitleWithIcon>
+					<TitleWithIcon icon={iconForNav("By outlet")}>
 						{fill(t.history.byOutletCount, { n: outletCount })}
 					</TitleWithIcon>
 				</button>

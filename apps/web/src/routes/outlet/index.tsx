@@ -38,6 +38,10 @@ function OutletHome() {
 
 			<OutletPageHeader
 				eyebrow={t.common.today}
+				// English lookup key for the eyebrow icon: `iconForNav` matches on the
+				// text, so the translated "今天" would resolve to a "?" glyph instead
+				// of the Home icon.
+				eyebrowIconKey="Today"
 				title={`${date} · ${time}`}
 				hint={t.outletHome.liveShiftHint}
 			/>

@@ -1,11 +1,16 @@
 /**
  * `.iz-collapsible-section` port — PR Shifts home sections ("TODAY", "TO-DO",
- * "AGENCY SCHEDULE") with the uppercase Sora title, "Tap to collapse/expand"
- * gold hint, and the bordered chevron box that highlights when open.
+ * "AGENCY SCHEDULE") with the uppercase Sora title, the collapse/expand gold
+ * hint, and the bordered chevron box that highlights when open.
+ *
+ * `title.toUpperCase()` stays: uppercasing is a NO-OP on Chinese, so the same
+ * call is correct in all three locales — the caller passes an already-localised
+ * title and only Latin script is affected.
  */
 import React, { type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { useLocale } from '../i18n';
 import { ChevronDown, type IconComponent } from './icons';
 
 export function Section({
@@ -21,6 +26,7 @@ export function Section({
   onToggle: (open: boolean) => void;
   children: ReactNode;
 }) {
+  const { t } = useLocale();
   return (
     <View
       style={[
@@ -35,7 +41,9 @@ export function Section({
             <Icon size={14} color={C.goldL} />
             <Text style={styles.title}>{title.toUpperCase()}</Text>
           </View>
-          <Text style={styles.action}>{open ? 'Tap to collapse' : 'Tap to expand'}</Text>
+          <Text style={styles.action}>
+            {open ? t.common.tapToCollapse : t.common.tapToExpand}
+          </Text>
         </View>
         <View style={[styles.chev, open && styles.chevOpen]}>
           <ChevronDown

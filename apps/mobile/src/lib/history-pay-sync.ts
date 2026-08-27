@@ -1,6 +1,7 @@
 /**
  * Keep History → Shifts aligned with History → Payment (same PV / week totals).
  */
+import type { AppTranslations } from '../i18n';
 import type { HistPayWeek } from './demo-payment-history';
 import {
   HISTORY_WEEKS,
@@ -103,6 +104,8 @@ function historyWeekWeeksAgo(hw: DemoHistoryWeek): number | null {
 export function historyShiftsFromPayWeek(
   week: HistPayWeek,
   weekId: string,
+  /** LAST and with no default — a default would pin English for every caller. */
+  t: AppTranslations,
 ): DemoHistoryShift[] {
   const year = yearFromWeekLabel(week.weekLabel);
   const status: DemoHistoryShift['status'] =
@@ -124,10 +127,12 @@ export function historyShiftsFromPayWeek(
       tips: 0,
       others: 0,
     };
-    const t = line.type.toLowerCase();
-    if (t.includes('wage')) bucket.wages += line.amount;
-    else if (t.includes('drink')) bucket.drinks += line.amount;
-    else if (t.includes('tip')) bucket.tips += line.amount;
+    // NOT `t` — that is the dictionary in this function, and a local of the
+    // same name would shadow it for anything moved inside this loop.
+    const kind = line.type.toLowerCase();
+    if (kind.includes('wage')) bucket.wages += line.amount;
+    else if (kind.includes('drink')) bucket.drinks += line.amount;
+    else if (kind.includes('tip')) bucket.tips += line.amount;
     else bucket.others += line.amount;
     byDate.set(dateIso, bucket);
   }
@@ -140,9 +145,12 @@ export function historyShiftsFromPayWeek(
       return {
         id: `pv-${week.id}-${dateIso}`,
         outlet: b.outlet,
-        dateLabel: fmtDFriendly(y, m, d),
+        dateLabel: fmtDFriendly(y, m, d, t),
         dateIso,
-        time: 'Per PV week breakdown',
+        // The History card's TIME slot, where a clock reading would go — this
+        // row was rebuilt from the voucher, so it has none. Rendered only;
+        // nothing parses or stores it.
+        time: t.payHistory.perPvWeekBreakdown,
         payout,
         wages: b.wages,
         drinks: b.drinks,
@@ -160,8 +168,10 @@ export function mergeHistoryShiftsWithPaymentWeeks(
   records: WeekPayRecord[],
   session: SessionTimes | undefined,
   payWeeks: HistPayWeek[],
+  /** LAST and with no default — a default would pin English for every caller. */
+  t: AppTranslations,
 ): DemoHistoryShift[] {
-  let merged = mergeHistoryShiftsWithWeekPay(base, records, session);
+  let merged = mergeHistoryShiftsWithWeekPay(base, records, session, t);
 
   const replaceIds = new Set<string>();
   const pvShifts: DemoHistoryShift[] = [];
@@ -171,7 +181,9 @@ export function mergeHistoryShiftsWithPaymentWeeks(
     const pw = matchPayWeekForHistoryWeek(hw, payWeeks);
     if (!pw) continue;
     replaceIds.add(hw.id);
-    pvShifts.push(...historyShiftsFromPayWeek(normalizeHistPayWeek(pw), hw.id));
+    pvShifts.push(
+      ...historyShiftsFromPayWeek(normalizeHistPayWeek(pw), hw.id, t),
+    );
   }
 
   merged = merged.filter((s) => !replaceIds.has(s.weekId));

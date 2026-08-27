@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type {
 	AgencyReceipt,
 	PaymentVoucherDispute,
@@ -80,10 +81,7 @@ function DisputeShiftFacts({ dispute }: { dispute: PaymentVoucherDispute }) {
 
 	if (shifts.length === 0) {
 		return (
-			<p className="iz-tiny iz-muted2 mt-2">
-				Which shift · not linked — this claim names no receipt, or the receipt
-				has no shift record.
-			</p>
+			<p className="iz-tiny iz-muted2 mt-2">{t.agencyQueues.shiftNotLinked}</p>
 		);
 	}
 
@@ -91,7 +89,7 @@ function DisputeShiftFacts({ dispute }: { dispute: PaymentVoucherDispute }) {
 		<div className="mt-2">
 			<p className="iz-tiny iz-muted mb-1">
 				{shifts.length > 1
-					? `This claim covers the whole day — ${shifts.length} shifts worked`
+					? fill(t.agencyQueues.claimCoversWholeDayMany, { n: shifts.length })
 					: dispute.receiptId
 						? t.payroll.theShiftBehindFigure
 						: t.payroll.claimCoversWholeDay}
@@ -138,8 +136,8 @@ function DisputeEvidence({
 		return (
 			<p className="iz-tiny iz-muted2 mt-3">
 				{dispute.component === "wages" || dispute.component === "others"
-					? "No receipt behind this — daily wages and OT are calculated from the check-in and check-out stamps, so the correction is to the shift record."
-					: "No receipt found for this day and bucket. It may have been removed since the dispute was raised."}
+					? t.agencyQueues.noReceiptBehindWagesOt
+					: t.agencyQueues.noReceiptForDayBucket}
 			</p>
 		);
 	}
@@ -148,9 +146,10 @@ function DisputeEvidence({
 		<div className="mt-3 space-y-2">
 			<p className="iz-tiny iz-muted">
 				{matches.length === 1
-					? t.payroll.theReceipt
-					: `The ${matches.length} receipts`}{" "}
-				behind this figure — correct it here if the PR is right.
+					? t.agencyQueues.receiptBehindFigureOne
+					: fill(t.agencyQueues.receiptBehindFigureMany, {
+							n: matches.length,
+						})}
 			</p>
 			{matches.map((receipt) => {
 				const editing = openId === receipt.id;
@@ -211,19 +210,22 @@ function DisputeEvidence({
 						{(receipt.proofPhotos ?? []).length > 0 ? (
 							<>
 								<p className="iz-tiny iz-muted2 mt-2">
-									The scanned receipt
 									{receipt.receiptTime
-										? ` · printed ${receipt.receiptTime}`
-										: ""}
+										? fill(t.agencyQueues.theScannedReceiptPrinted, {
+												time: receipt.receiptTime,
+											})
+										: t.agencyQueues.theScannedReceipt}
 								</p>
 								<ProofPhotos
 									photos={receipt.proofPhotos ?? []}
-									label={`${receipt.receiptNo} scan`}
+									label={fill(t.agencyQueues.receiptScanAlt, {
+										no: receipt.receiptNo,
+									})}
 								/>
 							</>
 						) : (
 							<p className="iz-tiny iz-muted2 mt-2">
-								No photo on this receipt — it was self-logged without one.
+								{t.agencyQueues.noPhotoSelfLogged}
 							</p>
 						)}
 
@@ -233,8 +235,8 @@ function DisputeEvidence({
 						{!editable && (
 							<p className="iz-tiny iz-muted2 mt-1.5">
 								{signedOff
-									? "The PR has signed this voucher — its figures can no longer be corrected."
-									: "Your agency role can see this receipt but not correct it — owner and finance edit receipts."}
+									? t.agencyQueues.signedCannotCorrect
+									: t.agencyQueues.roleCannotCorrectReceipt}
 							</p>
 						)}
 						{editable && (
@@ -336,7 +338,10 @@ function DisputeRow({
 						<p className="iz-tiny iz-muted mt-0.5">
 							{formatDay(dispute.disputeDate)}
 							{dispute.voucher.weekStart && dispute.voucher.weekEnd
-								? ` · week ${dispute.voucher.weekStart} to ${dispute.voucher.weekEnd}`
+								? ` · ${fill(t.agencyQueues.weekFromTo, {
+										from: dispute.voucher.weekStart,
+										to: dispute.voucher.weekEnd,
+									})}`
 								: ""}
 						</p>
 						{/* THE CONTESTED FIGURE, on the header line — a folded card that
@@ -366,7 +371,7 @@ function DisputeRow({
 						{dispute.outcome === "accepted"
 							? t.payroll.accepted
 							: dispute.outcome === "rejected"
-								? "Rejected"
+								? t.agencyQueues.rejected
 								: t.payroll.withdrawn}
 					</span>
 				) : (
@@ -418,8 +423,12 @@ function DisputeRow({
 							<>
 								<Paperclip className="h-3.5 w-3.5" />
 								<span className="iz-tiny">
-									What the PR attached · {proof.length} image
-									{proof.length > 1 ? "s" : ""}
+									{fill(
+										proof.length === 1
+											? t.agencyQueues.prAttachedOne
+											: t.agencyQueues.prAttachedMany,
+										{ n: proof.length },
+									)}
 								</span>
 							</>
 						) : (
@@ -462,7 +471,7 @@ function DisputeRow({
 							/>
 							{rejecting && (
 								<p className="iz-tiny mt-1 text-[var(--iz-amber,#d9b97a)]">
-									Tell the PR why this was rejected.
+									{t.adminService.tellPrWhyRejected}
 								</p>
 							)}
 
@@ -473,7 +482,7 @@ function DisputeRow({
 									disabled={busy}
 									onClick={() => submit("accepted")}
 								>
-									<Check className="h-4 w-4" /> Accept
+									<Check className="h-4 w-4" /> {t.adminService.accept}
 								</button>
 								<button
 									type="button"
@@ -481,7 +490,7 @@ function DisputeRow({
 									disabled={busy}
 									onClick={() => submit("rejected")}
 								>
-									<X className="h-4 w-4" /> Reject
+									<X className="h-4 w-4" /> {t.common.reject}
 								</button>
 							</div>
 						</>
@@ -642,18 +651,22 @@ export function DisputeQueuePanel({
 				resolutionNote: note || undefined,
 			});
 			toast(
-				outcome === "accepted" ? "Dispute accepted" : "Dispute rejected",
+				outcome === "accepted"
+					? t.agencyQueues.disputeAccepted
+					: t.agencyQueues.disputeRejected,
 				"success",
 			);
 		} catch {
-			toast("Could not record that decision", "warn");
+			toast(t.receipts.couldNotRecordDecision, "warn");
 		}
 	};
 
 	return (
 		<>
 			<IzSectionLabel>
-				Disputes{openCount > 0 ? ` (${openCount} open)` : ""}
+				{openCount > 0
+					? fill(t.agencyQueues.disputesTitleOpen, { n: openCount })
+					: t.agencyQueues.disputesTitle}
 			</IzSectionLabel>
 			<IzCard>
 				{isLoading && (
@@ -665,8 +678,8 @@ export function DisputeQueuePanel({
 						{(
 							[
 								["open", t.payroll.open, openCount],
-								["resolved", "Resolved", resolvedCount],
-								["all", "All", weekDisputes.length],
+								["resolved", t.agencyQueues.scopeResolved, resolvedCount],
+								["all", t.common.all, weekDisputes.length],
 							] as [DisputeScope, string, number][]
 						).map(([value, label, count]) => (
 							// Same chip as the Payment Vouchers filter above — one filter
@@ -704,27 +717,40 @@ export function DisputeQueuePanel({
 				)}
 				{!isLoading && openElsewhere > 0 && (
 					<p className="iz-tiny mt-1 text-[var(--iz-amber)]">
-						{openElsewhere} open dispute{openElsewhere === 1 ? "" : "s"} in
-						another week — switch weeks above to decide{" "}
-						{openElsewhere === 1 ? "it" : "them"}.
+						{fill(
+							openElsewhere === 1
+								? t.agencyQueues.openDisputesElsewhereOne
+								: t.agencyQueues.openDisputesElsewhereMany,
+							{ n: openElsewhere },
+						)}
 					</p>
 				)}
 				{!isLoading && weekDisputes.length > 0 && disputes.length === 0 && (
 					<p className="iz-tiny iz-muted">
 						{search.trim()
-							? `Nothing matches "${search.trim()}" in ${scope === "all" ? "any dispute" : `${scope} disputes`}.`
+							? fill(
+									scope === "all"
+										? t.agencyQueues.nothingMatchesAny
+										: scope === "open"
+											? t.agencyQueues.nothingMatchesOpen
+											: t.agencyQueues.nothingMatchesResolved,
+									{ q: search.trim() },
+								)
 							: scope === "open"
-								? `Nothing waiting on you — ${resolvedCount} already settled. Switch to Resolved to see ${resolvedCount === 1 ? "it" : "them"}.`
-								: "None settled yet."}
+								? fill(
+										resolvedCount === 1
+											? t.agencyQueues.nothingWaitingOne
+											: t.agencyQueues.nothingWaitingMany,
+										{ n: resolvedCount },
+									)
+								: t.agencyQueues.noneSettledYet}
 					</p>
 				)}
 
 				{disputes.length > 0 && (
 					<>
 						<p className="iz-tiny iz-muted">
-							Accepting records the decision and tells the PR. It does not
-							change the money on its own — correct the receipt below first if
-							the PR is right, then accept.
+							{t.agencyQueues.acceptingRecordsDecision}
 						</p>
 						{/* Two columns from `xl`, same as the Receipts feed. `items-start`
 						    so an expanded claim does not stretch the settled one beside it;

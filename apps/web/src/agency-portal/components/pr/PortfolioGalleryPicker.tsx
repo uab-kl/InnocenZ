@@ -2,6 +2,8 @@ import { PORTFOLIO_SLOT_COUNT } from "@agency-portal/lib/pr-demo";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { Camera, X } from "lucide-react";
 import { useRef } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /**
  * The grid is a FIXED set of numbered slots, not a list of photos: slot 3 stays
@@ -40,6 +42,7 @@ export function PortfolioGalleryPicker({
 	editable = true,
 	className = "",
 }: PortfolioGalleryPickerProps) {
+	const { t } = usePortalLocale();
 	const fileRef = useRef<HTMLInputElement>(null);
 	const slotRef = useRef(0);
 
@@ -57,11 +60,11 @@ export function PortfolioGalleryPicker({
 		e.target.value = "";
 		if (!file) return;
 		if (!file.type.startsWith("image/")) {
-			onWarn?.("Please choose an image file");
+			onWarn?.(t.prMedia.chooseImageFile);
 			return;
 		}
 		if (file.size > 5 * 1024 * 1024) {
-			onWarn?.("Image must be under 5 MB");
+			onWarn?.(t.prMedia.imageTooLarge);
 			return;
 		}
 		readImageFile(file, (dataUrl) => {
@@ -95,11 +98,10 @@ export function PortfolioGalleryPicker({
 								type="button"
 								className={`iz-pcell w-full${src ? " has-photo" : ""}${editable ? " editable" : ""}`}
 								onClick={() => (editable ? openUpload(i) : undefined)}
-								aria-label={
-									src
-										? `Portfolio photo ${i + 1}`
-										: `Add portfolio photo ${i + 1}`
-								}
+								aria-label={fill(
+									src ? t.prMedia.photoNamed : t.prMedia.addPhotoNamed,
+									{ n: i + 1 },
+								)}
 							>
 								{src ? (
 									<img
@@ -115,7 +117,7 @@ export function PortfolioGalleryPicker({
 								<button
 									type="button"
 									className="iz-pcell-remove"
-									aria-label="Remove photo"
+									aria-label={t.prMedia.removePhoto}
 									onClick={() => removePhoto(i)}
 								>
 									<X className="h-3 w-3" />

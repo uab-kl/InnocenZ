@@ -8,6 +8,7 @@ import { useSession } from './session';
 import { fetchMyLastWeek, type PrCurrentWeek } from './api';
 import { useSignedPvs } from './signed-pv';
 import { formatRM, weekRangeLabel } from './demo-shifts';
+import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 
 const REVIEWABLE = new Set(['sent', 'awaiting_pr']);
 
@@ -32,16 +33,24 @@ function pvRef(week: PrCurrentWeek): string {
   return `PV-${(week.voucherId ?? 'week').slice(0, 8).toUpperCase()}`;
 }
 
-function outletFromWeek(week: PrCurrentWeek): string {
+/**
+ * Venue label for the to-do card. Module scope — no hooks here, so the caller
+ * hands the dictionary in. Real outlet names are DATA and pass through
+ * untouched; only the generated multi-venue and empty labels are localized.
+ */
+function outletFromWeek(week: PrCurrentWeek, t: AppTranslations): string {
   const outlets = [
     ...new Set(week.lines.map((l) => l.outlet?.trim()).filter(Boolean) as string[]),
   ];
   if (outlets.length === 1) return outlets[0]!;
-  if (outlets.length > 1) return `(${outlets.length})-outlet`;
-  return 'Outlet';
+  if (outlets.length > 1) {
+    return formatMessage(t.shiftLib.multiOutlet, { n: outlets.length });
+  }
+  return t.common.outlet;
 }
 
 export function useAwaitingLastWeekPv() {
+  const { t } = useLocale();
   const { token } = useSession();
   const { isSigned } = useSignedPvs();
   const [week, setWeek] = useState<PrCurrentWeek | null>(null);
@@ -116,7 +125,7 @@ export function useAwaitingLastWeekPv() {
       if (net <= 0 && !hasLines) return [];
       const ref =
         row.voucherNo ?? pvRef({ ...week, voucherId: row.id, voucherNo: row.voucherNo });
-      const outlet = outletFromWeek({ ...week, lines: row.lines });
+      const outlet = outletFromWeek({ ...week, lines: row.lines }, t);
       // The agency LEADS the subtitle: on a two-voucher week the venue and the
       // week label are often identical, so it is the only thing telling the PR
       // which of the two they are about to sign.
@@ -125,9 +134,9 @@ export function useAwaitingLastWeekPv() {
         {
           id: `todo-pv-${row.id}`,
           pvId: row.id,
-          title: 'Review payment voucher',
+          title: t.shiftLib.reviewPvTitle,
           subtitle: `${who ? `${who} · ` : ''}${outlet} · ${ref} · ${formatRM(net)}`,
-          actionLabel: 'Review PV',
+          actionLabel: t.shiftLib.reviewPvAction,
           net,
           ref,
           outlet,
@@ -135,7 +144,7 @@ export function useAwaitingLastWeekPv() {
         },
       ];
     });
-  }, [week, isSigned]);
+  }, [week, isSigned, t]);
 
   /**
    * The FIRST outstanding to-do, for the callers that show a single prompt

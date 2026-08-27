@@ -2,6 +2,8 @@ import { IzPill } from "@agency-portal/components/iz/ui";
 import { cn } from "@agency-portal/lib/utils";
 import { CalendarRange, ChevronDown } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function HistPayrollWeekSection({
 	title,
@@ -18,6 +20,7 @@ export function HistPayrollWeekSection({
 	defaultOpen?: boolean;
 	children: ReactNode;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(defaultOpen);
 
 	return (
@@ -42,11 +45,13 @@ export function HistPayrollWeekSection({
 						<span className="iz-hist-payroll-week__title">{title}</span>
 						{isCurrent && (
 							<IzPill variant="gold" className="!py-0 !text-[8px]">
-								Current
+								{t.prPortal.currentWeek}
 							</IzPill>
 						)}
 						<IzPill variant="ink" className="!py-0 !text-[8px]">
-							{shiftCount} shift{shiftCount === 1 ? "" : "s"}
+							{shiftCount === 1
+								? t.calendar.summaryShiftsOne
+								: fill(t.calendar.summaryShiftsMany, { n: shiftCount })}
 						</IzPill>
 					</span>
 					<span className="iz-hist-payroll-week__hint">{hint}</span>

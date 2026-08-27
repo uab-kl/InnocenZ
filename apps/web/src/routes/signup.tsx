@@ -6,8 +6,26 @@ import { HandoffLanguageSwitcher } from "@/components/landing/handoff/HandoffLan
 import { LoginAsideBackdrop } from "@/components/landing/LoginDecor";
 import { LandingLocaleProvider, useLandingLocale } from "@/lib/landing-i18n";
 
+/**
+ * ⚠️ This page is ALREADY localised — through `@/lib/landing-i18n`, not the
+ * portal dictionary. Every visible string below comes from `t.signup`, and
+ * `SignupForm` reads the same provider, so it must NOT be ported to
+ * `portal-i18n`: that would strip a complete, reviewed translation of the whole
+ * sign-up wizard and split one form across two dictionaries.
+ *
+ * The two systems keep separate stored picks (`innocenz-landing-locale` vs
+ * `innocenz-portal-locale`), so a language chosen here does not follow the
+ * visitor to /login. Reconciling that is a change to the locale modules, not to
+ * this route.
+ */
 export const Route = createFileRoute("/signup")({
 	component: RouteComponent,
+	/**
+	 * English in every locale: `head()` runs OUTSIDE React, with no provider
+	 * above it and no hook to read a locale from. `LandingLocaleProvider` already
+	 * sets the live document title via `documentTitle` below — this is only the
+	 * pre-hydration fallback and the crawler's copy.
+	 */
 	head: () => ({
 		meta: [
 			{ title: "Sign up — InnocenZ" },

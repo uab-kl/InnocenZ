@@ -13,6 +13,12 @@ import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { recordRating } from "@agency-portal/lib/pr-rating-summary";
 import { cn } from "@agency-portal/lib/utils";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import {
+	languageLabel,
+	languageListLabel,
+} from "@/lib/portal-i18n/language-label";
 
 /**
  * The sheet is a full-width bottom panel — every language fits, so nothing is
@@ -79,6 +85,7 @@ export function PrComcardIdentity({
 	size = "table",
 	className,
 }: PrComcardIdentityProps) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	// The same splitter the Manage-PR card uses, so one PR's languages read the
 	// same on both screens. This sheet has room for all of them, so the cap is
@@ -113,8 +120,8 @@ export function PrComcardIdentity({
 					e.stopPropagation();
 					setOpen(true);
 				}}
-				aria-label={`View comcard for ${label}`}
-				title={`View ${label}'s comcard`}
+				aria-label={fill(t.today.viewComcardFor, { name: label })}
+				title={fill(t.today.viewComcardFor, { name: label })}
 			>
 				<Comcard3dPreviewThumb pr={pr} />
 			</button>
@@ -157,10 +164,15 @@ export function PrComcardIdentity({
 						the roster showed Vicky as English/Mandarin/Hokkien while her
 						profile — reading the same `user_profile.languages` — showed those
 						plus Cantonese. One row, two answers, purely from a slice.
+
+						The pills are portal CHROME around the card, not the card, so they
+						follow the viewer's language (see comcard-locale.ts). `lang` is the
+						STORED value — it stays the React key and only the rendered text is
+						resolved, the same split Manage PR uses.
 					*/}
 					{langs.shown.map((lang) => (
 						<IzPill key={lang} variant="violet" className="!py-0.5 !text-[9px]">
-							{lang}
+							{languageLabel(lang, t)}
 						</IzPill>
 					))}
 					{/*
@@ -170,7 +182,7 @@ export function PrComcardIdentity({
 						takes no `title`, so the tooltip lives on the wrapper.
 					*/}
 					{langs.hidden > 0 && (
-						<span title={langs.all.join(" · ")}>
+						<span title={languageListLabel(langs.all, t)}>
 							<IzPill variant="violet" className="!py-0.5 !text-[9px]">
 								+{langs.hidden}
 							</IzPill>

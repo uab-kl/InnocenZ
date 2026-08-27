@@ -11,8 +11,33 @@ import {
 	PRIVACY_CONTACT_LABEL,
 	PRIVACY_CONTACT_WHATSAPP,
 } from "@/lib/legal/privacy-policy";
+import {
+	PortalLocaleProvider,
+	usePortalLocale,
+} from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
+/**
+ * `/delete-account` is a PUBLIC route — Google Play and the App Store link
+ * straight to it — with no portal shell above it, so this page carries the
+ * locale provider itself.
+ *
+ * ⚠️ Same rule as the privacy policy: the deletion terms in
+ * `lib/legal/delete-account` stay English in every locale. They describe what
+ * InnocenZ will and will not erase, and an unreviewed translation of that is a
+ * promise nobody approved. Only the chrome follows the locale.
+ */
 export function DeleteAccountPage() {
+	return (
+		<PortalLocaleProvider>
+			<DeleteAccountBody />
+		</PortalLocaleProvider>
+	);
+}
+
+function DeleteAccountBody() {
+	const { t } = usePortalLocale();
+
 	return (
 		<div className="relative min-h-svh w-full overflow-x-hidden bg-background text-foreground">
 			<div
@@ -25,21 +50,23 @@ export function DeleteAccountPage() {
 					className="mb-8 inline-flex w-fit items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-foreground/65 transition-colors hover:text-gold-bright"
 				>
 					<ArrowLeft className="h-4 w-4" />
-					Back to home
+					{t.webShell.backToHome}
 				</Link>
 
 				<div className="mb-10 flex flex-col items-start gap-4">
 					<BrandLogo variant="stacked" size="md" showTagline />
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.2em] text-royal-gold">
-							Legal
+							{t.webShell.legalEyebrow}
 						</p>
 						<h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-							Delete your account
+							{t.webShell.deleteAccountTitle}
 						</h1>
 						<p className="mt-3 text-sm text-muted-foreground">
-							Effective {DELETE_ACCOUNT_EFFECTIVE_DATE} · Last updated{" "}
-							{DELETE_ACCOUNT_LAST_UPDATED}
+							{fill(t.webShell.effectiveUpdated, {
+								effective: DELETE_ACCOUNT_EFFECTIVE_DATE,
+								updated: DELETE_ACCOUNT_LAST_UPDATED,
+							})}
 						</p>
 					</div>
 				</div>
@@ -75,7 +102,7 @@ export function DeleteAccountPage() {
 
 				<div className="mt-12 border-t border-border pt-8 text-sm text-muted-foreground">
 					<p>
-						Support:{" "}
+						{t.webShell.supportContact}{" "}
 						<a
 							href={PRIVACY_CONTACT_WHATSAPP}
 							target="_blank"
@@ -90,7 +117,7 @@ export function DeleteAccountPage() {
 							to="/policy"
 							className="font-medium text-royal-gold underline-offset-4 hover:underline"
 						>
-							Privacy Policy
+							{t.webShell.privacyPolicyTitle}
 						</Link>
 					</p>
 				</div>

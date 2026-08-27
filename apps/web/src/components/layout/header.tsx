@@ -29,6 +29,7 @@ import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchPendingCount } from "@/services/admin-request";
 
@@ -169,7 +170,15 @@ export function Header() {
 		logout();
 	};
 
-	const roleLabel = user?.roles?.[0] ?? "Admin";
+	/*
+	 * `user.roles[0]` is a server `roleName` (see `use-profile.ts`), so it went
+	 * to screen untranslated — the same leak `portalRoleLabel` was written for
+	 * on the member and invite dropdowns. The default goes THROUGH the resolver
+	 * rather than beside it: treat "Admin" as the stand-in role NAME, not as a
+	 * finished label, or the two branches would disagree in Chinese — a real
+	 * role rendering "Admin" while the empty case rendered 管理员.
+	 */
+	const roleLabel = portalRoleLabel(user?.roles?.[0] ?? "Admin", t);
 	const avatarSrc = apiAssetUrl(user?.profileImage);
 
 	return (
@@ -234,7 +243,7 @@ export function Header() {
 
 							<div className="hidden text-left sm:block">
 								<p className="text-sm font-semibold leading-none text-foreground">
-									{user?.displayName ?? "User"}
+									{user?.displayName ?? t.webShell.userFallback}
 								</p>
 								<p className="mt-1 text-xs leading-none text-muted-foreground">
 									{roleLabel}

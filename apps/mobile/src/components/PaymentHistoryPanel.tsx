@@ -25,6 +25,12 @@ import {
 import { normalizeHistPayWeek } from '../lib/history-pay-sync';
 import { usePaymentHistory } from '../lib/payment-history';
 import {
+  localizePayLineType,
+  localizePayOutlet,
+  localizePayStatusMeta,
+} from '../lib/payment-history-map';
+import { formatMessage, useLocale, type AppTranslations } from '../i18n';
+import {
   createMyVoucherExportTicket,
   fetchMyVoucherExcelBlob,
   fetchMyVoucherPdfBlob,
@@ -60,12 +66,16 @@ type StatusChip = 'all' | 'paid' | 'signed' | 'pending';
  *
  * Ordered pending → signed → paid on screen because that is the order a week
  * actually moves through, and the first one is the only one the PR can act on.
+ *
+ * It holds RESOLVERS, not strings: this map is module scope, so it is built once
+ * before any hook has run and cannot read the dictionary itself. The record KEY
+ * is the stored status and never moves with the locale.
  */
-const CHIP_LABEL: Record<StatusChip, string> = {
-  all: 'All',
-  pending: 'To sign',
-  signed: 'Signed',
-  paid: 'Paid',
+const CHIP_LABEL: Record<StatusChip, (t: AppTranslations) => string> = {
+  all: (t) => t.payHistory.chipAll,
+  pending: (t) => t.payHistory.chipToSign,
+  signed: (t) => t.payHistory.statusSigned,
+  paid: (t) => t.payHistory.statusPaid,
 };
 
 type Filters = {
@@ -89,6 +99,7 @@ const EMPTY: Filters = {
 };
 
 export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => void }) {
+  const { t } = useLocale();
   const { openPv, lastOpenedPvId } = usePrNav();
   const { token } = useSession();
   const keyboardInset = useKeyboardInset();
@@ -165,15 +176,26 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       }
       const q = applied.query.trim().toLowerCase();
       if (q) {
+        // Both spellings of every localizable field: the stored English, which
+        // is what the row IS, and the label the PR can actually see. Searching
+        // only the stored side would mean a Chinese reader typing the words in
+        // front of them matches nothing.
         const blob = [
           w.ref,
           w.weekLabel,
           w.outlet,
+          localizePayOutlet(w.outlet, t),
           w.status,
           w.statusMeta,
+          localizePayStatusMeta(w.statusMeta, t),
           w.bankRef ?? '',
           w.issued,
-          ...w.lines.flatMap((l) => [l.type, l.outlet, l.date]),
+          ...w.lines.flatMap((l) => [
+            l.type,
+            localizePayLineType(l.type, t),
+            l.outlet,
+            l.date,
+          ]),
         ]
           .join(' ')
           .toLowerCase();
@@ -181,7 +203,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       }
       return true;
     });
-  }, [applied, allWeeks]);
+  }, [applied, allWeeks, t]);
 
   const paidList = filtered.filter((w) => w.status === 'paid');
   const signedList = filtered.filter((w) => w.status === 'signed');
@@ -212,9 +234,9 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       try {
         const { xlsxUrl } = await createMyVoucherExportTicket(token, w.id);
         await Linking.openURL(xlsxUrl);
-        flash('Excel opening in your browser — check Downloads');
+        flash(t.payHistory.excelOpening);
       } catch {
-        flash('Could not open the Excel — try again');
+        flash(t.payHistory.excelOpenFailed);
       }
       return;
     }
@@ -227,9 +249,9 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       a.download = `${w.ref}-payment-voucher.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      flash('Payment voucher Excel downloaded');
+      flash(t.payHistory.excelDownloaded);
     } catch {
-      flash('Could not download the Excel — try again');
+      flash(t.payHistory.excelDownloadFailed);
     }
   };
 
@@ -241,9 +263,9 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         // notification opens it in the phone's PDF viewer.
         const { pdfUrl } = await createMyVoucherExportTicket(token, w.id);
         await Linking.openURL(pdfUrl);
-        flash('PDF downloading — open it from your notifications');
+        flash(t.payHistory.pdfDownloading);
       } catch {
-        flash('Could not open the voucher — try again');
+        flash(t.payHistory.voucherOpenFailed);
       }
       return;
     }
@@ -262,9 +284,9 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         a.click();
       }
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      flash('Payment voucher PDF opened');
+      flash(t.payHistory.pdfOpened);
     } catch {
-      flash('Could not open the PDF — try again');
+      flash(t.payHistory.pdfOpenFailed);
     }
   };
 
@@ -305,11 +327,11 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       <View style={styles.secHead}>
         <View style={styles.secTitleRow}>
           <Wallet size={14} color={C.goldL} />
-          <Text style={styles.secTitle}>PAYMENT HISTORY</Text>
+          <Text style={styles.secTitle}>{t.payHistory.heading}</Text>
         </View>
         <Pressable style={styles.filterBtn} onPress={openFilter}>
           <Filter size={12} color={C.muted} />
-          <Text style={styles.filterBtnText}>Filter</Text>
+          <Text style={styles.filterBtnText}>{t.payHistory.filter}</Text>
           {filterCount > 0 && (
             <View style={styles.filterBadge}>
               <Text style={styles.filterBadgeText}>{filterCount}</Text>
@@ -323,7 +345,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         <TextInput
           value={applied.query}
           onChangeText={(query) => setApplied((f) => ({ ...f, query }))}
-          placeholder="Search PV ID, outlet, week, bank ref…"
+          placeholder={t.payHistory.searchPlaceholder}
           placeholderTextColor={C.muted2}
           style={styles.searchInput}
         />
@@ -332,8 +354,8 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       <View style={styles.filterRow}>
         <FilterField
           icon={House}
-          label="OUTLET"
-          value={applied.outlet === 'all' ? 'Any outlet' : applied.outlet}
+          label={t.payHistory.outletLabel}
+          value={applied.outlet === 'all' ? t.payHistory.anyOutlet : applied.outlet}
           onPress={() => {
             setOpenSelect((s) => (s === 'outlet' ? null : 'outlet'));
             setCalendarOpen(false);
@@ -363,7 +385,12 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
 
       {openSelect === 'outlet' && (
         <SelectList
-          options={[{ id: 'all', label: 'Any outlet' }, ...outlets.map((o) => ({ id: o, label: o }))]}
+          options={[
+            // `id` stays the stored 'all' — it is the filter VALUE and the row
+            // key, so neither moves when the label does.
+            { id: 'all', label: t.payHistory.anyOutlet },
+            ...outlets.map((o) => ({ id: o, label: o })),
+          ]}
           selected={applied.outlet}
           onPick={(id) => {
             setApplied((f) => ({ ...f, outlet: id }));
@@ -374,13 +401,13 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
 
       <View style={styles.timeRow}>
         <HistTimeInput
-          label="FROM TIME"
+          label={t.payHistory.fromTime}
           value={applied.timeFrom}
           onChange={(timeFrom) => setApplied((f) => ({ ...f, timeFrom }))}
           disabled={!applied.date}
         />
         <HistTimeInput
-          label="TO TIME"
+          label={t.payHistory.toTime}
           value={applied.timeTo}
           onChange={(timeTo) => setApplied((f) => ({ ...f, timeTo }))}
           disabled={!applied.date}
@@ -395,7 +422,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
             onPress={() => setApplied((f) => ({ ...f, status: c }))}
           >
             <Text style={[styles.chipText, applied.status === c && { color: C.txt }]}>
-              {CHIP_LABEL[c]}
+              {CHIP_LABEL[c](t)}
             </Text>
           </Pressable>
         ))}
@@ -403,7 +430,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
 
       {filterCount > 0 && (
         <Pressable onPress={clearFilters} style={{ marginTop: 8 }}>
-          <Text style={styles.clearAll}>Clear all filters</Text>
+          <Text style={styles.clearAll}>{t.payHistory.clearAllFilters}</Text>
         </Pressable>
       )}
 
@@ -411,13 +438,15 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         <StatTile
           icon={Calendar}
           value={String(filtered.length)}
-          label="Weeks"
+          label={t.payHistory.weeks}
         />
-        <StatTile icon={Briefcase} value={String(shifts)} label="Shifts" />
+        <StatTile icon={Briefcase} value={String(shifts)} label={t.history.shifts} />
         <StatTile
           value={formatRM(totalNet)}
           label={
-            applied.status === 'all' ? 'Total net' : CHIP_LABEL[applied.status]
+            applied.status === 'all'
+              ? t.payHistory.totalNet
+              : CHIP_LABEL[applied.status](t)
           }
           valueColor={
             applied.status === 'paid'
@@ -433,11 +462,17 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       {applied.status === 'all' && (paidList.length > 0 || signedList.length > 0) && (
         <Text style={styles.summaryLine}>
           <Text style={{ color: C.green, fontWeight: '700' }}>
-            {paidList.length} paid · {formatRM(totalPaid)}
+            {formatMessage(t.payHistory.paidSummary, {
+              n: paidList.length,
+              amount: formatRM(totalPaid),
+            })}
           </Text>
           <Text style={{ color: C.muted2 }}> · </Text>
           <Text style={{ color: C.amber, fontWeight: '700' }}>
-            {signedList.length} signed · {formatRM(totalSigned)}
+            {formatMessage(t.payHistory.signedSummary, {
+              n: signedList.length,
+              amount: formatRM(totalSigned),
+            })}
           </Text>
         </Text>
       )}
@@ -449,11 +484,15 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
               {allWeeks.length === 0
-                ? 'No payments yet'
-                : 'No payments match your filters.'}
+                ? t.payHistory.noPayments
+                : t.payHistory.noMatches}
             </Text>
             {allWeeks.length === 0 && (
-              <IzButton label="Open Payment" small onPress={onOpenPayment} />
+              <IzButton
+                label={t.payHistory.openPayment}
+                small
+                onPress={onOpenPayment}
+              />
             )}
           </View>
         ) : (
@@ -487,7 +526,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
             <View style={styles.sheetHandle} />
             <View style={styles.sheetTitleRow}>
               <Wallet size={18} color={C.accent} />
-              <Text style={styles.sheetTitle}>Filter payment history</Text>
+              <Text style={styles.sheetTitle}>{t.payHistory.sheetTitle}</Text>
             </View>
 
             <HistDateTimeFilter
@@ -511,7 +550,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
             />
 
             <Text style={[styles.fieldLabel, { marginTop: 4 }]}>
-              <House size={11} color={C.muted2} /> OUTLET
+              <House size={11} color={C.muted2} /> {t.payHistory.outletLabel}
             </Text>
             <Pressable
               style={styles.sheetField}
@@ -527,12 +566,14 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
               }}
             >
               <Text style={styles.sheetFieldText}>
-                {draft.outlet === 'all' ? 'Any outlet' : draft.outlet}
+                {draft.outlet === 'all' ? t.payHistory.anyOutlet : draft.outlet}
               </Text>
               <ChevronDown size={14} color={C.muted} />
             </Pressable>
 
-            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Status</Text>
+            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
+              {t.payHistory.statusLabel}
+            </Text>
             <View style={styles.chips}>
               {(['all', 'pending', 'signed', 'paid'] as StatusChip[]).map((c) => (
                 <Pressable
@@ -541,17 +582,17 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
                   onPress={() => setDraft((d) => ({ ...d, status: c }))}
                 >
                   <Text style={[styles.chipText, draft.status === c && { color: C.txt }]}>
-                    {CHIP_LABEL[c]}
+                    {CHIP_LABEL[c](t)}
                   </Text>
                 </Pressable>
               ))}
             </View>
 
-            <Text style={styles.fieldLabel}>NET PAID (RM)</Text>
+            <Text style={styles.fieldLabel}>{t.payHistory.netPaidLabel}</Text>
             <TextInput
               value={draft.netPaid}
               onChangeText={(netPaid) => setDraft((d) => ({ ...d, netPaid }))}
-              placeholder="e.g. 898"
+              placeholder={t.payHistory.netPaidPlaceholder}
               placeholderTextColor={C.muted2}
               keyboardType="decimal-pad"
               style={styles.netInput}
@@ -561,10 +602,10 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
               style={[styles.applyBtn, grad(GRADIENTS.accent, C.accent)]}
               onPress={applyFilters}
             >
-              <Text style={styles.applyText}>Apply filters</Text>
+              <Text style={styles.applyText}>{t.payHistory.applyFilters}</Text>
             </Pressable>
             <Pressable style={styles.clearBtn} onPress={clearFilters}>
-              <Text style={styles.clearBtnText}>Clear &amp; close</Text>
+              <Text style={styles.clearBtnText}>{t.payHistory.clearAndClose}</Text>
             </Pressable>
             </ScrollView>
           </Pressable>
@@ -589,13 +630,20 @@ function WeekCard({
   onPdf: () => void;
   onExcel: () => void;
 }) {
+  const { t } = useLocale();
   // Three states, not two. 'Pending' is the honest badge for a week the PR has
   // not signed — it used to read "Signed", asserting a signature that had never
   // been given, on the very screen a PR opens to check exactly that.
+  //
+  // The LABEL moves with the locale; the `week.status` it is chosen by does not.
   const border =
     week.status === 'paid' ? 'rgba(93,217,160,0.35)' : 'rgba(232,198,106,0.35)';
   const statusLabel =
-    week.status === 'paid' ? 'Paid' : week.status === 'signed' ? 'Signed' : 'Pending';
+    week.status === 'paid'
+      ? t.payHistory.statusPaid
+      : week.status === 'signed'
+        ? t.payHistory.statusSigned
+        : t.payHistory.statusPending;
   return (
     <View style={[styles.card, { borderColor: border }]}>
       <Pressable onPress={onToggle} style={styles.cardHd}>
@@ -608,10 +656,17 @@ function WeekCard({
             {/* Agency FIRST: two vouchers for one week are otherwise identical
                 here down to the venue, with only the PV number differing. */}
             {week.agencyName ? `${week.agencyName} · ` : ''}
-            {week.ref} · {week.outlet}
+            {week.ref} · {localizePayOutlet(week.outlet, t)}
           </Text>
           <Text style={styles.cardSub} numberOfLines={1}>
-            {week.shifts} shift{week.shifts !== 1 ? 's' : ''} · Issued {week.issued}
+            {/* Two whole keys, not a plural 's' glued on: Chinese has no plural
+                form, and the sentence has to be one string in every locale. */}
+            {formatMessage(
+              week.shifts === 1
+                ? t.payHistory.cardMetaOne
+                : t.payHistory.cardMetaMany,
+              { n: week.shifts, date: week.issued },
+            )}
           </Text>
           <Text
             style={[
@@ -619,7 +674,10 @@ function WeekCard({
               { color: week.status === 'paid' ? C.green : C.amber },
             ]}
           >
-            {week.statusMeta}
+            {/* Localized HERE, not at the producer: the stored string is
+                persisted verbatim by `signed-pv.tsx` and regex-migrated on read,
+                so it has to stay English in storage. See `localizePayStatusMeta`. */}
+            {localizePayStatusMeta(week.statusMeta, t)}
           </Text>
           {/* On the COLLAPSED card, beside the line that says it is waiting on
               her. The only other way in is Open PV, which sits below a full week
@@ -636,7 +694,7 @@ function WeekCard({
           {week.canSign && (
             <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
               <IzButton
-                label="Sign this week"
+                label={t.payHistory.signThisWeek}
                 small
                 fullWidth={false}
                 onPress={onOpenPv}
@@ -655,11 +713,19 @@ function WeekCard({
       </Pressable>
 
       <View style={styles.metrics}>
-        <Metric label="Wages" value={formatRM(week.wages)} color={C.violetL} />
-        <Metric label="Commission" value={formatRM(week.commission)} color={C.goldL} />
+        <Metric
+          label={t.payHistory.metricWages}
+          value={formatRM(week.wages)}
+          color={C.violetL}
+        />
+        <Metric
+          label={t.payHistory.metricCommission}
+          value={formatRM(week.commission)}
+          color={C.goldL}
+        />
         {week.earlyWithdrawal != null && week.earlyWithdrawal > 0 && (
           <Metric
-            label="Early withdrawal"
+            label={t.payHistory.metricEarlyWithdrawal}
             value={`−${formatRM(week.earlyWithdrawal)}`}
             color={C.red}
           />
@@ -668,25 +734,29 @@ function WeekCard({
 
       {open && (
         <View style={styles.cardBody}>
-          <Text style={styles.breakdownTitle}>WEEK BREAKDOWN</Text>
-          <Text style={styles.breakdownNote}>PV issued every Sunday</Text>
+          <Text style={styles.breakdownTitle}>{t.payHistory.weekBreakdown}</Text>
+          <Text style={styles.breakdownNote}>{t.payHistory.pvIssuedSunday}</Text>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View>
               <View style={styles.lineHead}>
-                <Text style={[styles.th, { width: 70 }]}>Date</Text>
-                <Text style={[styles.th, { width: 120 }]}>Type</Text>
-                <Text style={[styles.th, { width: 90 }]}>Outlet</Text>
-                <Text style={[styles.th, { width: 80, textAlign: 'right' }]}>Amount</Text>
+                <Text style={[styles.th, { width: 70 }]}>{t.payHistory.colDate}</Text>
+                <Text style={[styles.th, { width: 120 }]}>{t.payHistory.colType}</Text>
+                <Text style={[styles.th, { width: 90 }]}>{t.common.outlet}</Text>
+                <Text style={[styles.th, { width: 80, textAlign: 'right' }]}>
+                  {t.payHistory.colAmount}
+                </Text>
               </View>
               {week.lines.map((l, i) => (
+                // Keyed on the STORED `l.type`, which does not move with the
+                // locale — the row must not remount on a language switch.
                 <View key={`${l.date}-${l.type}-${i}`} style={styles.lineRow}>
                   <View style={{ width: 70 }}>
                     <Text style={styles.td}>{l.date}</Text>
                     <Text style={styles.tdTiny}>{l.day}</Text>
                   </View>
                   <Text style={[styles.td, { width: 120 }]} numberOfLines={1}>
-                    {l.type}
+                    {localizePayLineType(l.type, t)}
                   </Text>
                   <Text style={[styles.td, { width: 90 }]} numberOfLines={1}>
                     {l.outlet}
@@ -709,7 +779,7 @@ function WeekCard({
               ))}
               <View style={[styles.lineRow, styles.netRow]}>
                 <Text style={[styles.td, { width: 280, fontFamily: F.sora, fontWeight: '700' }]}>
-                  Net payable
+                  {t.payHistory.netPayable}
                 </Text>
                 <Text
                   style={[
@@ -730,7 +800,9 @@ function WeekCard({
           </ScrollView>
 
           {week.bankRef ? (
-            <Text style={styles.bankRef}>Bank ref: {week.bankRef}</Text>
+            <Text style={styles.bankRef}>
+              {formatMessage(t.payHistory.bankRef, { ref: week.bankRef })}
+            </Text>
           ) : null}
 
           <View style={styles.actions}>
@@ -743,14 +815,19 @@ function WeekCard({
                 when she signs for the money. */}
             {/* Same gate as the collapsed card — see the note there. */}
             {week.canSign && (
-              <IzButton label="Sign" small fullWidth={false} onPress={onOpenPv} />
+              <IzButton
+                label={t.payHistory.sign}
+                small
+                fullWidth={false}
+                onPress={onOpenPv}
+              />
             )}
             {/* Open PV is soft only while it is the SECONDARY action. With no
                 Sign button beside it, it is the only thing to press and should
                 look it — the variant followed the badge, so an un-issued week
                 quietly demoted its own single action. */}
             <IzButton
-              label="Open PV"
+              label={t.payHistory.openPv}
               variant={week.canSign ? 'soft' : undefined}
               small
               fullWidth={false}

@@ -6,6 +6,8 @@ import { Check, Clock, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type { PendingOvertimeClaim } from "@/services/shift-assignment";
 
 /** yyyy-MM-dd -> "Tue 21 Jul", matching how the roster names the same day. */
@@ -27,13 +29,13 @@ function formatDay(iso: string): string {
  * these minutes, or the agency could attest to one figure while a different one
  * lands on the voucher.
  */
-function formatMinutes(minutes: number | null): string {
+function formatMinutes(minutes: number | null, t: PortalTranslations): string {
 	if (minutes == null || minutes <= 0) return "—";
 	const h = Math.floor(minutes / 60);
 	const m = minutes % 60;
-	if (h === 0) return `${m}m`;
-	if (m === 0) return `${h}h`;
-	return `${h}h ${m}m`;
+	if (h === 0) return fill(t.agencyQueues.durationMinutes, { m });
+	if (m === 0) return fill(t.agencyQueues.durationHours, { h });
+	return fill(t.agencyQueues.durationHoursMinutes, { h, m });
 }
 
 /**
@@ -80,7 +82,7 @@ function OvertimeRow({
 			<div className="flex flex-wrap items-start justify-between gap-2">
 				<div>
 					<div className="text-sm font-semibold">
-						{claim.prName ?? "Unknown PR"} ·{" "}
+						{claim.prName ?? t.receipts.unknownPr} ·{" "}
 						{claim.outletName ?? t.table.outlet}
 					</div>
 					<p className="iz-tiny iz-muted mt-0.5">
@@ -89,7 +91,7 @@ function OvertimeRow({
 					</p>
 				</div>
 				<span className="iz-pill iz-pill-amber !text-[10px]">
-					Holding payroll
+					{t.agencyQueues.holdingPayroll}
 				</span>
 			</div>
 
@@ -99,12 +101,12 @@ function OvertimeRow({
 						{t.payroll.overtimeWorked}
 					</span>
 					<span className="font-mono">
-						{formatMinutes(claim.overtimeMinutes)}
+						{formatMinutes(claim.overtimeMinutes, t)}
 					</span>
 				</span>
 				<span>
 					{/* Priced by the server, by the same function the approval uses. */}
-					<span className="iz-tiny iz-muted block">Pays</span>
+					<span className="iz-tiny iz-muted block">{t.table.pays}</span>
 					<span className="font-mono">RM {claim.amount}</span>
 				</span>
 				<span>
@@ -119,9 +121,11 @@ function OvertimeRow({
 
 			<p className="iz-tiny iz-muted2 mt-2">
 				<Clock className="mr-1 inline h-3 w-3" />
-				Overtime is paid on the voucher for the week it was worked, so this
-				claim holds {claim.week ? `w/c ${claim.week.weekStart}` : "its week"}{" "}
-				from being sent until it is decided.
+				{claim.week
+					? fill(t.agencyQueues.overtimeHoldsWeek, {
+							week: claim.week.weekStart,
+						})
+					: t.agencyQueues.overtimeHoldsItsWeek}
 			</p>
 
 			{canDecide ? (
@@ -135,7 +139,9 @@ function OvertimeRow({
 						>
 							<Check className="h-4 w-4" />
 							{confirming === "approve"
-								? `Confirm · pay RM ${claim.amount}`
+								? fill(t.agencyQueues.confirmPayAmount, {
+										amount: `RM ${claim.amount}`,
+									})
 								: t.common.approve}
 						</button>
 						<button
@@ -145,13 +151,18 @@ function OvertimeRow({
 							onClick={() => act("reject")}
 						>
 							<X className="h-4 w-4" />
-							{confirming === "reject" ? t.payroll.confirmPayNothing : "Reject"}
+							{confirming === "reject"
+								? t.payroll.confirmPayNothing
+								: t.common.reject}
 						</button>
 					</div>
 					{confirming && (
 						<p className="iz-tiny iz-muted2 mt-1">
 							{confirming === "approve"
-								? `RM ${claim.amount} is added to ${claim.prName ?? "the PR"}'s voucher. This cannot be undone.`
+								? fill(t.agencyQueues.approveAddsToVoucher, {
+										amount: `RM ${claim.amount}`,
+										name: claim.prName ?? t.agencyQueues.thePr,
+									})
 								: t.payroll.noMoneyAddedWarning}
 						</p>
 					)}
@@ -160,7 +171,7 @@ function OvertimeRow({
 				// Read is open to the whole agency; deciding is not. Naming the role
 				// that holds it beats a disabled button with no explanation.
 				<p className="iz-tiny iz-muted2 mt-2">
-					Only the agency owner or finance can decide overtime.
+					{t.agencyQueues.onlyOwnerFinanceDecideOvertime}
 				</p>
 			)}
 		</div>
@@ -259,7 +270,9 @@ export function OvertimeQueuePanel({
 	return (
 		<>
 			<IzSectionLabel>
-				Overtime{claims.length > 0 ? ` (${claims.length})` : ""}
+				{claims.length > 0
+					? fill(t.agencyQueues.overtimeTitleCount, { n: claims.length })
+					: t.payroll.overtime}
 			</IzSectionLabel>
 			<IzCard>
 				{isLoading && (
@@ -272,17 +285,19 @@ export function OvertimeQueuePanel({
 
 				{!isLoading && pendingElsewhere > 0 && (
 					<p className="iz-tiny mt-1 text-[var(--iz-amber)]">
-						{pendingElsewhere} claim{pendingElsewhere === 1 ? "" : "s"} in
-						another week still undecided — switch weeks above to decide{" "}
-						{pendingElsewhere === 1 ? "it" : "them"}.
+						{fill(
+							pendingElsewhere === 1
+								? t.agencyQueues.overtimeElsewhereOne
+								: t.agencyQueues.overtimeElsewhereMany,
+							{ n: pendingElsewhere },
+						)}
 					</p>
 				)}
 
 				{claims.length > 0 && (
 					<>
 						<p className="iz-tiny iz-muted">
-							Each claim holds its own payroll week until it is decided. The
-							amount shown is what the approval writes onto the voucher.
+							{t.agencyQueues.overtimeQueueHint}
 						</p>
 						{/* Two columns from `xl`, matching the Disputes and Receipts
 						    queues on this page — one claim is a short card, and a column

@@ -43,9 +43,12 @@ const SKIP_DIR =
 /**
  * Generated code, and the dictionaries themselves — a dictionary is SUPPOSED
  * to be full of English, so scanning one reports its whole EN half as work.
+ * `src/i18n/` is the PR mobile app's dictionary; it does not sit under `lib/`
+ * like the web one, so it needs its own arm or a mobile scan opens with ~700
+ * phantom hits in the two files that are already finished.
  */
 const SKIP_FILE =
-	/routeTree\.gen\.|[\\/]lib[\\/](portal-i18n|landing-i18n)[\\/]/;
+	/routeTree\.gen\.|[\\/]lib[\\/](portal-i18n|landing-i18n)[\\/]|[\\/]src[\\/]i18n[\\/]|\.(test|spec)\.[jt]sx?$/;
 
 /**
  * Values that LOOK like prose but are class names, format strings, enum
@@ -54,9 +57,14 @@ const SKIP_FILE =
 const NOISE =
 	/^(iz-|min-|max-|text-|flex|h-|w-|mt-|mb-|ml-|mr-|p-|px-|py-|gap|absolute|relative|grid|border|inline|justify|items|overflow|shrink|truncate|rounded|font-|leading|whitespace|space-|hidden|block|uppercase|lowercase|capitalize|tracking|bg-|top-|left-|right-|bottom-|z-|col-|row-|sm:|md:|lg:|xl:|number|button|checkbox|radio|submit|div|span|@|\.\/|\.\.\/|react|lucide|date-fns|sonner|zod|en-|decimal|currency|2-digit|yyyy|MMM|HH:mm|application\/|image\/|multipart\/|utf-8|POST|GET|PATCH|PUT|DELETE)/;
 
-/** Looks like code that happened to sit between a `>` and a `<`. */
+/**
+ * Looks like code that happened to sit between a `>` and a `<`. The last two
+ * arms catch fragments sliced out of a ternary — `) : null`, `) : logoUri ? (`,
+ * `missedIds.has(a.id)) ? …` — which a `>…<` match produces constantly in
+ * React Native, where conditional rendering is the norm.
+ */
 const CODE_ISH =
-	/=>|&&|\|\||===|!==|\?\.|\.\.\.|\breturn\b|\bconst\b|\btypeof\b/;
+	/=>|&&|\|\||===|!==|\?\.|\.\.\.|\breturn\b|\bconst\b|\btypeof\b|\)\s*[?:]|\w\.\w+\(/;
 
 /** TS type noise the JSX matcher picks up from generics. */
 const TYPE_ISH =
@@ -111,11 +119,32 @@ function isProse(v) {
 	// query key, an element id. Real copy that is one word ("Cancel", "Next")
 	// has no hump, so this does not swallow it.
 	if (!/\s/.test(v) && /[a-z][A-Z]/.test(v)) return false;
+	// Begins on a closing bracket or ends on an opening one: a fragment sliced
+	// out of the middle of an expression, never a whole sentence.
+	if (/^[)\]}]|[([{]$/.test(v)) return false;
 	return true;
 }
 
+/**
+ * Blank out comments, preserving line count. Without this, prose QUOTED inside
+ * a block comment — `owner: "dont hide the address"` — is reported as shippable
+ * copy. The per-line `^\*` filter never caught those: a wrapped comment line
+ * does not start with `*`.
+ *
+ * Heuristic, not a parser: a `/*` inside a string literal would over-strip. No
+ * such case exists in this repo, and the failure mode is a MISSED candidate in
+ * one file rather than a wrong edit.
+ */
+function stripComments(src) {
+	return src
+		.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+		// `//` only when not part of a URL scheme (`https://`).
+		.replace(/(^|[^:"'`\w])\/\/[^\n]*/g, (_m, lead) => lead);
+}
+
 function scanFile(file) {
-	const src = fs.readFileSync(file, "utf8");
+	const raw = fs.readFileSync(file, "utf8");
+	const src = stripComments(raw);
 	const hits = new Map(); // text -> kind
 
 	/*
@@ -138,9 +167,21 @@ function scanFile(file) {
 		if (/^(\/\/|\*|\/\*)/.test(t)) continue; // comments
 		if (/^import\b|^export .*\bfrom\b/.test(t)) continue; // module paths
 
-		// Quoted values: props, object values, ternary arms, DEFAULT PARAMS.
-		for (const m of line.matchAll(/"([^"\n]{2,120})"/g)) {
-			const v = m[1];
+		/*
+		 * Quoted values: props, object values, ternary arms, DEFAULT PARAMS.
+		 *
+		 * BOTH quote styles. `apps/web` is biome (double quotes) but the PR
+		 * mobile app is prettier (single), and mobile carries 7509 single-quoted
+		 * literals against 607 double. Matching only `"…"` there hides ~92% of
+		 * the copy and reports finished-looking zeroes for files that are
+		 * visibly English on screen — `Section.tsx` scored 0 while rendering
+		 * `{open ? 'Tap to collapse' : 'Tap to expand'}`.
+		 *
+		 * Double is tried first so an apostrophe inside a double-quoted string
+		 * cannot open a bogus single-quoted run.
+		 */
+		for (const m of line.matchAll(/"([^"\n]{2,120})"|'([^'\n]{2,120})'/g)) {
+			const v = m[1] ?? m[2];
 			if (!isProse(v)) continue;
 			// Require a capital or a space: `"active"` is almost always an enum,
 			// `"Active"` or `"no rows"` is almost always copy.
@@ -162,9 +203,17 @@ function scanFile(file) {
 		}
 	}
 
+	/*
+	 * Both idioms. Web reads `usePortalLocale` out of `lib/portal-i18n`; the PR
+	 * mobile app reads `useLocale` out of `src/i18n`. Testing only for the web
+	 * one marks every mobile file `[UNWIRED]`, which reads as "nothing here is
+	 * done" for an app that is in fact half translated.
+	 */
+	const WIRED = /portal-i18n|usePortalLocale|\buseLocale\b|["']\.{1,2}\/.*i18n["']/;
+
 	return {
 		file,
-		wired: /portal-i18n|usePortalLocale/.test(src),
+		wired: WIRED.test(src),
 		hits: [...hits].map(([text, kind]) => ({ kind, text })),
 	};
 }

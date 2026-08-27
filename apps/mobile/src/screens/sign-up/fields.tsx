@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
 	Modal,
 	Pressable,
@@ -457,17 +457,31 @@ export function LanguageMultiPicker({
 	const keyboardHeight = useKeyboardHeight();
 	const sheetTitle = title ?? t.signup.preferredLanguages;
 	const emptyLabel = placeholder ?? t.signup.chooseLanguages;
+	/**
+	 * The English name IS the stored value (`user_profile.languages`) — only the
+	 * label follows the locale. A language the PR typed in themselves is not in
+	 * the map and passes through exactly as they wrote it.
+	 */
+	const langLabel = useCallback(
+		(lang: string) => t.signup.languageNames[lang] ?? lang,
+		[t.signup],
+	);
 
 	const selected = useMemo(
 		() => new Set(value.map((v) => v.trim()).filter(Boolean)),
 		[value],
 	);
 
+	// Search matches the localised label AND the stored English name, so typing
+	// either "Malay" or 马来语 finds the row.
 	const presetFiltered = useMemo(() => {
 		const q = query.trim().toLowerCase();
 		if (!q) return [...options];
-		return options.filter((o) => o.toLowerCase().includes(q));
-	}, [options, query]);
+		return options.filter(
+			(o) =>
+				o.toLowerCase().includes(q) || langLabel(o).toLowerCase().includes(q),
+		);
+	}, [options, query, langLabel]);
 
 	/** Custom picks that are not in the preset list. */
 	const customSelected = useMemo(() => {
@@ -497,12 +511,13 @@ export function LanguageMultiPicker({
 		setOther('');
 	};
 
+	const shownLangs = value.map(langLabel);
 	const summary =
 		value.length === 0
 			? emptyLabel
 			: value.length <= 2
-				? value.join(', ')
-				: `${value.slice(0, 2).join(', ')} +${value.length - 2}`;
+				? shownLangs.join(', ')
+				: `${shownLangs.slice(0, 2).join(', ')} +${value.length - 2}`;
 
 	const sheetPadBottom = 10 + Math.max(insets.bottom, 16) + keyboardHeight;
 
@@ -530,7 +545,7 @@ export function LanguageMultiPicker({
 							style={styles.langTag}
 							hitSlop={4}
 						>
-							<Text style={styles.langTagText}>{lang}</Text>
+							<Text style={styles.langTagText}>{langLabel(lang)}</Text>
 							<Text style={styles.langTagX}>×</Text>
 						</Pressable>
 					))}
@@ -581,7 +596,7 @@ export function LanguageMultiPicker({
 												on && styles.pickerSheetRowTextOn,
 											]}
 										>
-											{lang}
+											{langLabel(lang)}
 										</Text>
 										{on ? <Check size={16} color={C.accent} strokeWidth={2.6} /> : null}
 									</Pressable>
@@ -599,7 +614,7 @@ export function LanguageMultiPicker({
 										style={[styles.pickerSheetRow, styles.pickerSheetRowOn]}
 									>
 										<Text style={[styles.pickerSheetRowText, styles.pickerSheetRowTextOn]}>
-											{lang}
+											{langLabel(lang)}
 										</Text>
 										<Check size={16} color={C.accent} strokeWidth={2.6} />
 									</Pressable>

@@ -12,7 +12,7 @@ import {
 	PopoverTrigger,
 } from "@agency-portal/components/ui/popover";
 import { cn } from "@agency-portal/lib/utils";
-import { addMonths, format, startOfToday, subMonths } from "date-fns";
+import { addMonths, startOfToday, subMonths } from "date-fns";
 import {
 	CalendarIcon,
 	ChevronDown,
@@ -22,12 +22,25 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
 
-export function formatOutletDateLabel(value: Date | string): string {
+/**
+ * "27 Aug 2026" / "2026年8月27日" — the outlet portal's dated field value.
+ *
+ * `locale` is a required LAST parameter, not an optional one. A module-scope
+ * function cannot call `usePortalLocale`, and a default would pin the portal to
+ * one language for every caller that forgot to pass it — which is exactly how
+ * this label stayed English behind the language switch.
+ */
+export function formatOutletDateLabel(
+	value: Date | string,
+	locale: PortalLocale,
+): string {
 	const d = typeof value === "string" ? dateFromIsoKey(value) : value;
 	if (!d) return typeof value === "string" ? value : "";
-	return d.toLocaleDateString("en-GB", {
+	return d.toLocaleDateString(dateLocaleTag(locale), {
 		day: "numeric",
 		month: "short",
 		year: "numeric",
@@ -69,7 +82,7 @@ function RangeSelectionLegend({
 	end: Date | null;
 	pickingEnd: boolean;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	return (
 		<div className="iz-outlet-report-range-legend" aria-live="polite">
 			<div className="iz-outlet-report-range-legend-item is-start">
@@ -79,7 +92,7 @@ function RangeSelectionLegend({
 						{t.datePicker.start}
 					</span>
 					<span className="iz-outlet-report-range-legend-value">
-						{formatOutletDateLabel(start)}
+						{formatOutletDateLabel(start, locale)}
 					</span>
 				</div>
 			</div>
@@ -98,7 +111,7 @@ function RangeSelectionLegend({
 						{t.datePicker.end}
 					</span>
 					<span className="iz-outlet-report-range-legend-value">
-						{end ? formatOutletDateLabel(end) : t.datePicker.tapADay}
+						{end ? formatOutletDateLabel(end, locale) : t.datePicker.tapADay}
 					</span>
 				</div>
 			</div>
@@ -437,7 +450,7 @@ function MultiCalendarHeader({
 	quickSpans?: MultiDateQuickSpanHandlers;
 	spanAnchor: Date;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	return (
 		<div className="iz-multi-cal-header mb-1">
 			<div className="flex items-center gap-1">
@@ -477,8 +490,16 @@ function MultiCalendarHeader({
 					</div>
 				)}
 			</div>
+			{/* Month + year, so `Intl` rather than the dictionary: the two parts
+			    reorder between languages ("August 2026" / "2026年8月") and there is
+			    no key for the pair. date-fns `format` was used here and is locale-
+			    blind unless a locale object is threaded through it, which is what
+			    left this caption English above a translated grid. */}
 			<p className="mt-0.5 text-xs font-semibold text-[var(--iz-txt)]">
-				{format(month, "MMMM yyyy")}
+				{month.toLocaleDateString(dateLocaleTag(locale), {
+					month: "long",
+					year: "numeric",
+				})}
 			</p>
 		</div>
 	);
@@ -604,7 +625,7 @@ export function OutletMultiDatePopover({
 	compact?: boolean;
 	quickSpans?: MultiDateQuickSpanHandlers;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const sortedIsos = useMemo(() => [...selectedIsos].sort(), [selectedIsos]);
 	const selectedDates = useMemo(
@@ -632,7 +653,7 @@ export function OutletMultiDatePopover({
 					.map((iso) => {
 						const day = dateFromIsoKey(iso);
 						return day
-							? day.toLocaleDateString("en-GB", {
+							? day.toLocaleDateString(dateLocaleTag(locale), {
 									day: "numeric",
 									month: "short",
 								})
@@ -730,9 +751,9 @@ export function OutletDatePopoverField({
 	align?: "start" | "end" | "center";
 	className?: string;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const [open, setOpen] = useState(false);
-	const shown = displayLabel ?? formatOutletDateLabel(value);
+	const shown = displayLabel ?? formatOutletDateLabel(value, locale);
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>

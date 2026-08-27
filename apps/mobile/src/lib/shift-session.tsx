@@ -5,13 +5,13 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 import {
-  MONTH_NAMES,
   TONIGHT_SHIFT,
   isoDateFromTimestamp,
   upsertWeekPayRecord,
   type DemoShift,
   type WeekPayRecord,
 } from './demo-shifts';
+import { formatMessage, translations, type AppTranslations } from '../i18n';
 
 const SESSION_KEY = 'iz-pr-shift-session-v2';
 const WEEK_PAY_KEY = 'iz-pr-week-pay-v1';
@@ -126,16 +126,56 @@ function roundRm(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-/** e.g. "19 Jul 2026, 11:50 pm" — matches proto attendance stamps */
-export function fmtAttendanceStamp(iso: string | null | undefined): string {
+/**
+ * Short month, as RESOLVERS rather than strings: this is module scope, where no
+ * hook has run, so a plain array would be built once in whatever locale loaded
+ * first. Indexed by `Date#getMonth()`, so the ORDER is data.
+ */
+const MONTH_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monShortJan,
+  (t) => t.schedule.monShortFeb,
+  (t) => t.schedule.monShortMar,
+  (t) => t.schedule.monShortApr,
+  (t) => t.schedule.monShortMay,
+  (t) => t.schedule.monShortJun,
+  (t) => t.schedule.monShortJul,
+  (t) => t.schedule.monShortAug,
+  (t) => t.schedule.monShortSep,
+  (t) => t.schedule.monShortOct,
+  (t) => t.schedule.monShortNov,
+  (t) => t.schedule.monShortDec,
+];
+
+/**
+ * e.g. "19 Jul 2026, 11:50 pm" — the attendance stamp.
+ *
+ * Module scope, so it cannot call `useLocale` itself — the CALLER (a component,
+ * which has `t`) hands the dictionary in, exactly as `shiftDurationLabel` below
+ * does. Callers that pass nothing keep the English wording, taken from the
+ * dictionary rather than duplicated here.
+ *
+ * Morning and evening are two WHOLE templates rather than one sentence with an
+ * am/pm fragment spliced in: Chinese writes the year first and puts 上午/下午
+ * BEFORE the clock reading, so the order has to belong to the string.
+ */
+export function fmtAttendanceStamp(
+  iso: string | null | undefined,
+  t?: AppTranslations,
+): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
+  const copy = t ?? translations.en;
   let h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, '0');
-  const ampm = h >= 12 ? 'pm' : 'am';
+  const template = h >= 12 ? copy.shiftLib.stampPm : copy.shiftLib.stampAm;
   h = h % 12 || 12;
-  return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}, ${h}:${m} ${ampm}`;
+  return formatMessage(template, {
+    d: d.getDate(),
+    mon: MONTH_SHORT[d.getMonth()](copy),
+    y: d.getFullYear(),
+    time: `${h}:${m}`,
+  });
 }
 
 /** Sum of receipt commissions (RM) — matches proto `shiftCommissionTotal`. */
@@ -148,23 +188,36 @@ export function shiftPayoutTotal(baseWages: number, logs: ReceiptLog[]): number 
   return Math.round((baseWages + shiftCommissionTotal(logs)) * 100) / 100;
 }
 
-/** Elapsed check-in → check-out label, with OT beyond scheduled hours when known. */
+/**
+ * Elapsed check-in → check-out label, with OT beyond scheduled hours when known.
+ *
+ * Module scope, so it cannot call `useLocale` itself — the CALLER (a component,
+ * which has `t`) hands the dictionary in. Callers that pass nothing keep the
+ * English wording, taken from the dictionary rather than duplicated here.
+ */
 export function shiftDurationLabel(
   checkedInAt: string | null | undefined,
   checkedOutAt: string | null | undefined,
+  t?: AppTranslations,
   scheduledHours = 6,
 ): string {
   if (!checkedInAt || !checkedOutAt) return '—';
   const start = new Date(checkedInAt).getTime();
   const end = new Date(checkedOutAt).getTime();
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '—';
+  const copy = t ?? translations.en;
   const totalMins = Math.round((end - start) / 60_000);
   const h = Math.floor(totalMins / 60);
   const m = totalMins % 60;
-  const base = m > 0 ? `${h}h ${m}m` : `${h}h`;
+  // Two spelled-out templates rather than one built by appending a minutes
+  // fragment — Chinese has no such fragment to append.
+  const base =
+    m > 0
+      ? formatMessage(copy.shiftLib.durationHoursMinutes, { h, m })
+      : formatMessage(copy.shiftLib.durationHours, { h });
   const otMins = Math.max(0, totalMins - scheduledHours * 60);
   if (otMins <= 0) return base;
-  return `${base} incl. +${otMins}m OT`;
+  return formatMessage(copy.shiftLib.durationWithOt, { base, ot: otMins });
 }
 
 const DEFAULT: Persisted = {

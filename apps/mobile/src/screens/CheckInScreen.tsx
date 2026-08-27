@@ -14,6 +14,7 @@ import { distanceM } from '../lib/geo';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   cancellationRuleSummary,
+  DEFAULT_CANCELLATION_BANDS,
   GEOFENCE_METERS,
   GPS_BYPASS,
   fmtDFriendly,
@@ -29,7 +30,7 @@ import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { usePrNav } from '../lib/pr-nav';
-import { useLocale } from '../i18n';
+import { useLocale, formatMessage } from '../i18n';
 import { assetUrl, checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
 import { getAttendanceFix } from '../lib/device-location';
 import { Avatar, EmptyDashed, IzButton, Pill } from '../components/ui';
@@ -176,7 +177,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       // Also the recovery path after “Continue Without GPS”: asks again.
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setActionError('Location permission is off — allow it to check in.');
+        setActionError(t.checkin.locPermissionOff);
         return;
       }
       setLocGranted(true);
@@ -189,9 +190,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         accuracyM: pos.coords.accuracy ?? undefined,
       });
     } catch {
-      setActionError('Could not read GPS — check location permission and try again.');
+      setActionError(t.checkin.gpsReadFailed);
     }
-  }, []);
+  }, [t]);
 
   // The gate — same allowance the server gives (radius + capped accuracy).
   const metres = myPos && pin ? Math.round(distanceM(myPos, pin)) : null;
@@ -315,14 +316,23 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     (l) => l.source !== 'checkin' && l.kind !== 'wages',
   );
 
-  /** Why check-out is refused, or null when it is allowed. Photos first. */
-  const missingPlural = linesMissingPhoto === 1 ? '' : 's';
-  const missingHasHave = linesMissingPhoto === 1 ? 'has' : 'have';
+  /**
+   * Why check-out is refused, or null when it is allowed. Photos first.
+   *
+   * Two spelled-out sentences rather than an "s"/"has|have" fragment glued into
+   * one template: Chinese has no plural form to append, so the singular and
+   * plural wordings are separate keys picked by the count.
+   */
   const checkOutBlock: string | null =
     linesMissingPhoto > 0
-      ? `${linesMissingPhoto} logged action${missingPlural} ${missingHasHave} no picture — tap the red camera on that row to scan again, or remove the row, before you can check out.`
+      ? formatMessage(
+          linesMissingPhoto === 1
+            ? t.checkin.missingPhotoOne
+            : t.checkin.missingPhotoMany,
+          { n: linesMissingPhoto },
+        )
       : loggedActions.length === 0
-        ? 'Nothing logged yet. Scan a receipt or self-log at least one drink or tip — with its picture — before you check out. Once the shift closes, that commission cannot be claimed.'
+        ? t.checkin.nothingLogged
         : null;
 
   /**
@@ -362,7 +372,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       receiptCommissionTotal(todayReceipts)
     : 0;
   const completeDuration = active
-    ? shiftDurationLabel(active.checkInAt, active.checkOutAt)
+    ? shiftDurationLabel(active.checkInAt, active.checkOutAt, t)
     : '—';
 
   // OT read from the sealed stamps (the server clamps a forgotten check-out to
@@ -395,14 +405,16 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       )
     : 0;
 
+  // The PHASE values ('on_duty', …) are data and stay English; only the label
+  // rendered for each one is translated.
   const statusLabel =
     phase === 'on_duty'
-      ? 'On duty'
+      ? t.shifts.onDuty
       : phase === 'complete'
-        ? 'Complete'
+        ? t.checkin.complete
         : phase === 'booked'
-          ? 'Booked'
-          : 'No shift';
+          ? t.checkin.booked
+          : t.checkin.noShift;
 
   const runAttendance = useCallback(
     async (forCheckout: boolean) => {
@@ -416,7 +428,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         // stops check-in early, because a check-in with no fix is refused by
         // the server the moment that outlet has a pin; failing here gives the
         // PR a fixable message instead of a bare rejection.
-        const located = await getAttendanceFix();
+        const located = await getAttendanceFix(t);
         if (!located.ok && !forCheckout) {
           // `finally` clears busy.
           setActionError(located.message);
@@ -445,6 +457,8 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           await addLine({
             kind: 'wages',
             source: 'checkin',
+            // STORED on the voucher line and read back by the agency web
+            // portal — a value, not a label. Stays English.
             item: 'Daily wages',
             quantity: 1,
             sales: wagesRm,
@@ -474,13 +488,24 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           patch(stamped);
         }
       } catch (e) {
-        setActionError(e instanceof Error ? e.message : 'Attendance failed');
+        setActionError(e instanceof Error ? e.message : t.checkin.attendanceFailed);
         await refresh();
       } finally {
         setBusy(false);
       }
     },
-    [token, active, refresh, patch, addLine, markLocalOnDuty, markLocalComplete, setTab, todayKey],
+    [
+      token,
+      active,
+      refresh,
+      patch,
+      addLine,
+      markLocalOnDuty,
+      markLocalComplete,
+      setTab,
+      todayKey,
+      t,
+    ],
   );
 
   const startHold = (forCheckout: boolean) => {
@@ -508,7 +533,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setCancelReason('');
   };
 
-  const outletName = active?.outletName ?? 'Outlet';
+  const outletName = active?.outletName ?? t.common.outlet;
   const shiftTime = active?.slot ?? '—';
   // A completed shift shows the day it was actually worked (local check-out day),
   // not its scheduled shift_date — so a shift checked out today never reads as a
@@ -530,9 +555,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           one tap returns to the current check-in. */}
       {active && focusedId === active.id && current && current.id !== active.id && (
         <Pressable style={styles.focusBanner} onPress={() => focus(null)}>
-          <Text style={styles.focusBannerText}>
-            Viewing an earlier shift · tap to go to your current shift
-          </Text>
+          <Text style={styles.focusBannerText}>{t.checkin.viewingEarlier}</Text>
         </Pressable>
       )}
 
@@ -541,9 +564,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           <Text style={styles.pageLabel}>{t.checkin.pageLabel}</Text>
           <Text style={styles.pageTitle}>{t.checkin.title}</Text>
           <EmptyDashed>
-            {loading
-              ? 'Loading your shift…'
-              : 'Your agency will assign your shift — check in when assigned.'}
+            {loading ? t.checkin.loadingShift : t.checkin.idleEmpty}
           </EmptyDashed>
           <View style={styles.idleActions}>
             <IzButton
@@ -565,7 +586,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={styles.briefHead}>
                 <Text style={styles.briefPage}>{t.checkin.pageLabel}</Text>
                 <View style={styles.statusBlock}>
-                  <Text style={styles.statusK}>Status</Text>
+                  <Text style={styles.statusK}>{t.checkin.status}</Text>
                   <Text style={styles.statusV}>{statusLabel}</Text>
                 </View>
               </View>
@@ -604,7 +625,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         color: active?.eventKind === 'special' ? '#E8C27A' : '#C9B8F2',
                       }}
                     >
-                      {active?.eventKind === 'special' ? 'Special event' : 'Normal shift'}
+                      {active?.eventKind === 'special'
+                        ? t.shifts.specialEvent
+                        : t.shifts.normalShift}
                     </Text>
                   </View>
                   <ZoomHint />
@@ -613,8 +636,12 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={styles.briefMain}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.venueName}>{outletName}</Text>
-                  <Text style={styles.event}>{active.eventName ?? 'Shift'}</Text>
-                  <Text style={styles.tapHint}>{briefOpen ? 'Tap to collapse' : 'Tap to expand'}</Text>
+                  <Text style={styles.event}>
+                    {active.eventName ?? t.checkin.eventFallback}
+                  </Text>
+                  <Text style={styles.tapHint}>
+                    {briefOpen ? t.common.tapToCollapse : t.common.tapToExpand}
+                  </Text>
                 </View>
                 {/* The venue's own logo, with its initial as the fallback.
                     Nested Pressable: tapping the mark zooms it, everywhere
@@ -645,13 +672,19 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       <Text style={styles.addrText}>{active.outletAddress}</Text>
                     </View>
                   ) : null}
-                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Day & date</Text>
-                  <Text style={styles.briefBodyValue}>
-                    {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'}
+                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>
+                    {t.checkin.dayAndDate}
                   </Text>
-                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Shift time</Text>
+                  <Text style={styles.briefBodyValue}>
+                    {shiftDateYmd ? fmtDFriendly(...shiftDateYmd, t) : '—'}
+                  </Text>
+                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>
+                    {t.checkin.shiftTime}
+                  </Text>
                   <Text style={styles.briefBodyValue}>{shiftTime}</Text>
-                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Est. payout</Text>
+                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>
+                    {t.checkin.estPayout}
+                  </Text>
                   <Text style={styles.briefBodyValue}>
                     {formatRM(shiftWagesRm)}
                   </Text>
@@ -691,18 +724,25 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <View style={styles.metresRow}>
                     <Text style={[styles.metresText, inside && { color: C.green }]}>
                       {metres === null
-                        ? 'Locating…'
+                        ? t.checkin.locating
                         : inside
-                          ? `${metres} m from ${outletName}`
-                          : `${metres} m away — move closer`}
+                          ? formatMessage(t.checkin.metresFrom, {
+                              m: metres,
+                              name: outletName,
+                            })
+                          : formatMessage(t.checkin.metresAway, { m: metres })}
                     </Text>
                     <Pressable onPress={() => void refreshGps()}>
-                      <Text style={styles.refreshGps}>Refresh GPS</Text>
+                      <Text style={styles.refreshGps}>{t.checkin.refreshGps}</Text>
                     </Pressable>
                   </View>
                 )}
                 <HoldButton
-                  label={gateBlocked && metres !== null ? `${metres} m away — move closer` : 'Check in'}
+                  label={
+                    gateBlocked && metres !== null
+                      ? formatMessage(t.checkin.metresAway, { m: metres })
+                      : t.shifts.checkIn
+                  }
                   holding={holding}
                   progress={progress}
                   disabled={gateBlocked}
@@ -712,14 +752,16 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     startHold(false);
                   }}
                 />
+                {/* One whole sentence per key — never the radius clause and the
+                    tail glued together, because Chinese orders them differently. */}
                 <Text style={styles.gpsNote}>
-                  Check-in is only allowed within {pin?.radiusM ?? GEOFENCE_METERS}m of {outletName}
-                  {GPS_BYPASS
-                    ? ' — GPS temporarily bypassed for demo.'
-                    : '. Your phone shares its location for this stamp only.'}
+                  {formatMessage(
+                    GPS_BYPASS ? t.checkin.gpsNoteBypass : t.checkin.gpsNote,
+                    { m: pin?.radiusM ?? GEOFENCE_METERS, name: outletName },
+                  )}
                 </Text>
                 <Pressable style={styles.cancelBtn} onPress={() => setCancelOpen(true)}>
-                  <Text style={styles.cancelText}>Cancel shift</Text>
+                  <Text style={styles.cancelText}>{t.checkin.cancelShift}</Text>
                 </Pressable>
               </>
             )}
@@ -736,7 +778,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 />
                 <ScannedReceiptsCard lines={todayReceipts} />
                 <HoldButton
-                  label="Check out"
+                  label={t.checkin.checkOut}
                   holding={holding}
                   progress={progress}
                   disabled={checkOutBlock !== null}
@@ -754,11 +796,13 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             {phase === 'complete' && (
               <>
                 <View style={styles.completeHero}>
-                  <Pill variant="green">Complete</Pill>
+                  <Pill variant="green">{t.checkin.complete}</Pill>
                   <View style={styles.completeMoney}>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.onDutyLabel}>Final payout</Text>
-                      <Text style={styles.completeDuration}>Duration {completeDuration}</Text>
+                      <Text style={styles.onDutyLabel}>{t.checkin.finalPayout}</Text>
+                      <Text style={styles.completeDuration}>
+                        {formatMessage(t.checkin.duration, { d: completeDuration })}
+                      </Text>
                     </View>
                     <Text
                       style={styles.completeAmt}
@@ -782,9 +826,10 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   */}
                 {otPendingAmount > 0 && (
                   <Text style={styles.otPendingNote}>
-                    Overtime {otHoursWorked.toFixed(1)}h (about {formatRM(otPendingAmount)}) — our
-                    estimate from your stamps · not sent to the agency, not in your payout. Raise
-                    it with them if it should be paid.
+                    {formatMessage(t.checkin.otEstimate, {
+                      h: otHoursWorked.toFixed(1),
+                      amount: formatRM(otPendingAmount),
+                    })}
                   </Text>
                 )}
                 <ShiftStatusPanel
@@ -812,15 +857,13 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             style={[styles.sheet, { paddingBottom: 18 + insets.bottom + keyboardInset }]}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.sheetTitle}>Cancel shift?</Text>
+            <Text style={styles.sheetTitle}>{t.checkin.cancelTitle}</Text>
             <Text style={styles.sheetMeta}>
-              {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'} · {shiftTime}
+              {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd, t) : '—'} · {shiftTime}
             </Text>
-            <Text style={styles.sheetHint}>
-              Agency-assigned shift — cancellation may affect wages.
-            </Text>
-            <Text style={styles.rulesTitle}>Cancellation rules</Text>
-            {cancellationRuleSummary().map((r) => (
+            <Text style={styles.sheetHint}>{t.checkin.cancelWarning}</Text>
+            <Text style={styles.rulesTitle}>{t.checkin.cancelRules}</Text>
+            {cancellationRuleSummary(DEFAULT_CANCELLATION_BANDS, t).map((r) => (
               <View key={r.label} style={styles.ruleRow}>
                 <Text style={styles.ruleLabel}>{r.label}</Text>
                 <Text
@@ -836,19 +879,19 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 </Text>
               </View>
             ))}
-            <Text style={styles.fieldLabel}>Reason (required)</Text>
+            <Text style={styles.fieldLabel}>{t.checkin.reasonRequired}</Text>
             <TextInput
               value={cancelReason}
               onChangeText={setCancelReason}
               style={styles.input}
-              placeholder="Why are you cancelling?"
+              placeholder={t.checkin.reasonPlaceholder}
               placeholderTextColor={C.muted2}
             />
             <Pressable style={styles.dangerBtn} onPress={confirmCancel}>
-              <Text style={styles.dangerBtnText}>Cancel shift</Text>
+              <Text style={styles.dangerBtnText}>{t.checkin.cancelShift}</Text>
             </Pressable>
             <Pressable style={styles.sheetCancel} onPress={() => setCancelOpen(false)}>
-              <Text style={styles.sheetCancelText}>Back</Text>
+              <Text style={styles.sheetCancelText}>{t.checkin.back}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -872,22 +915,23 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <MapPin size={26} color={C.gold} strokeWidth={2.2} />
             </View>
             <Text style={[styles.sheetTitle, { textAlign: 'center' }]}>
-              Enable Location Access
+              {t.checkin.enableLocation}
             </Text>
             <Text style={[styles.sheetMeta, { textAlign: 'center' }]}>
-              InnocenZ uses your location for one thing only — proving you are at the
-              venue when you check in.
+              {t.checkin.locationExplainer}
             </Text>
+            {/* The ✓ is a bullet glyph, not copy — it stays out of the
+                dictionary so no locale can lose or mistranslate it. */}
             <View style={styles.locChecklist}>
-              <Text style={styles.locCheckText}>✓ Check-in unlocks within 50 m of the venue</Text>
-              <Text style={styles.locCheckText}>✓ One location stamp per check-in and check-out</Text>
-              <Text style={styles.locCheckText}>✓ No background tracking — ever</Text>
+              <Text style={styles.locCheckText}>{`✓ ${t.checkin.locCheckRadius}`}</Text>
+              <Text style={styles.locCheckText}>{`✓ ${t.checkin.locCheckStamp}`}</Text>
+              <Text style={styles.locCheckText}>{`✓ ${t.checkin.locCheckNoTracking}`}</Text>
             </View>
             <Pressable
               style={[styles.locEnableBtn, grad(GRADIENTS.accent, C.accent)]}
               onPress={() => void enableLocation()}
             >
-              <Text style={styles.locEnableText}>Enable Location Access</Text>
+              <Text style={styles.locEnableText}>{t.checkin.enableLocation}</Text>
             </Pressable>
             <Pressable
               style={styles.sheetCancel}
@@ -896,7 +940,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 setLocPromptDismissed(true);
               }}
             >
-              <Text style={styles.sheetCancelText}>Continue Without GPS</Text>
+              <Text style={styles.sheetCancelText}>{t.checkin.continueWithoutGps}</Text>
             </Pressable>
           </View>
         </View>
@@ -918,6 +962,9 @@ function HoldButton({
   onPress: () => void;
   disabled?: boolean;
 }) {
+  // Its own component, so it reads the locale itself — `label` arrives already
+  // translated from the caller.
+  const { t } = useLocale();
   return (
     <Pressable
       onPress={onPress}
@@ -927,7 +974,9 @@ function HoldButton({
       <View style={[styles.holdFill, { width: `${Math.min(100, progress)}%` as unknown as number }]} />
       <View style={styles.holdContent}>
         <MapPin size={16} color="#241a08" strokeWidth={2.2} />
-        <Text style={styles.holdText}>{holding ? `Holding ${progress}%` : label}</Text>
+        <Text style={styles.holdText}>
+          {holding ? formatMessage(t.checkin.holding, { p: progress }) : label}
+        </Text>
       </View>
     </Pressable>
   );

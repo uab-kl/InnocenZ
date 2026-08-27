@@ -3,6 +3,7 @@ import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { waiveCancelFee } from "@/services/agency-uncharged";
 
 /**
@@ -62,6 +63,7 @@ export function CancellationFeesPanel({
 	voucherId: string | null;
 	canWaive: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const identity = useMemo(() => getAgencyIdentity(), []);
@@ -119,8 +121,7 @@ export function CancellationFeesPanel({
 			});
 			void queryClient.invalidateQueries({ queryKey: ["agency-uncharged"] });
 		},
-		onError: () =>
-			setError("Could not waive this charge. Try again in a moment."),
+		onError: () => setError(t.agencyQueues.couldNotWaive),
 	});
 
 	// Nothing to show is the common case — most vouchers carry no cancellation.
@@ -131,7 +132,9 @@ export function CancellationFeesPanel({
 		<section className="iz-card mt-3 p-3">
 			<div className="flex items-baseline justify-between gap-2">
 				<b className="iz-sm text-[var(--iz-txt)]">
-					Cancellation {fees.length === 1 ? "fee" : "fees"} on this voucher
+					{fees.length === 1
+						? t.agencyQueues.cancellationFeeOnVoucherOne
+						: t.agencyQueues.cancellationFeeOnVoucherMany}
 				</b>
 				<b className="iz-sm shrink-0 tabular-nums text-[var(--iz-red)]">
 					-RM{" "}
@@ -142,8 +145,8 @@ export function CancellationFeesPanel({
 			</div>
 			<p className="iz-tiny iz-muted2 mt-1">
 				{editable
-					? "Charged automatically when the PR cancelled. Waive one to take it off this voucher before you send it."
-					: "This voucher has been sent, so these can no longer be taken off it. Credit the PR on next week's voucher instead."}
+					? t.agencyQueues.waiveBeforeSendHint
+					: t.agencyQueues.voucherSentCannotWaive}
 			</p>
 
 			<div className="mt-2 flex flex-col gap-1.5">
@@ -174,7 +177,7 @@ export function CancellationFeesPanel({
 									setError(null);
 								}}
 							>
-								Waive this charge
+								{t.agencyQueues.waiveThisCharge}
 							</button>
 						)}
 
@@ -187,7 +190,7 @@ export function CancellationFeesPanel({
 									className="iz-sm block font-semibold text-[var(--iz-txt)]"
 									htmlFor="waive-why"
 								>
-									Why are you waiving this? (optional)
+									{t.agencyQueues.whyWaiving}
 								</label>
 								{/* `iz-field-input` is the house field style — a real border,
 								    background and 12px padding. This used `iz-input`, which is
@@ -206,7 +209,7 @@ export function CancellationFeesPanel({
 									// that actually come up — something that happened to the PR,
 									// and the agency having caused the cancellation itself, which
 									// is the commonest fair reason to waive.
-									placeholder="e.g. hospital admission, or we stood them down ourselves"
+									placeholder={t.agencyQueues.waiveReasonPlaceholder}
 									onChange={(e) => setReason(e.target.value)}
 								/>
 								{error && (
@@ -221,7 +224,7 @@ export function CancellationFeesPanel({
 											setError(null);
 										}}
 									>
-										Keep the charge
+										{t.agencyQueues.keepTheCharge}
 									</button>
 									<button
 										type="button"
@@ -234,7 +237,9 @@ export function CancellationFeesPanel({
 											})
 										}
 									>
-										{waiveMut.isPending ? "Waiving…" : "Waive"}
+										{waiveMut.isPending
+											? t.agencyQueues.waiving
+											: t.agencyQueues.waive}
 									</button>
 								</div>
 							</div>

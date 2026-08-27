@@ -6,6 +6,7 @@ import {
 	InputGroupButton,
 	InputGroupInput,
 } from "@/components/ui/input-group";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { cn } from "@/lib/utils";
 
 type PasswordInputProps = Omit<
@@ -21,6 +22,7 @@ function PasswordInput({
 	disabled,
 	...props
 }: PasswordInputProps) {
+	const { t } = usePortalLocale();
 	const [visible, setVisible] = React.useState(false);
 
 	return (
@@ -38,7 +40,7 @@ function PasswordInput({
 					size="icon-xs"
 					disabled={disabled}
 					onClick={() => setVisible((v) => !v)}
-					aria-label={visible ? "Hide password" : "Show password"}
+					aria-label={visible ? t.webUi.hidePassword : t.webUi.showPassword}
 				>
 					{visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
 				</InputGroupButton>

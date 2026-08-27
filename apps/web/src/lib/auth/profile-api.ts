@@ -1,4 +1,5 @@
 import { env } from "@/env";
+import { apiErrorCopy } from "@/lib/auth/api-error-copy";
 import { getAccessToken } from "@/lib/auth/auth-storage";
 import { kickToLogin } from "@/lib/auth/guards";
 import { getClient } from "@/lib/axios-v1";
@@ -28,7 +29,9 @@ export async function updateMyDisplayName(
 		{ username },
 	);
 	if (!response.data.success || !response.data.data) {
-		throw new Error(response.data.message || "Failed to update display name");
+		throw new Error(
+			response.data.message || apiErrorCopy().webLib.displayNameUpdateFailed,
+		);
 	}
 	return response.data.data;
 }
@@ -40,7 +43,7 @@ export async function uploadMyProfileImage(
 	const token = getAccessToken();
 	if (!token) {
 		kickToLogin();
-		throw new Error("Not signed in");
+		throw new Error(apiErrorCopy().webLib.notSignedIn);
 	}
 
 	const form = new FormData();
@@ -58,12 +61,16 @@ export async function uploadMyProfileImage(
 
 	if (response.status === 401) {
 		kickToLogin();
-		throw new Error("Session expired");
+		throw new Error(apiErrorCopy().webLib.sessionExpired);
 	}
 
 	const payload = (await response.json()) as ApiResponse<UpdatedUser>;
 	if (!response.ok || !payload.success || !payload.data) {
-		throw new Error(payload.message || "Failed to upload profile image");
+		// Reuses the sentence the avatar card already shows for this failure —
+		// a second wording would be two answers to one question.
+		throw new Error(
+			payload.message || apiErrorCopy().profile.couldNotUploadPhoto,
+		);
 	}
 	return payload.data;
 }

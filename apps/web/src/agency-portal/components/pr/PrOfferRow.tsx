@@ -1,6 +1,7 @@
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function PrOfferRow({
 	title,
@@ -70,6 +71,7 @@ export function PrOfferRowActions({
 	primaryLabel: string;
 	secondaryLabel?: string;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="flex gap-2 iz-pr-inbox-card__actions">
 			<button
@@ -77,7 +79,7 @@ export function PrOfferRowActions({
 				className="iz-btn iz-btn-soft iz-btn-sm flex-1 !py-2"
 				onClick={onSecondary}
 			>
-				{secondaryLabel ?? "Decline"}
+				{secondaryLabel ?? t.common.decline}
 			</button>
 			<button
 				type="button"

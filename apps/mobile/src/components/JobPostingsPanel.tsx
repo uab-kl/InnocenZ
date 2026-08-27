@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
-import { formatRM } from '../lib/demo-shifts';
+import { DAY_SHORT, MONTH_SHORT, formatRM } from '../lib/demo-shifts';
 import {
   SERVICE_OFFERS,
   STATUS_FILTER_OPTIONS,
@@ -22,6 +22,7 @@ import {
   type ServiceStatus,
 } from '../lib/demo-services';
 import { useSession } from '../lib/session';
+import { useLocale, formatMessage, type AppTranslations } from '../i18n';
 import {
   createPrSpecialService,
   fetchMySpecialServices,
@@ -44,19 +45,117 @@ type Filters = {
 
 const EMPTY: Filters = { date: 'all', service: 'all', status: 'all' };
 
-const PR_STATUS_LABEL: Record<string, string> = {
-  open: 'Pending review',
-  assigned: 'Assigned',
-  in_progress: 'In progress',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
+/**
+ * Backend `special_service.status` -> the label the PR reads. The record KEY is
+ * the stored enum and never changes; only the rendered label is translated.
+ */
+const PR_STATUS_LABEL: Record<string, (t: AppTranslations) => string> = {
+  open: (t) => t.jobs.statusPendingReview,
+  assigned: (t) => t.jobs.statusAssigned,
+  in_progress: (t) => t.jobs.statusInProgress,
+  completed: (t) => t.jobs.statusCompleted,
+  cancelled: (t) => t.jobs.statusCancelled,
 };
 
+/** Filter option id (local-only, never sent) -> its rendered label. */
+const STATUS_FILTER_LABEL: Record<string, (t: AppTranslations) => string> = {
+  all: (t) => t.jobs.all,
+  pending_admin: (t) => t.jobs.statusPendingReview,
+  accepted: (t) => t.jobs.statusAccepted,
+  rejected: (t) => t.jobs.statusRejected,
+  pending_agency: (t) => t.jobs.statusPendingAgency,
+  pending_pr: (t) => t.jobs.statusAwaitingPr,
+  confirmed: (t) => t.jobs.statusConfirmed,
+  declined: (t) => t.jobs.statusDeclined,
+  paid: (t) => t.jobs.statusPaid,
+};
+
+function statusFilterLabel(id: string, t: AppTranslations): string {
+  const resolve = STATUS_FILTER_LABEL[id];
+  if (resolve) return resolve(t);
+  return STATUS_FILTER_OPTIONS.find((o) => o.id === id)?.label ?? id;
+}
+
+/**
+ * `SERVICE_OFFERS[].id` -> its rendered name and blurb. The id itself is the
+ * `category` posted to the backend, so only these labels are translated.
+ */
+const OFFER_LABEL: Record<string, (t: AppTranslations) => string> = {
+  transportation: (t) => t.jobs.offerTransportation,
+  delivery: (t) => t.jobs.offerDelivery,
+  wardrobe: (t) => t.jobs.offerWardrobe,
+  makeup: (t) => t.jobs.offerMakeup,
+  vip_escort: (t) => t.jobs.offerVipEscort,
+  uniform: (t) => t.jobs.offerUniform,
+  emergency_cover: (t) => t.jobs.offerEmergencyCover,
+  training: (t) => t.jobs.offerTraining,
+  others: (t) => t.jobs.offerOthers,
+  leave_agency: (t) => t.jobs.offerLeaveAgency,
+};
+
+const OFFER_SUMMARY: Record<string, (t: AppTranslations) => string> = {
+  transportation: (t) => t.jobs.offerTransportationSummary,
+  delivery: (t) => t.jobs.offerDeliverySummary,
+  wardrobe: (t) => t.jobs.offerWardrobeSummary,
+  makeup: (t) => t.jobs.offerMakeupSummary,
+  vip_escort: (t) => t.jobs.offerVipEscortSummary,
+  uniform: (t) => t.jobs.offerUniformSummary,
+  emergency_cover: (t) => t.jobs.offerEmergencyCoverSummary,
+  training: (t) => t.jobs.offerTrainingSummary,
+  others: (t) => t.jobs.offerOthersSummary,
+  leave_agency: (t) => t.jobs.offerLeaveAgencySummary,
+};
+
+function localOfferLabel(id: string, t: AppTranslations): string {
+  return OFFER_LABEL[id]?.(t) ?? offerLabel(id);
+}
+
+function localOfferSummary(id: string, t: AppTranslations): string {
+  const offer = SERVICE_OFFERS.find((o) => o.id === id);
+  return OFFER_SUMMARY[id]?.(t) ?? offer?.summary ?? '';
+}
+
+type InitiatedBy = ServiceOrder['initiatedBy'];
+
+/** Who raised the order — the stored value stays 'agency' | 'outlet' | 'pr'. */
+const INITIATED_BY_LABEL: Record<InitiatedBy, (t: AppTranslations) => string> = {
+  agency: (t) => t.jobs.agency,
+  outlet: (t) => t.common.outlet,
+  pr: (t) => t.topbar.pr,
+};
+
+// English on purpose: this label doubles as the DATE FILTER's identity, so a
+// locale switch must not silently invalidate the picked filter value. What the
+// PR reads comes from `localDateLabel` below, which resolves it back.
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function dateLabel(d: Date): string {
   return `${DAY_LABELS[d.getDay()]} ${String(d.getDate()).padStart(2, '0')} ${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/**
+ * The same date, worded for the reader.
+ *
+ * `dateLabel` above stays the row's IDENTITY: it is the date filter's option
+ * id and the value `filters.date` is compared against, so it must not move
+ * when the language does. This resolves that identity back through the very
+ * two arrays that built it, so only the FACE of the filter chip and of the
+ * order row changes. An unrecognised shape falls through unchanged rather than
+ * rendering blank.
+ */
+function localDateLabel(label: string, t: AppTranslations): string {
+  const m = /^(\w{3}) (\d{2}) (\w{3}) (\d{4})$/.exec(label);
+  if (!m) return label;
+  const dow = DAY_LABELS.indexOf(m[1]);
+  const mon = MONTH_LABELS.indexOf(m[3]);
+  if (dow < 0 || mon < 0) return label;
+  return formatMessage(t.jobs.dateLine, {
+    dow: DAY_SHORT[dow](t),
+    d: m[2],
+    mon: MONTH_SHORT[mon](t),
+    y: m[4],
+  });
 }
 
 function hhmm(d: Date): string {
@@ -94,13 +193,14 @@ function budgetToNumber(formatted: string): number {
 }
 
 /** Backend special_service row -> the ServiceOrder shape the cards render. */
-function recordToOrder(rec: SpecialServiceRecord): ServiceOrder {
+function recordToOrder(rec: SpecialServiceRecord, t: AppTranslations): ServiceOrder {
   const when = rec.scheduledFor ?? rec.createdAt;
   const d = new Date(when);
+  const who = rec.postingPrName ?? t.jobs.you;
   return {
     id: rec.id,
-    prName: rec.postingPrName ?? 'You',
-    outlet: 'Admin service',
+    prName: who,
+    outlet: t.jobs.adminService,
     date: dateLabel(d),
     time: rec.scheduledFor ? hhmm(d) : '—',
     serviceType: rec.category,
@@ -108,9 +208,9 @@ function recordToOrder(rec: SpecialServiceRecord): ServiceOrder {
     amountIn: 0,
     amountOut: rec.budget ? Number(rec.budget) : 0,
     initiatedBy: 'pr',
-    raisedBy: `${rec.postingPrName ?? 'You'} (PR)`,
+    raisedBy: formatMessage(t.jobs.raisedByPr, { name: who }),
     status: (rec.status === 'completed' ? 'accepted' : 'pending_admin') as ServiceStatus,
-    statusLabel: PR_STATUS_LABEL[rec.status] ?? rec.status,
+    statusLabel: PR_STATUS_LABEL[rec.status]?.(t) ?? rec.status,
   };
 }
 
@@ -120,8 +220,9 @@ export function JobPostingsPanel({
   /** Keep the Shifts ↔ Job postings badge in sync with this list. */
   onOrdersCountChange?: (count: number) => void;
 } = {}) {
+  const { t } = useLocale();
   const { token } = useSession();
-  const [orders, setOrders] = useState<ServiceOrder[]>([]);
+  const [records, setRecords] = useState<SpecialServiceRecord[]>([]);
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [orderOpen, setOrderOpen] = useState(false);
@@ -142,18 +243,21 @@ export function JobPostingsPanel({
     fetchMySpecialServices(token)
       .then((rows) => {
         if (cancelled) return;
-        setOrders(rows.map(recordToOrder));
+        setRecords(rows);
         onOrdersCountChange?.(rows.length);
       })
       .catch(() => {
         if (cancelled) return;
-        setOrders([]);
+        setRecords([]);
         onOrdersCountChange?.(0);
       });
     return () => {
       cancelled = true;
     };
   }, [token, onOrdersCountChange]);
+
+  // Re-derived from the raw rows so a locale switch relabels without refetching.
+  const orders = useMemo(() => records.map((rec) => recordToOrder(rec, t)), [records, t]);
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
@@ -191,6 +295,7 @@ export function JobPostingsPanel({
     try {
       const budgetNum = budgetToNumber(draftBudget);
       const rec = await createPrSpecialService(token, {
+        // English on purpose: title/description are STORED and read by admin.
         title: draftOffer.label,
         // Backend has no 'leave_agency' category — file it under 'others'.
         category: isLeave ? 'others' : draftType,
@@ -198,8 +303,8 @@ export function JobPostingsPanel({
         budget: Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : undefined,
         scheduledFor: isLeave ? null : isoFromTodayTime(draftTime),
       });
-      setOrders((prev) => {
-        const next = [recordToOrder(rec), ...prev];
+      setRecords((prev) => {
+        const next = [rec, ...prev];
         onOrdersCountChange?.(next.length);
         return next;
       });
@@ -207,9 +312,7 @@ export function JobPostingsPanel({
       setOrdersOpen(true);
     } catch (error) {
       // Surface the failure so a silent no-op never looks like success.
-      setSubmitError(
-        error instanceof Error ? error.message : 'Could not submit — please try again.',
-      );
+      setSubmitError(error instanceof Error ? error.message : t.jobs.submitFailed);
     } finally {
       setSubmitting(false);
     }
@@ -220,13 +323,12 @@ export function JobPostingsPanel({
       <View style={styles.banner}>
         <Text style={styles.bannerText}>
           <Text style={{ color: C.violetL }}>✦ </Text>
-          Request transportation, makeup, wardrobe, and other services — or raise Leave agency
-          under Service.
+          {t.jobs.banner}
         </Text>
       </View>
 
       <IzButton
-        label="Order service"
+        label={t.jobs.orderService}
         icon={Plus}
         small
         onPress={() => openOrderSheet()}
@@ -235,29 +337,34 @@ export function JobPostingsPanel({
 
       <View style={styles.filterCard}>
         <View style={styles.filterHead}>
-          <Text style={styles.filterTitle}>FILTER BOOKINGS</Text>
+          <Text style={styles.filterTitle}>{t.jobs.filterBookings}</Text>
           <Text style={styles.filterCount}>
-            {filtered.length} of {orders.length}
+            {formatMessage(t.jobs.countOf, {
+              shown: filtered.length,
+              total: orders.length,
+            })}
           </Text>
         </View>
         <View style={styles.filterGrid}>
           <FilterField
-            label="DATE"
-            value={filters.date === 'all' ? 'All dates' : filters.date}
+            label={t.jobs.filterDate}
+            value={
+              filters.date === 'all'
+                ? t.jobs.allDates
+                : localDateLabel(filters.date, t)
+            }
             open={openSelect === 'date'}
             onToggle={() => setOpenSelect((s) => (s === 'date' ? null : 'date'))}
           />
           <FilterField
-            label="SERVICE"
-            value={filters.service === 'all' ? 'All' : offerLabel(filters.service)}
+            label={t.jobs.filterService}
+            value={filters.service === 'all' ? t.jobs.all : localOfferLabel(filters.service, t)}
             open={openSelect === 'service'}
             onToggle={() => setOpenSelect((s) => (s === 'service' ? null : 'service'))}
           />
           <FilterField
-            label="STATUS"
-            value={
-              STATUS_FILTER_OPTIONS.find((o) => o.id === filters.status)?.label ?? 'All'
-            }
+            label={t.jobs.filterStatus}
+            value={statusFilterLabel(filters.status, t)}
             open={openSelect === 'status'}
             onToggle={() => setOpenSelect((s) => (s === 'status' ? null : 'status'))}
           />
@@ -267,7 +374,7 @@ export function JobPostingsPanel({
           <SelectList
             options={dateOptions.map((d) => ({
               id: d,
-              label: d === 'all' ? 'All dates' : d,
+              label: d === 'all' ? t.jobs.allDates : localDateLabel(d, t),
             }))}
             selected={filters.date}
             onPick={(id) => {
@@ -279,8 +386,8 @@ export function JobPostingsPanel({
         {openSelect === 'service' && (
           <SelectList
             options={[
-              { id: 'all', label: 'All' },
-              ...SERVICE_OFFERS.map((o) => ({ id: o.id, label: o.label })),
+              { id: 'all', label: t.jobs.all },
+              ...SERVICE_OFFERS.map((o) => ({ id: o.id, label: localOfferLabel(o.id, t) })),
             ]}
             selected={filters.service}
             onPick={(id) => {
@@ -291,7 +398,10 @@ export function JobPostingsPanel({
         )}
         {openSelect === 'status' && (
           <SelectList
-            options={STATUS_FILTER_OPTIONS}
+            options={STATUS_FILTER_OPTIONS.map((o) => ({
+              id: o.id,
+              label: statusFilterLabel(o.id, t),
+            }))}
             selected={filters.status}
             onPick={(id) => {
               setFilters((f) => ({ ...f, status: id }));
@@ -308,7 +418,7 @@ export function JobPostingsPanel({
               setOpenSelect(null);
             }}
           >
-            <Text style={styles.clearText}>Clear filters</Text>
+            <Text style={styles.clearText}>{t.jobs.clearFilters}</Text>
           </Pressable>
         )}
       </View>
@@ -318,13 +428,16 @@ export function JobPostingsPanel({
           <View style={{ flex: 1 }}>
             <View style={styles.ordersTitleRow}>
               <CircleHelp size={14} color={C.muted2} />
-              <Text style={styles.ordersTitle}>YOUR SERVICE ORDERS</Text>
+              <Text style={styles.ordersTitle}>{t.jobs.yourServiceOrders}</Text>
             </View>
             <Text style={styles.ordersHint}>
-              {filtered.length} record{filtered.length !== 1 ? 's' : ''}
+              {formatMessage(
+                filtered.length === 1 ? t.jobs.recordOne : t.jobs.recordMany,
+                { n: filtered.length },
+              )}
             </Text>
             <Text style={styles.tapHint}>
-              {ordersOpen ? 'Tap to collapse' : 'Tap to expand'}
+              {ordersOpen ? t.jobs.tapToCollapse : t.jobs.tapToExpand}
             </Text>
           </View>
           <ChevronDown
@@ -336,7 +449,7 @@ export function JobPostingsPanel({
         {ordersOpen && (
           <View style={styles.ordersBody}>
             {filtered.length === 0 ? (
-              <EmptyDashed>No service orders yet</EmptyDashed>
+              <EmptyDashed>{t.jobs.noOrders}</EmptyDashed>
             ) : (
               filtered.map((row) => <OrderCard key={row.id} row={row} />)
             )}
@@ -347,7 +460,7 @@ export function JobPostingsPanel({
       <Pressable style={styles.guide} onPress={() => setGuideOpen((o) => !o)}>
         <View style={styles.guideHd}>
           <CircleHelp size={14} color={C.muted} />
-          <Text style={styles.guideTitle}>Icon guide</Text>
+          <Text style={styles.guideTitle}>{t.jobs.iconGuide}</Text>
           <ChevronDown
             size={14}
             color={C.muted}
@@ -355,10 +468,7 @@ export function JobPostingsPanel({
           />
         </View>
         {guideOpen && (
-          <Text style={styles.guideBody}>
-            What each icon means — same icon, same meaning everywhere. Today · Post Job · Shifts ·
-            Check-In · Payment · History · Profile · Notifications · Drinks · Tips · Sign out.
-          </Text>
+          <Text style={styles.guideBody}>{t.jobs.iconGuideBody}</Text>
         )}
       </Pressable>
 
@@ -376,13 +486,11 @@ export function JobPostingsPanel({
               contentContainerStyle={styles.sheetScroll}
             >
               <Text style={styles.sheetTitle}>
-                {isLeave ? 'Service request' : 'Order agency service'}
+                {isLeave ? t.jobs.serviceRequestTitle : t.jobs.orderServiceTitle}
               </Text>
-              <Text style={styles.sheetSub}>
-                Request an add-on service — admin will review and confirm.
-              </Text>
+              <Text style={styles.sheetSub}>{t.jobs.sheetSubtitle}</Text>
 
-              <Text style={styles.fieldLabel}>Service</Text>
+              <Text style={styles.fieldLabel}>{t.jobs.service}</Text>
               <ScrollView
                 style={styles.offerList}
                 nestedScrollEnabled
@@ -394,39 +502,37 @@ export function JobPostingsPanel({
                     style={[styles.offerRow, draftType === o.id && styles.offerRowOn]}
                     onPress={() => setDraftType(o.id)}
                   >
-                    <Text style={styles.offerLabel}>{o.label}</Text>
+                    <Text style={styles.offerLabel}>{localOfferLabel(o.id, t)}</Text>
                     {draftType === o.id && <Check size={14} color={C.goldL} />}
                   </Pressable>
                 ))}
               </ScrollView>
-              <Text style={styles.offerSummary}>{draftOffer.summary}</Text>
+              <Text style={styles.offerSummary}>{localOfferSummary(draftOffer.id, t)}</Text>
 
               {!isLeave && (
                 <>
-                  <Text style={styles.fieldLabel}>Budget (RM)</Text>
+                  <Text style={styles.fieldLabel}>{t.jobs.budget}</Text>
                   <TextInput
                     value={draftBudget}
-                    onChangeText={(t) => setDraftBudget(formatBudgetInput(t))}
+                    onChangeText={(text) => setDraftBudget(formatBudgetInput(text))}
                     style={styles.input}
                     keyboardType="numeric"
                     selectTextOnFocus
                   />
 
-                  <Text style={styles.fieldLabel}>Service time</Text>
+                  <Text style={styles.fieldLabel}>{t.jobs.serviceTime}</Text>
                   <ServiceTimePicker value={draftTime} onChange={setDraftTime} />
                 </>
               )}
 
-              <Text style={styles.fieldLabel}>{isLeave ? 'Reason' : 'Notes'}</Text>
+              <Text style={styles.fieldLabel}>{isLeave ? t.jobs.reason : t.jobs.notes}</Text>
               <TextInput
                 value={draftNote}
                 onChangeText={setDraftNote}
                 style={[styles.input, { minHeight: 72, textAlignVertical: 'top' }]}
                 multiline
                 placeholder={
-                  isLeave
-                    ? 'Reason for early leave…'
-                    : 'Pickup address, delivery items, outlet contact…'
+                  isLeave ? t.jobs.reasonPlaceholder : t.jobs.notesPlaceholder
                 }
                 placeholderTextColor={C.muted2}
               />
@@ -444,14 +550,14 @@ export function JobPostingsPanel({
               >
                 <Text style={styles.submitText}>
                   {submitting
-                    ? 'Submitting…'
+                    ? t.jobs.submitting
                     : isLeave
-                      ? 'Raise support ticket'
-                      : 'Submit to admin'}
+                      ? t.jobs.raiseTicket
+                      : t.jobs.submitToAdmin}
                 </Text>
               </Pressable>
               <Pressable style={styles.cancel} onPress={() => setOrderOpen(false)}>
-                <Text style={styles.cancelText}>Back</Text>
+                <Text style={styles.cancelText}>{t.common.back}</Text>
               </Pressable>
             </ScrollView>
           </Pressable>
@@ -482,9 +588,11 @@ function formatTime24(parts: Time12Parts): string {
   return `${String(h24).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
 }
 
-function formatTimeLabel(hhmm: string): string {
+function formatTimeLabel(hhmm: string, t: AppTranslations): string {
   const { hour12, minute, period } = parseTime12(hhmm);
-  return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+  const clock = `${hour12}:${String(minute).padStart(2, '0')}`;
+  // One template per period — Chinese puts 上午/下午 before the clock.
+  return formatMessage(period === 'AM' ? t.jobs.timeAm : t.jobs.timePm, { time: clock });
 }
 
 function TimePickerColumn<T extends string | number>({
@@ -541,6 +649,7 @@ function ServiceTimePicker({
   value: string;
   onChange: (next: string) => void;
 }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const draft = useMemo(() => parseTime12(value || '19:00'), [value]);
 
@@ -553,7 +662,7 @@ function ServiceTimePicker({
         onPress={() => setOpen((o) => !o)}
       >
         <Clock size={16} color={C.muted2} />
-        <Text style={styles.timeTriggerLabel}>{formatTimeLabel(value || '19:00')}</Text>
+        <Text style={styles.timeTriggerLabel}>{formatTimeLabel(value || '19:00', t)}</Text>
         <ChevronDown
           size={14}
           color={C.muted}
@@ -579,7 +688,7 @@ function ServiceTimePicker({
               items={PERIODS}
               value={draft.period}
               onChange={(period) => apply({ ...draft, period })}
-              formatItem={(p) => p}
+              formatItem={(p) => (p === 'AM' ? t.jobs.am : t.jobs.pm)}
             />
           </View>
         </View>
@@ -645,6 +754,8 @@ function SelectList({
 }
 
 function OrderCard({ row }: { row: ServiceOrder }) {
+  const { t } = useLocale();
+  const outAmount = row.amountOut > 0 ? formatRM(row.amountOut) : t.jobs.tbc;
   return (
     <View style={styles.orderCard}>
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -652,32 +763,30 @@ function OrderCard({ row }: { row: ServiceOrder }) {
           <Text style={styles.orderId}>{row.id}</Text>
           <Pill variant={row.status === 'accepted' ? 'green' : 'amber'}>{row.statusLabel}</Pill>
           <View style={styles.initPill}>
-            <Text style={styles.initPillText}>
-              {row.initiatedBy === 'agency'
-                ? 'Agency'
-                : row.initiatedBy === 'outlet'
-                  ? 'Outlet'
-                  : 'PR'}
-            </Text>
+            <Text style={styles.initPillText}>{INITIATED_BY_LABEL[row.initiatedBy](t)}</Text>
           </View>
         </View>
         <Text style={styles.orderPr}>{row.prName}</Text>
         <Text style={styles.orderMeta}>
-          {offerLabel(row.serviceType)} · {row.outlet} · {row.date} · {row.time}
+          {localOfferLabel(row.serviceType, t)} · {row.outlet} ·{' '}
+          {localDateLabel(row.date, t)} · {row.time}
         </Text>
         <Text style={styles.orderDesc}>{row.description}</Text>
         <Text style={styles.orderMoney}>
-          In {formatRM(row.amountIn)} · Out {row.amountOut > 0 ? formatRM(row.amountOut) : 'TBC'} ·
-          Raised by {row.raisedBy}
+          {formatMessage(t.jobs.orderMoney, {
+            inAmt: formatRM(row.amountIn),
+            outAmt: outAmount,
+            who: row.raisedBy,
+          })}
         </Text>
       </View>
       <View style={styles.orderOut}>
-        <Text style={styles.orderOutLabel}>Out</Text>
-        <Text style={styles.orderOutAmt}>
-          {row.amountOut > 0 ? formatRM(row.amountOut) : 'TBC'}
-        </Text>
+        <Text style={styles.orderOutLabel}>{t.jobs.out}</Text>
+        <Text style={styles.orderOutAmt}>{outAmount}</Text>
         {row.amountIn > 0 && (
-          <Text style={styles.orderInAmt}>In {formatRM(row.amountIn)}</Text>
+          <Text style={styles.orderInAmt}>
+            {formatMessage(t.jobs.inAmount, { amount: formatRM(row.amountIn) })}
+          </Text>
         )}
       </View>
     </View>

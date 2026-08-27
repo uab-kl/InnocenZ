@@ -1,3 +1,5 @@
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
+import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
 import type {
 	AgencyCollectionInvoice,
 	AgencyManagedPR,
@@ -155,11 +157,24 @@ export function formatStampClock(iso: string | null, absent: string): string {
  * `new Date("2026-08-06")` is parsed as UTC midnight, which in UTC+8 renders as
  * the 6th but in any negative offset renders as the 5th.
  */
-export function formatShiftDayDate(iso: string | null): string {
+export function formatShiftDayDate(
+	iso: string | null,
+	/**
+	 * The portal's locale, LAST and with no default. A default would pin one
+	 * language for every caller that forgot to pass it — which is exactly what
+	 * this function's hardcoded "en-GB" did, silently, until an audit traced it.
+	 *
+	 * Intl rather than the dictionary's month names, on purpose: this is the one
+	 * date shape here carrying a YEAR, and the parts reorder between languages
+	 * (zh-CN leads with the year and puts the weekday last). Intl knows that
+	 * ordering; a hand-built template would have to encode it per language.
+	 */
+	locale: PortalLocale,
+): string {
 	if (!iso) return "—";
 	const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
 	if (Number.isNaN(d.getTime())) return iso;
-	return d.toLocaleDateString("en-GB", {
+	return d.toLocaleDateString(dateLocaleTag(locale), {
 		weekday: "short",
 		day: "numeric",
 		month: "short",

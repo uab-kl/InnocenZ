@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
+import { useLocale } from '../i18n';
 import { ImagePlus, XIcon, ZoomIn } from './icons';
 import { lockPhoneScroll, unlockPhoneScroll, scrollPhoneBy, autoScrollDirectionForFinger, refreshPhoneScrollWindow } from '../lib/phone-scroll';
 
@@ -95,6 +96,7 @@ export function PortfolioSlotGrid({
   onReorder,
   onView,
 }: Props) {
+  const { t } = useLocale();
   const gridRef = useRef<View>(null);
   const gridOrigin = useRef<GridOrigin>({ x: 0, y: 0 });
   const dragRef = useRef<DragState | null>(null);
@@ -505,9 +507,9 @@ export function PortfolioSlotGrid({
   return (
     <View>
       {picked != null && !drag ? (
-        <Text style={styles.hint}>Tap another slot to swap · tap again to cancel</Text>
+        <Text style={styles.hint}>{t.profile.slotTapToSwap}</Text>
       ) : canEdit ? (
-        <Text style={styles.hint}>Hold to drag · drag to top/bottom edge to scroll · drop to swap</Text>
+        <Text style={styles.hint}>{t.profile.slotDragHint}</Text>
       ) : null}
       <View
         ref={gridRef}

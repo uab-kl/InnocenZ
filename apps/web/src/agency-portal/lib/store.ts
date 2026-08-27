@@ -1,3 +1,5 @@
+import { loadLocale } from "@/lib/portal-i18n/locale-prefs";
+import { translations } from "@/lib/portal-i18n/translations";
 import {
 	type AdminNotification,
 	buildPosIntegrationAdminNotification,
@@ -1695,6 +1697,7 @@ export const useStore = create<StoreState>()(
 							notificationPrefs: st.notificationPrefs,
 						},
 						event,
+						translations[loadLocale()],
 					);
 					return pushed;
 				});

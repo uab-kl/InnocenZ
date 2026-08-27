@@ -9,6 +9,7 @@ import type {
 	SosIncident,
 } from "@agency-portal/lib/ops-notifications";
 import type { PrNotification } from "@agency-portal/lib/pr-features";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type PushEventType =
@@ -221,10 +222,23 @@ function rm(amount: number) {
 	return amount.toLocaleString("en-MY", { style: "currency", currency: "MYR" });
 }
 
-/** Apply one push event → updated notification arrays */
+/**
+ * Apply one push event → updated notification arrays.
+ *
+ * `t` is a PARAMETER, not a hook call: this module is a plain reducer invoked
+ * from the Zustand store, where there is no React tree to read the locale from.
+ * It is LAST and has NO DEFAULT on purpose — a default would let a call site
+ * silently keep shipping English while type-checking clean.
+ *
+ * Every name, amount, id and date inside a message stays a `{placeholder}`
+ * filled at the call site. The `event.type`, the `kind`, the `portal` and every
+ * `status` are STORED values matched against the backend's enums and are never
+ * translated — only the copy rendered for them moves.
+ */
 export function applyPushEvent(
 	state: PushNotifyInput,
 	event: PushEvent,
+	t: PortalTranslations,
 ): PushNotifyResult {
 	const at = notificationStamp();
 	const prefs = state.notificationPrefs;
@@ -238,8 +252,14 @@ export function applyPushEvent(
 					{
 						id: nid("n-assign"),
 						kind: "assignment",
-						title: "Shift assigned",
-						body: event.detail ?? `${event.outlet} — confirm on Shifts home`,
+						title: t.notifications.shiftAssignedTitle,
+						// `event.detail` is caller-supplied copy — already in whatever
+						// language the caller built it in, so it passes through.
+						body:
+							event.detail ??
+							fill(t.notifications.shiftAssignedPrBody, {
+								outlet: event.outlet,
+							}),
 						at,
 						read: false,
 						prId: event.prId,
@@ -254,8 +274,12 @@ export function applyPushEvent(
 						id: nid("ops-assign"),
 						portal: "agency",
 						kind: "shift_assigned",
-						title: `Assignment · ${event.prName}`,
-						body: `Shift at ${event.outlet} — awaiting PR confirm`,
+						title: fill(t.notifications.assignmentTitle, {
+							name: event.prName,
+						}),
+						body: fill(t.notifications.assignmentAgencyBody, {
+							outlet: event.outlet,
+						}),
 						at,
 						read: false,
 						href: "/agency/roster",
@@ -273,7 +297,9 @@ export function applyPushEvent(
 					{
 						id: nid("n-edit"),
 						kind: "assignment",
-						title: "Shift updated",
+						title: t.notifications.shiftUpdatedTitle,
+						// Outlet name and the caller's detail line, joined by
+						// punctuation only — nothing here is English copy.
 						body: `${event.outlet}: ${event.detail}`,
 						at,
 						read: false,
@@ -289,7 +315,9 @@ export function applyPushEvent(
 						id: nid("ops-edit"),
 						portal: "agency",
 						kind: "shift_edit",
-						title: `Roster edit · ${event.prName}`,
+						title: fill(t.notifications.rosterEditTitle, {
+							name: event.prName,
+						}),
 						body: `${event.outlet}: ${event.detail}`,
 						at,
 						read: false,
@@ -303,16 +331,16 @@ export function applyPushEvent(
 			break;
 		}
 		case "swap_update": {
-			const statusLabel =
+			// `Swap ${statusLabel}` used to be glued together. Chinese puts the
+			// state before the noun, so each state owns a WHOLE title instead.
+			// Only the three plain states land here — both audiences give `offer`
+			// and `replacement_declined` a title of their own below.
+			const statusTitle =
 				event.status === "approved"
-					? "approved"
+					? t.notifications.swapApprovedTitle
 					: event.status === "declined"
-						? "declined"
-						: event.status === "offer"
-							? "coverage offer"
-							: event.status === "replacement_declined"
-								? "replacement declined"
-								: "pending";
+						? t.notifications.swapDeclinedTitle
+						: t.notifications.swapPendingTitle;
 			if (
 				event.notifyPr !== false &&
 				prefOn(prefs, "swap_update", "pr") &&
@@ -320,15 +348,20 @@ export function applyPushEvent(
 			) {
 				const title =
 					event.status === "offer"
-						? "Swap coverage offer"
+						? t.notifications.swapCoverageOfferTitle
 						: event.status === "replacement_declined"
-							? "Swap update"
-							: `Swap ${statusLabel}`;
+							? t.notifications.swapUpdateTitle
+							: statusTitle;
 				const body =
 					event.status === "offer"
-						? `${event.requestingPrName ?? "A PR"} needs cover at ${event.outlet} — accept or decline on Shifts`
+						? fill(t.notifications.swapOfferPrBody, {
+								name: event.requestingPrName ?? t.notifications.aPr,
+								outlet: event.outlet,
+							})
 						: event.status === "approved"
-							? `${event.outlet} — coverage confirmed`
+							? fill(t.notifications.swapApprovedPrBody, {
+									outlet: event.outlet,
+								})
 							: `${event.outlet} — ${event.prName}`;
 				prNotifications = prependPr(
 					{
@@ -350,15 +383,28 @@ export function applyPushEvent(
 			) {
 				const agencyTitle =
 					event.status === "replacement_declined"
-						? "Replacement declined swap"
+						? t.notifications.swapReplacementDeclinedTitle
 						: event.status === "offer"
-							? "Swap offer sent"
-							: `Swap ${statusLabel}`;
+							? t.notifications.swapOfferSentTitle
+							: statusTitle;
+				// "PR" stays "PR" in both languages — it is the product's term for
+				// the role and it is what the database calls it.
+				const declinedBase = fill(t.notifications.swapReplacementDeclinedBody, {
+					name: event.prName,
+					other: event.requestingPrName ?? "PR",
+					outlet: event.outlet,
+				});
+				// The reason is the PR's own words; the dash and quotes around it are
+				// punctuation, not copy, so they stay in the template literal.
 				const agencyBody =
 					event.status === "replacement_declined"
-						? `${event.prName} declined cover for ${event.requestingPrName ?? "PR"} · ${event.outlet}${event.reason ? ` — “${event.reason}”` : ""}`
+						? `${declinedBase}${event.reason ? ` — “${event.reason}”` : ""}`
 						: event.status === "offer"
-							? `${event.prName} offered cover for ${event.requestingPrName ?? "PR"} · ${event.outlet}`
+							? fill(t.notifications.swapOfferAgencyBody, {
+									name: event.prName,
+									other: event.requestingPrName ?? "PR",
+									outlet: event.outlet,
+								})
 							: `${event.prName} · ${event.outlet}`;
 				opsNotifications = prependOps(
 					{
@@ -379,14 +425,19 @@ export function applyPushEvent(
 			break;
 		}
 		case "check_in": {
-			const body = `${event.prName} checked in${event.late ? " (late)" : ""}`;
+			// Two whole sentences rather than a "(late)" suffix glued on: Chinese
+			// puts the qualifier inside its own brackets and would not survive
+			// being appended to a finished sentence.
+			const body = event.late
+				? fill(t.notifications.checkedInLateBody, { name: event.prName })
+				: fill(t.notifications.checkedInBody, { name: event.prName });
 			if (prefOn(prefs, "check_in", "agency")) {
 				opsNotifications = prependOps(
 					{
 						id: nid("ops-checkin"),
 						portal: "agency",
 						kind: "check_in",
-						title: "Check-in confirmed",
+						title: t.notifications.checkInConfirmedTitle,
 						body: `${body} · ${event.outlet}`,
 						at,
 						read: false,
@@ -403,7 +454,7 @@ export function applyPushEvent(
 						id: nid("ops-checkin-out"),
 						portal: "outlet",
 						kind: "check_in",
-						title: "PR on floor",
+						title: t.notifications.prOnFloorTitle,
 						body: body,
 						at,
 						read: false,
@@ -418,13 +469,12 @@ export function applyPushEvent(
 		}
 		case "sos": {
 			const { incident } = event;
-			const typeLabel = "Agency-tied";
 			if (prefOn(prefs, "sos", "pr")) {
 				prNotifications = prependPr(
 					{
 						id: nid("n-sos"),
 						kind: "sos",
-						title: "SOS sent",
+						title: t.notifications.sosSentTitle,
 						body: incident.note.slice(0, 80),
 						at,
 						read: true,
@@ -439,8 +489,13 @@ export function applyPushEvent(
 						id: nid("ops-sos-ag"),
 						portal: "agency",
 						kind: "sos",
-						title: `SOS · ${incident.prName}`,
-						body: `${typeLabel} at ${incident.outlet} — ${incident.note.slice(0, 100)}`,
+						title: fill(t.notifications.sosNamedTitle, {
+							name: incident.prName,
+						}),
+						body: fill(t.notifications.sosAgencyBody, {
+							outlet: incident.outlet,
+							note: incident.note.slice(0, 100),
+						}),
 						at,
 						read: false,
 						href: "/agency/roster",
@@ -458,8 +513,12 @@ export function applyPushEvent(
 						id: nid("ops-sos-out"),
 						portal: "outlet",
 						kind: "sos",
-						title: `SOS · ${incident.prName}`,
-						body: `Duty manager alert — ${incident.note.slice(0, 100)}`,
+						title: fill(t.notifications.sosNamedTitle, {
+							name: incident.prName,
+						}),
+						body: fill(t.notifications.sosOutletBody, {
+							note: incident.note.slice(0, 100),
+						}),
 						at,
 						read: false,
 						href: "/outlet",
@@ -476,7 +535,9 @@ export function applyPushEvent(
 		case "pv_ready":
 		case "pv_sent": {
 			const title =
-				event.type === "pv_sent" ? "PV ready for review" : "Shift PV generated";
+				event.type === "pv_sent"
+					? t.notifications.pvReadyForReviewTitle
+					: t.notifications.pvGeneratedTitle;
 			if (
 				prefOn(prefs, event.type === "pv_sent" ? "pv_sent" : "pv_ready", "pr")
 			) {
@@ -485,7 +546,12 @@ export function applyPushEvent(
 						id: nid("n-pv"),
 						kind: "pv",
 						title,
-						body: `${event.pvId} · ${rm(event.net)} net — Finance Head pre-signed`,
+						// `rm()` already formatted the money against the locale — the
+						// key must never bake in a currency of its own.
+						body: fill(t.notifications.pvPreSignedBody, {
+							id: event.pvId,
+							amount: rm(event.net),
+						}),
 						at,
 						read: false,
 						prId: event.prId,
@@ -501,7 +567,9 @@ export function applyPushEvent(
 						id: nid("ops-pv"),
 						portal: "agency",
 						kind: "pv_ready",
-						title: `PV raised · ${event.prName}`,
+						title: fill(t.notifications.pvRaisedTitle, {
+							name: event.prName,
+						}),
 						body: `${event.pvId} · ${event.outlet} · ${rm(event.net)}`,
 						at,
 						read: false,
@@ -522,8 +590,13 @@ export function applyPushEvent(
 						id: nid("ops-pv-sign"),
 						portal: "agency",
 						kind: "pv_signed",
-						title: `PR signed · ${event.prName}`,
-						body: `${event.pvId} · ${rm(event.net)} — queued for Friday transfer`,
+						title: fill(t.notifications.pvPrSignedTitle, {
+							name: event.prName,
+						}),
+						body: fill(t.notifications.pvQueuedTransferBody, {
+							id: event.pvId,
+							amount: rm(event.net),
+						}),
 						at,
 						read: false,
 						href: "/agency/pv",
@@ -541,8 +614,11 @@ export function applyPushEvent(
 					{
 						id: nid("n-paid"),
 						kind: "pv",
-						title: "Payment received",
-						body: `${event.pvId} · ${rm(event.net)} in your bank`,
+						title: t.notifications.paymentReceivedTitle,
+						body: fill(t.notifications.paymentInBankBody, {
+							id: event.pvId,
+							amount: rm(event.net),
+						}),
 						at,
 						read: false,
 						prId: event.prId,
@@ -558,8 +634,11 @@ export function applyPushEvent(
 						id: nid("ops-paid"),
 						portal: "agency",
 						kind: "pv_paid",
-						title: `Paid · ${event.prName}`,
-						body: `${event.pvId} · ${rm(event.net)} transferred`,
+						title: fill(t.notifications.paidTitle, { name: event.prName }),
+						body: fill(t.notifications.paidTransferredBody, {
+							id: event.pvId,
+							amount: rm(event.net),
+						}),
 						at,
 						read: false,
 						href: "/agency/pv",
@@ -577,8 +656,11 @@ export function applyPushEvent(
 					{
 						id: nid("n-dispute"),
 						kind: "pv",
-						title: "Dispute submitted",
-						body: `${event.pvId} held — agency verifying with ${event.outlet}`,
+						title: t.notifications.disputeSubmittedTitle,
+						body: fill(t.notifications.disputeHeldBody, {
+							id: event.pvId,
+							outlet: event.outlet,
+						}),
 						at,
 						read: true,
 						pvId: event.pvId,
@@ -593,8 +675,13 @@ export function applyPushEvent(
 						id: nid("ops-dispute"),
 						portal: "agency",
 						kind: "dispute_raised",
-						title: `Dispute · ${event.prName}`,
-						body: `${event.pvId} at ${event.outlet} — 7 days to resolve`,
+						title: fill(t.notifications.disputeNamedTitle, {
+							name: event.prName,
+						}),
+						body: fill(t.notifications.disputeResolveWindowBody, {
+							id: event.pvId,
+							outlet: event.outlet,
+						}),
 						at,
 						read: false,
 						href: "/agency/pv",
@@ -611,8 +698,12 @@ export function applyPushEvent(
 						id: nid("ops-dispute-out"),
 						portal: "outlet",
 						kind: "dispute_raised",
-						title: `PV dispute · ${event.prName}`,
-						body: `${event.pvId} — agency may contact you to verify`,
+						title: fill(t.notifications.disputePvNamedTitle, {
+							name: event.prName,
+						}),
+						body: fill(t.notifications.disputeVerifyBody, {
+							id: event.pvId,
+						}),
 						at,
 						read: false,
 						href: "/outlet/billing",
@@ -635,8 +726,11 @@ export function applyPushEvent(
 						id: nid("ops-rate"),
 						portal: "outlet",
 						kind: "rating_prompt",
-						title: "Rate your PRs",
-						body: `${event.prName} · ${event.outlet} — post-seal window`,
+						title: t.notifications.rateYourPrsTitle,
+						body: fill(t.notifications.ratePostSealBody, {
+							name: event.prName,
+							outlet: event.outlet,
+						}),
 						at,
 						read: false,
 						href: "/outlet/history",
@@ -655,8 +749,10 @@ export function applyPushEvent(
 						id: nid("ops-recon-ag"),
 						portal: "agency",
 						kind: "reconciliation_due",
-						title: "Reconciliation due",
-						body: `Confirm today's figures vs ${event.outlet} sales`,
+						title: t.notifications.reconciliationDueTitle,
+						body: fill(t.notifications.reconciliationAgencyBody, {
+							outlet: event.outlet,
+						}),
 						at,
 						read: false,
 						href: "/agency/pv",
@@ -670,8 +766,8 @@ export function applyPushEvent(
 						id: nid("ops-recon-out"),
 						portal: "outlet",
 						kind: "reconciliation_due",
-						title: "End-of-week reconciliation",
-						body: "Review sealed totals vs live sales",
+						title: t.notifications.reconciliationWeekTitle,
+						body: t.notifications.reconciliationOutletBody,
 						at,
 						read: false,
 						href: "/outlet",
@@ -693,8 +789,17 @@ export function applyPushEvent(
 						id: nid("ops-col-remind"),
 						portal: "outlet",
 						kind: "collection_reminder",
-						title: "Payment reminder · Atlas Agency",
-						body: `${event.outlet}: ${amountLabel} due ${event.dueDate} · ${event.collectionId}`,
+						// "Atlas Agency" is demo fixture data, not copy — it stays
+						// out of the dictionary and rides in as a value.
+						title: fill(t.notifications.paymentReminderTitle, {
+							agency: "Atlas Agency",
+						}),
+						body: fill(t.notifications.collectionDueBody, {
+							outlet: event.outlet,
+							amount: amountLabel,
+							date: event.dueDate,
+							id: event.collectionId,
+						}),
 						at,
 						read: false,
 						href: "/outlet/billing",
@@ -712,7 +817,8 @@ export function applyPushEvent(
 						id: nid("ops-report"),
 						portal: event.portal,
 						kind: "report_ready",
-						title: "Report ready",
+						title: t.notifications.reportReadyTitle,
+						// The report's own name, built by whoever generated it.
 						body: event.label,
 						at,
 						read: false,
@@ -733,7 +839,7 @@ export function applyPushEvent(
 						id: nid("ops-ss-req-ag"),
 						portal: "agency",
 						kind: "special_service",
-						title: "Job posting request",
+						title: t.notifications.jobPostingRequestTitle,
 						body: `${event.serviceLabel} · ${event.prName} · ${event.outlet}`,
 						at,
 						read: false,
@@ -753,8 +859,13 @@ export function applyPushEvent(
 						id: nid("ops-ss-req-out"),
 						portal: "outlet",
 						kind: "special_service",
-						title: "Agency service booking",
-						body: `${event.serviceLabel} for ${event.prName} — accept or decline`,
+						title: t.notifications.agencyServiceBookingTitle,
+						// `serviceLabel` is the ordered service's own name, supplied
+						// by the caller — a value, not copy.
+						body: fill(t.notifications.serviceForPrBody, {
+							service: event.serviceLabel,
+							name: event.prName,
+						}),
 						at,
 						read: false,
 						href: "/outlet/bookings?tab=services",
@@ -769,20 +880,32 @@ export function applyPushEvent(
 				event.prId &&
 				prefOn(prefs, "special_service_requested", "pr")
 			) {
+				// `initiatedBy` is a stored value; only the sentence chosen for it
+				// moves. Each branch is a WHOLE sentence — Chinese reorders the
+				// outlet, the service and the actor differently in all three.
 				const prBody =
 					event.initiatedBy === "outlet"
-						? `${event.outlet} requested ${event.serviceLabel} for you — accept or decline`
+						? fill(t.notifications.serviceOutletRequestedBody, {
+								outlet: event.outlet,
+								service: event.serviceLabel,
+							})
 						: event.initiatedBy === "agency"
-							? `Agency booked ${event.serviceLabel} at ${event.outlet} — accept or decline`
-							: `${event.serviceLabel} at ${event.outlet} — accept or decline`;
+							? fill(t.notifications.serviceAgencyBookedBody, {
+									service: event.serviceLabel,
+									outlet: event.outlet,
+								})
+							: fill(t.notifications.serviceAtOutletBody, {
+									service: event.serviceLabel,
+									outlet: event.outlet,
+								});
 				prNotifications = prependPr(
 					{
 						id: nid("pr-ss-req"),
 						kind: "special_service",
 						title:
 							event.initiatedBy === "outlet"
-								? "Outlet service request"
-								: "Agency service booking",
+								? t.notifications.outletServiceRequestTitle
+								: t.notifications.agencyServiceBookingTitle,
 						body: prBody,
 						at,
 						read: false,
@@ -797,10 +920,17 @@ export function applyPushEvent(
 		case "special_service_update": {
 			const body =
 				event.status === "confirmed"
-					? `${event.serviceLabel} confirmed for ${event.prName}`
+					? fill(t.notifications.serviceConfirmedForBody, {
+							service: event.serviceLabel,
+							name: event.prName,
+						})
 					: event.status === "accepted"
-						? `${event.serviceLabel} accepted`
-						: `${event.serviceLabel} declined`;
+						? fill(t.notifications.serviceAcceptedBody, {
+								service: event.serviceLabel,
+							})
+						: fill(t.notifications.serviceDeclinedBody, {
+								service: event.serviceLabel,
+							});
 			if (
 				event.notifyAgency &&
 				prefOn(prefs, "special_service_update", "agency")
@@ -810,7 +940,7 @@ export function applyPushEvent(
 						id: nid("ops-ss-up-ag"),
 						portal: "agency",
 						kind: "special_service",
-						title: "Job posting update",
+						title: t.notifications.jobPostingUpdateTitle,
 						body,
 						at,
 						read: false,
@@ -830,7 +960,7 @@ export function applyPushEvent(
 						id: nid("ops-ss-up-out"),
 						portal: "outlet",
 						kind: "special_service",
-						title: "Job posting update",
+						title: t.notifications.jobPostingUpdateTitle,
 						body,
 						at,
 						read: false,
@@ -850,7 +980,7 @@ export function applyPushEvent(
 					{
 						id: nid("pr-ss-up"),
 						kind: "special_service",
-						title: "Job posting update",
+						title: t.notifications.jobPostingUpdateTitle,
 						body,
 						at,
 						read: false,
@@ -869,8 +999,17 @@ export function applyPushEvent(
 						id: nid("ops-selflog"),
 						portal: "agency",
 						kind: "receipt_self_log",
-						title: `Self-log · ${event.prName}`,
-						body: `${event.category} RM ${event.amount.toFixed(2)} at ${event.outlet} — verify manual entry (${event.receiptRef})`,
+						title: fill(t.notifications.selfLogNamedTitle, {
+							name: event.prName,
+						}),
+						// The amount keeps its currency here, not in the key: a key
+						// carrying "RM" would be a second source of truth for it.
+						body: fill(t.notifications.selfLogVerifyBody, {
+							category: event.category,
+							amount: `RM ${event.amount.toFixed(2)}`,
+							outlet: event.outlet,
+							ref: event.receiptRef,
+						}),
 						at,
 						read: false,
 						href: "/agency/pv",
@@ -888,10 +1027,16 @@ export function applyPushEvent(
 					{
 						id: nid("pr-selflog-v"),
 						kind: "assignment",
-						title: event.approved ? "Self-log verified" : "Self-log rejected",
+						title: event.approved
+							? t.notifications.selfLogVerifiedTitle
+							: t.notifications.selfLogRejectedTitle,
 						body: event.approved
-							? `Agency approved your manual receipt log · RM ${event.amount.toFixed(2)}`
-							: `Agency rejected your manual receipt log · RM ${event.amount.toFixed(2)} — contact agency`,
+							? fill(t.notifications.selfLogApprovedBody, {
+									amount: `RM ${event.amount.toFixed(2)}`,
+								})
+							: fill(t.notifications.selfLogRejectedBody, {
+									amount: `RM ${event.amount.toFixed(2)}`,
+								}),
 						at,
 						read: false,
 						prId: event.prId,

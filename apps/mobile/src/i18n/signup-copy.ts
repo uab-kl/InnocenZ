@@ -21,6 +21,34 @@ export type SignupFieldCopy = {
   emailPlaceholder: string;
   nationality: string;
   idType: string;
+  /**
+   * Rendered label for the stored `ID_TYPES` value 'NRIC'. The VALUE is posted
+   * to the backend and never changes — only this label is localised.
+   */
+  idTypeNric: string;
+  /** Rendered label for the stored value 'Passport'. */
+  idTypePassport: string;
+  /** Rendered label for the stored value 'Work permit'. */
+  idTypeWorkPermit: string;
+  /** Rendered label when no ID type has been chosen yet. */
+  idTypeFallback: string;
+  /**
+   * Rendered country names, keyed by the STORED English name (the value posted
+   * as `user_profile.country`). Unmapped names pass through untranslated.
+   */
+  countryNames: Record<string, string>;
+  /**
+   * Rendered nationality demonyms, keyed by the STORED English demonym
+   * (`user_profile.nationality`). Unmapped demonyms pass through.
+   */
+  nationalityNames: Record<string, string>;
+  /**
+   * Rendered language names, keyed by the STORED English name from
+   * `PR_LANGUAGE_OPTIONS` (the value posted as `user_profile.languages`).
+   * A language the PR typed in themselves is not in the map and passes
+   * through exactly as they wrote it.
+   */
+  languageNames: Record<string, string>;
   dob: string;
   dobPlaceholder: string;
   idNo: string;
@@ -98,6 +126,10 @@ export type SignupFieldCopy = {
   idVerifyKept: string;
   idVerifyContinueHint: string;
   idVerifyOkHint: string;
+  /** Stand-in for the typed ID inside an OCR line when the field was left empty. */
+  idNoEmpty: string;
+  /** `{id}` = the typed NRIC. One key — never the number with an English tail glued on. */
+  nricMustMatchDob: string;
 
   yourNickname: string;
   legalName: string;
@@ -172,6 +204,15 @@ export type SignupFieldCopy = {
   dobRequired: string;
   idNoSelectFirst: string;
   idNoRequired: string;
+  /** `{n}` = the required NRIC digit count. */
+  nricFormat: string;
+  /** Why the NRIC prefix is refused. YYMMDD is a format token and stays as-is. */
+  nricDobPrefix: string;
+  /**
+   * Optional height / weight / BWH out of range. `{label}` is one of the plain
+   * field labels above (height / weight / bust / waist / hip).
+   */
+  measureRange: string;
   languagesRequired: string;
   addressLine1Required: string;
   cityRequired: string;
@@ -225,6 +266,7 @@ export type SignupFieldCopy = {
   toastPhoneTaken: string;
   toastSendCodeFailed: string;
   toastOtpIncomplete: string;
+  /** `{list}` = the machine names of the assets that failed — never translated. */
   toastPhotosPartial: string;
   toastOtpExpired: string;
   toastRegisterFailed: string;
@@ -248,6 +290,60 @@ const en: SignupFieldCopy = {
   emailPlaceholder: 'you@example.com',
   nationality: 'Nationality*',
   idType: 'ID type*',
+  idTypeNric: 'NRIC',
+  idTypePassport: 'Passport',
+  idTypeWorkPermit: 'Work permit',
+  idTypeFallback: 'ID',
+  countryNames: {
+    Bangladesh: 'Bangladesh',
+    Cambodia: 'Cambodia',
+    India: 'India',
+    Indonesia: 'Indonesia',
+    Kazakhstan: 'Kazakhstan',
+    Laos: 'Laos',
+    Malaysia: 'Malaysia',
+    Myanmar: 'Myanmar',
+    Nepal: 'Nepal',
+    Pakistan: 'Pakistan',
+    Philippines: 'Philippines',
+    'Sri Lanka': 'Sri Lanka',
+    Thailand: 'Thailand',
+    Turkmenistan: 'Turkmenistan',
+    Uzbekistan: 'Uzbekistan',
+    Vietnam: 'Vietnam',
+  },
+  nationalityNames: {
+    Bangladeshi: 'Bangladeshi',
+    Cambodian: 'Cambodian',
+    Filipino: 'Filipino',
+    Indian: 'Indian',
+    Indonesian: 'Indonesian',
+    Kazakh: 'Kazakh',
+    Lao: 'Lao',
+    Malaysian: 'Malaysian',
+    Myanmar: 'Myanmar',
+    Nepali: 'Nepali',
+    Pakistani: 'Pakistani',
+    'Sri Lankan': 'Sri Lankan',
+    Thai: 'Thai',
+    Turkmen: 'Turkmen',
+    Uzbek: 'Uzbek',
+    Vietnamese: 'Vietnamese',
+  },
+  languageNames: {
+    English: 'English',
+    Mandarin: 'Mandarin',
+    Cantonese: 'Cantonese',
+    Malay: 'Malay',
+    Japanese: 'Japanese',
+    Korean: 'Korean',
+    Thai: 'Thai',
+    Hindi: 'Hindi',
+    Tagalog: 'Tagalog',
+    Vietnamese: 'Vietnamese',
+    Tamil: 'Tamil',
+    Hokkien: 'Hokkien',
+  },
   dob: 'Date of birth*',
   dobPlaceholder: 'YYYY-MM-DD',
   idNo: 'ID No*',
@@ -335,6 +431,8 @@ const en: SignupFieldCopy = {
   idVerifyKept: 'ID already verified',
   idVerifyContinueHint: 'Photos are still saved. Tap Continue to go to the next step.',
   idVerifyOkHint: 'Tap Continue to go to the next step.',
+  idNoEmpty: '(empty)',
+  nricMustMatchDob: '{id} (must match date of birth)',
 
   yourNickname: 'Your nickname',
   legalName: 'Legal name',
@@ -415,6 +513,9 @@ const en: SignupFieldCopy = {
   dobRequired: 'Date of birth is required.',
   idNoSelectFirst: 'Please select ID type first.',
   idNoRequired: 'ID number is required.',
+  nricFormat: 'NRIC must be {n} digits like 1234881234 (no dashes).',
+  nricDobPrefix: 'First 6 digits must match the date of birth as YYMMDD (e.g. 030704…).',
+  measureRange: '{label} must be between {min} and {max}.',
   languagesRequired: 'Pick at least one preferred language.',
   addressLine1Required: 'Address line 1 is required.',
   cityRequired: 'City is required.',
@@ -471,7 +572,8 @@ const en: SignupFieldCopy = {
   toastPhoneTaken: 'That number already has an account. Use another, or sign in.',
   toastSendCodeFailed: 'Could not send the code — please try again.',
   toastOtpIncomplete: 'Enter all six digits.',
-  toastPhotosPartial: 'Account created. Some photos failed to upload — try signing up again if ID photos are missing.',
+  toastPhotosPartial:
+    'Account created, but these photos failed to upload: {list}. Sign up again if ID photos are missing.',
   toastOtpExpired: 'That code expired. Tap Resend for a new one.',
   toastRegisterFailed:
     'Could not finish creating your account. Tap Verify & submit again.',
@@ -495,6 +597,60 @@ const zh: SignupFieldCopy = {
   emailPlaceholder: 'you@example.com',
   nationality: '国籍*',
   idType: '证件类型*',
+  idTypeNric: '身份证',
+  idTypePassport: '护照',
+  idTypeWorkPermit: '工作准证',
+  idTypeFallback: '证件',
+  countryNames: {
+    Bangladesh: '孟加拉国',
+    Cambodia: '柬埔寨',
+    India: '印度',
+    Indonesia: '印度尼西亚',
+    Kazakhstan: '哈萨克斯坦',
+    Laos: '老挝',
+    Malaysia: '马来西亚',
+    Myanmar: '缅甸',
+    Nepal: '尼泊尔',
+    Pakistan: '巴基斯坦',
+    Philippines: '菲律宾',
+    'Sri Lanka': '斯里兰卡',
+    Thailand: '泰国',
+    Turkmenistan: '土库曼斯坦',
+    Uzbekistan: '乌兹别克斯坦',
+    Vietnam: '越南',
+  },
+  nationalityNames: {
+    Bangladeshi: '孟加拉国籍',
+    Cambodian: '柬埔寨籍',
+    Filipino: '菲律宾籍',
+    Indian: '印度籍',
+    Indonesian: '印度尼西亚籍',
+    Kazakh: '哈萨克斯坦籍',
+    Lao: '老挝籍',
+    Malaysian: '马来西亚籍',
+    Myanmar: '缅甸籍',
+    Nepali: '尼泊尔籍',
+    Pakistani: '巴基斯坦籍',
+    'Sri Lankan': '斯里兰卡籍',
+    Thai: '泰国籍',
+    Turkmen: '土库曼斯坦籍',
+    Uzbek: '乌兹别克斯坦籍',
+    Vietnamese: '越南籍',
+  },
+  languageNames: {
+    English: '英语',
+    Mandarin: '华语',
+    Cantonese: '粤语',
+    Malay: '马来语',
+    Japanese: '日语',
+    Korean: '韩语',
+    Thai: '泰语',
+    Hindi: '印地语',
+    Tagalog: '他加禄语',
+    Vietnamese: '越南语',
+    Tamil: '淡米尔语',
+    Hokkien: '福建话',
+  },
   dob: '出生日期*',
   dobPlaceholder: 'YYYY-MM-DD',
   idNo: '证件号码*',
@@ -573,6 +729,8 @@ const zh: SignupFieldCopy = {
   idVerifyKept: '证件已核验',
   idVerifyContinueHint: '照片仍保留。点继续进入下一步。',
   idVerifyOkHint: '点继续进入下一步。',
+  idNoEmpty: '（空白）',
+  nricMustMatchDob: '{id}（须与出生日期一致）',
 
   yourNickname: '你的昵称',
   legalName: '法定姓名',
@@ -651,6 +809,9 @@ const zh: SignupFieldCopy = {
   dobRequired: '请填写出生日期。',
   idNoSelectFirst: '请先选择证件类型。',
   idNoRequired: '请填写证件号码。',
+  nricFormat: 'NRIC 须为 {n} 位数字，例如 1234881234（不含横线）。',
+  nricDobPrefix: '前 6 位须与出生日期一致，格式为 YYMMDD（例如 030704…）。',
+  measureRange: '{label}须介于 {min} 至 {max} 之间。',
   languagesRequired: '请至少选择一种语言。',
   addressLine1Required: '请填写地址第 1 行。',
   cityRequired: '请填写城市。',
@@ -704,7 +865,7 @@ const zh: SignupFieldCopy = {
   toastPhoneTaken: '该号码已有账户。请换号，或直接登录。',
   toastSendCodeFailed: '无法发送验证码 — 请重试。',
   toastOtpIncomplete: '请输入完整 6 位验证码。',
-  toastPhotosPartial: '账户已创建。部分照片上传失败 — 若身份证照片缺失请重新注册。',
+  toastPhotosPartial: '账户已创建，但以下照片上传失败：{list}。若身份证照片缺失，请重新注册。',
   toastOtpExpired: '验证码已过期。请点重发获取新码。',
   toastRegisterFailed: '无法完成注册。请再点「验证并提交」。',
   toastOtpWrong: '验证码不正确。请核对后重试。',
@@ -727,6 +888,60 @@ const zhHant: SignupFieldCopy = {
   email: '電子郵箱',
   nationality: '國籍*',
   idType: '證件類型*',
+  idTypeNric: '身分證',
+  idTypePassport: '護照',
+  idTypeWorkPermit: '工作准證',
+  idTypeFallback: '證件',
+  countryNames: {
+    Bangladesh: '孟加拉國',
+    Cambodia: '柬埔寨',
+    India: '印度',
+    Indonesia: '印度尼西亞',
+    Kazakhstan: '哈薩克斯坦',
+    Laos: '寮國',
+    Malaysia: '馬來西亞',
+    Myanmar: '緬甸',
+    Nepal: '尼泊爾',
+    Pakistan: '巴基斯坦',
+    Philippines: '菲律賓',
+    'Sri Lanka': '斯里蘭卡',
+    Thailand: '泰國',
+    Turkmenistan: '土庫曼斯坦',
+    Uzbekistan: '烏茲別克斯坦',
+    Vietnam: '越南',
+  },
+  nationalityNames: {
+    Bangladeshi: '孟加拉國籍',
+    Cambodian: '柬埔寨籍',
+    Filipino: '菲律賓籍',
+    Indian: '印度籍',
+    Indonesian: '印度尼西亞籍',
+    Kazakh: '哈薩克斯坦籍',
+    Lao: '寮國籍',
+    Malaysian: '馬來西亞籍',
+    Myanmar: '緬甸籍',
+    Nepali: '尼泊爾籍',
+    Pakistani: '巴基斯坦籍',
+    'Sri Lankan': '斯里蘭卡籍',
+    Thai: '泰國籍',
+    Turkmen: '土庫曼斯坦籍',
+    Uzbek: '烏茲別克斯坦籍',
+    Vietnamese: '越南籍',
+  },
+  languageNames: {
+    English: '英語',
+    Mandarin: '華語',
+    Cantonese: '粵語',
+    Malay: '馬來語',
+    Japanese: '日語',
+    Korean: '韓語',
+    Thai: '泰語',
+    Hindi: '印地語',
+    Tagalog: '他加祿語',
+    Vietnamese: '越南語',
+    Tamil: '淡米爾語',
+    Hokkien: '福建話',
+  },
   dob: '出生日期*',
   idNo: '證件號碼*',
   idNoSelectTypeFirst: '請先選擇證件類型',
@@ -803,6 +1018,8 @@ const zhHant: SignupFieldCopy = {
   idVerifyKept: '證件已核驗',
   idVerifyContinueHint: '照片仍保留。點繼續進入下一步。',
   idVerifyOkHint: '點繼續進入下一步。',
+  idNoEmpty: '（空白）',
+  nricMustMatchDob: '{id}（須與出生日期一致）',
 
   yourNickname: '你的暱稱',
   legalName: '法定姓名',
@@ -880,6 +1097,9 @@ const zhHant: SignupFieldCopy = {
   dobRequired: '請填寫出生日期。',
   idNoSelectFirst: '請先選擇證件類型。',
   idNoRequired: '請填寫證件號碼。',
+  nricFormat: 'NRIC 須為 {n} 位數字，例如 1234881234（不含橫線）。',
+  nricDobPrefix: '前 6 位須與出生日期一致，格式為 YYMMDD（例如 030704…）。',
+  measureRange: '{label}須介於 {min} 至 {max} 之間。',
   languagesRequired: '請至少選擇一種語言。',
   addressLine1Required: '請填寫地址第 1 行。',
   cityRequired: '請填寫城市。',
@@ -933,7 +1153,7 @@ const zhHant: SignupFieldCopy = {
   toastPhoneTaken: '該號碼已有帳戶。請換號，或直接登入。',
   toastSendCodeFailed: '無法傳送驗證碼 — 請重試。',
   toastOtpIncomplete: '請輸入完整 6 位驗證碼。',
-  toastPhotosPartial: '帳戶已建立。部分照片上傳失敗 — 若身分證照片缺失請重新註冊。',
+  toastPhotosPartial: '帳戶已建立，但以下照片上傳失敗：{list}。若身分證照片缺失，請重新註冊。',
   toastOtpExpired: '驗證碼已過期。請點重發取得新碼。',
   toastRegisterFailed: '無法完成註冊。請再點「驗證並提交」。',
   toastOtpWrong: '驗證碼不正確。請核對後重試。',

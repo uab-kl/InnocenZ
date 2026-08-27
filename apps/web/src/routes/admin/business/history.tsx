@@ -40,16 +40,19 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import {
 	formatDate,
 	formatNumber,
 	formatPrice,
-	formatRoleLabel,
 	getErrorMessage,
 } from "@/lib/utils";
 import { fetchAgencies } from "@/services/agency";
 import {
 	fetchMemberSubscriptions,
+	type MemberBillingCycle,
 	type MemberSubscriptionStatus,
 	type MemberSubscriptionsQueryParams,
 	type SubscriberType,
@@ -82,7 +85,41 @@ const subscriberTypeColors: Record<SubscriberType, string> = {
 	agency: "border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
 };
 
+/*
+ * Rendered labels for the three stored enums on a ledger row. The record KEY is
+ * the value the API sends and the filters compare on, so it never moves; only
+ * the label does, which is why each entry holds a FUNCTION of the dictionary
+ * rather than a string — a module-scope map cannot call a hook.
+ */
+const subscriberTypeLabels: Record<
+	SubscriberType,
+	(t: PortalTranslations) => string
+> = {
+	outlet: (t) => t.history.portalOutlet,
+	agency: (t) => t.history.portalAgency,
+};
+
+const statusLabels: Record<
+	MemberSubscriptionStatus,
+	(t: PortalTranslations) => string
+> = {
+	active: (t) => t.subscription.statusActive,
+	cancelled: (t) => t.subscription.statusCancelled,
+	expired: (t) => t.adminBusiness.statusExpired,
+	past_due: (t) => t.subscription.statusPastDue,
+};
+
+const billingCycleLabels: Record<
+	MemberBillingCycle,
+	(t: PortalTranslations) => string
+> = {
+	weekly: (t) => t.subscription.billedWeekly,
+	monthly: (t) => t.subscription.billedMonthly,
+	annually: (t) => t.subscription.billedAnnually,
+};
+
 function HistoryPage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 
 	const [subscriberTypeFilter, setSubscriberTypeFilter] =
@@ -205,8 +242,8 @@ function HistoryPage() {
 		<PageShell>
 			<PageHeader
 				icon={HistoryIcon}
-				title="Current Plan"
-				description="The plan each outlet and agency is on now — updated when a switch is approved."
+				title={t.admin.navCurrentPlan}
+				description={t.adminBusiness.currentPlanSubtitle}
 			/>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
@@ -214,15 +251,15 @@ function HistoryPage() {
 					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
-								Current Plan
+								{t.admin.navCurrentPlan}
 								{historyQuery.isFetching && !showLoading && (
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
 							</CardTitle>
 							<CardDescription>
 								{view === "current"
-									? "The plan each outlet and agency is on now — one row per subscriber, updated when a switch is approved"
-									: "Every subscription ever held — each row is one plan a subscriber was on, newest first"}
+									? t.adminBusiness.currentViewHint
+									: t.adminBusiness.historyViewHint}
 							</CardDescription>
 						</div>
 
@@ -241,9 +278,9 @@ function HistoryPage() {
 								<Input
 									value={searchInput}
 									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder="Search outlet or agency..."
+									placeholder={t.adminBusiness.searchOutletOrAgencyPlaceholder}
 									className="pl-8"
-									aria-label="Search outlet or agency"
+									aria-label={t.adminBusiness.searchOutletOrAgency}
 								/>
 							</div>
 
@@ -260,8 +297,12 @@ function HistoryPage() {
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="current">Current plan</SelectItem>
-									<SelectItem value="history">Full history</SelectItem>
+									<SelectItem value="current">
+										{t.adminBusiness.viewCurrentPlan}
+									</SelectItem>
+									<SelectItem value="history">
+										{t.adminBusiness.viewFullHistory}
+									</SelectItem>
 								</SelectContent>
 							</Select>
 
@@ -274,16 +315,24 @@ function HistoryPage() {
 							>
 								<SelectTrigger
 									className="sm:w-36"
-									aria-label="Filter by status"
+									aria-label={t.admin.filterByStatus}
 								>
-									<SelectValue placeholder="All Status" />
+									<SelectValue placeholder={t.admin.allStatus} />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">All Status</SelectItem>
-									<SelectItem value="active">Active</SelectItem>
-									<SelectItem value="cancelled">Cancelled</SelectItem>
-									<SelectItem value="expired">Expired</SelectItem>
-									<SelectItem value="past_due">Past due</SelectItem>
+									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+									<SelectItem value="active">
+										{statusLabels.active(t)}
+									</SelectItem>
+									<SelectItem value="cancelled">
+										{statusLabels.cancelled(t)}
+									</SelectItem>
+									<SelectItem value="expired">
+										{statusLabels.expired(t)}
+									</SelectItem>
+									<SelectItem value="past_due">
+										{statusLabels.past_due(t)}
+									</SelectItem>
 								</SelectContent>
 							</Select>
 
@@ -293,7 +342,7 @@ function HistoryPage() {
 									setSelectedDates(dates);
 									resetToFirstPage();
 								}}
-								ariaLabel="Filter by subscribed date"
+								ariaLabel={t.adminBusiness.filterBySubscribedDate}
 							/>
 						</div>
 					</div>
@@ -304,13 +353,19 @@ function HistoryPage() {
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Subscriber</TableHead>
-									<TableHead className="w-[110px]">Role</TableHead>
-									<TableHead>Plan</TableHead>
-									<TableHead>Amount (RM)</TableHead>
-									<TableHead>Billing Cycle</TableHead>
-									<TableHead className="w-[120px]">Status</TableHead>
-									<TableHead className="w-[190px]">Subscribed</TableHead>
+									<TableHead>{t.adminBusiness.colSubscriber}</TableHead>
+									<TableHead className="w-[110px]">
+										{t.adminBusiness.colRole}
+									</TableHead>
+									<TableHead>{t.adminBusiness.colPlan}</TableHead>
+									<TableHead>{t.adminBusiness.colAmount}</TableHead>
+									<TableHead>{t.adminBusiness.colBillingCycle}</TableHead>
+									<TableHead className="w-[120px]">
+										{t.admin.colStatus}
+									</TableHead>
+									<TableHead className="w-[190px]">
+										{t.adminBusiness.colSubscribed}
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -319,7 +374,7 @@ function HistoryPage() {
 										<TableCell colSpan={7} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
-												<span>Loading history...</span>
+												<span>{t.adminBusiness.loadingHistory}</span>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -329,7 +384,7 @@ function HistoryPage() {
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
-													Failed to load history
+													{t.adminBusiness.historyLoadFailed}
 												</p>
 												<p className="text-sm text-muted-foreground">
 													{getErrorMessage(historyQuery.error)}
@@ -340,7 +395,7 @@ function HistoryPage() {
 													onClick={() => historyQuery.refetch()}
 												>
 													<RefreshCw className="mr-2 h-4 w-4" />
-													Try Again
+													{t.admin.tryAgain}
 												</Button>
 											</div>
 										</TableCell>
@@ -350,7 +405,7 @@ function HistoryPage() {
 										<TableCell colSpan={7} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<HistoryIcon className="h-6 w-6" />
-												<span>No subscriptions found</span>
+												<span>{t.adminBusiness.noSubscriptionsFound}</span>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -363,22 +418,22 @@ function HistoryPage() {
 											<TableCell>
 												<Badge
 													variant="outline"
-													className={`${subscriberTypeColors[record.subscriberType]} w-fit capitalize`}
+													className={`${subscriberTypeColors[record.subscriberType]} w-fit`}
 												>
-													{formatRoleLabel(record.subscriberType)}
+													{subscriberTypeLabels[record.subscriberType](t)}
 												</Badge>
 											</TableCell>
 											<TableCell>{record.planName}</TableCell>
 											<TableCell>{formatPrice(record.amount)}</TableCell>
-											<TableCell className="capitalize">
-												{record.billingCycle}
+											<TableCell>
+												{billingCycleLabels[record.billingCycle](t)}
 											</TableCell>
 											<TableCell>
 												<Badge
 													variant="outline"
-													className={`${statusBadgeColors[record.status]} w-fit capitalize`}
+													className={`${statusBadgeColors[record.status]} w-fit`}
 												>
-													{record.status.replace("_", " ")}
+													{statusLabels[record.status](t)}
 												</Badge>
 											</TableCell>
 											<TableCell className="text-muted-foreground text-sm">
@@ -394,24 +449,16 @@ function HistoryPage() {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
 							<div>
-								Showing{" "}
-								<span className="font-medium">
-									{formatNumber((pagination.page - 1) * PAGE_SIZE + 1)}
-								</span>{" "}
-								-{" "}
-								<span className="font-medium">
-									{formatNumber(
+								{fill(t.adminBusiness.showingSubscriptions, {
+									from: formatNumber((pagination.page - 1) * PAGE_SIZE + 1),
+									to: formatNumber(
 										Math.min(
 											pagination.page * PAGE_SIZE,
 											pagination.totalCount,
 										),
-									)}
-								</span>{" "}
-								of{" "}
-								<span className="font-medium">
-									{formatNumber(pagination.totalCount)}
-								</span>{" "}
-								subscriptions
+									),
+									total: formatNumber(pagination.totalCount),
+								})}
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
@@ -420,10 +467,13 @@ function HistoryPage() {
 									disabled={!pagination.hasPrevPage || historyQuery.isFetching}
 									onClick={() => setPage((value) => value - 1)}
 								>
-									Previous
+									{t.admin.previous}
 								</Button>
 								<span>
-									Page {pagination.page} of {pagination.totalPages}
+									{fill(t.admin.pageOf, {
+										page: pagination.page,
+										total: pagination.totalPages,
+									})}
 								</span>
 								<Button
 									variant="outline"
@@ -431,7 +481,7 @@ function HistoryPage() {
 									disabled={!pagination.hasNextPage || historyQuery.isFetching}
 									onClick={() => setPage((value) => value + 1)}
 								>
-									Next
+									{t.admin.next}
 								</Button>
 							</div>
 						</div>
@@ -447,24 +497,24 @@ function HistoryPage() {
 			{unsubscribedOrgs.length > 0 && (
 				<Card className="border-(--lavender-soft)/40 bg-card">
 					<CardHeader>
-						<CardTitle>No subscription on record</CardTitle>
+						<CardTitle>{t.adminBusiness.noSubscriptionOnRecord}</CardTitle>
 						<CardDescription>
-							{formatNumber(unsubscribedOrgs.length)} registered{" "}
-							{unsubscribedOrgs.length === 1
-								? "organisation has"
-								: "organisations have"}{" "}
-							never been charged, so they have no row in the ledger above. They
-							can still sign in — give them a plan to start billing.
+							{fill(
+								unsubscribedOrgs.length === 1
+									? t.adminBusiness.neverChargedOne
+									: t.adminBusiness.neverChargedMany,
+								{ n: formatNumber(unsubscribedOrgs.length) },
+							)}
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Subscriber</TableHead>
-									<TableHead>Role</TableHead>
-									<TableHead>Plan</TableHead>
-									<TableHead>Status</TableHead>
+									<TableHead>{t.adminBusiness.colSubscriber}</TableHead>
+									<TableHead>{t.adminBusiness.colRole}</TableHead>
+									<TableHead>{t.adminBusiness.colPlan}</TableHead>
+									<TableHead>{t.admin.colStatus}</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -473,12 +523,14 @@ function HistoryPage() {
 										<TableCell className="font-medium">{org.name}</TableCell>
 										<TableCell>
 											<Badge variant="outline">
-												{formatRoleLabel(org.role)}
+												{subscriberTypeLabels[org.role](t)}
 											</Badge>
 										</TableCell>
 										<TableCell className="text-muted-foreground">—</TableCell>
 										<TableCell>
-											<Badge variant="outline">Not subscribed</Badge>
+											<Badge variant="outline">
+												{t.adminBusiness.notSubscribed}
+											</Badge>
 										</TableCell>
 									</TableRow>
 								))}

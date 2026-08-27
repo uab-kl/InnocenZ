@@ -61,6 +61,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import {
 	formatDate,
 	formatNumber,
@@ -95,11 +98,16 @@ type PlanChangeStatus = "direct" | "pending" | "approved" | "declined";
 type StatusFilter = "all" | PlanChangeStatus;
 type RoleFilter = "all" | SubscriberType;
 
-const statusLabels: Record<PlanChangeStatus, string> = {
-	direct: "Direct",
-	pending: "Pending",
-	approved: "Approved",
-	declined: "Declined",
+// The record KEY is the stored/derived status and never changes; only the label
+// it renders is looked up, so the map holds resolvers rather than strings.
+const statusLabels: Record<
+	PlanChangeStatus,
+	(t: PortalTranslations) => string
+> = {
+	direct: (t) => t.adminRequests.statusDirect,
+	pending: (t) => t.admin.statusPending,
+	approved: (t) => t.adminRequests.statusApproved,
+	declined: (t) => t.adminRequests.statusDeclined,
 };
 
 const statusBadgeColors: Record<PlanChangeStatus, string> = {
@@ -116,9 +124,9 @@ const roleBadgeColors: Record<SubscriberType, string> = {
 	agency: "border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
 };
 
-const roleLabels: Record<SubscriberType, string> = {
-	outlet: "Outlet",
-	agency: "Agency",
+const roleLabels: Record<SubscriberType, (t: PortalTranslations) => string> = {
+	outlet: (t) => t.adminRequests.roleOutlet,
+	agency: (t) => t.adminRequests.roleAgency,
 };
 
 /**
@@ -175,6 +183,10 @@ function toPlanOf(
  * POS add-on or entering Custom has no requested plan row, and LEAVING one
  * names the ordinary plan being returned to. Without this such rows rendered
  * "—" and the page could not show a move to or from POS/Custom at all.
+ *
+ * Every branch returns a NAME — the plan's own, the add-on's, or the tier's —
+ * and plan names stay English in every locale by the owner's decision, so
+ * nothing here is translated.
  */
 function toLabelOf(
 	request: AdminRequest,
@@ -203,12 +215,13 @@ function planPriceLabel(
 	request: AdminRequest,
 	plan: Subscription | undefined,
 	negotiatedAmount: string | null,
+	t: PortalTranslations,
 ): string {
 	if (!plan) return "—";
 	if (isNegotiatedCustom(request, plan)) {
 		return negotiatedAmount
 			? `RM ${formatPrice(negotiatedAmount)}`
-			: "Negotiated";
+			: t.adminRequests.negotiated;
 	}
 	return `RM ${formatPrice(plan.price)}`;
 }
@@ -222,17 +235,21 @@ function planPriceLabel(
 function priceOf(
 	request: AdminRequest,
 	planById: Map<string, Subscription>,
+	t: PortalTranslations,
 ): { amount: string | null; note: string | null } {
 	const status = planChangeStatus(request);
 	if (status === "direct" || status === "approved") {
 		const toPlan = toPlanOf(request, planById);
 		if (isNegotiatedCustom(request, toPlan)) {
 			return request.quotedAmount
-				? { amount: request.quotedAmount, note: "Negotiated · Custom" }
-				: { amount: null, note: "Negotiated" };
+				? {
+						amount: request.quotedAmount,
+						note: t.adminRequests.priceNoteNegotiatedCustom,
+					}
+				: { amount: null, note: t.adminRequests.negotiated };
 		}
 		const amount = toPlan?.price ?? null;
-		return { amount, note: amount != null ? "To plan" : null };
+		return { amount, note: amount != null ? t.adminRequests.colToPlan : null };
 	}
 	const fromPrice = fromPlanOf(request, planById)?.price ?? null;
 	return {
@@ -241,12 +258,13 @@ function priceOf(
 			fromPrice == null
 				? null
 				: status === "declined"
-					? "From plan · stays"
-					: "From plan · until approved",
+					? t.adminRequests.priceNoteFromPlanStays
+					: t.adminRequests.priceNoteFromPlanUntilApproved,
 	};
 }
 
 function PlanChangesPage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -328,12 +346,14 @@ function PlanChangesPage() {
 		}) => approvePlanChange(id, quotedAmount, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || "Plan change approved");
+			toast.success(
+				response.message || t.adminRequests.toastPlanChangeApproved,
+			);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to approve plan change")?.message ??
-					"Failed to approve plan change",
+				toMutationError(error, t.adminRequests.toastPlanChangeApproveFailed)
+					?.message ?? t.adminRequests.toastPlanChangeApproveFailed,
 			);
 		},
 	});
@@ -342,12 +362,14 @@ function PlanChangesPage() {
 		mutationFn: (id: string) => declineRequest(id, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || "Plan change declined");
+			toast.success(
+				response.message || t.adminRequests.toastPlanChangeDeclined,
+			);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to decline plan change")?.message ??
-					"Failed to decline plan change",
+				toMutationError(error, t.adminRequests.toastPlanChangeDeclineFailed)
+					?.message ?? t.adminRequests.toastPlanChangeDeclineFailed,
 			);
 		},
 	});
@@ -357,12 +379,12 @@ function PlanChangesPage() {
 			updateAdminRequest(id, { remarks }, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || "Remarks updated");
+			toast.success(response.message || t.adminRequests.toastRemarksUpdated);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to update remarks")?.message ??
-					"Failed to update remarks",
+				toMutationError(error, t.adminRequests.toastRemarksUpdateFailed)
+					?.message ?? t.adminRequests.toastRemarksUpdateFailed,
 			);
 		},
 	});
@@ -379,8 +401,8 @@ function PlanChangesPage() {
 		<PageShell>
 			<PageHeader
 				icon={ArrowRightLeft}
-				title="Plan Change"
-				description="Plan-switch activity from outlets and agencies. Agency switches are applied automatically by PR count (Direct). Outlet switches wait as Pending — open a row to approve or decline; the price rides the from-plan until you approve, then follows the to-plan."
+				title={t.admin.navPlanChange}
+				description={t.adminRequests.planChangeDescription}
 			/>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
@@ -388,25 +410,23 @@ function PlanChangesPage() {
 					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
-								Plan change activity
+								{t.adminRequests.activityTitle}
 								{requestsQuery.isFetching && !showLoading && (
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
 							</CardTitle>
 							<CardDescription>
 								{view === "latest"
-									? "One row per subscriber — the switch that still needs answering. Choose Full history for every previous change."
-									: "Every plan change ever filed — a subscriber appears once per switch, so the same outlet or agency repeats down the list. POS and Custom moves live on Plan Request."}{" "}
-								This is the log of switches ASKED FOR; for what each subscriber
-								has actually been billed — the same record it sees on its own
-								Subscription page — open{" "}
+									? t.adminRequests.activityHintLatest
+									: t.adminRequests.activityHintAll}{" "}
+								{/* The link now CLOSES the sentence, so the copy before it is one whole key rather than fragments glued either side of the anchor. */}
+								{t.adminRequests.billedRecordHint}{" "}
 								<Link
 									to="/admin/business/history"
 									className="text-lavender underline underline-offset-2"
 								>
-									Current Plan → Full history
+									{t.adminRequests.currentPlanFullHistoryLink}
 								</Link>
-								.
 							</CardDescription>
 						</div>
 
@@ -425,9 +445,9 @@ function PlanChangesPage() {
 								<Input
 									value={searchInput}
 									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder="Search outlet or agency..."
+									placeholder={t.adminRequests.searchPlaceholder}
 									className="pl-8"
-									aria-label="Search outlet or agency"
+									aria-label={t.adminRequests.searchAria}
 								/>
 							</div>
 
@@ -444,8 +464,13 @@ function PlanChangesPage() {
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="latest">Latest only</SelectItem>
-									<SelectItem value="all">Full history</SelectItem>
+									{/* Values drive the query; only the labels move. */}
+									<SelectItem value="latest">
+										{t.adminRequests.viewLatestOnly}
+									</SelectItem>
+									<SelectItem value="all">
+										{t.adminRequests.viewFullHistory}
+									</SelectItem>
 								</SelectContent>
 							</Select>
 
@@ -458,16 +483,25 @@ function PlanChangesPage() {
 							>
 								<SelectTrigger
 									className="sm:w-36"
-									aria-label="Filter by status"
+									aria-label={t.admin.filterByStatus}
 								>
-									<SelectValue placeholder="All Status" />
+									<SelectValue placeholder={t.admin.allStatus} />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">All Status</SelectItem>
-									<SelectItem value="direct">Direct</SelectItem>
-									<SelectItem value="pending">Pending</SelectItem>
-									<SelectItem value="approved">Approved</SelectItem>
-									<SelectItem value="declined">Declined</SelectItem>
+									{/* Values are the stored status; only the labels move. */}
+									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+									<SelectItem value="direct">
+										{t.adminRequests.statusDirect}
+									</SelectItem>
+									<SelectItem value="pending">
+										{t.admin.statusPending}
+									</SelectItem>
+									<SelectItem value="approved">
+										{t.adminRequests.statusApproved}
+									</SelectItem>
+									<SelectItem value="declined">
+										{t.adminRequests.statusDeclined}
+									</SelectItem>
 								</SelectContent>
 							</Select>
 
@@ -477,8 +511,8 @@ function PlanChangesPage() {
 									setSwitchedDates(dates);
 									setPage(1);
 								}}
-								ariaLabel="Filter by switched date"
-								emptyLabel="Switched date"
+								ariaLabel={t.adminRequests.filterBySwitchedDate}
+								emptyLabel={t.adminRequests.switchedDate}
 							/>
 						</div>
 					</div>
@@ -489,13 +523,19 @@ function PlanChangesPage() {
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Who</TableHead>
-									<TableHead className="w-[100px]">Role</TableHead>
-									<TableHead>From plan</TableHead>
-									<TableHead>To plan</TableHead>
-									<TableHead>Price (RM)</TableHead>
-									<TableHead className="w-[110px]">Status</TableHead>
-									<TableHead className="w-[170px]">Switched at</TableHead>
+									<TableHead>{t.adminRequests.colWho}</TableHead>
+									<TableHead className="w-[100px]">
+										{t.adminRequests.colRole}
+									</TableHead>
+									<TableHead>{t.adminRequests.colFromPlan}</TableHead>
+									<TableHead>{t.adminRequests.colToPlan}</TableHead>
+									<TableHead>{t.adminRequests.colPrice}</TableHead>
+									<TableHead className="w-[110px]">
+										{t.admin.colStatus}
+									</TableHead>
+									<TableHead className="w-[170px]">
+										{t.adminRequests.colSwitchedAt}
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -504,7 +544,7 @@ function PlanChangesPage() {
 										<TableCell colSpan={7} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
-												<span>Loading plan changes...</span>
+												<span>{t.adminRequests.loadingPlanChanges}</span>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -514,7 +554,7 @@ function PlanChangesPage() {
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
-													Failed to load plan changes
+													{t.adminRequests.failedToLoadPlanChanges}
 												</p>
 												<p className="text-sm text-muted-foreground">
 													{getErrorMessage(requestsQuery.error)}
@@ -525,7 +565,7 @@ function PlanChangesPage() {
 													onClick={() => requestsQuery.refetch()}
 												>
 													<RefreshCw className="mr-2 h-4 w-4" />
-													Try Again
+													{t.admin.tryAgain}
 												</Button>
 											</div>
 										</TableCell>
@@ -535,7 +575,7 @@ function PlanChangesPage() {
 										<TableCell colSpan={7} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<ArrowRightLeft className="h-6 w-6" />
-												<span>No plan changes found</span>
+												<span>{t.adminRequests.noPlanChangesFound}</span>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -544,7 +584,7 @@ function PlanChangesPage() {
 										const status = planChangeStatus(request);
 										const fromPlan = fromPlanOf(request, planById);
 										const toPlan = toPlanOf(request, planById);
-										const price = priceOf(request, planById);
+										const price = priceOf(request, planById, t);
 
 										return (
 											<TableRow
@@ -568,7 +608,7 @@ function PlanChangesPage() {
 															variant="outline"
 															className={`${roleBadgeColors[request.subscriberType]} w-fit`}
 														>
-															{roleLabels[request.subscriberType]}
+															{roleLabels[request.subscriberType](t)}
 														</Badge>
 													) : (
 														<span className="text-muted-foreground">—</span>
@@ -581,7 +621,7 @@ function PlanChangesPage() {
 													{toLabelOf(request, toPlan)}
 													{status === "pending" && (
 														<div className="text-sm text-muted-foreground">
-															Requested
+															{t.adminRequests.requestedPill}
 														</div>
 													)}
 												</TableCell>
@@ -608,7 +648,7 @@ function PlanChangesPage() {
 														variant="outline"
 														className={`${statusBadgeColors[status]} w-fit`}
 													>
-														{statusLabels[status]}
+														{statusLabels[status](t)}
 													</Badge>
 												</TableCell>
 												<TableCell className="text-base text-muted-foreground">
@@ -625,24 +665,16 @@ function PlanChangesPage() {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 							<div>
-								Showing{" "}
-								<span className="font-medium">
-									{formatNumber((pagination.page - 1) * PAGE_SIZE + 1)}
-								</span>{" "}
-								-{" "}
-								<span className="font-medium">
-									{formatNumber(
+								{fill(t.adminRequests.showingPlanChanges, {
+									from: formatNumber((pagination.page - 1) * PAGE_SIZE + 1),
+									to: formatNumber(
 										Math.min(
 											pagination.page * PAGE_SIZE,
 											pagination.totalCount,
 										),
-									)}
-								</span>{" "}
-								of{" "}
-								<span className="font-medium">
-									{formatNumber(pagination.totalCount)}
-								</span>{" "}
-								plan changes
+									),
+									total: formatNumber(pagination.totalCount),
+								})}
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
@@ -651,10 +683,13 @@ function PlanChangesPage() {
 									disabled={!pagination.hasPrevPage || requestsQuery.isFetching}
 									onClick={() => setPage((value) => value - 1)}
 								>
-									Previous
+									{t.admin.previous}
 								</Button>
 								<span>
-									Page {pagination.page} of {pagination.totalPages}
+									{fill(t.admin.pageOf, {
+										page: pagination.page,
+										total: pagination.totalPages,
+									})}
 								</span>
 								<Button
 									variant="outline"
@@ -662,7 +697,7 @@ function PlanChangesPage() {
 									disabled={!pagination.hasNextPage || requestsQuery.isFetching}
 									onClick={() => setPage((value) => value + 1)}
 								>
-									Next
+									{t.admin.next}
 								</Button>
 							</div>
 						</div>
@@ -724,6 +759,7 @@ function PlanChangeEditForm({
 	onDecline,
 	onDone,
 }: PlanChangeEditFormProps) {
+	const { t } = usePortalLocale();
 	const status = planChangeStatus(request);
 	const needsApproval = status === "pending";
 	const [remarks, setRemarks] = useState(request.remarks ?? "");
@@ -773,13 +809,13 @@ function PlanChangeEditForm({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<SheetHeader>
-				<SheetTitle>Plan change</SheetTitle>
+				<SheetTitle>{t.admin.navPlanChange}</SheetTitle>
 				<SheetDescription>
 					{status === "direct"
-						? "Agency switch — applied automatically by PR count."
+						? t.adminRequests.sheetHintDirect
 						: needsApproval
-							? "Outlet switch — review the before/after plans, then approve or decline."
-							: "Outlet switch — already actioned."}
+							? t.adminRequests.sheetHintPending
+							: t.adminRequests.sheetHintActioned}
 				</SheetDescription>
 			</SheetHeader>
 
@@ -787,25 +823,29 @@ function PlanChangeEditForm({
 				{/* Immutable record of the originating Outlet/Agency action. */}
 				<dl className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Who</dt>
+						<dt className="text-muted-foreground">{t.adminRequests.colWho}</dt>
 						<dd className="text-right font-medium">{request.subscriberName}</dd>
 					</div>
 					{request.contactName && (
 						<div className="flex items-center justify-between gap-2">
-							<dt className="text-muted-foreground">Contact</dt>
+							<dt className="text-muted-foreground">
+								{t.adminRequests.colContact}
+							</dt>
 							<dd className="text-right">{request.contactName}</dd>
 						</div>
 					)}
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Role</dt>
+						<dt className="text-muted-foreground">{t.adminRequests.colRole}</dt>
 						<dd className="text-right">
 							{request.subscriberType
-								? roleLabels[request.subscriberType]
+								? roleLabels[request.subscriberType](t)
 								: "—"}
 						</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Switched at</dt>
+						<dt className="text-muted-foreground">
+							{t.adminRequests.colSwitchedAt}
+						</dt>
 						<dd className="text-right">{formatDate(request.createdAt)}</dd>
 					</div>
 				</dl>
@@ -815,43 +855,45 @@ function PlanChangeEditForm({
 					<div className="flex items-center gap-2">
 						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								Before · From plan
+								{t.adminRequests.beforeFromPlan}
 							</p>
 							<p className="text-lg font-medium">{fromPlan?.name ?? "—"}</p>
 							<p className="text-base text-muted-foreground">
-								{planPriceLabel(request, fromPlan, null)}
+								{planPriceLabel(request, fromPlan, null, t)}
 							</p>
 						</div>
 						<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
 						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								After · To plan
+								{t.adminRequests.afterToPlan}
 							</p>
 							<p className="text-lg font-medium">
 								{toLabelOf(request, toPlan)}
 							</p>
 							<p className="text-base text-muted-foreground">
-								{planPriceLabel(request, toPlan, request.quotedAmount)}
+								{planPriceLabel(request, toPlan, request.quotedAmount, t)}
 							</p>
 						</div>
 					</div>
 					<p className="text-base text-muted-foreground">
 						{status === "direct"
-							? "Switched automatically by PR count — the price follows the to-plan."
+							? t.adminRequests.noteDirect
 							: needsApproval
-								? "Reminder: the outlet keeps paying the from-plan price until you approve. After approval the price follows the to-plan."
+								? t.adminRequests.notePendingApproval
 								: status === "approved"
-									? "Approved — the price now follows the to-plan."
-									: "Declined — the outlet stays on the from-plan price."}
+									? t.adminRequests.noteApproved
+									: t.adminRequests.noteDeclinedPlanChange}
 					</p>
 				</div>
 
 				<div className="space-y-1.5">
-					<Label htmlFor="plan-change-remarks">Remarks</Label>
+					<Label htmlFor="plan-change-remarks">
+						{t.adminRequests.colRemarks}
+					</Label>
 					<Textarea
 						id="plan-change-remarks"
 						rows={3}
-						placeholder="Add remarks…"
+						placeholder={t.adminRequests.addRemarks}
 						value={remarks}
 						onChange={(e) => setRemarks(e.target.value)}
 					/>
@@ -859,12 +901,12 @@ function PlanChangeEditForm({
 
 				<div className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
 					<div className="flex items-center justify-between gap-2 text-base">
-						<span className="text-muted-foreground">Status</span>
+						<span className="text-muted-foreground">{t.admin.colStatus}</span>
 						<Badge
 							variant="outline"
 							className={`${statusBadgeColors[status]} w-fit`}
 						>
-							{statusLabels[status]}
+							{statusLabels[status](t)}
 						</Badge>
 					</div>
 					{needsApproval && (
@@ -876,7 +918,7 @@ function PlanChangeEditForm({
 								onClick={handleApprove}
 							>
 								<CheckCircle2 className="mr-1 h-4 w-4" />
-								Approve
+								{t.common.approve}
 							</Button>
 							<Button
 								type="button"
@@ -886,7 +928,7 @@ function PlanChangeEditForm({
 								onClick={handleDecline}
 							>
 								<XCircle className="mr-1 h-4 w-4" />
-								Decline
+								{t.common.decline}
 							</Button>
 						</div>
 					)}
@@ -896,7 +938,7 @@ function PlanChangeEditForm({
 			<SheetFooter className="flex-row justify-end gap-2">
 				<SheetClose asChild>
 					<Button type="button" variant="outline">
-						Cancel
+						{t.common.cancel}
 					</Button>
 				</SheetClose>
 				<Button
@@ -905,7 +947,7 @@ function PlanChangeEditForm({
 					onClick={handleSave}
 				>
 					{isSaving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-					Save changes
+					{t.adminRequests.saveChanges}
 				</Button>
 			</SheetFooter>
 		</div>

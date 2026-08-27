@@ -34,8 +34,11 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { ChevronRight, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function OutletServicePostSection() {
+	const { t } = usePortalLocale();
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const records = useStore((s) => s.specialServiceOrders);
 	const submitOrder = useStore((s) => s.submitSpecialServiceOrder);
@@ -121,11 +124,9 @@ export function OutletServicePostSection() {
 			if (jobs.length > 0) {
 				backend
 					.postJobs(jobs)
-					.then(() =>
-						toast("Service order submitted for admin review", "success"),
-					)
+					.then(() => toast(t.outletPanels.serviceOrderSubmitted, "success"))
 					.catch(() =>
-						toast("Could not submit service order — try again", "warn"),
+						toast(t.outletPanels.couldNotSubmitServiceOrder, "warn"),
 					);
 			}
 			setQueuedJobs([]);
@@ -178,8 +179,12 @@ export function OutletServicePostSection() {
 					className="mb-3 border-[rgba(159,122,234,.35)] bg-[linear-gradient(180deg,rgba(159,122,234,.08),transparent)]"
 				>
 					<p className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
-						{pendingAction.length} booking
-						{pendingAction.length !== 1 ? "s" : ""} need your response
+						{fill(
+							pendingAction.length === 1
+								? t.outletPanels.bookingsNeedResponseOne
+								: t.outletPanels.bookingsNeedResponseMany,
+							{ n: pendingAction.length },
+						)}
 					</p>
 					<div className="mt-2 space-y-2">
 						{pendingAction.map((row) => (
@@ -199,7 +204,7 @@ export function OutletServicePostSection() {
 			<section className="iz-job-posting-form-section">
 				<div className="iz-job-posting-form-card">
 					<JobPostingMicroLabel className="mb-3 block">
-						New job
+						{t.outletPanels.newJob}
 					</JobPostingMicroLabel>
 					{editingId ? (
 						<JobPostingComposer
@@ -210,7 +215,9 @@ export function OutletServicePostSection() {
 								)
 							}
 							offers={serviceOffers}
-							title={`Edit job ${queuedJobs.findIndex((j) => j.id === editingId) + 1}`}
+							title={fill(t.outletPanels.editJobN, {
+								n: queuedJobs.findIndex((j) => j.id === editingId) + 1,
+							})}
 							onRemove={() => removeFromQueue(editingId)}
 							showRemove
 							onDone={() => setEditingId(null)}
@@ -231,7 +238,9 @@ export function OutletServicePostSection() {
 							className="iz-btn iz-btn-soft iz-job-posting-add-btn mt-3 w-full disabled:opacity-40"
 						>
 							<Plus className="h-4 w-4" />
-							{queuedJobs.length === 0 ? "Add job" : "Add another job"}
+							{queuedJobs.length === 0
+								? t.outletPanels.addJob
+								: t.outletPanels.addAnotherJob}
 						</button>
 					)}
 				</div>
@@ -239,9 +248,16 @@ export function OutletServicePostSection() {
 				{queuedJobs.length > 0 && !editingId && (
 					<div className="mt-3">
 						<div className="mb-2 flex items-center justify-between gap-2">
-							<JobPostingMicroLabel>Queued jobs</JobPostingMicroLabel>
+							<JobPostingMicroLabel>
+								{t.outletPanels.queuedJobs}
+							</JobPostingMicroLabel>
 							<span className="iz-job-posting-count-pill">
-								{queuedJobs.length} job{queuedJobs.length !== 1 ? "s" : ""}
+								{fill(
+									queuedJobs.length === 1
+										? t.outletPanels.jobCountOne
+										: t.outletPanels.jobCountMany,
+									{ n: queuedJobs.length },
+								)}
 							</span>
 						</div>
 						<JobQueueTable
@@ -259,17 +275,28 @@ export function OutletServicePostSection() {
 					disabled={queuedJobs.length === 0}
 					className="iz-btn iz-btn-primary iz-job-posting-submit-btn mt-3 w-full disabled:opacity-40"
 				>
-					Post{queuedJobs.length > 0 ? ` ${queuedOrderCount}` : ""} job
-					{queuedOrderCount !== 1 ? "s" : ""} for admin review
+					{queuedJobs.length === 0
+						? t.outletPanels.postJobsForReviewEmpty
+						: fill(
+								queuedOrderCount === 1
+									? t.outletPanels.postJobsForReviewOne
+									: t.outletPanels.postJobsForReviewMany,
+								{ n: queuedOrderCount },
+							)}
 					<ChevronRight className="h-4 w-4" />
 				</button>
 			</section>
 
 			<section className="iz-job-posting-list-section">
 				<div className="iz-job-posting-list-head">
-					<JobPostingMicroLabel>Your job postings</JobPostingMicroLabel>
+					<JobPostingMicroLabel>
+						{t.outletPanels.yourJobPostings}
+					</JobPostingMicroLabel>
 					<span className="iz-job-posting-count-pill">
-						{filtered.length} of {scopedRecords.length}
+						{fill(t.outletPanels.countOfTotal, {
+							n: filtered.length,
+							total: scopedRecords.length,
+						})}
 					</span>
 				</div>
 
@@ -289,9 +316,9 @@ export function OutletServicePostSection() {
 				<div className="mt-2.5">
 					<JobPostingsTable
 						rows={filtered}
-						statusLabel={agencyJobPostingInzLabel}
+						statusLabel={(row) => agencyJobPostingInzLabel(row, t)}
 						statusTone={agencyJobPostingStatusTone}
-						emptyMessage="No service orders match this filter"
+						emptyMessage={t.outletPanels.noServiceOrdersMatch}
 					/>
 				</div>
 			</section>

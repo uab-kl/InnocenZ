@@ -62,6 +62,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import {
 	formatDate,
 	formatNumber,
@@ -104,13 +107,46 @@ type RoleFilter = "all" | SubscriberType;
 //              to leave (which names the plan being kept)
 //  • agency  → Custom (151+ PV): "Renegotiate Price", entering, and leaving
 
-const requestTypeLabels: Record<AdminRequestType, string> = {
-	pos_integration_quote: "POS quote",
-	custom_renegotiation: "Custom",
-	plan_change: "Plan change",
-	contact: "Contact",
-	other: "Other",
+// The record KEY is the stored request type and never changes; only the label
+// it renders is looked up, so the map holds resolvers rather than strings.
+const requestTypeLabels: Record<
+	AdminRequestType,
+	(t: PortalTranslations) => string
+> = {
+	pos_integration_quote: (t) => t.admin.reqPosQuote,
+	custom_renegotiation: (t) => t.admin.reqCustom,
+	plan_change: (t) => t.admin.reqPlanChange,
+	contact: (t) => t.admin.reqContact,
+	other: (t) => t.admin.reqOther,
 };
+
+/** Same rule for the stored status: the value is compared, the label is shown. */
+const requestStatusLabels: Record<
+	AdminRequestStatus,
+	(t: PortalTranslations) => string
+> = {
+	pending: (t) => t.admin.statusPending,
+	contacted: (t) => t.adminRequests.statusContacted,
+	resolved: (t) => t.adminRequests.statusResolved,
+	declined: (t) => t.adminRequests.statusDeclined,
+	direct: (t) => t.adminRequests.statusDirect,
+	approved: (t) => t.adminRequests.statusApproved,
+};
+
+/**
+ * The plan's billing cycle, as a word. Stored on the plan record as an enum, so
+ * an unrecognised cycle falls through to the raw value rather than blanking the
+ * one line that tells the admin what price they are anchoring against.
+ */
+const billingCycleLabels: Record<string, (t: PortalTranslations) => string> = {
+	weekly: (t) => t.subscription.billedWeekly,
+	monthly: (t) => t.subscription.billedMonthly,
+	annually: (t) => t.subscription.billedAnnually,
+};
+
+function billingCycleLabel(cycle: string, t: PortalTranslations): string {
+	return billingCycleLabels[cycle]?.(t) ?? cycle;
+}
 
 const statusBadgeColors: Record<AdminRequestStatus, string> = {
 	pending:
@@ -132,9 +168,9 @@ const roleBadgeColors: Record<SubscriberType, string> = {
 	agency: "border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
 };
 
-const roleLabels: Record<SubscriberType, string> = {
-	outlet: "Outlet",
-	agency: "Agency",
+const roleLabels: Record<SubscriberType, (t: PortalTranslations) => string> = {
+	outlet: (t) => t.adminRequests.roleOutlet,
+	agency: (t) => t.adminRequests.roleAgency,
 };
 
 /** The subscriber's current tier — the "From plan" side of the request. */
@@ -153,6 +189,10 @@ function planForRequest(
  * Both work the same way — quoted, re-quoted, dropped — so both are labelled by
  * the same rules below. They differ in one respect only: the outlet's POS add-on
  * is billed BESIDE the plan, while the agency's Custom IS the plan.
+ *
+ * Both names stay English in every locale: they are the add-on's and the tier's
+ * names on the plan record, and this string is COMPARED against `plan.name`
+ * below. Translating it would make `current?.name === arrangement` never match.
  */
 function negotiatedArrangement(request: AdminRequest): string | null {
 	if (request.type === "pos_integration_quote") return "Integrate with POS";
@@ -214,10 +254,11 @@ function fromPlanLabel(
  */
 function toPlanLabel(
 	request: AdminRequest,
-	planById?: Map<string, Subscription>,
+	planById: Map<string, Subscription>,
+	t: PortalTranslations,
 ): string {
 	const requested = request.requestedPlanId
-		? planById?.get(request.requestedPlanId)
+		? planById.get(request.requestedPlanId)
 		: undefined;
 	const arrangement = negotiatedArrangement(request);
 	if (arrangement) {
@@ -225,18 +266,21 @@ function toPlanLabel(
 		// cancellation of its add-on; for an agency it is a RESET back to the rate
 		// card, because an agency's tier follows its PV volume rather than a choice.
 		if (isNegotiatedExit(request, requested)) {
+			// The plan NAME stays English; only the verb around it is translated.
 			return request.subscriberType === "agency"
-				? `Reset · ${requested?.name}`
-				: `Cancel · ${requested?.name} only`;
+				? fill(t.adminRequests.toPlanReset, { plan: requested?.name ?? "" })
+				: fill(t.adminRequests.toPlanCancelOnly, {
+						plan: requested?.name ?? "",
+					});
 		}
 		return arrangement;
 	}
 	if (requested && requested.kind !== "addon") {
 		// Older resets were filed as ordinary plan changes, before the reset had a
 		// type of its own. Read them the same way so history stays legible.
-		const from = planForRequest(request, planById ?? new Map());
+		const from = planForRequest(request, planById);
 		return request.subscriberType === "agency" && from?.name === "Custom"
-			? `Reset · ${requested.name}`
+			? fill(t.adminRequests.toPlanReset, { plan: requested.name })
 			: requested.name;
 	}
 	return "—";
@@ -266,6 +310,7 @@ function canEditQuote(request: AdminRequest): boolean {
 }
 
 function RequestsPage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -330,12 +375,12 @@ function RequestsPage() {
 		mutationFn: (id: string) => markRequestContacted(id, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || "Marked as contacted");
+			toast.success(response.message || t.adminRequests.toastMarkedContacted);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to mark as contacted")?.message ??
-					"Failed to mark as contacted",
+				toMutationError(error, t.adminRequests.toastMarkContactedFailed)
+					?.message ?? t.adminRequests.toastMarkContactedFailed,
 			);
 		},
 	});
@@ -350,12 +395,12 @@ function RequestsPage() {
 		}) => resolveRequest(id, quotedAmount, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || "Request resolved");
+			toast.success(response.message || t.adminRequests.toastResolved);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to resolve request")?.message ??
-					"Failed to resolve request",
+				toMutationError(error, t.adminRequests.toastResolveFailed)?.message ??
+					t.adminRequests.toastResolveFailed,
 			);
 		},
 	});
@@ -371,12 +416,12 @@ function RequestsPage() {
 		mutationFn: (id: string) => declineRequest(id, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || "Request cancelled");
+			toast.success(response.message || t.adminRequests.toastCancelled);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to cancel request")?.message ??
-					"Failed to cancel request",
+				toMutationError(error, t.adminRequests.toastCancelFailed)?.message ??
+					t.adminRequests.toastCancelFailed,
 			);
 		},
 	});
@@ -395,12 +440,12 @@ function RequestsPage() {
 		}) => updateAdminRequest(id, { remarks, quotedAmount }, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || "Request updated");
+			toast.success(response.message || t.adminRequests.toastUpdated);
 		},
 		onError: (error) => {
 			toast.error(
-				toMutationError(error, "Failed to update request")?.message ??
-					"Failed to update request",
+				toMutationError(error, t.adminRequests.toastUpdateFailed)?.message ??
+					t.adminRequests.toastUpdateFailed,
 			);
 		},
 	});
@@ -418,19 +463,19 @@ function RequestsPage() {
 	const summaryCards = [
 		{
 			key: "outlet",
-			label: "Outlet quotes",
+			label: t.adminRequests.summaryOutletQuotes,
 			total: summary?.byRole.outlet.total ?? 0,
 			count: summary?.byRole.outlet.count ?? 0,
 		},
 		{
 			key: "agency",
-			label: "Agency quotes",
+			label: t.adminRequests.summaryAgencyQuotes,
 			total: summary?.byRole.agency.total ?? 0,
 			count: summary?.byRole.agency.count ?? 0,
 		},
 		{
 			key: "total",
-			label: "Total negotiated",
+			label: t.adminRequests.summaryTotalNegotiated,
 			total: summary?.totals.total ?? 0,
 			count: summary?.totals.count ?? 0,
 		},
@@ -440,8 +485,8 @@ function RequestsPage() {
 		<PageShell>
 			<PageHeader
 				icon={Handshake}
-				title="Plan Request"
-				description="Two request kinds land here: outlets asking for an Integrate-with-POS quote, and agencies renegotiating the Custom (151+ PV) tier. Negotiate or change the estimate before Resolve — once resolved the price is final."
+				title={t.admin.navPlanRequest}
+				description={t.adminRequests.pageDescription}
 			/>
 
 			<div className="grid gap-4 sm:grid-cols-3">
@@ -454,7 +499,9 @@ function RequestsPage() {
 							</CardTitle>
 						</CardHeader>
 						<CardContent className="text-sm text-muted-foreground">
-							{formatNumber(card.count)} resolved with a price
+							{fill(t.adminRequests.summaryResolvedWithPrice, {
+								n: formatNumber(card.count),
+							})}
 						</CardContent>
 					</Card>
 				))}
@@ -465,15 +512,12 @@ function RequestsPage() {
 					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
-								Requests
+								{t.adminRequests.cardTitle}
 								{requestsQuery.isFetching && !showLoading && (
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
 							</CardTitle>
-							<CardDescription>
-								Click a row to open the editor — who asked, for which plan, and
-								the price you settled on
-							</CardDescription>
+							<CardDescription>{t.adminRequests.cardHint}</CardDescription>
 						</div>
 
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
@@ -491,9 +535,9 @@ function RequestsPage() {
 								<Input
 									value={searchInput}
 									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder="Search outlet or agency..."
+									placeholder={t.adminRequests.searchPlaceholder}
 									className="pl-8"
-									aria-label="Search outlet or agency"
+									aria-label={t.adminRequests.searchAria}
 								/>
 							</div>
 
@@ -506,15 +550,22 @@ function RequestsPage() {
 							>
 								<SelectTrigger
 									className="sm:w-36"
-									aria-label="Filter by status"
+									aria-label={t.admin.filterByStatus}
 								>
-									<SelectValue placeholder="All Status" />
+									<SelectValue placeholder={t.admin.allStatus} />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">All Status</SelectItem>
-									<SelectItem value="pending">Pending</SelectItem>
-									<SelectItem value="contacted">Contacted</SelectItem>
-									<SelectItem value="resolved">Resolved</SelectItem>
+									{/* Values are the stored status; only the labels move. */}
+									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+									<SelectItem value="pending">
+										{t.admin.statusPending}
+									</SelectItem>
+									<SelectItem value="contacted">
+										{t.adminRequests.statusContacted}
+									</SelectItem>
+									<SelectItem value="resolved">
+										{t.adminRequests.statusResolved}
+									</SelectItem>
 								</SelectContent>
 							</Select>
 
@@ -524,8 +575,8 @@ function RequestsPage() {
 									setRequestedDates(dates);
 									setPage(1);
 								}}
-								ariaLabel="Filter by requested date"
-								emptyLabel="Requested date"
+								ariaLabel={t.adminRequests.filterByRequestedDate}
+								emptyLabel={t.adminRequests.requestedDate}
 							/>
 						</div>
 					</div>
@@ -536,15 +587,23 @@ function RequestsPage() {
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Who</TableHead>
-									<TableHead className="w-[100px]">Role</TableHead>
-									<TableHead>Type</TableHead>
-									<TableHead className="w-[220px]">Remarks</TableHead>
-									<TableHead>From plan</TableHead>
-									<TableHead>To plan</TableHead>
-									<TableHead>Quoted (RM)</TableHead>
-									<TableHead className="w-[110px]">Status</TableHead>
-									<TableHead className="w-[170px]">Requested</TableHead>
+									<TableHead>{t.adminRequests.colWho}</TableHead>
+									<TableHead className="w-[100px]">
+										{t.adminRequests.colRole}
+									</TableHead>
+									<TableHead>{t.admin.colType}</TableHead>
+									<TableHead className="w-[220px]">
+										{t.adminRequests.colRemarks}
+									</TableHead>
+									<TableHead>{t.adminRequests.colFromPlan}</TableHead>
+									<TableHead>{t.adminRequests.colToPlan}</TableHead>
+									<TableHead>{t.adminRequests.colQuoted}</TableHead>
+									<TableHead className="w-[110px]">
+										{t.admin.colStatus}
+									</TableHead>
+									<TableHead className="w-[170px]">
+										{t.adminRequests.colRequestedAt}
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -553,7 +612,7 @@ function RequestsPage() {
 										<TableCell colSpan={9} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
-												<span>Loading requests...</span>
+												<span>{t.adminRequests.loadingRequests}</span>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -563,7 +622,7 @@ function RequestsPage() {
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
-													Failed to load requests
+													{t.adminRequests.failedToLoadRequests}
 												</p>
 												<p className="text-sm text-muted-foreground">
 													{getErrorMessage(requestsQuery.error)}
@@ -574,7 +633,7 @@ function RequestsPage() {
 													onClick={() => requestsQuery.refetch()}
 												>
 													<RefreshCw className="mr-2 h-4 w-4" />
-													Try Again
+													{t.admin.tryAgain}
 												</Button>
 											</div>
 										</TableCell>
@@ -584,7 +643,7 @@ function RequestsPage() {
 										<TableCell colSpan={9} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Handshake className="h-6 w-6" />
-												<span>No requests found</span>
+												<span>{t.adminRequests.noRequestsFound}</span>
 											</div>
 										</TableCell>
 									</TableRow>
@@ -592,7 +651,7 @@ function RequestsPage() {
 									records.map((request) => {
 										const plan = planForRequest(request, planById);
 										const fromPlan = fromPlanLabel(request, planById);
-										const toPlan = toPlanLabel(request, planById);
+										const toPlan = toPlanLabel(request, planById, t);
 										const negotiable = isPriceNegotiable(request);
 
 										return (
@@ -617,7 +676,7 @@ function RequestsPage() {
 															variant="outline"
 															className={`${roleBadgeColors[request.subscriberType]} w-fit`}
 														>
-															{roleLabels[request.subscriberType]}
+															{roleLabels[request.subscriberType](t)}
 														</Badge>
 													) : (
 														<span className="text-muted-foreground">—</span>
@@ -628,7 +687,7 @@ function RequestsPage() {
 														variant="outline"
 														className="w-fit text-muted-foreground"
 													>
-														{requestTypeLabels[request.type]}
+														{requestTypeLabels[request.type](t)}
 													</Badge>
 												</TableCell>
 												<TableCell className="max-w-[220px]">
@@ -649,7 +708,7 @@ function RequestsPage() {
 													{toPlan}
 													{negotiable && request.status !== "resolved" && (
 														<div className="text-sm text-muted-foreground">
-															Requested
+															{t.adminRequests.requestedPill}
 														</div>
 													)}
 												</TableCell>
@@ -661,7 +720,7 @@ function RequestsPage() {
 															</span>
 															{request.status !== "resolved" && (
 																<span className="text-sm text-muted-foreground">
-																	Estimate
+																	{t.adminRequests.estimatePill}
 																</span>
 															)}
 														</div>
@@ -672,14 +731,14 @@ function RequestsPage() {
 															<div className="flex flex-col leading-tight">
 																<span>RM {formatPrice(plan.price)}</span>
 																<span className="text-sm text-muted-foreground">
-																	From plan
+																	{t.adminRequests.colFromPlan}
 																</span>
 															</div>
 														) : (
 															<span className="text-base text-muted-foreground">
 																{request.status === "resolved"
 																	? "—"
-																	: "Set before resolve"}
+																	: t.adminRequests.setBeforeResolve}
 															</span>
 														)
 													) : (
@@ -689,9 +748,9 @@ function RequestsPage() {
 												<TableCell>
 													<Badge
 														variant="outline"
-														className={`${statusBadgeColors[request.status]} w-fit capitalize`}
+														className={`${statusBadgeColors[request.status]} w-fit`}
 													>
-														{request.status}
+														{requestStatusLabels[request.status](t)}
 													</Badge>
 												</TableCell>
 												<TableCell className="text-base text-muted-foreground">
@@ -708,24 +767,16 @@ function RequestsPage() {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 							<div>
-								Showing{" "}
-								<span className="font-medium">
-									{formatNumber((pagination.page - 1) * PAGE_SIZE + 1)}
-								</span>{" "}
-								-{" "}
-								<span className="font-medium">
-									{formatNumber(
+								{fill(t.adminRequests.showingRequests, {
+									from: formatNumber((pagination.page - 1) * PAGE_SIZE + 1),
+									to: formatNumber(
 										Math.min(
 											pagination.page * PAGE_SIZE,
 											pagination.totalCount,
 										),
-									)}
-								</span>{" "}
-								of{" "}
-								<span className="font-medium">
-									{formatNumber(pagination.totalCount)}
-								</span>{" "}
-								requests
+									),
+									total: formatNumber(pagination.totalCount),
+								})}
 							</div>
 							<div className="flex items-center gap-2">
 								<Button
@@ -734,10 +785,13 @@ function RequestsPage() {
 									disabled={!pagination.hasPrevPage || requestsQuery.isFetching}
 									onClick={() => setPage((value) => value - 1)}
 								>
-									Previous
+									{t.admin.previous}
 								</Button>
 								<span>
-									Page {pagination.page} of {pagination.totalPages}
+									{fill(t.admin.pageOf, {
+										page: pagination.page,
+										total: pagination.totalPages,
+									})}
 								</span>
 								<Button
 									variant="outline"
@@ -745,7 +799,7 @@ function RequestsPage() {
 									disabled={!pagination.hasNextPage || requestsQuery.isFetching}
 									onClick={() => setPage((value) => value + 1)}
 								>
-									Next
+									{t.admin.next}
 								</Button>
 							</div>
 						</div>
@@ -768,7 +822,7 @@ function RequestsPage() {
 							key={editRequest.id}
 							request={editRequest}
 							fromPlan={fromPlanLabel(editRequest, planById)}
-							toPlan={toPlanLabel(editRequest, planById)}
+							toPlan={toPlanLabel(editRequest, planById, t)}
 							plan={planForRequest(editRequest, planById)}
 							requestedPlan={
 								editRequest.requestedPlanId
@@ -827,6 +881,7 @@ function RequestEditForm({
 	onDecline,
 	onDone,
 }: RequestEditFormProps) {
+	const { t } = usePortalLocale();
 	const negotiable = isPriceNegotiable(request);
 	/**
 	 * A POS quote buys an ADD-ON, not a plan: resolving it leaves the venue on
@@ -864,7 +919,7 @@ function RequestEditForm({
 				: request.type === "pos_integration_quote" && plan
 					? `RM ${formatPrice(plan.price)}`
 					: negotiable
-						? "Set before resolve"
+						? t.adminRequests.setBeforeResolve
 						: "—";
 
 	/*
@@ -918,26 +973,32 @@ function RequestEditForm({
 		request.status === "declined"
 			? isExit
 				? isAddonRequest
-					? "Cancelled — the venue keeps the POS add-on at the price already agreed."
-					: "Cancelled — the agency stays on Custom at the price already agreed."
+					? t.adminRequests.noteDeclinedExitAddon
+					: t.adminRequests.noteDeclinedExitTier
 				: isAddonRequest
-					? "Cancelled — no add-on was started. The venue pays its plan only."
-					: "Cancelled — no price was agreed. The agency stays on the tier it is on."
+					? t.adminRequests.noteDeclinedJoinAddon
+					: t.adminRequests.noteDeclinedJoinTier
 			: isExit
 				? request.status === "resolved"
 					? isAddonRequest
-						? "Resolved — the POS add-on has ended. The venue pays its plan only."
-						: `Resolved — the Custom price has ended. The agency is on ${requestedPlan?.name ?? "its tier"} at the list price.`
+						? t.adminRequests.noteResolvedExitAddon
+						: fill(t.adminRequests.noteResolvedExitTier, {
+								plan: requestedPlan?.name ?? t.adminRequests.fallbackItsTier,
+							})
 					: isAddonRequest
-						? `Cancellation requested — waiting for you. The venue keeps ${requestedPlan?.name ?? "its plan"} and the add-on charge stands until you resolve this.`
-						: `Cancellation requested — waiting for you. The agency stays on Custom at the agreed price until you resolve this, then moves to ${requestedPlan?.name ?? "the tier it named"}.`
+						? fill(t.adminRequests.noteExitPendingAddon, {
+								plan: requestedPlan?.name ?? t.adminRequests.fallbackItsPlan,
+							})
+						: fill(t.adminRequests.noteExitPendingTier, {
+								plan: requestedPlan?.name ?? t.adminRequests.fallbackTierNamed,
+							})
 				: request.status === "resolved"
 					? isAddonRequest
-						? "Resolved — billed on top of the venue's plan, which is unchanged."
-						: "Resolved — this is the agency's tier price from now on."
+						? t.adminRequests.noteResolvedJoinAddon
+						: t.adminRequests.noteResolvedJoinTier
 					: isAddonRequest
-						? "Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change."
-						: "Set the price, then Resolve. It becomes the agency's tier price — Custom has no list price to fall back on.";
+						? t.adminRequests.notePendingJoinAddon
+						: t.adminRequests.notePendingJoinTier;
 
 	const remarksChanged = remarks.trim() !== (request.remarks ?? "").trim();
 	const quoteChanged =
@@ -961,7 +1022,7 @@ function RequestEditForm({
 		}
 		const parsed = Number(raw);
 		if (Number.isNaN(parsed) || parsed < 0) {
-			toast.error("Enter a valid non-negative amount");
+			toast.error(t.adminRequests.toastInvalidAmount);
 			throw new Error("invalid quote");
 		}
 		await onSaveQuote(request.id, parsed);
@@ -1011,14 +1072,14 @@ function RequestEditForm({
 		if (negotiable) {
 			if (rawQuote !== "") {
 				if (Number.isNaN(parsedQuote) || parsedQuote < 0) {
-					toast.error("Enter a valid non-negative amount");
+					toast.error(t.adminRequests.toastInvalidAmount);
 					return;
 				}
 				amount = parsedQuote;
 			} else if (isExit) {
 				amount = requestedPlan?.price ? Number(requestedPlan.price) : undefined;
 			} else if (request.type === "custom_renegotiation") {
-				toast.error("Set a Custom price before resolving");
+				toast.error(t.adminRequests.toastSetCustomPrice);
 				return;
 			} else if (plan && plan.name !== "Custom" && plan.price) {
 				amount = Number(plan.price);
@@ -1036,37 +1097,36 @@ function RequestEditForm({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<SheetHeader>
-				<SheetTitle>Edit request</SheetTitle>
-				<SheetDescription>
-					Annotate remarks, set the quote where negotiable, and move the request
-					forward.
-				</SheetDescription>
+				<SheetTitle>{t.adminRequests.editRequest}</SheetTitle>
+				<SheetDescription>{t.adminRequests.editRequestHint}</SheetDescription>
 			</SheetHeader>
 
 			<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
 				{/* Immutable record of the originating Outlet/Agency action. */}
 				<dl className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Who</dt>
+						<dt className="text-muted-foreground">{t.adminRequests.colWho}</dt>
 						<dd className="text-right font-medium">{request.subscriberName}</dd>
 					</div>
 					{request.contactName && (
 						<div className="flex items-center justify-between gap-2">
-							<dt className="text-muted-foreground">Contact</dt>
+							<dt className="text-muted-foreground">
+								{t.adminRequests.colContact}
+							</dt>
 							<dd className="text-right">{request.contactName}</dd>
 						</div>
 					)}
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Role</dt>
+						<dt className="text-muted-foreground">{t.adminRequests.colRole}</dt>
 						<dd className="text-right">
 							{request.subscriberType
-								? roleLabels[request.subscriberType]
+								? roleLabels[request.subscriberType](t)
 								: "—"}
 						</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Type</dt>
-						<dd className="text-right">{requestTypeLabels[request.type]}</dd>
+						<dt className="text-muted-foreground">{t.admin.colType}</dt>
+						<dd className="text-right">{requestTypeLabels[request.type](t)}</dd>
 					</div>
 					{/*
 						On an exit these two rows ARE the decision — what stops, and
@@ -1085,10 +1145,12 @@ function RequestEditForm({
 							className={isExit ? "text-red-500/90" : "text-muted-foreground"}
 						>
 							{isExit
-								? `${arrangementName} (ends)`
+								? fill(t.adminRequests.arrangementEnds, {
+										name: arrangementName ?? "",
+									})
 								: isAddonRequest
-									? "Plan (stays)"
-									: "From plan"}
+									? t.adminRequests.planStays
+									: t.adminRequests.colFromPlan}
 						</dt>
 						<dd
 							className={`text-right${isExit ? " font-semibold text-red-500" : ""}`}
@@ -1118,13 +1180,13 @@ function RequestEditForm({
 						>
 							{isExit
 								? isAddonRequest
-									? "Plan (continues)"
-									: "Tier (returns to)"
+									? t.adminRequests.planContinues
+									: t.adminRequests.tierReturnsTo
 								: isAddonRequest
-									? "Add-on"
+									? t.adminRequests.addOn
 									: isNegotiatedRequest
-										? "Tier"
-										: "To plan"}
+										? t.adminRequests.tier
+										: t.adminRequests.colToPlan}
 						</dt>
 						<dd
 							className={`text-right${
@@ -1135,7 +1197,9 @@ function RequestEditForm({
 						</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Requested</dt>
+						<dt className="text-muted-foreground">
+							{t.adminRequests.colRequestedAt}
+						</dt>
 						<dd className="text-right">{formatDate(request.createdAt)}</dd>
 					</div>
 				</dl>
@@ -1154,21 +1218,24 @@ function RequestEditForm({
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
 								{isExit
 									? isAddonRequest
-										? "Add-on · cancelling"
-										: "Negotiated tier · resetting to the rate card"
+										? t.adminRequests.addonCancelling
+										: t.adminRequests.tierResetting
 									: isAddonRequest
-										? "Add-on · billed on top"
-										: "Negotiated tier · replaces the tier price"}
+										? t.adminRequests.addonBilledOnTop
+										: t.adminRequests.tierReplacesPrice}
 							</p>
 							<p className="text-lg font-medium">{arrangementName}</p>
 							<p className="text-base text-muted-foreground">
-								{isExit ? "Charge stops on resolve" : estimateLabel}
+								{isExit ? t.adminRequests.chargeStopsOnResolve : estimateLabel}
 							</p>
 							{request.previousNegotiatedAmount && (
 								<p className="text-base text-muted-foreground">
-									Previous price RM{" "}
-									{formatPrice(request.previousNegotiatedAmount)}
-									{isExit ? " — ends" : " — negotiating again"}
+									{fill(
+										isExit
+											? t.adminRequests.previousPriceEnds
+											: t.adminRequests.previousPriceRenegotiating,
+										{ price: formatPrice(request.previousNegotiatedAmount) },
+									)}
 								</p>
 							)}
 						</div>
@@ -1179,13 +1246,13 @@ function RequestEditForm({
 						<div className="flex items-center gap-2">
 							<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 								<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-									Before · From plan
+									{t.adminRequests.beforeFromPlan}
 								</p>
 								<p className="text-lg font-medium">{fromPlan}</p>
 								<p className="text-base text-muted-foreground">
 									{plan
 										? plan.name === "Custom"
-											? "Negotiated"
+											? t.adminRequests.negotiated
 											: `RM ${formatPrice(plan.price)}`
 										: "—"}
 								</p>
@@ -1193,7 +1260,7 @@ function RequestEditForm({
 							<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
 							<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 								<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-									After · To plan
+									{t.adminRequests.afterToPlan}
 								</p>
 								<p className="text-lg font-medium">{toPlan}</p>
 								<p className="text-base text-muted-foreground">
@@ -1202,18 +1269,17 @@ function RequestEditForm({
 							</div>
 						</div>
 						<p className="text-base text-muted-foreground">
-							This request type carries no price — only outlet POS quotes and
-							agency Custom renegotiations are negotiable.
+							{t.adminRequests.noPriceHint}
 						</p>
 					</div>
 				)}
 
 				<div className="space-y-1.5">
-					<Label htmlFor="request-remarks">Remarks</Label>
+					<Label htmlFor="request-remarks">{t.adminRequests.colRemarks}</Label>
 					<Textarea
 						id="request-remarks"
 						rows={3}
-						placeholder="Add remarks…"
+						placeholder={t.adminRequests.addRemarks}
 						value={remarks}
 						onChange={(e) => setRemarks(e.target.value)}
 					/>
@@ -1243,11 +1309,11 @@ function RequestEditForm({
 							}
 						>
 							{quoteMissing && <AlertCircle className="size-4 shrink-0" />}
-							Quoted (RM)
+							{t.adminRequests.colQuoted}
 						</Label>
 						{quoteMissing && (
 							<span className="rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-500">
-								Needed to resolve
+								{t.adminRequests.neededToResolve}
 							</span>
 						)}
 					</div>
@@ -1288,16 +1354,18 @@ function RequestEditForm({
 										earlier three-line amber paragraph was the kind of
 										warning people learn to scroll past. */}
 									<p className="text-sm font-medium text-amber-500">
-										Resolve with this empty and the agency lands on a negotiated
-										tier costing nothing.
+										{t.adminRequests.quoteMissingWarn}
 									</p>
 									{/* An anchor to price AGAINST. Custom replaces the tier
 										price, so the tier it replaces is the one number the
 										admin would otherwise go hunting for. */}
 									{quoteAnchor && (
 										<p className="text-xs text-muted-foreground">
-											{quoteAnchor.name} is RM {formatPrice(quoteAnchor.price)}{" "}
-											{quoteAnchor.billingCycle} — Custom replaces it.
+											{fill(t.adminRequests.quoteAnchor, {
+												plan: quoteAnchor.name,
+												price: formatPrice(quoteAnchor.price),
+												cycle: billingCycleLabel(quoteAnchor.billingCycle, t),
+											})}
 										</p>
 									)}
 								</>
@@ -1311,18 +1379,21 @@ function RequestEditForm({
 									*/}
 									<p className="text-sm text-muted-foreground">
 										{isExit
-											? "No quote needed — the negotiated price ends on Resolve and the rate card takes over."
-											: "Estimate — negotiate or change it before Resolve."}
+											? t.adminRequests.noQuoteNeeded
+											: t.adminRequests.estimateHint}
 										{!isExit && request.type === "pos_integration_quote" && plan
-											? ` Leave empty to use the current plan price (RM ${formatPrice(plan.price)}) on Resolve.`
+											? ` ${fill(t.adminRequests.leaveEmptyUsesPlanPrice, {
+													price: formatPrice(plan.price),
+												})}`
 											: ""}
 									</p>
 									{quoteGiven && (
 										<p className="flex items-center gap-1.5 text-sm font-medium text-emerald-500">
 											<CheckCircle2 className="size-4 shrink-0" />
 											<span>
-												RM {formatPrice(parsedQuote)} becomes the agency's tier
-												price when you Resolve.
+												{fill(t.adminRequests.quoteBecomesTierPrice, {
+													price: formatPrice(parsedQuote),
+												})}
 											</span>
 										</p>
 									)}
@@ -1344,7 +1415,7 @@ function RequestEditForm({
 								}
 							/>
 							<p className="text-sm text-muted-foreground">
-								Resolved — the price is final.
+								{t.adminRequests.resolvedPriceFinal}
 							</p>
 						</>
 					) : request.quotedAmount ? (
@@ -1366,12 +1437,12 @@ function RequestEditForm({
 
 				<div className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
 					<div className="flex items-center justify-between gap-2 text-base">
-						<span className="text-muted-foreground">Status</span>
+						<span className="text-muted-foreground">{t.admin.colStatus}</span>
 						<Badge
 							variant="outline"
-							className={`${statusBadgeColors[request.status]} w-fit capitalize`}
+							className={`${statusBadgeColors[request.status]} w-fit`}
 						>
-							{request.status}
+							{requestStatusLabels[request.status](t)}
 						</Badge>
 					</div>
 					{request.status !== "resolved" && request.status !== "declined" && (
@@ -1385,7 +1456,7 @@ function RequestEditForm({
 									onClick={handleContacted}
 								>
 									<MailCheck className="mr-1 h-4 w-4" />
-									Mark contacted
+									{t.adminRequests.markContacted}
 								</Button>
 							)}
 							{/*
@@ -1406,7 +1477,7 @@ function RequestEditForm({
 									onClick={handleDecline}
 								>
 									<XCircle className="mr-1 h-4 w-4" />
-									Cancel request
+									{t.adminRequests.cancelRequest}
 								</Button>
 							)}
 							<Button
@@ -1416,7 +1487,7 @@ function RequestEditForm({
 								onClick={handleResolve}
 							>
 								<CheckCircle2 className="mr-1 h-4 w-4" />
-								Resolve
+								{t.adminRequests.resolve}
 							</Button>
 						</div>
 					)}
@@ -1426,7 +1497,7 @@ function RequestEditForm({
 			<SheetFooter className="flex-row justify-end gap-2">
 				<SheetClose asChild>
 					<Button type="button" variant="outline">
-						Cancel
+						{t.common.cancel}
 					</Button>
 				</SheetClose>
 				<Button
@@ -1435,7 +1506,7 @@ function RequestEditForm({
 					onClick={handleSave}
 				>
 					{isSaving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-					Save changes
+					{t.adminRequests.saveChanges}
 				</Button>
 			</SheetFooter>
 		</div>

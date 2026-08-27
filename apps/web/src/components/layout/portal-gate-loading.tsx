@@ -1,4 +1,8 @@
 import { BrandLogo } from "@/components/landing/BrandLogo";
+import {
+	PortalLocaleProvider,
+	usePortalLocale,
+} from "@/lib/portal-i18n/context";
 import { cn } from "@/lib/utils";
 
 type PortalGateLoadingProps = {
@@ -7,11 +11,33 @@ type PortalGateLoadingProps = {
 	className?: string;
 };
 
-/** Full-viewport brand splash while client portal auth is resolving. */
-export function PortalGateLoading({
+/**
+ * Full-viewport brand splash while client portal auth is resolving.
+ *
+ * It carries its OWN locale provider because of WHEN it renders: every one of
+ * its three call sites returns it INSTEAD of the shell that mounts
+ * `PortalLocaleProvider`, so an un-provided consumer here would fall back to
+ * English and pin the splash to English for a reader who already picked 中文.
+ * Nesting is harmless if a caller ever moves it inside a shell — both providers
+ * read the same stored locale.
+ *
+ * No `accountLocale`: the profile has not loaded yet at this point, which is
+ * the whole reason this screen exists. The browser's remembered pick is the
+ * only answer available, and it is the right one.
+ */
+export function PortalGateLoading(props: PortalGateLoadingProps) {
+	return (
+		<PortalLocaleProvider>
+			<PortalGateLoadingBody {...props} />
+		</PortalLocaleProvider>
+	);
+}
+
+function PortalGateLoadingBody({
 	variant = "admin",
 	className,
 }: PortalGateLoadingProps) {
+	const { t } = usePortalLocale();
 	const isPortal = variant === "portal";
 	return (
 		<output
@@ -23,7 +49,7 @@ export function PortalGateLoading({
 				className,
 			)}
 			aria-live="polite"
-			aria-label="Loading"
+			aria-label={t.webShell.loadingLabel}
 		>
 			{isPortal ? (
 				<div className="pointer-events-none absolute inset-0" aria-hidden>
@@ -54,7 +80,7 @@ export function PortalGateLoading({
 						isPortal ? "text-white/55" : "text-muted-foreground",
 					)}
 				>
-					Getting things ready…
+					{t.webShell.gettingReady}
 				</p>
 
 				<div

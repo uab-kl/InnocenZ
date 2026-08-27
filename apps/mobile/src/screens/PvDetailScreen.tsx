@@ -40,6 +40,7 @@ import {
   type PrReceiptSource,
 } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
+import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { useSignedPvs } from '../lib/signed-pv';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -57,11 +58,20 @@ import {
 
 type IncomeKey = 'wages' | 'drinks' | 'tips' | 'others';
 
-const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
-  { key: 'wages', label: 'Daily wages' },
-  { key: 'drinks', label: 'Drinks' },
-  { key: 'tips', label: 'Tips' },
-  { key: 'others', label: 'Others' },
+/**
+ * `key` is the DATA — a `GridBucket`, matched against `l.kind` and the cell
+ * lookups, so it stays English. `label` is what the PR reads, and it has to be
+ * a FUNCTION: this map is module scope, evaluated before any hook can run, so
+ * it cannot hold a resolved string from the active locale.
+ */
+const INCOME_ROWS: {
+  key: IncomeKey;
+  label: (t: AppTranslations) => string;
+}[] = [
+  { key: 'wages', label: (t) => t.pv.rowWages },
+  { key: 'drinks', label: (t) => t.shiftStatus.drinks },
+  { key: 'tips', label: (t) => t.shiftStatus.tips },
+  { key: 'others', label: (t) => t.pv.rowOthers },
 ];
 
 /**
@@ -70,10 +80,10 @@ const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
  * both screens render the SAME voucher, and a PR shown two different
  * breakdowns of one week has no way to tell which one is their payslip.
  */
-const GRID_ROWS: { key: GridBucket; label: string }[] = [
-  ...INCOME_ROWS,
-  { key: 'deductions', label: 'Deductions' },
-];
+const GRID_ROWS: {
+  key: GridBucket;
+  label: (t: AppTranslations) => string;
+}[] = [...INCOME_ROWS, { key: 'deductions', label: (t) => t.pv.rowDeductions }];
 
 type LinkedReceipt = {
   id: string;
@@ -89,6 +99,10 @@ type LinkedReceipt = {
    */
   receiptNo: string | null;
   item: string;
+  /**
+   * A DISCRIMINANT, not copy. It is derived from `l.kind` and compared, so both
+   * members stay English; `categoryLabel()` below is what the PR reads.
+   */
   category: 'Drinks' | 'Tips';
   qty: number;
   amount: number;
@@ -98,20 +112,32 @@ type LinkedReceipt = {
   matched: boolean;
 };
 
-const MONTH_SHORT = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
+/** Same resolver shape as the schedule panel's — module scope, so no hooks. */
+const MONTH_SHORT: ((t: AppTranslations) => string)[] = [
+  (t) => t.schedule.monShortJan,
+  (t) => t.schedule.monShortFeb,
+  (t) => t.schedule.monShortMar,
+  (t) => t.schedule.monShortApr,
+  (t) => t.schedule.monShortMay,
+  (t) => t.schedule.monShortJun,
+  (t) => t.schedule.monShortJul,
+  (t) => t.schedule.monShortAug,
+  (t) => t.schedule.monShortSep,
+  (t) => t.schedule.monShortOct,
+  (t) => t.schedule.monShortNov,
+  (t) => t.schedule.monShortDec,
 ];
+
+/**
+ * The label for a `LinkedReceipt.category`. The stored value stays English —
+ * translating the union would break both the type and the comparison.
+ */
+function categoryLabel(
+  category: LinkedReceipt['category'],
+  t: AppTranslations,
+): string {
+  return category === 'Drinks' ? t.shiftStatus.drinks : t.shiftStatus.tips;
+}
 
 /** '2026-07-21' → '21 Jul 2026' for the linked receipt rows. */
 /**
@@ -123,16 +149,24 @@ const MONTH_SHORT = [
  * from: that is the fact a PR needs when a line is queried, and it is the same
  * distinction the agency's verify panel acts on.
  */
-const SOURCE_LABEL: Record<PrReceiptSource, string> = {
-  scan: 'Scanned receipt',
-  manual: 'Self-logged',
-  checkin: 'Auto-sealed on check-out',
+//
+// The RECORD KEYS are the server's `PrReceiptSource` values and never change;
+// only the labels do, so they are resolvers rather than strings.
+const SOURCE_LABEL: Record<PrReceiptSource, (t: AppTranslations) => string> = {
+  scan: (t) => t.pv.sourceScan,
+  manual: (t) => t.pv.sourceManual,
+  checkin: (t) => t.pv.sourceCheckin,
 };
 
-function lineDateLabel(iso: string | null): string {
+function lineDateLabel(iso: string | null, t: AppTranslations): string {
   const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return '—';
-  return `${Number(m[3])} ${MONTH_SHORT[Number(m[2]) - 1]} ${m[1]}`;
+  // One template, not three glued pieces — Chinese writes the year first.
+  return formatMessage(t.pv.lineDate, {
+    d: Number(m[3]),
+    mon: MONTH_SHORT[Number(m[2]) - 1](t),
+    y: m[1],
+  });
 }
 
 function cellAmount(day: WeeklyDayPay, key: GridBucket): number {
@@ -150,6 +184,7 @@ function formatCell(value: number): string {
 }
 
 export function PvDetailScreen({ pvId }: { pvId: string }) {
+  const { t } = useLocale();
   const { goBack, setTab } = usePrNav();
   // Detail screens render outside the tab shell, so the back row must clear
   // the phone's own status bar or it becomes untouchable.
@@ -280,10 +315,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   );
   const liveOutlet =
     liveOutlets.length === 1
-      ? liveOutlets[0]!
+      ? // A real venue name — the outlet's own record, never translated.
+        liveOutlets[0]!
       : liveOutlets.length > 1
-        ? `(${liveOutlets.length})-outlet`
-        : 'Outlet';
+        ? formatMessage(t.shiftLib.multiOutlet, { n: liveOutlets.length })
+        : t.common.outlet;
   // The stored voucher number (0075) is what the paper document prints, so the
   // phone shows the same string. The week-derived form below is the pre-0075
   // fallback — it gave every PR's voucher for a week the same number.
@@ -326,7 +362,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         // This voucher's own net, not the week's sum across agencies.
         net: Number(liveVoucher?.net ?? lastWeek?.net) || 0,
         status: 'awaiting_pr',
-        statusLabel: 'Awaiting signature',
+        // A RENDERED label — `status` above is the field anything compares.
+        statusLabel: t.pv.awaitingSignature,
       };
   const grid = useMemo(
     () => buildWeekGridFromLines(weekForGrid),
@@ -388,7 +425,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         )
         .map((l) => ({
           id: l.id,
-          ref: SOURCE_LABEL[l.source],
+          ref: SOURCE_LABEL[l.source](t),
           receiptNo: l.receiptNo ?? null,
           item: l.item,
           category:
@@ -397,7 +434,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           amount: l.sales || l.commission,
           commission: l.commission,
           outlet: l.outlet ?? '—',
-          at: lineDateLabel(l.lineDate),
+          at: lineDateLabel(l.lineDate, t),
           // `pending` now carries the parent receipt's REAL review state
           // (migration 0074), falling back to the manual-self-log guess only for
           // a line with no receipt behind it. So this badge means "not waiting
@@ -406,7 +443,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           // receipt-backed.
           matched: !l.pending,
         })),
-    [weekForGrid],
+    // `t` is a dependency now: the row's origin label and its date are both
+    // rendered from the dictionary, so they must re-resolve on a language swap.
+    [weekForGrid, t],
   );
   // The signer IS the signed-in account, so this is derived, not typed.
   const sigName = me?.username?.trim() ?? '';
@@ -457,17 +496,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const confirmSign = async () => {
     if (sigName.trim().length < 2 || signBusy) return;
     if (!sigInk) {
-      Alert.alert(
-        'Draw your signature',
-        'Sign in the pad with your finger before confirming.',
-      );
+      Alert.alert(t.pv.drawSignatureTitle, t.pv.drawSignatureBody);
       return;
     }
     if (!backendPvId || !token) {
-      Alert.alert(
-        'No voucher to sign yet',
-        'This voucher is not on the server — go back, refresh Payment, and try again.',
-      );
+      Alert.alert(t.pv.noVoucherTitle, t.pv.noVoucherBody);
       return;
     }
     setSignBusy(true);
@@ -477,7 +510,13 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       // strictly after the commit, never before.
       await signMyVoucher(token, backendPvId, sigInk);
       signPv({
-        pv: { ...pv, net: netDisplay, status: 'signed', statusLabel: 'Signed' },
+        pv: {
+          ...pv,
+          net: netDisplay,
+          status: 'signed',
+          // Rendered only — `status: 'signed'` beside it is the compared value.
+          statusLabel: t.pv.signed,
+        },
         net: netDisplay,
         grid,
         sigName: sigName.trim(),
@@ -487,9 +526,15 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       setSignOpen(false);
       setTab('history');
     } catch (e: unknown) {
+      // The server's own refusal is shown RAW (backend English); only our
+      // fallback and the reassurance around it come from the dictionary — and
+      // they come as ONE template, because Chinese would not take the tail
+      // sentence in the same place.
       Alert.alert(
-        'Not signed',
-        `${e instanceof Error ? e.message : 'Could not reach the agency.'}\n\nNothing was saved — try again when you have signal.`,
+        t.pv.notSignedTitle,
+        formatMessage(t.pv.notSignedBody, {
+          reason: e instanceof Error ? e.message : t.pv.couldNotReachAgency,
+        }),
       );
     } finally {
       setSignBusy(false);
@@ -518,12 +563,19 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
 
   const anyDisputed = disputedKeys.size > 0;
 
+  /*
+   * The tap hint is ONE sentence in the dictionary, with `{red}` marking where
+   * the red-inked word sits — split here rather than stored as three
+   * fragments, so each language keeps its own word order around it.
+   */
+  const tapHintParts = t.pv.tapHint.split('{red}');
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
       <View style={styles.topRow}>
         <Pressable style={styles.back} onPress={goBack} hitSlop={10}>
           <ChevronLeft size={20} color={C.goldL} />
-          <Text style={styles.backText}>Payment</Text>
+          <Text style={styles.backText}>{t.nav.payment}</Text>
         </Pressable>
         <Pressable onPress={goBack} hitSlop={10}>
           <XIcon size={18} color={C.muted} />
@@ -557,10 +609,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             }
           >
             {anyDisputed
-              ? 'Dispute open'
+              ? t.pv.disputeOpen
               : isSealed
                 ? pv.statusLabel
-                : 'Pending your review'}
+                : t.pv.pendingYourReview}
           </Pill>
           {/*
            * WHO IS PAYING THIS. A PR on two rosters gets one voucher per agency for
@@ -578,8 +630,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           <View style={styles.banner}>
             <Text style={styles.bannerTitle}>
               {awaitingMySignature
-                ? 'Pending your review'
-                : 'Waiting for your agency'}
+                ? t.pv.pendingYourReview
+                : t.pv.waitingForAgency}
             </Text>
             {/*
              * Was hardcoded "Sign-by Sunday · Finance Head already signed". The
@@ -589,24 +641,19 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
              * the PR the money has been approved by someone who never saw it.
              */}
             <Text style={styles.bannerBody}>
-              {awaitingMySignature
-                ? 'Review each day, then sign to confirm this week’s earnings.'
-                : 'Your agency has not issued this voucher yet — you can review it, but there is nothing to sign until they send it.'}
+              {awaitingMySignature ? t.pv.reviewThenSign : t.pv.notIssuedYet}
             </Text>
           </View>
         )}
         {anyDisputed && (
           <View style={[styles.banner, styles.bannerDispute]}>
-            <Text style={styles.bannerTitle}>Dispute open</Text>
-            <Text style={styles.bannerBody}>
-              Your agency is reviewing the flagged amounts — see Payment for the
-              details.
-            </Text>
+            <Text style={styles.bannerTitle}>{t.pv.disputeOpen}</Text>
+            <Text style={styles.bannerBody}>{t.pv.disputeBannerBody}</Text>
           </View>
         )}
 
         <View style={styles.weekCard}>
-          <Text style={styles.sectionLabel}>WEEK SUMMARY</Text>
+          <Text style={styles.sectionLabel}>{t.pv.weekSummary}</Text>
           <Text style={styles.weekLabel}>{displayWeekLabel}</Text>
 
           <ScrollView
@@ -624,7 +671,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                   </View>
                 ))}
                 <View style={styles.gridCol}>
-                  <Text style={styles.gridDay}>TOT</Text>
+                  <Text style={styles.gridDay}>{t.pv.total}</Text>
                   <Text style={styles.gridDate}> </Text>
                 </View>
               </View>
@@ -649,7 +696,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                         isDeduction && styles.gridLabelDeduction,
                       ]}
                     >
-                      {row.label}
+                      {row.label(t)}
                     </Text>
                     {grid.map((d) => {
                       const amount = cellAmount(d, row.key);
@@ -709,7 +756,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
               })}
 
               <View style={styles.gridRow}>
-                <Text style={styles.gridLabel}>Status</Text>
+                <Text style={styles.gridLabel}>{t.checkin.status}</Text>
                 {grid.map((d) => {
                   const dayDisputed = INCOME_ROWS.some((r) =>
                     disputedKeys.has(`${d.dateIso}-${r.key}`),
@@ -726,16 +773,17 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                   // never "waiting on the agency" that charged it. Ahead of the
                   // dispute test because a fine is not disputable here; it is only
                   // reached when the day holds no earnings at all.
+                  // `d.status` is the DATA and stays English; only `label` is read.
                   const label =
                     d.status === 'empty'
                       ? '—'
                       : d.status === 'deducted'
-                        ? 'DEDUCTED'
+                        ? t.pv.dayDeducted
                         : dayDisputed
-                          ? 'DISPUTED'
+                          ? t.pv.dayDisputed
                           : d.status === 'pending'
-                            ? 'PENDING'
-                            : 'VERIFIED';
+                            ? t.pv.dayPending
+                            : t.pv.dayVerified;
                   return (
                     <View key={`st-${d.dateIso}`} style={styles.gridCol}>
                       <Text
@@ -753,8 +801,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                 })}
                 <View style={styles.gridCol}>
                   <Text style={styles.statusPill}>
-                    {grid.filter((d) => d.status === 'verified').length}{' '}
-                    verified
+                    {formatMessage(t.pv.verifiedCount, {
+                      n: grid.filter((d) => d.status === 'verified').length,
+                    })}
                   </Text>
                 </View>
               </View>
@@ -762,17 +811,19 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           </ScrollView>
 
           <Text style={styles.tapHint}>
-            Tap a drinks or tips amount to dispute it on the Payment page — a{' '}
-            <Text style={{ color: C.red }}>red</Text> amount already has an open
-            dispute.
+            {tapHintParts[0]}
+            <Text style={{ color: C.red }}>{t.pv.tapHintRed}</Text>
+            {tapHintParts[1]}
           </Text>
         </View>
 
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryK}>Net payable</Text>
+          <Text style={styles.summaryK}>{t.pv.netPayable}</Text>
           <Text style={styles.summaryV}>{formatRM(netDisplay)}</Text>
-          <Text style={[styles.summaryK, { marginTop: 10 }]}>Payee</Text>
-          <Text style={styles.summaryBody}>PR Personnel · {pv.outlet}</Text>
+          <Text style={[styles.summaryK, { marginTop: 10 }]}>{t.pv.payee}</Text>
+          <Text style={styles.summaryBody}>
+            {t.pv.prPersonnel} · {pv.outlet}
+          </Text>
         </View>
 
         {linkedReceipts.length > 0 && (
@@ -783,9 +834,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             {/* Not all of these are scans — a self-log and a check-out seal reach
               this list too, and the demo fallback is gone, so the heading can
               stop claiming a scan for every row. */}
-            <Text style={styles.collapseTitle}>DRINK &amp; TIP RECORDS</Text>
+            <Text style={styles.collapseTitle}>{t.pv.drinkTipRecords}</Text>
             <Text style={styles.collapseAction}>
-              {receiptsOpen ? 'Hide' : 'Details'}
+              {receiptsOpen ? t.pv.hide : t.pv.details}
             </Text>
           </Pressable>
         )}
@@ -805,9 +856,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                 </View>
                 <View style={styles.receiptRight}>
                   <Text style={styles.receiptMatched}>
-                    {r.matched ? 'Matched' : 'Pending'}
+                    {r.matched ? t.shiftStatus.matched : t.shiftStatus.pending}
                   </Text>
-                  <Text style={styles.receiptDetailsLink}>Details</Text>
+                  <Text style={styles.receiptDetailsLink}>{t.pv.details}</Text>
                 </View>
               </Pressable>
             ))}
@@ -815,24 +866,27 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         )}
 
         <View style={styles.sigCard}>
-          <Text style={styles.sectionLabel}>YOUR SIGNATURE</Text>
-          <Text style={styles.sigRole}>PR Personnel</Text>
+          <Text style={styles.sectionLabel}>{t.pv.yourSignature}</Text>
+          <Text style={styles.sigRole}>{t.pv.prPersonnel}</Text>
           {isSealed ? (
             <View style={styles.signedRow}>
               <Check size={16} color={C.green} />
+              {/* Two whole sentences, not one with a fragment spliced in — the
+                  name sits in a different place in Chinese. */}
               <Text style={styles.signedText}>
-                Signed{sigName ? ` · ${sigName}` : ''} — Dual-signed · transfer
-                processing
+                {sigName
+                  ? formatMessage(t.pv.signedWithName, { name: sigName })
+                  : t.pv.signedSealed}
               </Text>
             </View>
           ) : awaitingMySignature ? (
-            <Text style={styles.pendingSig}>Pending</Text>
+            // NOT t.shiftStatus.pending — that one is "waiting on the agency to
+            // review a receipt". This says the signature is the thing missing.
+            <Text style={styles.pendingSig}>{t.pv.signaturePending}</Text>
           ) : (
             // Names whose move it is. "Pending" alone read as "yours to do" beside a
             // Sign button that the server would have refused.
-            <Text style={styles.pendingSig}>
-              Not sent to you yet — waiting for your agency
-            </Text>
+            <Text style={styles.pendingSig}>{t.pv.notSentYet}</Text>
           )}
         </View>
 
@@ -842,7 +896,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             onPress={() => setSignOpen(true)}
           >
             <Pencil size={16} color="#241a08" />
-            <Text style={styles.primaryText}>Sign payment voucher</Text>
+            <Text style={styles.primaryText}>{t.pv.signVoucher}</Text>
           </Pressable>
         )}
 
@@ -850,16 +904,16 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           <View style={styles.paidBox}>
             <Shield size={16} color={C.green} />
             <Text style={styles.paidText}>
-              PAID · {formatRM(netDisplay)} in your bank
+              {formatMessage(t.pv.paidInBank, {
+                amount: formatRM(netDisplay),
+              })}
             </Text>
           </View>
         )}
 
         {isSealed && (
           <Pressable style={styles.soft} onPress={() => setTab('history')}>
-            <Text style={styles.softText}>
-              View in History · Payment history
-            </Text>
+            <Text style={styles.softText}>{t.pv.viewInHistory}</Text>
           </Pressable>
         )}
       </ScrollView>
@@ -933,15 +987,15 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.receiptSheetHead}>
               <Wallet size={18} color={C.goldL} />
-              <Text style={styles.sheetTitle}>Receipt details</Text>
+              <Text style={styles.sheetTitle}>{t.pv.receiptDetails}</Text>
             </View>
             {receiptDetail && (
               <>
-                <Text style={styles.detailK}>DATE &amp; TIME</Text>
+                <Text style={styles.detailK}>{t.pv.detailDateTime}</Text>
                 <Text style={styles.detailV}>{receiptDetail.at}</Text>
-                <Text style={styles.detailK}>OUTLET</Text>
+                <Text style={styles.detailK}>{t.pv.detailOutlet}</Text>
                 <Text style={styles.detailV}>{receiptDetail.outlet}</Text>
-                <Text style={styles.detailK}>RECEIPT</Text>
+                <Text style={styles.detailK}>{t.pv.detailReceipt}</Text>
                 <Text style={styles.detailV}>
                   {/* The number FIRST when there is one: it is what the agency
                       and the server both call this receipt, so it is the thing
@@ -954,13 +1008,17 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                     ? `${receiptDetail.receiptNo} · ${receiptDetail.ref}`
                     : receiptDetail.ref}
                 </Text>
-                <Text style={styles.detailK}>COMMISSION</Text>
+                <Text style={styles.detailK}>{t.pv.detailCommission}</Text>
                 <Text style={[styles.detailV, { color: C.accentL }]}>
                   {formatRM(receiptDetail.commission)}
                 </Text>
                 <View style={styles.detailFoot}>
                   <Text style={styles.detailFootL}>
-                    {receiptDetail.qty}× {receiptDetail.category}
+                    {/* `category` and 'Guest tip' are both DATA — the union is a
+                        discriminant and the item name is the server's own text;
+                        only the category's label is resolved for reading. */}
+                    {receiptDetail.qty}×{' '}
+                    {categoryLabel(receiptDetail.category, t)}
                     {receiptDetail.item !== 'Guest tip'
                       ? ` · ${receiptDetail.item}`
                       : ''}
@@ -973,8 +1031,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                   <Check size={14} color={C.green} />
                   <Text style={styles.matchedBannerText}>
                     {receiptDetail.matched
-                      ? 'Matched to this PV'
-                      : 'Pending agency verify'}
+                      ? t.pv.matchedToThisPv
+                      : t.pv.pendingAgencyVerify}
                   </Text>
                 </View>
               </>
@@ -983,7 +1041,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
               style={styles.sheetCancel}
               onPress={() => setReceiptDetail(null)}
             >
-              <Text style={styles.sheetCancelText}>Close</Text>
+              <Text style={styles.sheetCancelText}>{t.common.close}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -1004,11 +1062,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             ]}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.sheetTitle}>Sign payment voucher</Text>
-            <Text style={styles.sheetHint}>
-              Draw your signature with your finger — it is stored on the voucher
-              and printed on the PDF.
-            </Text>
+            <Text style={styles.sheetTitle}>{t.pv.signVoucher}</Text>
+            <Text style={styles.sheetHint}>{t.pv.signSheetHint}</Text>
             {/*
              * The name is the signed-in account's, not a field.
              *
@@ -1019,21 +1074,22 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
              * account that gave it. The app already knows who is signed in, so it
              * states that and signs as them.
              */}
-            <Text style={styles.fieldLabel}>Signing as</Text>
-            <Text style={styles.sigAsName}>{sigName || 'this account'}</Text>
-            <Text style={styles.fieldLabel}>Signature</Text>
+            <Text style={styles.fieldLabel}>{t.pv.signingAs}</Text>
+            {/* The account's own username when there is one — never translated. */}
+            <Text style={styles.sigAsName}>{sigName || t.pv.thisAccount}</Text>
+            <Text style={styles.fieldLabel}>{t.pv.signatureField}</Text>
             <SignaturePad onChange={setSigInk} />
             <Pressable
               style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
               onPress={confirmSign}
             >
-              <Text style={styles.primaryText}>Confirm signature</Text>
+              <Text style={styles.primaryText}>{t.pv.confirmSignature}</Text>
             </Pressable>
             <Pressable
               style={styles.sheetCancel}
               onPress={() => setSignOpen(false)}
             >
-              <Text style={styles.sheetCancelText}>Back</Text>
+              <Text style={styles.sheetCancelText}>{t.common.back}</Text>
             </Pressable>
           </Pressable>
         </Pressable>

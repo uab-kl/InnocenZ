@@ -39,6 +39,7 @@ import {
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
+import { iconForLabel } from "@agency-portal/lib/lucide-label-icons";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
@@ -75,6 +76,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 type ViewMode = "live" | "planning";
 
@@ -445,13 +447,22 @@ function AgencyRoster() {
 					<div className="iz-roster-head-badges">
 						{outletRequestCount > 0 && (
 							<IzPill variant="amber">
-								{outletRequestCount} outlet request
-								{outletRequestCount !== 1 ? "s" : ""}
+								{fill(
+									outletRequestCount === 1
+										? t.agencyPrs.outletRequestOne
+										: t.agencyPrs.outletRequestMany,
+									{ n: outletRequestCount },
+								)}
 							</IzPill>
 						)}
 						{swapCount > 0 && (
 							<IzPill variant="violet">
-								{swapCount} swap{swapCount > 1 ? "s" : ""}
+								{fill(
+									swapCount === 1
+										? t.agencyPrs.swapCountOne
+										: t.agencyPrs.swapCountMany,
+									{ n: swapCount },
+								)}
 							</IzPill>
 						)}
 					</div>
@@ -510,21 +521,42 @@ function AgencyRoster() {
 			<div className={`iz-roster-kpis${viewMode === "live" ? " cols-4" : ""}`}>
 				{viewMode === "live" ? (
 					<>
+						{/* `LabelWithIcon` with no `icon` resolves one from the rendered
+						    text, which is now translated — every KPI glyph would vanish
+						    outside English. Resolve from the ENGLISH label instead.
+						    `iconForLabel`, not `iconForNav`: a miss must stay iconless the
+						    way it is today, never degrade to a "?". */}
 						<div className="iz-roster-kpi">
 							<span className="n">{plannedCount}</span>
-							<LabelWithIcon label={t.roster.plannedPrs} className="l" />
+							<LabelWithIcon
+								label={t.roster.plannedPrs}
+								icon={iconForLabel("Planned PRs")}
+								className="l"
+							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n">{activeCount}</span>
-							<LabelWithIcon label={t.roster.activePrs} className="l" />
+							<LabelWithIcon
+								label={t.roster.activePrs}
+								icon={iconForLabel("Active PRs")}
+								className="l"
+							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n">{unavailableCount}</span>
-							<LabelWithIcon label={t.roster.unavailablePrs} className="l" />
+							<LabelWithIcon
+								label={t.roster.unavailablePrs}
+								icon={iconForLabel("Unavailable PRs")}
+								className="l"
+							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n gold">{formatRM(estPayoutLive)}</span>
-							<LabelWithIcon label={t.roster.estPayout} className="l" />
+							<LabelWithIcon
+								label={t.roster.estPayout}
+								icon={iconForLabel("Est payout")}
+								className="l"
+							/>
 						</div>
 					</>
 				) : (
@@ -533,12 +565,17 @@ function AgencyRoster() {
 							<span className="n">{weekScheduled.length}</span>
 							<LabelWithIcon
 								label={t.roster.prsRosteredThisWeek}
+								icon={iconForLabel("PRs rostered this week")}
 								className="l"
 							/>
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n gold">{formatRM(estLabour)}</span>
-							<LabelWithIcon label={t.roster.estLabourCost} className="l" />
+							<LabelWithIcon
+								label={t.roster.estLabourCost}
+								icon={iconForLabel("Est labour cost")}
+								className="l"
+							/>
 						</div>
 					</>
 				)}
@@ -550,14 +587,22 @@ function AgencyRoster() {
 						{t.roster.releasedEarlyReassign}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-1 leading-snug">
-						{earlyReleasedAvailable
-							.map(
-								(r) =>
-									`${r.prName} (from ${r.fromOutlet}${r.releasedAt ? ` @ ${r.releasedAt}` : ""})`,
-							)
-							.join(" · ")}
-						. Assign them to another outlet on the roster, or leave them sent
-						home.
+						{fill(t.agencyPrs.releasedEarlyAssignHint, {
+							names: earlyReleasedAvailable
+								.map((r) =>
+									fill(
+										r.releasedAt
+											? t.agencyPrs.releasedFromAt
+											: t.agencyPrs.releasedFrom,
+										{
+											name: r.prName,
+											outlet: r.fromOutlet,
+											time: r.releasedAt ?? "",
+										},
+									),
+								)
+								.join(" · "),
+						})}
 					</p>
 				</div>
 			)}
@@ -619,7 +664,7 @@ function AgencyRoster() {
 								// mutateAsync resolved = the server answered 201, so the
 								// assignment row is already committed — the pop-up never
 								// claims a save that didn't land.
-								toast("PR assigned — saved to the roster", "success");
+								toast(t.agencyPrs.prAssignedSaved, "success");
 								return created;
 							}}
 							todayIso={DEFAULT_ROSTER_DATE_ISO}
@@ -638,7 +683,10 @@ function AgencyRoster() {
 			{canAssign && pendingPrSwaps.length > 0 && (
 				<OutletSection
 					title={t.roster.prSwapRequests}
-					hint={`${pendingPrSwaps.length} pending`}
+					iconKey="PR swap requests"
+					hint={fill(t.agencyPrs.pendingCount, {
+						n: pendingPrSwaps.length,
+					})}
 					className="!mt-4"
 				>
 					<div className="grid gap-2 md:grid-cols-2">
@@ -661,14 +709,17 @@ function AgencyRoster() {
 								{swap.status === "pending_replacement" &&
 									swap.replacementPrName && (
 										<p className="iz-tiny mt-2 text-[var(--iz-amber)]">
-											Awaiting {swap.replacementPrName} to accept coverage offer
+											{fill(t.agencyPrs.awaitingCoverageAccept, {
+												name: swap.replacementPrName,
+											})}
 										</p>
 									)}
 								{swap.replacementDeclineReason && (
 									<p className="iz-tiny mt-1 text-[var(--iz-red)] line-clamp-2">
-										{swap.replacementPrName ?? t.roster.replacement} declined:
-										&ldquo;
-										{swap.replacementDeclineReason}&rdquo;
+										{fill(t.agencyPrs.replacementDeclined, {
+											name: swap.replacementPrName ?? t.roster.replacement,
+											reason: swap.replacementDeclineReason,
+										})}
 									</p>
 								)}
 								{swap.status === "pending_agency" && (
@@ -701,6 +752,7 @@ function AgencyRoster() {
 			{viewMode === "live" && (
 				<OutletSection
 					title={t.roster.shifts}
+					iconKey="Shifts"
 					hint={t.roster.shiftsHint}
 					className="!mt-4"
 				>
@@ -796,17 +848,16 @@ function AgencyRoster() {
 				{swapToApprove && (
 					<>
 						<IzCardTitle>{t.roster.assignReplacement}</IzCardTitle>
+						{/* One template, no <strong> fragments: the venue names sit in
+						    different places in Chinese word order. */}
 						<p className="iz-tiny iz-muted mb-3">
-							{swapToApprove.requestingPrName} wants to leave{" "}
-							<strong className="text-[var(--iz-txt)]">
-								{swapToApprove.outlet}
-							</strong>{" "}
-							for{" "}
-							<strong className="text-[var(--iz-txt)]">
-								{swapToApprove.targetOutlet}
-							</strong>{" "}
-							· {swapToApprove.targetDate} · {swapToApprove.targetShift}. Pick a
-							replacement for their current slot.
+							{fill(t.agencyPrs.swapWantsToLeave, {
+								name: swapToApprove.requestingPrName,
+								from: swapToApprove.outlet,
+								to: swapToApprove.targetOutlet ?? "",
+								date: swapToApprove.targetDate ?? "",
+								shift: swapToApprove.targetShift ?? "",
+							})}
 						</p>
 						<label
 							htmlFor="roster-replacement-pr"
@@ -909,7 +960,11 @@ function EditRosterModal({
 	});
 	// Once a swap target is picked the window that matters is the destination's,
 	// not the shift the PR is being moved off.
-	const selectedSwapTarget = swapTargets.find((t) => t.shiftId === swapShiftId);
+	// `target`, not `t`: the locale is `t` in this component, and a callback of
+	// that name shadows it.
+	const selectedSwapTarget = swapTargets.find(
+		(target) => target.shiftId === swapShiftId,
+	);
 	const releasedEarly = Boolean(slot.checkedOutAt);
 	// ── WHAT IS STILL CHANGEABLE ABOUT THIS SLOT ──────────────────────────────
 	// A shift that has already happened is a RECORD of a night worked, not a plan
@@ -995,7 +1050,7 @@ function EditRosterModal({
 						{slot.date}
 					</span>
 					<span className="iz-sheet-meta-pill">
-						Released early
+						{t.rosterGrid.releasedEarly}
 						{slot.checkedOutAt
 							? ` · ${formatAttendanceStamp(slot.checkedOutAt, slot.dateIso)}`
 							: ""}
@@ -1003,8 +1058,7 @@ function EditRosterModal({
 				</div>
 
 				<p className="iz-tiny iz-muted mt-1">
-					Pick an open shift today at another outlet. Hours already worked at{" "}
-					{slot.outlet} stay paid.
+					{fill(t.agencyPrs.pickOpenShiftHoursPaid, { outlet: slot.outlet })}
 				</p>
 
 				{availableShifts.length === 0 ? (
@@ -1026,14 +1080,18 @@ function EditRosterModal({
 							<option value="">{t.roster.selectOpenShift}</option>
 							{availableShifts.map((s) => (
 								<option key={s.id} value={s.id}>
-									{s.outlet} · {s.shift} · {s.openSlots} open · {s.event}
+									{s.outlet} · {s.shift} ·{" "}
+									{fill(t.rosterGrid.openCount, { n: s.openSlots })} · {s.event}
 								</option>
 							))}
 						</IzSelect>
 						{selectedReassign && (
 							<p className="iz-tiny iz-muted2 mt-2">
-								{selectedReassign.suppliedSlots}/{selectedReassign.demandSlots}{" "}
-								supplied · est. {formatRM(selectedReassign.payEstimate)}
+								{fill(t.agencyPrs.suppliedEstimate, {
+									supplied: selectedReassign.suppliedSlots,
+									demand: selectedReassign.demandSlots,
+									amount: formatRM(selectedReassign.payEstimate),
+								})}
 							</p>
 						)}
 					</div>
@@ -1111,7 +1169,7 @@ function EditRosterModal({
 							{t.roster.requestOutletSwap}
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
-							{prLabel} must approve before the outlet changes.
+							{fill(t.agencyPrs.mustApproveBeforeChange, { name: prLabel })}
 						</p>
 						<div className="mt-3">
 							<span className="iz-field-label">{t.roster.newShift}</span>
@@ -1145,19 +1203,24 @@ function EditRosterModal({
 								    this PR. A tier-blocked shift still shows a headcount like
 								    2/4, so without its own wording a disabled option with room
 								    left reads as a bug. */}
-								{swapTargets.map((t) => (
+								{/* `target`, not `t` — the locale lives in `t` and a map callback
+								    of that name would shadow it for the whole option body. */}
+								{swapTargets.map((target) => (
 									<option
-										key={t.shiftId}
-										value={t.shiftId}
-										disabled={t.isFull || t.tierBlocked}
+										key={target.shiftId}
+										value={target.shiftId}
+										disabled={target.isFull || target.tierBlocked}
 									>
-										{t.outletName}
-										{t.shiftWindow ? ` · ${t.shiftWindow}` : ""}
-										{t.isFull
-											? " — full"
-											: t.tierBlocked
-												? ` — no seat for this PR's tier (${t.staffedCount}/${t.quantity})`
-												: ` (${t.staffedCount}/${t.quantity})`}
+										{target.outletName}
+										{target.shiftWindow ? ` · ${target.shiftWindow}` : ""}{" "}
+										{target.isFull
+											? t.agencyPrs.swapTargetFull
+											: target.tierBlocked
+												? fill(t.agencyPrs.swapTargetTierBlocked, {
+														staffed: target.staffedCount,
+														quantity: target.quantity,
+													})
+												: `(${target.staffedCount}/${target.quantity})`}
 									</option>
 								))}
 							</IzSelect>
@@ -1174,8 +1237,10 @@ function EditRosterModal({
 										</div>
 									)}
 									<div className="iz-tiny iz-muted mt-0.5">
-										{selectedSwapTarget.staffedCount} of{" "}
-										{selectedSwapTarget.quantity} staffed
+										{fill(t.agencyPrs.staffedOf, {
+											staffed: selectedSwapTarget.staffedCount,
+											quantity: selectedSwapTarget.quantity,
+										})}
 									</div>
 								</div>
 							)}
@@ -1239,9 +1304,7 @@ function EditRosterModal({
 							{t.roster.removeAssignment}
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
-							Unassign {prLabel} from this shift. The assignment is deleted and
-							the slot reopens — use this to undo an assignment, not to cancel a
-							confirmed shift.
+							{fill(t.agencyPrs.unassignExplain, { name: prLabel })}
 						</p>
 						<button
 							type="button"
@@ -1277,10 +1340,12 @@ function EditRosterModal({
 			>
 				<IzCardTitle>{t.roster.removeThisAssignment}</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3">
-					{prLabel} at{" "}
-					<strong className="text-[var(--iz-txt)]">{slot.outlet}</strong> ·{" "}
-					{slot.date} · {slot.shift}. The assignment row is deleted and the slot
-					reopens. This cannot be undone.
+					{fill(t.agencyPrs.unassignConfirmBody, {
+						name: prLabel,
+						outlet: slot.outlet,
+						date: slot.date,
+						shift: slot.shift,
+					})}
 				</p>
 				<div className="flex gap-2">
 					<button

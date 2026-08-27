@@ -15,6 +15,7 @@ import React, {
 } from 'react';
 import { useSession } from './session';
 import { fetchMyShiftAssignments, type ShiftAssignmentRecord } from './api';
+import { useLocale } from '../i18n';
 
 export type AttendancePhase = 'idle' | 'booked' | 'on_duty' | 'complete';
 
@@ -142,6 +143,7 @@ type ActiveShiftState = {
 const ActiveShiftContext = createContext<ActiveShiftState | null>(null);
 
 export function ActiveShiftProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useLocale();
   const { token } = useSession();
   const [assignments, setAssignments] = useState<ShiftAssignmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,11 +161,11 @@ export function ActiveShiftProvider({ children }: { children: React.ReactNode })
       setAssignments(list);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load your shift');
+      setError(e instanceof Error ? e.message : t.shiftLib.loadShiftFailed);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     refresh();

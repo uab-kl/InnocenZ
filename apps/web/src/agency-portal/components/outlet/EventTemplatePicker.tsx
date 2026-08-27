@@ -19,6 +19,7 @@ import { useRef, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import {
 	createShiftTemplate,
 	fetchShiftTemplates,
@@ -181,6 +182,7 @@ function TemplateCard({
 	onPick: (template: ShiftTemplate) => void;
 	onEdit: (template: ShiftTemplate) => void;
 }) {
+	const { t } = usePortalLocale();
 	const cover = apiAssetUrl(template.coverImage);
 	return (
 		<div className="iz-event-card">
@@ -206,7 +208,7 @@ function TemplateCard({
 			<button
 				type="button"
 				className="iz-event-card__edit"
-				aria-label={`Edit ${template.name}`}
+				aria-label={fill(t.outletPanels.editNamed, { name: template.name })}
 				onClick={() => onEdit(template)}
 			>
 				<Pencil className="h-3 w-3" aria-hidden />
@@ -267,7 +269,11 @@ function TemplateEditorSheet({
 		},
 		onSuccess: onSaved,
 		onError: (err) =>
-			setError(err instanceof Error ? err.message : "Could not save"),
+			setError(
+				err instanceof Error
+					? err.message
+					: t.outletPanels.couldNotSaveTemplate,
+			),
 	});
 	const removeMut = useMutation({
 		mutationFn: () => {
@@ -276,7 +282,11 @@ function TemplateEditorSheet({
 		},
 		onSuccess: onSaved,
 		onError: (err) =>
-			setError(err instanceof Error ? err.message : "Could not delete"),
+			setError(
+				err instanceof Error
+					? err.message
+					: t.outletPanels.couldNotDeleteTemplate,
+			),
 	});
 
 	const preview = coverDataUrl ?? apiAssetUrl(template?.coverImage) ?? null;

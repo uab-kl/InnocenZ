@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	AgencyReceipt,
@@ -242,7 +243,11 @@ function ReceiptRow({
 							{formatPayeeLabel(receipt.prNickname, receipt.prName) ||
 								t.receipts.unknownPr}{" "}
 							· {receiptOutlet(receipt)}
-							{receipt.orderNo ? ` · order ${receipt.orderNo}` : ""}
+							{receipt.orderNo
+								? ` · ${fill(t.agencyReceipts.orderNoInline, {
+										no: receipt.orderNo,
+									})}`
+								: ""}
 						</p>
 						{/* THE SHIFT THE OUTLET POSTED — without it a stack of receipts from
 						    one venue is indistinguishable and the reviewer cannot tell which
@@ -257,19 +262,35 @@ function ReceiptRow({
 							</div>
 						)}
 						<p className="iz-tiny iz-muted2 mt-0.5">
-							Logged {formatLoggedAt(receipt.loggedAt)}
-							{receipt.receiptTime ? ` · printed ${receipt.receiptTime}` : ""} ·{" "}
+							{fill(t.agencyReceipts.loggedAt, {
+								when: formatLoggedAt(receipt.loggedAt),
+							})}
+							{receipt.receiptTime
+								? ` · ${fill(t.agencyReceipts.printedAt, {
+										time: receipt.receiptTime,
+									})}`
+								: ""}{" "}
+							·{" "}
 							{photos.length > 0
-								? `${photos.length} photo${photos.length === 1 ? "" : "s"}`
-								: "no photo"}
+								? fill(
+										photos.length === 1
+											? t.agencyReceipts.photoCountOne
+											: t.agencyReceipts.photoCountMany,
+										{ n: photos.length },
+									)
+								: t.agencyReceipts.noPhoto}
 						</p>
 					</div>
 					<div className="flex shrink-0 items-center gap-2 text-right">
 						<div>
 							<p className="iz-ledger text-sm font-bold">{formatRM(total)}</p>
 							<p className="iz-tiny iz-muted2">
-								{receipt.lines.length}{" "}
-								{receipt.lines.length === 1 ? "item" : "items"}
+								{fill(
+									receipt.lines.length === 1
+										? t.agencyReceipts.itemCountOne
+										: t.agencyReceipts.itemCountMany,
+									{ n: receipt.lines.length },
+								)}
 							</p>
 						</div>
 						<ChevronDown
@@ -291,8 +312,10 @@ function ReceiptRow({
 						<div className="mb-2 rounded-lg border border-[rgba(192,85,79,.4)] bg-[rgba(192,85,79,.08)] px-2 py-1.5">
 							<p className="iz-tiny font-bold text-[var(--iz-red,#c0554f)]">
 								{claims.length === 1
-									? "The PR is disputing this receipt"
-									: `The PR has ${claims.length} open claims on this receipt`}
+									? t.agencyReceipts.disputingOne
+									: fill(t.agencyReceipts.disputingMany, {
+											n: claims.length,
+										})}
 							</p>
 							{claims.map((claim) => (
 								<p key={claim.id} className="iz-tiny iz-muted2 mt-0.5">
@@ -302,9 +325,7 @@ function ReceiptRow({
 								</p>
 							))}
 							<p className="iz-tiny iz-muted2 mt-0.5">
-								Correct the figures here if the PR is right, then accept or
-								reject the claim under Disputes — an edit alone does not settle
-								it.
+								{t.agencyReceipts.correctThenSettleHint}
 							</p>
 						</div>
 					)}
@@ -313,7 +334,7 @@ function ReceiptRow({
 						// voucher, so printing RM 0.00 alone would read as a free receipt
 						// rather than as a record that never attached to any money.
 						<p className="iz-tiny text-[var(--iz-amber,#d9b97a)]">
-							No line items on this receipt — it adds nothing to the voucher.
+							{t.agencyReceipts.noLineItemsOnReceipt}
 						</p>
 					) : (
 						<div>
@@ -354,7 +375,14 @@ function ReceiptRow({
 						    size, still unreadable when the paper was shot at an angle —
 						    the shared one zooms to 6x and pans, which is what checking a
 						    printed total against a line actually needs. */}
-						<ProofPhotos photos={photos} label={`${receipt.receiptNo} scan`} />
+						{/* The label lands INSIDE the shared viewer's own copy, so it has
+						    to arrive already translated. */}
+						<ProofPhotos
+							photos={photos}
+							label={fill(t.agencyReceipts.receiptScanLabel, {
+								receiptNo: receipt.receiptNo,
+							})}
+						/>
 					</div>
 
 					{receipt.status !== "pending" && (
@@ -365,7 +393,7 @@ function ReceiptRow({
 							{" · "}
 							{receipt.reviewedAt
 								? new Date(receipt.reviewedAt).toLocaleDateString("en-GB")
-								: "before this review existed"}
+								: t.agencyReceipts.beforeThisReviewExisted}
 						</p>
 					)}
 
@@ -378,7 +406,7 @@ function ReceiptRow({
 									disabled={busy}
 									onClick={() => onReview("approved")}
 								>
-									<Check className="mr-1 h-3 w-3" /> Approve
+									<Check className="mr-1 h-3 w-3" /> {t.common.approve}
 								</button>
 							) : (
 								<button
@@ -387,7 +415,8 @@ function ReceiptRow({
 									disabled={busy}
 									onClick={() => onReview("pending")}
 								>
-									<RotateCcw className="mr-1 h-3 w-3" /> Withdraw approval
+									<RotateCcw className="mr-1 h-3 w-3" />{" "}
+									{t.agencyReceipts.withdrawApproval}
 								</button>
 							))}
 						{onOpenPv && (
@@ -396,7 +425,7 @@ function ReceiptRow({
 								className="iz-btn iz-btn-soft !h-7 !px-2.5 !text-[11px]"
 								onClick={() => onOpenPv(receipt.voucherId)}
 							>
-								<FileText className="mr-1 h-3 w-3" /> Open PV
+								<FileText className="mr-1 h-3 w-3" /> {t.agencyReceipts.openPv}
 							</button>
 						)}
 					</div>
@@ -415,15 +444,14 @@ function ReceiptRow({
 								aria-expanded={editing}
 							>
 								<Pencil className="mr-1 h-3 w-3" />{" "}
-								{editing ? t.receipts.closeEditor : "Edit"}
+								{editing ? t.receipts.closeEditor : t.common.edit}
 							</button>
 						</div>
 					)}
 					{/* An absent button explains nothing — say which rule removed it. */}
 					{canReview && signedOff && (
 						<p className="iz-tiny iz-muted2 mt-1.5">
-							The PR has signed this voucher — its figures can no longer be
-							corrected.
+							{t.agencyReceipts.prSignedNoCorrections}
 						</p>
 					)}
 
@@ -632,9 +660,12 @@ export function AgencyReceiptsPanel({
 		try {
 			await reviewReceipt({ receiptId: receipt.id, status: next });
 			toast(
-				next === "approved"
-					? `${receipt.receiptNo} approved`
-					: `${receipt.receiptNo} back to pending`,
+				fill(
+					next === "approved"
+						? t.agencyReceipts.toastApproved
+						: t.agencyReceipts.toastBackToPending,
+					{ receiptNo: receipt.receiptNo },
+				),
 				"success",
 			);
 		} catch {
@@ -659,7 +690,7 @@ export function AgencyReceiptsPanel({
 			{error && (
 				<IzCard flat className="border-[rgba(192,85,79,.4)]">
 					<p className="iz-tiny text-[var(--iz-red,#c0554f)]">
-						Could not load receipts. Check the backend is running, then reload.
+						{t.agencyReceipts.couldNotLoadReceipts}
 					</p>
 				</IzCard>
 			)}
@@ -698,19 +729,24 @@ export function AgencyReceiptsPanel({
 							className="mt-2 border-[rgba(244,183,64,.4)] bg-[rgba(244,183,64,.08)]"
 						>
 							<p className="iz-sm font-bold text-[var(--iz-amber)]">
-								{pendingAll} receipt
-								{pendingAll === 1 ? "" : "s"} awaiting your approval
+								{fill(
+									pendingAll === 1
+										? t.agencyReceipts.awaitingApprovalOne
+										: t.agencyReceipts.awaitingApprovalMany,
+									{ n: pendingAll },
+								)}
 								{/* Says out loud why this number can exceed the "Waiting on
 								    you" chip: the chip files a disputed receipt under
 								    Disputed, the sweep below still approves it. Without the
 								    clause the two numbers look like a bug. */}
 								{pendingAll > statusCounts.pending
-									? ` · ${pendingAll - statusCounts.pending} of them disputed`
+									? ` · ${fill(t.agencyReceipts.ofThemDisputed, {
+											n: pendingAll - statusCounts.pending,
+										})}`
 									: ""}
 							</p>
 							<p className="iz-tiny iz-muted2 mt-0.5">
-								A voucher cannot be sent while one of its receipts is pending —
-								and the PR cannot dispute the money behind it until you decide.
+								{t.agencyReceipts.voucherBlockedHint}
 							</p>
 							{/* The owner's one click. The endpoint approves only receipts
 							    still pending on THIS week and skips anything the PR has
@@ -835,7 +871,7 @@ export function AgencyReceiptsPanel({
 									className="iz-tiny text-left text-[var(--iz-gold-l)] sm:col-span-3"
 									onClick={clearFilters}
 								>
-									Clear filters
+									{t.payroll.clearFilters}
 								</button>
 							)}
 						</div>
@@ -860,8 +896,13 @@ export function AgencyReceiptsPanel({
 											{formatDay(day)}
 										</p>
 										<p className="iz-tiny iz-muted2">
-											{rows.length} receipt{rows.length === 1 ? "" : "s"} ·{" "}
-											{formatRM(total)}
+											{fill(
+												rows.length === 1
+													? t.agencyReceipts.receiptCountOne
+													: t.agencyReceipts.receiptCountMany,
+												{ n: rows.length },
+											)}{" "}
+											· {formatRM(total)}
 										</p>
 									</div>
 									{/*
@@ -908,16 +949,18 @@ export function AgencyReceiptsPanel({
 
 					{offWeekCount > 0 && (
 						<p className="iz-tiny iz-muted2 mt-3">
-							{offWeekCount} more receipt{offWeekCount === 1 ? "" : "s"} sit
-							{offWeekCount === 1 ? "s" : ""} in other payroll weeks — switch
-							the week tab above to review them.
+							{fill(
+								offWeekCount === 1
+									? t.agencyReceipts.offWeekOne
+									: t.agencyReceipts.offWeekMany,
+								{ n: offWeekCount },
+							)}
 						</p>
 					)}
 
 					{!canReview && weekReceipts.length > 0 && (
 						<p className="iz-tiny iz-muted2 mt-2">
-							Your agency role can see these receipts but not approve them —
-							owner and finance review receipts.
+							{t.agencyReceipts.roleCannotApprove}
 						</p>
 					)}
 				</>

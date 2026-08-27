@@ -43,6 +43,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import {
 	addonCopy,
@@ -297,7 +298,7 @@ function PosIntegrationAddonCard({
 }
 
 function OutletSubscriptionPage() {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const outletSubRole = useStore((s) => s.outletSubRole);
 	const outletOwner = useStore((s) => s.outletOwner);
 	const shifts = useStore((s) => s.shifts);
@@ -358,8 +359,13 @@ function OutletSubscriptionPage() {
 			detail: inv.detail,
 			dateLabel: inv.issueDate,
 			amountRm: inv.amount,
+			// The stored status is compared; only the badge WORD is looked up. The
+			// union is exactly SETTLED | PENDING, so the else-branch is Unpaid
+			// rather than the raw enum it used to print.
 			statusLabel:
-				inv.status === "SETTLED" ? t.outletSubscription.paid : inv.status,
+				inv.status === "SETTLED"
+					? t.outletSubscription.paid
+					: t.subscription.statusUnpaid,
 			tone: inv.status === "SETTLED" ? "green" : "amber",
 		}));
 	}, [backend.backed, backend.billingHistory, demoBilling, t]);
@@ -394,10 +400,16 @@ function OutletSubscriptionPage() {
 	 * real session shows a real date; when the ledger has nothing active the
 	 * label is omitted entirely rather than printing the old hardcoded
 	 * "15 Jul 2026", which was invented and already in the past.
+	 *
+	 * The tag comes from the portal's language, not a hardcoded `en-GB`: this is
+	 * a rendered label with nothing downstream parsing it. English still gets
+	 * `en-GB`, so day-before-month ordering is unchanged. `RENEWAL_DATE`, the
+	 * demo fallback, is a pre-formatted English constant and is left alone —
+	 * localizing it would mean re-parsing a string that has no Date behind it.
 	 */
 	const renewalLabel = backend.backed
 		? backend.nextRenewalDate
-			? backend.nextRenewalDate.toLocaleDateString("en-GB", {
+			? backend.nextRenewalDate.toLocaleDateString(dateLocaleTag(locale), {
 					day: "numeric",
 					month: "short",
 					year: "numeric",
@@ -893,6 +905,7 @@ function OutletSubscriptionPage() {
 
 			<OutletSection
 				title={t.agencyMisc.paymentMethod}
+				iconKey="Payment method"
 				hint={
 					backend.backed
 						? backend.card

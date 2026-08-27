@@ -14,6 +14,7 @@ import React, {
   useState,
 } from 'react';
 import { useSession } from './session';
+import { useLocale } from '../i18n';
 import {
   addMyReceiptLine,
   deleteMyReceipt,
@@ -55,6 +56,13 @@ export function PrEarningsProvider({
 }: {
   children: React.ReactNode;
 }) {
+  /*
+   * The refusals below are THROWN, and the screens render `e.message` raw — so
+   * they reach the PR's eyes exactly as written here. `schedule.notSignedIn` is
+   * reused rather than duplicated: it is already the app's wording for "there is
+   * no session behind this action".
+   */
+  const { t } = useLocale();
   const { token } = useSession();
   const [current, setCurrent] = useState<PrCurrentWeek | null>(null);
   const [loading, setLoading] = useState(false);
@@ -79,41 +87,41 @@ export function PrEarningsProvider({
 
   const addLine = useCallback(
     async (input: PrReceiptLineInput) => {
-      if (!token) throw new Error('Not signed in');
+      if (!token) throw new Error(t.schedule.notSignedIn);
       const line = await addMyReceiptLine(token, input);
       await refresh();
       return line;
     },
-    [token, refresh],
+    [token, refresh, t],
   );
 
   const submitReceipt = useCallback(
     async (input: PrReceiptSubmitInput) => {
-      if (!token) throw new Error('Not signed in');
+      if (!token) throw new Error(t.schedule.notSignedIn);
       const receipt = await submitMyReceipt(token, input);
       await refresh();
       return receipt;
     },
-    [token, refresh],
+    [token, refresh, t],
   );
 
   const updateLine = useCallback(
     async (id: string, input: Partial<PrReceiptLineInput>) => {
-      if (!token) throw new Error('Not signed in');
+      if (!token) throw new Error(t.schedule.notSignedIn);
       const line = await updateMyReceiptLine(token, id, input);
       await refresh();
       return line;
     },
-    [token, refresh],
+    [token, refresh, t],
   );
 
   const deleteLine = useCallback(
     async (id: string) => {
-      if (!token) throw new Error('Not signed in');
+      if (!token) throw new Error(t.schedule.notSignedIn);
       await deleteMyReceiptLine(token, id);
       await refresh();
     },
-    [token, refresh],
+    [token, refresh, t],
   );
 
   /**
@@ -125,11 +133,11 @@ export function PrEarningsProvider({
    */
   const deleteReceipt = useCallback(
     async (receiptId: string) => {
-      if (!token) throw new Error('Not signed in');
+      if (!token) throw new Error(t.schedule.notSignedIn);
       await deleteMyReceipt(token, receiptId);
       await refresh();
     },
-    [token, refresh],
+    [token, refresh, t],
   );
 
   const lines = current?.lines ?? [];

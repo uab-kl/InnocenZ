@@ -5,8 +5,11 @@ import {
 	receiptEntryLoggedLabel,
 	receiptEntryMethod,
 } from "@agency-portal/lib/pr-demo";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
+	const { t } = usePortalLocale();
 	const drinkUnits = scan.items
 		.filter((i) => i.category === "drinks")
 		.reduce((s, i) => s + i.qty, 0);
@@ -17,16 +20,19 @@ export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
 			<div className="iz-scanbox iz-receipt-slip__capture">
 				<div className="font-sora w-full text-left text-[11px] leading-relaxed text-[var(--iz-txt)]">
 					<b className="text-[var(--iz-violet-l)]">
-						{manual ? "— MANUAL ENTRY —" : "— OCR EXTRACTED —"}
+						{manual
+							? t.prMedia.manualEntryBanner
+							: t.prMedia.ocrExtractedBanner}
 					</b>
 					<br />
-					Receipt ID: {scan.receiptRef}
+					{t.prMedia.receiptIdLabel} {scan.receiptRef}
 					<br />
-					Outlet: {scan.outlet}
+					{t.prMedia.outletLabel} {scan.outlet}
 					<br />
-					PR ID: {scan.prId ?? "—"} · {scan.prCode} ({scan.prName})
+					{t.prMedia.prIdLabel} {scan.prId ?? "—"} · {scan.prCode} (
+					{scan.prName})
 					<br />
-					{receiptEntryLoggedLabel(scan)}
+					{receiptEntryLoggedLabel(scan, t)}
 					<br />
 					<br />
 					{scan.items.map((item) => (
@@ -35,7 +41,9 @@ export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
 							<br />
 						</span>
 					))}
-					<b>Total logged: {formatRM(scan.totalLogged)}</b>
+					<b>
+						{t.prMedia.totalLoggedLabel} {formatRM(scan.totalLogged)}
+					</b>
 				</div>
 			</div>
 
@@ -44,24 +52,27 @@ export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
 				className="mt-3 border-[rgba(111,176,255,.25)] bg-[linear-gradient(180deg,rgba(111,176,255,.08),transparent)]"
 			>
 				<p className="iz-sm font-bold text-[var(--iz-blue)]">
-					Commission (PV calc)
+					{t.prMedia.commissionPvCalc}
 				</p>
 				<div className="iz-data-table-wrap mt-2">
 					<table className="iz-data-table">
 						<thead>
 							<tr>
-								<th>Rule</th>
-								<th>Calc</th>
+								<th>{t.prMedia.colRule}</th>
+								<th>{t.prMedia.colCalc}</th>
+								{/* Currency CODE, not a word — it stays RM in every locale. */}
 								<th className="text-right">RM</th>
 							</tr>
 						</thead>
 						<tbody>
 							{scan.drinkCommission > 0 && (
 								<tr>
-									<td>Drinks</td>
+									<td>{t.money.drinks}</td>
 									<td className="iz-muted">
-										{drinkUnits} units × RM
-										{RECEIPT_COMMISSION_RULES.drinkPerUnit}
+										{fill(t.prMedia.drinkUnitsCalc, {
+											n: drinkUnits,
+											rate: `RM${RECEIPT_COMMISSION_RULES.drinkPerUnit}`,
+										})}
 									</td>
 									<td className="text-right">
 										{formatRM(scan.drinkCommission)}
@@ -70,8 +81,8 @@ export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
 							)}
 							{scan.tipCommission > 0 && (
 								<tr>
-									<td>Tips</td>
-									<td className="iz-muted">100% of tip logged</td>
+									<td>{t.money.tips}</td>
+									<td className="iz-muted">{t.prMedia.tipRuleCalc}</td>
 									<td className="text-right">{formatRM(scan.tipCommission)}</td>
 								</tr>
 							)}
@@ -79,7 +90,7 @@ export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
 						<tfoot>
 							<tr>
 								<td colSpan={2} className="font-bold">
-									Total commission
+									{t.prMedia.totalCommission}
 								</td>
 								<td className="text-right font-bold">
 									{formatRM(scan.totalCommission)}

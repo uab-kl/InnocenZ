@@ -2,10 +2,11 @@ import {
 	addDaysToIso,
 	getPayrollWeekSundayIso,
 } from "@agency-portal/lib/demo-clock";
-import type {
-	HistRow,
-	PrPaymentVoucher,
-	PrPvRow,
+import {
+	type HistRow,
+	type PrPaymentVoucher,
+	type PrPvRow,
+	pvRowDateKeyToIso,
 } from "@agency-portal/lib/pr-demo";
 import {
 	buildWeeklyPaymentSummary,
@@ -20,28 +21,19 @@ const PV_STATUS_PRIORITY: Record<PrPaymentVoucher["status"], number> = {
 	PAID: 1,
 };
 
+/**
+ * A stored `PrPvRow.date` KEY ("18 Jul") back to an ISO date.
+ *
+ * This used to carry its own copy of the English month list — one of four, the
+ * others being the writer (`fmtDtable`) and two more parsers. A drift between
+ * any two of them resolved a date to the wrong month or to epoch with nothing
+ * raising an error, so the parse now lives once, in `pvRowDateKeyToIso`.
+ *
+ * Kept as a named wrapper rather than folded away because `agency-payroll.ts`
+ * and `history-demo-sync.ts` import this name.
+ */
 export function pvRowDateToIso(row: PrPvRow, year: number): string | null {
-	const m = row.date.trim().match(/^(\d{1,2})\s+([A-Za-z]+)/);
-	if (!m) return null;
-	const day = parseInt(m[1], 10);
-	const mon = m[2].slice(0, 3).toLowerCase();
-	const months = [
-		"jan",
-		"feb",
-		"mar",
-		"apr",
-		"may",
-		"jun",
-		"jul",
-		"aug",
-		"sep",
-		"oct",
-		"nov",
-		"dec",
-	];
-	const mi = months.findIndex((x) => x === mon);
-	if (mi < 0) return null;
-	return `${year}-${String(mi + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+	return pvRowDateKeyToIso(row, year);
 }
 
 /** Weekly PV covering a shift night (Sun–Sat payroll week). Prefers inbox/dispute over settled PVs. */
