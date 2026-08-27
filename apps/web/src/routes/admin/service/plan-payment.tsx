@@ -544,152 +544,158 @@ function PlanPaymentPage() {
 										return [
 											header,
 											...group.invoices.map((invoice: SubscriptionInvoice) => (
-										<TableRow
-											key={invoice.id}
-											className="cursor-pointer"
-											onClick={() => setDetailId(invoice.id)}
-										>
-											<TableCell className="text-base font-medium">
-												<span className="pl-6 text-muted-foreground">
-													{periodDay(invoice.periodStart)}
-												</span>
-											</TableCell>
-											<TableCell>
-												<Badge
-													variant="outline"
-													className={`${roleBadgeColors[invoice.subscriberType]} w-fit`}
+												<TableRow
+													key={invoice.id}
+													className="cursor-pointer"
+													onClick={() => setDetailId(invoice.id)}
 												>
-													{roleLabels[invoice.subscriberType](t)}
-												</Badge>
-											</TableCell>
-											<TableCell>
-												{invoice.planName}
-												<span className="block text-sm text-muted-foreground">
-													{invoice.billingCycle === "weekly"
-														? t.subscription.billedWeekly
-														: t.subscription.billedMonthly}
-												</span>
-											</TableCell>
-											<TableCell className="text-base whitespace-nowrap">
-												{periodDay(invoice.periodStart)} –{" "}
-												{periodDay(invoice.periodEnd)}
-											</TableCell>
-											<TableCell className="text-base whitespace-nowrap">
-												{formatPrice(Number(invoice.amount))}
-											</TableCell>
-											<TableCell>
-												<Badge
-													variant="outline"
-													className={`${statusBadgeColors[invoice.status]} w-fit`}
-												>
-													{statusLabels[invoice.status](t)}
-												</Badge>
-											</TableCell>
-											<TableCell className="text-base whitespace-nowrap text-muted-foreground">
-												{invoice.paidAt ? formatDate(invoice.paidAt) : "—"}
-											</TableCell>
-											{/*
-											 * The row opens the detail panel, so this cell stops the
-											 * click here — otherwise typing a bank reference or
-											 * pressing Mark paid would ALSO slide a panel over the
-											 * input being used.
-											 */}
-											<TableCell
-												className="text-right"
-												onClick={(e) => e.stopPropagation()}
-											>
-												{/*
-												 * Both directions, always — an admin who marks the wrong
-												 * period paid has to be able to take it back, and a
-												 * one-way button is how a wrong figure becomes permanent.
-												 */}
-												{referenceFor?.id === invoice.id ? (
-													<div className="flex flex-col items-end gap-1">
-														<Input
-															autoFocus
-															value={referenceFor.value}
-															maxLength={120}
-															placeholder={
-																t.adminService.paymentReferencePlaceholder
-															}
-															aria-label={t.adminService.paymentReference}
-															disabled={isSaving}
-															className="h-8 w-56 text-sm"
-															onChange={(e) =>
-																setReferenceFor({
-																	id: invoice.id,
-																	value: e.target.value,
-																})
-															}
-															onKeyDown={(e) => {
-																// The two buttons below are disabled while the
-																// settle is in flight; this key path was not, so
-																// a second Enter fired a second settle request.
-																if (e.key === "Enter" && !isSaving)
-																	statusMutation.mutate({
-																		id: invoice.id,
-																		status: "paid",
-																		reference:
-																			referenceFor.value.trim() || null,
-																	});
-																if (e.key === "Escape") setReferenceFor(null);
-															}}
-														/>
-														<span className="text-xs text-muted-foreground">
-															{t.adminService.paymentReferenceHint}
+													<TableCell className="text-base font-medium">
+														<span className="pl-6 text-muted-foreground">
+															{periodDay(invoice.periodStart)}
 														</span>
-														<div className="flex gap-2">
-															<Button
-																size="sm"
-																variant="outline"
-																disabled={isSaving}
-																onClick={() => setReferenceFor(null)}
-															>
-																{t.common.cancel}
-															</Button>
-															<Button
-																size="sm"
-																disabled={isSaving}
-																onClick={() =>
-																	statusMutation.mutate({
-																		id: invoice.id,
-																		status: "paid",
-																		reference:
-																			referenceFor.value.trim() || null,
-																	})
-																}
-															>
-																{t.adminService.confirmPayment}
-															</Button>
-														</div>
-													</div>
-												) : (
-													<Button
-														size="sm"
-														variant={
-															invoice.status === "paid" ? "outline" : "default"
-														}
-														disabled={isSaving}
-														onClick={() => {
-															// Taking a mark back is immediate; asserting a
-															// payment asks what paid it.
-															if (invoice.status === "paid") {
-																statusMutation.mutate({
-																	id: invoice.id,
-																	status: "unpaid",
-																});
-																return;
-															}
-															setReferenceFor({ id: invoice.id, value: "" });
-														}}
+													</TableCell>
+													<TableCell>
+														<Badge
+															variant="outline"
+															className={`${roleBadgeColors[invoice.subscriberType]} w-fit`}
+														>
+															{roleLabels[invoice.subscriberType](t)}
+														</Badge>
+													</TableCell>
+													<TableCell>
+														{invoice.planName}
+														<span className="block text-sm text-muted-foreground">
+															{invoice.billingCycle === "weekly"
+																? t.subscription.billedWeekly
+																: t.subscription.billedMonthly}
+														</span>
+													</TableCell>
+													<TableCell className="text-base whitespace-nowrap">
+														{periodDay(invoice.periodStart)} –{" "}
+														{periodDay(invoice.periodEnd)}
+													</TableCell>
+													<TableCell className="text-base whitespace-nowrap">
+														{formatPrice(Number(invoice.amount))}
+													</TableCell>
+													<TableCell>
+														<Badge
+															variant="outline"
+															className={`${statusBadgeColors[invoice.status]} w-fit`}
+														>
+															{statusLabels[invoice.status](t)}
+														</Badge>
+													</TableCell>
+													<TableCell className="text-base whitespace-nowrap text-muted-foreground">
+														{invoice.paidAt ? formatDate(invoice.paidAt) : "—"}
+													</TableCell>
+													{/*
+													 * The row opens the detail panel, so this cell stops the
+													 * click here — otherwise typing a bank reference or
+													 * pressing Mark paid would ALSO slide a panel over the
+													 * input being used.
+													 */}
+													<TableCell
+														className="text-right"
+														onClick={(e) => e.stopPropagation()}
 													>
-														{invoice.status === "paid"
-															? t.adminService.markUnpaid
-															: t.adminService.markPaid}
-													</Button>
-												)}
-											</TableCell>
-										</TableRow>
+														{/*
+														 * Both directions, always — an admin who marks the wrong
+														 * period paid has to be able to take it back, and a
+														 * one-way button is how a wrong figure becomes permanent.
+														 */}
+														{referenceFor?.id === invoice.id ? (
+															<div className="flex flex-col items-end gap-1">
+																<Input
+																	autoFocus
+																	value={referenceFor.value}
+																	maxLength={120}
+																	placeholder={
+																		t.adminService.paymentReferencePlaceholder
+																	}
+																	aria-label={t.adminService.paymentReference}
+																	disabled={isSaving}
+																	className="h-8 w-56 text-sm"
+																	onChange={(e) =>
+																		setReferenceFor({
+																			id: invoice.id,
+																			value: e.target.value,
+																		})
+																	}
+																	onKeyDown={(e) => {
+																		// The two buttons below are disabled while the
+																		// settle is in flight; this key path was not, so
+																		// a second Enter fired a second settle request.
+																		if (e.key === "Enter" && !isSaving)
+																			statusMutation.mutate({
+																				id: invoice.id,
+																				status: "paid",
+																				reference:
+																					referenceFor.value.trim() || null,
+																			});
+																		if (e.key === "Escape")
+																			setReferenceFor(null);
+																	}}
+																/>
+																<span className="text-xs text-muted-foreground">
+																	{t.adminService.paymentReferenceHint}
+																</span>
+																<div className="flex gap-2">
+																	<Button
+																		size="sm"
+																		variant="outline"
+																		disabled={isSaving}
+																		onClick={() => setReferenceFor(null)}
+																	>
+																		{t.common.cancel}
+																	</Button>
+																	<Button
+																		size="sm"
+																		disabled={isSaving}
+																		onClick={() =>
+																			statusMutation.mutate({
+																				id: invoice.id,
+																				status: "paid",
+																				reference:
+																					referenceFor.value.trim() || null,
+																			})
+																		}
+																	>
+																		{t.adminService.confirmPayment}
+																	</Button>
+																</div>
+															</div>
+														) : (
+															<Button
+																size="sm"
+																variant={
+																	invoice.status === "paid"
+																		? "outline"
+																		: "default"
+																}
+																disabled={isSaving}
+																onClick={() => {
+																	// Taking a mark back is immediate; asserting a
+																	// payment asks what paid it.
+																	if (invoice.status === "paid") {
+																		statusMutation.mutate({
+																			id: invoice.id,
+																			status: "unpaid",
+																		});
+																		return;
+																	}
+																	setReferenceFor({
+																		id: invoice.id,
+																		value: "",
+																	});
+																}}
+															>
+																{invoice.status === "paid"
+																	? t.adminService.markUnpaid
+																	: t.adminService.markPaid}
+															</Button>
+														)}
+													</TableCell>
+												</TableRow>
 											)),
 										];
 									})

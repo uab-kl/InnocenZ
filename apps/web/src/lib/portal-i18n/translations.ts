@@ -3429,8 +3429,7 @@ const en = {
 		 * outlet/agency with its periods nested under it, so the old wording would
 		 * report a smaller number than the page holds.
 		 */
-		showingSubscribers:
-			"Showing {from} - {to} of {total} outlets & agencies",
+		showingSubscribers: "Showing {from} - {to} of {total} outlets & agencies",
 		/** The chevron on an org's row. The row itself opens the detail panel. */
 		expandPeriods: "Show billing periods",
 		collapsePeriods: "Hide billing periods",
