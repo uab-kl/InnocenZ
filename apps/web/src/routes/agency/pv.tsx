@@ -1181,26 +1181,35 @@ function AgencyPV() {
 						</IzCard>
 					)}
 
-					<div className="space-y-2.5">
-						{filteredVouchers.length === 0 ? (
-							<IzCard className="text-center">
-								<p className="iz-sm iz-muted">
-									{payrollWeekTab === "last_last_week"
-										? t.payroll.noSignedVouchersThisWeek
-										: t.payroll.noVouchersMatch}
-								</p>
-								{payrollWeekTab !== "last_last_week" && hasActiveFilters && (
-									<button
-										type="button"
-										className="iz-chip mt-2"
-										onClick={clearFilters}
-									>
-										{t.payroll.clearFilters}
-									</button>
-								)}
-							</IzCard>
-						) : (
-							filteredVouchers.map((pv) => (
+					{filteredVouchers.length === 0 ? (
+						/* The empty state stays FULL WIDTH — it is a sentence about the
+						   whole list, and half a row of centred text with a hole beside it
+						   reads as a layout fault rather than as an answer. */
+						<IzCard className="text-center">
+							<p className="iz-sm iz-muted">
+								{payrollWeekTab === "last_last_week"
+									? t.payroll.noSignedVouchersThisWeek
+									: t.payroll.noVouchersMatch}
+							</p>
+							{payrollWeekTab !== "last_last_week" && hasActiveFilters && (
+								<button
+									type="button"
+									className="iz-chip mt-2"
+									onClick={clearFilters}
+								>
+									{t.payroll.clearFilters}
+								</button>
+							)}
+						</IzCard>
+					) : (
+						/* Two columns from `xl`, like the Receipts, Disputes and Overtime
+						   queues below it. `items-start` so a voucher carrying an extra
+						   line does not stretch the one beside it. Nothing in this card
+						   truncates — the file has no `truncate` at all — so halving the
+						   width costs no words; the id gets `break-words` because a UUID is
+						   one unbreakable token that would otherwise run past the card. */
+						<div className="grid items-start gap-2.5 xl:grid-cols-2">
+							{filteredVouchers.map((pv) => (
 								<button
 									key={pv.id}
 									type="button"
@@ -1208,7 +1217,7 @@ function AgencyPV() {
 									onClick={() => setDetailId(pv.id)}
 								>
 									<div className="min-w-0">
-										<div className="font-sora text-[15px] font-bold">
+										<div className="font-sora break-words text-[15px] font-bold">
 											{pv.id}
 										</div>
 										<p className="iz-tiny iz-muted mt-0.5">
@@ -1257,9 +1266,9 @@ function AgencyPV() {
 										</p>
 									</div>
 								</button>
-							))
-						)}
-					</div>
+							))}
+						</div>
+					)}
 				</OutletSection>
 			)}
 

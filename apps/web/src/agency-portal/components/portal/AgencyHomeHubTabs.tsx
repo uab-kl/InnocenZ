@@ -55,18 +55,27 @@ const HUB_TAB_ALERT_COLOR: Record<HubTab, string> = {
 };
 
 /**
- * The tabs whose backlog STOPS MONEY — which is what "urgent" means here.
+ * The tabs whose LABEL takes the count's colour — a queue, not a statistic.
  *
- * Each of these four holds a week shut: a voucher nobody reviewed cannot be
+ * Between them these hold a week shut: a voucher nobody reviewed cannot be
  * sent, a dispute cannot be paid around, a pending receipt blocks its voucher,
- * an undecided overtime claim holds the whole payroll week. So they colour
- * their LABEL as well as their number. A coloured digit under a grey label
- * reads as a statistic; these are a queue.
+ * an undecided overtime claim holds the whole payroll week, and a PR waiting on
+ * a sign-up cannot be rostered at all. A coloured digit under a grey label
+ * reads as a number somebody keeps; these are all work waiting on a person.
  *
- * `on-duty` and `approvals` are deliberately absent. PRs on the floor is good
- * news, and a pending sign-up costs nobody their wages.
+ * `approvals` was left out on the reasoning that a pending sign-up costs nobody
+ * their wages — true of the MONEY, and beside the point on screen: it sat in the
+ * same strip as four coloured queues wearing a grey word over an amber 6, which
+ * reads as a different KIND of thing rather than as a lower priority. Owner's
+ * call, 26 Aug 2026: *"make the word follow the colour like the others"*.
+ *
+ * `on-duty` stays out, and is now the only one. It is a live readout — who is on
+ * the floor this minute — not a backlog, and green is how this strip says good
+ * news; colouring its word too would dress the one tab nobody has to act on as
+ * the one that needs acting on.
  */
-const HUB_TAB_URGENT = new Set<HubTab>([
+const HUB_TAB_LABEL_FOLLOWS_COUNT = new Set<HubTab>([
+	"approvals",
 	"review",
 	"disputes",
 	"receipts",
@@ -302,14 +311,15 @@ export function AgencyHomeHubTabs({
 						className={`iz-agency-home-tab${activeTab === tabItem.id ? " on" : ""}`}
 						onClick={() => setTab(tabItem.id)}
 					>
-						{/* The label carries the colour too, but only for the four that
-						    stop money — see HUB_TAB_URGENT. Applied even on the OPEN tab,
+						{/* The label carries the colour too — see
+						    HUB_TAB_LABEL_FOLLOWS_COUNT. Applied even on the OPEN tab,
 						    unlike the number: a queue does not stop being urgent because
 						    you are looking at it, and the underline already says which
 						    tab is open. */}
 						<div
 							className={`l${
-								HUB_TAB_URGENT.has(tabItem.id) && counts[tabItem.id] > 0
+								HUB_TAB_LABEL_FOLLOWS_COUNT.has(tabItem.id) &&
+								counts[tabItem.id] > 0
 									? ` ${HUB_TAB_ALERT_COLOR[tabItem.id]}`
 									: ""
 							}`}
@@ -323,7 +333,10 @@ export function AgencyHomeHubTabs({
 						<div
 							className={`n${
 								counts[tabItem.id] > 0 &&
-								(HUB_TAB_URGENT.has(tabItem.id) || activeTab !== tabItem.id)
+								(
+									HUB_TAB_LABEL_FOLLOWS_COUNT.has(tabItem.id) ||
+										activeTab !== tabItem.id
+								)
 									? ` ${HUB_TAB_ALERT_COLOR[tabItem.id]}`
 									: ""
 							}`}
