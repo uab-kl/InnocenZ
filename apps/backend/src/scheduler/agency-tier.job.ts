@@ -4,9 +4,11 @@ import { logger } from '@/util/logger.js';
 import { SYSTEM_ACTOR } from '@/util/actor.js';
 import {
   adminRequestRepository,
+  agencyMemberRepository,
   memberSubscriptionRepository,
   subscriptionRepository,
 } from '@/composition-root.js';
+import { notifyMany } from '@/features/notification/notify.js';
 import { applyPlanChangeToLedger } from '@/features/admin-request/apply-plan-change.js';
 import { agencyWeeklyPvCount } from '@/features/subscription/plan-limit.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
@@ -129,20 +131,84 @@ async function runAgencyTier(): Promise<void> {
     return;
   }
 
+  /**
+   * Tell the agency what it used and what that costs (owner's ask, 27 Aug 2026).
+   *
+   * This rule used to run in total silence: an agency's first news of a move
+   * from Plus to Growth was a bigger invoice, and one past the rate card never
+   * learned that a Custom price had been requested on its behalf. The log line
+   * beside each outcome talks to us; this talks to them.
+   *
+   * ONE per agency per run, addressed to owner + finance — the same shape and
+   * the same reasoning as `pv_day_review_pending` in the payout job. Finance
+   * pays the invoice and the owner owns the relationship; nobody else on the
+   * roster needs a billing statement.
+   *
+   * NEVER THROWS INTO THE LOOP. A notification that cannot be written must not
+   * cost the next agency its re-pricing — the money work is the job, this is the
+   * telling. Same argument as the planless report at the foot of the file.
+   */
+  async function sendStatement(params: {
+    subscriberId: string;
+    subscriberName: string;
+    issued: number;
+    title: string;
+    body: string;
+    outcome: 'moved' | 'unchanged' | 'past_rate_card' | 'frozen' | 'custom';
+    planName: string;
+  }): Promise<void> {
+    try {
+      const members = await agencyMemberRepository.listByAgency(params.subscriberId);
+      const recipients = members
+        .filter((m) => m.status === 'active')
+        .filter((m) => m.subRole === 'owner' || m.subRole === 'finance')
+        .map((m) => m.userId);
+      if (recipients.length === 0) {
+        logger.warn(
+          `[agency-tier] ${params.subscriberName}: no active owner/finance member to send the ` +
+            'weekly subscription statement to',
+        );
+        return;
+      }
+      await notifyMany(recipients, {
+        kind: 'subscription_tier_weekly',
+        title: params.title,
+        body: params.body,
+        payload: {
+          weekStart,
+          weekEnd,
+          pvCount: params.issued,
+          planName: params.planName,
+          outcome: params.outcome,
+        },
+        actor: SYSTEM_ACTOR,
+      });
+    } catch (error) {
+      logger.error(`[agency-tier] statement failed for ${params.subscriberName}:`, error);
+    }
+  }
+
+  const vouchers = (n: number) => `${n} PV`;
+  const window = `${weekStart} to ${weekEnd}`;
+
   let moved = 0;
   let flagged = 0;
   let frozen = 0;
   for (const row of live) {
     const current = plans.find((p) => p.id === row.subscriptionId) ?? null;
 
-    // Checked BEFORE the PV count, because the count cannot change the answer
-    // for these and reading it would only cost a query per frozen agency.
-    if (row.subscriberId && awaitingCustom.has(row.subscriberId)) {
-      frozen += 1;
-      logger.info(
-        `[agency-tier] ${row.subscriberName} has a Custom price request awaiting an answer — ` +
-          `left on ${row.planName}`,
-      );
+    /*
+     * The count is read for EVERY agency now, before any of the skips below.
+     * It used to be taken only where it could change a tier, which was right
+     * while this job only re-priced — but the statement quotes the number even
+     * when nothing moves, and "you issued 180 PV and stay on Custom" is exactly
+     * what an agency on a negotiated price has no other way to find out.
+     */
+    const issued = await agencyWeeklyPvCount({ agencyId: row.subscriberId, weekStart });
+    if (issued < 0) {
+      // No statement here on purpose: the whole message is a number, and one
+      // built on a failed read would be a confident wrong figure about money.
+      logger.warn(`[agency-tier] PV count failed for ${row.subscriberName}; left on ${row.planName}`);
       continue;
     }
 
@@ -153,11 +219,40 @@ async function runAgencyTier(): Promise<void> {
      * earlier auto-reset re-priced an agreed figure four times in two minutes.
      * Leaving Custom is the agency pressing Reset, or the admin ending it.
      */
-    if (current && current.limitAmount === null) continue;
+    if (current && current.limitAmount === null) {
+      await sendStatement({
+        subscriberId: row.subscriberId,
+        subscriberName: row.subscriberName,
+        issued,
+        outcome: 'custom',
+        planName: row.planName,
+        title: `${vouchers(issued)} last week · Custom`,
+        body:
+          `You issued ${vouchers(issued)} between ${window}. You are on a negotiated Custom ` +
+          `price, which volume does not change — the rate card bands do not apply to it.`,
+      });
+      continue;
+    }
 
-    const issued = await agencyWeeklyPvCount({ agencyId: row.subscriberId, weekStart });
-    if (issued < 0) {
-      logger.warn(`[agency-tier] PV count failed for ${row.subscriberName}; left on ${row.planName}`);
+    if (row.subscriberId && awaitingCustom.has(row.subscriberId)) {
+      frozen += 1;
+      logger.info(
+        `[agency-tier] ${row.subscriberName} has a Custom price request awaiting an answer — ` +
+          `left on ${row.planName}`,
+      );
+      await sendStatement({
+        subscriberId: row.subscriberId,
+        subscriberName: row.subscriberName,
+        issued,
+        outcome: 'frozen',
+        planName: row.planName,
+        title: `${vouchers(issued)} last week · Custom price still pending`,
+        body:
+          `You issued ${vouchers(issued)} between ${window}. Your tier is held at ` +
+          `${row.planName} while your Custom price request is open, so the figure being ` +
+          `negotiated does not move under it. It resumes following your weekly volume once ` +
+          `InnocenZ admin answers.`,
+      });
       continue;
     }
 
@@ -172,10 +267,38 @@ async function runAgencyTier(): Promise<void> {
       logger.info(
         `[agency-tier] ${row.subscriberName} issued ${issued} PV in ${weekStart}..${weekEnd} — past the rate card; needs a Custom price from admin`,
       );
+      await sendStatement({
+        subscriberId: row.subscriberId,
+        subscriberName: row.subscriberName,
+        issued,
+        outcome: 'past_rate_card',
+        planName: row.planName,
+        title: `${vouchers(issued)} last week · past the rate card`,
+        body:
+          `You issued ${vouchers(issued)} between ${window} — beyond the highest published ` +
+          `band, which has no list price. InnocenZ admin has been asked to agree a Custom ` +
+          `price with you. You stay on ${row.planName} until they answer.`,
+      });
       continue;
     }
 
-    if (banded.id === row.subscriptionId) continue;
+    if (banded.id === row.subscriptionId) {
+      // A week that changed nothing still gets a statement. This is the invoice
+      // basis, and an agency checking "what am I paying" must not be answered
+      // with silence on precisely the weeks its tier held steady.
+      await sendStatement({
+        subscriberId: row.subscriberId,
+        subscriberName: row.subscriberName,
+        issued,
+        outcome: 'unchanged',
+        planName: banded.name,
+        title: `${vouchers(issued)} last week · staying on ${banded.name}`,
+        body:
+          `You issued ${vouchers(issued)} between ${window}. That is still within the ` +
+          `${banded.name} band, so your weekly charge is unchanged.`,
+      });
+      continue;
+    }
 
     // Filed as the same 'direct' admin_request an agency switch has always
     // produced, so the move appears on the admin's Plan Change page with its
@@ -209,6 +332,22 @@ async function runAgencyTier(): Promise<void> {
     logger.info(
       `[agency-tier] ${row.subscriberName}: ${issued} PV -> ${banded.name} (was ${row.planName})`,
     );
+    // Sent AFTER the ledger write, so a statement can never announce a move
+    // that did not land. applyPlanChangeToLedger swallows its own failures by
+    // design, which is exactly why the order matters rather than the result.
+    await sendStatement({
+      subscriberId: row.subscriberId,
+      subscriberName: row.subscriberName,
+      issued,
+      outcome: 'moved',
+      planName: banded.name,
+      title: `${vouchers(issued)} last week · now on ${banded.name}`,
+      body:
+        `You issued ${vouchers(issued)} between ${window}. That volume falls in the ` +
+        `${banded.name} band, so your weekly charge follows ${banded.name} from this period ` +
+        `on — you were on ${row.planName}. Nothing to do: your tier follows the vouchers you ` +
+        `issue, there is no plan to pick.`,
+    });
   }
 
   // Logged even at zero: a quiet week is this job's normal outcome, and a silent

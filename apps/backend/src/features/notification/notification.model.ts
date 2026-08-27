@@ -85,6 +85,26 @@ export const notificationKindValues = [
    * try to resolve it to a shift or a voucher.
    */
   'agency_broadcast',
+  /**
+   * The agency's weekly subscription statement (migration 0136):
+   * how many PVs it issued last payroll week, and the tier that put it on.
+   *
+   * Agency-addressed, owner + finance only, and ONE PER AGENCY PER RUN — the
+   * same shape as `pv_day_review_pending`, for the same reason.
+   *
+   * Raised on EVERY run, including the weeks nothing moved. That looks like the
+   * repetition the note on `pv_day_review_pending` warns against and is the
+   * opposite: the PV count is different every week and it is the number the
+   * invoice is computed from, so this is a statement rather than a repeated
+   * alarm. A tier that held steady is itself the answer to "what am I paying
+   * this week", and only sending it on a CHANGE would mean the weeks an agency
+   * most wants to check are the weeks it hears nothing.
+   *
+   * Carries `{ weekStart, weekEnd, pvCount, planName, outcome }`. There is no
+   * object to open — the agency's own Subscription page is the destination —
+   * so a reader must route it there and must not resolve it to a voucher.
+   */
+  'subscription_tier_weekly',
 ] as const;
 export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKindEnum = MainSchema.enum('notification_kind', notificationKindValues);

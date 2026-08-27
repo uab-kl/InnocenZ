@@ -111,6 +111,8 @@ const en = {
 		kindPrRatingLow: "Rating drop",
 		kindShiftCoverNeeded: "Cover needed",
 		kindPvDayReviewPending: "Day review",
+		/** The agency's weekly subscription statement — PVs issued and the resulting tier. */
+		kindSubscription: "Subscription",
 		kindLeave: "MC / leave",
 		kindUnknown: "Update",
 		/** PR push title when a shift lands on them. */
@@ -5738,6 +5740,7 @@ const zh: PortalTranslations = {
 		kindPrRatingLow: "评分下降",
 		kindShiftCoverNeeded: "需要顶班",
 		kindPvDayReviewPending: "每日复核",
+		kindSubscription: "订阅",
 		kindLeave: "病假 / 请假",
 		kindUnknown: "更新",
 		shiftAssignedTitle: "已派班",

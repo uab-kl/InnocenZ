@@ -953,6 +953,13 @@
       "when": 1791000000000,
       "tag": "0135_subscription_payment_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0136_notification_kind_subscription_tier_weekly",
+      "breakpoints": true
     }
   ]
 }
