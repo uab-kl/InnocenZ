@@ -201,6 +201,25 @@ function negotiatedArrangement(request: AdminRequest): string | null {
 }
 
 /**
+ * A typed quote with its separators stripped, ready for `Number`.
+ *
+ * The field DISPLAYS a formatted figure now — "99,999.00" rather than 99999 —
+ * because an admin approving a price should read it the way it will be billed,
+ * and a bare 99999 is exactly the shape a wrong order of magnitude hides in.
+ *
+ * That means every parse has to strip the separators, and there were TWO
+ * parsers: `parsedQuote`, which drives the live hints, and `persistQuote`'s own
+ * copy, which drives the save. Two parsers is two places to forget a comma —
+ * and the one that forgets is the one that writes the money. Both call this.
+ *
+ * Returns NaN for anything unparseable, exactly as `Number` would, so the
+ * existing `Number.isNaN` guards keep their meaning.
+ */
+function quoteToRaw(value: string | number): string {
+	return String(value).replace(/,/g, "").trim();
+}
+
+/**
  * True when the request is the subscriber LEAVING the arrangement — a venue
  * dropping POS, or an agency coming off Custom — which is what naming an
  * ordinary tier as the requested plan means.
@@ -923,7 +942,7 @@ function RequestEditForm({
 
 	// Estimated After price for the reminder: the live estimate wins, then the
 	// saved quote, then the current plan's actual price (Custom stays negotiated).
-	const rawQuote = String(quote).trim();
+	const rawQuote = quoteToRaw(quote);
 	const parsedQuote = Number(rawQuote);
 	/*
 	 * ⚠️ An EXIT short-circuits the whole chain. Leaving POS or Custom needs no
@@ -1036,7 +1055,7 @@ function RequestEditForm({
 
 	async function persistQuote() {
 		if (!editableQuote || !quoteChanged) return;
-		const raw = String(quote).trim();
+		const raw = quoteToRaw(quote);
 		if (raw === "") {
 			await onSaveQuote(request.id, null);
 			return;
@@ -1376,13 +1395,36 @@ function RequestEditForm({
 								</span>
 								<Input
 									id="request-quote"
-									type="number"
-									min={0}
-									step="0.01"
+									/*
+									 * TEXT, not number. `type="number"` cannot hold a comma — the
+									 * browser treats "99,999.00" as invalid and blanks the field —
+									 * so thousands separators are impossible while it stays
+									 * numeric. `inputMode="decimal"` keeps the phone keypad.
+									 */
+									type="text"
 									inputMode="decimal"
 									placeholder="0.00"
 									value={quote}
 									onChange={(e) => setQuote(e.target.value)}
+									/*
+									 * Formatted only while the admin is NOT typing. Reformatting on
+									 * every keystroke fights the caret — type "1000" and the comma
+									 * inserted after "1,0" pushes the cursor, so the next digit
+									 * lands in the wrong place. Strip on focus, format on blur.
+									 */
+									onFocus={() => setQuote((value) => quoteToRaw(value))}
+									onBlur={() =>
+										setQuote((value) => {
+											const raw = quoteToRaw(value);
+											const parsed = Number(raw);
+											// Left exactly as typed when it is empty or not a number,
+											// so a typo stays visible for the admin to correct rather
+											// than being silently rewritten to something plausible.
+											return raw === "" || Number.isNaN(parsed) || parsed < 0
+												? value
+												: formatPrice(parsed);
+										})
+									}
 									className={`h-12 pl-11 text-xl font-semibold tabular-nums placeholder:font-normal placeholder:text-muted-foreground/35${
 										quoteMissing
 											? " border-amber-500/70 bg-amber-500/[0.03] focus-visible:ring-amber-500"
@@ -1442,13 +1484,20 @@ function RequestEditForm({
 											request naming a plan ends the add-on whatever sits in
 											this box.
 										*/}
-										{quoteGiven && !isExit && (
+									{quoteGiven && !isExit && (
 										<p className="flex items-center gap-1.5 text-sm font-medium text-emerald-500">
 											<CheckCircle2 className="size-4 shrink-0" />
 											<span>
-												{fill(t.adminRequests.quoteBecomesTierPrice, {
-													price: formatPrice(parsedQuote),
-												})}
+												{fill(
+													// Custom IS the agency's tier; POS is billed BESIDE
+													// the venue's plan. One sentence served both and
+													// told an outlet its add-on quote was about to
+													// become "the agency's tier price".
+													request.type === "pos_integration_quote"
+														? t.adminRequests.quoteBecomesAddonPrice
+														: t.adminRequests.quoteBecomesTierPrice,
+													{ price: formatPrice(parsedQuote) },
+												)}
 											</span>
 										</p>
 									)}

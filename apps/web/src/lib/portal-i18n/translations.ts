@@ -3743,8 +3743,18 @@ const en = {
 		/** Second sentence of the quote hint; the space before it is added at the call site. */
 		leaveEmptyUsesPlanPrice:
 			"Leave empty to use the current plan price (RM {price}) on Resolve.",
+		/**
+		 * ⚠️ AGENCY CUSTOM ONLY. Custom IS the agency's tier, so the quote really
+		 * does become its tier price. The outlet's POS add-on is billed BESIDE the
+		 * plan and never replaces it — this line was shown for both, telling a
+		 * venue on Enterprise that RM 99,999 was about to become "the agency's tier
+		 * price": wrong on the role, and wrong on what the figure is.
+		 */
 		quoteBecomesTierPrice:
 			"RM {price} becomes the agency's tier price when you Resolve.",
+		/** The outlet's POS add-on: billed on top, so the plan is untouched. */
+		quoteBecomesAddonPrice:
+			"RM {price} becomes the POS add-on price when you Resolve — billed on top of the plan, which does not change.",
 		resolvedPriceFinal: "Resolved — the price is final.",
 		markContacted: "Mark contacted",
 		cancelRequest: "Cancel request",
@@ -8913,6 +8923,8 @@ const zh: PortalTranslations = {
 		estimateHint: "预估价 —— 处理前可协商或修改。",
 		leaveEmptyUsesPlanPrice: "留空则在处理时采用当前套餐价格（RM {price}）。",
 		quoteBecomesTierPrice: "处理后，RM {price} 将成为该经纪公司的档位价格。",
+		quoteBecomesAddonPrice:
+			"处理后，RM {price} 将成为 POS 加购价格 —— 在门店套餐之外另行计费，套餐本身不变。",
 		resolvedPriceFinal: "已处理 —— 价格已最终确定。",
 		markContacted: "标记为已联系",
 		cancelRequest: "取消申请",
