@@ -3678,12 +3678,18 @@ const en = {
 		 *
 		 * PV, not PR — `agency-tier.job` bands on
 		 * `count(*) from payment_voucher where week_start = <previous complete
-		 * week>`. The two numbers are far apart, because one PR is issued a
-		 * voucher per shift: five PRs can raise thirty vouchers in a busy week.
-		 * These strings said "PR count" until 27 Aug 2026, which put the admin
-		 * portal at odds with both the agency's own Subscription page and the
-		 * rule itself — an admin reading them would expect Starter and see
-		 * Enterprise, with no way to reconcile the two.
+		 * week>`.
+		 *
+		 * The difference is narrower than it looks, and worth stating exactly:
+		 * `payment_voucher_one_per_agency_pr_week` makes that ONE voucher per PR
+		 * per week, so the count is the number of PRs who actually WORKED that
+		 * week — never the roster. An agency holding 40 PRs of whom 8 worked
+		 * bands at 8, and "PR count" invites precisely the opposite reading.
+		 *
+		 * These strings said "PR count" until 27 Aug 2026, which also put the
+		 * admin portal at odds with the agency's own Subscription page ("chosen
+		 * by the PVs you issue each payroll week") and with the rate card beside
+		 * it, which is labelled in PV/week.
 		 */
 		statusDirect: "Direct",
 		statusApproved: "Approved",
