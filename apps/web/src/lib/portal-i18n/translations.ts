@@ -3752,7 +3752,13 @@ const en = {
 		saveChanges: "Save changes",
 		/** {plan} is a plan name and stays English. */
 		toPlanReset: "Reset · {plan}",
-		toPlanCancelOnly: "Cancel · {plan} only",
+		/**
+		 * A venue dropping its add-on. Sits under a column headed "To plan", where
+		 * "Cancel · Enterprise only" read as CANCEL ENTERPRISE — the opposite of
+		 * what happens. The plan is the half that survives, so the label names the
+		 * half that ends and says the plan continues.
+		 */
+		toPlanCancelOnly: "POS ends · stays on {plan}",
 		/** Stands in for a plan name the lookup could not resolve, mid-sentence. */
 		fallbackItsTier: "its tier",
 		fallbackItsPlan: "its plan",
@@ -8913,7 +8919,7 @@ const zh: PortalTranslations = {
 		resolve: "处理",
 		saveChanges: "保存更改",
 		toPlanReset: "重置 · {plan}",
-		toPlanCancelOnly: "取消 · 仅保留 {plan}",
+		toPlanCancelOnly: "POS 结束 · 继续使用 {plan}",
 		fallbackItsTier: "其档位",
 		fallbackItsPlan: "其套餐",
 		fallbackTierNamed: "其指定的档位",
