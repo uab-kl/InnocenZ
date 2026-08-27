@@ -537,6 +537,25 @@ shift's own span (`shiftDayKeys`) — see the §10 row for 2026-08-24.
 both stamps at 22:12, so zero minutes fell inside the window and the server sealed a pro-rated
 RM 0.00. Only the commission was wrong.
 
+### ▶ 🔴 DEACTIVATING A ROLE DOES NOT REMOVE ITS ACCESS (found 26 Aug 2026 by the role-delete recon, NOT fixed)
+
+The admin RBAC sheet's Active toggle says "Inactive roles grant no access." Half the backend
+honours it: `getUserPermissions` and `userHasPermission` (auth.repository.ts:245, :288) filter
+`role.status = 'active'`, so module C/R/U goes dark. But `getRolesForUserIds`
+(auth.repository.ts:42-59) — the function `requireRole` actually calls on every guarded route
+(require-role.ts:55) — filters on nothing but user id. **A deactivated role passes every
+requireAdmin / requireRole gate as if the toggle did not exist.**
+
+The codebase already knows: `audit-log.resolvers.ts:45-73` names this exact gap in a comment
+and fixes it LOCALLY with its own `requireActiveAdmin`. The eleventh missed-lanes instance,
+recorded as N33 in the audit artifact.
+
+Fix: filter `status = 'active'` in `getRolesForUserIds` itself, then delete the audit log's
+private workaround so one implementation answers "does this role count". ⚠️ Test the PR app
+after: the `pr` role is seeded ACTIVE and must stay unaffected, and check no session flow
+depends on an inactive role still resolving (e.g. legacy `agency`/`outlet` names, which are
+deprecated-but-present in rbac-constant.ts).
+
 ### ▶ ✅ CLOSED — OT was recorded and invisible on Payment (24 Aug 2026)
 
 Check-In said **"+1m OT recorded"**; the Payment grid's Others cell for that day was a dash and
