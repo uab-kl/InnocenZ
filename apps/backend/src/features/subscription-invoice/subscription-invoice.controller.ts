@@ -11,6 +11,7 @@ import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
+import type { SubscriptionPaymentRepositoryClass } from '@/features/subscription-payment/subscription-payment.repository.js';
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -22,6 +23,12 @@ export class SubscriptionInvoiceControllerClass {
   constructor(
     private repository: SubscriptionInvoiceRepositoryClass,
     private orgScopeDeps: OrgScopeDeps,
+    /**
+     * The attempt ledger. Marking a period paid is a PAYMENT event, so it is
+     * written there and reflected here — through the very call a gateway
+     * webhook uses, so the manual and automatic paths cannot disagree.
+     */
+    private subscriptionPaymentRepository: SubscriptionPaymentRepositoryClass,
   ) {}
 
   private buildFilter(req: Request): SubscriptionInvoiceFilter {
@@ -141,10 +148,20 @@ export class SubscriptionInvoiceControllerClass {
   /**
    * Mark an invoice paid, or take that back. Admin-only at the route.
    *
-   * `paid_at` is stamped HERE rather than taken from the body, and cleared when
-   * the status goes back to unpaid — a row reading `unpaid` beside a paid date
-   * would be a record that contradicts itself, and someone would eventually
-   * believe the date.
+   * `paid_at` is stamped by the settle path rather than taken from the body, and
+   * cleared when the status goes back to unpaid — a row reading `unpaid` beside
+   * a paid date would be a record that contradicts itself, and someone would
+   * eventually believe the date.
+   *
+   * BOTH DIRECTIONS NOW GO THROUGH `subscription_payment`, not through a bare
+   * write to this table. Marking paid records the attempt that says HOW and with
+   * which bank reference; marking unpaid VOIDS that attempt rather than deleting
+   * it, so "who said this was paid and when did they take it back" stays
+   * answerable. This is the same call a gateway webhook makes, which is the
+   * point: one definition of a settled period, not two that drift.
+   *
+   * The manual path is deliberately kept. Some venues will only ever bank-
+   * transfer, and it is what an admin needs on the day a gateway is down.
    */
   async update(req: Request, res: Response) {
     try {
@@ -154,14 +171,42 @@ export class SubscriptionInvoiceControllerClass {
           .status(400)
           .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
-      const record = await this.repository.update(paramId(req.params.id), {
-        status: parsed.data.status,
-        paidAt: parsed.data.status === 'paid' ? new Date() : null,
-        updatedBy: getActor(req),
-      });
-      if (!record) {
+      const id = paramId(req.params.id);
+      const actor = getActor(req);
+
+      // Checked before either branch so a missing invoice is a 404 rather than
+      // a settle call that silently finds nothing.
+      const existing = await this.repository.getById(id);
+      if (!existing) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
+
+      if (parsed.data.status === 'paid') {
+        const result = await this.subscriptionPaymentRepository.recordAttempt({
+          subscriptionInvoiceId: id,
+          // A manual mark-paid is an admin recording a transfer they have seen
+          // on a statement; that is the honest default when none is given.
+          methodType: parsed.data.methodType ?? 'manual_transfer',
+          reference: parsed.data.reference ?? null,
+          actor,
+        });
+        if (!result.ok) {
+          return res
+            .status(result.reason === 'invoice_not_found' ? 404 : 500)
+            .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+        }
+      } else {
+        const ok = await this.subscriptionPaymentRepository.voidSettlements(id, actor);
+        if (!ok) {
+          return res
+            .status(500)
+            .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+        }
+      }
+
+      // Re-read so the response carries the row as it now stands, rather than
+      // the caller's assumption of it.
+      const record = await this.repository.getById(id);
       res.status(200).json({
         success: true,
         message: parsed.data.status === 'paid' ? 'Marked paid' : 'Marked unpaid',
