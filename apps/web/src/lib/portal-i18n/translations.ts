@@ -3671,7 +3671,18 @@ const en = {
 		statusContacted: "Contacted",
 		statusResolved: "Resolved",
 		statusDeclined: "Declined",
-		/** An agency plan switch applied automatically by PR count. */
+		/**
+		 * An agency plan switch applied automatically by PV count.
+		 *
+		 * PV, not PR — `agency-tier.job` bands on
+		 * `count(*) from payment_voucher where week_start = <previous complete
+		 * week>`. The two numbers are far apart, because one PR is issued a
+		 * voucher per shift: five PRs can raise thirty vouchers in a busy week.
+		 * These strings said "PR count" until 27 Aug 2026, which put the admin
+		 * portal at odds with both the agency's own Subscription page and the
+		 * rule itself — an admin reading them would expect Starter and see
+		 * Enterprise, with no way to reconcile the two.
+		 */
 		statusDirect: "Direct",
 		statusApproved: "Approved",
 		roleOutlet: "Outlet",
@@ -3761,7 +3772,7 @@ const en = {
 		toastSetCustomPrice: "Set a Custom price before resolving",
 		/** Admin → Service → Plan Change: the page header blurb. */
 		planChangeDescription:
-			"Plan-switch activity from outlets and agencies. Agency switches are applied automatically by PR count (Direct). Outlet switches wait as Pending — open a row to approve or decline; the price rides the from-plan until you approve, then follows the to-plan.",
+			"Plan-switch activity from outlets and agencies. Agency switches are applied automatically by PV count (Direct). Outlet switches wait as Pending — open a row to approve or decline; the price rides the from-plan until you approve, then follows the to-plan.",
 		activityTitle: "Plan change activity",
 		activityHintLatest:
 			"One row per subscriber — the switch that still needs answering. Choose Full history for every previous change.",
@@ -3784,12 +3795,12 @@ const en = {
 		priceNoteNegotiatedCustom: "Negotiated · Custom",
 		priceNoteFromPlanStays: "From plan · stays",
 		priceNoteFromPlanUntilApproved: "From plan · until approved",
-		sheetHintDirect: "Agency switch — applied automatically by PR count.",
+		sheetHintDirect: "Agency switch — applied automatically by PV count.",
 		sheetHintPending:
 			"Outlet switch — review the before/after plans, then approve or decline.",
 		sheetHintActioned: "Outlet switch — already actioned.",
 		noteDirect:
-			"Switched automatically by PR count — the price follows the to-plan.",
+			"Switched automatically by PV count — the price follows the to-plan.",
 		notePendingApproval:
 			"Reminder: the outlet keeps paying the from-plan price until you approve. After approval the price follows the to-plan.",
 		noteApproved: "Approved — the price now follows the to-plan.",
@@ -8898,7 +8909,7 @@ const zh: PortalTranslations = {
 		toastInvalidAmount: "请输入有效的非负金额",
 		toastSetCustomPrice: "处理前请先设定 Custom 价格",
 		planChangeDescription:
-			"门店与经纪公司的套餐切换记录。经纪公司按 PR 人数自动切换（自动生效）。门店切换会保持待审核 —— 点击任一行批准或拒绝；批准前按原套餐计价，批准后按新套餐计价。",
+			"门店与经纪公司的套餐切换记录。经纪公司按薪资单数量自动切换（自动生效）。门店切换会保持待审核 —— 点击任一行批准或拒绝；批准前按原套餐计价，批准后按新套餐计价。",
 		activityTitle: "套餐变更记录",
 		activityHintLatest:
 			"每个订阅方一行 —— 仅显示仍待处理的那次切换。选择「全部记录」可查看以往每一次变更。",
@@ -8920,10 +8931,10 @@ const zh: PortalTranslations = {
 		priceNoteNegotiatedCustom: "议价 · Custom",
 		priceNoteFromPlanStays: "原套餐 · 维持不变",
 		priceNoteFromPlanUntilApproved: "原套餐 · 直至批准",
-		sheetHintDirect: "经纪公司切换 —— 按 PR 人数自动生效。",
+		sheetHintDirect: "经纪公司切换 —— 按薪资单数量自动生效。",
 		sheetHintPending: "门店切换 —— 核对变更前后的套餐，然后批准或拒绝。",
 		sheetHintActioned: "门店切换 —— 已处理。",
-		noteDirect: "按 PR 人数自动切换 —— 价格随新套餐。",
+		noteDirect: "按薪资单数量自动切换 —— 价格随新套餐。",
 		notePendingApproval:
 			"提醒：在你批准之前，门店仍按原套餐价格付费。批准后价格随新套餐。",
 		noteApproved: "已批准 —— 价格现已随新套餐。",
