@@ -569,7 +569,9 @@ export function RoleSheet({
 									variant="destructive"
 									onClick={onDelete}
 									disabled={isBusy || role.isSeeded}
-									title={role.isSeeded ? t.rbac.deleteRoleSeededHint : undefined}
+									title={
+										role.isSeeded ? t.rbac.deleteRoleSeededHint : undefined
+									}
 								>
 									{t.rbac.deleteRole}
 								</Button>
