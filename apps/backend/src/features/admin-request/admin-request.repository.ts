@@ -177,6 +177,46 @@ export class AdminRequestRepositoryClass {
     }
   }
 
+  /**
+   * Every subscriber with a request of this type still awaiting an answer.
+   *
+   * The set form of `latestPendingByType`, and DELIBERATELY the same status
+   * test — `pending`, nothing else — because the agency's Subscription screen
+   * reads that method to decide whether it is "waiting for admin", and this one
+   * decides whether the weekly job may re-band. Two definitions of "still
+   * waiting" is how the page and the job come to disagree about the same
+   * agency, which is exactly the fault this exists to close.
+   *
+   * Returns `null` on a read failure rather than an empty set. An empty set
+   * means "nobody is mid-negotiation", which would let the caller re-price
+   * every agency including the ones it must not touch — a query that failed
+   * must not read as a quiet week. Callers are expected to stop, not proceed.
+   *
+   * One query for all subscribers rather than one per row: the caller already
+   * runs a PV count per agency, and adding a second per-agency round trip to a
+   * weekly loop is a cost with nothing to show for it.
+   */
+  async subscriberIdsAwaitingAnswer(type: AdminRequestType): Promise<Set<string> | null> {
+    try {
+      const rows = await db
+        .select({ subscriberId: AdminRequestTable.subscriberId })
+        .from(AdminRequestTable)
+        .where(
+          and(
+            eq(AdminRequestTable.type, type),
+            eq(AdminRequestTable.status, 'pending'),
+            isNotNull(AdminRequestTable.subscriberId),
+          ),
+        );
+      return new Set(
+        rows.map((row) => row.subscriberId).filter((id): id is string => Boolean(id)),
+      );
+    } catch (error) {
+      logger.error('[AdminRequestRepository.subscriberIdsAwaitingAnswer] Error:', error);
+      return null;
+    }
+  }
+
   async getById(id: string): Promise<AdminRequest | null> {
     try {
       const [row] = await db.select().from(AdminRequestTable).where(eq(AdminRequestTable.id, id)).limit(1);

@@ -98,10 +98,53 @@ async function runAgencyTier(): Promise<void> {
       ),
     );
 
+  /**
+   * AN AGENCY MID-NEGOTIATION IS NOT RE-BANDED (owner's call, 27 Aug 2026).
+   *
+   * The agency's own Subscription screen has always frozen its tier while a
+   * Custom price request is open — `waitingOn` short-circuits the auto-tier
+   * effect before it can write. This job did not, so the two disagreed about
+   * the same agency: one that spiked to 200 PV, had a Custom request filed, and
+   * then issued 10 PV the following week would read "Scale" on its own page
+   * while this job quietly moved it to Plus. The job is the one that bills, so
+   * the screen was the honest half and this was the lie.
+   *
+   * Frozen on the LATEST PREVIOUS tier is the owner's ruling: the price the
+   * admin is negotiating against must not move under them mid-conversation.
+   *
+   * `subscriberIdsAwaitingAnswer` returns null on a READ FAILURE, which is not
+   * the same as "nobody is negotiating" — treating it as an empty set would
+   * re-price exactly the agencies this guard exists to protect. A run skipped
+   * with a loud line is recoverable next Sunday; a wrongly re-banded agency is
+   * a wrong invoice.
+   */
+  const awaitingCustom = await adminRequestRepository.subscriberIdsAwaitingAnswer(
+    'custom_renegotiation',
+  );
+  if (awaitingCustom === null) {
+    logger.error(
+      '[agency-tier] could not read which agencies are awaiting a Custom price; ' +
+        'skipping the re-pricing run rather than risk re-banding one mid-negotiation',
+    );
+    return;
+  }
+
   let moved = 0;
   let flagged = 0;
+  let frozen = 0;
   for (const row of live) {
     const current = plans.find((p) => p.id === row.subscriptionId) ?? null;
+
+    // Checked BEFORE the PV count, because the count cannot change the answer
+    // for these and reading it would only cost a query per frozen agency.
+    if (row.subscriberId && awaitingCustom.has(row.subscriberId)) {
+      frozen += 1;
+      logger.info(
+        `[agency-tier] ${row.subscriberName} has a Custom price request awaiting an answer — ` +
+          `left on ${row.planName}`,
+      );
+      continue;
+    }
 
     /*
      * ⚠️ CUSTOM IS NEVER MOVED AUTOMATICALLY. A Custom price is a negotiated
@@ -171,7 +214,8 @@ async function runAgencyTier(): Promise<void> {
   // Logged even at zero: a quiet week is this job's normal outcome, and a silent
   // job is indistinguishable from one that stopped running.
   logger.info(
-    `[agency-tier] week ${weekStart}..${weekEnd}: ${live.length} agency subscription(s) checked, ${moved} moved, ${flagged} past the rate card`,
+    `[agency-tier] week ${weekStart}..${weekEnd}: ${live.length} agency subscription(s) checked, ` +
+      `${moved} moved, ${flagged} past the rate card, ${frozen} awaiting a Custom price`,
   );
 
   /*
