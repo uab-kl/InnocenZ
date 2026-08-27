@@ -1,6 +1,10 @@
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
-import { shiftHistoryRowFromAssignment } from "@agency-portal/lib/agency-shift-history-map";
+import {
+	indexShiftSales,
+	shiftHistoryRowFromAssignment,
+	shiftSaleKey,
+} from "@agency-portal/lib/agency-shift-history-map";
 import { addDaysToIso } from "@agency-portal/lib/demo-clock";
 import type { PrPaymentVoucher } from "@agency-portal/lib/pr-demo";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
@@ -11,6 +15,7 @@ import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchShifts } from "@/services/shift";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
+import { fetchShiftSales } from "@/services/shift-sale";
 import { useAgencyOutlets } from "./use-agency-outlets";
 import { useAgencyPrs } from "./use-agency-prs";
 import { useAgencyPvs } from "./use-agency-pvs";
@@ -34,8 +39,9 @@ export interface AgencyHistoryData {
  *
  * - **Shift tabs (By PR / By outlet):** rebuilt as `ShiftHistoryRow[]` from
  *   COMPLETED shift-assignments (the roster chain) — one sealed night per
- *   assignment, payout from `payAmount`. The backend has no per-shift drink/tip
- *   sales, so the money breakdown shows wages only (see the map).
+ *   assignment, payout from `payAmount`. The RECEIVED side joins `shift_sale`
+ *   on (shift, PR): drinks, tips and service entitlements, mirrored there from
+ *   the PR's approved receipts (see the map).
  * - **Paid PVs tab:** the already-wired PV backend (`useAgencyPvs`) + PR roster
  *   (`useAgencyPrs`), which the Paid-PV view filters to PAID + scopes by PR.
  *   Receipt scans + itemized PV line detail have no backend and stay empty /
@@ -80,10 +86,23 @@ export function useAgencyHistory(): AgencyHistoryData {
 		staleTime: 30_000,
 	});
 
+	// Floor sales (the RECEIVED side) — receipts, mirrored onto shift_sale by the
+	// backend. Bounded by the SAME window as the shifts query above: a sale
+	// outside it has no history row to attach to, so a narrower fetch cannot
+	// silently zero a row that is on screen.
+	const salesQuery = useQuery({
+		queryKey: ["agency", "history", "shift-sales", fromDate, toDate],
+		queryFn: () => fetchShiftSales({ fromDate, toDate }, logout),
+		enabled: backed,
+		placeholderData: keepPreviousData,
+		staleTime: 60_000,
+	});
+
 	const shiftRows = useMemo<ShiftHistoryRow[]>(() => {
 		if (!backed) return [];
 		const shifts = shiftsQuery.data?.data ?? [];
 		const assignments = assignmentsQuery.data?.data ?? [];
+		const saleByShiftPr = indexShiftSales(salesQuery.data ?? []);
 		const shiftById = new Map(shifts.map((s) => [s.id, s]));
 		const prNameById = new Map(prs.map((p) => [p.id, p.name]));
 		const outletNameById = new Map(outlets.map((o) => [o.id, o.name]));
@@ -103,6 +122,7 @@ export function useAgencyHistory(): AgencyHistoryData {
 					prName: prNameById.get(a.prId) ?? "Unknown PR",
 					outletName: outletNameById.get(shift.outletId) ?? shift.outletId,
 					agencyName,
+					sale: saleByShiftPr.get(shiftSaleKey(a.shiftId, a.prId)),
 				}),
 			);
 		}
@@ -112,6 +132,7 @@ export function useAgencyHistory(): AgencyHistoryData {
 		agencyName,
 		shiftsQuery.data,
 		assignmentsQuery.data,
+		salesQuery.data,
 		prs,
 		outlets,
 	]);
@@ -121,6 +142,12 @@ export function useAgencyHistory(): AgencyHistoryData {
 		shiftRows,
 		pvs,
 		agencyPRs: prs,
-		isLoading: backed && (shiftsQuery.isLoading || assignmentsQuery.isLoading),
+		isLoading:
+			backed &&
+			(shiftsQuery.isLoading ||
+				assignmentsQuery.isLoading ||
+				// Without this the screen paints Received RM 0.00 for a beat before
+				// the sales land — a wrong number, not a pending one.
+				salesQuery.isLoading),
 	};
 }

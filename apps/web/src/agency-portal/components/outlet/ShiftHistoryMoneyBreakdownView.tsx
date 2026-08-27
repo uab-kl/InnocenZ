@@ -26,6 +26,13 @@ function receivedLines(
 					: undefined,
 		},
 		{ label: t.reports.colTips, value: b.tipSalesRm },
+		// Service entitlements (Havoc, Booking commission …) — shown only when
+		// there are some, so venues that configure no services keep the two-tile
+		// layout instead of gaining a permanent RM 0.00 column. Drinks and tips
+		// stay put at zero: those are the buckets every venue has.
+		...(b.serviceSalesRm > 0
+			? [{ label: t.reports.colServices, value: b.serviceSalesRm }]
+			: []),
 	];
 }
 
@@ -76,7 +83,10 @@ export function ShiftHistoryMoneyBreakdownView({
 				<div>
 					<p className="iz-hist-money-breakdown__card-title">{title}</p>
 					<p className="iz-hist-money-breakdown__card-sub">
-						{lines.length} line{lines.length !== 1 ? "s" : ""}
+						{fill(
+							lines.length === 1 ? t.today.lineCountOne : t.today.lineCountMany,
+							{ n: lines.length },
+						)}
 					</p>
 				</div>
 				<div className="iz-hist-money-breakdown__card-total-wrap">

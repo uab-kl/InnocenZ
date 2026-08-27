@@ -590,8 +590,12 @@ export function OutletTodayOperationPanel({
 			{postSealRatePrompt && canRate && (
 				<div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-[rgba(232,194,122,.3)] bg-[rgba(232,194,122,.06)] px-3 py-2">
 					<p className="text-xs font-semibold">
-						Rate {postSealRatePrompt.prIds.length} PR
-						{postSealRatePrompt.prIds.length !== 1 ? "s" : ""} · 24h
+						{fill(
+							postSealRatePrompt.prIds.length === 1
+								? t.today.ratePrsPromptOne
+								: t.today.ratePrsPromptMany,
+							{ n: postSealRatePrompt.prIds.length },
+						)}
 					</p>
 					<button
 						type="button"

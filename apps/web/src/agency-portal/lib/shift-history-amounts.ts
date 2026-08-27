@@ -16,6 +16,8 @@ export { SHIFT_HISTORY_FALLBACK_PER_DRINK_RM };
 export type ShiftHistoryMoneyBreakdown = {
 	drinkSalesRm: number;
 	tipSalesRm: number;
+	/** Service entitlements — their own bucket, never merged into tips. */
+	serviceSalesRm: number;
 	totalReceived: number;
 	drinkUnits: number;
 	wagesRm: number;
@@ -46,14 +48,30 @@ export function resolveShiftDrinkSalesRm(
 	return deriveHistoryDrinkSalesRm(row.totalDrinks, perDrinkRm);
 }
 
-/** Full amount the PR generated for the outlet (drink sales + tip sales). */
+/** Stored service sales, or 0 — the bucket only real (receipt-backed) rows carry. */
+export function resolveShiftServiceSalesRm(
+	row: Pick<ShiftHistoryRow, "serviceSalesRm">,
+): number {
+	return typeof row.serviceSalesRm === "number" &&
+		Number.isFinite(row.serviceSalesRm)
+		? Math.round(row.serviceSalesRm * 100) / 100
+		: 0;
+}
+
+/** Full amount the PR generated for the outlet (drinks + tips + services). */
 export function shiftHistoryTotalReceived(
-	row: Pick<ShiftHistoryRow, "drinkSalesRm" | "totalDrinks" | "totalTips">,
+	row: Pick<
+		ShiftHistoryRow,
+		"drinkSalesRm" | "totalDrinks" | "totalTips" | "serviceSalesRm"
+	>,
 	perDrinkRm = SHIFT_HISTORY_FALLBACK_PER_DRINK_RM,
 ): number {
 	return (
 		Math.round(
-			(resolveShiftDrinkSalesRm(row, perDrinkRm) + row.totalTips) * 100,
+			(resolveShiftDrinkSalesRm(row, perDrinkRm) +
+				row.totalTips +
+				resolveShiftServiceSalesRm(row)) *
+				100,
 		) / 100
 	);
 }
@@ -71,6 +89,14 @@ export function sealShiftHistoryAmounts(input: {
 	hoursWorked: number;
 	perDrinkRm?: number;
 	drinkSalesRm?: number;
+	/**
+	 * Service-entitlement sales. Received-side ONLY: it is deliberately NOT fed
+	 * to `calcShiftPayout`. The PR's cut of a service line is sealed on
+	 * `payment_voucher_line.amount` when the receipt is approved, so deriving a
+	 * second figure from Workspace rates here would create a rival number for
+	 * money the agency has already committed to pay.
+	 */
+	serviceSalesRm?: number;
 	rules?: OutletCommissionRule[];
 	prTier?: string;
 	payClass?: PrPayClass;
@@ -78,6 +104,7 @@ export function sealShiftHistoryAmounts(input: {
 	totalDrinks: number;
 	drinkSalesRm: number;
 	totalTips: number;
+	serviceSalesRm: number;
 	totalTables: number;
 	totalPayout: number;
 	totalReceived: number;
@@ -91,6 +118,7 @@ export function sealShiftHistoryAmounts(input: {
 			? roundRm(input.drinkSalesRm)
 			: deriveHistoryDrinkSalesRm(input.drinkUnits, input.perDrinkRm);
 	const tipSalesRm = roundRm(input.tipSalesRm);
+	const serviceSalesRm = roundRm(input.serviceSalesRm ?? 0);
 	const payout = calcShiftPayout(
 		{
 			outlet: input.outlet,
@@ -110,11 +138,12 @@ export function sealShiftHistoryAmounts(input: {
 		totalDrinks: input.drinkUnits,
 		drinkSalesRm,
 		totalTips: tipSalesRm,
+		serviceSalesRm,
 		totalTables: input.tableUnits ?? 0,
 		totalPayout: roundRm(
 			wagesRm + otRm + payout.drinkCommission + payout.tipCommission,
 		),
-		totalReceived: roundRm(drinkSalesRm + tipSalesRm),
+		totalReceived: roundRm(drinkSalesRm + tipSalesRm + serviceSalesRm),
 		wagesRm,
 		otRm,
 		drinkCommissionRm: payout.drinkCommission,
@@ -162,6 +191,7 @@ export function resolveShiftHistoryBreakdown(
 		tableUnits: row.totalTables ?? 0,
 		hoursWorked: row.durationHours || 6,
 		drinkSalesRm: row.drinkSalesRm,
+		serviceSalesRm: row.serviceSalesRm,
 		perDrinkRm: opts?.perDrinkRm,
 		rules: opts?.rules,
 		prTier: opts?.prTier,
@@ -170,6 +200,8 @@ export function resolveShiftHistoryBreakdown(
 
 	const drinkSalesRm = resolveShiftDrinkSalesRm(row, opts?.perDrinkRm);
 	const tipSalesRm = roundRm(row.totalTips);
+	const serviceSalesRm = resolveShiftServiceSalesRm(row);
+	const totalReceived = roundRm(drinkSalesRm + tipSalesRm + serviceSalesRm);
 	const useStored =
 		hasStoredPayoutBreakdown(row) && !tipCommissionIgnoresWorkspacePct(row);
 
@@ -184,7 +216,8 @@ export function resolveShiftHistoryBreakdown(
 		return {
 			drinkSalesRm,
 			tipSalesRm,
-			totalReceived: roundRm(drinkSalesRm + tipSalesRm),
+			serviceSalesRm,
+			totalReceived,
 			drinkUnits: row.totalDrinks,
 			wagesRm,
 			otRm,
@@ -198,7 +231,8 @@ export function resolveShiftHistoryBreakdown(
 	return {
 		drinkSalesRm,
 		tipSalesRm,
-		totalReceived: roundRm(drinkSalesRm + tipSalesRm),
+		serviceSalesRm,
+		totalReceived,
 		drinkUnits: row.totalDrinks,
 		wagesRm: sealed.wagesRm,
 		otRm: sealed.otRm,
@@ -220,6 +254,7 @@ export function sumShiftHistoryBreakdowns(
 	const empty: ShiftHistoryMoneyBreakdown = {
 		drinkSalesRm: 0,
 		tipSalesRm: 0,
+		serviceSalesRm: 0,
 		totalReceived: 0,
 		drinkUnits: 0,
 		wagesRm: 0,
@@ -233,6 +268,7 @@ export function sumShiftHistoryBreakdowns(
 		return {
 			drinkSalesRm: roundRm(acc.drinkSalesRm + b.drinkSalesRm),
 			tipSalesRm: roundRm(acc.tipSalesRm + b.tipSalesRm),
+			serviceSalesRm: roundRm(acc.serviceSalesRm + b.serviceSalesRm),
 			totalReceived: roundRm(acc.totalReceived + b.totalReceived),
 			drinkUnits: acc.drinkUnits + b.drinkUnits,
 			wagesRm: roundRm(acc.wagesRm + b.wagesRm),
@@ -252,6 +288,7 @@ export function sealedAmountsToHistoryFields(
 	| "totalDrinks"
 	| "drinkSalesRm"
 	| "totalTips"
+	| "serviceSalesRm"
 	| "totalTables"
 	| "totalPayout"
 	| "wagesRm"
@@ -263,6 +300,7 @@ export function sealedAmountsToHistoryFields(
 		totalDrinks: sealed.totalDrinks,
 		drinkSalesRm: sealed.drinkSalesRm,
 		totalTips: sealed.totalTips,
+		serviceSalesRm: sealed.serviceSalesRm,
 		totalTables: sealed.totalTables,
 		totalPayout: sealed.totalPayout,
 		wagesRm: sealed.wagesRm,

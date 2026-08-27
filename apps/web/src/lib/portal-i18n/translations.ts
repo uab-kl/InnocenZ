@@ -2244,6 +2244,14 @@ const en = {
 		rate: "Rate",
 		submit: "Submit",
 		dismiss: "Dismiss",
+		/**
+		 * Post-seal prompt, shown beside the Dismiss button above. Chinese has no
+		 * plural — the two keys carry the same string on purpose. The 24h is the
+		 * product rule, not a layout hint: rating closes a day after the seal, and
+		 * the store's own seal toast states the same window.
+		 */
+		ratePrsPromptOne: "Rate {n} PR · 24h",
+		ratePrsPromptMany: "Rate {n} PRs · 24h",
 		outAt: "Out {time}",
 		drinksCount: "{n} drinks",
 		viewComcardFor: "View comcard for {name}",
@@ -2346,6 +2354,14 @@ const en = {
 		drinkSales: "Drink sales",
 		unitCountOne: "{n} unit",
 		unitCountMany: "{n} units",
+		/**
+		 * How many rows a money breakdown card holds, shown under its own title.
+		 * Chinese has no plural — the two keys carry the same string on purpose,
+		 * and it reads "{n} 项" rather than agencyPvReview's "{n} 项明细" because
+		 * the heading directly above it already ends in 明细.
+		 */
+		lineCountOne: "{n} line",
+		lineCountMany: "{n} lines",
 		wages: "Wages",
 		drinkCommission: "Drink commission",
 		tipCommission: "Tip commission",
@@ -7295,6 +7311,8 @@ const zh: PortalTranslations = {
 		rate: "评分",
 		submit: "提交",
 		dismiss: "忽略",
+		ratePrsPromptOne: "为 {n} 位 PR 评分 · 24 小时",
+		ratePrsPromptMany: "为 {n} 位 PR 评分 · 24 小时",
 		outAt: "下班 {time}",
 		drinksCount: "{n} 杯酒水",
 		viewComcardFor: "查看 {name} 的作品卡",
@@ -7394,6 +7412,8 @@ const zh: PortalTranslations = {
 		drinkSales: "酒水销售",
 		unitCountOne: "{n} 件",
 		unitCountMany: "{n} 件",
+		lineCountOne: "{n} 项",
+		lineCountMany: "{n} 项",
 		wages: "工资",
 		drinkCommission: "酒水抽成",
 		tipCommission: "小费抽成",
