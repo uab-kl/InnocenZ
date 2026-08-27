@@ -58,6 +58,14 @@ export interface AdminRequest {
 	 * for a catalog placeholder of zero. Computed server-side from the ledger.
 	 */
 	previousNegotiatedAmount?: string | null;
+	/**
+	 * What the subscriber is on TODAY, resolved server-side from
+	 * `member_subscription`. Carried BESIDE `currentPlanId`, never replacing it —
+	 * an answered row's stamp is what it was decided against, and this is the
+	 * present. Absent when the org holds no active plan.
+	 */
+	livePlanName?: string | null;
+	livePlanAmount?: string | null;
 }
 
 export interface AdminRequestsQueryParams {

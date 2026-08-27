@@ -3790,6 +3790,15 @@ const en = {
 		switchedDate: "Switched date",
 		colPrice: "Price (RM)",
 		colSwitchedAt: "Switched at",
+		/** What the org is on TODAY — the present, beside the switch the row records. */
+		currentlyOn: "Currently on",
+		/**
+		 * Shown when today's plan is not the one this switch moved to. Either a
+		 * later move superseded it (and landed on Plan Request, because it touched
+		 * Custom), or this switch never reached the ledger at all.
+		 */
+		livePlanDiffers:
+			"This is not the plan above — a later change superseded it, or this switch never reached the billing ledger. Plan Payment shows what is actually billed.",
 		loadingPlanChanges: "Loading plan changes…",
 		failedToLoadPlanChanges: "Failed to load plan changes",
 		noPlanChangesFound: "No plan changes found",
@@ -8927,6 +8936,9 @@ const zh: PortalTranslations = {
 		switchedDate: "变更日期",
 		colPrice: "价格（RM）",
 		colSwitchedAt: "变更时间",
+		currentlyOn: "当前套餐",
+		livePlanDiffers:
+			"与上方套餐不一致 —— 可能已被后续变更取代，或这次切换从未写入计费台账。实际计费以「套餐付款」为准。",
 		loadingPlanChanges: "正在加载套餐变更…",
 		failedToLoadPlanChanges: "加载套餐变更失败",
 		noPlanChangesFound: "未找到套餐变更",
