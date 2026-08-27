@@ -25,7 +25,7 @@ import type { DisputeShift } from "@/services/payment-voucher";
  * null slot into a confident, entirely fabricated "10pm – 4am".
  */
 export function ShiftFactsBlock({ shift }: { shift: DisputeShift }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const ot = shift.overtimeMinutes ?? 0;
 	return (
 		<div className="rounded-md border border-[var(--iz-line,#2a2a3a)] px-2.5 py-2">
@@ -53,7 +53,7 @@ export function ShiftFactsBlock({ shift }: { shift: DisputeShift }) {
 			    when the paper was logged, which differs on a midnight-crossing
 			    shift and on a re-dated receipt. */}
 			<p className="iz-tiny iz-muted2 mt-0.5">
-				{formatShiftDayDate(shift.shiftDate)}
+				{formatShiftDayDate(shift.shiftDate, locale)}
 			</p>
 			<div className="mt-1.5 flex flex-wrap gap-4">
 				<span>

@@ -2358,6 +2358,10 @@ const en = {
 		manager: "Manager",
 		venue: "Venue",
 		location: "Location",
+		/** The reconciliation week, rebuilt at the RENDER from the period’s ISO bounds. The stored `dateLabel` beside it keeps its English — it is persisted through the store’s partialize, and a language switch must not leave half the saved weeks in the other language. */
+		weekRange: "Week {range}",
+		/** {sales} and {pv} arrive already formatted by formatRM — no currency lives in the dictionary. */
+		salesVsPv: "Sales {sales} vs PV {pv}",
 	},
 	/** InnocenZ Admin. Its own portal: nav, org tables and review queues. */
 	admin: {
@@ -7402,6 +7406,8 @@ const zh: PortalTranslations = {
 		manager: "负责人",
 		venue: "场所",
 		location: "地址",
+		weekRange: "{range} 这一周",
+		salesVsPv: "销售额 {sales}，结算单 {pv}",
 	},
 	admin: {
 		navOverview: "总览",
