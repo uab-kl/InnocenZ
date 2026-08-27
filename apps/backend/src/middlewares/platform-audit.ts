@@ -15,12 +15,36 @@ export async function platformAuditMiddleware(
     return;
   }
 
-  if (req.originalUrl.split('?')[0].endsWith('/health')) {
+  const path = req.originalUrl.split('?')[0];
+
+  if (path.endsWith('/health')) {
     next();
     return;
   }
 
-  const path = req.originalUrl.split('?')[0];
+  /**
+   * PUBLIC WEBHOOKS ARE NOT AUDITED FROM HERE.
+   *
+   * These two routes sit ABOVE `authenticateJWT` by design — a gateway and Meta
+   * hold no session — which makes them the only mutating endpoints an
+   * unauthenticated stranger can reach. Auditing them meant every POST anyone
+   * sent wrote its whole body into `audit_log`, and the JSON limit is 12 MB, so
+   * a handful of requests could inflate the table without a single valid
+   * signature ever being presented. There is no actor to attribute the row to
+   * either, which is most of what an audit row is for.
+   *
+   * Nothing is lost: both handlers verify a signature and log their own
+   * outcome, and a delivery that fails verification is precisely the one that
+   * should not be persisted on a stranger's say-so.
+   */
+  if (
+    path.includes('/webhooks/whatsapp') ||
+    path.includes('/subscription-payment/webhook')
+  ) {
+    next();
+    return;
+  }
+
   const action = resolveRestAction(req.method, path);
   if ((action === 'UPDATE' || action === 'DELETE') && !req.auditLogged) {
     try {

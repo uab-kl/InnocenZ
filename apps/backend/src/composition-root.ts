@@ -237,6 +237,11 @@ export const memberSubscriptionController =
     orgScopeDeps,
   );
 
+// How a venue/agency pays. Declared BEFORE the invoice controller because that
+// controller now takes it: marking a period paid by card or mandate records
+// WHICH instrument settled it, the same resolution the gateway webhook makes.
+export const paymentMethodRepository = new PaymentMethodRepositoryClass();
+
 // Same scope resolver as the subscription ledger above — an org must read its
 // own invoices and no one else's.
 export const subscriptionInvoiceController =
@@ -246,11 +251,10 @@ export const subscriptionInvoiceController =
     // Marking a period paid now writes the attempt that records HOW and with
     // which bank reference, through the same call a gateway webhook uses.
     subscriptionPaymentRepository,
+    paymentMethodRepository,
   );
 
-// How a venue/agency pays. Same scope resolver: the owner comes from the
-// session, never from the request body.
-export const paymentMethodRepository = new PaymentMethodRepositoryClass();
+// Same scope resolver: the owner comes from the session, never the request body.
 export const paymentMethodController = new PaymentMethodControllerClass(
   paymentMethodRepository,
   orgScopeDeps,

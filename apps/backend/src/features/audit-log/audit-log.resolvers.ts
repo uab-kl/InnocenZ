@@ -41,13 +41,23 @@ function transformAuditLog(auditLog: {
  * hides `role='admin'` rows — so every other role's activity, with usernames, IP
  * addresses and old/new values, was readable by any signed-in account.
  *
- * ⚠️ It deliberately does NOT use `context.isAdmin`, and that is why this is a
- * function rather than a one-line check. `createContext` sets `isAdmin` from the
- * role NAME alone, so a role that has been switched OFF platform-wide still
- * passes it — and that same roleName-only test is relied on by auth, org-scope,
- * payment-voucher and pr. Tightening it centrally would change four features'
- * behaviour at once, so the stricter rule is kept local to the audit log, the
- * surface that warrants it.
+ * ⚠️ HISTORY, and it has since changed. This did not use `context.isAdmin`
+ * because `createContext` set that flag from the role NAME alone, so a role
+ * switched OFF platform-wide still passed it. Tightening it centrally looked
+ * like it would move four other features at once, so the stricter rule was kept
+ * local to the audit log — the surface that warranted it.
+ *
+ * On 27 Aug 2026 both central lanes were fixed instead, once the blast radius
+ * was MEASURED rather than assumed: 11 roles, all active, and zero `user_role`
+ * rows pointing at a non-active role, so nobody lost access. `context.isAdmin`
+ * now requires an active role, and `getRolesForUserIds` — the function every
+ * REST route guard actually calls — filters `role.status` the way its two
+ * siblings always did.
+ *
+ * This check is KEPT anyway, deliberately. It is the last guard on the most
+ * sensitive read surface in the app, it states the rule where the rule matters,
+ * and it costs one array scan. A redundant guard on the audit log is a better
+ * failure mode than a missing one.
  *
  * Be precise about which `status` this is, because the name invites the wrong
  * reading: `getUserRoles` projects `RoleTable.status`, the status of the ROLE

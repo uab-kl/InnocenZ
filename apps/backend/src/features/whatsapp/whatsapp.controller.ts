@@ -91,14 +91,51 @@ export class WhatsAppWebhookControllerClass {
 
   private signatureOk(req: Request): boolean {
     const secret = process.env.META_WHATSAPP_APP_SECRET?.trim();
-    if (!secret) return true; // optional until the Meta app secret is pasted in
+    /**
+     * NO SECRET IS A REFUSAL, NOT A PASS.
+     *
+     * This read `return true`d when the secret was unset — "optional until the
+     * Meta app secret is pasted in" — which made a PUBLIC, unauthenticated
+     * endpoint accept any body anyone posted to it, on any deployment where the
+     * variable was missing or misspelt. The sibling this webhook was the model
+     * for got the opposite treatment: the payment webhook answers 503 when it
+     * cannot verify a delivery, precisely so it never acts on bytes it cannot
+     * trust. Fail-closed is the only safe direction for a signature check — an
+     * unconfigured webhook that rejects is visible in minutes, one that accepts
+     * is invisible until it is abused.
+     *
+     * Development keeps the old convenience deliberately and loudly: nothing on
+     * a developer machine has a Meta secret, and the alternative is that the
+     * inbound path cannot be tested at all.
+     */
+    if (!secret) {
+      if (process.env.NODE_ENV === 'production') {
+        logger.error(
+          '[WhatsAppWebhook] META_WHATSAPP_APP_SECRET is unset — refusing unverifiable delivery',
+        );
+        return false;
+      }
+      logger.warn('[WhatsAppWebhook] no app secret set; accepting unverified delivery (dev only)');
+      return true;
+    }
 
     const header = req.headers['x-hub-signature-256'];
     const signature = Array.isArray(header) ? header[0] : header;
     if (!signature?.startsWith('sha256=')) return false;
 
+    /**
+     * The RAW bytes or nothing. Falling back to a re-serialised body meant
+     * checking a signature against JSON Meta never sent — key order and
+     * whitespace both move through parse/stringify — so a genuine delivery
+     * would fail and whoever debugged it would be tempted to drop the check.
+     * `main.ts` captures the raw body for this exact path.
+     */
     const raw = (req as Request & { rawBody?: Buffer }).rawBody;
-    const payload = raw ?? Buffer.from(JSON.stringify(req.body ?? {}));
+    if (!raw) {
+      logger.error('[WhatsAppWebhook] raw body missing; cannot verify signature');
+      return false;
+    }
+    const payload = raw;
     const expected =
       'sha256=' + crypto.createHmac('sha256', secret).update(payload).digest('hex');
     try {

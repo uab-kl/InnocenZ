@@ -167,6 +167,36 @@ export function isChargeable(
   return Boolean(method.gatewayToken);
 }
 
+/**
+ * The instrument AS THE BROWSER MAY SEE IT.
+ *
+ * `gatewayToken` is the credential that debits the instrument — the one field
+ * in this table that can actually move money — and every read path was handing
+ * it to the client, because `db.select()` returns whole rows and four separate
+ * lanes serialise them (`getMine`, `listMine`, the admin `list`, and the
+ * invoice panel's `methods`). A token in a JSON response is a token in devtools,
+ * in a HAR file, and in whatever the browser's network stack keeps.
+ *
+ * It is dropped here rather than in each controller ON PURPOSE: four lanes that
+ * each remember to strip a field is four lanes where the fifth one forgets, and
+ * this codebase has eleven recorded instances of exactly that. `gateway` stays —
+ * naming the provider is useful on screen and is not a secret.
+ *
+ * `chargeable` rides along so the UI stops re-deriving readiness from
+ * `mandateStatus === 'pending'`, which reads a CANCELLED or FAILED mandate as
+ * ready. One answer, computed where the rule lives.
+ *
+ * ⚠️ Every new read path must go through this. Returning a raw row is the bug.
+ */
+export type PublicPaymentMethod = Omit<PaymentMethod, 'gatewayToken'> & {
+  chargeable: boolean;
+};
+
+export function toPublicPaymentMethod(row: PaymentMethod): PublicPaymentMethod {
+  const { gatewayToken: _gatewayToken, ...rest } = row;
+  return { ...rest, chargeable: isChargeable(row) };
+}
+
 /** Card brands the UI derives from the leading digits. 'Card' is the fallback. */
 export const cardBrandValues = [
   'Visa',

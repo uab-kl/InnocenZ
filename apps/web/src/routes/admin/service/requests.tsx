@@ -201,6 +201,25 @@ function negotiatedArrangement(request: AdminRequest): string | null {
 }
 
 /**
+ * A typed quote with its separators stripped, ready for `Number`.
+ *
+ * The field DISPLAYS a formatted figure now — "99,999.00" rather than 99999 —
+ * because an admin approving a price should read it the way it will be billed,
+ * and a bare 99999 is exactly the shape a wrong order of magnitude hides in.
+ *
+ * That means every parse has to strip the separators, and there were TWO
+ * parsers: `parsedQuote`, which drives the live hints, and `persistQuote`'s own
+ * copy, which drives the save. Two parsers is two places to forget a comma —
+ * and the one that forgets is the one that writes the money. Both call this.
+ *
+ * Returns NaN for anything unparseable, exactly as `Number` would, so the
+ * existing `Number.isNaN` guards keep their meaning.
+ */
+function quoteToRaw(value: string | number): string {
+	return String(value).replace(/,/g, "").trim();
+}
+
+/**
  * True when the request is the subscriber LEAVING the arrangement — a venue
  * dropping POS, or an agency coming off Custom — which is what naming an
  * ordinary tier as the requested plan means.
@@ -653,6 +672,20 @@ function RequestsPage() {
 										const fromPlan = fromPlanLabel(request, planById);
 										const toPlan = toPlanLabel(request, planById, t);
 										const negotiable = isPriceNegotiable(request);
+										/*
+										 * An EXIT is never quoted, so the Quoted column must not
+										 * nag for one. It printed "Set before resolve" on a
+										 * CANCELLATION — a figure the server never reads, since
+										 * `applyResolvedPriceToLedger` ends the arrangement before
+										 * it looks at the amount. The sheet behind this row already
+										 * said "No quote needed"; the list contradicted it.
+										 */
+										const isExit = isNegotiatedExit(
+											request,
+											request.requestedPlanId
+												? planById.get(request.requestedPlanId)
+												: undefined,
+										);
 
 										return (
 											<TableRow
@@ -736,7 +769,7 @@ function RequestsPage() {
 															</div>
 														) : (
 															<span className="text-base text-muted-foreground">
-																{request.status === "resolved"
+																{request.status === "resolved" || isExit
 																	? "—"
 																	: t.adminRequests.setBeforeResolve}
 															</span>
@@ -909,10 +942,17 @@ function RequestEditForm({
 
 	// Estimated After price for the reminder: the live estimate wins, then the
 	// saved quote, then the current plan's actual price (Custom stays negotiated).
-	const rawQuote = String(quote).trim();
+	const rawQuote = quoteToRaw(quote);
 	const parsedQuote = Number(rawQuote);
-	const estimateLabel =
-		rawQuote !== "" && !Number.isNaN(parsedQuote) && parsedQuote >= 0
+	/*
+	 * ⚠️ An EXIT short-circuits the whole chain. Leaving POS or Custom needs no
+	 * figure — the rate card supplies the number — so every branch below would be
+	 * answering a question nobody asked, and the last one actively nagged for a
+	 * quote the server never reads.
+	 */
+	const estimateLabel = isExit
+		? "—"
+		: rawQuote !== "" && !Number.isNaN(parsedQuote) && parsedQuote >= 0
 			? `RM ${formatPrice(parsedQuote)}`
 			: request.quotedAmount
 				? `RM ${formatPrice(request.quotedAmount)}`
@@ -1015,7 +1055,7 @@ function RequestEditForm({
 
 	async function persistQuote() {
 		if (!editableQuote || !quoteChanged) return;
-		const raw = String(quote).trim();
+		const raw = quoteToRaw(quote);
 		if (raw === "") {
 			await onSaveQuote(request.id, null);
 			return;
@@ -1155,7 +1195,28 @@ function RequestEditForm({
 						<dd
 							className={`text-right${isExit ? " font-semibold text-red-500" : ""}`}
 						>
-							{isExit && fromPlan === "—" ? arrangementName : fromPlan}
+							{/*
+								AN ADD-ON SITS ON TOP OF A PLAN, so "Plan (stays)" has to name
+								the plan. `fromPlanLabel` returns "—" for a first-time POS
+								request and is right to: nothing is being moved away FROM. But
+								under a label promising the plan it read as though the venue had
+								none, and the admin's whole question here is what the add-on is
+								being billed on top of.
+
+								`livePlanName` is what the org is on TODAY, resolved server-side
+								beside the row's own stamp. The price rides along deliberately —
+								the card below shows the plan's figure as the POS estimate, and
+								naming it here is what stops the two being read as one price.
+							*/}
+							{isExit && fromPlan === "—"
+								? arrangementName
+								: isAddonRequest && fromPlan === "—" && request.livePlanName
+									? `${request.livePlanName}${
+											request.livePlanAmount
+												? ` · RM ${formatPrice(request.livePlanAmount)}`
+												: ""
+										}`
+									: fromPlan}
 						</dd>
 					</div>
 					{/*
@@ -1334,13 +1395,36 @@ function RequestEditForm({
 								</span>
 								<Input
 									id="request-quote"
-									type="number"
-									min={0}
-									step="0.01"
+									/*
+									 * TEXT, not number. `type="number"` cannot hold a comma — the
+									 * browser treats "99,999.00" as invalid and blanks the field —
+									 * so thousands separators are impossible while it stays
+									 * numeric. `inputMode="decimal"` keeps the phone keypad.
+									 */
+									type="text"
 									inputMode="decimal"
 									placeholder="0.00"
 									value={quote}
 									onChange={(e) => setQuote(e.target.value)}
+									/*
+									 * Formatted only while the admin is NOT typing. Reformatting on
+									 * every keystroke fights the caret — type "1000" and the comma
+									 * inserted after "1,0" pushes the cursor, so the next digit
+									 * lands in the wrong place. Strip on focus, format on blur.
+									 */
+									onFocus={() => setQuote((value) => quoteToRaw(value))}
+									onBlur={() =>
+										setQuote((value) => {
+											const raw = quoteToRaw(value);
+											const parsed = Number(raw);
+											// Left exactly as typed when it is empty or not a number,
+											// so a typo stays visible for the admin to correct rather
+											// than being silently rewritten to something plausible.
+											return raw === "" || Number.isNaN(parsed) || parsed < 0
+												? value
+												: formatPrice(parsed);
+										})
+									}
 									className={`h-12 pl-11 text-xl font-semibold tabular-nums placeholder:font-normal placeholder:text-muted-foreground/35${
 										quoteMissing
 											? " border-amber-500/70 bg-amber-500/[0.03] focus-visible:ring-amber-500"
@@ -1387,13 +1471,33 @@ function RequestEditForm({
 												})}`
 											: ""}
 									</p>
-									{quoteGiven && (
+									{/*
+											⚠️ NOT ON AN EXIT. This rendered whenever a figure was
+											typed, with no `isExit` guard — so on a CANCELLATION it
+											appeared directly beneath "No quote needed", in green
+											with a tick, contradicting the sentence above it and
+											promising that a number the server never reads was about
+											to become the price.
+
+											It cannot become anything: `applyResolvedPriceToLedger`
+											runs the removal branch first and returns, so a POS
+											request naming a plan ends the add-on whatever sits in
+											this box.
+										*/}
+									{quoteGiven && !isExit && (
 										<p className="flex items-center gap-1.5 text-sm font-medium text-emerald-500">
 											<CheckCircle2 className="size-4 shrink-0" />
 											<span>
-												{fill(t.adminRequests.quoteBecomesTierPrice, {
-													price: formatPrice(parsedQuote),
-												})}
+												{fill(
+													// Custom IS the agency's tier; POS is billed BESIDE
+													// the venue's plan. One sentence served both and
+													// told an outlet its add-on quote was about to
+													// become "the agency's tier price".
+													request.type === "pos_integration_quote"
+														? t.adminRequests.quoteBecomesAddonPrice
+														: t.adminRequests.quoteBecomesTierPrice,
+													{ price: formatPrice(parsedQuote) },
+												)}
 											</span>
 										</p>
 									)}
@@ -1500,8 +1604,21 @@ function RequestEditForm({
 						{t.common.cancel}
 					</Button>
 				</SheetClose>
+				{/*
+					SECONDARY, because it is the SMALLER of the two commits and was
+					wearing the same primary fill as Resolve — in the bottom-right slot,
+					which reads as "this is the main action". So the benign button looked
+					the most important while the one that writes a price into
+					`member_subscription` sat small in the Status row above.
+
+					They are genuinely different: this stores the remarks and the quote
+					and leaves the request PENDING; Resolve applies the figure and settles
+					it. Matching fills invited an admin to press the wrong one — and the
+					wrong one here is the one that bills.
+				*/}
 				<Button
 					type="button"
+					variant="secondary"
 					disabled={isSaving || (!remarksChanged && !quoteChanged)}
 					onClick={handleSave}
 				>

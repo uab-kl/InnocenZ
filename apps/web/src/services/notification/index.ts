@@ -17,7 +17,9 @@ export type NotificationKind =
 	| "shift_cover_needed"
 	| "pv_day_review_pending"
 	| "leave_requested"
-	| "leave_decided";
+	| "leave_decided"
+	/** Agency-addressed weekly billing statement: PVs issued, and the resulting tier (0136). */
+	| "subscription_tier_weekly";
 
 export interface NotificationRecord {
 	id: string;

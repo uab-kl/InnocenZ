@@ -162,6 +162,27 @@ export function describePaymentMethod(
 }
 
 /**
+ * WILL THIS INSTRUMENT BE CHARGED, or does the venue still have to pay by hand?
+ *
+ * Both subscription pages appended "· next charge {date}" to the collapsed
+ * Payment method header whenever a renewal date existed — over a bank transfer,
+ * which nothing can auto-charge, and over an FPX mandate the bank has NOT yet
+ * approved. Each page did carry a pending-mandate warning, and both put it
+ * INSIDE the section, which is collapsed by default: the reassuring sentence
+ * was the visible one and the correction was the hidden one.
+ *
+ * Deliberately NOT keyed off the server's `chargeable`, which also requires a
+ * gateway token and is therefore false for every instrument today — that would
+ * silence the renewal date for cards too. The question here is about the RAIL
+ * and the mandate's own state, which is knowable now.
+ */
+export function willAutoCharge(method: PaymentMethod): boolean {
+	if (method.type === "card") return true;
+	if (method.type === "fpx_mandate") return method.mandateStatus === "active";
+	return false;
+}
+
+/**
  * The card brand, from the leading digits — the same table every payment form
  * uses. Returns "Card" when nothing matches, rather than guessing.
  */

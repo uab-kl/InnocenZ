@@ -13,6 +13,7 @@ import {
 	type PaymentMethod,
 	type PaymentMethodType,
 	type SavePaymentMethodInput,
+	willAutoCharge,
 } from "@/services/payment-method";
 
 /**
@@ -245,10 +246,14 @@ export function PaymentMethodCard({
 				</div>
 			</div>
 
-			{/* A pending mandate is an ACTIVE, saved, default instrument that must
-			    not be debited — the one place where "saved" and "chargeable" come
-			    apart, so it gets said out loud rather than reading as ready. */}
-			{backed && card?.mandateStatus === "pending" && (
+			{/* A mandate the bank has not approved is an ACTIVE, saved, default
+			    instrument that must not be debited — the one place where "saved" and
+			    "chargeable" come apart, so it gets said out loud rather than reading
+			    as ready. Tested through the shared willAutoCharge rather than
+			    against "pending": a CANCELLED or FAILED mandate is not pending and
+			    is just as undebitable, and this branch used to let both render as
+			    ready. */}
+			{backed && card?.type === "fpx_mandate" && !willAutoCharge(card) && (
 				<p
 					className="iz-tiny mt-2"
 					style={{ color: "var(--iz-amber-l, #ffc46b)" }}

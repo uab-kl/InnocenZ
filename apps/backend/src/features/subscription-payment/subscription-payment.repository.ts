@@ -1,6 +1,7 @@
-import { and, desc, eq, SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
+import { UserTable } from '@/features/user/user.model.js';
 import { SubscriptionInvoiceTable } from '@/features/subscription-invoice/subscription-invoice.model.js';
 import type { PaymentMethodType } from '@/features/payment-method/payment-method.model.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
@@ -11,6 +12,9 @@ import {
   SubscriptionPaymentFilter,
   SubscriptionPaymentTable,
 } from './subscription-payment.model.js';
+
+/** Only a uuid is a person; `system` and `gateway:curlec` are stamps. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * What a caller must say to record an attempt against an invoice.
@@ -67,6 +71,34 @@ export class SubscriptionPaymentRepositoryClass {
     } catch (error) {
       logger.error('[SubscriptionPaymentRepository.getOrgProfile] Error:', error);
       return null;
+    }
+  }
+
+  /**
+   * WHO recorded each attempt, as a name rather than an id.
+   *
+   * `created_by` holds `req.user.id` — a bare uuid — so the panel was printing
+   * "Recorded by: 8c1f…". The alternative of denormalising a name onto
+   * `subscription_payment` was refused: one fact lives in one table, and a
+   * person who is renamed must not leave a stale name on every row they ever
+   * touched. `system` and `gateway:*` are stamps rather than people and are
+   * handed back unchanged for the UI to label.
+   */
+  async resolveActorNames(actors: string[]): Promise<Record<string, string>> {
+    const ids = [...new Set(actors)].filter((a) => UUID_RE.test(a));
+    if (ids.length === 0) return {};
+    try {
+      const rows = await db
+        // `username` is the display name this table actually carries; a real
+        // name lives on user_profile, which is redacted for some callers and is
+        // not worth a join to label an audit line.
+        .select({ id: UserTable.id, username: UserTable.username })
+        .from(UserTable)
+        .where(inArray(UserTable.id, ids));
+      return Object.fromEntries(rows.map((r) => [r.id, r.username || r.id]));
+    } catch (error) {
+      logger.error('[SubscriptionPaymentRepository.resolveActorNames] Error:', error);
+      return {};
     }
   }
 
@@ -157,43 +189,135 @@ export class SubscriptionPaymentRepositoryClass {
    * period to be paid" is exactly the pair that drifts, and the drift stays
    * invisible until an org is chased for money it already sent.
    *
-   * Four properties this has to hold, each load-bearing:
+   * Five properties this has to hold, each load-bearing:
    *
    * 1. IDEMPOTENT on `gatewayPaymentId`. A repeat delivery returns the payment
    *    that already exists, with `alreadyRecorded: true`, and writes nothing.
    *    The unique index is the real guarantee; this read makes the normal case
    *    cheap and the response honest.
-   * 2. ATOMIC. The payment row and the invoice's `status`/`paid_at` move in one
+   * 2. IDEMPOTENT ON THE INVOICE ITSELF — the half that was missing until
+   *    27 Aug 2026. A gateway id can only protect a lane that HAS one, and the
+   *    manual "Mark paid" has none, so its call skipped the check above
+   *    entirely. Measured on a live RM500 invoice: an admin double-click wrote
+   *    a second full settlement and a gateway settling what a human had already
+   *    marked wrote a third — three succeeded rows, a ledger reading RM1,500.
+   *    A period that is ALREADY settled now returns its existing settlement
+   *    instead of adding one. Locked with SELECT … FOR UPDATE rather than a
+   *    plain read: under READ COMMITTED two concurrent settles would otherwise
+   *    both see 'unpaid' and both proceed, which is precisely the double-click.
+   *
+   *    An invoice that reads paid with NO succeeded row behind it is allowed
+   *    through deliberately: those are periods settled before this table
+   *    existed, and recording what paid them adds history rather than money.
+   * 3. ATOMIC. The payment row and the invoice's `status`/`paid_at` move in one
    *    transaction, so there is no instant where money is recorded against an
    *    invoice that still reads unpaid — the window a retrying gateway would
    *    otherwise land in.
-   * 3. The AMOUNT comes from the invoice, never from the caller — for a decline
+   * 4. The AMOUNT comes from the invoice, never from the caller — for a decline
    *    as much as for a settlement. A webhook body is attacker-shaped input; the
    *    invoice is the only thing that knows what the period cost.
-   * 4. ONLY `succeeded` touches the invoice. A decline and a pending debit are
+   * 5. ONLY `succeeded` touches the invoice. A decline and a pending debit are
    *    recorded and change nothing about what is owed, which is the whole reason
-   *    this table is separate from the invoice's one status flag.
+   *    this table is separate from the invoice's one status flag — and why the
+   *    already-settled guard lets them through: history about a paid period is
+   *    still worth keeping.
    */
   async recordAttempt(input: AttemptInput): Promise<AttemptResult> {
     try {
-      if (input.gateway && input.gatewayPaymentId) {
-        const existing = await this.findByGatewayPaymentId(input.gateway, input.gatewayPaymentId);
-        if (existing) return { ok: true, payment: existing, alreadyRecorded: true };
-      }
-
       const outcome = input.outcome ?? 'succeeded';
       const settles = outcome === 'succeeded';
       const paidAt = input.paidAt ?? new Date();
 
-      const payment = await db.transaction(async (tx) => {
+      const settled = await db.transaction(async (tx) => {
         // Read the invoice inside the transaction, so a concurrent settlement
-        // cannot change the amount between the read and the write.
+        // cannot change the amount between the read and the write — and LOCK
+        // it, so a second settle waits here rather than racing past the
+        // already-paid check below with a stale 'unpaid'.
         const [invoice] = await tx
           .select()
           .from(SubscriptionInvoiceTable)
           .where(eq(SubscriptionInvoiceTable.id, input.subscriptionInvoiceId))
-          .limit(1);
+          .limit(1)
+          .for('update');
         if (!invoice) return null;
+
+        /**
+         * ONE GATEWAY PAYMENT ID IS ONE PAYMENT, AND A PAYMENT MOVES.
+         *
+         * The first version of this read returned any prior row for the id and
+         * called it already-recorded, which is right for a retry and wrong for
+         * everything else — and FPX is the rail where it matters, because the
+         * model's own comment says a mandate debit "sits pending for days".
+         * The gateway then delivers `succeeded` for that SAME id, the read
+         * matched the pending row, and the invoice was never settled at all:
+         * an org that paid stayed marked unpaid and would be chased for it.
+         *
+         * So a repeat delivery ADVANCES the row it already has. Terminal
+         * outcomes stand — a succeeded payment is never walked backwards by a
+         * late-arriving `failed`. `voided` is deliberately NOT terminal: an
+         * admin took the settlement back by hand, and the gateway re-reporting
+         * it is exactly how it should be able to come back.
+         */
+        if (input.gateway && input.gatewayPaymentId) {
+          const [prior] = await tx
+            .select()
+            .from(SubscriptionPaymentTable)
+            .where(
+              and(
+                eq(SubscriptionPaymentTable.gateway, input.gateway),
+                eq(SubscriptionPaymentTable.gatewayPaymentId, input.gatewayPaymentId),
+              ),
+            )
+            .limit(1);
+
+          if (prior) {
+            const terminal = prior.status === 'succeeded' || prior.status === 'refunded';
+            if (terminal || prior.status === outcome) {
+              return { row: prior, alreadyRecorded: true };
+            }
+            const [moved] = await tx
+              .update(SubscriptionPaymentTable)
+              .set({
+                status: outcome,
+                reference: input.reference ?? prior.reference,
+                failureReason: input.failureReason ?? null,
+                paidAt: settles ? paidAt : null,
+                updatedAt: new Date(),
+                updatedBy: input.actor,
+              })
+              .where(eq(SubscriptionPaymentTable.id, prior.id))
+              .returning();
+
+            if (settles) {
+              await tx
+                .update(SubscriptionInvoiceTable)
+                .set({ status: 'paid', paidAt, updatedAt: new Date(), updatedBy: input.actor })
+                .where(eq(SubscriptionInvoiceTable.id, invoice.id));
+            }
+            return { row: moved ?? prior, alreadyRecorded: false };
+          }
+        }
+
+        // ALREADY SETTLED? Hand back what settled it rather than settling again.
+        // Only a settling attempt is stopped: a decline or a pending debit
+        // against a paid period is history worth keeping and moves no money.
+        if (settles && invoice.status === 'paid') {
+          const [prior] = await tx
+            .select()
+            .from(SubscriptionPaymentTable)
+            .where(
+              and(
+                eq(SubscriptionPaymentTable.subscriptionInvoiceId, invoice.id),
+                eq(SubscriptionPaymentTable.status, 'succeeded'),
+              ),
+            )
+            .orderBy(desc(SubscriptionPaymentTable.createdAt))
+            .limit(1);
+          // A paid invoice with nothing behind it predates this table; let the
+          // write through so the period finally gains the record of how it was
+          // paid. Nothing is double-counted, because there is nothing to double.
+          if (prior) return { row: prior, alreadyRecorded: true };
+        }
 
         const [row] = await tx
           .insert(SubscriptionPaymentTable)
@@ -223,11 +347,11 @@ export class SubscriptionPaymentRepositoryClass {
             .where(eq(SubscriptionInvoiceTable.id, invoice.id));
         }
 
-        return row ?? null;
+        return row ? { row, alreadyRecorded: false } : null;
       });
 
-      if (!payment) return { ok: false, reason: 'invoice_not_found' };
-      return { ok: true, payment, alreadyRecorded: false };
+      if (!settled) return { ok: false, reason: 'invoice_not_found' };
+      return { ok: true, payment: settled.row, alreadyRecorded: settled.alreadyRecorded };
     } catch (error) {
       logger.error('[SubscriptionPaymentRepository.recordAttempt] Error:', error);
       return { ok: false, reason: 'error' };

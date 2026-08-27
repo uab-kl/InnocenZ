@@ -58,7 +58,10 @@ import {
 	planCapacityLabel,
 	planDescription,
 } from "@/lib/portal-i18n/plan-label";
-import { describePaymentMethod } from "@/services/payment-method";
+import {
+	describePaymentMethod,
+	willAutoCharge,
+} from "@/services/payment-method";
 
 const CARD_LAST4 = "4242";
 
@@ -948,9 +951,16 @@ function AgencySubscription() {
 									fpx: t.subscription.savedFpx,
 								}) +
 								(realRenewalLabel
-									? fill(t.agencyMisc.nextChargeSuffix, {
-											date: realRenewalLabel,
-										})
+									? fill(
+											// "Next charge" is a promise only an auto-chargeable
+											// rail can keep. A bank transfer and a mandate the
+											// bank has not approved RENEW on that date; nothing
+											// collects on it by itself.
+											willAutoCharge(sub.card)
+												? t.agencyMisc.nextChargeSuffix
+												: t.agencyMisc.renewsOnSuffix,
+											{ date: realRenewalLabel },
+										)
 									: "")
 							: t.subscription.noCardSavedYet
 						: fill(t.subscription.visaNextCharge, {

@@ -20,13 +20,33 @@ export type NegotiatedByRoleRow = {
 
 export class AdminRequestRepositoryClass {
   /**
-   * "Touches a negotiated arrangement" — the POS add-on or the Custom tier, in
-   * either direction. The two admin inboxes are split on exactly this: Plan
-   * Request owns everything that carries a negotiated price, Plan Change owns
-   * ordinary plan-to-plan switches.
+   * "Lands on a negotiated arrangement" — the POS add-on or the Custom tier.
+   * The two admin inboxes split on exactly this: Plan Request owns everything
+   * that ASKS FOR or ENDS a negotiated price, Plan Change owns the switches
+   * that put an org on an ordinary banded tier.
    *
-   * The second half matters: a venue moving Enterprise → Custom files a plain
-   * `plan_change`, so type alone would file it under the wrong page.
+   * Two halves, and each earns its place:
+   *
+   *  • BY TYPE. `pos_integration_quote` and `custom_renegotiation` are the
+   *    negotiation itself — joining Custom, re-agreeing its price, and LEAVING
+   *    it are all filed as the latter, so all three stay on Plan Request in
+   *    either direction. The admin who set a price must see it end.
+   *
+   *  • BY DESTINATION. A venue moving Enterprise → Custom files a plain
+   *    `plan_change`, so type alone would file it under the wrong page.
+   *
+   * ⚠️ DESTINATION, not either side (owner's call, 27 Aug 2026). This tested
+   * `current_plan_id` too, which sent the RESET — the plain `plan_change` that
+   * lands an org back on Starter after Custom ends — to Plan Request as well.
+   * The result was that Plan Change could hold nothing recent for an org that
+   * had ever touched Custom: Atlas had 14 requests, 13 of them routed away, and
+   * the one left on Plan Change was a 17 Jul switch that never reached the
+   * ledger, still presented as its current position six weeks later.
+   *
+   * The rule it replaces was written to keep the END of a negotiation visible,
+   * and that still holds — the cancellation REQUEST is a `custom_renegotiation`
+   * and is caught by type above, whatever tier it names. Only the resulting
+   * switch onto a normal tier moves, which is where an admin looks for it.
    */
   private negotiatedClause(): SQL {
     return sql`(
@@ -35,7 +55,7 @@ export class AdminRequestRepositoryClass {
         ${AdminRequestTable.type} = 'plan_change'
         and exists (
           select 1 from "main"."subscription" s
-          where s.id in (${AdminRequestTable.currentPlanId}, ${AdminRequestTable.requestedPlanId})
+          where s.id = ${AdminRequestTable.requestedPlanId}
             and (s.name = 'Custom' or s.kind = 'addon')
         )
       )
@@ -173,6 +193,46 @@ export class AdminRequestRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[AdminRequestRepository.latestPendingByType] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Every subscriber with a request of this type still awaiting an answer.
+   *
+   * The set form of `latestPendingByType`, and DELIBERATELY the same status
+   * test — `pending`, nothing else — because the agency's Subscription screen
+   * reads that method to decide whether it is "waiting for admin", and this one
+   * decides whether the weekly job may re-band. Two definitions of "still
+   * waiting" is how the page and the job come to disagree about the same
+   * agency, which is exactly the fault this exists to close.
+   *
+   * Returns `null` on a read failure rather than an empty set. An empty set
+   * means "nobody is mid-negotiation", which would let the caller re-price
+   * every agency including the ones it must not touch — a query that failed
+   * must not read as a quiet week. Callers are expected to stop, not proceed.
+   *
+   * One query for all subscribers rather than one per row: the caller already
+   * runs a PV count per agency, and adding a second per-agency round trip to a
+   * weekly loop is a cost with nothing to show for it.
+   */
+  async subscriberIdsAwaitingAnswer(type: AdminRequestType): Promise<Set<string> | null> {
+    try {
+      const rows = await db
+        .select({ subscriberId: AdminRequestTable.subscriberId })
+        .from(AdminRequestTable)
+        .where(
+          and(
+            eq(AdminRequestTable.type, type),
+            eq(AdminRequestTable.status, 'pending'),
+            isNotNull(AdminRequestTable.subscriberId),
+          ),
+        );
+      return new Set(
+        rows.map((row) => row.subscriberId).filter((id): id is string => Boolean(id)),
+      );
+    } catch (error) {
+      logger.error('[AdminRequestRepository.subscriberIdsAwaitingAnswer] Error:', error);
       return null;
     }
   }

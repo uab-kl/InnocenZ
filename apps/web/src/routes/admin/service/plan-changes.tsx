@@ -909,6 +909,42 @@ function PlanChangeEditForm({
 							{statusLabels[status](t)}
 						</Badge>
 					</div>
+					{/*
+					 * WHAT THE ORG IS ON TODAY, beside the switch this row records.
+					 *
+					 * This page shows one row per subscriber and presents it as the
+					 * latest — but any later move that touches Custom files as a
+					 * `custom_renegotiation` and lands on Plan REQUEST instead, so the
+					 * newest row HERE can be weeks stale with nothing saying so. Atlas
+					 * read "Growth → Enterprise, 17 Jul" as its current position while
+					 * the ledger said Starter at RM 125, and that switch had never
+					 * reached the ledger at all.
+					 *
+					 * The before/after above stays exactly as written — it is the record
+					 * of a decision, not a claim about the present. This line is the
+					 * present, and the amber note is what makes a stale or
+					 * never-applied row impossible to read as current.
+					 */}
+					{request.livePlanName && (
+						<div className="space-y-1 border-t border-(--lavender-soft)/20 pt-2">
+							<div className="flex items-center justify-between gap-2 text-base">
+								<span className="text-muted-foreground">
+									{t.adminRequests.currentlyOn}
+								</span>
+								<span className="font-medium">
+									{request.livePlanName}
+									{request.livePlanAmount
+										? ` · RM ${formatPrice(request.livePlanAmount)}`
+										: ""}
+								</span>
+							</div>
+							{toPlan?.name && request.livePlanName !== toPlan.name && (
+								<p className="text-sm text-amber-300/90">
+									{t.adminRequests.livePlanDiffers}
+								</p>
+							)}
+						</div>
+					)}
 					{needsApproval && (
 						<div className="flex flex-wrap gap-2 pt-1">
 							<Button

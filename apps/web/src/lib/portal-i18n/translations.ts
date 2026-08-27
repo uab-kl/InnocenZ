@@ -111,6 +111,8 @@ const en = {
 		kindPrRatingLow: "Rating drop",
 		kindShiftCoverNeeded: "Cover needed",
 		kindPvDayReviewPending: "Day review",
+		/** The agency's weekly subscription statement — PVs issued and the resulting tier. */
+		kindSubscription: "Subscription",
 		kindLeave: "MC / leave",
 		kindUnknown: "Update",
 		/** PR push title when a shift lands on them. */
@@ -989,6 +991,8 @@ const en = {
 		draftsNotShownYet: "Drafts · {total} · no outlet has been shown these yet",
 		/** Optional tail after the saved card's brand + last 4. Only a real renewal date earns it. */
 		nextChargeSuffix: " · next charge {date}",
+		/** For a rail nothing can auto-charge: it renews, but nobody collects. */
+		renewsOnSuffix: " · renews {date}",
 		/** Bare IC field label on the demo Finance Head card — agencyMisc.icForPv is the longer 'IC (for PV)' variant. */
 		ic: "IC",
 	},
@@ -3410,7 +3414,29 @@ const en = {
 		noAttemptsYet:
 			"No attempt recorded yet. Marking this period paid records the first one.",
 		recordedBy: "Recorded by",
+		/** A READ failure. Distinct from paymentStatusUpdateFailed, which is a WRITE. */
+		paymentDetailLoadFailed: "Could not load this payment record",
+		actorSystem: "System",
+		attemptInitiated: "Started",
+		attemptPending: "Awaiting the bank",
+		attemptSucceeded: "Settled",
+		attemptFailed: "Declined",
+		attemptRefunded: "Refunded",
+		attemptVoided: "Withdrawn",
 		showingBillingPeriods: "Showing {from} - {to} of {total} billing periods",
+		/**
+		 * The Plan Payment list counts ORGS now, not periods — it shows one row per
+		 * outlet/agency with its periods nested under it, so the old wording would
+		 * report a smaller number than the page holds.
+		 */
+		showingSubscribers: "Showing {from} - {to} of {total} outlets & agencies",
+		/** The chevron on an org's row. The row itself opens the detail panel. */
+		expandPeriods: "Show billing periods",
+		collapsePeriods: "Hide billing periods",
+		/** Summary cells on an org's row, standing in for one period's detail. */
+		periodsCount: "{n} periods",
+		unpaidOfTotal: "{unpaid} of {total} unpaid",
+		paidCount: "{n} paid",
 	},
 	agencyPending: {
 		/** Prefix before the applicant's legal IC name, beside their floor nickname. */
@@ -3660,7 +3686,24 @@ const en = {
 		statusContacted: "Contacted",
 		statusResolved: "Resolved",
 		statusDeclined: "Declined",
-		/** An agency plan switch applied automatically by PR count. */
+		/**
+		 * An agency plan switch applied automatically by PV count.
+		 *
+		 * PV, not PR — `agency-tier.job` bands on
+		 * `count(*) from payment_voucher where week_start = <previous complete
+		 * week>`.
+		 *
+		 * The difference is narrower than it looks, and worth stating exactly:
+		 * `payment_voucher_one_per_agency_pr_week` makes that ONE voucher per PR
+		 * per week, so the count is the number of PRs who actually WORKED that
+		 * week — never the roster. An agency holding 40 PRs of whom 8 worked
+		 * bands at 8, and "PR count" invites precisely the opposite reading.
+		 *
+		 * These strings said "PR count" until 27 Aug 2026, which also put the
+		 * admin portal at odds with the agency's own Subscription page ("chosen
+		 * by the PVs you issue each payroll week") and with the rate card beside
+		 * it, which is labelled in PV/week.
+		 */
 		statusDirect: "Direct",
 		statusApproved: "Approved",
 		roleOutlet: "Outlet",
@@ -3700,16 +3743,39 @@ const en = {
 		/** Second sentence of the quote hint; the space before it is added at the call site. */
 		leaveEmptyUsesPlanPrice:
 			"Leave empty to use the current plan price (RM {price}) on Resolve.",
+		/**
+		 * ⚠️ AGENCY CUSTOM ONLY. Custom IS the agency's tier, so the quote really
+		 * does become its tier price. The outlet's POS add-on is billed BESIDE the
+		 * plan and never replaces it — this line was shown for both, telling a
+		 * venue on Enterprise that RM 99,999 was about to become "the agency's tier
+		 * price": wrong on the role, and wrong on what the figure is.
+		 */
 		quoteBecomesTierPrice:
 			"RM {price} becomes the agency's tier price when you Resolve.",
+		/** The outlet's POS add-on: billed on top, so the plan is untouched. */
+		quoteBecomesAddonPrice:
+			"RM {price} becomes the POS add-on price when you Resolve — billed on top of the plan, which does not change.",
 		resolvedPriceFinal: "Resolved — the price is final.",
 		markContacted: "Mark contacted",
 		cancelRequest: "Cancel request",
 		resolve: "Resolve",
-		saveChanges: "Save changes",
+		/**
+		 * NOT the same button as Resolve, and it read like it — same primary fill,
+		 * in the bottom-right slot that means "main action". This one stores the
+		 * remarks and the quote and leaves the request PENDING; Resolve applies the
+		 * figure and settles it. The label now says which it is, so the difference
+		 * survives being skimmed.
+		 */
+		saveChanges: "Save without resolving",
 		/** {plan} is a plan name and stays English. */
 		toPlanReset: "Reset · {plan}",
-		toPlanCancelOnly: "Cancel · {plan} only",
+		/**
+		 * A venue dropping its add-on. Sits under a column headed "To plan", where
+		 * "Cancel · Enterprise only" read as CANCEL ENTERPRISE — the opposite of
+		 * what happens. The plan is the half that survives, so the label names the
+		 * half that ends and says the plan continues.
+		 */
+		toPlanCancelOnly: "POS ends · stays on {plan}",
 		/** Stands in for a plan name the lookup could not resolve, mid-sentence. */
 		fallbackItsTier: "its tier",
 		fallbackItsPlan: "its plan",
@@ -3750,7 +3816,7 @@ const en = {
 		toastSetCustomPrice: "Set a Custom price before resolving",
 		/** Admin → Service → Plan Change: the page header blurb. */
 		planChangeDescription:
-			"Plan-switch activity from outlets and agencies. Agency switches are applied automatically by PR count (Direct). Outlet switches wait as Pending — open a row to approve or decline; the price rides the from-plan until you approve, then follows the to-plan.",
+			"Plan-switch activity from outlets and agencies. Agency switches are applied automatically by PV count (Direct). Outlet switches wait as Pending — open a row to approve or decline; the price rides the from-plan until you approve, then follows the to-plan.",
 		activityTitle: "Plan change activity",
 		activityHintLatest:
 			"One row per subscriber — the switch that still needs answering. Choose Full history for every previous change.",
@@ -3766,6 +3832,15 @@ const en = {
 		switchedDate: "Switched date",
 		colPrice: "Price (RM)",
 		colSwitchedAt: "Switched at",
+		/** What the org is on TODAY — the present, beside the switch the row records. */
+		currentlyOn: "Currently on",
+		/**
+		 * Shown when today's plan is not the one this switch moved to. Either a
+		 * later move superseded it (and landed on Plan Request, because it touched
+		 * Custom), or this switch never reached the ledger at all.
+		 */
+		livePlanDiffers:
+			"This is not the plan above — a later change superseded it, or this switch never reached the billing ledger. Plan Payment shows what is actually billed.",
 		loadingPlanChanges: "Loading plan changes…",
 		failedToLoadPlanChanges: "Failed to load plan changes",
 		noPlanChangesFound: "No plan changes found",
@@ -3773,12 +3848,12 @@ const en = {
 		priceNoteNegotiatedCustom: "Negotiated · Custom",
 		priceNoteFromPlanStays: "From plan · stays",
 		priceNoteFromPlanUntilApproved: "From plan · until approved",
-		sheetHintDirect: "Agency switch — applied automatically by PR count.",
+		sheetHintDirect: "Agency switch — applied automatically by PV count.",
 		sheetHintPending:
 			"Outlet switch — review the before/after plans, then approve or decline.",
 		sheetHintActioned: "Outlet switch — already actioned.",
 		noteDirect:
-			"Switched automatically by PR count — the price follows the to-plan.",
+			"Switched automatically by PV count — the price follows the to-plan.",
 		notePendingApproval:
 			"Reminder: the outlet keeps paying the from-plan price until you approve. After approval the price follows the to-plan.",
 		noteApproved: "Approved — the price now follows the to-plan.",
@@ -5716,6 +5791,7 @@ const zh: PortalTranslations = {
 		kindPrRatingLow: "评分下降",
 		kindShiftCoverNeeded: "需要顶班",
 		kindPvDayReviewPending: "每日复核",
+		kindSubscription: "订阅",
 		kindLeave: "病假 / 请假",
 		kindUnknown: "更新",
 		shiftAssignedTitle: "已派班",
@@ -6465,6 +6541,7 @@ const zh: PortalTranslations = {
 		contactAdminCustomPricing: " · 定制价格请联系 InnocenZ 管理员",
 		draftsNotShownYet: "草稿 · {total} · 尚未向任何门店展示",
 		nextChargeSuffix: " · 下次扣费 {date}",
+		renewsOnSuffix: " · {date} 续期",
 		ic: "身份证",
 	},
 	managePr: {
@@ -8609,7 +8686,21 @@ const zh: PortalTranslations = {
 		paymentAttempts: "付款尝试",
 		noAttemptsYet: "尚无付款记录。将此账期标记为已付款即会记录第一笔。",
 		recordedBy: "记录人",
+		paymentDetailLoadFailed: "无法加载此付款记录",
+		actorSystem: "系统",
+		attemptInitiated: "已发起",
+		attemptPending: "等待银行处理",
+		attemptSucceeded: "已结清",
+		attemptFailed: "已拒付",
+		attemptRefunded: "已退款",
+		attemptVoided: "已撤回",
 		showingBillingPeriods: "显示第 {from} - {to} 项，共 {total} 个计费周期",
+		showingSubscribers: "显示第 {from} - {to} 项，共 {total} 个门店与经纪公司",
+		expandPeriods: "展开计费周期",
+		collapsePeriods: "收起计费周期",
+		periodsCount: "{n} 个周期",
+		unpaidOfTotal: "{total} 个中 {unpaid} 个未付",
+		paidCount: "{n} 个已付",
 	},
 	agencyPending: {
 		legal: "证件姓名",
@@ -8839,13 +8930,15 @@ const zh: PortalTranslations = {
 		estimateHint: "预估价 —— 处理前可协商或修改。",
 		leaveEmptyUsesPlanPrice: "留空则在处理时采用当前套餐价格（RM {price}）。",
 		quoteBecomesTierPrice: "处理后，RM {price} 将成为该经纪公司的档位价格。",
+		quoteBecomesAddonPrice:
+			"处理后，RM {price} 将成为 POS 加购价格 —— 在门店套餐之外另行计费，套餐本身不变。",
 		resolvedPriceFinal: "已处理 —— 价格已最终确定。",
 		markContacted: "标记为已联系",
 		cancelRequest: "取消申请",
 		resolve: "处理",
-		saveChanges: "保存更改",
+		saveChanges: "仅保存，不处理",
 		toPlanReset: "重置 · {plan}",
-		toPlanCancelOnly: "取消 · 仅保留 {plan}",
+		toPlanCancelOnly: "POS 结束 · 继续使用 {plan}",
 		fallbackItsTier: "其档位",
 		fallbackItsPlan: "其套餐",
 		fallbackTierNamed: "其指定的档位",
@@ -8878,7 +8971,7 @@ const zh: PortalTranslations = {
 		toastInvalidAmount: "请输入有效的非负金额",
 		toastSetCustomPrice: "处理前请先设定 Custom 价格",
 		planChangeDescription:
-			"门店与经纪公司的套餐切换记录。经纪公司按 PR 人数自动切换（自动生效）。门店切换会保持待审核 —— 点击任一行批准或拒绝；批准前按原套餐计价，批准后按新套餐计价。",
+			"门店与经纪公司的套餐切换记录。经纪公司按薪资单数量自动切换（自动生效）。门店切换会保持待审核 —— 点击任一行批准或拒绝；批准前按原套餐计价，批准后按新套餐计价。",
 		activityTitle: "套餐变更记录",
 		activityHintLatest:
 			"每个订阅方一行 —— 仅显示仍待处理的那次切换。选择「全部记录」可查看以往每一次变更。",
@@ -8893,6 +8986,9 @@ const zh: PortalTranslations = {
 		switchedDate: "变更日期",
 		colPrice: "价格（RM）",
 		colSwitchedAt: "变更时间",
+		currentlyOn: "当前套餐",
+		livePlanDiffers:
+			"与上方套餐不一致 —— 可能已被后续变更取代，或这次切换从未写入计费台账。实际计费以「套餐付款」为准。",
 		loadingPlanChanges: "正在加载套餐变更…",
 		failedToLoadPlanChanges: "加载套餐变更失败",
 		noPlanChangesFound: "未找到套餐变更",
@@ -8900,10 +8996,10 @@ const zh: PortalTranslations = {
 		priceNoteNegotiatedCustom: "议价 · Custom",
 		priceNoteFromPlanStays: "原套餐 · 维持不变",
 		priceNoteFromPlanUntilApproved: "原套餐 · 直至批准",
-		sheetHintDirect: "经纪公司切换 —— 按 PR 人数自动生效。",
+		sheetHintDirect: "经纪公司切换 —— 按薪资单数量自动生效。",
 		sheetHintPending: "门店切换 —— 核对变更前后的套餐，然后批准或拒绝。",
 		sheetHintActioned: "门店切换 —— 已处理。",
-		noteDirect: "按 PR 人数自动切换 —— 价格随新套餐。",
+		noteDirect: "按薪资单数量自动切换 —— 价格随新套餐。",
 		notePendingApproval:
 			"提醒：在你批准之前，门店仍按原套餐价格付费。批准后价格随新套餐。",
 		noteApproved: "已批准 —— 价格现已随新套餐。",

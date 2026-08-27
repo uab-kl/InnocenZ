@@ -36,6 +36,7 @@ const KIND_MAP: Record<NotificationKind, OpsNotificationKind> = {
 	pv_day_review_pending: "pv_day_review_pending",
 	leave_requested: "leave_requested",
 	leave_decided: "leave_decided",
+	subscription_tier_weekly: "subscription_tier_weekly",
 };
 
 /**
@@ -87,6 +88,18 @@ function hrefFor(
 			// rather than the roster.
 			case "pr_rating_low":
 				return "/agency/prs";
+			// The statement is about what this agency is billed, and Subscription
+			// is the only screen that shows the tier and the rate card together.
+			// Payroll would be the wrong landing even though the count comes from
+			// vouchers: the subject is the price, not any one PR's wages.
+			case "subscription_tier_weekly":
+				return "/agency/subscription";
+			// The statement is about what this agency is billed, and Subscription
+			// is the only screen that shows the tier and the rate card together.
+			// Payroll would be the wrong landing even though the count comes from
+			// vouchers: the subject is the price, not any one PR's wages.
+			case "subscription_tier_weekly":
+				return "/agency/subscription";
 			default:
 				return undefined;
 		}

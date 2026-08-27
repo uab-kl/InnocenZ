@@ -1,0 +1,23 @@
+-- The agency's weekly subscription statement: how many PVs it issued, and the
+-- tier that volume put it on.
+--
+-- Until now the weekly tier rule ran in silence. `agency-tier.job` re-priced an
+-- agency at 03:30 on Sunday and said so only in a server log — so the first an
+-- agency knew of a move from Plus to Growth was a larger invoice, and an agency
+-- past the rate card had no idea a Custom price had been requested on its
+-- behalf. The subscription screen shows TODAY's tier and cannot say what the
+-- week's count was, because nothing kept it.
+--
+-- Deliberately its own kind rather than reuse:
+--   * `payment_voucher_issued` is a PR's wage record, addressed to the PR.
+--   * `pv_day_review_pending` is money STUCK and a queue to clear; this is a
+--     statement about a week that closed normally, and reusing it would make a
+--     routine notice read as an alarm.
+-- Nothing existing is about billing at all — this is the first kind on the
+-- subscription side, so the producer lands with it, per the rule in
+-- notification.model.ts that a kind with no writer reads like a feature that
+-- exists.
+--
+-- Additive and idempotent; ALTER TYPE ... ADD VALUE cannot be rolled back
+-- inside a transaction, so a re-run must be a no-op.
+ALTER TYPE "main"."notification_kind" ADD VALUE IF NOT EXISTS 'subscription_tier_weekly';

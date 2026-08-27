@@ -55,7 +55,36 @@ export class AuthRepositoryClass {
         .from(UserRoleTable)
         .innerJoin(RoleTable, eq(UserRoleTable.roleId, RoleTable.id))
         .leftJoin(PortalTable, eq(RoleTable.portalId, PortalTable.id))
-        .where(and(inArray(UserRoleTable.userId, userIds)));
+        .where(
+          and(
+            inArray(UserRoleTable.userId, userIds),
+            /**
+             * A DEACTIVATED ROLE GRANTS NOTHING — INCLUDING ROUTE ACCESS.
+             *
+             * The admin sheet's Active toggle promises exactly that in its own
+             * caption ("Inactive roles grant no access"), and half the backend
+             * kept the promise: `getUserPermissions` and `userHasPermission`
+             * both filter this column, so the module create/read/update paths
+             * went dark when a role was switched off. THIS function — the one
+             * `requireRole`, `requirePortal`, `requirePermission`, the sub-role
+             * guards, `org-scope` and `redact-identity-docs` all actually call
+             * — filtered on the user id alone, so a deactivated role sailed
+             * through every guarded route as if the toggle did not exist.
+             *
+             * Fixed here rather than in the eighteen callers for the obvious
+             * reason: eighteen copies of a rule is eighteen chances to miss one,
+             * which is the mistake this filter repairs.
+             *
+             * ⚠️ This is the status of the ROLE DEFINITION, not of the grant —
+             * `user_role` has no status column, and revoking a role DELETES the
+             * row. Measured before shipping, because a wrong guess here locks
+             * every admin out: 11 roles, all `active`, and ZERO `user_role`
+             * rows pointing at a non-active role. Nobody loses access today;
+             * the toggle simply starts meaning what it already claims.
+             */
+            eq(RoleTable.status, 'active'),
+          ),
+        );
       return results;
     } catch (error) {
       // Rethrow, never return []: every caller (requireRole, the sub-role

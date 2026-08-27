@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PaymentMethodRepositoryClass, PaymentMethodOwner } from './payment-method.repository.js';
 import { UpsertPaymentMethodSchema } from '@/schema/payment-method.schema.js';
-import { fpxBankByCode, fpxBanks } from './payment-method.model.js';
+import { fpxBankByCode, fpxBanks, toPublicPaymentMethod } from './payment-method.model.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import { Error } from '@/error/index.js';
 import { getActor } from '@/util/actor.js';
@@ -40,7 +40,11 @@ export class PaymentMethodControllerClass {
         return res.status(200).json({ success: true, message: 'OK', data: null });
       }
       const record = await this.repository.getActiveFor(owner);
-      res.status(200).json({ success: true, message: 'OK', data: record });
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: record ? toPublicPaymentMethod(record) : null,
+      });
     } catch (error) {
       logger.error('[PaymentMethodController.getMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -67,7 +71,7 @@ export class PaymentMethodControllerClass {
         return res.status(200).json({ success: true, message: 'OK', data: [] });
       }
       const records = await this.repository.listFor(owner);
-      res.status(200).json({ success: true, message: 'OK', data: records });
+      res.status(200).json({ success: true, message: 'OK', data: records.map(toPublicPaymentMethod) });
     } catch (error) {
       logger.error('[PaymentMethodController.listMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -146,8 +150,34 @@ export class PaymentMethodControllerClass {
       const held = await this.repository.listFor(owner);
       const existing = held.find((row) => row.type === type);
 
+      /**
+       * AN APPROVED MANDATE IS NOT RE-ASKED FOR BY AN EDIT.
+       *
+       * `fields` above is INSERT-shaped: it forces `mandateStatus: 'pending'`,
+       * which is exactly right for a mandate being asked for and destructive for
+       * one that already exists. Re-using it on the update branch meant a venue
+       * correcting its billing email walked its BANK-APPROVED direct debit back
+       * to pending — the arrangement stops being chargeable, and getting it back
+       * costs another trip to the bank. `mandateReference`, written by the
+       * gateway rather than by this screen, was nulled the same way whenever the
+       * browser did not happen to echo it.
+       *
+       * Only the bank moves a mandate's state. So an update keeps whatever the
+       * existing row holds, and re-asks only when the venue has genuinely picked
+       * a DIFFERENT bank — which is a new authorisation and must start pending.
+       */
+      const rebank = existing?.type === 'fpx_mandate' && fields.bankCode !== existing.bankCode;
+      const updateFields =
+        existing?.type === 'fpx_mandate' && !rebank
+          ? {
+              ...fields,
+              mandateStatus: existing.mandateStatus,
+              mandateReference: parsed.data.mandateReference ?? existing.mandateReference,
+            }
+          : fields;
+
       const record = existing
-        ? await this.repository.update(existing.id, { ...fields, updatedBy: actor })
+        ? await this.repository.update(existing.id, { ...updateFields, updatedBy: actor })
         : await this.repository.create({
             ...('outletId' in owner ? { outletId: owner.outletId } : { agencyId: owner.agencyId }),
             ...fields,
@@ -162,7 +192,11 @@ export class PaymentMethodControllerClass {
       if (!record) {
         return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
       }
-      res.status(200).json({ success: true, message: 'Payment method saved', data: record });
+      res.status(200).json({
+        success: true,
+        message: 'Payment method saved',
+        data: toPublicPaymentMethod(record),
+      });
     } catch (error) {
       logger.error('[PaymentMethodController.upsertMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -195,7 +229,7 @@ export class PaymentMethodControllerClass {
       res.status(200).json({
         success: true,
         message: 'Default payment method updated',
-        data: await this.repository.listFor(owner),
+        data: (await this.repository.listFor(owner)).map(toPublicPaymentMethod),
       });
     } catch (error) {
       logger.error('[PaymentMethodController.setDefaultMine] Error:', error);
@@ -241,7 +275,7 @@ export class PaymentMethodControllerClass {
       res.status(200).json({
         success: true,
         message: 'Payment method removed',
-        data: await this.repository.listFor(owner),
+        data: (await this.repository.listFor(owner)).map(toPublicPaymentMethod),
       });
     } catch (error) {
       logger.error('[PaymentMethodController.removeMine] Error:', error);
@@ -253,7 +287,7 @@ export class PaymentMethodControllerClass {
   async list(_req: Request, res: Response) {
     try {
       const records = await this.repository.listAll();
-      res.status(200).json({ success: true, message: 'OK', data: records });
+      res.status(200).json({ success: true, message: 'OK', data: records.map(toPublicPaymentMethod) });
     } catch (error) {
       logger.error('[PaymentMethodController.list] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
