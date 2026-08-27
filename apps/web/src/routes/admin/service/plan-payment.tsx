@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { InvoicePaymentSheet } from "@/components/admin/invoice-payment-sheet";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { SourceToggle } from "@/components/admin/source-toggle";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
 	Table,
 	TableBody,
@@ -124,6 +126,29 @@ function PlanPaymentPage() {
 	const queryClient = useQueryClient();
 
 	const [statusFilter, setStatusFilter] = useState<string>("all");
+	/**
+	 * Which invoice is mid-mark-paid, and the reference typed so far.
+	 *
+	 * Marking paid asks for the bank reference FIRST, because that is the moment
+	 * the admin has it in front of them. `payment_voucher` has recorded which
+	 * transfer paid a PR since it was written; the subscription side never did,
+	 * and a reference asked for on some later screen is a reference nobody fills
+	 * in. Marking UNPAID stays a single click — a correction should not be made
+	 * tedious.
+	 */
+	const [referenceFor, setReferenceFor] = useState<{
+		id: string;
+		value: string;
+	} | null>(null);
+	/**
+	 * Which invoice the right-hand panel is showing.
+	 *
+	 * The table can only carry the invoice — a period, a figure, one status flag.
+	 * The two questions an admin opens a row to ask (what did they pay WITH, and
+	 * did anything already fail) live in `payment_method` and
+	 * `subscription_payment`, so they need a panel rather than more columns.
+	 */
+	const [detailId, setDetailId] = useState<string | null>(null);
 	// "all" plus the two payer roles — a PR never holds a subscription, so the
 	// PR button is deliberately not offered.
 	const [roleFilter, setRoleFilter] = useState<"all" | SubscriberType>("all");
@@ -160,12 +185,15 @@ function PlanPaymentPage() {
 		mutationFn: ({
 			id,
 			status,
+			reference,
 		}: {
 			id: string;
 			status: SubscriptionInvoiceStatus;
-		}) => setSubscriptionInvoiceStatus(id, status, logout),
+			reference?: string | null;
+		}) => setSubscriptionInvoiceStatus(id, status, logout, reference),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["subscription-invoices"] });
+			setReferenceFor(null);
 			toast.success(response.message || t.adminService.paymentStatusUpdated);
 		},
 		onError: (error) => {
@@ -350,7 +378,11 @@ function PlanPaymentPage() {
 									</TableRow>
 								) : (
 									records.map((invoice) => (
-										<TableRow key={invoice.id}>
+										<TableRow
+											key={invoice.id}
+											className="cursor-pointer"
+											onClick={() => setDetailId(invoice.id)}
+										>
 											<TableCell className="text-base font-medium">
 												{invoice.subscriberName}
 											</TableCell>
@@ -388,30 +420,102 @@ function PlanPaymentPage() {
 											<TableCell className="text-base whitespace-nowrap text-muted-foreground">
 												{invoice.paidAt ? formatDate(invoice.paidAt) : "—"}
 											</TableCell>
-											<TableCell className="text-right">
+											{/*
+											 * The row opens the detail panel, so this cell stops the
+											 * click here — otherwise typing a bank reference or
+											 * pressing Mark paid would ALSO slide a panel over the
+											 * input being used.
+											 */}
+											<TableCell
+												className="text-right"
+												onClick={(e) => e.stopPropagation()}
+											>
 												{/*
 												 * Both directions, always — an admin who marks the wrong
 												 * period paid has to be able to take it back, and a
 												 * one-way button is how a wrong figure becomes permanent.
 												 */}
-												<Button
-													size="sm"
-													variant={
-														invoice.status === "paid" ? "outline" : "default"
-													}
-													disabled={isSaving}
-													onClick={() =>
-														statusMutation.mutate({
-															id: invoice.id,
-															status:
-																invoice.status === "paid" ? "unpaid" : "paid",
-														})
-													}
-												>
-													{invoice.status === "paid"
-														? t.adminService.markUnpaid
-														: t.adminService.markPaid}
-												</Button>
+												{referenceFor?.id === invoice.id ? (
+													<div className="flex flex-col items-end gap-1">
+														<Input
+															autoFocus
+															value={referenceFor.value}
+															maxLength={120}
+															placeholder={
+																t.adminService.paymentReferencePlaceholder
+															}
+															aria-label={t.adminService.paymentReference}
+															className="h-8 w-56 text-sm"
+															onChange={(e) =>
+																setReferenceFor({
+																	id: invoice.id,
+																	value: e.target.value,
+																})
+															}
+															onKeyDown={(e) => {
+																if (e.key === "Enter")
+																	statusMutation.mutate({
+																		id: invoice.id,
+																		status: "paid",
+																		reference:
+																			referenceFor.value.trim() || null,
+																	});
+																if (e.key === "Escape") setReferenceFor(null);
+															}}
+														/>
+														<span className="text-xs text-muted-foreground">
+															{t.adminService.paymentReferenceHint}
+														</span>
+														<div className="flex gap-2">
+															<Button
+																size="sm"
+																variant="outline"
+																disabled={isSaving}
+																onClick={() => setReferenceFor(null)}
+															>
+																{t.common.cancel}
+															</Button>
+															<Button
+																size="sm"
+																disabled={isSaving}
+																onClick={() =>
+																	statusMutation.mutate({
+																		id: invoice.id,
+																		status: "paid",
+																		reference:
+																			referenceFor.value.trim() || null,
+																	})
+																}
+															>
+																{t.adminService.confirmPayment}
+															</Button>
+														</div>
+													</div>
+												) : (
+													<Button
+														size="sm"
+														variant={
+															invoice.status === "paid" ? "outline" : "default"
+														}
+														disabled={isSaving}
+														onClick={() => {
+															// Taking a mark back is immediate; asserting a
+															// payment asks what paid it.
+															if (invoice.status === "paid") {
+																statusMutation.mutate({
+																	id: invoice.id,
+																	status: "unpaid",
+																});
+																return;
+															}
+															setReferenceFor({ id: invoice.id, value: "" });
+														}}
+													>
+														{invoice.status === "paid"
+															? t.adminService.markUnpaid
+															: t.adminService.markPaid}
+													</Button>
+												)}
 											</TableCell>
 										</TableRow>
 									))
@@ -460,6 +564,24 @@ function PlanPaymentPage() {
 					)}
 				</CardContent>
 			</Card>
+
+			<Sheet
+				open={detailId != null}
+				onOpenChange={(open) => {
+					if (!open) setDetailId(null);
+				}}
+			>
+				<SheetContent
+					side="right"
+					className="w-full overflow-y-auto sm:max-w-xl md:max-w-2xl"
+				>
+					{/* Keyed on the id so switching rows remounts rather than showing
+					    the previous invoice's figures while the next one loads. */}
+					{detailId && (
+						<InvoicePaymentSheet key={detailId} invoiceId={detailId} />
+					)}
+				</SheetContent>
+			</Sheet>
 		</PageShell>
 	);
 }

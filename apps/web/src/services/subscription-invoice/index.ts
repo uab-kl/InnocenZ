@@ -105,11 +105,18 @@ export async function setSubscriptionInvoiceStatus(
 	id: string,
 	status: SubscriptionInvoiceStatus,
 	onRefreshFail: () => void,
+	/**
+	 * The bank reference, when marking paid. Optional, and only meaningful in
+	 * that direction — the server writes it to `subscription_payment` alongside
+	 * the settlement, which is what finally gives the subscription side the
+	 * equivalent of `payment_voucher.bank_ref`.
+	 */
+	reference?: string | null,
 ): Promise<SubscriptionInvoiceApiResponse> {
 	const client = getClient(onRefreshFail);
 	const response = await client.put<SubscriptionInvoiceApiResponse>(
 		`/subscription-invoice/${id}`,
-		{ status },
+		{ status, ...(status === "paid" && reference ? { reference } : {}) },
 	);
 	return response.data;
 }

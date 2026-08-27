@@ -11,19 +11,52 @@ import { buildQueryParams } from "@/lib/build-query-params";
  * page. `gateway`/`gatewayToken` is where a real charge token would go once a
  * payment gateway is connected; until then a card can be RECORDED, not charged.
  */
+/**
+ * The rails an org can pay on. Only `card` and `fpx_mandate` can ever be charged
+ * automatically; the rest are one-off by nature, and the UI says so rather than
+ * offering an auto-pay toggle it cannot honour.
+ */
+export const paymentMethodTypes = [
+	"card",
+	"fpx_mandate",
+	"ewallet",
+	"duitnow",
+	"manual_transfer",
+] as const;
+export type PaymentMethodType = (typeof paymentMethodTypes)[number];
+
+/**
+ * A direct debit mandate's life. `pending` is the one that matters: the venue
+ * has asked, the bank has not agreed, and nothing may be debited.
+ */
+export type MandateStatus = "pending" | "active" | "cancelled" | "failed";
+
 export interface PaymentMethod {
 	id: string;
 	outletId: string | null;
 	agencyId: string | null;
+	type: PaymentMethodType;
 	brand: string;
-	last4: string;
-	expMonth: number;
-	expYear: number;
+	/** Card rails only — null on a mandate or a bank transfer. */
+	last4: string | null;
+	expMonth: number | null;
+	expYear: number | null;
 	holderName: string | null;
 	billingEmail: string | null;
+	mandateStatus: MandateStatus | null;
+	mandateReference: string | null;
+	/**
+	 * WHICH BANK the direct debit is authorised at — never an account number.
+	 * The payer is redirected to their own bank, which creates the mandate; the
+	 * number never reaches this app and no field for it exists anywhere.
+	 */
+	bankCode: string | null;
+	bankName: string | null;
 	gateway: string | null;
 	gatewayToken: string | null;
 	autoPay: boolean;
+	/** Which instrument would be charged, when an org holds several. */
+	isDefault: boolean;
 	status: string;
 	createdAt: string;
 	updatedAt: string;
@@ -32,13 +65,21 @@ export interface PaymentMethod {
 }
 
 export interface SavePaymentMethodInput {
-	brand: string;
-	/** EXACTLY four digits — the server rejects anything longer. */
-	last4: string;
-	expMonth: number;
-	expYear: number;
+	type: PaymentMethodType;
+	brand?: string;
+	/** EXACTLY four digits — the server rejects anything longer. Card rails only. */
+	last4?: string | null;
+	expMonth?: number | null;
+	expYear?: number | null;
 	holderName?: string | null;
 	billingEmail?: string | null;
+	/**
+	 * Sent for a mandate rail, but NOT trusted: the server forces `pending`,
+	 * because only the payer's bank can approve a direct debit.
+	 */
+	mandateReference?: string | null;
+	/** PayNet code of the bank to redirect to. Required for `fpx_mandate`. */
+	bankCode?: string | null;
 	autoPay?: boolean;
 	/** Required only for an operator who holds more than one venue. */
 	outletId?: string;
@@ -70,6 +111,54 @@ export async function saveMyPaymentMethod(
 		data: PaymentMethod;
 	}>("/payment-method/mine", input);
 	return response.data.data;
+}
+
+export interface FpxBank {
+	code: string;
+	name: string;
+}
+
+/**
+ * The FPX banks a venue can authorise a direct debit at.
+ *
+ * Fetched from the server rather than hardcoded here, so the picker cannot
+ * offer a bank the save would then reject — two copies of this roster is
+ * exactly how that mismatch happens.
+ */
+export async function fetchFpxBanks(
+	onRefreshFail: () => void,
+): Promise<FpxBank[]> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: FpxBank[];
+	}>("/payment-method/banks");
+	return response.data.data ?? [];
+}
+
+/**
+ * How a saved instrument reads on screen.
+ *
+ * ONE copy, because three surfaces print it — the Payment method card and both
+ * Subscription pages — and each used to hardcode `{brand} ···· {last4}`. That
+ * was correct while a card was the only rail; on a bank transfer it renders
+ * "Card ···· ····", which looks like a card whose digits failed to load rather
+ * than a venue that pays by transfer.
+ *
+ * Labels are passed in rather than imported so this stays free of the i18n
+ * context and the caller keeps control of the language.
+ */
+export function describePaymentMethod(
+	method: PaymentMethod,
+	labels: { transfer: string; fpx: string },
+): string {
+	if (method.type === "manual_transfer") return labels.transfer;
+	// The bank is what a venue recognises its own mandate by — "FPX direct
+	// debit" alone reads the same for every venue on the rail.
+	if (method.type === "fpx_mandate")
+		return method.bankName ? `${labels.fpx} · ${method.bankName}` : labels.fpx;
+	return `${method.brand} ···· ${method.last4 ?? "····"}`;
 }
 
 /**

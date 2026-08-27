@@ -42,6 +42,8 @@ import { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invo
 import { SubscriptionInvoiceControllerClass } from '@/features/subscription-invoice/subscription-invoice.controller.js';
 import { PaymentMethodRepositoryClass } from '@/features/payment-method/payment-method.repository.js';
 import { PaymentMethodControllerClass } from '@/features/payment-method/payment-method.controller.js';
+import { SubscriptionPaymentRepositoryClass } from '@/features/subscription-payment/subscription-payment.repository.js';
+import { SubscriptionPaymentControllerClass } from '@/features/subscription-payment/subscription-payment.controller.js';
 import { OutletTransactionRepositoryClass } from '@/features/outlet-transaction/outlet-transaction.repository.js';
 import { OutletTransactionControllerClass } from '@/features/outlet-transaction/outlet-transaction.controller.js';
 import { AdminRequestRepositoryClass } from '@/features/admin-request/admin-request.repository.js';
@@ -129,6 +131,12 @@ export const memberSubscriptionRepository =
 // One row per CHARGE, against member_subscription's one row per SUBSCRIPTION.
 export const subscriptionInvoiceRepository =
   new SubscriptionInvoiceRepositoryClass();
+// One row per ATTEMPT against those charges. Declared up here with the other
+// repositories because the INVOICE controller needs it too: marking a period
+// paid has to write the attempt that says how, and both paths go through this
+// one object so "paid" is defined in exactly one place.
+export const subscriptionPaymentRepository =
+  new SubscriptionPaymentRepositoryClass();
 export const authController = new AuthControllerClass(
   authRepository,
   jwtController,
@@ -235,14 +243,29 @@ export const subscriptionInvoiceController =
   new SubscriptionInvoiceControllerClass(
     subscriptionInvoiceRepository,
     orgScopeDeps,
+    // Marking a period paid now writes the attempt that records HOW and with
+    // which bank reference, through the same call a gateway webhook uses.
+    subscriptionPaymentRepository,
   );
 
-// The card a venue/agency pays with. Same scope resolver: the owner comes from
-// the session, never from the request body.
+// How a venue/agency pays. Same scope resolver: the owner comes from the
+// session, never from the request body.
 export const paymentMethodRepository = new PaymentMethodRepositoryClass();
 export const paymentMethodController = new PaymentMethodControllerClass(
   paymentMethodRepository,
   orgScopeDeps,
+);
+
+// The webhook + attempt-history surface. The repository it uses is declared
+// with the other repositories above, because the invoice controller shares it.
+export const subscriptionPaymentController = new SubscriptionPaymentControllerClass(
+  subscriptionPaymentRepository,
+  // Ownership of an attempt is ownership of its invoice; the controller reads
+  // the invoice rather than trusting a subscriber id from the query.
+  subscriptionInvoiceRepository,
+  orgScopeDeps,
+  paymentMethodRepository,
+  memberSubscriptionRepository,
 );
 
 export const outletTransactionRepository =

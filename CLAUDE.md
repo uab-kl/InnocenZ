@@ -83,9 +83,11 @@ described 106 gaps against 141.
   one stops, and the schema) — flows only, never a log.
 - `TEST_SCRIPT.md` (repo root) is the single source of truth: verify every change against it,
   add new requirements to §9, promote to §8 when verified, append a §10 changelog row.
-- Typecheck baselines — judge ONLY files you touched: backend has 26 pre-existing TS2883
-  router errors (one per `*.routes.ts`) + 2 known `pr.repository.ts` lines; `apps/web` has its
-  own pre-existing baseline.
+- Typecheck baselines — judge ONLY files you touched. ⚠️ **Backend and `apps/web` are BOTH at
+  ZERO errors as of 27 Aug 2026** (backend re-measured: 400 files, exit 0). The old "26
+  pre-existing TS2883 router errors + 2 `pr.repository.ts` lines" NO LONGER HOLDS — treat any
+  backend or web error as yours until proven otherwise, and prove it by stashing and re-running,
+  not by assuming. (`apps/mobile` still has the real baseline described below.)
 - ⚠️ **`apps/mobile` MUST be checked with `npx tsc --noEmit -p tsconfig.app.json`.** Its
   `tsconfig.json` is SOLUTION-STYLE (`"files": []`, `"include": []`, references only), so
   `-p tsconfig.json` compiles **zero files** and always reports clean. That is where the old

@@ -21,6 +21,9 @@ import platformConfigRoutes from '@/features/platform-config/platform-config.rou
 import memberSubscriptionRoutes from '@/features/member-subscription/member-subscription.routes.js';
 import subscriptionInvoiceRoutes from '@/features/subscription-invoice/subscription-invoice.routes.js';
 import paymentMethodRoutes from '@/features/payment-method/payment-method.routes.js';
+import subscriptionPaymentRoutes, {
+  subscriptionPaymentWebhookRouter,
+} from '@/features/subscription-payment/subscription-payment.routes.js';
 import outletTransactionRoutes from '@/features/outlet-transaction/outlet-transaction.routes.js';
 import adminRequestRoutes from '@/features/admin-request/admin-request.routes.js';
 import specialServiceRoutes from '@/features/special-service/special-service.routes.js';
@@ -47,6 +50,12 @@ v1Router.use('/webhooks/whatsapp', whatsappRoutes);
 // credential (minted by an authenticated POST). Everything else stays behind
 // authenticateJWT below.
 v1Router.use('/payment-voucher/export', paymentVoucherExportRoutes);
+// Payment-gateway settlement callbacks — public for the same reason Meta's are:
+// the caller is a machine with no session, and its SIGNATURE over the raw body
+// is the credential (verified in the controller before any field is read).
+// Mounted here rather than with the rest of /subscription-payment because
+// everything below authenticateJWT would 401 every genuine delivery.
+v1Router.use('/subscription-payment/webhook', subscriptionPaymentWebhookRouter);
 v1Router.use(authenticateJWT);
 v1Router.use('/user', userRoutes);
 // Admin-only in BOTH directions, mounted the same way as /platform-config.
@@ -87,6 +96,10 @@ v1Router.use('/platform-config', requireAdmin, platformConfigRoutes);
 v1Router.use('/member-subscription', memberSubscriptionRoutes);
 v1Router.use('/subscription-invoice', subscriptionInvoiceRoutes);
 v1Router.use('/payment-method', paymentMethodRoutes);
+// One row per ATTEMPT against an invoice. Carries the gateway webhook, which is
+// unauthenticated by design and verified by signature inside the route file —
+// so NO guard may be mounted here.
+v1Router.use('/subscription-payment', subscriptionPaymentRoutes);
 v1Router.use('/outlet-transaction', outletTransactionRoutes);
 v1Router.use('/admin-request', adminRequestRoutes);
 v1Router.use('/special-service', specialServiceRoutes);

@@ -51,6 +51,7 @@ import {
 	planDescription,
 } from "@/lib/portal-i18n/plan-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import { describePaymentMethod } from "@/services/payment-method";
 
 const RENEWAL_DATE = "15 Jul 2026";
 
@@ -909,16 +910,16 @@ function OutletSubscriptionPage() {
 				hint={
 					backend.backed
 						? backend.card
-							? renewalLabel
-								? fill(t.outletSubscription.cardHintRenewal, {
-										brand: backend.card.brand,
-										last4: backend.card.last4,
-										date: renewalLabel,
-									})
-								: fill(t.outletSubscription.cardHint, {
-										brand: backend.card.brand,
-										last4: backend.card.last4,
-									})
+							? // The instrument stamp comes from the one shared describer, so a
+								// bank transfer reads as "Bank transfer" rather than
+								// "Card ···· ····". The renewal tail is unchanged.
+								describePaymentMethod(backend.card, {
+									transfer: t.subscription.savedTransfer,
+									fpx: t.subscription.savedFpx,
+								}) +
+								(renewalLabel
+									? fill(t.agencyMisc.nextChargeSuffix, { date: renewalLabel })
+									: "")
 							: t.subscription.noCardSavedYet
 						: fill(t.outletSubscription.demoCardHint, {
 								last4: paymentCardLast4,

@@ -58,6 +58,7 @@ import {
 	planCapacityLabel,
 	planDescription,
 } from "@/lib/portal-i18n/plan-label";
+import { describePaymentMethod } from "@/services/payment-method";
 
 const CARD_LAST4 = "4242";
 
@@ -937,12 +938,14 @@ function AgencySubscription() {
 				hint={
 					sub.backed
 						? sub.card
-							? // Two keys, not one sentence: the brand + last-4 stamp already
-								// had a key, and the charge date is an optional tail that only
-								// a saved renewal date earns.
-								fill(t.subscription.cardBrandLast4, {
-									brand: sub.card.brand,
-									last4: sub.card.last4,
+							? // Two keys, not one sentence: the instrument stamp already had
+								// a key, and the charge date is an optional tail that only a
+								// saved renewal date earns. The stamp comes from the one
+								// shared describer, so a bank transfer does not print
+								// "Card ···· ····" as if its digits had failed to load.
+								describePaymentMethod(sub.card, {
+									transfer: t.subscription.savedTransfer,
+									fpx: t.subscription.savedFpx,
 								}) +
 								(realRenewalLabel
 									? fill(t.agencyMisc.nextChargeSuffix, {
