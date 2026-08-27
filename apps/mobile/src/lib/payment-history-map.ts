@@ -253,14 +253,25 @@ export function historyVoucherToHistoryWeek(v: PrHistoryVoucher): DemoHistoryWee
      * to tell two vouchers apart.
      */
     id: `week-${asIsoDate(v.weekStart) ?? 'na'}-${v.voucherId}`,
-    // The agency leads the title when we know it: two cards for one week are
-    // otherwise identical down to the venue, with only the PV number differing.
+    /*
+     * English FALLBACK only — the card's heading is rebuilt per-locale by
+     * `ShiftHistoryPanel` from the ISO bounds and `agencyName` below. This
+     * string is what it shows when a row has no week bounds to format from.
+     *
+     * The agency still rides the title: two cards for one week are otherwise
+     * identical down to the venue, with only the PV number differing.
+     */
     title: v.agencyName
       ? `PAYROLL WEEK · ${range} · ${v.agencyName}`
       : `PAYROLL WEEK · ${range}`,
     kind: 'payroll',
+    // ⚠️ MATCHING KEY — `weekLabelsMatch` pairs this week with its voucher on
+    // this exact English string. It is not what the card prints.
     weekLabel: range,
     pvRef: pvRefForWeek(v.weekEnd, v.voucherId, v.voucherNo),
+    weekStartIso: asIsoDate(v.weekStart) ?? undefined,
+    weekEndIso: asIsoDate(v.weekEnd) ?? undefined,
+    agencyName: v.agencyName ?? null,
   };
 }
 
@@ -344,9 +355,12 @@ export function currentWeekHistoryMeta(weekStart: string, weekEnd: string): Demo
   const range = formatRangeLabel(weekStart, weekEnd);
   return {
     id: 'week-current',
+    // English FALLBACK — see `historyVoucherToHistoryWeek` above.
     title: `CURRENT WEEK · ${range}`,
     kind: 'current',
     weekLabel: range,
     pvRef: 'PV pending Sunday',
+    weekStartIso: asIsoDate(weekStart) ?? undefined,
+    weekEndIso: asIsoDate(weekEnd) ?? undefined,
   };
 }

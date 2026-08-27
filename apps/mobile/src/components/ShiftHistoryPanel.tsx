@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import {
   formatRM,
+  formatUpcomingWeekLabel,
   historyShiftOutlets,
   mergeHistoryShiftsWithWeekPay,
   type DemoHistoryShift,
@@ -65,6 +66,37 @@ function statusPill(
   if (status === 'signed') return { variant: 'amber', label: t.history.statusSigned };
   if (status === 'current') return { variant: 'amber', label: t.shiftStatus.pending };
   return { variant: 'green', label: t.shiftStatus.sealed };
+}
+
+/**
+ * The week card's heading, rebuilt in the active locale from the week's DATA.
+ *
+ * `DemoHistoryWeek.title` is composed English at both producers in
+ * `payment-history-map.ts` and stays that way — but this line is its ONLY
+ * consumer (`matchPayWeekForHistoryWeek` pairs on `weekLabel` and `pvRef`), so
+ * the rendered heading is free to be localized. Formatting from the ISO bounds
+ * beats re-parsing the English title: the month names come from the dictionary
+ * by index and Chinese gets its own order for free, via the same
+ * `schedule.weekRange*` templates the timetable strip already uses.
+ *
+ * The English `title` remains the fallback for a week with no bounds to format
+ * — the `HISTORY_WEEKS` fixtures, and any voucher row whose week_start/week_end
+ * came back null.
+ *
+ * The agency's NAME is data — a company is called what it is called — so it is
+ * substituted, never translated. `t` comes LAST with no default: a default
+ * would pin whichever locale loaded first for every caller.
+ */
+function weekTitle(week: DemoHistoryWeek, t: AppTranslations): string {
+  if (!week.weekStartIso || !week.weekEndIso) return week.title;
+  const range = formatUpcomingWeekLabel(week.weekStartIso, week.weekEndIso, t);
+  if (week.kind === 'current') {
+    return formatMessage(t.history.weekTitleCurrent, { range });
+  }
+  const agency = week.agencyName?.trim();
+  return agency
+    ? formatMessage(t.history.weekTitlePayrollAgency, { range, agency })
+    : formatMessage(t.history.weekTitlePayroll, { range });
 }
 
 /**
@@ -346,7 +378,7 @@ export function ShiftHistoryPanel() {
             <View key={week.id} style={styles.weekCard}>
               <Pressable style={styles.weekHd} onPress={() => toggleWeek(week.id)}>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.weekTitle}>{week.title}</Text>
+                  <Text style={styles.weekTitle}>{weekTitle(week, t)}</Text>
                   <View style={styles.weekMetaRow}>
                     {week.kind === 'current' ? (
                       <Pill variant="amber">{t.history.statusCurrent}</Pill>

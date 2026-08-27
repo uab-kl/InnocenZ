@@ -578,6 +578,12 @@ export type AppTranslations = {
     /** Calendar legend for the gold dot under a day that has rows. */
     calLegendWorked: string;
     calLegendNote: string;
+    /** Uppercase heading of the live week's History card. {range} is the already-localized week range (schedule.weekRangeSameMonth / weekRangeCrossMonth), e.g. '23–29 Aug 2026'. Distinct from history.statusCurrent ('Current'), the amber pill on the same card. */
+    weekTitleCurrent: string;
+    /** Heading of a past week's History card when the agency is unknown. {range} is the already-localized week range. */
+    weekTitlePayroll: string;
+    /** Heading of a past week's History card when the agency is known — a PR on two rosters gets one card PER AGENCY for the same week, otherwise identical down to the venue. {agency} is the company's NAME and is substituted verbatim, never translated. */
+    weekTitlePayrollAgency: string;
   };
   signup: {
     title: string;
@@ -1429,6 +1435,58 @@ export type AppTranslations = {
     /** Thrown by lib/session.tsx when a profile/upload action runs with no token — Profile renders it. */
     notSignedIn: string;
   };
+  notif: {
+    /** Bell-sheet title for a `shift_assigned` row. The row's own English title stays on the wire and in the database — this is only the rendered label. zh and zh-Hant are identical: no character differs between the scripts. */
+    shiftAssignedTitle: string;
+    /** {date} is the shift day from the payload, already formatted through the active locale. Identical in both Chinese scripts. */
+    shiftAssignedBody: string;
+    /** Every `shift_cancelled` row whose payload carries no `withdrawn` flag — the agency cancelling the assignment AND the agency unassigning the PR, which are identical on the wire. True of both: the booking is off. Identical in both Chinese scripts. */
+    shiftCancelledTitle: string;
+    /** {date} is locale-formatted. The producer puts the day in the BODY rather than the payload, so it is read back off a body that is a bare date and nothing else. */
+    shiftCancelledBody: string;
+    /** `shift_cancelled` with `withdrawn: true` — the venue pulled the whole shift, not just this PR's seat. */
+    shiftWithdrawnTitle: string;
+    /** {venue} is the outlet's own name — never translated. {date} is locale-formatted. */
+    shiftWithdrawnBody: string;
+    /** Spelled out in full rather than substituting a fallback noun into the line above — some withdrawal payloads carry no outlet name, and a translated noun dropped into an English-shaped slot reads wrong in Chinese. */
+    shiftWithdrawnBodyNoVenue: string;
+    /** `leave_decided` with decision 'approved'. MC is a Malaysian medical certificate — same wording as t.checkin.mcLeave. */
+    leaveApprovedTitle: string;
+    leaveApprovedBody: string;
+    /** `leave_decided` with decision 'rejected' — of the two outcomes this is the one the PR MUST act on: the shift is still theirs. */
+    leaveRejectedTitle: string;
+    leaveRejectedBody: string;
+    /** Identical in both Chinese scripts — no character differs. */
+    overtimeApprovedTitle: string;
+    /** {minutes} = overtime minutes, {date} locale-formatted, {amount} already formatted as RM x.xx by formatRM. */
+    overtimeApprovedBody: string;
+    overtimeRejectedTitle: string;
+    /** Carries no money figure on purpose — unapproved overtime is not money. */
+    overtimeRejectedBody: string;
+    /** `payment_voucher_dispute_resolved` with outcome 'accepted'. */
+    disputeAcceptedTitle: string;
+    disputeRejectedTitle: string;
+    /** {component} is the disputed bucket's LABEL — the stored value ('wages'/'drinks'/'tips'/'others') stays English and is resolved through the existing t.evidence.kindWages / t.shiftStatus.drinks / t.shiftStatus.tips / t.evidence.kindOthers. {date} is locale-formatted. Identical in both Chinese scripts. */
+    disputeBody: string;
+    /** Same as disputeBody plus the agency's resolution note. {note} is the agency's own words and is carried across VERBATIM, never translated. Identical in both Chinese scripts. */
+    disputeBodyWithNote: string;
+    /** The REAL `payment_voucher_issued` row. Distinct from topbar.pvReadyTitle, which titles the awaiting-PV stand-in and takes different parts. */
+    pvIssuedTitle: string;
+    /** {start} and {end} are the Sun–Sat week bounds, both locale-formatted. */
+    pvIssuedBody: string;
+    /** `shift_released_early` — an approved cut-loss sent the PR home and sealed their wages for the hours worked. TITLE ONLY: the stored body names the venue and the day and the payload carries neither, so the body stays as stored. Identical in both Chinese scripts. */
+    releasedEarlyTitle: string;
+    /** An `agency_broadcast` row carrying a `swapId` — the outlet-swap request, which reuses that kind rather than migrating the PG enum. TITLE ONLY: the body names the current and proposed slots, neither of which is in the payload. */
+    swapRequestTitle: string;
+    /** `agency_join_resolved` with `status: 'active'` — the pr.controller path, the only accepted-join row the payload separates from a refused departure. */
+    joinAcceptedTitle: string;
+    joinAcceptedBody: string;
+    /** The BODY is deliberately left as stored — it is the agency's own reject reason, free text nobody may reword. */
+    joinDeclinedTitle: string;
+    /** `agency_join_resolved` with `approveStatus: 'left'` — the departure branch reuses the join kind, and 'left' is the one value only it writes. */
+    departureApprovedTitle: string;
+    departureApprovedBody: string;
+  };
 };
 
 export const translations: Record<AppLocale, AppTranslations> = {
@@ -1890,6 +1948,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       done: 'Done',
       calLegendWorked: 'Worked · has record',
       calLegendNote: 'Any date up to today · empty days show no rows.',
+      weekTitleCurrent: 'CURRENT WEEK · {range}',
+      weekTitlePayroll: 'PAYROLL WEEK · {range}',
+      weekTitlePayrollAgency: 'PAYROLL WEEK · {range} · {agency}',
     },
     signup: {
       title: 'Create account',
@@ -2475,6 +2536,36 @@ export const translations: Record<AppLocale, AppTranslations> = {
       networkError: 'network error',
       notSignedIn: 'Not signed in',
     },
+    notif: {
+      shiftAssignedTitle: 'You have a new shift',
+      shiftAssignedBody: 'Your shift is on {date}.',
+      shiftCancelledTitle: 'A shift was cancelled',
+      shiftCancelledBody: 'You are no longer booked for the shift on {date}.',
+      shiftWithdrawnTitle: 'A shift was withdrawn',
+      shiftWithdrawnBody: '{venue} withdrew the shift on {date}. You are no longer booked for it.',
+      shiftWithdrawnBodyNoVenue: 'The venue withdrew the shift on {date}. You are no longer booked for it.',
+      leaveApprovedTitle: 'MC / leave approved',
+      leaveApprovedBody: 'Your agency approved the request — you are excused from this shift with no penalty.',
+      leaveRejectedTitle: 'MC / leave rejected',
+      leaveRejectedBody: 'Your agency rejected the request — you are still on this shift.',
+      overtimeApprovedTitle: 'Overtime approved',
+      overtimeApprovedBody: 'Your {minutes} min of overtime on {date} was approved — {amount} is on that week’s payment voucher.',
+      overtimeRejectedTitle: 'Overtime not approved',
+      overtimeRejectedBody: 'Your {minutes} min of overtime on {date} was not approved. Ask your agency if you think this is wrong.',
+      disputeAcceptedTitle: 'Your dispute was accepted',
+      disputeRejectedTitle: 'Your dispute was rejected',
+      disputeBody: '{component} on {date}',
+      disputeBodyWithNote: '{component} on {date} — {note}',
+      pvIssuedTitle: 'Your payment voucher is ready',
+      pvIssuedBody: 'Week {start} to {end}. Check the amounts and raise a dispute if anything is wrong.',
+      releasedEarlyTitle: 'You were released early',
+      swapRequestTitle: 'Outlet swap — your answer is needed',
+      joinAcceptedTitle: 'You were accepted by the agency',
+      joinAcceptedBody: 'You can now be scheduled for shifts.',
+      joinDeclinedTitle: 'Your agency application was declined',
+      departureApprovedTitle: 'Your departure from the agency was approved',
+      departureApprovedBody: 'You are no longer under this agency.',
+    },
   },
   zh: {
     lang: {
@@ -2933,6 +3024,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       done: '完成',
       calLegendWorked: '已出勤 · 有记录',
       calLegendNote: '可选至今天为止的任意日期 · 无记录的日期不会显示内容。',
+      weekTitleCurrent: '本周 · {range}',
+      weekTitlePayroll: '薪资周 · {range}',
+      weekTitlePayrollAgency: '薪资周 · {range} · {agency}',
     },
     signup: {
       title: '创建账号',
@@ -3518,6 +3612,36 @@ export const translations: Record<AppLocale, AppTranslations> = {
       networkError: '网络错误',
       notSignedIn: '尚未登录',
     },
+    notif: {
+      shiftAssignedTitle: '你有新的班次',
+      shiftAssignedBody: '你的班次在 {date}。',
+      shiftCancelledTitle: '班次已取消',
+      shiftCancelledBody: '你已不在 {date} 的这个班次上。',
+      shiftWithdrawnTitle: '班次已撤销',
+      shiftWithdrawnBody: '{venue} 撤销了 {date} 的班次，你已不在这个班次上。',
+      shiftWithdrawnBodyNoVenue: '门店撤销了 {date} 的班次，你已不在这个班次上。',
+      leaveApprovedTitle: '病假 / 请假已批准',
+      leaveApprovedBody: '经纪公司已批准你的申请 — 本次班次免责且不扣款。',
+      leaveRejectedTitle: '病假 / 请假被拒绝',
+      leaveRejectedBody: '经纪公司拒绝了你的申请 — 你仍需出勤这个班次。',
+      overtimeApprovedTitle: '加班已批准',
+      overtimeApprovedBody: '{date} 的 {minutes} 分钟加班已获批准 — {amount} 已列入该周的结算单。',
+      overtimeRejectedTitle: '加班未获批准',
+      overtimeRejectedBody: '{date} 的 {minutes} 分钟加班未获批准。如认为有误，请联系你的经纪公司。',
+      disputeAcceptedTitle: '你的争议已被接受',
+      disputeRejectedTitle: '你的争议已被拒绝',
+      disputeBody: '{date} 的{component}',
+      disputeBodyWithNote: '{date} 的{component} — {note}',
+      pvIssuedTitle: '你的结算单已就绪',
+      pvIssuedBody: '{start} 至 {end} 这一周。请核对金额，如有出入请提出争议。',
+      releasedEarlyTitle: '你被安排提前收工',
+      swapRequestTitle: '换班请求 — 需要你的答复',
+      joinAcceptedTitle: '经纪公司已接受你的申请',
+      joinAcceptedBody: '现在可以为你安排班次了。',
+      joinDeclinedTitle: '你的加入申请被拒绝',
+      departureApprovedTitle: '你的离开申请已批准',
+      departureApprovedBody: '你已不再隶属这家经纪公司。',
+    },
   },
   'zh-Hant': {
     lang: {
@@ -3976,6 +4100,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       done: '完成',
       calLegendWorked: '已出勤 · 有紀錄',
       calLegendNote: '可選至今天為止的任意日期 · 無紀錄的日期不會顯示內容。',
+      weekTitleCurrent: '本週 · {range}',
+      weekTitlePayroll: '薪資週 · {range}',
+      weekTitlePayrollAgency: '薪資週 · {range} · {agency}',
     },
     signup: {
       title: '建立帳號',
@@ -4560,6 +4687,36 @@ export const translations: Record<AppLocale, AppTranslations> = {
       uploadUnreachable: '上傳失敗 — 無法與 {base} 完成通訊（{detail}）。請檢查 Wi-Fi，並確認伺服器已啟動。',
       networkError: '網路錯誤',
       notSignedIn: '尚未登入',
+    },
+    notif: {
+      shiftAssignedTitle: '你有新的班次',
+      shiftAssignedBody: '你的班次在 {date}。',
+      shiftCancelledTitle: '班次已取消',
+      shiftCancelledBody: '你已不在 {date} 的這個班次上。',
+      shiftWithdrawnTitle: '班次已撤銷',
+      shiftWithdrawnBody: '{venue} 撤銷了 {date} 的班次，你已不在這個班次上。',
+      shiftWithdrawnBodyNoVenue: '門店撤銷了 {date} 的班次，你已不在這個班次上。',
+      leaveApprovedTitle: '病假 / 請假已批准',
+      leaveApprovedBody: '經紀公司已批准你的申請 — 本次班次免責且不扣款。',
+      leaveRejectedTitle: '病假 / 請假被拒絕',
+      leaveRejectedBody: '經紀公司拒絕了你的申請 — 你仍需出勤這個班次。',
+      overtimeApprovedTitle: '加班已批准',
+      overtimeApprovedBody: '{date} 的 {minutes} 分鐘加班已獲批准 — {amount} 已列入該週的結算單。',
+      overtimeRejectedTitle: '加班未獲批准',
+      overtimeRejectedBody: '{date} 的 {minutes} 分鐘加班未獲批准。如認為有誤，請聯繫你的經紀公司。',
+      disputeAcceptedTitle: '你的爭議已被接受',
+      disputeRejectedTitle: '你的爭議已被拒絕',
+      disputeBody: '{date} 的{component}',
+      disputeBodyWithNote: '{date} 的{component} — {note}',
+      pvIssuedTitle: '你的結算單已就緒',
+      pvIssuedBody: '{start} 至 {end} 這一週。請核對金額，如有出入請提出爭議。',
+      releasedEarlyTitle: '你被安排提前收工',
+      swapRequestTitle: '換班請求 — 需要你的答覆',
+      joinAcceptedTitle: '經紀公司已接受你的申請',
+      joinAcceptedBody: '現在可以為你安排班次了。',
+      joinDeclinedTitle: '你的加入申請被拒絕',
+      departureApprovedTitle: '你的離開申請已批准',
+      departureApprovedBody: '你已不再隸屬這家經紀公司。',
     },
   },
 };

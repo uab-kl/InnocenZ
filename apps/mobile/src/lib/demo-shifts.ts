@@ -610,11 +610,30 @@ export type DemoHistoryShift = {
 
 export type DemoHistoryWeek = {
   id: string;
-  /** e.g. CURRENT WEEK · 19–25 Jul 2026 */
+  /**
+   * English FALLBACK heading, e.g. "CURRENT WEEK · 19–25 Jul 2026".
+   *
+   * Composed English at both producers in `payment-history-map.ts`. Nothing
+   * matches on it — `matchPayWeekForHistoryWeek` pairs on `weekLabel` and
+   * `pvRef` — so `ShiftHistoryPanel` rebuilds the heading in the active locale
+   * from the three fields below and only falls back to this string when a week
+   * carries no ISO bounds (the fixtures here, and a voucher row whose
+   * week_start/week_end came back null).
+   */
   title: string;
   kind: 'current' | 'payroll';
+  /**
+   * ⚠️ A MATCHING KEY, and English forever. `history-pay-sync.ts` compares it
+   * through `weekLabelsMatch` to pair a week with its voucher, and it is
+   * persisted alongside signed vouchers.
+   */
   weekLabel: string;
   pvRef?: string;
+  /** Week bounds as YYYY-MM-DD — the localized heading is formatted from these. */
+  weekStartIso?: string;
+  weekEndIso?: string;
+  /** The agency's NAME: data, substituted into the heading and never translated. */
+  agencyName?: string | null;
 };
 
 export const HISTORY_WEEKS: DemoHistoryWeek[] = [
