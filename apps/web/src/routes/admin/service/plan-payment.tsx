@@ -193,6 +193,10 @@ function PlanPaymentPage() {
 		}) => setSubscriptionInvoiceStatus(id, status, logout, reference),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["subscription-invoices"] });
+			// The row detail panel reads its own key. Without this it kept
+			// showing Unpaid and "No attempts yet" over a period that had just
+			// been settled — the panel contradicting the table it opened from.
+			queryClient.invalidateQueries({ queryKey: ["invoice-payment-detail"] });
 			setReferenceFor(null);
 			toast.success(response.message || t.adminService.paymentStatusUpdated);
 		},
@@ -445,6 +449,7 @@ function PlanPaymentPage() {
 																t.adminService.paymentReferencePlaceholder
 															}
 															aria-label={t.adminService.paymentReference}
+															disabled={isSaving}
 															className="h-8 w-56 text-sm"
 															onChange={(e) =>
 																setReferenceFor({
@@ -453,7 +458,10 @@ function PlanPaymentPage() {
 																})
 															}
 															onKeyDown={(e) => {
-																if (e.key === "Enter")
+																// The two buttons below are disabled while the
+																// settle is in flight; this key path was not, so
+																// a second Enter fired a second settle request.
+																if (e.key === "Enter" && !isSaving)
 																	statusMutation.mutate({
 																		id: invoice.id,
 																		status: "paid",

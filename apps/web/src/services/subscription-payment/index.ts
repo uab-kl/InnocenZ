@@ -82,6 +82,12 @@ export interface InvoicePaymentDetail {
 	 * Integration" and looked like the venue had no plan at all.
 	 */
 	lanes: BillingLane[];
+	/**
+	 * uuid -> display name for each attempt's `createdBy`, resolved server-side.
+	 * Stamps that are not people (`system`, `gateway:curlec`) are absent and the
+	 * panel labels them itself.
+	 */
+	actors: Record<string, string>;
 	/** Join with `org.logoImage` to build the logo URL. Null when R2 is off. */
 	r2PublicUrl: string | null;
 }

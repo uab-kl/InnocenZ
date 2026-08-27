@@ -51,7 +51,10 @@ import {
 	planDescription,
 } from "@/lib/portal-i18n/plan-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
-import { describePaymentMethod } from "@/services/payment-method";
+import {
+	describePaymentMethod,
+	willAutoCharge,
+} from "@/services/payment-method";
 
 const RENEWAL_DATE = "15 Jul 2026";
 
@@ -918,7 +921,14 @@ function OutletSubscriptionPage() {
 									fpx: t.subscription.savedFpx,
 								}) +
 								(renewalLabel
-									? fill(t.agencyMisc.nextChargeSuffix, { date: renewalLabel })
+									? fill(
+											// Same rule as the agency page: only a rail that can
+											// actually be charged says "next charge".
+											willAutoCharge(backend.card)
+												? t.agencyMisc.nextChargeSuffix
+												: t.agencyMisc.renewsOnSuffix,
+											{ date: renewalLabel },
+										)
 									: "")
 							: t.subscription.noCardSavedYet
 						: fill(t.outletSubscription.demoCardHint, {

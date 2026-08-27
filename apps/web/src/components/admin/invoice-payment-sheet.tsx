@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { formatDate, formatPrice } from "@/lib/utils";
+import { formatDate, formatDay, formatPrice } from "@/lib/utils";
 import type { PaymentMethod } from "@/services/payment-method";
 import {
 	fetchInvoicePaymentDetail,
@@ -141,14 +141,18 @@ export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 		);
 	}
 	if (isError || !data) {
+		// This is the panel failing to LOAD. It used to borrow the mutation's
+		// message and tell the admin a payment UPDATE had failed — a read error
+		// reported as a write error is how someone goes looking for money that
+		// never moved.
 		return (
 			<div className="p-6 text-sm text-muted-foreground">
-				{t.adminService.paymentStatusUpdateFailed}
+				{t.adminService.paymentDetailLoadFailed}
 			</div>
 		);
 	}
 
-	const { invoice, payments, methods, org, lanes, r2PublicUrl } = data;
+	const { invoice, payments, methods, org, lanes, actors, r2PublicUrl } = data;
 	const isAgency = invoice.subscriberType === "agency";
 	/**
 	 * Legacy rows still hold base64 data URLs and absolute URLs; newer ones hold
@@ -178,6 +182,32 @@ export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 		if (type === "manual_transfer") return t.subscription.methodTransfer;
 		if (type === "fpx_mandate") return t.subscription.methodFpx;
 		return t.subscription.methodCard;
+	};
+
+	/**
+	 * The attempt's state, in the reader's language. The badge printed the raw
+	 * enum — "succeeded", "voided" — inside a portal with a 中文 switch in its
+	 * own sidebar, on the panel that explains what happened to money.
+	 */
+	const paymentStatusLabelOf = (status: SubscriptionPayment["status"]) =>
+		({
+			initiated: t.adminService.attemptInitiated,
+			pending: t.adminService.attemptPending,
+			succeeded: t.adminService.attemptSucceeded,
+			failed: t.adminService.attemptFailed,
+			refunded: t.adminService.attemptRefunded,
+			voided: t.adminService.attemptVoided,
+		})[status] ?? status;
+
+	/**
+	 * Who recorded it. The server resolves a uuid to a person's name; a stamp
+	 * that is not a person keeps its own word. Falls back to the raw value
+	 * rather than blanking — an unrecognised actor is still evidence.
+	 */
+	const actorLabelOf = (actor: string) => {
+		if (actor === "system") return t.adminService.actorSystem;
+		if (actor.startsWith("gateway:")) return actor.slice("gateway:".length);
+		return actors?.[actor] ?? actor;
 	};
 
 	return (
@@ -227,10 +257,12 @@ export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 				<div className="divide-y divide-border/50">
 					<Row label={t.adminService.thisInvoiceFor}>{invoice.planName}</Row>
 					<Row label={t.adminService.billingCycleLabel}>
-						{invoice.billingCycle}
+						{invoice.billingCycle === "weekly"
+							? t.subscription.billedWeekly
+							: t.subscription.billedMonthly}
 					</Row>
 					<Row label={t.adminService.billingPeriodLabel}>
-						{formatDate(invoice.periodStart)} – {formatDate(invoice.periodEnd)}
+						{formatDay(invoice.periodStart)} – {formatDay(invoice.periodEnd)}
 					</Row>
 					<Row label={t.adminService.amountLabel}>
 						{formatPrice(invoice.amount)}
@@ -379,7 +411,7 @@ export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 										{methodTypeLabelOf(payment.methodType)}
 									</span>
 									<Badge className={paymentToneOf[payment.status]}>
-										{payment.status}
+										{paymentStatusLabelOf(payment.status)}
 									</Badge>
 								</div>
 								<div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
@@ -404,7 +436,8 @@ export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 										<p className="text-red-300">{payment.failureReason}</p>
 									)}
 									<p>
-										{t.adminService.recordedBy}: {payment.createdBy}
+										{t.adminService.recordedBy}:{" "}
+										{actorLabelOf(payment.createdBy)}
 									</p>
 								</div>
 							</li>

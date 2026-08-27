@@ -989,6 +989,8 @@ const en = {
 		draftsNotShownYet: "Drafts · {total} · no outlet has been shown these yet",
 		/** Optional tail after the saved card's brand + last 4. Only a real renewal date earns it. */
 		nextChargeSuffix: " · next charge {date}",
+		/** For a rail nothing can auto-charge: it renews, but nobody collects. */
+		renewsOnSuffix: " · renews {date}",
 		/** Bare IC field label on the demo Finance Head card — agencyMisc.icForPv is the longer 'IC (for PV)' variant. */
 		ic: "IC",
 	},
@@ -3410,6 +3412,15 @@ const en = {
 		noAttemptsYet:
 			"No attempt recorded yet. Marking this period paid records the first one.",
 		recordedBy: "Recorded by",
+		/** A READ failure. Distinct from paymentStatusUpdateFailed, which is a WRITE. */
+		paymentDetailLoadFailed: "Could not load this payment record",
+		actorSystem: "System",
+		attemptInitiated: "Started",
+		attemptPending: "Awaiting the bank",
+		attemptSucceeded: "Settled",
+		attemptFailed: "Declined",
+		attemptRefunded: "Refunded",
+		attemptVoided: "Withdrawn",
 		showingBillingPeriods: "Showing {from} - {to} of {total} billing periods",
 	},
 	agencyPending: {
@@ -6465,6 +6476,7 @@ const zh: PortalTranslations = {
 		contactAdminCustomPricing: " · 定制价格请联系 InnocenZ 管理员",
 		draftsNotShownYet: "草稿 · {total} · 尚未向任何门店展示",
 		nextChargeSuffix: " · 下次扣费 {date}",
+		renewsOnSuffix: " · {date} 续期",
 		ic: "身份证",
 	},
 	managePr: {
@@ -8609,6 +8621,14 @@ const zh: PortalTranslations = {
 		paymentAttempts: "付款尝试",
 		noAttemptsYet: "尚无付款记录。将此账期标记为已付款即会记录第一笔。",
 		recordedBy: "记录人",
+		paymentDetailLoadFailed: "无法加载此付款记录",
+		actorSystem: "系统",
+		attemptInitiated: "已发起",
+		attemptPending: "等待银行处理",
+		attemptSucceeded: "已结清",
+		attemptFailed: "已拒付",
+		attemptRefunded: "已退款",
+		attemptVoided: "已撤回",
 		showingBillingPeriods: "显示第 {from} - {to} 项，共 {total} 个计费周期",
 	},
 	agencyPending: {

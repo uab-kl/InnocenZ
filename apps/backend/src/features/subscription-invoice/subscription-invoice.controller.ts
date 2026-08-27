@@ -12,6 +12,7 @@ import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import type { SubscriptionPaymentRepositoryClass } from '@/features/subscription-payment/subscription-payment.repository.js';
+import type { PaymentMethodRepositoryClass } from '@/features/payment-method/payment-method.repository.js';
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -29,6 +30,8 @@ export class SubscriptionInvoiceControllerClass {
      * webhook uses, so the manual and automatic paths cannot disagree.
      */
     private subscriptionPaymentRepository: SubscriptionPaymentRepositoryClass,
+    /** Resolves WHICH instrument settled a period, when the admin names a rail. */
+    private paymentMethodRepository: PaymentMethodRepositoryClass,
   ) {}
 
   private buildFilter(req: Request): SubscriptionInvoiceFilter {
@@ -182,11 +185,33 @@ export class SubscriptionInvoiceControllerClass {
       }
 
       if (parsed.data.status === 'paid') {
+        /**
+         * WHICH INSTRUMENT, when the admin names a rail rather than a transfer.
+         *
+         * The gateway webhook resolves this the same way, and the two must not
+         * diverge — one settle path recording the instrument while its sibling
+         * leaves the foreign key NULL is how the trail stops answering 'how was
+         * this period paid'. Left null for a plain bank transfer, which really
+         * does pass through no instrument on file.
+         */
+        const method = parsed.data.methodType ?? 'manual_transfer';
+        const instrument =
+          method === 'manual_transfer'
+            ? null
+            : ((
+                await this.paymentMethodRepository.listFor(
+                  existing.subscriberType === 'agency'
+                    ? { agencyId: existing.subscriberId }
+                    : { outletId: existing.subscriberId },
+                )
+              ).find((row) => row.type === method) ?? null);
+
         const result = await this.subscriptionPaymentRepository.recordAttempt({
           subscriptionInvoiceId: id,
           // A manual mark-paid is an admin recording a transfer they have seen
           // on a statement; that is the honest default when none is given.
-          methodType: parsed.data.methodType ?? 'manual_transfer',
+          methodType: method,
+          paymentMethodId: instrument?.id ?? null,
           reference: parsed.data.reference ?? null,
           actor,
         });

@@ -193,6 +193,9 @@ export class SubscriptionInvoiceRepositoryClass {
           billingCycle: MemberSubscriptionTable.billingCycle,
           startedAt: MemberSubscriptionTable.startedAt,
           endedAt: MemberSubscriptionTable.endedAt,
+          // Read beside endedAt so a lane that was cancelled WITHOUT an end date
+          // is not billed forever — see stillSubscribed below.
+          status: MemberSubscriptionTable.status,
         })
         .from(MemberSubscriptionTable)
         .leftJoin(SubscriptionTable, eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id))
@@ -260,7 +263,24 @@ export class SubscriptionInvoiceRepositoryClass {
         // came out billed 3 Aug–2 Sep for Scale *and* 4 Aug–3 Sep for
         // Enterprise, two overlapping months for one venue, with its POS add-on
         // charged twice over the same days.
-        const stillSubscribed = ordered.some((row) => row.endedAt === null);
+        /**
+         * STILL ON THE LANE means an OPEN row that is also still a
+         * subscription. Testing `endedAt === null` alone read the date and
+         * ignored the word beside it: `PUT /member-subscription/:id` accepts
+         * `status` and `endedAt` independently (member-subscription.schema.ts
+         * :26-27), so an admin setting a row to `cancelled` without also
+         * stamping a date leaves it open forever — and this lane went on
+         * opening an invoice against it every morning. The dedicated `cancel`
+         * endpoint does stamp `endedAt`, which is why the gap stays invisible
+         * until someone edits the row instead of cancelling it.
+         *
+         * `past_due` counts as still subscribed on purpose: an org behind on
+         * payment has not left, and it is exactly the one that must keep being
+         * invoiced.
+         */
+        const stillSubscribed = ordered.some(
+          (row) => row.endedAt === null && (row.status === 'active' || row.status === 'past_due'),
+        );
 
         // A LANE THE ORG HAS LEFT IS NOT BILLED. Its periods are history, and
         // history is not a debt — an agency that dropped a tier in July does not

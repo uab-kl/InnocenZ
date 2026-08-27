@@ -5,6 +5,7 @@ import { paramId } from '@/util/params.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import type { PaymentMethodRepositoryClass } from '@/features/payment-method/payment-method.repository.js';
+import { toPublicPaymentMethod } from '@/features/payment-method/payment-method.model.js';
 import { env } from '@/env.js';
 import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { getGateway, listGateways } from './payment-gateway.js';
@@ -70,11 +71,16 @@ export class SubscriptionPaymentControllerClass {
       // Read through the invoice's OWN subscriber, never through an org id from
       // the query — the scope check above is only a scope check if what comes
       // back belongs to the row that was checked.
-      const methods = await this.paymentMethodRepository.listFor(
-        invoice.subscriberType === 'agency'
-          ? { agencyId: invoice.subscriberId }
-          : { outletId: invoice.subscriberId },
-      );
+      // Through the shared mapper like every other read: this is the FIFTH lane
+      // that serialises an instrument, and the one a per-controller strip of
+      // `gatewayToken` would have missed — it lives in a different feature.
+      const methods = (
+        await this.paymentMethodRepository.listFor(
+          invoice.subscriberType === 'agency'
+            ? { agencyId: invoice.subscriberId }
+            : { outletId: invoice.subscriberId },
+        )
+      ).map(toPublicPaymentMethod);
 
       const org = await this.repository.getOrgProfile(
         invoice.subscriberType,
@@ -100,6 +106,9 @@ export class SubscriptionPaymentControllerClass {
         pageSize: 50,
       });
 
+      // uuid -> display name, so the panel prints a person rather than an id.
+      const actors = await this.repository.resolveActorNames(payments.map((p) => p.createdBy));
+
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -109,6 +118,7 @@ export class SubscriptionPaymentControllerClass {
           methods,
           org,
           lanes,
+          actors,
           // The logo is a bare R2 key; the browser needs the base to build a URL,
           // the same way the payment-voucher endpoints hand it over.
           r2PublicUrl: r2PublicBase(),
@@ -173,13 +183,38 @@ export class SubscriptionPaymentControllerClass {
         return res.status(200).json({ success: true, message: 'Ignored', data: null });
       }
 
+      /**
+       * WHICH INSTRUMENT PAID, resolved rather than guessed.
+       *
+       * `event.methodType ?? 'card'` stamped "card" on every delivery that did
+       * not name a rail — including settlements for orgs that hold no card at
+       * all and pay by FPX mandate, so the attempt trail claimed a rail the
+       * venue has never used. And `paymentMethodId` was never written by either
+       * settle path, leaving the foreign key 0133 added permanently NULL.
+       *
+       * Both answers live on the org's default instrument, so both are read
+       * from it when the gateway does not say. Still null-safe: an org may hold
+       * no instrument, and `manual_transfer` is the honest fallback for money
+       * that arrived through no instrument this app knows about — which is
+       * exactly what the column's own migration comment describes.
+       */
+      const invoice = await this.invoiceRepository.getById(event.subscriptionInvoiceId);
+      const instrument = invoice
+        ? await this.paymentMethodRepository.getActiveFor(
+            invoice.subscriberType === 'agency'
+              ? { agencyId: invoice.subscriberId }
+              : { outletId: invoice.subscriberId },
+          )
+        : null;
+
       // ONE call for every outcome. A failed or still-pending attempt is exactly
       // what `subscription_payment` exists to hold — dropping it is how a venue
       // gets chased with no record of the three declines behind it — and the
       // amount is read from the invoice in both cases, never from the body.
       const result = await this.repository.recordAttempt({
         subscriptionInvoiceId: event.subscriptionInvoiceId,
-        methodType: event.methodType ?? 'card',
+        methodType: event.methodType ?? instrument?.type ?? 'manual_transfer',
+        paymentMethodId: instrument?.id ?? null,
         gateway: gateway.name,
         gatewayPaymentId: event.gatewayPaymentId,
         reference: event.reference ?? null,
