@@ -1604,8 +1604,21 @@ function RequestEditForm({
 						{t.common.cancel}
 					</Button>
 				</SheetClose>
+				{/*
+					SECONDARY, because it is the SMALLER of the two commits and was
+					wearing the same primary fill as Resolve — in the bottom-right slot,
+					which reads as "this is the main action". So the benign button looked
+					the most important while the one that writes a price into
+					`member_subscription` sat small in the Status row above.
+
+					They are genuinely different: this stores the remarks and the quote
+					and leaves the request PENDING; Resolve applies the figure and settles
+					it. Matching fills invited an admin to press the wrong one — and the
+					wrong one here is the one that bills.
+				*/}
 				<Button
 					type="button"
+					variant="secondary"
 					disabled={isSaving || (!remarksChanged && !quoteChanged)}
 					onClick={handleSave}
 				>

@@ -3759,7 +3759,14 @@ const en = {
 		markContacted: "Mark contacted",
 		cancelRequest: "Cancel request",
 		resolve: "Resolve",
-		saveChanges: "Save changes",
+		/**
+		 * NOT the same button as Resolve, and it read like it — same primary fill,
+		 * in the bottom-right slot that means "main action". This one stores the
+		 * remarks and the quote and leaves the request PENDING; Resolve applies the
+		 * figure and settles it. The label now says which it is, so the difference
+		 * survives being skimmed.
+		 */
+		saveChanges: "Save without resolving",
 		/** {plan} is a plan name and stays English. */
 		toPlanReset: "Reset · {plan}",
 		/**
@@ -8929,7 +8936,7 @@ const zh: PortalTranslations = {
 		markContacted: "标记为已联系",
 		cancelRequest: "取消申请",
 		resolve: "处理",
-		saveChanges: "保存更改",
+		saveChanges: "仅保存，不处理",
 		toPlanReset: "重置 · {plan}",
 		toPlanCancelOnly: "POS 结束 · 继续使用 {plan}",
 		fallbackItsTier: "其档位",
