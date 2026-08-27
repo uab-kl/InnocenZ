@@ -9,8 +9,32 @@ import {
 	DayPicker,
 	getDefaultClassNames,
 } from "react-day-picker";
+import { enGB, zhCN } from "react-day-picker/locale";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { cn } from "@/lib/utils";
+
+/**
+ * The date-fns locale object behind the calendar's own rendering.
+ *
+ * The month caption and the weekday header are NOT ours — they come from
+ * react-day-picker's inherited `formatCaption` / `formatWeekdayName`, which
+ * format through this object. With no `locale` prop the library falls back to
+ * `enUS`, so a 中文 portal still printed "August" and "Th". Passing the object is
+ * the whole fix; there is nothing to override formatter-by-formatter.
+ *
+ * These come from `react-day-picker/locale`, not `date-fns/locale`: same
+ * formatting, plus the library's translated ARIA labels (「选择月份」,
+ * 「前往下个月」…), which a bare date-fns locale leaves in English.
+ *
+ * English resolves to `enGB` rather than `enUS` for the reason `dateLocaleTag`
+ * gives — day-before-month ordering is the portal's convention — and the shape
+ * mirrors that helper so an unrecognised locale falls back to English the same
+ * way.
+ */
+function dayPickerLocale(locale: string) {
+	return locale === "zh" ? zhCN : enGB;
+}
 
 function Calendar({
 	className,
@@ -20,15 +44,29 @@ function Calendar({
 	buttonVariant = "ghost",
 	formatters,
 	components,
+	locale,
 	...props
 }: React.ComponentProps<typeof DayPicker> & {
 	buttonVariant?: React.ComponentProps<typeof Button>["variant"];
 }) {
 	const defaultClassNames = getDefaultClassNames();
+	const { locale: portalLocale } = usePortalLocale();
 
 	return (
 		<DayPicker
 			showOutsideDays={showOutsideDays}
+			// `locale` is pulled out of `...props` only so an explicit
+			// `locale={undefined}` from a caller still lands on the portal's choice
+			// instead of dropping the calendar back to the library's `enUS`. Any real
+			// value a caller passes still wins.
+			locale={locale ?? dayPickerLocale(portalLocale)}
+			// Pinned because the locale object carries a week start with it, and both
+			// `enGB` and `zhCN` start on MONDAY while the library's old `enUS` default
+			// started on Sunday. Without this line, localizing the labels would have
+			// silently rotated every calendar grid by a day — and the portal's weeks
+			// are Sun–Sat everywhere else (payroll, vouchers, `weekdayShortLabel`).
+			// Still `...props`-overridable below for a caller that wants otherwise.
+			weekStartsOn={0}
 			className={cn(
 				"group/calendar bg-background p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
 				String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
@@ -36,11 +74,14 @@ function Calendar({
 				className,
 			)}
 			captionLayout={captionLayout}
-			formatters={{
-				formatMonthDropdown: (date) =>
-					date.toLocaleString("default", { month: "short" }),
-				...formatters,
-			}}
+			// A `formatMonthDropdown` override used to sit here, forcing the SHORT
+			// month through `toLocaleString("default")`. It was dead: that formatter
+			// only fires under a dropdown caption, `captionLayout` defaults to "label",
+			// and no caller in the app passes anything else. Deleted rather than
+			// translated — with a real `locale` above, the library's own default
+			// already prints the localized month name, so re-adding an override would
+			// only re-pin the browser's language over the portal's.
+			formatters={formatters}
 			classNames={{
 				root: cn("w-fit", defaultClassNames.root),
 				months: cn(
@@ -194,6 +235,10 @@ function CalendarDayButton({
 			ref={ref}
 			variant="ghost"
 			size="icon"
+			// An attribute, not copy — nothing renders it and nothing reads it. Left
+			// on the browser's locale deliberately: routing it through the portal
+			// dictionary would make a DOM attribute's VALUE change with the language,
+			// which is how a selector or snapshot starts failing in one language only.
 			data-day={day.date.toLocaleDateString()}
 			data-selected-single={
 				modifiers.selected &&

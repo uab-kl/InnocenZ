@@ -11,8 +11,10 @@ import {
 	type PrPvRow,
 	type PrReceiptScan,
 	pvPayByDeadlineIsoFromIssueIso,
+	pvRowDateKeyToIso,
 	RECEIPT_COMMISSION_RULES,
 	reconcilePvTotals,
+	WEEKDAY_KEYS,
 } from "@agency-portal/lib/pr-demo";
 import { verifyReceiptScan } from "@agency-portal/lib/pr-shift-status";
 import type { ShiftHistoryRow } from "@agency-portal/lib/shift-history-utils";
@@ -34,16 +36,14 @@ import type { PortalTranslations } from "@/lib/portal-i18n/translations";
  *     block on `` `${dayLabel} ${dateLabel}` ``.
  *
  * So the token stays data. `weekdayShortLabel` renders it.
+ *
+ * The seven tokens are no longer written out here: this is now an alias for the
+ * ONE `WEEKDAY_KEYS` table (defined in `agency-payroll-demo-pvs`, re-exported by
+ * `pr-demo`), so the list that WRITES `PrPvRow.day` and the list this file
+ * matches against cannot drift apart. The name is kept because
+ * `portal-i18n/date-label` and `portal-i18n/translations` both cite it.
  */
-export const WEEKDAY_SHORT = [
-	"Sun",
-	"Mon",
-	"Tue",
-	"Wed",
-	"Thu",
-	"Fri",
-	"Sat",
-] as const;
+export const WEEKDAY_SHORT = WEEKDAY_KEYS;
 
 /**
  * Rendered weekday for a `WEEKDAY_SHORT` token — the render half of the split
@@ -316,30 +316,6 @@ export function isPvIssuedForWeek(pv: PrPaymentVoucher, weekStartIso: string) {
 	return pv.weekStartIso === weekStartIso;
 }
 
-function parseRowDateIso(row: PrPvRow, year: number): string | null {
-	const m = row.date.trim().match(/^(\d{1,2})\s+([A-Za-z]+)/);
-	if (!m) return null;
-	const day = parseInt(m[1], 10);
-	const mon = m[2].slice(0, 3).toLowerCase();
-	const months = [
-		"jan",
-		"feb",
-		"mar",
-		"apr",
-		"may",
-		"jun",
-		"jul",
-		"aug",
-		"sep",
-		"oct",
-		"nov",
-		"dec",
-	];
-	const mi = months.findIndex((x) => x === mon);
-	if (mi < 0) return null;
-	return toDateIso(year, mi + 1, day);
-}
-
 function parseDisputeDateIsoFromText(
 	text: string,
 	year: number,
@@ -354,7 +330,7 @@ function parseDisputeDateIsoFromText(
 	);
 	const m = withDay ?? bare;
 	if (!m) return null;
-	const iso = parseRowDateIso({ date: `${m[1]} ${m[2]}` } as PrPvRow, year);
+	const iso = pvRowDateKeyToIso({ date: `${m[1]} ${m[2]}` } as PrPvRow, year);
 	if (!iso || iso < weekStartIso || iso > weekEndIso) return null;
 	return iso;
 }
@@ -366,7 +342,7 @@ export function disputedDateIsosFromPv(pv: PrPaymentVoucher): string[] {
 	const isos = new Set<string>();
 	for (const row of pv.rows) {
 		if (row.ref?.toLowerCase().includes("disput")) {
-			const iso = parseRowDateIso(row, year);
+			const iso = pvRowDateKeyToIso(row, year);
 			if (iso) isos.add(iso);
 		}
 	}
@@ -389,7 +365,7 @@ function rowMatchesDisputeTarget(
 	target: WeeklyDisputeTarget,
 	year: number,
 ): boolean {
-	const iso = parseRowDateIso(row, year);
+	const iso = pvRowDateKeyToIso(row, year);
 	if (iso !== target.dateIso) return false;
 	const desc = row.desc.toLowerCase();
 	switch (target.incomeKey) {
@@ -553,7 +529,7 @@ function applyPvDisputeMarkersToDayMap(
 ) {
 	for (const row of pvRows) {
 		if (!row.ref?.toLowerCase().includes("disput")) continue;
-		const iso = parseRowDateIso(row, year);
+		const iso = pvRowDateKeyToIso(row, year);
 		if (!iso || iso < weekStartIso || iso > weekEndIso) continue;
 		const b = dayMap.get(iso);
 		if (!b) continue;
@@ -655,7 +631,7 @@ function breakdownsFromPvRows(
 ) {
 	const map = new Map<string, WeeklyDayBreakdown>();
 	for (const row of rows) {
-		const iso = parseRowDateIso(row, year);
+		const iso = pvRowDateKeyToIso(row, year);
 		if (!iso || iso < weekStartIso || iso > weekEndIso) continue;
 		const b = map.get(iso) ?? emptyWeekBreakdown();
 		addRowToBreakdown(b, row);

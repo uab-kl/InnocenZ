@@ -3,6 +3,8 @@
 import {
 	AGENCY_PAYROLL_PV_WEEKS_AGO,
 	AGENCY_PAYROLL_WEEK_PVS,
+	MONTH_KEYS,
+	WEEKDAY_KEYS,
 } from "@agency-portal/lib/agency-payroll-demo-pvs";
 import {
 	addDaysToIso,
@@ -134,33 +136,48 @@ export const PR_SHIFT_OFFERS: PrShiftOffer[] = [
 	},
 ];
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_NAMES = [
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec",
-];
+/**
+ * ⚠️ STORED / PARSED KEYS, NOT LABELS. Re-exported from
+ * `agency-payroll-demo-pvs`, which holds the one definition of each — the full
+ * warning lives at that definition, and the short version is: these tokens are
+ * WRITTEN onto `PrPvRow.date` / `PrPvRow.day`, PARSED back by
+ * `pvRowDateKeyToIso` and `parsePvIssuedMs`, matched by the `paidRefs`
+ * duplicate-payment guard, and persisted to sessionStorage. Translating either
+ * rewrites stored records and breaks the parsers, silently, with tsc green.
+ *
+ * They are defined upstream only because this module imports that one; this is
+ * the import site everything downstream should use. To SHOW a month or weekday
+ * to a reader, use `monthShortLabel` / `weekdayLabel` from
+ * `@/lib/portal-i18n/date-label` instead.
+ */
+export { MONTH_KEYS, WEEKDAY_KEYS };
+
+/**
+ * The 0-based month for a stored month KEY — "Jul", "jul" and "July" all give 6,
+ * and anything that is not one of `MONTH_KEYS` gives -1.
+ *
+ * Every reader of a stored short date goes through this one lookup, so the table
+ * that WRITES "18 Jul" and the tables that read it cannot desync. It replaced
+ * four hand-copied month lists, all since deleted: one inside `pvRowDateIso`
+ * here, one inside `pvRowDateToIso` in pr-payment-history, one inside
+ * `parseRowDateIso` in pr-weekly-payment, and `MONTH_MAP` in pv-template.
+ */
+export function monthKeyIndex(token: string): number {
+	const key = token.slice(0, 3).toLowerCase();
+	return MONTH_KEYS.findIndex((month) => month.toLowerCase() === key);
+}
 
 export function dayName(y: number, m: number, d: number) {
-	return DAY_NAMES[new Date(y, m - 1, d).getDay()];
+	return WEEKDAY_KEYS[new Date(y, m - 1, d).getDay()];
 }
 
 export function fmtDFriendly(y: number, m: number, d: number) {
-	return `${dayName(y, m, d)} · ${String(d).padStart(2, "0")} ${MONTH_NAMES[m - 1]} ${y}`;
+	return `${dayName(y, m, d)} · ${String(d).padStart(2, "0")} ${MONTH_KEYS[m - 1]} ${y}`;
 }
 
 /** Compact date for PR topbar (no year). */
 export function fmtDTopbar(y: number, m: number, d: number) {
-	return `${dayName(y, m, d)} ${String(d).padStart(2, "0")} ${MONTH_NAMES[m - 1]}`;
+	return `${dayName(y, m, d)} ${String(d).padStart(2, "0")} ${MONTH_KEYS[m - 1]}`;
 }
 
 export function parseYmdIso(iso: string): [number, number, number] {
@@ -192,13 +209,35 @@ export function fmtDShort(y: number, m: number, d: number) {
 	return `${dayName(y, m, d)} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
+/**
+ * ⚠️ Builds a stored KEY — "18 Jul" — not a label, despite the `fmt` name.
+ *
+ * Its output is written onto `PrPvRow.date` and read straight back by
+ * `pvRowDateKeyToIso` — which pr-weekly-payment and pr-payment-history both call
+ * — and by `formatPvVoucherDate` in pv-template; it is also the date half of a
+ * `paidRefs` entry, the duplicate-payment guard.
+ * So it stays English in every locale and is built from `MONTH_KEYS`.
+ *
+ * It should be called `pvRowDateKey`. The rename is deferred because four files
+ * outside this consolidation call it — PrWeeklyPaymentGrid.tsx,
+ * agency-actions.ts, history-demo-sync.ts and velvet-week-demo.ts.
+ *
+ * To display a day and month, use `dayMonthLabel(date, t)` from
+ * `@/lib/portal-i18n/date-label`.
+ */
 export function fmtDtable(_y: number, m: number, d: number) {
-	return `${String(d).padStart(2, "0")} ${MONTH_NAMES[m - 1]}`;
+	return `${String(d).padStart(2, "0")} ${MONTH_KEYS[m - 1]}`;
 }
 
-/** History list — e.g. "Thu 21 May 2026" */
+/**
+ * History list — e.g. "Thu 21 May 2026".
+ *
+ * ENGLISH in every locale: it reads the stored `WEEKDAY_KEYS` / `MONTH_KEYS`
+ * tables, takes no `t`, and passing one in would change nothing. Anything that
+ * needs a localized date must build it from `@/lib/portal-i18n/date-label`.
+ */
 export function fmtHistDate(y: number, m: number, d: number) {
-	return `${dayName(y, m, d)} ${d} ${MONTH_NAMES[m - 1]} ${y}`;
+	return `${dayName(y, m, d)} ${d} ${MONTH_KEYS[m - 1]} ${y}`;
 }
 
 export function addDay(
@@ -607,15 +646,17 @@ export function pvStatusLabel(status: PrPvStatus) {
 	return status;
 }
 
-/** Parse `issued` / `due` strings like "10 May 2026" to epoch ms */
+/**
+ * Parse `issued` / `due` strings like "10 May 2026" to epoch ms.
+ *
+ * A PARSER of a stored month KEY — it goes through `monthKeyIndex` so it reads
+ * exactly the table that wrote the string.
+ */
 export function parsePvIssuedMs(issued: string): number {
 	const m = issued.trim().match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
 	if (!m) return 0;
 	const day = parseInt(m[1], 10);
-	const mon = m[2].slice(0, 3).toLowerCase();
-	const monthIdx = MONTH_NAMES.findIndex((name) =>
-		name.toLowerCase().startsWith(mon),
-	);
+	const monthIdx = monthKeyIndex(m[2]);
 	if (monthIdx < 0) return 0;
 	return new Date(parseInt(m[3], 10), monthIdx, day).getTime();
 }
@@ -1241,26 +1282,21 @@ export const SEED_PR_PVS: PrPaymentVoucher[] = [
 	...AGENCY_PAYROLL_WEEK_PVS,
 ];
 
-function pvRowDateIso(row: PrPvRow, year: number): string | null {
+/**
+ * A stored `PrPvRow.date` KEY ("18 Jul") back to an ISO date, given the year the
+ * row belongs to. `null` when the string is not one of ours.
+ *
+ * THE parser for that key — pr-weekly-payment and pr-payment-history both call
+ * this rather than keeping their own. Each used to carry a private copy of the
+ * month list beside the one `fmtDtable` writes with; a drift between any two of
+ * those four lists resolved a date to the wrong month or to epoch, with nothing
+ * raising an error.
+ */
+export function pvRowDateKeyToIso(row: PrPvRow, year: number): string | null {
 	const m = row.date.trim().match(/^(\d{1,2})\s+([A-Za-z]+)/);
 	if (!m) return null;
 	const day = parseInt(m[1], 10);
-	const mon = m[2].slice(0, 3).toLowerCase();
-	const months = [
-		"jan",
-		"feb",
-		"mar",
-		"apr",
-		"may",
-		"jun",
-		"jul",
-		"aug",
-		"sep",
-		"oct",
-		"nov",
-		"dec",
-	];
-	const mi = months.findIndex((x) => x === mon);
+	const mi = monthKeyIndex(m[2]);
 	if (mi < 0) return null;
 	return ymdToIso(year, mi + 1, day);
 }
@@ -1268,16 +1304,6 @@ function pvRowDateIso(row: PrPvRow, year: number): string | null {
 function parseIsoYear(iso: string) {
 	return parseInt(iso.slice(0, 4), 10);
 }
-
-const DAY_NAMES_SHORT = [
-	"Sun",
-	"Mon",
-	"Tue",
-	"Wed",
-	"Thu",
-	"Fri",
-	"Sat",
-] as const;
 
 /**
  * Completed payroll weeks ago relative to the latest issued PV Sunday.
@@ -1385,7 +1411,7 @@ function parseCycleStartIso(cycle: string | undefined): string | null {
 	const m = cycle.match(/^(\d{1,2}\s+[A-Za-z]+)\s*[–-]/);
 	if (!m) return null;
 	const year = cycle.match(/(\d{4})\s*$/)?.[1] ?? getLiveTodayIso().slice(0, 4);
-	return pvRowDateIso(
+	return pvRowDateKeyToIso(
 		{
 			i: 0,
 			date: m[1],
@@ -1428,7 +1454,7 @@ function shiftPvRowsToWeek(
 	if (!anchor) return pv.rows;
 	const anchorYear = parseIsoYear(anchor);
 	return pv.rows.map((row) => {
-		const iso = pvRowDateIso(row, anchorYear);
+		const iso = pvRowDateKeyToIso(row, anchorYear);
 		if (!iso) return row;
 		const dayOffset = differenceInCalendarDays(parseISO(iso), parseISO(anchor));
 		const newIso = addDaysToIso(targetWeekStartIso, dayOffset);
@@ -1437,7 +1463,7 @@ function shiftPvRowsToWeek(
 		return {
 			...row,
 			date: fmtDtable(y, m, d),
-			day: DAY_NAMES_SHORT[dayDate.getDay()],
+			day: WEEKDAY_KEYS[dayDate.getDay()],
 		};
 	});
 }
@@ -1460,7 +1486,7 @@ function remapAgencyPayrollRowsToTargetWeek(
 		const [y, m, d] = iso.split("-").map(Number);
 		const dayDate = new Date(y, m - 1, d);
 		const dateLabel = fmtDtable(y, m, d);
-		const dayLabel = DAY_NAMES_SHORT[dayDate.getDay()]!;
+		const dayLabel = WEEKDAY_KEYS[dayDate.getDay()]!;
 		for (const row of rows.filter((r) => r.date === dateOrder[slot])) {
 			out.push({ ...row, date: dateLabel, day: dayLabel });
 		}
@@ -1612,11 +1638,13 @@ export function remapSeedReceiptScan(scan: PrReceiptScan): PrReceiptScan {
 	if (migrated === iso) return scan;
 	const newDate = migrateDemoYmd(scan.date);
 	const [y, m, d] = newDate;
-	const dateLabel = `${d} ${MONTH_NAMES[m - 1]} ${y}`;
+	// A stored KEY, not a label: it is spliced into `scan.scannedAt` over a stamp
+	// the regex above matched in English, and stored back on the scan.
+	const dateKey = `${d} ${MONTH_KEYS[m - 1]} ${y}`;
 	return {
 		...scan,
 		date: newDate,
-		scannedAt: scan.scannedAt.replace(/^\d{1,2}\s+\w+\s+\d{4}/, dateLabel),
+		scannedAt: scan.scannedAt.replace(/^\d{1,2}\s+\w+\s+\d{4}/, dateKey),
 		shiftSessionId: scan.shiftSessionId
 			? scan.shiftSessionId.replace(
 					/shift-\d{4}-\d{2}-\d{2}-/,

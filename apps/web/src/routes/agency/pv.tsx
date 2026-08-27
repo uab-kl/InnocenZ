@@ -99,6 +99,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dayMonthLabel } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 export const Route = createFileRoute("/agency/pv")({
@@ -259,11 +260,22 @@ function statusFiltersForWeek(tab: PayrollWeekTab) {
 	return PV_STATUS_FILTERS;
 }
 
-/** "2026-07-20" -> "20 Jul", so a week range reads "20 Jul – 26 Jul 2026". */
-function shortIsoDay(iso: string): string {
+/**
+ * "2026-07-20" -> "20 Jul", so a week range reads "20 Jul – 26 Jul 2026".
+ *
+ * `T00:00:00` keeps the parse LOCAL — a bare `YYYY-MM-DD` is UTC midnight,
+ * which in Asia/Kuala_Lumpur draws the previous day — so the label is read off
+ * the local parts and the helper is called with `utc` left false.
+ *
+ * The month word comes from the dictionary rather than a hardcoded `"en-GB"`,
+ * which pinned English regardless of the language switch. `t` is a PARAMETER,
+ * last and with no default: module scope cannot call a hook, and a default
+ * would pin the label to one language just as firmly as the old tag did.
+ */
+function shortIsoDay(iso: string, t: PortalTranslations): string {
 	const d = new Date(`${iso}T00:00:00`);
 	if (Number.isNaN(d.getTime())) return iso;
-	return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+	return dayMonthLabel(d, t);
 }
 
 /**
@@ -274,10 +286,13 @@ function shortIsoDay(iso: string): string {
  * backend's `cycle` column holds a CADENCE ("Weekly"), not a range, so without
  * this the row shows no dates at all and the only week on screen is the tab's.
  */
-function pvOwnWeekLabel(pv: PrPaymentVoucher): string | null {
+function pvOwnWeekLabel(
+	pv: PrPaymentVoucher,
+	t: PortalTranslations,
+): string | null {
 	if (!pv.weekStartIso || !pv.weekEndIso) return null;
 	const year = pv.weekEndIso.slice(0, 4);
-	return `${shortIsoDay(pv.weekStartIso)} – ${shortIsoDay(pv.weekEndIso)} ${year}`;
+	return `${shortIsoDay(pv.weekStartIso, t)} – ${shortIsoDay(pv.weekEndIso, t)} ${year}`;
 }
 
 /**
@@ -1211,9 +1226,9 @@ function AgencyPV() {
 										    are Sun–Sat, so the tab heading is one day out from the
 										    week this voucher actually covers. Print the voucher's
 										    range rather than letting the heading speak for it. */}
-										{pvOwnWeekLabel(pv) && (
+										{pvOwnWeekLabel(pv, t) && (
 											<p className="iz-tiny iz-muted2">
-												{t.agencyPv.weekWorked}: {pvOwnWeekLabel(pv)}
+												{t.agencyPv.weekWorked}: {pvOwnWeekLabel(pv, t)}
 											</p>
 										)}
 										<p className="iz-tiny iz-muted2">

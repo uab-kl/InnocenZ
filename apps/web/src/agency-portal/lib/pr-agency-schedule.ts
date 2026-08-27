@@ -497,10 +497,22 @@ export function getUpcomingWeekRange(baselineIso = getLiveTodayIso()): {
 }
 
 /**
- * A DATE RANGE, not copy — no `t`, deliberately. It is built from `fmtHistDate`,
- * the shared date helper that already formats against the active locale, and a
- * dictionary key that baked in a month name would be a second source of truth
- * for dates. Its one consumer drops it into `prPortal.timetableForWeek`, whose
+ * A DATE RANGE, not copy — no `t`, deliberately.
+ *
+ * ⚠️ CORRECTED. This note used to say `fmtHistDate` "already formats against the
+ * active locale". It does NOT, and never did: `fmtHistDate` reads the hardcoded
+ * `WEEKDAY_KEYS` / `MONTH_KEYS` tables in `pr-demo` — the stored-and-parsed date
+ * tokens, which the audit fixed as English — so what comes out of here is
+ * ENGLISH in every locale ("Thu 21 May 2026"), and threading `t` in would change
+ * nothing. The same-month branch below depends on that shape too: it recovers
+ * "May 2026" with `.split(" ").slice(2)`, which only holds while the parts stay
+ * `weekday day month year`.
+ *
+ * A localized week range has to be built from `dayMonthLabel` /
+ * `monthShortLabel` in `@/lib/portal-i18n/date-label`, not by passing a
+ * dictionary to this function.
+ *
+ * Its one consumer drops the result into `prPortal.timetableForWeek`, whose
  * `{week}` hole is documented as arriving already formatted.
  */
 export function formatUpcomingWeekLabel(

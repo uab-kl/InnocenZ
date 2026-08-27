@@ -7,18 +7,25 @@
  *
  * - `PV_TEMPLATE_DISCLAIMER` — printed on the document, and the PR's copy
  *   carries the same English sentence from the backend exporter.
- * - `LINE_DAY_MONTHS` / `MONTH_NAMES` — date FORMATTING, deliberately the twin
- *   of the backend's `dayMonth()` and `klStamp()`. `formatPvSignStamp` also
- *   feeds on-screen text in `routes/agency/pv.tsx`, and must keep printing the
- *   same stamp on the screen as on the paper, so it is not locale-aware either.
- * - `MONTH_MAP` — a PARSER keyed on stored and demo-store strings. Its keys are
- *   data, matched against input, and never rendered.
+ * - `MONTH_KEYS` — date FORMATTING, deliberately the twin of the backend's
+ *   `dayMonth()` and `klStamp()`. `formatPvSignStamp` also feeds on-screen text
+ *   in `routes/agency/pv.tsx`, and must keep printing the same stamp on the
+ *   screen as on the paper, so it is not locale-aware either. This file used to
+ *   hold TWO identical local copies of that list, `LINE_DAY_MONTHS` and
+ *   `MONTH_NAMES`; both now read the one shared table, imported from `pr-demo`.
+ * - `monthKeyIndex` — the PARSER for those same tokens, matched against stored
+ *   and demo-store strings, never rendered. It replaced `MONTH_MAP`, a THIRD
+ *   local copy of the month list, which could have drifted from the two above —
+ *   and from the writer that produced the strings it parses — with nothing
+ *   raising an error.
  *
  * `PV_TEMPLATE_ISSUER` and the payee/line builders return DATA — names, IC,
  * bank details, line descriptions — never labels.
  */
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
+	MONTH_KEYS,
+	monthKeyIndex,
 	PR_PROFILES,
 	type PrPaymentVoucher,
 	type PrProfile,
@@ -138,21 +145,6 @@ export interface PvTemplateLine {
 	blank?: boolean;
 }
 
-const LINE_DAY_MONTHS = [
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec",
-];
-
 /**
  * A line's date as the printed document says it — '30 Jul', the backend
  * exporter's `dayMonth()`.
@@ -164,7 +156,7 @@ const LINE_DAY_MONTHS = [
 export function formatPvLineDay(date: string): string {
 	const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
 	if (!m) return date;
-	return `${Number(m[3])} ${LINE_DAY_MONTHS[Number(m[2]) - 1]}`;
+	return `${Number(m[3])} ${MONTH_KEYS[Number(m[2]) - 1]}`;
 }
 
 /** PDF line description — matches PV-2606-001.pdf (e.g. "Salary (2nd June) - Mamba") */
@@ -354,21 +346,6 @@ export function formatPvAmount(n: number) {
 	});
 }
 
-const MONTH_MAP: Record<string, string> = {
-	jan: "01",
-	feb: "02",
-	mar: "03",
-	apr: "04",
-	may: "05",
-	jun: "06",
-	jul: "07",
-	aug: "08",
-	sep: "09",
-	oct: "10",
-	nov: "11",
-	dec: "12",
-};
-
 /**
  * Voucher date on PDF — DD/MM/YYYY, the same `slashDate()` the backend exporter
  * prints.
@@ -386,26 +363,14 @@ export function formatPvVoucherDate(issued: string) {
 	if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
 	const m = value.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
 	if (m) {
-		const mm = MONTH_MAP[m[2].slice(0, 3).toLowerCase()];
-		if (mm) return `${m[1].padStart(2, "0")}/${mm}/${m[3]}`;
+		const mi = monthKeyIndex(m[2]);
+		if (mi >= 0) {
+			const mm = String(mi + 1).padStart(2, "0");
+			return `${m[1].padStart(2, "0")}/${mm}/${m[3]}`;
+		}
 	}
 	return value;
 }
-
-const MONTH_NAMES = [
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec",
-];
 
 /**
  * A signing timestamp as '4 Aug 2026 · 16:30' in Kuala Lumpur time — the web
@@ -424,7 +389,7 @@ export function formatPvSignStamp(at: string | undefined | null): string {
 	const kl = new Date(ms + 8 * 60 * 60 * 1000);
 	const hh = String(kl.getUTCHours()).padStart(2, "0");
 	const mm = String(kl.getUTCMinutes()).padStart(2, "0");
-	return `${kl.getUTCDate()} ${MONTH_NAMES[kl.getUTCMonth()]} ${kl.getUTCFullYear()} · ${hh}:${mm}`;
+	return `${kl.getUTCDate()} ${MONTH_KEYS[kl.getUTCMonth()]} ${kl.getUTCFullYear()} · ${hh}:${mm}`;
 }
 
 /**

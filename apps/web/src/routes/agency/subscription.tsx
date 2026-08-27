@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import {
 	planCapacityLabel,
@@ -78,7 +79,7 @@ export const Route = createFileRoute("/agency/subscription")({
 });
 
 function AgencySubscription() {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const agencyOwner = useStore((s) => s.agencyOwner);
 	const agencySubRole = useStore((s) => s.agencySubRole);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
@@ -310,9 +311,13 @@ function AgencySubscription() {
 	 * The real next charge, from this agency's own subscription row. The demo
 	 * clock's date sat beside it and disagreed — the screen showed "2 Aug 2026"
 	 * for an agency whose week rolls from its actual start date.
+	 *
+	 * The tag comes from the portal's language, not a hardcoded `en-GB`: this is
+	 * a rendered label with nothing downstream parsing it. English still gets
+	 * `en-GB`, so day-before-month ordering is unchanged.
 	 */
 	const realRenewalLabel = sub.nextRenewalDate
-		? sub.nextRenewalDate.toLocaleDateString("en-GB", {
+		? sub.nextRenewalDate.toLocaleDateString(dateLocaleTag(locale), {
 				day: "numeric",
 				month: "short",
 				year: "numeric",

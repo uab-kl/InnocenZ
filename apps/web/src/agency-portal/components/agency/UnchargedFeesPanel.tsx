@@ -5,6 +5,10 @@ import { useStore } from "@agency-portal/lib/store";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import {
+	monthShortLabel,
+	weekdayDayMonthLabel,
+} from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
@@ -30,22 +34,6 @@ import type {
  * under "Carried over". Filtering by week would hide the fee that has gone
  * uncollected longest, which is the one most worth chasing.
  */
-
-/** Three-letter month, so a date reads as a date and not as an id. */
-const MONTH = [
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec",
-];
 
 /**
  * WHICH RULE a weekly penalty is for, in the same words the penalty settings
@@ -75,8 +63,18 @@ function penaltyRuleLabel(ruleType: string, t: PortalTranslations): string {
  * `week 2026-08-02 – 2026-08-08` was 25 characters of mostly-repeated digits on
  * a line of its own under every carried-over row. The ISO pair survives in the
  * cell's `title`, so nothing is lost to someone who needs the exact dates.
+ *
+ * The month keeps its three-letter shape — the reason the array it came from
+ * existed at all is that a date must read as a date and not as an id — but the
+ * word now comes from the dictionary, so the shape survives the language
+ * switch. `t` is a PARAMETER and comes LAST, with no default: this is module
+ * scope and cannot call a hook, and a default would pin one language forever.
  */
-function formatWeekRange(startIso: string, endIso: string): string {
+function formatWeekRange(
+	startIso: string,
+	endIso: string,
+	t: PortalTranslations,
+): string {
 	const s = String(startIso ?? "")
 		.slice(0, 10)
 		.split("-")
@@ -89,20 +87,25 @@ function formatWeekRange(startIso: string, endIso: string): string {
 		return String(startIso ?? "");
 	}
 	return s[0] === e[0] && s[1] === e[1]
-		? `${s[2]}–${e[2]} ${MONTH[e[1] - 1]}`
-		: `${s[2]} ${MONTH[s[1] - 1]} – ${e[2]} ${MONTH[e[1] - 1]}`;
+		? `${s[2]}–${e[2]} ${monthShortLabel(e[1] - 1, t)}`
+		: `${s[2]} ${monthShortLabel(s[1] - 1, t)} – ${e[2]} ${monthShortLabel(e[1] - 1, t)}`;
 }
 
-/** "Sat 16 Aug" — the night the shift was, not a database value. */
-function formatShiftDay(iso: string | null): string {
+/**
+ * "Sat 16 Aug" — the night the shift was, not a database value.
+ *
+ * `T00:00:00` keeps the parse LOCAL, so the night is not dragged back a day by
+ * a UTC-midnight parse; the helper is therefore called with `utc` left false.
+ * The hardcoded `"en-GB"` here pinned English on the same ledger whose month
+ * words were about to stop being pinned, so it takes `t` on the same terms as
+ * `formatWeekRange` above.
+ */
+function formatShiftDay(iso: string | null, t: PortalTranslations): string {
 	if (!iso) return "—";
 	const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
 	if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
-	return d.toLocaleDateString("en-GB", {
-		weekday: "short",
-		day: "numeric",
-		month: "short",
-	});
+	const { weekday, dayMonth } = weekdayDayMonthLabel(d, t);
+	return `${weekday} ${dayMonth}`;
 }
 
 /**
@@ -408,7 +411,7 @@ export function UnchargedFeesPanel({
 		// reasoning that the tab above already names the week — true, and it still
 		// left the column blank on two rows out of three and the week itself
 		// unstated beside the fine it produced.
-		when: formatWeekRange(p.weekStart, p.weekEnd),
+		when: formatWeekRange(p.weekStart, p.weekEnd, t),
 		whenTitle: fill(t.agencyQueues.weekFromTo, {
 			from: p.weekStart,
 			to: p.weekEnd,
@@ -424,7 +427,7 @@ export function UnchargedFeesPanel({
 		// The night moves to the `when` column, where the penalty weeks are, so
 		// one column answers "when" for both kinds of money instead of the date
 		// hiding at the head of a sentence on one of them.
-		when: formatShiftDay(c.shiftDate),
+		when: formatShiftDay(c.shiftDate, t),
 		whenTitle: String(c.shiftDate ?? ""),
 		detail:
 			[c.slot, c.outletName].filter(Boolean).join(" · ") ||

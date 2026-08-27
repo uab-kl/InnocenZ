@@ -2,6 +2,7 @@
 	calendarNavBounds,
 	dateFromIsoKey,
 	isoKeyFromDate,
+	MONTH_INDEXES,
 } from "@agency-portal/components/iz/HistDateCalendar";
 import { PrStatusPill } from "@agency-portal/components/pr/PrOfferRow";
 import {
@@ -48,33 +49,8 @@ import {
 } from "react";
 import type { DayButton } from "react-day-picker";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { monthLongLabel } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
-import type { PortalTranslations } from "@/lib/portal-i18n/translations";
-
-/**
- * Month names for the picker, as READERS of the dictionary.
- *
- * A module-scope array of strings cannot see `t`, and storing the key path
- * instead would ship "prPortal.monthJanuary" to the screen. Spelled out rather
- * than derived from a date formatter, for the same reason `calendar.wdSun`…
- * are: the grid must not fall back to English month names inside a Chinese
- * page. The INDEX is the stable identity here — it is what the `<select>`
- * writes — so nothing keys on the label.
- */
-const MONTH_LABELS: ((t: PortalTranslations) => string)[] = [
-	(t) => t.prPortal.monthJanuary,
-	(t) => t.prPortal.monthFebruary,
-	(t) => t.prPortal.monthMarch,
-	(t) => t.prPortal.monthApril,
-	(t) => t.prPortal.monthMay,
-	(t) => t.prPortal.monthJune,
-	(t) => t.prPortal.monthJuly,
-	(t) => t.prPortal.monthAugust,
-	(t) => t.prPortal.monthSeptember,
-	(t) => t.prPortal.monthOctober,
-	(t) => t.prPortal.monthNovember,
-	(t) => t.prPortal.monthDecember,
-];
 
 /** Fills each grid cell — shared CalendarDayButton uses size="icon" (36×36px) and overlaps on mobile. */
 function PrScheduleDayButton({
@@ -252,12 +228,12 @@ export function PrAgencySchedulePanel({
 			<div className="iz-pr-schedule-cal-wrap">
 				<div className="iz-hist-cal-nav mb-2">
 					<label className="iz-hist-cal-nav-field">
-						<span className="iz-hist-cal-nav-label">{t.prPortal.month}</span>
+						<span className="iz-hist-cal-nav-label">{t.izPv.month}</span>
 						<span className="iz-hist-cal-select-wrap">
 							<select
 								className="iz-hist-cal-select"
 								value={viewMonth.getMonth()}
-								aria-label={t.prPortal.chooseMonth}
+								aria-label={t.izPv.chooseMonth}
 								onChange={(e) =>
 									setViewMonth(
 										new Date(
@@ -268,9 +244,9 @@ export function PrAgencySchedulePanel({
 									)
 								}
 							>
-								{MONTH_LABELS.map((label, i) => (
-									<option key={`m-${i + 1}`} value={i}>
-										{label(t)}
+								{MONTH_INDEXES.map((i) => (
+									<option key={i} value={i}>
+										{monthLongLabel(i, t)}
 									</option>
 								))}
 							</select>
@@ -278,12 +254,12 @@ export function PrAgencySchedulePanel({
 						</span>
 					</label>
 					<label className="iz-hist-cal-nav-field">
-						<span className="iz-hist-cal-nav-label">{t.prPortal.year}</span>
+						<span className="iz-hist-cal-nav-label">{t.izPv.year}</span>
 						<span className="iz-hist-cal-select-wrap">
 							<select
 								className="iz-hist-cal-select"
 								value={viewMonth.getFullYear()}
-								aria-label={t.prPortal.chooseYear}
+								aria-label={t.izPv.chooseYear}
 								onChange={(e) =>
 									setViewMonth(
 										new Date(Number(e.target.value), viewMonth.getMonth(), 1),

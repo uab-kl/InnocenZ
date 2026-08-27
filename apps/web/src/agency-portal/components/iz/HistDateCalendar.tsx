@@ -7,32 +7,22 @@ import { format, parseISO } from "date-fns";
 import { ChevronDown } from "lucide-react";
 import { type ComponentProps, useCallback, useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import { monthLongLabel } from "@/lib/portal-i18n/date-label";
 
-/*
- * A module-scope map cannot read `t`, so every entry holds a FUNCTION that
- * does. `id` is the React key: keying on the rendered label would remount all
- * twelve <option>s on a locale switch. The <option> VALUE stays the month
- * INDEX — that is what the select writes back into `viewMonth`, and a number
- * is never translated.
+/**
+ * The twelve month `<option>`s, as INDEXES.
+ *
+ * A module-scope array cannot read `t`, and it no longer has to: the label is
+ * resolved at the render by `monthLongLabel`, off the shared `dates`
+ * vocabulary. Two month-picker vocabularies had grown in the dictionary and
+ * spelled the same month two ways in the same portal ("一月" here, "1月" on the
+ * PR schedule picker); one vocabulary is what stops that happening again.
+ *
+ * The index is both the React key and the `<option>` VALUE — keying on the
+ * rendered label would remount all twelve on a locale switch, and the value is
+ * what the select writes back into `viewMonth`, so it must stay a number.
  */
-const MONTH_OPTIONS: {
-	id: string;
-	label: (t: PortalTranslations) => string;
-}[] = [
-	{ id: "january", label: (t) => t.izPv.monthJanuary },
-	{ id: "february", label: (t) => t.izPv.monthFebruary },
-	{ id: "march", label: (t) => t.izPv.monthMarch },
-	{ id: "april", label: (t) => t.izPv.monthApril },
-	{ id: "may", label: (t) => t.izPv.monthMay },
-	{ id: "june", label: (t) => t.izPv.monthJune },
-	{ id: "july", label: (t) => t.izPv.monthJuly },
-	{ id: "august", label: (t) => t.izPv.monthAugust },
-	{ id: "september", label: (t) => t.izPv.monthSeptember },
-	{ id: "october", label: (t) => t.izPv.monthOctober },
-	{ id: "november", label: (t) => t.izPv.monthNovember },
-	{ id: "december", label: (t) => t.izPv.monthDecember },
-];
+export const MONTH_INDEXES = Array.from({ length: 12 }, (_, i) => i);
 
 export function dateFromIsoKey(key: string): Date | undefined {
 	if (!key) return undefined;
@@ -125,9 +115,9 @@ export function HistCalendarMonthNav({
 							onMonthChange(new Date(year, Number(e.target.value), 1))
 						}
 					>
-						{MONTH_OPTIONS.map((opt, i) => (
-							<option key={opt.id} value={i}>
-								{opt.label(t)}
+						{MONTH_INDEXES.map((i) => (
+							<option key={i} value={i}>
+								{monthLongLabel(i, t)}
 							</option>
 						))}
 					</select>

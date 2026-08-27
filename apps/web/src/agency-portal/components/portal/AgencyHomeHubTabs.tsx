@@ -22,6 +22,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { weekdayDayMonthLabel } from "@/lib/portal-i18n/date-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 type HubTab =
@@ -93,15 +94,24 @@ function disputeComponentLabel(component: string, t: PortalTranslations) {
 	return key ? t.money[key] : component;
 }
 
-/** "2026-08-06" -> "Thu 6 Aug", the day the PR is contesting. */
-function formatDisputeDay(iso: string): string {
+/**
+ * "2026-08-06" -> "Thu 6 Aug", the day the PR is contesting.
+ *
+ * `T00:00:00` keeps the parse LOCAL — a bare `YYYY-MM-DD` is UTC midnight,
+ * which in Asia/Kuala_Lumpur draws the previous day — so the parts are read
+ * locally and the helper is called with `utc` left false.
+ *
+ * The words come from the dictionary rather than a hardcoded `"en-GB"`, which
+ * pinned this column to English whatever the portal was set to. Nothing reads
+ * this string back: it is drawn into a table cell and thrown away. `t` is a
+ * PARAMETER, last and with no default — module scope cannot call a hook, and a
+ * default dictionary would re-pin the language the tag just stopped pinning.
+ */
+function formatDisputeDay(iso: string, t: PortalTranslations): string {
 	const d = new Date(`${iso}T00:00:00`);
 	if (Number.isNaN(d.getTime())) return iso;
-	return d.toLocaleDateString("en-GB", {
-		weekday: "short",
-		day: "numeric",
-		month: "short",
-	});
+	const { weekday, dayMonth } = weekdayDayMonthLabel(d, t);
+	return `${weekday} ${dayMonth}`;
 }
 
 function HubPanelLink({
@@ -647,7 +657,7 @@ export function AgencyHomeHubTabs({
 													</div>
 												</td>
 												<td className="iz-portal-table-meta">
-													{formatDisputeDay(d.disputeDate)}
+													{formatDisputeDay(d.disputeDate, t)}
 												</td>
 												<td className="iz-portal-table-meta">
 													{disputeComponentLabel(d.component, t)}
@@ -734,7 +744,7 @@ export function AgencyHomeHubTabs({
 												    10 Aug, so this row said "Tue 16 Jun" while Payroll
 												    filed it under "Mon 10 Aug". */}
 												<td className="iz-portal-table-meta">
-													{formatDisputeDay(workingDayIso(r))}
+													{formatDisputeDay(workingDayIso(r), t)}
 												</td>
 												<td className="iz-portal-table-status">
 													<IzPill
@@ -815,7 +825,7 @@ export function AgencyHomeHubTabs({
 												</td>
 												<td className="iz-portal-table-meta">
 													{c.shiftDate
-														? formatDisputeDay(c.shiftDate.slice(0, 10))
+														? formatDisputeDay(c.shiftDate.slice(0, 10), t)
 														: "—"}
 												</td>
 												<td className="iz-portal-table-meta">

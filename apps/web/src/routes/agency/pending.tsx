@@ -53,6 +53,11 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import {
+	dateLocaleTag,
+	monthShortLabel,
+	weekdayShortLabel,
+} from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import { languageListLabel, raceLabel } from "@/lib/portal-i18n/language-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -253,30 +258,24 @@ function pendingPrPhoto(signup: PendingPR) {
  * Built from the date PARTS, never `new Date(iso)`: a bare `YYYY-MM-DD` parses
  * as UTC midnight, which in Asia/Kuala_Lumpur renders as the PREVIOUS day. An
  * MC request for the 10th showing as the 9th is the kind of error an agency
- * acts on before anyone notices.
+ * acts on before anyone notices. The weekday is therefore derived through
+ * `Date.UTC` and read back with `getUTCDay()`, so the parts never round-trip
+ * through a local-midnight Date.
+ *
+ * Nothing stores or re-reads this string — it is drawn once beside a calendar
+ * icon — so the words come from the dictionary. `t` is a PARAMETER and comes
+ * LAST: this is module scope and cannot call a hook, and a default dictionary
+ * here would pin the panel to one language forever.
  */
-function leaveDayLabel(iso: string | null | undefined): string {
+function leaveDayLabel(
+	iso: string | null | undefined,
+	t: PortalTranslations,
+): string {
 	if (!iso) return "—";
 	const [y, m, d] = iso.split("-").map(Number);
 	if (!y || !m || !d) return iso;
-	const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
-		new Date(Date.UTC(y, m - 1, d)).getUTCDay()
-	];
-	const mo = [
-		"Jan",
-		"Feb",
-		"Mar",
-		"Apr",
-		"May",
-		"Jun",
-		"Jul",
-		"Aug",
-		"Sep",
-		"Oct",
-		"Nov",
-		"Dec",
-	][m - 1];
-	return `${wd} · ${d} ${mo} ${y}`;
+	const wd = weekdayShortLabel(new Date(Date.UTC(y, m - 1, d)).getUTCDay(), t);
+	return `${wd} · ${d} ${monthShortLabel(m - 1, t)} ${y}`;
 }
 
 /** "Special event" / "Normal shift" — the outlet's toggle, worded as the PR app words it. */
@@ -1305,7 +1304,7 @@ function LeaveDetailPanel({
 	onApprove: () => void;
 	onReject: () => void;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const prName = req.prName ?? "PR";
 	const mcPhotos = req.leaveProofPhotos ?? [];
 	// The MC opens IN PLACE. It used to be an <a target="_blank"> to the raw
@@ -1347,14 +1346,20 @@ function LeaveDetailPanel({
 							{req.leaveStatus === "approved"
 								? t.approvals.approved
 								: t.approvals.rejected}
+							{/* The portal's language, not the BROWSER's. `undefined` here
+							    followed the machine, so a 中文 portal on an en-US browser
+							    stamped this decision in English beside translated words. */}
 							{req.leaveDecidedAt
-								? ` · ${new Date(req.leaveDecidedAt).toLocaleString(undefined, {
-										day: "2-digit",
-										month: "short",
-										year: "numeric",
-										hour: "2-digit",
-										minute: "2-digit",
-									})}`
+								? ` · ${new Date(req.leaveDecidedAt).toLocaleString(
+										dateLocaleTag(locale),
+										{
+											day: "2-digit",
+											month: "short",
+											year: "numeric",
+											hour: "2-digit",
+											minute: "2-digit",
+										},
+									)}`
 								: ""}
 						</IzPill>
 					</div>
@@ -1454,7 +1459,7 @@ function LeaveDetailPanel({
 					)}
 					<p className="iz-approvals-info-line">
 						<Calendar className="h-3.5 w-3.5 shrink-0" />
-						{leaveDayLabel(req.shiftDate)}
+						{leaveDayLabel(req.shiftDate, t)}
 					</p>
 					<p className="iz-approvals-info-line">
 						<Clock className="h-3.5 w-3.5 shrink-0" />
@@ -1492,7 +1497,7 @@ export const Route = createFileRoute("/agency/pending")({
 });
 
 function AgencyPending() {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const { tab: tabFromSearch } = Route.useSearch();
 	const {
 		approvePendingPR,
@@ -2135,8 +2140,11 @@ function AgencyPending() {
 													</span>
 													{req.leaveDecidedAt ? (
 														<span className="iz-tiny iz-muted">
+															{/* The portal's language, not the browser's — same
+															    reason as the decided-at stamp on the detail
+															    panel. */}
 															{new Date(req.leaveDecidedAt).toLocaleDateString(
-																undefined,
+																dateLocaleTag(locale),
 																{ day: "2-digit", month: "short" },
 															)}
 														</span>
