@@ -903,6 +903,15 @@ const en = {
 		noOpenShiftsThisDay: "No open shifts this day",
 		busyElsewhereAt: "{name} is not available {time}",
 		unavailableAtTime: "Unavailable",
+		/**
+		 * The busy chip's time slot when the rival slot named NO clock time —
+		 * the date is spoken for at an unknown hour. Advisory: the cell stays
+		 * clickable, and nothing may fall back to a whole-day "Unavailable".
+		 */
+		busyTimeUnknown: "time not stated",
+		/** Assign-sheet advice line for the same case — no card is greyed for it. */
+		busyTimeUnknownAdvice:
+			"Also not available at some point this day — no time was given, so no shift is greyed for it.",
 		/** The PR already holds a seat on this very shift — the server 409s on it. */
 		alreadyOnThisShift: "{name} is already on this shift",
 		alreadyOnShiftShort: "Already on this shift",
@@ -1594,6 +1603,8 @@ const en = {
 		 */
 		lanePlan: "Plan",
 		lanePosAddon: "POS add-on",
+		/** Under each Paid / Unpaid total on the org's own Payment history. */
+		periodsCount: "{n} periods",
 		methodEwallet: "E-wallet",
 		/**
 		 * Says plainly that this rail is a PUSH. A wallet cannot be debited
@@ -1628,6 +1639,13 @@ const en = {
 		billingDueMany: "{amount} outstanding across {n} billing periods.",
 		billingDueSince: "Oldest unpaid period starts {date}.",
 		billingDueCta: "Open Subscription",
+		/**
+		 * The agency's one gated ask. Leaving Custom is never gated — dropping
+		 * cost must not be blocked by debt — and the Sunday auto-tier moves on
+		 * its own; only the manual "Ask admin for a price" pops this.
+		 */
+		settleBeforeCustomAsk:
+			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before asking for a Custom price. Resetting to the normal rate card stays available anytime.",
 
 		/**
 		 * The bank picker. NOTE there is no account-number string here and there
@@ -2052,6 +2070,18 @@ const en = {
 		demoCardHint: "Visa ···· {last4} · renewal {date}",
 		billedMonthly: "Billed monthly · {price}",
 		nextRenewal: "Next renewal {date}",
+		/**
+		 * Popped the moment Switch is pressed while periods are unpaid — the
+		 * same rule the server enforces, said before the venue composes a
+		 * request that cannot succeed. POS asks and cancels are never gated.
+		 */
+		settleBeforeSwitch:
+			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before switching plans. POS add-on requests and cancellation stay available anytime.",
+		/** POS actions proceed — this only states the debt beside them. */
+		unpaidReminderPos:
+			"Reminder: {amount} across {n} unpaid billing period(s) is still outstanding — please settle with InnocenZ. This request still goes through.",
+		settleBeforeRequote:
+			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before asking for a new POS price. Cancelling POS stays available anytime.",
 		nothingToRenew: "No active subscription — nothing to renew",
 		cardSaved: "Card saved for subscription billing",
 		couldNotSaveCard: "Could not save the card — try again",
@@ -3410,7 +3440,7 @@ const en = {
 		ledgerUpToDate: "Ledger up to date",
 		ledgerRefreshFailed: "Failed to refresh the ledger",
 		colWho: "Who",
-		colPlan: "Plan",
+		colPlan: "Billed under",
 		colBillingPeriod: "Billing period",
 		colPaidOn: "Paid on",
 		noBillingPeriods: "No billing periods match this filter.",
@@ -3436,10 +3466,29 @@ const en = {
 		 * and read as though the venue had no plan at all.
 		 */
 		thisInvoiceFor: "This invoice is for",
-		allBillingLanes: "Everything this subscriber is billed for",
+		allBillingLanes: "Currently subscribed to",
 		allBillingLanesHint:
-			"A plan and each add-on are billed separately, so each one opens its own invoice.",
+			"What this organisation is on TODAY. A plan and each add-on are billed separately, so each opens its own invoice — and a period in Billing history below may have been billed under a plan they have since left.",
 		thisPeriodBadge: "This invoice",
+		/**
+		 * The drawer's own history block. "Subscription details" above it describes
+		 * ONE period; a venue on a plan plus the POS add-on opens two invoices for
+		 * the same month, so without this the panel looks like one has gone missing.
+		 */
+		billingHistory: "Billing history",
+		/**
+		 * Shown only while the history list is filtered. Without it a filtered list
+		 * is indistinguishable from a short one, and a reader concludes periods are
+		 * missing from the ledger.
+		 */
+		showingFilteredPeriods: "Showing {n} of {total} periods · show all",
+		/**
+		 * The sibling invoice for the same window. A venue on a plan plus the POS
+		 * add-on is billed on two lanes for one month, and a panel describing only
+		 * the row that was clicked reads as though the other does not exist.
+		 */
+		alsoThisPeriod: "Also this period",
+		totalThisPeriod: "Total this period",
 		totalPerCycle: "Total per cycle",
 		planLabel: "Plan",
 		billingCycleLabel: "Billing cycle",
@@ -6506,6 +6555,9 @@ const zh: PortalTranslations = {
 		noOpenShiftsThisDay: "当天没有空缺班次",
 		busyElsewhereAt: "{name} 在 {time} 不可排班",
 		unavailableAtTime: "不可排班",
+		busyTimeUnknown: "未注明时间",
+		busyTimeUnknownAdvice:
+			"当天另有一段不可排班的时间——未注明具体时间，因此不会锁定任何班次。",
 		alreadyOnThisShift: "{name} 已在此班次上",
 		alreadyOnShiftShort: "已在此班次",
 		noShiftsPostedThisDay: "当天没有发布班次。",
@@ -7097,6 +7149,7 @@ const zh: PortalTranslations = {
 			"每个账期由您自行转账，InnocenZ 收到后标记为已付款，绝不会自动扣款。",
 		lanePlan: "套餐",
 		lanePosAddon: "POS 加购",
+		periodsCount: "{n} 个周期",
 		methodEwallet: "电子钱包",
 		methodEwalletNote:
 			"Touch 'n Go、GrabPay、ShopeePay 或 Boost。每笔付款都需要您在钱包应用中确认，系统绝不会自动扣款。",
@@ -7117,6 +7170,8 @@ const zh: PortalTranslations = {
 		billingDueMany: "尚有 {amount} 未付，共 {n} 个账单周期。",
 		billingDueSince: "最早未付周期自 {date} 起。",
 		billingDueCta: "打开订阅页面",
+		settleBeforeCustomAsk:
+			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再申请 Custom 价格。随时可重置回普通价目表。",
 
 		yourBank: "您的银行",
 		chooseBankPlaceholder: "请选择银行…",
@@ -7508,6 +7563,12 @@ const zh: PortalTranslations = {
 		demoCardHint: "Visa ···· {last4} · 续订日 {date}",
 		billedMonthly: "按月计费 · {price}",
 		nextRenewal: "下次续订 {date}",
+		settleBeforeSwitch:
+			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再更换方案。POS 附加服务的申请与取消随时可办理。",
+		unpaidReminderPos:
+			"提醒：您尚有 {n} 个未付账单周期，共 {amount}——请尽快与 InnocenZ 结清。本次申请仍已提交。",
+		settleBeforeRequote:
+			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再申请新的 POS 价格。取消 POS 随时可办理。",
 		nothingToRenew: "没有生效中的订阅 —— 无需续订",
 		cardSaved: "银行卡已保存，用于订阅扣款",
 		couldNotSaveCard: "无法保存银行卡 —— 请重试",
@@ -8714,7 +8775,7 @@ const zh: PortalTranslations = {
 		ledgerUpToDate: "账目已是最新",
 		ledgerRefreshFailed: "刷新账目失败",
 		colWho: "订阅方",
-		colPlan: "套餐",
+		colPlan: "计费项目",
 		colBillingPeriod: "计费周期",
 		colPaidOn: "付款日期",
 		noBillingPeriods: "没有符合此筛选条件的计费周期。",
@@ -8729,9 +8790,14 @@ const zh: PortalTranslations = {
 			"此账期的费用、订户的付款方式，以及针对它的每一次付款尝试。",
 		subscriptionDetails: "订阅详情",
 		thisInvoiceFor: "此账单对应",
-		allBillingLanes: "该订户的全部计费项目",
-		allBillingLanesHint: "方案与每项附加服务分开计费，各自生成独立账单。",
+		allBillingLanes: "当前订阅",
+		allBillingLanesHint:
+			"该机构今天所用的方案。方案与每项附加服务分开计费，各自生成独立账单；下方「账单记录」中某个计费周期可能是按已退出的方案开具的。",
 		thisPeriodBadge: "本账单",
+		billingHistory: "账单记录",
+		showingFilteredPeriods: "显示 {total} 个周期中的 {n} 个 · 查看全部",
+		alsoThisPeriod: "本周期另有",
+		totalThisPeriod: "本周期合计",
 		totalPerCycle: "每期合计",
 		planLabel: "方案",
 		billingCycleLabel: "计费周期",

@@ -5,11 +5,8 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { format, parse } from "date-fns";
 import {
 	AlertCircle,
-	ChevronDown,
-	ChevronRight,
 	CreditCard,
 	Loader2,
 	RefreshCw,
@@ -51,16 +48,14 @@ import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
-import { formatDate, formatPrice, getErrorMessage } from "@/lib/utils";
+import { formatPrice, getErrorMessage } from "@/lib/utils";
 import {
 	fetchSubscriptionInvoiceGroups,
 	generateSubscriptionInvoices,
 	type SubscriberType,
-	type SubscriptionInvoice,
 	type SubscriptionInvoiceGroup,
 	type SubscriptionInvoiceQueryParams,
 	type SubscriptionInvoiceStatus,
-	setSubscriptionInvoiceStatus,
 } from "@/services/subscription-invoice";
 
 export const Route = createFileRoute("/admin/service/plan-payment")({
@@ -73,21 +68,6 @@ export const Route = createFileRoute("/admin/service/plan-payment")({
 });
 
 const PAGE_SIZE = 10;
-
-/**
- * A period boundary as a DAY.
- *
- * The shared `formatDate` prints a time, which rendered every period as
- * "10 Aug 2026, 08:00 am" — a clock reading on a fact that has no clock, and
- * 08:00 at that, being midnight UTC seen from Kuala Lumpur. `period_start` /
- * `period_end` are `date` columns; they arrive as plain `YYYY-MM-DD` and are
- * parsed as such rather than through `new Date()`, which would read them as UTC
- * and shift the day back for anyone east of Greenwich.
- */
-function periodDay(day: string): string {
-	const parsed = parse(day, "yyyy-MM-dd", new Date());
-	return Number.isNaN(parsed.getTime()) ? day : format(parsed, "d MMM yyyy");
-}
 
 /**
  * What one org owes, across every lane it holds.
@@ -161,20 +141,6 @@ function PlanPaymentPage() {
 
 	const [statusFilter, setStatusFilter] = useState<string>("all");
 	/**
-	 * Which invoice is mid-mark-paid, and the reference typed so far.
-	 *
-	 * Marking paid asks for the bank reference FIRST, because that is the moment
-	 * the admin has it in front of them. `payment_voucher` has recorded which
-	 * transfer paid a PR since it was written; the subscription side never did,
-	 * and a reference asked for on some later screen is a reference nobody fills
-	 * in. Marking UNPAID stays a single click — a correction should not be made
-	 * tedious.
-	 */
-	const [referenceFor, setReferenceFor] = useState<{
-		id: string;
-		value: string;
-	} | null>(null);
-	/**
 	 * Which invoice the right-hand panel is showing.
 	 *
 	 * The table can only carry the invoice — a period, a figure, one status flag.
@@ -219,41 +185,6 @@ function PlanPaymentPage() {
 	 * Which orgs are open. Ids, not indexes — a filter change reorders the page,
 	 * and an index would carry the open state onto whoever now sits in that slot.
 	 */
-	const [expanded, setExpanded] = useState<Set<string>>(new Set());
-	const toggleExpanded = (subscriberId: string) =>
-		setExpanded((prev) => {
-			const next = new Set(prev);
-			if (next.has(subscriberId)) next.delete(subscriberId);
-			else next.add(subscriberId);
-			return next;
-		});
-
-	const statusMutation = useMutation({
-		mutationFn: ({
-			id,
-			status,
-			reference,
-		}: {
-			id: string;
-			status: SubscriptionInvoiceStatus;
-			reference?: string | null;
-		}) => setSubscriptionInvoiceStatus(id, status, logout, reference),
-		onSuccess: (response) => {
-			queryClient.invalidateQueries({ queryKey: ["subscription-invoices"] });
-			// The row detail panel reads its own key. Without this it kept
-			// showing Unpaid and "No attempts yet" over a period that had just
-			// been settled — the panel contradicting the table it opened from.
-			queryClient.invalidateQueries({ queryKey: ["invoice-payment-detail"] });
-			setReferenceFor(null);
-			toast.success(response.message || t.adminService.paymentStatusUpdated);
-		},
-		onError: (error) => {
-			toast.error(
-				toMutationError(error, t.adminService.paymentStatusUpdateFailed)
-					?.message ?? t.adminService.paymentStatusUpdateFailed,
-			);
-		},
-	});
 
 	// Opens any period that has started and has no row yet. Idempotent — the
 	// server refuses to bill a period twice — so this is safe to press.
@@ -274,7 +205,7 @@ function PlanPaymentPage() {
 	const groups = invoicesQuery.data?.data ?? [];
 	const pagination = invoicesQuery.data?.pagination;
 	const showLoading = invoicesQuery.isLoading && groups.length === 0;
-	const isSaving = statusMutation.isPending || generateMutation.isPending;
+	const isSaving = generateMutation.isPending;
 
 	return (
 		<PageShell>
@@ -430,7 +361,6 @@ function PlanPaymentPage() {
 								) : (
 									groups.flatMap((group) => {
 										const summary = summarise(group);
-										const isOpen = expanded.has(group.subscriberId);
 										/*
 										 * ONE ROW PER ORG, its periods nested under it.
 										 *
@@ -463,31 +393,7 @@ function PlanPaymentPage() {
 												onClick={() => newest && setDetailId(newest.id)}
 											>
 												<TableCell className="text-base font-medium">
-													<span className="flex items-center gap-2">
-														<button
-															type="button"
-															aria-expanded={isOpen}
-															aria-label={
-																isOpen
-																	? t.adminService.collapsePeriods
-																	: t.adminService.expandPeriods
-															}
-															className="-m-1 rounded p-1 text-muted-foreground hover:text-foreground"
-															onClick={(event) => {
-																// Without this the row's own handler fires too and
-																// the panel slides over the rows just revealed.
-																event.stopPropagation();
-																toggleExpanded(group.subscriberId);
-															}}
-														>
-															{isOpen ? (
-																<ChevronDown className="h-4 w-4 shrink-0" />
-															) : (
-																<ChevronRight className="h-4 w-4 shrink-0" />
-															)}
-														</button>
 														{group.subscriberName}
-													</span>
 												</TableCell>
 												<TableCell>
 													<Badge
@@ -540,164 +446,11 @@ function PlanPaymentPage() {
 												<TableCell />
 											</TableRow>
 										);
-										if (!isOpen) return [header];
-										return [
-											header,
-											...group.invoices.map((invoice: SubscriptionInvoice) => (
-												<TableRow
-													key={invoice.id}
-													className="cursor-pointer"
-													onClick={() => setDetailId(invoice.id)}
-												>
-													<TableCell className="text-base font-medium">
-														<span className="pl-6 text-muted-foreground">
-															{periodDay(invoice.periodStart)}
-														</span>
-													</TableCell>
-													<TableCell>
-														<Badge
-															variant="outline"
-															className={`${roleBadgeColors[invoice.subscriberType]} w-fit`}
-														>
-															{roleLabels[invoice.subscriberType](t)}
-														</Badge>
-													</TableCell>
-													<TableCell>
-														{invoice.planName}
-														<span className="block text-sm text-muted-foreground">
-															{invoice.billingCycle === "weekly"
-																? t.subscription.billedWeekly
-																: t.subscription.billedMonthly}
-														</span>
-													</TableCell>
-													<TableCell className="text-base whitespace-nowrap">
-														{periodDay(invoice.periodStart)} –{" "}
-														{periodDay(invoice.periodEnd)}
-													</TableCell>
-													<TableCell className="text-base whitespace-nowrap">
-														{formatPrice(Number(invoice.amount))}
-													</TableCell>
-													<TableCell>
-														<Badge
-															variant="outline"
-															className={`${statusBadgeColors[invoice.status]} w-fit`}
-														>
-															{statusLabels[invoice.status](t)}
-														</Badge>
-													</TableCell>
-													<TableCell className="text-base whitespace-nowrap text-muted-foreground">
-														{invoice.paidAt ? formatDate(invoice.paidAt) : "—"}
-													</TableCell>
-													{/*
-													 * The row opens the detail panel, so this cell stops the
-													 * click here — otherwise typing a bank reference or
-													 * pressing Mark paid would ALSO slide a panel over the
-													 * input being used.
-													 */}
-													<TableCell
-														className="text-right"
-														onClick={(e) => e.stopPropagation()}
-													>
-														{/*
-														 * Both directions, always — an admin who marks the wrong
-														 * period paid has to be able to take it back, and a
-														 * one-way button is how a wrong figure becomes permanent.
-														 */}
-														{referenceFor?.id === invoice.id ? (
-															<div className="flex flex-col items-end gap-1">
-																<Input
-																	autoFocus
-																	value={referenceFor.value}
-																	maxLength={120}
-																	placeholder={
-																		t.adminService.paymentReferencePlaceholder
-																	}
-																	aria-label={t.adminService.paymentReference}
-																	disabled={isSaving}
-																	className="h-8 w-56 text-sm"
-																	onChange={(e) =>
-																		setReferenceFor({
-																			id: invoice.id,
-																			value: e.target.value,
-																		})
-																	}
-																	onKeyDown={(e) => {
-																		// The two buttons below are disabled while the
-																		// settle is in flight; this key path was not, so
-																		// a second Enter fired a second settle request.
-																		if (e.key === "Enter" && !isSaving)
-																			statusMutation.mutate({
-																				id: invoice.id,
-																				status: "paid",
-																				reference:
-																					referenceFor.value.trim() || null,
-																			});
-																		if (e.key === "Escape")
-																			setReferenceFor(null);
-																	}}
-																/>
-																<span className="text-xs text-muted-foreground">
-																	{t.adminService.paymentReferenceHint}
-																</span>
-																<div className="flex gap-2">
-																	<Button
-																		size="sm"
-																		variant="outline"
-																		disabled={isSaving}
-																		onClick={() => setReferenceFor(null)}
-																	>
-																		{t.common.cancel}
-																	</Button>
-																	<Button
-																		size="sm"
-																		disabled={isSaving}
-																		onClick={() =>
-																			statusMutation.mutate({
-																				id: invoice.id,
-																				status: "paid",
-																				reference:
-																					referenceFor.value.trim() || null,
-																			})
-																		}
-																	>
-																		{t.adminService.confirmPayment}
-																	</Button>
-																</div>
-															</div>
-														) : (
-															<Button
-																size="sm"
-																variant={
-																	invoice.status === "paid"
-																		? "outline"
-																		: "default"
-																}
-																disabled={isSaving}
-																onClick={() => {
-																	// Taking a mark back is immediate; asserting a
-																	// payment asks what paid it.
-																	if (invoice.status === "paid") {
-																		statusMutation.mutate({
-																			id: invoice.id,
-																			status: "unpaid",
-																		});
-																		return;
-																	}
-																	setReferenceFor({
-																		id: invoice.id,
-																		value: "",
-																	});
-																}}
-															>
-																{invoice.status === "paid"
-																	? t.adminService.markUnpaid
-																	: t.adminService.markPaid}
-															</Button>
-														)}
-													</TableCell>
-												</TableRow>
-											)),
-										];
+										// The per-period rows used to unfold here. They now live in the
+										// payment panel, which holds the same list PLUS the paid/unpaid
+										// totals and the Mark-paid action — so keeping them here was two
+										// renderings of one fact, and the worse of the two.
+										return [header];
 									})
 								)}
 							</TableBody>
@@ -758,7 +511,13 @@ function PlanPaymentPage() {
 					{/* Keyed on the id so switching rows remounts rather than showing
 					    the previous invoice's figures while the next one loads. */}
 					{detailId && (
-						<InvoicePaymentSheet key={detailId} invoiceId={detailId} />
+						<InvoicePaymentSheet
+							key={detailId}
+							invoiceId={detailId}
+							// Lets the panel's billing history move the focus to another of
+							// the subscriber's periods without closing and re-opening.
+							onSelectInvoice={setDetailId}
+						/>
 					)}
 				</SheetContent>
 			</Sheet>

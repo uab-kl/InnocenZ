@@ -45,6 +45,15 @@ export function PaymentHistoryList({
 	laneOf?: (invoice: SubscriptionInvoice) => "plan" | "addon" | null;
 }) {
 	const { t } = usePortalLocale();
+	/**
+	 * Which half the tiles have narrowed the list to. Pressing PAID or UNPAID
+	 * filters the rows to that half; pressing the active tile again clears it —
+	 * a one-way control that cannot be undone without leaving the page is how a
+	 * reader ends up convinced periods have gone missing.
+	 *
+	 * Declared before the early returns below: hooks must run on every render.
+	 */
+	const [filter, setFilter] = useState<"all" | "paid" | "unpaid">("all");
 	if (isLoading && invoices.length === 0) {
 		return (
 			<IzCard flat>
@@ -66,95 +75,206 @@ export function PaymentHistoryList({
 	const unpaid = invoices.filter((invoice) => invoice.status !== "paid");
 	const paid = invoices.filter((invoice) => invoice.status === "paid");
 
+	const sum = (rows: SubscriptionInvoice[]) =>
+		rows.reduce((total, invoice) => total + Number(invoice.amount), 0);
+
 	return (
 		<>
-			{unpaid.length === 0 ? (
-				<IzCard flat>
-					<p className="iz-tiny iz-muted py-4 text-center">
-						{t.subscription.nothingOutstanding}
+			{/*
+			 * WHAT THIS ORGANISATION HAS PAID, AND WHAT IT STILL OWES.
+			 *
+			 * The admin's payment panel has carried these two figures since it was
+			 * built; the org actually paying the bill could only read the rows and
+			 * add them up itself. Same two numbers, now on the screen of the party
+			 * the money is leaving.
+			 *
+			 * Summed over EVERY period this org holds, not the visible page — the
+			 * list below tucks settled periods behind a disclosure, and a total that
+			 * quietly ignored them would understate what has been paid.
+			 *
+			 * Green settled, amber waiting: the owner's colour rule, matching the
+			 * status pills on the rows underneath so the tiles and the list cannot
+			 * read as two different vocabularies.
+			 */}
+			<div className="mb-3 grid grid-cols-2 gap-2">
+				{/* BUTTONS, not cards: pressing one narrows the list below to that
+				    half — the tile IS the filter, the same control the admin's panel
+				    uses, so the two screens read as one vocabulary. */}
+				<button
+					type="button"
+					aria-pressed={filter === "paid"}
+					onClick={() => setFilter(filter === "paid" ? "all" : "paid")}
+					className={`iz-card iz-card-flat w-full text-left border-[rgba(57,217,138,.35)] bg-[rgba(57,217,138,.06)] ${
+						filter === "paid" ? "ring-2 ring-[rgba(57,217,138,.5)]" : ""
+					}`}
+				>
+					<p className="iz-tiny font-semibold uppercase tracking-wide text-[var(--iz-green)]">
+						{t.subscription.statusPaid}
 					</p>
-				</IzCard>
-			) : (
+					<p className="mt-0.5 font-sora text-base font-bold text-[var(--iz-green)]">
+						{formatRM(sum(paid))}
+					</p>
+					<p className="iz-tiny iz-muted2 mt-0.5">
+						{fill(t.subscription.periodsCount, { n: paid.length })}
+					</p>
+				</button>
+				<button
+					type="button"
+					aria-pressed={filter === "unpaid"}
+					onClick={() => setFilter(filter === "unpaid" ? "all" : "unpaid")}
+					className={`iz-card iz-card-flat w-full text-left border-amber-300/40 bg-amber-300/5 ${
+						filter === "unpaid" ? "ring-2 ring-amber-300/50" : ""
+					}`}
+				>
+					<p className="iz-tiny font-semibold uppercase tracking-wide text-amber-300">
+						{t.subscription.statusUnpaid}
+					</p>
+					<p className="mt-0.5 font-sora text-base font-bold text-amber-300">
+						{formatRM(sum(unpaid))}
+					</p>
+					<p className="iz-tiny iz-muted2 mt-0.5">
+						{fill(t.subscription.periodsCount, { n: unpaid.length })}
+					</p>
+				</button>
+			</div>
+
+			{filter !== "paid" &&
+				(unpaid.length === 0 ? (
+					<IzCard flat>
+						<p className="iz-tiny iz-muted py-4 text-center">
+							{t.subscription.nothingOutstanding}
+						</p>
+					</IzCard>
+				) : (
+					<div className="space-y-2">
+						{groupByPeriod(unpaid).map((group) => (
+							<PeriodCard key={group.key} rows={group.rows} laneOf={laneOf} />
+						))}
+					</div>
+				))}
+			{/*
+			 * PAID filter active: the settled periods come OUT of the disclosure and
+			 * stand as the list itself — that is what the press asked to see. With no
+			 * filter, they stay tucked behind the disclosure so the one or two rows
+			 * needing action are not buried; "which of these was the POS charge" gets
+			 * asked about paid periods most, because that is where the arguing
+			 * happens.
+			 */}
+			{filter === "paid" && (
 				<div className="space-y-2">
-					{unpaid.map((invoice) => (
-						<InvoiceCard
-							key={invoice.id}
-							invoice={invoice}
-							lane={laneOf?.(invoice) ?? null}
-						/>
+					{groupByPeriod(paid).map((group) => (
+						<PeriodCard key={group.key} rows={group.rows} laneOf={laneOf} />
 					))}
 				</div>
 			)}
-			{/* The settled half carries the same badges — "which of these two was the
-			    POS charge" gets asked about paid periods more often than unpaid ones,
-			    because that is where the arguing happens. */}
-			<PaidPeriodsDisclosure invoices={paid} laneOf={laneOf} />
+			{filter === "all" && (
+				<PaidPeriodsDisclosure invoices={paid} laneOf={laneOf} />
+			)}
 		</>
 	);
 }
 
-/** One billing period. Same card whether it is outstanding or settled. */
-function InvoiceCard({
-	invoice,
-	lane,
+/**
+ * One billing WINDOW, every lane inside it.
+ *
+ * A venue on a plan plus the POS add-on is billed twice for the SAME window,
+ * and two cards each restating "3 Aug – 2 Sep" read as a duplicate charge
+ * (owner: "can design the UI because is same date"). The date prints once;
+ * the lanes sit under it with their own figures and status — and the window's
+ * total beside the date when there is more than one lane to add up.
+ */
+function PeriodCard({
+	rows,
+	laneOf,
 }: {
-	invoice: SubscriptionInvoice;
-	lane?: "plan" | "addon" | null;
+	rows: SubscriptionInvoice[];
+	laneOf?: (invoice: SubscriptionInvoice) => "plan" | "addon" | null;
 }) {
 	const { t } = usePortalLocale();
-	const isPaid = invoice.status === "paid";
+	const first = rows[0];
+	if (!first) return null;
+	const cents = rows.reduce(
+		(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
+		0,
+	);
 	return (
 		<IzCard flat>
 			<div className="iz-between gap-2">
-				<div className="flex min-w-0 items-start gap-2">
-					<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
-					<div className="min-w-0">
-						<div className="flex flex-wrap items-center gap-2">
-							<p className="iz-sm truncate font-semibold">
-								{periodLabel(invoice.periodStart, invoice.periodEnd)}
-							</p>
-							{/*
-							 * WHICH LANE this period is for. A venue holding the POS add-on
-							 * is billed on BOTH lanes every month, so this list shows two
-							 * rows for one month — and two amounts with no label is how a
-							 * venue concludes it was charged twice for the same thing.
-							 *
-							 * Violet for the add-on, matching the "negotiated" pill the POS
-							 * and Custom cards already use, so POS reads the same everywhere.
-							 * The plan lane is labelled too rather than left bare: with only
-							 * the add-on badged, an unbadged row is ambiguous between "this
-							 * is the plan" and "we could not tell".
-							 *
-							 * Absent entirely when the lane could not be resolved — a missing
-							 * badge is honest, a guessed one is not.
-							 */}
-							{lane === "addon" && (
-								<IzPill variant="violet">{t.subscription.lanePosAddon}</IzPill>
-							)}
-							{lane === "plan" && (
-								<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
-							)}
+				<div className="flex min-w-0 items-center gap-2">
+					<Receipt className="h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
+					<p className="iz-sm truncate font-semibold">
+						{periodLabel(first.periodStart, first.periodEnd)}
+					</p>
+				</div>
+				{rows.length > 1 && (
+					<p className="iz-sm shrink-0 font-bold">{formatRM(cents / 100)}</p>
+				)}
+			</div>
+			<div className="mt-2 space-y-2">
+				{rows.map((invoice) => {
+					const isPaid = invoice.status === "paid";
+					const lane = laneOf?.(invoice) ?? null;
+					return (
+						<div
+							key={invoice.id}
+							className="flex items-center justify-between gap-3"
+						>
+							<span className="min-w-0">
+								<span className="iz-tiny flex items-center gap-2">
+									{lane === "addon" && (
+										<IzPill variant="violet">
+											{t.subscription.lanePosAddon}
+										</IzPill>
+									)}
+									{lane === "plan" && (
+										<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
+									)}
+									<span className="iz-muted truncate">
+										{invoice.planName} ·{" "}
+										{invoice.billingCycle === "weekly"
+											? t.subscription.billedWeekly
+											: t.subscription.billedMonthly}
+									</span>
+								</span>
+								{isPaid && invoice.paidAt && (
+									<span className="iz-tiny iz-muted2 block">
+										{fill(t.subscription.paidOn, {
+											date: format(parseISO(invoice.paidAt), "d MMM yyyy"),
+										})}
+									</span>
+								)}
+							</span>
+							<span className="flex shrink-0 items-center gap-2">
+								<span className="iz-sm font-bold">
+									{formatRM(Number(invoice.amount))}
+								</span>
+								<IzPill variant={isPaid ? "green" : "amber"}>
+									{isPaid
+										? t.subscription.statusPaid
+										: t.subscription.statusUnpaid}
+								</IzPill>
+							</span>
 						</div>
-						<p className="iz-tiny iz-muted">
-							{invoice.planName} ·{" "}
-							{invoice.billingCycle === "weekly"
-								? t.subscription.billedWeekly
-								: t.subscription.billedMonthly}
-							{isPaid && invoice.paidAt
-								? `${fill(t.subscription.paidOn, { date: format(parseISO(invoice.paidAt), "d MMM yyyy") })}`
-								: ""}
-						</p>
-					</div>
-				</div>
-				<div className="shrink-0 text-right">
-					<p className="iz-sm font-bold">{formatRM(Number(invoice.amount))}</p>
-					<IzPill variant={isPaid ? "green" : "amber"} className="!mt-1">
-						{isPaid ? t.subscription.statusPaid : t.subscription.statusUnpaid}
-					</IzPill>
-				</div>
+					);
+				})}
 			</div>
 		</IzCard>
 	);
+}
+
+/** Windows in first-seen order — the caller already sorts newest first. */
+function groupByPeriod(invoices: SubscriptionInvoice[]) {
+	const groups: {
+		key: string;
+		rows: SubscriptionInvoice[];
+	}[] = [];
+	for (const invoice of invoices) {
+		const key = `${invoice.periodStart}|${invoice.periodEnd}`;
+		const found = groups.find((group) => group.key === key);
+		if (found) found.rows.push(invoice);
+		else groups.push({ key, rows: [invoice] });
+	}
+	return groups;
 }
 
 /**
@@ -208,12 +328,8 @@ function PaidPeriodsDisclosure({
 			</button>
 			{open && (
 				<div className="mt-2 space-y-2">
-					{invoices.map((invoice) => (
-						<InvoiceCard
-							key={invoice.id}
-							invoice={invoice}
-							lane={laneOf?.(invoice) ?? null}
-						/>
+					{groupByPeriod(invoices).map((group) => (
+						<PeriodCard key={group.key} rows={group.rows} laneOf={laneOf} />
 					))}
 				</div>
 			)}

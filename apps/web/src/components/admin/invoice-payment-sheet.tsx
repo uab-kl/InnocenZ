@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { addDays, format, parse } from "date-fns";
 import {
 	ArrowUpRight,
 	Banknote,
@@ -9,17 +10,25 @@ import {
 	Loader2,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
 	SheetDescription,
 	SheetHeader,
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth-context";
+import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { formatDate, formatDay, formatPrice } from "@/lib/utils";
 import type { PaymentMethod } from "@/services/payment-method";
+import {
+	type SubscriptionInvoiceStatus,
+	setSubscriptionInvoiceStatus,
+} from "@/services/subscription-invoice";
 import {
 	fetchInvoicePaymentDetail,
 	type SubscriptionPayment,
@@ -108,24 +117,78 @@ function OrgLogo({
 	);
 }
 
-function Row({
-	label,
-	children,
+export function InvoicePaymentSheet({
+	invoiceId,
+	onSelectInvoice,
 }: {
-	label: string;
-	children: React.ReactNode;
+	invoiceId: string;
+	/**
+	 * Re-point the panel at another of this subscriber's periods.
+	 *
+	 * The panel describes ONE period and its Mark-paid button acts on that one,
+	 * so the history rows have to be able to move the focus — otherwise settling
+	 * the other lane means closing the drawer and hunting for its row.
+	 */
+	onSelectInvoice?: (id: string) => void;
 }) {
-	return (
-		<div className="flex items-start justify-between gap-4 py-2">
-			<span className="text-sm text-muted-foreground">{label}</span>
-			<span className="text-right text-sm font-medium">{children}</span>
-		</div>
-	);
-}
-
-export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 	const { t } = usePortalLocale();
 	const { logout } = useAuth();
+
+	/**
+	 * Which half of the billing history is on screen. The two tiles are the
+	 * control — pressing PAID or UNPAID narrows the list under them, pressing the
+	 * active one again clears it.
+	 *
+	 * Local to the panel and reset by remounting on a different invoice, so a
+	 * filter chosen while reading one subscriber never silently hides periods for
+	 * the next one.
+	 */
+	const [historyFilter, setHistoryFilter] = useState<"all" | "paid" | "unpaid">(
+		"all",
+	);
+	const queryClient = useQueryClient();
+
+	/**
+	 * Which row is asking for a bank reference, and what has been typed so far.
+	 *
+	 * Marking a period PAID asserts money arrived, so it asks what paid it —
+	 * `subscription_payment.reference` is the column that lets a settled period be
+	 * matched against a statement later. Taking a mark BACK asks nothing: no money
+	 * moved, and demanding a reference to undo a mistake is how wrong figures
+	 * become permanent.
+	 */
+	const [referenceFor, setReferenceFor] = useState<{
+		id: string;
+		value: string;
+	} | null>(null);
+
+	const statusMutation = useMutation({
+		mutationFn: ({
+			id,
+			status,
+			reference,
+		}: {
+			id: string;
+			status: SubscriptionInvoiceStatus;
+			reference?: string | null;
+		}) => setSubscriptionInvoiceStatus(id, status, logout, reference),
+		onSuccess: (response) => {
+			// BOTH keys. This panel reads `invoice-payment-detail` and the table
+			// behind it reads `subscription-invoices`; refreshing only one leaves the
+			// list showing Unpaid over a period this panel has just settled.
+			queryClient.invalidateQueries({ queryKey: ["invoice-payment-detail"] });
+			queryClient.invalidateQueries({ queryKey: ["subscription-invoices"] });
+			setReferenceFor(null);
+			toast.success(response.message || t.adminService.paymentStatusUpdated);
+		},
+		onError: (error) => {
+			toast.error(
+				toMutationError(error, t.adminService.paymentStatusUpdateFailed)
+					?.message ?? t.adminService.paymentStatusUpdateFailed,
+			);
+		},
+	});
+	const isSaving = statusMutation.isPending;
 
 	const { data, isLoading, isError } = useQuery({
 		queryKey: ["invoice-payment-detail", invoiceId],
@@ -152,8 +215,33 @@ export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 		);
 	}
 
-	const { invoice, payments, methods, org, lanes, actors, r2PublicUrl } = data;
+	const {
+		invoice,
+		payments,
+		methods,
+		org,
+		lanes,
+		history,
+		actors,
+		r2PublicUrl,
+	} = data;
+
 	const isAgency = invoice.subscriberType === "agency";
+	/**
+	 * The org's CURRENT billing window — its newest billed period.
+	 *
+	 * The per-lane dates below match invoices to lanes by FK, which goes dark
+	 * the moment an org SWITCHES: the old period belongs to the predecessor row
+	 * and the new lane has no invoice yet (exactly Emhub after Enterprise→Scale
+	 * — owner: "Still not show"). The window itself is still a fact the ledger
+	 * holds, so it is stated once at org level instead of vanishing.
+	 */
+	const newestPeriod = history.reduce<(typeof history)[number] | null>(
+		(newest, row) =>
+			!newest || row.periodStart > newest.periodStart ? row : newest,
+		null,
+	);
+
 	/**
 	 * Legacy rows still hold base64 data URLs and absolute URLs; newer ones hold
 	 * a bare R2 key that has to be joined with the base. Checked in that order so
@@ -249,58 +337,53 @@ export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 				</div>
 			</section>
 
-			{/* WHAT IS OWED — this period, and every lane it sits beside. */}
-			<section className="rounded-lg border border-border/60 p-4">
-				<p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-					{t.adminService.subscriptionDetails}
-				</p>
-				<div className="divide-y divide-border/50">
-					<Row label={t.adminService.thisInvoiceFor}>{invoice.planName}</Row>
-					<Row label={t.adminService.billingCycleLabel}>
-						{invoice.billingCycle === "weekly"
-							? t.subscription.billedWeekly
-							: t.subscription.billedMonthly}
-					</Row>
-					<Row label={t.adminService.billingPeriodLabel}>
-						{formatDay(invoice.periodStart)} – {formatDay(invoice.periodEnd)}
-					</Row>
-					<Row label={t.adminService.amountLabel}>
-						{formatPrice(invoice.amount)}
-					</Row>
-					<Row label={t.adminService.statusLabel}>
-						<Badge
-							className={
-								invoice.status === "paid"
-									? paymentToneOf.succeeded
-									: paymentToneOf.pending
-							}
-						>
-							{invoice.status === "paid"
-								? t.subscription.statusPaid
-								: t.subscription.statusUnpaid}
-						</Badge>
-					</Row>
-					{invoice.paidAt && (
-						<Row label={t.adminService.paidOnLabel}>
-							{formatDate(invoice.paidAt)}
-						</Row>
-					)}
-				</div>
-			</section>
-
 			{/*
-			 * EVERY LANE — the fix for "got 2 plans, why does it show one".
-			 * A venue on Enterprise with the POS add-on is billed on TWO lanes and
-			 * each opens its own invoice, so the row above is only ever one of them.
+			 * WHAT THEY ARE ON — the org's CURRENT subscription, and nothing else.
+			 *
+			 * This section used to describe the OPENED invoice — its plan, period
+			 * and amount — which for a venue that had switched read "Enterprise
+			 * 3,999" directly above a second card reading "Scale 6,999": two answers
+			 * stacked with nothing saying which was history (owner: "still cannot
+			 * understand … no blur"). One section now states today's subscription;
+			 * what any period was billed under — the current plan or one since left
+			 * — lives in Billing history below, where each row carries its own
+			 * figure, status and Mark paid.
 			 */}
 			{lanes.length > 0 && (
 				<section className="rounded-lg border border-border/60 p-4">
 					<p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-						{t.adminService.allBillingLanes}
+						{t.adminService.subscriptionDetails}
 					</p>
 					<p className="mb-2 text-xs text-muted-foreground">
 						{t.adminService.allBillingLanesHint}
 					</p>
+					{newestPeriod && (
+						<p className="mb-2 text-xs">
+							<span className="text-muted-foreground">
+								{t.adminService.billingPeriodLabel}:{" "}
+							</span>
+							<span className="font-medium">
+								{formatDay(newestPeriod.periodStart)} –{" "}
+								{formatDay(newestPeriod.periodEnd)}
+							</span>
+							<span className="text-muted-foreground">
+								{" · "}
+								{fill(t.outletSubscription.nextRenewal, {
+									date: format(
+										addDays(
+											parse(
+												newestPeriod.periodEnd,
+												"yyyy-MM-dd",
+												new Date(),
+											),
+											1,
+										),
+										"d MMM yyyy",
+									),
+								})}
+							</span>
+						</p>
+					)}
 					<ul className="space-y-2">
 						{lanes.map((lane) => {
 							const isThisOne = lane.id === invoice.memberSubscriptionId;
@@ -346,6 +429,359 @@ export function InvoicePaymentSheet({ invoiceId }: { invoiceId: string }) {
 								</span>
 							</li>
 						)}
+					</ul>
+				</section>
+			)}
+
+			{/*
+			 * BILLING HISTORY — every period this subscriber has, paid and unpaid.
+			 *
+			 * "Subscription details" above describes ONE period, because that is what
+			 * was opened. A venue on a plan plus the POS add-on is billed on two
+			 * lanes and opens two invoices for the same month, so a panel showing one
+			 * of them looks like the other has gone missing.
+			 *
+			 * It is also the decision this panel exists for: marking a period paid
+			 * needs the neighbours — is this the only thing outstanding, or the fourth
+			 * unpaid week running? Without this the only way to see was to close the
+			 * drawer, expand the org card, and come back.
+			 *
+			 * The period being viewed is MARKED rather than removed: a list missing
+			 * the row you are looking at reads as a gap in the ledger.
+			 */}
+			{history.length > 0 && (
+				<section className="rounded-lg border border-border/60 p-4">
+					<p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+						{t.adminService.billingHistory}
+					</p>
+
+					{/*
+					 * THE TWO NUMBERS AN ADMIN IS ACTUALLY AFTER: what this subscriber
+					 * has settled, and what it still owes. Summed over EVERY period, so
+					 * the answer does not depend on which row happened to be opened.
+					 *
+					 * Green settled, amber waiting — the owner's colour rule, the same
+					 * pairing the status pills below use, so the tiles and the rows
+					 * cannot read as two different vocabularies.
+					 */}
+					<div className="mb-3 grid grid-cols-2 gap-2">
+						{(
+							[
+								{
+									key: "paid" as const,
+									label: t.subscription.statusPaid,
+									rows: history.filter((row) => row.status === "paid"),
+									tone: "emerald",
+								},
+								{
+									key: "unpaid" as const,
+									label: t.subscription.statusUnpaid,
+									rows: history.filter((row) => row.status !== "paid"),
+									tone: "amber",
+								},
+							] as const
+						).map((tile) => {
+							const active = historyFilter === tile.key;
+							return (
+								<button
+									key={tile.key}
+									type="button"
+									// Pressing the active tile clears the filter. A one-way
+									// control that cannot be undone without closing the panel is
+									// how a reader ends up convinced periods have gone missing.
+									onClick={() => setHistoryFilter(active ? "all" : tile.key)}
+									aria-pressed={active}
+									className={`rounded-md border px-3 py-2 text-left transition-colors ${
+										tile.tone === "emerald"
+											? "border-emerald-500/25 bg-emerald-500/5 hover:bg-emerald-500/10"
+											: "border-amber-500/25 bg-amber-500/5 hover:bg-amber-500/10"
+									} ${
+										active
+											? tile.tone === "emerald"
+												? "ring-2 ring-emerald-500/50"
+												: "ring-2 ring-amber-500/50"
+											: ""
+									}`}
+								>
+									<p
+										className={`text-[11px] font-medium uppercase tracking-wide ${
+											tile.tone === "emerald"
+												? "text-emerald-500"
+												: "text-amber-500"
+										}`}
+									>
+										{tile.label}
+									</p>
+									<p
+										className={`text-base font-semibold ${
+											tile.tone === "emerald"
+												? "text-emerald-500"
+												: "text-amber-500"
+										}`}
+									>
+										{formatPrice(
+											tile.rows
+												.reduce((sum, row) => sum + Number(row.amount), 0)
+												.toFixed(2),
+										)}
+									</p>
+									<p className="text-xs text-muted-foreground">
+										{fill(t.adminService.periodsCount, { n: tile.rows.length })}
+									</p>
+								</button>
+							);
+						})}
+					</div>
+
+					{/* Says what the list is showing whenever it is NOT everything —
+					    otherwise a filtered list is indistinguishable from a short one. */}
+					{historyFilter !== "all" && (
+						<button
+							type="button"
+							onClick={() => setHistoryFilter("all")}
+							className="mb-2 text-xs text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+						>
+							{fill(t.adminService.showingFilteredPeriods, {
+								n: history.filter((row) =>
+									historyFilter === "paid"
+										? row.status === "paid"
+										: row.status !== "paid",
+								).length,
+								total: history.length,
+							})}
+						</button>
+					)}
+
+					<ul className="space-y-1.5">
+						{(() => {
+							/**
+							 * GROUPED BY PERIOD. A venue on a plan plus the POS add-on opens
+							 * TWO invoices for the SAME window, and two rows each restating
+							 * "3 Aug – 2 Sep" read as a duplicate (owner: "can design the UI
+							 * because is same date"). One date header per window; the lanes
+							 * sit under it, each keeping its own figure, status and Mark
+							 * paid, with the window's total beside the date when there is
+							 * more than one lane to add up.
+							 */
+							const filtered = history.filter((row) =>
+								historyFilter === "all"
+									? true
+									: historyFilter === "paid"
+										? row.status === "paid"
+										: row.status !== "paid",
+							);
+							const groups: {
+								key: string;
+								periodStart: string;
+								periodEnd: string;
+								rows: typeof filtered;
+							}[] = [];
+							for (const row of filtered) {
+								const key = `${row.periodStart}|${row.periodEnd}`;
+								const found = groups.find((group) => group.key === key);
+								if (found) found.rows.push(row);
+								else
+									groups.push({
+										key,
+										periodStart: row.periodStart,
+										periodEnd: row.periodEnd,
+										rows: [row],
+									});
+							}
+							return groups.map((group) => (
+								<li
+									key={group.key}
+									className="rounded-md bg-muted/30 px-3 py-2 text-sm"
+								>
+									<div className="flex items-center justify-between gap-3">
+										<span className="font-medium">
+											{formatDay(group.periodStart)} –{" "}
+											{formatDay(group.periodEnd)}
+										</span>
+										{group.rows.length > 1 && (
+											<span className="text-xs text-muted-foreground">
+												{t.adminService.totalThisPeriod} ·{" "}
+												{formatPrice(
+													(
+														group.rows.reduce(
+															(sum, row) =>
+																sum + Math.round(Number(row.amount) * 100),
+															0,
+														) / 100
+													).toFixed(2),
+												)}
+											</span>
+										)}
+									</div>
+									<ul className="mt-1.5 space-y-1">
+										{group.rows.map((row) => {
+											const isThisOne = row.id === invoice.id;
+											const refocusable =
+												!isThisOne &&
+												!!onSelectInvoice &&
+												referenceFor?.id !== row.id;
+											return (
+												<li
+													key={row.id}
+													className={`rounded px-2 py-1.5 ${
+														isThisOne
+															? "bg-primary/10 ring-1 ring-primary/40"
+															: ""
+													} ${refocusable ? "cursor-pointer hover:bg-muted/50" : ""}`}
+													// Clicking another lane re-points the panel; stands
+													// down while this row's reference form is open —
+													// refocusing remounts the panel and eats the typing.
+													// The target guard skips events bubbling out of the
+													// row's own button and input.
+													role={refocusable ? "button" : undefined}
+													tabIndex={refocusable ? 0 : undefined}
+													onKeyDown={
+														refocusable
+															? (event) => {
+																	if (event.target !== event.currentTarget)
+																		return;
+																	if (
+																		event.key === "Enter" ||
+																		event.key === " "
+																	) {
+																		event.preventDefault();
+																		onSelectInvoice?.(row.id);
+																	}
+																}
+															: undefined
+													}
+													onClick={
+														refocusable
+															? () => onSelectInvoice?.(row.id)
+															: undefined
+													}
+												>
+													<div className="flex items-center justify-between gap-3">
+														<span className="min-w-0 truncate text-xs text-muted-foreground">
+															{row.planName} ·{" "}
+															{row.billingCycle === "weekly"
+																? t.subscription.billedWeekly
+																: t.subscription.billedMonthly}
+														</span>
+														<span className="flex shrink-0 items-center gap-2">
+															<span className="font-medium">
+																{formatPrice(row.amount)}
+															</span>
+															<Badge
+																variant="outline"
+																className={
+																	row.status === "paid"
+																		? "border-emerald-500/40 text-emerald-500"
+																		: "border-amber-500/40 text-amber-500"
+																}
+															>
+																{row.status === "paid"
+																	? t.subscription.statusPaid
+																	: t.subscription.statusUnpaid}
+															</Badge>
+															{isThisOne && (
+																<Badge variant="outline">
+																	{t.adminService.thisPeriodBadge}
+																</Badge>
+															)}
+															{referenceFor?.id !== row.id && (
+																<Button
+																	size="sm"
+																	variant={
+																		row.status === "paid"
+																			? "outline"
+																			: "default"
+																	}
+																	disabled={isSaving}
+																	onClick={(event) => {
+																		// A press here settles, never navigates.
+																		event.stopPropagation();
+																		if (row.status === "paid") {
+																			statusMutation.mutate({
+																				id: row.id,
+																				status: "unpaid",
+																			});
+																			return;
+																		}
+																		setReferenceFor({
+																			id: row.id,
+																			value: "",
+																		});
+																	}}
+																>
+																	{row.status === "paid"
+																		? t.adminService.markUnpaid
+																		: t.adminService.markPaid}
+																</Button>
+															)}
+														</span>
+													</div>
+													{referenceFor?.id === row.id && (
+														<div className="mt-2 flex flex-col gap-1 border-t border-border/50 pt-2">
+															<Input
+																autoFocus
+																value={referenceFor.value}
+																maxLength={120}
+																placeholder={
+																	t.adminService.paymentReferencePlaceholder
+																}
+																aria-label={t.adminService.paymentReference}
+																disabled={isSaving}
+																className="h-8 text-sm"
+																onChange={(e) =>
+																	setReferenceFor({
+																		id: row.id,
+																		value: e.target.value,
+																	})
+																}
+																onKeyDown={(e) => {
+																	if (e.key === "Enter" && !isSaving)
+																		statusMutation.mutate({
+																			id: row.id,
+																			status: "paid",
+																			reference:
+																				referenceFor.value.trim() || null,
+																		});
+																	if (e.key === "Escape")
+																		setReferenceFor(null);
+																}}
+															/>
+															<span className="text-xs text-muted-foreground">
+																{t.adminService.paymentReferenceHint}
+															</span>
+															<div className="flex justify-end gap-2 pt-1">
+																<Button
+																	size="sm"
+																	variant="outline"
+																	disabled={isSaving}
+																	onClick={() => setReferenceFor(null)}
+																>
+																	{t.common.cancel}
+																</Button>
+																<Button
+																	size="sm"
+																	disabled={isSaving}
+																	onClick={() =>
+																		statusMutation.mutate({
+																			id: row.id,
+																			status: "paid",
+																			reference:
+																				referenceFor.value.trim() || null,
+																		})
+																	}
+																>
+																	{t.adminService.confirmPayment}
+																</Button>
+															</div>
+														</div>
+													)}
+												</li>
+											);
+										})}
+									</ul>
+								</li>
+							));
+						})()}
 					</ul>
 				</section>
 			)}
