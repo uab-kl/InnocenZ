@@ -1,4 +1,5 @@
 import { IconGuide } from "@agency-portal/components/iz/IconGuide";
+import { UnpaidBillingBanner } from "@agency-portal/components/iz/UnpaidBillingBanner";
 import { formatRM } from "@agency-portal/components/iz/ui";
 import { AgencyHomeHubTabs } from "@agency-portal/components/portal/AgencyHomeHubTabs";
 import { AiSuggestionsPanel } from "@agency-portal/components/portal/AiSuggestionsPanel";
@@ -165,6 +166,12 @@ function AgencyHub() {
 
 			<div className="iz-portal-home-grid">
 				<div className="iz-portal-home-main">
+					{/* What the agency owes InnocenZ for its OWN subscription — not the
+					    payout it owes its PRs, which is the KPI tile above. Two different
+					    directions of money, so they must never share a surface. Hidden
+					    entirely at zero. */}
+					<UnpaidBillingBanner portal="agency" />
+
 					{/* Says what finance can DO, not which pages exist for it.
 					    "payroll & PV only" was narrower than the role's actual reach —
 					    finance also reads the roster (owner's call, 11 Aug 2026: keep it)

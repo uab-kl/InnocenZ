@@ -8,6 +8,7 @@ import { fill } from "@/lib/portal-i18n/fill";
 import {
 	cardBrandFromNumber,
 	describePaymentMethod,
+	fetchEwalletProviders,
 	fetchFpxBanks,
 	isPlausibleCardNumber,
 	type PaymentMethod,
@@ -78,6 +79,7 @@ export function PaymentMethodCard({
 	const [expiry, setExpiry] = useState("");
 	const [email, setEmail] = useState("");
 	const [bankCode, setBankCode] = useState("");
+	const [walletProvider, setWalletProvider] = useState("");
 	const [error, setError] = useState<string | null>(null);
 
 	/**
@@ -91,11 +93,27 @@ export function PaymentMethodCard({
 		staleTime: 60 * 60 * 1000,
 	});
 
+	/** The wallet roster, on the same terms as the banks: fetched on demand only. */
+	const { data: wallets = [] } = useQuery({
+		queryKey: ["ewallet-providers"],
+		queryFn: () => fetchEwalletProviders(logout),
+		enabled: editing && type === "ewallet",
+		staleTime: 60 * 60 * 1000,
+	});
+
 	/**
-	 * The three rails a Malaysian venue realistically uses. E-wallets and DuitNow
-	 * are deliberately NOT offered: they cannot be charged on a schedule, so
-	 * storing one as "how you pay" would promise a renewal that never happens.
-	 * They belong on a per-invoice payment link instead.
+	 * The four rails a Malaysian venue realistically uses.
+	 *
+	 * E-WALLET IS A RECORD OF INTENT, not a schedulable instrument — and that is
+	 * exactly what `manual_transfer` beside it already is. An earlier note here
+	 * excluded wallets because they "cannot be charged on a schedule": true, and
+	 * not the distinction, since bank transfer cannot either and is offered. What
+	 * both share is that the money moves on a human's action; what the app stores
+	 * is which way that will be, so an admin chasing an unpaid period knows where
+	 * to look. `autoPay` is forced false on both, server-side.
+	 *
+	 * DuitNow stays out for now: the enum carries it, nothing renders it, and a
+	 * rail with no roster behind it would be a picker that saves nothing useful.
 	 */
 	const methodChoices: {
 		value: PaymentMethodType;
@@ -113,6 +131,11 @@ export function PaymentMethodCard({
 			note: t.subscription.methodFpxNote,
 		},
 		{
+			value: "ewallet",
+			label: t.subscription.methodEwallet,
+			note: t.subscription.methodEwalletNote,
+		},
+		{
 			value: "manual_transfer",
 			label: t.subscription.methodTransfer,
 			note: t.subscription.methodTransferNote,
@@ -126,6 +149,7 @@ export function PaymentMethodCard({
 		setNumber("");
 		setType(card?.type ?? "card");
 		setBankCode(card?.bankCode ?? "");
+		setWalletProvider(card?.walletProvider ?? "");
 		setHolder(card?.holderName ?? "");
 		setExpiry(
 			card?.expMonth && card?.expYear
@@ -153,6 +177,25 @@ export function PaymentMethodCard({
 			setError(null);
 			const savedMandate = await onSave({ type, bankCode, ...common });
 			if (savedMandate) {
+				setNumber("");
+				setEditing(false);
+			}
+			return;
+		}
+
+		/**
+		 * The wallet rail. Validated here as well as on the server for the same
+		 * reason the bank is: a 400 from the schema would surface as a generic
+		 * failure, and "choose your wallet" is a thing the person can act on.
+		 */
+		if (type === "ewallet") {
+			if (!walletProvider) {
+				setError(t.subscription.chooseWallet);
+				return;
+			}
+			setError(null);
+			const savedWallet = await onSave({ type, walletProvider, ...common });
+			if (savedWallet) {
 				setNumber("");
 				setEditing(false);
 			}
@@ -399,6 +442,54 @@ export function PaymentMethodCard({
 							</select>
 							<p className="iz-tiny iz-muted2 mt-1">
 								{t.subscription.bankRedirectNote}
+							</p>
+						</div>
+					)}
+
+					{/*
+					 * WHICH WALLET — and nothing else. No wallet id, phone number or
+					 * account is asked for here or anywhere: the payer opens their own
+					 * app and approves, so none of that is data this application can use.
+					 * Same rule that keeps the card PAN and the bank account number out.
+					 */}
+					{type === "ewallet" && (
+						<div className="iz-field">
+							<label htmlFor="pm-wallet">{t.subscription.yourWallet}</label>
+							{/* Inline-styled and dark-optioned for the same reasons the bank
+							    select above is — see the note there. */}
+							<select
+								id="pm-wallet"
+								value={walletProvider}
+								onChange={(e) => {
+									setWalletProvider(e.target.value);
+									setError(null);
+								}}
+								style={{
+									width: "100%",
+									background: "rgba(255,255,255,0.03)",
+									border: "1px solid var(--iz-line2)",
+									borderRadius: "13px",
+									padding: "13px",
+									color: "var(--iz-txt)",
+									fontSize: "15px",
+									fontFamily: '"Manrope", sans-serif',
+								}}
+							>
+								<option value="" style={OPTION_STYLE}>
+									{t.subscription.chooseWalletPlaceholder}
+								</option>
+								{wallets.map((wallet) => (
+									<option
+										key={wallet.code}
+										value={wallet.code}
+										style={OPTION_STYLE}
+									>
+										{wallet.name}
+									</option>
+								))}
+							</select>
+							<p className="iz-tiny iz-muted2 mt-1">
+								{t.subscription.walletPushNote}
 							</p>
 						</div>
 					)}

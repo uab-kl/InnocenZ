@@ -124,9 +124,29 @@ function AgencySubscription() {
 		[issuedWeeklyPv, t],
 	);
 
-	// Real login → rate card lists real backend plans; demo plans otherwise. The
-	// usage-based hero tier stays demo (no backend equivalent).
+	// Real login → rate card lists real backend plans; demo plans otherwise.
 	const sub = useAgencySubscription();
+
+	/**
+	 * THE NUMBER THE HERO CARD PRINTS. Real vouchers on a real login.
+	 *
+	 * `issuedWeeklyPv` above is computed from the browser demo store, which is
+	 * BLANKED on every real session — so a live agency read "0 PVs issued" sitting
+	 * directly beside a tier and a price chosen from a real, different count. That
+	 * is worse than showing nothing: it invites an agency to dispute a correct
+	 * invoice using a number the app made up.
+	 *
+	 * Deliberately a SEPARATE value rather than a fix to `issuedWeeklyPv` itself.
+	 * That one still feeds `billing`, which feeds the demo store write at the top
+	 * of this component; re-pointing it would move demo bookkeeping as a
+	 * side-effect of a display fix. Only what the card SHOWS changes here.
+	 *
+	 * Null while the vouchers are still loading — rendered as a dash, never as 0,
+	 * because 0 is itself a real and meaningful answer on this card.
+	 */
+	const heroPvCount: number | null = sub.backed
+		? sub.settledWeeklyPvCount
+		: issuedWeeklyPv;
 
 	// Receivables owed BY outlets — the opposite direction to everything else on
 	// this screen. Backed sessions only: the demo store's `kind: "outlet"` rows
@@ -449,12 +469,14 @@ function AgencySubscription() {
 							})}
 						</p>
 						<p className="mt-1 font-sora text-base font-bold">
-							{fill(
-								issuedWeeklyPv === 1
-									? t.subscription.pvIssuedOne
-									: t.subscription.pvIssuedMany,
-								{ n: issuedWeeklyPv },
-							)}
+							{heroPvCount === null
+								? t.subscription.loadingCard
+								: fill(
+										heroPvCount === 1
+											? t.subscription.pvIssuedOne
+											: t.subscription.pvIssuedMany,
+										{ n: heroPvCount },
+									)}
 						</p>
 						<p className="iz-tiny iz-muted mt-1">
 							{sub.backed && sub.onCustom
@@ -476,12 +498,14 @@ function AgencySubscription() {
 						? t.subscription.atAgreedPrice
 						: billing.plan.renegotiate
 							? t.agencyMisc.contactAdminCustomPricing
-							: fill(
-									issuedWeeklyPv === 1
-										? t.subscription.basedOnPvOne
-										: t.subscription.basedOnPvMany,
-									{ price: billedPriceLabel, n: issuedWeeklyPv },
-								)}
+							: heroPvCount === null
+								? ""
+								: fill(
+										heroPvCount === 1
+											? t.subscription.basedOnPvOne
+											: t.subscription.basedOnPvMany,
+										{ price: billedPriceLabel, n: heroPvCount },
+									)}
 				</p>
 			</IzCard>
 

@@ -960,6 +960,27 @@
       "when": 1791100000000,
       "tag": "0136_notification_kind_subscription_tier_weekly",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0137_notification_kind_subscription_invoice_opened",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0138_admin_request_status_withdrawn",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0139_payment_method_wallet",
+      "breakpoints": true
     }
   ]
 }

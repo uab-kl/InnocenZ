@@ -126,10 +126,13 @@ function PosIntegrationAddonCard({
 	 */
 	activeAddonPriceRm: number | null;
 	/**
-	 * Whether withdrawing is actually possible. In a real session the request
-	 * lives with the admin and there is no withdraw endpoint, so offering
-	 * "Cancel request" would clear the badge here while the admin still holds
-	 * the request — a button that lies.
+	 * Whether withdrawing is actually possible.
+	 *
+	 * Was hardcoded false on real sessions, because no withdraw endpoint existed
+	 * and offering "Cancel request" would have cleared the badge here while the
+	 * admin still held the request — a button that lies. The endpoint now exists
+	 * (PATCH /admin-request/mine/:id/withdraw), so this is false only while a
+	 * withdrawal is already in flight.
 	 */
 	canCancel: boolean;
 	quotePending: boolean;
@@ -494,10 +497,32 @@ function OutletSubscriptionPage() {
 
 	const handleCancelQuote = () => {
 		if (backend.backed) {
-			// Admin still holds the request (no outlet delete route); clear the
-			// local indicator only.
-			setQuoteSentLocal(false);
-			toast(t.outletSubscription.posRequestWithdrawn, "info");
+			/**
+			 * A REAL withdrawal now. This used to clear `quoteSentLocal` and toast
+			 * "withdrawn" while the admin still held the request — the badge went, the
+			 * request stayed, and the venue was told the opposite of what happened.
+			 *
+			 * The local flags are cleared only on the server's confirmation, and the
+			 * hook refetches the quote so the card's state comes from the ledger
+			 * rather than from this component's memory.
+			 */
+			backend
+				.withdrawPosRequest()
+				.then((ok) => {
+					if (ok) {
+						setQuoteSentLocal(false);
+						setRemovalSentLocal(false);
+					}
+					toast(
+						ok
+							? t.outletSubscription.posRequestWithdrawn
+							: t.outletSubscription.couldNotWithdrawRequest,
+						ok ? "info" : "warn",
+					);
+				})
+				.catch(() =>
+					toast(t.outletSubscription.couldNotWithdrawRequest, "warn"),
+				);
 			return;
 		}
 		cancelPosIntegrationQuoteRequest();
@@ -727,7 +752,11 @@ function OutletSubscriptionPage() {
 						key={addon.id}
 						addon={addon}
 						canEdit={canEdit}
-						canCancel={!backend.backed}
+						// Real sessions can withdraw too now: PATCH
+						// /admin-request/mine/:id/withdraw exists, so the button no longer
+						// clears a badge the admin's queue disagrees with. Still false
+						// while the withdrawal is in flight, so it cannot be double-sent.
+						canCancel={!backend.isWithdrawingPos}
 						quotePending={quotePending}
 						pendingKind={pendingKind}
 						activeAddonPriceRm={backend.addonAmountRm}
@@ -775,6 +804,10 @@ function OutletSubscriptionPage() {
 					<PaymentHistoryList
 						invoices={backend.paymentHistory}
 						isLoading={backend.isPaymentHistoryLoading}
+						// A venue can hold two lanes at once — its plan and the POS add-on
+						// — and is billed on both every month, so each row says which it
+						// is. The agency screen passes nothing: one lane, no badge needed.
+						laneOf={backend.invoiceLane}
 					/>
 				</>
 			)}
