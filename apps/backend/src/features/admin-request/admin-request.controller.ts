@@ -652,6 +652,64 @@ export class AdminRequestControllerClass {
     }
   }
 
+  /**
+   * The subscriber takes its own request back.
+   *
+   * The one action on this inbox that is NOT the admin's. A venue that asked for
+   * a POS quote, or asked to come off POS, previously had no way to change its
+   * mind: the request sat in the queue until a human answered something nobody
+   * wanted any more.
+   *
+   * OWNERSHIP IS RE-DERIVED, never taken from the request. The id in the path is
+   * checked against the caller's OWN organisations — otherwise one venue could
+   * cancel another's negotiation by guessing a uuid, and the admin would see a
+   * withdrawal the real subscriber never made.
+   *
+   * ONLY AN UNANSWERED REQUEST. `pending` and `contacted` may be withdrawn;
+   * `resolved`, `approved`, `declined` and `direct` are decisions that have
+   * already moved the billing ledger, and letting a subscriber retract one would
+   * let it walk back a price the admin had applied. A wrong answer is the
+   * admin's to correct, not the payer's to erase.
+   *
+   * A NON-EXISTENT id and SOMEBODY ELSE'S id answer the same 404, so the reply
+   * never confirms a request exists — the shape subscription-invoice uses.
+   */
+  async withdrawMine(req: Request, res: Response) {
+    try {
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
+      const subscriberIds = scope.agencyId ? [scope.agencyId] : scope.outletIds;
+      if (subscriberIds.length === 0) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const id = paramId(req.params.id);
+      const existing = await this.repository.getById(id);
+      if (!existing || !existing.subscriberId || !subscriberIds.includes(existing.subscriberId)) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      if (existing.status !== 'pending' && existing.status !== 'contacted') {
+        return res.status(409).json({
+          success: false,
+          message: `This request has already been answered (${existing.status}) and can no longer be withdrawn`,
+          data: null,
+        });
+      }
+
+      const record = await this.repository.update(id, {
+        status: 'withdrawn',
+        updatedBy: getActor(req),
+      });
+      if (!record) {
+        return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+      res.status(200).json({ success: true, message: 'Request withdrawn', data: record });
+    } catch (error) {
+      logger.error('[AdminRequestController.withdrawMine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async markContacted(req: Request, res: Response) {
     try {
       const actor = getActor(req);

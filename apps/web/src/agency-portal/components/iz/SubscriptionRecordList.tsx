@@ -32,9 +32,17 @@ function periodLabel(startIso: string, endIso: string): string {
 export function PaymentHistoryList({
 	invoices,
 	isLoading,
+	laneOf,
 }: {
 	invoices: SubscriptionInvoice[];
 	isLoading?: boolean;
+	/**
+	 * Which lane a period belongs to — the plan, or the POS add-on. Optional so
+	 * the agency screen, which can only ever hold ONE lane, passes nothing and
+	 * renders no badge: labelling every row "Plan" where no other lane exists is
+	 * noise, not information.
+	 */
+	laneOf?: (invoice: SubscriptionInvoice) => "plan" | "addon" | null;
 }) {
 	const { t } = usePortalLocale();
 	if (isLoading && invoices.length === 0) {
@@ -69,17 +77,30 @@ export function PaymentHistoryList({
 			) : (
 				<div className="space-y-2">
 					{unpaid.map((invoice) => (
-						<InvoiceCard key={invoice.id} invoice={invoice} />
+						<InvoiceCard
+							key={invoice.id}
+							invoice={invoice}
+							lane={laneOf?.(invoice) ?? null}
+						/>
 					))}
 				</div>
 			)}
-			<PaidPeriodsDisclosure invoices={paid} />
+			{/* The settled half carries the same badges — "which of these two was the
+			    POS charge" gets asked about paid periods more often than unpaid ones,
+			    because that is where the arguing happens. */}
+			<PaidPeriodsDisclosure invoices={paid} laneOf={laneOf} />
 		</>
 	);
 }
 
 /** One billing period. Same card whether it is outstanding or settled. */
-function InvoiceCard({ invoice }: { invoice: SubscriptionInvoice }) {
+function InvoiceCard({
+	invoice,
+	lane,
+}: {
+	invoice: SubscriptionInvoice;
+	lane?: "plan" | "addon" | null;
+}) {
 	const { t } = usePortalLocale();
 	const isPaid = invoice.status === "paid";
 	return (
@@ -88,9 +109,32 @@ function InvoiceCard({ invoice }: { invoice: SubscriptionInvoice }) {
 				<div className="flex min-w-0 items-start gap-2">
 					<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
 					<div className="min-w-0">
-						<p className="iz-sm truncate font-semibold">
-							{periodLabel(invoice.periodStart, invoice.periodEnd)}
-						</p>
+						<div className="flex flex-wrap items-center gap-2">
+							<p className="iz-sm truncate font-semibold">
+								{periodLabel(invoice.periodStart, invoice.periodEnd)}
+							</p>
+							{/*
+							 * WHICH LANE this period is for. A venue holding the POS add-on
+							 * is billed on BOTH lanes every month, so this list shows two
+							 * rows for one month — and two amounts with no label is how a
+							 * venue concludes it was charged twice for the same thing.
+							 *
+							 * Violet for the add-on, matching the "negotiated" pill the POS
+							 * and Custom cards already use, so POS reads the same everywhere.
+							 * The plan lane is labelled too rather than left bare: with only
+							 * the add-on badged, an unbadged row is ambiguous between "this
+							 * is the plan" and "we could not tell".
+							 *
+							 * Absent entirely when the lane could not be resolved — a missing
+							 * badge is honest, a guessed one is not.
+							 */}
+							{lane === "addon" && (
+								<IzPill variant="violet">{t.subscription.lanePosAddon}</IzPill>
+							)}
+							{lane === "plan" && (
+								<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
+							)}
+						</div>
 						<p className="iz-tiny iz-muted">
 							{invoice.planName} ·{" "}
 							{invoice.billingCycle === "weekly"
@@ -125,8 +169,10 @@ function InvoiceCard({ invoice }: { invoice: SubscriptionInvoice }) {
  */
 function PaidPeriodsDisclosure({
 	invoices,
+	laneOf,
 }: {
 	invoices: SubscriptionInvoice[];
+	laneOf?: (invoice: SubscriptionInvoice) => "plan" | "addon" | null;
 }) {
 	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
@@ -163,7 +209,11 @@ function PaidPeriodsDisclosure({
 			{open && (
 				<div className="mt-2 space-y-2">
 					{invoices.map((invoice) => (
-						<InvoiceCard key={invoice.id} invoice={invoice} />
+						<InvoiceCard
+							key={invoice.id}
+							invoice={invoice}
+							lane={laneOf?.(invoice) ?? null}
+						/>
 					))}
 				</div>
 			)}

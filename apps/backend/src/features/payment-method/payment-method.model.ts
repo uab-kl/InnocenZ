@@ -59,6 +59,14 @@ export const PaymentMethodTable = MainSchema.table('payment_method', {
   bankCode: varchar('bank_code', { length: 50 }),
   /** Snapshotted so a renamed or delisted bank cannot blank an existing mandate. */
   bankName: varchar('bank_name', { length: 120 }),
+  /**
+   * Which e-wallet, by roster code (migration 0139). Deliberately NOT folded
+   * into `bank_code` above: those hold PayNet FPX codes and are read back
+   * through `fpxBankByCode`, and Touch 'n Go is not a bank — sharing the column
+   * would make its name lie about its contents and break every lookup it exists
+   * to serve.
+   */
+  walletProvider: varchar('wallet_provider', { length: 50 }),
   /** Null until a payment gateway is connected; this pair is what could charge. */
   gateway: varchar('gateway', { length: 50 }),
   gatewayToken: varchar('gateway_token', { length: 255 }),
@@ -146,6 +154,33 @@ export type FpxBankCode = (typeof fpxBanks)[number]['code'];
 /** The bank behind a code, or null when the roster no longer carries it. */
 export function fpxBankByCode(code: string | null | undefined) {
   return fpxBanks.find((bank) => bank.code === code) ?? null;
+}
+
+/**
+ * The e-wallets a Malaysian subscriber can say it pays from (migration 0139).
+ *
+ * Served to the picker from HERE rather than hardcoded in the browser, for the
+ * same reason `fpxBanks` is: two copies of a roster is how a client comes to
+ * offer a provider that the save then rejects.
+ *
+ * ⚠️ EVERY ONE OF THESE IS A PUSH RAIL. The payer approves each payment inside
+ * their own wallet app, so none can be debited unattended — which is why
+ * `autoChargeableTypes` below excludes `ewallet`, and why the controller forces
+ * `autoPay` false on it. Saving one records an INTENTION to pay, exactly like a
+ * bank transfer, and never a standing authority to take money.
+ */
+export const ewalletProviders = [
+  { code: 'TNG', name: "Touch 'n Go eWallet" },
+  { code: 'GRABPAY', name: 'GrabPay' },
+  { code: 'SHOPEEPAY', name: 'ShopeePay' },
+  { code: 'BOOST', name: 'Boost' },
+] as const;
+
+export type EwalletProviderCode = (typeof ewalletProviders)[number]['code'];
+
+/** The wallet behind a code, or null when the roster no longer carries it. */
+export function ewalletProviderByCode(code: string | null | undefined) {
+  return ewalletProviders.find((wallet) => wallet.code === code) ?? null;
 }
 
 /**

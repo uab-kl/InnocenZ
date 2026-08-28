@@ -52,6 +52,8 @@ export interface PaymentMethod {
 	 */
 	bankCode: string | null;
 	bankName: string | null;
+	/** E-wallet rails only — the roster code, e.g. "TNG". Null on every other. */
+	walletProvider: string | null;
 	gateway: string | null;
 	gatewayToken: string | null;
 	autoPay: boolean;
@@ -80,6 +82,12 @@ export interface SavePaymentMethodInput {
 	mandateReference?: string | null;
 	/** PayNet code of the bank to redirect to. Required for `fpx_mandate`. */
 	bankCode?: string | null;
+	/**
+	 * WHICH E-WALLET, by roster code. Required by the server when
+	 * `type === "ewallet"`, and rejected there if it is not on the roster — so the
+	 * picker must offer the server's own list, never a hardcoded one.
+	 */
+	walletProvider?: string | null;
 	autoPay?: boolean;
 	/** Required only for an operator who holds more than one venue. */
 	outletId?: string;
@@ -134,6 +142,35 @@ export async function fetchFpxBanks(
 		message: string;
 		data: FpxBank[];
 	}>("/payment-method/banks");
+	return response.data.data ?? [];
+}
+
+export interface EwalletProvider {
+	code: string;
+	name: string;
+}
+
+/**
+ * The e-wallets a venue can say it pays from — Touch 'n Go, GrabPay, ShopeePay,
+ * Boost.
+ *
+ * From the SERVER's roster, the same as the banks above: the save validates
+ * against that list, so a hardcoded copy here is how the picker comes to offer a
+ * wallet the save rejects.
+ *
+ * ⚠️ Saving one records an INTENTION to pay, not a standing authority to debit.
+ * Every wallet here is a push rail — the payer approves each payment inside
+ * their own app — which is why the server forces `autoPay` false on it.
+ */
+export async function fetchEwalletProviders(
+	onRefreshFail: () => void,
+): Promise<EwalletProvider[]> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: EwalletProvider[];
+	}>("/payment-method/wallets");
 	return response.data.data ?? [];
 }
 

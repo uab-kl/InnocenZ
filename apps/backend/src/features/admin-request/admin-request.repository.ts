@@ -18,6 +18,28 @@ export type NegotiatedByRoleRow = {
   average: string;
 };
 
+/**
+ * THE ONE DEFINITION OF "the subscriber is still waiting for an answer".
+ *
+ * `contacted` belongs here and was missing. It means an admin has SPOKEN to
+ * them, not decided anything — the decisions are resolve / approve / decline.
+ * Testing `= 'pending'` alone meant that the moment an admin pressed "Mark
+ * contacted", the venue's own card stopped saying "waiting for admin" and
+ * offered to file the request again, so a venue could raise a duplicate of
+ * something already sitting in the queue being worked on.
+ *
+ * A CONSTANT rather than the same literal written twice, because the two
+ * readers must never drift: one decides what the subscriber's screen says, the
+ * other decides whether the weekly tier job may re-price that agency. When those
+ * two disagree, an agency is told it is mid-negotiation while the job re-bands
+ * it anyway — the exact fault `subscriberIdsAwaitingAnswer` was written to close.
+ *
+ * Deliberately NOT used by `pendingCount`: that is the ADMIN's "what still needs
+ * my attention" badge, and a request they have already picked up is reasonably
+ * out of it. Different question, different test, on purpose.
+ */
+const AWAITING_ANSWER = ['pending', 'contacted'] as const;
+
 export class AdminRequestRepositoryClass {
   /**
    * "Lands on a negotiated arrangement" — the POS add-on or the Custom tier.
@@ -184,7 +206,7 @@ export class AdminRequestRepositoryClass {
         .where(
           and(
             eq(AdminRequestTable.type, type),
-            eq(AdminRequestTable.status, 'pending'),
+            inArray(AdminRequestTable.status, AWAITING_ANSWER),
             inArray(AdminRequestTable.subscriberId, subscriberIds),
           ),
         )
@@ -201,11 +223,12 @@ export class AdminRequestRepositoryClass {
    * Every subscriber with a request of this type still awaiting an answer.
    *
    * The set form of `latestPendingByType`, and DELIBERATELY the same status
-   * test — `pending`, nothing else — because the agency's Subscription screen
-   * reads that method to decide whether it is "waiting for admin", and this one
-   * decides whether the weekly job may re-band. Two definitions of "still
-   * waiting" is how the page and the job come to disagree about the same
-   * agency, which is exactly the fault this exists to close.
+   * test — now the shared `AWAITING_ANSWER` — because the agency's Subscription
+   * screen reads that method to decide whether it is "waiting for admin", and
+   * this one decides whether the weekly job may re-band. Two definitions of
+   * "still waiting" is how the page and the job come to disagree about the same
+   * agency, which is exactly the fault this exists to close. The constant is
+   * what makes that shared rather than merely duplicated.
    *
    * Returns `null` on a read failure rather than an empty set. An empty set
    * means "nobody is mid-negotiation", which would let the caller re-price
@@ -224,7 +247,7 @@ export class AdminRequestRepositoryClass {
         .where(
           and(
             eq(AdminRequestTable.type, type),
-            eq(AdminRequestTable.status, 'pending'),
+            inArray(AdminRequestTable.status, AWAITING_ANSWER),
             isNotNull(AdminRequestTable.subscriberId),
           ),
         );

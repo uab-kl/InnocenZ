@@ -1,7 +1,13 @@
 import { Request, Response } from 'express';
 import { PaymentMethodRepositoryClass, PaymentMethodOwner } from './payment-method.repository.js';
 import { UpsertPaymentMethodSchema } from '@/schema/payment-method.schema.js';
-import { fpxBankByCode, fpxBanks, toPublicPaymentMethod } from './payment-method.model.js';
+import {
+  ewalletProviderByCode,
+  ewalletProviders,
+  fpxBankByCode,
+  fpxBanks,
+  toPublicPaymentMethod,
+} from './payment-method.model.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import { Error } from '@/error/index.js';
 import { getActor } from '@/util/actor.js';
@@ -60,6 +66,15 @@ export class PaymentMethodControllerClass {
    */
   async banks(_req: Request, res: Response) {
     res.status(200).json({ success: true, message: 'OK', data: fpxBanks });
+  }
+
+  /**
+   * The e-wallet roster the picker renders — the exact sibling of `banks` above,
+   * and served from the server for the same reason: two copies of a roster is
+   * how the browser comes to offer a provider the save would then reject.
+   */
+  async wallets(_req: Request, res: Response) {
+    res.status(200).json({ success: true, message: 'OK', data: ewalletProviders });
   }
 
   /** Every instrument the caller holds, default first. */
@@ -139,8 +154,20 @@ export class PaymentMethodControllerClass {
         bankCode: type === 'fpx_mandate' ? (parsed.data.bankCode ?? null) : null,
         bankName:
           type === 'fpx_mandate' ? (fpxBankByCode(parsed.data.bankCode)?.name ?? null) : null,
+        /**
+         * Which e-wallet, resolved from the shared roster rather than taken as
+         * given — the same reason the bank NAME is. A client-supplied label
+         * could otherwise print "Touch 'n Go" beside a code meaning something
+         * else entirely.
+         */
+        walletProvider:
+          type === 'ewallet'
+            ? (ewalletProviderByCode(parsed.data.walletProvider)?.code ?? null)
+            : null,
         // Meaningless on a rail that cannot be charged unattended — a bank
-        // transfer that claims auto-pay is a promise the app cannot keep.
+        // transfer that claims auto-pay is a promise the app cannot keep, and an
+        // e-wallet is a PUSH rail: the payer approves each payment inside their
+        // own app, so nothing here can ever debit them without that tap.
         autoPay:
           type === 'card' || type === 'fpx_mandate' ? (parsed.data.autoPay ?? true) : false,
       };

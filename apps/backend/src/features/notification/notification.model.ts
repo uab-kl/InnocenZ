@@ -105,6 +105,25 @@ export const notificationKindValues = [
    * so a reader must route it there and must not resolve it to a voucher.
    */
   'subscription_tier_weekly',
+  /**
+   * A new billing period was opened against this organisation (migration 0137).
+   *
+   * Outlet AND agency addressed — the first kind here that goes to both — owner
+   * + finance only, and ONE PER ORGANISATION PER RUN rather than per lane. A
+   * venue holding a plan and a POS add-on opens two invoices on the same night,
+   * and two notices for one night's billing is how a bell gets ignored.
+   *
+   * Distinct from `subscription_tier_weekly` above, which an outlet never
+   * receives and which says what a week's PV count did to a PRICE. This one says
+   * a CHARGE now exists. An agency that stayed on the same tier still gets a new
+   * weekly invoice, so the two are not interchangeable in either direction.
+   *
+   * Carries `{ periodStart, periodEnd, amount, currency, count }` — a TOTAL and
+   * how many lanes made it, never a single invoice id, because there may be two.
+   * There is nothing to open; the org's own Subscription page is the
+   * destination, so a reader must route it there.
+   */
+  'subscription_invoice_opened',
 ] as const;
 export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKindEnum = MainSchema.enum('notification_kind', notificationKindValues);

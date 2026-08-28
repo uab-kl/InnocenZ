@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { SubscriptionInvoiceRepositoryClass } from './subscription-invoice.repository.js';
+import { announceOpenedInvoices } from './announce-opened.js';
 import {
   SubscriptionInvoiceFilter,
   SubscriptionInvoiceStatus,
@@ -286,10 +287,27 @@ export class SubscriptionInvoiceControllerClass {
   async generate(req: Request, res: Response) {
     try {
       const result = await this.repository.generateMissing({ actor: getActor(req) });
+
+      /**
+       * THE SAME ANNOUNCEMENT THE NIGHTLY JOB MAKES.
+       *
+       * This button and the 03:00 pass are the only two things that open a
+       * period. If only the job told anybody, whether a venue heard about its
+       * bill would depend on which of the two happened to raise it — and an
+       * admin pressing this precisely because a period has just started is the
+       * case where the payer most needs to know.
+       *
+       * Awaited rather than fired and forgotten: the announcer never throws, and
+       * the admin's reply should not claim work that is still in flight.
+       */
+      await announceOpenedInvoices(result.opened);
+
       res.status(200).json({
         success: true,
         message: `${result.created} invoice${result.created === 1 ? '' : 's'} added`,
-        data: result,
+        // Deliberately NOT `result`: `opened` carries the subscriber rows the
+        // announcer needed and is no part of this endpoint's contract.
+        data: { scanned: result.scanned, created: result.created },
       });
     } catch (error) {
       logger.error('[SubscriptionInvoiceController.generate] Error:', error);

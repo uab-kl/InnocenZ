@@ -1,4 +1,5 @@
 import { IconGuide } from "@agency-portal/components/iz/IconGuide";
+import { UnpaidBillingBanner } from "@agency-portal/components/iz/UnpaidBillingBanner";
 import { OutletBookings } from "@agency-portal/components/outlet/OutletBookings";
 import { OutletReconciliationBanner } from "@agency-portal/components/outlet/OutletReconciliationBanner";
 import {
@@ -45,6 +46,11 @@ function OutletHome() {
 				title={`${date} · ${time}`}
 				hint={t.outletHome.liveShiftHint}
 			/>
+
+			{/* Money the venue owes InnocenZ, above the staffing banners: a shift it
+			    cannot post is today's problem, but an unpaid subscription is the one
+			    that ends the account. Hidden entirely at zero. */}
+			<UnpaidBillingBanner portal="outlet" />
 
 			{/* A venue with no APPROVED agency cannot post a shift, and Today is the
 			    screen it lands on. Without this it sees an empty board with no

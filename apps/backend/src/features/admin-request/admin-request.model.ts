@@ -26,6 +26,17 @@ export const adminRequestStatusValues = [
   'declined',
   'direct',
   'approved',
+  /**
+   * The SUBSCRIBER took its own request back before anyone answered it
+   * (migration 0138).
+   *
+   * Distinct from `declined`, which is the admin's refusal. Folding the two
+   * together would show a venue "declined" for something nobody refused, and
+   * leave the admin's history unable to tell "we said no" from "they changed
+   * their mind". Only a request still awaiting an answer — `pending` or
+   * `contacted` — can reach this state; an answered one is history.
+   */
+  'withdrawn',
 ] as const;
 export type AdminRequestStatus = (typeof adminRequestStatusValues)[number];
 export const adminRequestStatusEnum = MainSchema.enum('admin_request_status', adminRequestStatusValues);

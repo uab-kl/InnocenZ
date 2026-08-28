@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   cardBrandValues,
+  ewalletProviderByCode,
   fpxBankByCode,
   mandateStatusValues,
   paymentMethodTypeValues,
@@ -53,6 +54,16 @@ export const UpsertPaymentMethodSchema = z
      * and has no business holding — the same rule that keeps the card PAN out.
      */
     bankCode: z.string().trim().min(1).max(50).optional().nullable(),
+    /**
+     * WHICH E-WALLET, by roster code — 'TNG', 'GRABPAY' and so on.
+     *
+     * Its own field rather than a reuse of `bankCode`, because a wallet is not a
+     * bank and the FPX roster would reject every one of these. There is no
+     * account number, wallet id or phone number here and there must never be:
+     * the payer approves inside their own app, so none of that is data this
+     * application can use — the same rule that keeps the card PAN out.
+     */
+    walletProvider: z.string().trim().min(1).max(50).optional().nullable(),
     autoPay: z.boolean().optional(),
     /**
      * Which venue the instrument belongs to, for an operator who holds more
@@ -77,6 +88,27 @@ export const UpsertPaymentMethodSchema = z
           code: 'custom',
           path: ['bankCode'],
           message: 'That bank is not on the FPX roster',
+        });
+      }
+      return;
+    }
+
+    // Mirrors the `payment_method_wallet_provider` CHECK from 0139: a wallet
+    // rail with no wallet named is a payment instruction with no destination.
+    // Validated against the shared roster for the same reason the bank is — so a
+    // provider cannot be selectable in the picker and rejected here.
+    if (value.type === 'ewallet') {
+      if (!value.walletProvider) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['walletProvider'],
+          message: 'Choose the e-wallet you will pay from',
+        });
+      } else if (!ewalletProviderByCode(value.walletProvider)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['walletProvider'],
+          message: 'That wallet is not one we accept',
         });
       }
       return;

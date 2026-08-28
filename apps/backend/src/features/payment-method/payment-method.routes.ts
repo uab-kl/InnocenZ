@@ -25,6 +25,12 @@ router.get(
   requireRole('outlet', 'agency', 'admin'),
   paymentMethodController.banks.bind(paymentMethodController),
 );
+/** The e-wallet roster, on the same terms as `/banks`: a public list, not data. */
+router.get(
+  '/wallets',
+  requireRole('outlet', 'agency', 'admin'),
+  paymentMethodController.wallets.bind(paymentMethodController),
+);
 /** Every rail the org holds, default first — against `/mine`, which is the default alone. */
 router.get(
   '/mine/all',

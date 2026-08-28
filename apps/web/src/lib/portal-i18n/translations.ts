@@ -1587,6 +1587,27 @@ const en = {
 			"You authorise this once at your bank, and each period is debited automatically after that.",
 		methodTransferNote:
 			"You transfer each period yourself and InnocenZ marks it received. Nothing is ever charged automatically.",
+		/**
+		 * Which lane a billed period belongs to. A venue on a plan PLUS the POS
+		 * add-on is billed on both every month, so Payment history shows two rows
+		 * for one month — unlabelled, that reads as a double charge.
+		 */
+		lanePlan: "Plan",
+		lanePosAddon: "POS add-on",
+		methodEwallet: "E-wallet",
+		/**
+		 * Says plainly that this rail is a PUSH. A wallet cannot be debited
+		 * unattended — the payer approves inside their own app — so promising
+		 * "charged automatically" here, the way the card note does, would be a
+		 * promise neither this app nor Touch 'n Go can keep.
+		 */
+		methodEwalletNote:
+			"Touch 'n Go, GrabPay, ShopeePay or Boost. You approve each payment in your wallet app — nothing is ever taken automatically.",
+		yourWallet: "Your e-wallet",
+		chooseWalletPlaceholder: "Choose your e-wallet…",
+		chooseWallet: "Choose the e-wallet you will pay from.",
+		walletPushNote:
+			"InnocenZ records which wallet you use. Sending you a payment request needs a payment gateway, which is not connected yet.",
 		mandatePending:
 			"Waiting for your bank to approve this direct debit. Nothing is debited until it does.",
 		addPaymentMethod: "Add payment method",
@@ -1594,6 +1615,19 @@ const en = {
 		savePaymentMethod: "Save payment method",
 		savedTransfer: "Bank transfer",
 		savedFpx: "FPX direct debit",
+
+		/**
+		 * The Today-page billing banner, both portals.
+		 *
+		 * Says what is OWED and nothing about how to pay it: no gateway is
+		 * connected, so a "Pay now" here would be a button that cannot work. The
+		 * link goes to Subscription, where the periods are listed one by one.
+		 */
+		billingDueTitle: "Subscription payment due",
+		billingDueOne: "{amount} outstanding for 1 billing period.",
+		billingDueMany: "{amount} outstanding across {n} billing periods.",
+		billingDueSince: "Oldest unpaid period starts {date}.",
+		billingDueCta: "Open Subscription",
 
 		/**
 		 * The bank picker. NOTE there is no account-number string here and there
@@ -2028,6 +2062,14 @@ const en = {
 		posRemovalSent: "Request to remove POS integration sent to InnocenZ admin",
 		couldNotSendTheRequest: "Could not send the request — try again",
 		posRequestWithdrawn: "POS integration request withdrawn",
+		/**
+		 * The refusal half. Withdrawing can genuinely fail — the admin may have
+		 * answered a second earlier — and staying silent would leave the venue
+		 * believing it had cancelled something still in the queue, which is the
+		 * exact fault this endpoint was added to fix.
+		 */
+		couldNotWithdrawRequest:
+			"Couldn't withdraw the request — the admin may have already answered it. Reload to see where it stands.",
 		peakDayReduce:
 			"Peak day has {peak} requested PRs — reduce to {max}/day before downgrading to {plan}",
 		planListLoading: "Plan list still loading — try again in a moment",
@@ -7053,12 +7095,28 @@ const zh: PortalTranslations = {
 		methodFpxNote: "在银行一次性授权后，之后每个账期都会自动扣账。",
 		methodTransferNote:
 			"每个账期由您自行转账，InnocenZ 收到后标记为已付款，绝不会自动扣款。",
+		lanePlan: "套餐",
+		lanePosAddon: "POS 加购",
+		methodEwallet: "电子钱包",
+		methodEwalletNote:
+			"Touch 'n Go、GrabPay、ShopeePay 或 Boost。每笔付款都需要您在钱包应用中确认，系统绝不会自动扣款。",
+		yourWallet: "您的电子钱包",
+		chooseWalletPlaceholder: "请选择电子钱包…",
+		chooseWallet: "请选择您将用于付款的电子钱包。",
+		walletPushNote:
+			"InnocenZ 会记录您选择的钱包。向您发送付款请求需要支付网关，目前尚未接入。",
 		mandatePending: "正在等待银行批准此直接扣账授权，批准前不会扣款。",
 		addPaymentMethod: "添加付款方式",
 		editPaymentMethod: "编辑付款方式",
 		savePaymentMethod: "保存付款方式",
 		savedTransfer: "银行转账",
 		savedFpx: "FPX 银行直接扣账",
+
+		billingDueTitle: "订阅费待付",
+		billingDueOne: "尚有 {amount} 未付，共 1 个账单周期。",
+		billingDueMany: "尚有 {amount} 未付，共 {n} 个账单周期。",
+		billingDueSince: "最早未付周期自 {date} 起。",
+		billingDueCta: "打开订阅页面",
 
 		yourBank: "您的银行",
 		chooseBankPlaceholder: "请选择银行…",
@@ -7460,6 +7518,8 @@ const zh: PortalTranslations = {
 		posRemovalSent: "移除 POS 接入的申请已发送给 InnocenZ 管理员",
 		couldNotSendTheRequest: "无法发送该申请 —— 请重试",
 		posRequestWithdrawn: "POS 接入申请已撤回",
+		couldNotWithdrawRequest:
+			"无法撤回该申请——管理员可能已经处理。请刷新查看当前状态。",
 		peakDayReduce:
 			"峰值日已请求 {peak} 位 PR —— 降级到 {plan} 前请先减到每天 {max} 位",
 		planListLoading: "套餐列表仍在加载 —— 请稍后重试",

@@ -352,6 +352,33 @@ export function useAgencySubscription() {
 		}).length;
 	}, [backed, vouchersQuery.isLoading, vouchersQuery.data]);
 
+	/**
+	 * The SETTLED payroll week's count — the week that has finished.
+	 *
+	 * Distinct from `weeklyPvCount` above, which counts the week still running,
+	 * and the difference is not cosmetic. The tier an agency is billed on is
+	 * decided by the Sunday 03:30 job against a week that has CLOSED, so the card
+	 * explaining that price ("you issued N last week, which is what puts you
+	 * here") has to count the same week the price was computed from. Printing the
+	 * running week's count under that sentence shows a number that cannot explain
+	 * the tier beside it — worst on a Monday, when the running week is nearly
+	 * always 0.
+	 *
+	 * Same query, so this costs no extra request: the vouchers are already here.
+	 */
+	const settledWeeklyPvCount = useMemo<number | null>(() => {
+		if (!backed || vouchersQuery.isLoading || !vouchersQuery.data) return null;
+		const weekStart = addDaysToIso(
+			getPayrollWeekSundayIso(getLiveTodayIso()),
+			-7,
+		);
+		const weekEnd = addDaysToIso(weekStart, 6);
+		return vouchersQuery.data.data.filter((pv) => {
+			const day = (pv.weekStart ?? pv.issuedDate ?? "").slice(0, 10);
+			return day >= weekStart && day <= weekEnd;
+		}).length;
+	}, [backed, vouchersQuery.isLoading, vouchersQuery.data]);
+
 	/** The tier this agency is waiting on, or null when nothing is pending. */
 	const pendingPlanLabel = useMemo<string | null>(() => {
 		const requestedId = pendingQuery.data?.requestedPlanId;
@@ -539,6 +566,13 @@ export function useAgencySubscription() {
 		 * — the volume rule must not act on a number it does not have.
 		 */
 		weeklyPvCount,
+		/**
+		 * PVs issued in the payroll week that has CLOSED — the week the billed tier
+		 * was actually computed from. Null while unknown. This is what the hero
+		 * card prints; `weeklyPvCount` above is the running week and drives the
+		 * live tier rule.
+		 */
+		settledWeeklyPvCount,
 		applyAutoTier,
 		notifyAdminForCustom,
 		requestLeaveCustom,

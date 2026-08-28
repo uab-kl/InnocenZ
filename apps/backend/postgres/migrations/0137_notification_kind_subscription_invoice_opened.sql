@@ -1,0 +1,27 @@
+-- A new billing period was opened against an outlet or an agency.
+--
+-- The nightly 03:00 job has always written these rows in silence. Nothing on
+-- either portal announced a new charge: an org had to remember to open its own
+-- Subscription page and look, and the book has carried "nothing notifies an org
+-- that a new period has opened" as a known gap since the invoice table landed.
+-- That was survivable while an admin chased payment by hand. It stops being
+-- survivable the moment a payer is expected to PUSH a payment — nobody can pay
+-- an invoice they were never told about.
+--
+-- Deliberately its own kind rather than reuse:
+--   * `subscription_tier_weekly` (0136) is an AGENCY-only statement about what a
+--     week's PV count did to its tier. It says what the price became; it does
+--     not say a charge exists. Outlets never receive it at all, and an outlet's
+--     monthly invoice is exactly what this kind has to carry.
+--   * `payment_voucher_issued` is the PR's wage record — opposite direction of
+--     money, and a different party.
+--
+-- Addressed to owner + finance on BOTH sides — finance pays it, the owner owns
+-- the relationship — and raised ONE PER ORGANISATION PER RUN, not per lane. A
+-- venue on a plan with a POS add-on opens two invoices on the same night, and
+-- two notifications for one night's billing is how a bell gets ignored. The
+-- payload therefore carries a total and a count, never a single invoice id.
+--
+-- Additive and idempotent; ALTER TYPE ... ADD VALUE cannot be rolled back inside
+-- a transaction, so a re-run must be a no-op.
+ALTER TYPE "main"."notification_kind" ADD VALUE IF NOT EXISTS 'subscription_invoice_opened';
