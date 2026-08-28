@@ -58,15 +58,6 @@ import { useLocale, formatMessage } from '../i18n';
 
 type Phase = 'idle' | 'scanning' | 'review' | 'manual' | 'logged';
 
-function shiftPvId(outlet: string, date: [number, number, number]) {
-  const [y, m, d] = date;
-  const slug = outlet
-    .replace(/[^a-zA-Z0-9]+/g, '')
-    .toUpperCase()
-    .slice(0, 10);
-  return `PV-SHIFT-${y}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}-${slug || 'OUTLET'}`;
-}
-
 export function ScanScreen({
   category,
   mode,
@@ -87,7 +78,8 @@ export function ScanScreen({
   } = useActiveShift();
   // `deleteLine` is deliberately NOT taken here any more — see `confirmOcr`.
   // The provider still exports it for ShiftStatusPanel's whole-receipt removal.
-  const { receiptLines, addLine, submitReceipt, updateLine } = usePrEarnings();
+  const { current, receiptLines, addLine, submitReceipt, updateLine } =
+    usePrEarnings();
   const onDuty = attendancePhase === 'on_duty';
 
   // Re-pull `/shift-assignment/mine` from the DATABASE every time this screen
@@ -169,7 +161,6 @@ export function ScanScreen({
   // Proof photo(s) for the self-log — mandatory for a new drink self-log.
   const [proofPhotos, setProofPhotos] = useState<string[]>([]);
 
-  const pvId = useMemo(() => shiftPvId(outlet, dateYmd), [outlet, dateYmd]);
   const drinkMenu = useMemo(
     () => drinkMenuFromAssignment(active?.drinkMenu),
     [active?.drinkMenu],
@@ -412,6 +403,44 @@ export function ScanScreen({
       return Number.isNaN(loggedAt) ? true : loggedAt >= startedAt;
     });
   }, [receiptLines, todayKey, checkedInAt]);
+
+  /**
+   * What tonight's header may truthfully claim.
+   *
+   * The PV number is the SERVER's (`PV-000009`), resolved through
+   * `vouchers[]` when the week holds more than one agency's voucher — via a
+   * line this shift actually put on one — and shown as NOTHING when it
+   * cannot be resolved. It used to be a client-side construction
+   * (`PV-SHIFT-20260822-JKHOUSE`) that matched no document in the system.
+   */
+  const shiftVoucherNo = useMemo(() => {
+    if (!current) return null;
+    const vouchers = current.vouchers;
+    if (vouchers && vouchers.length > 0) {
+      if (vouchers.length === 1) return vouchers[0].voucherNo;
+      const linked = todayReceiptLines.find((l) => l.voucherId);
+      const hit = linked
+        ? vouchers.find((v) => v.id === linked.voucherId)
+        : null;
+      return hit ? hit.voucherNo : null;
+    }
+    return current.voucherNo ?? null;
+  }, [current, todayReceiptLines]);
+  /**
+   * Papers logged on THIS shift — distinct receipts plus bare lines, from
+   * the same rows the Check-In STATUS panel shows. The header used to print
+   * `receiptLines.length`: every LINE of the whole WEEK, presented as
+   * tonight's receipts.
+   */
+  const shiftReceiptCount = useMemo(() => {
+    const papers = new Set<string>();
+    let bare = 0;
+    for (const l of todayReceiptLines) {
+      if (l.receiptId) papers.add(l.receiptId);
+      else bare += 1;
+    }
+    return papers.size + bare;
+  }, [todayReceiptLines]);
 
   /**
    * The REAL scan: camera → ML Kit words → parser match against this page's
@@ -759,10 +788,15 @@ export function ScanScreen({
               {formatMessage(t.scan.activeShift, { outlet })}
             </Text>
             <Text style={styles.activeMeta}>
-              {t.scan.belongsTo} <Text style={styles.activeBold}>{pvId}</Text>
-              {' · '}
+              {shiftVoucherNo ? (
+                <>
+                  {t.scan.belongsTo}{' '}
+                  <Text style={styles.activeBold}>{shiftVoucherNo}</Text>
+                  {' · '}
+                </>
+              ) : null}
               {formatMessage(t.scan.receiptsLogged, {
-                n: receiptLines.length,
+                n: shiftReceiptCount,
               })}
               {' · '}
               {formatMessage(t.scan.timeIn, {
@@ -1302,15 +1336,22 @@ export function ScanScreen({
                 </View>
                 <Text style={styles.scanIdleHint}>{t.scan.addedToStatus}</Text>
                 <Text style={styles.activeMeta}>
-                  {t.scan.belongsToPv}{' '}
-                  <Text style={styles.activeBold}>{pvId}</Text>
+                  {shiftVoucherNo ? (
+                    <>
+                      {t.scan.belongsToPv}{' '}
+                      <Text style={styles.activeBold}>{shiftVoucherNo}</Text>
+                    </>
+                  ) : null}
                   {serverReceiptNo
-                    ? ` · ${formatMessage(t.scan.receiptRef, {
-                        no: serverReceiptNo,
-                      })}`
+                    ? `${shiftVoucherNo ? ' · ' : ''}${formatMessage(
+                        t.scan.receiptRef,
+                        { no: serverReceiptNo },
+                      )}`
                     : ''}
                   {receiptNo
-                    ? ` · ${formatMessage(t.scan.orderRef, { no: receiptNo })}`
+                    ? `${
+                        shiftVoucherNo || serverReceiptNo ? ' · ' : ''
+                      }${formatMessage(t.scan.orderRef, { no: receiptNo })}`
                     : ''}
                 </Text>
                 <View style={styles.loggedActions}>

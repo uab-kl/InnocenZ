@@ -20,6 +20,8 @@ import {
 	tierLabel,
 } from "@agency-portal/lib/auto-assign";
 import {
+	busyFrameOn,
+	minuteRangesOverlap,
 	previousDayIso,
 	windowMinutes,
 	windowsEffectiveOn,
@@ -344,17 +346,22 @@ export function RosterBackendTimetable({
 		[committedQuery.data],
 	);
 	/**
-	 * The busy windows the assign sheet shows — computed through the SAME
-	 * `windowsEffectiveOn` the grid cell behind it uses, so the sheet and the
-	 * cell cannot disagree about who is free on an overnight.
+	 * The busy windows the assign sheet shows — built by `busyFrameOn` from
+	 * the SAME map the grid cell behind it reads, so the sheet and the cell
+	 * cannot disagree about who is free on an overnight. The frame also
+	 * carries TOMORROW's windows rebased +1440, which is how an overnight
+	 * card offered tonight meets a booking that starts the next morning —
+	 * the server's `shiftsOverlap` timeline, not a same-day copy of it.
+	 * `timeUnknown` carries the one thing a window list cannot: a commitment
+	 * whose slot named no clock at all.
 	 */
-	const assignSheetBusyWindows = useMemo(() => {
+	const assignSheetBusy = useMemo(() => {
 		if (!assignTarget) return null;
-		const w = windowsEffectiveOn(
-			committedWindows.get(assignTarget.pr.id),
-			assignTarget.dateIso,
-		);
-		return w.length > 0 ? w : null;
+		const byDate = committedWindows.get(assignTarget.pr.id);
+		const frame = busyFrameOn(byDate, assignTarget.dateIso);
+		const timeUnknown = byDate?.get(assignTarget.dateIso)?.length === 0;
+		if (frame.length === 0 && !timeUnknown) return null;
+		return { frame, timeUnknown };
 	}, [assignTarget, committedWindows]);
 	// The PR's own words for why. Optional — most blocks carry none.
 	const blockedReasons = useMemo(
@@ -1260,12 +1267,24 @@ export function RosterBackendTimetable({
 												// shift is stamped with its START date, so last
 												// night's 22:00-04:00 is filed under yesterday while
 												// still occupying this morning.
+												const prCommittedByDate = committedWindows.get(pr.id);
 												const effectiveBusy = windowsEffectiveOn(
-													committedWindows.get(pr.id),
+													prCommittedByDate,
 													dateIso,
 												);
-												const busyWindows =
-													effectiveBusy.length > 0 ? effectiveBusy : null;
+												/*
+												 * A rival commitment whose slot named no clock time
+												 * arrives as this date registered with ZERO windows —
+												 * the server strips label-only slots to null at its
+												 * privacy boundary. The person is spoken for at an
+												 * UNKNOWN hour: the cell says so and stays clickable.
+												 * A whole-day "Unavailable" would re-impose the rule
+												 * the owner narrowed on 20 Aug, and silence is how a
+												 * double-booking gets planned in good faith.
+												 */
+												const committedTimeUnknown =
+													effectiveBusy.length === 0 &&
+													prCommittedByDate?.get(dateIso)?.length === 0;
 												// The venue asked for THIS person on THIS day — the
 												// "waiting for agency to approve" state the owner
 												// wants visible on the planning grid.
@@ -1282,11 +1301,12 @@ export function RosterBackendTimetable({
 																`${pr.id}|${r.shiftId}`,
 															),
 													) ?? null;
-												const busyLabel = busyWindows
-													? busyWindows.length > 0
-														? busyWindows.join(", ")
-														: t.roster.unavailable
-													: null;
+												const busyLabel =
+													effectiveBusy.length > 0
+														? effectiveBusy.join(", ")
+														: committedTimeUnknown
+															? t.rosterGrid.busyTimeUnknown
+															: null;
 												const reason = blockedReasons.get(
 													blockedReasonKey(pr.id, dateIso),
 												);
@@ -1702,7 +1722,8 @@ export function RosterBackendTimetable({
 					outletNameById={outletNameById}
 					// The same windows the grid greys behind this sheet, so the two
 					// cannot disagree about who is free.
-					busyWindows={assignSheetBusyWindows}
+					busyWindows={assignSheetBusy?.frame ?? null}
+					busyTimeUnknown={assignSheetBusy?.timeUnknown ?? false}
 					// The person-side fact the windows cannot carry: they are times,
 					// and "already on this one" is an identity.
 					alreadyOnShiftIds={alreadyOnShiftIds}
@@ -1725,37 +1746,6 @@ function shiftLabel(s: Shift, t: PortalTranslations): string {
 	return s.slot || s.eventName || t.rosterGrid.shift;
 }
 
-/**
- * "15:00 - 04:00" → minutes from midnight, with the END rolled past 24h when the
- * window crosses it. Null for a label-only slot ("Late night"), which carries no
- * window and therefore cannot be said to collide with anything.
- *
- * Local to this sheet on purpose: it answers a within-the-day question the sheet
- * asks, and the AUTHORITY on overlap is the server (`shiftsOverlap`), which works
- * on a continuous timeline across dates. Anything here is advice that saves a
- * round-trip, never the rule itself.
- */
-function parseDialogWindow(
-	slot: string | null | undefined,
-): { from: number; to: number; label: string } | null {
-	const m = slot?.match(/^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$/);
-	if (!m) return null;
-	const from = Number(m[1]) * 60 + Number(m[2]);
-	let to = Number(m[3]) * 60 + Number(m[4]);
-	// 22:00-04:00 ends the NEXT day; without this it would read as a negative
-	// window and overlap nothing.
-	if (to <= from) to += 24 * 60;
-	return { from, to, label: slot!.trim() };
-}
-
-/** Half-open overlap: a shift ENDING exactly when another starts is not a clash. */
-function dialogWindowsOverlap(
-	a: { from: number; to: number },
-	b: { from: number; to: number },
-): boolean {
-	return a.from < b.to && b.from < a.to;
-}
-
 function AssignBackendCellSheet({
 	pr,
 	dateIso,
@@ -1763,6 +1753,7 @@ function AssignBackendCellSheet({
 	staffingByShift,
 	outletNameById,
 	busyWindows,
+	busyTimeUnknown,
 	alreadyOnShiftIds,
 	onAssign,
 	onClose,
@@ -1776,13 +1767,21 @@ function AssignBackendCellSheet({
 	>;
 	outletNameById: Map<string, string>;
 	/**
-	 * Windows this PR is already unavailable for on this DATE — times only, the
-	 * same feed the week grid marks its cells from. Null when nothing is known.
+	 * Windows this PR is already unavailable for around this DATE, on the
+	 * continuous minute line `busyFrameOn` builds — today's windows plus
+	 * tomorrow's rebased +1440, so an overnight card is greyed against the
+	 * next morning too. Null when nothing is known.
 	 *
 	 * Times, never who or where: see the endpoint. The sheet greys a card and says
 	 * "unavailable", exactly as the grid behind it does.
 	 */
-	busyWindows?: string[] | null;
+	busyWindows?: { label: string; from: number; to: number }[] | null;
+	/**
+	 * The PR is also spoken for at an hour NOBODY KNOWS — a commitment whose
+	 * slot named no clock time. Advice only: no card is greyed for it, because
+	 * greying all of them is the whole-day rule the owner retired on 20 Aug.
+	 */
+	busyTimeUnknown?: boolean;
 	/** Shift ids this PR already holds a staffing seat on — see the parent memo. */
 	alreadyOnShiftIds?: Set<string>;
 	onAssign: (
@@ -1825,21 +1824,21 @@ function AssignBackendCellSheet({
 	 * auto-assign planner and takes only shift-shaped inputs; widening it to carry
 	 * a PR's commitments would push person-state into a module about shifts.
 	 *
-	 * ⚠️ Compares within the DAY. A window that spills past midnight (15:00–04:00)
-	 * is keyed to the date it STARTS, so a 02:00 shift the next morning is not
-	 * greyed here — the server still refuses it, and this stays advisory rather
-	 * than pretending to be the authority.
+	 * Compared on the CONTINUOUS minute line the busy frame arrives on, so a
+	 * card that runs past midnight (15:00 - 04:00 parses past 1440) meets a
+	 * booking filed under tomorrow. The server still holds the authority —
+	 * this is the same advice as before, now agreeing with the refusal it
+	 * previews.
 	 */
 	const unavailableById = useMemo(() => {
 		const map = new Map<string, string | null>();
-		const windows = (busyWindows ?? [])
-			.map(parseDialogWindow)
-			.filter(
-				(w): w is { from: number; to: number; label: string } => w !== null,
-			);
 		for (const s of shifts) {
-			const own = parseDialogWindow(s.slot);
-			const hit = own && windows.find((w) => dialogWindowsOverlap(own, w));
+			const own = windowMinutes(s.slot ?? "");
+			const hit =
+				own &&
+				busyWindows?.find((w) =>
+					minuteRangesOverlap({ from: own[0], to: own[1] }, w),
+				);
 			map.set(s.id, hit ? hit.label : null);
 		}
 		return map;
@@ -1968,6 +1967,11 @@ function AssignBackendCellSheet({
 					<p className="iz-field-label mt-3">
 						{fill(t.rosterGrid.openShiftsCount, { n: shifts.length })}
 					</p>
+					{busyTimeUnknown && (
+						<p className="iz-tiny iz-muted mt-1">
+							{t.rosterGrid.busyTimeUnknownAdvice}
+						</p>
+					)}
 					<div className="iz-roster-shift-pick-scroll mt-1.5">
 						<div className="iz-roster-shift-pick-list">
 							{shifts.map((shift) => {
