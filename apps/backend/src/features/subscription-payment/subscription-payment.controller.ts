@@ -106,6 +106,30 @@ export class SubscriptionPaymentControllerClass {
         pageSize: 50,
       });
 
+      /**
+       * EVERY PERIOD THIS SUBSCRIBER HAS BEEN BILLED, paid and unpaid.
+       *
+       * The panel opens on ONE period and is where an admin decides whether to
+       * mark it paid — a decision that needs the neighbours: is this the only
+       * thing outstanding, or the fourth unpaid week in a row? Without it the
+       * admin has to close the drawer, expand the org card, and come back.
+       *
+       * Scoped through the invoice's OWN subscriber, which the ownership check
+       * above has already cleared — never from an id in the query, or this
+       * would be a second, wider door onto another org's ledger.
+       */
+      const { records: history } = await this.invoiceRepository.listPaginated({
+        filter: {
+          subscriberType: invoice.subscriberType,
+          subscriberId: invoice.subscriberId,
+        },
+        page: 1,
+        // Generous but bounded: an agency bills weekly, so 100 is about two
+        // years. A subscriber past that reads the oldest periods on the org
+        // card, which pages properly.
+        pageSize: 100,
+      });
+
       // uuid -> display name, so the panel prints a person rather than an id.
       const actors = await this.repository.resolveActorNames(payments.map((p) => p.createdBy));
 
@@ -118,6 +142,7 @@ export class SubscriptionPaymentControllerClass {
           methods,
           org,
           lanes,
+          history,
           actors,
           // The logo is a bare R2 key; the browser needs the base to build a URL,
           // the same way the payment-voucher endpoints hand it over.
