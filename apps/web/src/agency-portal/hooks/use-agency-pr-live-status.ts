@@ -86,25 +86,34 @@ export function useAgencyPrLiveStatus(
 		}
 		const committedByUser = new Map<string, string[]>();
 		const committedByUserDate = new Map<string, Map<string, string[]>>();
+		// `w.slot` is null for a label-only commitment ("Late night") — the
+		// server strips what it cannot read to a clock. The DATE still
+		// registers, so a person spoken for at an unknown hour reads scheduled,
+		// not available — the same answer the roster grid gives that day.
 		for (const w of data.committed) {
-			if (!w.slot) continue;
 			const byDate = committedByUserDate.get(w.userId) ?? new Map();
 			const day = w.date.slice(0, 10);
-			byDate.set(day, [...(byDate.get(day) ?? []), w.slot]);
+			const slots = byDate.get(day) ?? [];
+			if (w.slot) slots.push(w.slot);
+			byDate.set(day, slots);
 			committedByUserDate.set(w.userId, byDate);
 		}
 		// Folded to TODAY's frame — yesterday's overnight tail arrives rebased as
 		// `00:00 - 04:00`, so `windowContains(now)` inside `derivePrLiveStatus`
 		// asks the right question at 02:00.
+		const committedTimeUnknown = new Set<string>();
 		for (const [userId, byDate] of committedByUserDate) {
 			const eff = windowsEffectiveOn(byDate, todayIso);
 			if (eff.length > 0) committedByUser.set(userId, eff);
+			else if (byDate.get(todayIso)?.length === 0)
+				committedTimeUnknown.add(userId);
 		}
 		const blockedUsers = new Set(data.blocked.map((b) => b.userId));
 
 		const everyone = new Set<string>([
 			...ownBooked,
 			...committedByUser.keys(),
+			...committedTimeUnknown,
 			...blockedUsers,
 		]);
 		for (const userId of everyone) {
@@ -115,6 +124,7 @@ export function useAgencyPrLiveStatus(
 					ownOnDuty: ownOnDuty.has(userId),
 					ownBookedToday: ownBooked.has(userId),
 					committedToday: committedByUser.get(userId) ?? [],
+					committedTimeUnknownToday: committedTimeUnknown.has(userId),
 					nowMinutes,
 				}),
 			);

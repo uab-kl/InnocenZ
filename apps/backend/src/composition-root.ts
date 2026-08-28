@@ -285,6 +285,8 @@ export const adminRequestController = new AdminRequestControllerClass(
   adminRequestRepository,
   memberSubscriptionRepository,
   subscriptionRepository,
+  // The billing ledger, for the unpaid→no-switch gate on outlet plan changes.
+  subscriptionInvoiceRepository,
   // A venue reads its OWN pending switch through the same scope resolver the
   // other member-facing controllers use — never from a client-supplied id.
   orgScopeDeps,

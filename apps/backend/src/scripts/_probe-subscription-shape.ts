@@ -110,6 +110,34 @@ async function main() {
     console.log(`   ${String(r.type).padEnd(18)} ${String(r.status).padEnd(10)} ${r.n}`);
   }
 
+  // Every invoice on the ledger, beside the price its lane charges TODAY.
+  // A gap between the two is a period raised at a figure the org is not on.
+  const inv = await db.execute(sql`
+    select ms.subscriber_name as name,
+           ms.subscriber_type::text as kind,
+           coalesce(s.kind::text,'?') as lane,
+           coalesce(s.name,ms.plan_name) as plan,
+           si.period_start::text as ps,
+           si.period_end::text as pe,
+           si.amount::text as billed,
+           ms.amount::text as lane_price_now,
+           si.status::text as status,
+           si.id::text as id
+    from "main"."subscription_invoice" si
+    join "main"."member_subscription" ms on ms.id = si.member_subscription_id
+    left join "main"."subscription" s on s.id = ms.subscription_id
+    order by ms.subscriber_name, si.period_start
+  `);
+  console.log('\n6. EVERY INVOICE vs ITS LANE PRICE TODAY');
+  for (const r of rowsOf(inv)) {
+    const drift = String(r.billed) !== String(r.lane_price_now) ? '  <-- MISMATCH' : '';
+    console.log(
+      `   ${String(r.name).padEnd(16)} ${String(r.lane).padEnd(6)} ${String(r.plan).padEnd(18)} ` +
+      `${String(r.ps)}..${String(r.pe)} billed ${String(r.billed).padStart(10)} ` +
+      `now ${String(r.lane_price_now).padStart(10)} ${String(r.status).padEnd(7)}${drift}`,
+    );
+  }
+
   process.exit(0);
 }
 

@@ -450,7 +450,62 @@ function OutletSubscriptionPage() {
 			? "requote"
 			: null;
 
+	/**
+	 * The unpaid REMINDER for POS actions — a nudge, never a gate.
+	 *
+	 * Owner's two rulings, held together: "add on pos and cancel can do
+	 * anytime" (so nothing here returns early) and "this need pop out" (so the
+	 * outstanding figure is still said out loud when they act). Switching plans
+	 * is the one action that BLOCKS; POS asks, re-quotes and cancels proceed
+	 * with the debt stated beside them.
+	 */
+	const remindUnpaidPos = () => {
+		if (!backend.backed) return;
+		const owing = backend.paymentHistory.filter(
+			(invoice) => invoice.status !== "paid",
+		);
+		if (owing.length === 0) return;
+		const cents = owing.reduce(
+			(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
+			0,
+		);
+		toast(
+			fill(t.outletSubscription.unpaidReminderPos, {
+				amount: formatRM(cents / 100),
+				n: owing.length,
+			}),
+			"warn",
+		);
+	};
+
 	const handleRequestQuote = () => {
+		/**
+		 * RE-QUOTE BLOCKS, first ask does not. Owner's final split: "outlet POS
+		 * ask new price need pay the unpaid" — but the INITIAL add-on ask and
+		 * cancelling stay "anytime". An active add-on is what makes this press a
+		 * re-quote rather than a first ask.
+		 */
+		if (backend.backed && backend.addonAmountRm !== null) {
+			const owing = backend.paymentHistory.filter(
+				(invoice) => invoice.status !== "paid",
+			);
+			if (owing.length > 0) {
+				const cents = owing.reduce(
+					(total, invoice) =>
+						total + Math.round(Number(invoice.amount) * 100),
+					0,
+				);
+				toast(
+					fill(t.outletSubscription.settleBeforeRequote, {
+						amount: formatRM(cents / 100),
+						n: owing.length,
+					}),
+					"warn",
+				);
+				return;
+			}
+		}
+		remindUnpaidPos();
 		if (backend.backed) {
 			backend
 				.requestPosQuote({
@@ -478,6 +533,7 @@ function OutletSubscriptionPage() {
 	 * told a charge stopped before it actually did.
 	 */
 	const handleRemoveAddon = () => {
+		remindUnpaidPos();
 		backend
 			.requestPosRemoval()
 			.then((filed) => {
@@ -563,6 +619,32 @@ function OutletSubscriptionPage() {
 		// request and stays on its current plan until an admin approves, which is
 		// what writes the billing ledger. Only the demo store flips instantly.
 		if (backend.backed) {
+			/**
+			 * THE OWNER'S RULE, said BEFORE the server says it: unpaid → no
+			 * switch. The server refuses the filing anyway (the admin-request
+			 * gate answers 409), but that reads as a failure after the fact —
+			 * this pops the same message the moment the venue presses Switch,
+			 * with the figure that settles it. POS add-on asks, re-quotes and
+			 * cancels are deliberately NOT gated — owner: "add on pos and
+			 * cancel can do anytime".
+			 */
+			const owing = backend.paymentHistory.filter(
+				(invoice) => invoice.status !== "paid",
+			);
+			if (owing.length > 0) {
+				const cents = owing.reduce(
+					(sum, invoice) => sum + Math.round(Number(invoice.amount) * 100),
+					0,
+				);
+				toast(
+					fill(t.outletSubscription.settleBeforeSwitch, {
+						amount: formatRM(cents / 100),
+						n: owing.length,
+					}),
+					"warn",
+				);
+				return;
+			}
 			if (!backend.planCatalogReady) {
 				toast(t.outletSubscription.planListLoading, "warn");
 				return;

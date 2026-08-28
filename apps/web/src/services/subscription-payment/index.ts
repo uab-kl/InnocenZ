@@ -83,6 +83,15 @@ export interface InvoicePaymentDetail {
 	 */
 	lanes: BillingLane[];
 	/**
+	 * EVERY period this subscriber has been billed, newest first, paid and unpaid.
+	 *
+	 * The panel opens on ONE period and is where an admin decides whether to mark
+	 * it paid — a decision that needs the neighbours: is this the only thing
+	 * outstanding, or the fourth unpaid week running? Without it the admin has to
+	 * close the drawer, expand the org card, and come back.
+	 */
+	history: SubscriptionInvoice[];
+	/**
 	 * uuid -> display name for each attempt's `createdBy`, resolved server-side.
 	 * Stamps that are not people (`system`, `gateway:curlec`) are absent and the
 	 * panel labels them itself.

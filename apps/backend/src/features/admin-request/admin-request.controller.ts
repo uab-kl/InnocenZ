@@ -3,6 +3,7 @@ import { AdminRequestRepositoryClass } from './admin-request.repository.js';
 import { AdminRequest, AdminRequestFilter, AdminRequestType, AdminRequestStatus } from './admin-request.model.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
+import { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import {
   CreateAdminRequestSchema,
@@ -21,6 +22,8 @@ export class AdminRequestControllerClass {
     private repository: AdminRequestRepositoryClass,
     private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
     private subscriptionRepository: SubscriptionRepositoryClass,
+    /** The billing ledger — the owner's unpaid→no-switch rule reads it. */
+    private subscriptionInvoiceRepository: SubscriptionInvoiceRepositoryClass,
     private orgScopeDeps: OrgScopeDeps,
   ) {}
 
@@ -190,6 +193,66 @@ export class AdminRequestControllerClass {
           return res.status(400).json({
             success: false,
             message: `Already on ${active[0].planName} — no switch needed`,
+            data: null,
+          });
+        }
+      }
+
+      /**
+       * THE OWNER'S RULE (29 Aug 2026): unpaid → no switch.
+       *
+       * A venue that switched plans while owing is exactly how Emhub came to
+       * carry an unpaid Enterprise period while accruing on Scale — the ledger
+       * held two prices for one org and every screen downstream had to explain
+       * it. So an OUTLET's plan change is refused while any billing period is
+       * unpaid, with the figure in the refusal so the venue knows what settles
+       * it.
+       *
+       * Deliberately narrow:
+       *  - OUTLETS ONLY. An agency's tier is moved by the Sunday job from PV
+       *    volume — work its PRs have already done — and gating that would
+       *    bill the agency at the wrong tier for delivered work.
+       *  - FILING is gated, never approval: an admin approving a request that
+       *    is already queued stays the override for "paid by bank transfer,
+       *    not yet marked".
+       *  - FAILS OPEN. The repository answers zero rows on a read error, and a
+       *    gate must not refuse on a number it does not have. There is no
+       *    due-date column (owner's call, same day), so "any unpaid period" is
+       *    the whole test — which also means a venue is blocked the day after
+       *    a new period opens, until an admin marks it. Stated to the owner;
+       *    accepted.
+       */
+      if (
+        parsed.data.type === 'plan_change' &&
+        parsed.data.subscriberType === 'outlet' &&
+        parsed.data.subscriberId
+      ) {
+        const { records: owing, totalCount: owingCount } =
+          await this.subscriptionInvoiceRepository.listPaginated({
+            filter: {
+              subscriberType: 'outlet',
+              subscriberId: parsed.data.subscriberId,
+              status: 'unpaid',
+            },
+            page: 1,
+            pageSize: 100,
+          });
+        if (owingCount > 0) {
+          // Integer cents — numeric(12,2) arrives as strings, and float
+          // addition is how 3999 + 200 reads 4198.999… in a refusal about money.
+          const cents = owing.reduce(
+            (sum, invoice) => sum + Math.round(Number(invoice.amount) * 100),
+            0,
+          );
+          const total = (cents / 100).toLocaleString('en-MY', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+          return res.status(409).json({
+            success: false,
+            message:
+              `This venue has ${owingCount} unpaid billing period${owingCount === 1 ? '' : 's'} ` +
+              `totalling RM ${total} — settle them with InnocenZ before switching plans`,
             data: null,
           });
         }

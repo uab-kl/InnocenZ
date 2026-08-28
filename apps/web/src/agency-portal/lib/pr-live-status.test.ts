@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+	busyFrameOn,
+	derivePrLiveStatus,
+	minuteRangesOverlap,
+	nextDayIso,
 	previousDayIso,
+	windowMinutes,
 	windowsEffectiveOn,
 	windowsOverlapPadded,
 } from "./pr-live-status";
@@ -84,5 +89,78 @@ describe("windowsEffectiveOn", () => {
 		expect(
 			effective.some((w) => windowsOverlapPadded(w, "18:00 - 22:00")),
 		).toBe(false);
+	});
+});
+
+describe("nextDayIso", () => {
+	it("steps forward one day", () => {
+		expect(nextDayIso("2026-08-25")).toBe("2026-08-26");
+	});
+
+	it("crosses a month boundary", () => {
+		expect(nextDayIso("2026-08-31")).toBe("2026-09-01");
+	});
+});
+
+describe("busyFrameOn", () => {
+	it("keeps today's windows on today's minutes", () => {
+		const byDate = new Map([["2026-08-30", ["15:00 - 16:00"]]]);
+		expect(busyFrameOn(byDate, "2026-08-30")).toEqual([
+			{ label: "15:00 - 16:00", from: 900, to: 960 },
+		]);
+	});
+
+	it("rebases tomorrow's windows past 1440", () => {
+		const byDate = new Map([["2026-08-31", ["02:00 - 06:00"]]]);
+		expect(busyFrameOn(byDate, "2026-08-30")).toEqual([
+			{ label: "02:00 - 06:00", from: 1560, to: 1800 },
+		]);
+	});
+
+	it("greys the recorded miss: an overnight card meets the next morning's booking", () => {
+		// The sheet's within-the-day copy cleared a 22:00-04:00 shift on the
+		// 30th against 02:00-06:00 on the 31st. On the continuous line they
+		// genuinely share 02:00-04:00 — the server's `shiftsOverlap` answer.
+		const byDate = new Map([["2026-08-31", ["02:00 - 06:00"]]]);
+		const frame = busyFrameOn(byDate, "2026-08-30");
+		const own = windowMinutes("22:00 - 04:00");
+		if (!own) throw new Error("own window failed to parse");
+		expect(
+			frame.some((w) => minuteRangesOverlap({ from: own[0], to: own[1] }, w)),
+		).toBe(true);
+	});
+
+	it("does NOT match tomorrow's ordinary window against today's same clock", () => {
+		// The trap `windowsEffectiveOn` documents: only a real rebase may cross
+		// midnight, or two different days invent a clash out of one clock time.
+		const byDate = new Map([["2026-08-31", ["10:00 - 12:00"]]]);
+		const frame = busyFrameOn(byDate, "2026-08-30");
+		const own = windowMinutes("10:00 - 12:00");
+		if (!own) throw new Error("own window failed to parse");
+		expect(
+			frame.some((w) => minuteRangesOverlap({ from: own[0], to: own[1] }, w)),
+		).toBe(false);
+	});
+
+	it("carries yesterday's spill in, rebased to midnight", () => {
+		const byDate = new Map([["2026-08-29", ["22:00 - 04:00"]]]);
+		expect(busyFrameOn(byDate, "2026-08-30")).toEqual([
+			{ label: "00:00 - 04:00", from: 0, to: 240 },
+		]);
+	});
+});
+
+describe("derivePrLiveStatus · committed with no stated time", () => {
+	it("reads scheduled, never available", () => {
+		expect(
+			derivePrLiveStatus({
+				blockedToday: false,
+				ownOnDuty: false,
+				ownBookedToday: false,
+				committedToday: [],
+				committedTimeUnknownToday: true,
+				nowMinutes: 600,
+			}),
+		).toBe("scheduled");
 	});
 });

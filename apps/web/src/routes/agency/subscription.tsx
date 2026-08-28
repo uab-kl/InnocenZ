@@ -394,6 +394,30 @@ function AgencySubscription() {
 	 * admin sets the price and nothing bills until they do.
 	 */
 	const handleAskForCustom = () => {
+		/**
+		 * THE OWNER'S RULE for the agency's one manual ask: unpaid → no Custom
+		 * negotiation — popped here, before a request that would just sit in the
+		 * admin's queue is composed. Resetting OFF Custom is deliberately NOT
+		 * gated (owner: "for agency reset any time if custom only") — dropping
+		 * cost must never be blocked by debt. The Sunday auto-tier and the
+		 * past-rate-card auto-file are untouched: those are the system's own
+		 * acts, not this button.
+		 */
+		const owing = sub.paymentHistory.filter((row) => row.status !== "paid");
+		if (owing.length > 0) {
+			const cents = owing.reduce(
+				(total, row) => total + Math.round(Number(row.amount) * 100),
+				0,
+			);
+			toast(
+				fill(t.subscription.settleBeforeCustomAsk, {
+					amount: formatRM(cents / 100),
+					n: owing.length,
+				}),
+				"warn",
+			);
+			return;
+		}
 		const pv = sub.weeklyPvCount ?? 0;
 		sub.notifyAdminForCustom(pv).then((result) => {
 			toast(
