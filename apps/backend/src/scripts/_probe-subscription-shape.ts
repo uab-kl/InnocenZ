@@ -95,6 +95,21 @@ async function main() {
     console.log(`   ${String(r.name).padEnd(22)} sold to ${r.sold_to} · RM ${r.price}`);
   }
 
+  // Which rails are actually SAVED today. Matters before removing one from the
+  // picker: a rail nobody holds can go quietly, one that is in use cannot.
+  const rails = await db.execute(sql`
+    select type::text as type, status::text as status, count(*)::int as n
+    from "main"."payment_method"
+    group by 1, 2
+    order by 1, 2
+  `);
+  console.log('\n5. PAYMENT METHOD ROWS BY RAIL');
+  const railRows = rowsOf(rails);
+  if (railRows.length === 0) console.log('   (none saved at all)');
+  for (const r of railRows) {
+    console.log(`   ${String(r.type).padEnd(18)} ${String(r.status).padEnd(10)} ${r.n}`);
+  }
+
   process.exit(0);
 }
 

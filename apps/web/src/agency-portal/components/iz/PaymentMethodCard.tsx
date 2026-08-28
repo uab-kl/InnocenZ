@@ -102,18 +102,25 @@ export function PaymentMethodCard({
 	});
 
 	/**
-	 * The four rails a Malaysian venue realistically uses.
+	 * The three rails a subscriber may CHOOSE: card, FPX direct debit, e-wallet.
 	 *
-	 * E-WALLET IS A RECORD OF INTENT, not a schedulable instrument — and that is
-	 * exactly what `manual_transfer` beside it already is. An earlier note here
-	 * excluded wallets because they "cannot be charged on a schedule": true, and
-	 * not the distinction, since bank transfer cannot either and is offered. What
-	 * both share is that the money moves on a human's action; what the app stores
-	 * is which way that will be, so an admin chasing an unpaid period knows where
-	 * to look. `autoPay` is forced false on both, server-side.
+	 * ⚠️ `manual_transfer` was removed from this picker on the owner's call
+	 * (28 Aug 2026) — card and FPX already cover paying by credit and debit, and
+	 * a third "I will send it myself" option beside them read as duplication.
+	 * Nothing was saved on it at the time: zero `payment_method` rows existed on
+	 * any rail, so no venue was orphaned.
 	 *
-	 * DuitNow stays out for now: the enum carries it, nothing renders it, and a
-	 * rail with no roster behind it would be a picker that saves nothing useful.
+	 * THE TYPE ITSELF STAYS, and removing it would break two live things:
+	 *   • `subscription-payment.controller` falls back to `manual_transfer` when a
+	 *     gateway names no rail, which is the honest label for money that arrived
+	 *     through no instrument this app knows about;
+	 *   • it is exactly what an admin marking an invoice paid from a bank
+	 *     statement is recording.
+	 * So the rail is no longer OFFERED; it is still how an out-of-band payment is
+	 * described once it happens.
+	 *
+	 * DuitNow also stays out: the enum carries it, nothing renders it, and a rail
+	 * with no roster behind it would be a picker that saves nothing useful.
 	 */
 	const methodChoices: {
 		value: PaymentMethodType;
@@ -134,11 +141,6 @@ export function PaymentMethodCard({
 			value: "ewallet",
 			label: t.subscription.methodEwallet,
 			note: t.subscription.methodEwalletNote,
-		},
-		{
-			value: "manual_transfer",
-			label: t.subscription.methodTransfer,
-			note: t.subscription.methodTransferNote,
 		},
 	];
 
