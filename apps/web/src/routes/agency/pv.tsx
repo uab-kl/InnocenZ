@@ -5,6 +5,7 @@ import {
 import { CancellationFeesPanel } from "@agency-portal/components/agency/CancellationFeesPanel";
 import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
 import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQueuePanel";
+import { PayoutRunsPanel } from "@agency-portal/components/agency/PayoutRunsPanel";
 import { PayrollVerifyPanel } from "@agency-portal/components/agency/PayrollVerifyPanel";
 import { UnchargedFeesPanel } from "@agency-portal/components/agency/UnchargedFeesPanel";
 import { PvSummaryView } from "@agency-portal/components/iz/PvSummaryView";
@@ -157,6 +158,7 @@ export const Route = createFileRoute("/agency/pv")({
 			"receipts",
 			"disputes",
 			"overtime",
+			"payouts",
 		];
 		const tab =
 			typeof search.tab === "string" &&
@@ -175,7 +177,7 @@ type PvStatusFilter = "all" | "TO_PAY" | PrPvStatus;
 
 type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
 
-type PvSubTab = "vouchers" | "receipts" | "disputes" | "overtime";
+type PvSubTab = "vouchers" | "receipts" | "disputes" | "overtime" | "payouts";
 
 /**
  * What last week's tab shows — every state a voucher for that week can be in,
@@ -1044,6 +1046,19 @@ function AgencyPV() {
 						>
 							{t.payroll.overtime} ({weekPendingOtClaims.length})
 						</button>
+						{/*
+							Payout runs live HERE rather than on a route of their own: this
+							screen is already where an agency comes for money, and a
+							separate page would put "who have we paid" a navigation away
+							from "what do we owe".
+						*/}
+						<button
+							type="button"
+							className={`iz-payroll-tab${pvSubTab === "payouts" ? " on" : ""}`}
+							onClick={() => selectPvSubTab("payouts")}
+						>
+							{t.payouts.runs}
+						</button>
 					</>
 				)}
 			</div>
@@ -1060,6 +1075,13 @@ function AgencyPV() {
 					weekEndIso={activeWeekBounds.weekEndIso}
 				/>
 			)}
+			{/*
+				`canPay` is the same authority as the backend's agencyOwnerOrFinance
+				gate on every /payout-batch route — the web twin of one rule, not a
+				second one. A viewer sees the runs and can open one; only owner and
+				finance get the buttons that move money.
+			*/}
+			{pvSubTab === "payouts" && <PayoutRunsPanel canPay={can("raisePv")} />}
 
 			{pvSubTab === "vouchers" && (
 				<OutletSection
