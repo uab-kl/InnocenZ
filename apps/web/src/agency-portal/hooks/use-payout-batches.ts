@@ -100,7 +100,7 @@ export function usePayoutBatches(params: {
 	 * still shows a draft that looks like it can be exported again.
 	 */
 	const exportCsv = useMutation({
-		mutationFn: (batch: Pick<PayoutBatch, "id" | "reference" | "weekStart">) =>
+		mutationFn: (batch: Pick<PayoutBatch, "id" | "runNo" | "weekStart">) =>
 			downloadPayoutCsv(batch, logout),
 		onSuccess: invalidate,
 	});

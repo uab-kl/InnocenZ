@@ -54,7 +54,7 @@ export class PayoutBatchRepositoryClass {
    * an ugly one — it appears on a file a bank already processed, so two runs
    * answer to the same name and nothing in a dispute can tell them apart.
    */
-  private async nextReference(tx: DbTransaction): Promise<string> {
+  private async nextRunNo(tx: DbTransaction): Promise<string> {
     /*
      * SERIALISE THE ALLOCATION, or MAX+1 is a race.
      *
@@ -74,7 +74,7 @@ export class PayoutBatchRepositoryClass {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('payout_batch_reference'))`);
     const [row] = await tx
       .select({
-        highest: sql<number>`coalesce(max(nullif(regexp_replace(${PayoutBatchTable.reference}, '\\D', '', 'g'), '')::int), 0)`,
+        highest: sql<number>`coalesce(max(nullif(regexp_replace(${PayoutBatchTable.runNo}, '\\D', '', 'g'), '')::int), 0)`,
       })
       .from(PayoutBatchTable);
     return `PO-${String(Number(row?.highest ?? 0) + 1).padStart(6, '0')}`;
@@ -172,7 +172,7 @@ export class PayoutBatchRepositoryClass {
   }): Promise<PayoutBatchWithItems> {
     try {
       return await db.transaction(async (tx) => {
-        const reference = await this.nextReference(tx as unknown as DbTransaction);
+        const runNo = await this.nextRunNo(tx as unknown as DbTransaction);
         // Σ in CENTS, then back to a decimal string. Summing '875.00' as floats
         // is how a 59-line run reports a total three sen off its own items.
         // A throw here is CORRECT and is the reason to use the strict helper:
@@ -183,7 +183,7 @@ export class PayoutBatchRepositoryClass {
           .insert(PayoutBatchTable)
           .values({
             agencyId: params.agencyId,
-            reference,
+            runNo,
             weekStart: params.weekStart,
             weekEnd: params.weekEnd,
             method: params.method,

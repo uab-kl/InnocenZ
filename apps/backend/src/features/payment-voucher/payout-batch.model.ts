@@ -98,8 +98,15 @@ export const PayoutBatchTable = MainSchema.table(
     agencyId: uuid('agency_id')
       .notNull()
       .references(() => AgencyTable.id, { onDelete: 'cascade' }),
-    /** Human-facing run number, `PO-000001`. Allocated once on insert. */
-    reference: varchar('reference', { length: 40 }).unique(),
+    /**
+     * Human-facing run number, `PO-000001`. Allocated once on insert.
+     *
+     * Named `run_no` to match `payment_voucher.voucher_no` (`PV-000001`) — the
+     * same concept, a number WE allocate — and NOT `reference`, which in the
+     * subscription lane means the bank's own statement reference. That is what
+     * `payout_batch_item.bank_ref` holds here (migration 0144).
+     */
+    runNo: varchar('run_no', { length: 40 }).unique(),
     /**
      * The payroll week this run settles. Nullable because a batch need not be a
      * week — a re-run for two bounced payments belongs to no week in particular.
@@ -109,9 +116,9 @@ export const PayoutBatchTable = MainSchema.table(
     method: payoutMethodEnum('method').notNull().default('ibg'),
     status: payoutBatchStatusEnum('status').notNull().default('draft'),
     /** Which payout API moved this, e.g. 'curlec'. NULL for file and manual runs. */
-    provider: varchar('provider', { length: 40 }),
+    provider: varchar('provider', { length: 50 }),
     /** The provider's own batch id, for reconciliation against their dashboard. */
-    providerBatchId: varchar('provider_batch_id', { length: 120 }),
+    providerBatchId: varchar('provider_batch_id', { length: 255 }),
     /**
      * Σ(item amounts) AS EXPORTED — a snapshot, not a live sum.
      *
@@ -216,7 +223,7 @@ export const PayoutBatchItemTable = MainSchema.table(
     /** The bank's or provider's own words. Kept verbatim — it is the evidence. */
     failureReason: varchar('failure_reason', { length: 500 }),
     /** Per-line provider reference, where a provider issues one. */
-    providerPayoutId: varchar('provider_payout_id', { length: 120 }),
+    providerPayoutId: varchar('provider_payout_id', { length: 255 }),
     /** The bank's reference for THIS line, which is what reconciles a statement. */
     bankRef: varchar('bank_ref', { length: 100 }),
     paidAt: timestamp('paid_at', { withTimezone: true }),

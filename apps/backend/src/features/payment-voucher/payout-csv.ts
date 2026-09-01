@@ -53,12 +53,12 @@ const GENERIC_HEADERS = [
 
 /** `PR wages 2026-08-16 to 2026-08-22` — what shows on the payee's statement. */
 export function payoutStatementReference(
-  batch: Pick<PayoutBatchType, 'reference' | 'weekStart' | 'weekEnd'>,
+  batch: Pick<PayoutBatchType, 'runNo' | 'weekStart' | 'weekEnd'>,
 ): string {
   if (batch.weekStart && batch.weekEnd) {
     return `PR wages ${batch.weekStart} to ${batch.weekEnd}`;
   }
-  return `PR wages ${batch.reference ?? ''}`.trim();
+  return `PR wages ${batch.runNo ?? ''}`.trim();
 }
 
 /**
@@ -74,7 +74,7 @@ export function payoutStatementReference(
  * people is the exact failure this feature exists to prevent.
  */
 export function buildPayoutCsv(
-  batch: Pick<PayoutBatchType, 'reference' | 'weekStart' | 'weekEnd'>,
+  batch: Pick<PayoutBatchType, 'runNo' | 'weekStart' | 'weekEnd'>,
   items: PayoutBatchItemType[],
   layout: PayoutCsvLayout = 'generic',
 ): string {
@@ -118,8 +118,8 @@ export function buildPayoutCsv(
 
 /** `payout-PO-000001-2026-08-16.csv`. Stable, sortable, and says what it is. */
 export function payoutCsvFilename(
-  batch: Pick<PayoutBatchType, 'reference' | 'weekStart'>,
+  batch: Pick<PayoutBatchType, 'runNo' | 'weekStart'>,
 ): string {
-  const ref = (batch.reference ?? 'batch').replace(/[^A-Za-z0-9_-]/g, '');
+  const ref = (batch.runNo ?? 'batch').replace(/[^A-Za-z0-9_-]/g, '');
   return batch.weekStart ? `payout-${ref}-${batch.weekStart}.csv` : `payout-${ref}.csv`;
 }

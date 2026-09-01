@@ -109,7 +109,7 @@ async function main() {
       body: JSON.stringify({ weekStart: '2026-06-07', weekEnd: '2026-06-13', method: 'ibg' }),
     });
     const draft = (await draftRes.json())?.data;
-    check('a draft can be created', draftRes.status === 201, draft?.reference);
+    check('a draft can be created', draftRes.status === 201, draft?.runNo);
 
     const dup = await fetch(`${API}/payout-batch`, {
       method: 'POST',
@@ -177,7 +177,7 @@ async function main() {
     check(
       'create returns 201 with one item',
       createRes.status === 201 && batch?.items?.length === 1,
-      `${createRes.status} ref=${batch?.reference} total=${batch?.totalAmount}`,
+      `${createRes.status} ref=${batch?.runNo} total=${batch?.totalAmount}`,
     );
     if (!batch?.id) throw new Error('no batch to continue with');
 

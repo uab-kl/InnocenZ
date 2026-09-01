@@ -30,7 +30,7 @@ const item = (over: Partial<PayoutBatchItemType> = {}): PayoutBatchItemType =>
     ...over,
   }) as PayoutBatchItemType;
 
-const batch = { reference: 'PO-000001', weekStart: '2026-08-16', weekEnd: '2026-08-22' };
+const batch = { runNo: 'PO-000001', weekStart: '2026-08-16', weekEnd: '2026-08-22' };
 
 const dataRow = (csv: string) => csv.split('\r\n')[1];
 
@@ -100,7 +100,7 @@ describe('payoutStatementReference', () => {
 
   test('falls back to the run number when the batch has no week', () => {
     expect(
-      payoutStatementReference({ reference: 'PO-000009', weekStart: null, weekEnd: null }),
+      payoutStatementReference({ runNo: 'PO-000009', weekStart: null, weekEnd: null }),
     ).toBe('PR wages PO-000009');
   });
 });
@@ -111,12 +111,12 @@ describe('payoutCsvFilename', () => {
   });
 
   test('strips anything that is not filename-safe', () => {
-    expect(payoutCsvFilename({ reference: 'PO/000001 ..\\x', weekStart: null })).toBe(
+    expect(payoutCsvFilename({ runNo: 'PO/000001 ..\\x', weekStart: null })).toBe(
       'payout-PO000001x.csv',
     );
   });
 
   test('survives a batch with no reference', () => {
-    expect(payoutCsvFilename({ reference: null, weekStart: null })).toBe('payout-batch.csv');
+    expect(payoutCsvFilename({ runNo: null, weekStart: null })).toBe('payout-batch.csv');
   });
 });

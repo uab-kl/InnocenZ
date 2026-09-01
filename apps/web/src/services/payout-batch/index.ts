@@ -56,7 +56,7 @@ export interface PayoutBatchItem {
 export interface PayoutBatch {
 	id: string;
 	agencyId: string;
-	reference: string | null;
+	runNo: string | null;
 	weekStart: string | null;
 	weekEnd: string | null;
 	method: PayoutMethod;
@@ -236,7 +236,7 @@ export async function importPayoutResponse(
  * would silently send a run.
  */
 export async function downloadPayoutCsv(
-	batch: Pick<PayoutBatch, "id" | "reference" | "weekStart">,
+	batch: Pick<PayoutBatch, "id" | "runNo" | "weekStart">,
 	onRefreshFail: () => void,
 ): Promise<void> {
 	const client = getClient(onRefreshFail);
@@ -253,7 +253,7 @@ export async function downloadPayoutCsv(
 			"",
 	);
 	const fromServer = /filename="?([^";]+)"?/.exec(disposition)?.[1];
-	const ref = (batch.reference ?? "batch").replace(/[^A-Za-z0-9_-]/g, "");
+	const ref = (batch.runNo ?? "batch").replace(/[^A-Za-z0-9_-]/g, "");
 	const name =
 		fromServer ??
 		(batch.weekStart

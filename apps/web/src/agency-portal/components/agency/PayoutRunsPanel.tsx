@@ -245,7 +245,7 @@ export function PayoutRunsPanel({ canPay }: { canPay: boolean }) {
 									onClick={() => setOpenBatchId(b.id)}
 								>
 									<div className="min-w-0">
-										<p className="iz-sm truncate font-bold">{b.reference}</p>
+										<p className="iz-sm truncate font-bold">{b.runNo}</p>
 										<p className="iz-tiny iz-muted2 truncate">
 											{b.weekStart} → {b.weekEnd} · {b.itemCount}
 										</p>
@@ -350,7 +350,7 @@ function PayoutBatchDetail({
 	return (
 		<div className="flex flex-col gap-3">
 			<div>
-				<p className="iz-h3">{batch.reference}</p>
+				<p className="iz-h3">{batch.runNo}</p>
 				<p className="iz-tiny iz-muted2">
 					{batch.weekStart} → {batch.weekEnd} ·{" "}
 					{formatRM(Number(batch.totalAmount))}

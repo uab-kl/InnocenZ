@@ -639,7 +639,7 @@ export class PayoutBatchControllerClass {
       const actor = getActor(req);
       const result = await provider.submit({
         agencyId: batch.agencyId,
-        batchReference: batch.reference ?? batch.id,
+        batchReference: batch.runNo ?? batch.id,
         items: batch.items.map((i) => ({
           itemId: i.id,
           amount: i.amount,
@@ -647,7 +647,7 @@ export class PayoutBatchControllerClass {
           payeeIc: i.payeeIc,
           bankName: i.bankName as string,
           bankAccountNo: i.bankAccountNo as string,
-          reference: batch.reference ?? '',
+          reference: batch.runNo ?? '',
         })),
       });
       const settleResult = await this.payoutBatchRepository.settle({

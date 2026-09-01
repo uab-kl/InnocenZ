@@ -132,7 +132,9 @@ describe("PayoutRunsPanel", () => {
 		render(<PayoutRunsPanel canPay={false} />);
 		expect(screen.getByText("Victoria Tan")).toBeTruthy();
 		expect(
-			screen.queryAllByRole("button").some((b) => b.textContent?.includes("createRun")),
+			screen
+				.queryAllByRole("button")
+				.some((b) => b.textContent?.includes("createRun")),
 		).toBe(false);
 	});
 
