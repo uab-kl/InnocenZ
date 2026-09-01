@@ -37,7 +37,8 @@ import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { PortfolioSlotGrid } from '../components/PortfolioSlotGrid';
 import { ImageLightbox, ZoomHint } from '../components/ImageLightbox';
 import { AppToast, useToast } from '../components/Toast';
-import { LanguageMultiPicker } from './sign-up/fields';
+import { LanguageMultiPicker, Picker } from './sign-up/fields';
+import { MALAYSIAN_BANKS, isKnownBank } from '../lib/malaysian-banks';
 import {
   Camera,
   Check,
@@ -63,6 +64,9 @@ type Draft = {
   languages: string[];
   agencyIds: string[];
   portfolio: (string | null)[];
+  /** Payout details. Held as strings so an emptied box round-trips as ''. */
+  bankName: string;
+  bankAccountNo: string;
 };
 
 /**
@@ -314,6 +318,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       languages: me?.profile.languages ?? [],
       agencyIds,
       portfolio: portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS),
+      // ?? '' rather than a null passthrough: these two are TextInput values,
+      // and a null value silently turns a controlled input into an
+      // uncontrolled one, which drops the first keystroke.
+      bankName: me?.profile.bankName ?? '',
+      bankAccountNo: me?.profile.bankAccountNo ?? '',
     });
     setError(null);
     setAgencyMenuOpen(false);
@@ -347,6 +356,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       setError(e instanceof ApiError ? e.message : t.profile.departureFailed);
     }
   };
+
+  /**
+   * The bank list, plus whatever is already saved if it is NOT on the list.
+   *
+   * A profile written before this list existed — or against a bank since
+   * renamed — must stay selected rather than silently resetting to blank.
+   * Blanking it would delete a real payee detail the PR never asked to change,
+   * and they would have no way of knowing their pay had nowhere to go.
+   */
+  const bankOptions = useMemo(() => {
+    const saved = me?.profile.bankName ?? '';
+    const list: string[] = [...MALAYSIAN_BANKS];
+    if (saved && !isKnownBank(saved)) list.unshift(saved);
+    return list;
+  }, [me?.profile.bankName]);
 
   const saveEdit = async () => {
     const name = draft.displayName.trim();
@@ -385,6 +409,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         comcardHipCm: draft.hip || null,
         // Spoken languages → user_profile.languages.
         languages: draft.languages,
+        // Where the agency's weekly transfer goes. Trimmed but NOT coerced to
+        // null on blank: '' is the server's "clear this" signal, and a PR
+        // removing a wrong account number must be able to actually remove it.
+        bankName: draft.bankName.trim(),
+        bankAccountNo: draft.bankAccountNo.trim(),
       });
       // Agencies live in agency_pr, not on the profile row — new picks are
       // saved as pending join requests for the agency to approve. Skip the
@@ -1286,6 +1315,76 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             </View>
           )}
         </View>
+
+        {/*
+          BANK DETAILS — where the agency's weekly transfer is sent.
+
+          These two columns have existed on user_profile since it was created,
+          and the voucher Excel and PDF have always printed them. Nothing ever
+          COLLECTED them: on 27 Aug 2026 all 71 profiles on the live database
+          had both fields null, so every voucher document rendered "—" for the
+          payee's bank. This form is the missing writer, not a new field.
+
+          It sits on the PR's own profile because the account is theirs to state
+          and correct. The agency reads it back on the voucher document.
+        */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t.profile.bankDetails}</Text>
+          {editing ? (
+            <>
+              <Text style={styles.fieldLabel}>{t.profile.bankName}</Text>
+              {/*
+                A PICKER, NOT A TEXT BOX. Typed by hand one bank arrives as
+                "may bank", "MBB" and "maybank berhad", none of which can be
+                matched to a payout file later. Searchable because 28 banks is
+                too many to scroll on a phone — and the stored value IS the
+                label, so what they search is what the voucher prints.
+              */}
+              <Picker
+                value={draft.bankName || null}
+                options={bankOptions}
+                onSelect={(v) => setDraft((d) => ({ ...d, bankName: v }))}
+                placeholder={t.profile.bankNamePlaceholder}
+                title={t.profile.bankName}
+                searchable
+                searchPlaceholder={t.profile.bankSearchPlaceholder}
+              />
+              <Text style={[styles.fieldLabel, { marginTop: 8 }]}>
+                {t.profile.bankAccountNo}
+              </Text>
+              <TextInput
+                value={draft.bankAccountNo}
+                /*
+                 * Digits only, stripped on the way IN rather than validated on
+                 * the way out. A number pasted from a banking app arrives as
+                 * "1234-5678-9012" or with thin spaces, and a payout file needs
+                 * the bare digits — mis-keyed account numbers are the single
+                 * most common cause of a failed payroll run. keyboardType alone
+                 * does not cover this: it does not constrain a paste, and on
+                 * Android it does not constrain a hardware keyboard either.
+                 */
+                onChangeText={(v) =>
+                  setDraft((d) => ({ ...d, bankAccountNo: v.replace(/[^0-9]/g, '') }))
+                }
+                keyboardType="number-pad"
+                maxLength={50}
+                placeholder={t.profile.bankAccountPlaceholder}
+                style={styles.input}
+                placeholderTextColor={C.muted2}
+              />
+              <Text style={styles.bankHint}>{t.profile.bankHint}</Text>
+            </>
+          ) : me?.profile.bankName || me?.profile.bankAccountNo ? (
+            <>
+              <Text style={styles.bankValue}>{me?.profile.bankName || '—'}</Text>
+              <Text style={styles.bankAccount}>{me?.profile.bankAccountNo || '—'}</Text>
+            </>
+          ) : (
+            /* Not decoration: an unpaid PR needs to know the app is missing
+               the one thing a transfer cannot be made without. */
+            <Text style={styles.bankEmptyText}>{t.profile.noBankDetails}</Text>
+          )}
+        </View>
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -1343,6 +1442,8 @@ function emptyDraft(): Draft {
     languages: [],
     agencyIds: [],
     portfolio: [],
+    bankName: '',
+    bankAccountNo: '',
   };
 }
 
@@ -1842,6 +1943,19 @@ const styles = StyleSheet.create({
   },
   langPillText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.violetL },
   langEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
+  bankValue: { marginTop: 8, fontFamily: F.manrope, fontSize: 14, color: C.txt },
+  // Tabular figures: an account number is read digit by digit against a bank
+  // statement, and a proportional font makes that needlessly hard.
+  bankAccount: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 14,
+    color: C.txt,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.5,
+  },
+  bankEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.amber },
+  bankHint: { marginTop: 8, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   agencyLoadError: {
     marginTop: 8,
     marginBottom: 10,

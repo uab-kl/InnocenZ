@@ -1553,6 +1553,116 @@ export class PaymentVoucherControllerClass {
         }
       }
 
+      /*
+       * SIGNING IS THE PR'S ACT, AND ONLY THE PR'S OWN ENDPOINT MAY PERFORM IT.
+       *
+       * The `paid` gate below is only ever as strong as the state it trusts, and
+       * `status` is a free field on this same endpoint. Without this, an agency
+       * owner could PUT {status:'signed'} onto a voucher the PR had never opened
+       * — the stamp further down would helpfully fill in `prSignedAt` from the
+       * server clock — and then legitimately record it paid. "Paid" would mean
+       * "somebody said the PR agreed" rather than "the PR agreed", which is the
+       * entire purpose of asking for a counter-signature.
+       *
+       * A flat refusal, NOT a "require the ink" check. The drawn signature is
+       * deliberately optional on the real lane — `signMyVoucher` accepts a sign
+       * from an older app build that draws nothing — so the absence of a
+       * signature cannot be the test. The test is WHO is asking.
+       *
+       * A no-op for every legitimate caller, checked before gating (the
+       * `GET /user` lesson — a flat gate can blank a live screen):
+       * POST '/mine/:voucherId/sign' writes through
+       * `paymentVoucherRepository.update` directly and never enters this method;
+       * no web or mobile caller sends 'signed' here, and the agency portal has
+       * no such action at all; the dispute lanes write 'sent' and
+       * 'pending_review', never 'signed'.
+       *
+       * Scoped to the TRANSITION for the same reason as `paid` below: a call
+       * that leaves an already-signed voucher signed — attaching a bank
+       * reference, correcting a field — is not a forged signature and passes.
+       */
+      if (data.status === 'signed' && existing.status !== 'signed') {
+        return res.status(409).json({
+          success: false,
+          message:
+            'A voucher becomes signed when the PR signs it in the app — an agency cannot sign on ' +
+            'their behalf. Send it to them to counter-sign.',
+          data: null,
+        });
+      }
+
+      /*
+       * RECORDING PAYMENT IS A TRANSITION OUT OF `signed`, AND NOTHING ELSE.
+       *
+       * This was the least-gated write on the whole rail. Sending a voucher
+       * costs an agency six checks — the week must have ended, finance must have
+       * signed, every day reviewed, no receipt still pending, no overtime still
+       * undecided, no line rewrite in the same call — while SETTLING one, the
+       * step that ends the argument for good, asked for nothing at all. The only
+       * server-side effect of `status: 'paid'` was stamping `paidAt` below.
+       *
+       * The rule existed, but only in the browser: agency/pv.tsx offers "Mark as
+       * paid" solely on a SIGNED voucher. A rule that lives in the client is not
+       * a rule — `PUT /payment-voucher/:id {status:'paid'}` would settle a
+       * pending_review voucher that had never been reviewed, never been sent and
+       * never been seen by the PR, and `PV-000002` on the live database is
+       * already `paid` with `finance_head_signed_at` NULL.
+       *
+       * Gated on the TRANSITION, not the target state, so a repeat call on an
+       * already-paid voucher still passes: the first request may well have
+       * succeeded with only its response lost, and `paidAt` is stamped once
+       * regardless, so a retry cannot re-date a transfer. It also leaves the one
+       * legitimate edit to a settled voucher open — attaching the bank reference
+       * afterwards, which the UI itself calls optional "because a transfer can be
+       * real without its reference being to hand".
+       */
+      if (data.status === 'paid' && existing.status !== 'paid') {
+        if (existing.status !== 'signed') {
+          return res.status(409).json({
+            success: false,
+            message:
+              'Only a signed voucher can be recorded as paid — this one is ' +
+              `${existing.status.replace('_', ' ')}. The PR's counter-signature is what says they ` +
+              'agree with the figure being transferred.',
+            data: null,
+          });
+        }
+        /*
+         * Belt and braces on the dispute, deliberately.
+         *
+         * Today a signed voucher CANNOT carry an open claim: raising one is
+         * refused once the status is signed or paid, and `resolveDispute` hands
+         * the voucher back only when `listOpenForVoucher` comes back empty. So
+         * this check should never fire — which is exactly why it is written down
+         * rather than inferred. The invariant belongs to the dispute lane, and a
+         * money gate that depends on another module's bookkeeping staying
+         * correct forever is one refactor away from being no gate at all.
+         *
+         * It also closes the door the status check alone leaves open: `status`
+         * is a free field on this same endpoint, so a caller could PUT 'signed'
+         * onto a disputed voucher and then PUT 'paid'. Paying silences the claim
+         * permanently — `raiseMyDispute` refuses anything already paid — so the
+         * failure this prevents is a PR's complaint disappearing, not a warning.
+         */
+        const openDisputes =
+          await this.paymentVoucherDisputeRepository.listOpenForVoucher(id);
+        if (openDisputes.length > 0) {
+          return res.status(409).json({
+            success: false,
+            message:
+              `This voucher has ${openDisputes.length} open dispute(s) — resolve them before ` +
+              'recording payment. Paying settles the week and closes the claim for good.',
+            data: {
+              openDisputes: openDisputes.map((d) => ({
+                id: d.id,
+                disputeDate: d.disputeDate,
+                component: d.component,
+              })),
+            },
+          });
+        }
+      }
+
       // A line rewrite can carry a stray date just as easily as a fresh create,
       // so the week rule applies here too. Checked against the week the voucher
       // will HAVE after this update, not the one it had before — otherwise

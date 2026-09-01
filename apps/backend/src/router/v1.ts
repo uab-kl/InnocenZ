@@ -10,6 +10,7 @@ import agencyRoutes from '@/features/agency/agency.routes.js';
 import prRoutes from '@/features/pr-personnel/pr.routes.js';
 import shiftRoutes from '@/features/shift/shift.routes.js';
 import paymentVoucherRoutes from '@/features/payment-voucher/payment-voucher.routes.js';
+import payoutBatchRoutes from '@/features/payment-voucher/payout-batch.routes.js';
 import paymentVoucherExportRoutes from '@/features/payment-voucher/payment-voucher-export.routes.js';
 import shiftAssignmentRoutes from '@/features/shift-assignment/shift-assignment.routes.js';
 import outletSwapRoutes from '@/features/outlet-swap/outlet-swap.routes.js';
@@ -83,6 +84,7 @@ v1Router.use('/agency-outlet', agencyOutletRoutes);
 v1Router.use('/pr', prRoutes);
 v1Router.use('/shift', shiftRoutes);
 v1Router.use('/payment-voucher', paymentVoucherRoutes);
+v1Router.use('/payout-batch', payoutBatchRoutes);
 v1Router.use('/shift-assignment', shiftAssignmentRoutes);
 v1Router.use('/outlet-swap', outletSwapRoutes);
 // A PR's own blocked days. The '/mine' half is scoped by token (every signed-in

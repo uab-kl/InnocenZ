@@ -2363,6 +2363,14 @@ const en = {
 		rate: "Rate",
 		submit: "Submit",
 		dismiss: "Dismiss",
+		/**
+		 * Post-seal prompt, shown beside the Dismiss button above. Chinese has no
+		 * plural — the two keys carry the same string on purpose. The 24h is the
+		 * product rule, not a layout hint: rating closes a day after the seal, and
+		 * the store's own seal toast states the same window.
+		 */
+		ratePrsPromptOne: "Rate {n} PR · 24h",
+		ratePrsPromptMany: "Rate {n} PRs · 24h",
 		outAt: "Out {time}",
 		drinksCount: "{n} drinks",
 		viewComcardFor: "View comcard for {name}",
@@ -2465,6 +2473,14 @@ const en = {
 		drinkSales: "Drink sales",
 		unitCountOne: "{n} unit",
 		unitCountMany: "{n} units",
+		/**
+		 * How many rows a money breakdown card holds, shown under its own title.
+		 * Chinese has no plural — the two keys carry the same string on purpose,
+		 * and it reads "{n} 项" rather than agencyPvReview's "{n} 项明细" because
+		 * the heading directly above it already ends in 明细.
+		 */
+		lineCountOne: "{n} line",
+		lineCountMany: "{n} lines",
 		wages: "Wages",
 		drinkCommission: "Drink commission",
 		tipCommission: "Tip commission",
@@ -3583,6 +3599,50 @@ const en = {
 		selectCutlostToReview: "Select a cutlost request to review",
 		inviteHint: "Enter IC + contact → invite sent to complete profile",
 		sendInvite: "Send invite",
+	},
+	/**
+	 * Flow 2 — the agency's payout runs (agency pays PR). Not to be confused with
+	 * `payroll`, which is the voucher itself, or with the subscription strings,
+	 * which are flow 1 (an org pays InnocenZ).
+	 */
+	payouts: {
+		chooseWeek: "Pay a week",
+		loading: "Loading…",
+		noneSigned:
+			"Nothing signed for this week yet — a PR must counter-sign before they can be paid.",
+		ready: "ready",
+		blocked: "blocked",
+		alreadyInRun: "already in a run",
+		inRun: "In a run",
+		noBankDetails: "No bank details",
+		blockedHint:
+			"These people are signed off but have no bank details, so they cannot be included. Ask them to add their bank in the app.",
+		createRun: "Create payout run",
+		creating: "Creating…",
+		cannotCreate: "Cannot create this run",
+		runs: "Payout runs",
+		noRuns: "No payout runs yet.",
+		downloadFile: "Download bank file",
+		downloadHint:
+			"Downloading marks this run as sent. Upload the file in your own bank, then record what the bank reported.",
+		markSubmitted: "Mark as submitted to bank",
+		cancelRun: "Cancel run",
+		pasteResponse: "Paste the bank's response file here",
+		importResponse: "Import response",
+		markPaid: "Paid",
+		markFailed: "Failed",
+		bankRefPlaceholder: "Bank reference (optional)",
+		statusDraft: "Draft",
+		statusExported: "Sent to bank",
+		statusSubmitted: "Submitted",
+		statusSettled: "Settled",
+		statusCancelled: "Cancelled",
+		itemPending: "Pending",
+		itemSent: "Sent",
+		itemPaid: "Paid",
+		itemFailed: "Failed",
+		itemReturned: "Returned",
+		itemCancelled: "Cancelled",
 	},
 	agencyPv: {
 		/** Singular/plural spelled out — the code used to splice in "s"/"is"/"are". */
@@ -7824,6 +7884,8 @@ const zh: PortalTranslations = {
 		rate: "评分",
 		submit: "提交",
 		dismiss: "忽略",
+		ratePrsPromptOne: "为 {n} 位 PR 评分 · 24 小时",
+		ratePrsPromptMany: "为 {n} 位 PR 评分 · 24 小时",
 		outAt: "下班 {time}",
 		drinksCount: "{n} 杯酒水",
 		viewComcardFor: "查看 {name} 的作品卡",
@@ -7923,6 +7985,8 @@ const zh: PortalTranslations = {
 		drinkSales: "酒水销售",
 		unitCountOne: "{n} 件",
 		unitCountMany: "{n} 件",
+		lineCountOne: "{n} 项",
+		lineCountMany: "{n} 项",
 		wages: "工资",
 		drinkCommission: "酒水抽成",
 		tipCommission: "小费抽成",
@@ -8862,6 +8926,49 @@ const zh: PortalTranslations = {
 		selectCutlostToReview: "请选择要审核的缺班损失申请",
 		inviteHint: "填写身份证号 + 联系方式 → 系统会发送邀请，由对方补全资料",
 		sendInvite: "发送邀请",
+	},
+	/**
+	 * Flow 2 — the agency's payout runs (agency pays PR). Not to be confused with
+	 * `payroll`, which is the voucher itself, or with the subscription strings,
+	 * which are flow 1 (an org pays InnocenZ).
+	 */
+	payouts: {
+		chooseWeek: "支付某一周",
+		loading: "载入中…",
+		noneSigned: "本周暂无已签收的付款单 — PR 需先签收才能收款。",
+		ready: "可支付",
+		blocked: "受阻",
+		alreadyInRun: "已在批次中",
+		inRun: "批次中",
+		noBankDetails: "未填银行资料",
+		blockedHint:
+			"这些人已签收但未填写银行资料，无法纳入本次支付。请提醒他们在应用内填写。",
+		createRun: "建立支付批次",
+		creating: "建立中…",
+		cannotCreate: "无法建立此批次",
+		runs: "支付批次",
+		noRuns: "暂无支付批次。",
+		downloadFile: "下载银行档案",
+		downloadHint:
+			"下载后此批次即标记为已送出。请在贵公司银行上传档案，再回来记录银行的回覆。",
+		markSubmitted: "标记为已提交银行",
+		cancelRun: "取消批次",
+		pasteResponse: "在此贴上银行的回覆档案",
+		importResponse: "汇入回覆",
+		markPaid: "已支付",
+		markFailed: "失败",
+		bankRefPlaceholder: "银行流水号（选填）",
+		statusDraft: "草稿",
+		statusExported: "已送银行",
+		statusSubmitted: "已提交",
+		statusSettled: "已结清",
+		statusCancelled: "已取消",
+		itemPending: "待处理",
+		itemSent: "已送出",
+		itemPaid: "已支付",
+		itemFailed: "失败",
+		itemReturned: "退回",
+		itemCancelled: "已取消",
 	},
 	agencyPv: {
 		unsignedVoucherOne: "本周有 {n} 张付款单尚未签署",

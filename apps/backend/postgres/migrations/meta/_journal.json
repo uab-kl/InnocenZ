@@ -981,6 +981,41 @@
       "when": 1791400000000,
       "tag": "0139_payment_method_wallet",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1791450000000,
+      "tag": "0140_payout_batch",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1791460000000,
+      "tag": "0141_notification_kind_pv_paid",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1791470000000,
+      "tag": "0142_payout_item_cancelled",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1791480000000,
+      "tag": "0143_agency_payout_account",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1791490000000,
+      "tag": "0144_payout_run_no",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,16 @@
+-- 0141 — `payment_voucher_paid`: the PR is finally told the money went out.
+--
+-- The bell has always rung when a voucher was ISSUED (`payment_voucher_issued`)
+-- and when a dispute was decided. It never rang for the one event the PR
+-- actually waits for. From where they stand, a signed voucher and a paid one
+-- looked identical until they happened to reopen the app and read a status
+-- word — or, more often, until they checked their bank and asked the agency.
+--
+-- Addressed to the PR, and raised ONLY for a voucher that genuinely moved
+-- signed -> paid. A settlement naming a voucher that was already paid updates
+-- the payout item and rings nothing: telling someone twice that they were paid
+-- once is how a notification stops being believed.
+--
+-- Additive and idempotent; ALTER TYPE ... ADD VALUE cannot be rolled back
+-- inside a transaction, so a re-run must be a no-op. Same shape as 0126.
+ALTER TYPE "main"."notification_kind" ADD VALUE IF NOT EXISTS 'payment_voucher_paid';

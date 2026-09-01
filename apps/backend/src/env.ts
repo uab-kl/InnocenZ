@@ -73,6 +73,27 @@ export const env = createEnv({
     R2_ACCESS_KEY_ID: z.string().min(1).optional(),
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     R2_PUBLIC_URL: z.string().url().optional(),
+    /*
+     * PAYOUT PROVIDER (flow 2 — the agency pays its PRs). All optional: the
+     * bank-file export path is fully functional with none of them set, and
+     * `payoutProviderConfigured()` returning false is a normal state, not an
+     * error.
+     *
+     * ⚠️ SINGLE-ACCOUNT FALLBACK ONLY. These configure ONE provider account for
+     * the whole deployment. Per-agency credentials live on
+     * `agency_payout_account` (migration 0143) and take precedence — because an
+     * agency must pay from an account IT owns. One shared key paying many
+     * agencies' PRs would make InnocenZ the payer of third-party funds, which
+     * is e-money / remittance activity under FSA 2013 and MSBA 2011.
+     *
+     * ⚠️ Setting PAYOUT_PROVIDER to a name with no registered adapter THROWS on
+     * use, deliberately — see payout-provider.ts. Register and sandbox-test an
+     * adapter before setting these anywhere.
+     */
+    PAYOUT_PROVIDER: z.string().min(1).optional(),
+    PAYOUT_API_KEY: z.string().min(1).optional(),
+    PAYOUT_API_SECRET: z.string().min(1).optional(),
+    PAYOUT_ACCOUNT_ID: z.string().min(1).optional(),
     // Brevo SMTP (optional at boot — sendEmail returns a clear error when missing).
     // Prefer BREVO_* names; legacy SMTP_* still accepted via runtimeEnv mapping.
     SENDER_EMAIL: z.string().email().optional(),

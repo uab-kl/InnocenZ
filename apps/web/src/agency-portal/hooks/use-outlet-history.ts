@@ -1,5 +1,9 @@
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
-import { shiftHistoryRowFromAssignment } from "@agency-portal/lib/agency-shift-history-map";
+import {
+	indexShiftSales,
+	shiftHistoryRowFromAssignment,
+	shiftSaleKey,
+} from "@agency-portal/lib/agency-shift-history-map";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { managedPrFromBackend } from "@agency-portal/lib/pr-personnel-map";
 import {
@@ -11,6 +15,7 @@ import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
+import { fetchShiftSales } from "@/services/shift-sale";
 
 // The assignment endpoint has no date filter, so the page size is what bounds
 // the ledger. One outlet's sealed nights stay well inside this.
@@ -38,9 +43,9 @@ export interface OutletHistoryData {
  * per-assignment shape the agency History uses. The list response joins the PR
  * display name and shift date. PR profile photos come from `/pr` (outlet-scoped
  * to PRs rostered at the caller's venues — same as Today). Agency names ride on
- * the assignment itself for the "by agency" filter. As on the agency side
- * the backend has no per-shift drink/tip sales, so the money breakdown is
- * wages-only.
+ * the assignment itself for the "by agency" filter. As on the agency side the
+ * RECEIVED money joins `shift_sale` on (shift, PR) — drinks, tips and service
+ * entitlements from the PR's approved receipts.
  */
 export function useOutletHistory(): OutletHistoryData {
 	const { logout } = useAuth();
@@ -67,6 +72,19 @@ export function useOutletHistory(): OutletHistoryData {
 	// option. The name now rides on the assignment itself, joined server-side from
 	// its agency FK, which needs no directory access at all.
 
+	// Floor sales (the RECEIVED side) — the PR's approved receipts, mirrored onto
+	// shift_sale by the backend. Deliberately NOT date-filtered: the assignments
+	// query above has no date bound either, so a window here would leave older
+	// rows on screen reading RM 0.00 — a wrong number dressed as a real one.
+	// `GET /shift-sale` pins an outlet caller to its own venues server-side.
+	const salesQuery = useQuery({
+		queryKey: ["outlet", "history", "shift-sales"],
+		queryFn: () => fetchShiftSales({}, logout),
+		enabled: backed,
+		placeholderData: keepPreviousData,
+		staleTime: 60_000,
+	});
+
 	// Same key/fn as outlet Today so history cards share the PR photo cache.
 	const prsQuery = useQuery({
 		queryKey: ["outlet", "today", "prs"],
@@ -78,6 +96,7 @@ export function useOutletHistory(): OutletHistoryData {
 	const rows = useMemo<ShiftHistoryRow[]>(() => {
 		if (!backed) return [];
 		const assignments = assignmentsQuery.data?.data ?? [];
+		const saleByShiftPr = indexShiftSales(salesQuery.data ?? []);
 
 		const built: ShiftHistoryRow[] = [];
 		for (const a of assignments) {
@@ -95,11 +114,12 @@ export function useOutletHistory(): OutletHistoryData {
 					// Falls back only if the agency row itself is gone, which the
 					// FK makes near-impossible — not on every row, as before.
 					agencyName: a.agencyName ?? "Agency",
+					sale: saleByShiftPr.get(shiftSaleKey(a.shiftId, a.prId)),
 				}),
 			);
 		}
 		return sortShiftHistoryDesc(built);
-	}, [backed, outletName, assignmentsQuery.data]);
+	}, [backed, outletName, assignmentsQuery.data, salesQuery.data]);
 
 	const prs = useMemo<AgencyManagedPR[]>(
 		() => (backed ? (prsQuery.data?.data ?? []).map(managedPrFromBackend) : []),
@@ -111,6 +131,12 @@ export function useOutletHistory(): OutletHistoryData {
 		outletName,
 		rows,
 		prs,
-		isLoading: backed && (assignmentsQuery.isLoading || prsQuery.isLoading),
+		isLoading:
+			backed &&
+			(assignmentsQuery.isLoading ||
+				prsQuery.isLoading ||
+				// Without this the cards paint Received RM 0.00 for a beat before
+				// the sales land — a wrong number, not a pending one.
+				salesQuery.isLoading),
 	};
 }

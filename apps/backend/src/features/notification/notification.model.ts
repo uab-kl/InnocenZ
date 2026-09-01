@@ -14,6 +14,16 @@ import { UserTable } from '@/features/user/user.model.js';
 export const notificationKindValues = [
   /** A weekly voucher was generated for this PR. */
   'payment_voucher_issued',
+  /**
+   * The money for that voucher actually left the agency (migration 0141).
+   *
+   * PR-addressed, and the counterpart the bell was missing: 'issued' told them
+   * a figure existed, 'dispute_resolved' told them an argument ended, and
+   * nothing told them they had been PAID. Raised only on a genuine
+   * signed -> paid transition — never for a re-settlement of a voucher that was
+   * already paid, or the notification stops being believed.
+   */
+  'payment_voucher_paid',
   /** The agency accepted or rejected a dispute the PR raised. */
   'payment_voucher_dispute_resolved',
   /** Overtime is waiting on agency approval — see the OT rules. */

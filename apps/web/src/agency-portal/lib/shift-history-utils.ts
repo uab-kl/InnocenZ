@@ -25,6 +25,18 @@ export interface ShiftHistoryRow {
 	totalTips: number;
 	/** Full drink sales RM for the outlet (menu prices, not PR drink commission). */
 	drinkSalesRm?: number;
+	/**
+	 * Full SERVICE-entitlement sales RM (Havoc, Booking commission …) — its own
+	 * bucket, never folded into tips.
+	 *
+	 * The PR app has no "service" page: ScanScreen shows category 'service' and
+	 * 'tip' together under Tips, and `receiptKindForItem` packs kind `tips` for
+	 * both. The split survives only in the receipt line's own category segment,
+	 * which is what `shift_sale.service_sales_rm` is derived from. It is the
+	 * LARGEST bucket in practice, so folding it into tips — or dropping it —
+	 * misstates the outlet's floor total rather than rounding it.
+	 */
+	serviceSalesRm?: number;
 	/** VIP / table units logged on shift */
 	totalTables?: number;
 	/** Sealed payout parts — wages / OT / commissions (Workspace snapshot). */
@@ -158,6 +170,34 @@ export function mergeShiftHistory(
 	return dedupeShiftHistorySlots(sortShiftHistoryDesc([...byId.values()]));
 }
 
+/**
+ * What the outlet took at the floor for one shift: drinks + tips + services.
+ *
+ * Kept here rather than reusing `shiftHistoryTotalReceived` because that lives
+ * in shift-history-amounts.ts, which imports THIS file — the drink fallback is
+ * duplicated for the same reason.
+ */
+function rowReceivedParts(row: ShiftHistoryRow): {
+	drinkSales: number;
+	serviceSales: number;
+	received: number;
+} {
+	const drinkSales =
+		typeof row.drinkSalesRm === "number" && Number.isFinite(row.drinkSalesRm)
+			? row.drinkSalesRm
+			: row.totalDrinks * SHIFT_HISTORY_FALLBACK_PER_DRINK_RM;
+	const serviceSales =
+		typeof row.serviceSalesRm === "number" &&
+		Number.isFinite(row.serviceSalesRm)
+			? row.serviceSalesRm
+			: 0;
+	return {
+		drinkSales,
+		serviceSales,
+		received: drinkSales + row.totalTips + serviceSales,
+	};
+}
+
 export type ShiftHistoryVenueRollup = {
 	venue: string;
 	shiftCount: number;
@@ -165,6 +205,7 @@ export type ShiftHistoryVenueRollup = {
 	totalDrinks: number;
 	totalTips: number;
 	drinkSalesRm: number;
+	serviceSalesRm: number;
 	totalReceived: number;
 	totalTables: number;
 	shifts: ShiftHistoryRow[];
@@ -189,22 +230,20 @@ export function aggregateShiftHistoryByVenue(
 				totalDrinks: 0,
 				totalTips: 0,
 				drinkSalesRm: 0,
+				serviceSalesRm: 0,
 				totalReceived: 0,
 				totalTables: 0,
 				shifts: [],
 			} satisfies ShiftHistoryVenueRollup);
 
-		const drinkSales =
-			typeof row.drinkSalesRm === "number" && Number.isFinite(row.drinkSalesRm)
-				? row.drinkSalesRm
-				: row.totalDrinks * SHIFT_HISTORY_FALLBACK_PER_DRINK_RM;
-		const received = drinkSales + row.totalTips;
+		const { drinkSales, serviceSales, received } = rowReceivedParts(row);
 
 		cur.shiftCount += 1;
 		cur.totalPayout += row.totalPayout;
 		cur.totalDrinks += row.totalDrinks;
 		cur.totalTips += row.totalTips;
 		cur.drinkSalesRm += drinkSales;
+		cur.serviceSalesRm += serviceSales;
 		cur.totalReceived += received;
 		cur.totalTables += row.totalTables ?? 0;
 		cur.shifts.push(row);
@@ -224,6 +263,7 @@ export function sumShiftHistoryVenueRollups(
 			totalDrinks: acc.totalDrinks + r.totalDrinks,
 			totalTips: acc.totalTips + r.totalTips,
 			drinkSalesRm: acc.drinkSalesRm + r.drinkSalesRm,
+			serviceSalesRm: acc.serviceSalesRm + r.serviceSalesRm,
 			totalReceived: acc.totalReceived + r.totalReceived,
 			totalTables: acc.totalTables + r.totalTables,
 		}),
@@ -233,6 +273,7 @@ export function sumShiftHistoryVenueRollups(
 			totalDrinks: 0,
 			totalTips: 0,
 			drinkSalesRm: 0,
+			serviceSalesRm: 0,
 			totalReceived: 0,
 			totalTables: 0,
 		},
@@ -250,6 +291,7 @@ export type ShiftHistoryPrRollup = {
 	totalDrinks: number;
 	totalTips: number;
 	drinkSalesRm: number;
+	serviceSalesRm: number;
 	totalReceived: number;
 	totalTables: number;
 };
@@ -280,22 +322,20 @@ export function aggregateShiftHistoryByPr(
 				totalDrinks: 0,
 				totalTips: 0,
 				drinkSalesRm: 0,
+				serviceSalesRm: 0,
 				totalReceived: 0,
 				totalTables: 0,
 			};
 			map.set(row.prId, cur);
 		}
-		const drinkSales =
-			typeof row.drinkSalesRm === "number" && Number.isFinite(row.drinkSalesRm)
-				? row.drinkSalesRm
-				: row.totalDrinks * SHIFT_HISTORY_FALLBACK_PER_DRINK_RM;
-		const received = drinkSales + row.totalTips;
+		const { drinkSales, serviceSales, received } = rowReceivedParts(row);
 
 		cur.shiftCount += 1;
 		cur.totalPayout += row.totalPayout;
 		cur.totalDrinks += row.totalDrinks;
 		cur.totalTips += row.totalTips;
 		cur.drinkSalesRm += drinkSales;
+		cur.serviceSalesRm += serviceSales;
 		cur.totalReceived += received;
 		cur.totalTables += row.totalTables ?? 0;
 		cur.venueSet.add(row[venueKey]);

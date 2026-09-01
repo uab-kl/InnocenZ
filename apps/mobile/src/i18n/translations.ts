@@ -108,6 +108,18 @@ export type AppTranslations = {
     saving: string;
     cancel: string;
     languages: string;
+    /** Bank section heading on the PR's own profile. */
+    bankDetails: string;
+    bankName: string;
+    bankNamePlaceholder: string;
+    bankAccountNo: string;
+    bankAccountPlaceholder: string;
+    /** Search wording inside the bank dropdown. */
+    bankSearchPlaceholder: string;
+    /** Helper under the two boxes: who uses this, and how to clear it. */
+    bankHint: string;
+    /** Shown in amber when neither field is set — a transfer cannot be made. */
+    noBankDetails: string;
     securitySettings: string;
     signOut: string;
     appLanguage: string;
@@ -369,6 +381,10 @@ export type AppTranslations = {
     title: string;
     history: string;
     /** Week tab. */
+    /** Banner shown when the PR has no bank details — they cannot be paid. */
+    bankNudgeTitle: string;
+    bankNudgeBody: string;
+    bankNudgeAction: string;
     lastWeek: string;
     /** Week tab. */
     thisWeek: string;
@@ -1584,6 +1600,15 @@ export const translations: Record<AppLocale, AppTranslations> = {
       saving: 'Saving…',
       cancel: 'Cancel',
       languages: 'Languages',
+      bankDetails: 'Bank details',
+      bankName: 'Bank',
+      bankNamePlaceholder: 'e.g. Maybank',
+      bankAccountNo: 'Account number',
+      bankAccountPlaceholder: 'e.g. 512345678901',
+      bankSearchPlaceholder: 'Search your bank',
+      bankHint:
+        'Your agency transfers your weekly voucher to this account. Clear both boxes to remove them.',
+      noBankDetails: 'Not set — your agency cannot transfer your pay without this.',
       securitySettings: 'Security settings',
       signOut: 'Sign out',
       appLanguage: 'App language',
@@ -1789,6 +1814,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
     payment: {
       title: 'Payment',
       history: 'Payment history',
+      bankNudgeTitle: 'Add your bank details',
+      bankNudgeBody:
+        'Your agency has nowhere to send this money. Add your bank and account number so your voucher can be transferred.',
+      bankNudgeAction: 'Add them now',
       lastWeek: 'Last week',
       thisWeek: 'This week',
       lastWeekTitle: 'LAST WEEK',
@@ -2661,6 +2690,14 @@ export const translations: Record<AppLocale, AppTranslations> = {
       saving: '保存中…',
       cancel: '取消',
       languages: '语言能力',
+      bankDetails: '银行资料',
+      bankName: '银行',
+      bankNamePlaceholder: '例如 Maybank',
+      bankAccountNo: '账号',
+      bankAccountPlaceholder: '例如 512345678901',
+      bankSearchPlaceholder: '搜索你的银行',
+      bankHint: '经纪公司会将每周付款单转账至此账户。两栏清空即可删除。',
+      noBankDetails: '未填写 — 没有这项资料，经纪公司无法转账给你。',
       securitySettings: '安全设置',
       signOut: '退出登录',
       appLanguage: '应用语言',
@@ -2865,6 +2902,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
     payment: {
       title: '结算',
       history: '结算记录',
+      bankNudgeTitle: '填写你的银行资料',
+      bankNudgeBody: '经纪公司无法转出这笔钱。请填写银行与账号，付款单才能转账给你。',
+      bankNudgeAction: '现在填写',
       lastWeek: '上周',
       thisWeek: '本周',
       lastWeekTitle: '上周',
@@ -3737,6 +3777,14 @@ export const translations: Record<AppLocale, AppTranslations> = {
       saving: '儲存中…',
       cancel: '取消',
       languages: '語言能力',
+      bankDetails: '銀行資料',
+      bankName: '銀行',
+      bankNamePlaceholder: '例如 Maybank',
+      bankAccountNo: '帳號',
+      bankAccountPlaceholder: '例如 512345678901',
+      bankSearchPlaceholder: '搜尋你的銀行',
+      bankHint: '經紀公司會將每週付款單轉帳至此帳戶。兩欄清空即可刪除。',
+      noBankDetails: '未填寫 — 沒有這項資料，經紀公司無法轉帳給你。',
       securitySettings: '安全設定',
       signOut: '登出',
       appLanguage: '應用語言',
@@ -3941,6 +3989,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
     payment: {
       title: '結算',
       history: '結算紀錄',
+      bankNudgeTitle: '填寫你的銀行資料',
+      bankNudgeBody: '經紀公司無法轉出這筆錢。請填寫銀行與帳號，付款單才能轉帳給你。',
+      bankNudgeAction: '現在填寫',
       lastWeek: '上週',
       thisWeek: '本週',
       lastWeekTitle: '上週',

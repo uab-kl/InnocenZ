@@ -71,6 +71,7 @@ import {
   Flag,
   ImagePlus,
   Search,
+  AlertTriangle,
   Wallet,
   XIcon,
 } from '../components/icons';
@@ -564,7 +565,15 @@ export function PaymentScreen({
 }) {
   const { t } = useLocale();
   const { openPv, route } = usePrNav();
-  const { token } = useSession();
+  const { me, token } = useSession();
+  /**
+   * Can this PR actually be paid? BOTH halves are required — a bank with no
+   * account number is as unpayable as neither, so this is AND-of-present, not
+   * "has anything". Checked here rather than only on Profile because this is
+   * the screen someone opens when they are wondering where their money is.
+   */
+  const bankDetailsMissing =
+    !me?.profile.bankName?.trim() || !me?.profile.bankAccountNo?.trim();
   const keyboardInset = useKeyboardInset();
   // Device safe-area — pads every sheet past the 3-button / gesture nav bar.
   const insets = useSafeAreaInsets();
@@ -1483,6 +1492,32 @@ export function PaymentScreen({
           </Text>
         </View>
       </View>
+
+      {/*
+        NO BANK DETAILS, NO TRANSFER.
+        Sits above the week tabs, not at the bottom of a scroll: on 27 Aug 2026
+        every one of the 71 profiles on the live database had this empty, and a
+        PR whose voucher is signed but unpaid has no other way to find out that
+        the missing piece is on their own profile. Amber, not red — nothing has
+        gone wrong yet, something is WAITING, which is what amber means on every
+        other money surface here.
+      */}
+      {bankDetailsMissing ? (
+        <Pressable
+          style={styles.bankNudge}
+          onPress={() => onNavigate('profile')}
+          accessibilityRole="button"
+          accessibilityLabel={t.payment.bankNudgeTitle}
+          accessibilityHint={t.payment.bankNudgeBody}
+        >
+          <AlertTriangle size={18} color={C.amber} />
+          <View style={styles.bankNudgeBody}>
+            <Text style={styles.bankNudgeTitle}>{t.payment.bankNudgeTitle}</Text>
+            <Text style={styles.bankNudgeText}>{t.payment.bankNudgeBody}</Text>
+            <Text style={styles.bankNudgeAction}>{t.payment.bankNudgeAction}</Text>
+          </View>
+        </Pressable>
+      ) : null}
 
       <View style={styles.weekTabs}>
         <Pressable
@@ -3357,6 +3392,31 @@ const penaltyStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  bankNudge: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+    marginHorizontal: 14,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(232,198,106,0.35)',
+    backgroundColor: C.amberBg,
+  },
+  bankNudgeBody: { flex: 1 },
+  bankNudgeTitle: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.txt },
+  bankNudgeText: { marginTop: 3, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  // Looks like the link it is — the whole card is the tap target, but a card
+  // with no visible action reads as a notice you cannot act on.
+  bankNudgeAction: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.amber,
+    textDecorationLine: 'underline',
+  },
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
   pageHeader: { paddingTop: 2 },
   headerTitleRow: {

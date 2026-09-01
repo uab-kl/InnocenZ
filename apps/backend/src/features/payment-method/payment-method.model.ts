@@ -127,6 +127,21 @@ export type MandateStatus = (typeof mandateStatusValues)[number];
  *
  * ⚠️ NO ACCOUNT NUMBER IS COLLECTED ANYWHERE IN THIS FLOW, and none should be.
  * The payer authorises at their bank, which is the only party that needs it.
+ *
+ * ⚠️ NOT `MALAYSIAN_BANKS` — DO NOT MERGE THE TWO ROSTERS.
+ *
+ * This list is the PAYER's inbound FPX rail (flow 1, an org paying InnocenZ):
+ * internet-banking channel brands, keyed by PayNet `bank_code`, used to pick a
+ * redirect bank for a direct-debit mandate.
+ *
+ * `apps/mobile/src/lib/malaysian-banks.ts` is the PAYEE's outbound list (flow 2,
+ * an agency paying a PR by credit transfer): 28 plain institution names, and it
+ * carries ten banks FPX cannot address here. Pointing either picker at the
+ * other would put a channel brand into a bank upload file, or drop ten banks a
+ * PR can hold an account at.
+ *
+ * Note also that `payment_method.bank_name` below and `user_profile.bank_name`
+ * are two different facts under one column name.
  */
 export const fpxBanks = [
   { code: 'MB2U0227', name: 'Maybank2u' },
