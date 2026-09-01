@@ -127,8 +127,7 @@ export type MandateStatus = (typeof mandateStatusValues)[number];
  *
  * ⚠️ NO ACCOUNT NUMBER IS COLLECTED ANYWHERE IN THIS FLOW, and none should be.
  * The payer authorises at their bank, which is the only party that needs it.
- */
-/**
+ *
  * ⚠️ NOT `MALAYSIAN_BANKS` — DO NOT MERGE THE TWO ROSTERS.
  *
  * This list is the PAYER's inbound FPX rail (flow 1, an org paying InnocenZ):
