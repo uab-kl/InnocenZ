@@ -98,6 +98,66 @@ export async function fetchSubscriptionInvoices(
 }
 
 /**
+ * One org and everything it is billed — its plan, its Custom price and its POS
+ * add-on together, every period, in one entry.
+ *
+ * `subscriberId` is the identity, never the name: a rename would otherwise
+ * split one org across two cards, and two orgs sharing a name would merge.
+ */
+export interface SubscriptionInvoiceGroup {
+	subscriberType: SubscriberType;
+	subscriberId: string;
+	subscriberName: string;
+	/** Newest period first. Every lane the org holds, not just its plan. */
+	invoices: SubscriptionInvoice[];
+}
+
+export interface SubscriptionInvoiceGroupsApiResponse {
+	success: boolean;
+	message: string;
+	data: SubscriptionInvoiceGroup[];
+	/** ⚠️ `totalCount` counts ORGS here, not invoices — the page lists orgs. */
+	pagination?: SubscriptionInvoicePagination;
+}
+
+/**
+ * The same endpoint and the same filters, grouped by org.
+ *
+ * ⚠️ The grouping is the SERVER's, and has to be: this list is paginated, so
+ * grouping a page in the browser would build cards out of whatever ten invoices
+ * happened to land on it — an org holding three periods would show one, under a
+ * heading claiming to be everything it owes. The server pages the orgs first and
+ * then fetches each one's invoices whole, so a card is complete by construction.
+ */
+export async function fetchSubscriptionInvoiceGroups(
+	params: SubscriptionInvoiceQueryParams = {},
+	onRefreshFail: () => void,
+): Promise<SubscriptionInvoiceGroupsApiResponse> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		groupBy: "subscriber",
+		page: params.page,
+		pageSize: params.pageSize,
+		subscriberType: params.subscriberType,
+		subscriberId: params.subscriberId,
+		status: params.status,
+		search: params.search,
+		dates: params.dates,
+		from: params.from,
+		to: params.to,
+	});
+	const response = await client.get<SubscriptionInvoiceGroupsApiResponse>(
+		`/subscription-invoice${queryString}`,
+	);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+		pagination: response.data.pagination,
+	};
+}
+
+/**
  * Mark a period paid, or take that back. Admin-only server-side — the payer
  * cannot declare its own bill settled.
  */
@@ -105,11 +165,18 @@ export async function setSubscriptionInvoiceStatus(
 	id: string,
 	status: SubscriptionInvoiceStatus,
 	onRefreshFail: () => void,
+	/**
+	 * The bank reference, when marking paid. Optional, and only meaningful in
+	 * that direction — the server writes it to `subscription_payment` alongside
+	 * the settlement, which is what finally gives the subscription side the
+	 * equivalent of `payment_voucher.bank_ref`.
+	 */
+	reference?: string | null,
 ): Promise<SubscriptionInvoiceApiResponse> {
 	const client = getClient(onRefreshFail);
 	const response = await client.put<SubscriptionInvoiceApiResponse>(
 		`/subscription-invoice/${id}`,
-		{ status },
+		{ status, ...(status === "paid" && reference ? { reference } : {}) },
 	);
 	return response.data;
 }

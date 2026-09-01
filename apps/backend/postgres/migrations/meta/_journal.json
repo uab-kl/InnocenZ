@@ -932,6 +932,55 @@
       "when": 1790700000000,
       "tag": "0132_shift_dress_code",
       "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0133_subscription_payment",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0134_payment_method_bank",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0135_subscription_payment_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1791100000000,
+      "tag": "0136_notification_kind_subscription_tier_weekly",
+      "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0137_notification_kind_subscription_invoice_opened",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0138_admin_request_status_withdrawn",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0139_payment_method_wallet",
+      "breakpoints": true
     }
   ]
 }

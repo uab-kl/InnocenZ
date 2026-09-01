@@ -51,6 +51,10 @@ import {
 	planDescription,
 } from "@/lib/portal-i18n/plan-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import {
+	describePaymentMethod,
+	willAutoCharge,
+} from "@/services/payment-method";
 
 const RENEWAL_DATE = "15 Jul 2026";
 
@@ -122,10 +126,13 @@ function PosIntegrationAddonCard({
 	 */
 	activeAddonPriceRm: number | null;
 	/**
-	 * Whether withdrawing is actually possible. In a real session the request
-	 * lives with the admin and there is no withdraw endpoint, so offering
-	 * "Cancel request" would clear the badge here while the admin still holds
-	 * the request — a button that lies.
+	 * Whether withdrawing is actually possible.
+	 *
+	 * Was hardcoded false on real sessions, because no withdraw endpoint existed
+	 * and offering "Cancel request" would have cleared the badge here while the
+	 * admin still held the request — a button that lies. The endpoint now exists
+	 * (PATCH /admin-request/mine/:id/withdraw), so this is false only while a
+	 * withdrawal is already in flight.
 	 */
 	canCancel: boolean;
 	quotePending: boolean;
@@ -443,7 +450,62 @@ function OutletSubscriptionPage() {
 			? "requote"
 			: null;
 
+	/**
+	 * The unpaid REMINDER for POS actions — a nudge, never a gate.
+	 *
+	 * Owner's two rulings, held together: "add on pos and cancel can do
+	 * anytime" (so nothing here returns early) and "this need pop out" (so the
+	 * outstanding figure is still said out loud when they act). Switching plans
+	 * is the one action that BLOCKS; POS asks, re-quotes and cancels proceed
+	 * with the debt stated beside them.
+	 */
+	const remindUnpaidPos = () => {
+		if (!backend.backed) return;
+		const owing = backend.paymentHistory.filter(
+			(invoice) => invoice.status !== "paid",
+		);
+		if (owing.length === 0) return;
+		const cents = owing.reduce(
+			(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
+			0,
+		);
+		toast(
+			fill(t.outletSubscription.unpaidReminderPos, {
+				amount: formatRM(cents / 100),
+				n: owing.length,
+			}),
+			"warn",
+		);
+	};
+
 	const handleRequestQuote = () => {
+		/**
+		 * RE-QUOTE BLOCKS, first ask does not. Owner's final split: "outlet POS
+		 * ask new price need pay the unpaid" — but the INITIAL add-on ask and
+		 * cancelling stay "anytime". An active add-on is what makes this press a
+		 * re-quote rather than a first ask.
+		 */
+		if (backend.backed && backend.addonAmountRm !== null) {
+			const owing = backend.paymentHistory.filter(
+				(invoice) => invoice.status !== "paid",
+			);
+			if (owing.length > 0) {
+				const cents = owing.reduce(
+					(total, invoice) =>
+						total + Math.round(Number(invoice.amount) * 100),
+					0,
+				);
+				toast(
+					fill(t.outletSubscription.settleBeforeRequote, {
+						amount: formatRM(cents / 100),
+						n: owing.length,
+					}),
+					"warn",
+				);
+				return;
+			}
+		}
+		remindUnpaidPos();
 		if (backend.backed) {
 			backend
 				.requestPosQuote({
@@ -471,6 +533,7 @@ function OutletSubscriptionPage() {
 	 * told a charge stopped before it actually did.
 	 */
 	const handleRemoveAddon = () => {
+		remindUnpaidPos();
 		backend
 			.requestPosRemoval()
 			.then((filed) => {
@@ -490,10 +553,32 @@ function OutletSubscriptionPage() {
 
 	const handleCancelQuote = () => {
 		if (backend.backed) {
-			// Admin still holds the request (no outlet delete route); clear the
-			// local indicator only.
-			setQuoteSentLocal(false);
-			toast(t.outletSubscription.posRequestWithdrawn, "info");
+			/**
+			 * A REAL withdrawal now. This used to clear `quoteSentLocal` and toast
+			 * "withdrawn" while the admin still held the request — the badge went, the
+			 * request stayed, and the venue was told the opposite of what happened.
+			 *
+			 * The local flags are cleared only on the server's confirmation, and the
+			 * hook refetches the quote so the card's state comes from the ledger
+			 * rather than from this component's memory.
+			 */
+			backend
+				.withdrawPosRequest()
+				.then((ok) => {
+					if (ok) {
+						setQuoteSentLocal(false);
+						setRemovalSentLocal(false);
+					}
+					toast(
+						ok
+							? t.outletSubscription.posRequestWithdrawn
+							: t.outletSubscription.couldNotWithdrawRequest,
+						ok ? "info" : "warn",
+					);
+				})
+				.catch(() =>
+					toast(t.outletSubscription.couldNotWithdrawRequest, "warn"),
+				);
 			return;
 		}
 		cancelPosIntegrationQuoteRequest();
@@ -534,6 +619,32 @@ function OutletSubscriptionPage() {
 		// request and stays on its current plan until an admin approves, which is
 		// what writes the billing ledger. Only the demo store flips instantly.
 		if (backend.backed) {
+			/**
+			 * THE OWNER'S RULE, said BEFORE the server says it: unpaid → no
+			 * switch. The server refuses the filing anyway (the admin-request
+			 * gate answers 409), but that reads as a failure after the fact —
+			 * this pops the same message the moment the venue presses Switch,
+			 * with the figure that settles it. POS add-on asks, re-quotes and
+			 * cancels are deliberately NOT gated — owner: "add on pos and
+			 * cancel can do anytime".
+			 */
+			const owing = backend.paymentHistory.filter(
+				(invoice) => invoice.status !== "paid",
+			);
+			if (owing.length > 0) {
+				const cents = owing.reduce(
+					(sum, invoice) => sum + Math.round(Number(invoice.amount) * 100),
+					0,
+				);
+				toast(
+					fill(t.outletSubscription.settleBeforeSwitch, {
+						amount: formatRM(cents / 100),
+						n: owing.length,
+					}),
+					"warn",
+				);
+				return;
+			}
 			if (!backend.planCatalogReady) {
 				toast(t.outletSubscription.planListLoading, "warn");
 				return;
@@ -723,7 +834,11 @@ function OutletSubscriptionPage() {
 						key={addon.id}
 						addon={addon}
 						canEdit={canEdit}
-						canCancel={!backend.backed}
+						// Real sessions can withdraw too now: PATCH
+						// /admin-request/mine/:id/withdraw exists, so the button no longer
+						// clears a badge the admin's queue disagrees with. Still false
+						// while the withdrawal is in flight, so it cannot be double-sent.
+						canCancel={!backend.isWithdrawingPos}
 						quotePending={quotePending}
 						pendingKind={pendingKind}
 						activeAddonPriceRm={backend.addonAmountRm}
@@ -771,6 +886,10 @@ function OutletSubscriptionPage() {
 					<PaymentHistoryList
 						invoices={backend.paymentHistory}
 						isLoading={backend.isPaymentHistoryLoading}
+						// A venue can hold two lanes at once — its plan and the POS add-on
+						// — and is billed on both every month, so each row says which it
+						// is. The agency screen passes nothing: one lane, no badge needed.
+						laneOf={backend.invoiceLane}
 					/>
 				</>
 			)}
@@ -909,16 +1028,23 @@ function OutletSubscriptionPage() {
 				hint={
 					backend.backed
 						? backend.card
-							? renewalLabel
-								? fill(t.outletSubscription.cardHintRenewal, {
-										brand: backend.card.brand,
-										last4: backend.card.last4,
-										date: renewalLabel,
-									})
-								: fill(t.outletSubscription.cardHint, {
-										brand: backend.card.brand,
-										last4: backend.card.last4,
-									})
+							? // The instrument stamp comes from the one shared describer, so a
+								// bank transfer reads as "Bank transfer" rather than
+								// "Card ···· ····". The renewal tail is unchanged.
+								describePaymentMethod(backend.card, {
+									transfer: t.subscription.savedTransfer,
+									fpx: t.subscription.savedFpx,
+								}) +
+								(renewalLabel
+									? fill(
+											// Same rule as the agency page: only a rail that can
+											// actually be charged says "next charge".
+											willAutoCharge(backend.card)
+												? t.agencyMisc.nextChargeSuffix
+												: t.agencyMisc.renewsOnSuffix,
+											{ date: renewalLabel },
+										)
+									: "")
 							: t.subscription.noCardSavedYet
 						: fill(t.outletSubscription.demoCardHint, {
 								last4: paymentCardLast4,

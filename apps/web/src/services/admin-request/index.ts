@@ -58,6 +58,14 @@ export interface AdminRequest {
 	 * for a catalog placeholder of zero. Computed server-side from the ledger.
 	 */
 	previousNegotiatedAmount?: string | null;
+	/**
+	 * What the subscriber is on TODAY, resolved server-side from
+	 * `member_subscription`. Carried BESIDE `currentPlanId`, never replacing it —
+	 * an answered row's stamp is what it was decided against, and this is the
+	 * present. Absent when the org holds no active plan.
+	 */
+	livePlanName?: string | null;
+	livePlanAmount?: string | null;
 }
 
 export interface AdminRequestsQueryParams {
@@ -330,5 +338,31 @@ export async function declineRequest(
 		message: string;
 		data: AdminRequest;
 	}>(`/admin-request/${id}/decline`);
+	return response.data;
+}
+
+/**
+ * The SUBSCRIBER takes its own request back — the only write on this inbox that
+ * is not the admin's.
+ *
+ * Distinct from `declineRequest` above, which is the admin refusing. The two
+ * land on different statuses on purpose: showing a venue "declined" for
+ * something it cancelled itself would be the app blaming somebody for its own
+ * user's decision.
+ *
+ * The id is checked against the caller's OWN organisations server-side, so an
+ * id belonging to another venue answers 404 rather than cancelling their
+ * negotiation. A request already answered answers 409.
+ */
+export async function withdrawMyAdminRequest(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string; data: AdminRequest | null }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: AdminRequest | null;
+	}>(`/admin-request/mine/${id}/withdraw`);
 	return response.data;
 }

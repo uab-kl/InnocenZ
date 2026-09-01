@@ -49,7 +49,24 @@ export async function createContext({ req }: { req: Request }): Promise<GraphQLC
       roleName: role.roleName,
       status: role.status,
     }));
-    context.isAdmin = context.userRoles.some((role) => role.roleName === 'admin');
+    /**
+     * AN ADMIN ROLE THAT IS SWITCHED OFF IS NOT AN ADMIN.
+     *
+     * This test was the role NAME alone, so a deactivated admin kept every
+     * privilege the flag grants — and what it grants is the audit log:
+     * `audit-log.repository` uses `!context.isAdmin` to hide `role='admin'`
+     * rows, so the one account that should have lost visibility kept it.
+     *
+     * The audit log's resolvers already refused that case with their own
+     * `requireActiveAdmin`, written precisely because this line could not be
+     * trusted. That guard stays as the belt to this braces, but the flag itself
+     * is now correct, so no future consumer inherits the old meaning. The
+     * matching gap on the REST side — `getRolesForUserIds`, which every route
+     * guard calls — was closed in the same change.
+     */
+    context.isAdmin = context.userRoles.some(
+      (role) => role.roleName === 'admin' && role.status === 'active',
+    );
   } catch {
     // Return unauthenticated context
   }

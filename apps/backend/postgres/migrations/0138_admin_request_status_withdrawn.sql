@@ -1,0 +1,22 @@
+-- A subscriber took its own request back.
+--
+-- Until now an outlet that asked for a POS quote, or asked to come off POS, had
+-- no way to change its mind: there was no withdraw endpoint at all, the button
+-- was hidden on a real session, and the demo path only cleared a local flag. The
+-- request sat in the admin's queue until a human answered something the venue no
+-- longer wanted.
+--
+-- ITS OWN STATUS, not `declined`. `declined` is the ADMIN's answer — "we said
+-- no". A withdrawal is the subscriber's own act, and folding it into `declined`
+-- would leave the admin's history unable to tell a refusal from a cancellation,
+-- and would show the venue "declined" for something nobody ever refused. This is
+-- the same argument `subscription_payment` makes for keeping `voided` (an
+-- assertion retracted) apart from `failed` (a decline that really happened).
+--
+-- Deliberately NOT a row delete. The request was really made and really
+-- withdrawn; deleting it would erase who asked and when, and an admin who had
+-- already started work on a quote would watch it vanish with no explanation.
+--
+-- Additive and idempotent; ALTER TYPE ... ADD VALUE cannot be rolled back inside
+-- a transaction, so a re-run must be a no-op.
+ALTER TYPE "main"."admin_request_status" ADD VALUE IF NOT EXISTS 'withdrawn';

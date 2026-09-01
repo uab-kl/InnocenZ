@@ -147,6 +147,10 @@ export function committedWindowsByPr(
 		const slots = byDate.get(row.date) ?? [];
 		const slot = row.slot?.trim();
 		if (slot && !slots.includes(slot)) slots.push(slot);
+		// A windowless row (label-only slot, stripped to null at the server's
+		// privacy boundary) still REGISTERS its date: an empty array here is
+		// the signal "spoken for at an unknown hour", which the grid, the
+		// assign sheet and the live badge all read the same way.
 		byDate.set(row.date, slots);
 		byPr.set(row.userId, byDate);
 	}

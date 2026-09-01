@@ -111,6 +111,8 @@ const en = {
 		kindPrRatingLow: "Rating drop",
 		kindShiftCoverNeeded: "Cover needed",
 		kindPvDayReviewPending: "Day review",
+		/** The agency's weekly subscription statement — PVs issued and the resulting tier. */
+		kindSubscription: "Subscription",
 		kindLeave: "MC / leave",
 		kindUnknown: "Update",
 		/** PR push title when a shift lands on them. */
@@ -133,7 +135,8 @@ const en = {
 		swapReplacementDeclinedTitle: "Replacement declined swap",
 		/** Stands in for a missing requesting-PR name inside swapOfferPrBody. */
 		aPr: "A PR",
-		swapOfferPrBody: "{name} needs cover at {outlet} — accept or decline on Shifts",
+		swapOfferPrBody:
+			"{name} needs cover at {outlet} — accept or decline on Shifts",
 		swapApprovedPrBody: "{outlet} — coverage confirmed",
 		/** The quoted reason, when present, is appended as punctuation at the call site. */
 		swapReplacementDeclinedBody: "{name} declined cover for {other} · {outlet}",
@@ -179,8 +182,10 @@ const en = {
 		agencyServiceBookingTitle: "Agency service booking",
 		/** {service} is the ordered service's own name, supplied by the caller. */
 		serviceForPrBody: "{service} for {name} — accept or decline",
-		serviceOutletRequestedBody: "{outlet} requested {service} for you — accept or decline",
-		serviceAgencyBookedBody: "Agency booked {service} at {outlet} — accept or decline",
+		serviceOutletRequestedBody:
+			"{outlet} requested {service} for you — accept or decline",
+		serviceAgencyBookedBody:
+			"Agency booked {service} at {outlet} — accept or decline",
 		serviceAtOutletBody: "{service} at {outlet} — accept or decline",
 		outletServiceRequestTitle: "Outlet service request",
 		serviceConfirmedForBody: "{service} confirmed for {name}",
@@ -190,11 +195,13 @@ const en = {
 		jobPostingUpdateTitle: "Job posting update",
 		selfLogNamedTitle: "Self-log · {name}",
 		/** {category} is the stored receipt category and passes through untranslated. */
-		selfLogVerifyBody: "{category} {amount} at {outlet} — verify manual entry ({ref})",
+		selfLogVerifyBody:
+			"{category} {amount} at {outlet} — verify manual entry ({ref})",
 		selfLogVerifiedTitle: "Self-log verified",
 		selfLogRejectedTitle: "Self-log rejected",
 		selfLogApprovedBody: "Agency approved your manual receipt log · {amount}",
-		selfLogRejectedBody: "Agency rejected your manual receipt log · {amount} — contact agency",
+		selfLogRejectedBody:
+			"Agency rejected your manual receipt log · {amount} — contact agency",
 	},
 	nav: {
 		today: "Today",
@@ -896,6 +903,15 @@ const en = {
 		noOpenShiftsThisDay: "No open shifts this day",
 		busyElsewhereAt: "{name} is not available {time}",
 		unavailableAtTime: "Unavailable",
+		/**
+		 * The busy chip's time slot when the rival slot named NO clock time —
+		 * the date is spoken for at an unknown hour. Advisory: the cell stays
+		 * clickable, and nothing may fall back to a whole-day "Unavailable".
+		 */
+		busyTimeUnknown: "time not stated",
+		/** Assign-sheet advice line for the same case — no card is greyed for it. */
+		busyTimeUnknownAdvice:
+			"Also not available at some point this day — no time was given, so no shift is greyed for it.",
 		/** The PR already holds a seat on this very shift — the server 409s on it. */
 		alreadyOnThisShift: "{name} is already on this shift",
 		alreadyOnShiftShort: "Already on this shift",
@@ -984,6 +1000,8 @@ const en = {
 		draftsNotShownYet: "Drafts · {total} · no outlet has been shown these yet",
 		/** Optional tail after the saved card's brand + last 4. Only a real renewal date earns it. */
 		nextChargeSuffix: " · next charge {date}",
+		/** For a rail nothing can auto-charge: it renews, but nobody collects. */
+		renewsOnSuffix: " · renews {date}",
 		/** Bare IC field label on the demo Finance Head card — agencyMisc.icForPv is the longer 'IC (for PV)' variant. */
 		ic: "IC",
 	},
@@ -1563,6 +1581,87 @@ const en = {
 		autoPayEnabled: "{billed} · auto-pay enabled",
 		visaNextCharge: "Visa ···· {last4} · next charge {date}",
 
+		/**
+		 * The payment rails a Malaysian venue actually uses. A card is one of
+		 * them and, for business accounts, not the common one — which is why
+		 * this screen no longer says "card" where it means "how you pay".
+		 */
+		payHow: "How you pay",
+		methodCard: "Card",
+		methodFpx: "FPX direct debit",
+		methodTransfer: "Bank transfer",
+		methodCardNote:
+			"Visa, Mastercard and others. Charged automatically once a payment gateway is connected.",
+		methodFpxNote:
+			"You authorise this once at your bank, and each period is debited automatically after that.",
+		methodTransferNote:
+			"You transfer each period yourself and InnocenZ marks it received. Nothing is ever charged automatically.",
+		/**
+		 * Which lane a billed period belongs to. A venue on a plan PLUS the POS
+		 * add-on is billed on both every month, so Payment history shows two rows
+		 * for one month — unlabelled, that reads as a double charge.
+		 */
+		lanePlan: "Plan",
+		lanePosAddon: "POS add-on",
+		/** Under each Paid / Unpaid total on the org's own Payment history. */
+		periodsCount: "{n} periods",
+		methodEwallet: "E-wallet",
+		/**
+		 * Says plainly that this rail is a PUSH. A wallet cannot be debited
+		 * unattended — the payer approves inside their own app — so promising
+		 * "charged automatically" here, the way the card note does, would be a
+		 * promise neither this app nor Touch 'n Go can keep.
+		 */
+		methodEwalletNote:
+			"Touch 'n Go, GrabPay, ShopeePay or Boost. You approve each payment in your wallet app — nothing is ever taken automatically.",
+		yourWallet: "Your e-wallet",
+		chooseWalletPlaceholder: "Choose your e-wallet…",
+		chooseWallet: "Choose the e-wallet you will pay from.",
+		walletPushNote:
+			"InnocenZ records which wallet you use. Sending you a payment request needs a payment gateway, which is not connected yet.",
+		mandatePending:
+			"Waiting for your bank to approve this direct debit. Nothing is debited until it does.",
+		addPaymentMethod: "Add payment method",
+		editPaymentMethod: "Edit payment method",
+		savePaymentMethod: "Save payment method",
+		savedTransfer: "Bank transfer",
+		savedFpx: "FPX direct debit",
+
+		/**
+		 * The Today-page billing banner, both portals.
+		 *
+		 * Says what is OWED and nothing about how to pay it: no gateway is
+		 * connected, so a "Pay now" here would be a button that cannot work. The
+		 * link goes to Subscription, where the periods are listed one by one.
+		 */
+		billingDueTitle: "Subscription payment due",
+		billingDueOne: "{amount} outstanding for 1 billing period.",
+		billingDueMany: "{amount} outstanding across {n} billing periods.",
+		billingDueSince: "Oldest unpaid period starts {date}.",
+		billingDueCta: "Open Subscription",
+		/**
+		 * The agency's one gated ask. Leaving Custom is never gated — dropping
+		 * cost must not be blocked by debt — and the Sunday auto-tier moves on
+		 * its own; only the manual "Ask admin for a price" pops this.
+		 */
+		settleBeforeCustomAsk:
+			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before asking for a Custom price. Resetting to the normal rate card stays available anytime.",
+
+		/**
+		 * The bank picker. NOTE there is no account-number string here and there
+		 * must never be one — the payer authorises at their own bank, which is
+		 * the only party that needs the number.
+		 */
+		yourBank: "Your bank",
+		chooseBankPlaceholder: "Choose your bank…",
+		chooseBank: "Choose the bank you will authorise the direct debit at.",
+		bankRedirectNote:
+			"You will be sent to your bank to authorise this. InnocenZ never sees or stores your account number.",
+		mandateNotLiveYet:
+			"InnocenZ records which bank you chose. Sending you there to authorise needs a payment gateway, which is not connected yet.",
+		transferRecordedNote:
+			"You transfer each period yourself; InnocenZ records it once an admin confirms the money arrived.",
+
 		capStarter: "5 PV/Week",
 		capPlus: "6–10 PV/Week",
 		capGrowth: "11–25 PV/Week",
@@ -1971,6 +2070,18 @@ const en = {
 		demoCardHint: "Visa ···· {last4} · renewal {date}",
 		billedMonthly: "Billed monthly · {price}",
 		nextRenewal: "Next renewal {date}",
+		/**
+		 * Popped the moment Switch is pressed while periods are unpaid — the
+		 * same rule the server enforces, said before the venue composes a
+		 * request that cannot succeed. POS asks and cancels are never gated.
+		 */
+		settleBeforeSwitch:
+			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before switching plans. POS add-on requests and cancellation stay available anytime.",
+		/** POS actions proceed — this only states the debt beside them. */
+		unpaidReminderPos:
+			"Reminder: {amount} across {n} unpaid billing period(s) is still outstanding — please settle with InnocenZ. This request still goes through.",
+		settleBeforeRequote:
+			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before asking for a new POS price. Cancelling POS stays available anytime.",
 		nothingToRenew: "No active subscription — nothing to renew",
 		cardSaved: "Card saved for subscription billing",
 		couldNotSaveCard: "Could not save the card — try again",
@@ -1981,6 +2092,14 @@ const en = {
 		posRemovalSent: "Request to remove POS integration sent to InnocenZ admin",
 		couldNotSendTheRequest: "Could not send the request — try again",
 		posRequestWithdrawn: "POS integration request withdrawn",
+		/**
+		 * The refusal half. Withdrawing can genuinely fail — the admin may have
+		 * answered a second earlier — and staying silent would leave the venue
+		 * believing it had cancelled something still in the queue, which is the
+		 * exact fault this endpoint was added to fix.
+		 */
+		couldNotWithdrawRequest:
+			"Couldn't withdraw the request — the admin may have already answered it. Reload to see where it stands.",
 		peakDayReduce:
 			"Peak day has {peak} requested PRs — reduce to {max}/day before downgrading to {plan}",
 		planListLoading: "Plan list still loading — try again in a moment",
@@ -3047,9 +3166,11 @@ const en = {
 	},
 	outletRoutes: {
 		/** Post Job banner — the venue has a PENDING agency link and cannot post yet. */
-		awaitingAgencyDecision: "You have asked to work with an agency and they have not decided yet. Once one accepts, you can post shifts to them.",
+		awaitingAgencyDecision:
+			"You have asked to work with an agency and they have not decided yet. Once one accepts, you can post shifts to them.",
 		/** Post Job banner — the venue has NO agency link at all; the next action is to add one. */
-		noAgencyAddInSettings: "Shifts are filled by PR agencies, so this venue needs at least one. Add one in Settings — they choose whether to accept.",
+		noAgencyAddInSettings:
+			"Shifts are filled by PR agencies, so this venue needs at least one. Add one in Settings — they choose whether to accept.",
 		/** Heading over the composer's draft-shift cart. {date} is already locale-formatted by formatJobDates(). */
 		shiftsForDate: "Shifts for {date}",
 		/** Count of DRAFT SHIFTS in the cart — a time slot, not a PR headcount slot (that is 名额). */
@@ -3057,7 +3178,8 @@ const en = {
 		/** Plural of slotCountOne; Chinese has no plural, so the two are spelled out separately. */
 		slotCountMany: "{n} slots",
 		/** /outlet/special-service while OUTLET_SERVICES_ENABLED is off. Shorter than postJob.servicesComingLater — this page says nothing about the reader's role. */
-		specialServiceComingLater: "Ordering agency services is coming in a later release. Nothing needs changing on your account.",
+		specialServiceComingLater:
+			"Ordering agency services is coming in a later release. Nothing needs changing on your account.",
 		/** /outlet/special-service role refusal — about READING postings, not posting them (postJob.roleCannotPost). */
 		roleCannotAccessPostings: "Your outlet role cannot access job postings.",
 	},
@@ -3067,7 +3189,8 @@ const en = {
 		/** Header action linking to /admin/settings. */
 		platformSettings: "Platform settings",
 		account: "Account",
-		accountHint: "Update your display name and profile picture. Changes are saved to your account.",
+		accountHint:
+			"Update your display name and profile picture. Changes are saved to your account.",
 		loadingProfile: "Loading profile…",
 		/** aria-label on the camera button over the avatar. */
 		uploadPictureAria: "Upload profile picture",
@@ -3097,9 +3220,11 @@ const en = {
 		agencySuspended: "Agency suspended",
 		agencySuspendFailed: "Failed to suspend agency",
 		aboutLegacyMember: "About Legacy Member",
-		aboutLegacyMemberBody: "This list shows suspended Agency and Outlet organizations, plus inactive PR accounts. Filter by Role (not Rank). Reactivating an agency or outlet restores the organization; reactivating a PR re-enables the person's account so they can sign in again.",
+		aboutLegacyMemberBody:
+			"This list shows suspended Agency and Outlet organizations, plus inactive PR accounts. Filter by Role (not Rank). Reactivating an agency or outlet restores the organization; reactivating a PR re-enables the person's account so they can sign in again.",
 		searchFilters: "Search Filters",
-		searchFiltersHint: "Find suspended records by name, code, contact, and role.",
+		searchFiltersHint:
+			"Find suspended records by name, code, contact, and role.",
 		placeholderName: "Full name / org name",
 		colCodeId: "Code / ID",
 		placeholderCode: "Agency code, SSM, ID no.",
@@ -3120,7 +3245,8 @@ const en = {
 		ascending: "Ascending",
 		descending: "Descending",
 		suspendedInactiveRecords: "Suspended & inactive records",
-		suspendedInactiveHint: "Segmented by role. Click a row or View to open details.",
+		suspendedInactiveHint:
+			"Segmented by role. Click a row or View to open details.",
 		refresh: "Refresh",
 		legacyLoadFailed: "Failed to load legacy members",
 		noSuspendedRecords: "No suspended records found.",
@@ -3136,9 +3262,12 @@ const en = {
 	},
 	adminBusiness: {
 		/** Admin → Business → Current Plan: the PageHeader subtitle. */
-		currentPlanSubtitle: "The plan each outlet and agency is on now — updated when a switch is approved.",
-		currentViewHint: "The plan each outlet and agency is on now — one row per subscriber, updated when a switch is approved",
-		historyViewHint: "Every subscription ever held — each row is one plan a subscriber was on, newest first",
+		currentPlanSubtitle:
+			"The plan each outlet and agency is on now — updated when a switch is approved.",
+		currentViewHint:
+			"The plan each outlet and agency is on now — one row per subscriber, updated when a switch is approved",
+		historyViewHint:
+			"Every subscription ever held — each row is one plan a subscriber was on, newest first",
 		/** aria-label on the ledger search box. */
 		searchOutletOrAgency: "Search outlet or agency",
 		searchOutletOrAgencyPlaceholder: "Search outlet or agency...",
@@ -3162,8 +3291,10 @@ const en = {
 		showingSubscriptions: "Showing {from} - {to} of {total} subscriptions",
 		noSubscriptionOnRecord: "No subscription on record",
 		/** Spelled out rather than pluralised in a template — Chinese has no plural. */
-		neverChargedOne: "{n} registered organisation has never been charged, so they have no row in the ledger above. They can still sign in — give them a plan to start billing.",
-		neverChargedMany: "{n} registered organisations have never been charged, so they have no row in the ledger above. They can still sign in — give them a plan to start billing.",
+		neverChargedOne:
+			"{n} registered organisation has never been charged, so they have no row in the ledger above. They can still sign in — give them a plan to start billing.",
+		neverChargedMany:
+			"{n} registered organisations have never been charged, so they have no row in the ledger above. They can still sign in — give them a plan to start billing.",
 		notSubscribed: "Not subscribed",
 		/** Admin → Business → Plan: the PageHeader subtitle. */
 		planSubtitle: "Manage agency and outlet plans and billing cycles.",
@@ -3182,9 +3313,11 @@ const en = {
 		/** Shared by the Jobs pending-review view and the PV / receipt pending state. */
 		pendingReview: "Pending review",
 		jobsTitle: "Jobs & Special Services",
-		jobsSubtitle: "Browse orders and agency jobs. Click a row to open the editor and update details or status. Use the filters to narrow by source, category, or status.",
+		jobsSubtitle:
+			"Browse orders and agency jobs. Click a row to open the editor and update details or status. Use the filters to narrow by source, category, or status.",
 		agencyJobPostings: "Agency job postings",
-		agencyJobPostingsHint: "Agency-submitted posts awaiting admin approve or decline",
+		agencyJobPostingsHint:
+			"Agency-submitted posts awaiting admin approve or decline",
 		allOrders: "All orders",
 		allOrdersHint: "Outlet orders and agency jobs — status and assignment",
 		viewMode: "View mode",
@@ -3204,8 +3337,10 @@ const en = {
 		colDescription: "Description",
 		colBudget: "Budget",
 		colThirdParty: "Third Party",
-		sortedNewestFirst: "Sorted by requested time, newest first — click for oldest first",
-		sortedOldestFirst: "Sorted by requested time, oldest first — click for newest first",
+		sortedNewestFirst:
+			"Sorted by requested time, newest first — click for oldest first",
+		sortedOldestFirst:
+			"Sorted by requested time, oldest first — click for newest first",
 		failedToLoad: "Failed to load",
 		noPendingJobs: "No job postings pending review",
 		noServicesFound: "No special services found",
@@ -3214,16 +3349,19 @@ const en = {
 		showingJobs: "Showing {from} - {to} of {total} jobs",
 		showingOrders: "Showing {from} - {to} of {total} orders",
 		editOrder: "Edit order",
-		editOrderHint: "Update the order details or status, then save your changes.",
+		editOrderHint:
+			"Update the order details or status, then save your changes.",
 		/** The role arrives already translated — it lands mid-label. */
 		sourceNameLabel: "{role} name",
-		roleNameLocked: "Role and requester name are set by whoever submitted the order and cannot be changed.",
+		roleNameLocked:
+			"Role and requester name are set by whoever submitted the order and cannot be changed.",
 		/** A whole label, not "Description" plus a glued suffix. */
 		descriptionRequiredForOthers: "Description (required for “Others”)",
 		descriptionPlaceholder: "PR / outlet note for this order…",
 		thirdPartyOptional: "Third party (optional)",
 		thirdPartyPlaceholder: "Who's supporting this — vendor or partner name…",
-		thirdPartyHint: "Who you found to support this category. Leave blank if none yet.",
+		thirdPartyHint:
+			"Who you found to support this category. Leave blank if none yet.",
 		titleRequired: "Title is required",
 		budgetInvalid: "Enter a valid non-negative budget",
 		statusUpdated: "Status updated",
@@ -3245,9 +3383,11 @@ const en = {
 		catTraining: "Training top-up",
 		/** The service CATEGORY "others" — a different fact from `money.others`, same word. */
 		catOthers: "Others",
-		pvSubtitle: "Weekly payment vouchers issued by agencies to their PRs. Click a row to view the voucher and its line items.",
+		pvSubtitle:
+			"Weekly payment vouchers issued by agencies to their PRs. Click a row to view the voucher and its line items.",
 		vouchers: "Vouchers",
-		pvReadOnlyHint: "Read-only view of every voucher persisted on the platform.",
+		pvReadOnlyHint:
+			"Read-only view of every voucher persisted on the platform.",
 		searchPrName: "Search PR name",
 		searchPrNamePlaceholder: "e.g. Ali",
 		/** Admin's own wording for the stored `sent` PV state; the agency portal words it "Pending PR Review". */
@@ -3282,13 +3422,15 @@ const en = {
 		/** Receipt source `checkin` — sealed by check-out, not entered by anyone. */
 		autoSealed: "Auto-sealed",
 		receiptEvidence: "Receipt evidence",
-		noReceiptEvidence: "No receipts are attached to this voucher — any commission lines here are not backed by a scanned or self-logged receipt.",
+		noReceiptEvidence:
+			"No receipts are attached to this voucher — any commission lines here are not backed by a scanned or self-logged receipt.",
 		reviewedAt: "Reviewed: {when}",
 		reviewedAtBy: "Reviewed: {when} by {name}",
 		openFullSize: "Open full size",
 		proofForReceipt: "Proof for receipt {no}",
 		disputes: "Disputes",
-		disputeEscalationHint: "Resolving here is an escalation path for when the agency has not acted. It records the decision and tells the PR; it does not change the voucher's amounts.",
+		disputeEscalationHint:
+			"Resolving here is an escalation path for when the agency has not acted. It records the decision and tells the PR; it does not change the voucher's amounts.",
 		/** Badge for the stored outcome `accepted`; the value itself is untouched. */
 		resolvedAccepted: "Resolved · accepted",
 		resolvedRejected: "Resolved · rejected",
@@ -3297,12 +3439,15 @@ const en = {
 		disputeNotePlaceholder: "Why this was accepted or rejected…",
 		tellPrWhyRejected: "Tell the PR why this was rejected.",
 		accept: "Accept",
-		planPaymentSubtitle: "What each outlet and agency owes InnocenZ for its plan, period by period. Agencies are billed weekly (Sun–Sat), outlets monthly. Every period opens Unpaid until you mark it paid.",
+		planPaymentSubtitle:
+			"What each outlet and agency owes InnocenZ for its plan, period by period. Agencies are billed weekly (Sun–Sat), outlets monthly. Every period opens Unpaid until you mark it paid.",
 		billingPeriods: "Billing periods",
 		/** First half of a sentence broken by an inline link to Plan Change; the link text is `admin.navPlanChange`. */
-		billingPeriodsHintBefore: "One row per period each subscriber is charged for — agencies weekly (Sun–Sat), outlets monthly from the day they subscribed. Generated from the subscription itself, so this is what was BILLED, not what was asked for; the switches behind it live on ",
+		billingPeriodsHintBefore:
+			"One row per period each subscriber is charged for — agencies weekly (Sun–Sat), outlets monthly from the day they subscribed. Generated from the subscription itself, so this is what was BILLED, not what was asked for; the switches behind it live on ",
 		/** Second half, after the Plan Change link. */
-		billingPeriodsHintAfter: ". Every period opens Unpaid until you mark it paid.",
+		billingPeriodsHintAfter:
+			". Every period opens Unpaid until you mark it paid.",
 		searchOutletOrAgency: "Search outlet or agency",
 		searchOutletOrAgencyPlaceholder: "Search outlet or agency...",
 		refreshPeriods: "Refresh periods",
@@ -3311,13 +3456,94 @@ const en = {
 		ledgerUpToDate: "Ledger up to date",
 		ledgerRefreshFailed: "Failed to refresh the ledger",
 		colWho: "Who",
-		colPlan: "Plan",
+		colPlan: "Billed under",
 		colBillingPeriod: "Billing period",
 		colPaidOn: "Paid on",
 		noBillingPeriods: "No billing periods match this filter.",
 		markPaid: "Mark paid",
 		markUnpaid: "Mark unpaid",
+		/**
+		 * The subscription side had no equivalent of `payment_voucher.bank_ref`,
+		 * so a period was marked paid and the reference lived in someone's
+		 * memory. Asked for at the moment the admin actually knows it.
+		 */
+		paymentReference: "Bank reference",
+		paymentReferenceHint:
+			"Optional — so this period can be matched to a statement",
+		paymentReferencePlaceholder: "e.g. MBB-20260827-0001",
+		confirmPayment: "Confirm payment",
+
+		/** The detail panel behind a Plan Payment row. */
+		paymentPanelIntro:
+			"What this period costs, how the subscriber pays, and every attempt made against it.",
+		subscriptionDetails: "Subscription details",
+		/**
+		 * "Plan" was wrong here: an add-on invoice printed "Plan: POS Integration"
+		 * and read as though the venue had no plan at all.
+		 */
+		thisInvoiceFor: "This invoice is for",
+		allBillingLanes: "Currently subscribed to",
+		allBillingLanesHint:
+			"What this organisation is on TODAY. A plan and each add-on are billed separately, so each opens its own invoice — and a period in Billing history below may have been billed under a plan they have since left.",
+		thisPeriodBadge: "This invoice",
+		/**
+		 * The drawer's own history block. "Subscription details" above it describes
+		 * ONE period; a venue on a plan plus the POS add-on opens two invoices for
+		 * the same month, so without this the panel looks like one has gone missing.
+		 */
+		billingHistory: "Billing history",
+		/**
+		 * Shown only while the history list is filtered. Without it a filtered list
+		 * is indistinguishable from a short one, and a reader concludes periods are
+		 * missing from the ledger.
+		 */
+		showingFilteredPeriods: "Showing {n} of {total} periods · show all",
+		/**
+		 * The sibling invoice for the same window. A venue on a plan plus the POS
+		 * add-on is billed on two lanes for one month, and a panel describing only
+		 * the row that was clicked reads as though the other does not exist.
+		 */
+		alsoThisPeriod: "Also this period",
+		totalThisPeriod: "Total this period",
+		totalPerCycle: "Total per cycle",
+		planLabel: "Plan",
+		billingCycleLabel: "Billing cycle",
+		billingPeriodLabel: "Billing period",
+		amountLabel: "Amount",
+		statusLabel: "Status",
+		paidOnLabel: "Paid on",
+		openFullRecord: "Open full record",
+		noMethodOnFile:
+			"No payment method on file — this subscriber has never saved one.",
+		defaultMethod: "Default",
+		mandatePendingShort: "Bank approval pending",
+		paymentAttempts: "Payment attempts",
+		noAttemptsYet:
+			"No attempt recorded yet. Marking this period paid records the first one.",
+		recordedBy: "Recorded by",
+		/** A READ failure. Distinct from paymentStatusUpdateFailed, which is a WRITE. */
+		paymentDetailLoadFailed: "Could not load this payment record",
+		actorSystem: "System",
+		attemptInitiated: "Started",
+		attemptPending: "Awaiting the bank",
+		attemptSucceeded: "Settled",
+		attemptFailed: "Declined",
+		attemptRefunded: "Refunded",
+		attemptVoided: "Withdrawn",
 		showingBillingPeriods: "Showing {from} - {to} of {total} billing periods",
+		/**
+		 * The Plan Payment list counts ORGS now, not periods — it shows one row per
+		 * outlet/agency with its periods nested under it, so the old wording would
+		 * report a smaller number than the page holds.
+		 */
+		showingSubscribers: "Showing {from} - {to} of {total} outlets & agencies",
+		/** The chevron on an org's row. The row itself opens the detail panel. */
+		expandPeriods: "Show billing periods",
+		collapsePeriods: "Hide billing periods",
+		/** Summary cells on an org's row, standing in for one period's detail. */
+		periodsCount: "{n} periods",
+		unpaidOfTotal: "{unpaid} of {total} unpaid",
+		paidCount: "{n} paid",
 	},
 	agencyPending: {
 		/** Prefix before the applicant's legal IC name, beside their floor nickname. */
@@ -3343,7 +3569,8 @@ const en = {
 		/** Word in front of a cutlost request's estimated saving. The RM and the number stay in code. */
 		saves: "Saves",
 		/** What approving a cutlost request does to the PRs it names. */
-		releaseOnApprove: "On approve: paid for hours worked + commissions. They are sent home unless you reassign them to another outlet on the roster.",
+		releaseOnApprove:
+			"On approve: paid for hours worked + commissions. They are sent home unless you reassign them to another outlet on the roster.",
 		/** Sub-line on an agency-link request. The requested-at date is appended after a separator. */
 		wantsToLinkTo: "Wants to link to {agency}",
 		/** Pill naming what kind of request the detail pane is showing. */
@@ -3351,17 +3578,20 @@ const en = {
 		/** Primary action on an agency-link request — not a plain Approve, because it ties a PR to the agency. */
 		approveLink: "Approve link",
 		askingToJoin: "{name} is asking to join {agency}.",
-		approveToAddRoster: "Approve to add them to your roster — they can then be scheduled like any tied PR.",
+		approveToAddRoster:
+			"Approve to add them to your roster — they can then be scheduled like any tied PR.",
 		/** Pill on the MC / leave detail pane. */
 		mcLeaveRequest: "MC / leave request",
 		/** Says WHAT approving an MC does, so it cannot be read as approving the shift. */
 		approveExcuseShift: "Approve · excuse shift",
-		noMcPhotoAttached: "No photo attached — this request predates the MC-photo rule.",
+		noMcPhotoAttached:
+			"No photo attached — this request predates the MC-photo rule.",
 		/** Alt text for one MC photo in the strip. */
 		mcDocumentNumbered: "MC document {n} from {name}",
 		/** Alt text for the MC photo opened in the lightbox. */
 		mcDocumentFrom: "MC document from {name}",
-		leaveDecisionNote: "Approving excuses the PR with no penalty and leaves the shift short — it shows up on the roster's backfill worklist for a replacement. Rejecting puts the PR back on the shift.",
+		leaveDecisionNote:
+			"Approving excuses the PR with no penalty and leaves the shift short — it shows up on the roster's backfill worklist for a replacement. Rejecting puts the PR back on the shift.",
 		financeCannotApprove: "Finance role cannot approve PR sign-ups.",
 		loadingLeaveRequests: "Loading MC / leave requests…",
 		noCutlostRequests: "No cutlost requests",
@@ -3374,7 +3604,8 @@ const en = {
 		/** Singular/plural spelled out — the code used to splice in "s"/"is"/"are". */
 		unsignedVoucherOne: "{n} voucher in this week is still not signed",
 		unsignedVoucherMany: "{n} vouchers in this week are still not signed",
-		overdueUnsignedHint: "These are overdue — a PR cannot sign a voucher that was never sent. Review each day, then send it, and it moves to the PR's Payment screen to e-sign.",
+		overdueUnsignedHint:
+			"These are overdue — a PR cannot sign a voucher that was never sent. Review each day, then send it, and it moves to the PR's Payment screen to e-sign.",
 		/** The week a BACKEND voucher itself covers, printed beside the tab's own week. */
 		weekWorked: "Week worked",
 		/** Chip on the most recently issued voucher in the list. */
@@ -3404,30 +3635,37 @@ const en = {
 		/** The date follows. */
 		prUpdated: "PR updated",
 		loadingLetterhead: "Loading your agency's letterhead…",
-		letterheadUnavailable: "Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload the page or check your connection.",
-		printLayoutNote: "PDF and Excel match the official voucher layout · duplicate payment blocked on send.",
+		letterheadUnavailable:
+			"Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload the page or check your connection.",
+		printLayoutNote:
+			"PDF and Excel match the official voucher layout · duplicate payment blocked on send.",
 		signingOpensWhenWeekCloses: "Signing opens when the week closes",
 		/** Half one of a sentence that wraps a bold <b>{payroll.lastWeek}</b>; the tail follows it. */
-		weekStillOpenBody: "This voucher is on the week still in progress ({cycle}), so its figures can still move — a shift tonight, a receipt tomorrow, a penalty recorded before the send. A signature attests to a total, and there is no final total to attest to yet. It appears under",
+		weekStillOpenBody:
+			"This voucher is on the week still in progress ({cycle}), so its figures can still move — a shift tonight, a receipt tomorrow, a penalty recorded before the send. A signature attests to a total, and there is no final total to attest to yet. It appears under",
 		weekStillOpenTail: "once the cycle closes, and signs from there.",
-		signToAttest: "Sign to attest these figures. The PR counter-signs what you sign here, so it comes before the voucher is sent.",
+		signToAttest:
+			"Sign to attest these figures. The PR counter-signs what you sign here, so it comes before the voucher is sent.",
 		drawDifferentSignature: "Draw a different signature",
 		signThisVoucher: "Sign this voucher",
-		saveSignatureHint: "Save a signature in Settings to sign with one tap next time.",
+		saveSignatureHint:
+			"Save a signature in Settings to sign with one tap next time.",
 		sendToPrForESign: "Send to PR for e-sign",
 		signAboveFirst: "Sign above first — the PR counter-signs your signature.",
 		/** Follows the send-gate reason and an em dash, which stay in the JSX. */
 		approveInPayrollReceipts: "approve them in Payroll › Receipts.",
 		resendToPr: "Re-send to PR",
 		resolveDisputeAndReassign: "Resolve dispute & reassign",
-		markPaidHint: "Marks this voucher paid and moves it to History. The paid date is stamped once — recording twice cannot re-date a transfer.",
+		markPaidHint:
+			"Marks this voucher paid and moves it to History. The paid date is stamped once — recording twice cannot re-date a transfer.",
 		markAsPaid: "Mark as paid",
 		/** {amount} arrives already formatted by formatRM — no currency is baked into the key. */
 		recordedAsPaid: "{amount} recorded as paid",
 		overriddenByAt: "Overridden by {by} · {at}",
 		/** The button. payroll.overrideSignedPv is the sheet's own title and stays the shorter form. */
 		overrideSignedPvAuditLogged: "Override signed PV (audit logged)",
-		overrideExplainer: "Finance may override with a mandatory audit reason — PV re-opens for PR review",
+		overrideExplainer:
+			"Finance may override with a mandatory audit reason — PV re-opens for PR review",
 		confirmOverride: "Confirm override",
 	},
 	agencyPrs: {
@@ -3439,16 +3677,21 @@ const en = {
 		penaltyPrMany: "{n} PRs · {amount} total",
 		penaltyRecorded: "recorded as owed — see Payroll & PV",
 		penaltyNotRecorded: "not recorded yet · record it on Payroll & PV",
-		penaltyRulesLoadFailed: "Could not load penalty rules — the agency penalty-rules endpoint failed.",
+		penaltyRulesLoadFailed:
+			"Could not load penalty rules — the agency penalty-rules endpoint failed.",
 		starsAvg: "{stars} ★ avg",
 		/** Section heading only. The comcard ARTWORK stays English in every locale. */
 		comcard3d: "3D Comcard",
 		editable: "Editable",
-		ageFollowsIc: "Age follows the PR's IC — it updates from their identity, not here.",
+		ageFollowsIc:
+			"Age follows the PR's IC — it updates from their identity, not here.",
 		suspendedShiftsPaused: "Suspended — shifts paused",
-		warnBelowAverage: "Warn · average {stars}★ is below {threshold}★ — monitor performance",
-		autoFlagConsiderSuspend: "Auto-flag · {n} consecutive shifts below {stars}★ — consider suspend",
-		tiedDetachNeedsAdmin: "Tied {duration} · detach requires InnocenZ admin approval",
+		warnBelowAverage:
+			"Warn · average {stars}★ is below {threshold}★ — monitor performance",
+		autoFlagConsiderSuspend:
+			"Auto-flag · {n} consecutive shifts below {stars}★ — consider suspend",
+		tiedDetachNeedsAdmin:
+			"Tied {duration} · detach requires InnocenZ admin approval",
 		tiedMonths: "{n} mo",
 		tiedYears: "{n} yr",
 		lastNofM: "Last {n} of {total}",
@@ -3461,18 +3704,24 @@ const en = {
 		ratingCountMany: "{n} ratings",
 		saveProfile: "Save profile",
 		suspendNamed: "Suspend {name}?",
-		suspendBody: "This pauses all shift offers and check-ins for this PR until you lift the suspension. Pending roster slots may need to be reassigned.",
+		suspendBody:
+			"This pauses all shift offers and check-ins for this PR until you lift the suspension. Pending roster slots may need to be reassigned.",
 		confirmSuspend: "Confirm suspend",
 		detachNamed: "Detach {name}?",
 		requestDetachNamed: "Request detach for {name}?",
-		detachTiedBody: "This PR has been tied for {duration} (under 1 year). Direct detach is blocked — submit a request for InnocenZ admin to review.",
-		detachBody: "Detach removes this PR from your agency roster. They will no longer receive tied shifts or payroll from your agency.",
+		detachTiedBody:
+			"This PR has been tied for {duration} (under 1 year). Direct detach is blocked — submit a request for InnocenZ admin to review.",
+		detachBody:
+			"Detach removes this PR from your agency roster. They will no longer receive tied shifts or payroll from your agency.",
 		submitAdminRequest: "Submit admin request",
 		confirmDetach: "Confirm detach",
 		/** One whole sentence: the two pay classes sit in a different order in Chinese, which the old <b>-glued fragments could not express. */
-		payClassChangeBody: "{name} moves from {from} to {to}, effective {date}. Shifts already worked or booked keep their original pay; new shifts use the new class.",
-		payClassConflictOne: "{n} upcoming booked shift is not commission-only. Commission-only PRs may only work commission-only shifts — review or reassign these bookings.",
-		payClassConflictMany: "{n} upcoming booked shifts are not commission-only. Commission-only PRs may only work commission-only shifts — review or reassign these bookings.",
+		payClassChangeBody:
+			"{name} moves from {from} to {to}, effective {date}. Shifts already worked or booked keep their original pay; new shifts use the new class.",
+		payClassConflictOne:
+			"{n} upcoming booked shift is not commission-only. Commission-only PRs may only work commission-only shifts — review or reassign these bookings.",
+		payClassConflictMany:
+			"{n} upcoming booked shifts are not commission-only. Commission-only PRs may only work commission-only shifts — review or reassign these bookings.",
 		confirmChange: "Confirm change",
 		outletRequestOne: "{n} outlet request",
 		outletRequestMany: "{n} outlet requests",
@@ -3480,22 +3729,28 @@ const en = {
 		swapCountMany: "{n} swaps",
 		releasedFrom: "{name} (from {outlet})",
 		releasedFromAt: "{name} (from {outlet} @ {time})",
-		releasedEarlyAssignHint: "{names}. Assign them to another outlet on the roster, or leave them sent home.",
+		releasedEarlyAssignHint:
+			"{names}. Assign them to another outlet on the roster, or leave them sent home.",
 		prAssignedSaved: "PR assigned — saved to the roster",
 		pendingCount: "{n} pending",
 		awaitingCoverageAccept: "Awaiting {name} to accept coverage offer",
 		replacementDeclined: "{name} declined: “{reason}”",
-		swapWantsToLeave: "{name} wants to leave {from} for {to} · {date} · {shift}. Pick a replacement for their current slot.",
-		pickOpenShiftHoursPaid: "Pick an open shift today at another outlet. Hours already worked at {outlet} stay paid.",
+		swapWantsToLeave:
+			"{name} wants to leave {from} for {to} · {date} · {shift}. Pick a replacement for their current slot.",
+		pickOpenShiftHoursPaid:
+			"Pick an open shift today at another outlet. Hours already worked at {outlet} stay paid.",
 		/** `amount` is already formatted by formatRM at the call site. */
 		suppliedEstimate: "{supplied}/{demand} supplied · est. {amount}",
 		mustApproveBeforeChange: "{name} must approve before the outlet changes.",
 		/** Suffix on a swap-target <option>. Leads with the dash because it is appended to the venue name and window. */
 		swapTargetFull: "— full",
-		swapTargetTierBlocked: "— no seat for this PR's tier ({staffed}/{quantity})",
+		swapTargetTierBlocked:
+			"— no seat for this PR's tier ({staffed}/{quantity})",
 		staffedOf: "{staffed} of {quantity} staffed",
-		unassignExplain: "Unassign {name} from this shift. The assignment is deleted and the slot reopens — use this to undo an assignment, not to cancel a confirmed shift.",
-		unassignConfirmBody: "{name} at {outlet} · {date} · {shift}. The assignment row is deleted and the slot reopens. This cannot be undone.",
+		unassignExplain:
+			"Unassign {name} from this shift. The assignment is deleted and the slot reopens — use this to undo an assignment, not to cancel a confirmed shift.",
+		unassignConfirmBody:
+			"{name} at {outlet} · {date} · {shift}. The assignment row is deleted and the slot reopens. This cannot be undone.",
 		/** Demo penalty-breach heading, keyed on the stored PenaltyRuleId `minShiftsPerWeek`. Same wording evaluatePrPenalties hard-codes; only the display moves. */
 		breachBelowMinShifts: "Below minimum shifts",
 		/** Demo penalty-breach heading for the stored rule id `maxMcPerMonth`. */
@@ -3505,9 +3760,11 @@ const en = {
 	},
 	adminRequests: {
 		/** Admin → Service → Plan Request: the page header blurb. */
-		pageDescription: "Two request kinds land here: outlets asking for an Integrate-with-POS quote, and agencies renegotiating the Custom (151+ PV) tier. Negotiate or change the estimate before Resolve — once resolved the price is final.",
+		pageDescription:
+			"Two request kinds land here: outlets asking for an Integrate-with-POS quote, and agencies renegotiating the Custom (151+ PV) tier. Negotiate or change the estimate before Resolve — once resolved the price is final.",
 		cardTitle: "Requests",
-		cardHint: "Click a row to open the editor — who asked, for which plan, and the price you settled on",
+		cardHint:
+			"Click a row to open the editor — who asked, for which plan, and the price you settled on",
 		summaryOutletQuotes: "Outlet quotes",
 		summaryAgencyQuotes: "Agency quotes",
 		summaryTotalNegotiated: "Total negotiated",
@@ -3536,13 +3793,31 @@ const en = {
 		statusContacted: "Contacted",
 		statusResolved: "Resolved",
 		statusDeclined: "Declined",
-		/** An agency plan switch applied automatically by PR count. */
+		/**
+		 * An agency plan switch applied automatically by PV count.
+		 *
+		 * PV, not PR — `agency-tier.job` bands on
+		 * `count(*) from payment_voucher where week_start = <previous complete
+		 * week>`.
+		 *
+		 * The difference is narrower than it looks, and worth stating exactly:
+		 * `payment_voucher_one_per_agency_pr_week` makes that ONE voucher per PR
+		 * per week, so the count is the number of PRs who actually WORKED that
+		 * week — never the roster. An agency holding 40 PRs of whom 8 worked
+		 * bands at 8, and "PR count" invites precisely the opposite reading.
+		 *
+		 * These strings said "PR count" until 27 Aug 2026, which also put the
+		 * admin portal at odds with the agency's own Subscription page ("chosen
+		 * by the PVs you issue each payroll week") and with the rate card beside
+		 * it, which is labelled in PV/week.
+		 */
 		statusDirect: "Direct",
 		statusApproved: "Approved",
 		roleOutlet: "Outlet",
 		roleAgency: "Agency",
 		editRequest: "Edit request",
-		editRequestHint: "Annotate remarks, set the quote where negotiable, and move the request forward.",
+		editRequestHint:
+			"Annotate remarks, set the quote where negotiable, and move the request forward.",
 		/** {name} is the add-on / tier name and stays English. */
 		arrangementEnds: "{name} (ends)",
 		planStays: "Plan (stays)",
@@ -3561,41 +3836,81 @@ const en = {
 		afterToPlan: "After · To plan",
 		/** Shown where a tier has no list price because it was negotiated. */
 		negotiated: "Negotiated",
-		noPriceHint: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable.",
+		noPriceHint:
+			"This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable.",
 		addRemarks: "Add remarks…",
 		neededToResolve: "Needed to resolve",
-		quoteMissingWarn: "Resolve with this empty and the agency lands on a negotiated tier costing nothing.",
+		quoteMissingWarn:
+			"Resolve with this empty and the agency lands on a negotiated tier costing nothing.",
 		/** {plan} is a plan name and stays English; {cycle} comes from t.subscription.billed*. */
 		quoteAnchor: "{plan} is RM {price} {cycle} — Custom replaces it.",
-		noQuoteNeeded: "No quote needed — the negotiated price ends on Resolve and the rate card takes over.",
+		noQuoteNeeded:
+			"No quote needed — the negotiated price ends on Resolve and the rate card takes over.",
 		estimateHint: "Estimate — negotiate or change it before Resolve.",
 		/** Second sentence of the quote hint; the space before it is added at the call site. */
-		leaveEmptyUsesPlanPrice: "Leave empty to use the current plan price (RM {price}) on Resolve.",
-		quoteBecomesTierPrice: "RM {price} becomes the agency's tier price when you Resolve.",
+		leaveEmptyUsesPlanPrice:
+			"Leave empty to use the current plan price (RM {price}) on Resolve.",
+		/**
+		 * ⚠️ AGENCY CUSTOM ONLY. Custom IS the agency's tier, so the quote really
+		 * does become its tier price. The outlet's POS add-on is billed BESIDE the
+		 * plan and never replaces it — this line was shown for both, telling a
+		 * venue on Enterprise that RM 99,999 was about to become "the agency's tier
+		 * price": wrong on the role, and wrong on what the figure is.
+		 */
+		quoteBecomesTierPrice:
+			"RM {price} becomes the agency's tier price when you Resolve.",
+		/** The outlet's POS add-on: billed on top, so the plan is untouched. */
+		quoteBecomesAddonPrice:
+			"RM {price} becomes the POS add-on price when you Resolve — billed on top of the plan, which does not change.",
 		resolvedPriceFinal: "Resolved — the price is final.",
 		markContacted: "Mark contacted",
 		cancelRequest: "Cancel request",
 		resolve: "Resolve",
-		saveChanges: "Save changes",
+		/**
+		 * NOT the same button as Resolve, and it read like it — same primary fill,
+		 * in the bottom-right slot that means "main action". This one stores the
+		 * remarks and the quote and leaves the request PENDING; Resolve applies the
+		 * figure and settles it. The label now says which it is, so the difference
+		 * survives being skimmed.
+		 */
+		saveChanges: "Save without resolving",
 		/** {plan} is a plan name and stays English. */
 		toPlanReset: "Reset · {plan}",
-		toPlanCancelOnly: "Cancel · {plan} only",
+		/**
+		 * A venue dropping its add-on. Sits under a column headed "To plan", where
+		 * "Cancel · Enterprise only" read as CANCEL ENTERPRISE — the opposite of
+		 * what happens. The plan is the half that survives, so the label names the
+		 * half that ends and says the plan continues.
+		 */
+		toPlanCancelOnly: "POS ends · stays on {plan}",
 		/** Stands in for a plan name the lookup could not resolve, mid-sentence. */
 		fallbackItsTier: "its tier",
 		fallbackItsPlan: "its plan",
 		fallbackTierNamed: "the tier it named",
-		noteDeclinedExitAddon: "Cancelled — the venue keeps the POS add-on at the price already agreed.",
-		noteDeclinedExitTier: "Cancelled — the agency stays on Custom at the price already agreed.",
-		noteDeclinedJoinAddon: "Cancelled — no add-on was started. The venue pays its plan only.",
-		noteDeclinedJoinTier: "Cancelled — no price was agreed. The agency stays on the tier it is on.",
-		noteResolvedExitAddon: "Resolved — the POS add-on has ended. The venue pays its plan only.",
-		noteResolvedExitTier: "Resolved — the Custom price has ended. The agency is on {plan} at the list price.",
-		noteExitPendingAddon: "Cancellation requested — waiting for you. The venue keeps {plan} and the add-on charge stands until you resolve this.",
-		noteExitPendingTier: "Cancellation requested — waiting for you. The agency stays on Custom at the agreed price until you resolve this, then moves to {plan}.",
-		noteResolvedJoinAddon: "Resolved — billed on top of the venue's plan, which is unchanged.",
-		noteResolvedJoinTier: "Resolved — this is the agency's tier price from now on.",
-		notePendingJoinAddon: "Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change.",
-		notePendingJoinTier: "Set the price, then Resolve. It becomes the agency's tier price — Custom has no list price to fall back on.",
+		noteDeclinedExitAddon:
+			"Cancelled — the venue keeps the POS add-on at the price already agreed.",
+		noteDeclinedExitTier:
+			"Cancelled — the agency stays on Custom at the price already agreed.",
+		noteDeclinedJoinAddon:
+			"Cancelled — no add-on was started. The venue pays its plan only.",
+		noteDeclinedJoinTier:
+			"Cancelled — no price was agreed. The agency stays on the tier it is on.",
+		noteResolvedExitAddon:
+			"Resolved — the POS add-on has ended. The venue pays its plan only.",
+		noteResolvedExitTier:
+			"Resolved — the Custom price has ended. The agency is on {plan} at the list price.",
+		noteExitPendingAddon:
+			"Cancellation requested — waiting for you. The venue keeps {plan} and the add-on charge stands until you resolve this.",
+		noteExitPendingTier:
+			"Cancellation requested — waiting for you. The agency stays on Custom at the agreed price until you resolve this, then moves to {plan}.",
+		noteResolvedJoinAddon:
+			"Resolved — billed on top of the venue's plan, which is unchanged.",
+		noteResolvedJoinTier:
+			"Resolved — this is the agency's tier price from now on.",
+		notePendingJoinAddon:
+			"Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change.",
+		notePendingJoinTier:
+			"Set the price, then Resolve. It becomes the agency's tier price — Custom has no list price to fall back on.",
 		toastMarkedContacted: "Marked as contacted",
 		toastMarkContactedFailed: "Failed to mark as contacted",
 		toastResolved: "Request resolved",
@@ -3607,12 +3922,16 @@ const en = {
 		toastInvalidAmount: "Enter a valid non-negative amount",
 		toastSetCustomPrice: "Set a Custom price before resolving",
 		/** Admin → Service → Plan Change: the page header blurb. */
-		planChangeDescription: "Plan-switch activity from outlets and agencies. Agency switches are applied automatically by PR count (Direct). Outlet switches wait as Pending — open a row to approve or decline; the price rides the from-plan until you approve, then follows the to-plan.",
+		planChangeDescription:
+			"Plan-switch activity from outlets and agencies. Agency switches are applied automatically by PV count (Direct). Outlet switches wait as Pending — open a row to approve or decline; the price rides the from-plan until you approve, then follows the to-plan.",
 		activityTitle: "Plan change activity",
-		activityHintLatest: "One row per subscriber — the switch that still needs answering. Choose Full history for every previous change.",
-		activityHintAll: "Every plan change ever filed — a subscriber appears once per switch, so the same outlet or agency repeats down the list. POS and Custom moves live on Plan Request.",
+		activityHintLatest:
+			"One row per subscriber — the switch that still needs answering. Choose Full history for every previous change.",
+		activityHintAll:
+			"Every plan change ever filed — a subscriber appears once per switch, so the same outlet or agency repeats down the list. POS and Custom moves live on Plan Request.",
 		/** Ends where the Current Plan link begins; the link closes the sentence. */
-		billedRecordHint: "This is the log of switches ASKED FOR. For what each subscriber has actually been billed — the same record it sees on its own Subscription page — open",
+		billedRecordHint:
+			"This is the log of switches ASKED FOR. For what each subscriber has actually been billed — the same record it sees on its own Subscription page — open",
 		currentPlanFullHistoryLink: "Current Plan → Full history",
 		viewLatestOnly: "Latest only",
 		viewFullHistory: "Full history",
@@ -3620,6 +3939,15 @@ const en = {
 		switchedDate: "Switched date",
 		colPrice: "Price (RM)",
 		colSwitchedAt: "Switched at",
+		/** What the org is on TODAY — the present, beside the switch the row records. */
+		currentlyOn: "Currently on",
+		/**
+		 * Shown when today's plan is not the one this switch moved to. Either a
+		 * later move superseded it (and landed on Plan Request, because it touched
+		 * Custom), or this switch never reached the ledger at all.
+		 */
+		livePlanDiffers:
+			"This is not the plan above — a later change superseded it, or this switch never reached the billing ledger. Plan Payment shows what is actually billed.",
 		loadingPlanChanges: "Loading plan changes…",
 		failedToLoadPlanChanges: "Failed to load plan changes",
 		noPlanChangesFound: "No plan changes found",
@@ -3627,13 +3955,17 @@ const en = {
 		priceNoteNegotiatedCustom: "Negotiated · Custom",
 		priceNoteFromPlanStays: "From plan · stays",
 		priceNoteFromPlanUntilApproved: "From plan · until approved",
-		sheetHintDirect: "Agency switch — applied automatically by PR count.",
-		sheetHintPending: "Outlet switch — review the before/after plans, then approve or decline.",
+		sheetHintDirect: "Agency switch — applied automatically by PV count.",
+		sheetHintPending:
+			"Outlet switch — review the before/after plans, then approve or decline.",
 		sheetHintActioned: "Outlet switch — already actioned.",
-		noteDirect: "Switched automatically by PR count — the price follows the to-plan.",
-		notePendingApproval: "Reminder: the outlet keeps paying the from-plan price until you approve. After approval the price follows the to-plan.",
+		noteDirect:
+			"Switched automatically by PV count — the price follows the to-plan.",
+		notePendingApproval:
+			"Reminder: the outlet keeps paying the from-plan price until you approve. After approval the price follows the to-plan.",
 		noteApproved: "Approved — the price now follows the to-plan.",
-		noteDeclinedPlanChange: "Declined — the outlet stays on the from-plan price.",
+		noteDeclinedPlanChange:
+			"Declined — the outlet stays on the from-plan price.",
 		toastPlanChangeApproved: "Plan change approved",
 		toastPlanChangeApproveFailed: "Failed to approve plan change",
 		toastPlanChangeDeclined: "Plan change declined",
@@ -3757,7 +4089,8 @@ const en = {
 		backfillOpenSlotOne: "1 open slot",
 		backfillOpenSlotMany: "{n} open slots",
 		/** One backfill row's detail line. `reason` arrives already translated; `slot` and `name` are data. */
-		backfillSlotLine: "{slot} · staffed {staffed}/{quantity} · {reason} — {name}",
+		backfillSlotLine:
+			"{slot} · staffed {staffed}/{quantity} · {reason} — {name}",
 		/** Rendered label for the stored status `leave_approved` — mid-sentence, hence lower case in English. */
 		backfillReasonLeaveApproved: "leave approved",
 		/** Rendered label for a released slot that was cancelled rather than excused. */
@@ -3765,7 +4098,8 @@ const en = {
 		/** Eyebrow over the replacement sheet. Rendered through CSS uppercase, so no case is baked in. */
 		backfillEyebrow: "Backfill · {date}",
 		backfillMatching: "Matching free PRs…",
-		backfillNoneFree: "No free PR available that night — every active PR already has a booking on {date}.",
+		backfillNoneFree:
+			"No free PR available that night — every active PR already has a booking on {date}.",
 		/** Heading over the ranked replacement candidates. */
 		backfillFreeThatNight: "Free that night · {n}",
 		/** Candidate subtitle. `tier` is the stored grade and passes through untranslated. */
@@ -3786,29 +4120,37 @@ const en = {
 		/** Pill on a day whose total moved after it was reviewed. */
 		statusChanged: "Changed",
 		/** {approved} and {now} arrive already formatted by the caller — no currency lives in this key. */
-		staleWithApproved: "This day changed after it was reviewed — signed off at {approved}, now {now}. The earlier decision no longer counts; review it again.",
+		staleWithApproved:
+			"This day changed after it was reviewed — signed off at {approved}, now {now}. The earlier decision no longer counts; review it again.",
 		/** Same as staleWithApproved when no signed-off total was recorded. {now} arrives formatted. */
-		staleWithoutApproved: "This day changed after it was reviewed — now {now}. The earlier decision no longer counts; review it again.",
+		staleWithoutApproved:
+			"This day changed after it was reviewed — now {now}. The earlier decision no longer counts; review it again.",
 		/** In front of the reason stored on a held day. */
 		noteLabel: "Note:",
-		holdNotePlaceholder: "Why is this day on hold? (optional, but the PR chases what it cannot see)",
+		holdNotePlaceholder:
+			"Why is this day on hold? (optional, but the PR chases what it cannot see)",
 		/** The button. `held` is the resulting state. */
 		holdAction: "Hold",
 		confirmHold: "Confirm hold",
 		/** Clears this day's decision back to undecided. */
 		clearDecision: "Clear",
 		loadingDays: "Loading this week's days…",
-		noDatedLines: "No dated lines on this voucher, so there is no day to review. It can be sent as it stands.",
+		noDatedLines:
+			"No dated lines on this voucher, so there is no day to review. It can be sent as it stands.",
 		/** Per-day, deliberately: the gate reads each day's own status, never an aggregate. */
-		approveEachDayHint: "Approve each day before this voucher goes to the PR. Holding a day blocks the send — including the Monday payout run — until it is approved or cleared.",
-		approvingDayApprovesReceipts: "Approving a day also approves the receipts on that day. A receipt spanning two days waits until both are approved.",
+		approveEachDayHint:
+			"Approve each day before this voucher goes to the PR. Holding a day blocks the send — including the Monday payout run — until it is approved or cleared.",
+		approvingDayApprovesReceipts:
+			"Approving a day also approves the receipts on that day. A receipt spanning two days waits until both are approved.",
 		everyDayDecided: "Every day is decided — this voucher can be sent.",
 		/** {reason} is built by use-agency-pv-day-review.ts and is still English — see the report's notes. */
 		notReadyToSend: "Not ready to send: {reason}.",
 		/** "day(s)" kept as one form, matching `agencyPv.daysLeftToAdjust`. */
-		staleDaysNeedAnotherLook: "{n} day(s) changed since they were reviewed and need another look.",
+		staleDaysNeedAnotherLook:
+			"{n} day(s) changed since they were reviewed and need another look.",
 		approveRemainingDays: "Approve the {n} remaining day(s)",
-		readOnlyDays: "Your agency role can see these decisions but not make them — owner and finance approve days.",
+		readOnlyDays:
+			"Your agency role can see these decisions but not make them — owner and finance approve days.",
 		toastDayApproved: "Day approved",
 		toastDayHeld: "Day held — this voucher cannot be sent until it is cleared",
 		toastDecisionCleared: "Decision cleared",
@@ -3824,19 +4166,25 @@ const en = {
 		beforeReviewExisted: "before this review existed",
 		/** Accessible label on a receipt's proof photos. {no} is the receipt number. */
 		receiptScanLabel: "{no} scan",
-		prSignedLocked: "The PR has signed this voucher — receipts on it can no longer be approved or corrected.",
+		prSignedLocked:
+			"The PR has signed this voucher — receipts on it can no longer be approved or corrected.",
 		withdrawApproval: "Withdraw approval",
 		unbackedCommissionOne: "{n} commission line has no receipt",
 		unbackedCommissionMany: "{n} commission lines have no receipt",
 		/** {amount} arrives already formatted — no currency in the key. */
-		selfDeclaredWarning: "{amount} was self-declared with nothing to check it against. Confirm with the outlet before issuing.",
-		everyCommissionBacked: "Every commission line on this voucher is backed by a receipt.",
-		unclassifiedExplainer: "Unclassified lines predate component tracking — they are counted in the totals but cannot be disputed per component.",
+		selfDeclaredWarning:
+			"{amount} was self-declared with nothing to check it against. Confirm with the outlet before issuing.",
+		everyCommissionBacked:
+			"Every commission line on this voucher is backed by a receipt.",
+		unclassifiedExplainer:
+			"Unclassified lines predate component tracking — they are counted in the totals but cannot be disputed per component.",
 		/** Count form of `receipts.waitingOnYou`; Chinese needs the measure word, so it cannot be built by gluing the count in front. */
 		pendingWaitingOnYou: "{n} waiting on you",
-		pendingReceiptsBlockSend: "This voucher cannot be sent until each of these is approved — and the PR cannot dispute the money behind one until you have.",
+		pendingReceiptsBlockSend:
+			"This voucher cannot be sent until each of these is approved — and the PR cannot dispute the money behind one until you have.",
 		/** AgencyReceiptsPanel.tsx carries the same English sentence — see the report's notes if that owner files it too. */
-		readOnlyReceipts: "Your agency role can see these receipts but not approve them — owner and finance review receipts.",
+		readOnlyReceipts:
+			"Your agency role can see these receipts but not approve them — owner and finance review receipts.",
 	},
 	agencyPanels: {
 		/** NOT "checked out" — the stored stamp is clamped to the scheduled end, so calling it a check-out would assert a time that never happened. */
@@ -3854,7 +4202,8 @@ const en = {
 		toTime: "To time",
 		clearRange: "Clear range",
 		/** Default footnote of the payroll range filter card. Resolved in the component BODY — a default parameter value is evaluated before any hook runs. */
-		rangeHint: "Filters by issue date on PVs & invoices · receipt scans use scan time when set.",
+		rangeHint:
+			"Filters by issue date on PVs & invoices · receipt scans use scan time when set.",
 		/** {hint} is outletDetail.syncedFromWorkspace, already filled — the agency mirrors the outlet's own rate card and cannot edit it. */
 		syncedReadOnly: "{hint} · read-only",
 		outletTierRatesReadOnly: "Outlet tier rates · read-only on agency",
@@ -3871,14 +4220,17 @@ const en = {
 		/** Count of LINES on a receipt. Chinese has no plural, so the two forms are spelled out. */
 		itemCountOne: "{n} item",
 		itemCountMany: "{n} items",
-		savingReopensHint: "Saving re-opens this receipt, and any change to the money makes that day's approval stale.",
+		savingReopensHint:
+			"Saving re-opens this receipt, and any change to the money makes that day's approval stale.",
 		/** The <summary> of the collapsed explainer under savingReopensHint. */
 		whatThatMeans: "What that means",
-		editCostExplainer: "An approved receipt drops back to waiting on you. A quantity, a commission, a new line or a change of date all move money, so the day has to be approved again before the voucher can be sent. Correcting only the order number moves no money — only the receipt re-opens.",
+		editCostExplainer:
+			"An approved receipt drops back to waiting on you. A quantity, a commission, a new line or a change of date all move money, so the day has to be approved again before the voucher can be sent. Correcting only the order number moves no money — only the receipt re-opens.",
 		/** Heading over the editable line list. */
 		items: "Items",
 		unsavedCount: "{n} unsaved",
-		noLinesYet: "Nothing is logged against this receipt yet — add the drinks or tips the paper shows below.",
+		noLinesYet:
+			"Nothing is logged against this receipt yet — add the drinks or tips the paper shows below.",
 		/** Line-table column header. */
 		colItem: "Item",
 		/** Line-table column header; also the add-form's Qty placeholder. */
@@ -3887,7 +4239,8 @@ const en = {
 		colCommission: "Commission",
 		/** Discards an unsaved line draft. Nothing is written. */
 		undo: "Undo",
-		commissionIsPrCut: "Commission is the PR's cut, not the price printed on the paper.",
+		commissionIsPrCut:
+			"Commission is the PR's cut, not the price printed on the paper.",
 		/** The link that opens the collapsed add-a-line form. */
 		paperShowsMissingItem: "The paper shows an item this list is missing",
 		addMissingLine: "Add a missing line",
@@ -3910,17 +4263,22 @@ const en = {
 		quantity: "Quantity",
 		/** aria-label. RM names the FIELD's unit here, not a formatted value. */
 		commissionInRm: "Commission in RM",
-		noListConfigured: "{outlet} has no {list} configured, so a line cannot be verified — ask the outlet to set it up first.",
+		noListConfigured:
+			"{outlet} has no {list} configured, so a line cannot be verified — ask the outlet to set it up first.",
 		/** Fills {list} in noListConfigured for a drinks receipt. */
 		drinksList: "drinks list",
 		/** Fills {list} for a tips receipt. Keeps workspace.serviceEntitlement's 服务项目. */
 		serviceEntitlementList: "Service Entitlement list",
 		/** Last-resort fallback; the server's own message is preferred when it has one. */
-		outletListUnavailable: "The outlet's list is not available, so a line cannot be verified.",
-		outletPriceVsCommission: "The RM beside each item is {outlet}'s selling price, for matching against the paper. The box you fill in is the PR's commission — a different figure, and yours to state.",
+		outletListUnavailable:
+			"The outlet's list is not available, so a line cannot be verified.",
+		outletPriceVsCommission:
+			"The RM beside each item is {outlet}'s selling price, for matching against the paper. The box you fill in is the PR's commission — a different figure, and yours to state.",
 		/** {kind} arrives already translated (money.drinks / money.tips). */
-		lockedKindHint: "This is a {kind} receipt, so a line added here is {kind} — one paper is one kind.",
-		drinksAndTipsOnly: "Drinks and tips only — wages and overtime come from the check-in and check-out stamps, so those are fixed on the attendance record.",
+		lockedKindHint:
+			"This is a {kind} receipt, so a line added here is {kind} — one paper is one kind.",
+		drinksAndTipsOnly:
+			"Drinks and tips only — wages and overtime come from the check-in and check-out stamps, so those are fixed on the attendance record.",
 		/** Heading over the order-no / date / time fields. */
 		theReceiptItself: "The receipt itself",
 		orderNoOnPaper: "Order no on the paper",
@@ -3931,20 +4289,24 @@ const en = {
 		/** The clock printed on the paper. Unlike the date this moves no money. */
 		timePrinted: "Time printed",
 		saveReceipt: "Save receipt",
-		orderDateSaveHint: "Clearing the order number removes it. Changing the date MOVES this receipt's money onto that day — the day it left and the day it lands on both need approving again, and the date must fall inside this voucher's week.",
+		orderDateSaveHint:
+			"Clearing the order number removes it. Changing the date MOVES this receipt's money onto that day — the day it left and the day it lands on both need approving again, and the date must fall inside this voucher's week.",
 		/** Client-side refusal, matching the server's own rule. */
 		quantityRange: "Quantity has to be a whole number from 1 to 999.",
 		/** Blank is NOT zero: a cleared field would post a real instruction to pay nothing. No currency in the key. */
-		commissionMinLeaveFilled: "Commission has to be 0.00 or more — leave it filled in.",
+		commissionMinLeaveFilled:
+			"Commission has to be 0.00 or more — leave it filled in.",
 		/** Same rule on the add form, where nothing is being cleared. */
 		commissionMin: "Commission has to be 0.00 or more.",
 		/** {item} is the line description as stored by the outlet. */
-		nothingChangedOn: "Nothing changed on \"{item}\".",
-		orderDateTimeUnchanged: "The order number, the date and the time are all unchanged.",
+		nothingChangedOn: 'Nothing changed on "{item}".',
+		orderDateTimeUnchanged:
+			"The order number, the date and the time are all unchanged.",
 		/** Appended after the server's own message when a date change moved lines. */
 		linesMovedOne: "{n} line moved to {date}",
 		linesMovedMany: "{n} lines moved to {date}",
-		pickFromOutletList: "Pick the item from the outlet's list — a line has to name something that outlet sells.",
+		pickFromOutletList:
+			"Pick the item from the outlet's list — a line has to name something that outlet sells.",
 		/** Screen-reader label on a per-line qty box. */
 		quantityForItem: "Quantity for {item}",
 		/** Screen-reader label on a per-line commission box. */
@@ -3961,8 +4323,10 @@ const en = {
 		noPhoto: "no photo",
 		disputingOne: "The PR is disputing this receipt",
 		disputingMany: "The PR has {n} open claims on this receipt",
-		correctThenSettleHint: "Correct the figures here if the PR is right, then accept or reject the claim under Disputes — an edit alone does not settle it.",
-		noLineItemsOnReceipt: "No line items on this receipt — it adds nothing to the voucher.",
+		correctThenSettleHint:
+			"Correct the figures here if the PR is right, then accept or reject the claim under Disputes — an edit alone does not settle it.",
+		noLineItemsOnReceipt:
+			"No line items on this receipt — it adds nothing to the voucher.",
 		/** Passed INTO the shared proof-photo viewer, so it must arrive translated. */
 		receiptScanLabel: "{receiptNo} scan",
 		/** Stands in for a review date on rows decided before the review lane shipped. */
@@ -3972,23 +4336,29 @@ const en = {
 		/** Jumps to the payment voucher this receipt sits on. */
 		openPv: "Open PV",
 		/** Says which rule removed the Edit button. */
-		prSignedNoCorrections: "The PR has signed this voucher — its figures can no longer be corrected.",
+		prSignedNoCorrections:
+			"The PR has signed this voucher — its figures can no longer be corrected.",
 		toastApproved: "{receiptNo} approved",
 		toastBackToPending: "{receiptNo} back to pending",
-		couldNotLoadReceipts: "Could not load receipts. Check the backend is running, then reload.",
+		couldNotLoadReceipts:
+			"Could not load receipts. Check the backend is running, then reload.",
 		/** Counts what the Approve-all sweep TOUCHES, which can exceed the Waiting-on-you chip. */
 		awaitingApprovalOne: "{n} receipt awaiting your approval",
 		awaitingApprovalMany: "{n} receipts awaiting your approval",
 		/** Explains why the banner count can exceed the chip count. */
 		ofThemDisputed: "{n} of them disputed",
-		voucherBlockedHint: "A voucher cannot be sent while one of its receipts is pending — and the PR cannot dispute the money behind it until you decide.",
+		voucherBlockedHint:
+			"A voucher cannot be sent while one of its receipts is pending — and the PR cannot dispute the money behind it until you decide.",
 		/** Per-day subtotal beside the day's money. */
 		receiptCountOne: "{n} receipt",
 		receiptCountMany: "{n} receipts",
 		/** The week tab is a FILTER, so what it hides is stated rather than left to look like absence. */
-		offWeekOne: "{n} more receipt sits in other payroll weeks — switch the week tab above to review them.",
-		offWeekMany: "{n} more receipts sit in other payroll weeks — switch the week tab above to review them.",
-		roleCannotApprove: "Your agency role can see these receipts but not approve them — owner and finance review receipts.",
+		offWeekOne:
+			"{n} more receipt sits in other payroll weeks — switch the week tab above to review them.",
+		offWeekMany:
+			"{n} more receipts sit in other payroll weeks — switch the week tab above to review them.",
+		roleCannotApprove:
+			"Your agency role can see these receipts but not approve them — owner and finance review receipts.",
 	},
 	agencyRoster: {
 		/** Accessible name on a tappable roster amount. {label} arrives ALREADY translated from the call site — it lands mid-sentence, so it cannot be a key. */
@@ -4033,21 +4403,30 @@ const en = {
 		disputesTitle: "Disputes",
 		/** Same label carrying the undecided count. */
 		disputesTitleOpen: "Disputes ({n} open)",
-		shiftNotLinked: "Which shift · not linked — this claim names no receipt, or the receipt has no shift record.",
+		shiftNotLinked:
+			"Which shift · not linked — this claim names no receipt, or the receipt has no shift record.",
 		/** Plural of payroll.claimCoversWholeDay, which stays the 1-shift wording. */
-		claimCoversWholeDayMany: "This claim covers the whole day — {n} shifts worked",
-		noReceiptBehindWagesOt: "No receipt behind this — daily wages and OT are calculated from the check-in and check-out stamps, so the correction is to the shift record.",
-		noReceiptForDayBucket: "No receipt found for this day and bucket. It may have been removed since the dispute was raised.",
-		receiptBehindFigureOne: "The receipt behind this figure — correct it here if the PR is right.",
-		receiptBehindFigureMany: "The {n} receipts behind this figure — correct them here if the PR is right.",
+		claimCoversWholeDayMany:
+			"This claim covers the whole day — {n} shifts worked",
+		noReceiptBehindWagesOt:
+			"No receipt behind this — daily wages and OT are calculated from the check-in and check-out stamps, so the correction is to the shift record.",
+		noReceiptForDayBucket:
+			"No receipt found for this day and bucket. It may have been removed since the dispute was raised.",
+		receiptBehindFigureOne:
+			"The receipt behind this figure — correct it here if the PR is right.",
+		receiptBehindFigureMany:
+			"The {n} receipts behind this figure — correct them here if the PR is right.",
 		theScannedReceipt: "The scanned receipt",
 		/** {time} is the printed time off the paper, formatted upstream. */
 		theScannedReceiptPrinted: "The scanned receipt · printed {time}",
 		/** Alt/accessible name for one scanned-receipt thumbnail. */
 		receiptScanAlt: "{no} scan",
-		noPhotoSelfLogged: "No photo on this receipt — it was self-logged without one.",
-		signedCannotCorrect: "The PR has signed this voucher — its figures can no longer be corrected.",
-		roleCannotCorrectReceipt: "Your agency role can see this receipt but not correct it — owner and finance edit receipts.",
+		noPhotoSelfLogged:
+			"No photo on this receipt — it was self-logged without one.",
+		signedCannotCorrect:
+			"The PR has signed this voucher — its figures can no longer be corrected.",
+		roleCannotCorrectReceipt:
+			"Your agency role can see this receipt but not correct it — owner and finance edit receipts.",
 		/** The two dates arrive as yyyy-MM-dd. Used on the dispute header line and as the hover title on an uncharged penalty's week cell. */
 		weekFromTo: "week {from} – {to}",
 		/** Outcome pill for the stored dispute outcome 'rejected'; the stored value is untouched. */
@@ -4056,15 +4435,20 @@ const en = {
 		prAttachedMany: "What the PR attached · {n} images",
 		/** Dispute scope chip. The chip's stored scope value stays 'resolved'. */
 		scopeResolved: "Resolved",
-		openDisputesElsewhereOne: "{n} open dispute in another week — switch weeks above to decide it.",
-		openDisputesElsewhereMany: "{n} open disputes in another week — switch weeks above to decide them.",
+		openDisputesElsewhereOne:
+			"{n} open dispute in another week — switch weeks above to decide it.",
+		openDisputesElsewhereMany:
+			"{n} open disputes in another week — switch weeks above to decide them.",
 		nothingMatchesAny: "Nothing matches “{q}” in any dispute.",
 		nothingMatchesOpen: "Nothing matches “{q}” in open disputes.",
 		nothingMatchesResolved: "Nothing matches “{q}” in resolved disputes.",
-		nothingWaitingOne: "Nothing waiting on you — {n} already settled. Switch to Resolved to see it.",
-		nothingWaitingMany: "Nothing waiting on you — {n} already settled. Switch to Resolved to see them.",
+		nothingWaitingOne:
+			"Nothing waiting on you — {n} already settled. Switch to Resolved to see it.",
+		nothingWaitingMany:
+			"Nothing waiting on you — {n} already settled. Switch to Resolved to see them.",
 		noneSettledYet: "None settled yet.",
-		acceptingRecordsDecision: "Accepting records the decision and tells the PR. It does not change the money on its own — correct the receipt below first if the PR is right, then accept.",
+		acceptingRecordsDecision:
+			"Accepting records the decision and tells the PR. It does not change the money on its own — correct the receipt below first if the PR is right, then accept.",
 		/** Toast. */
 		disputeAccepted: "Dispute accepted",
 		/** Toast. */
@@ -4073,34 +4457,45 @@ const en = {
 		overtimeTitleCount: "Overtime ({n})",
 		/** Pill on an undecided overtime claim — it blocks its week from being sent. */
 		holdingPayroll: "Holding payroll",
-		overtimeHoldsWeek: "Overtime is paid on the voucher for the week it was worked, so this claim holds w/c {week} from being sent until it is decided.",
-		overtimeHoldsItsWeek: "Overtime is paid on the voucher for the week it was worked, so this claim holds its week from being sent until it is decided.",
+		overtimeHoldsWeek:
+			"Overtime is paid on the voucher for the week it was worked, so this claim holds w/c {week} from being sent until it is decided.",
+		overtimeHoldsItsWeek:
+			"Overtime is paid on the voucher for the week it was worked, so this claim holds its week from being sent until it is decided.",
 		/** Recorded overtime minutes, formatted for display only — never a step toward pricing. */
 		durationHoursMinutes: "{h}h {m}m",
 		durationHours: "{h}h",
 		durationMinutes: "{m}m",
 		/** Second click on Approve. {amount} arrives already carrying RM. */
 		confirmPayAmount: "Confirm · pay {amount}",
-		approveAddsToVoucher: "{amount} is added to {name}'s voucher. This cannot be undone.",
+		approveAddsToVoucher:
+			"{amount} is added to {name}'s voucher. This cannot be undone.",
 		/** Mid-sentence fallback when an overtime claim carries no PR name. */
 		thePr: "the PR",
-		onlyOwnerFinanceDecideOvertime: "Only the agency owner or finance can decide overtime.",
-		overtimeElsewhereOne: "{n} claim in another week still undecided — switch weeks above to decide it.",
-		overtimeElsewhereMany: "{n} claims in another week still undecided — switch weeks above to decide them.",
-		overtimeQueueHint: "Each claim holds its own payroll week until it is decided. The amount shown is what the approval writes onto the voucher.",
+		onlyOwnerFinanceDecideOvertime:
+			"Only the agency owner or finance can decide overtime.",
+		overtimeElsewhereOne:
+			"{n} claim in another week still undecided — switch weeks above to decide it.",
+		overtimeElsewhereMany:
+			"{n} claims in another week still undecided — switch weeks above to decide them.",
+		overtimeQueueHint:
+			"Each claim holds its own payroll week until it is decided. The amount shown is what the approval writes onto the voucher.",
 		cancellationFeeOnVoucherOne: "Cancellation fee on this voucher",
 		cancellationFeeOnVoucherMany: "Cancellation fees on this voucher",
-		waiveBeforeSendHint: "Charged automatically when the PR cancelled. Waive one to take it off this voucher before you send it.",
-		voucherSentCannotWaive: "This voucher has been sent, so these can no longer be taken off it. Credit the PR on next week's voucher instead.",
+		waiveBeforeSendHint:
+			"Charged automatically when the PR cancelled. Waive one to take it off this voucher before you send it.",
+		voucherSentCannotWaive:
+			"This voucher has been sent, so these can no longer be taken off it. Credit the PR on next week's voucher instead.",
 		waiveThisCharge: "Waive this charge",
 		whyWaiving: "Why are you waiving this? (optional)",
 		/** Written in the agency's own voice — 'we', not 'the agency'. */
-		waiveReasonPlaceholder: "e.g. hospital admission, or we stood them down ourselves",
+		waiveReasonPlaceholder:
+			"e.g. hospital admission, or we stood them down ourselves",
 		keepTheCharge: "Keep the charge",
 		waive: "Waive",
 		waiving: "Waiving…",
 		couldNotWaive: "Could not waive this charge. Try again in a moment.",
-		couldNotLoadUncharged: "Could not load uncharged fees — the agency uncharged endpoint failed.",
+		couldNotLoadUncharged:
+			"Could not load uncharged fees — the agency uncharged endpoint failed.",
 		/** Fallback detail when a cancellation carries neither slot nor outlet name. */
 		cancelledShift: "cancelled shift",
 		/** How a cancellation fee was priced. {wage} arrives already carrying RM. */
@@ -4111,7 +4506,8 @@ const en = {
 		/** {amount} arrives already carrying RM. */
 		notYetBilledOutstanding: "{n} not yet billed · {amount} outstanding",
 		/** Both amounts arrive already carrying RM. */
-		weeklyPlusCancellations: "({weekly} weekly + {cancellations} cancellations)",
+		weeklyPlusCancellations:
+			"({weekly} weekly + {cancellations} cancellations)",
 		/** The ⚠ glyph stays in the JSX. */
 		addBeforeSendingPv: "Add these before sending the PV",
 		/** {amount} arrives already carrying RM. */
@@ -4131,7 +4527,8 @@ const en = {
 		/** ProfileLanguagePicker button that commits the typed language. */
 		add: "Add",
 		/** Second sentence of the payment-method note, after subscription.cardPrivacyNote. */
-		cardNotChargedYet: "InnocenZ records the card; charging it needs a payment gateway, which is not connected yet.",
+		cardNotChargedYet:
+			"InnocenZ records the card; charging it needs a payment gateway, which is not connected yet.",
 	},
 	prMedia: {
 		/** Banner over the capture box when the PR keyed the receipt in by hand. */
@@ -4248,10 +4645,13 @@ const en = {
 		/** Label AND aria-label on the PV time filter's first clock. */
 		fromTime: "From time",
 		toTime: "To time",
-		pickDateFirstHint: "Pick a date first to narrow by time within that shift day.",
-		selectDateAboveHint: "Select a date above — then tap From/To time to open the clock.",
+		pickDateFirstHint:
+			"Pick a date first to narrow by time within that shift day.",
+		selectDateAboveHint:
+			"Select a date above — then tap From/To time to open the clock.",
 		/** {date} is a display label; the ISO key behind it is what actually filters. */
-		matchedByTimeInOrReceipt: "Matched by shift Time-In or receipt scan on {date}.",
+		matchedByTimeInOrReceipt:
+			"Matched by shift Time-In or receipt scan on {date}.",
 		/** One sentence rather than fragments glued around two <b> tags. */
 		tapFromOrToTimeHint: "Tap From time or To time to open the clock picker.",
 		/** Duration under a shift-history card's payout. */
@@ -4305,11 +4705,14 @@ const en = {
 		/** Placeholder under a member's name when the membership row carries no email. */
 		noEmail: "no email",
 		/** OrgMembersPanel, kind === "agency": the invite dropdown fell back to FALLBACK_SUB_ROLES. */
-		rolesLoadFailedAgency: "Could not load agency portal roles — using defaults.",
+		rolesLoadFailedAgency:
+			"Could not load agency portal roles — using defaults.",
 		/** OrgMembersPanel, kind === "outlet". Two whole sentences rather than one with {kind} filled in — `kind` is the stored value. */
-		rolesLoadFailedOutlet: "Could not load outlet portal roles — using defaults.",
+		rolesLoadFailedOutlet:
+			"Could not load outlet portal roles — using defaults.",
 		/** OrgMembersPanel: the server saved the invite but the mailer did not fire. The accept URL is rendered after this sentence, outside the template. */
-		inviteSavedNoEmail: "The invitation for {email} was saved but no email went out. Send them this link — it expires in 7 days:",
+		inviteSavedNoEmail:
+			"The invitation for {email} was saved but no email went out. Send them this link — it expires in 7 days:",
 		/** The outlet portal's own name on the sign-in hero. Mirrors PORTAL_SIGNIN_LABELS.outlet, which is module-scope and cannot read the dictionary. */
 		portalNameOutlet: "Outlet",
 		/** The agency portal's own name on the sign-in hero. "PR" stays English — it is the product's term for the role and it is in the DB. */
@@ -4319,9 +4722,11 @@ const en = {
 		/** Prefix of the sign-in headline. Split from the portal name because the name is its own inline element carrying the portal icon. */
 		signInTo: "Sign in to",
 		/** Outlet sign-in tagline. Mirrors PORTAL_AUTH_TAGLINES.outlet. */
-		portalTaglineOutlet: "Staff tonight, log sales, and seal shifts from one desktop portal.",
+		portalTaglineOutlet:
+			"Staff tonight, log sales, and seal shifts from one desktop portal.",
 		/** Agency sign-in tagline. Mirrors PORTAL_AUTH_TAGLINES.agency. */
-		portalTaglineAgency: "Roster PRs, fill outlet demand, and sync payroll from one desktop portal.",
+		portalTaglineAgency:
+			"Roster PRs, fill outlet demand, and sync payroll from one desktop portal.",
 	},
 	portalShell: {
 		/** Live-workforce row pill for the `out` status — the PR is not on the floor. Sentence case; `pillOut` is the same fact shouted. */
@@ -4350,10 +4755,12 @@ const en = {
 		/** Red banner on profile/settings while the org is suspended. */
 		suspendedTitle: "Suspended.",
 		/** {kind} is portalShell.outletNoun / agencyNoun — the RENDERED noun, never the "outlet"/"agency" discriminator the caller passes. */
-		suspendedBody: "Your {kind} access is limited to this profile. Contact InnocenZ to restore full portal features.",
+		suspendedBody:
+			"Your {kind} access is limited to this profile. Contact InnocenZ to restore full portal features.",
 		/** Amber banner on profile/settings while the org awaits admin approval. */
 		pendingReviewTitle: "Pending review.",
-		pendingReviewBody: "Your {kind} is awaiting InnocenZ admin approval. You can update your profile here — other portal features unlock after approval.",
+		pendingReviewBody:
+			"Your {kind} is awaiting InnocenZ admin approval. You can update your profile here — other portal features unlock after approval.",
 		/** Lowercase mid-sentence noun for the two banners above. Not the stored value "outlet". */
 		outletNoun: "outlet",
 		/** Mid-sentence counterpart of outletNoun. Same term as notifications.agencyLabel. */
@@ -4373,16 +4780,23 @@ const en = {
 		/** The `others` offer once the requester has named their own service; the name is their content. */
 		othersNamed: "Others - {name}",
 		/** Blurb under the offer picker. The offer's own `summary` is POSTED as the description and stays English at the source. */
-		offerTransportationSummary: "Shift pickup, late-night return, and outlet transfers",
+		offerTransportationSummary:
+			"Shift pickup, late-night return, and outlet transfers",
 		offerDeliverySummary: "Outfits, heels, props, and supplies sent to venue",
-		offerWardrobeSummary: "Gown rental, dress code sourcing, and styling coordination",
+		offerWardrobeSummary:
+			"Gown rental, dress code sourcing, and styling coordination",
 		offerMakeupSummary: "Professional makeup before VIP or launch events",
-		offerVipEscortSummary: "Premium table hosting and high-value guest coverage",
-		offerUniformSummary: "Uniform handling, badge printing, and compliance docs",
-		offerEmergencyCoverSummary: "Last-minute replacement PR sourcing and dispatch",
-		offerTrainingSummary: "Tier upgrades, coaching sessions, and certification fees",
+		offerVipEscortSummary:
+			"Premium table hosting and high-value guest coverage",
+		offerUniformSummary:
+			"Uniform handling, badge printing, and compliance docs",
+		offerEmergencyCoverSummary:
+			"Last-minute replacement PR sourcing and dispatch",
+		offerTrainingSummary:
+			"Tier upgrades, coaching sessions, and certification fees",
 		offerOthersSummary: "Name your own service — describe what you need below",
-		offerLeaveAgencySummary: "Before 1 year you must raise a support ticket for early leave",
+		offerLeaveAgencySummary:
+			"Before 1 year you must raise a support ticket for early leave",
 		/** Remark placeholder for the stored offer id `transportation`. */
 		hintTransportation: "Pickup location and destination",
 		hintDelivery: "What to deliver and delivery address",
@@ -4424,9 +4838,12 @@ const en = {
 		serviceRequestTitle: "Service request",
 		bookAgencyService: "Book agency service",
 		orderAgencyService: "Order agency service",
-		leaveHint: "Before 1 year with your agency you must raise a support ticket to leave early.",
-		agencyBookHint: "Book on behalf of a PR or outlet — they will be notified to accept or decline.",
-		outletOrderHint: "Request an add-on from your agency — transportation, delivery, wardrobe, and more.",
+		leaveHint:
+			"Before 1 year with your agency you must raise a support ticket to leave early.",
+		agencyBookHint:
+			"Book on behalf of a PR or outlet — they will be notified to accept or decline.",
+		outletOrderHint:
+			"Request an add-on from your agency — transportation, delivery, wardrobe, and more.",
 		prOrderHint: "Request an add-on service — admin will review and confirm.",
 		/** Field label over the offer picker. */
 		service: "Service",
@@ -4445,9 +4862,12 @@ const en = {
 		/** Chinese has no plural — two keys rather than an appended "s". */
 		bookingsNeedResponseOne: "{n} booking needs your response",
 		bookingsNeedResponseMany: "{n} bookings need your response",
-		outletBanner: "Order agency add-ons for your venue — delivery, emergency cover, styling, and more.",
-		prBannerWithLeave: "Request transportation, makeup, wardrobe, and other services — or raise Leave agency under Service.",
-		prBanner: "Request transportation, makeup, wardrobe, and other services for your shifts.",
+		outletBanner:
+			"Order agency add-ons for your venue — delivery, emergency cover, styling, and more.",
+		prBannerWithLeave:
+			"Request transportation, makeup, wardrobe, and other services — or raise Leave agency under Service.",
+		prBanner:
+			"Request transportation, makeup, wardrobe, and other services for your shifts.",
 		/** Whole sentence: the stored `leave` / `transfer` discriminant picks the key, it is never spliced mid-line. */
 		leaveTicketSubmitted: "Leave ticket submitted {when}",
 		transferRequestSubmitted: "Transfer request submitted {when}",
@@ -4473,8 +4893,10 @@ const en = {
 		/** The outlet picker's empty option. Its VALUE stays "". */
 		selectVenue: "Select a venue…",
 		loadingVenues: "Loading your venues…",
-		venuesLoadFailed: "Could not load your venues — reload the page and try again.",
-		noLinkedVenues: "No linked venues yet — link an outlet before posting a job.",
+		venuesLoadFailed:
+			"Could not load your venues — reload the page and try again.",
+		noLinkedVenues:
+			"No linked venues yet — link an outlet before posting a job.",
 		serviceType: "Service type",
 		nameYourService: "Name your service",
 		customServiceName: "Custom service name",
@@ -4491,7 +4913,8 @@ const en = {
 		/** Marks the tier the other tiers' multipliers are measured against. */
 		baseTier: "base",
 		weekRangeTargets: "Week range · {range}",
-		noLiveShiftTonight: "No live shift tonight — check Calendar page for upcoming events.",
+		noLiveShiftTonight:
+			"No live shift tonight — check Calendar page for upcoming events.",
 		noShiftsYet: "No shifts yet — use Post Job to create one.",
 		suppliedOfDemandPrs: "{supplied}/{demand} PRs",
 		/** The amount arrives already formatted with its currency — never bake RM into the key. */
@@ -4499,7 +4922,8 @@ const en = {
 		savedPill: "Saved {amount}",
 		awaitingAgencyRequest: "Awaiting agency · {title} · ~{amount} savings",
 		alreadyApplied: "Already applied · {detail}",
-		bestEffortIntro: "Optimized for {event} — release PRs at current time ({clock}). They are paid for hours worked plus commissions; unused wage share ({pct}%) is estimated savings. If not reassigned by agency, they are sent home.",
+		bestEffortIntro:
+			"Optimized for {event} — release PRs at current time ({clock}). They are paid for hours worked plus commissions; unused wage share ({pct}%) is estimated savings. If not reassigned by agency, they are sent home.",
 		bestEffortSaveLine: "~{amount} save ({pct}% of {unused} unused wages)",
 		releaseNamesEarly: "Release {names} early",
 		demandPrNeeded: "Demand · {n} PR needed",
@@ -4550,7 +4974,8 @@ const en = {
 		legendScheduled: "Scheduled",
 		legendPending: "Pending",
 		legendNotAvailable: "Not available",
-		tapDayToBlockHint: "Tap an available day to block it · tap a blocked day to reopen",
+		tapDayToBlockHint:
+			"Tap an available day to block it · tap a blocked day to reopen",
 		/** {week} arrives already formatted by formatUpcomingWeekLabel(). */
 		timetableForWeek: "Timetable · {week}",
 		noShiftsThisWeek: "No shifts this week",
@@ -4560,7 +4985,8 @@ const en = {
 		cancelShift: "Cancel shift",
 		cancelAndAcceptDeduction: "Cancel & accept −{amount}",
 		/** Replaces copy that named the DEMO agency "Atlas" and told PRs they could decline. */
-		assignedByAgencyNote: "Shifts are assigned by your agency only — outlets may request you, but your agency confirms every assignment. Cancelling notifies your agency.",
+		assignedByAgencyNote:
+			"Shifts are assigned by your agency only — outlets may request you, but your agency confirms every assignment. Cancelling notifies your agency.",
 		reasonRequired: "Reason (required)",
 		cancelReasonPlaceholder: "Describe why you cannot work this shift",
 		/** The single band shown when the agency's cancellation rule is DISABLED. */
@@ -4574,14 +5000,18 @@ const en = {
 		/** Shared by the short-notice and late bands — they differ only in {pct}. */
 		bandWagePctOutcome: "−{pct}% daily wages on next PV",
 		cancelOnTimeHeadline: "On time notice — no pay deduction",
-		cancelOnTimeDetail: "{hours}h+ before shift · your agency will reassign coverage.",
+		cancelOnTimeDetail:
+			"{hours}h+ before shift · your agency will reassign coverage.",
 		/** A DISABLED rule is not "0% everywhere" — it is no cancellation charge at all. */
 		cancelNoChargeDetail: "Your agency does not charge for cancellations.",
 		cancelShortNoticeHeadline: "Short notice — −{amount} from next PV",
-		cancelShortNoticeDetail: "Less than {free}h but more than {short}h before start.",
+		cancelShortNoticeDetail:
+			"Less than {free}h but more than {short}h before start.",
 		cancelLateHeadline: "Late cancel — −{amount} from next PV",
-		cancelLateDetailBefore: "Less than {short}h before start · same rule as arriving {min}+ min late.",
-		cancelLateDetailStarted: "Shift already started or passed · same rule as arriving {min}+ min late.",
+		cancelLateDetailBefore:
+			"Less than {short}h before start · same rule as arriving {min}+ min late.",
+		cancelLateDetailStarted:
+			"Shift already started or passed · same rule as arriving {min}+ min late.",
 		/** Weekly grid day status. receipts.pending is a receipt review state and is deliberately not reused here. */
 		pendingVerification: "Pending verification",
 		verifiedDayCount: "{n} verified",
@@ -4589,7 +5019,8 @@ const en = {
 		withdrawDisputeOnDay: "Withdraw dispute on {day}",
 		/** One dispute per day PER COMPONENT — {component} is the income row, already translated at the call site. */
 		disputeAmountOnDay: "Dispute {component} on {day}",
-		tapAmountToDisputeHint: "Tap any amount to dispute · tap a red amount to withdraw a mistaken dispute.",
+		tapAmountToDisputeHint:
+			"Tap any amount to dispute · tap a red amount to withdraw a mistaken dispute.",
 		weekCollapsedHint: "{week} · {total} · {verified}/7 verified",
 		verifiedDays: "Verified days",
 		pvWillBeSentOn: "PV will be sent on {day} after this week ends",
@@ -4618,7 +5049,8 @@ const en = {
 		withdrawDisputeTitle: "Withdraw dispute?",
 		disputeThisAmount: "Dispute this amount",
 		raiseDispute: "Raise dispute",
-		withdrawExplainer: "Flagged this amount by mistake? Withdraw the dispute and it returns to verified.",
+		withdrawExplainer:
+			"Flagged this amount by mistake? Withdraw the dispute and it returns to verified.",
 		withdrawDispute: "Withdraw dispute",
 		submitDispute: "Submit dispute",
 		vipNight: "VIP night",
@@ -4635,7 +5067,8 @@ const en = {
 		/** Audit Log role picker — the page head under the shared "Audit Log" title. */
 		pickerSubtitle: "Select a user type to view its activity log.",
 		chooseRole: "Choose Role",
-		chooseRoleHint: "Open the audit log for admin, PR, outlet, agency, or others.",
+		chooseRoleHint:
+			"Open the audit log for admin, PR, outlet, agency, or others.",
 		/** The five role TABS. The stored key (admin/pr/outlet/agency/others) and the route slug are untouched — only the card label is resolved. */
 		roleAdmin: "Admin",
 		roleAdminHint: "View activity from platform administrators.",
@@ -4786,11 +5219,13 @@ const en = {
 		permFor: "{perm} for {name}",
 		/** Placeholder body on the not-yet-built RBAC and Business section pages. */
 		connectApiHint: "Connect your {name} API to populate this section.",
-		connectUserApiHint: "Connect your {name} user API to populate this section.",
+		connectUserApiHint:
+			"Connect your {name} user API to populate this section.",
 		/** Card title on the generic user-type placeholder page. */
 		namedUsers: "{name} users",
 		setNegotiatedQuote: "Set negotiated quote",
-		setNegotiatedQuoteHint: "Users who click “negotiate price” land here as a Plan Request. Enter the settled price, then resolve.",
+		setNegotiatedQuoteHint:
+			"Users who click “negotiate price” land here as a Plan Request. Enter the settled price, then resolve.",
 		/** {name} is a plan name and stays English — standing owner decision. */
 		planNamed: "Plan: {name}",
 		noCurrentPlan: "No current plan",
@@ -4804,7 +5239,8 @@ const en = {
 		/** Admin → User management → PR. Card title over the PR accounts table. */
 		title: "PR accounts",
 		/** Card blurb. Says the Agencies column is a LIST, because a PR can hold a different tier at each agency. */
-		subtitle: "Platform users with the PR role. Agencies column shows every agency a PR belongs to.",
+		subtitle:
+			"Platform users with the PR role. Agencies column shows every agency a PR belongs to.",
 		searchPlaceholder: "Search PRs…",
 		/** Accessible name for the PR search box. */
 		searchAria: "Search PRs by name, email, or agency",
@@ -4887,7 +5323,8 @@ const en = {
 		/** Stands in for the admin header's displayName when the profile has no name yet. */
 		userFallback: "User",
 		notFoundTitle: "Page not found",
-		notFoundBody: "Sorry, we couldn't find the page you're looking for. The page might have been removed or the URL might be incorrect.",
+		notFoundBody:
+			"Sorry, we couldn't find the page you're looking for. The page might have been removed or the URL might be incorrect.",
 		/** Same 仪表板 as admin.navDashboard — one word for the same destination. */
 		backToDashboard: "Back to dashboard",
 		/** Back link on the two public legal pages. */
@@ -4909,7 +5346,8 @@ const en = {
 	adminOrg: {
 		/** Admin → User management → PR Agency: the table card's own title. */
 		agencyOrganizations: "PR Agency organizations",
-		agencyOrganizationsHint: "Click a row to open agency details and linked PRs. Search agencies or filter by status.",
+		agencyOrganizationsHint:
+			"Click a row to open agency details and linked PRs. Search agencies or filter by status.",
 		searchAgenciesPlaceholder: "Search agencies…",
 		/** aria-label on the agency search box. */
 		searchAgenciesAria: "Search agencies by name",
@@ -4945,7 +5383,8 @@ const en = {
 		agencyCode: "Agency code",
 		ssmOrgNo: "SSM / Org No.",
 		outletDetailsTitle: "Outlet Details",
-		outletDetailsHint: "Venue profile, location, and team — as submitted by the outlet.",
+		outletDetailsHint:
+			"Venue profile, location, and team — as submitted by the outlet.",
 		/** Tab LABEL only — the Tabs value stays "business". */
 		tabBusiness: "Business",
 		/** Tab LABEL only — the Tabs value stays "location". */
@@ -4963,9 +5402,12 @@ const en = {
 		/** Read-only admin label. geofence.radius is the outlet's own editable field; this is the longer admin spelling of the same fact. */
 		geoFenceRadius: "Geo-fence radius",
 		linkedAgencies: "Linked agencies",
-		linkedAgenciesHint: "The agencies this venue works with. The outlet requests a link in its Settings and each agency accepts or declines — an admin does not set this.",
-		noAgenciesLinked: "No agencies linked. This venue cannot post a shift until it links one in Settings and that agency approves it.",
-		noAgencyApprovedYet: "No agency has approved yet — every Post Job attempt from this venue is refused until one does.",
+		linkedAgenciesHint:
+			"The agencies this venue works with. The outlet requests a link in its Settings and each agency accepts or declines — an admin does not set this.",
+		noAgenciesLinked:
+			"No agencies linked. This venue cannot post a shift until it links one in Settings and that agency approves it.",
+		noAgencyApprovedYet:
+			"No agency has approved yet — every Post Job attempt from this venue is refused until one does.",
 		/** Rendered label for a stored agency_outlet.approve_status of "approved". */
 		linkWorkingWithVenue: "Working with this venue",
 		/** approve_status "pending". */
@@ -4981,7 +5423,8 @@ const en = {
 		teamOwnerHint: "Venue owner · signs up the outlet and manages settings",
 		/** The admin sheet's shorter spelling; outletSettings.financeHeadHint is the outlet's own longer one and carries the Sunday due date. */
 		teamFinanceHint: "Weekly reconciliation · billing sign-off",
-		teamGuarantorHint: "Stands in for the owner · same rights while the owner is away",
+		teamGuarantorHint:
+			"Stands in for the owner · same rights while the owner is away",
 		teamDirectorHint: "View only · reads every screen, changes nothing",
 		loadingPrs: "Loading PRs…",
 		/** Spelled out as a second key rather than appending "matching" — Chinese cannot glue that clause on. */
@@ -5009,7 +5452,8 @@ const en = {
 		approvalStatus: "Approval Status",
 		awaitingFirstApproval: "Submitted signup awaiting first approval",
 		/** {entity} is adminOrg.entityAgency / entityOutlet — already translated, because it lands mid-sentence. */
-		approvalPendingBody: "Waiting for admin approval before this {entity} goes live.",
+		approvalPendingBody:
+			"Waiting for admin approval before this {entity} goes live.",
 		approvalActiveBody: "This {entity} is live on the platform.",
 		approvalSuspendedBody: "This {entity} has been suspended by an admin.",
 		approvalInactiveBody: "This {entity} is inactive.",
@@ -5028,7 +5472,8 @@ const en = {
 	},
 	webLib: {
 		/** Forgot-password result when the server returns no message of its own. */
-		passwordResetLinkSent: "If that email is registered, a reset link is on its way.",
+		passwordResetLinkSent:
+			"If that email is registered, a reset link is on its way.",
 		/** Fallback when POST /auth/forgot-password fails without a server message. */
 		passwordResetLinkFailed: "Could not send the reset link",
 		/** Fallback when POST /auth/reset-password fails without a server message. */
@@ -5044,7 +5489,8 @@ const en = {
 		/** Check-in hero when no roster slot resolves. */
 		tonightsShift: "Tonight's shift",
 		/** Check-in hero for an `outlet-pending` slot. */
-		outletRequestedPendingApproval: "Outlet requested you · pending agency & PR approval",
+		outletRequestedPendingApproval:
+			"Outlet requested you · pending agency & PR approval",
 		/** {agency} is the supplier's own NAME — data, inserted untranslated. */
 		agencyAssignedBy: "Agency assigned · {agency}",
 		/** Same fact with no agency named — the suffix leaves with its separator rather than trailing a bare dot. */
@@ -5060,9 +5506,11 @@ const en = {
 		outletMustConfirmSlot: "{outlet} must confirm your slot on their roster",
 		swapAwaitingOutlet: "Swap in progress — awaiting outlet confirmation",
 		scheduledOnAgencyRoster: "Scheduled on agency roster",
-		outletConfirmedOnBookings: "{outlet} confirmed you on their bookings roster",
+		outletConfirmedOnBookings:
+			"{outlet} confirmed you on their bookings roster",
 		/** Names the ROLE, not the demo agency: the two English strings this replaces both said "Atlas". */
-		agencyProposedNotConfirmed: "Your agency proposed this shift — the outlet has not confirmed yet",
+		agencyProposedNotConfirmed:
+			"Your agency proposed this shift — the outlet has not confirmed yet",
 		/** Timetable pill. NOT today.awaitingAgencyConfirm, whose English is "Awaiting agency confirm". */
 		awaitingAgency: "Awaiting agency",
 		/** Timetable pill. Same term as roster.requestOutletSwap (申请换店). */
@@ -5070,9 +5518,11 @@ const en = {
 		/** Sentence case. portalShell.pillEnRoute is the same fact SHOUTED for the outlet roster pill. */
 		enRoute: "En route",
 		/** Replaces copy naming the demo agency ("Atlas confirmed"). */
-		outletRequestedAgencyConfirmed: "{outlet} requested you — your agency confirmed",
+		outletRequestedAgencyConfirmed:
+			"{outlet} requested you — your agency confirmed",
 		/** Replaces copy naming the demo agency ("Atlas assigned you"). */
-		agencyAssignedCancelPolicy: "Your agency assigned you — cancel per agency policy if needed",
+		agencyAssignedCancelPolicy:
+			"Your agency assigned you — cancel per agency policy if needed",
 		agencyAssignedOnYourRoster: "Agency assigned this shift on your roster",
 		liveShiftFromOutletCheckIn: "Live shift from outlet check-in roster",
 		/** Catch-all source line. Replaces "Atlas agency roster". */
@@ -5112,28 +5562,35 @@ const en = {
 		/** Post Job headcount hint when the day is full. {plan} is the plan NAME and stays English by the owner's instruction; {date} arrives already formatted for the active locale. */
 		planDayLimitReached: "{plan} plan · {max} PRs/day limit reached for {date}",
 		/** Same hint with room left. Says WHICH counter this is — total headcount including agency fill, unlike the picker's named-PR limit beside it. */
-		planDayHeadcountAvailable: "{plan} plan · {band} PRs/day · {remaining} of {max} headcount available on {date}",
+		planDayHeadcountAvailable:
+			"{plan} plan · {band} PRs/day · {remaining} of {max} headcount available on {date}",
 		/** Outlet's PR-rating note placeholder at 1 star. Placeholder only — nothing here is stored (unlike PR_RATING_TAGS, which is). */
-		ratingNotePlaceholder1: "Serious issue — late, attitude, guest complaint, or floor impact…",
+		ratingNotePlaceholder1:
+			"Serious issue — late, attitude, guest complaint, or floor impact…",
 		/** Same placeholder at 2 stars. 着装要求 is the dictionary's term for dress code. */
-		ratingNotePlaceholder2: "Below standard — drinks, upsell, dress code, or table engagement…",
-		ratingNotePlaceholder3: "Acceptable shift — one coaching note for next booking…",
+		ratingNotePlaceholder2:
+			"Below standard — drinks, upsell, dress code, or table engagement…",
+		ratingNotePlaceholder3:
+			"Acceptable shift — one coaching note for next booking…",
 		ratingNotePlaceholder4: "Good shift — what would make this a 5 next time?",
-		ratingNotePlaceholder5: "Standout moment — VIP upsell, bottle push, teamwork, or vibe…",
+		ratingNotePlaceholder5:
+			"Standout moment — VIP upsell, bottle push, teamwork, or vibe…",
 	},
 	invitePages: {
 		/** The /invite/org-member page heading. */
 		joinTheTeam: "Join the team",
 		acceptToGetStarted: "Accept your invitation to get started.",
 		/** The ?token= search param is absent. The token itself is data and is never translated. */
-		missingToken: "This invite link is missing a token. Open the link from your email.",
+		missingToken:
+			"This invite link is missing a token. Open the link from your email.",
 		checkingInvitation: "Checking invitation…",
 		/** Heading of the preview-failed card; the server's own message renders beneath it. */
 		inviteUnavailable: "Invitation unavailable",
 		/** OUR stand-in when the API answered success:false with no message of its own. A message the server did send wins over this and stays as sent. */
 		notFound: "Invitation not found",
 		/** Stand-in for a bare 404 with no server message. */
-		notFoundAskOwner: "Invitation not found or already used — ask the owner to send a new invite",
+		notFoundAskOwner:
+			"Invitation not found or already used — ask the owner to send a new invite",
 		/** Last-resort body when the thrown Error carries an empty message. */
 		notFoundOrUsed: "This invitation was not found or was already used.",
 		/** Stand-in when the accept POST answered success:false with no message. */
@@ -5143,16 +5600,20 @@ const en = {
 		/** Fills {org} in youJoined when the accept response carried no orgName. Lands mid-sentence, hence lower case in English. */
 		theTeam: "the team",
 		/** {portal} arrives ALREADY translated from orgKindLabel — the zh portal labels already carry 端, so no second 门户 is glued on. */
-		accountReadySignIn: "Your account is ready. Sign in to open the {portal} portal.",
+		accountReadySignIn:
+			"Your account is ready. Sign in to open the {portal} portal.",
 		/** Fills {portal} in accountReadySignIn when the response kind is neither outlet nor agency (the caller's own fallback word). Lands mid-sentence, hence lower case in English. */
 		organisation: "organisation",
 		/** Link to /login from both the success card and an already-active membership. */
 		goToSignIn: "Go to sign in",
 		/** Whole sentence: Chinese puts the role BEFORE the org, so this cannot be glued from fragments. {org} is the stored org name; {role} arrives already resolved by portalRoleLabel. */
 		invitedToJoin: "You are invited to join {org} as {role}.",
-		inviteExpired: "This invitation has expired. Ask the owner to send a new invite.",
-		membershipAlreadyActive: "This membership is already active. You can sign in now.",
-		setUpAccountHint: "Set up your account to accept. You can change the email if needed.",
+		inviteExpired:
+			"This invitation has expired. Ask the owner to send a new invite.",
+		membershipAlreadyActive:
+			"This membership is already active. You can sign in now.",
+		setUpAccountHint:
+			"Set up your account to accept. You can change the email if needed.",
 		/** Field label on the accept form. The value typed here is POSTED and stays as typed. */
 		name: "Name",
 		email: "Email",
@@ -5176,11 +5637,14 @@ const en = {
 		signedInAs: "Signed in as:",
 		/** Stands in for the email when /auth/me has not answered yet. */
 		thisAccount: "this account",
-		wrongPortalBody: "This account does not have access to the {portal} portal. Your role has not changed — this browser is simply signed in to a different account.",
+		wrongPortalBody:
+			"This account does not have access to the {portal} portal. Your role has not changed — this browser is simply signed in to a different account.",
 		/** Colon baked in; the same-origin path follows in a mono span, verbatim. */
 		linkYouOpened: "Link you opened:",
-		wrongPortalHint: "Sign out and sign in with the {portal} account to open it. A link cannot carry a sign-in between browsers — if it could, anyone who received it would be signed in as you.",
-		noPortalBody: "Your account role does not have a web portal on InnocenZ yet. Please contact support if you believe this is a mistake.",
+		wrongPortalHint:
+			"Sign out and sign in with the {portal} account to open it. A link cannot carry a sign-in between browsers — if it could, anyone who received it would be signed in as you.",
+		noPortalBody:
+			"Your account role does not have a web portal on InnocenZ yet. Please contact support if you believe this is a mistake.",
 		/** /no-access primary button in the wrong-portal case. */
 		signOutSwitchAccount: "Sign out and switch account",
 		/** Same button in the no-portal case — it also signs out, then lands on /login. */
@@ -5202,7 +5666,8 @@ const en = {
 		/** Link back to /login from the forgot-password footer. */
 		backToSignIn: "Back to sign in",
 		/** The pitch paragraph in the sign-in page's left column. */
-		loginAsideDescription: "The workforce operating platform for nightlife industry. Manage rosters, track shifts, and run payroll from one secure portal.",
+		loginAsideDescription:
+			"The workforce operating platform for nightlife industry. Manage rosters, track shifts, and run payroll from one secure portal.",
 		/** First line of the /login h1. loginHeadingAccent finishes the sentence in the royal gradient, and it trails the phrase in both languages. */
 		loginHeadingLine1: "Sign in to your",
 		/** Second, gradient-filled line of the /login h1 — reads as one sentence with loginHeadingLine1. */
@@ -5242,7 +5707,8 @@ const en = {
 		/** Gradient second line of the /forgot-password h1 — one sentence with forgotHeading. */
 		forgotHeadingAccent: "password?",
 		/** Sub-line under the /forgot-password h1. */
-		forgotSubheading: "Enter the email on your account and we'll send you a reset link.",
+		forgotSubheading:
+			"Enter the email on your account and we'll send you a reset link.",
 		/** aria-label on the /forgot-password <form>. Announced, never displayed. */
 		forgotFormLabel: "Forgot password form",
 		/** The /forgot-password submit button at rest. */
@@ -5256,11 +5722,13 @@ const en = {
 		/** Gradient second line of the /forgot-password success h1 — one sentence with checkInboxHeading. */
 		checkInboxAccent: "inbox",
 		/** Sub-line after the request is accepted. Says IF on purpose — the endpoint answers identically whether or not the address exists, and this copy must not leak that. */
-		checkInboxSubheading: "If that email is registered, a reset link is on its way.",
+		checkInboxSubheading:
+			"If that email is registered, a reset link is on its way.",
 		/** Whole sentence with the address as a hole. forgot-password.tsx splits it at {email} so the address keeps its gold highlight — a prefix/suffix pair would force English word order. */
 		resetLinkSentTo: "We sent a password reset link to {email}.",
 		/** Fine print under the /forgot-password confirmation. */
-		resetLinkExpiryHint: "The link expires in 1 hour. If it does not arrive, check your spam folder — or make sure that address has an InnocenZ account.",
+		resetLinkExpiryHint:
+			"The link expires in 1 hour. If it does not arrive, check your spam folder — or make sure that address has an InnocenZ account.",
 		/** Ghost button that returns the /forgot-password confirmation to the form. */
 		useDifferentEmail: "Use a different email",
 		/** Lead-in before the back-to-sign-in link at the foot of /forgot-password. */
@@ -5288,7 +5756,8 @@ const en = {
 		/** Sub-line for the tokenless /reset-password state. */
 		linkIncompleteSubheading: "The reset link is missing its token.",
 		/** Body copy for the tokenless /reset-password state. */
-		linkIncompleteHint: "Open the link straight from the email, or request a new one.",
+		linkIncompleteHint:
+			"Open the link straight from the email, or request a new one.",
 		/** Button back to /forgot-password from the tokenless state. */
 		requestNewLink: "Request a new link",
 		/** First line of the /reset-password success h1; passwordUpdatedAccent finishes it (密码 + 已更新). */
@@ -5429,6 +5898,7 @@ const zh: PortalTranslations = {
 		kindPrRatingLow: "评分下降",
 		kindShiftCoverNeeded: "需要顶班",
 		kindPvDayReviewPending: "每日复核",
+		kindSubscription: "订阅",
 		kindLeave: "病假 / 请假",
 		kindUnknown: "更新",
 		shiftAssignedTitle: "已派班",
@@ -5486,7 +5956,8 @@ const zh: PortalTranslations = {
 		agencyServiceBookingTitle: "经纪公司服务预订",
 		serviceForPrBody: "{name} 的 {service} —— 请接受或拒绝",
 		serviceOutletRequestedBody: "{outlet} 为您申请了 {service} —— 请接受或拒绝",
-		serviceAgencyBookedBody: "经纪公司在 {outlet} 为您预订了 {service} —— 请接受或拒绝",
+		serviceAgencyBookedBody:
+			"经纪公司在 {outlet} 为您预订了 {service} —— 请接受或拒绝",
 		serviceAtOutletBody: "{outlet} 的 {service} —— 请接受或拒绝",
 		outletServiceRequestTitle: "门店服务申请",
 		serviceConfirmedForBody: "{name} 的 {service} 已确认",
@@ -5494,11 +5965,13 @@ const zh: PortalTranslations = {
 		serviceDeclinedBody: "{service} 已拒绝",
 		jobPostingUpdateTitle: "职位发布更新",
 		selfLogNamedTitle: "自行记录 · {name}",
-		selfLogVerifyBody: "{category} {amount} · {outlet} —— 请核实手动录入（{ref}）",
+		selfLogVerifyBody:
+			"{category} {amount} · {outlet} —— 请核实手动录入（{ref}）",
 		selfLogVerifiedTitle: "自行记录已核实",
 		selfLogRejectedTitle: "自行记录被驳回",
 		selfLogApprovedBody: "经纪公司已批准您的手动收据记录 · {amount}",
-		selfLogRejectedBody: "经纪公司已驳回您的手动收据记录 · {amount} —— 请联系经纪公司",
+		selfLogRejectedBody:
+			"经纪公司已驳回您的手动收据记录 · {amount} —— 请联系经纪公司",
 	},
 	nav: {
 		today: "今天",
@@ -6098,6 +6571,9 @@ const zh: PortalTranslations = {
 		noOpenShiftsThisDay: "当天没有空缺班次",
 		busyElsewhereAt: "{name} 在 {time} 不可排班",
 		unavailableAtTime: "不可排班",
+		busyTimeUnknown: "未注明时间",
+		busyTimeUnknownAdvice:
+			"当天另有一段不可排班的时间——未注明具体时间，因此不会锁定任何班次。",
 		alreadyOnThisShift: "{name} 已在此班次上",
 		alreadyOnShiftShort: "已在此班次",
 		noShiftsPostedThisDay: "当天没有发布班次。",
@@ -6175,6 +6651,7 @@ const zh: PortalTranslations = {
 		contactAdminCustomPricing: " · 定制价格请联系 InnocenZ 管理员",
 		draftsNotShownYet: "草稿 · {total} · 尚未向任何门店展示",
 		nextChargeSuffix: " · 下次扣费 {date}",
+		renewsOnSuffix: " · {date} 续期",
 		ic: "身份证",
 	},
 	managePr: {
@@ -6678,6 +7155,50 @@ const zh: PortalTranslations = {
 		autoPayEnabled: "{billed} · 已开启自动扣款",
 		visaNextCharge: "Visa ···· {last4} · 下次扣费 {date}",
 
+		payHow: "付款方式",
+		methodCard: "银行卡",
+		methodFpx: "FPX 银行直接扣账",
+		methodTransfer: "银行转账",
+		methodCardNote: "Visa、Mastercard 等。接入支付网关后将自动扣款。",
+		methodFpxNote: "在银行一次性授权后，之后每个账期都会自动扣账。",
+		methodTransferNote:
+			"每个账期由您自行转账，InnocenZ 收到后标记为已付款，绝不会自动扣款。",
+		lanePlan: "套餐",
+		lanePosAddon: "POS 加购",
+		periodsCount: "{n} 个周期",
+		methodEwallet: "电子钱包",
+		methodEwalletNote:
+			"Touch 'n Go、GrabPay、ShopeePay 或 Boost。每笔付款都需要您在钱包应用中确认，系统绝不会自动扣款。",
+		yourWallet: "您的电子钱包",
+		chooseWalletPlaceholder: "请选择电子钱包…",
+		chooseWallet: "请选择您将用于付款的电子钱包。",
+		walletPushNote:
+			"InnocenZ 会记录您选择的钱包。向您发送付款请求需要支付网关，目前尚未接入。",
+		mandatePending: "正在等待银行批准此直接扣账授权，批准前不会扣款。",
+		addPaymentMethod: "添加付款方式",
+		editPaymentMethod: "编辑付款方式",
+		savePaymentMethod: "保存付款方式",
+		savedTransfer: "银行转账",
+		savedFpx: "FPX 银行直接扣账",
+
+		billingDueTitle: "订阅费待付",
+		billingDueOne: "尚有 {amount} 未付，共 1 个账单周期。",
+		billingDueMany: "尚有 {amount} 未付，共 {n} 个账单周期。",
+		billingDueSince: "最早未付周期自 {date} 起。",
+		billingDueCta: "打开订阅页面",
+		settleBeforeCustomAsk:
+			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再申请 Custom 价格。随时可重置回普通价目表。",
+
+		yourBank: "您的银行",
+		chooseBankPlaceholder: "请选择银行…",
+		chooseBank: "请选择您将用于授权直接扣账的银行。",
+		bankRedirectNote:
+			"系统会将您转到该银行完成授权。InnocenZ 不会看到或保存您的账户号码。",
+		mandateNotLiveYet:
+			"InnocenZ 会记录您选择的银行。跳转到银行完成授权需要支付网关，目前尚未接入。",
+		transferRecordedNote:
+			"每个账期由您自行转账；管理员确认收款后 InnocenZ 才会记录。",
+
 		capStarter: "每周 5 张薪资单",
 		capPlus: "每周 6–10 张薪资单",
 		capGrowth: "每周 11–25 张薪资单",
@@ -7058,6 +7579,12 @@ const zh: PortalTranslations = {
 		demoCardHint: "Visa ···· {last4} · 续订日 {date}",
 		billedMonthly: "按月计费 · {price}",
 		nextRenewal: "下次续订 {date}",
+		settleBeforeSwitch:
+			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再更换方案。POS 附加服务的申请与取消随时可办理。",
+		unpaidReminderPos:
+			"提醒：您尚有 {n} 个未付账单周期，共 {amount}——请尽快与 InnocenZ 结清。本次申请仍已提交。",
+		settleBeforeRequote:
+			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再申请新的 POS 价格。取消 POS 随时可办理。",
 		nothingToRenew: "没有生效中的订阅 —— 无需续订",
 		cardSaved: "银行卡已保存，用于订阅扣款",
 		couldNotSaveCard: "无法保存银行卡 —— 请重试",
@@ -7068,6 +7595,8 @@ const zh: PortalTranslations = {
 		posRemovalSent: "移除 POS 接入的申请已发送给 InnocenZ 管理员",
 		couldNotSendTheRequest: "无法发送该申请 —— 请重试",
 		posRequestWithdrawn: "POS 接入申请已撤回",
+		couldNotWithdrawRequest:
+			"无法撤回该申请——管理员可能已经处理。请刷新查看当前状态。",
 		peakDayReduce:
 			"峰值日已请求 {peak} 位 PR —— 降级到 {plan} 前请先减到每天 {max} 位",
 		planListLoading: "套餐列表仍在加载 —— 请稍后重试",
@@ -8036,12 +8565,15 @@ const zh: PortalTranslations = {
 		signOutMeaning: "退出登录",
 	},
 	outletRoutes: {
-		awaitingAgencyDecision: "您已申请与一家经纪公司合作，对方尚未答复。一旦有一家接受，您就可以向他们发布班次。",
-		noAgencyAddInSettings: "班次由 PR 经纪公司配置人员，因此本门店至少需要一家。请在「设置」中添加 —— 是否接受由对方决定。",
+		awaitingAgencyDecision:
+			"您已申请与一家经纪公司合作，对方尚未答复。一旦有一家接受，您就可以向他们发布班次。",
+		noAgencyAddInSettings:
+			"班次由 PR 经纪公司配置人员，因此本门店至少需要一家。请在「设置」中添加 —— 是否接受由对方决定。",
 		shiftsForDate: "{date} 的班次",
 		slotCountOne: "1 个时段",
 		slotCountMany: "{n} 个时段",
-		specialServiceComingLater: "预订经纪公司增值服务将在后续版本推出。您的账户无需做任何更改。",
+		specialServiceComingLater:
+			"预订经纪公司增值服务将在后续版本推出。您的账户无需做任何更改。",
 		roleCannotAccessPostings: "您的门店角色无法访问职位发布。",
 	},
 	adminProfile: {
@@ -8069,7 +8601,8 @@ const zh: PortalTranslations = {
 		agencySuspended: "经纪公司已暂停",
 		agencySuspendFailed: "暂停经纪公司失败",
 		aboutLegacyMember: "关于旧版会员",
-		aboutLegacyMemberBody: "此列表显示已暂停的经纪公司与门店机构，以及已停用的 PR 账户。请按角色（而非等级）筛选。重新启用经纪公司或门店会恢复该机构；重新启用 PR 则会恢复本人的账户，使其可以再次登录。",
+		aboutLegacyMemberBody:
+			"此列表显示已暂停的经纪公司与门店机构，以及已停用的 PR 账户。请按角色（而非等级）筛选。重新启用经纪公司或门店会恢复该机构；重新启用 PR 则会恢复本人的账户，使其可以再次登录。",
 		searchFilters: "搜索筛选",
 		searchFiltersHint: "按名称、代码、联系方式和角色查找已暂停的记录。",
 		placeholderName: "姓名 / 机构名称",
@@ -8103,8 +8636,10 @@ const zh: PortalTranslations = {
 		outletReactivateFailed: "重新启用门店失败",
 	},
 	adminBusiness: {
-		currentPlanSubtitle: "每家门店和经纪公司当前所用的套餐 —— 套餐变更获批后即时更新。",
-		currentViewHint: "每家门店和经纪公司当前所用的套餐 —— 每个订阅方一行，套餐变更获批后更新",
+		currentPlanSubtitle:
+			"每家门店和经纪公司当前所用的套餐 —— 套餐变更获批后即时更新。",
+		currentViewHint:
+			"每家门店和经纪公司当前所用的套餐 —— 每个订阅方一行，套餐变更获批后更新",
 		historyViewHint: "历来所有订阅记录 —— 每行是订阅方用过的一个套餐，最新在前",
 		searchOutletOrAgency: "搜索门店或经纪公司",
 		searchOutletOrAgencyPlaceholder: "搜索门店或经纪公司…",
@@ -8123,8 +8658,10 @@ const zh: PortalTranslations = {
 		statusExpired: "已过期",
 		showingSubscriptions: "显示第 {from} - {to} 项，共 {total} 条订阅",
 		noSubscriptionOnRecord: "无订阅记录",
-		neverChargedOne: "有 {n} 家已注册机构从未被扣费，因此不会出现在上方账目中。它们仍可登录 —— 为其指定套餐即可开始计费。",
-		neverChargedMany: "有 {n} 家已注册机构从未被扣费，因此不会出现在上方账目中。它们仍可登录 —— 为其指定套餐即可开始计费。",
+		neverChargedOne:
+			"有 {n} 家已注册机构从未被扣费，因此不会出现在上方账目中。它们仍可登录 —— 为其指定套餐即可开始计费。",
+		neverChargedMany:
+			"有 {n} 家已注册机构从未被扣费，因此不会出现在上方账目中。它们仍可登录 —— 为其指定套餐即可开始计费。",
 		notSubscribed: "未订阅",
 		planSubtitle: "管理经纪公司与门店的套餐及计费周期。",
 		planCreated: "套餐创建成功",
@@ -8138,7 +8675,8 @@ const zh: PortalTranslations = {
 		colAmount: "金额",
 		pendingReview: "待审核",
 		jobsTitle: "工作与特别服务",
-		jobsSubtitle: "浏览订单与经纪公司发布的工作。点击某一行可打开编辑器，修改详情或状态。可使用筛选器按来源、类别或状态缩小范围。",
+		jobsSubtitle:
+			"浏览订单与经纪公司发布的工作。点击某一行可打开编辑器，修改详情或状态。可使用筛选器按来源、类别或状态缩小范围。",
 		agencyJobPostings: "经纪公司发布的工作",
 		agencyJobPostingsHint: "经纪公司提交、等待管理员批准或拒绝的发布",
 		allOrders: "全部订单",
@@ -8195,7 +8733,8 @@ const zh: PortalTranslations = {
 		catEmergencyCover: "紧急替班",
 		catTraining: "培训补充",
 		catOthers: "其他",
-		pvSubtitle: "经纪公司每周开给旗下 PR 的付款单。点击某一行可查看付款单及其明细项。",
+		pvSubtitle:
+			"经纪公司每周开给旗下 PR 的付款单。点击某一行可查看付款单及其明细项。",
 		vouchers: "付款单",
 		pvReadOnlyHint: "平台上所有付款单的只读视图。",
 		searchPrName: "搜索 PR 姓名",
@@ -8226,13 +8765,15 @@ const zh: PortalTranslations = {
 		noteLabel: "备注：",
 		autoSealed: "系统自动结算",
 		receiptEvidence: "收据凭证",
-		noReceiptEvidence: "此付款单未附任何收据 —— 这里的提成明细没有扫描件或自行填报的收据作为依据。",
+		noReceiptEvidence:
+			"此付款单未附任何收据 —— 这里的提成明细没有扫描件或自行填报的收据作为依据。",
 		reviewedAt: "审核：{when}",
 		reviewedAtBy: "审核：{when} · 审核人 {name}",
 		openFullSize: "查看原图",
 		proofForReceipt: "收据 {no} 的凭证",
 		disputes: "争议",
-		disputeEscalationHint: "在此处理属于经纪公司未处理时的升级通道。系统会记录该决定并通知 PR，但不会改动付款单的金额。",
+		disputeEscalationHint:
+			"在此处理属于经纪公司未处理时的升级通道。系统会记录该决定并通知 PR，但不会改动付款单的金额。",
 		resolvedAccepted: "已处理 · 接受",
 		resolvedRejected: "已处理 · 驳回",
 		resolvedWithdrawn: "已处理 · 已撤回",
@@ -8240,9 +8781,11 @@ const zh: PortalTranslations = {
 		disputeNotePlaceholder: "接受或驳回的原因…",
 		tellPrWhyRejected: "请告知 PR 驳回的原因。",
 		accept: "接受",
-		planPaymentSubtitle: "各门店与经纪公司按周期应向 InnocenZ 支付的套餐费用。经纪公司按周计费（周日至周六），门店按月计费。每个周期开出时均为未付款，直到您标记为已付款。",
+		planPaymentSubtitle:
+			"各门店与经纪公司按周期应向 InnocenZ 支付的套餐费用。经纪公司按周计费（周日至周六），门店按月计费。每个周期开出时均为未付款，直到您标记为已付款。",
 		billingPeriods: "计费周期",
-		billingPeriodsHintBefore: "每个订阅方需付费的周期各占一行 —— 经纪公司按周计费（周日至周六），门店从订阅当天起按月计费。数据由订阅本身生成，因此这里是实际已计费的内容，而非申请的内容；相关的方案切换记录见",
+		billingPeriodsHintBefore:
+			"每个订阅方需付费的周期各占一行 —— 经纪公司按周计费（周日至周六），门店从订阅当天起按月计费。数据由订阅本身生成，因此这里是实际已计费的内容，而非申请的内容；相关的方案切换记录见",
 		billingPeriodsHintAfter: "。每个周期开出时均为未付款，直到您标记为已付款。",
 		searchOutletOrAgency: "搜索门店或经纪公司",
 		searchOutletOrAgencyPlaceholder: "搜索门店或经纪公司…",
@@ -8252,13 +8795,58 @@ const zh: PortalTranslations = {
 		ledgerUpToDate: "账目已是最新",
 		ledgerRefreshFailed: "刷新账目失败",
 		colWho: "订阅方",
-		colPlan: "套餐",
+		colPlan: "计费项目",
 		colBillingPeriod: "计费周期",
 		colPaidOn: "付款日期",
 		noBillingPeriods: "没有符合此筛选条件的计费周期。",
 		markPaid: "标记为已付款",
 		markUnpaid: "标记为未付款",
+		paymentReference: "银行参考号",
+		paymentReferenceHint: "选填 — 便于将此账期与银行对账单核对",
+		paymentReferencePlaceholder: "例如 MBB-20260827-0001",
+		confirmPayment: "确认付款",
+
+		paymentPanelIntro:
+			"此账期的费用、订户的付款方式，以及针对它的每一次付款尝试。",
+		subscriptionDetails: "订阅详情",
+		thisInvoiceFor: "此账单对应",
+		allBillingLanes: "当前订阅",
+		allBillingLanesHint:
+			"该机构今天所用的方案。方案与每项附加服务分开计费，各自生成独立账单；下方「账单记录」中某个计费周期可能是按已退出的方案开具的。",
+		thisPeriodBadge: "本账单",
+		billingHistory: "账单记录",
+		showingFilteredPeriods: "显示 {total} 个周期中的 {n} 个 · 查看全部",
+		alsoThisPeriod: "本周期另有",
+		totalThisPeriod: "本周期合计",
+		totalPerCycle: "每期合计",
+		planLabel: "方案",
+		billingCycleLabel: "计费周期",
+		billingPeriodLabel: "账期",
+		amountLabel: "金额",
+		statusLabel: "状态",
+		paidOnLabel: "付款日期",
+		openFullRecord: "查看完整资料",
+		noMethodOnFile: "尚无付款方式 — 该订户从未保存过。",
+		defaultMethod: "默认",
+		mandatePendingShort: "等待银行批准",
+		paymentAttempts: "付款尝试",
+		noAttemptsYet: "尚无付款记录。将此账期标记为已付款即会记录第一笔。",
+		recordedBy: "记录人",
+		paymentDetailLoadFailed: "无法加载此付款记录",
+		actorSystem: "系统",
+		attemptInitiated: "已发起",
+		attemptPending: "等待银行处理",
+		attemptSucceeded: "已结清",
+		attemptFailed: "已拒付",
+		attemptRefunded: "已退款",
+		attemptVoided: "已撤回",
 		showingBillingPeriods: "显示第 {from} - {to} 项，共 {total} 个计费周期",
+		showingSubscribers: "显示第 {from} - {to} 项，共 {total} 个门店与经纪公司",
+		expandPeriods: "展开计费周期",
+		collapsePeriods: "收起计费周期",
+		periodsCount: "{n} 个周期",
+		unpaidOfTotal: "{total} 个中 {unpaid} 个未付",
+		paidCount: "{n} 个已付",
 	},
 	agencyPending: {
 		legal: "证件姓名",
@@ -8272,18 +8860,21 @@ const zh: PortalTranslations = {
 		portfolioSlot: "作品集 {n}",
 		requestedAt: "申请于 {date}",
 		saves: "可省",
-		releaseOnApprove: "批准后：按已工作时数结算工资并加上提成。除非你在排班中把他们改派到其他门店，否则他们将直接收工回家。",
+		releaseOnApprove:
+			"批准后：按已工作时数结算工资并加上提成。除非你在排班中把他们改派到其他门店，否则他们将直接收工回家。",
 		wantsToLinkTo: "申请关联至 {agency}",
 		agencyLinkRequest: "经纪公司关联申请",
 		approveLink: "批准关联",
 		askingToJoin: "{name} 申请加入 {agency}。",
-		approveToAddRoster: "批准后即可将其加入你的 PR 名单，之后就能像其他签约 PR 一样为其排班。",
+		approveToAddRoster:
+			"批准后即可将其加入你的 PR 名单，之后就能像其他签约 PR 一样为其排班。",
 		mcLeaveRequest: "病假 / 请假申请",
 		approveExcuseShift: "批准 · 免除该班次",
 		noMcPhotoAttached: "未附照片 — 这份申请早于病假照片规定。",
 		mcDocumentNumbered: "{name} 提交的病假证明 {n}",
 		mcDocumentFrom: "{name} 提交的病假证明",
-		leaveDecisionNote: "批准后 PR 不受任何处罚，该班次会空出一个名额 — 它会出现在排班的补位清单中等待替补。驳回则会让 PR 回到该班次。",
+		leaveDecisionNote:
+			"批准后 PR 不受任何处罚，该班次会空出一个名额 — 它会出现在排班的补位清单中等待替补。驳回则会让 PR 回到该班次。",
 		financeCannotApprove: "财务角色无法审批 PR 注册申请。",
 		loadingLeaveRequests: "正在加载病假 / 请假申请…",
 		noCutlostRequests: "暂无缺班损失申请",
@@ -8295,7 +8886,8 @@ const zh: PortalTranslations = {
 	agencyPv: {
 		unsignedVoucherOne: "本周有 {n} 张付款单尚未签署",
 		unsignedVoucherMany: "本周有 {n} 张付款单尚未签署",
-		overdueUnsignedHint: "这些已逾期 — PR 无法签署从未发送的付款单。请逐日审核后发送，付款单便会出现在 PR 的「收款」页面供其电子签署。",
+		overdueUnsignedHint:
+			"这些已逾期 — PR 无法签署从未发送的付款单。请逐日审核后发送，付款单便会出现在 PR 的「收款」页面供其电子签署。",
 		weekWorked: "工作周",
 		latest: "最新",
 		prIdLabel: "PR 编号",
@@ -8315,12 +8907,16 @@ const zh: PortalTranslations = {
 		daysLeftToAdjust: "还有 {n} 天可修改并重新发送",
 		prUpdated: "PR 已更新于",
 		loadingLetterhead: "正在加载贵公司的信头…",
-		letterheadUnavailable: "无法加载贵公司的资料，此付款单暂时无法打印。请重新加载页面或检查网络连接。",
-		printLayoutNote: "PDF 与 Excel 均与正式付款单版式一致 · 发送时会拦截重复付款。",
+		letterheadUnavailable:
+			"无法加载贵公司的资料，此付款单暂时无法打印。请重新加载页面或检查网络连接。",
+		printLayoutNote:
+			"PDF 与 Excel 均与正式付款单版式一致 · 发送时会拦截重复付款。",
 		signingOpensWhenWeekCloses: "本周结算后方可签署",
-		weekStillOpenBody: "此付款单属于仍在进行中的周期（{cycle}），金额仍可能变动 — 今晚的班次、明天的收据、发送前登记的罚款都会影响它。签名是对总额的确认，而目前还没有最终总额。周期结束后，它会出现在",
+		weekStillOpenBody:
+			"此付款单属于仍在进行中的周期（{cycle}），金额仍可能变动 — 今晚的班次、明天的收据、发送前登记的罚款都会影响它。签名是对总额的确认，而目前还没有最终总额。周期结束后，它会出现在",
 		weekStillOpenTail: "中，可从那里签署。",
-		signToAttest: "签名即确认这些金额。PR 会对您在此处的签名进行会签，因此需在发送付款单之前完成。",
+		signToAttest:
+			"签名即确认这些金额。PR 会对您在此处的签名进行会签，因此需在发送付款单之前完成。",
 		drawDifferentSignature: "手写另一个签名",
 		signThisVoucher: "签署此付款单",
 		saveSignatureHint: "在「设置」中保存签名，下次即可一键签署。",
@@ -8329,12 +8925,14 @@ const zh: PortalTranslations = {
 		approveInPayrollReceipts: "请在「薪资与付款单 › 收据」中审批。",
 		resendToPr: "重新发送给 PR",
 		resolveDisputeAndReassign: "处理争议并重新指派",
-		markPaidHint: "将此付款单标记为已付款并移入历史记录。付款日期只会记录一次 — 重复登记不会更改转账日期。",
+		markPaidHint:
+			"将此付款单标记为已付款并移入历史记录。付款日期只会记录一次 — 重复登记不会更改转账日期。",
 		markAsPaid: "标记为已付款",
 		recordedAsPaid: "{amount} 已登记为已付款",
 		overriddenByAt: "由 {by} 撤改 · {at}",
 		overrideSignedPvAuditLogged: "撤改已签署付款单（记入审计日志）",
-		overrideExplainer: "财务可在填写必填的审计原因后撤改 — 付款单将重新开放供 PR 审核",
+		overrideExplainer:
+			"财务可在填写必填的审计原因后撤改 — 付款单将重新开放供 PR 审核",
 		confirmOverride: "确认撤改",
 	},
 	agencyPrs: {
@@ -8344,14 +8942,17 @@ const zh: PortalTranslations = {
 		penaltyPrMany: "{n} 位 PR · 合计 {amount}",
 		penaltyRecorded: "已记为应扣 —— 详见薪资与薪资单",
 		penaltyNotRecorded: "尚未记录 · 请在薪资与薪资单中记录",
-		penaltyRulesLoadFailed: "无法加载罚款规则 —— 经纪公司罚款规则接口请求失败。",
+		penaltyRulesLoadFailed:
+			"无法加载罚款规则 —— 经纪公司罚款规则接口请求失败。",
 		starsAvg: "平均 {stars} ★",
 		comcard3d: "3D 模卡",
 		editable: "可编辑",
 		ageFollowsIc: "年龄以 PR 的身份证为准 —— 由其身份信息更新，无法在此修改。",
 		suspendedShiftsPaused: "已停用 —— 班次已暂停",
-		warnBelowAverage: "警告 · 平均评分 {stars}★ 低于 {threshold}★ —— 请关注其表现",
-		autoFlagConsiderSuspend: "自动标记 · 连续 {n} 场班次评分低于 {stars}★ —— 建议停用",
+		warnBelowAverage:
+			"警告 · 平均评分 {stars}★ 低于 {threshold}★ —— 请关注其表现",
+		autoFlagConsiderSuspend:
+			"自动标记 · 连续 {n} 场班次评分低于 {stars}★ —— 建议停用",
 		tiedDetachNeedsAdmin: "已绑定 {duration} · 解除关联需 InnocenZ 管理员批准",
 		tiedMonths: "{n} 个月",
 		tiedYears: "{n} 年",
@@ -8364,17 +8965,23 @@ const zh: PortalTranslations = {
 		ratingCountMany: "{n} 条评价",
 		saveProfile: "保存资料",
 		suspendNamed: "确认停用 {name}？",
-		suspendBody: "停用后，该 PR 将无法收到班次邀约，也无法打卡，直到你解除停用为止。已排入的班次可能需要重新指派。",
+		suspendBody:
+			"停用后，该 PR 将无法收到班次邀约，也无法打卡，直到你解除停用为止。已排入的班次可能需要重新指派。",
 		confirmSuspend: "确认停用",
 		detachNamed: "确认解除与 {name} 的关联？",
 		requestDetachNamed: "申请解除与 {name} 的关联？",
-		detachTiedBody: "该 PR 已绑定 {duration}（不足一年），无法直接解除关联 —— 请提交申请交由 InnocenZ 管理员审核。",
-		detachBody: "解除关联会将该 PR 移出你的经纪公司名单，其之后不会再收到你公司的绑定班次或薪资。",
+		detachTiedBody:
+			"该 PR 已绑定 {duration}（不足一年），无法直接解除关联 —— 请提交申请交由 InnocenZ 管理员审核。",
+		detachBody:
+			"解除关联会将该 PR 移出你的经纪公司名单，其之后不会再收到你公司的绑定班次或薪资。",
 		submitAdminRequest: "提交管理员申请",
 		confirmDetach: "确认解除关联",
-		payClassChangeBody: "{name} 的薪资级别将由 {from} 变更为 {to}，自 {date} 起生效。已完成或已预订的班次仍按原薪资结算，新班次按新级别计算。",
-		payClassConflictOne: "有 {n} 个已预订的未来班次不是仅抽成班次。仅抽成的 PR 只能上仅抽成班次 —— 请检查或重新指派这些排班。",
-		payClassConflictMany: "有 {n} 个已预订的未来班次不是仅抽成班次。仅抽成的 PR 只能上仅抽成班次 —— 请检查或重新指派这些排班。",
+		payClassChangeBody:
+			"{name} 的薪资级别将由 {from} 变更为 {to}，自 {date} 起生效。已完成或已预订的班次仍按原薪资结算，新班次按新级别计算。",
+		payClassConflictOne:
+			"有 {n} 个已预订的未来班次不是仅抽成班次。仅抽成的 PR 只能上仅抽成班次 —— 请检查或重新指派这些排班。",
+		payClassConflictMany:
+			"有 {n} 个已预订的未来班次不是仅抽成班次。仅抽成的 PR 只能上仅抽成班次 —— 请检查或重新指派这些排班。",
 		confirmChange: "确认更改",
 		outletRequestOne: "{n} 条门店请求",
 		outletRequestMany: "{n} 条门店请求",
@@ -8382,28 +8989,35 @@ const zh: PortalTranslations = {
 		swapCountMany: "{n} 条换班申请",
 		releasedFrom: "{name}（来自 {outlet}）",
 		releasedFromAt: "{name}（来自 {outlet} · {time}）",
-		releasedEarlyAssignHint: "{names}。可在排班中将其指派到其他门店，或让其直接下班回家。",
+		releasedEarlyAssignHint:
+			"{names}。可在排班中将其指派到其他门店，或让其直接下班回家。",
 		prAssignedSaved: "已指派 PR —— 已保存到排班",
 		pendingCount: "{n} 条待处理",
 		awaitingCoverageAccept: "等待 {name} 接受代班邀约",
 		replacementDeclined: "{name} 已拒绝：“{reason}”",
-		swapWantsToLeave: "{name} 希望从 {from} 调往 {to} · {date} · {shift}。请为其原班次选择替班人员。",
-		pickOpenShiftHoursPaid: "请选择今天其他门店的空缺班次。在 {outlet} 已工作的时数照常计薪。",
+		swapWantsToLeave:
+			"{name} 希望从 {from} 调往 {to} · {date} · {shift}。请为其原班次选择替班人员。",
+		pickOpenShiftHoursPaid:
+			"请选择今天其他门店的空缺班次。在 {outlet} 已工作的时数照常计薪。",
 		suppliedEstimate: "已供给 {supplied}/{demand} · 预计 {amount}",
 		mustApproveBeforeChange: "需 {name} 同意后才会更换门店。",
 		swapTargetFull: "—— 已满",
 		swapTargetTierBlocked: "—— 该 PR 的等级没有空位（{staffed}/{quantity}）",
 		staffedOf: "已配 {staffed}/{quantity} 人",
-		unassignExplain: "将 {name} 从此班次移除。该排班记录会被删除，空位重新开放 —— 用于撤销指派，不是取消已确认的班次。",
-		unassignConfirmBody: "{name} · {outlet} · {date} · {shift}。该排班记录将被删除，空位重新开放。此操作无法撤销。",
+		unassignExplain:
+			"将 {name} 从此班次移除。该排班记录会被删除，空位重新开放 —— 用于撤销指派，不是取消已确认的班次。",
+		unassignConfirmBody:
+			"{name} · {outlet} · {date} · {shift}。该排班记录将被删除，空位重新开放。此操作无法撤销。",
 		breachBelowMinShifts: "低于每周最少班次",
 		breachMcCapExceeded: "超出每月病假上限",
 		breachLateTooOften: "迟到次数过多",
 	},
 	adminRequests: {
-		pageDescription: "这里汇总两类申请：门店申请 Integrate with POS 报价，以及经纪公司重新协商 Custom（151+ PV）档位。处理前可协商或修改预估价 —— 一经处理，价格即为最终价。",
+		pageDescription:
+			"这里汇总两类申请：门店申请 Integrate with POS 报价，以及经纪公司重新协商 Custom（151+ PV）档位。处理前可协商或修改预估价 —— 一经处理，价格即为最终价。",
 		cardTitle: "申请",
-		cardHint: "点击任一行打开编辑器 —— 谁提出、针对哪个套餐，以及最终敲定的价格",
+		cardHint:
+			"点击任一行打开编辑器 —— 谁提出、针对哪个套餐，以及最终敲定的价格",
 		summaryOutletQuotes: "门店报价",
 		summaryAgencyQuotes: "经纪公司报价",
 		summaryTotalNegotiated: "议价总额",
@@ -8452,7 +9066,8 @@ const zh: PortalTranslations = {
 		beforeFromPlan: "变更前 · 原套餐",
 		afterToPlan: "变更后 · 新套餐",
 		negotiated: "议价",
-		noPriceHint: "此类申请不涉及价格 —— 只有门店的 POS 报价和经纪公司的 Custom 重新议价可以议价。",
+		noPriceHint:
+			"此类申请不涉及价格 —— 只有门店的 POS 报价和经纪公司的 Custom 重新议价可以议价。",
 		addRemarks: "添加备注…",
 		neededToResolve: "处理前必填",
 		quoteMissingWarn: "留空即处理，经纪公司会落在一个价格为零的议价档位上。",
@@ -8461,28 +9076,36 @@ const zh: PortalTranslations = {
 		estimateHint: "预估价 —— 处理前可协商或修改。",
 		leaveEmptyUsesPlanPrice: "留空则在处理时采用当前套餐价格（RM {price}）。",
 		quoteBecomesTierPrice: "处理后，RM {price} 将成为该经纪公司的档位价格。",
+		quoteBecomesAddonPrice:
+			"处理后，RM {price} 将成为 POS 加购价格 —— 在门店套餐之外另行计费，套餐本身不变。",
 		resolvedPriceFinal: "已处理 —— 价格已最终确定。",
 		markContacted: "标记为已联系",
 		cancelRequest: "取消申请",
 		resolve: "处理",
-		saveChanges: "保存更改",
+		saveChanges: "仅保存，不处理",
 		toPlanReset: "重置 · {plan}",
-		toPlanCancelOnly: "取消 · 仅保留 {plan}",
+		toPlanCancelOnly: "POS 结束 · 继续使用 {plan}",
 		fallbackItsTier: "其档位",
 		fallbackItsPlan: "其套餐",
 		fallbackTierNamed: "其指定的档位",
-		noteDeclinedExitAddon: "已取消 —— 门店按已议定的价格继续保留 POS 增值服务。",
+		noteDeclinedExitAddon:
+			"已取消 —— 门店按已议定的价格继续保留 POS 增值服务。",
 		noteDeclinedExitTier: "已取消 —— 经纪公司按已议定的价格继续留在 Custom。",
 		noteDeclinedJoinAddon: "已取消 —— 未开通增值服务。门店只支付套餐费。",
 		noteDeclinedJoinTier: "已取消 —— 未议定价格。经纪公司维持当前档位。",
 		noteResolvedExitAddon: "已处理 —— POS 增值服务已终止。门店只支付套餐费。",
-		noteResolvedExitTier: "已处理 —— Custom 价格已终止。经纪公司按标准价目使用 {plan}。",
-		noteExitPendingAddon: "已提出取消申请 —— 等待你处理。在你处理之前，门店保留 {plan}，增值服务费用继续计收。",
-		noteExitPendingTier: "已提出取消申请 —— 等待你处理。在你处理之前，经纪公司按已议定价格留在 Custom，处理后转为 {plan}。",
+		noteResolvedExitTier:
+			"已处理 —— Custom 价格已终止。经纪公司按标准价目使用 {plan}。",
+		noteExitPendingAddon:
+			"已提出取消申请 —— 等待你处理。在你处理之前，门店保留 {plan}，增值服务费用继续计收。",
+		noteExitPendingTier:
+			"已提出取消申请 —— 等待你处理。在你处理之前，经纪公司按已议定价格留在 Custom，处理后转为 {plan}。",
 		noteResolvedJoinAddon: "已处理 —— 在门店套餐费之外另行计收，套餐本身不变。",
 		noteResolvedJoinTier: "已处理 —— 从现在起，这就是该经纪公司的档位价格。",
-		notePendingJoinAddon: "先设定价格，再点击「处理」。该费用在门店套餐费之外另行计收 —— 套餐本身不变。",
-		notePendingJoinTier: "先设定价格，再点击「处理」。它将成为该经纪公司的档位价格 —— Custom 没有可回退的标准价目。",
+		notePendingJoinAddon:
+			"先设定价格，再点击「处理」。该费用在门店套餐费之外另行计收 —— 套餐本身不变。",
+		notePendingJoinTier:
+			"先设定价格，再点击「处理」。它将成为该经纪公司的档位价格 —— Custom 没有可回退的标准价目。",
 		toastMarkedContacted: "已标记为已联系",
 		toastMarkContactedFailed: "标记为已联系失败",
 		toastResolved: "申请已处理",
@@ -8493,11 +9116,15 @@ const zh: PortalTranslations = {
 		toastUpdateFailed: "更新申请失败",
 		toastInvalidAmount: "请输入有效的非负金额",
 		toastSetCustomPrice: "处理前请先设定 Custom 价格",
-		planChangeDescription: "门店与经纪公司的套餐切换记录。经纪公司按 PR 人数自动切换（自动生效）。门店切换会保持待审核 —— 点击任一行批准或拒绝；批准前按原套餐计价，批准后按新套餐计价。",
+		planChangeDescription:
+			"门店与经纪公司的套餐切换记录。经纪公司按薪资单数量自动切换（自动生效）。门店切换会保持待审核 —— 点击任一行批准或拒绝；批准前按原套餐计价，批准后按新套餐计价。",
 		activityTitle: "套餐变更记录",
-		activityHintLatest: "每个订阅方一行 —— 仅显示仍待处理的那次切换。选择「全部记录」可查看以往每一次变更。",
-		activityHintAll: "所有提交过的套餐变更 —— 每次切换各占一行，同一门店或经纪公司会重复出现。POS 与 Custom 的变动在「套餐申请」页。",
-		billedRecordHint: "这里记录的是提出的切换申请。若要查看各订阅方实际计费的记录（与其订阅页看到的一致），请打开",
+		activityHintLatest:
+			"每个订阅方一行 —— 仅显示仍待处理的那次切换。选择「全部记录」可查看以往每一次变更。",
+		activityHintAll:
+			"所有提交过的套餐变更 —— 每次切换各占一行，同一门店或经纪公司会重复出现。POS 与 Custom 的变动在「套餐申请」页。",
+		billedRecordHint:
+			"这里记录的是提出的切换申请。若要查看各订阅方实际计费的记录（与其订阅页看到的一致），请打开",
 		currentPlanFullHistoryLink: "当前套餐 → 全部记录",
 		viewLatestOnly: "仅最新",
 		viewFullHistory: "全部记录",
@@ -8505,6 +9132,9 @@ const zh: PortalTranslations = {
 		switchedDate: "变更日期",
 		colPrice: "价格（RM）",
 		colSwitchedAt: "变更时间",
+		currentlyOn: "当前套餐",
+		livePlanDiffers:
+			"与上方套餐不一致 —— 可能已被后续变更取代，或这次切换从未写入计费台账。实际计费以「套餐付款」为准。",
 		loadingPlanChanges: "正在加载套餐变更…",
 		failedToLoadPlanChanges: "加载套餐变更失败",
 		noPlanChangesFound: "未找到套餐变更",
@@ -8512,11 +9142,12 @@ const zh: PortalTranslations = {
 		priceNoteNegotiatedCustom: "议价 · Custom",
 		priceNoteFromPlanStays: "原套餐 · 维持不变",
 		priceNoteFromPlanUntilApproved: "原套餐 · 直至批准",
-		sheetHintDirect: "经纪公司切换 —— 按 PR 人数自动生效。",
+		sheetHintDirect: "经纪公司切换 —— 按薪资单数量自动生效。",
 		sheetHintPending: "门店切换 —— 核对变更前后的套餐，然后批准或拒绝。",
 		sheetHintActioned: "门店切换 —— 已处理。",
-		noteDirect: "按 PR 人数自动切换 —— 价格随新套餐。",
-		notePendingApproval: "提醒：在你批准之前，门店仍按原套餐价格付费。批准后价格随新套餐。",
+		noteDirect: "按薪资单数量自动切换 —— 价格随新套餐。",
+		notePendingApproval:
+			"提醒：在你批准之前，门店仍按原套餐价格付费。批准后价格随新套餐。",
 		noteApproved: "已批准 —— 价格现已随新套餐。",
 		noteDeclinedPlanChange: "已拒绝 —— 门店维持原套餐价格。",
 		toastPlanChangeApproved: "套餐变更已批准",
@@ -8596,7 +9227,8 @@ const zh: PortalTranslations = {
 		backfillNeeded: "需要补位",
 		backfillOpenSlotOne: "1 个空缺岗位",
 		backfillOpenSlotMany: "{n} 个空缺岗位",
-		backfillSlotLine: "{slot} · 已配 {staffed}/{quantity} 人 · {reason} —— {name}",
+		backfillSlotLine:
+			"{slot} · 已配 {staffed}/{quantity} 人 · {reason} —— {name}",
 		backfillReasonLeaveApproved: "请假已批准",
 		backfillReasonCancelled: "已取消",
 		backfillEyebrow: "补位 · {date}",
@@ -8613,22 +9245,29 @@ const zh: PortalTranslations = {
 		viaApproveAll: "批量批准",
 		statusOpen: "待审核",
 		statusChanged: "已变动",
-		staleWithApproved: "此日在审核后发生变动 — 当时按 {approved} 通过，现为 {now}。此前的决定已失效，请重新审核。",
-		staleWithoutApproved: "此日在审核后发生变动 — 现为 {now}。此前的决定已失效，请重新审核。",
+		staleWithApproved:
+			"此日在审核后发生变动 — 当时按 {approved} 通过，现为 {now}。此前的决定已失效，请重新审核。",
+		staleWithoutApproved:
+			"此日在审核后发生变动 — 现为 {now}。此前的决定已失效，请重新审核。",
 		noteLabel: "备注：",
-		holdNotePlaceholder: "为什么暂缓这一天？（选填，但 PR 看不到原因就会来追问）",
+		holdNotePlaceholder:
+			"为什么暂缓这一天？（选填，但 PR 看不到原因就会来追问）",
 		holdAction: "暂缓",
 		confirmHold: "确认暂缓",
 		clearDecision: "清除",
 		loadingDays: "正在加载本周各日…",
-		noDatedLines: "此付款单没有带日期的明细，因此没有需要复核的日期。可以直接发送。",
-		approveEachDayHint: "在把此付款单发送给 PR 之前，请逐日批准。只要有一天被暂缓，发送就会被拦截（包括周一的自动付款任务），直到该日被批准或清除决定为止。",
-		approvingDayApprovesReceipts: "批准某一天，也就同时批准了该日的收据。跨两天的收据要等两天都获批才算通过。",
+		noDatedLines:
+			"此付款单没有带日期的明细，因此没有需要复核的日期。可以直接发送。",
+		approveEachDayHint:
+			"在把此付款单发送给 PR 之前，请逐日批准。只要有一天被暂缓，发送就会被拦截（包括周一的自动付款任务），直到该日被批准或清除决定为止。",
+		approvingDayApprovesReceipts:
+			"批准某一天，也就同时批准了该日的收据。跨两天的收据要等两天都获批才算通过。",
 		everyDayDecided: "每一天都已有决定 — 此付款单可以发送。",
 		notReadyToSend: "尚不能发送：{reason}。",
 		staleDaysNeedAnotherLook: "有 {n} 天在审核后发生变动，需要重新查看。",
 		approveRemainingDays: "批准剩余的 {n} 天",
-		readOnlyDays: "您的经纪公司角色可以查看这些决定，但无权作出决定 — 每日复核由东主和财务批准。",
+		readOnlyDays:
+			"您的经纪公司角色可以查看这些决定，但无权作出决定 — 每日复核由东主和财务批准。",
 		toastDayApproved: "该日已批准",
 		toastDayHeld: "该日已暂缓 — 在清除该决定之前，此付款单无法发送",
 		toastDecisionCleared: "决定已清除",
@@ -8644,12 +9283,16 @@ const zh: PortalTranslations = {
 		withdrawApproval: "撤回批准",
 		unbackedCommissionOne: "{n} 条提成明细没有收据",
 		unbackedCommissionMany: "{n} 条提成明细没有收据",
-		selfDeclaredWarning: "{amount} 为自行申报，没有任何凭证可供核对。开具前请与门店确认。",
+		selfDeclaredWarning:
+			"{amount} 为自行申报，没有任何凭证可供核对。开具前请与门店确认。",
 		everyCommissionBacked: "此付款单上的每一条提成明细都有收据支持。",
-		unclassifiedExplainer: "未分类的明细产生于款项类别功能之前 — 它们计入总额，但无法按款项类别提出争议。",
+		unclassifiedExplainer:
+			"未分类的明细产生于款项类别功能之前 — 它们计入总额，但无法按款项类别提出争议。",
 		pendingWaitingOnYou: "{n} 张待您处理",
-		pendingReceiptsBlockSend: "在这些收据全部获批之前，此付款单无法发送 — 在您批准之前，PR 也无法对其背后的金额提出争议。",
-		readOnlyReceipts: "您的经纪公司角色可以查看这些收据，但无权批准 — 收据由东主和财务审核。",
+		pendingReceiptsBlockSend:
+			"在这些收据全部获批之前，此付款单无法发送 — 在您批准之前，PR 也无法对其背后的金额提出争议。",
+		readOnlyReceipts:
+			"您的经纪公司角色可以查看这些收据，但无权批准 — 收据由东主和财务审核。",
 	},
 	agencyPanels: {
 		shiftEnd: "班次结束",
@@ -8662,7 +9305,8 @@ const zh: PortalTranslations = {
 		fromTime: "起始时间",
 		toTime: "结束时间",
 		clearRange: "清除范围",
-		rangeHint: "按付款单与发票的开具日期筛选 · 收据扫描件若有扫描时间，则按扫描时间筛选。",
+		rangeHint:
+			"按付款单与发票的开具日期筛选 · 收据扫描件若有扫描时间，则按扫描时间筛选。",
 		syncedReadOnly: "{hint} · 只读",
 		outletTierRatesReadOnly: "门店等级费率 · 经纪公司端只读",
 		drinkPricesSynced: "酒水价格 · 已从门店同步",
@@ -8673,9 +9317,11 @@ const zh: PortalTranslations = {
 		correctingReceipt: "正在更正 {receiptNo}",
 		itemCountOne: "{n} 个项目",
 		itemCountMany: "{n} 个项目",
-		savingReopensHint: "保存后此收据会重新回到待处理状态；任何金额改动都会使当天的批准失效。",
+		savingReopensHint:
+			"保存后此收据会重新回到待处理状态；任何金额改动都会使当天的批准失效。",
 		whatThatMeans: "这是什么意思",
-		editCostExplainer: "已批准的收据会退回到待您处理。数量、提成、新增明细或更改日期都会改动金额，因此该日期必须重新批准后才能发送付款单。仅更正订单号不涉及金额 — 只有收据会重新打开。",
+		editCostExplainer:
+			"已批准的收据会退回到待您处理。数量、提成、新增明细或更改日期都会改动金额，因此该日期必须重新批准后才能发送付款单。仅更正订单号不涉及金额 — 只有收据会重新打开。",
 		items: "项目明细",
 		unsavedCount: "{n} 项未保存",
 		noLinesYet: "此收据尚未记录任何明细 — 请在下方添加单据上显示的酒水或小费。",
@@ -8697,20 +9343,25 @@ const zh: PortalTranslations = {
 		outletPriceLabel: "门店价",
 		quantity: "数量",
 		commissionInRm: "提成金额（RM）",
-		noListConfigured: "{outlet}尚未配置{list}，因此无法核实明细 — 请先请门店完成设置。",
+		noListConfigured:
+			"{outlet}尚未配置{list}，因此无法核实明细 — 请先请门店完成设置。",
 		drinksList: "酒水清单",
 		serviceEntitlementList: "服务项目清单",
 		outletListUnavailable: "门店清单不可用，因此无法核实明细。",
-		outletPriceVsCommission: "每个项目旁的 RM 是{outlet}的售价，用于与单据核对。您填写的是 PR 的提成 — 那是另一个数字，由您填写。",
-		lockedKindHint: "这是一张{kind}收据，因此在此添加的明细也属于{kind} — 一张单据只对应一种类别。",
-		drinksAndTipsOnly: "仅限酒水与小费 — 工资和加班来自签到与签退记录，以考勤记录为准。",
+		outletPriceVsCommission:
+			"每个项目旁的 RM 是{outlet}的售价，用于与单据核对。您填写的是 PR 的提成 — 那是另一个数字，由您填写。",
+		lockedKindHint:
+			"这是一张{kind}收据，因此在此添加的明细也属于{kind} — 一张单据只对应一种类别。",
+		drinksAndTipsOnly:
+			"仅限酒水与小费 — 工资和加班来自签到与签退记录，以考勤记录为准。",
 		theReceiptItself: "收据本身",
 		orderNoOnPaper: "单据上的订单号",
 		egOrderNo: "例如 ORD1111",
 		receiptDate: "收据日期",
 		timePrinted: "单据打印时间",
 		saveReceipt: "保存收据",
-		orderDateSaveHint: "清空订单号即删除该订单号。更改日期会把此收据的金额移到该日期 — 移出日和移入日都需要重新批准，且日期必须落在此付款单所属的周内。",
+		orderDateSaveHint:
+			"清空订单号即删除该订单号。更改日期会把此收据的金额移到该日期 — 移出日和移入日都需要重新批准，且日期必须落在此付款单所属的周内。",
 		quantityRange: "数量必须是 1 至 999 之间的整数。",
 		commissionMinLeaveFilled: "提成必须为 0.00 或以上 — 请勿留空。",
 		commissionMin: "提成必须为 0.00 或以上。",
@@ -8718,7 +9369,8 @@ const zh: PortalTranslations = {
 		orderDateTimeUnchanged: "订单号、日期和时间均未改动。",
 		linesMovedOne: "{n} 条明细已移至 {date}",
 		linesMovedMany: "{n} 条明细已移至 {date}",
-		pickFromOutletList: "请从门店清单中选择项目 — 明细必须对应该门店实际销售的商品。",
+		pickFromOutletList:
+			"请从门店清单中选择项目 — 明细必须对应该门店实际销售的商品。",
 		quantityForItem: "{item} 的数量",
 		commissionRmForItem: "{item} 的提成金额（RM）",
 		orderNoInline: "订单号 {no}",
@@ -8729,7 +9381,8 @@ const zh: PortalTranslations = {
 		noPhoto: "无照片",
 		disputingOne: "PR 正在对此收据提出争议",
 		disputingMany: "PR 对此收据提出了 {n} 项未解决的申诉",
-		correctThenSettleHint: "如果 PR 的说法属实，请在此更正金额，然后到「争议」中接受或驳回该申诉 — 仅修改金额并不会结案。",
+		correctThenSettleHint:
+			"如果 PR 的说法属实，请在此更正金额，然后到「争议」中接受或驳回该申诉 — 仅修改金额并不会结案。",
 		noLineItemsOnReceipt: "此收据没有任何明细 — 不会计入付款单。",
 		receiptScanLabel: "{receiptNo} 扫描件",
 		beforeThisReviewExisted: "早于本审核功能上线",
@@ -8742,12 +9395,14 @@ const zh: PortalTranslations = {
 		awaitingApprovalOne: "{n} 张收据待您批准",
 		awaitingApprovalMany: "{n} 张收据待您批准",
 		ofThemDisputed: "其中 {n} 张有争议",
-		voucherBlockedHint: "只要还有收据处于待处理状态，付款单就无法发送 — 在您做出决定前，PR 也无法对相关金额提出争议。",
+		voucherBlockedHint:
+			"只要还有收据处于待处理状态，付款单就无法发送 — 在您做出决定前，PR 也无法对相关金额提出争议。",
 		receiptCountOne: "{n} 张收据",
 		receiptCountMany: "{n} 张收据",
 		offWeekOne: "另有 {n} 张收据属于其他结算周 — 请切换上方的周标签查看。",
 		offWeekMany: "另有 {n} 张收据属于其他结算周 — 请切换上方的周标签查看。",
-		roleCannotApprove: "您的经纪公司角色可以查看这些收据，但无权批准 — 收据由负责人和财务审核。",
+		roleCannotApprove:
+			"您的经纪公司角色可以查看这些收据，但无权批准 — 收据由负责人和财务审核。",
 	},
 	agencyRoster: {
 		viewBreakdownAria: "查看{label}明细",
@@ -8772,38 +9427,50 @@ const zh: PortalTranslations = {
 	agencyQueues: {
 		disputesTitle: "争议",
 		disputesTitleOpen: "争议（{n} 项未解决）",
-		shiftNotLinked: "对应班次 · 未关联 —— 此争议未指明收据，或该收据没有班次记录。",
+		shiftNotLinked:
+			"对应班次 · 未关联 —— 此争议未指明收据，或该收据没有班次记录。",
 		claimCoversWholeDayMany: "此申诉涵盖全天 — 共 {n} 个班次",
-		noReceiptBehindWagesOt: "此项没有对应收据 —— 日薪与加班按签到、签退时间计算，应更正的是班次记录。",
-		noReceiptForDayBucket: "未找到该日期、该款项类别的收据。可能在争议提出后已被删除。",
+		noReceiptBehindWagesOt:
+			"此项没有对应收据 —— 日薪与加班按签到、签退时间计算，应更正的是班次记录。",
+		noReceiptForDayBucket:
+			"未找到该日期、该款项类别的收据。可能在争议提出后已被删除。",
 		receiptBehindFigureOne: "该金额对应的收据 —— 若 PR 有理，可在此更正。",
-		receiptBehindFigureMany: "该金额对应的 {n} 张收据 —— 若 PR 有理，可在此更正。",
+		receiptBehindFigureMany:
+			"该金额对应的 {n} 张收据 —— 若 PR 有理，可在此更正。",
 		theScannedReceipt: "收据扫描件",
 		theScannedReceiptPrinted: "收据扫描件 · 打印时间 {time}",
 		receiptScanAlt: "{no} 扫描件",
 		noPhotoSelfLogged: "此收据没有照片 —— 由 PR 自行填报且未附照片。",
 		signedCannotCorrect: "PR 已签署此付款单 —— 单上的金额无法再更正。",
-		roleCannotCorrectReceipt: "你的角色可以查看此收据，但无法更正 —— 只有负责人与财务可编辑收据。",
+		roleCannotCorrectReceipt:
+			"你的角色可以查看此收据，但无法更正 —— 只有负责人与财务可编辑收据。",
 		weekFromTo: "{from} – {to} 那一周",
 		rejected: "已驳回",
 		prAttachedOne: "PR 上传的凭证 · {n} 张图片",
 		prAttachedMany: "PR 上传的凭证 · {n} 张图片",
 		scopeResolved: "已解决",
-		openDisputesElsewhereOne: "另有 {n} 项未解决的争议属于其他周 —— 请在上方切换周次处理。",
-		openDisputesElsewhereMany: "另有 {n} 项未解决的争议属于其他周 —— 请在上方切换周次处理。",
+		openDisputesElsewhereOne:
+			"另有 {n} 项未解决的争议属于其他周 —— 请在上方切换周次处理。",
+		openDisputesElsewhereMany:
+			"另有 {n} 项未解决的争议属于其他周 —— 请在上方切换周次处理。",
 		nothingMatchesAny: "所有争议中都没有与“{q}”匹配的内容。",
 		nothingMatchesOpen: "未解决的争议中没有与“{q}”匹配的内容。",
 		nothingMatchesResolved: "已解决的争议中没有与“{q}”匹配的内容。",
-		nothingWaitingOne: "暂无待你处理的争议 —— 已处理 {n} 项。切换到「已解决」即可查看。",
-		nothingWaitingMany: "暂无待你处理的争议 —— 已处理 {n} 项。切换到「已解决」即可查看。",
+		nothingWaitingOne:
+			"暂无待你处理的争议 —— 已处理 {n} 项。切换到「已解决」即可查看。",
+		nothingWaitingMany:
+			"暂无待你处理的争议 —— 已处理 {n} 项。切换到「已解决」即可查看。",
 		noneSettledYet: "尚未处理任何争议。",
-		acceptingRecordsDecision: "接受会记录该决定并通知 PR，但本身不会改动金额 —— 若 PR 有理，请先在下方更正收据，再接受。",
+		acceptingRecordsDecision:
+			"接受会记录该决定并通知 PR，但本身不会改动金额 —— 若 PR 有理，请先在下方更正收据，再接受。",
 		disputeAccepted: "已接受争议",
 		disputeRejected: "已驳回争议",
 		overtimeTitleCount: "加班（{n}）",
 		holdingPayroll: "暂扣薪资周",
-		overtimeHoldsWeek: "加班计入实际工作那一周的付款单，因此在此申请处理前，{week} 起的那一周无法发送。",
-		overtimeHoldsItsWeek: "加班计入实际工作那一周的付款单，因此在此申请处理前，其所属周次无法发送。",
+		overtimeHoldsWeek:
+			"加班计入实际工作那一周的付款单，因此在此申请处理前，{week} 起的那一周无法发送。",
+		overtimeHoldsItsWeek:
+			"加班计入实际工作那一周的付款单，因此在此申请处理前，其所属周次无法发送。",
 		durationHoursMinutes: "{h} 小时 {m} 分",
 		durationHours: "{h} 小时",
 		durationMinutes: "{m} 分钟",
@@ -8811,13 +9478,18 @@ const zh: PortalTranslations = {
 		approveAddsToVoucher: "{amount} 将加入 {name} 的付款单。此操作无法撤销。",
 		thePr: "该 PR",
 		onlyOwnerFinanceDecideOvertime: "只有经纪公司负责人或财务可以审批加班。",
-		overtimeElsewhereOne: "另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
-		overtimeElsewhereMany: "另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
-		overtimeQueueHint: "每项申请在处理前都会暂扣其所属的薪资周。所示金额即批准后写入付款单的金额。",
+		overtimeElsewhereOne:
+			"另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
+		overtimeElsewhereMany:
+			"另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
+		overtimeQueueHint:
+			"每项申请在处理前都会暂扣其所属的薪资周。所示金额即批准后写入付款单的金额。",
 		cancellationFeeOnVoucherOne: "此付款单上的取消费用",
 		cancellationFeeOnVoucherMany: "此付款单上的取消费用",
-		waiveBeforeSendHint: "PR 取消班次时已自动收取。发送付款单前可豁免，将其从单上移除。",
-		voucherSentCannotWaive: "此付款单已发送，这些费用无法再移除。请改在下周的付款单上退还给 PR。",
+		waiveBeforeSendHint:
+			"PR 取消班次时已自动收取。发送付款单前可豁免，将其从单上移除。",
+		voucherSentCannotWaive:
+			"此付款单已发送，这些费用无法再移除。请改在下周的付款单上退还给 PR。",
 		waiveThisCharge: "豁免此项收费",
 		whyWaiving: "豁免原因？（选填）",
 		waiveReasonPlaceholder: "例如：住院，或我们自己临时取消了该班次",
@@ -8842,7 +9514,8 @@ const zh: PortalTranslations = {
 		clearTime: "清除时间",
 		otherLanguage: "其他语言",
 		add: "添加",
-		cardNotChargedYet: "InnocenZ 仅记录此卡；实际扣款需要支付网关，目前尚未接入。",
+		cardNotChargedYet:
+			"InnocenZ 仅记录此卡；实际扣款需要支付网关，目前尚未接入。",
 	},
 	prMedia: {
 		manualEntryBanner: "— 手动录入 —",
@@ -8909,7 +9582,8 @@ const zh: PortalTranslations = {
 		fromTime: "起始时间",
 		toTime: "结束时间",
 		pickDateFirstHint: "请先选择日期，才能按当班日内的时间进一步筛选。",
-		selectDateAboveHint: "请先在上方选择日期 —— 然后点击起始/结束时间打开时钟。",
+		selectDateAboveHint:
+			"请先在上方选择日期 —— 然后点击起始/结束时间打开时钟。",
 		matchedByTimeInOrReceipt: "按 {date} 的班次签到时间或收据扫描时间匹配。",
 		tapFromOrToTimeHint: "点击「起始时间」或「结束时间」即可打开时钟选择器。",
 		hoursShift: "{n} 小时班次",
@@ -8940,7 +9614,8 @@ const zh: PortalTranslations = {
 		noEmail: "无邮箱",
 		rolesLoadFailedAgency: "无法加载经纪公司端角色 —— 使用默认值。",
 		rolesLoadFailedOutlet: "无法加载门店端角色 —— 使用默认值。",
-		inviteSavedNoEmail: "给 {email} 的邀请已保存，但邮件未发出。请把此链接发给对方 —— 链接 7 天后失效：",
+		inviteSavedNoEmail:
+			"给 {email} 的邀请已保存，但邮件未发出。请把此链接发给对方 —— 链接 7 天后失效：",
 		portalNameOutlet: "门店",
 		portalNameAgency: "PR 经纪公司",
 		portalSuffixed: "{portal}端",
@@ -8964,9 +9639,11 @@ const zh: PortalTranslations = {
 		adminKindPosIntegration: "POS 系统对接",
 		adminKindAlert: "管理员提醒",
 		suspendedTitle: "已暂停。",
-		suspendedBody: "你的{kind}权限目前仅限于此资料页。请联系 InnocenZ 恢复完整门户功能。",
+		suspendedBody:
+			"你的{kind}权限目前仅限于此资料页。请联系 InnocenZ 恢复完整门户功能。",
 		pendingReviewTitle: "待审核。",
-		pendingReviewBody: "你的{kind}正在等待 InnocenZ 管理员审批。你可以在此更新资料 —— 其他门户功能将在审批通过后开放。",
+		pendingReviewBody:
+			"你的{kind}正在等待 InnocenZ 管理员审批。你可以在此更新资料 —— 其他门户功能将在审批通过后开放。",
 		outletNoun: "门店",
 		agencyNoun: "经纪公司",
 		editingWhat: "正在编辑 {what}",
@@ -9038,7 +9715,8 @@ const zh: PortalTranslations = {
 		bookingsNeedResponseOne: "{n} 条预约等待你回复",
 		bookingsNeedResponseMany: "{n} 条预约等待你回复",
 		outletBanner: "为你的场地申请经纪公司附加服务 —— 配送、紧急替班、造型等。",
-		prBannerWithLeave: "可申请交通接送、妆发、服装等服务 —— 如需离开经纪公司，请在「服务」中选择「离开经纪公司」。",
+		prBannerWithLeave:
+			"可申请交通接送、妆发、服装等服务 —— 如需离开经纪公司，请在「服务」中选择「离开经纪公司」。",
 		prBanner: "为你的班次申请交通接送、妆发、服装等服务。",
 		leaveTicketSubmitted: "离职工单已于 {when} 提交",
 		transferRequestSubmitted: "转会申请已于 {when} 提交",
@@ -9072,14 +9750,16 @@ const zh: PortalTranslations = {
 		pvEstimate: "薪资单预估 {amount}",
 		baseTier: "基准",
 		weekRangeTargets: "本周区间 · {range}",
-		noLiveShiftTonight: "今晚没有进行中的班次 —— 请到日历页面查看即将到来的活动。",
+		noLiveShiftTonight:
+			"今晚没有进行中的班次 —— 请到日历页面查看即将到来的活动。",
 		noShiftsYet: "还没有班次 —— 请用「发布职位」创建。",
 		suppliedOfDemandPrs: "PR {supplied}/{demand}",
 		salesAmount: "销售额 {amount}",
 		savedPill: "已省 {amount}",
 		awaitingAgencyRequest: "等待经纪公司 · {title} · 预计省 {amount}",
 		alreadyApplied: "已生效 · {detail}",
-		bestEffortIntro: "针对 {event} 优化 —— 在当前时间（{clock}）提前放行 PR。她们按实际工时结算工资并保留抽成；未使用工资的 {pct}% 计为预计节省。若经纪公司未另行派班，她们将直接下班回家。",
+		bestEffortIntro:
+			"针对 {event} 优化 —— 在当前时间（{clock}）提前放行 PR。她们按实际工时结算工资并保留抽成；未使用工资的 {pct}% 计为预计节省。若经纪公司未另行派班，她们将直接下班回家。",
 		bestEffortSaveLine: "约省 {amount}（未使用工资 {unused} 的 {pct}%）",
 		releaseNamesEarly: "提前放行 {names}",
 		demandPrNeeded: "需求 · 需要 {n} 位 PR",
@@ -9130,7 +9810,8 @@ const zh: PortalTranslations = {
 		deductionLoggedAt: "已记录扣款 −{amount} · {at}",
 		cancelShift: "取消班次",
 		cancelAndAcceptDeduction: "取消并接受扣款 −{amount}",
-		assignedByAgencyNote: "班次只由你的经纪公司安排 —— 门店可以指名要你，但每一次派班都由经纪公司确认。取消会通知你的经纪公司。",
+		assignedByAgencyNote:
+			"班次只由你的经纪公司安排 —— 门店可以指名要你，但每一次派班都由经纪公司确认。取消会通知你的经纪公司。",
 		reasonRequired: "原因（必填）",
 		cancelReasonPlaceholder: "说明你无法出勤的原因",
 		bandAnyTimeLabel: "班次开始前任意时间",
@@ -9141,19 +9822,24 @@ const zh: PortalTranslations = {
 		bandLateLabel: "班次开始前不足 {short} 小时，或迟到 {min} 分钟以上",
 		bandWagePctOutcome: "下一张付款单扣日薪的 {pct}%",
 		cancelOnTimeHeadline: "提前通知 —— 不扣工资",
-		cancelOnTimeDetail: "距离班次开始还有 {hours} 小时以上 · 你的经纪公司会另行安排人手。",
+		cancelOnTimeDetail:
+			"距离班次开始还有 {hours} 小时以上 · 你的经纪公司会另行安排人手。",
 		cancelNoChargeDetail: "你的经纪公司不收取取消费用。",
 		cancelShortNoticeHeadline: "临时通知 —— 下一张付款单扣 {amount}",
-		cancelShortNoticeDetail: "距离班次开始不足 {free} 小时，但仍超过 {short} 小时。",
+		cancelShortNoticeDetail:
+			"距离班次开始不足 {free} 小时，但仍超过 {short} 小时。",
 		cancelLateHeadline: "临时取消 —— 下一张付款单扣 {amount}",
-		cancelLateDetailBefore: "距离班次开始不足 {short} 小时 · 与迟到 {min} 分钟以上适用同一规则。",
-		cancelLateDetailStarted: "班次已开始或已结束 · 与迟到 {min} 分钟以上适用同一规则。",
+		cancelLateDetailBefore:
+			"距离班次开始不足 {short} 小时 · 与迟到 {min} 分钟以上适用同一规则。",
+		cancelLateDetailStarted:
+			"班次已开始或已结束 · 与迟到 {min} 分钟以上适用同一规则。",
 		pendingVerification: "待核实",
 		verifiedDayCount: "已核实 {n} 天",
 		pvIssuedEverySunday: "付款单每周日出具",
 		withdrawDisputeOnDay: "撤回 {day} 的争议",
 		disputeAmountOnDay: "对 {day} 的{component}提出争议",
-		tapAmountToDisputeHint: "点击任意金额即可提出争议 · 点击红色金额可撤回误报的争议。",
+		tapAmountToDisputeHint:
+			"点击任意金额即可提出争议 · 点击红色金额可撤回误报的争议。",
 		weekCollapsedHint: "{week} · {total} · 已核实 {verified}/7 天",
 		verifiedDays: "已核实天数",
 		pvWillBeSentOn: "本周结束后，付款单将于 {day} 发出",
@@ -9297,7 +9983,8 @@ const zh: PortalTranslations = {
 		connectUserApiHint: "接入{name}用户接口后，此处即可显示数据。",
 		namedUsers: "{name}用户",
 		setNegotiatedQuote: "设置议价金额",
-		setNegotiatedQuoteHint: "点击「议价」的用户会以套餐申请的形式进入此处。请输入最终敲定的价格，然后处理。",
+		setNegotiatedQuoteHint:
+			"点击「议价」的用户会以套餐申请的形式进入此处。请输入最终敲定的价格，然后处理。",
 		planNamed: "套餐：{name}",
 		noCurrentPlan: "暂无当前套餐",
 		quotedPriceRm: "报价金额（RM）",
@@ -9308,7 +9995,8 @@ const zh: PortalTranslations = {
 	},
 	adminPr: {
 		title: "PR 账户",
-		subtitle: "拥有 PR 角色的平台用户。“经纪公司”列显示该 PR 所属的全部经纪公司。",
+		subtitle:
+			"拥有 PR 角色的平台用户。“经纪公司”列显示该 PR 所属的全部经纪公司。",
 		searchPlaceholder: "搜索 PR…",
 		searchAria: "按姓名、电子邮箱或经纪公司搜索 PR",
 		legalName: "身份证姓名",
@@ -9362,7 +10050,8 @@ const zh: PortalTranslations = {
 		loadingLabel: "加载中",
 		userFallback: "用户",
 		notFoundTitle: "页面未找到",
-		notFoundBody: "抱歉，找不到您要访问的页面。该页面可能已被移除，或网址有误。",
+		notFoundBody:
+			"抱歉，找不到您要访问的页面。该页面可能已被移除，或网址有误。",
 		backToDashboard: "返回仪表板",
 		backToHome: "返回首页",
 		legalEyebrow: "法律条款",
@@ -9375,7 +10064,8 @@ const zh: PortalTranslations = {
 	},
 	adminOrg: {
 		agencyOrganizations: "PR 经纪公司机构",
-		agencyOrganizationsHint: "点击某一行可查看经纪公司详情及其名下 PR。可搜索经纪公司或按状态筛选。",
+		agencyOrganizationsHint:
+			"点击某一行可查看经纪公司详情及其名下 PR。可搜索经纪公司或按状态筛选。",
 		searchAgenciesPlaceholder: "搜索经纪公司…",
 		searchAgenciesAria: "按名称搜索经纪公司",
 		colCode: "代码",
@@ -9410,9 +10100,12 @@ const zh: PortalTranslations = {
 		coordinates: "坐标",
 		geoFenceRadius: "定位围栏半径",
 		linkedAgencies: "已关联的经纪公司",
-		linkedAgenciesHint: "该场所合作的经纪公司。门店在「设置」中发起关联申请，由每家经纪公司自行接受或拒绝 —— 管理员不能代为设置。",
-		noAgenciesLinked: "尚未关联任何经纪公司。该场所须先在「设置」中关联一家并获其批准，才能发布班次。",
-		noAgencyApprovedYet: "还没有经纪公司通过审批 —— 在此之前，该场所的每一次发布工作都会被拒绝。",
+		linkedAgenciesHint:
+			"该场所合作的经纪公司。门店在「设置」中发起关联申请，由每家经纪公司自行接受或拒绝 —— 管理员不能代为设置。",
+		noAgenciesLinked:
+			"尚未关联任何经纪公司。该场所须先在「设置」中关联一家并获其批准，才能发布班次。",
+		noAgencyApprovedYet:
+			"还没有经纪公司通过审批 —— 在此之前，该场所的每一次发布工作都会被拒绝。",
 		linkWorkingWithVenue: "正在与该场所合作",
 		linkAwaitingAgency: "等待经纪公司决定",
 		linkDeclinedByAgency: "经纪公司已拒绝",
@@ -9480,7 +10173,8 @@ const zh: PortalTranslations = {
 		outletSwap: "换店",
 		enRoute: "在途",
 		outletRequestedAgencyConfirmed: "{outlet} 指名要你 —— 你的经纪公司已确认",
-		agencyAssignedCancelPolicy: "你的经纪公司已为你派班 —— 如需取消，请按经纪公司规定办理",
+		agencyAssignedCancelPolicy:
+			"你的经纪公司已为你派班 —— 如需取消，请按经纪公司规定办理",
 		agencyAssignedOnYourRoster: "经纪公司已在你的班表上安排此班次",
 		liveShiftFromOutletCheckIn: "来自门店签到表的实时班次",
 		agencyRoster: "经纪公司排班表",
@@ -9505,7 +10199,8 @@ const zh: PortalTranslations = {
 		cutLossDemandCut: "削减 {n} 个名额",
 		cutLossTargetPct: "目标 {pct}%",
 		planDayLimitReached: "{plan} 套餐 · {date} 已达每日 {max} 位 PR 上限",
-		planDayHeadcountAvailable: "{plan} 套餐 · 每日 {band} 位 PR · {date} 可用人数 {remaining}/{max}",
+		planDayHeadcountAvailable:
+			"{plan} 套餐 · 每日 {band} 位 PR · {date} 可用人数 {remaining}/{max}",
 		ratingNotePlaceholder1: "严重问题 —— 迟到、态度、客人投诉或影响现场…",
 		ratingNotePlaceholder2: "低于标准 —— 酒水、加单、着装要求或桌台互动…",
 		ratingNotePlaceholder3: "表现合格 —— 给下次排班留一条改进建议…",
@@ -9519,7 +10214,8 @@ const zh: PortalTranslations = {
 		checkingInvitation: "正在核对邀请…",
 		inviteUnavailable: "邀请不可用",
 		notFound: "未找到该邀请",
-		notFoundAskOwner: "未找到该邀请，或该邀请已被使用 —— 请联系东主重新发送邀请",
+		notFoundAskOwner:
+			"未找到该邀请，或该邀请已被使用 —— 请联系东主重新发送邀请",
 		notFoundOrUsed: "未找到该邀请，或该邀请已被使用。",
 		couldNotAccept: "接受邀请失败",
 		youJoined: "您已加入{org}",
@@ -9546,10 +10242,13 @@ const zh: PortalTranslations = {
 		noPortalTitle: "您无法访问此网页门户",
 		signedInAs: "登录账号：",
 		thisAccount: "当前账号",
-		wrongPortalBody: "该账号没有{portal}的访问权限。您的角色没有变化 —— 此浏览器只是登录了另一个账号。",
+		wrongPortalBody:
+			"该账号没有{portal}的访问权限。您的角色没有变化 —— 此浏览器只是登录了另一个账号。",
 		linkYouOpened: "您打开的链接：",
-		wrongPortalHint: "请退出登录，改用{portal}的账号登录后再打开此链接。链接无法在浏览器之间传递登录状态 —— 否则任何拿到该链接的人都会以您的身份登录。",
-		noPortalBody: "您的账号角色在 InnocenZ 上暂时没有网页门户。如果您认为这是误判，请联系客服。",
+		wrongPortalHint:
+			"请退出登录，改用{portal}的账号登录后再打开此链接。链接无法在浏览器之间传递登录状态 —— 否则任何拿到该链接的人都会以您的身份登录。",
+		noPortalBody:
+			"您的账号角色在 InnocenZ 上暂时没有网页门户。如果您认为这是误判，请联系客服。",
 		signOutSwitchAccount: "退出登录并切换账号",
 		backToLogin: "返回登录页",
 	},
@@ -9561,7 +10260,8 @@ const zh: PortalTranslations = {
 		passwordRequired: "密码不能为空",
 		rightsReserved: "版权所有。",
 		backToSignIn: "返回登录",
-		loginAsideDescription: "面向夜生活行业的劳动力运营平台。在同一个安全门户中管理排班、追踪班次并发放薪资。",
+		loginAsideDescription:
+			"面向夜生活行业的劳动力运营平台。在同一个安全门户中管理排班、追踪班次并发放薪资。",
 		loginHeadingLine1: "登录您的",
 		loginHeadingAccent: "门户",
 		loginSubheading: "请输入您的登录信息以继续。",
@@ -9590,7 +10290,8 @@ const zh: PortalTranslations = {
 		checkInboxAccent: "邮箱",
 		checkInboxSubheading: "如果该邮箱已注册，重置链接即将送达。",
 		resetLinkSentTo: "我们已向 {email} 发送密码重置链接。",
-		resetLinkExpiryHint: "链接 1 小时后失效。如果没有收到，请查看垃圾邮件文件夹，或确认该邮箱已注册 InnocenZ 账户。",
+		resetLinkExpiryHint:
+			"链接 1 小时后失效。如果没有收到，请查看垃圾邮件文件夹，或确认该邮箱已注册 InnocenZ 账户。",
 		useDifferentEmail: "换一个邮箱",
 		rememberedIt: "想起密码了？",
 		resetHeading: "设置新",

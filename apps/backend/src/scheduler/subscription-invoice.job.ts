@@ -1,4 +1,5 @@
 import { subscriptionInvoiceRepository } from '@/composition-root.js';
+import { announceOpenedInvoices } from '@/features/subscription-invoice/announce-opened.js';
 import { logger } from '@/util/logger.js';
 import { SYSTEM_ACTOR } from '@/util/actor.js';
 import type { JobDefinition } from './scheduler.js';
@@ -26,6 +27,22 @@ async function runSubscriptionInvoices(): Promise<void> {
   logger.info(
     `[subscription-invoice] scanned ${result.scanned} subscription(s), opened ${result.created} new period(s)`,
   );
+
+  /**
+   * And tell whoever now owes it.
+   *
+   * Runs AFTER the log line rather than inside the generator, so a billing run
+   * that succeeded is recorded as having succeeded even if every notification
+   * then fails. The announcer never throws, so this cannot cost the run either
+   * way — but the ordering keeps the two facts separable when reading the log.
+   *
+   * The admin's "Refresh periods" button calls the same announcer, or which door
+   * opened the period would decide whether the payer heard about it.
+   */
+  const told = await announceOpenedInvoices(result.opened);
+  if (result.created > 0) {
+    logger.info(`[subscription-invoice] told ${told} organisation(s) about a new bill`);
+  }
 }
 
 export const SUBSCRIPTION_INVOICE_JOB: JobDefinition = {

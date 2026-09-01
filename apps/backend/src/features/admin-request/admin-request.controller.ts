@@ -3,6 +3,7 @@ import { AdminRequestRepositoryClass } from './admin-request.repository.js';
 import { AdminRequest, AdminRequestFilter, AdminRequestType, AdminRequestStatus } from './admin-request.model.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
+import { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import {
   CreateAdminRequestSchema,
@@ -21,6 +22,8 @@ export class AdminRequestControllerClass {
     private repository: AdminRequestRepositoryClass,
     private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
     private subscriptionRepository: SubscriptionRepositoryClass,
+    /** The billing ledger — the owner's unpaid→no-switch rule reads it. */
+    private subscriptionInvoiceRepository: SubscriptionInvoiceRepositoryClass,
     private orgScopeDeps: OrgScopeDeps,
   ) {}
 
@@ -86,7 +89,9 @@ export class AdminRequestControllerClass {
         page,
         pageSize,
       });
-      const records = await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan(rawRecords));
+      const records = await this.withLivePlan(
+        await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan(rawRecords)),
+      );
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
@@ -119,7 +124,9 @@ export class AdminRequestControllerClass {
     try {
       const record = await this.repository.getById(paramId(req.params.id));
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      const [enriched] = await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan([record]));
+      const [enriched] = await this.withLivePlan(
+        await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan([record])),
+      );
       res.status(200).json({ success: true, message: 'OK', data: enriched ?? record });
     } catch (error) {
       logger.error('[AdminRequestController.getById] Error:', error);
@@ -186,6 +193,66 @@ export class AdminRequestControllerClass {
           return res.status(400).json({
             success: false,
             message: `Already on ${active[0].planName} — no switch needed`,
+            data: null,
+          });
+        }
+      }
+
+      /**
+       * THE OWNER'S RULE (29 Aug 2026): unpaid → no switch.
+       *
+       * A venue that switched plans while owing is exactly how Emhub came to
+       * carry an unpaid Enterprise period while accruing on Scale — the ledger
+       * held two prices for one org and every screen downstream had to explain
+       * it. So an OUTLET's plan change is refused while any billing period is
+       * unpaid, with the figure in the refusal so the venue knows what settles
+       * it.
+       *
+       * Deliberately narrow:
+       *  - OUTLETS ONLY. An agency's tier is moved by the Sunday job from PV
+       *    volume — work its PRs have already done — and gating that would
+       *    bill the agency at the wrong tier for delivered work.
+       *  - FILING is gated, never approval: an admin approving a request that
+       *    is already queued stays the override for "paid by bank transfer,
+       *    not yet marked".
+       *  - FAILS OPEN. The repository answers zero rows on a read error, and a
+       *    gate must not refuse on a number it does not have. There is no
+       *    due-date column (owner's call, same day), so "any unpaid period" is
+       *    the whole test — which also means a venue is blocked the day after
+       *    a new period opens, until an admin marks it. Stated to the owner;
+       *    accepted.
+       */
+      if (
+        parsed.data.type === 'plan_change' &&
+        parsed.data.subscriberType === 'outlet' &&
+        parsed.data.subscriberId
+      ) {
+        const { records: owing, totalCount: owingCount } =
+          await this.subscriptionInvoiceRepository.listPaginated({
+            filter: {
+              subscriberType: 'outlet',
+              subscriberId: parsed.data.subscriberId,
+              status: 'unpaid',
+            },
+            page: 1,
+            pageSize: 100,
+          });
+        if (owingCount > 0) {
+          // Integer cents — numeric(12,2) arrives as strings, and float
+          // addition is how 3999 + 200 reads 4198.999… in a refusal about money.
+          const cents = owing.reduce(
+            (sum, invoice) => sum + Math.round(Number(invoice.amount) * 100),
+            0,
+          );
+          const total = (cents / 100).toLocaleString('en-MY', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+          return res.status(409).json({
+            success: false,
+            message:
+              `This venue has ${owingCount} unpaid billing period${owingCount === 1 ? '' : 's'} ` +
+              `totalling RM ${total} — settle them with InnocenZ before switching plans`,
             data: null,
           });
         }
@@ -332,6 +399,53 @@ export class AdminRequestControllerClass {
           // re-pricing does, and applyPlanChangeToLedger falls back to the plan's
           // own price when quotedAmount is null.
           await this.applyPlanChangeToLedger(record, actor);
+
+          /**
+           * A RESET ONTO A NORMAL TIER IS ALSO A PLAN CHANGE, and is filed as one
+           * (owner's call, 27 Aug 2026).
+           *
+           * Two facts, two records, and they belong on different pages: the
+           * negotiation ENDING is this `custom_renegotiation` and stays on Plan
+           * Request, while the SWITCH it produced belongs on Plan Change, where an
+           * admin looks to see what tier an org is on.
+           *
+           * Without this the switch existed only in `member_subscription`:
+           * `applyPlanChangeToLedger` moves the ledger and files nothing, so
+           * resolving Atlas's reset moved it to Starter while Plan Change went on
+           * showing a 17 Jul switch to Enterprise that had never applied.
+           *
+           * Only for a NORMAL destination. Resolving ONTO Custom or an add-on is
+           * the negotiation itself, already recorded on Plan Request, and filing a
+           * second row for it would put the same event on both pages.
+           *
+           * Fire-and-forget by design: the ledger move above is the money, this is
+           * the record of it, and a failed write here must not fail the resolve the
+           * admin just performed. It is logged loudly instead.
+           */
+          const landsOnNormalTier = requested.name !== 'Custom' && requested.kind !== 'addon';
+          if (landsOnNormalTier) {
+            try {
+              await this.repository.create({
+                type: 'plan_change',
+                subscriberType: record.subscriberType,
+                subscriberId: record.subscriberId,
+                subscriberName: record.subscriberName,
+                currentPlanId: record.currentPlanId,
+                requestedPlanId: record.requestedPlanId,
+                // 'direct' for the same reason an agency tier move is: it is
+                // already applied, there is nothing for anyone to approve.
+                status: 'direct',
+                message: `Reset from a negotiated price to ${requested.name} — recorded when request ${record.id} was resolved.`,
+                createdBy: actor,
+                updatedBy: actor,
+              });
+            } catch (error) {
+              logger.error(
+                `[AdminRequestController] reset applied for ${record.subscriberName} but the Plan Change record could not be filed:`,
+                error,
+              );
+            }
+          }
           return;
         }
 
@@ -451,6 +565,71 @@ export class AdminRequestControllerClass {
     }
   }
 
+  /**
+   * What the subscriber is on TODAY, carried BESIDE the row's own stamp.
+   *
+   * ⚠️ Deliberately a NEW pair of fields rather than a re-point of
+   * `currentPlanId`. `withLiveFromPlan` below rewrites that stamp for PENDING
+   * rows only, and its reasoning is load-bearing: an answered row's stamp IS
+   * what it was decided against, so overwriting it would rewrite the record of
+   * a decision rather than report the present.
+   *
+   * This exists because the Plan Change page shows ONE ROW PER SUBSCRIBER and
+   * presents it as the latest. For an org that has ever touched Custom, every
+   * later move files as `custom_renegotiation` and lands on Plan REQUEST
+   * instead — so the newest row on Plan Change can be arbitrarily stale, with
+   * nothing on the page saying so. Measured on Atlas Agency: 14 requests, 13 of
+   * them routed to Plan Request, and the ONE that reached Plan Change was a
+   * 17 Jul switch to Enterprise that never reached the ledger at all — still
+   * presented as that agency's current position six weeks later, while it was
+   * actually on Starter at RM 125.
+   *
+   * One lookup per SUBSCRIBER, not per row: the queue routinely carries several
+   * requests for one org and they all resolve to the same live plan.
+   *
+   * Never throws — a failed lookup returns the records untouched, because a
+   * missing "currently on" line is a smaller fault than an empty admin queue.
+   */
+  private async withLivePlan(records: AdminRequest[]): Promise<AdminRequest[]> {
+    const scoped = records.filter((row) => row.subscriberId && row.subscriberType);
+    if (scoped.length === 0) return records;
+    try {
+      const liveBySubscriber = new Map<string, { name: string; amount: string } | null>();
+      for (const row of scoped) {
+        if (!row.subscriberId || !row.subscriberType) continue;
+        if (liveBySubscriber.has(row.subscriberId)) continue;
+        const { records: active } = await this.memberSubscriptionRepository.listPaginated({
+          filter: {
+            subscriberType: row.subscriberType,
+            subscriberId: row.subscriberId,
+            status: 'active',
+            // The PLAN, never the add-on beside it — the same reason
+            // `withLiveFromPlan` pins this: a venue holding POS has an add-on
+            // line newer than its plan, and "currently on POS Integration,
+            // RM 0" is not an answer to what it pays for its tier.
+            kind: 'plan',
+          },
+          page: 1,
+          pageSize: 1,
+        });
+        const current = active[0];
+        liveBySubscriber.set(
+          row.subscriberId,
+          current ? { name: current.planName, amount: current.amount } : null,
+        );
+      }
+      return records.map((row) => {
+        if (!row.subscriberId) return row;
+        const live = liveBySubscriber.get(row.subscriberId);
+        if (!live) return row;
+        return { ...row, livePlanName: live.name, livePlanAmount: live.amount };
+      });
+    } catch (error) {
+      logger.error('[AdminRequestController.withLivePlan] Error:', error);
+      return records;
+    }
+  }
+
   private async withLiveFromPlan(records: AdminRequest[]): Promise<AdminRequest[]> {
     const pending = records.filter((row) => row.status === 'pending' && row.subscriberId);
     if (pending.length === 0) return records;
@@ -532,6 +711,64 @@ export class AdminRequestControllerClass {
       res.status(200).json({ success: true, message: 'OK', data: record });
     } catch (error) {
       logger.error('[AdminRequestController.myLatestPending] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The subscriber takes its own request back.
+   *
+   * The one action on this inbox that is NOT the admin's. A venue that asked for
+   * a POS quote, or asked to come off POS, previously had no way to change its
+   * mind: the request sat in the queue until a human answered something nobody
+   * wanted any more.
+   *
+   * OWNERSHIP IS RE-DERIVED, never taken from the request. The id in the path is
+   * checked against the caller's OWN organisations — otherwise one venue could
+   * cancel another's negotiation by guessing a uuid, and the admin would see a
+   * withdrawal the real subscriber never made.
+   *
+   * ONLY AN UNANSWERED REQUEST. `pending` and `contacted` may be withdrawn;
+   * `resolved`, `approved`, `declined` and `direct` are decisions that have
+   * already moved the billing ledger, and letting a subscriber retract one would
+   * let it walk back a price the admin had applied. A wrong answer is the
+   * admin's to correct, not the payer's to erase.
+   *
+   * A NON-EXISTENT id and SOMEBODY ELSE'S id answer the same 404, so the reply
+   * never confirms a request exists — the shape subscription-invoice uses.
+   */
+  async withdrawMine(req: Request, res: Response) {
+    try {
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
+      const subscriberIds = scope.agencyId ? [scope.agencyId] : scope.outletIds;
+      if (subscriberIds.length === 0) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const id = paramId(req.params.id);
+      const existing = await this.repository.getById(id);
+      if (!existing || !existing.subscriberId || !subscriberIds.includes(existing.subscriberId)) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      if (existing.status !== 'pending' && existing.status !== 'contacted') {
+        return res.status(409).json({
+          success: false,
+          message: `This request has already been answered (${existing.status}) and can no longer be withdrawn`,
+          data: null,
+        });
+      }
+
+      const record = await this.repository.update(id, {
+        status: 'withdrawn',
+        updatedBy: getActor(req),
+      });
+      if (!record) {
+        return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+      res.status(200).json({ success: true, message: 'Request withdrawn', data: record });
+    } catch (error) {
+      logger.error('[AdminRequestController.withdrawMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

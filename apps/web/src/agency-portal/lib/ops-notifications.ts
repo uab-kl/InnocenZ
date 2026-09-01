@@ -39,6 +39,11 @@ export type OpsNotificationKind =
 	| "leave_requested"
 	// The agency answered that request — approved or rejected. PR-addressed.
 	| "leave_decided"
+	// The agency's weekly subscription statement: PVs issued last payroll week
+	// and the tier that volume put it on. Its own kind rather than `pv_ready`:
+	// that announces one PR's voucher, this is the count of ALL of them read as
+	// a bill, and it lands on Subscription rather than Payroll.
+	| "subscription_tier_weekly"
 	// Last resort for a row whose backend kind this build has never heard of.
 	// The `notification_kind` DB enum grows by migration and a shared dev database
 	// routinely runs ahead of the web app — mapping such a row to a neutral kind

@@ -15,6 +15,7 @@ import {
 	createAdminRequest,
 	fetchMyPlanChange,
 	fetchMyPosQuote,
+	withdrawMyAdminRequest,
 } from "@/services/admin-request";
 import {
 	fetchMemberSubscriptions,
@@ -187,6 +188,40 @@ export function useOutletSubscription() {
 		[invoicesQuery.data],
 	);
 
+	/**
+	 * WHICH LANE each billed period belongs to — the plan, or the POS add-on.
+	 *
+	 * A venue holding both is billed on BOTH every month, so Payment history shows
+	 * two rows for one month and, until now, nothing on them said which was which.
+	 * Two amounts for one month with no label is how a venue concludes it was
+	 * double-billed.
+	 *
+	 * Resolved through the invoice's `memberSubscriptionId` FK into the rows this
+	 * hook already holds, then classified against the plan catalogue's own `kind`
+	 * — never by matching the plan NAME, which would break the moment an add-on is
+	 * renamed or a plan happens to contain the word "POS".
+	 *
+	 * Returns null rather than guessing when the subscription row is not in hand
+	 * (they are fetched at pageSize 100, so only a venue with a very long
+	 * switching history could reach that). A missing badge is honest; a wrong one
+	 * is not.
+	 */
+	const invoiceLaneById = useMemo(() => {
+		const laneOf = new Map<string, "plan" | "addon">();
+		for (const sub of billingQuery.data?.data ?? []) {
+			laneOf.set(
+				sub.id,
+				sub.subscriptionId && addonPlanIds.has(sub.subscriptionId)
+					? "addon"
+					: "plan",
+			);
+		}
+		return laneOf;
+	}, [billingQuery.data, addonPlanIds]);
+
+	const invoiceLane = (invoice: SubscriptionInvoice): "plan" | "addon" | null =>
+		invoiceLaneById.get(invoice.memberSubscriptionId) ?? null;
+
 	const pastSubscriptions = useMemo<SubscriptionRecordRow[]>(() => {
 		if (!backed) return [];
 		return sortMemberSubscriptions(billingQuery.data?.data ?? [])
@@ -251,6 +286,33 @@ export function useOutletSubscription() {
 			createAdminRequest(input, logout),
 		onSuccess: () => void posQuoteQuery.refetch(),
 	});
+
+	/**
+	 * Taking the POS request back. Refetches the same query the request was read
+	 * from, so the card stops saying "waiting for admin" because the SERVER says
+	 * so — not because a local flag was cleared. That flag was the whole fault
+	 * here: it hid the badge while the admin still held the request.
+	 */
+	const withdrawPosMut = useMutation({
+		mutationFn: (id: string) => withdrawMyAdminRequest(id, logout),
+		onSuccess: () => void posQuoteQuery.refetch(),
+	});
+
+	/**
+	 * Withdraw whatever POS request is outstanding. False when there is nothing
+	 * to withdraw or the server refused — the caller must not clear its own
+	 * indicator on a refusal, or the card lies again in the other direction.
+	 */
+	const withdrawPosRequest = async (): Promise<boolean> => {
+		const id = posQuoteQuery.data?.id;
+		if (!id) return false;
+		try {
+			const result = await withdrawPosMut.mutateAsync(id);
+			return result.success;
+		} catch {
+			return false;
+		}
+	};
 
 	/**
 	 * The venue's saved card. Real, and the only source — the page used to print
@@ -439,6 +501,13 @@ export function useOutletSubscription() {
 		pastSubscriptions,
 		/** Billed periods with their paid/unpaid state — the real payment history. */
 		paymentHistory,
+		/**
+		 * Which lane a billed period belongs to — 'plan', 'addon', or null when it
+		 * cannot be resolved. A venue holding the POS add-on is billed on both
+		 * lanes each month, and two rows for one month with no label reads as a
+		 * double charge.
+		 */
+		invoiceLane,
 		isPaymentHistoryLoading: invoicesQuery.isLoading,
 		activePlanName,
 		/** Real next billing date from the ledger; null when nothing is active. */
@@ -471,6 +540,13 @@ export function useOutletSubscription() {
 		isRequestingQuote: posQuoteMut.isPending,
 		requestPosQuote,
 		requestPosRemoval,
+		/**
+		 * Taking the outstanding POS request back. Real now — before this there was
+		 * no withdraw endpoint at all, and the card cleared a local flag while the
+		 * admin still held the request.
+		 */
+		withdrawPosRequest,
+		isWithdrawingPos: withdrawPosMut.isPending,
 		requestPlanChange,
 		isRequestingPlanChange: planChangeMut.isPending,
 		/** False until the catalog has loaded — the switch cannot be filed yet. */

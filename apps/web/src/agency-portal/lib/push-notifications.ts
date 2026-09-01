@@ -1094,6 +1094,10 @@ export const OPS_KIND_LABEL: Record<
 	// says which way it went, so the chip only names the topic.
 	leave_requested: (t) => t.notifications.kindLeave,
 	leave_decided: (t) => t.notifications.kindLeave,
+	// All five outcomes (moved, unchanged, past the rate card, frozen mid-
+	// negotiation, on Custom) share one chip: the row body carries which one it
+	// was, and the chip names the topic — the same argument as leave above.
+	subscription_tier_weekly: (t) => t.notifications.kindSubscription,
 	unknown: (t) => t.notifications.kindUnknown,
 };
 

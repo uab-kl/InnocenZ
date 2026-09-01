@@ -58,6 +58,10 @@ import {
 	planCapacityLabel,
 	planDescription,
 } from "@/lib/portal-i18n/plan-label";
+import {
+	describePaymentMethod,
+	willAutoCharge,
+} from "@/services/payment-method";
 
 const CARD_LAST4 = "4242";
 
@@ -120,9 +124,29 @@ function AgencySubscription() {
 		[issuedWeeklyPv, t],
 	);
 
-	// Real login → rate card lists real backend plans; demo plans otherwise. The
-	// usage-based hero tier stays demo (no backend equivalent).
+	// Real login → rate card lists real backend plans; demo plans otherwise.
 	const sub = useAgencySubscription();
+
+	/**
+	 * THE NUMBER THE HERO CARD PRINTS. Real vouchers on a real login.
+	 *
+	 * `issuedWeeklyPv` above is computed from the browser demo store, which is
+	 * BLANKED on every real session — so a live agency read "0 PVs issued" sitting
+	 * directly beside a tier and a price chosen from a real, different count. That
+	 * is worse than showing nothing: it invites an agency to dispute a correct
+	 * invoice using a number the app made up.
+	 *
+	 * Deliberately a SEPARATE value rather than a fix to `issuedWeeklyPv` itself.
+	 * That one still feeds `billing`, which feeds the demo store write at the top
+	 * of this component; re-pointing it would move demo bookkeeping as a
+	 * side-effect of a display fix. Only what the card SHOWS changes here.
+	 *
+	 * Null while the vouchers are still loading — rendered as a dash, never as 0,
+	 * because 0 is itself a real and meaningful answer on this card.
+	 */
+	const heroPvCount: number | null = sub.backed
+		? sub.settledWeeklyPvCount
+		: issuedWeeklyPv;
 
 	// Receivables owed BY outlets — the opposite direction to everything else on
 	// this screen. Backed sessions only: the demo store's `kind: "outlet"` rows
@@ -370,6 +394,30 @@ function AgencySubscription() {
 	 * admin sets the price and nothing bills until they do.
 	 */
 	const handleAskForCustom = () => {
+		/**
+		 * THE OWNER'S RULE for the agency's one manual ask: unpaid → no Custom
+		 * negotiation — popped here, before a request that would just sit in the
+		 * admin's queue is composed. Resetting OFF Custom is deliberately NOT
+		 * gated (owner: "for agency reset any time if custom only") — dropping
+		 * cost must never be blocked by debt. The Sunday auto-tier and the
+		 * past-rate-card auto-file are untouched: those are the system's own
+		 * acts, not this button.
+		 */
+		const owing = sub.paymentHistory.filter((row) => row.status !== "paid");
+		if (owing.length > 0) {
+			const cents = owing.reduce(
+				(total, row) => total + Math.round(Number(row.amount) * 100),
+				0,
+			);
+			toast(
+				fill(t.subscription.settleBeforeCustomAsk, {
+					amount: formatRM(cents / 100),
+					n: owing.length,
+				}),
+				"warn",
+			);
+			return;
+		}
 		const pv = sub.weeklyPvCount ?? 0;
 		sub.notifyAdminForCustom(pv).then((result) => {
 			toast(
@@ -445,12 +493,14 @@ function AgencySubscription() {
 							})}
 						</p>
 						<p className="mt-1 font-sora text-base font-bold">
-							{fill(
-								issuedWeeklyPv === 1
-									? t.subscription.pvIssuedOne
-									: t.subscription.pvIssuedMany,
-								{ n: issuedWeeklyPv },
-							)}
+							{heroPvCount === null
+								? t.subscription.loadingCard
+								: fill(
+										heroPvCount === 1
+											? t.subscription.pvIssuedOne
+											: t.subscription.pvIssuedMany,
+										{ n: heroPvCount },
+									)}
 						</p>
 						<p className="iz-tiny iz-muted mt-1">
 							{sub.backed && sub.onCustom
@@ -472,12 +522,14 @@ function AgencySubscription() {
 						? t.subscription.atAgreedPrice
 						: billing.plan.renegotiate
 							? t.agencyMisc.contactAdminCustomPricing
-							: fill(
-									issuedWeeklyPv === 1
-										? t.subscription.basedOnPvOne
-										: t.subscription.basedOnPvMany,
-									{ price: billedPriceLabel, n: issuedWeeklyPv },
-								)}
+							: heroPvCount === null
+								? ""
+								: fill(
+										heroPvCount === 1
+											? t.subscription.basedOnPvOne
+											: t.subscription.basedOnPvMany,
+										{ price: billedPriceLabel, n: heroPvCount },
+									)}
 				</p>
 			</IzCard>
 
@@ -937,17 +989,26 @@ function AgencySubscription() {
 				hint={
 					sub.backed
 						? sub.card
-							? // Two keys, not one sentence: the brand + last-4 stamp already
-								// had a key, and the charge date is an optional tail that only
-								// a saved renewal date earns.
-								fill(t.subscription.cardBrandLast4, {
-									brand: sub.card.brand,
-									last4: sub.card.last4,
+							? // Two keys, not one sentence: the instrument stamp already had
+								// a key, and the charge date is an optional tail that only a
+								// saved renewal date earns. The stamp comes from the one
+								// shared describer, so a bank transfer does not print
+								// "Card ···· ····" as if its digits had failed to load.
+								describePaymentMethod(sub.card, {
+									transfer: t.subscription.savedTransfer,
+									fpx: t.subscription.savedFpx,
 								}) +
 								(realRenewalLabel
-									? fill(t.agencyMisc.nextChargeSuffix, {
-											date: realRenewalLabel,
-										})
+									? fill(
+											// "Next charge" is a promise only an auto-chargeable
+											// rail can keep. A bank transfer and a mandate the
+											// bank has not approved RENEW on that date; nothing
+											// collects on it by itself.
+											willAutoCharge(sub.card)
+												? t.agencyMisc.nextChargeSuffix
+												: t.agencyMisc.renewsOnSuffix,
+											{ date: realRenewalLabel },
+										)
 									: "")
 							: t.subscription.noCardSavedYet
 						: fill(t.subscription.visaNextCharge, {

@@ -23,6 +23,29 @@ const SUBSCRIBER_COLUMNS = {
   billingCycle: MemberSubscriptionTable.billingCycle,
 };
 
+/**
+ * One billing period the ledger has just opened, handed back so the caller can
+ * tell the organisation it was raised against.
+ *
+ * Returned rather than notified from inside `generateMissing`, deliberately: the
+ * period job and the admin's "Refresh periods" button both open periods, and a
+ * repository that announced its own writes would still leave the two callers
+ * free to disagree about everything else. One shared announcer over this array
+ * is what keeps them the same.
+ */
+export type OpenedInvoice = {
+  subscriberType: SubscriptionInvoiceWithSubscriber['subscriberType'];
+  subscriberId: string;
+  /** Snapshotted on member_subscription; used for the log line, not the notice. */
+  subscriberName: string;
+  /** Calendar days, YYYY-MM-DD — a billing period has no time of day. */
+  periodStart: string;
+  periodEnd: string;
+  /** numeric(12,2), so a string. */
+  amount: string;
+  currency: string;
+};
+
 type JoinedRow = {
   invoice: SubscriptionInvoice;
   subscriberType: SubscriptionInvoiceWithSubscriber['subscriberType'];
@@ -119,6 +142,141 @@ export class SubscriptionInvoiceRepositoryClass {
     }
   }
 
+  /**
+   * One entry per ORG, carrying every invoice it holds — plan, Custom and the
+   * POS add-on together.
+   *
+   * ⚠️ PAGINATED BY SUBSCRIBER, NOT BY INVOICE, and that is the whole point.
+   * Grouping `listPaginated`'s ten rows in the browser would have produced
+   * confident half-groups: Atlas holds three periods, and on a page that
+   * happened to carry one of them the card would have read "1 period,
+   * RM 9,999" under a heading claiming to be everything that org owes. A
+   * summary that silently omits rows is worse than the flat list it replaces,
+   * because it looks like an answer.
+   *
+   * So the subscribers are selected and paged FIRST, then every invoice
+   * belonging to them is fetched whole. Two queries, and each org on the page
+   * is complete by construction.
+   *
+   * Grouped on `subscriberId`, never on the name: a rename would split one org
+   * into two cards, and two orgs sharing a name would merge into one. An org
+   * may hold several `member_subscription` rows — its plan, and an add-on
+   * beside it — and collapsing those into one card is exactly what was asked
+   * for; the lanes stay legible as separate invoices inside it.
+   */
+  async listGroupedBySubscriber(params: {
+    filter?: SubscriptionInvoiceFilter;
+    page: number;
+    pageSize: number;
+  }): Promise<{
+    groups: Array<{
+      subscriberType: SubscriptionInvoiceWithSubscriber['subscriberType'];
+      subscriberId: string;
+      subscriberName: string;
+      invoices: SubscriptionInvoiceWithSubscriber[];
+    }>;
+    totalCount: number;
+  }> {
+    try {
+      const { filter, page, pageSize } = params;
+      const whereClause = this.buildConditions(filter);
+
+      // How many ORGS match — the denominator the pager counts in.
+      const [countRow] = await db
+        .select({
+          value: sql<number>`count(distinct ${MemberSubscriptionTable.subscriberId})::int`,
+        })
+        .from(SubscriptionInvoiceTable)
+        .innerJoin(
+          MemberSubscriptionTable,
+          eq(SubscriptionInvoiceTable.memberSubscriptionId, MemberSubscriptionTable.id),
+        )
+        .where(whereClause);
+      const totalCount = Number(countRow?.value ?? 0);
+      if (totalCount === 0) return { groups: [], totalCount: 0 };
+
+      /*
+       * The page of orgs. Ordered by their most recent period so live billing
+       * leads, with the id as a tie-break — without a total order two orgs
+       * whose newest period falls on the same day could swap places between
+       * page 1 and page 2, and one of them would never be shown at all.
+       */
+      const subscriberPage = await db
+        .select({
+          subscriberId: MemberSubscriptionTable.subscriberId,
+          latest: sql<string>`max(${SubscriptionInvoiceTable.periodStart})`,
+        })
+        .from(SubscriptionInvoiceTable)
+        .innerJoin(
+          MemberSubscriptionTable,
+          eq(SubscriptionInvoiceTable.memberSubscriptionId, MemberSubscriptionTable.id),
+        )
+        .where(whereClause)
+        .groupBy(MemberSubscriptionTable.subscriberId)
+        .orderBy(
+          sql`max(${SubscriptionInvoiceTable.periodStart}) desc`,
+          sql`${MemberSubscriptionTable.subscriberId} asc`,
+        )
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+
+      const ids = subscriberPage
+        .map((row) => row.subscriberId)
+        .filter((id): id is string => Boolean(id));
+      if (ids.length === 0) return { groups: [], totalCount };
+
+      /*
+       * Every invoice for those orgs, under the SAME filter. Re-applying it
+       * matters: a status filter of "unpaid" must not hand a card its paid
+       * periods as well, or the card's total would answer a question nobody
+       * asked.
+       */
+      const rows = await db
+        .select({ invoice: SubscriptionInvoiceTable, ...SUBSCRIBER_COLUMNS })
+        .from(SubscriptionInvoiceTable)
+        .innerJoin(
+          MemberSubscriptionTable,
+          eq(SubscriptionInvoiceTable.memberSubscriptionId, MemberSubscriptionTable.id),
+        )
+        .where(
+          whereClause
+            ? and(whereClause, inArray(MemberSubscriptionTable.subscriberId, ids))
+            : inArray(MemberSubscriptionTable.subscriberId, ids),
+        )
+        .orderBy(
+          desc(SubscriptionInvoiceTable.periodStart),
+          desc(SubscriptionInvoiceTable.createdAt),
+        );
+
+      // Seeded in the page's own order so the response preserves it — a Map
+      // keyed as rows arrive would re-order the page by whichever org happened
+      // to own the newest invoice.
+      const byId = new Map<string, (typeof rows)[number][]>(ids.map((id) => [id, []]));
+      for (const row of rows) {
+        byId.get(row.subscriberId)?.push(row);
+      }
+
+      const groups = ids
+        .map((id) => {
+          const held = byId.get(id) ?? [];
+          const first = held[0];
+          if (!first) return null;
+          return {
+            subscriberType: first.subscriberType,
+            subscriberId: id,
+            subscriberName: first.subscriberName,
+            invoices: held.map(flatten),
+          };
+        })
+        .filter((group): group is NonNullable<typeof group> => group !== null);
+
+      return { groups, totalCount };
+    } catch (error) {
+      logger.error('[SubscriptionInvoiceRepository.listGroupedBySubscriber] Error:', error);
+      return { groups: [], totalCount: 0 };
+    }
+  }
+
   async getById(id: string): Promise<SubscriptionInvoiceWithSubscriber | null> {
     try {
       const [row] = await db
@@ -176,7 +334,7 @@ export class SubscriptionInvoiceRepositoryClass {
     actor?: string;
     memberSubscriptionIds?: string[];
     today?: string;
-  }): Promise<{ scanned: number; created: number }> {
+  }): Promise<{ scanned: number; created: number; opened: OpenedInvoice[] }> {
     try {
       const actor = params?.actor ?? 'system';
       const today = params?.today ?? klToday();
@@ -186,6 +344,10 @@ export class SubscriptionInvoiceRepositoryClass {
           id: MemberSubscriptionTable.id,
           subscriberType: MemberSubscriptionTable.subscriberType,
           subscriberId: MemberSubscriptionTable.subscriberId,
+          // Carried only so an opened period can be logged as "JK House" rather
+          // than a uuid; the notice itself is addressed to that org's own people
+          // and never prints their own name back at them.
+          subscriberName: MemberSubscriptionTable.subscriberName,
           subscriptionId: MemberSubscriptionTable.subscriptionId,
           kind: SubscriptionTable.kind,
           amount: MemberSubscriptionTable.amount,
@@ -193,6 +355,9 @@ export class SubscriptionInvoiceRepositoryClass {
           billingCycle: MemberSubscriptionTable.billingCycle,
           startedAt: MemberSubscriptionTable.startedAt,
           endedAt: MemberSubscriptionTable.endedAt,
+          // Read beside endedAt so a lane that was cancelled WITHOUT an end date
+          // is not billed forever — see stillSubscribed below.
+          status: MemberSubscriptionTable.status,
         })
         .from(MemberSubscriptionTable)
         .leftJoin(SubscriptionTable, eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id))
@@ -260,7 +425,24 @@ export class SubscriptionInvoiceRepositoryClass {
         // came out billed 3 Aug–2 Sep for Scale *and* 4 Aug–3 Sep for
         // Enterprise, two overlapping months for one venue, with its POS add-on
         // charged twice over the same days.
-        const stillSubscribed = ordered.some((row) => row.endedAt === null);
+        /**
+         * STILL ON THE LANE means an OPEN row that is also still a
+         * subscription. Testing `endedAt === null` alone read the date and
+         * ignored the word beside it: `PUT /member-subscription/:id` accepts
+         * `status` and `endedAt` independently (member-subscription.schema.ts
+         * :26-27), so an admin setting a row to `cancelled` without also
+         * stamping a date leaves it open forever — and this lane went on
+         * opening an invoice against it every morning. The dedicated `cancel`
+         * endpoint does stamp `endedAt`, which is why the gap stays invisible
+         * until someone edits the row instead of cancelling it.
+         *
+         * `past_due` counts as still subscribed on purpose: an org behind on
+         * payment has not left, and it is exactly the one that must keep being
+         * invoiced.
+         */
+        const stillSubscribed = ordered.some(
+          (row) => row.endedAt === null && (row.status === 'active' || row.status === 'past_due'),
+        );
 
         // A LANE THE ORG HAS LEFT IS NOT BILLED. Its periods are history, and
         // history is not a debt — an agency that dropped a tier in July does not
@@ -358,12 +540,32 @@ export class SubscriptionInvoiceRepositoryClass {
         });
       }
 
-      if (rows.length === 0) return { scanned: subscriptions.length, created: 0 };
+      if (rows.length === 0) return { scanned: subscriptions.length, created: 0, opened: [] };
+
+      /**
+       * Which organisation each lane belongs to, so the caller can announce what
+       * it opened without a second pass over the ledger.
+       *
+       * Built from `subscriptions` — the rows this run already read — rather than
+       * re-queried: the answer is in hand, and a second read could disagree with
+       * the first if a plan moved between them.
+       */
+      const ownerOf = new Map(
+        subscriptions.map((row) => [
+          row.id,
+          {
+            subscriberType: row.subscriberType,
+            subscriberId: row.subscriberId,
+            subscriberName: row.subscriberName,
+          },
+        ]),
+      );
 
       // Chunked, because a first run over a long history can be thousands of
       // rows and node-postgres binds one parameter per column.
       const CHUNK = 500;
       let created = 0;
+      const opened: OpenedInvoice[] = [];
       for (let index = 0; index < rows.length; index += CHUNK) {
         const inserted = await db
           .insert(SubscriptionInvoiceTable)
@@ -374,14 +576,44 @@ export class SubscriptionInvoiceRepositoryClass {
               SubscriptionInvoiceTable.periodStart,
             ],
           })
-          .returning({ id: SubscriptionInvoiceTable.id });
+          /**
+           * The RETURNING set is what makes the announcement honest. Read back
+           * from the rows the database actually accepted, never from `rows`
+           * above: `onConflictDoNothing` silently drops a period already billed,
+           * and announcing the intended set would tell an org about a charge
+           * that was not raised tonight.
+           */
+          .returning({
+            id: SubscriptionInvoiceTable.id,
+            memberSubscriptionId: SubscriptionInvoiceTable.memberSubscriptionId,
+            periodStart: SubscriptionInvoiceTable.periodStart,
+            periodEnd: SubscriptionInvoiceTable.periodEnd,
+            amount: SubscriptionInvoiceTable.amount,
+            currency: SubscriptionInvoiceTable.currency,
+          });
         created += inserted.length;
+        for (const row of inserted) {
+          const owner = ownerOf.get(row.memberSubscriptionId);
+          // A lane whose owner cannot be resolved is still BILLED — it is in the
+          // table — it simply cannot be announced to anybody. Dropping it here
+          // keeps the notification honest rather than addressing it to nobody.
+          if (!owner) continue;
+          opened.push({
+            subscriberType: owner.subscriberType,
+            subscriberId: owner.subscriberId,
+            subscriberName: owner.subscriberName,
+            periodStart: row.periodStart,
+            periodEnd: row.periodEnd,
+            amount: row.amount,
+            currency: row.currency,
+          });
+        }
       }
 
-      return { scanned: subscriptions.length, created };
+      return { scanned: subscriptions.length, created, opened };
     } catch (error) {
       logger.error('[SubscriptionInvoiceRepository.generateMissing] Error:', error);
-      return { scanned: 0, created: 0 };
+      return { scanned: 0, created: 0, opened: [] };
     }
   }
 }

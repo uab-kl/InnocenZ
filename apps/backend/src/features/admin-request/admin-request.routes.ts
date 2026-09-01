@@ -32,6 +32,24 @@ router.get(
   adminRequestController.myLatestCustomQuote.bind(adminRequestController),
 );
 
+/**
+ * Taking your own request back. The only WRITE on this inbox that is not the
+ * admin's, so it sits with the `/mine` reads above `/:id` and outside
+ * requireAdmin — a venue cancelling its own POS quote is acting on itself.
+ *
+ * The id in the path is NOT the authority: the controller re-derives the
+ * caller's organisations from the session and answers 404 for anything outside
+ * them, so a guessed uuid cannot cancel another venue's negotiation.
+ */
+router.patch(
+  '/mine/:id/withdraw',
+  requireRole('outlet', 'agency', 'admin'),
+  // Same guard as saving a payment method: withdrawing a price negotiation is a
+  // settings-class write, and requireRole alone would admit a view-only Director.
+  requirePermission('settings', 'update'),
+  adminRequestController.withdrawMine.bind(adminRequestController),
+);
+
 router.get('/pending-count', requireAdmin, adminRequestController.pendingCount.bind(adminRequestController));
 router.get(
   '/negotiated-summary',

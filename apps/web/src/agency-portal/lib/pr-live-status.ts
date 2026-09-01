@@ -93,6 +93,13 @@ export function previousDayIso(dateIso: string): string {
 	return d.toISOString().slice(0, 10);
 }
 
+/** `2026-08-25` → `2026-08-26`. UTC arithmetic, so no zone can shift the day. */
+export function nextDayIso(dateIso: string): string {
+	const d = new Date(`${dateIso}T00:00:00Z`);
+	d.setUTCDate(d.getUTCDate() + 1);
+	return d.toISOString().slice(0, 10);
+}
+
 /** 240 → `"04:00"`. */
 function hhmm(minutes: number): string {
 	const h = Math.floor(minutes / 60);
@@ -137,6 +144,41 @@ export function windowsEffectiveOn(
 	return [...spill, ...(byDate.get(dateIso) ?? [])];
 }
 
+/** Half-open overlap on one continuous minute line — a window ending exactly
+ *  when the other starts is not a clash, same as the server's `shiftsOverlap`. */
+export function minuteRangesOverlap(
+	a: { from: number; to: number },
+	b: { from: number; to: number },
+): boolean {
+	return a.from < b.to && b.from < a.to;
+}
+
+/**
+ * A day's busy windows on the CONTINUOUS minute line an assign decision runs
+ * on: today's effective windows as-is, plus TOMORROW's rebased +1440 — so an
+ * overnight shift offered today (22:00 - 04:00 parses past 1440) can meet a
+ * booking that starts the next morning (02:00 - 06:00 → 1560 - 1800). The
+ * server's `shiftsOverlap` compares on exactly this timeline; the sheet's old
+ * within-the-day copy is how that pair was cleared and the sheet under-warned.
+ * Labels stay the bare display strings the windows arrived as — times, never
+ * who or where.
+ */
+export function busyFrameOn(
+	byDate: ReadonlyMap<string, string[]> | undefined,
+	dateIso: string,
+): { label: string; from: number; to: number }[] {
+	const out: { label: string; from: number; to: number }[] = [];
+	for (const w of windowsEffectiveOn(byDate, dateIso)) {
+		const m = windowMinutes(w);
+		if (m) out.push({ label: w, from: m[0], to: m[1] });
+	}
+	for (const w of byDate?.get(nextDayIso(dateIso)) ?? []) {
+		const m = windowMinutes(w);
+		if (m) out.push({ label: w, from: m[0] + 1440, to: m[1] + 1440 });
+	}
+	return out;
+}
+
 /** Is this instant (minutes from the day's midnight) inside the window? */
 export function windowContains(win: string, minutes: number): boolean {
 	const w = windowMinutes(win);
@@ -156,6 +198,12 @@ export function derivePrLiveStatus(opts: {
 	ownBookedToday: boolean;
 	/** Bare committed windows for the day — own AND rival, times only. */
 	committedToday: string[];
+	/**
+	 * A commitment that day whose slot named no clock time — spoken for at an
+	 * UNKNOWN hour. Scheduled, because booked-that-day is what the state means;
+	 * never unavailable, because nothing knows WHEN (the 20 Aug narrowing).
+	 */
+	committedTimeUnknownToday?: boolean;
 	/** Minutes from midnight of the instant being asked about. */
 	nowMinutes: number;
 }): PrLiveStatus {
@@ -163,7 +211,12 @@ export function derivePrLiveStatus(opts: {
 	// can never claim more than scheduled — and an own booking without a
 	// check-in is exactly the state the check-in exists to distinguish.
 	if (opts.ownOnDuty) return "on-duty";
-	if (opts.ownBookedToday || opts.committedToday.length > 0) return "scheduled";
+	if (
+		opts.ownBookedToday ||
+		opts.committedToday.length > 0 ||
+		opts.committedTimeUnknownToday
+	)
+		return "scheduled";
 	if (opts.blockedToday) return "unavailable";
 	return "available";
 }

@@ -163,7 +163,14 @@ app.use(express.json({
     // day this runs behind a mount that does rewrite it.
     const target =
       (req as express.Request).originalUrl ?? (req as { url?: string }).url ?? '';
-    if (target.includes('/webhooks/whatsapp')) {
+    // Payment gateways sign the exact bytes they sent, so the parsed body is
+    // useless for verification: JSON.parse followed by JSON.stringify does not
+    // reproduce key order or whitespace, and every genuine delivery would fail
+    // the check. Same reason Meta's webhook is captured here.
+    if (
+      target.includes('/webhooks/whatsapp') ||
+      target.includes('/subscription-payment/webhook/')
+    ) {
       (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
     }
   },

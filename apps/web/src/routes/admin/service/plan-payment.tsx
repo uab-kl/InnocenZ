@@ -5,7 +5,6 @@ import {
 	useQueryClient,
 } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { format, parse } from "date-fns";
 import {
 	AlertCircle,
 	CreditCard,
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { InvoicePaymentSheet } from "@/components/admin/invoice-payment-sheet";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { SourceToggle } from "@/components/admin/source-toggle";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
 	Table,
 	TableBody,
@@ -47,14 +48,14 @@ import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
-import { formatDate, formatPrice, getErrorMessage } from "@/lib/utils";
+import { formatPrice, getErrorMessage } from "@/lib/utils";
 import {
-	fetchSubscriptionInvoices,
+	fetchSubscriptionInvoiceGroups,
 	generateSubscriptionInvoices,
 	type SubscriberType,
+	type SubscriptionInvoiceGroup,
 	type SubscriptionInvoiceQueryParams,
 	type SubscriptionInvoiceStatus,
-	setSubscriptionInvoiceStatus,
 } from "@/services/subscription-invoice";
 
 export const Route = createFileRoute("/admin/service/plan-payment")({
@@ -69,18 +70,33 @@ export const Route = createFileRoute("/admin/service/plan-payment")({
 const PAGE_SIZE = 10;
 
 /**
- * A period boundary as a DAY.
+ * What one org owes, across every lane it holds.
  *
- * The shared `formatDate` prints a time, which rendered every period as
- * "10 Aug 2026, 08:00 am" — a clock reading on a fact that has no clock, and
- * 08:00 at that, being midnight UTC seen from Kuala Lumpur. `period_start` /
- * `period_end` are `date` columns; they arrive as plain `YYYY-MM-DD` and are
- * parsed as such rather than through `new Date()`, which would read them as UTC
- * and shift the day back for anyone east of Greenwich.
+ * Summed from the group's OWN invoices rather than re-queried, because the
+ * server already sent every period for the orgs on this page — see
+ * `fetchSubscriptionInvoiceGroups` on why the grouping cannot happen here.
+ *
+ * `lanes` is what makes the plan / Custom / POS combination legible: an org on
+ * Enterprise with a POS add-on is billed on two lanes, each opening its own
+ * invoice, and a card that showed one figure with no explanation would look
+ * like an arithmetic error. Deduplicated by name — the same lane repeats once
+ * per period, and listing it once per week is the "doubles" this page exists
+ * to remove.
  */
-function periodDay(day: string): string {
-	const parsed = parse(day, "yyyy-MM-dd", new Date());
-	return Number.isNaN(parsed.getTime()) ? day : format(parsed, "d MMM yyyy");
+function summarise(group: SubscriptionInvoiceGroup) {
+	let owed = 0;
+	let paidCount = 0;
+	for (const invoice of group.invoices) {
+		if (invoice.status === "paid") paidCount += 1;
+		else owed += Number(invoice.amount);
+	}
+	return {
+		periods: group.invoices.length,
+		paidCount,
+		unpaidCount: group.invoices.length - paidCount,
+		owed,
+		lanes: [...new Set(group.invoices.map((invoice) => invoice.planName))],
+	};
 }
 
 /*
@@ -124,6 +140,15 @@ function PlanPaymentPage() {
 	const queryClient = useQueryClient();
 
 	const [statusFilter, setStatusFilter] = useState<string>("all");
+	/**
+	 * Which invoice the right-hand panel is showing.
+	 *
+	 * The table can only carry the invoice — a period, a figure, one status flag.
+	 * The two questions an admin opens a row to ask (what did they pay WITH, and
+	 * did anything already fail) live in `payment_method` and
+	 * `subscription_payment`, so they need a panel rather than more columns.
+	 */
+	const [detailId, setDetailId] = useState<string | null>(null);
 	// "all" plus the two payer roles — a PR never holds a subscription, so the
 	// PR button is deliberately not offered.
 	const [roleFilter, setRoleFilter] = useState<"all" | SubscriberType>("all");
@@ -149,32 +174,17 @@ function PlanPaymentPage() {
 	if (roleFilter !== "all") queryParams.subscriberType = roleFilter;
 
 	const invoicesQuery = useQuery({
-		queryKey: ["subscription-invoices", queryParams],
-		queryFn: () => fetchSubscriptionInvoices(queryParams, logout),
+		queryKey: ["subscription-invoices", "by-subscriber", queryParams],
+		queryFn: () => fetchSubscriptionInvoiceGroups(queryParams, logout),
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
 		retry: 2,
 	});
 
-	const statusMutation = useMutation({
-		mutationFn: ({
-			id,
-			status,
-		}: {
-			id: string;
-			status: SubscriptionInvoiceStatus;
-		}) => setSubscriptionInvoiceStatus(id, status, logout),
-		onSuccess: (response) => {
-			queryClient.invalidateQueries({ queryKey: ["subscription-invoices"] });
-			toast.success(response.message || t.adminService.paymentStatusUpdated);
-		},
-		onError: (error) => {
-			toast.error(
-				toMutationError(error, t.adminService.paymentStatusUpdateFailed)
-					?.message ?? t.adminService.paymentStatusUpdateFailed,
-			);
-		},
-	});
+	/**
+	 * Which orgs are open. Ids, not indexes — a filter change reorders the page,
+	 * and an index would carry the open state onto whoever now sits in that slot.
+	 */
 
 	// Opens any period that has started and has no row yet. Idempotent — the
 	// server refuses to bill a period twice — so this is safe to press.
@@ -192,10 +202,10 @@ function PlanPaymentPage() {
 		},
 	});
 
-	const records = invoicesQuery.data?.data ?? [];
+	const groups = invoicesQuery.data?.data ?? [];
 	const pagination = invoicesQuery.data?.pagination;
-	const showLoading = invoicesQuery.isLoading && records.length === 0;
-	const isSaving = statusMutation.isPending || generateMutation.isPending;
+	const showLoading = invoicesQuery.isLoading && groups.length === 0;
+	const isSaving = generateMutation.isPending;
 
 	return (
 		<PageShell>
@@ -339,7 +349,7 @@ function PlanPaymentPage() {
 											</Button>
 										</TableCell>
 									</TableRow>
-								) : records.length === 0 ? (
+								) : groups.length === 0 ? (
 									<TableRow>
 										<TableCell
 											colSpan={8}
@@ -349,72 +359,99 @@ function PlanPaymentPage() {
 										</TableCell>
 									</TableRow>
 								) : (
-									records.map((invoice) => (
-										<TableRow key={invoice.id}>
-											<TableCell className="text-base font-medium">
-												{invoice.subscriberName}
-											</TableCell>
-											<TableCell>
-												<Badge
-													variant="outline"
-													className={`${roleBadgeColors[invoice.subscriberType]} w-fit`}
-												>
-													{roleLabels[invoice.subscriberType](t)}
-												</Badge>
-											</TableCell>
-											<TableCell>
-												{invoice.planName}
-												<span className="block text-sm text-muted-foreground">
-													{invoice.billingCycle === "weekly"
-														? t.subscription.billedWeekly
-														: t.subscription.billedMonthly}
-												</span>
-											</TableCell>
-											<TableCell className="text-base whitespace-nowrap">
-												{periodDay(invoice.periodStart)} –{" "}
-												{periodDay(invoice.periodEnd)}
-											</TableCell>
-											<TableCell className="text-base whitespace-nowrap">
-												{formatPrice(Number(invoice.amount))}
-											</TableCell>
-											<TableCell>
-												<Badge
-													variant="outline"
-													className={`${statusBadgeColors[invoice.status]} w-fit`}
-												>
-													{statusLabels[invoice.status](t)}
-												</Badge>
-											</TableCell>
-											<TableCell className="text-base whitespace-nowrap text-muted-foreground">
-												{invoice.paidAt ? formatDate(invoice.paidAt) : "—"}
-											</TableCell>
-											<TableCell className="text-right">
-												{/*
-												 * Both directions, always — an admin who marks the wrong
-												 * period paid has to be able to take it back, and a
-												 * one-way button is how a wrong figure becomes permanent.
-												 */}
-												<Button
-													size="sm"
-													variant={
-														invoice.status === "paid" ? "outline" : "default"
-													}
-													disabled={isSaving}
-													onClick={() =>
-														statusMutation.mutate({
-															id: invoice.id,
-															status:
-																invoice.status === "paid" ? "unpaid" : "paid",
-														})
-													}
-												>
-													{invoice.status === "paid"
-														? t.adminService.markUnpaid
-														: t.adminService.markPaid}
-												</Button>
-											</TableCell>
-										</TableRow>
-									))
+									groups.flatMap((group) => {
+										const summary = summarise(group);
+										/*
+										 * ONE ROW PER ORG, its periods nested under it.
+										 *
+										 * The header carries what an admin came to find — how many
+										 * periods, how much is outstanding, and which lanes the org
+										 * is billed on — so the common question is answered without
+										 * opening anything. The periods themselves are the detail,
+										 * and each keeps its own Mark paid, because settling is per
+										 * period and always was.
+										 */
+										/*
+										 * TWO ACTIONS ON ONE ROW, deliberately separated.
+										 *
+										 * The chevron expands the periods inline; the rest of the row
+										 * opens the right-hand panel, which is where "all the details
+										 * and the current state" live — every billing lane with the
+										 * live one ringed, the payment methods on file, and every
+										 * attempt made against the period.
+										 *
+										 * The panel is keyed on an INVOICE, so the newest period is
+										 * what it is handed: it is the one an admin is answering
+										 * questions about, and the panel widens from there to the
+										 * org's other lanes by itself.
+										 */
+										const newest = group.invoices[0];
+										const header = (
+											<TableRow
+												key={`group-${group.subscriberId}`}
+												className="cursor-pointer bg-muted/30 hover:bg-muted/50"
+												onClick={() => newest && setDetailId(newest.id)}
+											>
+												<TableCell className="text-base font-medium">
+														{group.subscriberName}
+												</TableCell>
+												<TableCell>
+													<Badge
+														variant="outline"
+														className={`${roleBadgeColors[group.subscriberType]} w-fit`}
+													>
+														{roleLabels[group.subscriberType](t)}
+													</Badge>
+												</TableCell>
+												{/* Every lane the org is billed on — plan, Custom, POS —
+												    named once rather than once per period. */}
+												<TableCell className="text-base">
+													{summary.lanes.join(" · ")}
+												</TableCell>
+												<TableCell className="text-base whitespace-nowrap text-muted-foreground">
+													{fill(t.adminService.periodsCount, {
+														n: summary.periods,
+													})}
+												</TableCell>
+												<TableCell className="text-base font-medium whitespace-nowrap">
+													{formatPrice(summary.owed)}
+												</TableCell>
+												<TableCell>
+													{summary.unpaidCount === 0 ? (
+														<Badge
+															variant="outline"
+															className={`${statusBadgeColors.paid} w-fit`}
+														>
+															{statusLabels.paid(t)}
+														</Badge>
+													) : (
+														<Badge
+															variant="outline"
+															className={`${statusBadgeColors.unpaid} w-fit`}
+														>
+															{fill(t.adminService.unpaidOfTotal, {
+																unpaid: summary.unpaidCount,
+																total: summary.periods,
+															})}
+														</Badge>
+													)}
+												</TableCell>
+												<TableCell className="text-base whitespace-nowrap text-muted-foreground">
+													{summary.paidCount > 0
+														? fill(t.adminService.paidCount, {
+																n: summary.paidCount,
+															})
+														: "—"}
+												</TableCell>
+												<TableCell />
+											</TableRow>
+										);
+										// The per-period rows used to unfold here. They now live in the
+										// payment panel, which holds the same list PLUS the paid/unpaid
+										// totals and the Mark-paid action — so keeping them here was two
+										// renderings of one fact, and the worse of the two.
+										return [header];
+									})
 								)}
 							</TableBody>
 						</Table>
@@ -423,7 +460,7 @@ function PlanPaymentPage() {
 					{pagination && pagination.totalCount > 0 && (
 						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 							<span>
-								{fill(t.adminService.showingBillingPeriods, {
+								{fill(t.adminService.showingSubscribers, {
 									from: (pagination.page - 1) * pagination.pageSize + 1,
 									to: Math.min(
 										pagination.page * pagination.pageSize,
@@ -460,6 +497,30 @@ function PlanPaymentPage() {
 					)}
 				</CardContent>
 			</Card>
+
+			<Sheet
+				open={detailId != null}
+				onOpenChange={(open) => {
+					if (!open) setDetailId(null);
+				}}
+			>
+				<SheetContent
+					side="right"
+					className="w-full overflow-y-auto sm:max-w-xl md:max-w-2xl"
+				>
+					{/* Keyed on the id so switching rows remounts rather than showing
+					    the previous invoice's figures while the next one loads. */}
+					{detailId && (
+						<InvoicePaymentSheet
+							key={detailId}
+							invoiceId={detailId}
+							// Lets the panel's billing history move the focus to another of
+							// the subscriber's periods without closing and re-opening.
+							onSelectInvoice={setDetailId}
+						/>
+					)}
+				</SheetContent>
+			</Sheet>
 		</PageShell>
 	);
 }
