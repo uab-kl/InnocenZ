@@ -981,6 +981,20 @@
       "when": 1791400000000,
       "tag": "0139_payment_method_wallet",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1791450000000,
+      "tag": "0140_payout_batch",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1791460000000,
+      "tag": "0141_notification_kind_pv_paid",
+      "breakpoints": true
     }
   ]
 }

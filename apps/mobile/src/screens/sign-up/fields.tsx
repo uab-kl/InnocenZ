@@ -92,6 +92,7 @@ export function Picker({
 	placeholder,
 	title,
 	searchable = false,
+	searchPlaceholder,
 	displayValue,
 }: {
 	value: string | null;
@@ -103,6 +104,11 @@ export function Picker({
 	title?: string;
 	/** Show a search box (use for long lists like countries). */
 	searchable?: boolean;
+	/**
+	 * Search box wording. Defaults to the country/code phrasing this picker was
+	 * built for — a bank list asking "Search country or code" reads as a bug.
+	 */
+	searchPlaceholder?: string;
 	/** Override the closed-field label (e.g. show `🇲🇾 +60` while value is `MY`). */
 	displayValue?: string | null;
 }) {
@@ -170,7 +176,7 @@ export function Picker({
 									style={styles.pickerSearch}
 									value={query}
 									onChangeText={setQuery}
-									placeholder={t.signup.searchCountryOrCode}
+									placeholder={searchPlaceholder ?? t.signup.searchCountryOrCode}
 									placeholderTextColor={C.muted2}
 									autoCorrect={false}
 									autoCapitalize="none"

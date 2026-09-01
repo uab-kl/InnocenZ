@@ -15,6 +15,7 @@ import {
   SQL,
 } from 'drizzle-orm';
 import { db } from '@/db/index';
+import type { PayeeBank } from './payout-batch.model';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
@@ -955,6 +956,63 @@ export class PaymentVoucherRepositoryClass {
       };
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getExportBundle] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * WHERE EACH OF THESE PEOPLE IS PAID — the payee side of a payout.
+   *
+   * Reached by FK through the ACCOUNT (payment_voucher.pr_id -> user_id ->
+   * user_profile), exactly as `getExportBundle` does it, and never copied onto
+   * the voucher: one fact, one table.
+   *
+   * BULK because both callers are bulk-shaped — a payout batch keys a whole
+   * week at once, and the single-voucher lookup is this same query with one id.
+   * A per-voucher version would make the agency's "To pay" list issue N
+   * queries, and `inArray` here has no page clamp above it to truncate the set.
+   *
+   * A PR who has not filled their profile in comes back PRESENT with null
+   * fields rather than being dropped from the map. The caller has to be able to
+   * tell "this person cannot be paid yet" from "no such voucher" — silently
+   * omitting them is how a payout run pays 57 of 59 people and reports success.
+   */
+  async listPayeeBanks(voucherIds: string[]): Promise<Map<string, PayeeBank>> {
+    if (voucherIds.length === 0) return new Map();
+    try {
+      const payee = sql`coalesce(${PaymentVoucherTable.userId}, ${PaymentVoucherTable.prId})`;
+      const rows = await db
+        .select({
+          voucherId: PaymentVoucherTable.id,
+          name: sql<
+            string | null
+          >`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
+          icNo: UserProfileTable.idNo,
+          bankName: UserProfileTable.bankName,
+          bankAccountNo: UserProfileTable.bankAccountNo,
+        })
+        .from(PaymentVoucherTable)
+        .leftJoin(UserTable, eq(UserTable.id, payee))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, payee))
+        .where(inArray(PaymentVoucherTable.id, voucherIds));
+      return new Map(
+        rows.map((r) => [
+          r.voucherId,
+          {
+            name: r.name,
+            icNo: r.icNo,
+            bankName: r.bankName,
+            bankAccountNo: r.bankAccountNo,
+            // ONE definition of payable, computed here so the export, the
+            // detail panel and any future provider driver cannot disagree
+            // about who is ready. Both halves, trimmed: a bank with no
+            // account number is exactly as unpayable as neither.
+            payable: !!r.bankName?.trim() && !!r.bankAccountNo?.trim(),
+          },
+        ]),
+      );
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listPayeeBanks] Error:', error);
       throw error;
     }
   }

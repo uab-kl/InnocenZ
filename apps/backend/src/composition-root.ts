@@ -68,6 +68,8 @@ import { ShiftSaleControllerClass } from '@/features/shift-sale/shift-sale.contr
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
 import { PaymentVoucherDisputeRepositoryClass } from '@/features/payment-voucher/payment-voucher-dispute.repository.js';
 import { PaymentVoucherControllerClass } from '@/features/payment-voucher/payment-voucher.controller.js';
+import { PayoutBatchControllerClass } from '@/features/payment-voucher/payout-batch.controller.js';
+import { PayoutBatchRepositoryClass } from '@/features/payment-voucher/payout-batch.repository.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import { ShiftAssignmentControllerClass } from '@/features/shift-assignment/shift-assignment.controller.js';
 import { OutletSwapRepositoryClass } from '@/features/outlet-swap/outlet-swap.repository.js';
@@ -392,6 +394,8 @@ export const agencyPenaltyRuleController = new AgencyPenaltyRuleControllerClass(
 );
 export const paymentVoucherDisputeRepository =
   new PaymentVoucherDisputeRepositoryClass();
+export const payoutBatchRepository = new PayoutBatchRepositoryClass();
+
 export const paymentVoucherController = new PaymentVoucherControllerClass(
   paymentVoucherRepository,
   agencyMemberRepository,
@@ -399,6 +403,15 @@ export const paymentVoucherController = new PaymentVoucherControllerClass(
   prRepository,
   paymentVoucherDisputeRepository,
   shiftAssignmentRepository,
+);
+
+// The bank-run lane. Takes the voucher repository because settling a run marks
+// vouchers paid, and the notification it then sends needs the voucher's payee.
+export const payoutBatchController = new PayoutBatchControllerClass(
+  payoutBatchRepository,
+  paymentVoucherRepository,
+  agencyMemberRepository,
+  authRepository,
 );
 
 // Takes paymentVoucherRepository (declared above) because approving overtime

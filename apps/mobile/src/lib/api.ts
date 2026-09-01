@@ -142,6 +142,15 @@ export type MeProfile = {
   comcardBustCm: number | null;
   comcardWaistCm: number | null;
   comcardHipCm: number | null;
+  /**
+   * Where the agency's weekly transfer is sent (`user_profile.bank_name` /
+   * `bank_account_no`). Read-back matters as much as the write: the voucher
+   * Excel and PDF have always PRINTED these two, so before the profile form
+   * existed every voucher document rendered "—" for a payee nobody could fill
+   * in. Null = not provided yet, which is what a payout run must skip on.
+   */
+  bankName: string | null;
+  bankAccountNo: string | null;
 };
 
 export type Me = {
@@ -646,6 +655,17 @@ export type ProfileUpdate = {
   comcardHipCm?: number | null;
   /** Spoken languages — persisted to user_profile.languages. */
   languages?: string[];
+  /**
+   * Payout details → user_profile.bank_name / bank_account_no.
+   *
+   * A BLANK STRING IS MEANINGFUL and must not be coerced to undefined: the
+   * server reads '' as "clear this", deliberately, "otherwise a wrong account
+   * number could never be removed, only overwritten". Sending undefined leaves
+   * the stored value alone, which is the right behaviour for a caller that is
+   * not editing the field — but the wrong one for a PR who just emptied it.
+   */
+  bankName?: string;
+  bankAccountNo?: string;
 };
 
 export function portfolioSlotsFromProfile(
