@@ -21,6 +21,30 @@
  *
  * Alphabetical so the list is scannable; the picker's search box is what
  * actually finds a bank, and it matches on this same string.
+ *
+ * ⚠️ NOT `fpxBanks` — DO NOT MERGE THE TWO ROSTERS.
+ * `payment-method.model.ts` carries an 18-entry `fpxBanks` list for the
+ * SUBSCRIPTION direct debit (flow 1, an org paying InnocenZ inward). Those are
+ * internet-banking PRODUCT brands — Maybank2u, CIMB Clicks, RHB Now — which in
+ * an outbound IBG file is a rejected or misrouted transfer, not a cosmetic
+ * oddity. Ten institutions a PR can genuinely bank with are absent from it
+ * entirely: Al Rajhi, AEON Bank, Bank of China (Malaysia), Boost Bank,
+ * Citibank, Co-opbank Pertama, GXBank, KAF Digital Bank, MBSB Bank, Ryt Bank.
+ * Its endpoint also 403s a PR token. Opposite direction of money, different
+ * list.
+ *
+ * ⚠️ AND THERE ARE TWO COLUMNS CALLED `bank_name`.
+ * `user_profile.bank_name` varchar(255) is THIS value: a payee name that flows
+ * to `payout_batch_item.bank_name` and into the CSV an agency uploads to its
+ * bank — so a wrong one is a failed transfer, not a typo.
+ * `payment_method.bank_name` varchar(120) is a snapshot of an fpxBanks display
+ * name beside a PayNet `bank_code`. Same column name, different tables.
+ *
+ * KNOWN GAP: this roster constrains the PICKER, not the data.
+ * `user.controller.ts` accepts `bankName` as free text up to 255, so a legacy
+ * or hand-typed value still saves. That is deliberate — a strict server check
+ * would 400 a PR's entire profile save over an old bank string, and a PR who
+ * cannot save cannot be paid at all, which is strictly worse than a misspelling.
  */
 export const MALAYSIAN_BANKS = [
   'Affin Bank',

@@ -7,6 +7,7 @@ import {
 	fetchPayoutBatch,
 	fetchPayoutBatches,
 	fetchPayoutCandidates,
+	importPayoutResponse,
 	markPayoutBatchSubmitted,
 	type PayoutBatch,
 	type PayoutMethod,
@@ -81,6 +82,12 @@ export function usePayoutBatches(params: {
 		onSuccess: invalidate,
 	});
 
+	const importResponse = useMutation({
+		mutationFn: (input: { id: string; csv: string }) =>
+			importPayoutResponse(input.id, input.csv, logout),
+		onSuccess: invalidate,
+	});
+
 	const settle = useMutation({
 		mutationFn: (input: { id: string; settlements: PayoutSettlementInput[] }) =>
 			settlePayoutBatch(input.id, input.settlements, logout),
@@ -107,6 +114,7 @@ export function usePayoutBatches(params: {
 		cancel,
 		markSubmitted,
 		settle,
+		importResponse,
 		exportCsv,
 	};
 }

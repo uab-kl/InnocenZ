@@ -97,7 +97,9 @@ export function PayoutRunsPanel({ canPay }: { canPay: boolean }) {
 		markSubmitted,
 		exportCsv,
 		settle,
+		importResponse,
 	} = usePayoutBatches({ weekStart, weekEnd });
+	const [importError, setImportError] = useState<string | null>(null);
 
 	const detail = usePayoutBatch(openBatchId);
 	const summary = candidates?.summary;
@@ -286,6 +288,23 @@ export function PayoutRunsPanel({ canPay }: { canPay: boolean }) {
 								settlements: [{ itemId, status, bankRef }],
 							})
 						}
+						importError={importError}
+						onImport={(csv) => {
+							setImportError(null);
+							importResponse.mutate(
+								{ id: (detail.data as PayoutBatch).id, csv },
+								{
+									onError: (err: unknown) => {
+										// The 409 lists every line it could not match, and says
+										// nothing was settled — that is the useful half.
+										const res = (
+											err as { response?: { data?: { message?: string } } }
+										)?.response?.data;
+										setImportError(res?.message ?? "Could not read that file.");
+									},
+								},
+							);
+						}}
 					/>
 				)}
 			</IzSheet>
@@ -300,6 +319,8 @@ function PayoutBatchDetail({
 	onSubmitted,
 	onCancel,
 	onSettle,
+	onImport,
+	importError,
 }: {
 	batch: PayoutBatch;
 	canPay: boolean;
@@ -311,6 +332,8 @@ function PayoutBatchDetail({
 		status: "paid" | "failed",
 		bankRef?: string,
 	) => void;
+	onImport: (csv: string) => void;
+	importError: string | null;
 }) {
 	const { t } = usePortalLocale();
 	const itemLabel: Record<PayoutItemStatus, string> = {
@@ -322,6 +345,7 @@ function PayoutBatchDetail({
 		cancelled: t.payouts.itemCancelled,
 	};
 	const [bankRef, setBankRef] = useState("");
+	const [responseCsv, setResponseCsv] = useState("");
 
 	return (
 		<div className="flex flex-col gap-3">
@@ -420,6 +444,36 @@ function PayoutBatchDetail({
 						>
 							{t.payouts.cancelRun}
 						</button>
+					)}
+
+					{/*
+						Paste, not upload: no multipart middleware is mounted on this
+						router and a response file is a few kilobytes. Settling by hand
+						above stays the path that always works — this only saves the
+						typing when the bank's file happens to fit.
+					*/}
+					{batch.status !== "draft" && (
+						<>
+							<textarea
+								className="mt-1 w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-2 py-1.5 text-xs"
+								rows={3}
+								placeholder={t.payouts.pasteResponse}
+								value={responseCsv}
+								onChange={(e) => setResponseCsv(e.target.value)}
+								aria-label={t.payouts.pasteResponse}
+							/>
+							<button
+								type="button"
+								className="iz-btn iz-btn-soft"
+								disabled={!responseCsv.trim()}
+								onClick={() => onImport(responseCsv)}
+							>
+								{t.payouts.importResponse}
+							</button>
+							{importError && (
+								<p className="iz-tiny text-[var(--iz-amber)]">{importError}</p>
+							)}
+						</>
 					)}
 				</div>
 			)}

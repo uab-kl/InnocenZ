@@ -207,6 +207,27 @@ export async function settlePayoutBatch(
 }
 
 /**
+ * Settle a whole run from the bank's own response file.
+ *
+ * REFUSES with 409 if ANY line could not be matched, and the body lists them —
+ * a partial import that settles 56 of 59 and says "done" is the failure this
+ * lane keeps being built against. Manual per-line settle stays the path that
+ * always works.
+ */
+export async function importPayoutResponse(
+	id: string,
+	csv: string,
+	onRefreshFail: () => void,
+): Promise<PayoutBatch> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<Envelope<PayoutBatch>>(
+		`/payout-batch/${id}/import-response`,
+		{ csv },
+	);
+	return response.data.data;
+}
+
+/**
  * Download the bank file.
  *
  * ⚠️ THIS GET MUTATES — the server moves the run to `exported` and its lines to
@@ -222,10 +243,22 @@ export async function downloadPayoutCsv(
 	const response = await client.get(`/payout-batch/${batch.id}/export.csv`, {
 		responseType: "blob",
 	});
+	// PREFER THE SERVER'S OWN FILENAME. It already sends one in
+	// Content-Disposition, and re-deriving it here was a second copy of
+	// `payoutCsvFilename` that could drift from the file the bank is told to
+	// expect. The local derivation stays only as a fallback for a proxy that
+	// strips the header.
+	const disposition = String(
+		(response.headers as Record<string, unknown>)?.["content-disposition"] ??
+			"",
+	);
+	const fromServer = /filename="?([^";]+)"?/.exec(disposition)?.[1];
 	const ref = (batch.reference ?? "batch").replace(/[^A-Za-z0-9_-]/g, "");
-	const name = batch.weekStart
-		? `payout-${ref}-${batch.weekStart}.csv`
-		: `payout-${ref}.csv`;
+	const name =
+		fromServer ??
+		(batch.weekStart
+			? `payout-${ref}-${batch.weekStart}.csv`
+			: `payout-${ref}.csv`);
 	const url = URL.createObjectURL(response.data as Blob);
 	const link = document.createElement("a");
 	link.href = url;
