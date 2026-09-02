@@ -242,7 +242,14 @@ export function findDemoProfileForPv(
 export function buildAgencyPayee(
 	pv: PrPaymentVoucher,
 	agencyPRs: AgencyManagedPR[],
-	realBank?: { bankName: string | null; bankAccountNo: string | null } | null,
+	realBank?: {
+		bankName: string | null;
+		bankAccountNo: string | null;
+		/** Legal name — the bank account name, never the nickname. */
+		name?: string | null;
+		nickname?: string | null;
+		phone?: string | null;
+	} | null,
 ): PvPayeeProfile {
 	const isRealSession = getPortalSessionKind() === "real";
 	const managed = agencyPRs.find(
@@ -253,12 +260,28 @@ export function buildAgencyPayee(
 	);
 	// Not consulted at all on a real session — see the note above.
 	const demo = isRealSession ? undefined : findDemoProfileForPv(pv);
-	const displayName = managed?.name ?? demo?.name ?? pv.prName;
-	const icName = managed?.icName ?? demo?.first ?? displayName;
+	// The fixture used to supply the working name and the phone as well as the
+	// bank. Gating it off without replacing THOSE printed the legal name twice,
+	// a payee code derived from the wrong string, and an empty phone.
+	const displayName = managed?.name ?? realBank?.nickname ?? demo?.name ?? pv.prName;
+	/*
+	 * ⚠️ THE LEGAL NAME, NEVER THE NICKNAME.
+	 *
+	 * This feeds "Name" and "Bank Account Name" on the voucher, and a bank
+	 * matches the account name against the account holder — "Vicky" would
+	 * bounce a transfer that "Victoria Tan Mei Lin" completes.
+	 *
+	 * It used to fall back to `displayName`, which was harmless only because
+	 * displayName came from the demo fixture's legal-ish name. Once displayName
+	 * started preferring the real WORKING name, that fallback started putting a
+	 * nickname in the account-name field.
+	 */
+	const icName =
+		managed?.icName ?? realBank?.name ?? demo?.first ?? pv.prName ?? displayName;
 	return payeeFromPaymentVoucher(pv, {
 		code:
 			managed?.id ?? (demo ? derivePrCode(displayName, demo.ic) : undefined),
-		phone: managed?.mobile ?? demo?.mobile,
+		phone: managed?.mobile ?? realBank?.phone ?? demo?.mobile,
 		nickname: displayName,
 		name: icName,
 		ic: managed?.ic ?? pv.prIc ?? demo?.ic,

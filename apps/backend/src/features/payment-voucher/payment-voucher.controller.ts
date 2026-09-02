@@ -1065,6 +1065,8 @@ export class PaymentVoucherControllerClass {
         // document must be able to state, and it is different from an error.
         data: payee ?? {
           name: null,
+          nickname: null,
+          phone: null,
           icNo: null,
           bankName: null,
           bankAccountNo: null,

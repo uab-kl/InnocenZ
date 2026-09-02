@@ -744,6 +744,9 @@ export async function fetchPaymentVouchers(
  */
 export interface VoucherPayeeBank {
 	name: string | null;
+	/** Working name ("Vicky"), used for the nickname line and the payee code. */
+	nickname: string | null;
+	phone: string | null;
 	icNo: string | null;
 	bankName: string | null;
 	bankAccountNo: string | null;

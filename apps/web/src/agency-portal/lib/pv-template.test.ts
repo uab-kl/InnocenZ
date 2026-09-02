@@ -71,6 +71,27 @@ describe("buildAgencyPayee — demo bank details", () => {
 		expect(payee.accountNo).toBe("0123456789");
 	});
 
+	/**
+	 * The fixture supplied MORE than the bank. Gating it off without replacing
+	 * the rest printed the legal name twice, an empty phone, and a payee code
+	 * derived from the wrong string — the second incomplete fix in a row on this
+	 * function, which is why these are asserted together now.
+	 */
+	it("prints the real nickname and phone, not blanks", () => {
+		mockKind.mockReturnValue("real");
+		const payee = buildAgencyPayee(pv, [], {
+			bankName: null,
+			bankAccountNo: null,
+			nickname: "Vicky",
+			phone: "+60123456789",
+		});
+		expect(payee.nickname).toBe("Vicky");
+		expect(payee.phone).toBe("+60123456789");
+		// The code derives from the working name, so a wrong nickname silently
+		// changes the payee code too (VICK-8821 became VICT-8821).
+		expect(payee.code).toContain("VICK");
+	});
+
 	it("still uses the fixture on a DEMO session — that is what demo is for", () => {
 		mockKind.mockReturnValue("demo");
 		const payee = buildAgencyPayee(pv, []);
