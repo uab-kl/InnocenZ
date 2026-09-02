@@ -84,9 +84,9 @@ export interface SavePaymentMethodInput {
 	/** PayNet code of the bank to redirect to. Required for `fpx_mandate`. */
 	bankCode?: string | null;
 	/**
-	 * WHICH E-WALLET, by roster code. Required by the server when
-	 * `type === "ewallet"`, and rejected there if it is not on the roster — so the
-	 * picker must offer the server's own list, never a hardcoded one.
+	 * Ignored by the server since 2 Sep 2026: the e-wallet rail can no longer
+	 * be SAVED (only card and bank direct debit auto-debit, and a saved method
+	 * means auto-debit). Kept so the shape still matches older rows read back.
 	 */
 	walletProvider?: string | null;
 	autoPay?: boolean;

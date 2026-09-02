@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { PaymentMethodRepositoryClass, PaymentMethodOwner } from './payment-method.repository.js';
 import { UpsertPaymentMethodSchema } from '@/schema/payment-method.schema.js';
 import {
-  ewalletProviderByCode,
   ewalletProviders,
   fpxBankByCode,
   fpxBanks,
@@ -154,16 +153,9 @@ export class PaymentMethodControllerClass {
         bankCode: type === 'fpx_mandate' ? (parsed.data.bankCode ?? null) : null,
         bankName:
           type === 'fpx_mandate' ? (fpxBankByCode(parsed.data.bankCode)?.name ?? null) : null,
-        /**
-         * Which e-wallet, resolved from the shared roster rather than taken as
-         * given — the same reason the bank NAME is. A client-supplied label
-         * could otherwise print "Touch 'n Go" beside a code meaning something
-         * else entirely.
-         */
-        walletProvider:
-          type === 'ewallet'
-            ? (ewalletProviderByCode(parsed.data.walletProvider)?.code ?? null)
-            : null,
+        // The e-wallet rail cannot be saved any more (0148 retired the rows;
+        // the schema refuses the type), so nothing is ever written here.
+        walletProvider: null,
         // Meaningless on a rail that cannot be charged unattended — a bank
         // transfer that claims auto-pay is a promise the app cannot keep, and an
         // e-wallet is a PUSH rail: the payer approves each payment inside their

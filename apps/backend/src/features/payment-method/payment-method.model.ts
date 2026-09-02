@@ -115,6 +115,16 @@ export type PaymentMethodType = (typeof paymentMethodTypeValues)[number];
 export const autoChargeableTypes: readonly PaymentMethodType[] = ['card', 'fpx_mandate'];
 
 /**
+ * Rails a subscriber may SAVE (owner, 2 Sep 2026): a saved method is optional
+ * and means auto-debit, so only the two auto-chargeable rails can be saved.
+ * The others stay in `paymentMethodTypeValues` because rows on them exist
+ * (retired by 0148, still describable) and because `fpx` is how every manual
+ * pay-now is recorded on the attempt ledger — a rail on an attempt, not an
+ * instrument. The save schema is the door; this is the list it checks.
+ */
+export const savablePaymentMethodTypes = ['card', 'fpx_mandate'] as const;
+
+/**
  * A direct debit mandate's life. `pending` is the state that matters: the row
  * exists, the venue has asked for it, and NOTHING may be debited yet.
  */
