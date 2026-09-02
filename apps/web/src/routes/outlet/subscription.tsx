@@ -108,6 +108,7 @@ function PosIntegrationAddonCard({
 	activeAddonPriceRm,
 	windowLabel = null,
 	renewsOn = null,
+	requoteBlockedNote = null,
 	contactLine,
 	onRequestQuote,
 	onCancelQuote,
@@ -131,6 +132,12 @@ function PosIntegrationAddonCard({
 	 */
 	windowLabel?: string | null;
 	renewsOn?: string | null;
+	/**
+	 * The sentence that explains why a re-quote is refused right now — unpaid
+	 * periods — or null when the ask is allowed. Printed on the card and the
+	 * gold button disabled, instead of a toast nobody caught.
+	 */
+	requoteBlockedNote?: string | null;
 	/**
 	 * Whether withdrawing is actually possible.
 	 *
@@ -257,6 +264,14 @@ function PosIntegrationAddonCard({
 								 * instead — it had to wait for an answer to a question it no
 								 * longer wanted asked.
 								 */}
+								{requoteBlockedNote && !quotePending && (
+									<p
+										className="iz-outlet-pos-addon__sent-body"
+										style={{ color: "var(--iz-amber)" }}
+									>
+										{requoteBlockedNote}
+									</p>
+								)}
 								<div className="flex flex-col gap-2 sm:flex-row">
 									{/* Gold = the act (it sends a request to the admin), red = the
 									    way out (ends POS billing) — the owner's colour code, applied
@@ -264,7 +279,9 @@ function PosIntegrationAddonCard({
 									<button
 										type="button"
 										className="iz-btn iz-btn-gold iz-outlet-pos-addon__cancel flex-1"
-										disabled={pendingKind === "requote"}
+										disabled={
+											pendingKind === "requote" || requoteBlockedNote !== null
+										}
 										onClick={onRequestQuote}
 									>
 										{pendingKind === "requote"
@@ -441,6 +458,29 @@ function OutletSubscriptionPage() {
 					year: "numeric",
 				})
 			: null;
+
+	/**
+	 * WHY "Ask for a new price" is refused, said ON THE CARD (owner, 2 Sep 2026:
+	 * pressed it, saw nothing, asked where the status was). The rule is the
+	 * owner's own — a re-quote waits until every billing period is paid — and
+	 * `handleRequestQuote` enforced it with a toast that had vanished by the
+	 * time anyone looked. Null when the ask is allowed.
+	 */
+	const requoteBlockedNote = useMemo(() => {
+		if (!backend.backed || backend.addonAmountRm === null) return null;
+		const owing = backend.paymentHistory.filter(
+			(invoice) => invoice.status !== "paid",
+		);
+		if (owing.length === 0) return null;
+		const cents = owing.reduce(
+			(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
+			0,
+		);
+		return fill(t.outletSubscription.settleBeforeRequote, {
+			amount: formatRM(cents / 100),
+			n: owing.length,
+		});
+	}, [backend.backed, backend.addonAmountRm, backend.paymentHistory, t]);
 
 	const posQuotePending = useMemo(
 		() =>
@@ -866,6 +906,7 @@ function OutletSubscriptionPage() {
 						activeAddonPriceRm={backend.addonAmountRm}
 						windowLabel={addonWindowLabel}
 						renewsOn={addonRenewalLabel}
+						requoteBlockedNote={requoteBlockedNote}
 						contactLine={contactLine}
 						onRequestQuote={handleRequestQuote}
 						onCancelQuote={handleCancelQuote}
