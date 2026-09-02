@@ -670,23 +670,30 @@ export class SubscriptionInvoiceRepositoryClass {
         // that switched tier three times in July got a column of unpaid weeks
         // nobody had ever raised, for plans it was no longer on. The ledger
         // starts when it starts, and grows one period at a time from the daily
-        // job — so history here is what this app actually billed, not a
-        // reconstruction of what it might have.
-        const current = periods[periods.length - 1];
-        if (!current) continue;
-
-        // Priced by the subscription actually LIVE in that period — the last one
-        // to start within it, which is the tier the org settled on and the one
-        // its Current subscription card shows.
-        const live =
-          [...ordered]
-            .reverse()
-            .find(
-              (row) =>
-                klDayOf(row.startedAt) <= current.periodEnd &&
-                (!row.endedAt || klDayOf(row.endedAt) > current.periodStart),
-            ) ?? latest;
-        winners.set(`${lane}|${current.periodStart}`, { row: live, period: current });
+        // job.
+        //
+        // EVERY MISSING PERIOD, NOT ONLY TODAY'S (owner's choice "A", 28 Aug
+        // 2026). This used to take `periods[periods.length - 1]` alone, which
+        // meant a morning the job did not run was a period nobody was ever
+        // billed for — and that orgs from before the ledger's first run had no
+        // history at all. Now every period from the lane's anchor to today is a
+        // candidate; `billed` below drops the ones that already exist, so a
+        // re-run mints nothing twice and a missed morning heals itself the next
+        // one. The owner accepted the consequence: the first run writes the old
+        // periods as unpaid, and any to be forgiven are marked paid with a note.
+        for (const period of periods) {
+          // Priced by the subscription actually LIVE in that period — the last
+          // one to start within it, which is the tier the org settled on then.
+          const live =
+            [...ordered]
+              .reverse()
+              .find(
+                (row) =>
+                  klDayOf(row.startedAt) <= period.periodEnd &&
+                  (!row.endedAt || klDayOf(row.endedAt) > period.periodStart),
+              ) ?? latest;
+          winners.set(`${lane}|${period.periodStart}`, { row: live, period });
+        }
       }
 
       /**
