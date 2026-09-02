@@ -10,10 +10,9 @@ import type { ShiftRequest } from "@agency-portal/lib/store";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchShifts } from "@/services/shift";
-import { fetchShiftAssignments } from "@/services/shift-assignment";
 import { useAgencyOutlets } from "./use-agency-outlets";
+import { useAllShiftAssignments } from "./use-all-shift-assignments";
 import { useRosterSlots } from "./use-roster-slots";
 
 // How far ahead to pull upcoming shifts for the demand dashboard. The builder
@@ -62,17 +61,9 @@ export function useAgencyOutletDemand() {
 	// `AgencyRosterSlot` carries no `shiftId`, so a slot cannot be attributed back
 	// to the shift it staffs. Shares the roster query key, so a roster write
 	// invalidates this dashboard too.
-	const assignmentsQuery = useQuery({
-		queryKey: ["roster", "assignments"],
-		// Paged out: the server clamps to 100, and this key is shared — see
-		// lib/fetch-all-pages.ts.
-		queryFn: () =>
-			fetchAllPages((page) =>
-				fetchShiftAssignments({ page, pageSize: 100 }, logout),
-			),
-		enabled: backed,
-		staleTime: 30_000,
-	});
+	// The shared assignments cache — see the hook for why this is not written out
+	// per screen.
+	const assignmentsQuery = useAllShiftAssignments({ enabled: backed });
 
 	// Roster assignments feed `scheduledTonight` per outlet (already backend-mapped).
 	const roster = useRosterSlots({

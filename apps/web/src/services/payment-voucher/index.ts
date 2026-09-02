@@ -734,6 +734,39 @@ export async function fetchPaymentVouchers(
 	};
 }
 
+/**
+ * Where this PR is actually paid — UNMASKED, for the printed voucher.
+ *
+ * Behind `agencyOwnerOrFinance` server-side. Fetch it ONLY for a document that
+ * needs to tell somebody where to send money; anywhere a screen just needs to
+ * identify an account, use the masked `bankAccountMasked` from the payout
+ * candidate list instead.
+ */
+export interface VoucherPayeeBank {
+	name: string | null;
+	/** Working name ("Vicky"), used for the nickname line and the payee code. */
+	nickname: string | null;
+	phone: string | null;
+	icNo: string | null;
+	bankName: string | null;
+	bankAccountNo: string | null;
+	/** Both halves present. False means this PR cannot be paid yet. */
+	payable: boolean;
+}
+
+export async function fetchVoucherPayeeBank(
+	voucherId: string,
+	onRefreshFail: () => void,
+): Promise<VoucherPayeeBank> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: VoucherPayeeBank;
+	}>(`/payment-voucher/${voucherId}/payee-bank`);
+	return response.data.data;
+}
+
 export async function fetchPaymentVoucher(
 	id: string,
 	onRefreshFail: () => void,

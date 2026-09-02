@@ -16,11 +16,8 @@ import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { updateMyDisplayName } from "@/lib/auth/profile-api";
 import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
 import { useAuth } from "@/lib/auth-context";
-import {
-	fetchAgencyById,
-	fetchAgencyMembers,
-	updateAgency,
-} from "@/services/agency";
+import { fetchAgencyById, updateAgency } from "@/services/agency";
+import { useOrgMembersQuery } from "./use-org-members";
 
 /** Backend-backed subset of the demo owner settings shown on the Profile screen. */
 export interface AgencyProfileOwnerOverlay {
@@ -64,25 +61,28 @@ export function useAgencyProfile() {
 		staleTime: 60_000,
 	});
 
-	const membersQuery = useQuery({
-		queryKey: ["agency", "members", agencyId ?? "none"],
-		// Same cache key as `useOrgMembers` — store the array, not the envelope.
-		queryFn: async () => {
-			const res = await fetchAgencyMembers(
-				agencyId as string,
-				{ status: "active" },
-				logout,
-			);
-			return res.data ?? [];
-		},
-		enabled: backed,
-		staleTime: 60_000,
-	});
+	/**
+	 * The SHARED member list — literally the same query the Team panel further
+	 * down this same screen mounts.
+	 *
+	 * It used to be a second `useQuery` on the identical key that asked the server
+	 * for `{ status: "active" }` while `useOrgMembers` asked for everything. React
+	 * Query stores one value per key, so whichever of the two resolved first
+	 * decided what BOTH read: the Team count and the owner's name on Settings
+	 * changed with mount order. The active filter now happens at the reader,
+	 * below, over one fetched list.
+	 */
+	const membersQuery = useOrgMembersQuery("agency", agencyId);
 
 	const owner = useMemo<AgencyProfileOwnerOverlay | null>(() => {
 		if (!backed) return null;
 		const agency = agencyQuery.data?.data;
-		const members = membersQuery.data ?? [];
+		// ACTIVE only. The shared query fetches every member so the Team panel can
+		// list suspended rows too; the owner OF RECORD is an active one, and a
+		// deactivated ex-owner must never supply the name on this screen.
+		const members = (membersQuery.data ?? []).filter(
+			(m) => m.status === "active",
+		);
 		const ownerMember = members.find((m) => m.subRole === "owner");
 
 		const overlay: AgencyProfileOwnerOverlay = {};
@@ -132,7 +132,8 @@ export function useAgencyProfile() {
 	const finance = useMemo<AgencyProfileFinanceOverlay | null>(() => {
 		if (!backed) return null;
 		if (!membersQuery.data) return null;
-		const members = membersQuery.data;
+		// ACTIVE only, same reason as the owner above.
+		const members = membersQuery.data.filter((m) => m.status === "active");
 		const financeMember = members.find((m) => m.subRole === "finance");
 		if (!financeMember) return null;
 

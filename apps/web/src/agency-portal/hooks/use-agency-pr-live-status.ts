@@ -12,7 +12,7 @@ import {
 	fetchPrAvailability,
 	fetchPrCommittedWindows,
 } from "@/services/pr-availability";
-import { fetchShiftAssignments } from "@/services/shift-assignment";
+import { useAllShiftAssignments } from "./use-all-shift-assignments";
 
 /** Assignment states that no longer put a person on a floor. */
 const NON_STAFFING = new Set(["cancelled", "no_show", "leave_approved"]);
@@ -36,13 +36,25 @@ export function useAgencyPrLiveStatus(
 	const { logout } = useAuth();
 	const todayIso = new Date().toLocaleDateString("en-CA");
 
+	/**
+	 * ⚠️ THE SHARED assignments cache, not a private read.
+	 *
+	 * This used to be a `fetchShiftAssignments({ pageSize: 500 })` folded into the
+	 * query below, under this hook's own `["managePr","live",…]` key. The server
+	 * clamps every list to 100, so past 100 lifetime rows the pill was deciding
+	 * "on duty right now" from the agency's OLDEST hundred assignments — while the
+	 * Roster, three feet away, paged the same endpoint to exhaustion under
+	 * `["roster","assignments"]` and showed the person on a floor. Two screens,
+	 * one question, two answers, and no way to tell which was lying.
+	 */
+	const assignmentsQuery = useAllShiftAssignments({ enabled });
+
 	const liveQuery = useQuery({
 		queryKey: ["managePr", "live", todayIso],
 		enabled,
 		staleTime: 30_000,
 		queryFn: async () => {
-			const [assignments, committed, blocked] = await Promise.all([
-				fetchShiftAssignments({ pageSize: 500 }, logout),
+			const [committed, blocked] = await Promise.all([
 				// FROM YESTERDAY. A shift carries only its start date, so a
 				// 22:00-04:00 booking is stamped with the night before and a
 				// same-day read cannot see it — at 02:00 the PR is on a floor and
@@ -54,21 +66,25 @@ export function useAgencyPrLiveStatus(
 				),
 				fetchPrAvailability({ from: todayIso, to: todayIso }, logout),
 			]);
-			return { assignments: assignments.data ?? [], committed, blocked };
+			return { committed, blocked };
 		},
 	});
 
 	return useMemo(() => {
 		const map = new Map<string, PrLiveStatus>();
 		const data = liveQuery.data;
-		if (!data) return map;
+		const assignments = assignmentsQuery.data?.data;
+		// Both halves or nothing. A status derived from committed windows alone
+		// would omit this agency's OWN on-duty stamps, which is a wrong badge
+		// rather than a missing one.
+		if (!data || !assignments) return map;
 		const now = new Date();
 		const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
 		const ownOnDuty = new Set<string>();
 		const ownBooked = new Set<string>();
 		const yesterdayIso = previousDayIso(todayIso);
-		for (const a of data.assignments) {
+		for (const a of assignments) {
 			const day = a.shiftDate?.slice(0, 10);
 			// YESTERDAY counts too, but only for a shift that actually runs past
 			// midnight. Checked in at 22:00 and never checked out IS on duty at
@@ -130,5 +146,5 @@ export function useAgencyPrLiveStatus(
 			);
 		}
 		return map;
-	}, [liveQuery.data, todayIso]);
+	}, [liveQuery.data, assignmentsQuery.data, todayIso]);
 }

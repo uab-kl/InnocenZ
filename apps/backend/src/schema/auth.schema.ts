@@ -185,6 +185,12 @@ const RegisterSchema = z
       ['companyRegistrationNew', 'Company registration (new) is required'],
       ['personInCharge', 'Person in charge is required'],
       ['password', 'Password must be at least 6 characters long'],
+      // No outlet or agency may exist without a subscription plan (owner's
+      // call, 2 Sep 2026). The field was `.optional()` while the form marked it
+      // required, so anything posting here directly could create an org with no
+      // plan — and `ShiftController` now refuses to post for a venue that has
+      // none, so such an account would be born unable to work.
+      ['packageId', 'A subscription package is required'],
     ];
     for (const [key, message] of required) {
       if (!data[key]) {

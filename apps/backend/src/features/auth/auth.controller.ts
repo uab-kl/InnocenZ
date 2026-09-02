@@ -43,6 +43,11 @@ import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
+import {
+  enrolOrgOnPlan,
+  resolveEnrollablePlan,
+} from '@/features/subscription/enroll-plan.js';
+import { db } from '@/db/index.js';
 import { SYSTEM_ACTOR } from '@/util/actor';
 import { sendPasswordResetEmail } from '@/features/mailing/mailing.repository.js';
 import { env } from '@/env.js';
@@ -466,154 +471,148 @@ export class AuthControllerClass {
     const contactName = body.personInCharge ?? null;
     const contactEmail = body.contactEmail ?? body.email ?? null;
     const contactPhone = body.phoneNum;
+    const accountType = body.accountType === 'agency' ? 'agency' : 'outlet';
+
+    /**
+     * The plan, resolved before either transaction opens.
+     *
+     * `registerUser` has already refused an unusable package, so this is the
+     * same answer a second time rather than a new gate — it is re-read because
+     * the enrolment needs the catalog row itself, and threading it down through
+     * the caller's signature is how the pre-check and the write would come to
+     * disagree the day someone adds a branch between them.
+     */
+    const chosen = await resolveEnrollablePlan({
+      subscriptionRepository: this.subscriptionRepository,
+      accountType,
+      packageId: body.packageId,
+    });
+    if (!chosen.ok) {
+      // `globalThis.Error` because this module imports its own `Error` from
+      // `@/error/index.js`, which shadows the built-in and is not constructable.
+      throw new globalThis.Error(
+        `Sign-up package unusable at org creation: ${chosen.message}`,
+      );
+    }
 
     if (body.accountType === 'agency') {
       const agencyCode = await this.agencyRepository.generateUniqueCode();
-      const agency = await this.agencyRepository.create({
-        name,
-        agencyCode,
-        ssmNo,
-        contactName,
-        contactEmail,
-        contactPhone,
-        addressLine1,
-        addressLine2,
-        city,
-        postcode,
-        state,
-        country,
-        status: 'pending_review',
-        createdBy: actor,
-        updatedBy: actor,
+      /**
+       * ONE TRANSACTION: the agency, its first member, and its plan.
+       *
+       * These were three separate commits, and enrolment came last and swallowed
+       * its own failure — so the way an agency came to exist holding no
+       * subscription was simply that the third write did not land. Now the org
+       * cannot outlive its plan: `enrolOrgOnPlan` throws, and the agency and its
+       * membership roll back with it. A registration that fails is recoverable;
+       * an org nobody can bill is not, because nothing reports it.
+       */
+      return await db.transaction(async (tx) => {
+        const agency = await this.agencyRepository.create(
+          {
+            name,
+            agencyCode,
+            ssmNo,
+            contactName,
+            contactEmail,
+            contactPhone,
+            addressLine1,
+            addressLine2,
+            city,
+            postcode,
+            state,
+            country,
+            status: 'pending_review',
+            createdBy: actor,
+            updatedBy: actor,
+          },
+          tx,
+        );
+        await this.agencyMemberRepository.add(
+          {
+            agencyId: agency.id,
+            userId,
+            status: 'active',
+            createdBy: actor,
+            updatedBy: actor,
+          },
+          tx,
+        );
+        await enrolOrgOnPlan({
+          memberSubscriptionRepository: this.memberSubscriptionRepository,
+          plan: chosen.plan,
+          subscriberType: 'agency',
+          subscriberId: agency.id,
+          subscriberName: agency.name,
+          actor,
+          tx,
+        });
+        logger.info('[AuthController.register] Agency created for signup', {
+          agencyId: agency.id,
+          userId,
+          packageId: chosen.plan.id,
+        });
+        return { kind: 'agency' as const, id: agency.id, name: agency.name };
       });
-      await this.agencyMemberRepository.add({
-        agencyId: agency.id,
-        userId,
-        status: 'active',
-        createdBy: actor,
-        updatedBy: actor,
-      });
-      await this.enrollSignupPackage({
-        accountType: 'agency',
-        orgId: agency.id,
-        orgName: agency.name,
-        packageId: body.packageId,
+    }
+
+    // ONE TRANSACTION, for the reason spelled out on the agency branch above:
+    // the venue, its first member and its plan commit together or not at all.
+    return await db.transaction(async (tx) => {
+      const outlet = await this.outletRepository.create(
+        {
+          name,
+          addressLine1,
+          addressLine2,
+          city,
+          postcode,
+          state,
+          country: country ?? 'Malaysia',
+          businessLicense: body.companyRegistrationOld ?? null,
+          ssmNo,
+          status: 'pending_review',
+          // `onboarded_by_agency_id` is deliberately NOT set. Sign-up no longer
+          // names an agency: a venue works with as many as accept it, and each
+          // one decides for itself (`agency_outlet`, 0123). The column keeps its
+          // historical values for venues registered before the cutover and stays
+          // null from here on.
+          createdBy: actor,
+          updatedBy: actor,
+        },
+        tx,
+      );
+      await this.outletMemberRepository.add(
+        {
+          outletId: outlet.id,
+          userId,
+          status: 'active',
+          createdBy: actor,
+          updatedBy: actor,
+        },
+        tx,
+      );
+      // No `agency_outlet` link is created here, because sign-up no longer asks
+      // which agency. A new venue therefore starts with NONE and cannot post
+      // until it links one in Settings and that agency approves — which is the
+      // intended flow, not a gap: an agency partnership is the agency's to
+      // accept, and manufacturing one from a dropdown the venue picked would
+      // record a relationship nobody on the other side agreed to.
+      await enrolOrgOnPlan({
+        memberSubscriptionRepository: this.memberSubscriptionRepository,
+        plan: chosen.plan,
+        subscriberType: 'outlet',
+        subscriberId: outlet.id,
+        subscriberName: outlet.name,
         actor,
+        tx,
       });
-      logger.info('[AuthController.register] Agency created for signup', {
-        agencyId: agency.id,
+      logger.info('[AuthController.register] Outlet created for signup', {
+        outletId: outlet.id,
         userId,
-        packageId: body.packageId ?? null,
+        packageId: chosen.plan.id,
       });
-      return { kind: 'agency', id: agency.id, name: agency.name };
-    }
-
-    const outlet = await this.outletRepository.create({
-      name,
-      addressLine1,
-      addressLine2,
-      city,
-      postcode,
-      state,
-      country: country ?? 'Malaysia',
-      businessLicense: body.companyRegistrationOld ?? null,
-      ssmNo,
-      status: 'pending_review',
-      // `onboarded_by_agency_id` is deliberately NOT set. Sign-up no longer
-      // names an agency: a venue works with as many as accept it, and each one
-      // decides for itself (`agency_outlet`, 0123). The column keeps its
-      // historical values for venues registered before the cutover and stays
-      // null from here on.
-      createdBy: actor,
-      updatedBy: actor,
+      return { kind: 'outlet' as const, id: outlet.id, name: outlet.name };
     });
-    await this.outletMemberRepository.add({
-      outletId: outlet.id,
-      userId,
-      status: 'active',
-      createdBy: actor,
-      updatedBy: actor,
-    });
-    // No `agency_outlet` link is created here, because sign-up no longer asks
-    // which agency. A new venue therefore starts with NONE and cannot post until
-    // it links one in Settings and that agency approves — which is the intended
-    // flow, not a gap: an agency partnership is the agency's to accept, and
-    // manufacturing one from a dropdown the venue picked would record a
-    // relationship nobody on the other side agreed to.
-    await this.enrollSignupPackage({
-      accountType: 'outlet',
-      orgId: outlet.id,
-      orgName: outlet.name,
-      packageId: body.packageId,
-      actor,
-    });
-    logger.info('[AuthController.register] Outlet created for signup', {
-      outletId: outlet.id,
-      userId,
-      packageId: body.packageId ?? null,
-
-    });
-    return { kind: 'outlet', id: outlet.id, name: outlet.name };
-  }
-
-  /**
-   * Write the chosen catalog plan into `member_subscription`.
-   * `packageId` is `subscription.id` (UUID) from GET /auth/signup-packages.
-   */
-  private async enrollSignupPackage(input: {
-    accountType: 'agency' | 'outlet';
-    orgId: string;
-    orgName: string;
-    packageId?: string;
-    actor: string;
-  }): Promise<void> {
-    const packageId = input.packageId?.trim();
-    if (!packageId) {
-      logger.warn('[AuthController.enrollSignupPackage] No packageId on signup', {
-        orgId: input.orgId,
-      });
-      return;
-    }
-
-    const plan = await this.subscriptionRepository.getSubscriptionById(packageId);
-    if (!plan || plan.status !== 'active' || (plan.kind ?? 'plan') !== 'plan') {
-      logger.warn('[AuthController.enrollSignupPackage] Invalid packageId', {
-        packageId,
-        orgId: input.orgId,
-      });
-      return;
-    }
-    if (
-      plan.subscriptionType &&
-      plan.subscriptionType !== input.accountType
-    ) {
-      logger.warn('[AuthController.enrollSignupPackage] Plan audience mismatch', {
-        packageId,
-        expected: input.accountType,
-        got: plan.subscriptionType,
-      });
-      return;
-    }
-
-    const row = await this.memberSubscriptionRepository.create({
-      subscriberType: input.accountType,
-      subscriberId: input.orgId,
-      subscriberName: input.orgName,
-      subscriptionId: plan.id,
-      planName: plan.name,
-      amount: plan.price,
-      billingCycle: plan.billingCycle,
-      status: 'active',
-      startedAt: new Date(),
-      createdBy: input.actor,
-      updatedBy: input.actor,
-    });
-    if (!row) {
-      logger.error('[AuthController.enrollSignupPackage] Ledger insert failed', {
-        packageId,
-        orgId: input.orgId,
-      });
-    }
   }
 
   /**
@@ -770,6 +769,35 @@ export class AuthControllerClass {
           return res.status(409).json({
             success: false,
             message: 'An account with this ID number already exists',
+            data: null,
+          });
+        }
+      }
+
+      /**
+       * The package is judged BEFORE anything is written.
+       *
+       * Registration is not transactional: the user, the org and the membership
+       * are each committed as they are created, and enrolment runs last. A
+       * refusal raised down there — which is where an invalid package used to be
+       * noticed — would leave a half-built account whose email and phone are
+       * already taken, so the person could not even retry. Validating here costs
+       * a 400 and creates nothing.
+       *
+       * No outlet or agency may exist without a plan (owner's call, 2 Sep 2026),
+       * and `ShiftController` now refuses to post for a venue holding none, so
+       * letting one through would mint an account that cannot work.
+       */
+      if (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') {
+        const plan = await resolveEnrollablePlan({
+          subscriptionRepository: this.subscriptionRepository,
+          accountType: parsedBody.accountType,
+          packageId: parsedBody.packageId,
+        });
+        if (!plan.ok) {
+          return res.status(400).json({
+            success: false,
+            message: plan.message,
             data: null,
           });
         }

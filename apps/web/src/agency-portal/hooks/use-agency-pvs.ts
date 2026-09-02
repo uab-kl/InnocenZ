@@ -7,9 +7,11 @@ import type { PrPaymentVoucher, PrPvRow } from "@agency-portal/lib/pr-demo";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import {
 	fetchPaymentVoucher,
 	fetchPaymentVouchers,
+	fetchVoucherPayeeBank,
 	financeSignPaymentVoucher,
 	type UpdatePaymentVoucherInput,
 	updatePaymentVoucher,
@@ -41,6 +43,56 @@ export const pvEvidenceKey = (id: string | null) =>
 	["agency", "payment-voucher", "evidence", id] as const;
 
 /**
+ * The agency's vouchers, RAW and paged to exhaustion — the one query behind
+ * `PV_KEY`, and the only place this list is fetched.
+ *
+ * Exported because the Subscription screen needs the same rows to count what
+ * this agency issued in a payroll week, and it used to fetch them itself under
+ * `["agency","subscription","weekly-pv"]`. That was the same GET twice, under
+ * two keys that nothing invalidated in common: raising a voucher on Payroll left
+ * the count the subscription TIER is priced from unchanged for a minute, and the
+ * auto-tier plan-change write fired off whichever copy happened to be colder.
+ *
+ * ⚠️ `pageSize: 500` is what this used to ask for, and the server clamps every
+ * list to 100 and returns the short page with no error (see
+ * `lib/fetch-all-pages.ts`). So past 100 vouchers the Payroll totals, the Today
+ * hub's Pending payout and the subscription's billed tier were all computed over
+ * the OLDEST hundred. Page it out; never raise the number.
+ */
+export function useAgencyPvRows(params: { enabled?: boolean } = {}) {
+	const { enabled = true } = params;
+	const { logout } = useAuth();
+	return useQuery({
+		queryKey: PV_KEY,
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchPaymentVouchers({ page, pageSize: 100 }, logout),
+			),
+		enabled,
+		staleTime: 60_000,
+	});
+}
+
+/**
+ * Where this PR is paid — UNMASKED, and ONLY for the printed voucher.
+ *
+ * Kept out of `useAgencyPvs` so it is never fetched incidentally: the endpoint
+ * is gated to owner/finance and returns a full bank account number, so it
+ * should be asked for by the one surface that needs it and no other.
+ *
+ * `isBackedVoucherId` guards it — a demo voucher id like "pv1" would be a
+ * guaranteed failed request on every open.
+ */
+export function useVoucherPayeeBank(voucherId: string | null) {
+	const { logout } = useAuth();
+	return useQuery({
+		queryKey: ["agency", "payment-voucher", "payee-bank", voucherId],
+		queryFn: () => fetchVoucherPayeeBank(voucherId as string, logout),
+		enabled: isBackedVoucherId(voucherId),
+	});
+}
+
+/**
  * Backend-driven payment vouchers for the Payroll & PV screen. Reads real PVs
  * (already agency-scoped server-side, so no client tenant filter) and exposes
  * the lifecycle writes the backend supports via PUT /payment-voucher: send to
@@ -55,12 +107,7 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 	const queryClient = useQueryClient();
 	const invalidate = () => queryClient.invalidateQueries({ queryKey: PV_KEY });
 
-	const pvQuery = useQuery({
-		queryKey: PV_KEY,
-		queryFn: () => fetchPaymentVouchers({ pageSize: 500 }, logout),
-		enabled,
-		staleTime: 60_000,
-	});
+	const pvQuery = useAgencyPvRows({ enabled });
 
 	const pvs = useMemo<PrPaymentVoucher[]>(
 		() => (pvQuery.data?.data ?? []).map(managedPvFromBackend),
@@ -172,24 +219,28 @@ export function useAgencyPvEvidence(id: string | null) {
 /**
  * Fetch a single voucher WITH its line items (the list endpoint omits them).
  * Falls back to the list-mapped voucher until the detail resolves.
+ *
+ * ⚠️ SHARES `useAgencyPvEvidence`'s query — same endpoint, same key, one request.
+ *
+ * It used to hold its own `["agency","payment-voucher", id]`, which is NOT a
+ * prefix of `["agency","payment-voucher","evidence", id]` and was therefore
+ * missed by every invalidation the receipt and day-review writes fire. Both are
+ * on the Payroll detail at once: the voucher document rendered from this hook
+ * kept quoting pre-edit money while the evidence panel beside it, reading the
+ * same voucher, had already refreshed. One key, and the whole class goes away.
+ *
+ * Gating on `isBackedVoucherId` rather than `Boolean(id)` also stops the doomed
+ * request a demo id like "pv1" used to fire on every open; the caller still gets
+ * `fallback`, exactly as it did when that request failed.
  */
 export function useAgencyPvDetail(
 	id: string | null,
 	fallback?: PrPaymentVoucher,
 ) {
-	const { logout } = useAuth();
-	const detailQuery = useQuery({
-		queryKey: ["agency", "payment-voucher", id],
-		queryFn: () => fetchPaymentVoucher(id as string, logout),
-		enabled: Boolean(id),
-		staleTime: 60_000,
-	});
+	const { voucher } = useAgencyPvEvidence(id);
 
 	return useMemo<PrPaymentVoucher | undefined>(
-		() =>
-			detailQuery.data
-				? managedPvFromBackendDetail(detailQuery.data)
-				: fallback,
-		[detailQuery.data, fallback],
+		() => (voucher ? managedPvFromBackendDetail(voucher) : fallback),
+		[voucher, fallback],
 	);
 }

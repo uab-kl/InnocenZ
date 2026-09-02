@@ -28,6 +28,7 @@ import {
 	createShiftAssignment,
 	fetchShiftAssignments,
 } from "@/services/shift-assignment";
+import { useAllShiftAssignments } from "./use-all-shift-assignments";
 
 /** The payroll week (Sun–Sat) containing `todayIso`. */
 function payrollWeekRange(todayIso: string): { from: string; to: string } {
@@ -101,15 +102,10 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		enabled: backed,
 		staleTime: 30_000,
 	});
-	const assignmentsQuery = useQuery({
-		queryKey: ["roster", "assignments"],
-		queryFn: () =>
-			fetchAllPages((page) =>
-				fetchShiftAssignments({ page, pageSize: 100 }, logout),
-			),
-		enabled: backed,
-		staleTime: 30_000,
-	});
+	// The shared assignments cache. The planner is the surface that proved why it
+	// must be paged out: reading the oldest 100 rows made every current shift look
+	// unstaffed. See the hook.
+	const assignmentsQuery = useAllShiftAssignments({ enabled: backed });
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
 		queryFn: () =>

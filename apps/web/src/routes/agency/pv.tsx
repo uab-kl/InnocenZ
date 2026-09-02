@@ -28,6 +28,7 @@ import { useAgencyPvDayReview } from "@agency-portal/hooks/use-agency-pv-day-rev
 import {
 	useAgencyPvDetail,
 	useAgencyPvs,
+	useVoucherPayeeBank,
 } from "@agency-portal/hooks/use-agency-pvs";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { useMySignature } from "@agency-portal/hooks/use-my-signature";
@@ -1674,7 +1675,10 @@ function PvDetail({
 		}
 	}, [v, editing]);
 
-	const payee = buildAgencyPayee(v, agencyPRs);
+	// The printed voucher needs the REAL account, not a demo fixture — see the
+	// note on buildAgencyPayee. Blank when the PR has not entered one.
+	const payeeBank = useVoucherPayeeBank(v.id);
+	const payee = buildAgencyPayee(v, agencyPRs, payeeBank.data);
 	const breakdown = summarizePv(editing ? { ...v, rows, deduct } : v);
 	const prHasSigned = Boolean(
 		v.prSignedAt || v.status === "PAID" || v.status === "SIGNED",

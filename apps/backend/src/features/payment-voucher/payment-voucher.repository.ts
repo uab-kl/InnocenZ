@@ -987,6 +987,8 @@ export class PaymentVoucherRepositoryClass {
           name: sql<
             string | null
           >`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
+          nickname: UserTable.username,
+          phone: UserTable.phoneNum,
           icNo: UserProfileTable.idNo,
           bankName: UserProfileTable.bankName,
           bankAccountNo: UserProfileTable.bankAccountNo,
@@ -1000,6 +1002,8 @@ export class PaymentVoucherRepositoryClass {
           r.voucherId,
           {
             name: r.name,
+            nickname: r.nickname,
+            phone: r.phone,
             icNo: r.icNo,
             bankName: r.bankName,
             bankAccountNo: r.bankAccountNo,

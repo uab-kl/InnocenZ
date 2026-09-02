@@ -11,6 +11,55 @@ import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { parseGranularity } from '@/util/period.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
+import { LIVE_MEMBER_SUBSCRIPTION_STATUSES } from './member-subscription.model.js';
+import { wouldLeaveOrgPlanless } from '@/features/subscription/plan-limit.js';
+
+/** Does this status still mean the org is ON the lane? */
+function isLiveStatus(status: string): boolean {
+  const live: readonly string[] = LIVE_MEMBER_SUBSCRIPTION_STATUSES;
+  return live.includes(status);
+}
+
+/**
+ * The refusal for closing an org's LAST plan, or null when it may proceed.
+ *
+ * The creation doors all require a plan now — sign-up, admin create, the tier
+ * switch — but nothing guarded the other end, and cancelling is the everyday
+ * action that breaks the rule. An outlet left with no plan cannot post at all;
+ * an agency left with no plan is invisible to the Sunday tier rule, which reads
+ * FROM this table, so it can never be re-priced.
+ *
+ * REFUSES ON UNKNOWN, unlike the posting gate. There, an unanswerable question
+ * must not take a working venue offline. Here it must not wave through a
+ * cancellation nobody can undo — a retry is the cheaper mistake.
+ */
+async function lastPlanRefusal(memberSubscriptionId: string): Promise<{
+  status: number;
+  body: { success: boolean; message: string; data: null };
+} | null> {
+  const verdict = await wouldLeaveOrgPlanless(memberSubscriptionId);
+  if (verdict === 'no') return null;
+  if (verdict === 'unknown') {
+    return {
+      status: 503,
+      body: {
+        success: false,
+        message:
+          "Could not check whether this is the organisation's last plan. Nothing was changed — try again.",
+        data: null,
+      },
+    };
+  }
+  return {
+    status: 409,
+    body: {
+      success: false,
+      message:
+        "This is the organisation's only active plan. Move it onto another plan instead of ending it: an outlet with no plan cannot post shifts, and an agency with no plan cannot be priced or billed.",
+      data: null,
+    },
+  };
+}
 
 function parseDate(value: unknown): Date | undefined {
   if (typeof value !== 'string' || value.length === 0) return undefined;
@@ -238,6 +287,21 @@ export class MemberSubscriptionControllerClass {
       if (parsed.data.status !== undefined) payload.status = parsed.data.status;
       if (parsed.data.endedAt !== undefined) payload.endedAt = parsed.data.endedAt;
 
+      /**
+       * An edit can close a lane just as thoroughly as `cancel` does — by
+       * stamping `endedAt`, or by moving `status` to a dead value — and this is
+       * the endpoint that does it one field at a time. Guarded only when the
+       * payload actually closes something: setting `endedAt` back to null
+       * REOPENS a lane, which is the opposite of the danger.
+       */
+      const closesLane =
+        (payload.endedAt !== undefined && payload.endedAt !== null) ||
+        (payload.status !== undefined && !isLiveStatus(payload.status));
+      if (closesLane) {
+        const refusal = await lastPlanRefusal(id);
+        if (refusal) return res.status(refusal.status).json(refusal.body);
+      }
+
       const record = await this.repository.update(id, payload);
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       res.status(200).json({ success: true, message: 'Subscription record updated', data: record });
@@ -249,7 +313,11 @@ export class MemberSubscriptionControllerClass {
 
   async cancel(req: Request, res: Response) {
     try {
-      const record = await this.repository.update(paramId(req.params.id), {
+      const id = paramId(req.params.id);
+      const refusal = await lastPlanRefusal(id);
+      if (refusal) return res.status(refusal.status).json(refusal.body);
+
+      const record = await this.repository.update(id, {
         status: 'cancelled',
         endedAt: new Date(),
         updatedBy: getActor(req),

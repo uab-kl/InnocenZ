@@ -2,6 +2,14 @@ import { z } from 'zod';
 import { agencyStatusValues, agencyUserSubRoleValues } from '@/features/agency/agency.model';
 
 export const CreateAgencySchema = z.object({
+  /**
+   * The catalog plan (`main.subscription.id`) this agency is created on.
+   *
+   * REQUIRED — see the twin on `CreateOutletSchema`. An agency with no plan is
+   * invisible to the Sunday tier rule, which reads FROM `member_subscription`,
+   * so it can never be re-priced and works unbilled indefinitely.
+   */
+  packageId: z.string().uuid('A subscription package is required'),
   name: z.string().min(1, 'Name is required'),
   ssmNo: z.string().min(1, 'SSM registration number is required'),
   contactName: z.string().optional(),

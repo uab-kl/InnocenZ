@@ -37,6 +37,13 @@ import {
 } from '@/features/rbac/portal-role-map';
 import { portalRepository } from '@/features/rbac/portal/portal.repository';
 import { outletUserSubRoleValues } from './outlet.model';
+import { db } from '@/db/index.js';
+import type { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
+import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
+import {
+  enrolOrgOnPlan,
+  resolveEnrollablePlan,
+} from '@/features/subscription/enroll-plan.js';
 
 export class OutletControllerClass {
   constructor(
@@ -51,6 +58,9 @@ export class OutletControllerClass {
     private agencyRepository: AgencyRepositoryClass,
     // Only for the admin check in listMemberships' scoping clamp.
     private authRepository: AuthRepositoryClass,
+    // An admin-created venue must land on a plan, same rule as sign-up.
+    private subscriptionRepository: SubscriptionRepositoryClass,
+    private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
   ) {}
 
   async list(req: Request, res: Response) {
@@ -189,15 +199,51 @@ export class OutletControllerClass {
         });
       }
       const actor = getActor(req);
-      const outlet = await this.outletRepository.create({
-        ...parsed.data,
-        lat:
-          parsed.data.lat !== undefined ? String(parsed.data.lat) : undefined,
-        lng:
-          parsed.data.lng !== undefined ? String(parsed.data.lng) : undefined,
-        status: 'pending_review',
-        createdBy: actor,
-        updatedBy: actor,
+      // `packageId` is pulled OUT of the spread: it belongs to
+      // `member_subscription`, not to the outlet row, and spreading it into the
+      // insert would push a column the table does not have.
+      const { packageId, ...outletData } = parsed.data;
+
+      // The same rule sign-up uses, imported rather than restated. An admin
+      // creating a venue must put it on a plan — this endpoint used to create
+      // one with no subscription at all, and the posting gate now refuses such
+      // a venue, so it would be born unable to work.
+      const chosen = await resolveEnrollablePlan({
+        subscriptionRepository: this.subscriptionRepository,
+        accountType: 'outlet',
+        packageId,
+      });
+      if (!chosen.ok) {
+        return res
+          .status(400)
+          .json({ success: false, message: chosen.message, data: null });
+      }
+
+      // Venue and plan commit together or not at all.
+      const outlet = await db.transaction(async (tx) => {
+        const created = await this.outletRepository.create(
+          {
+            ...outletData,
+            lat:
+              outletData.lat !== undefined ? String(outletData.lat) : undefined,
+            lng:
+              outletData.lng !== undefined ? String(outletData.lng) : undefined,
+            status: 'pending_review',
+            createdBy: actor,
+            updatedBy: actor,
+          },
+          tx,
+        );
+        await enrolOrgOnPlan({
+          memberSubscriptionRepository: this.memberSubscriptionRepository,
+          plan: chosen.plan,
+          subscriberType: 'outlet',
+          subscriberId: created.id,
+          subscriberName: created.name,
+          actor,
+          tx,
+        });
+        return created;
       });
       res
         .status(201)

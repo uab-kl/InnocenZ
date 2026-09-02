@@ -23,6 +23,17 @@ import { PaymentVoucherTable } from './payment-voucher.model';
  */
 export type PayeeBank = {
   name: string | null;
+  /**
+   * Their working name (`user.username`) — "Vicky", not "Victoria Tan Mei Lin".
+   *
+   * Here because the printed voucher shows BOTH, and because the payee code is
+   * derived from it. Gating the demo fixture off removed the only source these
+   * had, so the document started printing the legal name twice and a code
+   * derived from the wrong string.
+   */
+  nickname: string | null;
+  /** `user.phone_num` — the voucher prints it, and only the account has it. */
+  phone: string | null;
   icNo: string | null;
   bankName: string | null;
   bankAccountNo: string | null;
