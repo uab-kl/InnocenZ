@@ -330,7 +330,7 @@ function PeriodCard({
 				{onToggle && unpaidIds.length > 0 && (
 					<input
 						type="checkbox"
-						className="h-4 w-4 shrink-0 accent-[var(--iz-gold)]"
+						className="h-4 w-4 shrink-0 accent-[var(--iz-yellow)]"
 						checked={unpaidIds.every((id) => selected?.has(id))}
 						onChange={() => onToggle(unpaidIds)}
 						aria-label={periodLabel(first.periodStart, first.periodEnd)}

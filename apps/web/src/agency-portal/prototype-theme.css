@@ -20,6 +20,15 @@
 	--iz-accent: #e3b877;
 	--iz-accent-d: #c99b4e;
 	--iz-accent-l: #f2d9a0;
+	/* The ACT colour (owner, 2 Sep 2026): a true gold-yellow for the one button
+	   on a screen that moves money or commits a choice — Pay by FPX, Save
+	   payment method, the pressed rail. Deliberately NOT `--iz-gold`, which is
+	   the violet the prototype named "gold" and which half the portal reads for
+	   its lavender accents; renaming that would recolour the wrong things. */
+	--iz-yellow: #f2c14e;
+	--iz-yellow-d: #d9a53a;
+	--iz-yellow-l: #ffd978;
+	--iz-yellow-ink: #1c1405;
 	--iz-grad-accent: linear-gradient(
 		135deg,
 		#f2d9a0 0%,
@@ -561,6 +570,29 @@
 		inset 0 1px 0 rgba(255, 255, 255, 0.18),
 		0 14px 28px -10px rgba(124, 58, 237, 0.55),
 		0 0 0 1px rgba(139, 92, 246, 0.3);
+}
+/*
+ * `.iz-btn-gold` was used by a dozen buttons and defined NOWHERE — "Save
+ * payment method", "Pay … by FPX" and the pressed rail all rendered as bare
+ * bold text beside a properly bordered Cancel, so the action read as the
+ * afterthought and the escape as the button. A gold-yellow fill, dark ink for
+ * contrast, a warm glow that `.iz-btn:disabled` already strips.
+ */
+.iz-btn-gold {
+	background: linear-gradient(
+		135deg,
+		var(--iz-yellow-l) 0%,
+		var(--iz-yellow) 55%,
+		var(--iz-yellow-d) 100%
+	);
+	color: var(--iz-yellow-ink);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.45),
+		0 14px 30px -10px rgba(242, 193, 78, 0.55),
+		0 0 0 1px rgba(217, 165, 58, 0.45);
+}
+.iz-btn-gold:hover:not(:disabled) {
+	filter: brightness(1.06);
 }
 .iz-btn-soft {
 	background: var(--iz-glass2);
