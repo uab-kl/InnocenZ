@@ -18,6 +18,7 @@ import { buildQueryParams } from "@/lib/build-query-params";
  */
 export const paymentMethodTypes = [
 	"card",
+	"fpx",
 	"fpx_mandate",
 	"ewallet",
 	"duitnow",
@@ -188,9 +189,12 @@ export async function fetchEwalletProviders(
  */
 export function describePaymentMethod(
 	method: PaymentMethod,
-	labels: { transfer: string; fpx: string },
+	labels: { transfer: string; fpx: string; fpxLink: string },
 ): string {
 	if (method.type === "manual_transfer") return labels.transfer;
+	// One-off FPX stores no bank — the venue picks it at pay time — so there is
+	// nothing to print beside the rail's name.
+	if (method.type === "fpx") return labels.fpxLink;
 	// The bank is what a venue recognises its own mandate by — "FPX direct
 	// debit" alone reads the same for every venue on the rail.
 	if (method.type === "fpx_mandate")

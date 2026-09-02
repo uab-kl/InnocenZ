@@ -64,7 +64,8 @@ const paymentToneOf: Record<SubscriptionPaymentStatus, string> = {
 
 function MethodIcon({ type }: { type: PaymentMethod["type"] }) {
 	if (type === "manual_transfer") return <Landmark className="h-4 w-4" />;
-	if (type === "fpx_mandate") return <Banknote className="h-4 w-4" />;
+	if (type === "fpx" || type === "fpx_mandate")
+		return <Banknote className="h-4 w-4" />;
 	return <CreditCard className="h-4 w-4" />;
 }
 
@@ -262,12 +263,14 @@ export function InvoicePaymentSheet({
 
 	const methodLabelOf = (method: PaymentMethod) => {
 		if (method.type === "manual_transfer") return t.subscription.savedTransfer;
+		if (method.type === "fpx") return t.subscription.savedFpxLink;
 		if (method.type === "fpx_mandate") return t.subscription.savedFpx;
 		return `${method.brand} ···· ${method.last4 ?? "····"}`;
 	};
 
 	const methodTypeLabelOf = (type: SubscriptionPayment["methodType"]) => {
 		if (type === "manual_transfer") return t.subscription.methodTransfer;
+		if (type === "fpx") return t.subscription.methodFpxLink;
 		if (type === "fpx_mandate") return t.subscription.methodFpx;
 		return t.subscription.methodCard;
 	};
@@ -371,11 +374,7 @@ export function InvoicePaymentSheet({
 								{fill(t.outletSubscription.nextRenewal, {
 									date: format(
 										addDays(
-											parse(
-												newestPeriod.periodEnd,
-												"yyyy-MM-dd",
-												new Date(),
-											),
+											parse(newestPeriod.periodEnd, "yyyy-MM-dd", new Date()),
 											1,
 										),
 										"d MMM yyyy",
@@ -742,8 +741,7 @@ export function InvoicePaymentSheet({
 																			reference:
 																				referenceFor.value.trim() || null,
 																		});
-																	if (e.key === "Escape")
-																		setReferenceFor(null);
+																	if (e.key === "Escape") setReferenceFor(null);
 																}}
 															/>
 															<span className="text-xs text-muted-foreground">

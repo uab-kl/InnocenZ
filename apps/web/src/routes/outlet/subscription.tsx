@@ -491,8 +491,7 @@ function OutletSubscriptionPage() {
 			);
 			if (owing.length > 0) {
 				const cents = owing.reduce(
-					(total, invoice) =>
-						total + Math.round(Number(invoice.amount) * 100),
+					(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
 					0,
 				);
 				toast(
@@ -1034,6 +1033,7 @@ function OutletSubscriptionPage() {
 								describePaymentMethod(backend.card, {
 									transfer: t.subscription.savedTransfer,
 									fpx: t.subscription.savedFpx,
+									fpxLink: t.subscription.savedFpxLink,
 								}) +
 								(renewalLabel
 									? fill(

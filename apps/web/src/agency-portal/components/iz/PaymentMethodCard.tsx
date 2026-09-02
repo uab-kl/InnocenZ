@@ -102,7 +102,7 @@ export function PaymentMethodCard({
 	});
 
 	/**
-	 * The three rails a subscriber may CHOOSE: card, FPX direct debit, e-wallet.
+	 * The three rails a subscriber may CHOOSE: card, one-off FPX, e-wallet.
 	 *
 	 * ⚠️ `manual_transfer` was removed from this picker on the owner's call
 	 * (28 Aug 2026) — card and FPX already cover paying by credit and debit, and
@@ -132,10 +132,13 @@ export function PaymentMethodCard({
 			label: t.subscription.methodCard,
 			note: t.subscription.methodCardNote,
 		},
+		// One-off FPX (owner's rail, 28 Aug 2026): a link each period, every bank,
+		// no mandate. The direct-debit mandate rail is deliberately NOT offered
+		// here any more — its code and columns stay for the day it is added back.
 		{
-			value: "fpx_mandate",
-			label: t.subscription.methodFpx,
-			note: t.subscription.methodFpxNote,
+			value: "fpx",
+			label: t.subscription.methodFpxLink,
+			note: t.subscription.methodFpxLinkNote,
 		},
 		{
 			value: "ewallet",
@@ -261,6 +264,7 @@ export function PaymentMethodCard({
 			? describePaymentMethod(card, {
 					transfer: t.subscription.savedTransfer,
 					fpx: t.subscription.savedFpx,
+					fpxLink: t.subscription.savedFpxLink,
 				})
 			: t.subscription.noCardSaved
 		: `Visa ···· ${demoLast4}`;
@@ -526,9 +530,11 @@ export function PaymentMethodCard({
 					<p className="iz-tiny iz-muted2">
 						{type === "card"
 							? `${t.subscription.cardPrivacyNote} ${t.izUi.cardNotChargedYet}`
-							: type === "fpx_mandate"
-								? t.subscription.mandateNotLiveYet
-								: t.subscription.transferRecordedNote}
+							: type === "fpx"
+								? t.subscription.fpxLinkNote
+								: type === "fpx_mandate"
+									? t.subscription.mandateNotLiveYet
+									: t.subscription.transferRecordedNote}
 					</p>
 
 					<div className="flex gap-2">

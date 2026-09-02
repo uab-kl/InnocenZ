@@ -95,9 +95,15 @@ export type NewPaymentMethod = typeof PaymentMethodTable.$inferInsert;
  * one-off by nature — the honest pattern for them is a payment link per invoice,
  * not a stored instrument that pretends it will auto-renew. `autoPay` is
  * therefore meaningless on them, and `isChargeable` below is what says so.
+ *
+ * `fpx` (migration 0145) is the owner's chosen rail: one-off FPX, a link each
+ * period, every Malaysian bank. It stores NOTHING about the bank — the venue
+ * picks it on the provider's page at pay time — which is exactly what makes it
+ * a different value from `fpx_mandate`, whose CHECKs demand a bank and a state.
  */
 export const paymentMethodTypeValues = [
   'card',
+  'fpx',
   'fpx_mandate',
   'ewallet',
   'duitnow',

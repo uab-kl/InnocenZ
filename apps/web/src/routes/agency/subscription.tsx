@@ -997,6 +997,7 @@ function AgencySubscription() {
 								describePaymentMethod(sub.card, {
 									transfer: t.subscription.savedTransfer,
 									fpx: t.subscription.savedFpx,
+									fpxLink: t.subscription.savedFpxLink,
 								}) +
 								(realRenewalLabel
 									? fill(

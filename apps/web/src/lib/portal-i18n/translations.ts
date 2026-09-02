@@ -1628,6 +1628,18 @@ const en = {
 		savedFpx: "FPX direct debit",
 
 		/**
+		 * One-off FPX — the owner's chosen rail (28 Aug 2026). A link each
+		 * period, every Malaysian bank, no mandate. Distinct keys from the
+		 * direct-debit ones above so a saved mandate keeps reading as a mandate.
+		 */
+		methodFpxLink: "FPX (online banking)",
+		methodFpxLinkNote:
+			"We send you a payment link each period and you pay at your own bank — every Malaysian bank, nothing to set up.",
+		savedFpxLink: "FPX",
+		fpxLinkNote:
+			"InnocenZ records that you pay by FPX. The payment link each period needs Fiuu to be connected, which is not yet.",
+
+		/**
 		 * The Today-page billing banner, both portals.
 		 *
 		 * Says what is OWED and nothing about how to pay it: no gateway is
@@ -7224,6 +7236,13 @@ const zh: PortalTranslations = {
 		savePaymentMethod: "保存付款方式",
 		savedTransfer: "银行转账",
 		savedFpx: "FPX 银行直接扣账",
+
+		methodFpxLink: "FPX（网上银行）",
+		methodFpxLinkNote:
+			"每个账期我们会发送付款链接，您在自己的银行完成付款 — 支持所有马来西亚银行，无需任何设置。",
+		savedFpxLink: "FPX",
+		fpxLinkNote:
+			"InnocenZ 会记录您以 FPX 付款。每期的付款链接需要接入 Fiuu，目前尚未接入。",
 
 		billingDueTitle: "订阅费待付",
 		billingDueOne: "尚有 {amount} 未付，共 1 个账单周期。",
