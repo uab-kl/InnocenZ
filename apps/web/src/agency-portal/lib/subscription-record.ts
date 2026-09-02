@@ -156,6 +156,35 @@ export function sortMemberSubscriptions(
  * started on the 31st bills on the 28th/30th in short months and returns to the
  * 31st afterwards.
  */
+/**
+ * When the org is next billed, read from the BILLING CALENDAR — the day after
+ * the latest period the ledger has opened on its plan lane.
+ *
+ * `nextRenewalFrom` below rolls the current subscription row's start date
+ * forward, which is wrong the moment a plan is switched: the row starts on the
+ * switch day, the calendar does not. Emhub switched on 28 Aug and the screen
+ * said "renews 28 Sept" over a history that plainly ran 3 Aug – 2 Sep. The
+ * invoices are the calendar, so they win; the start-date rule is the fallback
+ * for an org that has no period opened yet.
+ *
+ * Callers pass plan-lane invoices only: an add-on has its own anchor, and its
+ * later period end would push the plan's renewal to the wrong day.
+ */
+export function nextRenewalFromInvoices(
+	invoices: { periodEnd: string; kind?: string }[],
+): Date | null {
+	let latest: string | null = null;
+	for (const invoice of invoices) {
+		if (invoice.kind && invoice.kind !== "period") continue;
+		if (!latest || invoice.periodEnd > latest) latest = invoice.periodEnd;
+	}
+	if (!latest) return null;
+	const [y, m, d] = latest.split("-").map(Number);
+	if (!y || !m || !d) return null;
+	// Local calendar day, +1 — a period end is a date, not an instant.
+	return new Date(y, m - 1, d + 1);
+}
+
 export function nextRenewalFrom(
 	startedAt: string | null | undefined,
 	billingCycle: string | null | undefined,

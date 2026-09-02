@@ -1,6 +1,7 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
 	nextRenewalFrom,
+	nextRenewalFromInvoices,
 	planChangeRecordFromMember,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
@@ -262,11 +263,21 @@ export function useOutletSubscription() {
 	 */
 	const nextRenewalDate = useMemo<Date | null>(
 		() =>
+			// The billing calendar wins: the day after the latest PLAN-lane period
+			// the ledger has opened. The start-date rule is only the fallback for a
+			// venue with no period yet — rolled from the switch day it read
+			// "renews 28 Sept" over a history running 3 Aug – 2 Sep.
+			nextRenewalFromInvoices(
+				paymentHistory.filter(
+					(invoice) =>
+						invoiceLaneById.get(invoice.memberSubscriptionId) !== "addon",
+				),
+			) ??
 			nextRenewalFrom(
 				activeSubscription?.startedAt,
 				activeSubscription?.billingCycle,
 			),
-		[activeSubscription],
+		[activeSubscription, paymentHistory, invoiceLaneById],
 	);
 
 	/**

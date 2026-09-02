@@ -6,6 +6,7 @@ import {
 } from "@agency-portal/lib/demo-clock";
 import {
 	nextRenewalFrom,
+	nextRenewalFromInvoices,
 	planChangeRecordFromMember,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
@@ -248,8 +249,13 @@ export function useAgencySubscription() {
 	 * used to print a demo-clock date that had nothing to do with the ledger.
 	 */
 	const nextRenewalDate = useMemo<Date | null>(
-		() => nextRenewalFrom(current?.startedAt, current?.billingCycle),
-		[current],
+		// The billing calendar wins — an agency holds one lane, so every period
+		// invoice is the plan's. The start-date rule is only the fallback for an
+		// agency with no week opened yet.
+		() =>
+			nextRenewalFromInvoices(paymentHistory) ??
+			nextRenewalFrom(current?.startedAt, current?.billingCycle),
+		[current, paymentHistory],
 	);
 
 	/**
