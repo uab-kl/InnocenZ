@@ -93,13 +93,20 @@ export function PaymentMethodCard({
 		staleTime: 60 * 60 * 1000,
 	});
 
-	/** The wallet roster, on the same terms as the banks: fetched on demand only. */
+	/**
+	 * The wallet roster. Fetched on demand like the banks — but ALSO when a
+	 * wallet is already saved, because the collapsed header prints its name, and
+	 * "E-wallet · TNG" is the code, not the name the venue chose.
+	 */
 	const { data: wallets = [] } = useQuery({
 		queryKey: ["ewallet-providers"],
 		queryFn: () => fetchEwalletProviders(logout),
-		enabled: editing && type === "ewallet",
+		enabled: (editing && type === "ewallet") || card?.type === "ewallet",
 		staleTime: 60 * 60 * 1000,
 	});
+	const walletNames = Object.fromEntries(
+		wallets.map((wallet) => [wallet.code, wallet.name]),
+	);
 
 	/**
 	 * The three rails a subscriber may CHOOSE: card, one-off FPX, e-wallet.
@@ -261,11 +268,16 @@ export function PaymentMethodCard({
 
 	const summary = backed
 		? card
-			? describePaymentMethod(card, {
-					transfer: t.subscription.savedTransfer,
-					fpx: t.subscription.savedFpx,
-					fpxLink: t.subscription.savedFpxLink,
-				})
+			? describePaymentMethod(
+					card,
+					{
+						transfer: t.subscription.savedTransfer,
+						fpx: t.subscription.savedFpx,
+						fpxLink: t.subscription.savedFpxLink,
+						ewallet: t.subscription.methodEwallet,
+					},
+					walletNames,
+				)
 			: t.subscription.noCardSaved
 		: `Visa ···· ${demoLast4}`;
 

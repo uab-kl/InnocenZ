@@ -1034,6 +1034,7 @@ function OutletSubscriptionPage() {
 									transfer: t.subscription.savedTransfer,
 									fpx: t.subscription.savedFpx,
 									fpxLink: t.subscription.savedFpxLink,
+									ewallet: t.subscription.methodEwallet,
 								}) +
 								(renewalLabel
 									? fill(

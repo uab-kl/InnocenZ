@@ -998,6 +998,7 @@ function AgencySubscription() {
 									transfer: t.subscription.savedTransfer,
 									fpx: t.subscription.savedFpx,
 									fpxLink: t.subscription.savedFpxLink,
+									ewallet: t.subscription.methodEwallet,
 								}) +
 								(realRenewalLabel
 									? fill(

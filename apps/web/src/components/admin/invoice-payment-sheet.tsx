@@ -265,6 +265,10 @@ export function InvoicePaymentSheet({
 		if (method.type === "manual_transfer") return t.subscription.savedTransfer;
 		if (method.type === "fpx") return t.subscription.savedFpxLink;
 		if (method.type === "fpx_mandate") return t.subscription.savedFpx;
+		if (method.type === "ewallet")
+			return method.walletProvider
+				? `${t.subscription.methodEwallet} · ${method.walletProvider}`
+				: t.subscription.methodEwallet;
 		return `${method.brand} ···· ${method.last4 ?? "····"}`;
 	};
 
