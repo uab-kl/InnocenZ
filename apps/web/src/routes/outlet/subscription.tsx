@@ -1080,6 +1080,19 @@ function OutletSubscriptionPage() {
 						);
 						return result.ok;
 					}}
+					isRemoving={backend.isRemovingCard}
+					onRemove={async () => {
+						const result = await backend.removeCard();
+						// The server's own sentence first; the local one only if it sent none.
+						toast(
+							result.message ??
+								(result.ok
+									? t.subscription.methodRemoved
+									: t.subscription.couldNotRemoveMethod),
+							result.ok ? "success" : "warn",
+						);
+						return result.ok;
+					}}
 				/>
 
 				<div className="iz-tiny iz-muted mt-2 flex items-center gap-2">

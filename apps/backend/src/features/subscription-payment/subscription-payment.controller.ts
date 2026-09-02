@@ -240,8 +240,12 @@ export class SubscriptionPaymentControllerClass {
       for (const invoice of invoices) {
         await this.repository.recordAttempt({
           subscriptionInvoiceId: invoice.id,
-          methodType: instrument?.type ?? 'fpx',
-          paymentMethodId: instrument?.id ?? null,
+          // A manual pay-now is ALWAYS one-off FPX (owner, 2 Sep 2026): it is
+          // the road for an org with nothing saved AND for one whose direct
+          // debit just bounced, so the attempt must not claim the instrument
+          // that failed to pay. The saved row still lends its billing email.
+          methodType: 'fpx',
+          paymentMethodId: null,
           gateway: gateway.name,
           gatewayPaymentId: session.gatewayPaymentId,
           reference,

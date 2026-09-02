@@ -1043,6 +1043,19 @@ function AgencySubscription() {
 						);
 						return result.ok;
 					}}
+					isRemoving={sub.isRemovingCard}
+					onRemove={async () => {
+						const result = await sub.removeCard();
+						// The server's own sentence first; the local one only if it sent none.
+						toast(
+							result.message ??
+								(result.ok
+									? t.subscription.methodRemoved
+									: t.subscription.couldNotRemoveMethod),
+							result.ok ? "success" : "warn",
+						);
+						return result.ok;
+					}}
 				/>
 
 				<div className="mt-2 flex items-center gap-2 iz-tiny iz-muted">

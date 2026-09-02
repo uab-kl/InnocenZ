@@ -336,8 +336,32 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 Migration 0133 + `subscription_payment` landed the parts that need no gateway account (see §10).
 What is left needs a **commercial decision first, then credentials** — nothing below is blocked on code.
 
+**DECIDED (owner, 2 Sep 2026) — supersedes the 28 Aug rail bullet below:**
+- **A saved payment method is OPTIONAL, and saving one means AUTO-DEBIT.** The picker offers two
+  rails only: **Card** and **Bank direct debit** (the existing `fpx_mandate` rail — authorise once
+  at the bank via the 18-bank picker, no account number ever, every period debited; a mandate the
+  bank has not approved stays amber and is never charged). The e-wallet rail and the one-off `fpx`
+  rail are WITHDRAWN from the picker; their types, columns and describers stay because rows saved
+  on them exist (this outlet was on TNG) and the header, admin panel and receipts must keep
+  naming them. A venue on one opens the form onto the nearest offered rail (fpx → direct debit,
+  wallet → card) or presses **Remove payment method** (two-step, server sentence shown) — that
+  is the way back to "none".
+- **Nothing saved, or a debit bounces (insufficient balance) → the period stays unpaid and the
+  org pays it by one-off FPX** from tick-to-pay on Payment history ("Pay RM x by FPX"). So every
+  manual pay-now is recorded as an `fpx` attempt with no `payment_method_id` — it must never
+  claim the instrument that just failed. The "no method" header line says exactly this instead
+  of nagging for a card.
+- **Provider re-check needed with the quote:** Fiuu lists **6** direct-debit banks (Curlec "+17
+  others"), so the 28 Aug "chosen for bank coverage" argument now applies only to the one-off FPX
+  road (29 banks), not to the saved rail. Ask Fiuu for its Direct Debit bank list.
+- **Not built until a gateway exists:** the mandate-enrolment redirect, the mandate-approval
+  webhook, the nightly debit job (one attempt per open invoice on chargeable instruments; a
+  `failed` attempt leaves the invoice unpaid so tick-to-pay shows it), and card tokenisation.
+
 **DECIDED (owner, 28 Aug 2026) — supersedes items 1–3 below where they differ:**
-- **Rail: FPX one-off (link-and-pay), NOT direct-debit mandates.** Chosen for bank coverage: FPX
+- **Rail: FPX one-off (link-and-pay), NOT direct-debit mandates.** ⚠️ Superseded 2 Sep (above):
+  one-off FPX is now the MANUAL road for unpaid periods, and the SAVED rail is direct debit or
+  card. The coverage argument below still holds for the manual road. Chosen for bank coverage: FPX
   reaches every bank (Fiuu lists 29 consumer + **19 B2B**); direct debit reaches 6 (Fiuu) / 18
   (Curlec). The trade, accepted: **nothing pulls money** — each period the venue gets a link and
   pays at its bank; agencies weekly ≈ 52 taps/yr. So reminders + `past_due` are the collection
@@ -352,9 +376,8 @@ What is left needs a **commercial decision first, then credentials** — nothing
   button (deliberately absent today), reminders at +3/+7 days, `past_due` computed (agency 7d /
   outlet 14d), no auto cut-off. Settlement webhook (0135) unchanged — pending→succeeded on the
   same row is exactly FPX B2B's late-approval shape. Runbook: claude.ai artifact "FPX Billing Runbook".
-- **App is now mislabelled:** the rail says "FPX direct debit" with an 18-bank picker and promises
-  "debited automatically". Next slice: migration adds `fpx` type; rail renamed "FPX"; picker dropped
-  for it (venue picks its bank on Fiuu's hosted page); copy says "a link each period".
+- ~~**App is now mislabelled**~~ — done 28 Aug (`fpx` type, 0145, link rail in the picker), then
+  reversed 2 Sep: the picker is Card / **Bank direct debit** again and `fpx` is the manual road.
 
 **BILLING RULES (owner, 28 Aug 2026) — asked after seeing Emhub Testing billed at Enterprise
 (RM 3,999) for 3 Aug–2 Sep while its current plan card says Scale (RM 6,999) from 28 Aug:**
@@ -2494,6 +2517,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-09-02 | **The saved payment method is OPTIONAL and means auto-debit; every manual pay-now is one-off FPX.** Owner, from the outlet Subscription screenshot: *"remove the e-wallet section, the FPX section make to (Bank direct debit)"*, then *"make this payment method section optional, if they choose to enter their payment method then is auto debit, if they insufficient balance and no choose to payment method then the pay for unpaid need manual fpx payment."* **Card** (one component, both portals): the picker is now **Card / Bank direct debit** — the existing `fpx_mandate` rail with its 18-bank picker, never an account number, a bank-unapproved mandate still amber and undebitable. The e-wallet rail and the one-off `fpx` rail are withdrawn from the picker; their types, columns and describers stay because rows saved on them exist (this very outlet was on TNG) and the header, admin panel and receipts must keep naming them — a venue on one opens the form onto the nearest offered rail (fpx → direct debit, wallet → card). With nothing saved the header now says *"no auto-debit — pay each period by FPX from Payment history"* instead of *"choose how you pay so billing has somewhere to go"* (key `addACard` replaced by `noMethodPaysByFpx`); the form opens with an *"Optional…"* sentence; both rail notes say a bounced debit / declined charge leaves the period unpaid to pay by FPX; the link-rail email label and pre-fill are gone (no link rail is offered). **Remove payment method** is new — two presses (the second names what removing does), shows the SERVER'S sentence, and reaches the already-existing `DELETE /payment-method/mine/:id` (settings-update guard) through new `removeMyPaymentMethod` → `removeCard` in both hooks → `onRemove` in both routes. Tick-to-pay copy says *"Tick the periods to pay by FPX"* / *"Pay RM x by FPX"*. Labels `methodFpx`/`savedFpx` → **"Bank direct debit" / "银行直接扣账"**, so the admin panel and receipts follow without a change of their own. **Backend, one line that mattered:** checkout stamped `instrument?.type ?? 'fpx'` on the pending attempt — an org whose mandate had just bounced and paid by hand would have been recorded as a mandate debit; now always `fpx` with `paymentMethodId` null (the saved row still lends its billing email). §9 carries the new DECIDED block, the provider consequence (Fiuu lists 6 direct-debit banks; ask for the list with the quote) and the four gateway-dependent pieces still unbuilt. | agency + outlet + admin web + backend | ✅ web tsc **0**, backend tsc **0**, web **136/136**, backend **110/110**, biome clean on 7 files. Admin Plan Payment rendered in the dev browser with no console errors. ⚠️ The card itself is NOT click-verified — the dev browser is signed in as the admin account, which the outlet portal refuses, and signing in as another account is the owner's to do. The runbook artifact still describes the 28 Aug link-and-pay shape for steps 5–8 |
 
 | 2026-08-28 | **Option A: the ledger backfills from each lane's anchor — a missed morning heals itself, and history is billed.** Owner chose A over a fixed ledger-start, accepting that the first run writes old periods as unpaid. `generateMissing` took `periods[periods.length - 1]` — today's period only — so a day the 03:00 job did not run was a period nobody was ever billed for, and orgs from before the ledger's first run (9 Aug) had no history. It now loops every period from the lane's anchor to today, pricing each by the subscription LIVE in that period; `billed` (lane + period) drops the ones that exist, so a re-run mints nothing twice. **First run, through the real method:** scanned 52 lanes, **created 22** — AliMaMa +1 (2 Aug), Atlas +5 from 5 Jul (RM 11,999 — one of those weeks was on Custom 9,999, priced as it was held), Delta +5 from 5 Jul (RM 1,000), Starline +10 from 31 May (RM 5,625), Velvet +1 (1 Jul, RM 2,999); **0 lanes billed twice for one period** (checked by query). Those 22 are unpaid and will show on the orgs' Today banners and the admin's Plan Payment; the owner forgives any of them with Mark paid + note. Also: the 0137 "new bill" notice groups per org per run, so each of those five orgs got ONE notice summing its backfill. ⚠️ Note for the future: `applyOpenCredits` applies to inserted rows in order, so on a backfill a credit could land on an old period before a current one — moot today (0 open credits), recorded in case. | backend (code + data) | ✅ backend tsc **0**; run verified by the runner's own per-org read and a duplicate check |
 

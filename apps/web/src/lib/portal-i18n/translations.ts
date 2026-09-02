@@ -1577,7 +1577,14 @@ const en = {
 		savingCard: "Saving…",
 		saveCard: "Save card",
 		cardExpires: "{billed} · expires {mm}/{yy}",
-		addACard: "{billed} · choose how you pay so billing has somewhere to go",
+		/**
+		 * The header line when nothing is saved. A saved method is OPTIONAL
+		 * (owner, 2 Sep 2026) and means auto-debit; with none, the org pays each
+		 * period by one-off FPX from Payment history — so this states that plan
+		 * rather than nagging for a card.
+		 */
+		noMethodPaysByFpx:
+			"{billed} · no auto-debit — pay each period by FPX from Payment history",
 		autoPayEnabled: "{billed} · auto-pay enabled",
 		visaNextCharge: "Visa ···· {last4} · next charge {date}",
 
@@ -1588,12 +1595,12 @@ const en = {
 		 */
 		payHow: "How you pay",
 		methodCard: "Card",
-		methodFpx: "FPX direct debit",
+		methodFpx: "Bank direct debit",
 		methodTransfer: "Bank transfer",
 		methodCardNote:
-			"Visa, Mastercard and others. Charged automatically once a payment gateway is connected.",
+			"Visa, Mastercard and others. Each period is charged automatically once a payment gateway is connected; a declined charge leaves that period unpaid, to pay by FPX.",
 		methodFpxNote:
-			"You authorise this once at your bank, and each period is debited automatically after that.",
+			"You authorise this once at your bank and each period is taken automatically after that. A debit that bounces leaves that period unpaid, to pay by FPX.",
 		methodTransferNote:
 			"You transfer each period yourself and InnocenZ marks it received. Nothing is ever charged automatically.",
 		/**
@@ -1625,17 +1632,29 @@ const en = {
 		editPaymentMethod: "Edit payment method",
 		savePaymentMethod: "Save payment method",
 		savedTransfer: "Bank transfer",
-		savedFpx: "FPX direct debit",
+		savedFpx: "Bank direct debit",
+		/** Optional-ness, said before the picker; and the way back to "none". */
+		methodOptional:
+			"Optional. Save a card or a bank direct debit and each period is taken automatically. With nothing saved — or if a debit bounces — you pay the unpaid periods by FPX from Payment history.",
+		removePaymentMethod: "Remove payment method",
+		removeMethodNote:
+			"Removing it turns auto-debit off — you will pay each period by FPX from Payment history instead.",
+		confirmRemoveMethod: "Yes, remove it",
+		removingMethod: "Removing…",
+		methodRemoved: "Payment method removed — you now pay each period by FPX",
+		couldNotRemoveMethod: "Could not remove the payment method — try again",
 
 		/**
-		 * One-off FPX — the owner's chosen rail (28 Aug 2026). A link each
-		 * period, every Malaysian bank, no mandate. Distinct keys from the
-		 * direct-debit ones above so a saved mandate keeps reading as a mandate.
+		 * One-off FPX — chosen 28 Aug 2026 as the SAVED rail, then WITHDRAWN from
+		 * the picker on 2 Sep 2026 when the owner made the saved method optional
+		 * and auto-debit only (card / bank direct debit). It is still how every
+		 * manual pay-now is made and recorded, so these keys stay: the admin panel
+		 * and receipts name the rail, and rows saved on it must keep reading true.
 		 */
 		methodFpxLink: "FPX (online banking)",
 		/** Tick-to-pay on the payer's history, and the receipt behind a paid period. */
-		selectToPay: "Tick the periods to pay",
-		paySelected: "Pay {amount}",
+		selectToPay: "Tick the periods to pay by FPX",
+		paySelected: "Pay {amount} by FPX",
 		paySelectedCount: "{n} selected",
 		payOpening: "Opening payment…",
 		payNotConnected:
@@ -7244,16 +7263,19 @@ const zh: PortalTranslations = {
 		savingCard: "正在保存…",
 		saveCard: "保存银行卡",
 		cardExpires: "{billed} · 有效期至 {mm}/{yy}",
-		addACard: "{billed} · 请选择付款方式以便扣费",
+		noMethodPaysByFpx:
+			"{billed} · 未开启自动扣款 —— 请在付款记录中以 FPX 支付每个账期",
 		autoPayEnabled: "{billed} · 已开启自动扣款",
 		visaNextCharge: "Visa ···· {last4} · 下次扣费 {date}",
 
 		payHow: "付款方式",
 		methodCard: "银行卡",
-		methodFpx: "FPX 银行直接扣账",
+		methodFpx: "银行直接扣账",
 		methodTransfer: "银行转账",
-		methodCardNote: "Visa、Mastercard 等。接入支付网关后将自动扣款。",
-		methodFpxNote: "在银行一次性授权后，之后每个账期都会自动扣账。",
+		methodCardNote:
+			"Visa、Mastercard 等。接入支付网关后每个账期将自动扣款；扣款被拒时该账期保持未付，请以 FPX 支付。",
+		methodFpxNote:
+			"在银行一次性授权后，之后每个账期会自动扣款。扣款失败时该账期保持未付，请以 FPX 支付。",
 		methodTransferNote:
 			"每个账期由您自行转账，InnocenZ 收到后标记为已付款，绝不会自动扣款。",
 		lanePlan: "套餐",
@@ -7272,11 +7294,20 @@ const zh: PortalTranslations = {
 		editPaymentMethod: "编辑付款方式",
 		savePaymentMethod: "保存付款方式",
 		savedTransfer: "银行转账",
-		savedFpx: "FPX 银行直接扣账",
+		savedFpx: "银行直接扣账",
+		methodOptional:
+			"选填。保存银行卡或银行直接扣账后，每个账期会自动扣款。未保存付款方式，或扣款失败时，请在付款记录中以 FPX 支付未付账期。",
+		removePaymentMethod: "移除付款方式",
+		removeMethodNote:
+			"移除后将关闭自动扣款 —— 之后每个账期需在付款记录中以 FPX 支付。",
+		confirmRemoveMethod: "是，移除",
+		removingMethod: "正在移除…",
+		methodRemoved: "付款方式已移除 —— 之后每个账期以 FPX 支付",
+		couldNotRemoveMethod: "无法移除付款方式 —— 请重试",
 
 		methodFpxLink: "FPX（网上银行）",
-		selectToPay: "勾选要付款的账期",
-		paySelected: "付款 {amount}",
+		selectToPay: "勾选要以 FPX 付款的账期",
+		paySelected: "以 FPX 付款 {amount}",
 		paySelectedCount: "已选 {n} 项",
 		payOpening: "正在打开付款页面…",
 		payNotConnected:

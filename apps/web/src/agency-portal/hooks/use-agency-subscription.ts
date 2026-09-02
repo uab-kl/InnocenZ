@@ -27,6 +27,7 @@ import {
 import { fetchMemberSubscriptions } from "@/services/member-subscription";
 import {
 	fetchMyPaymentMethod,
+	removeMyPaymentMethod,
 	type SavePaymentMethodInput,
 	saveMyPaymentMethod,
 } from "@/services/payment-method";
@@ -290,6 +291,28 @@ export function useAgencySubscription() {
 			const message = (error as { response?: { data?: { message?: string } } })
 				?.response?.data?.message;
 			return { ok: false, reason: message };
+		}
+	};
+
+	const removeMut = useMutation({
+		mutationFn: (id: string) => removeMyPaymentMethod(id, logout),
+		onSuccess: () => void cardQuery.refetch(),
+	});
+
+	/**
+	 * Retire the saved instrument — auto-debit off, the agency pays each week
+	 * by FPX from then on. The server's sentence comes back either way.
+	 */
+	const removeCard = async (): Promise<{ ok: boolean; message?: string }> => {
+		const id = cardQuery.data?.id;
+		if (!id) return { ok: false };
+		try {
+			const message = await removeMut.mutateAsync(id);
+			return { ok: true, message };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			return { ok: false, message };
 		}
 	};
 
@@ -557,6 +580,8 @@ export function useAgencySubscription() {
 		isCardLoading: cardQuery.isLoading,
 		isSavingCard: cardMut.isPending,
 		saveCard,
+		isRemovingCard: removeMut.isPending,
+		removeCard,
 		/** Real amount billed for the current tier; null when nothing is active. */
 		currentAmountRm: current ? Number(current.amount) : null,
 		onCustom,

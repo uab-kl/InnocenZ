@@ -24,6 +24,7 @@ import {
 } from "@/services/member-subscription";
 import {
 	fetchMyPaymentMethod,
+	removeMyPaymentMethod,
 	type SavePaymentMethodInput,
 	saveMyPaymentMethod,
 } from "@/services/payment-method";
@@ -367,6 +368,34 @@ export function useOutletSubscription() {
 		}
 	};
 
+	const removeMut = useMutation({
+		mutationFn: (id: string) =>
+			removeMyPaymentMethod(
+				id,
+				logout,
+				outletId && UUID_RE.test(outletId) ? outletId : undefined,
+			),
+		onSuccess: () => void cardQuery.refetch(),
+	});
+
+	/**
+	 * Retire the saved instrument — auto-debit off, the venue pays each period
+	 * by FPX from then on. The server's sentence comes back either way so the
+	 * screen shows what happened, not a guess.
+	 */
+	const removeCard = async (): Promise<{ ok: boolean; message?: string }> => {
+		const id = cardQuery.data?.id;
+		if (!id) return { ok: false };
+		try {
+			const message = await removeMut.mutateAsync(id);
+			return { ok: true, message };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			return { ok: false, message };
+		}
+	};
+
 	/** Match a plan by name, case/space-insensitively ("Pro" -> the Pro row). */
 	const findPlan = (label: string) =>
 		outletPlans.find(
@@ -547,6 +576,8 @@ export function useOutletSubscription() {
 		isCardLoading: cardQuery.isLoading,
 		isSavingCard: cardMut.isPending,
 		saveCard,
+		isRemovingCard: removeMut.isPending,
+		removeCard,
 		isLoading: billingQuery.isLoading,
 		isRequestingQuote: posQuoteMut.isPending,
 		requestPosQuote,

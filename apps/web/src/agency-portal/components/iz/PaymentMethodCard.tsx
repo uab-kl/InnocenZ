@@ -1,5 +1,4 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
-import { useStore } from "@agency-portal/lib/store";
 import { useQuery } from "@tanstack/react-query";
 import { CreditCard } from "lucide-react";
 import { useState } from "react";
@@ -31,15 +30,22 @@ const OPTION_STYLE = { background: "#17121f", color: "#ece7f5" } as const;
  * component for both portals: they show the same record from the same side, and
  * a second copy is how one of them keeps a demo card.
  *
- * Three rails, not one. A card is what this screen used to assume, and for a
- * Malaysian business account it is not the common one: FPX direct debit runs on
- * a bank-approved mandate, and plenty of venues will only ever bank-transfer.
- * The card fields appear ONLY for the card rail — an expiry box beside "Bank
- * transfer" is how a form teaches people to ignore it.
+ * THE SECTION IS OPTIONAL, and saving something here means AUTO-DEBIT (owner's
+ * rule, 2 Sep 2026). Two rails: Card, and Bank direct debit — the FPX mandate
+ * the payer authorises once at their bank, after which every period is taken
+ * without a tap. With nothing saved, or when a debit bounces on an empty
+ * account, the period simply stays unpaid and the org pays it by one-off FPX
+ * from tick-to-pay on Payment history. So "no method" is a normal state, not a
+ * gap to nag about, and the header says what happens in that state.
  *
- * E-wallets and DuitNow are deliberately absent. They cannot be charged on a
- * schedule, so keeping one here as "how you pay" would promise a renewal that
- * never happens; those belong on a per-invoice payment link instead.
+ * The one-off FPX link rail and the e-wallet rail were withdrawn from the
+ * picker the same day. Their types, columns and describers STAY: rows saved on
+ * them exist and must keep reading as what they are, here and on the admin
+ * panel. A venue on one of them opens the form onto the nearest offered rail
+ * (FPX → direct debit, wallet → card) and re-saves, or removes it.
+ *
+ * The card fields appear ONLY for the card rail — an expiry box beside a bank
+ * picker is how a form teaches people to ignore it.
  *
  * ⚠️ THE FULL NUMBER NEVER LEAVES THIS COMPONENT. The brand and the last four
  * are derived here and only those are sent; the number itself is dropped when
@@ -59,8 +65,10 @@ export function PaymentMethodCard({
 	canEdit,
 	isLoading,
 	isSaving,
+	isRemoving = false,
 	billedLabel,
 	onSave,
+	onRemove,
 }: {
 	card: PaymentMethod | null;
 	backed: boolean;
@@ -68,34 +76,29 @@ export function PaymentMethodCard({
 	canEdit: boolean;
 	isLoading: boolean;
 	isSaving: boolean;
+	isRemoving?: boolean;
 	billedLabel: string;
 	onSave: (input: Omit<SavePaymentMethodInput, "outletId">) => Promise<boolean>;
+	/**
+	 * Retire the saved instrument — auto-debit off, FPX by hand from then on.
+	 * Optional so a caller with no delete path simply shows no Remove button.
+	 */
+	onRemove?: () => Promise<boolean>;
 }) {
 	const { t } = usePortalLocale();
 	const { logout } = useAuth();
-	// The signed-in identity lives in the portal store, not the auth context —
-	// the context only knows whether a token exists.
-	const signedInEmail = useStore((s) => s.user?.email ?? "");
 	const [editing, setEditing] = useState(false);
+	const [confirmingRemove, setConfirmingRemove] = useState(false);
 	const [type, setType] = useState<PaymentMethodType>("card");
-	/**
-	 * The rails where nothing is charged and a LINK is sent instead. On these
-	 * the email field is the delivery address, so it is labelled that way and
-	 * pre-filled with the signed-in account's email — a venue should not have to
-	 * retype the address it just logged in with to receive its own bills.
-	 */
-	const isLinkRail = type === "fpx" || type === "ewallet";
-	const accountEmail = signedInEmail;
 	const [number, setNumber] = useState("");
 	const [holder, setHolder] = useState("");
 	const [expiry, setExpiry] = useState("");
 	const [email, setEmail] = useState("");
 	const [bankCode, setBankCode] = useState("");
-	const [walletProvider, setWalletProvider] = useState("");
 	const [error, setError] = useState<string | null>(null);
 
 	/**
-	 * The FPX roster, fetched only once the payer actually picks that rail —
+	 * The bank roster, fetched only once the payer actually picks that rail —
 	 * a list of 18 banks is not worth loading for someone saving a card.
 	 */
 	const { data: banks = [] } = useQuery({
@@ -106,14 +109,14 @@ export function PaymentMethodCard({
 	});
 
 	/**
-	 * The wallet roster. Fetched on demand like the banks — but ALSO when a
-	 * wallet is already saved, because the collapsed header prints its name, and
-	 * "E-wallet · TNG" is the code, not the name the venue chose.
+	 * The wallet roster — ONLY for a wallet that is already saved, because the
+	 * collapsed header prints its name and "E-wallet · TNG" is the code, not
+	 * the name the venue chose. Nothing offers the rail any more.
 	 */
 	const { data: wallets = [] } = useQuery({
 		queryKey: ["ewallet-providers"],
 		queryFn: () => fetchEwalletProviders(logout),
-		enabled: (editing && type === "ewallet") || card?.type === "ewallet",
+		enabled: card?.type === "ewallet",
 		staleTime: 60 * 60 * 1000,
 	});
 	const walletNames = Object.fromEntries(
@@ -121,22 +124,17 @@ export function PaymentMethodCard({
 	);
 
 	/**
-	 * The three rails a subscriber may CHOOSE: card, one-off FPX, e-wallet.
+	 * The two rails a subscriber may CHOOSE, both of which auto-debit.
 	 *
-	 * ⚠️ `manual_transfer` was removed from this picker on the owner's call
-	 * (28 Aug 2026) — card and FPX already cover paying by credit and debit, and
-	 * a third "I will send it myself" option beside them read as duplication.
-	 * Nothing was saved on it at the time: zero `payment_method` rows existed on
-	 * any rail, so no venue was orphaned.
-	 *
-	 * THE TYPE ITSELF STAYS, and removing it would break two live things:
-	 *   • `subscription-payment.controller` falls back to `manual_transfer` when a
-	 *     gateway names no rail, which is the honest label for money that arrived
-	 *     through no instrument this app knows about;
-	 *   • it is exactly what an admin marking an invoice paid from a bank
-	 *     statement is recording.
-	 * So the rail is no longer OFFERED; it is still how an out-of-band payment is
-	 * described once it happens.
+	 * ⚠️ `manual_transfer` (28 Aug 2026), then `ewallet` and one-off `fpx`
+	 * (2 Sep 2026) were removed from this picker on the owner's call. THE TYPES
+	 * STAY, and removing them would break live things:
+	 *   • `subscription-payment.controller` stamps `fpx` on every manual pay-now
+	 *     and falls back to `manual_transfer` when a gateway names no rail;
+	 *   • rows saved on the withdrawn rails exist and the header, the admin
+	 *     panel and the receipts must keep describing them truthfully.
+	 * So those rails are no longer OFFERED; they are still how a payment that
+	 * happened is described.
 	 *
 	 * DuitNow also stays out: the enum carries it, nothing renders it, and a rail
 	 * with no roster behind it would be a picker that saves nothing useful.
@@ -151,18 +149,10 @@ export function PaymentMethodCard({
 			label: t.subscription.methodCard,
 			note: t.subscription.methodCardNote,
 		},
-		// One-off FPX (owner's rail, 28 Aug 2026): a link each period, every bank,
-		// no mandate. The direct-debit mandate rail is deliberately NOT offered
-		// here any more — its code and columns stay for the day it is added back.
 		{
-			value: "fpx",
-			label: t.subscription.methodFpxLink,
-			note: t.subscription.methodFpxLinkNote,
-		},
-		{
-			value: "ewallet",
-			label: t.subscription.methodEwallet,
-			note: t.subscription.methodEwalletNote,
+			value: "fpx_mandate",
+			label: t.subscription.methodFpx,
+			note: t.subscription.methodFpxNote,
 		},
 	];
 
@@ -171,22 +161,26 @@ export function PaymentMethodCard({
 		// not have — re-typing it is the only way to change the last four, and a
 		// masked placeholder that looked editable would be a lie.
 		setNumber("");
-		setType(card?.type ?? "card");
+		// A row on a withdrawn rail opens onto the nearest offered one rather than
+		// onto a choice the picker cannot show pressed.
+		const offered = methodChoices.some((choice) => choice.value === card?.type);
+		setType(
+			card && offered
+				? card.type
+				: card?.type === "fpx"
+					? "fpx_mandate"
+					: "card",
+		);
 		setBankCode(card?.bankCode ?? "");
-		setWalletProvider(card?.walletProvider ?? "");
 		setHolder(card?.holderName ?? "");
 		setExpiry(
 			card?.expMonth && card?.expYear
 				? `${String(card.expMonth).padStart(2, "0")}/${String(card.expYear).slice(-2)}`
 				: "",
 		);
-		// A saved link rail with no address on file starts from the account's
-		// own email rather than blank — still editable, never silently saved.
-		setEmail(
-			card?.billingEmail ??
-				(card?.type === "fpx" || card?.type === "ewallet" ? accountEmail : ""),
-		);
+		setEmail(card?.billingEmail ?? "");
 		setError(null);
+		setConfirmingRemove(false);
 		setEditing(true);
 	};
 
@@ -206,37 +200,6 @@ export function PaymentMethodCard({
 			setError(null);
 			const savedMandate = await onSave({ type, bankCode, ...common });
 			if (savedMandate) {
-				setNumber("");
-				setEditing(false);
-			}
-			return;
-		}
-
-		/**
-		 * The wallet rail. Validated here as well as on the server for the same
-		 * reason the bank is: a 400 from the schema would surface as a generic
-		 * failure, and "choose your wallet" is a thing the person can act on.
-		 */
-		if (type === "ewallet") {
-			if (!walletProvider) {
-				setError(t.subscription.chooseWallet);
-				return;
-			}
-			setError(null);
-			const savedWallet = await onSave({ type, walletProvider, ...common });
-			if (savedWallet) {
-				setNumber("");
-				setEditing(false);
-			}
-			return;
-		}
-
-		// A rail with no card fields skips the card validation entirely, rather
-		// than validating a number nobody was asked for.
-		if (type !== "card") {
-			setError(null);
-			const savedOther = await onSave({ type, ...common });
-			if (savedOther) {
 				setNumber("");
 				setEditing(false);
 			}
@@ -283,6 +246,15 @@ export function PaymentMethodCard({
 		}
 	};
 
+	const remove = async () => {
+		if (!onRemove) return;
+		const removed = await onRemove();
+		if (removed) {
+			setConfirmingRemove(false);
+			setEditing(false);
+		}
+	};
+
 	const summary = backed
 		? card
 			? describePaymentMethod(
@@ -298,6 +270,27 @@ export function PaymentMethodCard({
 			: t.subscription.noCardSaved
 		: `Visa ···· ${demoLast4}`;
 
+	/**
+	 * The line under the summary says what will HAPPEN at renewal. A card with
+	 * an expiry prints it; a chargeable instrument prints the billing line; a
+	 * mandate the bank has not approved keeps the billing line and gets the
+	 * amber sentence below; and anything that cannot auto-debit — nothing saved,
+	 * or a row on a withdrawn rail — says plainly that the org pays by FPX.
+	 */
+	const subline = !backed
+		? fill(t.subscription.autoPayEnabled, { billed: billedLabel })
+		: !card
+			? fill(t.subscription.noMethodPaysByFpx, { billed: billedLabel })
+			: card.type === "card" && card.expMonth && card.expYear
+				? `${fill(t.subscription.cardExpires, {
+						billed: billedLabel,
+						mm: String(card.expMonth).padStart(2, "0"),
+						yy: String(card.expYear).slice(-2),
+					})}${card.holderName ? ` · ${card.holderName}` : ""}`
+				: willAutoCharge(card) || card.type === "fpx_mandate"
+					? billedLabel
+					: fill(t.subscription.noMethodPaysByFpx, { billed: billedLabel });
+
 	return (
 		<IzCard flat>
 			<div className="flex items-center gap-2">
@@ -306,21 +299,7 @@ export function PaymentMethodCard({
 					<p className="iz-sm font-semibold">
 						{isLoading ? t.subscription.loadingCard : summary}
 					</p>
-					<p className="iz-tiny iz-muted">
-						{backed && card
-							? // An expiry line only makes sense on a rail that HAS one; a
-								// bank transfer says what it is instead of borrowing card copy.
-								card.type === "card" && card.expMonth && card.expYear
-								? `${fill(t.subscription.cardExpires, {
-										billed: billedLabel,
-										mm: String(card.expMonth).padStart(2, "0"),
-										yy: String(card.expYear).slice(-2),
-									})}${card.holderName ? ` · ${card.holderName}` : ""}`
-								: billedLabel
-							: backed
-								? fill(t.subscription.addACard, { billed: billedLabel })
-								: fill(t.subscription.autoPayEnabled, { billed: billedLabel })}
-					</p>
+					<p className="iz-tiny iz-muted">{subline}</p>
 				</div>
 			</div>
 
@@ -354,6 +333,10 @@ export function PaymentMethodCard({
 
 			{canEdit && editing && (
 				<div className="mt-3 space-y-2 border-t border-[var(--iz-line)] pt-3">
+					{/* Said before the picker, not after: a person deciding whether to
+					    fill this in needs to know it is optional and what saving does. */}
+					<p className="iz-tiny iz-muted2">{t.subscription.methodOptional}</p>
+
 					<fieldset className="iz-field">
 						<legend className="iz-tiny iz-muted mb-1">
 							{t.subscription.payHow}
@@ -370,15 +353,6 @@ export function PaymentMethodCard({
 									onClick={() => {
 										setType(choice.value);
 										setError(null);
-										// Switching onto a link rail with the field still empty
-										// pre-fills the account email; switching with a typed
-										// address leaves it alone.
-										if (
-											(choice.value === "fpx" || choice.value === "ewallet") &&
-											email.trim() === ""
-										) {
-											setEmail(accountEmail);
-										}
 									}}
 								>
 									{choice.label}
@@ -391,7 +365,7 @@ export function PaymentMethodCard({
 					</fieldset>
 
 					{/* Only a card rail asks for card details. Showing an expiry box
-					    beside "Bank transfer" is how a form teaches people to ignore it. */}
+					    beside a bank picker is how a form teaches people to ignore it. */}
 					{type === "card" && (
 						<>
 							<div className="iz-field">
@@ -490,66 +464,9 @@ export function PaymentMethodCard({
 						</div>
 					)}
 
-					{/*
-					 * WHICH WALLET — and nothing else. No wallet id, phone number or
-					 * account is asked for here or anywhere: the payer opens their own
-					 * app and approves, so none of that is data this application can use.
-					 * Same rule that keeps the card PAN and the bank account number out.
-					 */}
-					{type === "ewallet" && (
-						<div className="iz-field">
-							<label htmlFor="pm-wallet">{t.subscription.yourWallet}</label>
-							{/* Inline-styled and dark-optioned for the same reasons the bank
-							    select above is — see the note there. */}
-							<select
-								id="pm-wallet"
-								value={walletProvider}
-								onChange={(e) => {
-									setWalletProvider(e.target.value);
-									setError(null);
-								}}
-								style={{
-									width: "100%",
-									background: "rgba(255,255,255,0.03)",
-									border: "1px solid var(--iz-line2)",
-									borderRadius: "13px",
-									padding: "13px",
-									color: "var(--iz-txt)",
-									fontSize: "15px",
-									fontFamily: '"Manrope", sans-serif',
-								}}
-							>
-								<option value="" style={OPTION_STYLE}>
-									{t.subscription.chooseWalletPlaceholder}
-								</option>
-								{wallets.map((wallet) => (
-									<option
-										key={wallet.code}
-										value={wallet.code}
-										style={OPTION_STYLE}
-									>
-										{wallet.name}
-									</option>
-								))}
-							</select>
-							<p className="iz-tiny iz-muted2 mt-1">
-								{t.subscription.walletPushNote}
-							</p>
-						</div>
-					)}
-
-					{/*
-					 * On a link-and-pay rail this field is not a "billing email" — it is
-					 * WHERE THE PAYMENT LINK GOES, so the label says that. It stays
-					 * optional only because the link also reaches the org in the app and
-					 * by WhatsApp, and the note under it says so rather than leaving
-					 * "optional" to imply the field does nothing.
-					 */}
 					<div className="iz-field">
 						<label htmlFor="pm-email">
-							{isLinkRail
-								? t.subscription.sendLinksTo
-								: t.subscription.billingEmailOptional}
+							{t.subscription.billingEmailOptional}
 						</label>
 						<input
 							id="pm-email"
@@ -558,11 +475,6 @@ export function PaymentMethodCard({
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
 						/>
-						{isLinkRail && (
-							<p className="iz-tiny iz-muted2 mt-1">
-								{t.subscription.linksAlsoReachYou}
-							</p>
-						)}
 					</div>
 
 					{error && (
@@ -574,34 +486,31 @@ export function PaymentMethodCard({
 						</p>
 					)}
 					{/*
-					 * ONE NOTE PER RAIL. This used to print "InnocenZ records the CARD"
-					 * under Bank transfer, where there is no card — copy about a thing
-					 * the form is not collecting reads as a form that does not know what
-					 * it is doing. The PAN warning belongs only where a PAN is typed.
+					 * ONE NOTE PER RAIL. The PAN warning belongs only where a PAN is
+					 * typed; the mandate note says the bank redirect is not live yet.
 					 */}
 					<p className="iz-tiny iz-muted2">
 						{type === "card"
 							? `${t.subscription.cardPrivacyNote} ${t.izUi.cardNotChargedYet}`
-							: type === "fpx"
-								? t.subscription.fpxLinkNote
-								: type === "fpx_mandate"
-									? t.subscription.mandateNotLiveYet
-									: t.subscription.transferRecordedNote}
+							: t.subscription.mandateNotLiveYet}
 					</p>
 
 					<div className="flex gap-2">
 						<button
 							type="button"
 							className="iz-btn iz-btn-soft flex-1"
-							disabled={isSaving}
-							onClick={() => setEditing(false)}
+							disabled={isSaving || isRemoving}
+							onClick={() => {
+								setConfirmingRemove(false);
+								setEditing(false);
+							}}
 						>
 							{t.common.cancel}
 						</button>
 						<button
 							type="button"
 							className="iz-btn iz-btn-gold flex-1"
-							disabled={isSaving}
+							disabled={isSaving || isRemoving}
 							onClick={submit}
 						>
 							{isSaving
@@ -609,6 +518,52 @@ export function PaymentMethodCard({
 								: t.subscription.savePaymentMethod}
 						</button>
 					</div>
+
+					{/*
+					 * REMOVE is the way back to "no method" — auto-debit off, FPX by
+					 * hand. Two presses on purpose: the first shows what removing does
+					 * and the second does it, and the result shown is the server's own
+					 * sentence, never a local guess (silence reads as failure and
+					 * invites a second, harmful click).
+					 */}
+					{backed && card && onRemove && !confirmingRemove && (
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft w-full"
+							disabled={isSaving || isRemoving}
+							onClick={() => setConfirmingRemove(true)}
+						>
+							{t.subscription.removePaymentMethod}
+						</button>
+					)}
+					{backed && card && onRemove && confirmingRemove && (
+						<div className="space-y-2 border-t border-[var(--iz-line)] pt-2">
+							<p className="iz-tiny iz-muted2">
+								{t.subscription.removeMethodNote}
+							</p>
+							<div className="flex gap-2">
+								<button
+									type="button"
+									className="iz-btn iz-btn-soft flex-1"
+									disabled={isRemoving}
+									onClick={() => setConfirmingRemove(false)}
+								>
+									{t.common.cancel}
+								</button>
+								<button
+									type="button"
+									className="iz-btn iz-btn-soft flex-1"
+									style={{ color: "var(--iz-red-l, #ff8080)" }}
+									disabled={isRemoving}
+									onClick={remove}
+								>
+									{isRemoving
+										? t.subscription.removingMethod
+										: t.subscription.confirmRemoveMethod}
+								</button>
+							</div>
+						</div>
+					)}
 				</div>
 			)}
 		</IzCard>

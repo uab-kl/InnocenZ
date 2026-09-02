@@ -108,7 +108,7 @@ export async function fetchMyPaymentMethod(
 	return response.data.data ?? null;
 }
 
-/** Save (or replace) the caller's card — one card per organisation. */
+/** Save (or replace) the caller's instrument — one default per organisation. */
 export async function saveMyPaymentMethod(
 	input: SavePaymentMethodInput,
 	onRefreshFail: () => void,
@@ -120,6 +120,27 @@ export async function saveMyPaymentMethod(
 		data: PaymentMethod;
 	}>("/payment-method/mine", input);
 	return response.data.data;
+}
+
+/**
+ * Retire the caller's saved instrument — auto-debit off, the org pays each
+ * period by FPX from then on. Returns the SERVER'S sentence so the screen can
+ * show what actually happened rather than a local guess.
+ */
+export async function removeMyPaymentMethod(
+	id: string,
+	onRefreshFail: () => void,
+	outletId?: string,
+): Promise<string> {
+	const client = getClient(onRefreshFail);
+	const response = await client.delete<{
+		success: boolean;
+		message: string;
+		data: unknown;
+	}>(
+		`/payment-method/mine/${encodeURIComponent(id)}${buildQueryParams({ outletId })}`,
+	);
+	return response.data.message;
 }
 
 export interface FpxBank {
@@ -201,7 +222,7 @@ export function describePaymentMethod(
 	// One-off FPX stores no bank — the venue picks it at pay time — so there is
 	// nothing to print beside the rail's name.
 	if (method.type === "fpx") return labels.fpxLink;
-	// The bank is what a venue recognises its own mandate by — "FPX direct
+	// The bank is what a venue recognises its own mandate by — "Bank direct
 	// debit" alone reads the same for every venue on the rail.
 	if (method.type === "fpx_mandate")
 		return method.bankName ? `${labels.fpx} · ${method.bankName}` : labels.fpx;
