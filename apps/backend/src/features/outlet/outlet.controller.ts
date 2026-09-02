@@ -551,6 +551,42 @@ export class OutletControllerClass {
     }
   }
 
+  /**
+   * The admin's OFF switch (owner, 2 Sep 2026: "admin can set the user approval
+   * status to inactive to make the user cannot login"). `inactive` is the one
+   * organisation status the auth layer refuses — every login is denied and the
+   * JWT middleware re-reads the organisation on each request, so sessions
+   * already open die with it. `suspended` deliberately does NOT do this (a
+   * suspended org keeps a profile-only session); this is the harder state.
+   * The way back is `approve`, which sets `active`.
+   */
+  async deactivate(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const outlet = await this.outletRepository.update(id, {
+        status: 'inactive',
+        updatedBy: getActor(req),
+      });
+      if (!outlet)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      logger.warn(`[OutletController.deactivate] ${getActor(req)} set outlet ${id} inactive`);
+      res.status(200).json({
+        success: true,
+        message: 'Outlet set inactive — its accounts can no longer sign in',
+        data: outlet,
+      });
+    } catch (error) {
+      logger.error('[OutletController.deactivate] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
   // --- Members ---
 
   /**

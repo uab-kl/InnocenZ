@@ -231,12 +231,92 @@ const approvalStatusClass: Record<OrgStatus, string> = {
 	inactive: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
+/**
+ * The same Approval Status card for a PERSON — a PR or an admin account — where
+ * the status lives on `user.status` (active | inactive | blocked) and the
+ * switch is PATCH /user/:id/status. The confirm is the page's own account
+ * dialog (`useAccountActions`), so this card only asks; it never writes.
+ * Owner, 2 Sep 2026: "for all the roles, admin can set the user approval
+ * status to inactive to make the user cannot login — activate and deactivate
+ * button". `inactive` is refused at login and on every request.
+ */
+export function AccountStatusCard({
+	status,
+	busy,
+	onSetStatus,
+}: {
+	status: string;
+	busy: boolean;
+	onSetStatus: (next: "active" | "inactive") => void;
+}) {
+	const { t } = usePortalLocale();
+	const active = status === "active";
+	const label = active
+		? t.admin.statusActive
+		: status === "inactive"
+			? t.admin.statusInactive
+			: status;
+	const description = active
+		? t.adminOrg.accountActiveBody
+		: status === "inactive"
+			? t.adminOrg.accountInactiveBody
+			: t.adminOrg.accountBlockedBody;
+	const tone = active
+		? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+		: status === "inactive"
+			? "border-muted-foreground/30 bg-muted text-muted-foreground"
+			: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400";
+	return (
+		<div className="space-y-3 rounded-lg border-l-4 border-(--lavender-soft) bg-card p-4">
+			<div className="flex items-center gap-2 text-base font-bold">
+				<CircleCheckBig className="h-5 w-5 text-lavender" />
+				{t.adminOrg.approvalStatus}
+			</div>
+			<div className={`rounded-md border px-4 py-3 ${tone}`}>
+				<div className="text-base font-bold">{label}</div>
+				<div className="text-sm opacity-90">{description}</div>
+			</div>
+			<div className="flex flex-wrap gap-2 pt-1">
+				{active ? (
+					<Button
+						size="sm"
+						variant="destructive"
+						disabled={busy}
+						onClick={() => onSetStatus("inactive")}
+					>
+						{busy ? (
+							<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+						) : (
+							<Ban className="mr-1 h-3.5 w-3.5" />
+						)}
+						{t.adminOrg.setInactive}
+					</Button>
+				) : (
+					<Button
+						size="sm"
+						disabled={busy}
+						onClick={() => onSetStatus("active")}
+					>
+						{busy ? (
+							<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+						) : (
+							<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+						)}
+						{t.adminOrg.activate}
+					</Button>
+				)}
+			</div>
+		</div>
+	);
+}
+
 export function ApprovalStatusCard({
 	status,
 	entityLabel,
 	busy,
 	onApprove,
 	onSuspend,
+	onDeactivate,
 }: {
 	status: OrgStatus;
 	/**
@@ -249,8 +329,11 @@ export function ApprovalStatusCard({
 	busy: boolean;
 	onApprove: () => void;
 	onSuspend: () => void;
+	/** The hard off switch — `inactive` refuses every login; confirmed in place. */
+	onDeactivate: () => void;
 }) {
 	const { t } = usePortalLocale();
+	const [confirmingInactive, setConfirmingInactive] = useState(false);
 	const description =
 		status === "pending_review"
 			? fill(t.adminOrg.approvalPendingBody, { entity: entityLabel })
@@ -308,6 +391,31 @@ export function ApprovalStatusCard({
 						{t.adminUsers.reactivate}
 					</Button>
 				)}
+				{status === "inactive" && (
+					<Button size="sm" disabled={busy} onClick={onApprove}>
+						{busy ? (
+							<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+						) : (
+							<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+						)}
+						{t.adminOrg.activate}
+					</Button>
+				)}
+				{/* INACTIVE is the state that actually locks people out (owner, 2 Sep
+				    2026); Suspend keeps a profile-only session. Two presses, and the
+				    second names what happens, because this ends every open session. */}
+				{(status === "active" || status === "suspended") &&
+					!confirmingInactive && (
+						<Button
+							size="sm"
+							variant="destructive"
+							disabled={busy}
+							onClick={() => setConfirmingInactive(true)}
+						>
+							<Ban className="mr-1 h-3.5 w-3.5" />
+							{t.adminOrg.setInactive}
+						</Button>
+					)}
 				{status === "pending_review" && (
 					<span className="flex items-center gap-1 text-sm text-muted-foreground">
 						<Clock className="h-4 w-4" />
@@ -315,6 +423,32 @@ export function ApprovalStatusCard({
 					</span>
 				)}
 			</div>
+			{confirmingInactive && (
+				<div className="rounded-md border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm">
+					<p>{fill(t.adminOrg.setInactiveBody, { entity: entityLabel })}</p>
+					<div className="mt-2 flex flex-wrap gap-2">
+						<Button
+							size="sm"
+							variant="outline"
+							disabled={busy}
+							onClick={() => setConfirmingInactive(false)}
+						>
+							{t.common.cancel}
+						</Button>
+						<Button
+							size="sm"
+							variant="destructive"
+							disabled={busy}
+							onClick={() => {
+								setConfirmingInactive(false);
+								onDeactivate();
+							}}
+						>
+							{t.adminOrg.confirmSetInactive}
+						</Button>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

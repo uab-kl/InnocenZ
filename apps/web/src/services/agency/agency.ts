@@ -103,6 +103,18 @@ export async function suspendAgency(
 	return response.data;
 }
 
+/** Set the agency `inactive`: every account in it is refused at login and signed out. */
+export async function deactivateAgency(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<AgencyApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<AgencyApiResponse>(
+		`/agency/${id}/deactivate`,
+	);
+	return response.data;
+}
+
 /**
  * Send one free-text notice to PRs on this agency's roster.
  *

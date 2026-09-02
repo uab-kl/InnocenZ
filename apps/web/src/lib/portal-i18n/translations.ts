@@ -2592,6 +2592,9 @@ const en = {
 		outletApproveFailed: "Failed to approve outlet",
 		outletSuspended: "Outlet suspended",
 		outletSuspendFailed: "Failed to suspend outlet",
+		outletDeactivated:
+			"Outlet set inactive — its accounts can no longer sign in",
+		outletDeactivateFailed: "Failed to set the outlet inactive",
 		allStatus: "All Status",
 		filterByStatus: "Filter by status",
 		colName: "Name",
@@ -3269,6 +3272,9 @@ const en = {
 		agencyApproveFailed: "Failed to approve agency",
 		agencySuspended: "Agency suspended",
 		agencySuspendFailed: "Failed to suspend agency",
+		agencyDeactivated:
+			"Agency set inactive — its accounts can no longer sign in",
+		agencyDeactivateFailed: "Failed to set the agency inactive",
 		aboutLegacyMember: "About Legacy Member",
 		aboutLegacyMemberBody:
 			"This list shows suspended Agency and Outlet organizations, plus inactive PR accounts. Filter by Role (not Rank). Reactivating an agency or outlet restores the organization; reactivating a PR re-enables the person's account so they can sign in again.",
@@ -5550,7 +5556,19 @@ const en = {
 			"Waiting for admin approval before this {entity} goes live.",
 		approvalActiveBody: "This {entity} is live on the platform.",
 		approvalSuspendedBody: "This {entity} has been suspended by an admin.",
-		approvalInactiveBody: "This {entity} is inactive.",
+		approvalInactiveBody:
+			"This {entity} is inactive — its accounts are refused at login until an admin reactivates it.",
+		/** The hard off switch (owner, 2 Sep 2026). Suspend keeps a profile-only session; inactive refuses every login. */
+		activate: "Activate",
+		setInactive: "Deactivate",
+		setInactiveBody:
+			"Every account in this {entity} will be signed out now and refused at login until an admin presses Activate.",
+		confirmSetInactive: "Yes, deactivate",
+		/** The person-shaped card (PR / admin accounts). */
+		accountActiveBody: "This account can sign in.",
+		accountInactiveBody:
+			"This account is refused at login until an admin activates it.",
+		accountBlockedBody: "This account is blocked and cannot sign in.",
 		/** Lower-case on purpose: it lands MID-sentence in the four approval bodies. Not the stored "agency" value, which is never rendered. */
 		entityAgency: "agency",
 		/** Mid-sentence noun for the four approval bodies. Never compared or sent. */
@@ -8123,6 +8141,8 @@ const zh: PortalTranslations = {
 		outletApproveFailed: "批准门店失败",
 		outletSuspended: "门店已暂停",
 		outletSuspendFailed: "暂停门店失败",
+		outletDeactivated: "门店已停用 —— 其账号无法再登录",
+		outletDeactivateFailed: "停用门店失败",
 		allStatus: "全部状态",
 		filterByStatus: "按状态筛选",
 		colName: "名称",
@@ -8723,6 +8743,8 @@ const zh: PortalTranslations = {
 		agencyApproveFailed: "批准经纪公司失败",
 		agencySuspended: "经纪公司已暂停",
 		agencySuspendFailed: "暂停经纪公司失败",
+		agencyDeactivated: "经纪公司已停用 —— 其账号无法再登录",
+		agencyDeactivateFailed: "停用经纪公司失败",
 		aboutLegacyMember: "关于旧版会员",
 		aboutLegacyMemberBody:
 			"此列表显示已暂停的经纪公司与门店机构，以及已停用的 PR 账户。请按角色（而非等级）筛选。重新启用经纪公司或门店会恢复该机构；重新启用 PR 则会恢复本人的账户，使其可以再次登录。",
@@ -10304,7 +10326,16 @@ const zh: PortalTranslations = {
 		approvalPendingBody: "等待管理员审批，通过后该{entity}才会上线。",
 		approvalActiveBody: "该{entity}已在平台上线。",
 		approvalSuspendedBody: "该{entity}已被管理员暂停。",
-		approvalInactiveBody: "该{entity}目前处于停用状态。",
+		approvalInactiveBody:
+			"该{entity}已停用 —— 其账号在管理员重新启用前无法登录。",
+		activate: "启用",
+		setInactive: "停用",
+		setInactiveBody:
+			"该{entity}下的所有账号将立即登出，并在管理员点击「启用」前无法登录。",
+		confirmSetInactive: "是，停用",
+		accountActiveBody: "该账号可以登录。",
+		accountInactiveBody: "该账号在管理员启用前无法登录。",
+		accountBlockedBody: "该账号已被封锁，无法登录。",
 		entityAgency: "经纪公司",
 		entityOutlet: "门店",
 	},

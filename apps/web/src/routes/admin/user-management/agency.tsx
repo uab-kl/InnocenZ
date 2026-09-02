@@ -24,6 +24,7 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	type AgenciesQueryParams,
 	approveAgency,
+	deactivateAgency,
 	fetchAgencies,
 	fetchAgencyById,
 	suspendAgency,
@@ -138,6 +139,28 @@ function AgencyOrgsPage() {
 		onSettled: () => setActionId(null),
 	});
 
+	/**
+	 * The hard off switch. `inactive` is the one status the auth layer refuses,
+	 * so every account in the organisation is signed out and refused at login
+	 * until Reactivate. The server's own sentence is what the admin sees.
+	 */
+	const deactivateMutation = useMutation({
+		mutationFn: (id: string) => deactivateAgency(id, logout),
+		onMutate: (id) => setActionId(id),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["agencies"] });
+			queryClient.invalidateQueries({ queryKey: ["agency-by-id"] });
+			toast.success(response.message || t.adminUsers.agencyDeactivated);
+		},
+		onError: (err) => {
+			toast.error(
+				toMutationError(err, t.adminUsers.agencyDeactivateFailed)?.message ??
+					t.adminUsers.agencyDeactivateFailed,
+			);
+		},
+		onSettled: () => setActionId(null),
+	});
+
 	return (
 		<PageShell>
 			<PageHeader
@@ -178,6 +201,7 @@ function AgencyOrgsPage() {
 				}}
 				onApprove={(id) => approveMutation.mutate(id)}
 				onSuspend={(id) => suspendMutation.mutate(id)}
+				onDeactivate={(id) => deactivateMutation.mutate(id)}
 				actionId={actionId}
 			/>
 		</PageShell>

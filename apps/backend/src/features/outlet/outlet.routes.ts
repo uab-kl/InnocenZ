@@ -97,6 +97,13 @@ router.patch(
   requireAdmin,
   outletController.suspend.bind(outletController),
 );
+// The hard off switch: `inactive` denies every login and ends open sessions;
+// `suspend` above does not. Reactivation is `/approve`.
+router.patch(
+  '/:id/deactivate',
+  requireAdmin,
+  outletController.deactivate.bind(outletController),
+);
 
 // Outlet members. Same reasoning as the agency member routes: an outlet_user row
 // is what requireOutletSubRole and resolveOrgScope() read to decide who a caller

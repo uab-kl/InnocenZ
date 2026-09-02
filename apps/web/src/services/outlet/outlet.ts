@@ -102,6 +102,18 @@ export async function suspendOutlet(
 	return response.data;
 }
 
+/** Set the outlet `inactive`: every account in it is refused at login and signed out. */
+export async function deactivateOutlet(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<OutletApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<OutletApiResponse>(
+		`/outlet/${id}/deactivate`,
+	);
+	return response.data;
+}
+
 /**
  * Address -> candidate pins, built from the outlet's OWN stored address columns.
  * Read-only: nothing is saved until the operator confirms one through

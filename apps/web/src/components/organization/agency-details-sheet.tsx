@@ -35,6 +35,7 @@ interface AgencyDetailsSheetProps {
 	onOpenChange: (open: boolean) => void;
 	onApprove: (id: string) => void;
 	onSuspend: (id: string) => void;
+	onDeactivate: (id: string) => void;
 	actionId: string | null;
 }
 
@@ -44,6 +45,7 @@ export function AgencyDetailsSheet({
 	onOpenChange,
 	onApprove,
 	onSuspend,
+	onDeactivate,
 	actionId,
 }: AgencyDetailsSheetProps) {
 	const { t } = usePortalLocale();
@@ -150,6 +152,7 @@ export function AgencyDetailsSheet({
 							busy={actionId === agency.id}
 							onApprove={() => onApprove(agency.id)}
 							onSuspend={() => onSuspend(agency.id)}
+							onDeactivate={() => onDeactivate(agency.id)}
 						/>
 
 						<SystemInfoCard

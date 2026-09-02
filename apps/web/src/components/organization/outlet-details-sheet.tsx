@@ -231,6 +231,7 @@ interface OutletDetailsSheetProps {
 	onOpenChange: (open: boolean) => void;
 	onApprove: (id: string) => void;
 	onSuspend: (id: string) => void;
+	onDeactivate: (id: string) => void;
 	actionId: string | null;
 }
 
@@ -240,6 +241,7 @@ export function OutletDetailsSheet({
 	onOpenChange,
 	onApprove,
 	onSuspend,
+	onDeactivate,
 	actionId,
 }: OutletDetailsSheetProps) {
 	const { logout } = useAuth();
@@ -431,6 +433,7 @@ export function OutletDetailsSheet({
 							busy={actionId === outlet.id}
 							onApprove={() => onApprove(outlet.id)}
 							onSuspend={() => onSuspend(outlet.id)}
+							onDeactivate={() => onDeactivate(outlet.id)}
 						/>
 
 						<SystemInfoCard

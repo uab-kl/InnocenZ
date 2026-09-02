@@ -829,6 +829,42 @@ export class AgencyControllerClass {
   }
 
   /**
+   * The admin's OFF switch (owner, 2 Sep 2026: "admin can set the user approval
+   * status to inactive to make the user cannot login"). `inactive` is the one
+   * organisation status the auth layer refuses — every login is denied and the
+   * JWT middleware re-reads the organisation on each request, so sessions
+   * already open die with it. `suspended` deliberately does NOT do this (a
+   * suspended org keeps a profile-only session); this is the harder state.
+   * The way back is `approve`, which sets `active`.
+   */
+  async deactivate(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const agency = await this.agencyRepository.update(id, {
+        status: 'inactive',
+        updatedBy: getActor(req),
+      });
+      if (!agency)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      logger.warn(`[AgencyController.deactivate] ${getActor(req)} set agency ${id} inactive`);
+      res.status(200).json({
+        success: true,
+        message: 'Agency set inactive — its accounts can no longer sign in',
+        data: agency,
+      });
+    } catch (error) {
+      logger.error('[AgencyController.deactivate] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
    * Active RBAC roles for this agency portal — invite dropdown (not /rbac admin).
    *
    * Owner is withheld on purpose: an invitation goes to an address that has no
