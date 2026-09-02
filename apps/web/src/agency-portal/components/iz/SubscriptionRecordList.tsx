@@ -1,9 +1,6 @@
 import { InvoiceReceipt } from "@agency-portal/components/iz/InvoiceReceipt";
 import { formatRM, IzCard, IzPill } from "@agency-portal/components/iz/ui";
-import {
-	periodLabel,
-	type SubscriptionRecordRow,
-} from "@agency-portal/lib/subscription-record";
+import { periodLabel } from "@agency-portal/lib/subscription-record";
 import { useMutation } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ChevronDown, Receipt } from "lucide-react";
@@ -330,7 +327,7 @@ function PeriodCard({
 				{onToggle && unpaidIds.length > 0 && (
 					<input
 						type="checkbox"
-						className="h-4 w-4 shrink-0 accent-[var(--iz-yellow)]"
+						className="h-4 w-4 shrink-0 accent-[var(--iz-accent)]"
 						checked={unpaidIds.every((id) => selected?.has(id))}
 						onChange={() => onToggle(unpaidIds)}
 						aria-label={periodLabel(first.periodStart, first.periodEnd)}
@@ -554,39 +551,5 @@ function PaidPeriodsDisclosure({
 				</div>
 			)}
 		</div>
-	);
-}
-
-/**
- * One `member_subscription` row as a card. Shared by the agency and outlet
- * Subscription screens, which show the same record from the same side — the two
- * had copies of this markup that had already drifted apart in class order.
- */
-export function SubscriptionRecordCard({
-	row,
-}: {
-	row: SubscriptionRecordRow;
-}) {
-	return (
-		<IzCard flat>
-			<div className="iz-between gap-2">
-				<div className="flex min-w-0 items-start gap-2">
-					<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
-					<div className="min-w-0">
-						<p className="iz-sm truncate font-semibold">{row.title}</p>
-						<p className="iz-tiny iz-muted">
-							{row.dateLabel}
-							{row.detail ? ` · ${row.detail}` : ""}
-						</p>
-					</div>
-				</div>
-				<div className="shrink-0 text-right">
-					<p className="iz-sm font-bold">{formatRM(row.amountRm)}</p>
-					<IzPill variant={row.tone} className="!mt-1">
-						{row.statusLabel}
-					</IzPill>
-				</div>
-			</div>
-		</IzCard>
 	);
 }

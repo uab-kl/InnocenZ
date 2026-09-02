@@ -1,9 +1,6 @@
 import { isoKeyFromDate } from "@agency-portal/components/iz/HistDateCalendar";
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
-import {
-	PaymentHistoryList,
-	SubscriptionRecordCard,
-} from "@agency-portal/components/iz/SubscriptionRecordList";
+import { PaymentHistoryList } from "@agency-portal/components/iz/SubscriptionRecordList";
 import {
 	formatRM,
 	IzCard,
@@ -36,7 +33,7 @@ import {
 	tonightShiftOutletName,
 } from "@agency-portal/lib/portal-sync";
 import { useStore } from "@agency-portal/lib/store";
-import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
+import { periodLabel } from "@agency-portal/lib/subscription-record";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
@@ -109,6 +106,8 @@ function PosIntegrationAddonCard({
 	quotePending,
 	pendingKind,
 	activeAddonPriceRm,
+	windowLabel = null,
+	renewsOn = null,
 	contactLine,
 	onRequestQuote,
 	onCancelQuote,
@@ -124,6 +123,14 @@ function PosIntegrationAddonCard({
 	 * product on offer.
 	 */
 	activeAddonPriceRm: number | null;
+	/**
+	 * The add-on lane's current billing window and next renewal, formatted.
+	 * Its own dates, not the plan's: POS is bought after the plan, so its month
+	 * can start on a different day. Null on a demo session or before the first
+	 * period is minted, and then nothing is printed rather than a guess.
+	 */
+	windowLabel?: string | null;
+	renewsOn?: string | null;
 	/**
 	 * Whether withdrawing is actually possible.
 	 *
@@ -195,6 +202,14 @@ function PosIntegrationAddonCard({
 										price: copy.priceLabel,
 									})}
 						</p>
+						{activeAddonPriceRm !== null && windowLabel && renewsOn && (
+							<p className="iz-outlet-pos-addon__subtitle">
+								{fill(t.outletSubscription.windowRenewal, {
+									window: windowLabel,
+									date: renewsOn,
+								})}
+							</p>
+						)}
 					</div>
 					<Sparkles className="h-5 w-5 shrink-0 text-[var(--iz-violet-l)] opacity-80" />
 				</div>
@@ -322,7 +337,6 @@ function OutletSubscriptionPage() {
 	const cancelPosIntegrationQuoteRequest = useStore(
 		(s) => s.cancelPosIntegrationQuoteRequest,
 	);
-	const demoBilling = useStore((s) => s.outletSubscriptionBilling);
 	const toast = useStore((s) => s.toast);
 	const can = useOutletCan();
 	const canEdit = can("editSettings");
@@ -346,35 +360,6 @@ function OutletSubscriptionPage() {
 	const planChangeRequested = backend.backed
 		? (backend.pendingPlanLabel ?? planChangeRequestedLocal)
 		: null;
-
-	/**
-	 * Real sessions read the `member_subscription` ledger; demo sessions keep the
-	 * store's invoices, mapped onto the same row shape so the render has one
-	 * branch. The plan rate-card + payment card stay on demo data either way (see
-	 * the hook's docstring).
-	 *
-	 * The demo rows genuinely ARE invoice-shaped, with a settled/pending state, so
-	 * "Paid" is honest for them. The backend rows are not, which is why they no
-	 * longer borrow that wording.
-	 */
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
-		if (backend.backed) return backend.billingHistory;
-		return demoBilling.map((inv) => ({
-			id: inv.id,
-			title: `InnocenZ Outlet · ${inv.planLabel}`,
-			detail: inv.detail,
-			dateLabel: inv.issueDate,
-			amountRm: inv.amount,
-			// The stored status is compared; only the badge WORD is looked up. The
-			// union is exactly SETTLED | PENDING, so the else-branch is Unpaid
-			// rather than the raw enum it used to print.
-			statusLabel:
-				inv.status === "SETTLED"
-					? t.outletSubscription.paid
-					: t.subscription.statusUnpaid,
-			tone: inv.status === "SETTLED" ? "green" : "amber",
-		}));
-	}, [backend.backed, backend.billingHistory, demoBilling, t]);
 
 	const outletName = tonightShiftOutletName(shifts);
 	/**
@@ -422,6 +407,37 @@ function OutletSubscriptionPage() {
 				})
 			: null
 		: RENEWAL_DATE;
+
+	/**
+	 * Each lane's CURRENT billing window, from that lane's own invoices (owner,
+	 * 2 Sep 2026: "the date duration shows here"). The plan's month and the POS
+	 * add-on's month can start on different days, and every venue's month runs
+	 * from its own activation day, because the ledger is anchored there. Null on
+	 * a demo session or before the first period is minted — then only the
+	 * renewal prints, never a guessed range.
+	 */
+	const planWindowLabel =
+		backend.backed && backend.planWindow
+			? periodLabel(
+					backend.planWindow.periodStart,
+					backend.planWindow.periodEnd,
+				)
+			: null;
+	const addonWindowLabel =
+		backend.backed && backend.addonWindow
+			? periodLabel(
+					backend.addonWindow.periodStart,
+					backend.addonWindow.periodEnd,
+				)
+			: null;
+	const addonRenewalLabel =
+		backend.backed && backend.addonRenewalDate
+			? backend.addonRenewalDate.toLocaleDateString(dateLocaleTag(locale), {
+					day: "numeric",
+					month: "short",
+					year: "numeric",
+				})
+			: null;
 
 	const posQuotePending = useMemo(
 		() =>
@@ -781,11 +797,16 @@ function OutletSubscriptionPage() {
 							</div>
 							{isCurrent ? (
 								<p className="iz-tiny iz-muted2 mt-2">
-									{renewalLabel
-										? fill(t.outletSubscription.renewalPrefix, {
+									{planWindowLabel && renewalLabel
+										? fill(t.outletSubscription.windowRenewalPrefix, {
+												window: planWindowLabel,
 												date: renewalLabel,
 											})
-										: ""}
+										: renewalLabel
+											? fill(t.outletSubscription.renewalPrefix, {
+													date: renewalLabel,
+												})
+											: ""}
 									{fill(t.outletSubscription.requestedTodayPool, {
 										today: namedPrsToday,
 										max: plan.prPerDayMax,
@@ -840,38 +861,14 @@ function OutletSubscriptionPage() {
 						quotePending={quotePending}
 						pendingKind={pendingKind}
 						activeAddonPriceRm={backend.addonAmountRm}
+						windowLabel={addonWindowLabel}
+						renewsOn={addonRenewalLabel}
 						contactLine={contactLine}
 						onRequestQuote={handleRequestQuote}
 						onCancelQuote={handleCancelQuote}
 						onRemoveAddon={handleRemoveAddon}
 					/>
 				))}
-			</div>
-
-			<IzSectionLabel>
-				{backend.backed
-					? t.subscription.currentSubscription
-					: t.subscription.billingHistoryTitle}
-			</IzSectionLabel>
-			{backend.backed && (
-				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-					{t.outletSubscription.whatVenueSubscribedTo}
-				</p>
-			)}
-			<div className="space-y-2">
-				{billingHistory.length === 0 ? (
-					<IzCard flat>
-						<p className="iz-tiny iz-muted py-4 text-center">
-							{backend.backed
-								? t.outletSubscription.noActiveSubscription
-								: t.subscription.noSubscriptionInvoices}
-						</p>
-					</IzCard>
-				) : (
-					billingHistory.map((row) => (
-						<SubscriptionRecordCard key={row.id} row={row} />
-					))
-				)}
 			</div>
 
 			{backend.backed && (

@@ -341,15 +341,19 @@ export function PaymentMethodCard({
 						<legend className="iz-tiny iz-muted mb-1">
 							{t.subscription.payHow}
 						</legend>
+						{/* Full-size soft buttons, and the CHOSEN one carries the payroll
+						    tabs' pressed colour (owner, 2 Sep 2026: "redesign the button
+						    style to previous" / "this colour remain"). A choice, not an
+						    action: it lifts lavender, never gold — gold is Save and Pay. */}
 						<div className="flex flex-wrap gap-2">
 							{methodChoices.map((choice) => (
 								<button
 									key={choice.value}
 									type="button"
 									aria-pressed={type === choice.value}
-									className={`iz-btn ${
-										type === choice.value ? "iz-btn-gold" : "iz-btn-soft"
-									} flex-1`}
+									className={`iz-btn iz-btn-soft flex-1${
+										type === choice.value ? " iz-btn-on" : ""
+									}`}
 									onClick={() => {
 										setType(choice.value);
 										setError(null);

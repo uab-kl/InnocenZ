@@ -8,9 +8,6 @@ import {
 	currentPeriodOf,
 	nextRenewalFrom,
 	nextRenewalFromInvoices,
-	type SubscriptionRecordRow,
-	sortMemberSubscriptions,
-	subscriptionRecordFromMember,
 } from "@agency-portal/lib/subscription-record";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -178,28 +175,11 @@ export function useAgencySubscription() {
 		[invoicesQuery.data],
 	);
 
-	/**
-	 * What this agency is subscribed to RIGHT NOW — normally one row.
-	 *
-	 * Read off `memberQuery`, which is already scoped to this agency and to
-	 * `status: "active"`. It used to have a query of its own that listed the whole
-	 * ledger, and since every tier change ENDS one row and STARTS another, an
-	 * agency that had moved tier a few times saw seven rows for one subscription:
-	 * six of them ended or cancelled, none carrying any payment state (see the
-	 * type's docstring), all of them reading like bills it still owed. That query
-	 * also passed no `subscriberType`/`subscriberId`, so its page of 50 was
-	 * whatever the endpoint returned rather than this agency's own rows.
-	 *
-	 * The row carries the agency's CURRENT billing week, read from the ledger —
-	 * one lane only, anchored on its own first payroll Sunday — so the card says
-	 * "31 Aug – 6 Sep 2026" rather than the day of the last tier change.
-	 */
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
-		const billingWindow = currentPeriodOf(paymentHistory);
-		return sortMemberSubscriptions(memberQuery.data?.data ?? []).map((sub) =>
-			subscriptionRecordFromMember(sub, "InnocenZ Agency", t, billingWindow),
-		);
-	}, [memberQuery.data, paymentHistory, t]);
+	/** The agency's current billing week — one lane, anchored on its first payroll Sunday. */
+	const currentWindow = useMemo(
+		() => currentPeriodOf(paymentHistory),
+		[paymentHistory],
+	);
 
 	const plans = useMemo<AgencyRatePlan[]>(
 		() =>
@@ -543,7 +523,7 @@ export function useAgencySubscription() {
 	return {
 		backed,
 		plans,
-		billingHistory,
+		currentWindow,
 		currentSubscriptionId: current?.subscriptionId ?? null,
 		currentPlanName: current?.planName ?? null,
 		/** Real next charge date from the ledger; null when nothing is active. */

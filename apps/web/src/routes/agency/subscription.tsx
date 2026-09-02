@@ -1,8 +1,5 @@
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
-import {
-	PaymentHistoryList,
-	SubscriptionRecordCard,
-} from "@agency-portal/components/iz/SubscriptionRecordList";
+import { PaymentHistoryList } from "@agency-portal/components/iz/SubscriptionRecordList";
 import {
 	formatRM,
 	IzCard,
@@ -36,7 +33,7 @@ import {
 	demoPvIssueIsoForWeeksAgo,
 } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
-import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
+import { periodLabel } from "@agency-portal/lib/subscription-record";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { format, parseISO } from "date-fns";
@@ -92,11 +89,6 @@ function AgencySubscription() {
 		[allAgencyPRs, activeAgencyId],
 	);
 	const prPaymentVouchers = useStore((s) => s.prPaymentVouchers ?? []);
-	const allAgencyCollections = useStore((s) => s.agencyCollections);
-	const agencyCollections = useMemo(
-		() => scopeToAgency(allAgencyCollections, activeAgencyId),
-		[allAgencyCollections, activeAgencyId],
-	);
 	const saveAgencyOwner = useStore((s) => s.saveAgencyOwner);
 	const toast = useStore((s) => s.toast);
 	const can = useAgencyCan();
@@ -173,43 +165,6 @@ function AgencySubscription() {
 			saveAgencyOwner({ subscriptionPlanId: billing.plan.id });
 		}
 	}, [agencyOwner.subscriptionPlanId, billing.plan.id, saveAgencyOwner]);
-
-	/**
-	 * What this agency owes InnocenZ. Real sessions read the
-	 * `member_subscription` ledger; demo sessions keep the store's
-	 * `kind: "agency"` invoices, mapped onto the same row shape so the render
-	 * below has one branch rather than two.
-	 *
-	 * The demo rows and the backend rows are NOT the same kind of record — see
-	 * the note under the section heading — so this is the one place that
-	 * difference is reconciled, deliberately and in the open.
-	 */
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
-		if (sub.backed) return sub.billingHistory;
-		return agencyCollections
-			.filter(
-				(c) =>
-					c.kind === "agency" &&
-					(c.lines ?? []).some((line) =>
-						line.label.toLowerCase().includes("subscription"),
-					),
-			)
-			.map((c) => ({
-				id: c.id,
-				title: c.lines?.[0]?.label ?? c.id,
-				detail: c.lines?.[0]?.detail ?? "",
-				dateLabel: c.issueDate,
-				amountRm: c.amount,
-				// The comparison stays on the STORED "SETTLED"; only the label the
-				// card prints is resolved. Any other status falls through to the raw
-				// value rather than blanking the pill.
-				statusLabel:
-					c.status === "SETTLED" ? t.subscription.statusPaid : c.status,
-				tone: c.status === "SETTLED" ? "green" : "amber",
-			}));
-		// `t` is read above, so it belongs here: without it these rows keep the
-		// wording from whichever language was active when the memo last ran.
-	}, [sub.backed, sub.billingHistory, agencyCollections, t]);
 
 	/**
 	 * What this agency has asked InnocenZ for and not been answered on yet — the
@@ -339,6 +294,11 @@ function AgencySubscription() {
 	 * a rendered label with nothing downstream parsing it. English still gets
 	 * `en-GB`, so day-before-month ordering is unchanged.
 	 */
+	/** The agency's current billing week, from the ledger; null on a demo session. */
+	const agencyWindowLabel =
+		sub.backed && sub.currentWindow
+			? periodLabel(sub.currentWindow.periodStart, sub.currentWindow.periodEnd)
+			: null;
 	const realRenewalLabel = sub.nextRenewalDate
 		? sub.nextRenewalDate.toLocaleDateString(dateLocaleTag(locale), {
 				day: "numeric",
@@ -516,6 +476,7 @@ function AgencySubscription() {
 					</div>
 				</div>
 				<p className="iz-tiny iz-muted2 mt-3 border-t border-[var(--iz-line)] pt-2">
+					{agencyWindowLabel ? `${agencyWindowLabel} · ` : ""}
 					{fill(t.subscription.nextWeeklyCharge, { date: renewalDate })}
 					{sub.backed && sub.onCustom
 						? t.subscription.atAgreedPrice
@@ -764,40 +725,6 @@ function AgencySubscription() {
 						</IzCard>
 					);
 				})}
-			</div>
-
-			<IzSectionLabel>
-				{sub.backed
-					? t.subscription.currentSubscription
-					: t.subscription.billingHistoryTitle}
-			</IzSectionLabel>
-			{sub.backed && (
-				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-					{t.subscription.whatYouSubscribedTo}
-				</p>
-			)}
-			<div className="space-y-2">
-				{sub.backed && sub.isHistoryLoading ? (
-					<IzCard flat>
-						<p className="iz-tiny iz-muted text-center py-4">
-							{t.subscription.loadingSubscription}
-						</p>
-					</IzCard>
-				) : billingHistory.length === 0 ? (
-					<IzCard flat>
-						<p className="iz-tiny iz-muted text-center py-4">
-							{sub.backed
-								? fill(t.subscription.noActiveSubscription, {
-										plan: billedTierLabel,
-									})
-								: t.subscription.noSubscriptionInvoices}
-						</p>
-					</IzCard>
-				) : (
-					billingHistory.map((row) => (
-						<SubscriptionRecordCard key={row.id} row={row} />
-					))
-				)}
 			</div>
 
 			{sub.backed && (

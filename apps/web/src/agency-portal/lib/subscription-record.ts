@@ -1,63 +1,5 @@
-import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
 import { format, parseISO } from "date-fns";
-import { fill } from "@/lib/portal-i18n/fill";
-import type { PortalTranslations } from "@/lib/portal-i18n/translations";
-import type {
-	MemberSubscription,
-	MemberSubscriptionStatus,
-} from "@/services/member-subscription";
-
-/**
- * One row of an org's subscription record with InnocenZ. Shared by the agency and
- * outlet Subscription screens, which show the same table from the same side.
- *
- * Called a "record" rather than an invoice on purpose. `member_subscription` is a
- * "who subscribed and when" ledger — one row per subscription, carrying
- * `startedAt`, `endedAt`, `amount` and `billingCycle`. It is NOT one row per
- * charge, and it holds no payment state, so nothing built on it can honestly say
- * a given week or month was paid.
- */
-export interface SubscriptionRecordRow {
-	id: string;
-	title: string;
-	detail: string;
-	dateLabel: string;
-	amountRm: number;
-	statusLabel: string;
-	tone: "green" | "amber" | "ink";
-}
-
-/**
- * Deliberately NOT collapsed to paid/unpaid.
- *
- * `active` means the subscription is running, which is not the same claim as
- * "this was paid", and `cancelled` flattened into a green "Paid" pill is an
- * outright misstatement — which is exactly what both screens used to render.
- */
-export const MEMBER_STATUS: Record<
-	MemberSubscriptionStatus,
-	{
-		label: (t: PortalTranslations) => string;
-		tone: SubscriptionRecordRow["tone"];
-	}
-> = {
-	active: { label: (t) => t.subscription.statusActive, tone: "green" },
-	past_due: { label: (t) => t.subscription.statusPastDue, tone: "amber" },
-	cancelled: { label: (t) => t.subscription.statusCancelled, tone: "ink" },
-	expired: { label: (t) => t.subscription.statusEnded, tone: "ink" },
-};
-
-/**
- * The billing cycle as a word. `sub.billingCycle` is the stored enum
- * (weekly | monthly | annually); an unrecognised one falls through capitalised,
- * the same contract as an unrecognised status.
- */
-function cycleWord(cycle: string, t: PortalTranslations): string {
-	if (cycle === "weekly") return t.subscription.billedWeekly;
-	if (cycle === "monthly") return t.subscription.billedMonthly;
-	if (cycle === "annually") return t.subscription.billedAnnually;
-	return cycle.charAt(0).toUpperCase() + cycle.slice(1);
-}
+import type { MemberSubscription } from "@/services/member-subscription";
 
 /** One opened billing period, as the ledger states it (KL calendar days). */
 export interface BillingWindow {
@@ -99,49 +41,6 @@ export function periodLabel(startIso: string, endIso: string): string {
 	} catch {
 		return `${startIso} – ${endIso}`;
 	}
-}
-
-/**
- * `orgLabel` is the plan's owner as the screen names it — "InnocenZ Agency" or
- * "InnocenZ Outlet". It is passed in rather than derived from
- * `sub.subscriberType`, because it is display copy each screen already owns.
- *
- * `period` is the lane's CURRENT billing window (owner, 2 Sep 2026). The card
- * used to print the row's start day — "Fri · 28 Aug 2026" — which is the day
- * of the last plan SWITCH, not a billing date, and every outlet's month runs
- * from its own activation day. With a window it prints "3 Aug – 2 Sep 2026";
- * without one (no period minted yet) it falls back to the start day.
- */
-export function subscriptionRecordFromMember(
-	sub: MemberSubscription,
-	orgLabel: string,
-	t: PortalTranslations,
-	period?: BillingWindow | null,
-): SubscriptionRecordRow {
-	const cycle = cycleWord(sub.billingCycle, t);
-	// An unrecognised status falls back to showing the raw value rather than
-	// guessing a tone — a new enum value must not silently render as paid.
-	const status = MEMBER_STATUS[sub.status] ?? {
-		label: () => sub.status,
-		tone: "ink" as const,
-	};
-	return {
-		id: sub.id,
-		title: `${sub.subscriberName?.trim() || orgLabel} · ${sub.planName}`,
-		detail: sub.endedAt
-			? fill(t.subscription.billingCycleEnded, {
-					cycle,
-					date: fmtDateLabelFromIso(sub.endedAt.slice(0, 10)),
-				})
-			: fill(t.subscription.billingCycleLine, { cycle }),
-		dateLabel: period
-			? periodLabel(period.periodStart, period.periodEnd)
-			: fmtDateLabelFromIso(sub.startedAt.slice(0, 10)),
-		// numeric over the wire; every display path needs a number.
-		amountRm: Number(sub.amount) || 0,
-		statusLabel: status.label(t),
-		tone: status.tone,
-	};
 }
 
 /** Newest subscription first. */

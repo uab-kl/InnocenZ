@@ -1496,14 +1496,6 @@ const en = {
 		resetRequesting: "Reset requested…",
 		resetPendingAdmin: "Reset · pending admin",
 		pricePendingAdmin: "Price · pending admin",
-		currentSubscription: "Current subscription",
-		billingHistoryTitle: "Billing history",
-		whatYouSubscribedTo:
-			"What your agency is subscribed to with InnocenZ today. It records what you subscribed to and when, so it does not say whether a given week was paid.",
-		loadingSubscription: "Loading your subscription…",
-		noActiveSubscription:
-			"No plan has been assigned to this agency yet, so nothing has been billed. {plan} above is the tier your PV volume implies — not a plan you are paying for.",
-		noSubscriptionInvoices: "No subscription invoices yet.",
 		oneRowPerPeriod:
 			"One row per billing period — agencies are billed weekly, Sunday to Saturday, the same week your payroll runs on. A period stays Unpaid until InnocenZ marks the payment received.",
 		moneyComingIn:
@@ -1537,8 +1529,6 @@ const en = {
 		billedMonthly: "Monthly",
 		billedAnnually: "Annually",
 		/** Cycle line under a subscription record: "Monthly billing". */
-		billingCycleLine: "{cycle} billing",
-		billingCycleEnded: "{cycle} billing · ended {date}",
 		statusActive: "Active",
 		statusPastDue: "Past due",
 		statusCancelled: "Cancelled",
@@ -2067,6 +2057,9 @@ const en = {
 		atDailyLimit: "At daily limit",
 		perMonth: "/ month",
 		renewalPrefix: "Renewal {date} · ",
+		/** The lane's current billing window beside its renewal (owner, 2 Sep 2026). */
+		windowRenewalPrefix: "{window} · Renewal {date} · ",
+		windowRenewal: "{window} · renewal {date}",
 		requestedTodayPool: "{today} / {max} requested PRs today · pool of {pool}",
 		sentToAdmin:
 			"Sent to InnocenZ admin — you stay on {plan} until it is approved.",
@@ -2101,9 +2094,6 @@ const en = {
 			"InnocenZ admin received your request and will contact {contact} to negotiate pricing.",
 		cancelRequest: "Cancel request",
 		requestAdminQuote: "Request admin quote",
-		whatVenueSubscribedTo:
-			"What this venue is subscribed to with InnocenZ today — its plan, plus POS integration if you have added it. It records what you subscribed to and when, so it does not say whether a given month was paid.",
-		noActiveSubscription: "No active subscription for this venue.",
 		paymentHistory: "Payment history",
 		oneRowPerPeriod:
 			"One row per billing period — venues are billed monthly, from the day you subscribed. A period stays Unpaid until InnocenZ marks the payment received.",
@@ -7180,14 +7170,6 @@ const zh: PortalTranslations = {
 		resetRequesting: "正在提交重置…",
 		resetPendingAdmin: "重置 · 等待管理员",
 		pricePendingAdmin: "报价 · 等待管理员",
-		currentSubscription: "当前订阅",
-		billingHistoryTitle: "账单记录",
-		whatYouSubscribedTo:
-			"这是你的经纪公司目前在 InnocenZ 的订阅内容。它记录你订阅了什么以及订阅时间，并不表示某一周是否已付款。",
-		loadingSubscription: "正在加载你的订阅…",
-		noActiveSubscription:
-			"InnocenZ 尚未为你的经纪公司分配订阅方案，因此没有产生任何账单。上方的 {plan} 是根据 PV 用量推算出的级别，并非你正在支付的方案。",
-		noSubscriptionInvoices: "还没有订阅账单。",
 		oneRowPerPeriod:
 			"每个计费周期一行 —— 经纪公司按周计费，周日至周六，与你的薪资周一致。在 InnocenZ 确认收款前，该周期显示为未付款。",
 		moneyComingIn:
@@ -7216,8 +7198,6 @@ const zh: PortalTranslations = {
 		billedWeekly: "按周",
 		billedMonthly: "按月",
 		billedAnnually: "按年",
-		billingCycleLine: "{cycle}计费",
-		billingCycleEnded: "{cycle}计费 · 已于 {date} 结束",
 		statusActive: "生效中",
 		statusPastDue: "已逾期",
 		statusCancelled: "已取消",
@@ -7661,6 +7641,8 @@ const zh: PortalTranslations = {
 		atDailyLimit: "已达每日上限",
 		perMonth: "/ 每月",
 		renewalPrefix: "续订日 {date} · ",
+		windowRenewalPrefix: "{window} · 续订日 {date} · ",
+		windowRenewal: "{window} · 续订日 {date}",
 		requestedTodayPool: "今天已请求 {today} / {max} 位 PR · 人才库 {pool} 位",
 		sentToAdmin: "已发送给 InnocenZ 管理员 —— 在获批前你仍使用 {plan}。",
 		yourCurrentPlan: "你当前的套餐",
@@ -7694,9 +7676,6 @@ const zh: PortalTranslations = {
 			"InnocenZ 管理员已收到你的申请，将联系 {contact} 洽谈价格。",
 		cancelRequest: "撤回申请",
 		requestAdminQuote: "向管理员索取报价",
-		whatVenueSubscribedTo:
-			"本门店目前在 InnocenZ 订阅的内容 —— 套餐，以及已添加的 POS 接入。它记录你订阅了什么以及订阅时间，因此并不说明某个月份是否已付款。",
-		noActiveSubscription: "本门店没有生效中的订阅。",
 		paymentHistory: "付款记录",
 		oneRowPerPeriod:
 			"每个计费周期一行 —— 门店按月计费，从你订阅当天起算。在 InnocenZ 标记收款之前，该周期一直显示为未付款。",
