@@ -147,6 +147,28 @@ export class SubscriptionPaymentRepositoryClass {
    * second and third delivery of the same settlement are normal traffic, not
    * an error condition.
    */
+  /**
+   * Every invoice a checkout session was opened for. A webhook names the
+   * SESSION; this is how it finds the periods behind it.
+   */
+  async invoiceIdsForGatewayPayment(gateway: string, gatewayPaymentId: string): Promise<string[]> {
+    try {
+      const rows = await db
+        .select({ id: SubscriptionPaymentTable.subscriptionInvoiceId })
+        .from(SubscriptionPaymentTable)
+        .where(
+          and(
+            eq(SubscriptionPaymentTable.gateway, gateway),
+            eq(SubscriptionPaymentTable.gatewayPaymentId, gatewayPaymentId),
+          ),
+        );
+      return [...new Set(rows.map((row) => row.id))];
+    } catch (error) {
+      logger.error('[SubscriptionPaymentRepository.invoiceIdsForGatewayPayment] Error:', error);
+      return [];
+    }
+  }
+
   async findByGatewayPaymentId(
     gateway: string,
     gatewayPaymentId: string,
@@ -259,6 +281,9 @@ export class SubscriptionPaymentRepositoryClass {
          * it is exactly how it should be able to come back.
          */
         if (input.gateway && input.gatewayPaymentId) {
+          // Per INVOICE, not per gateway id alone: one checkout session can
+          // cover several ticked periods (0146), so the same gateway id
+          // legitimately appears on several rows — one per invoice.
           const [prior] = await tx
             .select()
             .from(SubscriptionPaymentTable)
@@ -266,6 +291,7 @@ export class SubscriptionPaymentRepositoryClass {
               and(
                 eq(SubscriptionPaymentTable.gateway, input.gateway),
                 eq(SubscriptionPaymentTable.gatewayPaymentId, input.gatewayPaymentId),
+                eq(SubscriptionPaymentTable.subscriptionInvoiceId, input.subscriptionInvoiceId),
               ),
             )
             .limit(1);

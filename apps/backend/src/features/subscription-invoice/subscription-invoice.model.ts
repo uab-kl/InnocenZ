@@ -1,4 +1,5 @@
 import { MainSchema } from '@/db/db.schema';
+import { sql } from 'drizzle-orm';
 import { date, numeric, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import {
   MemberSubscriptionTable,
@@ -44,6 +45,18 @@ export const SubscriptionInvoiceTable = MainSchema.table('subscription_invoice',
   // Calendar days, not instants — a billing period has no time of day, and
   // `date(mode:'string')` keeps these directly comparable with `klToday()` and
   // with every existing week_start/week_end column in the schema.
+  /**
+   * INV-000001, minted by the database default on insert (migration 0146) so
+   * two concurrent openings cannot collide. What a receipt is headed with and
+   * what a payer quotes on a transfer — the subscription side's `voucher_no`.
+   */
+  invoiceNo: varchar('invoice_no', { length: 20 })
+    .notNull()
+    // Declared here as well as in the migration so Drizzle knows the database
+    // fills it: without this the insert type demands a number from the caller,
+    // and `generateMissing` would have to mint one — the race the sequence exists
+    // to prevent.
+    .default(sql`'INV-' || lpad(nextval('main.subscription_invoice_no_seq')::text, 6, '0')`),
   periodStart: date('period_start', { mode: 'string' }).notNull(),
   periodEnd: date('period_end', { mode: 'string' }).notNull(),
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),

@@ -1633,6 +1633,26 @@ const en = {
 		 * direct-debit ones above so a saved mandate keeps reading as a mandate.
 		 */
 		methodFpxLink: "FPX (online banking)",
+		/** Tick-to-pay on the payer's history, and the receipt behind a paid period. */
+		selectToPay: "Tick the periods to pay",
+		paySelected: "Pay {amount}",
+		paySelectedCount: "{n} selected",
+		payOpening: "Opening payment…",
+		payNotConnected:
+			"Online payment is not connected yet — InnocenZ will mark this period paid once your transfer arrives.",
+		receiptTitle: "Receipt",
+		receiptInvoiceNo: "Invoice no.",
+		receiptPeriod: "Billing period",
+		receiptPaidOn: "Paid on",
+		receiptPaidBy: "Paid by",
+		receiptReference: "Reference",
+		receiptFrom: "From",
+		receiptTo: "To",
+		receiptTotal: "Total paid",
+		receiptPrint: "Print",
+		receiptNoPayment:
+			"Marked paid by InnocenZ — no payment record was attached to this period.",
+		receiptTap: "Tap a paid period for its receipt",
 		/**
 		 * On a link-and-pay rail the email is not a "billing email" — it is
 		 * where the payment link goes. Optional only because the link also
@@ -7246,6 +7266,24 @@ const zh: PortalTranslations = {
 		savedFpx: "FPX 银行直接扣账",
 
 		methodFpxLink: "FPX（网上银行）",
+		selectToPay: "勾选要付款的账期",
+		paySelected: "付款 {amount}",
+		paySelectedCount: "已选 {n} 项",
+		payOpening: "正在打开付款页面…",
+		payNotConnected:
+			"在线付款尚未接入 — 收到您的转账后，InnocenZ 会将此账期标记为已付款。",
+		receiptTitle: "收据",
+		receiptInvoiceNo: "账单编号",
+		receiptPeriod: "账期",
+		receiptPaidOn: "付款日期",
+		receiptPaidBy: "付款方式",
+		receiptReference: "参考号",
+		receiptFrom: "付款方",
+		receiptTo: "收款方",
+		receiptTotal: "已付总额",
+		receiptPrint: "打印",
+		receiptNoPayment: "由 InnocenZ 标记为已付款 — 此账期未附付款记录。",
+		receiptTap: "点击已付款账期查看收据",
 		sendLinksTo: "付款链接发送至",
 		linksAlsoReachYou:
 			"选填 — 付款链接也会通过应用内通知和 WhatsApp 发送给您的负责人和财务账号，Today 页面亦有「立即付款」按钮。",

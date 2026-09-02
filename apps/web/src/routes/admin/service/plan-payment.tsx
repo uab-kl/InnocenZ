@@ -393,7 +393,7 @@ function PlanPaymentPage() {
 												onClick={() => newest && setDetailId(newest.id)}
 											>
 												<TableCell className="text-base font-medium">
-														{group.subscriberName}
+													{group.subscriberName}
 												</TableCell>
 												<TableCell>
 													<Badge

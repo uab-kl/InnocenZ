@@ -1,11 +1,16 @@
+import { InvoiceReceipt } from "@agency-portal/components/iz/InvoiceReceipt";
 import { formatRM, IzCard, IzPill } from "@agency-portal/components/iz/ui";
 import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
+import { useMutation } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ChevronDown, Receipt } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { SubscriptionInvoice } from "@/services/subscription-invoice";
+import { createCheckout } from "@/services/subscription-payment";
 
 /** "1 Aug – 31 Aug 2026", with the year printed once. */
 function periodLabel(startIso: string, endIso: string): string {
@@ -54,6 +59,39 @@ export function PaymentHistoryList({
 	 * Declared before the early returns below: hooks must run on every render.
 	 */
 	const [filter, setFilter] = useState<"all" | "paid" | "unpaid">("all");
+	/**
+	 * TICK-TO-PAY. The periods the payer has ticked, and the checkout that sends
+	 * them to the provider's page. The total is re-summed server-side from the
+	 * ids — the figure on the button is for the payer's eyes, never the charge.
+	 *
+	 * Until a gateway is registered the server answers 503 with its own sentence
+	 * ("not connected yet — InnocenZ will mark this paid once your transfer
+	 * arrives"); that sentence is shown as-is rather than a generic error, so the
+	 * payer knows what to do instead.
+	 */
+	const { logout } = useAuth();
+	const [selected, setSelected] = useState<Set<string>>(() => new Set());
+	const [payMessage, setPayMessage] = useState<string | null>(null);
+	const checkout = useMutation({
+		mutationFn: (ids: string[]) => createCheckout(ids, logout),
+		onSuccess: ({ payUrl }) => {
+			window.location.assign(payUrl);
+		},
+		onError: (error) =>
+			setPayMessage(
+				toMutationError(error, t.subscription.payNotConnected)?.message ??
+					t.subscription.payNotConnected,
+			),
+	});
+	const toggle = (id: string) => {
+		setPayMessage(null);
+		setSelected((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	};
 	if (isLoading && invoices.length === 0) {
 		return (
 			<IzCard flat>
@@ -147,9 +185,56 @@ export function PaymentHistoryList({
 					</IzCard>
 				) : (
 					<div className="space-y-2">
+						<p className="iz-tiny iz-muted2">{t.subscription.selectToPay}</p>
 						{groupByPeriod(unpaid).map((group) => (
-							<PeriodCard key={group.key} rows={group.rows} laneOf={laneOf} />
+							<PeriodCard
+								key={group.key}
+								rows={group.rows}
+								laneOf={laneOf}
+								selected={selected}
+								onToggle={toggle}
+							/>
 						))}
+						{/*
+						 * The pay bar appears only once something is ticked: an
+						 * always-present button reads as "you owe this", and the tiles
+						 * above already say that.
+						 */}
+						{selected.size > 0 && (
+							<IzCard flat>
+								<div className="iz-between gap-3">
+									<span className="iz-tiny iz-muted">
+										{fill(t.subscription.paySelectedCount, {
+											n: selected.size,
+										})}
+									</span>
+									<button
+										type="button"
+										className="iz-btn iz-btn-gold"
+										disabled={checkout.isPending}
+										onClick={() => checkout.mutate([...selected])}
+									>
+										{checkout.isPending
+											? t.subscription.payOpening
+											: fill(t.subscription.paySelected, {
+													amount: formatRM(
+														unpaid
+															.filter((invoice) => selected.has(invoice.id))
+															.reduce(
+																(cents, invoice) =>
+																	cents +
+																	Math.round(Number(invoice.amount) * 100),
+																0,
+															) / 100,
+													),
+												})}
+									</button>
+								</div>
+								{payMessage && (
+									<p className="iz-tiny mt-2 text-amber-300">{payMessage}</p>
+								)}
+							</IzCard>
+						)}
 					</div>
 				))}
 			{/*
@@ -186,11 +271,19 @@ export function PaymentHistoryList({
 function PeriodCard({
 	rows,
 	laneOf,
+	selected,
+	onToggle,
 }: {
 	rows: SubscriptionInvoice[];
 	laneOf?: (invoice: SubscriptionInvoice) => "plan" | "addon" | null;
+	/** Tick-to-pay, offered only by the unpaid list — paid rows never get a box. */
+	selected?: Set<string>;
+	onToggle?: (id: string) => void;
 }) {
 	const { t } = usePortalLocale();
+	// Which PAID row has its receipt open. Local to the card so it works inside
+	// the disclosure too, with nothing threaded through.
+	const [receiptFor, setReceiptFor] = useState<string | null>(null);
 	const first = rows[0];
 	if (!first) return null;
 	const cents = rows.reduce(
@@ -214,46 +307,73 @@ function PeriodCard({
 				{rows.map((invoice) => {
 					const isPaid = invoice.status === "paid";
 					const lane = laneOf?.(invoice) ?? null;
+					const tickable = !isPaid && Boolean(onToggle);
 					return (
-						<div
-							key={invoice.id}
-							className="flex items-center justify-between gap-3"
-						>
-							<span className="min-w-0">
-								<span className="iz-tiny flex items-center gap-2">
-									{lane === "addon" && (
-										<IzPill variant="violet">
-											{t.subscription.lanePosAddon}
-										</IzPill>
-									)}
-									{lane === "plan" && (
-										<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
-									)}
-									<span className="iz-muted truncate">
-										{invoice.planName} ·{" "}
-										{invoice.billingCycle === "weekly"
-											? t.subscription.billedWeekly
-											: t.subscription.billedMonthly}
-									</span>
-								</span>
-								{isPaid && invoice.paidAt && (
-									<span className="iz-tiny iz-muted2 block">
-										{fill(t.subscription.paidOn, {
-											date: format(parseISO(invoice.paidAt), "d MMM yyyy"),
-										})}
-									</span>
+						<div key={invoice.id}>
+							<div className="flex items-center justify-between gap-3">
+								{/* Unpaid + tick-to-pay on: a box. Paid: the row opens its receipt. */}
+								{tickable && (
+									<input
+										type="checkbox"
+										className="h-4 w-4 shrink-0 accent-[var(--iz-gold)]"
+										checked={selected?.has(invoice.id) ?? false}
+										onChange={() => onToggle?.(invoice.id)}
+										aria-label={invoice.invoiceNo}
+									/>
 								)}
-							</span>
-							<span className="flex shrink-0 items-center gap-2">
-								<span className="iz-sm font-bold">
-									{formatRM(Number(invoice.amount))}
+								{isPaid && (
+									<button
+										type="button"
+										className="iz-tiny iz-muted2 shrink-0 underline-offset-2 hover:underline"
+										onClick={() =>
+											setReceiptFor(
+												receiptFor === invoice.id ? null : invoice.id,
+											)
+										}
+										aria-expanded={receiptFor === invoice.id}
+									>
+										{invoice.invoiceNo}
+									</button>
+								)}
+								<span className="min-w-0">
+									<span className="iz-tiny flex items-center gap-2">
+										{lane === "addon" && (
+											<IzPill variant="violet">
+												{t.subscription.lanePosAddon}
+											</IzPill>
+										)}
+										{lane === "plan" && (
+											<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
+										)}
+										<span className="iz-muted truncate">
+											{invoice.planName} ·{" "}
+											{invoice.billingCycle === "weekly"
+												? t.subscription.billedWeekly
+												: t.subscription.billedMonthly}
+										</span>
+									</span>
+									{isPaid && invoice.paidAt && (
+										<span className="iz-tiny iz-muted2 block">
+											{fill(t.subscription.paidOn, {
+												date: format(parseISO(invoice.paidAt), "d MMM yyyy"),
+											})}
+										</span>
+									)}
 								</span>
-								<IzPill variant={isPaid ? "green" : "amber"}>
-									{isPaid
-										? t.subscription.statusPaid
-										: t.subscription.statusUnpaid}
-								</IzPill>
-							</span>
+								<span className="flex shrink-0 items-center gap-2">
+									<span className="iz-sm font-bold">
+										{formatRM(Number(invoice.amount))}
+									</span>
+									<IzPill variant={isPaid ? "green" : "amber"}>
+										{isPaid
+											? t.subscription.statusPaid
+											: t.subscription.statusUnpaid}
+									</IzPill>
+								</span>
+							</div>
+							{receiptFor === invoice.id && (
+								<InvoiceReceipt invoiceId={invoice.id} />
+							)}
 						</div>
 					);
 				})}

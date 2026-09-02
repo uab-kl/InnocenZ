@@ -63,7 +63,34 @@ export interface PaymentGateway {
 
   /** Reduce a verified delivery to the facts above, or null if it is not one we act on. */
   parseWebhook(rawBody: Buffer): NormalisedWebhookEvent | null;
+
+  /**
+   * Open ONE hosted payment session for the periods the payer ticked.
+   *
+   * The payer chooses its bank, wallet or card on the provider's page — nothing
+   * about the instrument is decided here. The amount is the SUM the server
+   * computed from the invoices, never a figure from the browser. The provider's
+   * id for the session becomes `gateway_payment_id` on every one of the
+   * invoices' attempt rows, which is how one webhook later settles them all.
+   */
+  createCheckout(input: CheckoutInput): Promise<CheckoutResult>;
 }
+
+export type CheckoutInput = {
+  /** Our own reference for the session — echoed back by the webhook. */
+  reference: string;
+  invoices: { id: string; invoiceNo: string; amount: string; currency: string }[];
+  totalAmount: string;
+  currency: string;
+  payer: { name: string; email: string | null };
+  /** Where the provider sends the browser afterwards. NOT proof of payment. */
+  returnUrl: string;
+};
+
+export type CheckoutResult = {
+  gatewayPaymentId: string;
+  payUrl: string;
+};
 
 const gateways = new Map<string, PaymentGateway>();
 

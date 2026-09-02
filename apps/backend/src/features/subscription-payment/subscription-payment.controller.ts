@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Error } from '@/error/index.js';
 import { logger } from '@/util/logger.js';
 import { paramId } from '@/util/params.js';
+import { getActor } from '@/util/actor.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import type { PaymentMethodRepositoryClass } from '@/features/payment-method/payment-method.repository.js';
@@ -155,6 +156,111 @@ export class SubscriptionPaymentControllerClass {
     }
   }
 
+  /**
+   * THE PAYER TICKED SOME PERIODS AND PRESSED PAY.
+   *
+   * Everything that decides money is settled server-side: which invoices exist,
+   * that every one belongs to the caller, that none is already paid, and what
+   * they add up to. The browser sends ids and nothing else. One hosted session
+   * is opened for the lot; one `pending` attempt is written per invoice, all
+   * carrying the session's id, so the webhook can settle them together.
+   *
+   * With no gateway registered this answers 503 and says so — the honest state
+   * until Fiuu is wired (runbook step 5) — rather than inventing a URL.
+   */
+  async checkout(req: Request, res: Response) {
+    try {
+      const raw = Array.isArray(req.body?.invoiceIds) ? (req.body.invoiceIds as unknown[]) : [];
+      const invoiceIds = [...new Set(raw.filter((v): v is string => typeof v === 'string'))];
+      if (invoiceIds.length === 0 || invoiceIds.length > 24) {
+        return res.status(400).json({ success: false, message: 'Choose 1–24 periods', data: null });
+      }
+
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
+      const invoices = [];
+      for (const id of invoiceIds) {
+        const invoice = await this.invoiceRepository.getById(id);
+        const owns =
+          invoice &&
+          ((invoice.subscriberType === 'agency' && invoice.subscriberId === scope.agencyId) ||
+            (invoice.subscriberType === 'outlet' && scope.outletIds.includes(invoice.subscriberId)));
+        // Someone else's invoice is a 404, never a 403 — do not confirm it exists.
+        if (!owns) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        if (invoice.status === 'paid') {
+          return res.status(409).json({
+            success: false,
+            message: `${invoice.invoiceNo} is already paid`,
+            data: null,
+          });
+        }
+        invoices.push(invoice);
+      }
+      const currency = invoices[0].currency;
+      if (invoices.some((invoice) => invoice.currency !== currency)) {
+        return res.status(400).json({ success: false, message: 'Mixed currencies', data: null });
+      }
+      // Integer cents, never float addition, for the same reason as everywhere
+      // else money is summed in this codebase.
+      const totalCents = invoices.reduce((sum, invoice) => sum + Math.round(Number(invoice.amount) * 100), 0);
+      const totalAmount = (totalCents / 100).toFixed(2);
+
+      const [gatewayName] = listGateways();
+      const gateway = gatewayName ? getGateway(gatewayName) : null;
+      if (!gateway) {
+        return res.status(503).json({
+          success: false,
+          message: 'Online payment is not connected yet — InnocenZ will mark this period paid once your transfer arrives.',
+          data: { totalAmount, currency, invoiceIds },
+        });
+      }
+
+      const first = invoices[0];
+      const owner =
+        first.subscriberType === 'agency'
+          ? { agencyId: first.subscriberId }
+          : { outletId: first.subscriberId };
+      const instrument = await this.paymentMethodRepository.getActiveFor(owner);
+      const org = await this.repository.getOrgProfile(first.subscriberType, first.subscriberId);
+      const reference = `chk_${first.subscriberId.slice(0, 8)}_${Date.now().toString(36)}`;
+      const session = await gateway.createCheckout({
+        reference,
+        invoices: invoices.map((invoice) => ({
+          id: invoice.id,
+          invoiceNo: invoice.invoiceNo,
+          amount: invoice.amount,
+          currency: invoice.currency,
+        })),
+        totalAmount,
+        currency,
+        payer: { name: org?.name ?? first.subscriberName, email: instrument?.billingEmail ?? null },
+        returnUrl: `${env.FRONTEND_URL ?? ''}/${first.subscriberType}/subscription?checkout=returned`,
+      });
+
+      const actor = getActor(req);
+      for (const invoice of invoices) {
+        await this.repository.recordAttempt({
+          subscriptionInvoiceId: invoice.id,
+          methodType: instrument?.type ?? 'fpx',
+          paymentMethodId: instrument?.id ?? null,
+          gateway: gateway.name,
+          gatewayPaymentId: session.gatewayPaymentId,
+          reference,
+          outcome: 'pending',
+          actor,
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Checkout opened',
+        data: { payUrl: session.payUrl, totalAmount, currency, invoiceIds },
+      });
+    } catch (error) {
+      logger.error('[SubscriptionPaymentController.checkout] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   /** Which providers are registered. Empty today, and the admin UI reads it to say so. */
   async gateways(_req: Request, res: Response) {
     res.status(200).json({ success: true, message: 'OK', data: listGateways() });
@@ -236,18 +342,38 @@ export class SubscriptionPaymentControllerClass {
       // what `subscription_payment` exists to hold — dropping it is how a venue
       // gets chased with no record of the three declines behind it — and the
       // amount is read from the invoice in both cases, never from the body.
-      const result = await this.repository.recordAttempt({
-        subscriptionInvoiceId: event.subscriptionInvoiceId,
-        methodType: event.methodType ?? instrument?.type ?? 'manual_transfer',
-        paymentMethodId: instrument?.id ?? null,
-        gateway: gateway.name,
-        gatewayPaymentId: event.gatewayPaymentId,
-        reference: event.reference ?? null,
-        failureReason: event.failureReason ?? null,
-        outcome: event.outcome,
-        paidAt: event.paidAt,
-        actor: `gateway:${gateway.name}`,
-      });
+      // A checkout session can cover several ticked periods (0146). When the
+      // provider names the session rather than a single invoice, every period
+      // opened under that session is settled — or declined — together.
+      const invoiceIds = event.subscriptionInvoiceId
+        ? [event.subscriptionInvoiceId]
+        : await this.repository.invoiceIdsForGatewayPayment(gateway.name, event.gatewayPaymentId);
+      if (invoiceIds.length === 0) {
+        logger.error(
+          `[subscription-payment] ${gateway.name} reported session ${event.gatewayPaymentId} with no invoices behind it`,
+        );
+        return res.status(200).json({ success: true, message: 'Ignored', data: null });
+      }
+
+      let result: Awaited<ReturnType<typeof this.repository.recordAttempt>> = {
+        ok: false,
+        reason: 'invoice_not_found',
+      };
+      for (const invoiceId of invoiceIds) {
+        result = await this.repository.recordAttempt({
+          subscriptionInvoiceId: invoiceId,
+          methodType: event.methodType ?? instrument?.type ?? 'manual_transfer',
+          paymentMethodId: instrument?.id ?? null,
+          gateway: gateway.name,
+          gatewayPaymentId: event.gatewayPaymentId,
+          reference: event.reference ?? null,
+          failureReason: event.failureReason ?? null,
+          outcome: event.outcome,
+          paidAt: event.paidAt,
+          actor: `gateway:${gateway.name}`,
+        });
+        if (!result.ok && result.reason === 'error') break;
+      }
 
       if (!result.ok) {
         // An unknown invoice is OUR problem, not something the gateway can fix

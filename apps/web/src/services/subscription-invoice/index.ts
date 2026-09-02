@@ -14,6 +14,8 @@ export type SubscriberType = "outlet" | "agency";
 export interface SubscriptionInvoice {
 	id: string;
 	memberSubscriptionId: string;
+	/** INV-000001 — minted by the database on insert; what a receipt is headed with. */
+	invoiceNo: string;
 	/** Calendar days, YYYY-MM-DD — a billing period has no time of day. */
 	periodStart: string;
 	periodEnd: string;
