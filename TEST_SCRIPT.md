@@ -382,6 +382,18 @@ What is left needs a **commercial decision first, then credentials** — nothing
   confirm) and an enforcement middleware. **Owner to decide WHAT is blocked** — proposed: outlet
   cannot post new jobs and agency cannot send new PVs while `past_due`; everything already
   running (checked-in shifts, issued PVs) finishes.
+- **VERIFIED 28 Aug (data + code, both org types):** Rule 3 holds — every outlet's first minted period
+  starts on its first plan row's day (4Gays 7th, Emhub/JK 3rd, Testing 10th, Velvet 1st); every
+  agency's on the Sun–Sat payroll week containing it (all on Sundays). Both plan-switch paths (admin
+  approval, agency tier job) pass the invoice repository, so upgrade lines and downgrade credits apply
+  to BOTH types;  is type-agnostic and plan-lane only. **Two gaps found:**
+  (a) 🔴 ** mints only the CURRENT period** () — it
+  never backfills. That is why Starline (anchored 1 Jun) and Atlas/Delta (7 Jul) have no invoice
+  before 9 Aug, the ledger's first run — and it means a day the 03:00 job does not run is a period
+  that is never billed. Decision needed: backfill from the anchor (bills history) or from a fixed
+  ledger-start date. (b) An **add-on re-quote** (POS 99,999 → 200) closes and re-opens the add-on row
+  directly (), outside  — no upgrade line, no
+  credit. The owner's rule was stated for plans; say whether add-ons follow it.
 - **Rule 5 — shape:** agency holds ONE lane, moved automatically by weekly PV count
   (`agency-tier.job`, Sun 03:30 KL) or pinned to Custom; outlet holds ONE plan lane plus any
   add-on lanes (POS). ✅ Already true; recorded so it is not re-litigated.
