@@ -393,36 +393,31 @@ export class SubscriptionInvoiceRepositoryClass {
       const money = (cents: number) => (cents / 100).toFixed(2);
 
       if (diffCents > 0) {
-        if (invoice.status === 'paid') {
-          await db.insert(SubscriptionInvoiceTable).values({
-            memberSubscriptionId: input.newMemberSubscriptionId,
-            periodStart: invoice.periodStart,
-            periodEnd: invoice.periodEnd,
-            kind: 'upgrade',
-            baseAmount: money(diffCents),
-            creditApplied: '0',
-            amount: money(diffCents),
-            currency: invoice.currency,
-            note: `Upgrade ${input.fromPlanName} → ${input.toPlanName}: ${input.toAmount} − ${input.fromAmount} already paid`,
-            createdBy: input.actor,
-            updatedBy: input.actor,
-          });
-          return 'upgrade_invoiced';
-        }
-        // Unpaid: the period is billed at the highest plan held during it.
-        const creditCents = Math.round(Number(invoice.creditApplied) * 100);
-        const baseCents = Math.round(Number(input.toAmount) * 100);
-        await db
-          .update(SubscriptionInvoiceTable)
-          .set({
-            baseAmount: money(baseCents),
-            amount: money(Math.max(0, baseCents - creditCents)),
-            note: `Re-priced ${input.fromPlanName} → ${input.toPlanName} (highest plan held this period)`,
-            updatedAt: new Date(),
-            updatedBy: input.actor,
-          })
-          .where(eq(SubscriptionInvoiceTable.id, invoice.id));
-        return 'repriced';
+        // Dearer plan, paid OR unpaid: the EXTRA is its own line, never a
+        // silently changed figure. Owner, on seeing the first cut re-price in
+        // place: "the extra charge? where is it shown?" — a period that read
+        // 3,999 yesterday and 6,999 today, with only a note to explain, looks
+        // like a wrong price. As a separate `upgrade` invoice in the same window
+        // it reads as arithmetic: Enterprise 3,999 + Upgrade 3,000 = 6,999, the
+        // highest plan held — and it is ticked and paid together with the
+        // period, since the pay box is on the window.
+        await db.insert(SubscriptionInvoiceTable).values({
+          memberSubscriptionId: input.newMemberSubscriptionId,
+          periodStart: invoice.periodStart,
+          periodEnd: invoice.periodEnd,
+          kind: 'upgrade',
+          baseAmount: money(diffCents),
+          creditApplied: '0',
+          amount: money(diffCents),
+          currency: invoice.currency,
+          note:
+            invoice.status === 'paid'
+              ? `Upgrade ${input.fromPlanName} → ${input.toPlanName}: ${input.toAmount} − ${input.fromAmount} already paid`
+              : `Upgrade ${input.fromPlanName} → ${input.toPlanName}: ${input.toAmount} − ${input.fromAmount} billed this period`,
+          createdBy: input.actor,
+          updatedBy: input.actor,
+        });
+        return 'upgrade_invoiced';
       }
 
       // Cheaper plan: the difference comes off the next period on this lane.
