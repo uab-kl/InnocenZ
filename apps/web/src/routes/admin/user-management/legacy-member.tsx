@@ -938,7 +938,6 @@ function LegacyMemberPage() {
 					if (!open) setSelected(null);
 				}}
 				onApprove={(id) => approveAgencyMutation.mutate(id)}
-				onSuspend={() => {}}
 				onDeactivate={(id) => deactivateAgencyMutation.mutate(id)}
 				actionId={actionId}
 			/>
@@ -950,7 +949,6 @@ function LegacyMemberPage() {
 					if (!open) setSelected(null);
 				}}
 				onApprove={(id) => approveOutletMutation.mutate(id)}
-				onSuspend={() => {}}
 				onDeactivate={(id) => deactivateOutletMutation.mutate(id)}
 				actionId={actionId}
 			/>

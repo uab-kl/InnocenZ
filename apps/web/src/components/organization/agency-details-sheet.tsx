@@ -34,7 +34,6 @@ interface AgencyDetailsSheetProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onApprove: (id: string) => void;
-	onSuspend: (id: string) => void;
 	onDeactivate: (id: string) => void;
 	actionId: string | null;
 }
@@ -44,7 +43,6 @@ export function AgencyDetailsSheet({
 	open,
 	onOpenChange,
 	onApprove,
-	onSuspend,
 	onDeactivate,
 	actionId,
 }: AgencyDetailsSheetProps) {
@@ -151,7 +149,6 @@ export function AgencyDetailsSheet({
 							entityLabel={t.adminOrg.entityAgency}
 							busy={actionId === agency.id}
 							onApprove={() => onApprove(agency.id)}
-							onSuspend={() => onSuspend(agency.id)}
 							onDeactivate={() => onDeactivate(agency.id)}
 						/>
 

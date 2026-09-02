@@ -91,17 +91,6 @@ export async function approveOutlet(
 	return response.data;
 }
 
-export async function suspendOutlet(
-	id: string,
-	onRefreshFail: () => void,
-): Promise<OutletApiResponse> {
-	const client = getClient(onRefreshFail);
-	const response = await client.patch<OutletApiResponse>(
-		`/outlet/${id}/suspend`,
-	);
-	return response.data;
-}
-
 /** Set the outlet `inactive`: every account in it is refused at login and signed out. */
 export async function deactivateOutlet(
 	id: string,

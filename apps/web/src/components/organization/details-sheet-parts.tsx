@@ -315,7 +315,6 @@ export function ApprovalStatusCard({
 	entityLabel,
 	busy,
 	onApprove,
-	onSuspend,
 	onDeactivate,
 }: {
 	status: OrgStatus;
@@ -328,7 +327,6 @@ export function ApprovalStatusCard({
 	entityLabel: string;
 	busy: boolean;
 	onApprove: () => void;
-	onSuspend: () => void;
 	/** The hard off switch — `inactive` refuses every login; confirmed in place. */
 	onDeactivate: () => void;
 }) {
@@ -366,21 +364,6 @@ export function ApprovalStatusCard({
 						{t.common.approve}
 					</Button>
 				)}
-				{status === "active" && (
-					<Button
-						size="sm"
-						variant="outline"
-						disabled={busy}
-						onClick={onSuspend}
-					>
-						{busy ? (
-							<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-						) : (
-							<Ban className="mr-1 h-3.5 w-3.5" />
-						)}
-						{t.adminOrg.suspend}
-					</Button>
-				)}
 				{status === "suspended" && (
 					<Button size="sm" disabled={busy} onClick={onApprove}>
 						{busy ? (
@@ -388,7 +371,7 @@ export function ApprovalStatusCard({
 						) : (
 							<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
 						)}
-						{t.adminUsers.reactivate}
+						{t.adminOrg.activate}
 					</Button>
 				)}
 				{status === "inactive" && (

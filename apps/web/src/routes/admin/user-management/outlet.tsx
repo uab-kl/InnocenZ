@@ -27,7 +27,6 @@ import {
 	fetchOutletById,
 	fetchOutlets,
 	type OutletsQueryParams,
-	suspendOutlet,
 } from "@/services/outlet";
 
 export const Route = createFileRoute("/admin/user-management/outlet")({
@@ -114,23 +113,6 @@ function OutletOrgsPage() {
 		onSettled: () => setActionId(null),
 	});
 
-	const suspendMutation = useMutation({
-		mutationFn: (id: string) => suspendOutlet(id, logout),
-		onMutate: (id) => setActionId(id),
-		onSuccess: (response) => {
-			queryClient.invalidateQueries({ queryKey: ["outlets"] });
-			queryClient.invalidateQueries({ queryKey: ["outlet-by-id"] });
-			toast.success(response.message || t.admin.outletSuspended);
-		},
-		onError: (err) => {
-			toast.error(
-				toMutationError(err, t.admin.outletSuspendFailed)?.message ??
-					t.admin.outletSuspendFailed,
-			);
-		},
-		onSettled: () => setActionId(null),
-	});
-
 	/**
 	 * The hard off switch. `inactive` is the one status the auth layer refuses,
 	 * so every account in the organisation is signed out and refused at login
@@ -178,7 +160,7 @@ function OutletOrgsPage() {
 				onPageChange={setCurrentPage}
 				onRetry={() => refetch()}
 				onApprove={(id) => approveMutation.mutate(id)}
-				onSuspend={(id) => suspendMutation.mutate(id)}
+				onDeactivate={(id) => deactivateMutation.mutate(id)}
 				onSelect={(outlet) => setSelectedId(outlet.id)}
 				actionId={actionId}
 			/>
@@ -190,7 +172,6 @@ function OutletOrgsPage() {
 					if (!open) closeDetails();
 				}}
 				onApprove={(id) => approveMutation.mutate(id)}
-				onSuspend={(id) => suspendMutation.mutate(id)}
 				onDeactivate={(id) => deactivateMutation.mutate(id)}
 				actionId={actionId}
 			/>
