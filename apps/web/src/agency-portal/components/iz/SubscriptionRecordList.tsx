@@ -302,6 +302,23 @@ function PeriodCard({
 	const unpaidIds = rows
 		.filter((invoice) => invoice.status !== "paid")
 		.map((invoice) => invoice.id);
+	/**
+	 * READ TOP-DOWN AS A SUM. The plan first, its upgrade lines indented under
+	 * it as "+", a plan subtotal when there is one, then the add-ons. The first
+	 * cut listed rows in database order — Upgrade above the plan it belonged
+	 * to — which is arithmetic nobody can follow at a glance.
+	 */
+	const rank = (invoice: SubscriptionInvoice) =>
+		invoice.kind === "upgrade" ? 1 : laneOf?.(invoice) === "addon" ? 2 : 0;
+	const ordered = [...rows].sort((a, b) => rank(a) - rank(b));
+	const upgrades = ordered.filter((invoice) => invoice.kind === "upgrade");
+	const lastUpgradeId = upgrades[upgrades.length - 1]?.id ?? null;
+	const planCents = ordered
+		.filter((invoice) => rank(invoice) < 2)
+		.reduce(
+			(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
+			0,
+		);
 	const cents = rows.reduce(
 		(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
 		0,
@@ -332,12 +349,17 @@ function PeriodCard({
 				)}
 			</div>
 			<div className="mt-2 space-y-2">
-				{rows.map((invoice) => {
+				{ordered.map((invoice) => {
 					const isPaid = invoice.status === "paid";
 					const lane = laneOf?.(invoice) ?? null;
+					const isUpgrade = invoice.kind === "upgrade";
 					return (
 						<div key={invoice.id}>
-							<div className="flex items-center justify-between gap-3">
+							<div
+								className={`flex items-center justify-between gap-3 ${
+									isUpgrade ? "ml-2 border-l-2 border-amber-300/40 pl-3" : ""
+								}`}
+							>
 								{/* Paid: the row's number opens its receipt. Unpaid rows carry
 								    no box of their own — the period's box above covers them. */}
 								{isPaid && (
@@ -364,16 +386,21 @@ function PeriodCard({
 										{lane === "plan" && invoice.kind !== "upgrade" && (
 											<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
 										)}
-										{invoice.kind === "upgrade" && (
+										{isUpgrade && (
 											<IzPill variant="amber">
 												{t.subscription.laneUpgrade}
 											</IzPill>
 										)}
 										<span className="iz-muted truncate">
-											{invoice.planName} ·{" "}
-											{invoice.billingCycle === "weekly"
-												? t.subscription.billedWeekly
-												: t.subscription.billedMonthly}
+											{isUpgrade
+												? fill(t.subscription.upgradeTo, {
+														plan: invoice.planName,
+													})
+												: `${invoice.planName} · ${
+														invoice.billingCycle === "weekly"
+															? t.subscription.billedWeekly
+															: t.subscription.billedMonthly
+													}`}
 										</span>
 									</span>
 									{isPaid && invoice.paidAt && (
@@ -405,6 +432,7 @@ function PeriodCard({
 								</span>
 								<span className="flex shrink-0 items-center gap-2">
 									<span className="iz-sm font-bold">
+										{isUpgrade ? "+" : ""}
 										{formatRM(Number(invoice.amount))}
 									</span>
 									<IzPill variant={isPaid ? "green" : "amber"}>
@@ -414,6 +442,20 @@ function PeriodCard({
 									</IzPill>
 								</span>
 							</div>
+							{/* The sum the upgrade lines add up to — printed once, under the
+							    last of them, so "Enterprise + 3,000 = Scale" is on the page. */}
+							{invoice.id === lastUpgradeId && (
+								<div className="iz-between ml-2 mt-1 border-l-2 border-amber-300/40 pl-3">
+									<span className="iz-tiny iz-muted">
+										{fill(t.subscription.planTotalWith, {
+											plan: invoice.planName,
+										})}
+									</span>
+									<span className="iz-sm font-semibold">
+										{formatRM(planCents / 100)}
+									</span>
+								</div>
+							)}
 							{receiptFor === invoice.id && (
 								<InvoiceReceipt invoiceId={invoice.id} />
 							)}

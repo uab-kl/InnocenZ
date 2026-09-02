@@ -1655,6 +1655,8 @@ const en = {
 		receiptTap: "Tap a paid period for its receipt",
 		/** Plan-switch proration — shown on the row and on the receipt. */
 		laneUpgrade: "Upgrade",
+		upgradeTo: "→ {plan}",
+		planTotalWith: "Plan total · {plan}",
 		priceBeforeDeduction: "Plan price {amount}",
 		creditDeducted: "Deduction from previous plan −{amount}",
 		receiptBase: "Plan price",
@@ -7292,6 +7294,8 @@ const zh: PortalTranslations = {
 		receiptNoPayment: "由 InnocenZ 标记为已付款 — 此账期未附付款记录。",
 		receiptTap: "点击已付款账期查看收据",
 		laneUpgrade: "升级",
+		upgradeTo: "→ {plan}",
+		planTotalWith: "方案合计 · {plan}",
 		priceBeforeDeduction: "方案价格 {amount}",
 		creditDeducted: "前方案抵扣 −{amount}",
 		receiptBase: "方案价格",
