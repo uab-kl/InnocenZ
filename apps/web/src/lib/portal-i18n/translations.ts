@@ -1633,6 +1633,14 @@ const en = {
 		 * direct-debit ones above so a saved mandate keeps reading as a mandate.
 		 */
 		methodFpxLink: "FPX (online banking)",
+		/**
+		 * On a link-and-pay rail the email is not a "billing email" — it is
+		 * where the payment link goes. Optional only because the link also
+		 * reaches the org in the app and by WhatsApp; the note says so.
+		 */
+		sendLinksTo: "Send payment links to",
+		linksAlsoReachYou:
+			"Optional — the link also reaches your owner and finance accounts in the app and by WhatsApp, and there is a Pay now button on your Today page.",
 		methodFpxLinkNote:
 			"We send you a payment link each period and you pay at your own bank — every Malaysian bank, nothing to set up.",
 		savedFpxLink: "FPX",
@@ -7238,6 +7246,9 @@ const zh: PortalTranslations = {
 		savedFpx: "FPX 银行直接扣账",
 
 		methodFpxLink: "FPX（网上银行）",
+		sendLinksTo: "付款链接发送至",
+		linksAlsoReachYou:
+			"选填 — 付款链接也会通过应用内通知和 WhatsApp 发送给您的负责人和财务账号，Today 页面亦有「立即付款」按钮。",
 		methodFpxLinkNote:
 			"每个账期我们会发送付款链接，您在自己的银行完成付款 — 支持所有马来西亚银行，无需任何设置。",
 		savedFpxLink: "FPX",

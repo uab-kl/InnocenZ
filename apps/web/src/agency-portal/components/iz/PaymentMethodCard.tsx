@@ -1,4 +1,5 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
+import { useStore } from "@agency-portal/lib/store";
 import { useQuery } from "@tanstack/react-query";
 import { CreditCard } from "lucide-react";
 import { useState } from "react";
@@ -72,8 +73,19 @@ export function PaymentMethodCard({
 }) {
 	const { t } = usePortalLocale();
 	const { logout } = useAuth();
+	// The signed-in identity lives in the portal store, not the auth context —
+	// the context only knows whether a token exists.
+	const signedInEmail = useStore((s) => s.user?.email ?? "");
 	const [editing, setEditing] = useState(false);
 	const [type, setType] = useState<PaymentMethodType>("card");
+	/**
+	 * The rails where nothing is charged and a LINK is sent instead. On these
+	 * the email field is the delivery address, so it is labelled that way and
+	 * pre-filled with the signed-in account's email — a venue should not have to
+	 * retype the address it just logged in with to receive its own bills.
+	 */
+	const isLinkRail = type === "fpx" || type === "ewallet";
+	const accountEmail = signedInEmail;
 	const [number, setNumber] = useState("");
 	const [holder, setHolder] = useState("");
 	const [expiry, setExpiry] = useState("");
@@ -168,7 +180,12 @@ export function PaymentMethodCard({
 				? `${String(card.expMonth).padStart(2, "0")}/${String(card.expYear).slice(-2)}`
 				: "",
 		);
-		setEmail(card?.billingEmail ?? "");
+		// A saved link rail with no address on file starts from the account's
+		// own email rather than blank — still editable, never silently saved.
+		setEmail(
+			card?.billingEmail ??
+				(card?.type === "fpx" || card?.type === "ewallet" ? accountEmail : ""),
+		);
 		setError(null);
 		setEditing(true);
 	};
@@ -353,6 +370,15 @@ export function PaymentMethodCard({
 									onClick={() => {
 										setType(choice.value);
 										setError(null);
+										// Switching onto a link rail with the field still empty
+										// pre-fills the account email; switching with a typed
+										// address leaves it alone.
+										if (
+											(choice.value === "fpx" || choice.value === "ewallet") &&
+											email.trim() === ""
+										) {
+											setEmail(accountEmail);
+										}
 									}}
 								>
 									{choice.label}
@@ -512,9 +538,18 @@ export function PaymentMethodCard({
 						</div>
 					)}
 
+					{/*
+					 * On a link-and-pay rail this field is not a "billing email" — it is
+					 * WHERE THE PAYMENT LINK GOES, so the label says that. It stays
+					 * optional only because the link also reaches the org in the app and
+					 * by WhatsApp, and the note under it says so rather than leaving
+					 * "optional" to imply the field does nothing.
+					 */}
 					<div className="iz-field">
 						<label htmlFor="pm-email">
-							{t.subscription.billingEmailOptional}
+							{isLinkRail
+								? t.subscription.sendLinksTo
+								: t.subscription.billingEmailOptional}
 						</label>
 						<input
 							id="pm-email"
@@ -523,6 +558,11 @@ export function PaymentMethodCard({
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
 						/>
+						{isLinkRail && (
+							<p className="iz-tiny iz-muted2 mt-1">
+								{t.subscription.linksAlsoReachYou}
+							</p>
+						)}
 					</div>
 
 					{error && (
