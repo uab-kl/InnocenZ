@@ -6,6 +6,7 @@ import {
   adminRequestRepository,
   agencyMemberRepository,
   memberSubscriptionRepository,
+  subscriptionInvoiceRepository,
   subscriptionRepository,
 } from '@/composition-root.js';
 import { notifyMany } from '@/features/notification/notify.js';
@@ -319,6 +320,10 @@ async function runAgencyTier(): Promise<void> {
     await applyPlanChangeToLedger({
       memberSubscriptionRepository,
       subscriptionRepository,
+      // The week opens at 03:00 and this job moves the tier at 03:30: the
+      // week's invoice already exists, unpaid, at the old tier. Pricing the
+      // switch re-prices it to the tier the PVs actually put the agency on.
+      subscriptionInvoiceRepository,
       record: {
         id: request?.id ?? 'agency-tier-job',
         subscriberType: 'agency',

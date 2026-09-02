@@ -361,8 +361,13 @@ function PeriodCard({
 												{t.subscription.lanePosAddon}
 											</IzPill>
 										)}
-										{lane === "plan" && (
+										{lane === "plan" && invoice.kind !== "upgrade" && (
 											<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
+										)}
+										{invoice.kind === "upgrade" && (
+											<IzPill variant="amber">
+												{t.subscription.laneUpgrade}
+											</IzPill>
 										)}
 										<span className="iz-muted truncate">
 											{invoice.planName} ·{" "}
@@ -376,6 +381,25 @@ function PeriodCard({
 											{fill(t.subscription.paidOn, {
 												date: format(parseISO(invoice.paidAt), "d MMM yyyy"),
 											})}
+										</span>
+									)}
+									{/* THE DEDUCTION, IN THE OPEN. A net figure alone reads as a
+									    wrong price; the plan price and what came off it are printed
+									    together, with the sentence that explains it. */}
+									{Number(invoice.creditApplied) > 0 && (
+										<span className="iz-tiny block text-[var(--iz-green)]">
+											{fill(t.subscription.priceBeforeDeduction, {
+												amount: formatRM(Number(invoice.baseAmount)),
+											})}
+											{" · "}
+											{fill(t.subscription.creditDeducted, {
+												amount: formatRM(Number(invoice.creditApplied)),
+											})}
+										</span>
+									)}
+									{invoice.note && (
+										<span className="iz-tiny iz-muted2 block">
+											{invoice.note}
 										</span>
 									)}
 								</span>

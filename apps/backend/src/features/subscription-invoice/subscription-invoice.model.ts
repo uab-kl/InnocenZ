@@ -11,6 +11,8 @@ import {
 // otherwise — nothing in this app can observe a bank transfer, so no automatic
 // transition to `paid` exists or should.
 export const subscriptionInvoiceStatusValues = ['unpaid', 'paid'] as const;
+export const subscriptionInvoiceKindValues = ['period', 'upgrade'] as const;
+export type SubscriptionInvoiceKind = (typeof subscriptionInvoiceKindValues)[number];
 export type SubscriptionInvoiceStatus = (typeof subscriptionInvoiceStatusValues)[number];
 export const subscriptionInvoiceStatusEnum = MainSchema.enum(
   'subscription_invoice_status',
@@ -59,8 +61,20 @@ export const SubscriptionInvoiceTable = MainSchema.table('subscription_invoice',
     .default(sql`'INV-' || lpad(nextval('main.subscription_invoice_no_seq')::text, 6, '0')`),
   periodStart: date('period_start', { mode: 'string' }).notNull(),
   periodEnd: date('period_end', { mode: 'string' }).notNull(),
+  /**
+   * The NET the payer owes — `base_amount − credit_applied`, enforced by CHECK
+   * (migration 0147). Kept as the one figure every reader already uses.
+   */
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
   currency: varchar('currency', { length: 8 }).notNull().default('MYR'),
+  /** 'period' — the normal charge; 'upgrade' — the difference when a PAID period moves to a dearer plan. */
+  kind: varchar('kind', { length: 20 }).$type<SubscriptionInvoiceKind>().notNull().default('period'),
+  /** What the period cost before any deduction. */
+  baseAmount: numeric('base_amount', { precision: 12, scale: 2 }).notNull(),
+  /** How much open credit (from an earlier downgrade) was used on this invoice. */
+  creditApplied: numeric('credit_applied', { precision: 12, scale: 2 }).notNull().default('0'),
+  /** The sentence behind an upgrade or a deduction, printed on the row and the receipt. */
+  note: varchar('note', { length: 255 }),
   status: subscriptionInvoiceStatusEnum('status').notNull().default('unpaid'),
   // Set when an admin marks it paid, cleared when they take that back. Never
   // written by the generator.

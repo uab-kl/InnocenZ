@@ -77,6 +77,29 @@ export function InvoiceReceipt({ invoiceId }: { invoiceId: string }) {
 					value={`${format(parseISO(invoice.periodStart), "d MMM yyyy")} – ${format(parseISO(invoice.periodEnd), "d MMM yyyy")}`}
 				/>
 				<Row label={t.adminService.planLabel} value={invoice.planName} />
+				{/* The arithmetic behind the total, when there is any: plan price,
+				    what was deducted and why, or the upgrade difference. */}
+				{invoice.kind === "upgrade" && (
+					<Row
+						label={t.subscription.receiptUpgrade}
+						value={invoice.note ?? formatRM(Number(invoice.baseAmount))}
+					/>
+				)}
+				{Number(invoice.creditApplied) > 0 && (
+					<>
+						<Row
+							label={t.subscription.receiptBase}
+							value={formatRM(Number(invoice.baseAmount))}
+						/>
+						<Row
+							label={t.subscription.receiptCredit}
+							value={`−${formatRM(Number(invoice.creditApplied))}`}
+						/>
+						{invoice.note && (
+							<p className="iz-tiny iz-muted2 py-1">{invoice.note}</p>
+						)}
+					</>
+				)}
 				<Row
 					label={t.subscription.receiptFrom}
 					value={org?.name ?? invoice.subscriberName}

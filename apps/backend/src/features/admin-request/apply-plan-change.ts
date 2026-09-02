@@ -1,6 +1,7 @@
 import { logger } from '@/util/logger.js';
 import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import type { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
+import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import type { SubscriberType } from '@/features/member-subscription/member-subscription.model.js';
 
 /**
@@ -29,6 +30,12 @@ import type { SubscriberType } from '@/features/member-subscription/member-subsc
 export async function applyPlanChangeToLedger(params: {
   memberSubscriptionRepository: MemberSubscriptionRepositoryClass;
   subscriptionRepository: SubscriptionRepositoryClass;
+  /**
+   * When given, the switch is PRICED: a paid period moved to a dearer plan
+   * bills the difference, a cheaper plan credits it. Optional only so a caller
+   * that cannot reach the billing ledger still moves the plan.
+   */
+  subscriptionInvoiceRepository?: SubscriptionInvoiceRepositoryClass;
   record: {
     id: string;
     subscriberType: SubscriberType | null;
@@ -66,6 +73,12 @@ export async function applyPlanChangeToLedger(params: {
       page: 1,
       pageSize: 50,
     });
+    // What the org was paying before the switch — the highest of the rows
+    // being closed, which for a sane ledger is the one row on the plan lane.
+    const previous = current.reduce<(typeof current)[number] | null>(
+      (best, row) => (!best || Number(row.amount) > Number(best.amount) ? row : best),
+      null,
+    );
     const endedAt = new Date();
     for (const row of current) {
       await memberSubscriptionRepository.update(row.id, {
@@ -77,7 +90,7 @@ export async function applyPlanChangeToLedger(params: {
 
     // The negotiated price wins when one was set; otherwise the plan's.
     const amount = record.quotedAmount ?? plan.price;
-    await memberSubscriptionRepository.create({
+    const created = await memberSubscriptionRepository.create({
       subscriberType: record.subscriberType,
       subscriberId: record.subscriberId,
       subscriberName: record.subscriberName,
@@ -90,6 +103,24 @@ export async function applyPlanChangeToLedger(params: {
       createdBy: actor,
       updatedBy: actor,
     });
+
+    // Price the switch against the period already running. A first plan
+    // (nothing closed) has nothing to prorate against.
+    if (params.subscriptionInvoiceRepository && previous && created) {
+      const outcome = await params.subscriptionInvoiceRepository.prorateLaneSwitch({
+        subscriberType: record.subscriberType,
+        subscriberId: record.subscriberId,
+        newMemberSubscriptionId: created.id,
+        fromPlanName: previous.planName,
+        toPlanName: plan.name,
+        fromAmount: previous.amount,
+        toAmount: amount,
+        actor,
+      });
+      logger.info(
+        `[applyPlanChangeToLedger] ${record.subscriberName}: ${previous.planName} → ${plan.name}, proration: ${outcome}`,
+      );
+    }
   } catch (error) {
     logger.error('[applyPlanChangeToLedger] Error:', error);
   }

@@ -1653,6 +1653,13 @@ const en = {
 		receiptNoPayment:
 			"Marked paid by InnocenZ — no payment record was attached to this period.",
 		receiptTap: "Tap a paid period for its receipt",
+		/** Plan-switch proration — shown on the row and on the receipt. */
+		laneUpgrade: "Upgrade",
+		priceBeforeDeduction: "Plan price {amount}",
+		creditDeducted: "Deduction from previous plan −{amount}",
+		receiptBase: "Plan price",
+		receiptCredit: "Deduction (credit from previous plan)",
+		receiptUpgrade: "Upgrade charge",
 		/**
 		 * On a link-and-pay rail the email is not a "billing email" — it is
 		 * where the payment link goes. Optional only because the link also
@@ -7284,6 +7291,12 @@ const zh: PortalTranslations = {
 		receiptPrint: "打印",
 		receiptNoPayment: "由 InnocenZ 标记为已付款 — 此账期未附付款记录。",
 		receiptTap: "点击已付款账期查看收据",
+		laneUpgrade: "升级",
+		priceBeforeDeduction: "方案价格 {amount}",
+		creditDeducted: "前方案抵扣 −{amount}",
+		receiptBase: "方案价格",
+		receiptCredit: "抵扣（前方案余额）",
+		receiptUpgrade: "升级差额",
 		sendLinksTo: "付款链接发送至",
 		linksAlsoReachYou:
 			"选填 — 付款链接也会通过应用内通知和 WhatsApp 发送给您的负责人和财务账号，Today 页面亦有「立即付款」按钮。",

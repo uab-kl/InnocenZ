@@ -1030,6 +1030,13 @@
       "when": 1791690000000,
       "tag": "0146_invoice_no_and_checkout",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1791790000000,
+      "tag": "0147_plan_switch_proration",
+      "breakpoints": true
     }
   ]
 }

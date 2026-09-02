@@ -49,6 +49,7 @@ export class AdminRequestControllerClass {
     await applyPlanChangeToLedger({
       memberSubscriptionRepository: this.memberSubscriptionRepository,
       subscriptionRepository: this.subscriptionRepository,
+      subscriptionInvoiceRepository: this.subscriptionInvoiceRepository,
       record,
       actor,
     });
