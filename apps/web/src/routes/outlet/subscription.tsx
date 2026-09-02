@@ -1,7 +1,6 @@
 import { isoKeyFromDate } from "@agency-portal/components/iz/HistDateCalendar";
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import {
-	PastSubscriptionsDisclosure,
 	PaymentHistoryList,
 	SubscriptionRecordCard,
 } from "@agency-portal/components/iz/SubscriptionRecordList";
@@ -873,7 +872,6 @@ function OutletSubscriptionPage() {
 						<SubscriptionRecordCard key={row.id} row={row} />
 					))
 				)}
-				<PastSubscriptionsDisclosure rows={backend.pastSubscriptions} />
 			</div>
 
 			{backend.backed && (

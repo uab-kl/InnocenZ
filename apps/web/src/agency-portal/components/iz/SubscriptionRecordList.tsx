@@ -1,6 +1,9 @@
 import { InvoiceReceipt } from "@agency-portal/components/iz/InvoiceReceipt";
 import { formatRM, IzCard, IzPill } from "@agency-portal/components/iz/ui";
-import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
+import {
+	periodLabel,
+	type SubscriptionRecordRow,
+} from "@agency-portal/lib/subscription-record";
 import { useMutation } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ChevronDown, Receipt } from "lucide-react";
@@ -11,18 +14,6 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { SubscriptionInvoice } from "@/services/subscription-invoice";
 import { createCheckout } from "@/services/subscription-payment";
-
-/** "1 Aug – 31 Aug 2026", with the year printed once. */
-function periodLabel(startIso: string, endIso: string): string {
-	try {
-		const start = parseISO(startIso);
-		const end = parseISO(endIso);
-		const sameYear = start.getFullYear() === end.getFullYear();
-		return `${format(start, sameYear ? "d MMM" : "d MMM yyyy")} – ${format(end, "d MMM yyyy")}`;
-	} catch {
-		return `${startIso} – ${endIso}`;
-	}
-}
 
 /**
  * What this org has been BILLED, period by period, and whether InnocenZ has
@@ -296,6 +287,12 @@ function PeriodCard({
 	// Which PAID row has its receipt open. Local to the card so it works inside
 	// the disclosure too, with nothing threaded through.
 	const [receiptFor, setReceiptFor] = useState<string | null>(null);
+	/**
+	 * Collapsed by default (owner, 2 Sep 2026): the card shows the date range
+	 * and the total, and the lane rows — plan, upgrade, add-on — open on a tap.
+	 * Four lines of arithmetic per month is the detail, not the headline.
+	 */
+	const [open, setOpen] = useState(false);
 	const first = rows[0];
 	if (!first) return null;
 	// What the period's box selects: every lane in this window that still owes.
@@ -325,144 +322,162 @@ function PeriodCard({
 	);
 	return (
 		<IzCard flat>
-			<div className="iz-between gap-2">
-				<div className="flex min-w-0 items-center gap-2">
-					{/* The box is on the PERIOD: ticking it takes every unpaid lane in
-					    the window into one payment — the plan and its POS add-on are
-					    one month's bill, not two. */}
-					{onToggle && unpaidIds.length > 0 && (
-						<input
-							type="checkbox"
-							className="h-4 w-4 shrink-0 accent-[var(--iz-gold)]"
-							checked={unpaidIds.every((id) => selected?.has(id))}
-							onChange={() => onToggle(unpaidIds)}
-							aria-label={periodLabel(first.periodStart, first.periodEnd)}
-						/>
-					)}
-					<Receipt className="h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
-					<p className="iz-sm truncate font-semibold">
-						{periodLabel(first.periodStart, first.periodEnd)}
-					</p>
-				</div>
-				{rows.length > 1 && (
-					<p className="iz-sm shrink-0 font-bold">{formatRM(cents / 100)}</p>
+			<div className="flex items-center gap-2">
+				{/* The box is on the PERIOD: ticking it takes every unpaid lane in
+				    the window into one payment — the plan and its POS add-on are
+				    one month's bill, not two. It sits OUTSIDE the disclosure button
+				    so a tick never opens the card and a tap never ticks the box. */}
+				{onToggle && unpaidIds.length > 0 && (
+					<input
+						type="checkbox"
+						className="h-4 w-4 shrink-0 accent-[var(--iz-gold)]"
+						checked={unpaidIds.every((id) => selected?.has(id))}
+						onChange={() => onToggle(unpaidIds)}
+						aria-label={periodLabel(first.periodStart, first.periodEnd)}
+					/>
 				)}
+				{/* The headline: date range and the period's total, always — the
+				    total used to print only when a period had more than one lane,
+				    which left a one-lane month with no figure once collapsed. */}
+				<button
+					type="button"
+					className="iz-between min-w-0 flex-1 cursor-pointer gap-2 text-left"
+					aria-expanded={open}
+					onClick={() => setOpen((prev) => !prev)}
+				>
+					<span className="flex min-w-0 items-center gap-2">
+						<Receipt className="h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
+						<span className="iz-sm truncate font-semibold">
+							{periodLabel(first.periodStart, first.periodEnd)}
+						</span>
+					</span>
+					<span className="flex shrink-0 items-center gap-2">
+						<span className="iz-sm font-bold">{formatRM(cents / 100)}</span>
+						<ChevronDown
+							className={`h-4 w-4 text-[var(--iz-muted)] transition-transform ${
+								open ? "rotate-180" : ""
+							}`}
+						/>
+					</span>
+				</button>
 			</div>
-			<div className="mt-2 space-y-2">
-				{ordered.map((invoice) => {
-					const isPaid = invoice.status === "paid";
-					const lane = laneOf?.(invoice) ?? null;
-					const isUpgrade = invoice.kind === "upgrade";
-					return (
-						<div key={invoice.id}>
-							<div
-								className={`flex items-center justify-between gap-3 ${
-									isUpgrade ? "ml-2 border-l-2 border-amber-300/40 pl-3" : ""
-								}`}
-							>
-								{/* Paid: the row's number opens its receipt. Unpaid rows carry
+			{open && (
+				<div className="mt-2 space-y-2">
+					{ordered.map((invoice) => {
+						const isPaid = invoice.status === "paid";
+						const lane = laneOf?.(invoice) ?? null;
+						const isUpgrade = invoice.kind === "upgrade";
+						return (
+							<div key={invoice.id}>
+								<div
+									className={`flex items-center justify-between gap-3 ${
+										isUpgrade ? "ml-2 border-l-2 border-amber-300/40 pl-3" : ""
+									}`}
+								>
+									{/* Paid: the row's number opens its receipt. Unpaid rows carry
 								    no box of their own — the period's box above covers them. */}
-								{isPaid && (
-									<button
-										type="button"
-										className="iz-tiny iz-muted2 shrink-0 underline-offset-2 hover:underline"
-										onClick={() =>
-											setReceiptFor(
-												receiptFor === invoice.id ? null : invoice.id,
-											)
-										}
-										aria-expanded={receiptFor === invoice.id}
-									>
-										{invoice.invoiceNo}
-									</button>
-								)}
-								<span className="min-w-0">
-									<span className="iz-tiny flex items-center gap-2">
-										{lane === "addon" && (
-											<IzPill variant="violet">
-												{t.subscription.lanePosAddon}
-											</IzPill>
-										)}
-										{lane === "plan" && invoice.kind !== "upgrade" && (
-											<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
-										)}
-										{isUpgrade && (
-											<IzPill variant="amber">
-												{t.subscription.laneUpgrade}
-											</IzPill>
-										)}
-										<span className="iz-muted truncate">
-											{isUpgrade
-												? fill(t.subscription.upgradeTo, {
-														plan: invoice.planName,
-													})
-												: `${invoice.planName} · ${
-														invoice.billingCycle === "weekly"
-															? t.subscription.billedWeekly
-															: t.subscription.billedMonthly
-													}`}
-										</span>
-									</span>
-									{isPaid && invoice.paidAt && (
-										<span className="iz-tiny iz-muted2 block">
-											{fill(t.subscription.paidOn, {
-												date: format(parseISO(invoice.paidAt), "d MMM yyyy"),
-											})}
-										</span>
+									{isPaid && (
+										<button
+											type="button"
+											className="iz-tiny iz-muted2 shrink-0 underline-offset-2 hover:underline"
+											onClick={() =>
+												setReceiptFor(
+													receiptFor === invoice.id ? null : invoice.id,
+												)
+											}
+											aria-expanded={receiptFor === invoice.id}
+										>
+											{invoice.invoiceNo}
+										</button>
 									)}
-									{/* THE DEDUCTION, IN THE OPEN. A net figure alone reads as a
+									<span className="min-w-0">
+										<span className="iz-tiny flex items-center gap-2">
+											{lane === "addon" && (
+												<IzPill variant="violet">
+													{t.subscription.lanePosAddon}
+												</IzPill>
+											)}
+											{lane === "plan" && invoice.kind !== "upgrade" && (
+												<IzPill variant="ink">{t.subscription.lanePlan}</IzPill>
+											)}
+											{isUpgrade && (
+												<IzPill variant="amber">
+													{t.subscription.laneUpgrade}
+												</IzPill>
+											)}
+											<span className="iz-muted truncate">
+												{isUpgrade
+													? fill(t.subscription.upgradeTo, {
+															plan: invoice.planName,
+														})
+													: `${invoice.planName} · ${
+															invoice.billingCycle === "weekly"
+																? t.subscription.billedWeekly
+																: t.subscription.billedMonthly
+														}`}
+											</span>
+										</span>
+										{isPaid && invoice.paidAt && (
+											<span className="iz-tiny iz-muted2 block">
+												{fill(t.subscription.paidOn, {
+													date: format(parseISO(invoice.paidAt), "d MMM yyyy"),
+												})}
+											</span>
+										)}
+										{/* THE DEDUCTION, IN THE OPEN. A net figure alone reads as a
 									    wrong price; the plan price and what came off it are printed
 									    together, with the sentence that explains it. */}
-									{Number(invoice.creditApplied) > 0 && (
-										<span className="iz-tiny block text-[var(--iz-green)]">
-											{fill(t.subscription.priceBeforeDeduction, {
-												amount: formatRM(Number(invoice.baseAmount)),
-											})}
-											{" · "}
-											{fill(t.subscription.creditDeducted, {
-												amount: formatRM(Number(invoice.creditApplied)),
-											})}
-										</span>
-									)}
-									{invoice.note && (
-										<span className="iz-tiny iz-muted2 block">
-											{invoice.note}
-										</span>
-									)}
-								</span>
-								<span className="flex shrink-0 items-center gap-2">
-									<span className="iz-sm font-bold">
-										{isUpgrade ? "+" : ""}
-										{formatRM(Number(invoice.amount))}
+										{Number(invoice.creditApplied) > 0 && (
+											<span className="iz-tiny block text-[var(--iz-green)]">
+												{fill(t.subscription.priceBeforeDeduction, {
+													amount: formatRM(Number(invoice.baseAmount)),
+												})}
+												{" · "}
+												{fill(t.subscription.creditDeducted, {
+													amount: formatRM(Number(invoice.creditApplied)),
+												})}
+											</span>
+										)}
+										{invoice.note && (
+											<span className="iz-tiny iz-muted2 block">
+												{invoice.note}
+											</span>
+										)}
 									</span>
-									<IzPill variant={isPaid ? "green" : "amber"}>
-										{isPaid
-											? t.subscription.statusPaid
-											: t.subscription.statusUnpaid}
-									</IzPill>
-								</span>
-							</div>
-							{/* The sum the upgrade lines add up to — printed once, under the
-							    last of them, so "Enterprise + 3,000 = Scale" is on the page. */}
-							{invoice.id === lastUpgradeId && (
-								<div className="iz-between ml-2 mt-1 border-l-2 border-amber-300/40 pl-3">
-									<span className="iz-tiny iz-muted">
-										{fill(t.subscription.planTotalWith, {
-											plan: invoice.planName,
-										})}
-									</span>
-									<span className="iz-sm font-semibold">
-										{formatRM(planCents / 100)}
+									<span className="flex shrink-0 items-center gap-2">
+										<span className="iz-sm font-bold">
+											{isUpgrade ? "+" : ""}
+											{formatRM(Number(invoice.amount))}
+										</span>
+										<IzPill variant={isPaid ? "green" : "amber"}>
+											{isPaid
+												? t.subscription.statusPaid
+												: t.subscription.statusUnpaid}
+										</IzPill>
 									</span>
 								</div>
-							)}
-							{receiptFor === invoice.id && (
-								<InvoiceReceipt invoiceId={invoice.id} />
-							)}
-						</div>
-					);
-				})}
-			</div>
+								{/* The sum the upgrade lines add up to — printed once, under the
+							    last of them, so "Enterprise + 3,000 = Scale" is on the page. */}
+								{invoice.id === lastUpgradeId && (
+									<div className="iz-between ml-2 mt-1 border-l-2 border-amber-300/40 pl-3">
+										<span className="iz-tiny iz-muted">
+											{fill(t.subscription.planTotalWith, {
+												plan: invoice.planName,
+											})}
+										</span>
+										<span className="iz-sm font-semibold">
+											{formatRM(planCents / 100)}
+										</span>
+									</div>
+								)}
+								{receiptFor === invoice.id && (
+									<InvoiceReceipt invoiceId={invoice.id} />
+								)}
+							</div>
+						);
+					})}
+				</div>
+			)}
 		</IzCard>
 	);
 }
@@ -549,17 +564,8 @@ function PaidPeriodsDisclosure({
  */
 export function SubscriptionRecordCard({
 	row,
-	showAmount = true,
 }: {
 	row: SubscriptionRecordRow;
-	/**
-	 * Whether to print the price. Off for past plans: `member_subscription`
-	 * records what was SUBSCRIBED TO, never what was charged, and most ended rows
-	 * are a plan switch that started and ended the same day — so the figure beside
-	 * them is a rate that was never billed, on a card that reads like a receipt.
-	 * The live rows keep it, because that is what the org is paying now.
-	 */
-	showAmount?: boolean;
 }) {
 	return (
 		<IzCard flat>
@@ -575,69 +581,12 @@ export function SubscriptionRecordCard({
 					</div>
 				</div>
 				<div className="shrink-0 text-right">
-					{showAmount && (
-						<p className="iz-sm font-bold">{formatRM(row.amountRm)}</p>
-					)}
-					<IzPill variant={row.tone} className={showAmount ? "!mt-1" : ""}>
+					<p className="iz-sm font-bold">{formatRM(row.amountRm)}</p>
+					<IzPill variant={row.tone} className="!mt-1">
 						{row.statusLabel}
 					</IzPill>
 				</div>
 			</div>
 		</IzCard>
-	);
-}
-
-/**
- * Plans this org has been on and is no longer, collapsed by default.
- *
- * A switch ENDS one `member_subscription` row and STARTS another, so an org that
- * has changed plan a few times has a column of priced cards that all read like
- * bills — which is why the live subscription is listed on its own above and the
- * rest lives in here. Renders nothing at all when there is no history, so a new
- * org is not offered a control that opens onto an empty list.
- */
-export function PastSubscriptionsDisclosure({
-	rows,
-}: {
-	rows: SubscriptionRecordRow[];
-}) {
-	const { t } = usePortalLocale();
-	const [open, setOpen] = useState(false);
-	if (rows.length === 0) return null;
-	return (
-		<div className="mt-2">
-			<button
-				type="button"
-				className="iz-card iz-between w-full cursor-pointer text-left"
-				aria-expanded={open}
-				onClick={() => setOpen((prev) => !prev)}
-			>
-				<div className="min-w-0">
-					<p className="iz-sm font-semibold">
-						{t.subscription.planChangeHistory}
-					</p>
-					<p className="iz-tiny iz-muted2 mt-0.5">
-						{fill(
-							rows.length === 1
-								? t.subscription.pastPlansOne
-								: t.subscription.pastPlansMany,
-							{ n: rows.length },
-						)}
-					</p>
-				</div>
-				<ChevronDown
-					className={`h-4 w-4 shrink-0 text-[var(--iz-muted)] transition-transform ${
-						open ? "rotate-180" : ""
-					}`}
-				/>
-			</button>
-			{open && (
-				<div className="mt-2 space-y-2">
-					{rows.map((row) => (
-						<SubscriptionRecordCard key={row.id} row={row} showAmount={false} />
-					))}
-				</div>
-			)}
-		</div>
 	);
 }

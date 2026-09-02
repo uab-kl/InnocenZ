@@ -1,8 +1,8 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
+	currentPeriodOf,
 	nextRenewalFrom,
 	nextRenewalFromInvoices,
-	planChangeRecordFromMember,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
 	subscriptionRecordFromMember,
@@ -132,36 +132,6 @@ export function useOutletSubscription() {
 	);
 
 	/**
-	 * What this venue is subscribed to RIGHT NOW — its live plan, plus the POS
-	 * add-on when it has one. Deliberately not the whole ledger.
-	 *
-	 * `member_subscription` keeps every row a venue has ever held, and a plan
-	 * switch ends one row and starts another, so a venue that tried a few plans
-	 * had seven rows listed for one subscription. The ended and cancelled ones
-	 * carry no payment state (see the type's docstring), name nothing the venue
-	 * can act on, and read as a bill — so they are dropped here.
-	 *
-	 * Every ACTIVE row is kept rather than just the plan + add-on the pickers
-	 * derive: those two are matched against the plan catalog, and a row the
-	 * catalog cannot classify would otherwise vanish from the one list that is
-	 * supposed to state what the venue is paying for. The plan is listed first —
-	 * sorting by start date put the add-on on top, because POS is bought after
-	 * the plan it attaches to.
-	 */
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
-		if (!backed) return [];
-		const active = sortMemberSubscriptions(
-			billingQuery.data?.data ?? [],
-		).filter((sub) => sub.status === "active");
-		const isAddon = (sub: MemberSubscription) =>
-			Boolean(sub.subscriptionId && addonPlanIds.has(sub.subscriptionId));
-		return [
-			...active.filter((sub) => !isAddon(sub)),
-			...active.filter(isAddon),
-		].map((sub) => subscriptionRecordFromMember(sub, "InnocenZ Outlet", t));
-	}, [backed, billingQuery.data, addonPlanIds, t]);
-
-	/**
 	 * Everything this venue has been on and is no longer — ended, cancelled, past
 	 * due. Kept out of the list above and shown behind a disclosure, because it is
 	 * reference, not a bill: these rows carry no payment state, so a venue reading
@@ -224,12 +194,61 @@ export function useOutletSubscription() {
 	const invoiceLane = (invoice: SubscriptionInvoice): "plan" | "addon" | null =>
 		invoiceLaneById.get(invoice.memberSubscriptionId) ?? null;
 
-	const pastSubscriptions = useMemo<SubscriptionRecordRow[]>(() => {
+	/**
+	 * What this venue is subscribed to RIGHT NOW — its live plan, plus the POS
+	 * add-on when it has one. Deliberately not the whole ledger.
+	 *
+	 * `member_subscription` keeps every row a venue has ever held, and a plan
+	 * switch ends one row and starts another, so a venue that tried a few plans
+	 * had seven rows listed for one subscription. The ended and cancelled ones
+	 * carry no payment state (see the type's docstring), name nothing the venue
+	 * can act on, and read as a bill — so they are dropped here.
+	 *
+	 * Every ACTIVE row is kept rather than just the plan + add-on the pickers
+	 * derive: those two are matched against the plan catalog, and a row the
+	 * catalog cannot classify would otherwise vanish from the one list that is
+	 * supposed to state what the venue is paying for. The plan is listed first —
+	 * sorting by start date put the add-on on top, because POS is bought after
+	 * the plan it attaches to.
+	 *
+	 * Each row carries its lane's CURRENT billing window, read from that lane's
+	 * own invoices — the plan's month and the POS add-on's month start on
+	 * different days, and each venue's month starts on its own activation day.
+	 * This is why the list sits below the invoice query it reads.
+	 */
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
 		if (!backed) return [];
-		return sortMemberSubscriptions(billingQuery.data?.data ?? [])
-			.filter((sub) => sub.status !== "active")
-			.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Outlet", t));
-	}, [backed, billingQuery.data, t]);
+		const active = sortMemberSubscriptions(
+			billingQuery.data?.data ?? [],
+		).filter((sub) => sub.status === "active");
+		const isAddon = (sub: MemberSubscription) =>
+			Boolean(sub.subscriptionId && addonPlanIds.has(sub.subscriptionId));
+		const windowOf = (lane: "plan" | "addon") =>
+			currentPeriodOf(
+				paymentHistory.filter(
+					(invoice) =>
+						invoiceLaneById.get(invoice.memberSubscriptionId) === lane,
+				),
+			);
+		return [
+			...active.filter((sub) => !isAddon(sub)),
+			...active.filter(isAddon),
+		].map((sub) =>
+			subscriptionRecordFromMember(
+				sub,
+				"InnocenZ Outlet",
+				t,
+				windowOf(isAddon(sub) ? "addon" : "plan"),
+			),
+		);
+	}, [
+		backed,
+		billingQuery.data,
+		addonPlanIds,
+		paymentHistory,
+		invoiceLaneById,
+		t,
+	]);
 
 	const activeSubscription = useMemo(() => {
 		if (!backed) return null;
@@ -538,7 +557,6 @@ export function useOutletSubscription() {
 		backed,
 		billingHistory,
 		/** Ended/cancelled subscriptions, behind a disclosure on the screen. */
-		pastSubscriptions,
 		/** Billed periods with their paid/unpaid state — the real payment history. */
 		paymentHistory,
 		/**

@@ -1,4 +1,5 @@
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
+import { format, parseISO } from "date-fns";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
@@ -58,15 +59,64 @@ function cycleWord(cycle: string, t: PortalTranslations): string {
 	return cycle.charAt(0).toUpperCase() + cycle.slice(1);
 }
 
+/** One opened billing period, as the ledger states it (KL calendar days). */
+export interface BillingWindow {
+	periodStart: string;
+	periodEnd: string;
+}
+
+/**
+ * The window an org is IN today on one lane: the latest period the ledger has
+ * opened among the invoices given. Pass ONE lane's invoices — the plan's and
+ * the POS add-on's are anchored on different days, and the later of the two
+ * would otherwise claim the other's dates. Upgrade lines are skipped: they
+ * share the window of the period they belong to and carry no dates of their
+ * own. Null until the first period is minted.
+ */
+export function currentPeriodOf(
+	invoices: { periodStart: string; periodEnd: string; kind?: string }[],
+): BillingWindow | null {
+	let latest: BillingWindow | null = null;
+	for (const invoice of invoices) {
+		if (invoice.kind && invoice.kind !== "period") continue;
+		if (!latest || invoice.periodEnd > latest.periodEnd) {
+			latest = {
+				periodStart: invoice.periodStart,
+				periodEnd: invoice.periodEnd,
+			};
+		}
+	}
+	return latest;
+}
+
+/** "1 Aug – 31 Aug 2026", with the year printed once. */
+export function periodLabel(startIso: string, endIso: string): string {
+	try {
+		const start = parseISO(startIso);
+		const end = parseISO(endIso);
+		const sameYear = start.getFullYear() === end.getFullYear();
+		return `${format(start, sameYear ? "d MMM" : "d MMM yyyy")} – ${format(end, "d MMM yyyy")}`;
+	} catch {
+		return `${startIso} – ${endIso}`;
+	}
+}
+
 /**
  * `orgLabel` is the plan's owner as the screen names it — "InnocenZ Agency" or
  * "InnocenZ Outlet". It is passed in rather than derived from
  * `sub.subscriberType`, because it is display copy each screen already owns.
+ *
+ * `period` is the lane's CURRENT billing window (owner, 2 Sep 2026). The card
+ * used to print the row's start day — "Fri · 28 Aug 2026" — which is the day
+ * of the last plan SWITCH, not a billing date, and every outlet's month runs
+ * from its own activation day. With a window it prints "3 Aug – 2 Sep 2026";
+ * without one (no period minted yet) it falls back to the start day.
  */
 export function subscriptionRecordFromMember(
 	sub: MemberSubscription,
 	orgLabel: string,
 	t: PortalTranslations,
+	period?: BillingWindow | null,
 ): SubscriptionRecordRow {
 	const cycle = cycleWord(sub.billingCycle, t);
 	// An unrecognised status falls back to showing the raw value rather than
@@ -84,51 +134,10 @@ export function subscriptionRecordFromMember(
 					date: fmtDateLabelFromIso(sub.endedAt.slice(0, 10)),
 				})
 			: fill(t.subscription.billingCycleLine, { cycle }),
-		dateLabel: fmtDateLabelFromIso(sub.startedAt.slice(0, 10)),
+		dateLabel: period
+			? periodLabel(period.periodStart, period.periodEnd)
+			: fmtDateLabelFromIso(sub.startedAt.slice(0, 10)),
 		// numeric over the wire; every display path needs a number.
-		amountRm: Number(sub.amount) || 0,
-		statusLabel: status.label(t),
-		tone: status.tone,
-	};
-}
-
-/**
- * A row the org is NO LONGER on, described as what it actually is: a plan
- * CHANGE, not a subscription that was paid for.
- *
- * `member_subscription` records what was subscribed to and when — a switch ends
- * one row and starts another — and it holds no payment state at all. Rendered
- * with the ordinary builder, an ended row reads *"Tue · 04 Aug 2026 · Monthly
- * billing · ended Tue · 04 Aug 2026"*: a start date, a billing cycle and an end
- * date, i.e. every part of a term that was invoiced. Almost none of these were.
- * Most start and end on the SAME DAY, because they are the trail left by trying
- * plans out, so this says so in place of a billing cycle the org was never
- * charged on.
- */
-export function planChangeRecordFromMember(
-	sub: MemberSubscription,
-	orgLabel: string,
-	t: PortalTranslations,
-): SubscriptionRecordRow {
-	const status = MEMBER_STATUS[sub.status] ?? {
-		label: () => sub.status,
-		tone: "ink" as const,
-	};
-	const startIso = sub.startedAt.slice(0, 10);
-	const endIso = sub.endedAt ? sub.endedAt.slice(0, 10) : null;
-	return {
-		id: sub.id,
-		title: `${sub.subscriberName?.trim() || orgLabel} · ${sub.planName}`,
-		dateLabel: fill(t.subscription.onDate, {
-			date: fmtDateLabelFromIso(startIso),
-		}),
-		detail: !endIso
-			? ""
-			: endIso === startIso
-				? t.subscription.switchedSameDay
-				: fill(t.subscription.untilDate, {
-						date: fmtDateLabelFromIso(endIso),
-					}),
 		amountRm: Number(sub.amount) || 0,
 		statusLabel: status.label(t),
 		tone: status.tone,
@@ -171,13 +180,9 @@ export function sortMemberSubscriptions(
  * later period end would push the plan's renewal to the wrong day.
  */
 export function nextRenewalFromInvoices(
-	invoices: { periodEnd: string; kind?: string }[],
+	invoices: { periodStart: string; periodEnd: string; kind?: string }[],
 ): Date | null {
-	let latest: string | null = null;
-	for (const invoice of invoices) {
-		if (invoice.kind && invoice.kind !== "period") continue;
-		if (!latest || invoice.periodEnd > latest) latest = invoice.periodEnd;
-	}
+	const latest = currentPeriodOf(invoices)?.periodEnd ?? null;
 	if (!latest) return null;
 	const [y, m, d] = latest.split("-").map(Number);
 	if (!y || !m || !d) return null;

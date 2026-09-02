@@ -5,9 +5,9 @@ import {
 	getPayrollWeekSundayIso,
 } from "@agency-portal/lib/demo-clock";
 import {
+	currentPeriodOf,
 	nextRenewalFrom,
 	nextRenewalFromInvoices,
-	planChangeRecordFromMember,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
 	subscriptionRecordFromMember,
@@ -159,48 +159,6 @@ export function useAgencySubscription() {
 	});
 
 	/**
-	 * What this agency is subscribed to RIGHT NOW — normally one row.
-	 *
-	 * Read off `memberQuery`, which is already scoped to this agency and to
-	 * `status: "active"`. It used to have a query of its own that listed the whole
-	 * ledger, and since every tier change ENDS one row and STARTS another, an
-	 * agency that had moved tier a few times saw seven rows for one subscription:
-	 * six of them ended or cancelled, none carrying any payment state (see the
-	 * type's docstring), all of them reading like bills it still owed. That query
-	 * also passed no `subscriberType`/`subscriberId`, so its page of 50 was
-	 * whatever the endpoint returned rather than this agency's own rows.
-	 */
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(
-		() =>
-			sortMemberSubscriptions(memberQuery.data?.data ?? []).map((sub) =>
-				subscriptionRecordFromMember(sub, "InnocenZ Agency", t),
-			),
-		[memberQuery.data, t],
-	);
-
-	/**
-	 * Everything this agency has been on and is no longer. Its own query, because
-	 * `memberQuery` filters to `status: "active"` server-side and widening it
-	 * would let a cancelled row become the current plan (it is consumed as
-	 * `data[0]`). Scoped to THIS agency — the query this replaced passed neither
-	 * `subscriberType` nor `subscriberId`.
-	 */
-	const historyQuery = useQuery({
-		queryKey: ["agency", "subscription", "history", agencyId ?? "none"],
-		queryFn: () =>
-			fetchMemberSubscriptions(
-				{
-					subscriberType: "agency",
-					subscriberId: agencyId as string,
-					pageSize: 50,
-				},
-				logout,
-			),
-		enabled: backed,
-		staleTime: 60_000,
-	});
-
-	/**
 	 * What this agency has actually been BILLED, week by week — the billing
 	 * ledger, not the subscription ledger.
 	 *
@@ -220,13 +178,28 @@ export function useAgencySubscription() {
 		[invoicesQuery.data],
 	);
 
-	const pastSubscriptions = useMemo<SubscriptionRecordRow[]>(
-		() =>
-			sortMemberSubscriptions(historyQuery.data?.data ?? [])
-				.filter((sub) => sub.status !== "active")
-				.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Agency", t)),
-		[historyQuery.data, t],
-	);
+	/**
+	 * What this agency is subscribed to RIGHT NOW — normally one row.
+	 *
+	 * Read off `memberQuery`, which is already scoped to this agency and to
+	 * `status: "active"`. It used to have a query of its own that listed the whole
+	 * ledger, and since every tier change ENDS one row and STARTS another, an
+	 * agency that had moved tier a few times saw seven rows for one subscription:
+	 * six of them ended or cancelled, none carrying any payment state (see the
+	 * type's docstring), all of them reading like bills it still owed. That query
+	 * also passed no `subscriberType`/`subscriberId`, so its page of 50 was
+	 * whatever the endpoint returned rather than this agency's own rows.
+	 *
+	 * The row carries the agency's CURRENT billing week, read from the ledger —
+	 * one lane only, anchored on its own first payroll Sunday — so the card says
+	 * "31 Aug – 6 Sep 2026" rather than the day of the last tier change.
+	 */
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
+		const billingWindow = currentPeriodOf(paymentHistory);
+		return sortMemberSubscriptions(memberQuery.data?.data ?? []).map((sub) =>
+			subscriptionRecordFromMember(sub, "InnocenZ Agency", t, billingWindow),
+		);
+	}, [memberQuery.data, paymentHistory, t]);
 
 	const plans = useMemo<AgencyRatePlan[]>(
 		() =>
@@ -613,7 +586,6 @@ export function useAgencySubscription() {
 		isLoading: plansQuery.isLoading || memberQuery.isLoading,
 		isHistoryLoading: memberQuery.isLoading,
 		/** Ended/cancelled plans, behind a disclosure on the screen. */
-		pastSubscriptions,
 		/** Billed weeks with their paid/unpaid state — the real payment history. */
 		paymentHistory,
 		isPaymentHistoryLoading: invoicesQuery.isLoading,

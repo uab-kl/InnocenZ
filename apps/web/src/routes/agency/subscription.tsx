@@ -1,6 +1,5 @@
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import {
-	PastSubscriptionsDisclosure,
 	PaymentHistoryList,
 	SubscriptionRecordCard,
 } from "@agency-portal/components/iz/SubscriptionRecordList";
@@ -799,7 +798,6 @@ function AgencySubscription() {
 						<SubscriptionRecordCard key={row.id} row={row} />
 					))
 				)}
-				<PastSubscriptionsDisclosure rows={sub.pastSubscriptions} />
 			</div>
 
 			{sub.backed && (

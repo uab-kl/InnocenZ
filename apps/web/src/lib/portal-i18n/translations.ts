@@ -1533,7 +1533,6 @@ const en = {
 		nothingOutstanding:
 			"Nothing outstanding — every billing period so far is marked paid.",
 		paidPeriods: "Paid periods",
-		planChangeHistory: "Plan change history",
 		billedWeekly: "Weekly",
 		billedMonthly: "Monthly",
 		billedAnnually: "Annually",
@@ -1544,15 +1543,8 @@ const en = {
 		statusPastDue: "Past due",
 		statusCancelled: "Cancelled",
 		statusEnded: "Ended",
-		onDate: "On {date}",
-		switchedSameDay: "switched away the same day",
-		untilDate: "until {date}",
 		settledPeriodsOne: "{n} settled period · {total} paid to InnocenZ",
 		settledPeriodsMany: "{n} settled periods · {total} paid to InnocenZ",
-		pastPlansOne:
-			"{n} plan you were on before · not billing. A switch closes one record and opens another, so most of these ran for a day or less.",
-		pastPlansMany:
-			"{n} plans you were on before · not billing. A switch closes one record and opens another, so most of these ran for a day or less.",
 		paidOn: " · paid {date}",
 		statusPaid: "Paid",
 		statusUnpaid: "Unpaid",
@@ -7221,7 +7213,6 @@ const zh: PortalTranslations = {
 			"还没有计费周期 —— 第一个周期会在你的方案周期开始时生成。",
 		nothingOutstanding: "没有未结款项 —— 目前每个计费周期都已标记为已付款。",
 		paidPeriods: "已付周期",
-		planChangeHistory: "方案变更记录",
 		billedWeekly: "按周",
 		billedMonthly: "按月",
 		billedAnnually: "按年",
@@ -7231,15 +7222,8 @@ const zh: PortalTranslations = {
 		statusPastDue: "已逾期",
 		statusCancelled: "已取消",
 		statusEnded: "已结束",
-		onDate: "{date}",
-		switchedSameDay: "当天即已切换",
-		untilDate: "至 {date}",
 		settledPeriodsOne: "{n} 个已结算周期 · 已向 InnocenZ 支付 {total}",
 		settledPeriodsMany: "{n} 个已结算周期 · 已向 InnocenZ 支付 {total}",
-		pastPlansOne:
-			"你此前使用过 {n} 个套餐 · 不涉及计费。切换会结束一条记录并开启另一条，因此其中大多数只持续了一天或更短。",
-		pastPlansMany:
-			"你此前使用过 {n} 个套餐 · 不涉及计费。切换会结束一条记录并开启另一条，因此其中大多数只持续了一天或更短。",
 		paidOn: " · 付款于 {date}",
 		statusPaid: "已付款",
 		statusUnpaid: "未付款",
