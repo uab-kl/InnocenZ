@@ -356,6 +356,36 @@ What is left needs a **commercial decision first, then credentials** — nothing
   "debited automatically". Next slice: migration adds `fpx` type; rail renamed "FPX"; picker dropped
   for it (venue picks its bank on Fiuu's hosted page); copy says "a link each period".
 
+**BILLING RULES (owner, 28 Aug 2026) — asked after seeing Emhub Testing billed at Enterprise
+(RM 3,999) for 3 Aug–2 Sep while its current plan card says Scale (RM 6,999) from 28 Aug:**
+- **Why it happened (code as it stands):** an invoice is minted the morning its period OPENS, at
+  the plan held that morning, and is **immutable afterwards** (`generateMissing`: one charge per
+  lane per period; amount snapshotted "so a Custom price renegotiated in September cannot rewrite
+  August"). The 28 Aug switch closed the Enterprise row and opened a Scale row, but the period's
+  invoice already existed, so nothing re-priced it. The "latest row to start wins" rule applies
+  only at mint time.
+- **Rule 1 — a period is billed at the HIGHEST plan held during it.** Mint at the highest, and
+  when an upgrade lands mid-period, re-price the period's still-UNPAID invoice upward (a PAID
+  invoice is never touched — the difference goes on the next period). A downgrade mid-period
+  never re-prices down: the period is paid at the highest.
+- **Rule 2 — no plan switch while anything is unpaid.** Outlet switches (`admin-request`) are
+  refused, and the agency auto-tier job skips an org, until every invoice on every lane is paid.
+  (Upgrades: owner to confirm whether an upgrade may go ahead with the unpaid balance carried —
+  Rule 1 already prices it correctly either way.)
+- **Rule 3 — the billing calendar anchors on activation day** (sign-up / first plan chosen) and
+  runs monthly (outlet) or weekly Sun–Sat (agency) from there. ✅ Already how `billingPeriodsFor`
+  anchors: the lane's FIRST row's `started_at`, not each switch's. Each lane keeps its own anchor
+  — a POS add-on taken on the 27th bills 27th→26th, which is why it can sit in a different window
+  from the plan.
+- **Rule 4 — unpaid too long stops the activity.** Nothing computes `past_due` today and nothing
+  enforces it. Needs: `past_due` set after the grace (agency 7d / outlet 14d proposed, owner to
+  confirm) and an enforcement middleware. **Owner to decide WHAT is blocked** — proposed: outlet
+  cannot post new jobs and agency cannot send new PVs while `past_due`; everything already
+  running (checked-in shifts, issued PVs) finishes.
+- **Rule 5 — shape:** agency holds ONE lane, moved automatically by weekly PV count
+  (`agency-tier.job`, Sun 03:30 KL) or pinned to Custom; outlet holds ONE plan lane plus any
+  add-on lanes (POS). ✅ Already true; recorded so it is not re-litigated.
+
 0. **⚠️ NOTHING IS PAID YET, AND THAT IS NOT A BUG.** `subscription_payment` and
    `payment_method` are both at **0 rows** (checked 27 Aug), which is why every Plan Payment line
    reads "Unpaid / —" and every panel says "no payment method on file". The chain
@@ -2450,6 +2480,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-28 | **One tick per period, every lane in it — "this should be pay together."** The first cut of tick-to-pay put a box on each LANE, so an outlet on Enterprise + POS saw two boxes for one month and could pay half of it. The box now sits on the PERIOD header and selects every unpaid lane in that window; all-or-nothing, so unticking drops both. The pay bar counts periods, not lanes. The checkout endpoint needed no change — it already takes several invoice ids into one hosted session, which was built for exactly this. Paid rows keep their number-opens-receipt behaviour and never get a box. | agency + outlet web | ✅ web tsc **0**, biome clean. ⚠️ Not click-verified — needs an org login |
 
 | 2026-08-28 | **The payer can now tick periods and press Pay, and every paid period has a receipt with a number on it.** Owner's two asks on the org-side Payment History. **(1) Tick-to-pay.** Unpaid rows get a checkbox; a pay bar appears only once something is ticked ("Pay RM 4,199.00 · 2 selected") and posts the ids to new **`POST /subscription-payment/checkout`** (payers only). The server decides everything about money: every id must belong to the caller (else 404, never confirming it exists), none may be paid (409 naming the invoice), currencies must match, the total is summed in integer cents. It opens ONE hosted session for the lot via a new seam method **`createCheckout(input) → { gatewayPaymentId, payUrl }`** and writes one `pending` attempt per invoice, all carrying the session id. **Today no gateway is registered, so it answers 503 with its own sentence** — "Online payment is not connected yet — InnocenZ will mark this period paid once your transfer arrives" — and the bar shows that sentence verbatim instead of a generic error. **Migration 0146** re-scopes the idempotency index to `(gateway, gateway_payment_id, subscription_invoice_id)` so several periods can share a session; `recordAttempt`'s prior-row lookup and the webhook both follow — a session that names no single invoice settles (or declines) every period opened under it. **(2) The receipt.** 0146 also gives `subscription_invoice` an **`invoice_no`** (`INV-000001`), minted by a DB sequence default so `generateMissing` is untouched and two concurrent openings cannot collide; existing rows backfilled in period order. Tapping a paid row's number opens an inline receipt (`InvoiceReceipt.tsx`) built from the same owner-scoped detail call the admin panel uses: number, period, plan, from (org's live name) → to InnocenZ, paid on, paid by (the settled attempt's rail), reference, total, print button. A period marked paid with no attempt behind it says so rather than inventing a method. Inline rather than a sheet so it works inside the paid-periods disclosure too. EN + 中文 (20 keys). ⚠️ **Payee block prints "InnocenZ" only** — company registration and address are not in config; give them and it is one edit. | backend + agency/outlet web | ✅ backend tsc **0**, web tsc **0** (checked from `apps/web` — one earlier "web" run had inherited the backend cwd and was discarded), biome clean. **0146 proven live by probe**: `invoice_no` NOT NULL with the sequence default, **26/26** rows numbered INV-000001→000026, index definition carries `subscription_invoice_id`. ⚠️ Not click-verified — needs an org login; the checkout cannot be exercised past the 503 until Fiuu is registered (runbook step 5) |
 

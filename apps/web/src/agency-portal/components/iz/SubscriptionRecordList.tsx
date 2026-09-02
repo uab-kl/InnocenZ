@@ -83,12 +83,21 @@ export function PaymentHistoryList({
 					t.subscription.payNotConnected,
 			),
 	});
-	const toggle = (id: string) => {
+	/**
+	 * ONE TICK PER PERIOD, ALL ITS LANES TOGETHER (owner, 28 Aug 2026: "this
+	 * should be pay together"). A venue on Enterprise + POS owes one month, not
+	 * two bills, so the box sits on the period and takes every unpaid lane in
+	 * it. All-or-nothing: unticking the period drops every lane it added.
+	 */
+	const toggle = (ids: string[]) => {
 		setPayMessage(null);
 		setSelected((prev) => {
 			const next = new Set(prev);
-			if (next.has(id)) next.delete(id);
-			else next.add(id);
+			const allIn = ids.every((id) => next.has(id));
+			for (const id of ids) {
+				if (allIn) next.delete(id);
+				else next.add(id);
+			}
 			return next;
 		});
 	};
@@ -205,7 +214,10 @@ export function PaymentHistoryList({
 								<div className="iz-between gap-3">
 									<span className="iz-tiny iz-muted">
 										{fill(t.subscription.paySelectedCount, {
-											n: selected.size,
+											// Periods, not lanes — that is what the payer ticked.
+											n: groupByPeriod(unpaid).filter((group) =>
+												group.rows.every((invoice) => selected.has(invoice.id)),
+											).length,
 										})}
 									</span>
 									<button
@@ -276,9 +288,9 @@ function PeriodCard({
 }: {
 	rows: SubscriptionInvoice[];
 	laneOf?: (invoice: SubscriptionInvoice) => "plan" | "addon" | null;
-	/** Tick-to-pay, offered only by the unpaid list — paid rows never get a box. */
+	/** Tick-to-pay, offered only by the unpaid list — one box per period, every lane in it. */
 	selected?: Set<string>;
-	onToggle?: (id: string) => void;
+	onToggle?: (ids: string[]) => void;
 }) {
 	const { t } = usePortalLocale();
 	// Which PAID row has its receipt open. Local to the card so it works inside
@@ -286,6 +298,10 @@ function PeriodCard({
 	const [receiptFor, setReceiptFor] = useState<string | null>(null);
 	const first = rows[0];
 	if (!first) return null;
+	// What the period's box selects: every lane in this window that still owes.
+	const unpaidIds = rows
+		.filter((invoice) => invoice.status !== "paid")
+		.map((invoice) => invoice.id);
 	const cents = rows.reduce(
 		(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
 		0,
@@ -294,6 +310,18 @@ function PeriodCard({
 		<IzCard flat>
 			<div className="iz-between gap-2">
 				<div className="flex min-w-0 items-center gap-2">
+					{/* The box is on the PERIOD: ticking it takes every unpaid lane in
+					    the window into one payment — the plan and its POS add-on are
+					    one month's bill, not two. */}
+					{onToggle && unpaidIds.length > 0 && (
+						<input
+							type="checkbox"
+							className="h-4 w-4 shrink-0 accent-[var(--iz-gold)]"
+							checked={unpaidIds.every((id) => selected?.has(id))}
+							onChange={() => onToggle(unpaidIds)}
+							aria-label={periodLabel(first.periodStart, first.periodEnd)}
+						/>
+					)}
 					<Receipt className="h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
 					<p className="iz-sm truncate font-semibold">
 						{periodLabel(first.periodStart, first.periodEnd)}
@@ -307,20 +335,11 @@ function PeriodCard({
 				{rows.map((invoice) => {
 					const isPaid = invoice.status === "paid";
 					const lane = laneOf?.(invoice) ?? null;
-					const tickable = !isPaid && Boolean(onToggle);
 					return (
 						<div key={invoice.id}>
 							<div className="flex items-center justify-between gap-3">
-								{/* Unpaid + tick-to-pay on: a box. Paid: the row opens its receipt. */}
-								{tickable && (
-									<input
-										type="checkbox"
-										className="h-4 w-4 shrink-0 accent-[var(--iz-gold)]"
-										checked={selected?.has(invoice.id) ?? false}
-										onChange={() => onToggle?.(invoice.id)}
-										aria-label={invoice.invoiceNo}
-									/>
-								)}
+								{/* Paid: the row's number opens its receipt. Unpaid rows carry
+								    no box of their own — the period's box above covers them. */}
 								{isPaid && (
 									<button
 										type="button"
