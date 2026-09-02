@@ -258,9 +258,12 @@ function PosIntegrationAddonCard({
 								 * longer wanted asked.
 								 */}
 								<div className="flex flex-col gap-2 sm:flex-row">
+									{/* Gold = the act (it sends a request to the admin), red = the
+									    way out (ends POS billing) — the owner's colour code, applied
+									    2 Sep 2026 after both sat as plain soft buttons. */}
 									<button
 										type="button"
-										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										className="iz-btn iz-btn-gold iz-outlet-pos-addon__cancel flex-1"
 										disabled={pendingKind === "requote"}
 										onClick={onRequestQuote}
 									>
@@ -270,7 +273,7 @@ function PosIntegrationAddonCard({
 									</button>
 									<button
 										type="button"
-										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										className="iz-btn iz-btn-danger iz-outlet-pos-addon__cancel flex-1"
 										disabled={pendingKind === "cancel"}
 										onClick={onRemoveAddon}
 									>

@@ -5,19 +5,24 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: e2fc9165-55fd-439f-a58d-3751e117f247
-  modified: 2026-09-02T08:29:23.677Z
+  modified: 2026-09-02T08:35:40.733Z
 ---
 
 Owner's colour code for buttons on the outlet/agency web portal (`apps/web`, theme
 `agency-portal/prototype-theme.css`), fixed on 2 Sep 2026 after three corrections in a row:
 
-- **Champagne gold = commit / money.** `.iz-btn-gold` and `.iz-btn-primary` share
-  `--iz-grad-accent` (#f2d9a0 → #e3b877 → #c99b4e, ink #241a08). Use it for Save,
-  Pay by FPX, Save workspace — the one action on a screen. NOT a bright yellow: the owner
-  rejected #f2c14e as "ugly".
-- **Dark soft = secondary action.** `.iz-btn-soft` (glass background, `--iz-line2` border,
-  white text): "Ask for a new price", "Cancel POS · plan only", Cancel, Add payment method.
-  The owner said "remember this colour code" pointing at exactly these two buttons.
+- **Champagne gold = act / commit / money.** `.iz-btn-gold` and `.iz-btn-primary` share
+  `--iz-grad-accent` (#f2d9a0 → #e3b877 → #c99b4e, ink #241a08). Use it for Save, Pay by
+  FPX, Save workspace, "Ask for a new price" — the action that sends something. NOT a bright
+  yellow: the owner rejected #f2c14e as "ugly".
+- **Red = ending something.** `.iz-btn-danger` (`--iz-red` text, faint red fill):
+  "Cancel POS · plan only", Remove payment method's confirm. Same rule as the phone's
+  gold=act / red=close.
+- **Dark soft = neutral / secondary.** `.iz-btn-soft` (glass background, `--iz-line2` border,
+  white text): a form's Cancel, Add payment method, Edit payment method, "Cancel request".
+  ⚠️ The owner pointed at the two POS buttons and said "remember this colour code", then
+  "change it the colour" — the two buttons were UNcoloured and had to become gold + red; a
+  plain soft pair on an act/close decision is the thing to avoid, not the reference.
 - **A chosen option = the pressed-tab colour on a normal soft button.** `.iz-btn-soft.iz-btn-on`
   (lavender `--iz-gold` border, faint warm fill, `--iz-gold-l` text — the same colours as the
   payroll week tabs' `.on`). Used for the Card / Bank direct debit rail picker. Keep the

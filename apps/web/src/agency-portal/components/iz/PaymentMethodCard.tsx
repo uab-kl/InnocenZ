@@ -556,8 +556,7 @@ export function PaymentMethodCard({
 								</button>
 								<button
 									type="button"
-									className="iz-btn iz-btn-soft flex-1"
-									style={{ color: "var(--iz-red-l, #ff8080)" }}
+									className="iz-btn iz-btn-danger flex-1"
 									disabled={isRemoving}
 									onClick={remove}
 								>
