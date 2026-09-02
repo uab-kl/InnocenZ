@@ -1024,6 +1024,61 @@ export class PaymentVoucherControllerClass {
    * consistent picture: a response carrying pre-sweep receipt rows would tell the
    * panel a receipt is still pending a millisecond after approving it.
    */
+  /**
+   * WHERE THIS PR IS ACTUALLY PAID — for the printed voucher, UNMASKED.
+   *
+   * Its own route, and its own gate, for two reasons.
+   *
+   * NOT folded into GET '/:id': that read is deliberately open to the whole
+   * agency role ("seeing what was decided is not the same authority as
+   * deciding it"), and a bank account number is PII, not a decision. This one
+   * carries `agencyOwnerOrFinance` — the same set that may record a payment.
+   *
+   * NOT masked, unlike the payout candidate list. A masked number is right for
+   * a list on screen, where the reader needs to identify an account. This is
+   * the PAYMENT VOUCHER — the document that tells somebody where to send
+   * money — so last-4 would make it useless for the one job it has.
+   *
+   * Exists because the agency's printed voucher had NO real source for these
+   * fields and fell back to a demo fixture, printing a plausible, wrong account
+   * number on a payment document (pv-template.ts `buildAgencyPayee`).
+   */
+  async getPayeeBank(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const scope = await this.resolveScope(req);
+      const voucher = await this.paymentVoucherRepository.getById(id);
+      // Cross-tenant reads 404, never 403 — the same rule as every other
+      // by-id path here, so a response never confirms an id exists.
+      if (!voucher || (!scope.isAdmin && voucher.agencyId !== scope.agencyId)) {
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const banks = await this.paymentVoucherRepository.listPayeeBanks([id]);
+      const payee = banks.get(id) ?? null;
+      return res.status(200).json({
+        success: true,
+        message: 'Payee bank details',
+        // Null fields rather than an absent object when the PR has not filled
+        // them in: "this person has not said where to pay them" is a fact the
+        // document must be able to state, and it is different from an error.
+        data: payee ?? {
+          name: null,
+          icNo: null,
+          bankName: null,
+          bankAccountNo: null,
+          payable: false,
+        },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.getPayeeBank] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: 'Failed to read payee bank details', data: null });
+    }
+  }
+
   private async carryDayApprovalToReceipts(
     voucher: { id: string; lines: PaymentVoucherLineType[] },
     dayReviews: DayReviewView[],

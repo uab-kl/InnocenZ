@@ -1,3 +1,4 @@
+import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import type { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
@@ -67,28 +68,58 @@ export async function applyPlanChangeToLedger(params: {
       pageSize: 50,
     });
     const endedAt = new Date();
-    for (const row of current) {
-      await memberSubscriptionRepository.update(row.id, {
-        status: 'expired',
-        endedAt,
-        updatedBy: actor,
-      });
-    }
-
     // The negotiated price wins when one was set; otherwise the plan's.
     const amount = record.quotedAmount ?? plan.price;
-    await memberSubscriptionRepository.create({
-      subscriberType: record.subscriberType,
-      subscriberId: record.subscriberId,
-      subscriberName: record.subscriberName,
-      subscriptionId: plan.id,
-      planName: plan.name,
-      amount,
-      billingCycle: plan.billingCycle,
-      status: 'active',
-      startedAt: endedAt,
-      createdBy: actor,
-      updatedBy: actor,
+
+    /**
+     * ONE TRANSACTION: closing the old row and opening the new one.
+     *
+     * These were two separate awaits, old-closed-first, inside the catch below
+     * that deliberately swallows — so a failure between them left the subscriber
+     * with every plan row closed and none open. That is not a cosmetic gap: an
+     * org with no active plan is unbillable, invisible to the tier rule (which
+     * reads FROM this table), and now refused outright by the posting gate.
+     *
+     * And it does not need bad luck to happen. This runs unattended for every
+     * agency whose band moves at the Sunday 03:30 tier job, so "a failure
+     * between the two writes" means weekly exposure across the whole estate.
+     * Atomic now: either the org moves onto the new plan, or it stays on the old
+     * one. There is no state in between.
+     */
+    await db.transaction(async (tx) => {
+      for (const row of current) {
+        await memberSubscriptionRepository.update(
+          row.id,
+          { status: 'expired', endedAt, updatedBy: actor },
+          tx,
+        );
+      }
+
+      const opened = await memberSubscriptionRepository.create(
+        {
+          subscriberType: record.subscriberType as SubscriberType,
+          subscriberId: record.subscriberId as string,
+          subscriberName: record.subscriberName,
+          subscriptionId: plan.id,
+          planName: plan.name,
+          amount,
+          billingCycle: plan.billingCycle,
+          status: 'active',
+          startedAt: endedAt,
+          createdBy: actor,
+          updatedBy: actor,
+        },
+        tx,
+      );
+      // The repository catches its own errors and returns null, so a failed
+      // insert would otherwise return normally and let the transaction COMMIT
+      // the closures — the exact "all closed, none open" state this block
+      // exists to prevent. Throwing is what makes the rollback happen.
+      if (!opened) {
+        throw new Error(
+          `[applyPlanChangeToLedger] could not open the new plan row for ${record.subscriberType} ${record.subscriberId}`,
+        );
+      }
     });
   } catch (error) {
     logger.error('[applyPlanChangeToLedger] Error:', error);

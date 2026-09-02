@@ -2,6 +2,17 @@ import { z } from 'zod';
 import { outletStatusValues, outletUserSubRoleValues } from '@/features/outlet/outlet.model';
 
 export const CreateOutletSchema = z.object({
+  /**
+   * The catalog plan (`main.subscription.id`) this venue is created on.
+   *
+   * REQUIRED, and required here rather than left to the caller's goodwill: an
+   * admin-created outlet used to get no `member_subscription` row at all, which
+   * is one of the ways venues came to exist that could not be billed — and
+   * since the posting gate now refuses a venue with no plan, such an outlet
+   * would be created unable to work. There is no UI behind this endpoint, so
+   * tightening it breaks no form.
+   */
+  packageId: z.string().uuid('A subscription package is required'),
   name: z.string().min(1, 'Name is required'),
   addressLine1: z.string().optional(),
   addressLine2: z.string().optional(),

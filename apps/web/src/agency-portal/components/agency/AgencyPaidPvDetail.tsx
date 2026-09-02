@@ -2,6 +2,7 @@ import { PvSummaryView } from "@agency-portal/components/iz/PvSummaryView";
 import { formatRM, IzCard, IzPill } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { useVoucherPayeeBank } from "@agency-portal/hooks/use-agency-pvs";
 import { usePvIssuer } from "@agency-portal/hooks/use-pv-issuer";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { agencyPvStatusLabel } from "@agency-portal/lib/agency-payroll";
@@ -66,7 +67,9 @@ export function AgencyPaidPvDetail({
 	const toast = useStore((s) => s.toast);
 	// Same letterhead the live PV screen prints — one agency, one document.
 	const pvIssuer = usePvIssuer();
-	const payee = buildAgencyPayee(pv, agencyPRs);
+	// Real account for the printed document; blank rather than a demo fixture.
+	const payeeBank = useVoucherPayeeBank(pv.id);
+	const payee = buildAgencyPayee(pv, agencyPRs, payeeBank.data);
 	const breakdown = summarizePv(pv);
 	const breakdownRows = pvBreakdownDisplayRows(breakdown, t);
 

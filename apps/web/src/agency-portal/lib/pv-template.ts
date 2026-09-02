@@ -22,6 +22,7 @@
  * `PV_TEMPLATE_ISSUER` and the payee/line builders return DATA — names, IC,
  * bank details, line descriptions — never labels.
  */
+
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
 	MONTH_KEYS,
@@ -32,6 +33,7 @@ import {
 	type PrSubRole,
 	resolvePrAccountFields,
 } from "@agency-portal/lib/pr-demo";
+import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 
 /** Issuer block — matches PV Template.xlsx (Atmosphere Event Planner) */
 export const PV_TEMPLATE_ISSUER = {
@@ -216,17 +218,41 @@ export function findDemoProfileForPv(
 	);
 }
 
+/**
+ * The payee block on an agency's printed Payment Voucher.
+ *
+ * ⚠️ THE BANK DETAILS MUST NEVER COME FROM A DEMO FIXTURE ON A REAL SESSION.
+ *
+ * They used to. `findDemoProfileForPv` matches on `name === pv.prName ||
+ * ic === pv.prIc`, and the seeded PRs carry the SAME ICs as the demo profiles —
+ * so a real voucher for a real person matched `PR_PROFILES.pr_tied` and printed
+ * its hardcoded "Maybank / 5142 8890 1123" onto the one document whose entire
+ * job is to say where to send money. An agency could have paid that account.
+ * (Found in testing, 2 Sep 2026; the portal rule this broke is
+ * `.cursor/rules/no-demo-data-on-real-sessions.mdc`.)
+ *
+ * On a REAL session the bank now comes only from `realBank`, fetched from the
+ * gated `/payment-voucher/:id/payee-bank`, and stays BLANK when the PR has not
+ * entered it. A blank field says "we do not know where to pay this person",
+ * which is true and actionable. A plausible wrong number says nothing and
+ * invites a transfer.
+ *
+ * Demo sessions keep the fixture — that is what they are for.
+ */
 export function buildAgencyPayee(
 	pv: PrPaymentVoucher,
 	agencyPRs: AgencyManagedPR[],
+	realBank?: { bankName: string | null; bankAccountNo: string | null } | null,
 ): PvPayeeProfile {
+	const isRealSession = getPortalSessionKind() === "real";
 	const managed = agencyPRs.find(
 		(p) =>
 			p.name === pv.prName ||
 			p.id === pv.prName ||
 			(pv.prIc && p.ic === pv.prIc),
 	);
-	const demo = findDemoProfileForPv(pv);
+	// Not consulted at all on a real session — see the note above.
+	const demo = isRealSession ? undefined : findDemoProfileForPv(pv);
 	const displayName = managed?.name ?? demo?.name ?? pv.prName;
 	const icName = managed?.icName ?? demo?.first ?? displayName;
 	return payeeFromPaymentVoucher(pv, {
@@ -236,8 +262,10 @@ export function buildAgencyPayee(
 		nickname: displayName,
 		name: icName,
 		ic: managed?.ic ?? pv.prIc ?? demo?.ic,
-		bank: demo?.bank,
-		accountNo: demo?.acc,
+		// Real first, demo only as a demo-session fallback, and undefined when
+		// neither exists — which renders blank rather than inventing an account.
+		bank: realBank?.bankName ?? demo?.bank,
+		accountNo: realBank?.bankAccountNo ?? demo?.acc,
 		accountName: icName,
 	});
 }
@@ -317,7 +345,20 @@ export function payeeFromPaymentVoucher(
 		code?: string;
 	},
 ): PvPayeeProfile {
-	const demo = findDemoProfileForPv(pv);
+	/*
+	 * ⚠️ NEVER A DEMO FIXTURE ON A REAL SESSION.
+	 *
+	 * This is the demo lookup that actually leaked. `buildAgencyPayee` gates its
+	 * own copy, but it then calls THIS function, which looked the fixture up
+	 * again and used it as the BASE profile — so passing `bank: undefined` as an
+	 * override simply fell through to `demo.bank`. The printed voucher kept
+	 * showing "Maybank / 5142 8890 1123" for a real PR whose bank is unset.
+	 *
+	 * Fixing one of the two lookups changed nothing on screen, which is the
+	 * whole reason this is gated at the root instead.
+	 */
+	const demo =
+		getPortalSessionKind() === "real" ? undefined : findDemoProfileForPv(pv);
 	return payeeFromProfile(
 		demo ?? {
 			name: pv.prName,

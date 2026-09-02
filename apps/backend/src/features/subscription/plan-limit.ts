@@ -26,21 +26,41 @@ export type PlanLimit = {
 };
 
 /**
- * The org's live PLAN and its numeric allowance, or null when it has no active
- * plan at all.
+ * The three answers this lookup can give, as separate cases.
+ *
+ * It used to return `PlanLimit | null`, and `null` carried BOTH "this org holds
+ * no plan" and "the query threw" — the catch below returned the same value as an
+ * empty result. That was survivable only while the caller waved both through.
+ * The moment a missing plan became a refusal (owner's call, 2 Sep 2026: no
+ * outlet or agency may exist without a plan), collapsing them would have made a
+ * transient database error take every venue offline at once.
+ *
+ * So the two are now impossible to confuse at the type level, and `unknown` is
+ * the same idea as `outletDailyPrUsage`'s `-1`: a gate must never refuse on a
+ * fact it does not have.
+ */
+export type PlanLookup =
+  | ({ kind: 'plan' } & PlanLimit)
+  /** The org holds no active plan row — never enrolled, or its plan has ended. */
+  | { kind: 'none' }
+  /** The read itself failed. NOT the same as `none`. */
+  | { kind: 'unknown' };
+
+/**
+ * The org's live PLAN and its numeric allowance.
  *
  * Add-ons are excluded deliberately: POS integration is held alongside a plan
  * and is not a capacity product, so joining it here would let an add-on's NULL
  * limit read as the venue's allowance.
  *
- * A null RESULT means "no plan" and a `limitAmount: null` means "unlimited" —
- * two different facts, and callers must not collapse them. Nothing here decides
- * what to do about either; that is the caller's rule.
+ * `{ kind: 'none' }` means "no plan" and a `limitAmount: null` on a real plan
+ * means "unlimited" — two different facts, and callers must not collapse them.
+ * Nothing here decides what to do about either; that is the caller's rule.
  */
 export async function resolveActivePlanLimit(params: {
   subscriberType: 'agency' | 'outlet';
   subscriberId: string;
-}): Promise<PlanLimit | null> {
+}): Promise<PlanLookup> {
   try {
     const [row] = await db
       .select({
@@ -60,11 +80,21 @@ export async function resolveActivePlanLimit(params: {
         ),
       )
       .limit(1);
-    if (!row) return null;
-    return { planName: row.planName, limitAmount: row.limitAmount ?? null };
+    if (!row) return { kind: 'none' };
+    return {
+      kind: 'plan',
+      planName: row.planName,
+      // ⚠️ `limitAmount` comes off the LEFT-JOINED catalog row, so it is also
+      // null when `subscription_id` resolves to nothing — a plan whose catalog
+      // entry was deleted. That reads as "unlimited" here and the caller cannot
+      // tell it apart from Premier. It is the narrower of the two remaining
+      // permissive holes and is left as-is deliberately: inventing a cap for it
+      // would refuse real Premier venues.
+      limitAmount: row.limitAmount ?? null,
+    };
   } catch (error) {
     logger.error('[plan-limit.resolveActivePlanLimit] Error:', error);
-    return null;
+    return { kind: 'unknown' };
   }
 }
 

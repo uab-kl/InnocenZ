@@ -12,7 +12,7 @@ import {
 } from "@/services/pr-availability";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
-import { fetchShiftAssignments } from "@/services/shift-assignment";
+import { useAllShiftAssignments } from "./use-all-shift-assignments";
 
 /**
  * Loads the active agency's roster for a week from the backend (shifts +
@@ -45,15 +45,9 @@ export function useRosterSlots(params: {
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
 	});
-	const assignmentsQuery = useQuery({
-		queryKey: ["roster", "assignments"],
-		queryFn: () =>
-			fetchAllPages((page) =>
-				fetchShiftAssignments({ page, pageSize: 100 }, logout),
-			),
-		enabled,
-		staleTime: 30_000,
-	});
+	// Shared with the timetable, history, outlet demand, auto-assign and Manage
+	// PR's live pill — one key, one definition, one answer. See the hook.
+	const assignmentsQuery = useAllShiftAssignments({ enabled });
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
 		queryFn: () =>

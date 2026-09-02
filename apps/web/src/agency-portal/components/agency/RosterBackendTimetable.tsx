@@ -6,6 +6,7 @@ import {
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { formatRM } from "@agency-portal/components/iz/ui";
+import { useAllShiftAssignments } from "@agency-portal/hooks/use-all-shift-assignments";
 import type {
 	AgencyRosterSlot,
 	RosterSlotStatus,
@@ -77,7 +78,6 @@ import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts, type Shift } from "@/services/shift";
 import {
 	fetchBackfillSlots,
-	fetchShiftAssignments,
 	fetchWagePreview,
 	type ShiftAssignmentStatus,
 	type TierWagePreview,
@@ -399,14 +399,7 @@ export function RosterBackendTimetable({
 	// and route around it), so it reads 0 on a fully-staffed shift. Trusting it is
 	// why this sheet offered a 2/2 shift as "2 open" and the API then refused the
 	// write with "already fully staffed (2/2)".
-	const assignmentsQuery = useQuery({
-		queryKey: ["roster", "assignments"],
-		queryFn: () =>
-			fetchAllPages((page) =>
-				fetchShiftAssignments({ page, pageSize: 100 }, logout),
-			),
-		staleTime: 30_000,
-	});
+	const assignmentsQuery = useAllShiftAssignments();
 
 	const outletNameById = useMemo(
 		() => new Map((outletsQuery.data?.data ?? []).map((o) => [o.id, o.name])),

@@ -204,6 +204,9 @@ export const outletController = new OutletControllerClass(
   userRoleRepository,
   agencyRepository,
   authRepository,
+  // Admin-created venues must land on a plan, same rule as sign-up.
+  subscriptionRepository,
+  memberSubscriptionRepository,
 );
 
 export const orgMemberInviteController = new OrgMemberInviteControllerClass(
@@ -306,6 +309,9 @@ export const agencyController = new AgencyControllerClass(
   orgMemberInviteRepository,
   authRepository,
   userRoleRepository,
+  // Admin-created agencies must land on a plan, same rule as sign-up.
+  subscriptionRepository,
+  memberSubscriptionRepository,
 );
 
 export const specialServiceRepository = new SpecialServiceRepositoryClass();
