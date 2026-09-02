@@ -352,6 +352,14 @@ export class SubscriptionInvoiceRepositoryClass {
   async prorateLaneSwitch(input: {
     subscriberType: 'agency' | 'outlet';
     subscriberId: string;
+    /**
+     * Which lane. Absent = the plan lane. Set to the add-on product's
+     * `subscription.id` to price an add-on re-quote (owner, 28 Aug: "the Custom
+     * and the integrate with POS follow also the credit") — each add-on is its
+     * own lane with its own calendar, so it is priced against ITS current
+     * period, never the plan's.
+     */
+    laneSubscriptionId?: string;
     newMemberSubscriptionId: string;
     fromPlanName: string;
     toPlanName: string;
@@ -383,7 +391,9 @@ export class SubscriptionInvoiceRepositoryClass {
             eq(SubscriptionInvoiceTable.kind, 'period'),
             lte(SubscriptionInvoiceTable.periodStart, today),
             gte(SubscriptionInvoiceTable.periodEnd, today),
-            sql`coalesce(${SubscriptionTable.kind}, 'plan') <> 'addon'`,
+            input.laneSubscriptionId
+              ? eq(MemberSubscriptionTable.subscriptionId, input.laneSubscriptionId)
+              : sql`coalesce(${SubscriptionTable.kind}, 'plan') <> 'addon'`,
           ),
         )
         .orderBy(desc(SubscriptionInvoiceTable.periodStart))
@@ -449,20 +459,29 @@ export class SubscriptionInvoiceRepositoryClass {
    */
   private async applyOpenCredits(
     inserted: { id: string; memberSubscriptionId: string; amount: string }[],
-    laneKindOf: Map<string, string | null>,
+    // Lane matching now happens in the query itself; kept positional so the
+    // one call site is unchanged.
+    _laneKindOf: Map<string, string | null>,
     actor: string,
   ): Promise<void> {
     for (const row of inserted) {
-      if (laneKindOf.get(row.memberSubscriptionId) === 'addon') continue;
       try {
+        // A credit follows its OWN lane: a plan credit comes off the next plan
+        // period, a POS credit off the next POS period — matched on the lane's
+        // kind and, for add-ons, the product. Money paid for POS never quietly
+        // discounts the plan, or the reverse.
         const credits = await db.execute<{ id: string; remaining: string; reason: string | null }>(sql`
           SELECT c.id, c.remaining, c.reason
           FROM main.subscription_credit c
           JOIN main.member_subscription cm ON cm.id = c.member_subscription_id
+          LEFT JOIN main.subscription cs ON cs.id = cm.subscription_id
           JOIN main.member_subscription im ON im.id = ${row.memberSubscriptionId}
+          LEFT JOIN main.subscription isub ON isub.id = im.subscription_id
           WHERE c.status = 'open'
             AND cm.subscriber_type = im.subscriber_type
             AND cm.subscriber_id = im.subscriber_id
+            AND coalesce(cs.kind, 'plan') = coalesce(isub.kind, 'plan')
+            AND (coalesce(isub.kind, 'plan') <> 'addon' OR cm.subscription_id = im.subscription_id)
           ORDER BY c.created_at ASC
         `);
         if (credits.rows.length === 0) continue;

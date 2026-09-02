@@ -369,7 +369,11 @@ export class AdminRequestControllerClass {
             updatedBy: actor,
           });
         }
-        await this.memberSubscriptionRepository.create({
+        // What this add-on cost before the re-quote — the row being closed on
+        // the same product. Absent when the add-on is being taken for the first
+        // time, in which case there is nothing to price against.
+        const previousAddon = existing.find((row) => row.subscriptionId === addon.id) ?? null;
+        const createdAddon = await this.memberSubscriptionRepository.create({
           subscriberType: record.subscriberType,
           subscriberId: record.subscriberId,
           subscriberName: record.subscriberName,
@@ -383,6 +387,26 @@ export class AdminRequestControllerClass {
           createdBy: actor,
           updatedBy: actor,
         });
+        // Owner, 28 Aug: add-ons follow the same rule as plans. A re-quote
+        // upward mints the difference as an upgrade line on the POS lane's
+        // current period; downward, the difference is a credit taken off the
+        // next POS period — never the plan's.
+        if (previousAddon && createdAddon) {
+          const outcome = await this.subscriptionInvoiceRepository.prorateLaneSwitch({
+            subscriberType: record.subscriberType,
+            subscriberId: record.subscriberId,
+            laneSubscriptionId: addon.id,
+            newMemberSubscriptionId: createdAddon.id,
+            fromPlanName: previousAddon.planName,
+            toPlanName: addon.name,
+            fromAmount: previousAddon.amount,
+            toAmount: amount,
+            actor,
+          });
+          logger.info(
+            `[adminRequest] ${record.subscriberName}: ${addon.name} ${previousAddon.amount} → ${amount}, proration: ${outcome}`,
+          );
+        }
         return;
       }
 
