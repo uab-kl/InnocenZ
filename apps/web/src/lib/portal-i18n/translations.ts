@@ -5019,12 +5019,16 @@ const en = {
 			"No live shift tonight — check Calendar page for upcoming events.",
 		noShiftsYet: "No shifts yet — use Post Job to create one.",
 		/**
-		 * Names the shift the PR / labour / cutlost panels below are computed
-		 * from (owner, 3 Sep 2026). Today lists every shift tonight as one
-		 * section, so the panels no longer touch the card they belong to.
+		 * Says HOW to point the panels below at a shift (owner, 3 Sep 2026:
+		 * "replace this with a hint to let user know"). It used to name the
+		 * chosen shift, which stated where the panels already were and never
+		 * hinted that it could be changed — the ticked card shows the state now,
+		 * so this only has to teach the control.
 		 */
-		panelsCoverShift:
-			"PR, labour cost and cutlost below are for {event} · {slot}",
+		pickShiftForPanels:
+			"Tick a shift above to see its PR, labour cost and cutlost below.",
+		/** Screen-reader name for that tick — a bare radio says nothing. */
+		showShiftDetails: "Show details for {event}",
 		suppliedOfDemandPrs: "{supplied}/{demand} PRs",
 		/** The amount arrives already formatted with its currency — never bake RM into the key. */
 		salesAmount: "{amount} sales",
@@ -9947,7 +9951,9 @@ const zh: PortalTranslations = {
 		noLiveShiftTonight:
 			"今晚没有进行中的班次 —— 请到日历页面查看即将到来的活动。",
 		noShiftsYet: "还没有班次 —— 请用「发布职位」创建。",
-		panelsCoverShift: "下方的 PR、人力成本与止损针对 {event} · {slot}",
+		pickShiftForPanels:
+			"勾选上方任一班次，即可查看该班次的 PR、人力成本与止损。",
+		showShiftDetails: "查看 {event} 的详情",
 		suppliedOfDemandPrs: "PR {supplied}/{demand}",
 		salesAmount: "销售额 {amount}",
 		savedPill: "已省 {amount}",

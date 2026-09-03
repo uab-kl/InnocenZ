@@ -229,28 +229,35 @@ export function OutletBookings({
 						: ""
 				}`}
 				open={s.id === defaultOpenId}
-				/*
-				 * OPENING A CARD POINTS THE PANELS AT IT — expanding a shift and
-				 * asking "show me this one" are the same intent, so a separate
-				 * select control beside a card you just opened would be a second way
-				 * to say one thing.
-				 *
-				 * On `onToggle` rather than a click handler on the summary: the
-				 * summary is natively interactive and a bare `onClick` on it is an
-				 * element with behaviour and no role, which is what biome refused —
-				 * correctly. This also means keyboard expansion selects too, where a
-				 * click handler would not.
-				 *
-				 * Only on OPEN, so collapsing a card leaves the panels where they
-				 * are rather than silently throwing the venue back to the live shift.
-				 */
-				onToggle={(event) => {
-					if (variant === "home" && event.currentTarget.open) {
-						setSelectedShiftId(s.id);
-					}
-				}}
 			>
 				<summary className="flex items-center gap-2">
+					{/*
+					 * THE TICK IS THE SELECTOR (owner, 3 Sep 2026: "make a tick for user
+					 * to select the shift, to see that specific shift details").
+					 *
+					 * Expanding a card was doing this a moment ago, and it conflated two
+					 * different asks: "let me read this card" and "point the panels at
+					 * this shift". A venue that opened the earlier shift to check its
+					 * roster would have moved the labour cost with it, without asking.
+					 *
+					 * A RADIO, not a checkbox: the panels describe exactly one shift, so
+					 * the control has to say that only one can win. `stopPropagation`
+					 * because a click anywhere in a `<summary>` also toggles the card,
+					 * and ticking is not opening.
+					 */}
+					{variant === "home" && todayShifts.length > 1 && (
+						<input
+							type="radio"
+							name="outlet-today-panel-shift"
+							className="h-4 w-4 shrink-0 accent-[var(--iz-accent)]"
+							checked={s.id === panelShift?.id}
+							onChange={() => setSelectedShiftId(s.id)}
+							onClick={(event) => event.stopPropagation()}
+							aria-label={fill(t.outletPanels.showShiftDetails, {
+								event: s.event,
+							})}
+						/>
+					)}
 					<div className="min-w-0 flex-1">
 						<div className="flex items-center gap-2">
 							<span className="truncate text-sm font-semibold">{s.event}</span>
@@ -314,10 +321,7 @@ export function OutletBookings({
 			 */}
 			{variant === "home" && panelShift && todayShifts.length > 1 && (
 				<p className="iz-tiny iz-muted2 mt-3">
-					{fill(t.outletPanels.panelsCoverShift, {
-						event: panelShift.event,
-						slot: panelShift.shift ?? "",
-					})}
+					{t.outletPanels.pickShiftForPanels}
 				</p>
 			)}
 			{variant === "home" && panelShift && (
