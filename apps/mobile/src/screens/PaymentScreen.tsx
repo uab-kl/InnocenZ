@@ -2410,20 +2410,27 @@ export function PaymentScreen({
                       );
                     })}
                     <View style={styles.gridCol}>
-                      {/* BOTH halves are waiting states, so both are amber and
-                          the base carries them: an open week's days top out at
-                          APPROVED, which is a checkpoint, not settlement. No
-                          green belongs in this column — the explicit pending
-                          override it used to carry only restated the base. */}
-                      <Text style={styles.statusPill}>
-                        {thisPendingDays > 0
-                          ? formatMessage(t.payment.nPending, {
-                              n: thisPendingDays,
-                            })
-                          : formatMessage(t.payment.nApproved, {
-                              n: thisApprovedDays,
-                            })}
-                      </Text>
+                      {/* PENDING ONLY (owner, 3 Sep 2026: "status of that week,
+                          remove this '1 approved'").
+
+                          The approved count was already on this card — the
+                          header reads "Approved days 1/7" — so the cell restated
+                          it in the one column that is supposed to summarise the
+                          week, and read as a second, smaller answer to a
+                          question already answered above.
+
+                          What is left says something the header does not: how
+                          many days the agency has still to look at. Amber, and
+                          absent at zero — an open week's days top out at
+                          APPROVED, which is a checkpoint, not settlement, so no
+                          green belongs in this column either way. */}
+                      {thisPendingDays > 0 && (
+                        <Text style={styles.statusPill}>
+                          {formatMessage(t.payment.nPending, {
+                            n: thisPendingDays,
+                          })}
+                        </Text>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -3119,6 +3126,14 @@ export function PaymentScreen({
                       </Pressable>
                     ))}
                   </View>
+                  {/* Why the box below fills itself in. Shown only while it
+                      still does — once the PR has typed, the note is theirs and
+                      the hint would be describing behaviour that has stopped. */}
+                  {!disputeNoteDirty && (
+                    <Text style={[styles.pickedHint, { marginTop: 8 }]}>
+                      {t.payment.noteFollowsItems}
+                    </Text>
+                  )}
                   <TextInput
                     value={disputeNote}
                     // Typing takes ownership: from here the reason and item

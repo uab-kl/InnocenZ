@@ -407,7 +407,6 @@ export type AppTranslations = {
     rowOthers: string;
     rowDeductions: string;
     nVerified: string;
-    nApproved: string;
     nPending: string;
     /** Status word — day pills, receipt rows, voucher pills and penalty rows all read from this one vocabulary. */
     statusPending: string;
@@ -478,7 +477,14 @@ export type AppTranslations = {
     disputingOf: string;
     whichItem: string;
     pickOneItem: string;
+    /**
+     * Was "Quick reason" (owner, 3 Sep 2026: "remove the quick reason, put name
+     * to reason"). "Quick" read as a shortcut the PR could skip, but this IS the
+     * reason posted to the agency and printed on their dispute card.
+     */
     quickReason: string;
+    /** Says why the note below fills itself in — it tracks the ticked items. */
+    noteFollowsItems: string;
     /** Face of the DISPUTE_PRESETS value 'Wrong commission'; the posted reason stays English. */
     reasonWrongCommission: string;
     reasonWrongQuantity: string;
@@ -1834,7 +1840,6 @@ export const translations: Record<AppLocale, AppTranslations> = {
       rowOthers: 'Others',
       rowDeductions: 'Deductions',
       nVerified: '{n} verified',
-      nApproved: '{n} approved',
       nPending: '{n} pending',
       statusPending: 'PENDING',
       statusApproved: 'APPROVED',
@@ -1893,7 +1898,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       disputingOf: 'Disputing {picked} of this day’s {day}.',
       whichItem: 'Which item?',
       pickOneItem: 'Pick at least one item.',
-      quickReason: 'Quick reason',
+      quickReason: 'Reason',
+      noteFollowsItems:
+        'The note below follows the items you ticked and the reason you picked — edit it if you want to say more.',
       reasonWrongCommission: 'Wrong commission',
       reasonWrongQuantity: 'Wrong quantity',
       reasonCountedTwice: 'Counted twice',
@@ -2921,7 +2928,6 @@ export const translations: Record<AppLocale, AppTranslations> = {
       rowOthers: '其他',
       rowDeductions: '扣款',
       nVerified: '{n} 已核实',
-      nApproved: '{n} 已批准',
       nPending: '{n} 待处理',
       statusPending: '待处理',
       statusApproved: '已批准',
@@ -2980,7 +2986,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       disputingOf: '正在对当日 {day} 中的 {picked} 提出争议。',
       whichItem: '哪一项？',
       pickOneItem: '请至少选择一项。',
-      quickReason: '快速原因',
+      quickReason: '原因',
+      noteFollowsItems:
+        '下方说明会根据你勾选的项目和选择的原因自动生成 —— 需要补充可直接修改。',
       reasonWrongCommission: '佣金有误',
       reasonWrongQuantity: '数量有误',
       reasonCountedTwice: '重复计算',
@@ -4008,7 +4016,6 @@ export const translations: Record<AppLocale, AppTranslations> = {
       rowOthers: '其他',
       rowDeductions: '扣款',
       nVerified: '{n} 已核實',
-      nApproved: '{n} 已批准',
       nPending: '{n} 待處理',
       statusPending: '待處理',
       statusApproved: '已批准',
@@ -4067,7 +4074,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       disputingOf: '正在對當日 {day} 中的 {picked} 提出爭議。',
       whichItem: '哪一項？',
       pickOneItem: '請至少選擇一項。',
-      quickReason: '快速原因',
+      quickReason: '原因',
+      noteFollowsItems:
+        '下方說明會根據你勾選的項目和選擇的原因自動產生 —— 需要補充可直接修改。',
       reasonWrongCommission: '佣金有誤',
       reasonWrongQuantity: '數量有誤',
       reasonCountedTwice: '重複計算',
