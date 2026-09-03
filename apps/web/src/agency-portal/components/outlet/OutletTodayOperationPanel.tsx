@@ -244,7 +244,23 @@ export function OutletTodayOperationPanel({
 	}, [postSealRatePrompt]);
 
 	useEffect(() => {
-		const openLiveSales = () => setLiveSalesOpen(true);
+		/**
+		 * ⚠️ OPEN THE PARENT TOO — this is why tapping the SALES tile looked dead.
+		 *
+		 * The Live sales section is nested INSIDE PR tonight (see the markup
+		 * below: PR tonight opens the card and closes only after live sales does).
+		 * Setting `liveSalesOpen` alone opened a section that was still inside a
+		 * collapsed parent, so nothing appeared and the scroll landed nowhere
+		 * useful — the venue tapped a tile about money and the page sat still.
+		 *
+		 * Owner, 3 Sep 2026: "can make this I click redirect to PR tonight open
+		 * then live sales for user to see" — which is this nesting, described
+		 * from the outside.
+		 */
+		const openLiveSales = () => {
+			setPrTonightOpen(true);
+			setLiveSalesOpen(true);
+		};
 		window.addEventListener(OUTLET_OPEN_LIVE_SALES_EVENT, openLiveSales);
 		return () =>
 			window.removeEventListener(OUTLET_OPEN_LIVE_SALES_EVENT, openLiveSales);
