@@ -171,8 +171,8 @@ jobs:
     needs: [prepare, frontend, backend]
     # success() is explicit on purpose. Putting any `if:` on a job REPLACES the
     # implicit success() that `needs:` normally applies, so without it a failed
-    # build would still roll out — pointing the server at image tags that were
-    # never pushed, and deploy.sh deletes the old local images before it pulls.
+    # build would still roll out - pointing the server at image tags that were
+    # never pushed, and deploy.sh removes the old local images before it pulls.
     if: success() && github.event.inputs.deploy != 'false'
     runs-on: ubuntu-latest
     env:
@@ -182,22 +182,22 @@ jobs:
       DOCKERHUB_NAMESPACE: juneyou
       # Selected BY NAME rather than listing both environments, so a staging
       # rollout never has the production key in its environment at all. The
-      # index has to be pre-upper-cased — GitHub expressions have no upper().
+      # index has to be pre-upper-cased - GitHub expressions have no upper().
       SERVER_IP: ${{ secrets[format('{0}_SERVER_IP', needs.prepare.outputs.env_upper)] }}
       SERVER_USER: ${{ secrets[format('{0}_SERVER_USER', needs.prepare.outputs.env_upper)] }}
       SERVER_PORT: ${{ secrets[format('{0}_SERVER_PORT', needs.prepare.outputs.env_upper)] }}
       SERVER_KEY: ${{ secrets[format('{0}_SECRET_KEY', needs.prepare.outputs.env_upper)] }}
+      # Optional repo VARIABLE, not a secret - a directory name is not one.
+      # Unset means: probe the names this project has actually used.
+      REMOTE_DIR: ${{ vars[format('{0}_REMOTE_DIR', needs.prepare.outputs.env_upper)] }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
       - name: Roll out over SSH
         shell: bash
         run: |
           set -euo pipefail
 
           # A secret that does not exist resolves to an EMPTY STRING, not an
-          # error — a typo in a secret name would otherwise surface much later
+          # error - a typo in a secret name would otherwise surface much later
           # as an unreadable ssh usage error. Name the missing ones instead.
           missing=""
           [ -n "$SERVER_IP" ]   || missing="$missing ${ENV_UPPER}_SERVER_IP"
@@ -205,7 +205,7 @@ jobs:
           [ -n "$SERVER_KEY" ]  || missing="$missing ${ENV_UPPER}_SECRET_KEY"
           if [ -n "$missing" ]; then
             echo "ERROR: missing repo secret(s):$missing"
-            echo "Add them under Settings → Secrets and variables → Actions."
+            echo "Add them under Settings > Secrets and variables > Actions."
             exit 1
           fi
           PORT="${SERVER_PORT:-22}"
@@ -217,10 +217,10 @@ jobs:
           install -m 600 /dev/null deploy_key
           printf '%s\n' "$SERVER_KEY" | tr -d '\r' > deploy_key
 
-          # "Load key: error in libcrypto" tells you the key is unreadable but
-          # not WHY, and ssh then falls through to password auth and reports a
-          # misleading "Permission denied (publickey,password)". Check the shape
-          # here instead. None of this prints the private key.
+          # "Load key: error in libcrypto" says the key is unreadable but not
+          # WHY, and ssh then falls through to password auth and reports a
+          # misleading "Permission denied (publickey,password)". Check the
+          # shape here. None of this prints the private key.
           key_lines=$(wc -l < deploy_key)
           head -1 deploy_key | grep -q -- '-----BEGIN .*PRIVATE KEY-----' || {
             echo "ERROR: ${ENV_UPPER}_SECRET_KEY does not begin with a PEM header."
@@ -231,73 +231,77 @@ jobs:
             echo "ERROR: OpenSSH cannot read ${ENV_UPPER}_SECRET_KEY - it is ${key_lines} line(s)."
             if [ "$key_lines" -le 2 ]; then
               echo "  A valid OpenSSH private key is 7+ lines. The line breaks were lost when"
-              echo "  the secret was set - passing it as one argument does that. Re-set it FROM"
-              echo "  THE FILE, which preserves them:"
-              echo "    gh secret set ${ENV_UPPER}_SECRET_KEY -R ${GITHUB_REPOSITORY} < ~/.ssh/gh_deploy"
+              echo "  the secret was set. Paste the whole file, BEGIN and END lines included."
             else
               echo "  Line count looks right, so the body is corrupt or the key has a passphrase."
-              echo "  This job cannot answer a passphrase prompt. Regenerate without one:"
-              echo "    ssh-keygen -t ed25519 -f ~/.ssh/gh_deploy -N '' -C github-actions"
+              echo "  This job cannot answer a passphrase prompt, so regenerate without one."
             fi
             exit 1
           fi
-          echo "Deploy key parses (${key_lines} lines). Its PUBLIC half is below - this exact"
-          echo "line must be present in ~/.ssh/authorized_keys on the target server:"
-          cat deploy_key.pub
 
           HOST="${SERVER_USER}@${SERVER_IP}"
           # BatchMode=yes so a bad key fails immediately instead of hanging on a
           # password prompt that no one can answer.
           OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -i deploy_key"
-          DIR="innocenz-${DEPLOY_ENV}"
 
-          echo "Rolling out ${DEPLOY_ENV} @ ${SHORT_SHA} to ~/${DIR}"
-
-          # Refuse before touching anything. scp into a missing directory fails
-          # cryptically, and a missing .env.backend / Caddyfile would bring the
-          # stack up with no DATABASE_URL or no HTTPS routing at all.
-          ssh $OPTS -p "$PORT" "$HOST" "
-            set -e
-            [ -d \"\$HOME/$DIR\" ] || { echo 'ERROR: ~/$DIR does not exist. Provision it once from a PC: pnpm deploy:'\"$DEPLOY_ENV\"; exit 1; }
-            [ -f \"\$HOME/$DIR/.env.backend\" ] || { echo 'ERROR: ~/$DIR/.env.backend missing — backend would boot with no DATABASE_URL / R2.'; exit 1; }
-            [ -f \"\$HOME/$DIR/Caddyfile\" ] || { echo 'ERROR: ~/$DIR/Caddyfile missing — Caddy would mount a directory and serve nothing.'; exit 1; }
-            [ -f \"\$HOME/$DIR/.env.frontend\" ] || { echo 'ERROR: ~/$DIR/.env.frontend missing - compose declares env_file for it and aborts before pulling. VITE_* are baked in at build time, so an empty file is correct: touch ~/$DIR/.env.frontend'; exit 1; }
-          "
-
-          # Keep the two non-secret server files in step with the repo, so a
-          # change under tools/deploy/ ships without needing a PC deploy.
-          scp $OPTS -P "$PORT" \
-            tools/deploy/docker-compose.yml tools/deploy/deploy.sh \
-            "$HOST:$DIR/"
-
-          # Quoted heredoc: the values below are handed over as remote variables
-          # rather than expanded into the script, so nothing in the remote body
-          # gets mangled by the runner.
+          # This job copies NOTHING to the server. The box owns its runtime
+          # layout - its compose file, its reverse proxy, its deploy.sh - and
+          # those have already been shown to differ from this repo's copies
+          # (no Caddy service, host-bound ports, no external network). All that
+          # happens here is: point the image tags at what this run built, then
+          # run the server's own deploy.sh.
           ssh $OPTS -p "$PORT" "$HOST" \
-            "DEPLOY_ENV='$DEPLOY_ENV' SHORT_SHA='$SHORT_SHA' NS='$DOCKERHUB_NAMESPACE' bash -s" <<'REMOTE'
+            "DEPLOY_ENV='$DEPLOY_ENV' ENV_UPPER='$ENV_UPPER' SHORT_SHA='$SHORT_SHA' NS='$DOCKERHUB_NAMESPACE' WANT_DIR='$REMOTE_DIR' bash -s" <<'REMOTE'
           set -euo pipefail
-          cd "$HOME/innocenz-${DEPLOY_ENV}"
 
-          grep -q '^DATABASE_URL=.' .env.backend || {
-            echo "ERROR: .env.backend has no DATABASE_URL — refusing to start."
-            exit 1
+          # The explicit variable wins; otherwise probe the names this project
+          # has used. Printed either way, so the log always names the directory
+          # that was actually touched.
+          if [ -n "$WANT_DIR" ]; then
+            DIR="$HOME/$WANT_DIR"
+            [ -d "$DIR" ] || { echo "ERROR: $DIR does not exist, but variable ${ENV_UPPER}_REMOTE_DIR names it."; exit 1; }
+          else
+            DIR=""
+            for candidate in "innocenz-${DEPLOY_ENV}" "innocenz"; do
+              if [ -d "$HOME/$candidate" ]; then DIR="$HOME/$candidate"; break; fi
+            done
+            if [ -z "$DIR" ]; then
+              echo "ERROR: found neither ~/innocenz-${DEPLOY_ENV} nor ~/innocenz."
+              echo "  If the deployment lives elsewhere, set repository VARIABLE"
+              echo "  ${ENV_UPPER}_REMOTE_DIR to its name, under Settings > Secrets and"
+              echo "  variables > Actions > Variables."
+              exit 1
+            fi
+          fi
+          cd "$DIR"
+          echo "Deploying in: $DIR"
+
+          [ -f deploy.sh ] || { echo "ERROR: $DIR/deploy.sh is missing - nothing to run."; exit 1; }
+          [ -f .env ] || { echo "ERROR: $DIR/.env is missing - deploy.sh reads the image tags from it."; exit 1; }
+
+          # Rewrite ONLY the two image tags, so every other key the server keeps
+          # in .env survives - including FRONTEND_CONTAINER_NAME and
+          # BACKEND_CONTAINER_NAME, which its compose interpolates. Tolerant of
+          # a missing line, an indented one, or an `export` prefix, each of
+          # which a strictly anchored sed would skip silently.
+          # Pinned to the immutable <env>-<sha> tag rather than the floating
+          # <env> one, so what starts is exactly what this run built, and a bad
+          # deploy rolls back by pointing these two lines at an earlier sha.
+          set_env_var() {
+            VAR="$1"
+            VALUE="$2"
+            if grep -qE "^[[:space:]]*(export[[:space:]]+)?${VAR}=" .env; then
+              sed -i -E "s|^[[:space:]]*(export[[:space:]]+)?${VAR}=.*|${VAR}=${VALUE}|" .env
+            else
+              echo "${VAR}=${VALUE}" >> .env
+            fi
           }
-
-          # The same five keys tools/scripts/deploy.mjs generates, so a CI rollout
-          # and a PC deploy leave the server in an identical state. Pinned to the
-          # immutable <env>-<sha> tag rather than the floating <env> one, so what
-          # starts here is exactly what this run built — and a bad deploy rolls
-          # back by pointing these two lines at an earlier sha.
-          cat > .env <<ENV
-          DEPLOY_ENV=${DEPLOY_ENV}
-          FRONTEND_IMAGE=${NS}/innocenz-frontend:${DEPLOY_ENV}-${SHORT_SHA}
-          BACKEND_IMAGE=${NS}/innocenz-backend:${DEPLOY_ENV}-${SHORT_SHA}
-          FRONTEND_CONTAINER_NAME=innocenz-frontend
-          BACKEND_CONTAINER_NAME=innocenz-backend
-          ENV
-
-          NETWORK="innocenz-${DEPLOY_ENV}-network"
-          docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK"
+          FRONTEND_IMAGE="${NS}/innocenz-frontend:${DEPLOY_ENV}-${SHORT_SHA}"
+          BACKEND_IMAGE="${NS}/innocenz-backend:${DEPLOY_ENV}-${SHORT_SHA}"
+          set_env_var FRONTEND_IMAGE "$FRONTEND_IMAGE"
+          set_env_var BACKEND_IMAGE "$BACKEND_IMAGE"
+          echo "Frontend: $FRONTEND_IMAGE"
+          echo "Backend:  $BACKEND_IMAGE"
 
           chmod +x deploy.sh
           ./deploy.sh
