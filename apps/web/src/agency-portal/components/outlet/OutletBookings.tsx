@@ -33,7 +33,7 @@ import { parseSlotRange } from "@agency-portal/lib/shift-window";
 import { specialServicesForOutlet } from "@agency-portal/lib/special-service-actions";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { ChevronDown } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
@@ -147,6 +147,23 @@ export function OutletBookings({
 		);
 	}, [visibleShifts]);
 
+	/**
+	 * WHICH shift the panels below describe (owner, 3 Sep 2026: "if the user
+	 * select the shift then the below section like PR tonight, labor cost and
+	 * the reduce cutlost will follow with the selected shift").
+	 *
+	 * Null until the venue picks one, and then `liveShift` answers — so the page
+	 * still opens on the shift that is RUNNING, which is what a venue wants at a
+	 * glance, and only moves when someone asks it to.
+	 *
+	 * Resolved THROUGH `todayShifts` rather than trusted: an id that has left the
+	 * day (the week rolled, the shift was cancelled) falls back to the live shift
+	 * instead of leaving the panels describing a shift no longer on the page.
+	 */
+	const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
+	const panelShift =
+		todayShifts.find((s) => s.id === selectedShiftId) ?? liveShift;
+
 	const defaultOpenId = variant === "future" ? futureShifts[0]?.id : undefined;
 
 	if (variant === "home" && !liveShift) {
@@ -201,8 +218,37 @@ export function OutletBookings({
 		return (
 			<details
 				key={s.id}
-				className="iz-outlet-booking-card group"
+				className={`iz-outlet-booking-card group${
+					// The chosen card is marked, because the panels below name a shift
+					// and the venue must be able to see WHICH card that sentence points
+					// at. Only on Today, and only once there is a choice to make.
+					variant === "home" &&
+					todayShifts.length > 1 &&
+					s.id === panelShift?.id
+						? " ring-1 ring-[var(--iz-gold)]"
+						: ""
+				}`}
 				open={s.id === defaultOpenId}
+				/*
+				 * OPENING A CARD POINTS THE PANELS AT IT — expanding a shift and
+				 * asking "show me this one" are the same intent, so a separate
+				 * select control beside a card you just opened would be a second way
+				 * to say one thing.
+				 *
+				 * On `onToggle` rather than a click handler on the summary: the
+				 * summary is natively interactive and a bare `onClick` on it is an
+				 * element with behaviour and no role, which is what biome refused —
+				 * correctly. This also means keyboard expansion selects too, where a
+				 * click handler would not.
+				 *
+				 * Only on OPEN, so collapsing a card leaves the panels where they
+				 * are rather than silently throwing the venue back to the live shift.
+				 */
+				onToggle={(event) => {
+					if (variant === "home" && event.currentTarget.open) {
+						setSelectedShiftId(s.id);
+					}
+				}}
 			>
 				<summary className="flex items-center gap-2">
 					<div className="min-w-0 flex-1">
@@ -258,34 +304,38 @@ export function OutletBookings({
 			{/* Every shift tonight, in time order, as ONE section. */}
 			{variant === "home" && todayShifts.map((s) => renderShiftCard(s, true))}
 			{/*
-			 * WHICH shift the panels below describe. They are computed from
-			 * `liveShift` alone, and now that the cards sit together above them
-			 * they no longer touch the card they belong to — without this line the
-			 * labour cost of the 10:00 shift would read as the 11:00 shift's,
-			 * which is a money figure attached to the wrong night's work.
+			 * WHICH shift the panels below describe — the one tapped, or the live
+			 * one until something is tapped. Said out loud because the cards now
+			 * sit together above the panels and no longer touch the one they
+			 * belong to: without this line the labour cost of the 10:00 shift
+			 * would read as the 11:00 shift's, a money figure attached to the
+			 * wrong night's work. Only when there is more than one shift to
+			 * confuse.
 			 */}
-			{variant === "home" && liveShift && todayShifts.length > 1 && (
+			{variant === "home" && panelShift && todayShifts.length > 1 && (
 				<p className="iz-tiny iz-muted2 mt-3">
 					{fill(t.outletPanels.panelsCoverShift, {
-						event: liveShift.event,
-						slot: liveShift.shift ?? "",
+						event: panelShift.event,
+						slot: panelShift.shift ?? "",
 					})}
 				</p>
 			)}
-			{variant === "home" && liveShift && (
+			{variant === "home" && panelShift && (
 				<OutletTodayOperationPanel
-					shift={liveShift}
+					shift={panelShift}
 					outletName={outletWorkspace.outletName}
 					roster={rosterOverride}
 					agencyPrs={agencyPrs}
 				/>
 			)}
-			{variant === "home" && liveShift && (
-				<OutletLaborCostReport shift={liveShift} />
+			{variant === "home" && panelShift && (
+				<OutletLaborCostReport shift={panelShift} />
 			)}
-			{variant === "home" && liveShift && liveShift.status === "confirmed" && (
-				<OutletCutLossActions shift={liveShift} />
-			)}
+			{variant === "home" &&
+				panelShift &&
+				panelShift.status === "confirmed" && (
+					<OutletCutLossActions shift={panelShift} />
+				)}
 			{variant === "future" && futureShifts.map((s) => renderShiftCard(s))}
 		</div>
 	);

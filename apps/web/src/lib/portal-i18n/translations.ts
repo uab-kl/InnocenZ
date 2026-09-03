@@ -2318,6 +2318,12 @@ const en = {
 		nextMonth: "Next month",
 		statusLegend: "Shift status legend",
 		legendLive: "Live",
+		/**
+		 * A confirmed shift whose slot has already ENDED (owner, 3 Sep 2026:
+		 * "if time is exceed then the live will show expired"). The stored status
+		 * stays `confirmed` — this is the clock talking, not the record.
+		 */
+		legendExpired: "Expired",
 		legendConfirmed: "Confirmed",
 		legendOpen: "Open",
 		legendDraft: "Draft",
@@ -7897,6 +7903,7 @@ const zh: PortalTranslations = {
 		nextMonth: "下一个月",
 		statusLegend: "班次状态图例",
 		legendLive: "进行中",
+		legendExpired: "已结束",
 		legendConfirmed: "已确认",
 		legendOpen: "招募中",
 		legendDraft: "草稿",
