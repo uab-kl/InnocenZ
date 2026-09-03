@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 88bfe12d-2821-45af-978c-7103c199f157
-  modified: 2026-08-13T00:35:21.966Z
+  modified: 2026-08-20T07:46:01.260Z
 ---
 
 The user works on multiple devices (office PC + house PC, same Claude account) — file-based memory is per-machine, so it must be mirrored where every device can read it.
