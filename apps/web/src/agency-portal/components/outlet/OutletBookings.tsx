@@ -29,10 +29,11 @@ import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial
 import { pickLiveShift } from "@agency-portal/lib/outlet-live-shift";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { PR_AGENCY_TIED_OFFERS } from "@agency-portal/lib/pr-features";
+import { parseSlotRange } from "@agency-portal/lib/shift-window";
 import { specialServicesForOutlet } from "@agency-portal/lib/special-service-actions";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { ChevronDown } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
@@ -94,6 +95,75 @@ export function OutletBookings({
 		? visibleShifts.filter((s) => s.id !== liveShift.id)
 		: visibleShifts;
 
+	/**
+	 * EVERY SHIFT RUNNING TODAY, earliest first — one list, in the order the
+	 * night actually runs (owner, 3 Sep 2026: "the shift put together at same
+	 * section, then arrange from earlier to latest").
+	 *
+	 * Today used to render `liveShift` alone, so a venue working two shifts in a
+	 * night saw only one and the PRs on the other were invisible on the page
+	 * that exists to say who is working. Emhub had exactly that: a 10:00–11:00
+	 * shift with nobody on it, and an 11:00–12:00 "tt" whose PR had already
+	 * checked in and out — Today showed the first and reported "No PRs assigned
+	 * for tonight yet". The first fix listed the rest under a separate "Also
+	 * today" heading; this one drops that split, because two cards describing
+	 * the same night are one section.
+	 *
+	 * `pickLiveShift` is deliberately still NOT touched. It answers "which shift
+	 * is RUNNING" for the panels below, it is unit-tested, and its own comment
+	 * records three past wrong answers. What changed is only which cards the
+	 * page lists, never which shift it calls live.
+	 *
+	 * Scoped to today by the shift's own resolved date — `visibleShifts` spans
+	 * the fortnight the hook fetches, and next Tuesday's booking is the
+	 * Calendar's business, not tonight's.
+	 */
+	const todayShifts = useMemo(() => {
+		const todayIso = getLiveTodayIso();
+		return (
+			visibleShifts
+				.filter(
+					(s) =>
+						resolveOutletShiftDateIso(s.date, s.dateIso, todayIso) === todayIso,
+				)
+				/*
+				 * EARLIEST FIRST (owner, 3 Sep 2026: "arrange the posted shift time
+				 * from earlier to later"). The hook returns shifts in the order the
+				 * API sends them, which is not the order a night runs in.
+				 *
+				 * `parseSlotRange` is the shared parser the clash checks use, so an
+				 * overnight 22:00–04:00 sorts by when it STARTS rather than wrapping
+				 * to the front. A slot that is not a time range at all returns null;
+				 * those sink to the end rather than sorting as midnight, since
+				 * "unknown" is not "earliest".
+				 */
+				.sort((a, b) => {
+					const aStart =
+						parseSlotRange(a.shift)?.startMin ?? Number.MAX_SAFE_INTEGER;
+					const bStart =
+						parseSlotRange(b.shift)?.startMin ?? Number.MAX_SAFE_INTEGER;
+					return aStart - bStart;
+				})
+		);
+	}, [visibleShifts]);
+
+	/**
+	 * WHICH shift the panels below describe (owner, 3 Sep 2026: "if the user
+	 * select the shift then the below section like PR tonight, labor cost and
+	 * the reduce cutlost will follow with the selected shift").
+	 *
+	 * Null until the venue picks one, and then `liveShift` answers — so the page
+	 * still opens on the shift that is RUNNING, which is what a venue wants at a
+	 * glance, and only moves when someone asks it to.
+	 *
+	 * Resolved THROUGH `todayShifts` rather than trusted: an id that has left the
+	 * day (the week rolled, the shift was cancelled) falls back to the live shift
+	 * instead of leaving the panels describing a shift no longer on the page.
+	 */
+	const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
+	const panelShift =
+		todayShifts.find((s) => s.id === selectedShiftId) ?? liveShift;
+
 	const defaultOpenId = variant === "future" ? futureShifts[0]?.id : undefined;
 
 	if (variant === "home" && !liveShift) {
@@ -148,10 +218,46 @@ export function OutletBookings({
 		return (
 			<details
 				key={s.id}
-				className="iz-outlet-booking-card group"
+				className={`iz-outlet-booking-card group${
+					// The chosen card is marked, because the panels below name a shift
+					// and the venue must be able to see WHICH card that sentence points
+					// at. Only on Today, and only once there is a choice to make.
+					variant === "home" &&
+					todayShifts.length > 1 &&
+					s.id === panelShift?.id
+						? " ring-1 ring-[var(--iz-gold)]"
+						: ""
+				}`}
 				open={s.id === defaultOpenId}
 			>
 				<summary className="flex items-center gap-2">
+					{/*
+					 * THE TICK IS THE SELECTOR (owner, 3 Sep 2026: "make a tick for user
+					 * to select the shift, to see that specific shift details").
+					 *
+					 * Expanding a card was doing this a moment ago, and it conflated two
+					 * different asks: "let me read this card" and "point the panels at
+					 * this shift". A venue that opened the earlier shift to check its
+					 * roster would have moved the labour cost with it, without asking.
+					 *
+					 * A RADIO, not a checkbox: the panels describe exactly one shift, so
+					 * the control has to say that only one can win. `stopPropagation`
+					 * because a click anywhere in a `<summary>` also toggles the card,
+					 * and ticking is not opening.
+					 */}
+					{variant === "home" && todayShifts.length > 1 && (
+						<input
+							type="radio"
+							name="outlet-today-panel-shift"
+							className="h-4 w-4 shrink-0 accent-[var(--iz-accent)]"
+							checked={s.id === panelShift?.id}
+							onChange={() => setSelectedShiftId(s.id)}
+							onClick={(event) => event.stopPropagation()}
+							aria-label={fill(t.outletPanels.showShiftDetails, {
+								event: s.event,
+							})}
+						/>
+					)}
 					<div className="min-w-0 flex-1">
 						<div className="flex items-center gap-2">
 							<span className="truncate text-sm font-semibold">{s.event}</span>
@@ -202,21 +308,38 @@ export function OutletBookings({
 
 	return (
 		<div className="space-y-2">
-			{variant === "home" && liveShift && renderShiftCard(liveShift, true)}
-			{variant === "home" && liveShift && (
+			{/* Every shift tonight, in time order, as ONE section. */}
+			{variant === "home" && todayShifts.map((s) => renderShiftCard(s, true))}
+			{/*
+			 * WHICH shift the panels below describe — the one tapped, or the live
+			 * one until something is tapped. Said out loud because the cards now
+			 * sit together above the panels and no longer touch the one they
+			 * belong to: without this line the labour cost of the 10:00 shift
+			 * would read as the 11:00 shift's, a money figure attached to the
+			 * wrong night's work. Only when there is more than one shift to
+			 * confuse.
+			 */}
+			{variant === "home" && panelShift && todayShifts.length > 1 && (
+				<p className="iz-tiny iz-muted2 mt-3">
+					{t.outletPanels.pickShiftForPanels}
+				</p>
+			)}
+			{variant === "home" && panelShift && (
 				<OutletTodayOperationPanel
-					shift={liveShift}
+					shift={panelShift}
 					outletName={outletWorkspace.outletName}
 					roster={rosterOverride}
 					agencyPrs={agencyPrs}
 				/>
 			)}
-			{variant === "home" && liveShift && (
-				<OutletLaborCostReport shift={liveShift} />
+			{variant === "home" && panelShift && (
+				<OutletLaborCostReport shift={panelShift} />
 			)}
-			{variant === "home" && liveShift && liveShift.status === "confirmed" && (
-				<OutletCutLossActions shift={liveShift} />
-			)}
+			{variant === "home" &&
+				panelShift &&
+				panelShift.status === "confirmed" && (
+					<OutletCutLossActions shift={panelShift} />
+				)}
 			{variant === "future" && futureShifts.map((s) => renderShiftCard(s))}
 		</div>
 	);

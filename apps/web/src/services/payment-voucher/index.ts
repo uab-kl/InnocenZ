@@ -922,6 +922,27 @@ export interface PaymentVoucherDispute {
 	/** What the voucher said when raised — computed server-side, not claimed. */
 	disputedAmount: string | null;
 	claimedAmount: string | null;
+	/**
+	 * WHICH LINES the PR picked — the receipt rows the claim is actually about
+	 * ("Heradura anejo ultra × 3 · RM 45.00"), not the bucket total.
+	 *
+	 * The server has sent this since the picker existed (the queue spreads the
+	 * whole dispute row); only this interface omitted it, so the agency card
+	 * could show "Reason: Wrong commission" and nothing about which drink was
+	 * wrong. Owner, 3 Sep 2026: "the reason come with which wrong item that the
+	 * pr selected, to making easier for agency to review."
+	 *
+	 * NULL on the claims raised before the picker — 8 of the 12 live rows — so
+	 * every reader must fall back to the reason alone rather than assume a list.
+	 */
+	disputedItems:
+		| {
+				lineId: string;
+				description: string;
+				quantity: number;
+				amount: string;
+		  }[]
+		| null;
 	proofPhotos: string[] | null;
 	outcome: DisputeOutcome | null;
 	resolvedAt: string | null;

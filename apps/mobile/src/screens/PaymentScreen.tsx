@@ -52,7 +52,6 @@ import {
   disputesForDay,
   kindDisputable,
   openDisputeKeys,
-  DISPUTE_PRESETS,
   receiptClaimState,
   receiptReviewCaption,
   thisWeekDayStatus,
@@ -156,12 +155,18 @@ function incomeRowLabel(key: string, t: AppTranslations): string {
 }
 
 /**
- * The dispute reasons, worded for the reader.
+ * The dispute reasons, worded for the reader — for CLAIMS ALREADY RAISED.
  *
- * The KEYS are `DISPUTE_PRESETS` verbatim — that string is what `raiseMyDispute`
- * posts as `reason` and what the agency's own screens match on, so it must not
- * move. Only the chip's face is translated, and an unknown reason coming back
- * from the server falls through to itself rather than rendering blank.
+ * The chips that produced these are gone (3 Sep 2026); a new claim now posts
+ * the PR's own description as its reason. This map stays because the rows
+ * already in the database still hold the old seven strings, and a PR opening
+ * "What you disputed" on a claim from last week must still read the words they
+ * tapped rather than a raw English token.
+ *
+ * The KEYS are the stored values verbatim, so they must not move. `presetLabel`
+ * falls through to the reason itself for anything unrecognised — which is now
+ * the normal case, not the exception, since a free-written reason has no entry
+ * here and must render as written.
  */
 const PRESET_LABELS: Record<string, (t: AppTranslations) => string> = {
   'Wrong commission': (t) => t.payment.reasonWrongCommission,
@@ -175,6 +180,41 @@ const PRESET_LABELS: Record<string, (t: AppTranslations) => string> = {
 
 function presetLabel(reason: string, t: AppTranslations): string {
   return PRESET_LABELS[reason]?.(t) ?? reason;
+}
+
+/**
+ * `payment_voucher_dispute.reason` is `varchar(200)` and the server refuses
+ * anything longer. Held here so the text the app WRITES can never be the thing
+ * that 400s a claim.
+ */
+const REASON_MAX = 200;
+
+/**
+ * The claim's reason, written from what the PR ticked.
+ *
+ * Since 3 Sep 2026 this IS the reason posted to the agency — the seven preset
+ * chips are gone (owner: "the reason remove this all"). They forced every
+ * argument into one of seven words, none of which said WHICH drink was wrong,
+ * which is the one thing the reviewer needs.
+ *
+ * ENGLISH, like everything else posted: the agency reads one wording whatever
+ * the PR's phone is set to.
+ *
+ * Names the ticked lines while they fit. Past that it says how many rather
+ * than truncating mid-word — the agency card lists every line separately from
+ * `disputedItems`, so the count loses nothing and a sentence cut in half
+ * would look like data loss.
+ */
+function composeDisputeReason(
+  base: string,
+  itemLabels: string[],
+  fallbackAmount: string,
+): string {
+  const detail = itemLabels.length ? itemLabels.join(' · ') : fallbackAmount;
+  const full = `${base} · ${detail} — please verify`;
+  if (full.length <= REASON_MAX) return full;
+  const counted = `${base} · ${itemLabels.length} items — please verify`;
+  return counted.length <= REASON_MAX ? counted : counted.slice(0, REASON_MAX);
 }
 
 /**
@@ -746,9 +786,6 @@ export function PaymentScreen({
     day: WeeklyDayPay;
     row: (typeof GRID_ROWS)[number];
   } | null>(null);
-  const [disputePreset, setDisputePreset] = useState<string>(
-    DISPUTE_PRESETS[0],
-  );
   /**
    * The ONE receipt being contested — a dispute is about a single shift.
    *
@@ -762,6 +799,25 @@ export function PaymentScreen({
     string | null
   >(null);
   const [disputeNote, setDisputeNote] = useState('');
+  /**
+   * The bucket and day the claim is on, in ENGLISH — "Tips · THU 3".
+   *
+   * Held as a plain string rather than derived at render like every label on
+   * `DisputeTarget`, and that is deliberate rather than an oversight: this is
+   * not a label, it is part of the note POSTED to the agency, which must read
+   * the same in their inbox whatever language the PR's phone is set to. It
+   * carries no amount, because the amount depends on whether the PR narrowed
+   * the claim to specific lines.
+   */
+  const [disputeNoteBase, setDisputeNoteBase] = useState('');
+  /**
+   * Has the PR typed their own note? Once they have, nothing regenerates it.
+   *
+   * Without this the auto-clarify below would erase a sentence someone wrote
+   * by hand the moment they changed the reason chip — losing the one part of a
+   * claim the app did not write itself.
+   */
+  const [disputeNoteDirty, setDisputeNoteDirty] = useState(false);
   const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
   /** Optional proof kept with submitted disputes (image upload is still local). */
   const [disputePhotoMap, setDisputePhotoMap] = useState<
@@ -996,6 +1052,37 @@ export function PaymentScreen({
     const anyShiftToDispute = buildCellEvidence(weekData, day.dateIso, row.key)
       .groups.flatMap((g) => g.receipts)
       .some((r) => !!r.receiptNo);
+    /**
+     * Is there still a receipt in THIS cell that carries no open claim?
+     *
+     * ⚠️ THE REASON A SECOND DISPUTE LOOKED IMPOSSIBLE (owner, 3 Sep 2026:
+     * "on the same day, or same shift, I can dispute more than one receipt").
+     * The database has allowed it since 0088 — the unique index is keyed
+     * `(voucher, date, component, coalesce(receipt_id,''))` over OPEN claims
+     * only, and one live day already carries six claims across two receipts.
+     * The block was HERE: `weekDisputed` asks whether the VOUCHER is disputed,
+     * so the first open claim turned every later tap into "Withdraw dispute?",
+     * whatever day, bucket or paper it was on — the second receipt had no route
+     * to being questioned at all.
+     *
+     * Withdraw is now offered only when this cell has nothing LEFT to contest,
+     * which is the case that sheet was written for. A cell with a free receipt
+     * opens the dispute picker, where the claimed ones already grey out with
+     * "already disputed". Cancelling a specific claim keeps its own home in the
+     * "What you disputed" sheet, so no route is lost.
+     */
+    const cellClaims = receiptClaimState(weekData, day.dateIso, row.key);
+    const freeReceiptInCell =
+      !cellClaims.openAll &&
+      buildCellEvidence(weekData, day.dateIso, row.key)
+        .groups.flatMap((g) => g.receipts)
+        .some((r) => {
+          if (!r.receiptNo) return false;
+          const claimed =
+            (!!r.receiptId && cellClaims.open.has(r.receiptId)) ||
+            cellClaims.open.has(r.receiptNo);
+          return !claimed;
+        });
     if (!weekDisputed && !anyShiftToDispute) {
       // Two different refusals, and they must not share a message. "Still being
       // reviewed" tells the PR to wait — useless advice for wages, where waiting
@@ -1028,19 +1115,29 @@ export function PaymentScreen({
       week,
     };
     setDisputeTarget(target);
-    // A PV already under dispute → tapping any amount offers to withdraw it.
-    if (weekDisputed) {
+    // Withdraw only when this cell has nothing left to contest; otherwise the
+    // tap raises a NEW claim, even while another is open elsewhere on the week.
+    if (weekDisputed && !freeReceiptInCell) {
       setDisputeMode('withdraw');
       setDisputeNote('');
       setDisputePhotos([]);
     } else {
       setDisputeMode('dispute');
-      setDisputePreset(DISPUTE_PRESETS[0]);
       // ENGLISH ON PURPOSE — this is the note POSTED to the agency, not a label.
       // `noteLabel`, not `label(t)`: the claim reads the same in the agency's
       // inbox whatever language the PR's phone is set to.
+      //
+      // Only the bucket and the day are frozen here. The reason and the lines
+      // are appended by the effect below, which re-runs as the PR changes
+      // either — so the note keeps describing what is actually selected.
+      setDisputeNoteBase(`${row.noteLabel} · ${day.day} ${day.date}`);
+      setDisputeNoteDirty(false);
       setDisputeNote(
-        `${row.noteLabel} · ${day.day} ${day.date} · ${formatRM(amount)} — please verify`,
+        composeDisputeReason(
+          `${row.noteLabel} · ${day.day} ${day.date}`,
+          [],
+          formatRM(amount),
+        ),
       );
       setDisputePhotos([]);
     }
@@ -1239,6 +1336,46 @@ export function PaymentScreen({
     setDisputePickedItems(disputeItems.map((i) => i.id));
   }, [disputeItems]);
 
+  /**
+   * THE NOTE FOLLOWS THE SELECTION (owner, 3 Sep 2026: "this need follow from
+   * which items pr selected, then the quick reason and the description of the
+   * quick reason need to auto clarify also").
+   *
+   * It used to be written once, on the tap, as "Tips · THU 3 · RM 230.00 —
+   * please verify": the BUCKET and the bucket's whole total. So a PR who then
+   * picked "Tips × 4 · RM 30.00" and the reason "Wrong commission" sent the
+   * agency a note naming neither — the reviewer read RM 230.00 for a claim
+   * about RM 30.00, and had to open the receipt to learn which line was wrong.
+   *
+   * Now it recomposes as either changes: the reason first, then the exact
+   * lines ticked, falling back to the bucket total when the PR is contesting
+   * the whole cell (no picker shown, or nothing ticked). Left alone the moment
+   * the PR types — see `disputeNoteDirty`.
+   *
+   * ENGLISH throughout, like the base: the agency reads one wording whatever
+   * the phone's language.
+   */
+  useEffect(() => {
+    if (disputeMode !== 'dispute' || disputeNoteDirty || !disputeNoteBase) {
+      return;
+    }
+    const picked = disputeItems.filter((i) => disputePickedItems.includes(i.id));
+    setDisputeNote(
+      composeDisputeReason(
+        disputeNoteBase,
+        picked.map((i) => i.label),
+        formatRM(disputeTarget?.amount ?? 0),
+      ),
+    );
+  }, [
+    disputeMode,
+    disputeNoteDirty,
+    disputeNoteBase,
+    disputeItems,
+    disputePickedItems,
+    disputeTarget,
+  ]);
+
   /** A chooser was shown and the PR has not answered it yet. */
   const noReceiptPicked =
     (disputeReceipts.length > 0 && disputePickedReceipt === null) ||
@@ -1393,8 +1530,22 @@ export function PaymentScreen({
           : await raiseMyDispute(token, voucherId, {
               disputeDate: disputeTarget.dateIso,
               component: disputeTarget.incomeKey,
-              reason: disputePreset,
-              note: disputeNote.trim() || undefined,
+              /*
+               * THE BOX IS THE REASON (owner, 3 Sep 2026). It replaced the
+               * seven preset chips, so what the agency reads under "Reason" is
+               * the sentence the PR saw and could edit — no second, vaguer
+               * word in front of it.
+               *
+               * `slice` is a floor, not the plan: `composeDisputeReason` keeps
+               * what the app writes inside the column, and the input is capped
+               * too, so this only catches a value that arrived some other way.
+               * An empty box would fail the server's `min(1)`, so it falls
+               * back rather than posting a claim that cannot be filed.
+               */
+              reason:
+                disputeNote.trim().slice(0, REASON_MAX) || 'Please verify',
+              // No separate note: one field, one thing to read.
+              note: undefined,
               proofPhotos: disputePhotos.length ? disputePhotos : undefined,
               /*
                * ALWAYS the one shift, when the cell has a receipt at all.
@@ -2313,20 +2464,27 @@ export function PaymentScreen({
                       );
                     })}
                     <View style={styles.gridCol}>
-                      {/* BOTH halves are waiting states, so both are amber and
-                          the base carries them: an open week's days top out at
-                          APPROVED, which is a checkpoint, not settlement. No
-                          green belongs in this column — the explicit pending
-                          override it used to carry only restated the base. */}
-                      <Text style={styles.statusPill}>
-                        {thisPendingDays > 0
-                          ? formatMessage(t.payment.nPending, {
-                              n: thisPendingDays,
-                            })
-                          : formatMessage(t.payment.nApproved, {
-                              n: thisApprovedDays,
-                            })}
-                      </Text>
+                      {/* PENDING ONLY (owner, 3 Sep 2026: "status of that week,
+                          remove this '1 approved'").
+
+                          The approved count was already on this card — the
+                          header reads "Approved days 1/7" — so the cell restated
+                          it in the one column that is supposed to summarise the
+                          week, and read as a second, smaller answer to a
+                          question already answered above.
+
+                          What is left says something the header does not: how
+                          many days the agency has still to look at. Amber, and
+                          absent at zero — an open week's days top out at
+                          APPROVED, which is a checkpoint, not settlement, so no
+                          green belongs in this column either way. */}
+                      {thisPendingDays > 0 && (
+                        <Text style={styles.statusPill}>
+                          {formatMessage(t.payment.nPending, {
+                            n: thisPendingDays,
+                          })}
+                        </Text>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -2511,10 +2669,11 @@ export function PaymentScreen({
                                   Number(d.disputedAmount ?? 0),
                                 ),
                               })}
-                              {/* The stored reason is one of DISPUTE_PRESETS —
-                                  shown through the same label map the chips
-                                  use, so the PR reads back the words they
-                                  tapped. */}
+                              {/* A claim raised since 3 Sep carries the PR's own
+                                  description here and renders as written; an
+                                  older one holds one of the seven retired
+                                  preset strings, which `presetLabel` still
+                                  translates so it reads as it always did. */}
                               {d.reason ? ` · ${presetLabel(d.reason, t)}` : ''}
                             </Text>
                             {/*
@@ -2996,35 +3155,42 @@ export function PaymentScreen({
                     </>
                   )}
 
+                  {/*
+                   * ONE FIELD, not chips + a note (owner, 3 Sep 2026: "the
+                   * reason remove this all, the small selection buttons" and
+                   * "the reason will always get the reason description").
+                   *
+                   * The seven preset chips forced every claim into one of seven
+                   * words, and the words did not say which drink was wrong — the
+                   * thing the agency actually needs. What is posted as `reason`
+                   * is now this box: written for the PR from the lines they
+                   * ticked, and theirs to edit. The agency reads exactly what
+                   * the PR sees, and the ticked lines still ride along
+                   * separately as `disputedItems`.
+                   */}
                   <Text style={styles.fieldLabel}>
                     {t.payment.quickReason}
                   </Text>
-                  <View style={styles.presetWrap}>
-                    {DISPUTE_PRESETS.map((p) => (
-                      <Pressable
-                        key={p}
-                        style={[
-                          styles.presetChip,
-                          disputePreset === p && styles.presetChipOn,
-                        ]}
-                        onPress={() => setDisputePreset(p)}
-                      >
-                        <Text
-                          style={[
-                            styles.presetChipText,
-                            disputePreset === p && { color: C.violetL },
-                          ]}
-                        >
-                          {/* `p` stays the stored/posted reason; only its face
-                              is translated. */}
-                          {presetLabel(p, t)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                  {/* Why the box below fills itself in. Shown only while it
+                      still does — once the PR has typed, the note is theirs and
+                      the hint would be describing behaviour that has stopped. */}
+                  {!disputeNoteDirty && (
+                    <Text style={[styles.pickedHint, { marginTop: 8 }]}>
+                      {t.payment.noteFollowsItems}
+                    </Text>
+                  )}
                   <TextInput
                     value={disputeNote}
-                    onChangeText={setDisputeNote}
+                    // Typing takes ownership: from here the reason and item
+                    // chips stop rewriting what the PR wrote.
+                    onChangeText={(next) => {
+                      setDisputeNoteDirty(true);
+                      setDisputeNote(next);
+                    }}
+                    // The column this posts to is varchar(200). Capping the
+                    // input is how the PR finds that out while typing, rather
+                    // than from a rejected submit after writing a paragraph.
+                    maxLength={REASON_MAX}
                     style={[
                       styles.input,
                       {

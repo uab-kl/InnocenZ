@@ -1,6 +1,6 @@
 # Memory Index
 
-All 22 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
+All 26 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
 are kept identical in BOTH directions — see [Sync memory mirrors](sync-memory-mirrors.md).
 Dated session history is NOT here: it lives in `TEST_SCRIPT.md` §8/§10. Rules live in `CLAUDE.md`.
 The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stops + schema), not a log.
@@ -23,13 +23,13 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 - [InnocenZ PV pipeline](innocenz-pv-pipeline.md) — weekly voucher lifecycle, issue job, drawn-ink PR sign, one-bundle Excel/PDF/print exports + phone ticket links, open queue
 - [InnocenZ tier rate card](innocenz-tier-rate-card.md) — 7-tier payroll rate model (base/RM-HR/HH+NH drinks/tips/OT), per-outlet defaults + per-shift override, outlet/agency/PR role boundaries
 - [Tier is per-membership](innocenz-tier-is-per-membership.md) — tier lives only in agency_pr.tier and is per-agency; the phone's tier_5 was a hardcoded string, never a database fact
-
 - [A zero-count pay tier is a price, not a quota](zero-count-tier-is-a-price.md) — Post Job discarded a rate typed for a tier with 0 requested; persisting it alone would have made that tier unstaffable (`0 >= 0` reads as full)
+- [Self-logged money goes to the oldest agency](pr-self-logged-money-goes-to-oldest-agency.md) — write path FIXED (resolveMoneyAgencyId answers from the WORK); the double-bill risk and the rows already written the old way are the part to watch
 
 ### Access, scope and identity
-- [A privacy-worded refusal leaked the rival it hid](refusal-privacy-defeated-by-earlier-guard.md) — the guard 30 lines ABOVE it refused first and named the venue. Harden one refusal, walk every EARLIER one in the same handler. Also: `agencies[0]` on a feed that MERGES all agencies named shifts nobody at that agency booked
 
 - [Org scope guards](innocenz-org-scope-guards.md) — 🔴 a role guard that never checks the ORGANISATION is not a scope check; also: a zero result is evidence about the instrument, not proof of safety
+- [A privacy-worded refusal leaked the rival it hid](refusal-privacy-defeated-by-earlier-guard.md) — the guard 30 lines ABOVE it refused first and named the venue. Harden one refusal, walk every EARLIER one in the same handler. Also: `agencies[0]` on a feed that MERGES all agencies named shifts nobody at that agency booked
 - [RBAC Portal → Role → Module C/R/U](innocenz-rbac-portal-cru.md) — 3 master portals, specialized roles, module_key + C/R/U only; migrate 0103 + seed/backfill
 - [Accounts, roles and the phone number](innocenz-account-and-phone-rules.md) — `user.phone_num` wins over any roster copy; accounts can be disabled and roles revoked, with self-lockout and last-holder guards
 

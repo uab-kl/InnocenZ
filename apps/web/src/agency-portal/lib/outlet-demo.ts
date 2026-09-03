@@ -552,11 +552,26 @@ export const OUTLET_LABOR_COST_SECTION_ID = "labor-cost-report";
 
 export const OUTLET_OPEN_LABOR_COST_EVENT = "outlet:open-labor-cost";
 
+/**
+ * Open Live sales and take the venue to it.
+ *
+ * The event opens BOTH that section and PR tonight, which encloses it — and
+ * React applies those on the next render, not inside this call. Scrolling
+ * straight away measured a node still inside a collapsed parent and landed
+ * nowhere near it, so the tap read as doing nothing at all.
+ *
+ * Two frames: the first lets React commit the open state, the second lets the
+ * browser lay the expanded sections out before anything is measured.
+ */
 export function scrollToOutletLiveSales() {
 	window.dispatchEvent(new Event(OUTLET_OPEN_LIVE_SALES_EVENT));
-	document
-		.getElementById(OUTLET_LIVE_SALES_SECTION_ID)
-		?.scrollIntoView({ behavior: "smooth", block: "start" });
+	requestAnimationFrame(() => {
+		requestAnimationFrame(() => {
+			document
+				.getElementById(OUTLET_LIVE_SALES_SECTION_ID)
+				?.scrollIntoView({ behavior: "smooth", block: "start" });
+		});
+	});
 }
 
 export function scrollToOutletLaborCostReport() {

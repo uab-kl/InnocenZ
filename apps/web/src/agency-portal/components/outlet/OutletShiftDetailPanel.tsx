@@ -45,6 +45,7 @@ import {
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { shiftTierStaffingByPayTier } from "@agency-portal/lib/post-job-pay-tiers";
+import { shiftEndInstant } from "@agency-portal/lib/shift-window";
 import { specialServicesForOutlet } from "@agency-portal/lib/special-service-actions";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { trafficLevelForRatio } from "@agency-portal/lib/traffic-status";
@@ -91,9 +92,41 @@ const STATUS_META = {
 	},
 } as const;
 
+/** A confirmed shift reads as expired once its slot has finished, by the clock. */
+const EXPIRED_META = {
+	tone: "iz-pill-ink",
+	icon: Clock,
+	label: (t: PortalTranslations) => t.calendar.legendExpired,
+} as const;
+
+/**
+ * Has this shift's slot already finished?
+ *
+ * `shift.status` says what was AGREED, not what time it is, so a 10:00–11:00
+ * shift still read "Live" at 11:42 (owner, 3 Sep 2026: "the shift must follow
+ * the actual time — if time is exceed then the live will show expired"). The
+ * stored status is deliberately not touched: nothing about the booking changed
+ * when the hour passed, and only the badge was claiming otherwise.
+ *
+ * `shiftEndInstant` is the shared parser, so an overnight 22:00–04:00 expires
+ * at 4am the NEXT day rather than the moment it starts. A slot that is not a
+ * time range returns null and the shift keeps its stored badge — unknown is not
+ * expired.
+ */
+function shiftHasExpired(shift: ShiftRequest): boolean {
+	if (shift.status !== "confirmed") return false;
+	const endsAt = shiftEndInstant(
+		resolveOutletShiftDateIso(shift.date, shift.dateIso, getLiveTodayIso()),
+		shift.shift,
+	);
+	return !!endsAt && endsAt.getTime() <= Date.now();
+}
+
 export function OutletShiftStatusBadge({ shift }: { shift: ShiftRequest }) {
 	const { t } = usePortalLocale();
-	const meta = STATUS_META[shift.status] ?? STATUS_META.draft;
+	const meta = shiftHasExpired(shift)
+		? EXPIRED_META
+		: (STATUS_META[shift.status] ?? STATUS_META.draft);
 	const StatusIcon = meta.icon;
 	return (
 		<span className={cn("iz-pill shrink-0 !py-0.5 !text-[9px]", meta.tone)}>

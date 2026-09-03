@@ -633,21 +633,24 @@ function AgencyRoster() {
 
 			{viewMode === "planning" && (
 				<div className="iz-roster-planning">
-					{/* Backend plan + confirm sheet, shared with the home card. The demo
-					    store's one-PR action lives on inside it, for demo sessions only. */}
-					{canAssign && <RosterAutoAssignBanner dateIso={planningDate} />}
+					{/* Filters FIRST (owner, 3 Sep 2026): they narrow both the open-demand
+					    row and the week grid below, so they belong with the week picker
+					    above rather than buried under the auto-assign banner. Lifted out
+					    of the panel, which framed them only visually — the bar carries its
+					    own border and background, and the panel's one filter rule targets
+					    a class no component uses. */}
+					<RosterTimetableFilters
+						filters={timetableFilters}
+						onChange={(patch) =>
+							setTimetableFilters((prev) => ({ ...prev, ...patch }))
+						}
+						prCount={filteredTimetablePrs.length}
+						totalPrs={activePrs.length}
+						shiftCount={timetableShiftCount}
+						totalShifts={weekShiftTotal}
+						outletNames={rosterOutletNames}
+					/>
 					<div className="iz-roster-planning-panel">
-						<RosterTimetableFilters
-							filters={timetableFilters}
-							onChange={(patch) =>
-								setTimetableFilters((prev) => ({ ...prev, ...patch }))
-							}
-							prCount={filteredTimetablePrs.length}
-							totalPrs={activePrs.length}
-							shiftCount={timetableShiftCount}
-							totalShifts={weekShiftTotal}
-							outletNames={rosterOutletNames}
-						/>
 						<RosterBackendTimetable
 							weekStartIso={weekStartIso}
 							roster={agencyRoster}
@@ -668,6 +671,17 @@ function AgencyRoster() {
 								return created;
 							}}
 							todayIso={DEFAULT_ROSTER_DATE_ISO}
+							/* Under Open demand, above the grid (owner, 3 Sep 2026): the
+							   banner offers to fill the very seats the band just listed,
+							   so it reads as the answer to it rather than a header over
+							   it. Backend plan + confirm sheet, shared with the home card;
+							   the demo store's one-PR action lives on inside it, for demo
+							   sessions only. */
+							afterOpenDemand={
+								canAssign ? (
+									<RosterAutoAssignBanner dateIso={planningDate} />
+								) : null
+							}
 						/>
 					</div>
 				</div>
