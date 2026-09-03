@@ -94,6 +94,35 @@ export function OutletBookings({
 		? visibleShifts.filter((s) => s.id !== liveShift.id)
 		: visibleShifts;
 
+	/**
+	 * TODAY'S OTHER SHIFTS — everything running today that is not the live one.
+	 *
+	 * Today rendered `liveShift` and nothing else, so a venue working two shifts
+	 * in a night could see only one of them, and the PRs on the other were
+	 * invisible on the page that exists to say who is working (owner, 3 Sep
+	 * 2026: "the outlet cannot track that shift, where is the other shift").
+	 * Emhub had exactly that: a 10:00–11:00 shift with nobody on it, and an
+	 * 11:00–12:00 "tt" whose PR had already checked in and out — Today showed
+	 * the first and reported "No PRs assigned for tonight yet".
+	 *
+	 * `pickLiveShift` is deliberately NOT touched. It answers "which shift is
+	 * RUNNING", it is unit-tested, and its own comment records three past wrong
+	 * answers; the page was wrong to show only its winner, not wrong about the
+	 * winner. So the others are ADDED beneath, collapsed, rather than the pick
+	 * being widened.
+	 *
+	 * Scoped to today by the shift's own resolved date — `futureShifts` spans
+	 * the fortnight the hook fetches, and next Tuesday's booking is the
+	 * Calendar's business, not tonight's.
+	 */
+	const alsoTodayShifts = useMemo(() => {
+		const todayIso = getLiveTodayIso();
+		return futureShifts.filter(
+			(s) =>
+				resolveOutletShiftDateIso(s.date, s.dateIso, todayIso) === todayIso,
+		);
+	}, [futureShifts]);
+
 	const defaultOpenId = variant === "future" ? futureShifts[0]?.id : undefined;
 
 	if (variant === "home" && !liveShift) {
@@ -216,6 +245,26 @@ export function OutletBookings({
 			)}
 			{variant === "home" && liveShift && liveShift.status === "confirmed" && (
 				<OutletCutLossActions shift={liveShift} />
+			)}
+			{/*
+			 * The rest of tonight, BELOW the live shift's own panels rather than
+			 * between them: PR tonight, live sales and labour cost all describe the
+			 * live shift, and a second card wedged in above them would read as
+			 * theirs. Each opens to the same detail panel, so the venue can see who
+			 * is on the 11:00 shift without leaving Today for the Calendar.
+			 */}
+			{variant === "home" && alsoTodayShifts.length > 0 && (
+				<>
+					<p className="iz-tiny iz-muted2 mt-3">
+						{fill(
+							alsoTodayShifts.length === 1
+								? t.outletPanels.alsoTodayOne
+								: t.outletPanels.alsoTodayMany,
+							{ n: alsoTodayShifts.length },
+						)}
+					</p>
+					{alsoTodayShifts.map((s) => renderShiftCard(s, true))}
+				</>
 			)}
 			{variant === "future" && futureShifts.map((s) => renderShiftCard(s))}
 		</div>
