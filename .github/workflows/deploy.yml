@@ -217,6 +217,34 @@ jobs:
           install -m 600 /dev/null deploy_key
           printf '%s\n' "$SERVER_KEY" | tr -d '\r' > deploy_key
 
+          # "Load key: error in libcrypto" tells you the key is unreadable but
+          # not WHY, and ssh then falls through to password auth and reports a
+          # misleading "Permission denied (publickey,password)". Check the shape
+          # here instead. None of this prints the private key.
+          key_lines=$(wc -l < deploy_key)
+          head -1 deploy_key | grep -q -- '-----BEGIN .*PRIVATE KEY-----' || {
+            echo "ERROR: ${ENV_UPPER}_SECRET_KEY does not begin with a PEM header."
+            echo "  It is probably the PUBLIC half. Set the private one (~/.ssh/gh_deploy, no .pub)."
+            exit 1
+          }
+          if ! ssh-keygen -y -f deploy_key > deploy_key.pub 2>/dev/null < /dev/null; then
+            echo "ERROR: OpenSSH cannot read ${ENV_UPPER}_SECRET_KEY - it is ${key_lines} line(s)."
+            if [ "$key_lines" -le 2 ]; then
+              echo "  A valid OpenSSH private key is 7+ lines. The line breaks were lost when"
+              echo "  the secret was set - passing it as one argument does that. Re-set it FROM"
+              echo "  THE FILE, which preserves them:"
+              echo "    gh secret set ${ENV_UPPER}_SECRET_KEY -R ${GITHUB_REPOSITORY} < ~/.ssh/gh_deploy"
+            else
+              echo "  Line count looks right, so the body is corrupt or the key has a passphrase."
+              echo "  This job cannot answer a passphrase prompt. Regenerate without one:"
+              echo "    ssh-keygen -t ed25519 -f ~/.ssh/gh_deploy -N '' -C github-actions"
+            fi
+            exit 1
+          fi
+          echo "Deploy key parses (${key_lines} lines). Its PUBLIC half is below - this exact"
+          echo "line must be present in ~/.ssh/authorized_keys on the target server:"
+          cat deploy_key.pub
+
           HOST="${SERVER_USER}@${SERVER_IP}"
           # BatchMode=yes so a bad key fails immediately instead of hanging on a
           # password prompt that no one can answer.
@@ -277,4 +305,4 @@ jobs:
 
       - name: Remove key
         if: always()
-        run: rm -f deploy_key
+        run: rm -f deploy_key deploy_key.pub
