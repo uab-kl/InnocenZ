@@ -52,7 +52,6 @@ import {
   disputesForDay,
   kindDisputable,
   openDisputeKeys,
-  DISPUTE_PRESETS,
   receiptClaimState,
   receiptReviewCaption,
   thisWeekDayStatus,
@@ -156,12 +155,18 @@ function incomeRowLabel(key: string, t: AppTranslations): string {
 }
 
 /**
- * The dispute reasons, worded for the reader.
+ * The dispute reasons, worded for the reader — for CLAIMS ALREADY RAISED.
  *
- * The KEYS are `DISPUTE_PRESETS` verbatim — that string is what `raiseMyDispute`
- * posts as `reason` and what the agency's own screens match on, so it must not
- * move. Only the chip's face is translated, and an unknown reason coming back
- * from the server falls through to itself rather than rendering blank.
+ * The chips that produced these are gone (3 Sep 2026); a new claim now posts
+ * the PR's own description as its reason. This map stays because the rows
+ * already in the database still hold the old seven strings, and a PR opening
+ * "What you disputed" on a claim from last week must still read the words they
+ * tapped rather than a raw English token.
+ *
+ * The KEYS are the stored values verbatim, so they must not move. `presetLabel`
+ * falls through to the reason itself for anything unrecognised — which is now
+ * the normal case, not the exception, since a free-written reason has no entry
+ * here and must render as written.
  */
 const PRESET_LABELS: Record<string, (t: AppTranslations) => string> = {
   'Wrong commission': (t) => t.payment.reasonWrongCommission,
@@ -175,6 +180,41 @@ const PRESET_LABELS: Record<string, (t: AppTranslations) => string> = {
 
 function presetLabel(reason: string, t: AppTranslations): string {
   return PRESET_LABELS[reason]?.(t) ?? reason;
+}
+
+/**
+ * `payment_voucher_dispute.reason` is `varchar(200)` and the server refuses
+ * anything longer. Held here so the text the app WRITES can never be the thing
+ * that 400s a claim.
+ */
+const REASON_MAX = 200;
+
+/**
+ * The claim's reason, written from what the PR ticked.
+ *
+ * Since 3 Sep 2026 this IS the reason posted to the agency — the seven preset
+ * chips are gone (owner: "the reason remove this all"). They forced every
+ * argument into one of seven words, none of which said WHICH drink was wrong,
+ * which is the one thing the reviewer needs.
+ *
+ * ENGLISH, like everything else posted: the agency reads one wording whatever
+ * the PR's phone is set to.
+ *
+ * Names the ticked lines while they fit. Past that it says how many rather
+ * than truncating mid-word — the agency card lists every line separately from
+ * `disputedItems`, so the count loses nothing and a sentence cut in half
+ * would look like data loss.
+ */
+function composeDisputeReason(
+  base: string,
+  itemLabels: string[],
+  fallbackAmount: string,
+): string {
+  const detail = itemLabels.length ? itemLabels.join(' · ') : fallbackAmount;
+  const full = `${base} · ${detail} — please verify`;
+  if (full.length <= REASON_MAX) return full;
+  const counted = `${base} · ${itemLabels.length} items — please verify`;
+  return counted.length <= REASON_MAX ? counted : counted.slice(0, REASON_MAX);
 }
 
 /**
@@ -746,9 +786,6 @@ export function PaymentScreen({
     day: WeeklyDayPay;
     row: (typeof GRID_ROWS)[number];
   } | null>(null);
-  const [disputePreset, setDisputePreset] = useState<string>(
-    DISPUTE_PRESETS[0],
-  );
   /**
    * The ONE receipt being contested — a dispute is about a single shift.
    *
@@ -1086,7 +1123,6 @@ export function PaymentScreen({
       setDisputePhotos([]);
     } else {
       setDisputeMode('dispute');
-      setDisputePreset(DISPUTE_PRESETS[0]);
       // ENGLISH ON PURPOSE — this is the note POSTED to the agency, not a label.
       // `noteLabel`, not `label(t)`: the claim reads the same in the agency's
       // inbox whatever language the PR's phone is set to.
@@ -1097,7 +1133,11 @@ export function PaymentScreen({
       setDisputeNoteBase(`${row.noteLabel} · ${day.day} ${day.date}`);
       setDisputeNoteDirty(false);
       setDisputeNote(
-        `${DISPUTE_PRESETS[0]} · ${row.noteLabel} · ${day.day} ${day.date} · ${formatRM(amount)} — please verify`,
+        composeDisputeReason(
+          `${row.noteLabel} · ${day.day} ${day.date}`,
+          [],
+          formatRM(amount),
+        ),
       );
       setDisputePhotos([]);
     }
@@ -1320,17 +1360,17 @@ export function PaymentScreen({
       return;
     }
     const picked = disputeItems.filter((i) => disputePickedItems.includes(i.id));
-    const detail = picked.length
-      ? picked.map((i) => i.label).join(' · ')
-      : formatRM(disputeTarget?.amount ?? 0);
     setDisputeNote(
-      `${disputePreset} · ${disputeNoteBase} · ${detail} — please verify`,
+      composeDisputeReason(
+        disputeNoteBase,
+        picked.map((i) => i.label),
+        formatRM(disputeTarget?.amount ?? 0),
+      ),
     );
   }, [
     disputeMode,
     disputeNoteDirty,
     disputeNoteBase,
-    disputePreset,
     disputeItems,
     disputePickedItems,
     disputeTarget,
@@ -1490,8 +1530,22 @@ export function PaymentScreen({
           : await raiseMyDispute(token, voucherId, {
               disputeDate: disputeTarget.dateIso,
               component: disputeTarget.incomeKey,
-              reason: disputePreset,
-              note: disputeNote.trim() || undefined,
+              /*
+               * THE BOX IS THE REASON (owner, 3 Sep 2026). It replaced the
+               * seven preset chips, so what the agency reads under "Reason" is
+               * the sentence the PR saw and could edit — no second, vaguer
+               * word in front of it.
+               *
+               * `slice` is a floor, not the plan: `composeDisputeReason` keeps
+               * what the app writes inside the column, and the input is capped
+               * too, so this only catches a value that arrived some other way.
+               * An empty box would fail the server's `min(1)`, so it falls
+               * back rather than posting a claim that cannot be filed.
+               */
+              reason:
+                disputeNote.trim().slice(0, REASON_MAX) || 'Please verify',
+              // No separate note: one field, one thing to read.
+              note: undefined,
               proofPhotos: disputePhotos.length ? disputePhotos : undefined,
               /*
                * ALWAYS the one shift, when the cell has a receipt at all.
@@ -2615,10 +2669,11 @@ export function PaymentScreen({
                                   Number(d.disputedAmount ?? 0),
                                 ),
                               })}
-                              {/* The stored reason is one of DISPUTE_PRESETS —
-                                  shown through the same label map the chips
-                                  use, so the PR reads back the words they
-                                  tapped. */}
+                              {/* A claim raised since 3 Sep carries the PR's own
+                                  description here and renders as written; an
+                                  older one holds one of the seven retired
+                                  preset strings, which `presetLabel` still
+                                  translates so it reads as it always did. */}
                               {d.reason ? ` · ${presetLabel(d.reason, t)}` : ''}
                             </Text>
                             {/*
@@ -3100,32 +3155,22 @@ export function PaymentScreen({
                     </>
                   )}
 
+                  {/*
+                   * ONE FIELD, not chips + a note (owner, 3 Sep 2026: "the
+                   * reason remove this all, the small selection buttons" and
+                   * "the reason will always get the reason description").
+                   *
+                   * The seven preset chips forced every claim into one of seven
+                   * words, and the words did not say which drink was wrong — the
+                   * thing the agency actually needs. What is posted as `reason`
+                   * is now this box: written for the PR from the lines they
+                   * ticked, and theirs to edit. The agency reads exactly what
+                   * the PR sees, and the ticked lines still ride along
+                   * separately as `disputedItems`.
+                   */}
                   <Text style={styles.fieldLabel}>
                     {t.payment.quickReason}
                   </Text>
-                  <View style={styles.presetWrap}>
-                    {DISPUTE_PRESETS.map((p) => (
-                      <Pressable
-                        key={p}
-                        style={[
-                          styles.presetChip,
-                          disputePreset === p && styles.presetChipOn,
-                        ]}
-                        onPress={() => setDisputePreset(p)}
-                      >
-                        <Text
-                          style={[
-                            styles.presetChipText,
-                            disputePreset === p && { color: C.violetL },
-                          ]}
-                        >
-                          {/* `p` stays the stored/posted reason; only its face
-                              is translated. */}
-                          {presetLabel(p, t)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
                   {/* Why the box below fills itself in. Shown only while it
                       still does — once the PR has typed, the note is theirs and
                       the hint would be describing behaviour that has stopped. */}
@@ -3142,6 +3187,10 @@ export function PaymentScreen({
                       setDisputeNoteDirty(true);
                       setDisputeNote(next);
                     }}
+                    // The column this posts to is varchar(200). Capping the
+                    // input is how the PR finds that out while typing, rather
+                    // than from a rejected submit after writing a paragraph.
+                    maxLength={REASON_MAX}
                     style={[
                       styles.input,
                       {

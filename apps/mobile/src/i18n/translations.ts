@@ -1900,7 +1900,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pickOneItem: 'Pick at least one item.',
       quickReason: 'Reason',
       noteFollowsItems:
-        'The note below follows the items you ticked and the reason you picked — edit it if you want to say more.',
+        'Written from the items you ticked. Edit it — your agency reads exactly this.',
       reasonWrongCommission: 'Wrong commission',
       reasonWrongQuantity: 'Wrong quantity',
       reasonCountedTwice: 'Counted twice',
@@ -2988,7 +2988,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pickOneItem: '请至少选择一项。',
       quickReason: '原因',
       noteFollowsItems:
-        '下方说明会根据你勾选的项目和选择的原因自动生成 —— 需要补充可直接修改。',
+        '根据你勾选的项目自动生成。可直接修改 —— 经纪公司看到的就是这段内容。',
       reasonWrongCommission: '佣金有误',
       reasonWrongQuantity: '数量有误',
       reasonCountedTwice: '重复计算',
@@ -4076,7 +4076,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pickOneItem: '請至少選擇一項。',
       quickReason: '原因',
       noteFollowsItems:
-        '下方說明會根據你勾選的項目和選擇的原因自動產生 —— 需要補充可直接修改。',
+        '根據你勾選的項目自動產生。可直接修改 —— 經紀公司看到的就是這段內容。',
       reasonWrongCommission: '佣金有誤',
       reasonWrongQuantity: '數量有誤',
       reasonCountedTwice: '重複計算',
