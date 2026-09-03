@@ -414,6 +414,28 @@ function DisputeRow({
 							{dispute.reason}
 						</p>
 					)}
+					{/*
+					 * WHICH LINE the PR picked, under the reason it was picked for
+					 * (owner, 3 Sep 2026). "Wrong commission" alone does not say which
+					 * drink is wrong, so the reviewer had to open the receipt to find
+					 * out what the argument was even about.
+					 *
+					 * A LIST, not `[0]`: a claim may name several lines, and showing
+					 * the first would quietly hide the rest of what is contested.
+					 * Absent on claims raised before the picker existed, which is why
+					 * the reason above still stands on its own.
+					 */}
+					{dispute.disputedItems?.map((item) => (
+						<p className="iz-tiny mt-1" key={item.lineId}>
+							<span className="font-semibold">{item.description}</span>
+							<span className="iz-muted">
+								{" × "}
+								{item.quantity}
+								{" · "}
+							</span>
+							<span className="font-mono">{formatRM(item.amount)}</span>
+						</p>
+					))}
 					{dispute.note && (
 						<p className="iz-tiny iz-muted2 mt-1">{dispute.note}</p>
 					)}
