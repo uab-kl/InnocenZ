@@ -1,8 +1,14 @@
 name: Deploy
 
-# Builds + pushes Docker images to Docker Hub.
-# Does NOT SSH to the VPS — each server still runs tools/deploy/deploy.sh
-# (or you pull :staging / :production there) with that server's .env.backend.
+# Builds + pushes Docker images to Docker Hub, then SSHes to the VPS and rolls
+# them out by running tools/deploy/deploy.sh there — the same script a
+# `pnpm deploy:<env>` from a PC runs. Deploying from GitHub alone is enough to
+# put the new build online; no local Docker build or push is needed.
+#
+# The server is provisioned ONCE from a PC (`pnpm deploy:staging`), which is what
+# creates ~/innocenz-<env>/ with its Caddyfile + .env.backend. Those two stay
+# server-managed and never travel through CI: .env.backend holds the DB/R2
+# secrets, and Caddyfile encodes that server's own domain.
 #
 # Triggers:
 #   - Manual: Actions → Deploy → Run workflow → pick environment
@@ -20,6 +26,10 @@ on:
           - staging
           - production
         default: staging
+      deploy:
+        description: Roll out to the server after building
+        type: boolean
+        default: true
   push:
     tags:
       - 'v*'
@@ -44,6 +54,7 @@ jobs:
       short_sha: ${{ steps.meta.outputs.short_sha }}
       frontend_tags: ${{ steps.meta.outputs.frontend_tags }}
       backend_tags: ${{ steps.meta.outputs.backend_tags }}
+      env_upper: ${{ steps.meta.outputs.env_upper }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -73,6 +84,7 @@ jobs:
           fi
 
           echo "environment=${ENV}" >> "$GITHUB_OUTPUT"
+          echo "env_upper=$(echo "${ENV}" | tr '[:lower:]' '[:upper:]')" >> "$GITHUB_OUTPUT"
           echo "frontend_tags=${DOCKERHUB_NAMESPACE}/innocenz-frontend:${ENV}-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-frontend:${ENV}" >> "$GITHUB_OUTPUT"
           echo "backend_tags=${DOCKERHUB_NAMESPACE}/innocenz-backend:${ENV}-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-backend:${ENV}" >> "$GITHUB_OUTPUT"
           echo "Building for environment=${ENV}"
@@ -154,3 +166,115 @@ jobs:
           tags: ${{ needs.prepare.outputs.backend_tags }}
           cache-from: type=gha,scope=backend-${{ needs.prepare.outputs.environment }}
           cache-to: type=gha,mode=max,scope=backend-${{ needs.prepare.outputs.environment }}
+
+  rollout:
+    needs: [prepare, frontend, backend]
+    # success() is explicit on purpose. Putting any `if:` on a job REPLACES the
+    # implicit success() that `needs:` normally applies, so without it a failed
+    # build would still roll out — pointing the server at image tags that were
+    # never pushed, and deploy.sh deletes the old local images before it pulls.
+    if: success() && github.event.inputs.deploy != 'false'
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_ENV: ${{ needs.prepare.outputs.environment }}
+      ENV_UPPER: ${{ needs.prepare.outputs.env_upper }}
+      SHORT_SHA: ${{ needs.prepare.outputs.short_sha }}
+      DOCKERHUB_NAMESPACE: juneyou
+      # Selected BY NAME rather than listing both environments, so a staging
+      # rollout never has the production key in its environment at all. The
+      # index has to be pre-upper-cased — GitHub expressions have no upper().
+      SERVER_IP: ${{ secrets[format('{0}_SERVER_IP', needs.prepare.outputs.env_upper)] }}
+      SERVER_USER: ${{ secrets[format('{0}_SERVER_USER', needs.prepare.outputs.env_upper)] }}
+      SERVER_PORT: ${{ secrets[format('{0}_SERVER_PORT', needs.prepare.outputs.env_upper)] }}
+      SERVER_KEY: ${{ secrets[format('{0}_SECRET_KEY', needs.prepare.outputs.env_upper)] }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Roll out over SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # A secret that does not exist resolves to an EMPTY STRING, not an
+          # error — a typo in a secret name would otherwise surface much later
+          # as an unreadable ssh usage error. Name the missing ones instead.
+          missing=""
+          [ -n "$SERVER_IP" ]   || missing="$missing ${ENV_UPPER}_SERVER_IP"
+          [ -n "$SERVER_USER" ] || missing="$missing ${ENV_UPPER}_SERVER_USER"
+          [ -n "$SERVER_KEY" ]  || missing="$missing ${ENV_UPPER}_SECRET_KEY"
+          if [ -n "$missing" ]; then
+            echo "ERROR: missing repo secret(s):$missing"
+            echo "Add them under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          PORT="${SERVER_PORT:-22}"
+
+          # tr -d '\r' is load-bearing. A key pasted from Windows carries CRLF
+          # line endings and OpenSSH rejects those with "error in libcrypto",
+          # then silently falls back to password auth and fails. printf
+          # guarantees the trailing newline that echo does not always add.
+          install -m 600 /dev/null deploy_key
+          printf '%s\n' "$SERVER_KEY" | tr -d '\r' > deploy_key
+
+          HOST="${SERVER_USER}@${SERVER_IP}"
+          # BatchMode=yes so a bad key fails immediately instead of hanging on a
+          # password prompt that no one can answer.
+          OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -i deploy_key"
+          DIR="innocenz-${DEPLOY_ENV}"
+
+          echo "Rolling out ${DEPLOY_ENV} @ ${SHORT_SHA} to ~/${DIR}"
+
+          # Refuse before touching anything. scp into a missing directory fails
+          # cryptically, and a missing .env.backend / Caddyfile would bring the
+          # stack up with no DATABASE_URL or no HTTPS routing at all.
+          ssh $OPTS -p "$PORT" "$HOST" "
+            set -e
+            [ -d \"\$HOME/$DIR\" ] || { echo 'ERROR: ~/$DIR does not exist. Provision it once from a PC: pnpm deploy:'\"$DEPLOY_ENV\"; exit 1; }
+            [ -f \"\$HOME/$DIR/.env.backend\" ] || { echo 'ERROR: ~/$DIR/.env.backend missing — backend would boot with no DATABASE_URL / R2.'; exit 1; }
+            [ -f \"\$HOME/$DIR/Caddyfile\" ] || { echo 'ERROR: ~/$DIR/Caddyfile missing — Caddy would mount a directory and serve nothing.'; exit 1; }
+            [ -f \"\$HOME/$DIR/.env.frontend\" ] || { echo 'ERROR: ~/$DIR/.env.frontend missing - compose declares env_file for it and aborts before pulling. VITE_* are baked in at build time, so an empty file is correct: touch ~/$DIR/.env.frontend'; exit 1; }
+          "
+
+          # Keep the two non-secret server files in step with the repo, so a
+          # change under tools/deploy/ ships without needing a PC deploy.
+          scp $OPTS -P "$PORT" \
+            tools/deploy/docker-compose.yml tools/deploy/deploy.sh \
+            "$HOST:$DIR/"
+
+          # Quoted heredoc: the values below are handed over as remote variables
+          # rather than expanded into the script, so nothing in the remote body
+          # gets mangled by the runner.
+          ssh $OPTS -p "$PORT" "$HOST" \
+            "DEPLOY_ENV='$DEPLOY_ENV' SHORT_SHA='$SHORT_SHA' NS='$DOCKERHUB_NAMESPACE' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/innocenz-${DEPLOY_ENV}"
+
+          grep -q '^DATABASE_URL=.' .env.backend || {
+            echo "ERROR: .env.backend has no DATABASE_URL — refusing to start."
+            exit 1
+          }
+
+          # The same five keys tools/scripts/deploy.mjs generates, so a CI rollout
+          # and a PC deploy leave the server in an identical state. Pinned to the
+          # immutable <env>-<sha> tag rather than the floating <env> one, so what
+          # starts here is exactly what this run built — and a bad deploy rolls
+          # back by pointing these two lines at an earlier sha.
+          cat > .env <<ENV
+          DEPLOY_ENV=${DEPLOY_ENV}
+          FRONTEND_IMAGE=${NS}/innocenz-frontend:${DEPLOY_ENV}-${SHORT_SHA}
+          BACKEND_IMAGE=${NS}/innocenz-backend:${DEPLOY_ENV}-${SHORT_SHA}
+          FRONTEND_CONTAINER_NAME=innocenz-frontend
+          BACKEND_CONTAINER_NAME=innocenz-backend
+          ENV
+
+          NETWORK="innocenz-${DEPLOY_ENV}-network"
+          docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK"
+
+          chmod +x deploy.sh
+          ./deploy.sh
+          REMOTE
+
+      - name: Remove key
+        if: always()
+        run: rm -f deploy_key

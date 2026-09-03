@@ -1,7 +1,7 @@
 # Deploying web + backend
 
-Images are built on your machine, pushed to Docker Hub, and pulled by the
-server — the server never needs a git checkout of this repo, only Docker.
+Images are built (on your machine **or** by GitHub Actions), pushed to Docker
+Hub, and pulled by the server — the server never needs a git checkout of this repo, only Docker.
 A Caddy reverse proxy on the server terminates HTTPS and routes both the
 frontend and backend hostnames to the right container. staging and
 production are separate environments with their own image tags, remote
@@ -21,6 +21,53 @@ servers without colliding.
 **Note:** `pnpm deploy` (no suffix) does not work — `deploy` is a command
 reserved by pnpm itself. Always use `pnpm deploy:staging` / `pnpm deploy:production`
 (or `pnpm run deploy <env>` to bypass pnpm's built-in command).
+
+## Deploying from GitHub (no PC build)
+
+`.github/workflows/deploy.yml` does the whole thing: it builds and pushes both
+images, then SSHes to the server and runs the **same `deploy.sh`** a PC deploy
+runs. Actions → Deploy → Run workflow → pick the environment → Run. Untick
+**Roll out to the server after building** to build images only.
+
+It needs four secrets **per environment**, named by the environment in caps —
+`STAGING_*` for staging, `PRODUCTION_*` for production. The job picks them by
+name, so a staging rollout never has the production key in its environment at
+all:
+
+| Secret | Value |
+|---|---|
+| `<ENV>_SERVER_IP` | the server's public IP (`DEPLOY_HOST` in `.env.deploy.<env>`) |
+| `<ENV>_SERVER_USER` | the deploy user, e.g. `devops` |
+| `<ENV>_SERVER_PORT` | SSH port — optional, defaults to `22` |
+| `<ENV>_SECRET_KEY` | private half of a key whose public half is in that user's `~/.ssh/authorized_keys` |
+
+A secret that does not exist resolves to an **empty string, not an error**, so a
+typo'd name would surface much later as an unreadable `ssh` usage error. The job
+therefore checks the three required ones up front and names whichever are
+missing.
+
+Plus the `VITE_*` build secrets. **Anything not set is baked into the web image as
+an empty string** — a missing `VITE_R2_PUBLIC_URL_<ENV>` ships a frontend that
+cannot resolve a single uploaded file, and nothing in the build fails to say so.
+
+Who owns what on the server, under `~/innocenz-<env>/`:
+
+| File | Owner |
+|---|---|
+| `docker-compose.yml`, `deploy.sh` | **CI** — re-copied from `tools/deploy/` every run, so they cannot go stale |
+| `.env` | **CI** — rewritten each run, pinned to the immutable `<env>-<sha>` tag |
+| `Caddyfile` | **server** — encodes that server's own domain; CI aborts if it is missing |
+| `.env.backend`, `.env.frontend` | **server** — DB/R2 secrets never travel through CI |
+
+The environment must be **provisioned once from a PC** (`pnpm deploy:staging`),
+which is what creates the directory, the `Caddyfile` and `.env.backend`. After
+that, GitHub alone puts a build online. The rollout refuses (with a message
+naming the missing file) rather than starting a stack with no `DATABASE_URL` or
+no HTTPS routing.
+
+**Rollback:** because CI pins `<env>-<sha>` rather than the floating `<env>` tag,
+rolling back is editing those two `*_IMAGE` lines in `~/innocenz-<env>/.env` to an
+earlier sha and re-running `./deploy.sh`.
 
 ## DNS (DuckDNS or otherwise)
 

@@ -1,0 +1,8 @@
+# These files are copied to a Linux server and executed there. With
+# core.autocrlf=true (the default on Windows) a checkout rewrites them to CRLF,
+# and `scp`ing that up ships `#!/usr/bin/env bash\r` — which the server rejects
+# as "bad interpreter: /usr/bin/env bash^M". Pin them to LF regardless of the
+# machine's git config. Applies to both the PC deploy path and CI.
+tools/deploy/*.sh          text eol=lf
+tools/deploy/docker-compose.yml text eol=lf
+*.sh                       text eol=lf
