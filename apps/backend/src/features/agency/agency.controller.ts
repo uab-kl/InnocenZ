@@ -46,6 +46,13 @@ import {
 import { portalRepository } from '@/features/rbac/portal/portal.repository';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import type { AuthRepositoryClass } from '@/features/auth/auth.repository.js';
+import { db } from '@/db/index.js';
+import type { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
+import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
+import {
+  enrolOrgOnPlan,
+  resolveEnrollablePlan,
+} from '@/features/subscription/enroll-plan.js';
 
 function parseSubRole(value: unknown): AgencyUserSubRole | undefined {
   if (typeof value !== 'string') return undefined;
@@ -73,6 +80,9 @@ export class AgencyControllerClass {
     private inviteRepository: OrgMemberInviteRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private userRoleRepository: UserRoleRepositoryClass,
+    // An admin-created agency must land on a plan, same rule as sign-up.
+    private subscriptionRepository: SubscriptionRepositoryClass,
+    private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
   ) {}
 
   /**
@@ -661,12 +671,46 @@ export class AgencyControllerClass {
       }
       const actor = getActor(req);
       const agencyCode = await this.agencyRepository.generateUniqueCode();
-      const agency = await this.agencyRepository.create({
-        ...parsed.data,
-        agencyCode,
-        status: 'pending_review',
-        createdBy: actor,
-        updatedBy: actor,
+      // Out of the spread — `packageId` belongs to `member_subscription`, not
+      // to the agency row.
+      const { packageId, ...agencyData } = parsed.data;
+
+      // The same rule sign-up uses. An agency with no plan is invisible to the
+      // Sunday tier job, which reads FROM `member_subscription`, so it could
+      // never be re-priced and would work unbilled indefinitely.
+      const chosen = await resolveEnrollablePlan({
+        subscriptionRepository: this.subscriptionRepository,
+        accountType: 'agency',
+        packageId,
+      });
+      if (!chosen.ok) {
+        return res
+          .status(400)
+          .json({ success: false, message: chosen.message, data: null });
+      }
+
+      // Agency and plan commit together or not at all.
+      const agency = await db.transaction(async (tx) => {
+        const created = await this.agencyRepository.create(
+          {
+            ...agencyData,
+            agencyCode,
+            status: 'pending_review',
+            createdBy: actor,
+            updatedBy: actor,
+          },
+          tx,
+        );
+        await enrolOrgOnPlan({
+          memberSubscriptionRepository: this.memberSubscriptionRepository,
+          plan: chosen.plan,
+          subscriberType: 'agency',
+          subscriberId: created.id,
+          subscriberName: created.name,
+          actor,
+          tx,
+        });
+        return created;
       });
       res
         .status(201)

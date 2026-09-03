@@ -114,6 +114,15 @@ router.post(
   paymentVoucherController.approveAllDays.bind(paymentVoucherController),
 );
 
+// The payee's bank details for the printed voucher — UNMASKED, and therefore
+// behind the sub-role gate rather than the open agency read. Two segments, so
+// it cannot collide with '/:id'.
+router.get(
+  '/:id/payee-bank',
+  agencyOwnerOrFinance,
+  paymentVoucherController.getPayeeBank.bind(paymentVoucherController),
+);
+
 // The agency's receipt-review feed (full OCR evidence per receipt). One
 // segment, so it MUST precede '/:id' below.
 router.get(

@@ -12,13 +12,12 @@ import type { ShiftHistoryRow } from "@agency-portal/lib/shift-history-utils";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchShifts } from "@/services/shift";
-import { fetchShiftAssignments } from "@/services/shift-assignment";
 import { fetchShiftSales } from "@/services/shift-sale";
 import { useAgencyOutlets } from "./use-agency-outlets";
 import { useAgencyPrs } from "./use-agency-prs";
 import { useAgencyPvs } from "./use-agency-pvs";
+import { useAllShiftAssignments } from "./use-all-shift-assignments";
 
 // How far back to pull shifts for the History tabs. The join to assignments
 // bounds which nights become rows; a year covers the demo's ledger horizon.
@@ -72,19 +71,10 @@ export function useAgencyHistory(): AgencyHistoryData {
 		placeholderData: keepPreviousData,
 		staleTime: 60_000,
 	});
-	// Shares the roster screen's assignment cache.
-	const assignmentsQuery = useQuery({
-		queryKey: ["roster", "assignments"],
-		// Paged out: the server clamps to 100, and this key is shared — see
-		// lib/fetch-all-pages.ts. History reading a truncated set is its own bug:
-		// the oldest 100 rows are exactly the ones history is least about.
-		queryFn: () =>
-			fetchAllPages((page) =>
-				fetchShiftAssignments({ page, pageSize: 100 }, logout),
-			),
-		enabled: backed,
-		staleTime: 30_000,
-	});
+	// The shared assignments cache. History reading a truncated set is its own
+	// bug — the oldest 100 rows are exactly the ones history is least about — and
+	// the hook is what guarantees it is paged out here and on every other screen.
+	const assignmentsQuery = useAllShiftAssignments({ enabled: backed });
 
 	// Floor sales (the RECEIVED side) — receipts, mirrored onto shift_sale by the
 	// backend. Bounded by the SAME window as the shifts query above: a sale

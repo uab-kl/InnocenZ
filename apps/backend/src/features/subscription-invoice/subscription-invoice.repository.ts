@@ -2,7 +2,10 @@ import { and, desc, eq, gte, ilike, inArray, lte, or, sql, SQL } from 'drizzle-o
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
-import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
+import {
+  LIVE_MEMBER_SUBSCRIPTION_STATUSES,
+  MemberSubscriptionTable,
+} from '@/features/member-subscription/member-subscription.model.js';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
 import { SubscriptionCreditTable } from './subscription-credit.model.js';
 import { klToday } from '@/features/payment-voucher/payment-voucher-week.js';
@@ -637,8 +640,11 @@ export class SubscriptionInvoiceRepositoryClass {
          * payment has not left, and it is exactly the one that must keep being
          * invoiced.
          */
+        // The shared constant, not two literals: the posting gate asks the same
+        // question and used to answer it differently. See the constant.
+        const liveStatuses: readonly string[] = LIVE_MEMBER_SUBSCRIPTION_STATUSES;
         const stillSubscribed = ordered.some(
-          (row) => row.endedAt === null && (row.status === 'active' || row.status === 'past_due'),
+          (row) => row.endedAt === null && liveStatuses.includes(row.status),
         );
 
         // A LANE THE ORG HAS LEFT IS NOT BILLED. Its periods are history, and

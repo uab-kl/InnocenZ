@@ -1,3 +1,4 @@
+import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import type { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
@@ -80,14 +81,6 @@ export async function applyPlanChangeToLedger(params: {
       null,
     );
     const endedAt = new Date();
-    for (const row of current) {
-      await memberSubscriptionRepository.update(row.id, {
-        status: 'expired',
-        endedAt,
-        updatedBy: actor,
-      });
-    }
-
     // The negotiated price wins when one was set; otherwise the plan's.
     const amount = record.quotedAmount ?? plan.price;
     const created = await memberSubscriptionRepository.create({

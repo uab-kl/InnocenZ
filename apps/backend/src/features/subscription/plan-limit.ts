@@ -1,7 +1,10 @@
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
-import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
+import {
+  LIVE_MEMBER_SUBSCRIPTION_STATUSES,
+  MemberSubscriptionTable,
+} from '@/features/member-subscription/member-subscription.model.js';
 import { ShiftTable } from '@/features/shift/shift.model.js';
 import { SubscriptionTable } from './subscription.model.js';
 
@@ -26,21 +29,41 @@ export type PlanLimit = {
 };
 
 /**
- * The org's live PLAN and its numeric allowance, or null when it has no active
- * plan at all.
+ * The three answers this lookup can give, as separate cases.
+ *
+ * It used to return `PlanLimit | null`, and `null` carried BOTH "this org holds
+ * no plan" and "the query threw" — the catch below returned the same value as an
+ * empty result. That was survivable only while the caller waved both through.
+ * The moment a missing plan became a refusal (owner's call, 2 Sep 2026: no
+ * outlet or agency may exist without a plan), collapsing them would have made a
+ * transient database error take every venue offline at once.
+ *
+ * So the two are now impossible to confuse at the type level, and `unknown` is
+ * the same idea as `outletDailyPrUsage`'s `-1`: a gate must never refuse on a
+ * fact it does not have.
+ */
+export type PlanLookup =
+  | ({ kind: 'plan' } & PlanLimit)
+  /** The org holds no active plan row — never enrolled, or its plan has ended. */
+  | { kind: 'none' }
+  /** The read itself failed. NOT the same as `none`. */
+  | { kind: 'unknown' };
+
+/**
+ * The org's live PLAN and its numeric allowance.
  *
  * Add-ons are excluded deliberately: POS integration is held alongside a plan
  * and is not a capacity product, so joining it here would let an add-on's NULL
  * limit read as the venue's allowance.
  *
- * A null RESULT means "no plan" and a `limitAmount: null` means "unlimited" —
- * two different facts, and callers must not collapse them. Nothing here decides
- * what to do about either; that is the caller's rule.
+ * `{ kind: 'none' }` means "no plan" and a `limitAmount: null` on a real plan
+ * means "unlimited" — two different facts, and callers must not collapse them.
+ * Nothing here decides what to do about either; that is the caller's rule.
  */
 export async function resolveActivePlanLimit(params: {
   subscriberType: 'agency' | 'outlet';
   subscriberId: string;
-}): Promise<PlanLimit | null> {
+}): Promise<PlanLookup> {
   try {
     const [row] = await db
       .select({
@@ -54,17 +77,109 @@ export async function resolveActivePlanLimit(params: {
           eq(MemberSubscriptionTable.subscriberType, params.subscriberType),
           eq(MemberSubscriptionTable.subscriberId, params.subscriberId),
           isNull(MemberSubscriptionTable.endedAt),
+          // ⚠️ The STATUS as well as the date. Testing `ended_at IS NULL` alone
+          // read the date and ignored the word beside it, so a row an admin set
+          // to `cancelled` without stamping a date still counted as a plan here
+          // while the billing side had already written it off. See the constant.
+          inArray(MemberSubscriptionTable.status, [
+            ...LIVE_MEMBER_SUBSCRIPTION_STATUSES,
+          ]),
           // A row whose plan is missing from the catalog still counts as a plan;
           // only a row that IS an add-on is skipped.
           sql`coalesce(${SubscriptionTable.kind}::text, 'plan') = 'plan'`,
         ),
       )
       .limit(1);
-    if (!row) return null;
-    return { planName: row.planName, limitAmount: row.limitAmount ?? null };
+    if (!row) return { kind: 'none' };
+    return {
+      kind: 'plan',
+      planName: row.planName,
+      // ⚠️ `limitAmount` comes off the LEFT-JOINED catalog row, so it is also
+      // null when `subscription_id` resolves to nothing — a plan whose catalog
+      // entry was deleted. That reads as "unlimited" here and the caller cannot
+      // tell it apart from Premier. It is the narrower of the two remaining
+      // permissive holes and is left as-is deliberately: inventing a cap for it
+      // would refuse real Premier venues.
+      limitAmount: row.limitAmount ?? null,
+    };
   } catch (error) {
     logger.error('[plan-limit.resolveActivePlanLimit] Error:', error);
-    return null;
+    return { kind: 'unknown' };
+  }
+}
+
+/**
+ * Would closing this ledger row leave its org with no plan at all?
+ *
+ * The creation doors all refuse an org without a plan now, but nothing guarded
+ * the other end: `PATCH /member-subscription/:id/cancel` stamps `ended_at` and
+ * writes no replacement, and `PUT /member-subscription/:id` lets an admin set
+ * `ended_at` or a dead `status` by hand. Either one applied to an org's only
+ * plan makes it planless in a single click — and for an outlet that is now an
+ * outage, because the posting gate refuses a venue with no plan.
+ *
+ * ADD-ONS ARE FREELY CANCELLABLE. Only a `kind = 'plan'` lane is a plan; POS
+ * integration is held alongside one and dropping it takes nothing away.
+ *
+ * Returns `'unknown'` when it cannot tell. The caller REFUSES on unknown, which
+ * is the opposite of the posting gate's rule and deliberately so: there, an
+ * unknown answer must not take a working venue offline; here, an unknown answer
+ * must not let an irreversible cancellation through on a guess. Refusing an
+ * admin's cancel during a database blip costs a retry.
+ */
+export async function wouldLeaveOrgPlanless(
+  memberSubscriptionId: string,
+): Promise<'no' | 'yes' | 'unknown'> {
+  try {
+    const [row] = await db
+      .select({
+        subscriberType: MemberSubscriptionTable.subscriberType,
+        subscriberId: MemberSubscriptionTable.subscriberId,
+        status: MemberSubscriptionTable.status,
+        endedAt: MemberSubscriptionTable.endedAt,
+        kind: sql<string>`coalesce(${SubscriptionTable.kind}::text, 'plan')`,
+      })
+      .from(MemberSubscriptionTable)
+      .leftJoin(
+        SubscriptionTable,
+        eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id),
+      )
+      .where(eq(MemberSubscriptionTable.id, memberSubscriptionId))
+      .limit(1);
+
+    // No such row, an add-on, or a lane the org has ALREADY left: closing it
+    // takes no plan away, so there is nothing to protect.
+    if (!row) return 'no';
+    if (row.kind !== 'plan') return 'no';
+    if (row.endedAt !== null) return 'no';
+    const live: readonly string[] = LIVE_MEMBER_SUBSCRIPTION_STATUSES;
+    if (!live.includes(row.status)) return 'no';
+
+    const [other] = await db
+      .select({ id: MemberSubscriptionTable.id })
+      .from(MemberSubscriptionTable)
+      .leftJoin(
+        SubscriptionTable,
+        eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id),
+      )
+      .where(
+        and(
+          eq(MemberSubscriptionTable.subscriberType, row.subscriberType),
+          eq(MemberSubscriptionTable.subscriberId, row.subscriberId),
+          ne(MemberSubscriptionTable.id, memberSubscriptionId),
+          isNull(MemberSubscriptionTable.endedAt),
+          inArray(MemberSubscriptionTable.status, [
+            ...LIVE_MEMBER_SUBSCRIPTION_STATUSES,
+          ]),
+          sql`coalesce(${SubscriptionTable.kind}::text, 'plan') = 'plan'`,
+        ),
+      )
+      .limit(1);
+
+    return other ? 'no' : 'yes';
+  } catch (error) {
+    logger.error('[plan-limit.wouldLeaveOrgPlanless] Error:', error);
+    return 'unknown';
   }
 }
 

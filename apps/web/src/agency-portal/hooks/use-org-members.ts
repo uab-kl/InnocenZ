@@ -26,6 +26,44 @@ export interface OrgMember {
 	phoneNum?: string | null;
 }
 
+/** The one cache key holding an organisation's member list. */
+export const orgMembersKey = (kind: OrgKind, orgId: string | null) =>
+	[kind, "members", orgId ?? "none"] as const;
+
+/**
+ * One organisation's members — the ONE query behind that key.
+ *
+ * Split out because `useAgencyProfile` held a SECOND `useQuery` on the identical
+ * key with a different queryFn: it asked the server for `{ status: "active" }`
+ * while this one asked for everything, and both mount together on Settings.
+ * React Query stores one value per key, so whichever resolved first decided what
+ * the other read — the Team count and the owner's details on that page changed
+ * with mount order, and neither hook was wrong on its own.
+ *
+ * Fetches EVERY member and lets each caller narrow. A filter applied in the
+ * request is a filter baked into the shared cache; a filter applied at the
+ * reader is not.
+ *
+ * 60s, matching what the profile side used — the panel that writes here
+ * invalidates this key on every mutation, so staleness never outlives an edit.
+ */
+export function useOrgMembersQuery(kind: OrgKind, orgId: string | null) {
+	const { logout } = useAuth();
+	return useQuery({
+		queryKey: orgMembersKey(kind, orgId),
+		queryFn: async (): Promise<OrgMember[]> => {
+			const id = orgId as string;
+			const res =
+				kind === "agency"
+					? await fetchAgencyMembers(id, {}, logout)
+					: await fetchOutletMembers(id, logout);
+			return (res.data ?? []) as OrgMember[];
+		},
+		enabled: Boolean(orgId),
+		staleTime: 60_000,
+	});
+}
+
 /**
  * Member management for one organisation, agency or outlet.
  *
@@ -36,22 +74,8 @@ export interface OrgMember {
 export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
-	const enabled = Boolean(orgId);
-	const key = [kind, "members", orgId ?? "none"];
-
-	const membersQuery = useQuery({
-		queryKey: key,
-		queryFn: async (): Promise<OrgMember[]> => {
-			const id = orgId as string;
-			const res =
-				kind === "agency"
-					? await fetchAgencyMembers(id, {}, logout)
-					: await fetchOutletMembers(id, logout);
-			return (res.data ?? []) as OrgMember[];
-		},
-		enabled,
-		staleTime: 30_000,
-	});
+	const key = orgMembersKey(kind, orgId);
+	const membersQuery = useOrgMembersQuery(kind, orgId);
 
 	const invalidate = () => {
 		void queryClient.invalidateQueries({ queryKey: key });

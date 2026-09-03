@@ -61,6 +61,44 @@ function PrNeededKpi() {
 	);
 }
 
+/**
+ * A hub figure that carries a link to the page it was counted from.
+ *
+ * The COUNT does not change — every number the owner asked to keep on Today is
+ * still here, still read from the same hooks the destination screens read
+ * (`useAgencyPrs`, `useAgencyOutlets`, `useAgencyPvs`). What was missing is the
+ * other half of that: a figure quoted on one screen and listed on another with
+ * no path between them is two facts a reader has to trust are equal. One click
+ * is what makes them checkable.
+ *
+ * `to` is deliberately the router's own path union rather than `string`, so a
+ * renamed route fails the build instead of shipping a dead tile. Omit it and the
+ * tile renders as a plain figure — which is what a role that the destination
+ * would bounce should get, rather than a link into a redirect.
+ */
+function KpiTile({
+	label,
+	value,
+	to,
+}: {
+	label: string;
+	value: number | string;
+	to?: "/agency/prs" | "/agency/outlets";
+}) {
+	const body = (
+		<>
+			<div className="l">{label}</div>
+			<div className="n">{value}</div>
+		</>
+	);
+	if (!to) return <div className="iz-portal-kpi">{body}</div>;
+	return (
+		<Link to={to} className="iz-portal-kpi no-underline">
+			{body}
+		</Link>
+	);
+}
+
 function AgencyHub() {
 	const agencySubRole = useStore((s) => s.agencySubRole);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
@@ -119,20 +157,30 @@ function AgencyHub() {
 		? backendOutlets.outlets.length
 		: OUTLET_NAMES.length;
 	const isFinance = agencySubRole === "agency_finance";
-	const showWorkforce = useAgencyCan()("viewWorkforce");
+	const can = useAgencyCan();
+	const showWorkforce = can("viewWorkforce");
+	/*
+	 * The SAME test `canAccessAgencyPath` applies to `/agency/prs` and
+	 * `/agency/outlets` — `managePr || viewWorkforce`. Repeating the route's own
+	 * rule here is what keeps the tile a plain figure for a role the destination
+	 * would bounce, instead of a link that lands on a redirect.
+	 */
+	const canOpenRecords = showWorkforce || can("managePr");
 	const { t } = usePortalLocale();
 
 	return (
 		<div className="iz-screen iz-portal-page">
 			<div className="iz-portal-kpi-grid iz-portal-desktop-only">
-				<div className="iz-portal-kpi">
-					<div className="l">{t.agencyHome.totalPr}</div>
-					<div className="n">{totalPrs}</div>
-				</div>
-				<div className="iz-portal-kpi">
-					<div className="l">{t.agencyHome.totalOutlets}</div>
-					<div className="n">{totalOutlets}</div>
-				</div>
+				<KpiTile
+					label={t.agencyHome.totalPr}
+					value={totalPrs}
+					to={canOpenRecords ? "/agency/prs" : undefined}
+				/>
+				<KpiTile
+					label={t.agencyHome.totalOutlets}
+					value={totalOutlets}
+					to={canOpenRecords ? "/agency/outlets" : undefined}
+				/>
 				{/* Rendered only for roles that can actually staff a shift, so the
 				    hook inside it — and its roster queries — never mount for
 				    finance, who holds no `viewLiveFloor` and would 403 on some. */}

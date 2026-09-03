@@ -65,29 +65,48 @@ function demandExceedsQuantity(
  * day's usage is the sum of `quantity` across its shifts that date — a shift
  * posted for 8 consumes 8 whether or not anyone is rostered onto it yet.
  *
- * Three cases deliberately do NOT refuse:
- *   • `limitAmount` null — Premier and the open-ended bands are a floor with no
- *     ceiling, and the POS add-on is not a capacity product.
- *   • no active plan — a venue with no subscription is a billing problem, not a
- *     posting problem, and blocking its roster would be a strange way to raise
- *     it. Nothing here is the place to invent that policy.
- *   • the usage count FAILED (-1) — a gate must not refuse on a number it does
- *     not have, and must not read a failed count as "nothing used" either.
+ * NO ACTIVE PLAN REFUSES OUTRIGHT (owner's call, 2 Sep 2026). This used to wave
+ * such a venue through on the reasoning that "no subscription is a billing
+ * problem, not a posting problem" — but the effect was the opposite of what that
+ * sentence implies: because `resolveActivePlanLimit` returned nothing and the
+ * check below was skipped, a venue with NO plan could request UNLIMITED PRs a
+ * day, while a venue paying for the cheapest one was capped. The failure ran in
+ * the permissive direction, so holding the cheapest plan was strictly worse than
+ * holding none. The rule is now that no outlet may exist without a plan, and
+ * this is where a venue that somehow does is stopped.
+ *
+ * It is checked BEFORE the `asking <= 0` return, unlike the capacity rule below:
+ * "you have no plan" does not depend on the headcount, and a shift created
+ * without an explicit quantity would otherwise slip past the gate entirely.
+ *
+ * Two cases still do NOT refuse:
+ *   • `limitAmount` null on a real plan — Premier and the open-ended bands are a
+ *     floor with no ceiling, and the POS add-on is not a capacity product.
+ *   • the lookup or the usage count FAILED — a gate must not refuse on a fact it
+ *     does not have, and must not read a failed count as "nothing used" either.
+ *     This is why `PlanLookup` separates `none` from `unknown`: a database blip
+ *     must not read as "no plan" and take every venue offline at once.
  */
+const NO_PLAN_REFUSAL =
+  'This venue has no active subscription plan, so it cannot post shifts. ' +
+  'Choose a plan under Settings → Subscription, or contact InnocenZ.';
+
 async function planCapacityRefusal(params: {
   outletId: string;
   shiftDate: string;
   adding: number | undefined;
   excludeShiftId?: string;
 }): Promise<string | null> {
-  const asking = params.adding ?? 0;
-  if (asking <= 0) return null;
-
   const plan = await resolveActivePlanLimit({
     subscriberType: 'outlet',
     subscriberId: params.outletId,
   });
-  if (!plan || plan.limitAmount === null) return null;
+  if (plan.kind === 'unknown') return null;
+  if (plan.kind === 'none') return NO_PLAN_REFUSAL;
+
+  const asking = params.adding ?? 0;
+  if (asking <= 0) return null;
+  if (plan.limitAmount === null) return null;
 
   const used = await outletDailyPrUsage({
     outletId: params.outletId,

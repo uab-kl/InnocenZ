@@ -17,6 +17,23 @@ export const memberSubscriptionStatusEnum = MainSchema.enum(
   memberSubscriptionStatusValues,
 );
 
+/**
+ * The statuses that still mean the org IS on this lane.
+ *
+ * ONE definition, because there were two and they disagreed. The billing side
+ * tested `ended_at IS NULL && (active || past_due)`, while the posting gate
+ * tested `ended_at IS NULL` alone — so a row an admin set to `cancelled`
+ * WITHOUT stamping a date (which `PUT /member-subscription/:id` allows: it takes
+ * `status` and `endedAt` independently) was simultaneously "cancelled" for
+ * invoicing and "subscribed" for posting. Two answers to one question about one
+ * row.
+ *
+ * `past_due` counts as still subscribed on purpose: an org behind on payment has
+ * not left. It is exactly the one that must keep being invoiced — and cutting
+ * off its roster over an unpaid invoice is a billing decision nobody made.
+ */
+export const LIVE_MEMBER_SUBSCRIPTION_STATUSES = ['active', 'past_due'] as const;
+
 // A record of an outlet/agency subscribing to a plan (the "who subscribed & when" ledger).
 // Powers the admin plan dashboard, subscription history (date/time filter) and monthly
 // subscription-revenue totals. Snapshots subscriber/plan names so history stays readable

@@ -11,7 +11,11 @@ import {
 } from '@/composition-root.js';
 import { notifyMany } from '@/features/notification/notify.js';
 import { applyPlanChangeToLedger } from '@/features/admin-request/apply-plan-change.js';
-import { agencyWeeklyPvCount } from '@/features/subscription/plan-limit.js';
+import {
+  agencyWeeklyPvCount,
+  resolveActivePlanLimit,
+} from '@/features/subscription/plan-limit.js';
+import { OutletTable } from '@/features/outlet/outlet.model.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
 import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
@@ -381,6 +385,70 @@ async function runAgencyTier(): Promise<void> {
   } catch (error) {
     logger.error('[agency-tier] planless-agency report failed:', error);
   }
+
+  // Wrapped separately, so a failure in one report cannot hide the other.
+  try {
+    await reportPlanlessOutlets();
+  } catch (error) {
+    logger.error('[agency-tier] planless-outlet report failed:', error);
+  }
+}
+
+/**
+ * Active venues holding no plan — for outlets this is now an OUTAGE, not a
+ * billing note.
+ *
+ * The agency report beside this one exists because a planless agency works
+ * unbilled. A planless VENUE is worse off than that: since 2 Sep 2026
+ * `ShiftController` refuses to post for one, so the venue is not quietly
+ * under-charged, it is silently unable to open a shift. Nothing else would say
+ * so — the venue sees a refusal, and no one on this side sees anything.
+ *
+ * ⚠️ It asks `resolveActivePlanLimit`, the SAME function the posting gate asks,
+ * one venue at a time rather than rebuilding the "holds a plan" predicate as a
+ * join here. A second copy of that predicate would eventually disagree with the
+ * gate, and a report naming a different set of venues than the one actually
+ * being blocked is worse than no report: it sends someone to look at the wrong
+ * venues while the real ones stay dark. Outlets number in the dozens and this
+ * runs weekly, so the extra round trips cost nothing worth saving.
+ *
+ * Reporting only. It never enrols anyone: writing a plan here would bill an org
+ * that never subscribed, the same line the agency report refuses to cross.
+ */
+export async function reportPlanlessOutlets(): Promise<void> {
+  // A pending_review / inactive / suspended venue without a plan is expected
+  // rather than a gap, so only live ones are asked about.
+  const outlets = await db
+    .select({ id: OutletTable.id, name: OutletTable.name })
+    .from(OutletTable)
+    .where(eq(OutletTable.status, 'active'));
+
+  const blocked: string[] = [];
+  let unknown = 0;
+  for (const outlet of outlets) {
+    const plan = await resolveActivePlanLimit({
+      subscriberType: 'outlet',
+      subscriberId: outlet.id,
+    });
+    // `unknown` is the lookup FAILING, not an absent plan. Counting it as
+    // planless would turn a broken query into a list of venues to go and fix.
+    if (plan.kind === 'unknown') unknown += 1;
+    else if (plan.kind === 'none') blocked.push(outlet.name);
+  }
+
+  if (blocked.length > 0) {
+    logger.warn(
+      `[agency-tier] ${blocked.length} active outlet(s) hold NO subscription and ` +
+        `are therefore BLOCKED from posting shifts until one is added: ${blocked.join(', ')}`,
+    );
+  }
+  // Logged at zero too: a check that says nothing when it finds nothing cannot
+  // be told apart from one that stopped running. The denominator proves what
+  // was actually examined.
+  logger.info(
+    `[agency-tier] ${blocked.length} of ${outlets.length} active outlet(s) hold no subscription` +
+      (unknown > 0 ? ` (${unknown} lookup(s) unavailable)` : ''),
+  );
 }
 
 /**

@@ -28,12 +28,12 @@ import {
 	type SavePaymentMethodInput,
 	saveMyPaymentMethod,
 } from "@/services/payment-method";
-import { fetchPaymentVouchers } from "@/services/payment-voucher";
 import { fetchSubscriptions, type Subscription } from "@/services/subscription";
 import {
 	fetchSubscriptionInvoices,
 	type SubscriptionInvoice,
 } from "@/services/subscription-invoice";
+import { useAgencyPvRows } from "./use-agency-pvs";
 
 const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -315,12 +315,12 @@ export function useAgencySubscription() {
 	 * count is unknown (loading, or a demo session), which is what stops the
 	 * caller acting on a number it does not have yet.
 	 */
-	const vouchersQuery = useQuery({
-		queryKey: ["agency", "subscription", "weekly-pv"],
-		queryFn: () => fetchPaymentVouchers({ pageSize: 500 }, logout),
-		enabled: backed,
-		staleTime: 60_000,
-	});
+	// THE SHARED voucher list, not a second copy. This was its own
+	// `["agency","subscription","weekly-pv"]` fetch of the same endpoint, so the
+	// count that decides this agency's billed tier could sit a minute behind the
+	// Payroll screen that had just changed it — and both were silently capped at
+	// the server's 100-row clamp. See `useAgencyPvRows`.
+	const vouchersQuery = useAgencyPvRows({ enabled: backed });
 
 	const weeklyPvCount = useMemo<number | null>(() => {
 		if (!backed || vouchersQuery.isLoading || !vouchersQuery.data) return null;
