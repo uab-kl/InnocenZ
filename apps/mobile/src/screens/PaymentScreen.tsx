@@ -996,6 +996,37 @@ export function PaymentScreen({
     const anyShiftToDispute = buildCellEvidence(weekData, day.dateIso, row.key)
       .groups.flatMap((g) => g.receipts)
       .some((r) => !!r.receiptNo);
+    /**
+     * Is there still a receipt in THIS cell that carries no open claim?
+     *
+     * ⚠️ THE REASON A SECOND DISPUTE LOOKED IMPOSSIBLE (owner, 3 Sep 2026:
+     * "on the same day, or same shift, I can dispute more than one receipt").
+     * The database has allowed it since 0088 — the unique index is keyed
+     * `(voucher, date, component, coalesce(receipt_id,''))` over OPEN claims
+     * only, and one live day already carries six claims across two receipts.
+     * The block was HERE: `weekDisputed` asks whether the VOUCHER is disputed,
+     * so the first open claim turned every later tap into "Withdraw dispute?",
+     * whatever day, bucket or paper it was on — the second receipt had no route
+     * to being questioned at all.
+     *
+     * Withdraw is now offered only when this cell has nothing LEFT to contest,
+     * which is the case that sheet was written for. A cell with a free receipt
+     * opens the dispute picker, where the claimed ones already grey out with
+     * "already disputed". Cancelling a specific claim keeps its own home in the
+     * "What you disputed" sheet, so no route is lost.
+     */
+    const cellClaims = receiptClaimState(weekData, day.dateIso, row.key);
+    const freeReceiptInCell =
+      !cellClaims.openAll &&
+      buildCellEvidence(weekData, day.dateIso, row.key)
+        .groups.flatMap((g) => g.receipts)
+        .some((r) => {
+          if (!r.receiptNo) return false;
+          const claimed =
+            (!!r.receiptId && cellClaims.open.has(r.receiptId)) ||
+            cellClaims.open.has(r.receiptNo);
+          return !claimed;
+        });
     if (!weekDisputed && !anyShiftToDispute) {
       // Two different refusals, and they must not share a message. "Still being
       // reviewed" tells the PR to wait — useless advice for wages, where waiting
@@ -1028,8 +1059,9 @@ export function PaymentScreen({
       week,
     };
     setDisputeTarget(target);
-    // A PV already under dispute → tapping any amount offers to withdraw it.
-    if (weekDisputed) {
+    // Withdraw only when this cell has nothing left to contest; otherwise the
+    // tap raises a NEW claim, even while another is open elsewhere on the week.
+    if (weekDisputed && !freeReceiptInCell) {
       setDisputeMode('withdraw');
       setDisputeNote('');
       setDisputePhotos([]);
