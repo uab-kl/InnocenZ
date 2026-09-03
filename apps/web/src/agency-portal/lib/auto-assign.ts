@@ -1,3 +1,7 @@
+import {
+	addDaysToIso,
+	getPayrollWeekSundayIso,
+} from "@agency-portal/lib/demo-clock";
 import { windowMinutes } from "@agency-portal/lib/shift-slot-clash";
 import { hasShiftEnded } from "@agency-portal/lib/shift-window";
 import {
@@ -22,6 +26,91 @@ const NON_STAFFING_STATUSES: readonly ShiftAssignmentStatus[] = [
 	"no_show",
 	"leave_approved",
 ];
+
+/**
+ * Rows that can no longer COLLIDE with work not yet done — the backend's own
+ * exclusion list in `shift-assignment.controller.ts`, mirrored here.
+ *
+ * Wider than {@link NON_STAFFING_STATUSES} by `completed`: cut-loss releases a
+ * PR mid-shift precisely so they can be sent somewhere else the same night, and
+ * the released row still carries the original window. A check-out stamp is a
+ * fact about the past and cannot clash with work still ahead, so it exempts a
+ * row whatever its status says.
+ *
+ * NOT the set used for staffing counts, the fairness tie-break or venue history:
+ * a completed shift WAS worked, and all three of those need to know it.
+ */
+const CLASH_EXEMPT_STATUSES: readonly ShiftAssignmentStatus[] = [
+	...NON_STAFFING_STATUSES,
+	"completed",
+];
+
+/** True when this row cannot clash with a shift being planned. */
+function exemptFromClash(a: ShiftAssignment): boolean {
+	return CLASH_EXEMPT_STATUSES.includes(a.status) || Boolean(a.checkOutAt);
+}
+
+/**
+ * WHEN EACH PR IS ALREADY COMMITTED, as absolute-minute windows on one timeline.
+ *
+ * ⚠️ THE PLANNER'S BUSY RULE, and it is a WINDOW rule — never a DATE one. It was
+ * a date for its whole life: any assignment that day took the PR off the market
+ * until midnight. That is far blunter than the server, which refuses only a
+ * genuine overlap (`shiftsOverlap`, with completed and checked-out rows exempt)
+ * and which deliberately gave up its own day rule in Aug 2026 — so the planner
+ * was hiding candidates the API would have accepted.
+ *
+ * Live case, 3 Sep 2026: a venue NAMED Vicky for a 16:00–20:00 shift posted to
+ * two agencies. Atlas would not offer her, because she had already worked
+ * 10:00–11:00 and 11:00–12:00 that day FOR ATLAS; Why We Met, which cannot see
+ * another agency's assignment rows, offered her normally. Same person, same
+ * shift, assignable at one agency and invisible at the other — and the venue's
+ * explicit ask lost to a filter, because being requested is a RANKING term
+ * applied to whoever survives this test.
+ *
+ * Date and slot come off the SHIFT row when it is present and off the
+ * assignment's own joined columns when it is not. The plan is built from the
+ * week's LIVE shifts — ended ones are filtered out before it — so a shift that
+ * has already finished is missing from `shiftById` while its assignment is still
+ * in the list, and those are exactly the rows an evening shift must be compared
+ * against.
+ *
+ * Fails OPEN at an unparseable slot, matching the server: a label-only window
+ * ("Late night") carries no time and never clashes.
+ */
+function committedWindowsByPr(
+	assignments: readonly ShiftAssignment[],
+	shiftById: ReadonlyMap<string, Shift>,
+): Map<string, { start: number; end: number }[]> {
+	const byPr = new Map<string, { start: number; end: number }[]>();
+	for (const a of assignments) {
+		if (exemptFromClash(a)) continue;
+		const row = shiftById.get(a.shiftId);
+		const dateIso = row?.shiftDate ?? a.shiftDate;
+		if (!dateIso) continue;
+		const w = windowMinutes({ dateIso, shift: row?.slot ?? a.slot ?? "" });
+		if (!w) continue;
+		byPr.set(a.prId, [...(byPr.get(a.prId) ?? []), w]);
+	}
+	return byPr;
+}
+
+/**
+ * Does `target` collide with a window the PR already holds?
+ *
+ * STRICT intersection, so a 12:00 finish and a 12:00 start are back-to-back
+ * rather than a clash — the same boundary rule the server and the outlet's own
+ * clash check apply. Whether a PR can TRAVEL that gap is a separate question
+ * with its own guard, deliberately: two refusals for one candidate is a
+ * shortage nobody can diagnose.
+ */
+function clashesWithCommitted(
+	held: readonly { start: number; end: number }[] | undefined,
+	target: { start: number; end: number } | null,
+): boolean {
+	if (!target || !held) return false;
+	return held.some((w) => w.start < target.end && target.start < w.end);
+}
 
 /**
  * Shift statuses an agency may staff. Drafts are not published yet and sealed
@@ -147,7 +236,11 @@ export interface AutoAssignPlan {
 	pairs: AutoAssignPair[];
 	/** Open slots across the target dates, before the plan is applied. */
 	openSlotCount: number;
-	/** Active PRs free on at least one target date. */
+	/**
+	 * Active PRs who could take at least one of the open slots — not booked over
+	 * it, not blocked that day, and able to travel to it. Per SHIFT, not per
+	 * date: a PR who finished at noon is free for tonight.
+	 */
 	freePrCount: number;
 	/** Open slots the plan cannot cover — more slots than free PRs. */
 	unfilledCount: number;
@@ -420,10 +513,19 @@ export function findOpenShifts(params: {
 /**
  * Proposes PR → open-shift pairings for `targetDates`, most suitable first.
  *
- * Suitability, per the agency's rule: active PRs only, never one already
- * working that date, ranked by tier (Tier I first) then by who holds the fewest
- * shifts that payroll week, so the work spreads instead of always landing on
- * the same few names. Nothing is written — the caller confirms the plan.
+ * Suitability, per the agency's rule: active PRs only, never one already booked
+ * over the shift's own WINDOW (see `committedWindowsByPr` — a second shift the
+ * same day is fine, and the server has always allowed it), ranked by the venue's
+ * named request first, then venue history, then tier (Tier I first), then by who
+ * holds the fewest shifts that payroll week, so the work spreads instead of
+ * always landing on the same few names. Nothing is written — the caller confirms
+ * the plan.
+ *
+ * A shift posted to several agencies is FIRST COME, FIRST SERVED: each invited
+ * agency plans from its own rows and proposes the same requested PR, and the
+ * seat goes to whoever confirms first. The loser is not left to discover it at a
+ * 409 — `validateAutoAssignPairs` refetches immediately before the write and
+ * drops the pair with a reason.
  *
  * No outlet is preferred: slots are filled by rotating across the outlets that
  * still need staff, so a scarce night thins every outlet equally rather than
@@ -479,48 +581,65 @@ export function buildAutoAssignPlan(params: {
 	});
 	const openSlotCount = openShifts.reduce((sum, s) => sum + s.openSlots, 0);
 
-	// A PR is busy on a date if they hold a staffing assignment on a shift that
-	// day; the same pass counts the week's shifts per PR for the tie-break.
-	const shiftDateById = new Map(weekShifts.map((s) => [s.id, s.shiftDate]));
-	const busyDatesByPr = new Map<string, Set<string>>();
+	const shiftRowById = new Map(weekShifts.map((s) => [s.id, s]));
+
+	// THE PAYROLL WEEK THE FAIRNESS COUNT IS ABOUT.
+	//
+	// Derived HERE rather than taken as a parameter, because `weekAssignments`
+	// arrives with no date filter — the hook pages `GET /shift-assignment` to
+	// exhaustion, whatever the parameter name says — so a caller who forgot to
+	// narrow it would silently reinstate the lifetime count this replaced, and
+	// nothing would look wrong until someone read the number.
+	//
+	// Sunday-anchored through the ONE helper. See its docblock: nothing in the
+	// app may derive a week another way, and THIS COUNT is the thing that broke
+	// last time one did (12 Aug 2026 — the roster planned Mon–Sun and put its
+	// fairness count on a different seven days from every money screen).
+	const anchorIso = [...targetDates].sort()[0];
+	const weekFrom = anchorIso ? getPayrollWeekSundayIso(anchorIso) : null;
+	const weekTo = weekFrom ? addDaysToIso(weekFrom, 6) : null;
+
+	// How many of THIS WEEK's shifts each PR holds, for the fairness tie-break.
+	//
+	// ⚠️ It counted every row it was handed until 3 Sep 2026, which made it the
+	// PR's LIFETIME total under a label that said "this week". Measured on Atlas
+	// that day: the sheet printed 31 / 2 / 3 where the real week was 2 / 0 / 0.
+	// The label was the smaller half of it — `load()` reads this map, so a PR with
+	// a long history sank down the queue permanently, which is the exact opposite
+	// of the spreading the sort exists to do.
+	//
+	// ⚠️ NOT the clash-exempt list: a `completed` shift WAS worked and must count
+	// here, which is why this pass cannot be folded into `committedWindowsByPr`
+	// below however similar the two loops look.
 	const weekCountByPr = new Map<string, number>();
 	for (const a of weekAssignments) {
 		if (NON_STAFFING_STATUSES.includes(a.status)) continue;
-		const date = shiftDateById.get(a.shiftId) ?? a.shiftDate;
-		if (!date) continue;
-		const dates = busyDatesByPr.get(a.prId) ?? new Set<string>();
-		dates.add(date);
-		busyDatesByPr.set(a.prId, dates);
+		const date = (
+			shiftRowById.get(a.shiftId)?.shiftDate ??
+			a.shiftDate ??
+			""
+		).slice(0, 10);
+		// Outside the week, or undateable — the same answer either way: a row that
+		// cannot be placed in the week must not be charged to it.
+		if (!date || !weekFrom || !weekTo || date < weekFrom || date > weekTo) {
+			continue;
+		}
 		weekCountByPr.set(a.prId, (weekCountByPr.get(a.prId) ?? 0) + 1);
 	}
 
-	// A day the PR blocked counts as busy for planning: the question every use
-	// of `busyDatesByPr` below asks is "can this PR take a shift that date", and
-	// the answer is no either way. Folded in here rather than added as a fourth
-	// filter so the three consumers — the free-PR count, the pick, and the
-	// anyFreeToday test that decides whether a shortfall is people or tier mix —
-	// cannot drift apart. They did not all learn about tiers at the same time
-	// once already.
+	// WHEN each PR is already committed, as windows on one continuous timeline.
+	// See `committedWindowsByPr` for why this is a window rule and which live bug
+	// the DATE rule it replaced was hiding.
 	//
-	// NOT counted into `weekCountByPr`: that drives the fairness tie-break, and
-	// a PR who blocked Saturday has not worked a shift. Charging them one would
-	// push them DOWN the queue for the days they are in fact available.
-	if (blockedDatesByPr) {
-		for (const [prId, dates] of blockedDatesByPr) {
-			if (dates.size === 0) continue;
-			const busy = busyDatesByPr.get(prId) ?? new Set<string>();
-			for (const d of dates) busy.add(d);
-			busyDatesByPr.set(prId, busy);
-		}
-	}
-
-	// WHERE EACH PR ALREADY IS, on one continuous timeline.
+	// A day the PR blocked THEMSELVES stays a whole-day rule and is checked
+	// separately in `availableFor`: `pr_availability` blocks a DATE, not an hour,
+	// and the server refuses every shift on it. The two are never merged — they
+	// answer different questions and are proven different ways.
 	//
-	// The date filter below already stops a PR taking two shifts on one DATE, so
-	// what is left — and what nothing checked — is the seam between adjacent dates:
-	// an overnight 22:00–04:00 at one venue and an 05:00 start at another are two
-	// different `shiftDate`s and read as two free days.
-	const shiftRowById = new Map(weekShifts.map((s) => [s.id, s]));
+	// Neither is counted into `weekCountByPr`: that drives the fairness
+	// tie-break, and a PR who blocked Saturday has not worked a shift. Charging
+	// them one would push them DOWN the queue for the days they are available.
+	const committedByPr = committedWindowsByPr(weekAssignments, shiftRowById);
 
 	/**
 	 * WHICH VENUES EACH PR HAS ALREADY WORKED (owner, 24 Aug 2026: "prioritise
@@ -556,16 +675,23 @@ export function buildAutoAssignPlan(params: {
 	if (outletPinById) {
 		for (const a of weekAssignments) {
 			if (NON_STAFFING_STATUSES.includes(a.status)) continue;
+			// Same shift-row-then-assignment fallback as `committedWindowsByPr`, for
+			// the same reason: the shift a PR is travelling FROM has usually already
+			// ended, and an ended shift is filtered out of the live week before it
+			// reaches here. Reading only `shiftRowById` meant the trip that matters
+			// most — the one earlier the same evening — was the one never checked.
 			const row = shiftRowById.get(a.shiftId);
-			if (!row) continue;
+			const dateIso = row?.shiftDate ?? a.shiftDate;
+			const outletId = row?.outletId ?? a.outletId;
+			if (!dateIso || !outletId) continue;
 			const w = windowMinutes({
-				dateIso: row.shiftDate,
-				shift: row.slot ?? "",
+				dateIso,
+				shift: row?.slot ?? a.slot ?? "",
 			});
 			if (!w) continue;
 			occupiedByPr.set(a.prId, [
 				...(occupiedByPr.get(a.prId) ?? []),
-				{ outletId: row.outletId, start: w.start, end: w.end },
+				{ outletId, start: w.start, end: w.end },
 			]);
 		}
 	}
@@ -593,9 +719,44 @@ export function buildAutoAssignPlan(params: {
 		});
 	};
 
+	/** Each open shift's window, resolved once — every candidate test asks for it. */
+	const windowCache = new Map<string, { start: number; end: number } | null>();
+	const targetWindow = (target: OpenShift) => {
+		if (!windowCache.has(target.shiftId)) {
+			windowCache.set(
+				target.shiftId,
+				windowMinutes({
+					dateIso: target.shiftDate,
+					shift: target.slot ?? "",
+				}),
+			);
+		}
+		return windowCache.get(target.shiftId) ?? null;
+	};
+
+	/**
+	 * CAN THIS PR TAKE THIS SHIFT AT ALL — the three physical refusals the server
+	 * applies, in its order: a day they blocked, a window they already hold, and
+	 * a trip they could not make. Tier is NOT here; that is the shift's quota,
+	 * asked separately by `fitsTarget`, because the remedies differ.
+	 *
+	 * ONE definition on purpose. Its three consumers — the free-PR count, the
+	 * pick, and the `anyFreeToday` test that decides whether a shortfall is
+	 * people or tier mix — drifted apart once already when they did not all learn
+	 * about tiers at the same time.
+	 */
+	const availableFor = (prId: string, target: OpenShift): boolean =>
+		!blockedDatesByPr?.get(prId)?.has(target.shiftDate) &&
+		!clashesWithCommitted(committedByPr.get(prId), targetWindow(target)) &&
+		!travelBlocked(prId, target);
+
 	const activePrs = prs.filter((p) => p.status === "active");
+	// Free = could take at least one of the slots actually on offer. Counted per
+	// SHIFT rather than per date, because that is now the question the planner
+	// asks: a PR who finished at noon is free for tonight, and the old per-date
+	// count called them booked.
 	const freePrCount = activePrs.filter((p) =>
-		targetDates.some((d) => !busyDatesByPr.get(p.id)?.has(d)),
+		openShifts.some((s) => availableFor(p.id, s)),
 	).length;
 
 	// Fill one PR at a time, rotating across outlets: each turn goes to the
@@ -688,14 +849,21 @@ export function buildAutoAssignPlan(params: {
 			const pick = activePrs
 				.filter(
 					(p) =>
+						// One NEW shift per PR per run, per day. A fairness rule about
+						// what the planner ADDS, not a claim about what the PR could
+						// work — `availableFor` is the physical question, and it now
+						// allows a second non-overlapping shift the same day, which is
+						// what the roster's manual "+" and the server have always
+						// allowed. Auto-assign still spreads the work rather than
+						// stacking one person's night.
 						!takenToday.has(p.id) &&
-						!busyDatesByPr.get(p.id)?.has(date) &&
-						fitsTarget(p.tier) &&
-						// Choosing someone who cannot make the trip when someone else can
-						// is simply a worse plan. If nobody else is free the seat stays
-						// open and is reported as a shortage — which the agency can still
-						// fill by hand, and be warned about at that moment.
-						!travelBlocked(p.id, target),
+						// The day they blocked, a window they already hold, and a trip
+						// they could not make. Choosing someone who cannot make the trip
+						// when someone else can is simply a worse plan; if nobody else is
+						// free the seat stays open and is reported as a shortage, which
+						// the agency can still fill by hand and be warned about then.
+						availableFor(p.id, target) &&
+						fitsTarget(p.tier),
 				)
 				// KNOWN FACE AT THIS VENUE. Second only to being named for the
 				// shift, and above tier — see `outletsWorkedByPr` for why that
@@ -722,7 +890,7 @@ export function buildAutoAssignPlan(params: {
 				// The agency needs to hear the difference — one is solved by finding
 				// staff, the other by editing the shift.
 				const anyFreeToday = activePrs.some(
-					(p) => !takenToday.has(p.id) && !busyDatesByPr.get(p.id)?.has(date),
+					(p) => !takenToday.has(p.id) && availableFor(p.id, target),
 				);
 				if (anyFreeToday) tierBlockedCount += exhausted;
 				continue;
@@ -794,7 +962,9 @@ export function dropReasonLabel(reason: DropReason): string {
 		case "shift-full":
 			return "shift already fully staffed";
 		case "pr-busy":
-			return "PR booked elsewhere";
+			// "at that time", not "that day" — the rule is an overlap, so a PR with
+			// an earlier shift the same evening is not busy and must not be told so.
+			return "PR is already booked at that time";
 		case "tier-full":
 			return "that tier is already full on this shift";
 		case "travel-tight":
@@ -843,22 +1013,28 @@ export function validateAutoAssignPairs(params: {
 		for (const a of assignments) {
 			if (NON_STAFFING_STATUSES.includes(a.status)) continue;
 			const row = shiftById.get(a.shiftId);
-			if (!row) continue;
+			const dateIso = row?.shiftDate ?? a.shiftDate;
+			const outletId = row?.outletId ?? a.outletId;
+			if (!dateIso || !outletId) continue;
 			const w = windowMinutes({
-				dateIso: row.shiftDate,
-				shift: row.slot ?? "",
+				dateIso,
+				shift: row?.slot ?? a.slot ?? "",
 			});
 			if (!w) continue;
 			occupiedByPr.set(a.prId, [
 				...(occupiedByPr.get(a.prId) ?? []),
-				{ outletId: row.outletId, start: w.start, end: w.end },
+				{ outletId, start: w.start, end: w.end },
 			]);
 		}
 	}
+	// WHEN each PR is already committed, from the FRESH rows — the same window
+	// rule the planner applies, and it MUST stay the same one. A date rule here
+	// would drop, one pair at a time and with no explanation, exactly the
+	// candidates the plan was just corrected to offer.
+	const committedByPr = committedWindowsByPr(assignments, shiftById);
 	// Seeded from the shift AFTER the loop below — see the note in `findOpenShifts`.
 	const staffedByShift = new Map<string, number>();
 	const staffedBucketsByShift = new Map<string, (string | null)[]>();
-	const busyDatesByPr = new Map<string, Set<string>>();
 	for (const a of assignments) {
 		if (NON_STAFFING_STATUSES.includes(a.status)) continue;
 		staffedByShift.set(a.shiftId, (staffedByShift.get(a.shiftId) ?? 0) + 1);
@@ -866,11 +1042,6 @@ export function validateAutoAssignPairs(params: {
 			...(staffedBucketsByShift.get(a.shiftId) ?? []),
 			bucketForPrTier(tierByPrId?.get(a.prId) ?? null),
 		]);
-		const date = shiftById.get(a.shiftId)?.shiftDate ?? a.shiftDate;
-		if (!date) continue;
-		const dates = busyDatesByPr.get(a.prId) ?? new Set<string>();
-		dates.add(date);
-		busyDatesByPr.set(a.prId, dates);
 	}
 	// The server's cross-agency figures win here too — the total AND the buckets.
 	// This is the last gate before the write, so it is where a shared shift filling
@@ -899,18 +1070,21 @@ export function validateAutoAssignPairs(params: {
 			dropped.push({ pair, reason: "shift-full" });
 			continue;
 		}
-		if (busyDatesByPr.get(pair.prId)?.has(shift.shiftDate)) {
-			dropped.push({ pair, reason: "pr-busy" });
-			continue;
-		}
-		// CAN THEY GET THERE? Checked after pr-busy so an overlap is reported as the
-		// clash it is; what is left is the seam between adjacent dates, which the
-		// date test above cannot see.
-		const pin = outletPinById?.get(shift.outletId);
 		const window = windowMinutes({
 			dateIso: shift.shiftDate,
 			shift: shift.slot ?? "",
 		});
+		// Booked over this shift's own window — by this agency, on rows it can see.
+		// A seat another agency took while the sheet sat open surfaces above as
+		// `shift-full` instead, off the server's cross-agency `staffedCount`.
+		if (clashesWithCommitted(committedByPr.get(pair.prId), window)) {
+			dropped.push({ pair, reason: "pr-busy" });
+			continue;
+		}
+		// CAN THEY GET THERE? Checked after pr-busy so an overlap is reported as the
+		// clash it is; what is left is the gap between two shifts that do not cross,
+		// which the test above deliberately says nothing about.
+		const pin = outletPinById?.get(shift.outletId);
 		if (
 			outletPinById &&
 			pin &&
@@ -949,9 +1123,15 @@ export function validateAutoAssignPairs(params: {
 			...(staffedBucketsByShift.get(shift.id) ?? []),
 			bucketForPrTier(pair.prTier),
 		]);
-		const dates = busyDatesByPr.get(pair.prId) ?? new Set<string>();
-		dates.add(shift.shiftDate);
-		busyDatesByPr.set(pair.prId, dates);
+		// And the WINDOW, so two pairs in one batch cannot book the same PR over
+		// themselves. Skipped when the slot has no readable window — nothing to
+		// intersect, and the server would not refuse it either.
+		if (window) {
+			committedByPr.set(pair.prId, [
+				...(committedByPr.get(pair.prId) ?? []),
+				window,
+			]);
+		}
 	}
 
 	return { valid, dropped };
