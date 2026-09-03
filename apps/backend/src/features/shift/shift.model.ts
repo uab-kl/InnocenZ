@@ -1,4 +1,4 @@
-import { date, integer, numeric, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { date, integer, numeric, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
@@ -137,28 +137,46 @@ export type ShiftAgencyType = typeof ShiftAgencyTable.$inferSelect;
  * `shift_assignment` row existing for the same (shift, person). One fact,
  * one place.
  *
- * `agencyId` records WHICH membership the tapped card came from (a PR can
- * belong to several agencies), and is what scopes the agency read: each
- * agency sees only the requests addressed to it, never a rival's.
+ * `agencyId` records WHICH agency the ask is addressed to, and is what scopes
+ * the agency read: each agency sees only the requests addressed to it, never a
+ * rival's. One venue pick fans out to EVERY invited agency holding that PR
+ * (0150), so a person legitimately has SEVERAL rows on one shift.
+ *
+ * ⚠️ THE KEY IS THE THREE COLUMNS, and it is declared here on purpose. 0131
+ * created the table with UNIQUE (shift_id, user_id) and the model declared no
+ * key at all — so reading the model said "several agencies are fine" while the
+ * database rejected the second one. The insert is `onConflictDoNothing`, so it
+ * was discarded in silence and the shift kept one arbitrary agency. A key that
+ * lives only in the database is a key nobody reviewing this file can see.
  *
  * `userId`, not prId: there is no `pr` table — a PR is a `user` row (0089).
  */
-export const ShiftPrRequestTable = MainSchema.table('shift_pr_request', {
-  id: uuid('id').defaultRandom().notNull().primaryKey(),
-  shiftId: uuid('shift_id')
-    .notNull()
-    .references(() => ShiftTable.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => UserTable.id, { onDelete: 'cascade' }),
-  agencyId: uuid('agency_id')
-    .notNull()
-    .references(() => AgencyTable.id, { onDelete: 'cascade' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdBy: varchar('created_by').notNull().default('system'),
-  updatedBy: varchar('updated_by').notNull().default('system'),
-});
+export const ShiftPrRequestTable = MainSchema.table(
+  'shift_pr_request',
+  {
+    id: uuid('id').defaultRandom().notNull().primaryKey(),
+    shiftId: uuid('shift_id')
+      .notNull()
+      .references(() => ShiftTable.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => UserTable.id, { onDelete: 'cascade' }),
+    agencyId: uuid('agency_id')
+      .notNull()
+      .references(() => AgencyTable.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdBy: varchar('created_by').notNull().default('system'),
+    updatedBy: varchar('updated_by').notNull().default('system'),
+  },
+  (table) => [
+    unique('shift_pr_request_shift_user_agency_unique').on(
+      table.shiftId,
+      table.userId,
+      table.agencyId,
+    ),
+  ],
+);
 
 export type ShiftPrRequestType = typeof ShiftPrRequestTable.$inferSelect;
 
