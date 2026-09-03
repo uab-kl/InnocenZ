@@ -332,6 +332,93 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ ✅ CLOSED same day — OUTLET PRIVACY SWEEP: both leaks fixed (3 Sept 2026)
+
+**Shipped.** New `util/outlet-redaction.ts` blanks the fields; `redactIdentityDocsForOutlet` —
+the middleware `/user` has always used — is now wired to `GET /pr`, `GET /pr/:id`,
+`GET /shift-assignment` and `GET /shift-assignment/:id`, and both controllers honour the flag it
+sets. `IDENTITY_DOC_FIELDS` is exported and REUSED rather than re-typed: two lists of "what an
+outlet must not see" is one list that gets updated and one that does not.
+
+**Blanked for outlet callers:** `icNo` + the shared identity-doc list inside `profile` (PR row);
+the seven `cancelFee*` columns, the four raw coordinates and `leaveProofPhotos` (assignment row).
+**Deliberately kept:** `cancelNoticeHours` (the venue’s own operational fact),
+`checkIn/OutDistanceM` + `AccuracyM` (measured FROM the venue’s own location — distance from a
+point you own is not a position, and it is the geofence evidence), `leaveStatus` (a venue must
+know the PR is not coming; it must not see the doctor’s note), and `phone`/`email` (a booked PR
+has to be reachable on the night). Blanked to `null`, never deleted — a missing key renders
+`undefined` or throws on a destructure, and a privacy fix that breaks a roster gets reverted.
+
+**Age survives.** `toUserProfileResponse` already derives `age` from `dob` upstream — verified: of
+every live profile carrying a `dob`, none arrives without an `age` — so blanking the date costs
+the venue nothing. A derive-age-here fallback was written, shown to never fire on live data, and
+DELETED rather than shipped as a branch nobody would notice going wrong.
+
+**Proof is TWO-SIDED, which is the part that matters.** A fix that hides a column from everybody
+is an outage, not a privacy fix — the agency roster reads `icNo` and the payroll lane reads the
+coordinates. `_probe-redaction-counter-test.ts` asserts both directions and reports INCONCLUSIVE
+where the agency column is empty (a field null for everyone proves nothing):
+`icNo` outlet 0 / agency 5 · `profile.dob` 0 / 5 · `checkInLat` 0 / 18 · `checkInLng` 0 / 18 ·
+`checkOutLat` 0 / 17 · `cancelFeeRm` 0 / 1 · `cancelFeeVoucherId` 0 / 1 — **NO LEAKS**, every row
+discriminating. Booking pool intact across all 44 rows: name, nickname, tier, status, comcard,
+portfolio, languages, roster. Outlet History still renders "Vicky · Atlas Agency · 3 shifts" and
+`/pr?pageSize=500` still 200s — which is exactly what a GATE would have broken.
+
+**The original finding, kept for the record:**
+
+Swept all 55 outlet-reachable GETs with a real outlet token (`emhub@emhub.test`), deep-scanning
+live responses. **25 refused (403) — every discipline surface held**: `/pr/:id/penalties`,
+`/agency/:id/penalty-rules`, `/penalty-proposals`, `/uncharged`, `/agency/:id/prs`,
+`/payment-voucher` (where deductions live), `/payout-batch`, `/shift-assignment/attendance-fixes`,
+`/shift-assignment/overtime/pending`. Two endpoints leak. Instrument:
+`_probe-outlet-privacy-sweep.ts` + `_probe-outlet-pii-scope.ts`.
+
+The rule being broken is already WRITTEN, in `redact-identity-docs.ts`: *"OWNER DECISION
+(30 Jul 2026): an outlet may see WHO is working at its venue, not who they are. Coordinates stay
+closed … and IC number, date of birth, home address and both sides of the ID photo now go with
+them."* That module exists, is correct, and is wired to `/user` — and to nothing else. Its own
+header records that the decision sat undelivered for three weeks once before, because the check
+matched a deprecated role name. This is the same decision undelivered again, on two other routes.
+
+**① `GET /pr` hands an outlet IC numbers and dates of birth.** `pr.routes.ts` imports
+`requireRole` and `requirePermission` and no redactor, so the roster rows go out whole: `icNo`,
+`profile.dob`, `phone`, `email`, `profile.race`. Live with `?pageSize=200`: **44 PRs across 2
+agencies — 5 ICs, 23 DOBs, 25 phones — when only 6 people have ever worked at that venue.** The
+44 is NOT a scoping bug: the controller deliberately serves "its approved agencies’ rosters, not
+the people who happen to have worked here before", which is the booking pool the plan sells. The
+row SET is intended; the FIELD projection was never narrowed to match. Same file already withholds
+`stats.totalPaidRm` from outlets — the field-level instinct was there, applied once.
+
+**② `GET /shift-assignment` hands an outlet a PR’s fine and their GPS trail.** The full row ships:
+`cancelFeeRm` / `cancelFeePct` / `cancelFeeChargedAt` / `cancelFeeVoucherId` (a cancellation
+PENALTY charged to the PR, and a pointer into their voucher — 1 live row), and metre-level
+`checkInLat` / `checkInLng` / `checkOutLat` / `checkOutLng` (**15 and 14 rows**, 8 decimal places).
+The coordinates directly contradict "coordinates stay closed" — that call was made when
+`attendance-fixes` was gated, and the main list was never looked at. Also in the projection:
+`leaveStatus` / `leaveProofPhotos` (a photographed MC), unpopulated at this venue, so **carried but
+unexercised** — the shape is the exposure, not the current rows.
+
+**Fix — same shape both times, not a gate.** A 403 blanks PR names on live outlet screens (that is
+exactly why `redact-identity-docs.ts` chose a flag over a guard). Wire
+`redactIdentityDocsForOutlet` onto `/pr` and `/shift-assignment` and have their mappers honour
+`req.redactIdentityDocs`, dropping `icNo`/`dob` on the PR row and the four cancel-fee columns, the
+four coordinates and `leaveProofPhotos` on the assignment row. **Check every other route that
+returns a user- or assignment-shaped payload in the same pass** — the lesson of this finding is
+that the decision was wired to one route and assumed everywhere.
+
+**③ By design, but worth re-confirming: `GET /user` is not org-scoped for an outlet.** Returns all
+**74 platform users** (74 emails, 36 phones) — every PR, every other venue’s staff, every agency
+user. Identity docs ARE redacted here and `dob` is replaced by `age` (verified), which is the
+stated mitigation, and the module explains that gating blanks two live screens. So this is the
+accepted trade rather than a defect — but the blast radius is the whole user table, and the owner
+should re-confirm that names+email+phone for every account is what "resolve PR display names" needs.
+
+**⚠️ The first run of this sweep reported these endpoints CLEAN.** Three instrument faults, all
+now fixed in the probe: `ic` does not match `icNo`; `lat`/`lng`/`leaveProof` were not in the
+vocabulary at all; and it scanned only the first 2 array elements, so a penalty on row 25 of 35 was
+invisible. What actually found the leaks was enumerating FIELD NAMES rather than pattern-matching
+them. **Do not trust a privacy sweep that has never been shown to catch a known-present field.**
+
 ### ▶ REAL SUBSCRIPTION PAYMENT — the shape is built, the money is not (27 Aug 2026)
 
 Migration 0133 + `subscription_payment` landed the parts that need no gateway account (see §10).
@@ -2520,6 +2607,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-09-03 | **An outlet could read PR IC numbers, dates of birth, cancellation FINES and metre-level GPS — fixed.** Swept all 55 outlet-reachable GETs with a real outlet token. 25 refused and **every discipline surface held** (`/pr/:id/penalties`, `/agency/:id/penalty-rules`, `/penalty-proposals`, `/uncharged`, `/agency/:id/prs`, `/payment-voucher`, `/payout-batch`, `attendance-fixes`, `overtime/pending` — all 403). Two endpoints did not. The rule was already WRITTEN in `redact-identity-docs.ts` — *"an outlet may see WHO is working at its venue, not who they are … coordinates stay closed"* — and the middleware was correct; it was **wired to `/user` and nothing else**. `GET /pr` shipped `icNo` + `profile.dob` (live: 44 PRs across 2 agencies, 5 ICs, 23 DOBs, where 6 people had ever worked there — the row SET is deliberate, the FIELDS were never narrowed). `GET /shift-assignment` shipped `cancelFee*` and `checkInLat/Lng` on the very router whose header says outlets are "left OUT even for their own venues" on positions — the specialised endpoint was gated, the general list was not. Fixed as a SHAPE, not a gate: a 403 blanks PR names on live outlet screens, which is why the module chose a flag in the first place. | backend (`/pr`, `/shift-assignment`) | ✅ backend tsc 0 · sweep re-run clean (`icNo`, `dob`, 4 coordinates, all 7 `cancelFee*` gone) · **counter-test two-sided: 7/7 fields outlet=0 / agency>0, NO LEAKS** — a one-sided check would have passed just as happily on a fix that blanked the column for everyone. Outlet History and `/pr?pageSize=500` still render. ⚠️ **The FIRST run of the sweep called all of this clean** — `\bic\b` does not match `icNo`, `lat`/`lng`/`leaveProof` were not in the vocabulary, and it scanned only the first 2 array elements so a fine on row 25 of 35 was invisible. All three fixed in the probe; what actually found the leaks was ENUMERATING field names, not pattern-matching them. |
 
 | 2026-09-03 | **Approved overtime now counts toward PR spend too** (owner’s follow-up to the commission fix two rows below). `reportCostByPrDay` gained a third field, `overtime`, read from **`shift_assignment.overtime_amount`** — the frozen figure an owner/finance user signed off — rather than from the `component=‘ot’` voucher line. The two records agree by construction (`overtime-line.ts` computes the number once and writes it both places; checked across every live row — 6/6 identical), and the column sits on the row already being aggregated, so it needs no join and **cannot** fan the wage sum out the way a second line join would. **Gated on `overtime_status = ‘approved’`, not on the amount being present** — a REJECTED claim also carries a frozen amount (live: the 279-minute claim of 2026-08-03), so `sum(overtime_amount)` alone would bill a venue for overtime its agency refused. Live data does not discriminate that gate (every non-approved row happens to hold 0), so the gate was proven against a synthetic set instead: approved 100 / rejected 50 / pending 25 / undecided null → the shipped expression returns **100**, ungated returns 175. **Deductions stay OUT as a PRIVACY rule, not a bucketing choice** (owner: *“ignore the deductions — the outlet is not supposed to see them”*): a `component=‘deduction’` line is a penalty the agency levied on its PR, i.e. their discipline record, and this row is served to OUTLET callers. The component filter is therefore an **allow-list**, never “everything receipt-backed except deduction” — a NOT-IN list would disclose the next component anyone adds and would still type-check. Currently UNEXERCISED by live data: the one deduction line carries no `receipt_id`, so it cannot reach the report’s join at all — the allow-list is what would hold if a penalty ever gained one. Also checked: zero references to deductions or penalties anywhere in the outlet portal, and voucher data sits behind `requireRole(‘admin’,‘agency’)` with only PR-scoped `/mine/*` above that guard. A full outlet-privacy sweep was NOT done. | outlet web (Reports → PR spend, P&L, Top PRs) + backend | ✅ backend tsc 0 · web tsc 0 · biome clean. Live as `jk@house.test`, 23–29 Aug: PR spend **RM 347.50** = RM 0 wage + RM 322.50 commission + **RM 25.00 OT**, net **RM 1,802.50**, margin **84%**, P&L 84/16, “PR spend by person” and Top PRs both RM 347.50 — all agreeing, no console errors. Wage control re-run: RM 16,131.11 both ways (no fan-out). |
 

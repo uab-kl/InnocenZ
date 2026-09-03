@@ -28,6 +28,10 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
+import {
+  redactAssignmentForOutlet,
+  redactAssignmentsForOutlet,
+} from '@/util/outlet-redaction';
 import { saveProofPhotosToR2 } from '@/util/pv-proof-photo';
 import { isOwnedUserKey } from '@/util/user-folder';
 import {
@@ -227,7 +231,11 @@ export class ShiftAssignmentControllerClass {
       res.status(200).json({
         success: true,
         message: 'OK',
-        data: assignments,
+        // An outlet gets the roster without the PR's fine or their coordinates.
+        // Applied at the RESPONSE rather than in the query so agency and admin
+        // callers — and every internal reader of `listPaginated` — keep the whole
+        // row: the flag is about who is being answered, not what was fetched.
+        data: req.redactIdentityDocs ? redactAssignmentsForOutlet(assignments) : assignments,
         pagination: { page, pageSize, totalCount, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
       });
     } catch (error) {
@@ -1552,7 +1560,11 @@ export class ShiftAssignmentControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      res.status(200).json({ success: true, message: 'OK', data: assignment });
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: req.redactIdentityDocs ? redactAssignmentForOutlet(assignment) : assignment,
+      });
     } catch (error) {
       logger.error('[ShiftAssignmentController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
