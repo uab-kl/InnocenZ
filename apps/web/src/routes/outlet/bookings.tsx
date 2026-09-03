@@ -40,7 +40,12 @@ import {
 	outletPrHeadcountForDate,
 	resolveDressCode,
 } from "@agency-portal/lib/outlet-demo";
+import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { OUTLET_SERVICES_ENABLED } from "@agency-portal/lib/phase-flags";
+import {
+	loadPostJobDefaults,
+	savePostJobDefaults,
+} from "@agency-portal/lib/post-job-defaults";
 import {
 	basePayFromPayTierRows,
 	clonePostJobPayTierRow,
@@ -179,9 +184,36 @@ function PostJobPage() {
 	const subscriptionPlan = useOutletEffectivePlan();
 	const outletName = outletWorkspace.outletName;
 
-	const [composer, setComposer] = useState<DraftShift>(() =>
-		newDraftShift(undefined, effectiveWorkspace),
+	/**
+	 * Which venue's remembered time + headcount to open on: the outlet id when
+	 * the session has one, the venue NAME otherwise. Never a shared key — a
+	 * two-venue operator must not carry venue A's club night into venue B.
+	 */
+	const postJobDefaultsKey = useMemo(
+		() => getOutletIdentity()?.outletId || outletName,
+		[outletName],
 	);
+
+	/**
+	 * A fresh composer, opened on whatever this venue LAST POSTED (owner, 2 Sep
+	 * 2026: "the setted time and the people needed will be store and keep same
+	 * for the next post shift"). Everything else still starts empty; only the
+	 * time and the headcount carry over, until the next post changes them.
+	 */
+	const freshDraft = (patch?: Partial<Omit<DraftShift, "id">>) => {
+		// An explicit `undefined` in the patch must NOT erase what was remembered:
+		// a template that names no time should still open on the venue's usual
+		// one, and `{ ...remembered, ...{ shiftTime: undefined } }` would blank it.
+		const named = Object.fromEntries(
+			Object.entries(patch ?? {}).filter(([, value]) => value !== undefined),
+		) as Partial<Omit<DraftShift, "id">>;
+		return newDraftShift(
+			{ ...loadPostJobDefaults(postJobDefaultsKey), ...named },
+			effectiveWorkspace,
+		);
+	};
+
+	const [composer, setComposer] = useState<DraftShift>(() => freshDraft());
 
 	// The step BEFORE the form (owner's flow): null = show the event gallery,
 	// "blank" = start fresh, a template = the card the composer was filled from.
@@ -192,27 +224,26 @@ function PostJobPage() {
 
 	const applyTemplate = (tpl: ShiftTemplate) => {
 		setComposer({
-			...newDraftShift(
-				{
-					eventKind: tpl.eventKind,
-					specialEventType:
-						tpl.eventKind === "special"
-							? ((tpl.specialEventType ??
-									"vip") as DraftShift["specialEventType"])
-							: undefined,
-					customSpecialEventName: tpl.customSpecialEventName ?? undefined,
-					shiftTime: tpl.slot ?? undefined,
-					quantity: tpl.quantity ?? undefined,
-					langs: tpl.languages
-						? tpl.languages
-								.split(",")
-								.map((x) => x.trim())
-								.filter(Boolean)
+			// Through freshDraft, so a template that names no slot or headcount
+			// still opens on the venue's remembered pair rather than 22:00 / 6.
+			...freshDraft({
+				eventKind: tpl.eventKind,
+				specialEventType:
+					tpl.eventKind === "special"
+						? ((tpl.specialEventType ??
+								"vip") as DraftShift["specialEventType"])
 						: undefined,
-					dressCode: tpl.dressCode ?? undefined,
-				},
-				effectiveWorkspace,
-			),
+				customSpecialEventName: tpl.customSpecialEventName ?? undefined,
+				shiftTime: tpl.slot ?? undefined,
+				quantity: tpl.quantity ?? undefined,
+				langs: tpl.languages
+					? tpl.languages
+							.split(",")
+							.map((x) => x.trim())
+							.filter(Boolean)
+					: undefined,
+				dressCode: tpl.dressCode ?? undefined,
+			}),
 			// newDraftShift returns a fixed shape; the template link rides on top.
 			templateId: tpl.id,
 			templateName: tpl.name,
@@ -704,7 +735,23 @@ function PostJobPage() {
 		}));
 
 		const resetForm = () => {
-			setComposer(newDraftShift(undefined, effectiveWorkspace));
+			/**
+			 * The post went through, so what was just posted becomes what the next
+			 * shift opens on. Only ever reached from the two SUCCESS paths — an
+			 * abandoned draft or a post the server refused is not a choice to keep.
+			 *
+			 * The LAST shift in the batch wins: posting several at once, it is the
+			 * one configured most recently. Written before the reset below, because
+			 * `freshDraft()` is what reads it straight back.
+			 */
+			const lastPosted = shiftsToPost[shiftsToPost.length - 1];
+			if (lastPosted) {
+				savePostJobDefaults(postJobDefaultsKey, {
+					shiftTime: lastPosted.shiftTime,
+					quantity: lastPosted.quantity,
+				});
+			}
+			setComposer(freshDraft());
 			setEventChosen(null);
 			setDraftShifts([]);
 			setEditingShiftId(null);
@@ -819,7 +866,7 @@ function PostJobPage() {
 						type="button"
 						className="iz-post-job-return"
 						onClick={() => {
-							setComposer(newDraftShift(undefined, effectiveWorkspace));
+							setComposer(freshDraft());
 							setEventChosen(null);
 						}}
 					>
@@ -959,9 +1006,7 @@ function PostJobPage() {
 												template={eventChosen}
 												eventName={composer.event}
 												onChange={() => {
-													setComposer(
-														newDraftShift(undefined, effectiveWorkspace),
-													);
+													setComposer(freshDraft());
 													setEventChosen(null);
 												}}
 											/>
