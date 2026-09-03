@@ -34,6 +34,11 @@ export function voucherExportLines(bundle: {
     .map((line) => toReceiptLineDTO(line))
     .map((l) => ({
       kind: l.kind,
+      // The typed column travels WITH the ref-derived kind, because one of them
+      // is wrong for overtime — see `exportLineLabel`.
+      component: l.component,
+      // The item as logged — what the description cell prints.
+      item: l.item,
       lineDate: l.lineDate,
       outlet: l.outlet,
       quantity: l.quantity,
@@ -2269,8 +2274,38 @@ export class PaymentVoucherControllerClass {
       }
 
       const actor = getActor(req);
+      /*
+       * WHOEVER SIGNED IT, BY NAME — the owner or the finance head.
+       *
+       * `financeHeadName` held the signer's UUID: the fallback was `?? actor`,
+       * and `getActor` returns `req.user.id`. So every signed voucher printed
+       * "Name: 96cb6034-47b9-4bd9-8ad6-17a555d40b9a" under "Agency (Approved
+       * by)" — on both documents, next to a real hand-drawn signature
+       * (reported 3 Sep 2026). The schema's own docstring already said what
+       * this should be: *"the server falls back to the signed-in account: the
+       * person clicking is the person signing"*. It fell back to the account's
+       * KEY instead of the account's NAME.
+       *
+       * The resolved name WINS over any `financeHeadName` in the body, rather
+       * than the old client-first order. Same docstring, next sentence:
+       * *"letting a caller type any name is how a signature stops meaning
+       * anything."* No shipped client sends the field; it stays accepted so an
+       * older build does not 400, and is simply not believed.
+       *
+       * The id remains the last resort. A signature with an unresolvable signer
+       * is worth less than one with a name, but it is still a record of who
+       * clicked — and blanking it would destroy the only identifier there is.
+       */
+      const [signerName, signerRole] = await Promise.all([
+        this.paymentVoucherRepository.getUserDisplayName(actor),
+        // AND IN WHAT CAPACITY — an owner signing must not be labelled the
+        // finance head. Frozen here rather than resolved at render time; see
+        // `financeHeadRole` on the model.
+        this.paymentVoucherRepository.getUserRoleName(actor),
+      ]);
       const voucher = await this.paymentVoucherRepository.update(id, {
-        financeHeadName: parsed.data.financeHeadName ?? actor,
+        financeHeadName: signerName ?? actor,
+        financeHeadRole: signerRole ?? undefined,
         financeHeadSignedAt: new Date(),
         financeHeadSignature: JSON.stringify(parsed.data.signature),
         updatedBy: actor,
@@ -4655,6 +4690,63 @@ export class PaymentVoucherControllerClass {
     }
   }
 
+  /**
+   * THE AGENCY ASKS FOR THE SAME DOWNLOAD LINK, for a voucher in its own org.
+   *
+   * The twin of `createMyVoucherExportTicket`, and deliberately the same ticket
+   * and the same three paths: until 3 Sep 2026 the agency portal built its OWN
+   * PDF in the browser while the PR downloaded this one, so the two parties to
+   * a signed document were reading two different renderings of it — different
+   * line wording, a different payee code, a different logo, one dated and one
+   * not. Pointing the portal here retires that second renderer entirely; the
+   * document is now produced in exactly one place for both sides.
+   *
+   * Authorised like `getById`: admin, or the voucher's own agency. A voucher
+   * outside the caller's org answers 404 rather than 403, so this route cannot
+   * be used to discover that a PV number exists.
+   */
+  async createVoucherExportTicket(req: Request, res: Response) {
+    try {
+      const voucherId = uuidParam(req.params.id);
+      const voucher = voucherId
+        ? await this.paymentVoucherRepository.getById(voucherId)
+        : null;
+      if (!voucher)
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && voucher.agencyId !== scope.agencyId) {
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const ticket = issueExportTicket(voucher.id);
+      return res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: {
+          xlsxPath: `/payment-voucher/export/${ticket}/voucher.xlsx`,
+          pdfPath: `/payment-voucher/export/${ticket}/voucher.pdf`,
+          printPath: `/payment-voucher/export/${ticket}/print`,
+          expiresInSeconds: 300,
+        },
+      });
+    } catch (error) {
+      logger.error(
+        '[PaymentVoucherController.createVoucherExportTicket] Error:',
+        error,
+      );
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
   /** Ticket download — reached by the phone's browser, no JWT. */
   async exportTicketExcel(req: Request, res: Response) {
     try {
@@ -4713,9 +4805,27 @@ export class PaymentVoucherControllerClass {
       });
       const filename = `${voucherRef(bundle.voucher)}-payment-voucher.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
+      /*
+       * INLINE — open it, do not download it.
+       *
+       * This said `attachment`, which was right when the only caller was a
+       * phone handing the link to the system browser. The agency portal now
+       * opens the same link in a tab (3 Sep 2026), and `attachment` turns that
+       * tab into an instant download and a blank window: the reader wanted to
+       * LOOK at the voucher before signing anything, and got a file in their
+       * downloads folder instead.
+       *
+       * Inline is also what `exportMyVoucherPdf` already sends, so the two
+       * routes that serve this identical PDF now behave identically too — the
+       * point of routing both parties through one document in the first place.
+       * Every browser still offers download and print from its PDF viewer, so
+       * nothing is lost; `?download=1` forces the old behaviour for a caller
+       * that genuinely wants a file.
+       */
+      const asDownload = req.query.download === '1';
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="${filename}"`,
+        `${asDownload ? 'attachment' : 'inline'}; filename="${filename}"`,
       );
       return res.status(200).send(pdf);
     } catch (error) {

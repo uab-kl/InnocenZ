@@ -73,6 +73,19 @@ router.post(
   ),
 );
 
+// The AGENCY's twin of the line above — same ticket, same document. Its own
+// route rather than a widened '/mine' one, because '/mine' derives the PR
+// server-side and must keep refusing anyone who is not that PR.
+//
+// Declared here, after '/mine/...', for the reason every route in this file is
+// ordered: '/:id/export-ticket' would otherwise let 'mine' match ':id'.
+router.post(
+  '/:id/export-ticket',
+  paymentVoucherController.createVoucherExportTicket.bind(
+    paymentVoucherController,
+  ),
+);
+
 // A PR raises / withdraws a dispute on its OWN issued voucher (§3 F). 3- and
 // 4-segment paths, so they never collide with the 2-segment '/mine/lines'.
 router.post(

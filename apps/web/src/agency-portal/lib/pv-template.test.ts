@@ -99,3 +99,52 @@ describe("buildAgencyPayee — demo bank details", () => {
 		expect(payee.accountNo).toBe("5142 8890 1123");
 	});
 });
+
+/**
+ * THE "#" COLUMN COUNTS FROM 1.
+ *
+ * Reported 3 Sep 2026: a 19-line voucher printed rows 0…18. `PrPvRow.i` is
+ * `payment_voucher_line.sort_order`, which is zero-based, and the template was
+ * printing it raw — so every PR received a document whose first item was "0"
+ * and whose last number was one short of its own line count.
+ */
+describe("buildPvTemplateLines — the printed sequence", () => {
+	const row = (i: number, desc: string, amt: number) => ({
+		i,
+		date: "2026-08-23",
+		day: "",
+		outlet: "JK House",
+		desc,
+		qty: 1,
+		amt,
+		ref: "",
+	});
+
+	it("numbers from 1 even though sort_order starts at 0", async () => {
+		const { buildPvTemplateLines } = await import("./pv-template");
+		const lines = buildPvTemplateLines({
+			rows: [row(0, "Tips", 7.5), row(1, "Havoc", 300), row(2, "Donjulio", 20)],
+			deduct: 0,
+		} as never);
+		expect(lines.map((l) => l.seq)).toEqual(["1", "2", "3"]);
+	});
+
+	it("stays contiguous when sort_order has a gap", async () => {
+		const { buildPvTemplateLines } = await import("./pv-template");
+		const lines = buildPvTemplateLines({
+			rows: [row(0, "Tips", 7.5), row(3, "Havoc", 300)],
+			deduct: 0,
+		} as never);
+		expect(lines.map((l) => l.seq)).toEqual(["1", "2"]);
+	});
+
+	it("continues the sequence onto the deductions row", async () => {
+		const { buildPvTemplateLines } = await import("./pv-template");
+		const lines = buildPvTemplateLines({
+			rows: [row(0, "Tips", 7.5), row(1, "Havoc", 300)],
+			deduct: 50,
+		} as never);
+		expect(lines.map((l) => l.seq)).toEqual(["1", "2", "3"]);
+		expect(lines.at(-1)?.description).toBe("Deductions");
+	});
+});

@@ -61,6 +61,69 @@ export function parseSignatureInk(
 	}
 }
 
+/** The rectangle the ink actually occupies, in the pad's own coordinates. */
+export interface SignatureInkBounds {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+
+/**
+ * A little air around the mark, as a fraction of its longer side, so a stroke
+ * does not sit flush against the edge of its box.
+ */
+const INK_BOUNDS_PAD = 0.06;
+
+/**
+ * WHERE THE MARK IS — not where the pad was.
+ *
+ * A signature is stored with the dimensions of the CANVAS it was drawn on, and
+ * those differ wildly by device: the agency's web pad is 1794 x 160 while a
+ * phone's is 354 x 120. Rendering the whole pad scales the empty canvas along
+ * with the ink, so on PV-000010 the owner's signature — which occupies 33% of
+ * its pad's width, starting a third of the way in — drew 59px wide beside a
+ * PR signature that drew 126px. Same box, same rules, one mark less than half
+ * the size of the other, purely because of what it was signed on.
+ *
+ * Trimming to the strokes is NOT distortion: the aspect ratio of the mark
+ * itself is untouched, only the blank margins around it are dropped. That
+ * distinction is why this returns a box rather than a scale factor — callers
+ * fit the mark into their own space and must keep preserving its ratio.
+ *
+ * Returns null when the ink has no extent in a direction (a single point, or a
+ * perfectly straight horizontal line). Those cannot be trimmed without dividing
+ * by zero, and the caller falls back to the pad — a rare mark drawn small is a
+ * better outcome than one that fails to render.
+ *
+ * ⚠️ The bounds are NOT clamped to the pad. PV-000010's agency ink is 179 tall
+ * inside a 160-tall pad: the capture let strokes run past the canvas, and the
+ * old full-pad viewBox therefore cut the bottom off the signature. Honouring
+ * the real extent shows the whole mark.
+ */
+export function signatureInkBounds(
+	ink: SignatureInk,
+): SignatureInkBounds | null {
+	let minX = Number.POSITIVE_INFINITY;
+	let minY = Number.POSITIVE_INFINITY;
+	let maxX = Number.NEGATIVE_INFINITY;
+	let maxY = Number.NEGATIVE_INFINITY;
+	for (const stroke of ink.strokes) {
+		for (const [x, y] of stroke) {
+			if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+			if (x < minX) minX = x;
+			if (x > maxX) maxX = x;
+			if (y < minY) minY = y;
+			if (y > maxY) maxY = y;
+		}
+	}
+	const w = maxX - minX;
+	const h = maxY - minY;
+	if (!(w > 0) || !(h > 0)) return null;
+	const pad = Math.max(w, h) * INK_BOUNDS_PAD;
+	return { x: minX - pad, y: minY - pad, w: w + pad * 2, h: h + pad * 2 };
+}
+
 function pointsAttr(stroke: [number, number][]): string {
 	return stroke
 		.filter((p) => Array.isArray(p) && p.length >= 2)

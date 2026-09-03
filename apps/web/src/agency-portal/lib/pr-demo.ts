@@ -426,6 +426,8 @@ export interface PrPaymentVoucher {
 	status: PrPvStatus;
 	/** Agency Finance Head e-sign — always present before PR receives PV */
 	financeHeadName: string;
+	/** 'Owner' | 'Finance' | … — see PaymentVoucher.financeHeadRole. */
+	financeHeadRole?: string | null;
 	financeHeadSignedAt: string;
 	/** Finance Head stored e-signature (PNG/SVG data URL) — DEMO vouchers only */
 	financeHeadSignatureDataUrl?: string;

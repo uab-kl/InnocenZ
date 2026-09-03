@@ -4,10 +4,13 @@ import {
 	pvLineInputsFromRows,
 } from "@agency-portal/lib/payment-voucher-map";
 import type { PrPaymentVoucher, PrPvRow } from "@agency-portal/lib/pr-demo";
+import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
+import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	fetchPaymentVoucher,
 	fetchPaymentVouchers,
@@ -104,6 +107,9 @@ export function useVoucherPayeeBank(voucherId: string | null) {
 export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 	const { enabled = true } = params;
 	const { logout } = useAuth();
+	const { t } = usePortalLocale();
+	// The portal-wide toaster, same one the roster mutations write to.
+	const { toast } = useStore();
 	const queryClient = useQueryClient();
 	const invalidate = () => queryClient.invalidateQueries({ queryKey: PV_KEY });
 
@@ -128,6 +134,32 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 		mutationFn: (vars: { id: string; input: UpdatePaymentVoucherInput }) =>
 			updatePaymentVoucher(vars.id, vars.input, logout),
 		onSuccess: invalidate,
+		/*
+		 * EVERY REFUSAL ON THIS ENDPOINT WAS SILENT UNTIL 3 SEP 2026.
+		 *
+		 * `patch()` is `mutate`, not `mutateAsync`, so a rejected promise had
+		 * nowhere to go: React Query has no default error UI and this app
+		 * installs no MutationCache handler. Send, re-send, resolve-dispute,
+		 * override, mark-paid and the dispute line edit all ride this one
+		 * mutation — six actions that answered a 409 by doing nothing visible at
+		 * all. On PV-000009 that read as a dead button: the server was refusing
+		 * with a sentence naming both undecided overtime claims, and the screen
+		 * dropped it.
+		 *
+		 * The server's own message is what gets shown, never a generic one. These
+		 * refusals are written to be read by the person who hit them — they name
+		 * the dates, the receipts, the day to come back on — and replacing that
+		 * with "something went wrong" would throw away the only part that tells
+		 * the agency what to do next. The fallback is for the case where there is
+		 * no message: a network drop, a 502, a proxy.
+		 *
+		 * `warn`, not `error`: a gate refusing an early send is the system
+		 * working. It is the same tone the roster's travel-gap warning uses.
+		 */
+		onError: (error) => {
+			const failure = toMutationError(error, t.agencyPv.voucherUpdateRefused);
+			toast(failure?.message ?? t.agencyPv.voucherUpdateRefused, "warn");
+		},
 	});
 
 	const patch = (id: string, input: UpdatePaymentVoucherInput) =>

@@ -169,8 +169,23 @@ export function pvPdfLineDescription(r: PrPaymentVoucher["rows"][number]) {
 }
 
 export function buildPvTemplateLines(pv: PrPaymentVoucher): PvTemplateLine[] {
-	const lines: PvTemplateLine[] = pv.rows.map((r) => ({
-		seq: String(r.i),
+	/*
+	 * The "#" column is a DISPLAY sequence, counted from 1 — not the row's
+	 * `i`.
+	 *
+	 * `i` is `payment_voucher_line.sort_order`, which is ZERO-based, so every
+	 * printed voucher opened at row 0 and ended one short of its own line count
+	 * (reported 3 Sep 2026: "#" ran 0…18 on a 19-line document). Numbering off
+	 * the array also survives a gap in `sort_order` — a deleted line would
+	 * otherwise print 0,1,3 — and it lines up with the Deductions row below,
+	 * which has always used `lines.length + 1`.
+	 *
+	 * `i` itself is left alone: it is the STORAGE key other readers match a row
+	 * back to its line by, and renumbering it to please a column heading would
+	 * trade a cosmetic bug for a data one.
+	 */
+	const lines: PvTemplateLine[] = pv.rows.map((r, index) => ({
+		seq: String(index + 1),
 		description: pvPdfLineDescription(r),
 		unit: r.qty,
 		unitPrice: r.qty > 0 ? r.amt / r.qty : r.amt,
@@ -263,7 +278,8 @@ export function buildAgencyPayee(
 	// The fixture used to supply the working name and the phone as well as the
 	// bank. Gating it off without replacing THOSE printed the legal name twice,
 	// a payee code derived from the wrong string, and an empty phone.
-	const displayName = managed?.name ?? realBank?.nickname ?? demo?.name ?? pv.prName;
+	const displayName =
+		managed?.name ?? realBank?.nickname ?? demo?.name ?? pv.prName;
 	/*
 	 * ⚠️ THE LEGAL NAME, NEVER THE NICKNAME.
 	 *
@@ -277,10 +293,29 @@ export function buildAgencyPayee(
 	 * nickname in the account-name field.
 	 */
 	const icName =
-		managed?.icName ?? realBank?.name ?? demo?.first ?? pv.prName ?? displayName;
+		managed?.icName ??
+		realBank?.name ??
+		demo?.first ??
+		pv.prName ??
+		displayName;
 	return payeeFromPaymentVoucher(pv, {
-		code:
-			managed?.id ?? (demo ? derivePrCode(displayName, demo.ic) : undefined),
+		/*
+		 * DERIVED FROM REAL FACTS, on every session.
+		 *
+		 * Two bugs sat in the old expression. `managed?.id` printed the PR's
+		 * UUID into a cell a human reads. And the fallback derived the code from
+		 * `demo.ic` — the demo fixture's IC — so a REAL agency printing a REAL
+		 * voucher got a code computed from demo data, which is precisely what
+		 * .cursor/rules/no-demo-data-on-real-sessions.mdc forbids. It went
+		 * unnoticed because the seeded PRs carry the same ICs as the fixtures,
+		 * so the demo-derived answer happened to match the real one.
+		 *
+		 * Now: the working name and the REAL IC off the voucher. The backend
+		 * export derives the identical code from the identical facts
+		 * (`derivePayeeCode` in payment-voucher-excel.ts) so the agency's copy
+		 * and the PR's copy cannot disagree about who this document is for.
+		 */
+		code: derivePrCode(displayName, managed?.ic ?? pv.prIc ?? undefined),
 		phone: managed?.mobile ?? realBank?.phone ?? demo?.mobile,
 		nickname: displayName,
 		name: icName,

@@ -23,6 +23,9 @@ import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model';
+import { RoleTable } from '@/features/rbac/role/role.model';
+import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
+import { klToday } from './payment-voucher-week';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { prepareLine, resolveComponent } from './payment-voucher-component';
 import {
@@ -868,6 +871,8 @@ export class PaymentVoucherRepositoryClass {
       postcode: string | null;
       state: string | null;
       country: string | null;
+      /** R2 object key for the issuing agency's own letterhead logo. */
+      logoImage: string | null;
     } | null;
     pr: {
       name: string;
@@ -892,6 +897,7 @@ export class PaymentVoucherRepositoryClass {
           agencyPostcode: AgencyTable.postcode,
           agencyState: AgencyTable.state,
           agencyCountry: AgencyTable.country,
+          agencyLogo: AgencyTable.logoImage,
           // `main.pr` is gone — `prId` IS the `userId` now, so identity comes
           // straight off the account: name/nickname off `user`/`user_profile`,
           // IC off `user_profile.id_no`, phone off the account (one fact, one
@@ -941,6 +947,7 @@ export class PaymentVoucherRepositoryClass {
               postcode: row.agencyPostcode,
               state: row.agencyState,
               country: row.agencyCountry,
+              logoImage: row.agencyLogo,
             }
           : null,
         pr: row.prName
@@ -1041,6 +1048,61 @@ export class PaymentVoucherRepositoryClass {
    * decide what to tell the PR — a self-log lost to a swallowed exception is the
    * failure mode this whole area is being repaired for.
    */
+  /**
+   * THE NAME TO PRINT AGAINST A SIGNATURE.
+   *
+   * Same precedence as `prName` on the export bundle — profile full name, then
+   * account username — so both halves of a dual-signed voucher name people the
+   * same way. Null when the account is gone or nameless; the caller decides what
+   * a nameless signer prints as.
+   *
+   * Lives here rather than being a second user lookup elsewhere because the one
+   * fact it returns is already being read three times in this file, and a
+   * fourth spelling of it is how the agency's half of a voucher starts naming
+   * people differently from the PR's half.
+   */
+  async getUserDisplayName(userId: string): Promise<string | null> {
+    try {
+      const [row] = await db
+        .select({
+          name: sql<string | null>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
+        })
+        .from(UserTable)
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
+        .where(eq(UserTable.id, userId));
+      return row?.name ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getUserDisplayName] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * The capacity to record against a signature — 'Owner', 'Finance', …
+   *
+   * Read at SIGNING time and then frozen onto the voucher; see
+   * `financeHeadRole`. Null when the account holds no role, which is a real
+   * answer: the document then says who signed without claiming a title.
+   *
+   * Takes the FIRST role. Portal accounts hold one; if that ever stops being
+   * true this must take the one that authorised the signature, not whichever
+   * row sorts first — an ordering accident is not an attestation.
+   */
+  async getUserRoleName(userId: string): Promise<string | null> {
+    try {
+      const [row] = await db
+        .select({ roleName: RoleTable.roleName })
+        .from(UserRoleTable)
+        .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
+        .where(eq(UserRoleTable.userId, userId))
+        .limit(1);
+      return row?.roleName ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getUserRoleName] Error:', error);
+      return null;
+    }
+  }
+
   async getOrCreateCurrentWeekDraft(data: {
     prId: string;
     userId?: string | null;
@@ -1102,6 +1164,27 @@ export class PaymentVoucherRepositoryClass {
         cycle: 'Weekly',
         weekStart: data.weekStart,
         weekEnd: data.weekEnd,
+        /*
+         * THE VOUCHER DATE, stamped the day the voucher is raised.
+         *
+         * Missing entirely until 3 Sep 2026, when the printed document was
+         * reported as showing "Voucher Date: —". Only the WEEKLY GENERATOR set
+         * it (`issuedDate = params.issuedDate ?? todayIso()`); a voucher born
+         * here — the PR's very first self-log of the week, which is how most
+         * of them are born — got NULL and stayed NULL for its whole life. Two
+         * documents for the same company therefore disagreed about whether a
+         * payment voucher has a date at all, depending only on which path
+         * happened to create it.
+         *
+         * `klToday()`, matching the generator exactly. NOT `new Date()` in UTC:
+         * that is the bug `todayIso`'s own docstring records, where a cron at
+         * 02:00 KL stamped every voucher with the previous day.
+         *
+         * `dueDate` is deliberately left alone — the generator does not set it
+         * either, and inventing a payment deadline here would be this project's
+         * recurring defect of writing a plausible value where it has no fact.
+         */
+        issuedDate: klToday(),
         subtotal: '0.00',
         deduction: '0.00',
         net: '0.00',
