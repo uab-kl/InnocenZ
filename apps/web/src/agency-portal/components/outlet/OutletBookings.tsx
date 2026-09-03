@@ -29,6 +29,7 @@ import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial
 import { pickLiveShift } from "@agency-portal/lib/outlet-live-shift";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { PR_AGENCY_TIED_OFFERS } from "@agency-portal/lib/pr-features";
+import { parseSlotRange } from "@agency-portal/lib/shift-window";
 import { specialServicesForOutlet } from "@agency-portal/lib/special-service-actions";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { ChevronDown } from "lucide-react";
@@ -117,9 +118,30 @@ export function OutletBookings({
 	 */
 	const alsoTodayShifts = useMemo(() => {
 		const todayIso = getLiveTodayIso();
-		return futureShifts.filter(
-			(s) =>
-				resolveOutletShiftDateIso(s.date, s.dateIso, todayIso) === todayIso,
+		return (
+			futureShifts
+				.filter(
+					(s) =>
+						resolveOutletShiftDateIso(s.date, s.dateIso, todayIso) === todayIso,
+				)
+				/*
+				 * EARLIEST FIRST (owner, 3 Sep 2026: "arrange the posted shift time
+				 * from earlier to later"). The hook returns shifts in the order the
+				 * API sends them, which is not the order a night runs in.
+				 *
+				 * `parseSlotRange` is the shared parser the clash checks use, so an
+				 * overnight 22:00–04:00 sorts by when it STARTS rather than wrapping
+				 * to the front. A slot that is not a time range at all returns null;
+				 * those sink to the end rather than sorting as midnight, since
+				 * "unknown" is not "earliest".
+				 */
+				.sort((a, b) => {
+					const aStart =
+						parseSlotRange(a.shift)?.startMin ?? Number.MAX_SAFE_INTEGER;
+					const bStart =
+						parseSlotRange(b.shift)?.startMin ?? Number.MAX_SAFE_INTEGER;
+					return aStart - bStart;
+				})
 		);
 	}, [futureShifts]);
 

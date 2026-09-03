@@ -762,6 +762,25 @@ export function PaymentScreen({
     string | null
   >(null);
   const [disputeNote, setDisputeNote] = useState('');
+  /**
+   * The bucket and day the claim is on, in ENGLISH — "Tips · THU 3".
+   *
+   * Held as a plain string rather than derived at render like every label on
+   * `DisputeTarget`, and that is deliberate rather than an oversight: this is
+   * not a label, it is part of the note POSTED to the agency, which must read
+   * the same in their inbox whatever language the PR's phone is set to. It
+   * carries no amount, because the amount depends on whether the PR narrowed
+   * the claim to specific lines.
+   */
+  const [disputeNoteBase, setDisputeNoteBase] = useState('');
+  /**
+   * Has the PR typed their own note? Once they have, nothing regenerates it.
+   *
+   * Without this the auto-clarify below would erase a sentence someone wrote
+   * by hand the moment they changed the reason chip — losing the one part of a
+   * claim the app did not write itself.
+   */
+  const [disputeNoteDirty, setDisputeNoteDirty] = useState(false);
   const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
   /** Optional proof kept with submitted disputes (image upload is still local). */
   const [disputePhotoMap, setDisputePhotoMap] = useState<
@@ -1071,8 +1090,14 @@ export function PaymentScreen({
       // ENGLISH ON PURPOSE — this is the note POSTED to the agency, not a label.
       // `noteLabel`, not `label(t)`: the claim reads the same in the agency's
       // inbox whatever language the PR's phone is set to.
+      //
+      // Only the bucket and the day are frozen here. The reason and the lines
+      // are appended by the effect below, which re-runs as the PR changes
+      // either — so the note keeps describing what is actually selected.
+      setDisputeNoteBase(`${row.noteLabel} · ${day.day} ${day.date}`);
+      setDisputeNoteDirty(false);
       setDisputeNote(
-        `${row.noteLabel} · ${day.day} ${day.date} · ${formatRM(amount)} — please verify`,
+        `${DISPUTE_PRESETS[0]} · ${row.noteLabel} · ${day.day} ${day.date} · ${formatRM(amount)} — please verify`,
       );
       setDisputePhotos([]);
     }
@@ -1270,6 +1295,46 @@ export function PaymentScreen({
   useEffect(() => {
     setDisputePickedItems(disputeItems.map((i) => i.id));
   }, [disputeItems]);
+
+  /**
+   * THE NOTE FOLLOWS THE SELECTION (owner, 3 Sep 2026: "this need follow from
+   * which items pr selected, then the quick reason and the description of the
+   * quick reason need to auto clarify also").
+   *
+   * It used to be written once, on the tap, as "Tips · THU 3 · RM 230.00 —
+   * please verify": the BUCKET and the bucket's whole total. So a PR who then
+   * picked "Tips × 4 · RM 30.00" and the reason "Wrong commission" sent the
+   * agency a note naming neither — the reviewer read RM 230.00 for a claim
+   * about RM 30.00, and had to open the receipt to learn which line was wrong.
+   *
+   * Now it recomposes as either changes: the reason first, then the exact
+   * lines ticked, falling back to the bucket total when the PR is contesting
+   * the whole cell (no picker shown, or nothing ticked). Left alone the moment
+   * the PR types — see `disputeNoteDirty`.
+   *
+   * ENGLISH throughout, like the base: the agency reads one wording whatever
+   * the phone's language.
+   */
+  useEffect(() => {
+    if (disputeMode !== 'dispute' || disputeNoteDirty || !disputeNoteBase) {
+      return;
+    }
+    const picked = disputeItems.filter((i) => disputePickedItems.includes(i.id));
+    const detail = picked.length
+      ? picked.map((i) => i.label).join(' · ')
+      : formatRM(disputeTarget?.amount ?? 0);
+    setDisputeNote(
+      `${disputePreset} · ${disputeNoteBase} · ${detail} — please verify`,
+    );
+  }, [
+    disputeMode,
+    disputeNoteDirty,
+    disputeNoteBase,
+    disputePreset,
+    disputeItems,
+    disputePickedItems,
+    disputeTarget,
+  ]);
 
   /** A chooser was shown and the PR has not answered it yet. */
   const noReceiptPicked =
@@ -3056,7 +3121,12 @@ export function PaymentScreen({
                   </View>
                   <TextInput
                     value={disputeNote}
-                    onChangeText={setDisputeNote}
+                    // Typing takes ownership: from here the reason and item
+                    // chips stop rewriting what the PR wrote.
+                    onChangeText={(next) => {
+                      setDisputeNoteDirty(true);
+                      setDisputeNote(next);
+                    }}
                     style={[
                       styles.input,
                       {
