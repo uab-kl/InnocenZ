@@ -96,30 +96,32 @@ export function OutletBookings({
 		: visibleShifts;
 
 	/**
-	 * TODAY'S OTHER SHIFTS — everything running today that is not the live one.
+	 * EVERY SHIFT RUNNING TODAY, earliest first — one list, in the order the
+	 * night actually runs (owner, 3 Sep 2026: "the shift put together at same
+	 * section, then arrange from earlier to latest").
 	 *
-	 * Today rendered `liveShift` and nothing else, so a venue working two shifts
-	 * in a night could see only one of them, and the PRs on the other were
-	 * invisible on the page that exists to say who is working (owner, 3 Sep
-	 * 2026: "the outlet cannot track that shift, where is the other shift").
-	 * Emhub had exactly that: a 10:00–11:00 shift with nobody on it, and an
-	 * 11:00–12:00 "tt" whose PR had already checked in and out — Today showed
-	 * the first and reported "No PRs assigned for tonight yet".
+	 * Today used to render `liveShift` alone, so a venue working two shifts in a
+	 * night saw only one and the PRs on the other were invisible on the page
+	 * that exists to say who is working. Emhub had exactly that: a 10:00–11:00
+	 * shift with nobody on it, and an 11:00–12:00 "tt" whose PR had already
+	 * checked in and out — Today showed the first and reported "No PRs assigned
+	 * for tonight yet". The first fix listed the rest under a separate "Also
+	 * today" heading; this one drops that split, because two cards describing
+	 * the same night are one section.
 	 *
-	 * `pickLiveShift` is deliberately NOT touched. It answers "which shift is
-	 * RUNNING", it is unit-tested, and its own comment records three past wrong
-	 * answers; the page was wrong to show only its winner, not wrong about the
-	 * winner. So the others are ADDED beneath, collapsed, rather than the pick
-	 * being widened.
+	 * `pickLiveShift` is deliberately still NOT touched. It answers "which shift
+	 * is RUNNING" for the panels below, it is unit-tested, and its own comment
+	 * records three past wrong answers. What changed is only which cards the
+	 * page lists, never which shift it calls live.
 	 *
-	 * Scoped to today by the shift's own resolved date — `futureShifts` spans
+	 * Scoped to today by the shift's own resolved date — `visibleShifts` spans
 	 * the fortnight the hook fetches, and next Tuesday's booking is the
 	 * Calendar's business, not tonight's.
 	 */
-	const alsoTodayShifts = useMemo(() => {
+	const todayShifts = useMemo(() => {
 		const todayIso = getLiveTodayIso();
 		return (
-			futureShifts
+			visibleShifts
 				.filter(
 					(s) =>
 						resolveOutletShiftDateIso(s.date, s.dateIso, todayIso) === todayIso,
@@ -143,7 +145,7 @@ export function OutletBookings({
 					return aStart - bStart;
 				})
 		);
-	}, [futureShifts]);
+	}, [visibleShifts]);
 
 	const defaultOpenId = variant === "future" ? futureShifts[0]?.id : undefined;
 
@@ -253,7 +255,23 @@ export function OutletBookings({
 
 	return (
 		<div className="space-y-2">
-			{variant === "home" && liveShift && renderShiftCard(liveShift, true)}
+			{/* Every shift tonight, in time order, as ONE section. */}
+			{variant === "home" && todayShifts.map((s) => renderShiftCard(s, true))}
+			{/*
+			 * WHICH shift the panels below describe. They are computed from
+			 * `liveShift` alone, and now that the cards sit together above them
+			 * they no longer touch the card they belong to — without this line the
+			 * labour cost of the 10:00 shift would read as the 11:00 shift's,
+			 * which is a money figure attached to the wrong night's work.
+			 */}
+			{variant === "home" && liveShift && todayShifts.length > 1 && (
+				<p className="iz-tiny iz-muted2 mt-3">
+					{fill(t.outletPanels.panelsCoverShift, {
+						event: liveShift.event,
+						slot: liveShift.shift ?? "",
+					})}
+				</p>
+			)}
 			{variant === "home" && liveShift && (
 				<OutletTodayOperationPanel
 					shift={liveShift}
@@ -267,26 +285,6 @@ export function OutletBookings({
 			)}
 			{variant === "home" && liveShift && liveShift.status === "confirmed" && (
 				<OutletCutLossActions shift={liveShift} />
-			)}
-			{/*
-			 * The rest of tonight, BELOW the live shift's own panels rather than
-			 * between them: PR tonight, live sales and labour cost all describe the
-			 * live shift, and a second card wedged in above them would read as
-			 * theirs. Each opens to the same detail panel, so the venue can see who
-			 * is on the 11:00 shift without leaving Today for the Calendar.
-			 */}
-			{variant === "home" && alsoTodayShifts.length > 0 && (
-				<>
-					<p className="iz-tiny iz-muted2 mt-3">
-						{fill(
-							alsoTodayShifts.length === 1
-								? t.outletPanels.alsoTodayOne
-								: t.outletPanels.alsoTodayMany,
-							{ n: alsoTodayShifts.length },
-						)}
-					</p>
-					{alsoTodayShifts.map((s) => renderShiftCard(s, true))}
-				</>
 			)}
 			{variant === "future" && futureShifts.map((s) => renderShiftCard(s))}
 		</div>

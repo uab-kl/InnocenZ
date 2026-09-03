@@ -5013,12 +5013,12 @@ const en = {
 			"No live shift tonight — check Calendar page for upcoming events.",
 		noShiftsYet: "No shifts yet — use Post Job to create one.",
 		/**
-		 * Heads the rest of TODAY on the Today page (owner, 3 Sep 2026). Today
-		 * used to render only the running shift, so a second shift that night —
-		 * and whoever was working it — never appeared.
+		 * Names the shift the PR / labour / cutlost panels below are computed
+		 * from (owner, 3 Sep 2026). Today lists every shift tonight as one
+		 * section, so the panels no longer touch the card they belong to.
 		 */
-		alsoTodayOne: "Also today · 1 more shift",
-		alsoTodayMany: "Also today · {n} more shifts",
+		panelsCoverShift:
+			"PR, labour cost and cutlost below are for {event} · {slot}",
 		suppliedOfDemandPrs: "{supplied}/{demand} PRs",
 		/** The amount arrives already formatted with its currency — never bake RM into the key. */
 		salesAmount: "{amount} sales",
@@ -9940,8 +9940,7 @@ const zh: PortalTranslations = {
 		noLiveShiftTonight:
 			"今晚没有进行中的班次 —— 请到日历页面查看即将到来的活动。",
 		noShiftsYet: "还没有班次 —— 请用「发布职位」创建。",
-		alsoTodayOne: "今天还有 · 1 个班次",
-		alsoTodayMany: "今天还有 · {n} 个班次",
+		panelsCoverShift: "下方的 PR、人力成本与止损针对 {event} · {slot}",
 		suppliedOfDemandPrs: "PR {supplied}/{demand}",
 		salesAmount: "销售额 {amount}",
 		savedPill: "已省 {amount}",
