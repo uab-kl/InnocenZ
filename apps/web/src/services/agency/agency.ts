@@ -92,13 +92,14 @@ export async function approveAgency(
 	return response.data;
 }
 
-export async function suspendAgency(
+/** Set the agency `inactive`: every account in it is refused at login and signed out. */
+export async function deactivateAgency(
 	id: string,
 	onRefreshFail: () => void,
 ): Promise<AgencyApiResponse> {
 	const client = getClient(onRefreshFail);
 	const response = await client.patch<AgencyApiResponse>(
-		`/agency/${id}/suspend`,
+		`/agency/${id}/deactivate`,
 	);
 	return response.data;
 }

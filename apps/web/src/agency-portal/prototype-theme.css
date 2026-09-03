@@ -562,11 +562,44 @@
 		0 14px 28px -10px rgba(124, 58, 237, 0.55),
 		0 0 0 1px rgba(139, 92, 246, 0.3);
 }
+/*
+ * `.iz-btn-gold` was used by a dozen buttons and defined NOWHERE — "Save
+ * payment method", "Pay … by FPX" and the like rendered as bare bold text
+ * beside a properly bordered Cancel, so the action read as the afterthought
+ * and the escape as the button. It is the SAME champagne gold as
+ * `.iz-btn-primary` (owner, 2 Sep 2026: "this colour, save or make payment"),
+ * so a Save and a Pay look like every other primary action in the portal —
+ * one gold, not two. `--iz-gold` is NOT that colour: it is the violet the
+ * prototype misnamed, and half the portal reads it for lavender accents.
+ */
+.iz-btn-gold {
+	background: var(--iz-grad-accent);
+	color: #241a08;
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.5),
+		0 14px 30px -10px rgba(201, 155, 78, 0.5),
+		0 0 0 1px rgba(201, 155, 78, 0.4);
+}
+.iz-btn-gold:hover:not(:disabled) {
+	filter: brightness(1.05);
+}
 .iz-btn-soft {
 	background: var(--iz-glass2);
 	border: 1px solid var(--iz-line2);
 	color: var(--iz-txt);
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+/*
+ * A soft button that is the CHOSEN one of a set — the Card / Bank direct debit
+ * rail picker. Same size and shape as its siblings (owner, 2 Sep 2026: "redesign
+ * the button style to previous"), and the pressed colour of the payroll week
+ * tabs ("this colour remain"): a lifted lavender border, never gold, because a
+ * choice is not an action.
+ */
+.iz-btn-soft.iz-btn-on {
+	border-color: var(--iz-gold);
+	background: rgba(232, 194, 122, 0.12);
+	color: var(--iz-gold-l);
 }
 .iz-btn-ghost {
 	background: transparent;

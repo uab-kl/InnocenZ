@@ -60,7 +60,8 @@ interface AgenciesTableProps {
 	onPageChange: (page: number) => void;
 	onRetry: () => void;
 	onApprove: (id: string) => void;
-	onSuspend: (id: string) => void;
+	/** The off switch — `inactive`, refused at login until Activate. */
+	onDeactivate: (id: string) => void;
 	onSelect: (agency: Agency) => void;
 	actionId: string | null;
 }
@@ -81,7 +82,7 @@ export function AgenciesTable({
 	onPageChange,
 	onRetry,
 	onApprove,
-	onSuspend,
+	onDeactivate,
 	onSelect,
 	actionId,
 }: AgenciesTableProps) {
@@ -266,19 +267,20 @@ export function AgenciesTable({
 															{t.common.approve}
 														</Button>
 													)}
-													{agency.status === "active" && (
+													{(agency.status === "active" ||
+														agency.status === "suspended") && (
 														<Button
 															size="sm"
-															variant="outline"
+															variant="destructive"
 															disabled={busy}
-															onClick={() => onSuspend(agency.id)}
+															onClick={() => onDeactivate(agency.id)}
 														>
 															{busy ? (
 																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
 															) : (
 																<Ban className="mr-1 h-3.5 w-3.5" />
 															)}
-															{t.adminOrg.suspend}
+															{t.adminOrg.setInactive}
 														</Button>
 													)}
 													{agency.status === "suspended" && (

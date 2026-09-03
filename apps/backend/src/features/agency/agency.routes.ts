@@ -70,6 +70,13 @@ router.patch(
   requireAdmin,
   agencyController.suspend.bind(agencyController),
 );
+// The hard off switch: `inactive` denies every login and ends open sessions;
+// `suspend` above does not. Reactivation is `/approve`.
+router.patch(
+  '/:id/deactivate',
+  requireAdmin,
+  agencyController.deactivate.bind(agencyController),
+);
 
 // This carried NO gate at all while every route around it had one, so any
 // signed-in token — a PR's, an outlet's, another agency's — could read any

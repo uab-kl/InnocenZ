@@ -13,6 +13,7 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 - [Confirm every agency action](innocenz-confirm-every-action.md) — approve/edit/save must show the server's own success sentence; silence reads as failure and invites a second, harmful click
 - [InnocenZ mobile flexible UI](innocenz-mobile-flexible-ui.md) — sheets/screens flex to any phone; safe-area insets not fixed pixels; no Pressable over ScrollView; gold=act red=close
 - [Payee name format](innocenz-payee-name-format.md) — always "(Vicky) Victoria Tan Mei Lin": brackets round the nickname, nickname first, via the one shared formatPayeeLabel
+- [InnocenZ portal button colours](innocenz-portal-button-colours.md) — champagne gold = save/pay, dark soft = secondary, segmented tabs = a choice; `--iz-gold` is violet, never gold
 
 ### The money rules — get one wrong and the flow is wrong
 

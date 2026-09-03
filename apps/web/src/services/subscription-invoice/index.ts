@@ -14,6 +14,15 @@ export type SubscriberType = "outlet" | "agency";
 export interface SubscriptionInvoice {
 	id: string;
 	memberSubscriptionId: string;
+	/** INV-000001 — minted by the database on insert; what a receipt is headed with. */
+	invoiceNo: string;
+	/** 'period' — the normal charge; 'upgrade' — the difference when a paid period moved to a dearer plan. */
+	kind: "period" | "upgrade";
+	/** What the period cost before any deduction; `amount` is the net after `creditApplied`. */
+	baseAmount: string;
+	creditApplied: string;
+	/** The sentence behind an upgrade or a deduction. */
+	note: string | null;
 	/** Calendar days, YYYY-MM-DD — a billing period has no time of day. */
 	periodStart: string;
 	periodEnd: string;

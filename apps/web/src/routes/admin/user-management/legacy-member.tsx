@@ -66,11 +66,13 @@ import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
 	type Agency,
 	approveAgency,
+	deactivateAgency,
 	fetchAgencies,
 	fetchAgencyById,
 } from "@/services/agency";
 import {
 	approveOutlet,
+	deactivateOutlet,
 	fetchOutletById,
 	fetchOutlets,
 	type Outlet,
@@ -456,6 +458,42 @@ function LegacyMemberPage() {
 			toast.error(
 				toMutationError(err, t.adminUsers.outletReactivateFailed)?.message ??
 					t.adminUsers.outletReactivateFailed,
+			);
+		},
+		onSettled: () => setActionId(null),
+	});
+
+	// A suspended organisation listed here can be taken the rest of the way —
+	// `inactive` refuses every login — from the same Approval Status card.
+	const deactivateAgencyMutation = useMutation({
+		mutationFn: (id: string) => deactivateAgency(id, logout),
+		onMutate: (id) => setActionId(id),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["legacy-members"] });
+			queryClient.invalidateQueries({ queryKey: ["agencies"] });
+			toast.success(response.message || t.adminUsers.agencyDeactivated);
+		},
+		onError: (err) => {
+			toast.error(
+				toMutationError(err, t.adminUsers.agencyDeactivateFailed)?.message ??
+					t.adminUsers.agencyDeactivateFailed,
+			);
+		},
+		onSettled: () => setActionId(null),
+	});
+
+	const deactivateOutletMutation = useMutation({
+		mutationFn: (id: string) => deactivateOutlet(id, logout),
+		onMutate: (id) => setActionId(id),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["legacy-members"] });
+			queryClient.invalidateQueries({ queryKey: ["outlets"] });
+			toast.success(response.message || t.admin.outletDeactivated);
+		},
+		onError: (err) => {
+			toast.error(
+				toMutationError(err, t.admin.outletDeactivateFailed)?.message ??
+					t.admin.outletDeactivateFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -900,7 +938,7 @@ function LegacyMemberPage() {
 					if (!open) setSelected(null);
 				}}
 				onApprove={(id) => approveAgencyMutation.mutate(id)}
-				onSuspend={() => {}}
+				onDeactivate={(id) => deactivateAgencyMutation.mutate(id)}
 				actionId={actionId}
 			/>
 
@@ -911,7 +949,7 @@ function LegacyMemberPage() {
 					if (!open) setSelected(null);
 				}}
 				onApprove={(id) => approveOutletMutation.mutate(id)}
-				onSuspend={() => {}}
+				onDeactivate={(id) => deactivateOutletMutation.mutate(id)}
 				actionId={actionId}
 			/>
 

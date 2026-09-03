@@ -118,6 +118,25 @@ export async function fetchInvoicePaymentDetail(
  * Which gateways are registered. Empty today — the admin panel reads it so it
  * can say "no gateway connected" rather than implying auto-charge works.
  */
+/**
+ * Open one hosted payment session for the periods the payer ticked.
+ *
+ * Returns the URL to send the browser to. A 503 means no gateway is connected
+ * yet — the caller shows the server's own sentence rather than inventing one.
+ */
+export async function createCheckout(
+	invoiceIds: string[],
+	onRefreshFail: () => void,
+): Promise<{ payUrl: string; totalAmount: string; currency: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: { payUrl: string; totalAmount: string; currency: string };
+	}>("/subscription-payment/checkout", { invoiceIds });
+	return response.data.data;
+}
+
 export async function fetchPaymentGateways(
 	onRefreshFail: () => void,
 ): Promise<string[]> {

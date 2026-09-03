@@ -5,11 +5,9 @@ import {
 	getPayrollWeekSundayIso,
 } from "@agency-portal/lib/demo-clock";
 import {
+	currentPeriodOf,
 	nextRenewalFrom,
-	planChangeRecordFromMember,
-	type SubscriptionRecordRow,
-	sortMemberSubscriptions,
-	subscriptionRecordFromMember,
+	nextRenewalFromInvoices,
 } from "@agency-portal/lib/subscription-record";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -26,6 +24,7 @@ import {
 import { fetchMemberSubscriptions } from "@/services/member-subscription";
 import {
 	fetchMyPaymentMethod,
+	removeMyPaymentMethod,
 	type SavePaymentMethodInput,
 	saveMyPaymentMethod,
 } from "@/services/payment-method";
@@ -157,48 +156,6 @@ export function useAgencySubscription() {
 	});
 
 	/**
-	 * What this agency is subscribed to RIGHT NOW — normally one row.
-	 *
-	 * Read off `memberQuery`, which is already scoped to this agency and to
-	 * `status: "active"`. It used to have a query of its own that listed the whole
-	 * ledger, and since every tier change ENDS one row and STARTS another, an
-	 * agency that had moved tier a few times saw seven rows for one subscription:
-	 * six of them ended or cancelled, none carrying any payment state (see the
-	 * type's docstring), all of them reading like bills it still owed. That query
-	 * also passed no `subscriberType`/`subscriberId`, so its page of 50 was
-	 * whatever the endpoint returned rather than this agency's own rows.
-	 */
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(
-		() =>
-			sortMemberSubscriptions(memberQuery.data?.data ?? []).map((sub) =>
-				subscriptionRecordFromMember(sub, "InnocenZ Agency", t),
-			),
-		[memberQuery.data, t],
-	);
-
-	/**
-	 * Everything this agency has been on and is no longer. Its own query, because
-	 * `memberQuery` filters to `status: "active"` server-side and widening it
-	 * would let a cancelled row become the current plan (it is consumed as
-	 * `data[0]`). Scoped to THIS agency — the query this replaced passed neither
-	 * `subscriberType` nor `subscriberId`.
-	 */
-	const historyQuery = useQuery({
-		queryKey: ["agency", "subscription", "history", agencyId ?? "none"],
-		queryFn: () =>
-			fetchMemberSubscriptions(
-				{
-					subscriberType: "agency",
-					subscriberId: agencyId as string,
-					pageSize: 50,
-				},
-				logout,
-			),
-		enabled: backed,
-		staleTime: 60_000,
-	});
-
-	/**
 	 * What this agency has actually been BILLED, week by week — the billing
 	 * ledger, not the subscription ledger.
 	 *
@@ -218,12 +175,10 @@ export function useAgencySubscription() {
 		[invoicesQuery.data],
 	);
 
-	const pastSubscriptions = useMemo<SubscriptionRecordRow[]>(
-		() =>
-			sortMemberSubscriptions(historyQuery.data?.data ?? [])
-				.filter((sub) => sub.status !== "active")
-				.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Agency", t)),
-		[historyQuery.data, t],
+	/** The agency's current billing week — one lane, anchored on its first payroll Sunday. */
+	const currentWindow = useMemo(
+		() => currentPeriodOf(paymentHistory),
+		[paymentHistory],
 	);
 
 	const plans = useMemo<AgencyRatePlan[]>(
@@ -248,8 +203,13 @@ export function useAgencySubscription() {
 	 * used to print a demo-clock date that had nothing to do with the ledger.
 	 */
 	const nextRenewalDate = useMemo<Date | null>(
-		() => nextRenewalFrom(current?.startedAt, current?.billingCycle),
-		[current],
+		// The billing calendar wins — an agency holds one lane, so every period
+		// invoice is the plan's. The start-date rule is only the fallback for an
+		// agency with no week opened yet.
+		() =>
+			nextRenewalFromInvoices(paymentHistory) ??
+			nextRenewalFrom(current?.startedAt, current?.billingCycle),
+		[current, paymentHistory],
 	);
 
 	/**
@@ -284,6 +244,28 @@ export function useAgencySubscription() {
 			const message = (error as { response?: { data?: { message?: string } } })
 				?.response?.data?.message;
 			return { ok: false, reason: message };
+		}
+	};
+
+	const removeMut = useMutation({
+		mutationFn: (id: string) => removeMyPaymentMethod(id, logout),
+		onSuccess: () => void cardQuery.refetch(),
+	});
+
+	/**
+	 * Retire the saved instrument — auto-debit off, the agency pays each week
+	 * by FPX from then on. The server's sentence comes back either way.
+	 */
+	const removeCard = async (): Promise<{ ok: boolean; message?: string }> => {
+		const id = cardQuery.data?.id;
+		if (!id) return { ok: false };
+		try {
+			const message = await removeMut.mutateAsync(id);
+			return { ok: true, message };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			return { ok: false, message };
 		}
 	};
 
@@ -541,7 +523,7 @@ export function useAgencySubscription() {
 	return {
 		backed,
 		plans,
-		billingHistory,
+		currentWindow,
 		currentSubscriptionId: current?.subscriptionId ?? null,
 		currentPlanName: current?.planName ?? null,
 		/** Real next charge date from the ledger; null when nothing is active. */
@@ -551,6 +533,8 @@ export function useAgencySubscription() {
 		isCardLoading: cardQuery.isLoading,
 		isSavingCard: cardMut.isPending,
 		saveCard,
+		isRemovingCard: removeMut.isPending,
+		removeCard,
 		/** Real amount billed for the current tier; null when nothing is active. */
 		currentAmountRm: current ? Number(current.amount) : null,
 		onCustom,
@@ -582,7 +566,6 @@ export function useAgencySubscription() {
 		isLoading: plansQuery.isLoading || memberQuery.isLoading,
 		isHistoryLoading: memberQuery.isLoading,
 		/** Ended/cancelled plans, behind a disclosure on the screen. */
-		pastSubscriptions,
 		/** Billed weeks with their paid/unpaid state — the real payment history. */
 		paymentHistory,
 		isPaymentHistoryLoading: invoicesQuery.isLoading,

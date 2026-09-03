@@ -1,10 +1,9 @@
 import { z } from 'zod';
 import {
   cardBrandValues,
-  ewalletProviderByCode,
   fpxBankByCode,
   mandateStatusValues,
-  paymentMethodTypeValues,
+  savablePaymentMethodTypes,
 } from '@/features/payment-method/payment-method.model.js';
 
 /**
@@ -27,7 +26,13 @@ import {
  */
 export const UpsertPaymentMethodSchema = z
   .object({
-    type: z.enum(paymentMethodTypeValues).default('card'),
+    /**
+     * Only the two rails that auto-debit may be SAVED (owner, 2 Sep 2026). A
+     * wallet or one-off FPX row cannot pull money, so saving one would promise
+     * a renewal that never happens; the picker no longer offers them and this
+     * is what stops an older client, or a hand-made request, saving one anyway.
+     */
+    type: z.enum(savablePaymentMethodTypes).default('card'),
     brand: z.enum(cardBrandValues).default('Card'),
     last4: z
       .string()
@@ -55,15 +60,12 @@ export const UpsertPaymentMethodSchema = z
      */
     bankCode: z.string().trim().min(1).max(50).optional().nullable(),
     /**
-     * WHICH E-WALLET, by roster code — 'TNG', 'GRABPAY' and so on.
-     *
-     * Its own field rather than a reuse of `bankCode`, because a wallet is not a
-     * bank and the FPX roster would reject every one of these. There is no
-     * account number, wallet id or phone number here and there must never be:
-     * the payer approves inside their own app, so none of that is data this
-     * application can use — the same rule that keeps the card PAN out.
+     * Accepted and IGNORED: the e-wallet rail cannot be saved any more (see
+     * `type`), and the controller writes null. Kept in the shape so a client
+     * still sending it gets a 200 on its card, not a 400 on a field it no
+     * longer needs.
      */
-    walletProvider: z.string().trim().min(1).max(50).optional().nullable(),
+    walletProvider: z.string().trim().max(50).optional().nullable(),
     autoPay: z.boolean().optional(),
     /**
      * Which venue the instrument belongs to, for an operator who holds more
@@ -88,27 +90,6 @@ export const UpsertPaymentMethodSchema = z
           code: 'custom',
           path: ['bankCode'],
           message: 'That bank is not on the FPX roster',
-        });
-      }
-      return;
-    }
-
-    // Mirrors the `payment_method_wallet_provider` CHECK from 0139: a wallet
-    // rail with no wallet named is a payment instruction with no destination.
-    // Validated against the shared roster for the same reason the bank is — so a
-    // provider cannot be selectable in the picker and rejected here.
-    if (value.type === 'ewallet') {
-      if (!value.walletProvider) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['walletProvider'],
-          message: 'Choose the e-wallet you will pay from',
-        });
-      } else if (!ewalletProviderByCode(value.walletProvider)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['walletProvider'],
-          message: 'That wallet is not one we accept',
         });
       }
       return;

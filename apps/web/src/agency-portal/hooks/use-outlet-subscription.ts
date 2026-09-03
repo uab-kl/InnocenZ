@@ -1,15 +1,14 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
+	type BillingWindow,
+	currentPeriodOf,
 	nextRenewalFrom,
-	planChangeRecordFromMember,
-	type SubscriptionRecordRow,
+	nextRenewalFromInvoices,
 	sortMemberSubscriptions,
-	subscriptionRecordFromMember,
 } from "@agency-portal/lib/subscription-record";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	type CreateAdminRequestInput,
 	createAdminRequest,
@@ -17,12 +16,10 @@ import {
 	fetchMyPosQuote,
 	withdrawMyAdminRequest,
 } from "@/services/admin-request";
-import {
-	fetchMemberSubscriptions,
-	type MemberSubscription,
-} from "@/services/member-subscription";
+import { fetchMemberSubscriptions } from "@/services/member-subscription";
 import {
 	fetchMyPaymentMethod,
+	removeMyPaymentMethod,
 	type SavePaymentMethodInput,
 	saveMyPaymentMethod,
 } from "@/services/payment-method";
@@ -72,7 +69,6 @@ export interface PlanChangeResult {
  * indicator stays an optimistic local flag in the store.
  */
 export function useOutletSubscription() {
-	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const identity = useMemo(() => getOutletIdentity(), []);
 	const backed = identity !== null;
@@ -128,36 +124,6 @@ export function useOutletSubscription() {
 			),
 		[plansQuery.data],
 	);
-
-	/**
-	 * What this venue is subscribed to RIGHT NOW — its live plan, plus the POS
-	 * add-on when it has one. Deliberately not the whole ledger.
-	 *
-	 * `member_subscription` keeps every row a venue has ever held, and a plan
-	 * switch ends one row and starts another, so a venue that tried a few plans
-	 * had seven rows listed for one subscription. The ended and cancelled ones
-	 * carry no payment state (see the type's docstring), name nothing the venue
-	 * can act on, and read as a bill — so they are dropped here.
-	 *
-	 * Every ACTIVE row is kept rather than just the plan + add-on the pickers
-	 * derive: those two are matched against the plan catalog, and a row the
-	 * catalog cannot classify would otherwise vanish from the one list that is
-	 * supposed to state what the venue is paying for. The plan is listed first —
-	 * sorting by start date put the add-on on top, because POS is bought after
-	 * the plan it attaches to.
-	 */
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
-		if (!backed) return [];
-		const active = sortMemberSubscriptions(
-			billingQuery.data?.data ?? [],
-		).filter((sub) => sub.status === "active");
-		const isAddon = (sub: MemberSubscription) =>
-			Boolean(sub.subscriptionId && addonPlanIds.has(sub.subscriptionId));
-		return [
-			...active.filter((sub) => !isAddon(sub)),
-			...active.filter(isAddon),
-		].map((sub) => subscriptionRecordFromMember(sub, "InnocenZ Outlet", t));
-	}, [backed, billingQuery.data, addonPlanIds, t]);
 
 	/**
 	 * Everything this venue has been on and is no longer — ended, cancelled, past
@@ -222,13 +188,6 @@ export function useOutletSubscription() {
 	const invoiceLane = (invoice: SubscriptionInvoice): "plan" | "addon" | null =>
 		invoiceLaneById.get(invoice.memberSubscriptionId) ?? null;
 
-	const pastSubscriptions = useMemo<SubscriptionRecordRow[]>(() => {
-		if (!backed) return [];
-		return sortMemberSubscriptions(billingQuery.data?.data ?? [])
-			.filter((sub) => sub.status !== "active")
-			.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Outlet", t));
-	}, [backed, billingQuery.data, t]);
-
 	const activeSubscription = useMemo(() => {
 		if (!backed) return null;
 		return (
@@ -262,12 +221,52 @@ export function useOutletSubscription() {
 	 */
 	const nextRenewalDate = useMemo<Date | null>(
 		() =>
+			// The billing calendar wins: the day after the latest PLAN-lane period
+			// the ledger has opened. The start-date rule is only the fallback for a
+			// venue with no period yet — rolled from the switch day it read
+			// "renews 28 Sept" over a history running 3 Aug – 2 Sep.
+			nextRenewalFromInvoices(
+				paymentHistory.filter(
+					(invoice) =>
+						invoiceLaneById.get(invoice.memberSubscriptionId) !== "addon",
+				),
+			) ??
 			nextRenewalFrom(
 				activeSubscription?.startedAt,
 				activeSubscription?.billingCycle,
 			),
-		[activeSubscription],
+		[activeSubscription, paymentHistory, invoiceLaneById],
 	);
+
+	/**
+	 * EACH LANE'S CURRENT BILLING WINDOW, and the add-on's own renewal — what the
+	 * plan card and the POS card print (owner, 2 Sep 2026: "where is the start
+	 * activation date and the renewal date, for both plan" / "the date duration
+	 * shows here"). Read from each lane's own invoices: POS is bought after the
+	 * plan, so its month can start on a different day, and every venue's month
+	 * runs from its own activation day because the ledger is anchored there.
+	 */
+	const laneDates = useMemo(() => {
+		if (!backed) {
+			return {
+				planWindow: null as BillingWindow | null,
+				addonWindow: null as BillingWindow | null,
+				addonRenewalDate: null as Date | null,
+			};
+		}
+		const laneInvoices = (lane: "plan" | "addon") =>
+			paymentHistory.filter(
+				(invoice) => invoiceLaneById.get(invoice.memberSubscriptionId) === lane,
+			);
+		const addonInvoices = laneInvoices("addon");
+		return {
+			planWindow: currentPeriodOf(laneInvoices("plan")),
+			addonWindow: currentPeriodOf(addonInvoices),
+			addonRenewalDate:
+				nextRenewalFromInvoices(addonInvoices) ??
+				nextRenewalFrom(activeAddon?.startedAt, activeAddon?.billingCycle),
+		};
+	}, [backed, paymentHistory, invoiceLaneById, activeAddon]);
 
 	/**
 	 * The venue's own outstanding POS-integration quote, from the server — so the
@@ -353,6 +352,34 @@ export function useOutletSubscription() {
 			const message = (error as { response?: { data?: { message?: string } } })
 				?.response?.data?.message;
 			return { ok: false, reason: message };
+		}
+	};
+
+	const removeMut = useMutation({
+		mutationFn: (id: string) =>
+			removeMyPaymentMethod(
+				id,
+				logout,
+				outletId && UUID_RE.test(outletId) ? outletId : undefined,
+			),
+		onSuccess: () => void cardQuery.refetch(),
+	});
+
+	/**
+	 * Retire the saved instrument — auto-debit off, the venue pays each period
+	 * by FPX from then on. The server's sentence comes back either way so the
+	 * screen shows what happened, not a guess.
+	 */
+	const removeCard = async (): Promise<{ ok: boolean; message?: string }> => {
+		const id = cardQuery.data?.id;
+		if (!id) return { ok: false };
+		try {
+			const message = await removeMut.mutateAsync(id);
+			return { ok: true, message };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			return { ok: false, message };
 		}
 	};
 
@@ -496,9 +523,7 @@ export function useOutletSubscription() {
 
 	return {
 		backed,
-		billingHistory,
 		/** Ended/cancelled subscriptions, behind a disclosure on the screen. */
-		pastSubscriptions,
 		/** Billed periods with their paid/unpaid state — the real payment history. */
 		paymentHistory,
 		/**
@@ -512,6 +537,10 @@ export function useOutletSubscription() {
 		activePlanName,
 		/** Real next billing date from the ledger; null when nothing is active. */
 		nextRenewalDate,
+		/** Each lane's current billing window, and the add-on's own renewal. */
+		planWindow: laneDates.planWindow,
+		addonWindow: laneDates.addonWindow,
+		addonRenewalDate: laneDates.addonRenewalDate,
 		/** True while a POS-integration quote is with the admin (server truth). */
 		posQuotePending: Boolean(posQuoteQuery.data),
 		/**
@@ -536,6 +565,8 @@ export function useOutletSubscription() {
 		isCardLoading: cardQuery.isLoading,
 		isSavingCard: cardMut.isPending,
 		saveCard,
+		isRemovingCard: removeMut.isPending,
+		removeCard,
 		isLoading: billingQuery.isLoading,
 		isRequestingQuote: posQuoteMut.isPending,
 		requestPosQuote,

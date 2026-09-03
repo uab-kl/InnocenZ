@@ -7,6 +7,7 @@ import {
   MemberSubscriptionTable,
 } from '@/features/member-subscription/member-subscription.model.js';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
+import { SubscriptionCreditTable } from './subscription-credit.model.js';
 import { klToday } from '@/features/payment-voucher/payment-voucher-week.js';
 import { billingPeriodsFor, klDayOf } from './subscription-period.js';
 import {
@@ -333,6 +334,202 @@ export class SubscriptionInvoiceRepositoryClass {
    * only thing needed is the billing columns, and taking that dependency would
    * add a feature-to-feature edge for nothing.
    */
+  /**
+   * A PLAN SWITCH MID-PERIOD, PRICED FAIRLY (owner, 28 Aug 2026).
+   *
+   * Called right after the ledger has closed the old plan row and opened the
+   * new one. Finds the CURRENT period on the org's plan lane and:
+   *
+   * - dearer plan, period already PAID  → an `upgrade` invoice for the same
+   *   period, for the DIFFERENCE only — "deducted based on their previous plan".
+   * - dearer plan, period still UNPAID  → the period is re-priced to the new
+   *   plan (the owner's "highest plan held" rule); nothing extra is minted.
+   * - cheaper plan                      → a `subscription_credit` for the
+   *   difference, taken off the next period minted on this lane.
+   *
+   * Full-period difference, not day-prorated: that is the rule the owner stated
+   * ("the plan in the period must follow the highest"), and it is what makes an
+   * upgrade and a later downgrade net to zero instead of to a day-count.
+   * Amounts move in integer cents.
+   */
+  async prorateLaneSwitch(input: {
+    subscriberType: 'agency' | 'outlet';
+    subscriberId: string;
+    /**
+     * Which lane. Absent = the plan lane. Set to the add-on product's
+     * `subscription.id` to price an add-on re-quote (owner, 28 Aug: "the Custom
+     * and the integrate with POS follow also the credit") — each add-on is its
+     * own lane with its own calendar, so it is priced against ITS current
+     * period, never the plan's.
+     */
+    laneSubscriptionId?: string;
+    newMemberSubscriptionId: string;
+    fromPlanName: string;
+    toPlanName: string;
+    fromAmount: string;
+    toAmount: string;
+    actor: string;
+    today?: string;
+  }): Promise<'upgrade_invoiced' | 'repriced' | 'credited' | 'none'> {
+    try {
+      const today = input.today ?? klToday();
+      const diffCents =
+        Math.round(Number(input.toAmount) * 100) - Math.round(Number(input.fromAmount) * 100);
+      if (diffCents === 0) return 'none';
+
+      // The period that contains today on this org's PLAN lane (add-ons keep
+      // their own lanes and are never touched by a plan switch).
+      const [current] = await db
+        .select({ invoice: SubscriptionInvoiceTable, kind: SubscriptionTable.kind })
+        .from(SubscriptionInvoiceTable)
+        .innerJoin(
+          MemberSubscriptionTable,
+          eq(SubscriptionInvoiceTable.memberSubscriptionId, MemberSubscriptionTable.id),
+        )
+        .leftJoin(SubscriptionTable, eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id))
+        .where(
+          and(
+            eq(MemberSubscriptionTable.subscriberType, input.subscriberType),
+            eq(MemberSubscriptionTable.subscriberId, input.subscriberId),
+            eq(SubscriptionInvoiceTable.kind, 'period'),
+            lte(SubscriptionInvoiceTable.periodStart, today),
+            gte(SubscriptionInvoiceTable.periodEnd, today),
+            input.laneSubscriptionId
+              ? eq(MemberSubscriptionTable.subscriptionId, input.laneSubscriptionId)
+              : sql`coalesce(${SubscriptionTable.kind}, 'plan') <> 'addon'`,
+          ),
+        )
+        .orderBy(desc(SubscriptionInvoiceTable.periodStart))
+        .limit(1);
+      if (!current) return 'none';
+      const invoice = current.invoice;
+      const money = (cents: number) => (cents / 100).toFixed(2);
+
+      if (diffCents > 0) {
+        // Dearer plan, paid OR unpaid: the EXTRA is its own line, never a
+        // silently changed figure. Owner, on seeing the first cut re-price in
+        // place: "the extra charge? where is it shown?" — a period that read
+        // 3,999 yesterday and 6,999 today, with only a note to explain, looks
+        // like a wrong price. As a separate `upgrade` invoice in the same window
+        // it reads as arithmetic: Enterprise 3,999 + Upgrade 3,000 = 6,999, the
+        // highest plan held — and it is ticked and paid together with the
+        // period, since the pay box is on the window.
+        await db.insert(SubscriptionInvoiceTable).values({
+          memberSubscriptionId: input.newMemberSubscriptionId,
+          periodStart: invoice.periodStart,
+          periodEnd: invoice.periodEnd,
+          kind: 'upgrade',
+          baseAmount: money(diffCents),
+          creditApplied: '0',
+          amount: money(diffCents),
+          currency: invoice.currency,
+          note:
+            invoice.status === 'paid'
+              ? `Upgrade ${input.fromPlanName} → ${input.toPlanName}: ${input.toAmount} − ${input.fromAmount} already paid`
+              : `Upgrade ${input.fromPlanName} → ${input.toPlanName}: ${input.toAmount} − ${input.fromAmount} billed this period`,
+          createdBy: input.actor,
+          updatedBy: input.actor,
+        });
+        return 'upgrade_invoiced';
+      }
+
+      // Cheaper plan: the difference comes off the next period on this lane.
+      await db.insert(SubscriptionCreditTable).values({
+        memberSubscriptionId: input.newMemberSubscriptionId,
+        sourceInvoiceId: invoice.id,
+        amount: money(-diffCents),
+        remaining: money(-diffCents),
+        status: 'open',
+        reason: `Switched ${input.fromPlanName} → ${input.toPlanName} mid-period; ${input.fromPlanName} already billed`,
+        createdBy: input.actor,
+        updatedBy: input.actor,
+      });
+      return 'credited';
+    } catch (error) {
+      logger.error('[SubscriptionInvoiceRepository.prorateLaneSwitch] Error:', error);
+      return 'none';
+    }
+  }
+
+  /**
+   * Take open downgrade credits off freshly minted PLAN-lane invoices.
+   *
+   * Oldest credit first; a credit larger than the invoice is used partly and
+   * stays open for the period after. Both writes are plain UPDATEs keyed on
+   * the ids the INSERT returned, so a re-run of the job cannot apply a credit
+   * twice — the invoice it applied to already exists and is skipped by the
+   * conflict target.
+   */
+  private async applyOpenCredits(
+    inserted: { id: string; memberSubscriptionId: string; amount: string }[],
+    // Lane matching now happens in the query itself; kept positional so the
+    // one call site is unchanged.
+    _laneKindOf: Map<string, string | null>,
+    actor: string,
+  ): Promise<void> {
+    for (const row of inserted) {
+      try {
+        // A credit follows its OWN lane: a plan credit comes off the next plan
+        // period, a POS credit off the next POS period — matched on the lane's
+        // kind and, for add-ons, the product. Money paid for POS never quietly
+        // discounts the plan, or the reverse.
+        const credits = await db.execute<{ id: string; remaining: string; reason: string | null }>(sql`
+          SELECT c.id, c.remaining, c.reason
+          FROM main.subscription_credit c
+          JOIN main.member_subscription cm ON cm.id = c.member_subscription_id
+          LEFT JOIN main.subscription cs ON cs.id = cm.subscription_id
+          JOIN main.member_subscription im ON im.id = ${row.memberSubscriptionId}
+          LEFT JOIN main.subscription isub ON isub.id = im.subscription_id
+          WHERE c.status = 'open'
+            AND cm.subscriber_type = im.subscriber_type
+            AND cm.subscriber_id = im.subscriber_id
+            AND coalesce(cs.kind, 'plan') = coalesce(isub.kind, 'plan')
+            AND (coalesce(isub.kind, 'plan') <> 'addon' OR cm.subscription_id = im.subscription_id)
+          ORDER BY c.created_at ASC
+        `);
+        if (credits.rows.length === 0) continue;
+
+        const baseCents = Math.round(Number(row.amount) * 100);
+        let leftCents = baseCents;
+        let usedCents = 0;
+        const notes: string[] = [];
+        for (const credit of credits.rows) {
+          if (leftCents <= 0) break;
+          const remainingCents = Math.round(Number(credit.remaining) * 100);
+          const take = Math.min(remainingCents, leftCents);
+          if (take <= 0) continue;
+          usedCents += take;
+          leftCents -= take;
+          const stillOpen = remainingCents - take;
+          await db
+            .update(SubscriptionCreditTable)
+            .set({
+              remaining: (stillOpen / 100).toFixed(2),
+              status: stillOpen === 0 ? 'applied' : 'open',
+              appliedToInvoiceId: row.id,
+              updatedAt: new Date(),
+              updatedBy: actor,
+            })
+            .where(eq(SubscriptionCreditTable.id, credit.id));
+          if (credit.reason) notes.push(credit.reason);
+        }
+        if (usedCents === 0) continue;
+        await db
+          .update(SubscriptionInvoiceTable)
+          .set({
+            creditApplied: (usedCents / 100).toFixed(2),
+            amount: ((baseCents - usedCents) / 100).toFixed(2),
+            note: notes[0] ?? null,
+            updatedAt: new Date(),
+            updatedBy: actor,
+          })
+          .where(eq(SubscriptionInvoiceTable.id, row.id));
+      } catch (error) {
+        logger.error('[SubscriptionInvoiceRepository.applyOpenCredits] Error:', error);
+      }
+    }
+  }
+
   async generateMissing(params?: {
     actor?: string;
     memberSubscriptionIds?: string[];
@@ -479,23 +676,30 @@ export class SubscriptionInvoiceRepositoryClass {
         // that switched tier three times in July got a column of unpaid weeks
         // nobody had ever raised, for plans it was no longer on. The ledger
         // starts when it starts, and grows one period at a time from the daily
-        // job — so history here is what this app actually billed, not a
-        // reconstruction of what it might have.
-        const current = periods[periods.length - 1];
-        if (!current) continue;
-
-        // Priced by the subscription actually LIVE in that period — the last one
-        // to start within it, which is the tier the org settled on and the one
-        // its Current subscription card shows.
-        const live =
-          [...ordered]
-            .reverse()
-            .find(
-              (row) =>
-                klDayOf(row.startedAt) <= current.periodEnd &&
-                (!row.endedAt || klDayOf(row.endedAt) > current.periodStart),
-            ) ?? latest;
-        winners.set(`${lane}|${current.periodStart}`, { row: live, period: current });
+        // job.
+        //
+        // EVERY MISSING PERIOD, NOT ONLY TODAY'S (owner's choice "A", 28 Aug
+        // 2026). This used to take `periods[periods.length - 1]` alone, which
+        // meant a morning the job did not run was a period nobody was ever
+        // billed for — and that orgs from before the ledger's first run had no
+        // history at all. Now every period from the lane's anchor to today is a
+        // candidate; `billed` below drops the ones that already exist, so a
+        // re-run mints nothing twice and a missed morning heals itself the next
+        // one. The owner accepted the consequence: the first run writes the old
+        // periods as unpaid, and any to be forgiven are marked paid with a note.
+        for (const period of periods) {
+          // Priced by the subscription actually LIVE in that period — the last
+          // one to start within it, which is the tier the org settled on then.
+          const live =
+            [...ordered]
+              .reverse()
+              .find(
+                (row) =>
+                  klDayOf(row.startedAt) <= period.periodEnd &&
+                  (!row.endedAt || klDayOf(row.endedAt) > period.periodStart),
+              ) ?? latest;
+          winners.set(`${lane}|${period.periodStart}`, { row: live, period });
+        }
       }
 
       /**
@@ -540,6 +744,9 @@ export class SubscriptionInvoiceRepositoryClass {
           periodStart: winner.period.periodStart,
           periodEnd: winner.period.periodEnd,
           amount: winner.row.amount,
+          // Gross = net at mint; a downgrade credit, if one is open, is taken
+          // off right after the insert (see applyOpenCredits below).
+          baseAmount: winner.row.amount,
           currency: winner.row.currency,
           createdBy: actor,
           updatedBy: actor,
@@ -569,6 +776,9 @@ export class SubscriptionInvoiceRepositoryClass {
 
       // Chunked, because a first run over a long history can be thousands of
       // rows and node-postgres binds one parameter per column.
+      // Which lane each subscription row is on, so downgrade credits are taken
+      // off PLAN-lane invoices only — an add-on never absorbs a plan's credit.
+      const laneKindOf = new Map(subscriptions.map((row) => [row.id, row.kind]));
       const CHUNK = 500;
       let created = 0;
       const opened: OpenedInvoice[] = [];
@@ -598,6 +808,9 @@ export class SubscriptionInvoiceRepositoryClass {
             currency: SubscriptionInvoiceTable.currency,
           });
         created += inserted.length;
+        // Only rows this run actually inserted — a re-run returns none here, so
+        // a credit can never be applied twice.
+        await this.applyOpenCredits(inserted, laneKindOf, actor);
         for (const row of inserted) {
           const owner = ownerOf.get(row.memberSubscriptionId);
           // A lane whose owner cannot be resolved is still BILLED — it is in the

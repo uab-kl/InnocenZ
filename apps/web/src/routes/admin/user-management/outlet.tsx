@@ -23,10 +23,10 @@ import {
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	approveOutlet,
+	deactivateOutlet,
 	fetchOutletById,
 	fetchOutlets,
 	type OutletsQueryParams,
-	suspendOutlet,
 } from "@/services/outlet";
 
 export const Route = createFileRoute("/admin/user-management/outlet")({
@@ -113,18 +113,23 @@ function OutletOrgsPage() {
 		onSettled: () => setActionId(null),
 	});
 
-	const suspendMutation = useMutation({
-		mutationFn: (id: string) => suspendOutlet(id, logout),
+	/**
+	 * The hard off switch. `inactive` is the one status the auth layer refuses,
+	 * so every account in the organisation is signed out and refused at login
+	 * until Reactivate. The server's own sentence is what the admin sees.
+	 */
+	const deactivateMutation = useMutation({
+		mutationFn: (id: string) => deactivateOutlet(id, logout),
 		onMutate: (id) => setActionId(id),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["outlets"] });
 			queryClient.invalidateQueries({ queryKey: ["outlet-by-id"] });
-			toast.success(response.message || t.admin.outletSuspended);
+			toast.success(response.message || t.admin.outletDeactivated);
 		},
 		onError: (err) => {
 			toast.error(
-				toMutationError(err, t.admin.outletSuspendFailed)?.message ??
-					t.admin.outletSuspendFailed,
+				toMutationError(err, t.admin.outletDeactivateFailed)?.message ??
+					t.admin.outletDeactivateFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -155,7 +160,7 @@ function OutletOrgsPage() {
 				onPageChange={setCurrentPage}
 				onRetry={() => refetch()}
 				onApprove={(id) => approveMutation.mutate(id)}
-				onSuspend={(id) => suspendMutation.mutate(id)}
+				onDeactivate={(id) => deactivateMutation.mutate(id)}
 				onSelect={(outlet) => setSelectedId(outlet.id)}
 				actionId={actionId}
 			/>
@@ -167,7 +172,7 @@ function OutletOrgsPage() {
 					if (!open) closeDetails();
 				}}
 				onApprove={(id) => approveMutation.mutate(id)}
-				onSuspend={(id) => suspendMutation.mutate(id)}
+				onDeactivate={(id) => deactivateMutation.mutate(id)}
 				actionId={actionId}
 			/>
 		</PageShell>

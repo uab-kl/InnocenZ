@@ -1,10 +1,6 @@
 import { isoKeyFromDate } from "@agency-portal/components/iz/HistDateCalendar";
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
-import {
-	PastSubscriptionsDisclosure,
-	PaymentHistoryList,
-	SubscriptionRecordCard,
-} from "@agency-portal/components/iz/SubscriptionRecordList";
+import { PaymentHistoryList } from "@agency-portal/components/iz/SubscriptionRecordList";
 import {
 	formatRM,
 	IzCard,
@@ -37,7 +33,7 @@ import {
 	tonightShiftOutletName,
 } from "@agency-portal/lib/portal-sync";
 import { useStore } from "@agency-portal/lib/store";
-import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
+import { periodLabel } from "@agency-portal/lib/subscription-record";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
@@ -110,6 +106,9 @@ function PosIntegrationAddonCard({
 	quotePending,
 	pendingKind,
 	activeAddonPriceRm,
+	windowLabel = null,
+	renewsOn = null,
+	requoteBlockedNote = null,
 	contactLine,
 	onRequestQuote,
 	onCancelQuote,
@@ -125,6 +124,20 @@ function PosIntegrationAddonCard({
 	 * product on offer.
 	 */
 	activeAddonPriceRm: number | null;
+	/**
+	 * The add-on lane's current billing window and next renewal, formatted.
+	 * Its own dates, not the plan's: POS is bought after the plan, so its month
+	 * can start on a different day. Null on a demo session or before the first
+	 * period is minted, and then nothing is printed rather than a guess.
+	 */
+	windowLabel?: string | null;
+	renewsOn?: string | null;
+	/**
+	 * The sentence that explains why a re-quote is refused right now — unpaid
+	 * periods — or null when the ask is allowed. Printed on the card and the
+	 * gold button disabled, instead of a toast nobody caught.
+	 */
+	requoteBlockedNote?: string | null;
 	/**
 	 * Whether withdrawing is actually possible.
 	 *
@@ -196,6 +209,14 @@ function PosIntegrationAddonCard({
 										price: copy.priceLabel,
 									})}
 						</p>
+						{activeAddonPriceRm !== null && windowLabel && renewsOn && (
+							<p className="iz-outlet-pos-addon__subtitle">
+								{fill(t.outletSubscription.windowRenewal, {
+									window: windowLabel,
+									date: renewsOn,
+								})}
+							</p>
+						)}
 					</div>
 					<Sparkles className="h-5 w-5 shrink-0 text-[var(--iz-violet-l)] opacity-80" />
 				</div>
@@ -243,11 +264,24 @@ function PosIntegrationAddonCard({
 								 * instead — it had to wait for an answer to a question it no
 								 * longer wanted asked.
 								 */}
+								{requoteBlockedNote && !quotePending && (
+									<p
+										className="iz-outlet-pos-addon__sent-body"
+										style={{ color: "var(--iz-amber)" }}
+									>
+										{requoteBlockedNote}
+									</p>
+								)}
 								<div className="flex flex-col gap-2 sm:flex-row">
+									{/* Gold = the act (it sends a request to the admin), red = the
+									    way out (ends POS billing) — the owner's colour code, applied
+									    2 Sep 2026 after both sat as plain soft buttons. */}
 									<button
 										type="button"
-										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
-										disabled={pendingKind === "requote"}
+										className="iz-btn iz-btn-gold iz-outlet-pos-addon__cancel flex-1"
+										disabled={
+											pendingKind === "requote" || requoteBlockedNote !== null
+										}
 										onClick={onRequestQuote}
 									>
 										{pendingKind === "requote"
@@ -256,7 +290,7 @@ function PosIntegrationAddonCard({
 									</button>
 									<button
 										type="button"
-										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										className="iz-btn iz-btn-danger iz-outlet-pos-addon__cancel flex-1"
 										disabled={pendingKind === "cancel"}
 										onClick={onRemoveAddon}
 									>
@@ -323,7 +357,6 @@ function OutletSubscriptionPage() {
 	const cancelPosIntegrationQuoteRequest = useStore(
 		(s) => s.cancelPosIntegrationQuoteRequest,
 	);
-	const demoBilling = useStore((s) => s.outletSubscriptionBilling);
 	const toast = useStore((s) => s.toast);
 	const can = useOutletCan();
 	const canEdit = can("editSettings");
@@ -347,35 +380,6 @@ function OutletSubscriptionPage() {
 	const planChangeRequested = backend.backed
 		? (backend.pendingPlanLabel ?? planChangeRequestedLocal)
 		: null;
-
-	/**
-	 * Real sessions read the `member_subscription` ledger; demo sessions keep the
-	 * store's invoices, mapped onto the same row shape so the render has one
-	 * branch. The plan rate-card + payment card stay on demo data either way (see
-	 * the hook's docstring).
-	 *
-	 * The demo rows genuinely ARE invoice-shaped, with a settled/pending state, so
-	 * "Paid" is honest for them. The backend rows are not, which is why they no
-	 * longer borrow that wording.
-	 */
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
-		if (backend.backed) return backend.billingHistory;
-		return demoBilling.map((inv) => ({
-			id: inv.id,
-			title: `InnocenZ Outlet · ${inv.planLabel}`,
-			detail: inv.detail,
-			dateLabel: inv.issueDate,
-			amountRm: inv.amount,
-			// The stored status is compared; only the badge WORD is looked up. The
-			// union is exactly SETTLED | PENDING, so the else-branch is Unpaid
-			// rather than the raw enum it used to print.
-			statusLabel:
-				inv.status === "SETTLED"
-					? t.outletSubscription.paid
-					: t.subscription.statusUnpaid,
-			tone: inv.status === "SETTLED" ? "green" : "amber",
-		}));
-	}, [backend.backed, backend.billingHistory, demoBilling, t]);
 
 	const outletName = tonightShiftOutletName(shifts);
 	/**
@@ -423,6 +427,60 @@ function OutletSubscriptionPage() {
 				})
 			: null
 		: RENEWAL_DATE;
+
+	/**
+	 * Each lane's CURRENT billing window, from that lane's own invoices (owner,
+	 * 2 Sep 2026: "the date duration shows here"). The plan's month and the POS
+	 * add-on's month can start on different days, and every venue's month runs
+	 * from its own activation day, because the ledger is anchored there. Null on
+	 * a demo session or before the first period is minted — then only the
+	 * renewal prints, never a guessed range.
+	 */
+	const planWindowLabel =
+		backend.backed && backend.planWindow
+			? periodLabel(
+					backend.planWindow.periodStart,
+					backend.planWindow.periodEnd,
+				)
+			: null;
+	const addonWindowLabel =
+		backend.backed && backend.addonWindow
+			? periodLabel(
+					backend.addonWindow.periodStart,
+					backend.addonWindow.periodEnd,
+				)
+			: null;
+	const addonRenewalLabel =
+		backend.backed && backend.addonRenewalDate
+			? backend.addonRenewalDate.toLocaleDateString(dateLocaleTag(locale), {
+					day: "numeric",
+					month: "short",
+					year: "numeric",
+				})
+			: null;
+
+	/**
+	 * WHY "Ask for a new price" is refused, said ON THE CARD (owner, 2 Sep 2026:
+	 * pressed it, saw nothing, asked where the status was). The rule is the
+	 * owner's own — a re-quote waits until every billing period is paid — and
+	 * `handleRequestQuote` enforced it with a toast that had vanished by the
+	 * time anyone looked. Null when the ask is allowed.
+	 */
+	const requoteBlockedNote = useMemo(() => {
+		if (!backend.backed || backend.addonAmountRm === null) return null;
+		const owing = backend.paymentHistory.filter(
+			(invoice) => invoice.status !== "paid",
+		);
+		if (owing.length === 0) return null;
+		const cents = owing.reduce(
+			(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
+			0,
+		);
+		return fill(t.outletSubscription.settleBeforeRequote, {
+			amount: formatRM(cents / 100),
+			n: owing.length,
+		});
+	}, [backend.backed, backend.addonAmountRm, backend.paymentHistory, t]);
 
 	const posQuotePending = useMemo(
 		() =>
@@ -491,8 +549,7 @@ function OutletSubscriptionPage() {
 			);
 			if (owing.length > 0) {
 				const cents = owing.reduce(
-					(total, invoice) =>
-						total + Math.round(Number(invoice.amount) * 100),
+					(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
 					0,
 				);
 				toast(
@@ -783,11 +840,16 @@ function OutletSubscriptionPage() {
 							</div>
 							{isCurrent ? (
 								<p className="iz-tiny iz-muted2 mt-2">
-									{renewalLabel
-										? fill(t.outletSubscription.renewalPrefix, {
+									{planWindowLabel && renewalLabel
+										? fill(t.outletSubscription.windowRenewalPrefix, {
+												window: planWindowLabel,
 												date: renewalLabel,
 											})
-										: ""}
+										: renewalLabel
+											? fill(t.outletSubscription.renewalPrefix, {
+													date: renewalLabel,
+												})
+											: ""}
 									{fill(t.outletSubscription.requestedTodayPool, {
 										today: namedPrsToday,
 										max: plan.prPerDayMax,
@@ -842,39 +904,15 @@ function OutletSubscriptionPage() {
 						quotePending={quotePending}
 						pendingKind={pendingKind}
 						activeAddonPriceRm={backend.addonAmountRm}
+						windowLabel={addonWindowLabel}
+						renewsOn={addonRenewalLabel}
+						requoteBlockedNote={requoteBlockedNote}
 						contactLine={contactLine}
 						onRequestQuote={handleRequestQuote}
 						onCancelQuote={handleCancelQuote}
 						onRemoveAddon={handleRemoveAddon}
 					/>
 				))}
-			</div>
-
-			<IzSectionLabel>
-				{backend.backed
-					? t.subscription.currentSubscription
-					: t.subscription.billingHistoryTitle}
-			</IzSectionLabel>
-			{backend.backed && (
-				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-					{t.outletSubscription.whatVenueSubscribedTo}
-				</p>
-			)}
-			<div className="space-y-2">
-				{billingHistory.length === 0 ? (
-					<IzCard flat>
-						<p className="iz-tiny iz-muted py-4 text-center">
-							{backend.backed
-								? t.outletSubscription.noActiveSubscription
-								: t.subscription.noSubscriptionInvoices}
-						</p>
-					</IzCard>
-				) : (
-					billingHistory.map((row) => (
-						<SubscriptionRecordCard key={row.id} row={row} />
-					))
-				)}
-				<PastSubscriptionsDisclosure rows={backend.pastSubscriptions} />
 			</div>
 
 			{backend.backed && (
@@ -1034,6 +1072,8 @@ function OutletSubscriptionPage() {
 								describePaymentMethod(backend.card, {
 									transfer: t.subscription.savedTransfer,
 									fpx: t.subscription.savedFpx,
+									fpxLink: t.subscription.savedFpxLink,
+									ewallet: t.subscription.methodEwallet,
 								}) +
 								(renewalLabel
 									? fill(
@@ -1075,6 +1115,19 @@ function OutletSubscriptionPage() {
 							result.ok
 								? t.outletSubscription.cardSaved
 								: (result.reason ?? t.outletSubscription.couldNotSaveCard),
+							result.ok ? "success" : "warn",
+						);
+						return result.ok;
+					}}
+					isRemoving={backend.isRemovingCard}
+					onRemove={async () => {
+						const result = await backend.removeCard();
+						// The server's own sentence first; the local one only if it sent none.
+						toast(
+							result.message ??
+								(result.ok
+									? t.subscription.methodRemoved
+									: t.subscription.couldNotRemoveMethod),
 							result.ok ? "success" : "warn",
 						);
 						return result.ok;

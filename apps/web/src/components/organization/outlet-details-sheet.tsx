@@ -230,7 +230,7 @@ interface OutletDetailsSheetProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onApprove: (id: string) => void;
-	onSuspend: (id: string) => void;
+	onDeactivate: (id: string) => void;
 	actionId: string | null;
 }
 
@@ -239,7 +239,7 @@ export function OutletDetailsSheet({
 	open,
 	onOpenChange,
 	onApprove,
-	onSuspend,
+	onDeactivate,
 	actionId,
 }: OutletDetailsSheetProps) {
 	const { logout } = useAuth();
@@ -430,7 +430,7 @@ export function OutletDetailsSheet({
 							entityLabel={t.adminOrg.entityOutlet}
 							busy={actionId === outlet.id}
 							onApprove={() => onApprove(outlet.id)}
-							onSuspend={() => onSuspend(outlet.id)}
+							onDeactivate={() => onDeactivate(outlet.id)}
 						/>
 
 						<SystemInfoCard

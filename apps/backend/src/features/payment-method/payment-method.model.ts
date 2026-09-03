@@ -95,9 +95,15 @@ export type NewPaymentMethod = typeof PaymentMethodTable.$inferInsert;
  * one-off by nature — the honest pattern for them is a payment link per invoice,
  * not a stored instrument that pretends it will auto-renew. `autoPay` is
  * therefore meaningless on them, and `isChargeable` below is what says so.
+ *
+ * `fpx` (migration 0145) is the owner's chosen rail: one-off FPX, a link each
+ * period, every Malaysian bank. It stores NOTHING about the bank — the venue
+ * picks it on the provider's page at pay time — which is exactly what makes it
+ * a different value from `fpx_mandate`, whose CHECKs demand a bank and a state.
  */
 export const paymentMethodTypeValues = [
   'card',
+  'fpx',
   'fpx_mandate',
   'ewallet',
   'duitnow',
@@ -107,6 +113,16 @@ export type PaymentMethodType = (typeof paymentMethodTypeValues)[number];
 
 /** Rails a scheduled charge could ever run on unattended. */
 export const autoChargeableTypes: readonly PaymentMethodType[] = ['card', 'fpx_mandate'];
+
+/**
+ * Rails a subscriber may SAVE (owner, 2 Sep 2026): a saved method is optional
+ * and means auto-debit, so only the two auto-chargeable rails can be saved.
+ * The others stay in `paymentMethodTypeValues` because rows on them exist
+ * (retired by 0148, still describable) and because `fpx` is how every manual
+ * pay-now is recorded on the attempt ledger — a rail on an attempt, not an
+ * instrument. The save schema is the door; this is the list it checks.
+ */
+export const savablePaymentMethodTypes = ['card', 'fpx_mandate'] as const;
 
 /**
  * A direct debit mandate's life. `pending` is the state that matters: the row

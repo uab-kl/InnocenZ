@@ -1496,14 +1496,6 @@ const en = {
 		resetRequesting: "Reset requested…",
 		resetPendingAdmin: "Reset · pending admin",
 		pricePendingAdmin: "Price · pending admin",
-		currentSubscription: "Current subscription",
-		billingHistoryTitle: "Billing history",
-		whatYouSubscribedTo:
-			"What your agency is subscribed to with InnocenZ today. It records what you subscribed to and when, so it does not say whether a given week was paid.",
-		loadingSubscription: "Loading your subscription…",
-		noActiveSubscription:
-			"No plan has been assigned to this agency yet, so nothing has been billed. {plan} above is the tier your PV volume implies — not a plan you are paying for.",
-		noSubscriptionInvoices: "No subscription invoices yet.",
 		oneRowPerPeriod:
 			"One row per billing period — agencies are billed weekly, Sunday to Saturday, the same week your payroll runs on. A period stays Unpaid until InnocenZ marks the payment received.",
 		moneyComingIn:
@@ -1533,26 +1525,16 @@ const en = {
 		nothingOutstanding:
 			"Nothing outstanding — every billing period so far is marked paid.",
 		paidPeriods: "Paid periods",
-		planChangeHistory: "Plan change history",
 		billedWeekly: "Weekly",
 		billedMonthly: "Monthly",
 		billedAnnually: "Annually",
 		/** Cycle line under a subscription record: "Monthly billing". */
-		billingCycleLine: "{cycle} billing",
-		billingCycleEnded: "{cycle} billing · ended {date}",
 		statusActive: "Active",
 		statusPastDue: "Past due",
 		statusCancelled: "Cancelled",
 		statusEnded: "Ended",
-		onDate: "On {date}",
-		switchedSameDay: "switched away the same day",
-		untilDate: "until {date}",
 		settledPeriodsOne: "{n} settled period · {total} paid to InnocenZ",
 		settledPeriodsMany: "{n} settled periods · {total} paid to InnocenZ",
-		pastPlansOne:
-			"{n} plan you were on before · not billing. A switch closes one record and opens another, so most of these ran for a day or less.",
-		pastPlansMany:
-			"{n} plans you were on before · not billing. A switch closes one record and opens another, so most of these ran for a day or less.",
 		paidOn: " · paid {date}",
 		statusPaid: "Paid",
 		statusUnpaid: "Unpaid",
@@ -1568,8 +1550,8 @@ const en = {
 		expiryFormat: "Expiry must be MM/YY",
 		expiryMonthRange: "Expiry month must be 01–12",
 		cardExpired: "That card has already expired",
-		noCardSaved: "No card saved",
-		noCardSavedYet: "No card saved yet",
+		noCardSaved: "No payment method saved",
+		noCardSavedYet: "No payment method saved yet",
 		loadingCard: "Loading card…",
 		editCard: "Edit card",
 		addCard: "Add card",
@@ -1577,7 +1559,14 @@ const en = {
 		savingCard: "Saving…",
 		saveCard: "Save card",
 		cardExpires: "{billed} · expires {mm}/{yy}",
-		addACard: "{billed} · add a card so billing has somewhere to go",
+		/**
+		 * The header line when nothing is saved. A saved method is OPTIONAL
+		 * (owner, 2 Sep 2026) and means auto-debit; with none, the org pays each
+		 * period by one-off FPX from Payment history — so this states that plan
+		 * rather than nagging for a card.
+		 */
+		noMethodPaysByFpx:
+			"{billed} · no auto-debit — pay each period by FPX from Payment history",
 		autoPayEnabled: "{billed} · auto-pay enabled",
 		visaNextCharge: "Visa ···· {last4} · next charge {date}",
 
@@ -1588,12 +1577,12 @@ const en = {
 		 */
 		payHow: "How you pay",
 		methodCard: "Card",
-		methodFpx: "FPX direct debit",
+		methodFpx: "Bank direct debit",
 		methodTransfer: "Bank transfer",
 		methodCardNote:
-			"Visa, Mastercard and others. Charged automatically once a payment gateway is connected.",
+			"Visa, Mastercard and others. Each period is charged automatically once a payment gateway is connected; a declined charge leaves that period unpaid, to pay by FPX.",
 		methodFpxNote:
-			"You authorise this once at your bank, and each period is debited automatically after that.",
+			"You authorise this once at your bank and each period is taken automatically after that. A debit that bounces leaves that period unpaid, to pay by FPX.",
 		methodTransferNote:
 			"You transfer each period yourself and InnocenZ marks it received. Nothing is ever charged automatically.",
 		/**
@@ -1625,7 +1614,68 @@ const en = {
 		editPaymentMethod: "Edit payment method",
 		savePaymentMethod: "Save payment method",
 		savedTransfer: "Bank transfer",
-		savedFpx: "FPX direct debit",
+		savedFpx: "Bank direct debit",
+		/** Optional-ness, said before the picker; and the way back to "none". */
+		methodOptional:
+			"Optional. Save a card or a bank direct debit and each period is taken automatically. With nothing saved — or if a debit bounces — you pay the unpaid periods by FPX from Payment history.",
+		removePaymentMethod: "Remove payment method",
+		removeMethodNote:
+			"Removing it turns auto-debit off — you will pay each period by FPX from Payment history instead.",
+		confirmRemoveMethod: "Yes, remove it",
+		removingMethod: "Removing…",
+		methodRemoved: "Payment method removed — you now pay each period by FPX",
+		couldNotRemoveMethod: "Could not remove the payment method — try again",
+
+		/**
+		 * One-off FPX — chosen 28 Aug 2026 as the SAVED rail, then WITHDRAWN from
+		 * the picker on 2 Sep 2026 when the owner made the saved method optional
+		 * and auto-debit only (card / bank direct debit). It is still how every
+		 * manual pay-now is made and recorded, so these keys stay: the admin panel
+		 * and receipts name the rail, and rows saved on it must keep reading true.
+		 */
+		methodFpxLink: "FPX (online banking)",
+		/** Tick-to-pay on the payer's history, and the receipt behind a paid period. */
+		selectToPay: "Tick the periods to pay by FPX",
+		paySelected: "Pay {amount} by FPX",
+		paySelectedCount: "{n} selected",
+		payOpening: "Opening payment…",
+		payNotConnected:
+			"Online payment is not connected yet — InnocenZ will mark this period paid once your transfer arrives.",
+		receiptTitle: "Receipt",
+		receiptInvoiceNo: "Invoice no.",
+		receiptPeriod: "Billing period",
+		receiptPaidOn: "Paid on",
+		receiptPaidBy: "Paid by",
+		receiptReference: "Reference",
+		receiptFrom: "From",
+		receiptTo: "To",
+		receiptTotal: "Total paid",
+		receiptPrint: "Print",
+		receiptNoPayment:
+			"Marked paid by InnocenZ — no payment record was attached to this period.",
+		receiptTap: "Tap a paid period for its receipt",
+		/** Plan-switch proration — shown on the row and on the receipt. */
+		laneUpgrade: "Upgrade",
+		upgradeTo: "→ {plan}",
+		planTotalWith: "Plan total · {plan}",
+		priceBeforeDeduction: "Plan price {amount}",
+		creditDeducted: "Deduction from previous plan −{amount}",
+		receiptBase: "Plan price",
+		receiptCredit: "Deduction (credit from previous plan)",
+		receiptUpgrade: "Upgrade charge",
+		/**
+		 * On a link-and-pay rail the email is not a "billing email" — it is
+		 * where the payment link goes. Optional only because the link also
+		 * reaches the org in the app and by WhatsApp; the note says so.
+		 */
+		sendLinksTo: "Send payment links to",
+		linksAlsoReachYou:
+			"Optional — the link also reaches your owner and finance accounts in the app and by WhatsApp, and there is a Pay now button on your Today page.",
+		methodFpxLinkNote:
+			"We send you a payment link each period and you pay at your own bank — every Malaysian bank, nothing to set up.",
+		savedFpxLink: "FPX",
+		fpxLinkNote:
+			"InnocenZ records that you pay by FPX. The payment link each period needs Fiuu to be connected, which is not yet.",
 
 		/**
 		 * The Today-page billing banner, both portals.
@@ -2007,6 +2057,9 @@ const en = {
 		atDailyLimit: "At daily limit",
 		perMonth: "/ month",
 		renewalPrefix: "Renewal {date} · ",
+		/** The lane's current billing window beside its renewal (owner, 2 Sep 2026). */
+		windowRenewalPrefix: "{window} · Renewal {date} · ",
+		windowRenewal: "{window} · renewal {date}",
 		requestedTodayPool: "{today} / {max} requested PRs today · pool of {pool}",
 		sentToAdmin:
 			"Sent to InnocenZ admin — you stay on {plan} until it is approved.",
@@ -2041,9 +2094,6 @@ const en = {
 			"InnocenZ admin received your request and will contact {contact} to negotiate pricing.",
 		cancelRequest: "Cancel request",
 		requestAdminQuote: "Request admin quote",
-		whatVenueSubscribedTo:
-			"What this venue is subscribed to with InnocenZ today — its plan, plus POS integration if you have added it. It records what you subscribed to and when, so it does not say whether a given month was paid.",
-		noActiveSubscription: "No active subscription for this venue.",
 		paymentHistory: "Payment history",
 		oneRowPerPeriod:
 			"One row per billing period — venues are billed monthly, from the day you subscribed. A period stays Unpaid until InnocenZ marks the payment received.",
@@ -2540,8 +2590,9 @@ const en = {
 		outletPageTitle: "Outlet Organizations — Innocenz Admin",
 		outletApproved: "Outlet approved",
 		outletApproveFailed: "Failed to approve outlet",
-		outletSuspended: "Outlet suspended",
-		outletSuspendFailed: "Failed to suspend outlet",
+		outletDeactivated:
+			"Outlet set inactive — its accounts can no longer sign in",
+		outletDeactivateFailed: "Failed to set the outlet inactive",
 		allStatus: "All Status",
 		filterByStatus: "Filter by status",
 		colName: "Name",
@@ -3217,8 +3268,9 @@ const en = {
 		thisAccount: "This account",
 		agencyApproved: "Agency approved",
 		agencyApproveFailed: "Failed to approve agency",
-		agencySuspended: "Agency suspended",
-		agencySuspendFailed: "Failed to suspend agency",
+		agencyDeactivated:
+			"Agency set inactive — its accounts can no longer sign in",
+		agencyDeactivateFailed: "Failed to set the agency inactive",
 		aboutLegacyMember: "About Legacy Member",
 		aboutLegacyMemberBody:
 			"This list shows suspended Agency and Outlet organizations, plus inactive PR accounts. Filter by Role (not Rank). Reactivating an agency or outlet restores the organization; reactivating a PR re-enables the person's account so they can sign in again.",
@@ -5500,7 +5552,19 @@ const en = {
 			"Waiting for admin approval before this {entity} goes live.",
 		approvalActiveBody: "This {entity} is live on the platform.",
 		approvalSuspendedBody: "This {entity} has been suspended by an admin.",
-		approvalInactiveBody: "This {entity} is inactive.",
+		approvalInactiveBody:
+			"This {entity} is inactive — its accounts are refused at login until an admin reactivates it.",
+		/** The hard off switch (owner, 2 Sep 2026). Suspend keeps a profile-only session; inactive refuses every login. */
+		activate: "Activate",
+		setInactive: "Deactivate",
+		setInactiveBody:
+			"Every account in this {entity} will be signed out now and refused at login until an admin presses Activate.",
+		confirmSetInactive: "Yes, deactivate",
+		/** The person-shaped card (PR / admin accounts). */
+		accountActiveBody: "This account can sign in.",
+		accountInactiveBody:
+			"This account is refused at login until an admin activates it.",
+		accountBlockedBody: "This account is blocked and cannot sign in.",
 		/** Lower-case on purpose: it lands MID-sentence in the four approval bodies. Not the stored "agency" value, which is never rendered. */
 		entityAgency: "agency",
 		/** Mid-sentence noun for the four approval bodies. Never compared or sent. */
@@ -7120,14 +7184,6 @@ const zh: PortalTranslations = {
 		resetRequesting: "正在提交重置…",
 		resetPendingAdmin: "重置 · 等待管理员",
 		pricePendingAdmin: "报价 · 等待管理员",
-		currentSubscription: "当前订阅",
-		billingHistoryTitle: "账单记录",
-		whatYouSubscribedTo:
-			"这是你的经纪公司目前在 InnocenZ 的订阅内容。它记录你订阅了什么以及订阅时间，并不表示某一周是否已付款。",
-		loadingSubscription: "正在加载你的订阅…",
-		noActiveSubscription:
-			"InnocenZ 尚未为你的经纪公司分配订阅方案，因此没有产生任何账单。上方的 {plan} 是根据 PV 用量推算出的级别，并非你正在支付的方案。",
-		noSubscriptionInvoices: "还没有订阅账单。",
 		oneRowPerPeriod:
 			"每个计费周期一行 —— 经纪公司按周计费，周日至周六，与你的薪资周一致。在 InnocenZ 确认收款前，该周期显示为未付款。",
 		moneyComingIn:
@@ -7153,25 +7209,15 @@ const zh: PortalTranslations = {
 			"还没有计费周期 —— 第一个周期会在你的方案周期开始时生成。",
 		nothingOutstanding: "没有未结款项 —— 目前每个计费周期都已标记为已付款。",
 		paidPeriods: "已付周期",
-		planChangeHistory: "方案变更记录",
 		billedWeekly: "按周",
 		billedMonthly: "按月",
 		billedAnnually: "按年",
-		billingCycleLine: "{cycle}计费",
-		billingCycleEnded: "{cycle}计费 · 已于 {date} 结束",
 		statusActive: "生效中",
 		statusPastDue: "已逾期",
 		statusCancelled: "已取消",
 		statusEnded: "已结束",
-		onDate: "{date}",
-		switchedSameDay: "当天即已切换",
-		untilDate: "至 {date}",
 		settledPeriodsOne: "{n} 个已结算周期 · 已向 InnocenZ 支付 {total}",
 		settledPeriodsMany: "{n} 个已结算周期 · 已向 InnocenZ 支付 {total}",
-		pastPlansOne:
-			"你此前使用过 {n} 个套餐 · 不涉及计费。切换会结束一条记录并开启另一条，因此其中大多数只持续了一天或更短。",
-		pastPlansMany:
-			"你此前使用过 {n} 个套餐 · 不涉及计费。切换会结束一条记录并开启另一条，因此其中大多数只持续了一天或更短。",
 		paidOn: " · 付款于 {date}",
 		statusPaid: "已付款",
 		statusUnpaid: "未付款",
@@ -7186,8 +7232,8 @@ const zh: PortalTranslations = {
 		expiryFormat: "有效期格式须为 月/年",
 		expiryMonthRange: "有效期月份须为 01–12",
 		cardExpired: "该卡已过期",
-		noCardSaved: "未保存银行卡",
-		noCardSavedYet: "尚未保存银行卡",
+		noCardSaved: "未保存付款方式",
+		noCardSavedYet: "尚未保存付款方式",
 		loadingCard: "正在加载银行卡…",
 		editCard: "编辑银行卡",
 		addCard: "添加银行卡",
@@ -7195,16 +7241,19 @@ const zh: PortalTranslations = {
 		savingCard: "正在保存…",
 		saveCard: "保存银行卡",
 		cardExpires: "{billed} · 有效期至 {mm}/{yy}",
-		addACard: "{billed} · 请添加银行卡以便扣费",
+		noMethodPaysByFpx:
+			"{billed} · 未开启自动扣款 —— 请在付款记录中以 FPX 支付每个账期",
 		autoPayEnabled: "{billed} · 已开启自动扣款",
 		visaNextCharge: "Visa ···· {last4} · 下次扣费 {date}",
 
 		payHow: "付款方式",
 		methodCard: "银行卡",
-		methodFpx: "FPX 银行直接扣账",
+		methodFpx: "银行直接扣账",
 		methodTransfer: "银行转账",
-		methodCardNote: "Visa、Mastercard 等。接入支付网关后将自动扣款。",
-		methodFpxNote: "在银行一次性授权后，之后每个账期都会自动扣账。",
+		methodCardNote:
+			"Visa、Mastercard 等。接入支付网关后每个账期将自动扣款；扣款被拒时该账期保持未付，请以 FPX 支付。",
+		methodFpxNote:
+			"在银行一次性授权后，之后每个账期会自动扣款。扣款失败时该账期保持未付，请以 FPX 支付。",
 		methodTransferNote:
 			"每个账期由您自行转账，InnocenZ 收到后标记为已付款，绝不会自动扣款。",
 		lanePlan: "套餐",
@@ -7223,7 +7272,52 @@ const zh: PortalTranslations = {
 		editPaymentMethod: "编辑付款方式",
 		savePaymentMethod: "保存付款方式",
 		savedTransfer: "银行转账",
-		savedFpx: "FPX 银行直接扣账",
+		savedFpx: "银行直接扣账",
+		methodOptional:
+			"选填。保存银行卡或银行直接扣账后，每个账期会自动扣款。未保存付款方式，或扣款失败时，请在付款记录中以 FPX 支付未付账期。",
+		removePaymentMethod: "移除付款方式",
+		removeMethodNote:
+			"移除后将关闭自动扣款 —— 之后每个账期需在付款记录中以 FPX 支付。",
+		confirmRemoveMethod: "是，移除",
+		removingMethod: "正在移除…",
+		methodRemoved: "付款方式已移除 —— 之后每个账期以 FPX 支付",
+		couldNotRemoveMethod: "无法移除付款方式 —— 请重试",
+
+		methodFpxLink: "FPX（网上银行）",
+		selectToPay: "勾选要以 FPX 付款的账期",
+		paySelected: "以 FPX 付款 {amount}",
+		paySelectedCount: "已选 {n} 项",
+		payOpening: "正在打开付款页面…",
+		payNotConnected:
+			"在线付款尚未接入 — 收到您的转账后，InnocenZ 会将此账期标记为已付款。",
+		receiptTitle: "收据",
+		receiptInvoiceNo: "账单编号",
+		receiptPeriod: "账期",
+		receiptPaidOn: "付款日期",
+		receiptPaidBy: "付款方式",
+		receiptReference: "参考号",
+		receiptFrom: "付款方",
+		receiptTo: "收款方",
+		receiptTotal: "已付总额",
+		receiptPrint: "打印",
+		receiptNoPayment: "由 InnocenZ 标记为已付款 — 此账期未附付款记录。",
+		receiptTap: "点击已付款账期查看收据",
+		laneUpgrade: "升级",
+		upgradeTo: "→ {plan}",
+		planTotalWith: "方案合计 · {plan}",
+		priceBeforeDeduction: "方案价格 {amount}",
+		creditDeducted: "前方案抵扣 −{amount}",
+		receiptBase: "方案价格",
+		receiptCredit: "抵扣（前方案余额）",
+		receiptUpgrade: "升级差额",
+		sendLinksTo: "付款链接发送至",
+		linksAlsoReachYou:
+			"选填 — 付款链接也会通过应用内通知和 WhatsApp 发送给您的负责人和财务账号，Today 页面亦有「立即付款」按钮。",
+		methodFpxLinkNote:
+			"每个账期我们会发送付款链接，您在自己的银行完成付款 — 支持所有马来西亚银行，无需任何设置。",
+		savedFpxLink: "FPX",
+		fpxLinkNote:
+			"InnocenZ 会记录您以 FPX 付款。每期的付款链接需要接入 Fiuu，目前尚未接入。",
 
 		billingDueTitle: "订阅费待付",
 		billingDueOne: "尚有 {amount} 未付，共 1 个账单周期。",
@@ -7561,6 +7655,8 @@ const zh: PortalTranslations = {
 		atDailyLimit: "已达每日上限",
 		perMonth: "/ 每月",
 		renewalPrefix: "续订日 {date} · ",
+		windowRenewalPrefix: "{window} · 续订日 {date} · ",
+		windowRenewal: "{window} · 续订日 {date}",
 		requestedTodayPool: "今天已请求 {today} / {max} 位 PR · 人才库 {pool} 位",
 		sentToAdmin: "已发送给 InnocenZ 管理员 —— 在获批前你仍使用 {plan}。",
 		yourCurrentPlan: "你当前的套餐",
@@ -7594,9 +7690,6 @@ const zh: PortalTranslations = {
 			"InnocenZ 管理员已收到你的申请，将联系 {contact} 洽谈价格。",
 		cancelRequest: "撤回申请",
 		requestAdminQuote: "向管理员索取报价",
-		whatVenueSubscribedTo:
-			"本门店目前在 InnocenZ 订阅的内容 —— 套餐，以及已添加的 POS 接入。它记录你订阅了什么以及订阅时间，因此并不说明某个月份是否已付款。",
-		noActiveSubscription: "本门店没有生效中的订阅。",
 		paymentHistory: "付款记录",
 		oneRowPerPeriod:
 			"每个计费周期一行 —— 门店按月计费，从你订阅当天起算。在 InnocenZ 标记收款之前，该周期一直显示为未付款。",
@@ -8042,8 +8135,8 @@ const zh: PortalTranslations = {
 		outletPageTitle: "门店机构 —— InnocenZ 管理端",
 		outletApproved: "门店已批准",
 		outletApproveFailed: "批准门店失败",
-		outletSuspended: "门店已暂停",
-		outletSuspendFailed: "暂停门店失败",
+		outletDeactivated: "门店已停用 —— 其账号无法再登录",
+		outletDeactivateFailed: "停用门店失败",
 		allStatus: "全部状态",
 		filterByStatus: "按状态筛选",
 		colName: "名称",
@@ -8642,8 +8735,8 @@ const zh: PortalTranslations = {
 		thisAccount: "此账户",
 		agencyApproved: "经纪公司已批准",
 		agencyApproveFailed: "批准经纪公司失败",
-		agencySuspended: "经纪公司已暂停",
-		agencySuspendFailed: "暂停经纪公司失败",
+		agencyDeactivated: "经纪公司已停用 —— 其账号无法再登录",
+		agencyDeactivateFailed: "停用经纪公司失败",
 		aboutLegacyMember: "关于旧版会员",
 		aboutLegacyMemberBody:
 			"此列表显示已暂停的经纪公司与门店机构，以及已停用的 PR 账户。请按角色（而非等级）筛选。重新启用经纪公司或门店会恢复该机构；重新启用 PR 则会恢复本人的账户，使其可以再次登录。",
@@ -10225,7 +10318,16 @@ const zh: PortalTranslations = {
 		approvalPendingBody: "等待管理员审批，通过后该{entity}才会上线。",
 		approvalActiveBody: "该{entity}已在平台上线。",
 		approvalSuspendedBody: "该{entity}已被管理员暂停。",
-		approvalInactiveBody: "该{entity}目前处于停用状态。",
+		approvalInactiveBody:
+			"该{entity}已停用 —— 其账号在管理员重新启用前无法登录。",
+		activate: "启用",
+		setInactive: "停用",
+		setInactiveBody:
+			"该{entity}下的所有账号将立即登出，并在管理员点击「启用」前无法登录。",
+		confirmSetInactive: "是，停用",
+		accountActiveBody: "该账号可以登录。",
+		accountInactiveBody: "该账号在管理员启用前无法登录。",
+		accountBlockedBody: "该账号已被封锁，无法登录。",
 		entityAgency: "经纪公司",
 		entityOutlet: "门店",
 	},

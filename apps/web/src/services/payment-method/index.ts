@@ -18,6 +18,7 @@ import { buildQueryParams } from "@/lib/build-query-params";
  */
 export const paymentMethodTypes = [
 	"card",
+	"fpx",
 	"fpx_mandate",
 	"ewallet",
 	"duitnow",
@@ -83,9 +84,9 @@ export interface SavePaymentMethodInput {
 	/** PayNet code of the bank to redirect to. Required for `fpx_mandate`. */
 	bankCode?: string | null;
 	/**
-	 * WHICH E-WALLET, by roster code. Required by the server when
-	 * `type === "ewallet"`, and rejected there if it is not on the roster — so the
-	 * picker must offer the server's own list, never a hardcoded one.
+	 * Ignored by the server since 2 Sep 2026: the e-wallet rail can no longer
+	 * be SAVED (only card and bank direct debit auto-debit, and a saved method
+	 * means auto-debit). Kept so the shape still matches older rows read back.
 	 */
 	walletProvider?: string | null;
 	autoPay?: boolean;
@@ -107,7 +108,7 @@ export async function fetchMyPaymentMethod(
 	return response.data.data ?? null;
 }
 
-/** Save (or replace) the caller's card — one card per organisation. */
+/** Save (or replace) the caller's instrument — one default per organisation. */
 export async function saveMyPaymentMethod(
 	input: SavePaymentMethodInput,
 	onRefreshFail: () => void,
@@ -119,6 +120,27 @@ export async function saveMyPaymentMethod(
 		data: PaymentMethod;
 	}>("/payment-method/mine", input);
 	return response.data.data;
+}
+
+/**
+ * Retire the caller's saved instrument — auto-debit off, the org pays each
+ * period by FPX from then on. Returns the SERVER'S sentence so the screen can
+ * show what actually happened rather than a local guess.
+ */
+export async function removeMyPaymentMethod(
+	id: string,
+	onRefreshFail: () => void,
+	outletId?: string,
+): Promise<string> {
+	const client = getClient(onRefreshFail);
+	const response = await client.delete<{
+		success: boolean;
+		message: string;
+		data: unknown;
+	}>(
+		`/payment-method/mine/${encodeURIComponent(id)}${buildQueryParams({ outletId })}`,
+	);
+	return response.data.message;
 }
 
 export interface FpxBank {
@@ -188,13 +210,31 @@ export async function fetchEwalletProviders(
  */
 export function describePaymentMethod(
 	method: PaymentMethod,
-	labels: { transfer: string; fpx: string },
+	labels: { transfer: string; fpx: string; fpxLink: string; ewallet: string },
+	/**
+	 * Wallet code → display name, from `fetchEwalletProviders`. Optional because
+	 * most callers never hold a wallet row; without it the code itself is shown
+	 * ("E-wallet · TNG"), which is still true — unlike the fall-through below.
+	 */
+	walletNames?: Record<string, string>,
 ): string {
 	if (method.type === "manual_transfer") return labels.transfer;
-	// The bank is what a venue recognises its own mandate by — "FPX direct
+	// One-off FPX stores no bank — the venue picks it at pay time — so there is
+	// nothing to print beside the rail's name.
+	if (method.type === "fpx") return labels.fpxLink;
+	// The bank is what a venue recognises its own mandate by — "Bank direct
 	// debit" alone reads the same for every venue on the rail.
 	if (method.type === "fpx_mandate")
 		return method.bankName ? `${labels.fpx} · ${method.bankName}` : labels.fpx;
+	// An e-wallet has a brand of "Card" (the column default) and no last four,
+	// so letting it fall through printed "Card ···· ····" — a card whose digits
+	// looked like they had failed to load.
+	if (method.type === "ewallet") {
+		const name =
+			(method.walletProvider && walletNames?.[method.walletProvider]) ||
+			method.walletProvider;
+		return name ? `${labels.ewallet} · ${name}` : labels.ewallet;
+	}
 	return `${method.brand} ···· ${method.last4 ?? "····"}`;
 }
 

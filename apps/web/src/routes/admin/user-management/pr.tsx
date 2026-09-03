@@ -150,6 +150,11 @@ function PrUsersPage() {
 				onOpenChange={(open) => {
 					if (!open) setSelectedId(null);
 				}}
+				busy={accountActions.busyUserId === selectedId}
+				onSetStatus={(next) => {
+					const user = data?.data.find((row) => row.id === selectedId);
+					if (user) accountActions.askSetStatus(toTarget(user, t), next);
+				}}
 			/>
 		</PageShell>
 	);

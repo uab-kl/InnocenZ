@@ -17,6 +17,7 @@ import {
 	Weight,
 } from "lucide-react";
 import {
+	AccountStatusCard,
 	apiAssetUrl,
 	DetailField,
 	DetailSection,
@@ -42,6 +43,9 @@ interface PrDetailsSheetProps {
 	user: PrUser | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	/** Approval Status card: asks the page to confirm and set the account's status. */
+	onSetStatus?: (next: "active" | "inactive") => void;
+	busy?: boolean;
 }
 
 /**
@@ -68,6 +72,8 @@ export function PrDetailsSheet({
 	user,
 	open,
 	onOpenChange,
+	onSetStatus,
+	busy = false,
 }: PrDetailsSheetProps) {
 	const { t } = usePortalLocale();
 	const age = user ? ageFromDob(user.dob) : null;
@@ -107,6 +113,13 @@ export function PrDetailsSheet({
 							}
 						/>
 
+						{onSetStatus && (
+							<AccountStatusCard
+								status={user.status}
+								busy={busy}
+								onSetStatus={onSetStatus}
+							/>
+						)}
 						<Tabs defaultValue="personal">
 							<TabsList className="w-full">
 								<TabsTrigger value="personal">

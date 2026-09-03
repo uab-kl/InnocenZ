@@ -56,7 +56,8 @@ interface OutletsTableProps {
 	onPageChange: (page: number) => void;
 	onRetry: () => void;
 	onApprove: (id: string) => void;
-	onSuspend: (id: string) => void;
+	/** The off switch — `inactive`, refused at login until Activate. */
+	onDeactivate: (id: string) => void;
 	onSelect: (outlet: Outlet) => void;
 	actionId: string | null;
 }
@@ -75,7 +76,7 @@ export function OutletsTable({
 	onPageChange,
 	onRetry,
 	onApprove,
-	onSuspend,
+	onDeactivate,
 	onSelect,
 	actionId,
 }: OutletsTableProps) {
@@ -246,19 +247,20 @@ export function OutletsTable({
 															{t.common.approve}
 														</Button>
 													)}
-													{outlet.status === "active" && (
+													{(outlet.status === "active" ||
+														outlet.status === "suspended") && (
 														<Button
 															size="sm"
-															variant="outline"
+															variant="destructive"
 															disabled={busy}
-															onClick={() => onSuspend(outlet.id)}
+															onClick={() => onDeactivate(outlet.id)}
 														>
 															{busy ? (
 																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
 															) : (
 																<Ban className="mr-1 h-3.5 w-3.5" />
 															)}
-															{t.adminOrg.suspend}
+															{t.adminOrg.setInactive}
 														</Button>
 													)}
 													{outlet.status === "suspended" && (

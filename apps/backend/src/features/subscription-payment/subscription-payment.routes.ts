@@ -29,6 +29,17 @@ subscriptionPaymentWebhookRouter.post(
 
 const router = Router();
 
+/**
+ * The payer ticked periods and pressed Pay. Payers only — an admin marks
+ * money received, it does not pay on a venue's behalf. Ownership of every
+ * invoice is checked inside against the session, never taken from the body.
+ */
+router.post(
+  '/checkout',
+  requireRole('agency', 'outlet'),
+  subscriptionPaymentController.checkout.bind(subscriptionPaymentController),
+);
+
 /** Which providers are wired. Empty today; the admin UI reads it to say so. */
 router.get(
   '/gateways',

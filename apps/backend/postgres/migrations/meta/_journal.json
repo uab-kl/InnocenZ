@@ -1016,6 +1016,34 @@
       "when": 1791490000000,
       "tag": "0144_payout_run_no",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1791590000000,
+      "tag": "0145_payment_method_fpx",
+      "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1791690000000,
+      "tag": "0146_invoice_no_and_checkout",
+      "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1791790000000,
+      "tag": "0147_plan_switch_proration",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1791890000000,
+      "tag": "0148_retire_withdrawn_payment_rails",
+      "breakpoints": true
     }
   ]
 }
