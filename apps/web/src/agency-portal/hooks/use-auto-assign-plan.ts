@@ -258,27 +258,27 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		mutationFn: async (pairs: AutoAssignPair[]) => {
 			const [freshShifts, freshAssignments, freshPrs, freshBusy] =
 				await Promise.all([
-				fetchAllPages((page) =>
-					fetchShifts(
-						{ fromDate: week.from, toDate: week.to, page, pageSize: 100 },
+					fetchAllPages((page) =>
+						fetchShifts(
+							{ fromDate: week.from, toDate: week.to, page, pageSize: 100 },
+							logout,
+						),
+					),
+					fetchAllPages((page) =>
+						fetchShiftAssignments({ page, pageSize: 100 }, logout),
+					),
+					fetchAllPages((page) =>
+						fetchPrPersonnel({ page, pageSize: 100 }, logout),
+					),
+					// Re-read for the same reason as everything else here: a seat can be
+					// taken while the sheet sits open, and a seat taken by ANOTHER agency
+					// is invisible in `freshAssignments` — the one race the re-check could
+					// not see, and the one that reaches the API as an anonymous 409.
+					fetchPrCommittedWindows(
+						{ from: addDaysToIso(week.from, -1), to: week.to },
 						logout,
 					),
-				),
-				fetchAllPages((page) =>
-					fetchShiftAssignments({ page, pageSize: 100 }, logout),
-				),
-				fetchAllPages((page) =>
-					fetchPrPersonnel({ page, pageSize: 100 }, logout),
-				),
-				// Re-read for the same reason as everything else here: a seat can be
-				// taken while the sheet sits open, and a seat taken by ANOTHER agency
-				// is invisible in `freshAssignments` — the one race the re-check could
-				// not see, and the one that reaches the API as an anonymous 409.
-				fetchPrCommittedWindows(
-					{ from: addDaysToIso(week.from, -1), to: week.to },
-					logout,
-				),
-			]);
+				]);
 			const { valid, dropped } = validateAutoAssignPairs({
 				pairs,
 				shifts: freshShifts.data,
