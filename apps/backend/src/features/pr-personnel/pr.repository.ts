@@ -315,6 +315,39 @@ async function loadPrimaryMembership(
   }
 }
 
+/**
+ * Which of `agencyIds` each of `userIds` is genuinely on the roster of.
+ *
+ * A named-PR pick is a PERSON, not a membership. The Post Job picker draws one
+ * card per person (the `selectDistinctOn` in `listPaginated`), so the client
+ * can only ever name ONE membership — whichever survived that dedupe — and a
+ * request addressed from it reached exactly one agency. Resolving the pairs
+ * from the roster instead lets one pick reach every invited agency holding her.
+ *
+ * A `rejected` membership is excluded: the picker's own pool drops those
+ * (`status !== 'inactive'` in use-outlet-pr-pool), so addressing one would name
+ * an agency the venue was never offered.
+ *
+ * Callers pass an ALREADY-AUTHORISED agency list — this widens a pick across
+ * that list, it does not decide who may be asked.
+ */
+export async function listMembershipPairs(
+  userIds: string[],
+  agencyIds: string[],
+): Promise<{ userId: string; agencyId: string }[]> {
+  if (userIds.length === 0 || agencyIds.length === 0) return [];
+  return await db
+    .select({ userId: AgencyPrTable.userId, agencyId: AgencyPrTable.agencyId })
+    .from(AgencyPrTable)
+    .where(
+      and(
+        inArray(AgencyPrTable.userId, userIds),
+        inArray(AgencyPrTable.agencyId, agencyIds),
+        ne(AgencyPrTable.approveStatus, 'rejected'),
+      ),
+    );
+}
+
 export class PrRepositoryClass {
   /**
    * `main.pr` is dropped — there is nothing left to INSERT. A PR is a user

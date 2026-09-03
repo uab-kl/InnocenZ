@@ -1,4 +1,9 @@
-import { IzPill, TierBadge, TrafficPill } from "@agency-portal/components/iz/ui";
+import {
+	IzPill,
+	TierBadge,
+	TrafficPill,
+} from "@agency-portal/components/iz/ui";
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -12,13 +17,13 @@ import {
 	shiftStaffingSummary,
 	staffingFallbackAgencyName,
 } from "@agency-portal/lib/outlet-shift-staffing";
+import { groupRequestsByPerson } from "@agency-portal/lib/requested-prs";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { trafficLevelForRatio } from "@agency-portal/lib/traffic-status";
 import { cn } from "@agency-portal/lib/utils";
 import { ClipboardList, UserCheck, Users } from "lucide-react";
 import { useMemo } from "react";
-import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -145,18 +150,23 @@ export function OutletShiftStaffingSection({
 		() => new Map(agencyLinks.links.map((l) => [l.agencyId, l.agencyName])),
 		[agencyLinks.links],
 	);
+	// ONE ROW PER PERSON. One pick now writes a request to every invited agency
+	// holding that PR, and the venue reads them ALL — so without this the face it
+	// picked once would appear once per agency.
 	const requestedRows = useMemo(() => {
 		const bookedIds = new Set(shift.prs ?? []);
-		return (shift.requestedPrs ?? []).map((r) => {
-			const managed = agencyPRs.find((p) => p.id === r.userId);
-			return {
-				userId: r.userId,
-				name: managed?.name ?? "PR",
-				photo: managed?.comcardImageUrl ?? managed?.avatarPhoto ?? null,
-				agencyName: agencyNameById.get(r.agencyId) ?? null,
-				booked: bookedIds.has(r.userId),
-			};
-		});
+		return groupRequestsByPerson(shift.requestedPrs ?? [], agencyNameById).map(
+			(r) => {
+				const managed = agencyPRs.find((p) => p.id === r.userId);
+				return {
+					userId: r.userId,
+					name: managed?.name ?? "PR",
+					photo: managed?.comcardImageUrl ?? managed?.avatarPhoto ?? null,
+					agencyName: r.agencyName,
+					booked: bookedIds.has(r.userId),
+				};
+			},
+		);
 	}, [shift.requestedPrs, shift.prs, agencyPRs, agencyNameById]);
 
 	const { booked, applicants } = buildShiftStaffRows({

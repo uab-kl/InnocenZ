@@ -332,6 +332,22 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ ✅ CLOSED by decision — old one-agency requests are LEFT AS THEY ARE (3 Sep 2026)
+
+The fan-out fixed the WRITE path; the rows already in the database were written by the old
+one-agency code and stay one-agency. Four shifts are affected — both of the 3 Sep Emhub posts
+(Vicky, addressed to Why We Met, invisible to Atlas) and the two 24 Aug posts (6 and 5 names).
+**Owner's call: leave them** — *"leave those as long as the next few shifts take this fix then it
+is fine"*. No backfill was run and none is planned; those four stay one-agency for good, so do
+NOT re-raise this as pending work. The check that matters is the NEXT posts: rerun
+`_probe-request-pr-cross-agency.ts` and read section 2 — a post made under the fix has
+`asked_agencies` equal to `invited`, and the four pre-fix rows are the ones dated 3 Sep and
+24 Aug.
+
+⚠️ Related, still open: `requestedPrs` is accepted only on CREATE. `UpdateShiftSchema` inherits
+the field via `.partial()` but the update handler never writes it, so editing a posted shift can
+neither add a named PR nor repair one of the rows above.
+
 ### ▶ ✅ CLOSED same day — OUTLET PRIVACY SWEEP: both leaks fixed (3 Sept 2026)
 
 **Shipped.** New `util/outlet-redaction.ts` blanks the fields; `redactIdentityDocsForOutlet` —
@@ -2607,6 +2623,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-09-03 (g) | **A named-PR request reached ONE agency when the venue had posted the job to two.** Reported: Vicky is on Why We Met AND Atlas, Emhub posted to both, only one side saw the ask. The design was already per-membership (`shift_pr_request` stores (shift, person, agency) and each agency reads only its own rows) — the break was upstream: the Post Job picker draws ONE card per person, because `listPaginated` runs `selectDistinctOn([userId]) … orderBy(userId, desc(createdAt))` for an outlet caller, so a pick could only ever carry the NEWEST membership among the ticked agencies. Vicky's Why We Met row (12 Aug) beat her Atlas row (20 Jul) and Atlas got a job with no ask on it. Measured, not guessed: both of the coworker's 3 Sep posts show `invited=2, request_rows=1`, and the 24 Aug post shows 6 names all addressed to one agency. **Fix:** the pairs are RE-RESOLVED server-side from the roster (new `listMembershipPairs` in `pr.repository.ts`, excluding `rejected` memberships to match the picker's own pool) and the client's `agencyId` is now advisory — the INVITED set is the only source of agencies, so both halves of the owner's rule fall out of one expression: every posted-to agency holding that PR gets a row, and an agency the venue did not post to never does (Vicky's third agency, Delta). Outlet-side views group back to one row per person (new `lib/requested-prs.ts`, used by `OutletShiftStaffingSection` + `OutletTodayOperationPanel`) so the venue does not see the same face once per agency; agency views need no change, the server already hands each of them only its own rows. Two outlets wanting the same PR at the same time was ALREADY first-come-first-serve — the cross-agency overlap guard in `shift-assignment.controller.ts` refuses the second booking with a deliberately anonymous message. | backend (shift create + PR roster read) + outlet web | ✅ backend tsc 0 · web tsc 0 · biome clean on touched files. Fan-out proven READ-ONLY against the live roster by `_probe-request-pr-cross-agency.ts` §4: posted-to Atlas+WWM → asks both; WWM only → asks WWM only; Atlas only → asks Atlas only; Delta on her roster but not posted to → absent — with a CONTROL row proving the filter can still say yes (invite Delta and it appears), so the exclusion is caused by the invited list and not by something incidental. ⚠️ The 4 shifts posted BEFORE this fix still carry their single row; new posts are correct, historical ones need a backfill (see §9). ⚠️ Requests are still create-only — editing a posted shift cannot add or repair them. |
 
 | 2026-09-03 (f) | **The agency's signature printed half the size of the PR's, because both renderers scaled the CANVAS instead of the mark.** Follow-on from (e): equal boxes were not enough. Measured on PV-000010 — the agency's ink occupies a 596x179 box inside a 1794x160 web pad, starting a third of the way in, so it fills just **33% of its pad's width**; the PR's fills 71% of a 354x120 phone pad. Fitting the whole pad drew the agency mark **59px** wide beside the PR's **126px**. New `signatureInkBounds()` (apps/web/.../signature-ink.ts) returns the strokes' own box plus a uniform 6% margin, and `SignatureInkMark` uses it as the viewBox. **The PDF had the identical bug** — `Math.min(valueW / ink.w, SIG_BOX_H / ink.h)` — and got the same trim, kept deliberately in step (same 6% margin, same bottom alignment as the SVG's `xMinYMax`), because the portal and the PDF show the same signature and must not disagree about it. Trimming is NOT distortion: only blank margins go, both axes still scale together, so the mark keeps its shape. Two subtleties preserved on purpose: bounds are **not clamped to the pad** — PV-000010's agency ink is 179 tall inside a 160-tall pad, and the old full-pad viewBox cut the bottom off it — and a mark with no extent in a direction (a single point, a perfectly flat line) returns null and falls back to the pad, since a mark drawn small beats one that cannot be drawn. 6 new unit tests. | agency web + backend PDF | ✅ web tsc 0 · **157/157** · backend tsc 0 · 110/110 · biome clean. Verified LIVE by measuring the drawn ink in the DOM: agency **114x34px** and PR **95x37px** inside identical 178x48 boxes — was 59px vs 126px. PDF rebuilds at 10,171 bytes. |
 

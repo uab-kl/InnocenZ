@@ -10,6 +10,8 @@ import { Error } from '@/error/index';
 import { paramId, uuidParam } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { shiftTemplateBelongsToOutlet } from '@/features/shift-template/shift-template.repository';
+// Widens a named-PR pick across every invited agency that holds her (0131).
+import { listMembershipPairs } from '@/features/pr-personnel/pr.repository';
 import { logger } from '@/util/logger';
 import { CreateShiftSchema, UpdateShiftSchema } from '@/schema/shift.schema';
 import { ShiftFilter, ShiftStatus, ShiftEventKind } from './shift.model';
@@ -437,15 +439,31 @@ export class ShiftControllerClass {
       // payTiers is a child-table override, not a shift column — keep it out of
       // the shift insert and persist it alongside in one transaction.
       const { payTiers, requestedPrs, ...shiftData } = parsed.data;
-      // A request addressed to an agency that is NOT invited on this shift is
-      // dropped rather than refused: the picker pool and the agency links can
-      // drift between page load and post, and losing one stale name must not
-      // sink the whole job. The rows kept are only ones some agency can read.
-      const invitedForRequests = new Set(
-        selectedAgencyIds.length > 0 ? selectedAgencyIds : [agencyId],
-      );
-      const requestRows = (requestedPrs ?? []).filter((r) =>
-        invitedForRequests.has(r.agencyId),
+      // A NAMED PICK IS A PERSON, NOT A MEMBERSHIP (owner, 3 Sep 2026: "ask all
+      // their related agencies that got posted the job and have that PR").
+      //
+      // The picker draws ONE card per person, so the client could only ever name
+      // one membership — whichever `selectDistinctOn` left standing in the PR
+      // list, which is the NEWEST among the ticked agencies. Trusting it wrote a
+      // single row: Emhub posted to Atlas AND Why We Met, and only Why We Met
+      // (membership 12 Aug, vs Atlas 20 Jul) ever saw the ask. Measured on the
+      // live rows by scripts/_probe-request-pr-cross-agency.ts.
+      //
+      // So the pairs are RE-RESOLVED from the roster rather than trusted, and
+      // the client's `agencyId` is now advisory. Both halves of the owner's rule
+      // fall out of one expression: the invited set is the ONLY source of
+      // agencies, so an agency the venue did not post to never appears — not
+      // even when the PR is on its roster (Vicky's third agency, Delta) — and
+      // every invited agency that does hold her gets a row.
+      //
+      // Unknown or stale picks still DROP rather than refuse: the picker pool
+      // and the agency links can drift between page load and post, and losing
+      // one name must not sink the whole job.
+      const invitedForRequests =
+        selectedAgencyIds.length > 0 ? selectedAgencyIds : [agencyId];
+      const requestRows = await listMembershipPairs(
+        [...new Set((requestedPrs ?? []).map((r) => r.userId))],
+        invitedForRequests,
       );
 
       const overAsked = demandExceedsQuantity(payTiers, shiftData.quantity);
