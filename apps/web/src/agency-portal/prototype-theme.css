@@ -3965,6 +3965,31 @@
 	object-fit: contain;
 	object-position: left center;
 }
+/*
+ * THE SAME 48px BOX FOR A DRAWN SIGNATURE AS FOR AN IMAGE ONE.
+ *
+ * SignatureInkMark renders a bare <svg> with a viewBox and no width/height, so
+ * without this rule the browser sizes it from the viewBox's aspect ratio — that
+ * is, from the dimensions of the PAD THE SIGNATURE WAS CAPTURED ON. On
+ * PV-000010 the owner signed on the web pad (1794 x 160) and the PR on a phone
+ * (354 x 120), giving one box ~16px tall and the other ~61px: a 3.8x difference
+ * between two marks on one document, reported 3 Sep 2026.
+ *
+ * A capture device is not a display instruction. The rule above has always
+ * pinned the <img> branch to 48px; the SVG branch never got the same treatment,
+ * so which branch a voucher happened to take decided how tall its signature box
+ * was.
+ *
+ * The element carries preserveAspectRatio="xMinYMax meet", which letterboxes the
+ * ink inside the box rather than stretching it: a wide pad's signature stays the
+ * shape it was drawn — smaller, but never distorted. A signature is evidence,
+ * and scaling one to fill a box would change what the mark looks like.
+ */
+.iz-pv-sig-preview svg {
+	display: block;
+	width: 100%;
+	height: 48px;
+}
 .iz-pv-sign-pad {
 	width: 100%;
 }

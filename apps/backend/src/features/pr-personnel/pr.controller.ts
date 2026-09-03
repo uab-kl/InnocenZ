@@ -18,6 +18,7 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
+import { redactPrRowForOutlet, redactPrRowsForOutlet } from '@/util/outlet-redaction';
 import { CreatePrSchema, UpdatePrSchema } from '@/schema/pr.schema';
 import { PrFilter, PrStatus, PrTier, type PrWithProfileType } from './pr.model';
 import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penalty-rule.repository.js';
@@ -589,12 +590,19 @@ export class PrControllerClass {
       res.status(200).json({
         success: true,
         message: 'OK',
+        // An outlet books from this list; it does not identify anyone from it.
+        // `stats` (agency→PR payroll) is already withheld above — this withholds
+        // the identity documents that were riding on every row beside it. Only
+        // an outlet caller reaches the bare `prs` arm: `stats` is non-null for
+        // admin and agency.
         data: stats
           ? prs.map((pr) => ({
               ...pr,
               stats: stats.get(pr.id) ?? EMPTY_PR_STATS,
             }))
-          : prs,
+          : req.redactIdentityDocs
+            ? redactPrRowsForOutlet(prs)
+            : prs,
         pagination: {
           page,
           pageSize,
@@ -700,7 +708,11 @@ export class PrControllerClass {
         },
       );
       if (!resolved) return;
-      res.status(200).json({ success: true, message: 'OK', data: resolved.pr });
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: req.redactIdentityDocs ? redactPrRowForOutlet(resolved.pr) : resolved.pr,
+      });
     } catch (error) {
       logger.error('[PrController.getById] Error:', error);
       res.status(500).json({

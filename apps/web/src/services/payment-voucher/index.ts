@@ -1,3 +1,4 @@
+import { env } from "@/env";
 import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
 
@@ -114,6 +115,13 @@ export interface PaymentVoucher {
 	net: string;
 	status: PaymentVoucherStatus;
 	financeHeadName: string | null;
+	/**
+	 * The capacity the signer signed in — 'Owner', 'Finance', 'Director'. A
+	 * snapshot taken at signing (migration 0149), so it keeps saying what was
+	 * true then. Null on vouchers signed before the column existed: those record
+	 * who signed but not as what, and the UI must claim no title for them.
+	 */
+	financeHeadRole: string | null;
 	financeHeadSignedAt: string | null;
 	/**
 	 * The two REAL finger-drawn signatures, as the `{w, h, strokes}` JSON the
@@ -805,6 +813,39 @@ export async function updatePaymentVoucher(
 		data: PaymentVoucherWithLines;
 	}>(`/payment-voucher/${id}`, input);
 	return response.data.data;
+}
+
+/**
+ * A 5-minute link to THE voucher PDF — the one the backend renders, which is
+ * the one the PR receives.
+ *
+ * The agency portal used to build its own document in the browser and open it
+ * as HTML in a blank tab: no PDF viewer, no page controls, no download or print
+ * button, and — worse — a second rendering of a document both parties sign.
+ * This mints the same ticket the PR's app uses, so both sides open the same
+ * bytes.
+ *
+ * A ticket rather than a direct authenticated GET, for the same reason the PR
+ * flow uses one: `window.open` cannot attach an Authorization header, and a
+ * session token in a URL leaks into history and server logs.
+ */
+export async function createVoucherExportTicket(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<{ pdfUrl: string; xlsxUrl: string; printUrl: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: { xlsxPath: string; pdfPath: string; printPath: string };
+	}>(`/payment-voucher/${id}/export-ticket`);
+	const base = `${env.VITE_API_URL}/v1`;
+	const d = response.data.data;
+	return {
+		pdfUrl: `${base}${d.pdfPath}`,
+		xlsxUrl: `${base}${d.xlsxPath}`,
+		printUrl: `${base}${d.printPath}`,
+	};
 }
 
 export async function removePaymentVoucher(

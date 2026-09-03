@@ -322,5 +322,52 @@ export type ShiftCostPrDayTotals = {
   prId: string;
   prName: string | null;
   soldOn: string;
+  /**
+   * WAGES ONLY — `shift_assignment.pay_amount`. Deliberately NOT the whole PR
+   * spend: `collection_invoice.amount` is summed from this same column, and the
+   * outlet's reconciliation banner checks the agency's bill against it. Widen
+   * this to include commission and that banner reports a variance every week
+   * between two figures that were never meant to match.
+   */
   cost: number;
+  /**
+   * COMMISSION the PR earned that day — `payment_voucher_line.amount` on
+   * approved/verified receipts, drink + tip components.
+   *
+   * Its own field rather than folded into `cost` because the two answer
+   * different questions: `cost` is what the agency BILLS the venue, this is
+   * what the PR EARNED on the floor. The Reports screen adds them — its card
+   * has always been labelled "PR wages & commission" — while the
+   * reconciliation banner must keep reading `cost` alone.
+   *
+   * Gated on the same receipt statuses as `recomputeShiftSale`, so a night's
+   * revenue and the commission earned against it move together: a pending
+   * receipt has raised neither yet.
+   *
+   * ⚠️ DRINK + TIP ONLY. `component='deduction'` is excluded on purpose and
+   * must stay excluded: a deduction is a PENALTY the agency levied on its PR,
+   * and **an outlet is not supposed to see it** (owner's rule, 3 Sept 2026).
+   * This row is served to outlet callers, so widening the filter to "every
+   * receipt-backed component" — or to a NOT-IN list that a new component would
+   * fall through — would disclose a PR's discipline record to the venue they
+   * work at. Name the components you want; never subtract the ones you don't.
+   */
+  commission: number;
+  /**
+   * APPROVED overtime — `shift_assignment.overtime_amount`, the frozen figure
+   * an owner/finance user signed off.
+   *
+   * Read from the assignment rather than from the `component='ot'` voucher
+   * line, even though commission comes from lines. The two records agree by
+   * construction (`overtime-line.ts` computes the number once and writes it
+   * both places, verified across every live row on 3 Sept 2026), and the
+   * column sits on the row already being aggregated — so it needs no join, and
+   * therefore cannot fan the wage sum out.
+   *
+   * ⚠️ Gated on `overtime_status = 'approved'`, NOT on the amount being
+   * present. A REJECTED claim also carries a frozen amount (one live row
+   * does), so "has an amount" is not "was approved" — overtime is never
+   * auto-paid, and a refusal must not reach a venue's bill.
+   */
+  overtime: number;
 };

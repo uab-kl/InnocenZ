@@ -55,6 +55,7 @@ import {
 } from "@agency-portal/lib/pr-demo";
 import { recordRating } from "@agency-portal/lib/pr-rating-summary";
 import type { PrShiftSessionState } from "@agency-portal/lib/pr-session";
+import { groupRequestsByPerson } from "@agency-portal/lib/requested-prs";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import type { PR, ShiftRequest } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
@@ -362,7 +363,10 @@ export function OutletTodayOperationPanel({
 	// "waiting on the agency" list, beside the live staff it complements.
 	const requestedTonight = useMemo(() => {
 		const bookedIds = new Set(shift.prs ?? []);
-		return (shift.requestedPrs ?? [])
+		// Grouped to one row per PERSON before anything else: one pick now writes a
+		// request to every invited agency holding that PR, and the venue reads them
+		// all, so the same face would otherwise be listed once per agency.
+		return groupRequestsByPerson(shift.requestedPrs ?? [], agencyNameById)
 			.filter((r) => !bookedIds.has(r.userId))
 			.map((r) => ({
 				userId: r.userId,
@@ -371,7 +375,7 @@ export function OutletTodayOperationPanel({
 					agencyPrById.get(r.userId)?.comcardImageUrl ??
 					agencyPrById.get(r.userId)?.avatarPhoto ??
 					null,
-				agencyName: agencyNameById.get(r.agencyId) ?? null,
+				agencyName: r.agencyName,
 			}));
 	}, [shift.requestedPrs, shift.prs, agencyPrById, agencyNameById]);
 

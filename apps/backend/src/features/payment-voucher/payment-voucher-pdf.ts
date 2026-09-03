@@ -11,10 +11,11 @@ import PDFDocument from 'pdfkit';
 import type { PaymentVoucherWithLines } from './payment-voucher.model';
 import {
   DASH,
-  KIND_LABELS,
+  derivePayeeCode,
+  exportLineDescription,
   dayMonth,
   klStamp,
-  pvLogoPath,
+  loadAgencyLogo,
   slashDate,
   voucherRef,
   type VoucherExportAgency,
@@ -39,13 +40,18 @@ const ROW_H = 16;
 const FILL = '#ececec';
 const BORDER = '#777777';
 
-export function buildVoucherPdf(params: {
+export async function buildVoucherPdf(params: {
   voucher: PaymentVoucherWithLines;
   agency: VoucherExportAgency;
   pr: VoucherExportPr;
   lines: VoucherExportLine[];
 }): Promise<Buffer> {
   const { voucher, agency, pr, lines } = params;
+  // Resolved BEFORE the document opens: PDFKit's stream is synchronous once
+  // started, and awaiting a network fetch midway would interleave the logo's
+  // bytes with the page's. Null when the agency has none, or the fetch failed —
+  // `loadAgencyLogo` never throws and never substitutes another agency's mark.
+  const logo = await loadAgencyLogo(agency);
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: MARGIN });
     const chunks: Buffer[] = [];
@@ -103,8 +109,7 @@ export function buildVoucherPdf(params: {
     };
     // The agency logo, top-left beside the centered letterhead — same gutter
     // as the Excel template's merged A1:A6.
-    const logo = pvLogoPath();
-    if (logo) doc.image(logo, XA, MARGIN - 8, { fit: [72, 72] });
+    if (logo) doc.image(logo.data, XA, MARGIN - 8, { fit: [72, 72] });
 
     centered('Payment Voucher', 16, true, 4);
     centered(agency?.name ?? DASH, 9, true);
@@ -119,7 +124,12 @@ export function buildVoucherPdf(params: {
     cell(XD, XEND - XD, ROW_H, voucherRef(voucher), { bold: true });
     y += ROW_H;
     const payableRows: [string, string, string, string][] = [
-      ['Code:', DASH, 'Voucher Date:', slashDate(voucher.issuedDate)],
+      [
+        'Code:',
+        derivePayeeCode(pr?.nickname ?? voucher.prName, pr?.icNo ?? voucher.prIc),
+        'Voucher Date:',
+        slashDate(voucher.issuedDate),
+      ],
       ['Name:', prName, '', ''],
       ['Nickname:', pr?.nickname ?? DASH, '', ''],
       ['IC/Passport No.:', pr?.icNo ?? DASH, '', ''],
@@ -159,11 +169,10 @@ export function buildVoucherPdf(params: {
 
     let seq = 1;
     for (const line of lines) {
-      const label = KIND_LABELS[line.kind] ?? line.kind;
       const qty = Math.max(1, line.quantity);
       itemRow(
         String(seq),
-        `${label} (${dayMonth(line.lineDate)}) - ${line.outlet ?? DASH}`,
+        exportLineDescription(line),
         String(qty),
         (line.commission / qty).toFixed(2),
         line.commission.toFixed(2),
@@ -227,6 +236,57 @@ export function buildVoucherPdf(params: {
     // The agency's half used to be absent entirely, which is why signing as
     // finance head changed nothing on the printed document.
     type SignatureInk = { w: number; h: number; strokes: [number, number][][] };
+    /*
+     * WHERE THE MARK IS — not where the pad was.
+     *
+     * The scale below used to be `min(valueW / ink.w, SIG_BOX_H / ink.h)`: the
+     * whole CANVAS fitted into the box, empty margins and all. Canvases differ
+     * enormously by device — the agency's web pad is 1794 x 160, a phone's is
+     * 354 x 120 — so on PV-000010 the owner's signature, which occupies 33% of
+     * its pad starting a third of the way in, printed at less than half the
+     * size of the PR's beside it. Two marks on one document, one of them barely
+     * legible, decided entirely by what each person signed on.
+     *
+     * Trimming to the strokes is not distortion: only the blank margins go, and
+     * the single `s` below still scales both axes together so the mark keeps
+     * its shape.
+     *
+     * Null when the ink has no extent in a direction (a single point, a
+     * perfectly flat line) — the caller then falls back to the pad, because a
+     * mark drawn small beats one that cannot be drawn at all. The bounds are
+     * deliberately NOT clamped to the pad: PV-000010's agency ink runs 179 tall
+     * inside a 160-tall pad, and the old maths cut the overflow off.
+     *
+     * ⚠️ Kept in step with `signatureInkBounds` in
+     * apps/web/src/agency-portal/lib/signature-ink.ts, including the 6% margin.
+     * The portal and this PDF show the same signature; they must trim it the
+     * same way.
+     */
+    const INK_BOUNDS_PAD = 0.06;
+    const inkBounds = (
+      ink: SignatureInk,
+    ): { x: number; y: number; w: number; h: number } | null => {
+      let minX = Number.POSITIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      for (const stroke of ink.strokes) {
+        if (!Array.isArray(stroke)) continue;
+        for (const point of stroke) {
+          const [x, y] = point ?? [];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+      const w = maxX - minX;
+      const h = maxY - minY;
+      if (!(w > 0) || !(h > 0)) return null;
+      const pad = Math.max(w, h) * INK_BOUNDS_PAD;
+      return { x: minX - pad, y: minY - pad, w: w + pad * 2, h: h + pad * 2 };
+    };
     const parseInk = (raw: string | null | undefined): SignatureInk | null => {
       if (!raw) return null;
       try {
@@ -281,14 +341,20 @@ export function buildVoucherPdf(params: {
 
       doc.font('Helvetica').fontSize(8).fillColor('#111').text('Signature:', x, cy + 8);
       if (sig.stamp && sig.ink) {
-        const s = Math.min(valueW / sig.ink.w, SIG_BOX_H / sig.ink.h);
-        const oy = cy + (SIG_BOX_H - sig.ink.h * s);
+        // The mark's own box, falling back to the pad when it has no extent.
+        const b = inkBounds(sig.ink) ?? { x: 0, y: 0, w: sig.ink.w, h: sig.ink.h };
+        const s = Math.min(valueW / b.w, SIG_BOX_H / b.h);
+        // Bottom-aligned, matching the SVG's xMinYMax on the portal: a
+        // signature sits on a line, so its baseline is what should be steady.
+        const oy = cy + (SIG_BOX_H - b.h * s);
+        const px = (x: number) => valueX + (x - b.x) * s;
+        const py = (y: number) => oy + (y - b.y) * s;
         doc.save().lineWidth(1.1).lineJoin('round').lineCap('round').strokeColor('#22345f');
         for (const stroke of sig.ink.strokes) {
           if (!Array.isArray(stroke) || stroke.length < 2) continue;
-          doc.moveTo(valueX + stroke[0][0] * s, oy + stroke[0][1] * s);
+          doc.moveTo(px(stroke[0][0]), py(stroke[0][1]));
           for (let i = 1; i < stroke.length; i++) {
-            doc.lineTo(valueX + stroke[i][0] * s, oy + stroke[i][1] * s);
+            doc.lineTo(px(stroke[i][0]), py(stroke[i][1]));
           }
           doc.stroke();
         }

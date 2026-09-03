@@ -5,7 +5,6 @@ import {
 import { CancellationFeesPanel } from "@agency-portal/components/agency/CancellationFeesPanel";
 import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
 import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQueuePanel";
-import { PayoutRunsPanel } from "@agency-portal/components/agency/PayoutRunsPanel";
 import { PayrollVerifyPanel } from "@agency-portal/components/agency/PayrollVerifyPanel";
 import { UnchargedFeesPanel } from "@agency-portal/components/agency/UnchargedFeesPanel";
 import { PvSummaryView } from "@agency-portal/components/iz/PvSummaryView";
@@ -26,6 +25,7 @@ import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
 import { useAgencyPvDayReview } from "@agency-portal/hooks/use-agency-pv-day-review";
 import {
+	isBackedVoucherId,
 	useAgencyPvDetail,
 	useAgencyPvs,
 	useVoucherPayeeBank,
@@ -76,10 +76,7 @@ import {
 	pvWorkflowStepIndex,
 	summarizePv,
 } from "@agency-portal/lib/pv-breakdown";
-import {
-	downloadPvBreakdownCsv,
-	downloadPvBreakdownPdf,
-} from "@agency-portal/lib/pv-pdf";
+import { downloadPvBreakdownCsv } from "@agency-portal/lib/pv-pdf";
 import {
 	buildAgencyPayee,
 	formatPvSignStamp,
@@ -100,10 +97,13 @@ import {
 	Shield,
 } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dayMonthLabel } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import { createVoucherExportTicket } from "@/services/payment-voucher";
 export const Route = createFileRoute("/agency/pv")({
 	component: AgencyPV,
 	validateSearch: (
@@ -159,7 +159,6 @@ export const Route = createFileRoute("/agency/pv")({
 			"receipts",
 			"disputes",
 			"overtime",
-			"payouts",
 		];
 		const tab =
 			typeof search.tab === "string" &&
@@ -178,7 +177,19 @@ type PvStatusFilter = "all" | "TO_PAY" | PrPvStatus;
 
 type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
 
-type PvSubTab = "vouchers" | "receipts" | "disputes" | "overtime" | "payouts";
+/*
+ * "payouts" is GONE (owner's call, 3 Sep 2026): *"remove the payout run
+ * completely"*. The Payout runs tab rendered on This Week and Last Week only —
+ * the two weeks nobody pays from — and duplicated what the PAYMENT week's
+ * "Signed PVs · manual payment" lane already does, one voucher at a time.
+ *
+ * The batch itself is NOT deleted: `PayoutRunsPanel`, `use-payout-batches` and
+ * the backend's /payout-batch routes are all still here and still tested. What
+ * is gone is the way in. Removing the tab rather than the feature keeps the
+ * bank-file lane recoverable by mounting it somewhere, instead of needing it
+ * rebuilt — and leaves the settled runs in the database addressable.
+ */
+type PvSubTab = "vouchers" | "receipts" | "disputes" | "overtime";
 
 /**
  * What last week's tab shows — every state a voucher for that week can be in,
@@ -657,6 +668,30 @@ function AgencyPV() {
 		],
 	);
 
+	/*
+	 * IS THE OVERTIME TAB OFFERED ON THIS WEEK?
+	 *
+	 * Everywhere except the payment week: yes. On the PAYMENT week it was hidden
+	 * outright (owner's rule, 3 Aug 2026) on the premise that "by then every
+	 * voucher is signed, and a signed voucher's figures are settled". That
+	 * premise stopped holding — the payment week now lists UNSIGNED vouchers too,
+	 * which the status-chip comment below already acknowledges — and the
+	 * consequence was reported on 3 Sep 2026: PV-000009's two undecided claims
+	 * sat on a week whose only control for deciding them was not rendered. The
+	 * panel's own cross-week line said "switch weeks above to decide them",
+	 * naming a week that then offered no tab to switch to.
+	 *
+	 * So it appears exactly when there is something to decide, which honours the
+	 * original rule in the case that rule was written for: a genuinely settled
+	 * payment week has no pending claim, so it still shows no tab. `pvSubTab`
+	 * keeps it alive while it is the one selected, so deciding the last claim
+	 * cannot pull the panel out from under the person deciding it.
+	 */
+	const showOvertimeTab =
+		payrollWeekTab !== "last_last_week" ||
+		weekPendingOtClaims.length > 0 ||
+		pvSubTab === "overtime";
+
 	const activeWeekStats = useMemo(() => {
 		const signed = weekTabPvs.filter((p) => p.status === "SIGNED");
 		const prCount = new Set(
@@ -717,13 +752,16 @@ function AgencyPV() {
 	const selectPayrollWeekTab = (tab: PayrollWeekTab) => {
 		setPayrollWeekTab(tab);
 		setStatusFilter("all");
-		// The payment week hides Disputes and Overtime, so landing on it while one
-		// of them is selected would leave a panel open with no tab above it — and
-		// no way back except guessing. Fall back to the tab that always exists.
-		if (
-			tab === "last_last_week" &&
-			(pvSubTab === "disputes" || pvSubTab === "overtime")
-		) {
+		// The payment week hides Disputes, so landing on it while that is selected
+		// would leave a panel open with no tab above it — and no way back except
+		// guessing. Fall back to the tab that always exists.
+		//
+		// Overtime is NOT bounced any more: `showOvertimeTab` keeps its button
+		// rendered whenever it is the selected tab, so the panel and its tab arrive
+		// together. Bouncing it was the other half of the 3 Sep report — following
+		// the panel's own "switch weeks above" advice landed the user on the
+		// Vouchers tab instead, which reads as the claims having disappeared.
+		if (tab === "last_last_week" && pvSubTab === "disputes") {
 			setPvSubTab("vouchers");
 		}
 		// Drop the incoming ?status/?pv/?tab. They are an instruction about where to
@@ -1020,47 +1058,38 @@ function AgencyPV() {
 				>
 					{t.receipts.receipts} ({activeWeekReceipts.length})
 				</button>
-				{/* Hidden on the PAYMENT week (owner's rule, 3 Aug 2026): by then every
-				    voucher is signed, and a signed voucher's figures are settled — a
-				    dispute or an overtime claim belongs to a week still under review.
-				    These two ARE week-scoped now (owner's rule, 11 Aug 2026): *"the
-				    dispute should sit with the week it is disputed at"*. They were not,
-				    and one claim appeared under every week with an identical count while
-				    the Vouchers and Receipts counts beside it moved — which reads as the
+				{/* Disputes is hidden on the PAYMENT week (owner's rule, 3 Aug 2026):
+				    by then a voucher's figures are settled, and a dispute belongs to a
+				    week still under review. Overtime USED to be hidden by this same
+				    rule and no longer is — see `showOvertimeTab` for why the premise
+				    stopped holding.
+				    Both ARE week-scoped (owner's rule, 11 Aug 2026): *"the dispute
+				    should sit with the week it is disputed at"*. They were not, and one
+				    claim appeared under every week with an identical count while the
+				    Vouchers and Receipts counts beside it moved — which reads as the
 				    filter leaking between weeks. The blocker they used to keep visible
-				    has not been thrown away: each panel counts its off-week open items on
-				    a line of its own, and the agency home lists every open one
+				    has not been thrown away: each panel counts its off-week open items
+				    on a line of its own, and the agency home lists every open one
 				    regardless of week. */}
 				{payrollWeekTab !== "last_last_week" && (
-					<>
-						<button
-							type="button"
-							className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
-							onClick={() => selectPvSubTab("disputes")}
-						>
-							{t.agencyHome.disputes} ({weekOpenDisputes.length})
-						</button>
-						<button
-							type="button"
-							className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
-							onClick={() => selectPvSubTab("overtime")}
-						>
-							{t.payroll.overtime} ({weekPendingOtClaims.length})
-						</button>
-						{/*
-							Payout runs live HERE rather than on a route of their own: this
-							screen is already where an agency comes for money, and a
-							separate page would put "who have we paid" a navigation away
-							from "what do we owe".
-						*/}
-						<button
-							type="button"
-							className={`iz-payroll-tab${pvSubTab === "payouts" ? " on" : ""}`}
-							onClick={() => selectPvSubTab("payouts")}
-						>
-							{t.payouts.runs}
-						</button>
-					</>
+					<button
+						type="button"
+						className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
+						onClick={() => selectPvSubTab("disputes")}
+					>
+						{t.agencyHome.disputes} ({weekOpenDisputes.length})
+					</button>
+				)}
+				{/* See `showOvertimeTab`: on the payment week this is offered only
+				    while that week still has a claim nobody has decided. */}
+				{showOvertimeTab && (
+					<button
+						type="button"
+						className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
+						onClick={() => selectPvSubTab("overtime")}
+					>
+						{t.payroll.overtime} ({weekPendingOtClaims.length})
+					</button>
 				)}
 			</div>
 
@@ -1076,13 +1105,6 @@ function AgencyPV() {
 					weekEndIso={activeWeekBounds.weekEndIso}
 				/>
 			)}
-			{/*
-				`canPay` is the same authority as the backend's agencyOwnerOrFinance
-				gate on every /payout-batch route — the web twin of one rule, not a
-				second one. A viewer sees the runs and can open one; only owner and
-				finance get the buttons that move money.
-			*/}
-			{pvSubTab === "payouts" && <PayoutRunsPanel canPay={can("raisePv")} />}
 
 			{pvSubTab === "vouchers" && (
 				<OutletSection
@@ -1679,6 +1701,44 @@ function PvDetail({
 	// note on buildAgencyPayee. Blank when the PR has not entered one.
 	const payeeBank = useVoucherPayeeBank(v.id);
 	const payee = buildAgencyPayee(v, agencyPRs, payeeBank.data);
+	const { logout } = useAuth();
+	const [pdfOpening, setPdfOpening] = useState(false);
+	/**
+	 * Opens the SERVER's voucher PDF in a new tab.
+	 *
+	 * The tab is opened SYNCHRONOUSLY, before the await, and only then pointed at
+	 * the URL. A `window.open` that happens after an awaited request is a popup
+	 * the browser did not see the click for, and Safari and Firefox block it —
+	 * the user would press PDF and get nothing at all, which is a worse failure
+	 * than the HTML tab this replaced.
+	 *
+	 * A demo voucher has no backend row and therefore no ticket to mint; it says
+	 * so rather than opening a tab onto a 404.
+	 */
+	const openOfficialPdf = async () => {
+		if (!pvIssuer.issuer || pdfOpening) return;
+		if (!isBackedVoucherId(v.id)) {
+			toast(t.payroll.officialPvDemoOnly, "warn");
+			return;
+		}
+		const tab = window.open("", "_blank");
+		setPdfOpening(true);
+		try {
+			const links = await createVoucherExportTicket(v.id, logout);
+			if (tab) tab.location.href = links.pdfUrl;
+			else window.location.href = links.pdfUrl;
+			toast(t.payroll.officialPvOpened, "success");
+		} catch (error) {
+			tab?.close();
+			toast(
+				toMutationError(error, t.payroll.officialPvFailed)?.message ??
+					t.payroll.officialPvFailed,
+				"warn",
+			);
+		} finally {
+			setPdfOpening(false);
+		}
+	};
 	const breakdown = summarizePv(editing ? { ...v, rows, deduct } : v);
 	const prHasSigned = Boolean(
 		v.prSignedAt || v.status === "PAID" || v.status === "SIGNED",
@@ -1712,9 +1772,26 @@ function PvDetail({
 
 			<IzCard flat className="mb-2">
 				<p className="iz-tiny iz-muted2">{t.payroll.dualSignPv}</p>
+				{/*
+					WHO SIGNED, AND AS WHAT — both read off this voucher.
+					
+					This printed `FINANCE_HEAD_LABEL`, a demo constant reading
+					"Finance Head · Atlas Agency". Two things wrong on a real session:
+					it announced every signer as the finance head (an OWNER signed
+					PV-000010, reported 3 Sep 2026), and it hardcoded ONE agency's
+					trading name onto every agency's voucher — the same demo-data leak
+					`.cursor/rules/no-demo-data-on-real-sessions.mdc` covers, hidden
+					here because the agency testing it happened to be Atlas.
+					
+					A voucher with no recorded capacity prints the agency alone rather
+					than guessing a title; see migration 0149.
+				*/}
 				<p className="iz-tiny mt-1">
-					{t.agencyPv.signerFirst} · {FINANCE_HEAD_LABEL}:{" "}
-					<b className="text-[var(--iz-txt)]">{v.financeHeadName}</b>
+					{t.agencyPv.signerFirst} ·{" "}
+					{[v.financeHeadRole, pvIssuer.issuer?.name]
+						.filter((part): part is string => Boolean(part?.trim()))
+						.join(" · ") || FINANCE_HEAD_LABEL}
+					: <b className="text-[var(--iz-txt)]">{v.financeHeadName}</b>
 					{v.financeHeadSignedAt
 						? ` · ${formatPvSignStamp(v.financeHeadSignedAt)}`
 						: ` · ${t.agencyPv.pendingSignature}`}
@@ -1917,15 +1994,24 @@ function PvDetail({
 
 			{/* No letterhead, no document — see AgencyPaidPvDetail for the why. */}
 			<div className="mt-2.5 flex gap-2">
+				{/*
+					OPENS THE SERVER'S PDF — the same bytes the PR downloads.
+					
+					It used to call `downloadPvBreakdownPdf`, which wrote HTML into a
+					blank tab: a page that looks like a voucher but has no PDF viewer
+					around it — no page controls, no download, no print — while the PR
+					opened a real PDF. Two renderings of one signed document, and only
+					one of them was a document.
+					
+					Still gated on `pvIssuer.issuer`: a session that cannot say which
+					company it is has no business printing a letterhead, and that rule
+					predates this change.
+				*/}
 				<button
 					type="button"
-					disabled={!pvIssuer.issuer}
+					disabled={!pvIssuer.issuer || pdfOpening}
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs disabled:opacity-50"
-					onClick={() => {
-						if (!pvIssuer.issuer) return;
-						downloadPvBreakdownPdf(displayPv, payee, [], pvIssuer.issuer);
-						toast(t.payroll.officialPvOpened, "success");
-					}}
+					onClick={() => void openOfficialPdf()}
 				>
 					<FileText className="h-4 w-4 shrink-0" /> PDF
 				</button>
@@ -2110,14 +2196,29 @@ function PvDetail({
 					{/* Only once we know WHY. While the fetch is in flight the button is
 						    disabled with no caption — a reason would be a guess. The day
 						    review is retired, so the pointer goes to the Receipts section
-						    where the approve action now lives. */}
+						    where the approve action now lives, and to the Overtime tab for
+						    a claim nobody has decided. Keyed on the two concrete blockers
+						    rather than on `!allowed`, because the in-flight state is also
+						    "not allowed" and has nothing to point at yet. */}
 					{/* `sendGate.reason` still arrives in English from the hook; only the
 						    pointer after it is under the locale here. */}
-					{!sendGate.allowed && sendGate.pendingReceipts.length > 0 && (
-						<p className="iz-tiny iz-muted2 mt-1 text-center">
-							{sendGate.reason} — {t.agencyPv.approveInPayrollReceipts}
-						</p>
-					)}
+					{!sendGate.allowed &&
+						(sendGate.pendingReceipts.length > 0 ||
+							sendGate.pendingOvertime.length > 0) && (
+							<p className="iz-tiny iz-muted2 mt-1 text-center">
+								{sendGate.reason} —{" "}
+								{[
+									sendGate.pendingReceipts.length > 0
+										? t.agencyPv.approveInPayrollReceipts
+										: null,
+									sendGate.pendingOvertime.length > 0
+										? t.agencyPv.decideInPayrollOvertime
+										: null,
+								]
+									.filter(Boolean)
+									.join(" ")}
+							</p>
+						)}
 				</>
 			)}
 

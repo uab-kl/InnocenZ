@@ -182,7 +182,13 @@ function stripPrivateUserFields<T extends object>(user: T): PublicUser<T> {
  * portfolio images deliberately stay: they are the profile a venue books from.
  * The line is drawn at documents that identify a person off the job.
  */
-const IDENTITY_DOC_FIELDS = [
+/**
+ * EXPORTED so `outlet-redaction.ts` can blank the same names on the PR-roster
+ * row, which carries its own trimmed copy of this profile. Reused rather than
+ * re-typed: two lists of "what an outlet must not see" is one list that gets
+ * updated and one that does not.
+ */
+export const IDENTITY_DOC_FIELDS = [
   'idType',
   'idNo',
   'dob',

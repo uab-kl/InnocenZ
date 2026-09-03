@@ -2707,6 +2707,11 @@ export class ShiftAssignmentRepositoryClass {
    * Aggregating server-side removes the old client-side 100-row assignment cap
    * that under-counted cost (and so overstated margin); the (PR × day) grain
    * lets the client slice any date range and roll up both P&L and top-PRs.
+   *
+   * Wages and commission come back SEPARATELY. The Reports screen adds them —
+   * a PR costs the venue both — but the reconciliation banner reads wages
+   * alone, because that is the one column `collection_invoice` bills from.
+   * See `ShiftCostPrDayTotals`.
    */
   async reportCostByPrDay(
     filter?: ShiftAssignmentCostFilter,
@@ -2719,6 +2724,50 @@ export class ShiftAssignmentRepositoryClass {
           prName: prDisplayNameSql,
           soldOn: ShiftTable.shiftDate,
           cost: sql<number>`coalesce(sum(${ShiftAssignmentTable.payAmount}), 0)::float8`,
+          /**
+           * A CORRELATED SUBQUERY, not a join — deliberately.
+           *
+           * Joining `payment_voucher_line` into this statement fans the
+           * assignment row out once per receipt line, and `sum(pay_amount)`
+           * above would then count a night's wage once for every drink on the
+           * receipt. The subquery collapses each assignment's lines to a single
+           * number before the outer aggregate sees it, so wages stay untouched
+           * by however many items the PR logged.
+           *
+           * Needs no scope terms of its own: the receipt hangs off
+           * `shift_assignment_id`, so it inherits whatever outlet, agency and
+           * date window `buildCostConditions` already applied to the row it
+           * belongs to. That is also what keeps it from crossing agencies —
+           * the assignment is the record of which agency supplied this PR.
+           *
+           * ⚠️ The component list is an ALLOW-list, and deliberately so.
+           * `deduction` is a penalty the agency levied on its PR and an outlet
+           * must not see it — this row is served to outlet callers. A NOT-IN
+           * list would leak the next component somebody adds.
+           */
+          commission: sql<number>`coalesce(sum((
+            select coalesce(sum(l.amount), 0)
+              from main.payment_voucher_line l
+              join main.payment_voucher_receipt r on r.id = l.receipt_id
+             where r.shift_assignment_id = ${ShiftAssignmentTable.id}
+               and r.status in ('approved', 'verified')
+               and l.component in ('drink_commission', 'tip_commission')
+          )), 0)::float8`,
+          /**
+           * Approved overtime. A plain aggregate over the row already being
+           * grouped — the frozen amount lives on the assignment itself, so
+           * unlike commission this needs no subquery and can add nothing to the
+           * wage sum.
+           *
+           * The `case` tests the STATUS, not the amount. A rejected claim keeps
+           * its frozen figure too (live: the 279-minute claim of 2026-08-03),
+           * so `sum(overtime_amount)` alone would bill a venue for overtime its
+           * agency refused.
+           */
+          overtime: sql<number>`coalesce(sum(
+            case when ${ShiftAssignmentTable.overtimeStatus} = 'approved'
+                 then ${ShiftAssignmentTable.overtimeAmount} end
+          ), 0)::float8`,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
@@ -2737,6 +2786,8 @@ export class ShiftAssignmentRepositoryClass {
         prName: r.prName,
         soldOn: r.soldOn,
         cost: Number(r.cost),
+        commission: Number(r.commission),
+        overtime: Number(r.overtime),
       }));
     } catch (error) {
       logger.error(

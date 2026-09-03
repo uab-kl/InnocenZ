@@ -75,7 +75,16 @@ function BilledVsRecordsBanner() {
 	if (!report) return null;
 
 	const billedRm = collectionAmountRm(statement);
-	const ownRecordRm = report.totalCost;
+	// WAGES, not the report's headline PR spend.
+	//
+	// `collection_invoice.amount` is `sum(shift_assignment.pay_amount)` and
+	// nothing else, so the wage half is the only like-for-like figure on this
+	// side. `totalCost` also carries the commission the PRs earned on their
+	// receipts — real money, and the right number for the Reports screen, but
+	// money this statement never claimed to bill. Comparing against it would
+	// raise a variance EVERY week, on every venue with receipts, between two
+	// numbers that were never measuring the same thing.
+	const ownRecordRm = report.totalWages;
 	const variance = Math.round((billedRm - ownRecordRm) * 100) / 100;
 
 	// A matching week is not news. This is an alert, and one that renders every

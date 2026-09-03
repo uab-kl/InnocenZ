@@ -114,6 +114,7 @@ function baseVoucher(pv: PaymentVoucher, rows: PrPvRow[]): PrPaymentVoucher {
 		net: num(pv.net),
 		status: STATUS_TO_DEMO[pv.status] ?? "PENDING_REVIEW",
 		financeHeadName: pv.financeHeadName ?? "",
+		financeHeadRole: pv.financeHeadRole ?? null,
 		financeHeadSignedAt: stamp(pv.financeHeadSignedAt),
 		prSignedAt: stamp(pv.prSignedAt) || undefined,
 		// The drawn ink. The comment that used to sit here — "backend tracks the

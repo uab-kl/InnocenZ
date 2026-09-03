@@ -74,6 +74,19 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
   net: numeric('net', { precision: 12, scale: 2 }).notNull().default('0'),
   status: paymentVoucherStatusEnum('status').notNull().default('pending_review'),
   financeHeadName: varchar('finance_head_name', { length: 255 }),
+  /**
+   * The capacity the signer signed in — 'Owner', 'Finance', 'Director'…
+   *
+   * A SNAPSHOT, like the name beside it (0149). The UI used to print a
+   * hardcoded "Finance Head" next to whoever had signed, so an owner's
+   * signature was labelled as the finance head's. Resolving this live through
+   * `user_role` would rewrite the label the day that person changes role, which
+   * on a signed document is a lie about the past rather than an update.
+   *
+   * Null on every voucher signed before the column existed — those genuinely do
+   * not record a capacity, and readers must say nothing rather than guess.
+   */
+  financeHeadRole: varchar('finance_head_role', { length: 50 }),
   financeHeadSignedAt: timestamp('finance_head_signed_at', { withTimezone: true }),
   /**
    * The agency's finger-drawn signature ({w,h,strokes}), mirroring `prSignature`.

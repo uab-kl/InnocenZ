@@ -42,13 +42,32 @@ export interface ShiftSalePrTotals {
 	totalSalesRm: number;
 }
 
-// Manpower cost (shift_assignment.pay_amount) at (PR × day) grain, aggregated
-// server-side. Non-staffing statuses (cancelled/no_show) are already excluded.
+// What a PR cost the venue at (PR × day) grain, aggregated server-side.
+// Non-staffing statuses (cancelled/no_show) are already excluded.
 export interface ShiftCostPrDayTotals {
 	prId: string;
 	prName: string | null;
 	soldOn: string;
+	/**
+	 * WAGES ONLY — shift_assignment.pay_amount. `collection_invoice.amount` is
+	 * billed from that same column, so this is the half the reconciliation
+	 * banner checks the agency's statement against. Don't fold commission in
+	 * here; add the two fields where they are displayed.
+	 */
 	cost: number;
+	/**
+	 * Commission earned on approved/verified receipts (drink + tip). Kept apart
+	 * from `cost` because only the Reports screen wants the sum — see
+	 * ShiftCostPrDayTotals in the backend model for the full reasoning.
+	 */
+	commission: number;
+	/**
+	 * APPROVED overtime only (`shift_assignment.overtime_amount` where the
+	 * status is 'approved'). Pending and rejected claims are 0 here — overtime
+	 * is never auto-paid, so it reaches a venue's bill only once the agency has
+	 * signed it off.
+	 */
+	overtime: number;
 }
 
 export interface ShiftSaleReport {

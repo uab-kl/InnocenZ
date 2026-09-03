@@ -3,6 +3,7 @@ import { shiftAssignmentController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
 import { agencyOwnerOnly, agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
 import { requirePermission } from '@/middlewares/require-permission.js';
+import { redactIdentityDocsForOutlet } from '@/middlewares/redact-identity-docs.js';
 
 const router = Router();
 
@@ -14,9 +15,18 @@ const canWrite = requireRole('admin', 'agency');
 // Where a worker physically stood is narrower than the roster: outlets are left
 // OUT even for their own venues, because that is a privacy call about staff
 // coordinates rather than the usual tenant-scoping question.
+//
+// ⚠️ THIS GATE WAS BEING WALKED AROUND BY THE ROUTE ABOVE IT. `attendance-fixes`
+// was closed to outlets while `GET /` — same router, same rows — served
+// `checkInLat`/`checkInLng` in full on 15 of 35 live rows, plus the PR's
+// cancellation FINE. Gating the specialised endpoint and leaving the general
+// list open is the shape of this whole class of bug: the decision gets enforced
+// wherever somebody happened to be looking. `redactIdentityDocsForOutlet` now
+// covers the list and `/:id`; a gate there would blank PR names on live outlet
+// screens, which is why the fix is a shape.
 const canReadPositions = requireRole('admin', 'agency');
 
-router.get('/', canRead, shiftAssignmentController.list.bind(shiftAssignmentController));
+router.get('/', canRead, redactIdentityDocsForOutlet, shiftAssignmentController.list.bind(shiftAssignmentController));
 // A signed-in PR reads only its own assignments (scoped server-side by pr.id),
 // so this sits outside the agency/outlet canRead guard. Must precede '/:id'.
 router.get('/mine', shiftAssignmentController.listMine.bind(shiftAssignmentController));
@@ -47,7 +57,7 @@ router.get('/overtime/pending', canWrite, shiftAssignmentController.listPendingO
 // roster ask, and it discloses the outlet's rate card for a tier. Must precede
 // '/:id', which would otherwise swallow 'wage-preview' as an assignment id.
 router.get('/wage-preview', canWrite, shiftAssignmentController.wagePreview.bind(shiftAssignmentController));
-router.get('/:id', canRead, shiftAssignmentController.getById.bind(shiftAssignmentController));
+router.get('/:id', canRead, redactIdentityDocsForOutlet, shiftAssignmentController.getById.bind(shiftAssignmentController));
 // Ranked replacement PRs for a released assignment; assigning the pick goes
 // through the normal POST '/' below.
 router.get('/:id/replacement-candidates', canWrite, shiftAssignmentController.listReplacementCandidatesForAssignment.bind(shiftAssignmentController));

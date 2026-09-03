@@ -585,7 +585,11 @@ const en = {
 		reasonForOverride: "Reason for override…",
 		bankReference: "Bank reference",
 		bankReferenceOptional: "Bank reference (optional)",
-		officialPvOpened: "Official PV opened — use Print → Save as PDF",
+		officialPvOpened: "Official PV opened",
+		/** The PDF comes from the server, so a demo voucher has none to fetch. */
+		officialPvDemoOnly:
+			"This is a demo voucher — the official PDF is only available for a real one.",
+		officialPvFailed: "Could not open the official PV — try again.",
 		excelDownloaded: "Payment voucher Excel downloaded",
 		receiptDownloaded: "Payment receipt downloaded",
 		/**
@@ -3750,6 +3754,15 @@ const en = {
 		signAboveFirst: "Sign above first — the PR counter-signs your signature.",
 		/** Follows the send-gate reason and an em dash, which stay in the JSX. */
 		approveInPayrollReceipts: "approve them in Payroll › Receipts.",
+		/** Same position as the line above, for the overtime half of the gate. */
+		decideInPayrollOvertime: "decide them in Payroll › Overtime.",
+		/**
+		 * Only shown when a failed voucher write carried NO message of its own — a
+		 * dropped connection, a 502. Every real refusal from this endpoint names
+		 * its own reason and that is what the toast says instead.
+		 */
+		voucherUpdateRefused:
+			"That change did not go through — check your connection and try again.",
 		resendToPr: "Re-send to PR",
 		resolveDisputeAndReassign: "Resolve dispute & reassign",
 		markPaidHint:
@@ -6427,7 +6440,9 @@ const zh: PortalTranslations = {
 		reasonForOverride: "撤改原因…",
 		bankReference: "银行流水号",
 		bankReferenceOptional: "银行流水号（选填）",
-		officialPvOpened: "正式付款单已打开 — 请使用「打印 → 另存为 PDF」",
+		officialPvOpened: "正式付款单已打开",
+		officialPvDemoOnly: "这是演示付款单 — 正式 PDF 仅适用于真实付款单。",
+		officialPvFailed: "无法打开正式付款单 — 请重试。",
 		excelDownloaded: "付款单 Excel 已下载",
 		receiptDownloaded: "付款收据已下载",
 		statusPendingReview: "待经纪公司审核",
@@ -9103,6 +9118,8 @@ const zh: PortalTranslations = {
 		sendToPrForESign: "发送给 PR 电子签署",
 		signAboveFirst: "请先在上方签名 — PR 会对您的签名进行会签。",
 		approveInPayrollReceipts: "请在「薪资与付款单 › 收据」中审批。",
+		decideInPayrollOvertime: "请在「薪资与付款单 › 加班」中处理。",
+		voucherUpdateRefused: "此变更未能提交 — 请检查网络连接后重试。",
 		resendToPr: "重新发送给 PR",
 		resolveDisputeAndReassign: "处理争议并重新指派",
 		markPaidHint:

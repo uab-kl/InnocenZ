@@ -9,8 +9,7 @@
  * address, PR bank account) render as an em dash rather than invented data.
  */
 import ExcelJS from 'exceljs';
-import fs from 'node:fs';
-import path from 'node:path';
+import { env } from '@/env';
 import type { PaymentVoucherWithLines } from './payment-voucher.model';
 
 export type VoucherExportAgency = {
@@ -24,6 +23,8 @@ export type VoucherExportAgency = {
   postcode: string | null;
   state: string | null;
   country: string | null;
+  /** R2 object key (or legacy data URL) for this agency's letterhead logo. */
+  logoImage: string | null;
 } | null;
 
 export type VoucherExportPr = {
@@ -55,6 +56,18 @@ export function joinAddress(agency: VoucherExportAgency): string {
 /** One table row, already decoded from the packed line ref by the controller. */
 export type VoucherExportLine = {
   kind: string;
+  /**
+   * The TYPED column (`payment_voucher_line.component`), which the ref-derived
+   * `kind` cannot always stand in for — see `exportLineLabel`. Optional so a
+   * caller that predates it still compiles; absent falls back to `kind`.
+   */
+  component?: string | null;
+  /**
+   * `payment_voucher_line.description` — the ITEM as it was logged ("Havoc",
+   * "Donjulio", "Overtime 1 min"). Optional so a caller that predates it still
+   * compiles; absent falls back to the category label.
+   */
+  item?: string | null;
   lineDate: string | null;
   outlet: string | null;
   quantity: number;
@@ -68,9 +81,102 @@ export const KIND_LABELS: Record<string, string> = {
   others: 'Others',
 };
 
+/**
+ * Labels keyed on the TYPED `component` column, consulted BEFORE `KIND_LABELS`.
+ *
+ * ⚠️ `kind` is decoded from the packed `ref`, and an overtime line is written
+ * with the ref kind 'others' — there is no 'ot' kind to decode. So the printed
+ * voucher called an approved overtime payment "Others" (reported 3 Sep 2026:
+ * "Others (23 Aug) - JK House" for a line the PR's own copy called "Overtime 1
+ * min"). The component column has said 'ot' all along; nothing was reading it.
+ *
+ * Only the components whose ref kind is WRONG or missing are listed. Wages,
+ * drinks and tips already decode correctly and are deliberately left to
+ * `KIND_LABELS`, so this map does not become a second, competing source for
+ * labels that already have one.
+ */
+export const COMPONENT_LABELS: Record<string, string> = {
+  ot: 'Overtime',
+  deduction: 'Deduction',
+};
+
+/**
+ * What one line is called on the printed document.
+ *
+ * Component first, ref-kind second, raw kind last — the same "column first, ref
+ * second" precedence `lineKind`/`resolveComponent` use on the read side, so the
+ * document and the API cannot disagree about what a line is.
+ */
+export function exportLineLabel(line: {
+  kind: string;
+  component?: string | null;
+}): string {
+  const byComponent = line.component ? COMPONENT_LABELS[line.component] : undefined;
+  return byComponent ?? KIND_LABELS[line.kind] ?? line.kind;
+}
+
+/**
+ * THE DESCRIPTION CELL, on every rendering of this document.
+ *
+ * Owner's call, 3 Sep 2026: the ITEM, not the category. This export used to
+ * print `exportLineLabel` — so three different drinks all read "Commission –
+ * Drinks", and a PR disputing one of them could not tell from the voucher which
+ * bottle it was. The web template already printed the stored description; the
+ * two documents therefore described the same money differently, which on a
+ * document people sign is the whole problem.
+ *
+ * ⚠️ Composed to match `pvPdfLineDescription` in
+ * apps/web/src/agency-portal/lib/pv-template.ts EXACTLY, including its two
+ * quirks: a description that already contains "(" is assumed to carry its own
+ * date and is not given another, and a line with no outlet gets no trailing
+ * separator rather than " - —". Both documents are signed against each other;
+ * they do not get to differ by a dash.
+ *
+ * The category label survives as the FALLBACK, for a line whose description was
+ * never written — better "Commission – Drinks" than an empty cell.
+ */
+export function exportLineDescription(line: {
+  kind: string;
+  component?: string | null;
+  item?: string | null;
+  lineDate: string | null;
+  outlet: string | null;
+}): string {
+  const base = line.item?.trim() || exportLineLabel(line);
+  const datePart = line.lineDate ? ` (${dayMonth(line.lineDate)})` : '';
+  const text = base.includes('(') ? base : `${base}${datePart}`;
+  return line.outlet ? `${text} - ${line.outlet}` : text;
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export const DASH = '—';
+
+/**
+ * THE PAYEE CODE — derived, because nothing stores one.
+ *
+ * There is no `pr_code` column anywhere in this schema. The printed voucher has
+ * always had a "Code:" cell, and until 3 Sep 2026 the two documents answered it
+ * differently: the backend export hardcoded an em dash, while the web template
+ * derived one — from the DEMO fixture's IC, on real sessions, which is the very
+ * thing `.cursor/rules/no-demo-data-on-real-sessions.mdc` exists to stop.
+ *
+ * So both now derive the SAME code from the SAME real facts: the payee's
+ * working name and the last four digits of their real IC. It is a label for
+ * humans reading two documents side by side, not an identifier anything stores
+ * or looks up — which is exactly why it must be reproducible rather than
+ * remembered.
+ *
+ * ⚠️ Kept byte-identical to `derivePrCode` in
+ * apps/web/src/agency-portal/lib/pv-template.ts. Two renderers, one rule; if
+ * you change one, change both, or the documents disagree again.
+ */
+export function derivePayeeCode(name: string | null | undefined, ic: string | null | undefined): string {
+  const slug = (name ?? '').replace(/\s+/g, '').slice(0, 4).toUpperCase();
+  const tail = (ic ?? '').replace(/\D/g, '').slice(-4);
+  if (!slug && !tail) return DASH;
+  return tail ? `${slug || 'PR'}-${tail}` : slug;
+}
 
 export function dayMonth(iso: string | null): string {
   const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -93,14 +199,57 @@ export function klStamp(at: Date | null): string {
   return `${kl.getUTCDate()} ${MONTHS[kl.getUTCMonth()]} ${kl.getUTCFullYear()} · ${hh}:${mm}`;
 }
 
+/** A letterhead logo, decoded and ready for PDFKit or ExcelJS. */
+export type VoucherLogo = { data: Buffer; extension: 'png' | 'jpeg' };
+
+/** A logo is a picture on a money document; it must never delay one for long. */
+const LOGO_FETCH_TIMEOUT_MS = 4000;
+
 /**
- * The PV letterhead logo (PV documents ONLY, per the user's instruction).
- * Null when the file is missing — the export renders without it rather than
- * failing a money document over a picture.
+ * THE ISSUING AGENCY'S OWN LOGO — read through the voucher's agency FK.
+ *
+ * ⚠️ This used to be `pvLogoPath()`, which returned ONE hardcoded file
+ * (`public/img/agencies/atmosphere-logo.png`) for every agency on the platform.
+ * So a voucher issued by Atlas Agency printed ATMOSPHERE's mark beside Atlas's
+ * name and reg. no. (reported 3 Sep 2026). It is the same defect the web side
+ * already fixed on the TEXT half of the letterhead — `use-pv-issuer.ts` documents
+ * how a default parameter put a real, different company on a live payment
+ * voucher — and the picture was simply the half nobody had come back for.
+ *
+ * Returns NULL rather than throwing on every failure path: no key, no R2 base,
+ * a non-200, a timeout, a malformed data URL. A money document renders without
+ * its picture; it does not fail over one. It also never falls back to another
+ * agency's logo, which is the whole point — printing nothing says "we have no
+ * logo on file", printing someone else's says something false.
  */
-export function pvLogoPath(): string | null {
-  const p = path.join(process.cwd(), 'public', 'img', 'agencies', 'atmosphere-logo.png');
-  return fs.existsSync(p) ? p : null;
+export async function loadAgencyLogo(agency: VoucherExportAgency): Promise<VoucherLogo | null> {
+  const key = agency?.logoImage?.trim();
+  if (!key) return null;
+  try {
+    // Legacy rows still hold a base64 data URL rather than an R2 key — the same
+    // dual shape `withUserProfile` handles for profile images.
+    const inline = key.match(/^data:image\/(png|jpe?g);base64,(.+)$/i);
+    if (inline?.[1] && inline[2]) {
+      return {
+        data: Buffer.from(inline[2], 'base64'),
+        extension: inline[1].toLowerCase() === 'png' ? 'png' : 'jpeg',
+      };
+    }
+    const base = env.R2_PUBLIC_URL?.replace(/\/$/, '');
+    const url = /^https?:\/\//i.test(key) ? key : base ? `${base}/${key.replace(/^\//, '')}` : null;
+    if (!url) return null;
+    const response = await fetch(url, { signal: AbortSignal.timeout(LOGO_FETCH_TIMEOUT_MS) });
+    if (!response.ok) return null;
+    return {
+      data: Buffer.from(await response.arrayBuffer()),
+      // ExcelJS takes only 'png' | 'jpeg' | 'gif'; PDFKit sniffs the bytes and
+      // ignores this. Keyed off the stored key, which carries the real
+      // extension, because R2 does not always serve a useful content-type.
+      extension: /\.png(\?|$)/i.test(key) ? 'png' : 'jpeg',
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -159,9 +308,8 @@ export function buildVoucherPrintHtml(params: {
   const { voucher, agency, pr, lines } = params;
   const rows = lines
     .map((line, i) => {
-      const label = KIND_LABELS[line.kind] ?? line.kind;
       const qty = Math.max(1, line.quantity);
-      return `<tr><td>${i + 1}</td><td>${esc(`${label} (${dayMonth(line.lineDate)}) - ${line.outlet ?? DASH}`)}</td><td style="text-align:center">${qty}</td><td style="text-align:right">${(line.commission / qty).toFixed(2)}</td><td style="text-align:right">${line.commission.toFixed(2)}</td></tr>`;
+      return `<tr><td>${i + 1}</td><td>${esc(exportLineDescription(line))}</td><td style="text-align:center">${qty}</td><td style="text-align:right">${(line.commission / qty).toFixed(2)}</td><td style="text-align:right">${line.commission.toFixed(2)}</td></tr>`;
     })
     .join('');
   const net = Number(voucher.net ?? '0');
@@ -229,9 +377,14 @@ export async function buildVoucherWorkbook(params: {
   for (let r = 1; r <= 6; r++) ws.mergeCells(`B${r}:E${r}`);
 
   // The agency logo sits in the template's A1:A6 gutter, top-left.
-  const logo = pvLogoPath();
+  const logo = await loadAgencyLogo(agency);
   if (logo) {
-    const imageId = wb.addImage({ filename: logo, extension: 'png' });
+    // base64 rather than `buffer`: ExcelJS's typings name their own Buffer, and
+    // handing it Node's is a type error even though the bytes are identical.
+    const imageId = wb.addImage({
+      base64: logo.data.toString('base64'),
+      extension: logo.extension,
+    });
     ws.addImage(imageId, {
       tl: { col: 0, row: 0 },
       ext: { width: 86, height: 86 },
@@ -245,7 +398,7 @@ export async function buildVoucherWorkbook(params: {
   ws.getCell('D8').value = 'Voucher No.:';
   ws.getCell('E8').value = voucherRef(voucher);
   const payable: [string, string][] = [
-    ['Code:', DASH],
+    ['Code:', derivePayeeCode(pr?.nickname ?? voucher.prName, pr?.icNo ?? voucher.prIc)],
     ['Name:', pr?.name ?? voucher.prName ?? DASH],
     ['Nickname:', pr?.nickname ?? DASH],
     ['IC/Passport No.:', pr?.icNo ?? DASH],
@@ -271,11 +424,10 @@ export async function buildVoucherWorkbook(params: {
   let rowNo = 15;
   let seq = 1;
   for (const line of lines) {
-    const label = KIND_LABELS[line.kind] ?? line.kind;
     const qty = Math.max(1, line.quantity);
     const row = ws.getRow(rowNo);
     row.getCell(1).value = seq;
-    row.getCell(2).value = `${label} (${dayMonth(line.lineDate)}) - ${line.outlet ?? DASH}`;
+    row.getCell(2).value = exportLineDescription(line);
     row.getCell(3).value = qty;
     money(row.getCell(4), line.commission / qty);
     money(row.getCell(5), line.commission);

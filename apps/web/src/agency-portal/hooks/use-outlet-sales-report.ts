@@ -25,6 +25,15 @@ export interface WeeklyDaySales {
 	dateIso: string;
 	dateDisplay: string;
 	sales: number;
+	/**
+	 * The night's WHOLE PR spend — wages, the commission earned against that
+	 * night's approved receipts, and any overtime the agency approved. The same
+	 * meaning the demo producer gives it (`velvet-week-demo` sums `pr.payout`,
+	 * which is take-home), so both sources hand the dashboard one shape.
+	 *
+	 * For base wages alone — the figure an agency's invoice is built from —
+	 * read `WeeklyReport.totalWages`.
+	 */
 	manpowerCost: number;
 }
 
@@ -32,7 +41,22 @@ export interface WeeklyReport {
 	weekLabel: string;
 	days: WeeklyDaySales[];
 	totalSales: number;
+	/**
+	 * Wages + commission + approved overtime — what the venue's PRs cost it
+	 * over the window.
+	 */
 	totalCost: number;
+	/**
+	 * The BASE WAGE part of `totalCost`, on its own.
+	 *
+	 * Exists for exactly one caller: the reconciliation banner, which checks
+	 * the agency's `collection_invoice` against the outlet's own records. That
+	 * invoice is summed from `shift_assignment.pay_amount` and nothing else, so
+	 * comparing it against the full PR spend would report a variance every
+	 * single week — the commission and overtime — between two numbers that were
+	 * never measuring the same thing. Display surfaces want `totalCost`.
+	 */
+	totalWages: number;
 	margin: number;
 	shifts: number;
 	avgTicket: number;
@@ -65,6 +89,9 @@ export interface FloorBreakdown {
 export interface TopPrRow {
 	prId: string;
 	name: string;
+	/** What this PR cost the venue — wages + commission + approved overtime,
+	 * the same sum the "PR spend" headline shows, so the card and the total
+	 * agree. */
 	earned: number;
 	agency: string;
 }
@@ -149,6 +176,24 @@ function growthPct(current: number, prior: number): number | null {
 	return Math.round(((current - prior) / prior) * 100);
 }
 
+/**
+ * A PR's whole cost to the venue for one day: the wage, the commission earned
+ * that night, and any overtime the agency approved. One function so every
+ * surface adds the same fields — the bug this replaces was a card showing
+ * `cost` alone under a label reading "PR wages & commission".
+ *
+ * Overtime rides inside that label rather than needing a new one: overtime pay
+ * IS wages, and only APPROVED overtime is counted server-side, so nothing here
+ * is money the agency has not agreed to.
+ *
+ * Either extra field may be absent on a response from a backend older than it;
+ * treating that as 0 degrades to the narrower number rather than rendering NaN
+ * across the whole report.
+ */
+function prSpend(row: ShiftCostPrDayTotals): number {
+	return row.cost + (row.commission ?? 0) + (row.overtime ?? 0);
+}
+
 function inRange(dateIso: string, range: SalesReportRange): boolean {
 	if (range.dateIsos && range.dateIsos.length > 0) {
 		return range.dateIsos.includes(dateIso);
@@ -187,8 +232,15 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 	});
 
 	const byDaySales = reportQuery.data?.byDay ?? [];
-	// Manpower cost at (PR × day) grain, aggregated server-side (no client row
+	// What PRs cost at (PR × day) grain, aggregated server-side (no client row
 	// cap; cancelled/no-show already excluded). Sliced to the range below.
+	//
+	// Each row carries WAGES (`cost`), COMMISSION and approved OVERTIME apart.
+	// Add them for anything the venue reads as its spend; the reconciliation
+	// banner is the one place that wants wages alone. `prSpend` is the only
+	// place the sum is formed, so no surface can quietly drift back to a
+	// narrower one — which is what the card did while its own label already
+	// read "wages & commission".
 	const costByPrDay: ShiftCostPrDayTotals[] =
 		reportQuery.data?.costByPrDay ?? [];
 
@@ -203,7 +255,7 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 						name: c.prName ?? "PR",
 						earned: 0,
 					};
-					cur.earned += c.cost;
+					cur.earned += prSpend(c);
 					if (c.prName) cur.name = c.prName;
 					perPr.set(c.prId, cur);
 				}
@@ -230,7 +282,7 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 		const salesDays = byDaySales.filter((d) => inRange(d.soldOn, range));
 		const costRows = costByPrDay.filter((c) => inRange(c.soldOn, range));
 		const sales = salesDays.reduce((s, d) => s + d.totalSalesRm, 0);
-		const cost = costRows.reduce((s, c) => s + c.cost, 0);
+		const cost = costRows.reduce((s, c) => s + prSpend(c), 0);
 		const dayIsos = new Set<string>(salesDays.map((d) => d.soldOn));
 		for (const c of costRows) dayIsos.add(c.soldOn);
 		return { sales, cost, margin: sales - cost, days: dayIsos.size };
@@ -249,7 +301,7 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 		);
 		const costByDay = new Map<string, number>();
 		for (const c of costInRange) {
-			costByDay.set(c.soldOn, (costByDay.get(c.soldOn) ?? 0) + c.cost);
+			costByDay.set(c.soldOn, (costByDay.get(c.soldOn) ?? 0) + prSpend(c));
 		}
 
 		const days: WeeklyDaySales[] = [...dayIsos]
@@ -263,6 +315,9 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 
 		const totalSales = days.reduce((s, d) => s + d.sales, 0);
 		const totalCost = days.reduce((s, d) => s + d.manpowerCost, 0);
+		// Wages on their own, summed from the same rows so it can never fall out
+		// of step with `totalCost`. Only the reconciliation banner reads it.
+		const totalWages = costInRange.reduce((s, c) => s + c.cost, 0);
 		const margin = totalSales - totalCost;
 		const shifts = days.length;
 
@@ -271,6 +326,7 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 			days,
 			totalSales,
 			totalCost,
+			totalWages,
 			margin,
 			shifts,
 			avgTicket: shifts > 0 ? Math.round(totalSales / shifts) : 0,
