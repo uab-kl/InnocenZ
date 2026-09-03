@@ -50,24 +50,32 @@ Plus the `VITE_*` build secrets. **Anything not set is baked into the web image 
 an empty string** — a missing `VITE_R2_PUBLIC_URL_<ENV>` ships a frontend that
 cannot resolve a single uploaded file, and nothing in the build fails to say so.
 
-Who owns what on the server, under `~/innocenz-<env>/`:
+The rollout **copies nothing to the server.** The box owns its own runtime
+layout, and this repo's copies have been shown to disagree with it — the staging
+server runs no Caddy service, binds its ports to `127.0.0.1`, and declares no
+external network, none of which matches `tools/deploy/docker-compose.yml`. So
+the job only:
 
-| File | Owner |
-|---|---|
-| `docker-compose.yml`, `deploy.sh` | **CI** — re-copied from `tools/deploy/` every run, so they cannot go stale |
-| `.env` | **CI** — rewritten each run, pinned to the immutable `<env>-<sha>` tag |
-| `Caddyfile` | **server** — encodes that server's own domain; CI aborts if it is missing |
-| `.env.backend`, `.env.frontend` | **server** — DB/R2 secrets never travel through CI |
+1. finds the deployment directory — the `<ENV>_REMOTE_DIR` variable if set,
+   otherwise `~/innocenz-<env>` then `~/innocenz`, printing whichever it used;
+2. rewrites **only** the `FRONTEND_IMAGE` / `BACKEND_IMAGE` lines in that
+   directory's `.env`, pinned to the immutable `<env>-<sha>` tag — every other
+   key, including the container names its compose interpolates, survives;
+3. runs the server's own `./deploy.sh`.
 
-The environment must be **provisioned once from a PC** (`pnpm deploy:staging`),
-which is what creates the directory, the `Caddyfile` and `.env.backend`. After
-that, GitHub alone puts a build online. The rollout refuses (with a message
-naming the missing file) rather than starting a stack with no `DATABASE_URL` or
-no HTTPS routing.
+`.env.backend`, `.env.frontend`, `docker-compose.yml` and any reverse-proxy
+config are never read or written by CI.
 
-**Rollback:** because CI pins `<env>-<sha>` rather than the floating `<env>` tag,
-rolling back is editing those two `*_IMAGE` lines in `~/innocenz-<env>/.env` to an
-earlier sha and re-running `./deploy.sh`.
+⚠️ **`pnpm deploy:<env>` is NOT safe against a server whose layout has diverged.**
+Unlike the rollout above, `tools/scripts/deploy.mjs` scp's this repo's
+`docker-compose.yml`, a generated `Caddyfile` and `deploy.sh` over whatever is
+already there. Against the current staging box that would replace a working
+stack with one demanding Caddy and a network it does not have. Use the GitHub
+rollout for that server, or reconcile the two layouts first.
+
+**Rollback:** because the rollout pins `<env>-<sha>` rather than the floating
+`<env>` tag, rolling back is editing those two `*_IMAGE` lines in the server's
+`.env` to an earlier sha and re-running `./deploy.sh`.
 
 ## DNS (DuckDNS or otherwise)
 

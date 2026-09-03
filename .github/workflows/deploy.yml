@@ -245,11 +245,11 @@ jobs:
           OPTS="-o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -i deploy_key"
 
           # This job copies NOTHING to the server. The box owns its runtime
-          # layout - its compose file, its reverse proxy, its deploy.sh - and
-          # those have already been shown to differ from this repo's copies
-          # (no Caddy service, host-bound ports, no external network). All that
-          # happens here is: point the image tags at what this run built, then
-          # run the server's own deploy.sh.
+          # layout - its compose file, its reverse proxy, its deploy.sh, and
+          # above all its .env.backend / .env.frontend, which hold that
+          # environment's own database and bucket and differ between servers.
+          # All that happens here is: point the image tags at what this run
+          # built, then run the server's own deploy.sh.
           ssh $OPTS -p "$PORT" "$HOST" \
             "DEPLOY_ENV='$DEPLOY_ENV' ENV_UPPER='$ENV_UPPER' SHORT_SHA='$SHORT_SHA' NS='$DOCKERHUB_NAMESPACE' WANT_DIR='$REMOTE_DIR' bash -s" <<'REMOTE'
           set -euo pipefail
@@ -279,6 +279,20 @@ jobs:
           [ -f deploy.sh ] || { echo "ERROR: $DIR/deploy.sh is missing - nothing to run."; exit 1; }
           [ -f .env ] || { echo "ERROR: $DIR/.env is missing - deploy.sh reads the image tags from it."; exit 1; }
 
+          # This server's OWN secrets. CI never writes these - they differ per
+          # environment (different database, different R2 bucket), so the only
+          # correct copy is the one already on the box. The compose file
+          # declares env_file for both, so a missing one aborts compose after
+          # the old containers are already down.
+          for envfile in .env.backend .env.frontend; do
+            [ -f "$envfile" ] || {
+              echo "ERROR: $DIR/$envfile is missing - this server's compose declares env_file for it."
+              echo "  CI does not create it: it holds this environment's own DB / R2 values."
+              exit 1
+            }
+          done
+          echo "Using this server's own .env.backend and .env.frontend (untouched by CI)."
+
           # Rewrite ONLY the two image tags, so every other key the server keeps
           # in .env survives - including FRONTEND_CONTAINER_NAME and
           # BACKEND_CONTAINER_NAME, which its compose interpolates. Tolerant of
@@ -305,6 +319,17 @@ jobs:
 
           chmod +x deploy.sh
           ./deploy.sh
+
+          # Proof, read back out of the RUNNING container rather than off disk:
+          # which database and bucket this environment actually came up on. The
+          # file says what the backend was given; this says what it took. It is
+          # the check that a staging rollout did not start on production data.
+          # No password is printed - the connection string is not read.
+          BACKEND_NAME="$(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?BACKEND_CONTAINER_NAME=(.*)$/\2/p' .env | tail -1)"
+          BACKEND_NAME="${BACKEND_NAME:-innocenz-backend}"
+          echo "=== Backend runtime check (${BACKEND_NAME}) ==="
+          docker exec "$BACKEND_NAME" printenv POSTGRES_HOST POSTGRES_DB R2_BUCKET_NAME R2_PUBLIC_URL 2>/dev/null \
+            || echo "(could not read the backend container's environment - is it up?)"
           REMOTE
 
       - name: Remove key
