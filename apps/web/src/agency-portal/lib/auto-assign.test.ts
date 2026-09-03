@@ -98,8 +98,10 @@ describe("buildAutoAssignPlan — who gets picked", () => {
 			prs: [pr("stranger", "Aaa Stranger"), pr("regular", "Zzz Regular")],
 			assignments: [worked("regular", VENUE)],
 		});
-		// Named last alphabetically and holding one more shift, so only the venue
-		// history can put them first.
+		// Named last alphabetically, so only the venue history can put them first.
+		// (Their history row is dated last winter, outside this payroll week, so
+		// since 3 Sep 2026 it no longer counts against them on the fairness
+		// tie-break either — the name is what this test now has to beat.)
 		expect(plan.pairs[0]?.prId).toBe("regular");
 		expect(plan.pairs[0]?.workedHereBefore).toBe(true);
 	});
@@ -294,6 +296,48 @@ describe("buildAutoAssignPlan — busy is a window, not a day", () => {
 			blockedDatesByPr: new Map([["off", new Set([DATE])]]),
 		});
 		expect(plan.pairs.map((p) => p.prId)).toEqual(["on"]);
+	});
+});
+
+/**
+ * "N SHIFTS THIS WEEK" IS THE WEEK (3 Sep 2026).
+ *
+ * `weekCountByPr` counted every row it was handed, and it is handed the agency's
+ * whole assignment history — the hook pages `GET /shift-assignment` to
+ * exhaustion with no date filter. So the sheet printed a LIFETIME total under a
+ * label that said "this week": Atlas read 31 / 2 / 3 where the real Sun–Sat week
+ * was 2 / 0 / 0. `load()` reads the same map, so the ranking was wrong too.
+ *
+ * `DATE` is a Saturday, so the payroll week under test is 2030-05-26 → 2030-06-01.
+ */
+describe("buildAutoAssignPlan — shifts this week means THIS WEEK", () => {
+	test("history outside the payroll week is not counted", () => {
+		const plan = planWith({
+			prs: [pr("solo", "Solo PR")],
+			assignments: [
+				worked("solo", VENUE, { shiftDate: "2030-01-01" }), // last winter
+				worked("solo", VENUE, { shiftDate: "2030-05-28" }), // Tue of this week
+			],
+		});
+		expect(plan.pairs[0]?.shiftsThisWeek).toBe(1);
+	});
+
+	test("the fairness tie-break follows the week, not the lifetime total", () => {
+		// Same tier, no request, and both have history at a DIFFERENT venue so the
+		// venue term cannot decide it — the count is all that is left. The veteran
+		// is also named last alphabetically, so the name tie-break is set up to
+		// lose: only a week-scoped count can put them first.
+		const plan = planWith({
+			prs: [pr("fresh", "Aaa Fresh"), pr("veteran", "Zzz Veteran")],
+			assignments: [
+				worked("veteran", OTHER_VENUE, { shiftDate: "2030-01-01" }),
+				worked("veteran", OTHER_VENUE, { shiftDate: "2030-01-02" }),
+				worked("veteran", OTHER_VENUE, { shiftDate: "2030-01-03" }),
+				worked("fresh", OTHER_VENUE, { shiftDate: "2030-05-28" }),
+			],
+		});
+		expect(plan.pairs[0]?.prId).toBe("veteran");
+		expect(plan.pairs[0]?.shiftsThisWeek).toBe(0);
 	});
 });
 

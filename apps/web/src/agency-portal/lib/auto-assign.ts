@@ -1,3 +1,7 @@
+import {
+	addDaysToIso,
+	getPayrollWeekSundayIso,
+} from "@agency-portal/lib/demo-clock";
 import { windowMinutes } from "@agency-portal/lib/shift-slot-clash";
 import { hasShiftEnded } from "@agency-portal/lib/shift-window";
 import {
@@ -579,14 +583,47 @@ export function buildAutoAssignPlan(params: {
 
 	const shiftRowById = new Map(weekShifts.map((s) => [s.id, s]));
 
-	// How many of the week's shifts each PR holds, for the fairness tie-break.
+	// THE PAYROLL WEEK THE FAIRNESS COUNT IS ABOUT.
 	//
-	// ⚠️ NOT the clash-exempt list: a `completed` shift was worked and must count
-	// here, which is exactly why this pass cannot be folded into
-	// `committedWindowsByPr` below however similar the two loops look.
+	// Derived HERE rather than taken as a parameter, because `weekAssignments`
+	// arrives with no date filter — the hook pages `GET /shift-assignment` to
+	// exhaustion, whatever the parameter name says — so a caller who forgot to
+	// narrow it would silently reinstate the lifetime count this replaced, and
+	// nothing would look wrong until someone read the number.
+	//
+	// Sunday-anchored through the ONE helper. See its docblock: nothing in the
+	// app may derive a week another way, and THIS COUNT is the thing that broke
+	// last time one did (12 Aug 2026 — the roster planned Mon–Sun and put its
+	// fairness count on a different seven days from every money screen).
+	const anchorIso = [...targetDates].sort()[0];
+	const weekFrom = anchorIso ? getPayrollWeekSundayIso(anchorIso) : null;
+	const weekTo = weekFrom ? addDaysToIso(weekFrom, 6) : null;
+
+	// How many of THIS WEEK's shifts each PR holds, for the fairness tie-break.
+	//
+	// ⚠️ It counted every row it was handed until 3 Sep 2026, which made it the
+	// PR's LIFETIME total under a label that said "this week". Measured on Atlas
+	// that day: the sheet printed 31 / 2 / 3 where the real week was 2 / 0 / 0.
+	// The label was the smaller half of it — `load()` reads this map, so a PR with
+	// a long history sank down the queue permanently, which is the exact opposite
+	// of the spreading the sort exists to do.
+	//
+	// ⚠️ NOT the clash-exempt list: a `completed` shift WAS worked and must count
+	// here, which is why this pass cannot be folded into `committedWindowsByPr`
+	// below however similar the two loops look.
 	const weekCountByPr = new Map<string, number>();
 	for (const a of weekAssignments) {
 		if (NON_STAFFING_STATUSES.includes(a.status)) continue;
+		const date = (
+			shiftRowById.get(a.shiftId)?.shiftDate ??
+			a.shiftDate ??
+			""
+		).slice(0, 10);
+		// Outside the week, or undateable — the same answer either way: a row that
+		// cannot be placed in the week must not be charged to it.
+		if (!date || !weekFrom || !weekTo || date < weekFrom || date > weekTo) {
+			continue;
+		}
 		weekCountByPr.set(a.prId, (weekCountByPr.get(a.prId) ?? 0) + 1);
 	}
 
