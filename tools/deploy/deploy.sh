@@ -32,6 +32,12 @@ if [ ! -f .env.backend ]; then
   exit 1
 fi
 
+echo "=== Deploy config ==="
+echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
+echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
+echo "Containers: ${FRONTEND_CONTAINER_NAME}, ${BACKEND_CONTAINER_NAME}"
+echo "Backend env file: .env.backend (DB/R2 come from here — not from deploy.sh)"
+
 echo "=== Stopping and removing old ${DEPLOY_ENV} containers ==="
 docker compose down --remove-orphans
 
@@ -52,7 +58,9 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   if docker compose pull "$@"; then
     echo "Pull succeeded."
     echo "=== Starting new containers ==="
-    docker compose up -d
+    # --force-recreate so a changed .env.backend / .env.frontend is re-applied
+    # even when the image tag did not move.
+    docker compose up -d --force-recreate
     docker compose ps
 
     echo "=== Logging deployment info ==="
@@ -99,8 +107,12 @@ with open('$HISTORY_FILE', 'r+') as f:
 
     echo "Saved logs to target folder: ./${LOG_DIR}/"
     echo "=== Backend runtime check (DB / R2 bucket) ==="
-    docker compose exec -T backend printenv DATABASE_URL R2_BUCKET_NAME R2_PUBLIC_URL 2>/dev/null \
+    sleep 2
+    docker compose exec -T backend printenv DATABASE_URL POSTGRES_HOST POSTGRES_DB R2_BUCKET_NAME R2_PUBLIC_URL 2>/dev/null \
       | sed 's#://[^@]*@#://***:***@#' || true
+    # The printenv above is what the backend was GIVEN; this is the database
+    # it actually connected to.
+    docker logs "${BACKEND_CONTAINER_NAME}" 2>&1 | grep '\[db\]' | tail -1 || true
     exit 0
   fi
   echo "Pull failed. Retrying in ${WAIT_SECONDS}s..."
