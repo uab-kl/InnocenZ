@@ -22,6 +22,7 @@ import {
 } from "@agency-portal/lib/auto-assign";
 import {
 	busyFrameOn,
+	busyOverShift,
 	minuteRangesOverlap,
 	previousDayIso,
 	windowMinutes,
@@ -482,6 +483,22 @@ export function RosterBackendTimetable({
 				// cannot disagree about who is off. The request ROW is untouched: what
 				// the venue asked for stays true even once it cannot be granted.
 				if (blockedDates.get(r.userId)?.has(shift.shiftDate)) continue;
+				// THE FIFTH way, and the same argument one notch finer (owner, 3 Sep
+				// 2026: "since they are already unavailable it should not show the
+				// Outlet request anymore"). The PR is SPOKEN FOR over this shift's
+				// own hours — by us or by anyone — so the cell already paints
+				// UNAVAILABLE and printed "Outlet request" directly beneath it, on
+				// the very hours it had just called unbookable.
+				//
+				// A WINDOW test, not the day test above: the venue may name the same
+				// PR for an afternoon and an evening, and only the hour they are
+				// actually taken stops being answerable. `busyOverShift` is the same
+				// predicate the UNAVAILABLE band is drawn from, so the marker and the
+				// band cannot disagree — the discipline the MC case established.
+				//
+				// The request ROW is untouched, as ever: what the venue asked for
+				// stays true even once it cannot be granted.
+				if (busyOverShift(committedWindows.get(r.userId), shift)) continue;
 				const byDate =
 					map.get(r.userId) ??
 					new Map<
@@ -506,7 +523,7 @@ export function RosterBackendTimetable({
 			}
 		}
 		return map;
-	}, [shiftsQuery.data, outletNameById, blockedDates]);
+	}, [shiftsQuery.data, outletNameById, blockedDates, committedWindows]);
 
 	const shiftFiltersOn = rosterShiftFiltersActive(filters);
 

@@ -179,6 +179,39 @@ export function busyFrameOn(
 	return out;
 }
 
+/**
+ * Is this shift's own window already spoken for? Returns the colliding window's
+ * bare label, or null.
+ *
+ * ⚠️ TIMES, NEVER WHO OR WHERE. The rows behind `byDate` come from the committed
+ * read, which strips the agency and the venue at the server's privacy boundary
+ * (owner, 3 Sep 2026: *"they should only see that the PR is Busy but they should
+ * not be able to see that another agency assigned them to the shift"*). Every
+ * caller may say "unavailable" and show the hours; none may say who booked them.
+ *
+ * A label-only slot ("Late night") carries no window and never collides — the
+ * same fail-open the server's `shiftsOverlap` takes. Its "spoken for at an hour
+ * nobody knows" is advice only, and deliberately NOT a refusal: greying every
+ * card for it is the whole-day rule the owner retired on 20 Aug 2026.
+ *
+ * The assign sheet's `unavailableById` is this same test one step later in the
+ * pipeline — it is handed the frame ready-made as a prop, so it cannot call
+ * this. Both compare `windowMinutes` against `busyFrameOn` output through
+ * `minuteRangesOverlap`; keep them that way, or the sheet and the grid will
+ * start disagreeing about who is free.
+ */
+export function busyOverShift(
+	byDate: ReadonlyMap<string, string[]> | undefined,
+	shift: { shiftDate: string; slot?: string | null },
+): string | null {
+	const own = windowMinutes(shift.slot ?? "");
+	if (!own) return null;
+	const hit = busyFrameOn(byDate, shift.shiftDate).find((w) =>
+		minuteRangesOverlap({ from: own[0], to: own[1] }, w),
+	);
+	return hit ? hit.label : null;
+}
+
 /** Is this instant (minutes from the day's midnight) inside the window? */
 export function windowContains(win: string, minutes: number): boolean {
 	const w = windowMinutes(win);
