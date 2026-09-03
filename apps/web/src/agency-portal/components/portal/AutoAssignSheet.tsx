@@ -209,7 +209,9 @@ export function AutoAssignSheet({
 							onClick={() => toggle(pair)}
 							aria-pressed={on}
 							className={cn(
-								"flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+								// items-START, not centre: the rows are multi-line now, and a
+								// centred tick drifts down the taller ones.
+								"flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors",
 								on
 									? "border-[var(--iz-gold)] bg-[rgba(232,194,122,0.06)]"
 									: "border-[var(--iz-line)]",
@@ -217,7 +219,7 @@ export function AutoAssignSheet({
 						>
 							<span
 								className={cn(
-									"flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+									"mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
 									on
 										? "border-[var(--iz-gold)] bg-[var(--iz-gold)] text-black"
 										: "border-[var(--iz-line2)]",
@@ -226,26 +228,46 @@ export function AutoAssignSheet({
 							>
 								{on && <Check className="h-3 w-3" />}
 							</span>
+							{/* WHO (line 1), WHY THEY RANK HERE (line 2), WHAT THEY WOULD GET
+							    (line 3).
+
+							    ⚠️ This was ONE `truncate`d line carrying all four facts inline,
+							    and both halves failed at once. The pill sat directly against the
+							    tier with no separator between them, so it read as
+							    "Tier I⟨Outlet request⟩" with the chip overlapping the numeral.
+							    And the detail line lost the end of the window and the whole
+							    event name to the ellipsis — "· 16:00 - 20:00 · THURSD…" — which
+							    is the half an agency actually reads before committing someone's
+							    evening.
+
+							    Chips WRAP now rather than truncate: a chip pushed off the end is
+							    the one thing the row exists to say. Keep the gap utilities on
+							    these flex rows — `ml-2` on an inline span is what produced the
+							    collision, because a pill is a flex box and takes no margin from
+							    the text beside it. */}
 							<div className="min-w-0 flex-1">
-								<p className="truncate text-sm font-semibold">
-									{pair.prName}
-									<span className="iz-tiny iz-muted2 ml-2 font-normal">
+								<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+									<span className="text-sm font-semibold">{pair.prName}</span>
+									<span className="iz-tiny iz-muted2">
 										{tierLabel(pair.prTier)}
-										{pair.requestedByVenue && (
-											<span className="iz-pill iz-pill-amber !py-0 !text-[9px]">
-												{t.rosterGrid.outletRequest}
-											</span>
-										)}
-										{/* Why this row sits where it does. Drawn only when the venue
-								    did NOT name them: a requested PR is already at the top for
-								    a stronger reason, and two chips on one line would bury the
-								    name they belong to. */}
-										{!pair.requestedByVenue && pair.workedHereBefore && (
-											<span className="iz-pill iz-pill-green !py-0 !text-[9px]">
-												{t.rosterGrid.autoAssignWorkedHere}
-											</span>
-										)}{" "}
-										·{" "}
+									</span>
+								</div>
+								{/* The venue's ask and the venue history are mutually exclusive
+								    by design: a requested PR is already at the top for the
+								    stronger reason, so drawing both would only bury the one that
+								    decided the order. */}
+								<div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+									{pair.requestedByVenue && (
+										<span className="iz-pill iz-pill-amber !px-2 !py-0.5 !text-[9px] !leading-normal">
+											{t.rosterGrid.outletRequest}
+										</span>
+									)}
+									{!pair.requestedByVenue && pair.workedHereBefore && (
+										<span className="iz-pill iz-pill-green !px-2 !py-0.5 !text-[9px] !leading-normal">
+											{t.rosterGrid.autoAssignWorkedHere}
+										</span>
+									)}
+									<span className="iz-tiny iz-muted2">
 										{fill(
 											pair.shiftsThisWeek === 1
 												? t.rosterGrid.autoAssignShiftsThisWeekOne
@@ -253,8 +275,8 @@ export function AutoAssignSheet({
 											{ n: pair.shiftsThisWeek },
 										)}
 									</span>
-								</p>
-								<p className="iz-tiny iz-muted mt-0.5 truncate">
+								</div>
+								<p className="iz-tiny iz-muted mt-1 leading-snug">
 									→ {pair.outletName} · {dayLabel(pair.shiftDate)}
 									{context ? ` · ${context}` : ""}
 								</p>
