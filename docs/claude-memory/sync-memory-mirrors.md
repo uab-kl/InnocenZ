@@ -24,7 +24,18 @@ The user works on multiple devices (office PC + house PC, same Claude account) �
 
 **Why:** (2026-07-30) "My house same Claude account but have no all those your current Claude code memory … so i can easily do in another devices and consistent and keep memory."
 
-**How to apply.** After meaningful InnocenZ sessions (or when asked), sync the mirror **in BOTH directions** — this is the whole rule, not a detail:
+**How to apply. RUN THE SCRIPT** (added 3 Sep 2026 — the four numbered rules below are what it
+encodes; they are kept because they are the reasoning, not because they should be done by hand):
+
+```bash
+node tools/scripts/sync-claude-memory.mjs          # union both ways, then rebuild MEMORY.md
+node tools/scripts/sync-claude-memory.mjs --check  # report drift only, exit 1 if any
+```
+
+It derives the native folder from **wherever this repo actually sits**, unions both ways, and
+**refuses to resolve a two-sided conflict** — it prints the two paths and exits 1, because
+choosing needs someone to read the code. Re-run with `--prefer-repo` / `--prefer-native` once you
+have. The rules it encodes:
 
 1. **Compare first, copy second.** Hash every `.md` in `memory/` against `docs/claude-memory/`, normalising CRLF, and classify each as native-only / repo-only / differs / same. Only then copy.
 2. **Union, never overwrite wholesale.** Native-only files go to the repo; repo-only files come back to native. `MEMORY.md` is regenerated as the union of everything, never copied from one side.
@@ -35,7 +46,22 @@ The user works on multiple devices (office PC + house PC, same Claude account) �
 
 **Restoring memory on a NEW device:**
 1. `git clone` / `git pull` the repo (branch `jk`, or `main` once merged) — any path works.
-2. Copy `docs\claude-memory\*.md` into `%USERPROFILE%\.claude\projects\C--Users-jinkg-Downloads-InnocenZ-InnocenZ\memory\`. (The folder name is the working directory with separators replaced by `-`; if the repo sits elsewhere, match the folder name that Claude Code creates on that machine.)
+2. `node tools/scripts/sync-claude-memory.mjs` — it creates the native folder and fills it.
 3. Read `MEMORY.md` first — it indexes the rest.
+
+⚠️ **Why step 2 must not be a hand-copy.** The native folder is named after the repo's ABSOLUTE
+PATH, with `:` and every separator replaced by `-`: `C:\Users\jinkg\Downloads\InnocenZ\InnocenZ` becomes
+`C--Users-jinkg-Downloads-InnocenZ-InnocenZ` — yes, a DOUBLE dash after the drive letter; it is
+not a typo, and it has been “corrected” by hand before. A second machine cloning to
+`D:\work\InnocenZ` needs `D--work-InnocenZ`, so copying into the folder name written above would
+write somewhere **nothing ever reads** — no error, no memories, and the session simply behaves as
+though it had never met the project. The script computes that name; a human transcribing it does
+not.
+
+⚠️ **What does NOT travel: the session transcripts.** `~/.claude/projects/<slug>/*.jsonl` is ~3 GB
+across ~85 files on this machine, per-device, and not gittable — it is not the thing to sync. What
+carries the project across devices is `CLAUDE.md` + `TEST_SCRIPT.md` + this mirror, all three in
+git. “Same session” on the other device means the same KNOWLEDGE, resumed from those three,
+not the same scrollback.
 
 Related: [[verify-against-test-script]], [[innocenz-database-rules]], [[innocenz-env-gotchas]].

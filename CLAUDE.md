@@ -22,17 +22,40 @@
 
 # InnocenZ project memory (works on ANY device with this repo)
 
-Full session memory is committed at **`docs/claude-memory/*.md`** — 22 memories plus
-`MEMORY.md`, which indexes the rest and must be read first. On a new machine, copy those files
-into `%USERPROFILE%\.claude\projects\C--Users-jinkg-Downloads-InnocenZ-InnocenZ\memory\` to
-restore native memory.
+Full session memory is committed at **`docs/claude-memory/*.md`** — 26 memories plus
+`MEMORY.md`, which indexes the rest and must be read first.
+
+**Syncing it is one command, on any device** (3 Sep 2026 — it replaces the hand-copy that used
+to live here):
+
+```bash
+node tools/scripts/sync-claude-memory.mjs          # union both ways, then rebuild MEMORY.md
+node tools/scripts/sync-claude-memory.mjs --check  # report drift only, exit 1 if any
+```
+
+On a new machine: `git pull`, then run it — it creates the native folder and fills it.
+
+⚠️ **Never hand-copy into a folder name written down somewhere.** Claude Code names the native
+folder after the repo's ABSOLUTE PATH, `:` and every separator replaced by `-`, so this machine's
+`C:\Users\jinkg\Downloads\InnocenZ\InnocenZ` is `C--Users-jinkg-Downloads-InnocenZ-InnocenZ`
+(a DOUBLE dash after the drive letter — not a typo). A machine that clones to `D:\work\InnocenZ`
+needs `D--work-InnocenZ`; copying into the name above would write where **nothing ever reads** —
+no error, no memories, and the session simply behaves as if it had never met the project. The
+script derives the name from wherever the repo actually is.
 
 ⚠️ **Sync runs in BOTH directions** (rule corrected 13 Aug 2026). The mirror and the machine's
 own `memory/` folder are each other's backup, not source and copy: **compare first** (hash every
 `.md` both ways, normalising CRLF), then **union** — never overwrite one side wholesale — and
-regenerate `MEMORY.md` from the union rather than copying it. On a conflict, prefer the file
-whose claims match real code, and check before choosing. A one-way copy is what let the two
-stores drift 13 files apart, hiding 8 standing rules from the second device.
+regenerate `MEMORY.md` from the union rather than copying it. A one-way copy is what let the two
+stores drift 13 files apart, hiding 8 standing rules from the second device. The script encodes
+all of that and **refuses to resolve a two-sided conflict** — it prints both paths and exits 1,
+because preferring the file whose claims match real code needs someone to read the code. Re-run
+with `--prefer-repo` / `--prefer-native` once you have.
+
+⚠️ **Session transcripts do NOT travel, and are not meant to.** `~/.claude/projects/<slug>/*.jsonl`
+is ~3 GB over ~85 files here, per-device and not gittable. What carries the project between
+devices is `CLAUDE.md` + `TEST_SCRIPT.md` + the memory mirror, all three in git — "same session"
+elsewhere means the same KNOWLEDGE resumed from those, not the same scrollback.
 
 ⚠️ The memory mirror is NO LONGER kept in the workbook (owner's call, 11 Aug 2026).
 `InnocenZ_BuildSteps.xlsx` is the **one and only book** (owner's call, 17 Aug 2026 — the MVP

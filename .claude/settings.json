@@ -14,5 +14,25 @@
     "network": {
       "allowedDomains": ["www.google-analytics.com"]
     }
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/renew-test-script.js",
+            "timeout": 15,
+            "statusMessage": "Checking TEST_SCRIPT.md renewal"
+          },
+          {
+            "type": "command",
+            "command": "node tools/scripts/sync-claude-memory.mjs",
+            "timeout": 20,
+            "statusMessage": "Syncing Claude memory mirrors"
+          }
+        ]
+      }
+    ]
   }
 }
