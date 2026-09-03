@@ -78,6 +78,7 @@ function planWith(opts: {
 	assignments?: ShiftAssignment[];
 	shifts?: Shift[];
 	requested?: Map<string, Set<string>>;
+	crossAgencyBusy?: { userId: string; date: string; slot: string | null }[];
 }) {
 	return buildAutoAssignPlan({
 		weekShifts: opts.shifts ?? [shift()],
@@ -89,6 +90,7 @@ function planWith(opts: {
 		]),
 		targetDates: [DATE],
 		requestedPrIdsByShift: opts.requested,
+		crossAgencyBusy: opts.crossAgencyBusy,
 	});
 }
 
@@ -341,6 +343,55 @@ describe("buildAutoAssignPlan — shifts this week means THIS WEEK", () => {
 	});
 });
 
+/**
+ * A RIVAL AGENCY'S BOOKING, WITHOUT LEARNING WHOSE (3 Sep 2026).
+ *
+ * `GET /shift-assignment` is agency-scoped, so the planner never sees another
+ * agency's rows — Atlas seated Vicky on a shift posted to two agencies and Why
+ * We Met went on offering her for that same shift, all the way to a 409 that is
+ * deliberately anonymous and so could not explain itself.
+ *
+ * The fix is the committed read the grid has painted as UNAVAILABLE for weeks:
+ * `{ userId, date, slot }` and nothing else. Owner's rule — "they should only
+ * see that the PR is Busy but they should not be able to see that another agency
+ * assigned them to the shift". These fixtures carry NO assignment row on purpose:
+ * that absence IS the production shape.
+ */
+describe("buildAutoAssignPlan — rival bookings, as times only", () => {
+	test("a rival booking over the shift hides the PR", () => {
+		const plan = planWith({
+			prs: [pr("vicky", "Aaa Vicky"), pr("abby", "Zzz Abby")],
+			// Requested too, to prove the venue's ask does not override a real
+			// clash — she cannot work it, and no ranking can change that.
+			requested: new Map([["shift-1", new Set(["vicky"])]]),
+			crossAgencyBusy: [
+				{ userId: "vicky", date: DATE, slot: "22:00 - 04:00" },
+			],
+		});
+		expect(plan.pairs.map((p) => p.prId)).toEqual(["abby"]);
+	});
+
+	test("a rival booking at another hour does not hide them", () => {
+		const plan = planWith({
+			prs: [pr("vicky", "Vicky")],
+			crossAgencyBusy: [
+				{ userId: "vicky", date: DATE, slot: "10:00 - 11:00" },
+			],
+		});
+		expect(plan.pairs.map((p) => p.prId)).toEqual(["vicky"]);
+	});
+
+	test("a rival booking with no readable window is advice, not a refusal", () => {
+		// "Spoken for at an hour nobody knows." Refusing the day for it is the
+		// whole-day rule the owner retired on 20 Aug 2026.
+		const plan = planWith({
+			prs: [pr("vicky", "Vicky")],
+			crossAgencyBusy: [{ userId: "vicky", date: DATE, slot: null }],
+		});
+		expect(plan.pairs.map((p) => p.prId)).toEqual(["vicky"]);
+	});
+});
+
 describe("validateAutoAssignPairs — the pre-write re-check agrees", () => {
 	const pairFor = (prId: string) => {
 		const plan = planWith({ prs: [pr(prId, "Any Name")] });
@@ -365,6 +416,22 @@ describe("validateAutoAssignPairs — the pre-write re-check agrees", () => {
 			pairs: [pair],
 			shifts: [shift()],
 			assignments: [booked("vicky", "23:00 - 01:00")],
+		});
+		expect(valid).toEqual([]);
+		expect(dropped[0]?.reason).toBe("pr-busy");
+	});
+
+	test("drops a pair a RIVAL agency seated while the sheet sat open", () => {
+		// No assignment row — that race is invisible in our own rows, and it is
+		// the one that used to reach the API as an unexplainable 409.
+		const pair = pairFor("vicky");
+		const { valid, dropped } = validateAutoAssignPairs({
+			pairs: [pair],
+			shifts: [shift()],
+			assignments: [],
+			crossAgencyBusy: [
+				{ userId: "vicky", date: DATE, slot: "22:00 - 04:00" },
+			],
 		});
 		expect(valid).toEqual([]);
 		expect(dropped[0]?.reason).toBe("pr-busy");

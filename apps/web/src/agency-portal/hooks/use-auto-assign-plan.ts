@@ -21,6 +21,7 @@ import { fetchOutlets } from "@/services/outlet";
 import {
 	blockedDatesByPr,
 	fetchPrAvailability,
+	fetchPrCommittedWindows,
 } from "@/services/pr-availability";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
@@ -133,6 +134,32 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		staleTime: 30_000,
 	});
 
+	/**
+	 * WHEN EACH PR IS SPOKEN FOR, BY ANY AGENCY — bare times, no agency, no venue.
+	 *
+	 * ⚠️ The planner is otherwise BLIND to every rival booking: `fetchShiftAssignments`
+	 * is agency-scoped, so the server hands back only our own rows. On 3 Sep 2026
+	 * Atlas seated Vicky on a shift posted to two agencies and Why We Met went on
+	 * offering her for that same shift, because nothing in its world said
+	 * otherwise — a proposal the API would refuse with a deliberately anonymous
+	 * 409 the agency could do nothing with.
+	 *
+	 * The roster grid has read this endpoint for weeks and paints it UNAVAILABLE;
+	 * only the planner never asked. Same query key and the same one-day-earlier
+	 * `from` as the grid, so the two cannot disagree about who is free and an
+	 * overnight window that began the night before is still visible.
+	 */
+	const committedQuery = useQuery({
+		queryKey: ["roster", "committed", addDaysToIso(week.from, -1), week.to],
+		queryFn: () =>
+			fetchPrCommittedWindows(
+				{ from: addDaysToIso(week.from, -1), to: week.to },
+				logout,
+			),
+		enabled: backed,
+		staleTime: 30_000,
+	});
+
 	// The venue's named asks per shift (0131) — the list response already
 	// carries them, agency-scoped by the server, so this is a pure reshape.
 	const requestedPrIdsByShift = useMemo(() => {
@@ -192,6 +219,10 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 			// every one of those pairings 409s at Confirm — a preview that promises
 			// what the write cannot deliver.
 			blockedDatesByPr: blockedDatesByPr(availabilityQuery.data ?? []),
+			// Rival bookings, as times only — see the query. Without it the planner
+			// proposes PRs another agency has already seated, and the refusal that
+			// follows cannot explain itself.
+			crossAgencyBusy: committedQuery.data ?? [],
 			requestedPrIdsByShift,
 		});
 	}, [
@@ -200,6 +231,7 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		prsQuery.data,
 		outletsQuery.data,
 		availabilityQuery.data,
+		committedQuery.data,
 		targetDates,
 		requestedPrIdsByShift,
 		liveWeekShifts,
@@ -224,7 +256,8 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 	 */
 	const confirm = useMutation({
 		mutationFn: async (pairs: AutoAssignPair[]) => {
-			const [freshShifts, freshAssignments, freshPrs] = await Promise.all([
+			const [freshShifts, freshAssignments, freshPrs, freshBusy] =
+				await Promise.all([
 				fetchAllPages((page) =>
 					fetchShifts(
 						{ fromDate: week.from, toDate: week.to, page, pageSize: 100 },
@@ -237,11 +270,20 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 				fetchAllPages((page) =>
 					fetchPrPersonnel({ page, pageSize: 100 }, logout),
 				),
+				// Re-read for the same reason as everything else here: a seat can be
+				// taken while the sheet sits open, and a seat taken by ANOTHER agency
+				// is invisible in `freshAssignments` — the one race the re-check could
+				// not see, and the one that reaches the API as an anonymous 409.
+				fetchPrCommittedWindows(
+					{ from: addDaysToIso(week.from, -1), to: week.to },
+					logout,
+				),
 			]);
 			const { valid, dropped } = validateAutoAssignPairs({
 				pairs,
 				shifts: freshShifts.data,
 				assignments: freshAssignments.data,
+				crossAgencyBusy: freshBusy,
 				// Needed to bucket each STAFFED seat by tier — without it the
 				// re-check cannot tell a full Tier I quota from a free one.
 				tierByPrId: new Map(freshPrs.data.map((p) => [p.id, p.tier])),

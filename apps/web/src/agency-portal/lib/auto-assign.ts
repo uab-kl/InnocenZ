@@ -561,6 +561,34 @@ export function buildAutoAssignPlan(params: {
 	 * confirmed them.
 	 */
 	outletPinById?: ReadonlyMap<string, VenuePin>;
+	/**
+	 * Windows each PR is spoken for by ANY agency, from `GET
+	 * /pr-availability/committed` — `{ userId, date, slot }` and nothing else.
+	 *
+	 * ⚠️ WITHOUT THIS THE PLANNER IS BLIND TO EVERY RIVAL BOOKING, because
+	 * `weekAssignments` is agency-scoped: the server returns only the caller's own
+	 * rows. Live case, 3 Sep 2026 — Atlas seated Vicky on a shift posted to two
+	 * agencies, and Why We Met went on offering her for that same shift, because
+	 * nothing in its world said otherwise. Confirming would have hit a 409 the
+	 * agency could not act on: the refusal is deliberately anonymous, so it cannot
+	 * explain itself.
+	 *
+	 * TIMES, NEVER WHO OR WHERE (owner, 3 Sep 2026: *"they should only see that
+	 * the PR is Busy but they should not be able to see that another agency
+	 * assigned them to the shift"*). The rows carry no agency, no outlet and no
+	 * shift id, so this closes the gap without disclosing a rival's roster — and
+	 * the grid has rendered exactly this as UNAVAILABLE for weeks; only the
+	 * planner never asked for it.
+	 *
+	 * A row with a null slot is SKIPPED, not treated as a day off: "spoken for at
+	 * an hour nobody knows" is advice, and refusing the whole day for it is the
+	 * rule the owner retired on 20 Aug 2026.
+	 */
+	crossAgencyBusy?: readonly {
+		userId: string;
+		date: string;
+		slot: string | null;
+	}[];
 }): AutoAssignPlan {
 	const {
 		weekShifts,
@@ -570,6 +598,7 @@ export function buildAutoAssignPlan(params: {
 		targetDates,
 		blockedDatesByPr,
 		outletPinById,
+		crossAgencyBusy,
 	} = params;
 
 	const openShifts = findOpenShifts({
@@ -640,6 +669,24 @@ export function buildAutoAssignPlan(params: {
 	// tie-break, and a PR who blocked Saturday has not worked a shift. Charging
 	// them one would push them DOWN the queue for the days they are available.
 	const committedByPr = committedWindowsByPr(weekAssignments, shiftRowById);
+
+	// EVERY OTHER AGENCY'S BOOKINGS, as bare times. Folded into the SAME map on
+	// the SAME absolute-minute line, so one overlap test answers for both and
+	// there is no second rule to drift. No rebasing is needed: each row carries
+	// its own date, and `windowMinutes` pushes an overnight end past midnight, so
+	// a 22:00-04:00 on the 24th already meets a 02:00-06:00 on the 25th.
+	//
+	// Duplicates are harmless — the committed read includes our own rows too, and
+	// overlapping a window twice is the same answer as overlapping it once.
+	for (const row of crossAgencyBusy ?? []) {
+		if (!row.slot) continue;
+		const w = windowMinutes({ dateIso: row.date, shift: row.slot });
+		if (!w) continue;
+		committedByPr.set(row.userId, [
+			...(committedByPr.get(row.userId) ?? []),
+			w,
+		]);
+	}
 
 	/**
 	 * WHICH VENUES EACH PR HAS ALREADY WORKED (owner, 24 Aug 2026: "prioritise
@@ -745,10 +792,23 @@ export function buildAutoAssignPlan(params: {
 	 * people or tier mix — drifted apart once already when they did not all learn
 	 * about tiers at the same time.
 	 */
-	const availableFor = (prId: string, target: OpenShift): boolean =>
-		!blockedDatesByPr?.get(prId)?.has(target.shiftDate) &&
-		!clashesWithCommitted(committedByPr.get(prId), targetWindow(target)) &&
-		!travelBlocked(prId, target);
+	// Own assignment rows are keyed by `prId`; the cross-agency windows arrive
+	// keyed by `userId`. Post-0089 those are the same uuid, but the PR row still
+	// carries both columns, so BOTH are looked up — a mismatch here would fail
+	// silently as "this PR is free", which is the direction that books someone
+	// into two places at once.
+	const committedFor = (pr: PrPersonnel) =>
+		pr.userId && pr.userId !== pr.id
+			? [
+					...(committedByPr.get(pr.id) ?? []),
+					...(committedByPr.get(pr.userId) ?? []),
+				]
+			: committedByPr.get(pr.id);
+
+	const availableFor = (pr: PrPersonnel, target: OpenShift): boolean =>
+		!blockedDatesByPr?.get(pr.id)?.has(target.shiftDate) &&
+		!clashesWithCommitted(committedFor(pr), targetWindow(target)) &&
+		!travelBlocked(pr.id, target);
 
 	const activePrs = prs.filter((p) => p.status === "active");
 	// Free = could take at least one of the slots actually on offer. Counted per
@@ -756,7 +816,7 @@ export function buildAutoAssignPlan(params: {
 	// asks: a PR who finished at noon is free for tonight, and the old per-date
 	// count called them booked.
 	const freePrCount = activePrs.filter((p) =>
-		openShifts.some((s) => availableFor(p.id, s)),
+		openShifts.some((s) => availableFor(p, s)),
 	).length;
 
 	// Fill one PR at a time, rotating across outlets: each turn goes to the
@@ -862,7 +922,7 @@ export function buildAutoAssignPlan(params: {
 						// when someone else can is simply a worse plan; if nobody else is
 						// free the seat stays open and is reported as a shortage, which
 						// the agency can still fill by hand and be warned about then.
-						availableFor(p.id, target) &&
+						availableFor(p, target) &&
 						fitsTarget(p.tier),
 				)
 				// KNOWN FACE AT THIS VENUE. Second only to being named for the
@@ -890,7 +950,7 @@ export function buildAutoAssignPlan(params: {
 				// The agency needs to hear the difference — one is solved by finding
 				// staff, the other by editing the shift.
 				const anyFreeToday = activePrs.some(
-					(p) => !takenToday.has(p.id) && availableFor(p.id, target),
+					(p) => !takenToday.has(p.id) && availableFor(p, target),
 				);
 				if (anyFreeToday) tierBlockedCount += exhausted;
 				continue;
@@ -1002,8 +1062,25 @@ export function validateAutoAssignPairs(params: {
 	 * only fail open. This pass is the last chance to catch that.
 	 */
 	outletPinById?: ReadonlyMap<string, VenuePin>;
+	/**
+	 * Rival bookings as bare times — the same rows the plan was built from, re-read.
+	 * Omit and only OUR OWN clashes are re-checked, which is the state that let a
+	 * seat taken by another agency while the sheet sat open reach the API as a 409.
+	 */
+	crossAgencyBusy?: readonly {
+		userId: string;
+		date: string;
+		slot: string | null;
+	}[];
 }): ValidatedPairs {
-	const { pairs, shifts, assignments, tierByPrId, outletPinById } = params;
+	const {
+		pairs,
+		shifts,
+		assignments,
+		tierByPrId,
+		outletPinById,
+		crossAgencyBusy,
+	} = params;
 
 	const shiftById = new Map(shifts.map((s) => [s.id, s]));
 	// Where each PR already is, from the FRESH rows — the same timeline the planner
@@ -1032,6 +1109,17 @@ export function validateAutoAssignPairs(params: {
 	// would drop, one pair at a time and with no explanation, exactly the
 	// candidates the plan was just corrected to offer.
 	const committedByPr = committedWindowsByPr(assignments, shiftById);
+	// Rival bookings folded into the same map, exactly as the planner does it —
+	// one overlap test, one rule, no second place for it to drift.
+	for (const row of crossAgencyBusy ?? []) {
+		if (!row.slot) continue;
+		const w = windowMinutes({ dateIso: row.date, shift: row.slot });
+		if (!w) continue;
+		committedByPr.set(row.userId, [
+			...(committedByPr.get(row.userId) ?? []),
+			w,
+		]);
+	}
 	// Seeded from the shift AFTER the loop below — see the note in `findOpenShifts`.
 	const staffedByShift = new Map<string, number>();
 	const staffedBucketsByShift = new Map<string, (string | null)[]>();
@@ -1077,7 +1165,16 @@ export function validateAutoAssignPairs(params: {
 		// Booked over this shift's own window — by this agency, on rows it can see.
 		// A seat another agency took while the sheet sat open surfaces above as
 		// `shift-full` instead, off the server's cross-agency `staffedCount`.
-		if (clashesWithCommitted(committedByPr.get(pair.prId), window)) {
+		// Both id columns, for the reason the planner's `committedFor` gives: our
+		// own rows are keyed by `prId`, the rival windows by `userId`.
+		const held =
+			pair.userId && pair.userId !== pair.prId
+				? [
+						...(committedByPr.get(pair.prId) ?? []),
+						...(committedByPr.get(pair.userId) ?? []),
+					]
+				: committedByPr.get(pair.prId);
+		if (clashesWithCommitted(held, window)) {
 			dropped.push({ pair, reason: "pr-busy" });
 			continue;
 		}
