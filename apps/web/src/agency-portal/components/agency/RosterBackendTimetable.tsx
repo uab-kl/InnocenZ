@@ -52,7 +52,7 @@ import {
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Maximize2, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
@@ -239,6 +239,16 @@ type RosterBackendTimetableProps = {
 		userId?: string,
 	) => Promise<unknown>;
 	todayIso?: string;
+	/**
+	 * Rendered between the open-demand band and the week grid (owner, 3 Sep
+	 * 2026: the auto-assign banner belongs under Open demand, not above it).
+	 * A SLOT rather than the banner itself, because this component knows about
+	 * rosters and nothing about auto-assign — the page owns that decision.
+	 *
+	 * The band above it is conditional, so with no open demand this simply
+	 * renders first, still directly above the grid it acts on.
+	 */
+	afterOpenDemand?: ReactNode;
 };
 
 /**
@@ -260,6 +270,7 @@ export function RosterBackendTimetable({
 	onWeekChange,
 	onAssign,
 	todayIso,
+	afterOpenDemand,
 }: RosterBackendTimetableProps) {
 	const { t } = usePortalLocale();
 	const { logout } = useAuth();
@@ -1085,6 +1096,8 @@ export function RosterBackendTimetable({
 					</div>
 				</section>
 			)}
+
+			{afterOpenDemand}
 
 			<div className="iz-roster-week">
 				<div className="iz-roster-week-head">

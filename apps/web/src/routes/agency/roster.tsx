@@ -650,9 +650,6 @@ function AgencyRoster() {
 						totalShifts={weekShiftTotal}
 						outletNames={rosterOutletNames}
 					/>
-					{/* Backend plan + confirm sheet, shared with the home card. The demo
-					    store's one-PR action lives on inside it, for demo sessions only. */}
-					{canAssign && <RosterAutoAssignBanner dateIso={planningDate} />}
 					<div className="iz-roster-planning-panel">
 						<RosterBackendTimetable
 							weekStartIso={weekStartIso}
@@ -674,6 +671,17 @@ function AgencyRoster() {
 								return created;
 							}}
 							todayIso={DEFAULT_ROSTER_DATE_ISO}
+							/* Under Open demand, above the grid (owner, 3 Sep 2026): the
+							   banner offers to fill the very seats the band just listed,
+							   so it reads as the answer to it rather than a header over
+							   it. Backend plan + confirm sheet, shared with the home card;
+							   the demo store's one-PR action lives on inside it, for demo
+							   sessions only. */
+							afterOpenDemand={
+								canAssign ? (
+									<RosterAutoAssignBanner dateIso={planningDate} />
+								) : null
+							}
 						/>
 					</div>
 				</div>
