@@ -535,6 +535,14 @@ const en = {
 	 * while the query string they set stayed English.
 	 */
 	payroll: {
+		/** The Drinks/Tips + day strip under both Payroll sub-tabs. */
+		showMoney: "Show",
+		allDays: "All days",
+		nothingLoggedThatDay: "Nothing logged that day",
+		clearSelection: "Clear",
+		kindUnlabelled: "This feed carries no drinks/tips label yet.",
+		nothingForKindDay:
+			"Nothing here for that money or that night — clear the strip above to widen it.",
 		title: "Payroll & PV",
 		paymentVouchers: "Payment Vouchers",
 		pendingPayout: "Pending Payout",
@@ -4317,6 +4325,10 @@ const en = {
 		languagesLine: "Languages · {langs}",
 	},
 	agencyReceipts: {
+		/** "Tips RM 175.00 of RM 320.00" — the selected bucket against the paper. */
+		kindSubtotalOf: "{kind} {sub} of {total}",
+		/** A line the server put in no bucket. NOT "Others", which is a real one. */
+		unlabelledBucket: "Not labelled",
 		/** Editor header. {receiptNo} is the stored receipt number and is never translated. */
 		correctingReceipt: "Correcting {receiptNo}",
 		/** Count of LINES on a receipt. Chinese has no plural, so the two forms are spelled out. */
@@ -4501,6 +4513,15 @@ const en = {
 		chooseWeek: "Choose week",
 	},
 	agencyQueues: {
+		/**
+		 * A wages or overtime claim can never be shown by a Drinks/Tips chip, so
+		 * its absence has to be stated. Silently scoping one away is how a week
+		 * that refuses to send looks like a week with nothing left to decide.
+		 */
+		claimsHiddenByKindOne:
+			"1 claim about wages or other pay is hidden by the Drinks/Tips filter.",
+		claimsHiddenByKindMany:
+			"{n} claims about wages or other pay are hidden by the Drinks/Tips filter.",
 		/** Section label above the agency dispute queue when nothing is open. */
 		disputesTitle: "Disputes",
 		/** Same label carrying the undecided count. */
@@ -6394,6 +6415,12 @@ const zh: PortalTranslations = {
 		changeEvent: "更换活动",
 	},
 	payroll: {
+		showMoney: "显示",
+		allDays: "全部日期",
+		nothingLoggedThatDay: "当天没有记录",
+		clearSelection: "清除",
+		kindUnlabelled: "此列表尚未标注酒水／小费。",
+		nothingForKindDay: "该收入类型或该日期没有记录 — 清除上方筛选即可放宽。",
 		title: "薪资与付款单",
 		paymentVouchers: "付款单",
 		pendingPayout: "待付款",
@@ -9512,6 +9539,8 @@ const zh: PortalTranslations = {
 		languagesLine: "语言 · {langs}",
 	},
 	agencyReceipts: {
+		kindSubtotalOf: "{kind} {sub}，共 {total}",
+		unlabelledBucket: "未标注",
 		correctingReceipt: "正在更正 {receiptNo}",
 		itemCountOne: "{n} 个项目",
 		itemCountMany: "{n} 个项目",
@@ -9623,6 +9652,13 @@ const zh: PortalTranslations = {
 		chooseWeek: "选择周次",
 	},
 	agencyQueues: {
+		/**
+		 * Claims the Drinks/Tips strip cannot reach — see the same pair in EN.
+		 */
+		claimsHiddenByKindOne:
+			"有 1 宗关于工资或其他收入的申诉被「酒水／小费」筛选隐藏。",
+		claimsHiddenByKindMany:
+			"有 {n} 宗关于工资或其他收入的申诉被「酒水／小费」筛选隐藏。",
 		disputesTitle: "争议",
 		disputesTitleOpen: "争议（{n} 项未解决）",
 		shiftNotLinked:

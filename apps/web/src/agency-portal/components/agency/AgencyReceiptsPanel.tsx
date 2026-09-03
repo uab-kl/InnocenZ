@@ -1,4 +1,5 @@
 import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
+import { PayrollKindDayFilter } from "@agency-portal/components/agency/PayrollKindDayFilter";
 import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { ShiftFactsBlock } from "@agency-portal/components/agency/ShiftFactsBlock";
 import {
@@ -10,6 +11,16 @@ import {
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import {
+	anyLineClassified,
+	groupLinesByKind,
+	type KindSelection,
+	MONEY_KINDS,
+	type MoneyKind,
+	receiptKinds,
+	receiptKindTotal,
+	receiptMatchesKinds,
+} from "@agency-portal/lib/payroll-kind-day";
 import {
 	DISPUTE_COMPONENT_LABEL,
 	isDisputed,
@@ -32,7 +43,9 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	AgencyReceipt,
@@ -93,11 +106,20 @@ export function workingDayIso(receipt: AgencyReceipt): string {
 const receiptOutlet = (receipt: AgencyReceipt): string =>
 	receipt.lines.find((line) => line.outlet)?.outlet ?? "—";
 
-/** yyyy-MM-dd -> "Tue 29 Jul", the same shape the day-review panel prints. */
-function formatDay(iso: string): string {
+/**
+ * yyyy-MM-dd -> "Tue 29 Jul" / "周二 29 7月".
+ *
+ * Takes the LOCALE. This hardcoded "en-GB", which `date-label.ts` names as a
+ * bug at its own definition: the language is the portal choice, not the
+ * machine's, so the heading stayed English under the 中文 switch. Harmless
+ * until the Drinks/Tips strip landed above it — its day chips resolve through
+ * the `dates` dictionary, so the two sat side by side reading 周四 3 and
+ * "Thu 3 Sept" about the same night.
+ */
+function formatDay(iso: string, locale: PortalLocale): string {
 	const d = new Date(`${iso}T00:00:00`);
 	if (Number.isNaN(d.getTime())) return iso;
-	return d.toLocaleDateString("en-GB", {
+	return d.toLocaleDateString(dateLocaleTag(locale), {
 		weekday: "short",
 		day: "numeric",
 		month: "short",
@@ -149,20 +171,40 @@ export function receiptsInPayrollWeek(
 	return receipts.filter((r) => inPayrollWeek(r, weekStartIso, weekEndIso));
 }
 
+/**
+ * The bucket a line sits in, in the words the rest of the app uses.
+ *
+ * Through `DISPUTE_COMPONENT_LABEL`, not a private map: the API's key for wages
+ * is `wages` while the dictionary's is `dailyWages`, and a second copy of that
+ * one crossing is how a receipt comes to name a bucket the dispute card spells
+ * differently. `""` is a line the server classified into nothing at all — named
+ * as such rather than folded into Others, which is a real bucket with its own
+ * money in it.
+ */
+function KindLabel({ kind }: { kind: string }) {
+	const { t } = usePortalLocale();
+	const key =
+		DISPUTE_COMPONENT_LABEL[kind as keyof typeof DISPUTE_COMPONENT_LABEL];
+	return <>{key ? t.money[key] : t.agencyReceipts.unlabelledBucket}</>;
+}
+
 function ReceiptRow({
 	receipt,
 	canReview,
 	busy,
 	onReview,
 	onOpenPv,
+	kinds,
 }: {
 	receipt: AgencyReceipt;
 	canReview: boolean;
 	busy: boolean;
 	onReview: (status: "pending" | "approved") => void;
 	onOpenPv?: (voucherId: string) => void;
+	/** What the reviewer asked for — dims the rest, and names the subtotal. */
+	kinds: KindSelection;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	/**
 	 * The claims the PR has open on this paper.
 	 *
@@ -292,6 +334,19 @@ function ReceiptRow({
 									{ n: receipt.lines.length },
 								)}
 							</p>
+							{/* WHAT THIS PAPER PUT IN THE SELECTED BUCKET, under its own
+							    total and never instead of it. A receipt is a physical
+							    document that has to reconcile against the printed one, so
+							    the whole figure stays; but a reviewer who asked for tips is
+							    checking the tips figure, and leaving them to derive it from
+							    a mixed RM 190.00 is how RM 190 of drinks-and-tips gets read
+							    as RM 190 of tips. */}
+							{kinds.length > 0 && (
+								<p className="iz-tiny text-[var(--iz-gold-l)]">
+									{kinds.map((k) => t.money[k]).join(" + ")}{" "}
+									{formatRM(receiptKindTotal(receipt, kinds))}
+								</p>
+							)}
 						</div>
 						<ChevronDown
 							className={`h-4 w-4 text-[var(--iz-muted)] transition-transform${open ? " rotate-180" : ""}`}
@@ -320,7 +375,7 @@ function ReceiptRow({
 							{claims.map((claim) => (
 								<p key={claim.id} className="iz-tiny iz-muted2 mt-0.5">
 									{t.money[DISPUTE_COMPONENT_LABEL[claim.component]]} ·{" "}
-									{formatDay(claim.disputeDate)}
+									{formatDay(claim.disputeDate, locale)}
 									{claim.reason ? ` · ${claim.reason}` : ""}
 								</p>
 							))}
@@ -337,20 +392,52 @@ function ReceiptRow({
 							{t.agencyReceipts.noLineItemsOnReceipt}
 						</p>
 					) : (
+						/*
+						 * GROUPED BY BUCKET, always — the "see" half of the owner's ask
+						 * (3 Sep 2026). A flat list under "3 items" cannot be read as
+						 * "RM 90 of drinks and RM 100 of tips" without adding it up by
+						 * hand, and that sum is exactly what a reviewer is checking
+						 * against the paper.
+						 *
+						 * A non-selected bucket DIMS, it does not disappear. A receipt is
+						 * one printed document and its lines have to reconcile against
+						 * the printed total; hiding two of three items would leave a
+						 * reviewer holding a paper the screen disagrees with.
+						 */
 						<div>
-							{receipt.lines.map((line) => (
-								<div
-									key={line.id}
-									className="iz-tiny flex items-center justify-between gap-2 border-b border-[var(--iz-line)] py-1 last:border-0"
-								>
-									<span className="iz-muted2">
-										{line.quantity} × {line.description}
-									</span>
-									<span className="font-medium">
-										{formatRM(Number(line.amount || 0))}
-									</span>
-								</div>
-							))}
+							{groupLinesByKind(receipt.lines).map((group) => {
+								const muted =
+									kinds.length > 0 &&
+									!(kinds as readonly string[]).includes(group.kind);
+								return (
+									<div
+										key={group.kind || "unlabelled"}
+										className={muted ? "opacity-45" : undefined}
+									>
+										<div className="iz-tiny mt-1.5 flex items-baseline justify-between gap-2 first:mt-0">
+											<span className="font-bold tracking-wide">
+												<KindLabel kind={group.kind} />
+											</span>
+											<span className="iz-muted2 font-mono">
+												{formatRM(group.total)}
+											</span>
+										</div>
+										{group.lines.map((line) => (
+											<div
+												key={line.id}
+												className="iz-tiny flex items-center justify-between gap-2 border-b border-[var(--iz-line)] py-1 last:border-0"
+											>
+												<span className="iz-muted2 pl-2">
+													{line.quantity} × {line.description}
+												</span>
+												<span className="font-medium">
+													{formatRM(Number(line.amount || 0))}
+												</span>
+											</div>
+										))}
+									</div>
+								);
+							})}
 						</div>
 					)}
 
@@ -481,14 +568,26 @@ export function AgencyReceiptsPanel({
 	weekEndIso,
 	onOpenPv,
 	focusReceiptId,
+	kinds,
+	day,
+	onKindsChange,
+	onDayChange,
 }: {
 	weekStartIso: string;
 	weekEndIso: string;
 	onOpenPv?: (voucherId: string) => void;
 	/** Deep-linked receipt to scroll to — see the effect below. */
 	focusReceiptId?: string;
+	/**
+	 * WHICH MONEY and WHICH NIGHT — owned by the Payroll route so the answer
+	 * survives a hop to the Disputes sub-tab and back. See the same note there.
+	 */
+	kinds: KindSelection;
+	day: string | null;
+	onKindsChange: (next: MoneyKind[]) => void;
+	onDayChange: (next: string | null) => void;
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	const canReview = useAgencyCan()("raisePv");
 	const {
@@ -600,7 +699,15 @@ export function AgencyReceiptsPanel({
 		[weekReceipts],
 	);
 
-	const filtered = useMemo(() => {
+	/**
+	 * The week's receipts under the STATUS chips, the search box and the advanced
+	 * filters — everything the Drinks/Tips + day strip then counts over.
+	 *
+	 * Split out from `filtered` on purpose: count the strip against the raw week
+	 * and a day chip reading (2) opens an empty list because both of those two are
+	 * Verified while the chip above says Waiting on you.
+	 */
+	const base = useMemo(() => {
 		const needle = search.trim().toLowerCase();
 		return weekReceipts.filter((r) => {
 			// The chips partition the week, so a review bucket EXCLUDES anything
@@ -628,6 +735,58 @@ export function AgencyReceiptsPanel({
 		});
 	}, [weekReceipts, status, prId, outlet, source, search]);
 
+	/**
+	 * CROSS-FACETED counts — each row of the strip counted with the OTHER row
+	 * applied but not its own. See the note on `PayrollKindDayFilter`.
+	 *
+	 * The day test is written out in each memo rather than lifted to a shared
+	 * closure: a closure re-made every render is not a dependency React can
+	 * compare, so the memos would re-run on every keystroke in the search box.
+	 */
+	const kindCounts = useMemo(() => {
+		const onDay = base.filter((r) => day === null || workingDayIso(r) === day);
+		return Object.fromEntries(
+			MONEY_KINDS.map((k) => [
+				k,
+				onDay.filter((r) => receiptKinds(r).has(k)).length,
+			]),
+		) as Record<MoneyKind, number>;
+	}, [base, day]);
+
+	const inKinds = useMemo(
+		() => base.filter((r) => receiptMatchesKinds(r, kinds)),
+		[base, kinds],
+	);
+
+	const dayCounts = useMemo(() => {
+		const counts: Record<string, number> = {};
+		// The SAME `workingDayIso` the day headings group by, so a chip reading
+		// "Thu 3 (2)" lands on a heading that also says two. Deriving the chip's
+		// day from the matching LINES instead would be a second rule, and a
+		// receipt whose tips line falls either side of midnight would file itself
+		// under a heading it is not printed beneath.
+		for (const r of inKinds) {
+			const iso = workingDayIso(r);
+			counts[iso] = (counts[iso] ?? 0) + 1;
+		}
+		return counts;
+	}, [inKinds]);
+
+	const filtered = useMemo(
+		() => inKinds.filter((r) => day === null || workingDayIso(r) === day),
+		[inKinds, day],
+	);
+
+	/**
+	 * Can the two bucket chips mean anything at all? — see `anyLineClassified`.
+	 * Measured over the WEEK, not the filtered list: a week whose only receipt is
+	 * currently filtered out would otherwise disable the chips that filtered it.
+	 */
+	const kindsUnavailable = useMemo(
+		() => weekReceipts.length > 0 && !anyLineClassified(weekReceipts),
+		[weekReceipts],
+	);
+
 	/** Newest working day first, receipts within a day newest-logged first. */
 	const days = useMemo(() => {
 		const byDay = new Map<string, AgencyReceipt[]>();
@@ -641,8 +800,12 @@ export function AgencyReceiptsPanel({
 				day,
 				rows: [...rows].sort((a, b) => b.loggedAt.localeCompare(a.loggedAt)),
 				total: rows.reduce((sum, r) => sum + sumLines(r), 0),
+				// What that night put in the SELECTED buckets. Equal to `total` when
+				// nothing is selected, so the heading is unchanged until it is asked
+				// a narrower question.
+				kindTotal: rows.reduce((sum, r) => sum + receiptKindTotal(r, kinds), 0),
 			}));
-	}, [filtered]);
+	}, [filtered, kinds]);
 
 	const filtersActive = Boolean(prId || outlet || source || search.trim());
 
@@ -799,6 +962,28 @@ export function AgencyReceiptsPanel({
 						))}
 					</div>
 
+					{/* WHICH MONEY, WHICH NIGHT — the same strip the Disputes sub-tab
+					    draws, from the same component, reading the same selection
+					    (owner, 3 Sep 2026). Above the search box and OUTSIDE the
+					    collapsible Filters panel deliberately: the ask was to *see and
+					    select* drinks and tips, and a filter folded behind a toggle is
+					    one nobody discovers. Below the status chips because it narrows
+					    what they have already partitioned. */}
+					{weekReceipts.length > 0 && (
+						<PayrollKindDayFilter
+							weekStartIso={weekStartIso}
+							weekEndIso={weekEndIso}
+							kinds={kinds}
+							day={day}
+							onKindsChange={onKindsChange}
+							onDayChange={onDayChange}
+							kindCounts={kindCounts}
+							dayCounts={dayCounts}
+							allDaysCount={inKinds.length}
+							kindsUnavailable={kindsUnavailable}
+						/>
+					)}
+
 					<div className="mt-2 flex items-center gap-2">
 						<div className="relative flex-1">
 							<Search
@@ -883,17 +1068,25 @@ export function AgencyReceiptsPanel({
 								<p className="iz-sm iz-muted">
 									{receipts.length === 0
 										? t.payroll.noReceiptsLoggedYet
-										: filtersActive || status !== "all"
-											? t.receipts.noReceiptsMatch
-											: t.receipts.noReceiptsThisWeek}
+										: base.length > 0 && (kinds.length > 0 || day !== null)
+											? // The STRIP first — but only when it is what emptied
+												// the list. `base.length > 0` means the status chips
+												// and the search still had receipts and the strip
+												// removed them; without that guard the sentence points
+												// at a control that cannot bring anything back, while
+												// the chip actually hiding them sits a row above.
+												t.payroll.nothingForKindDay
+											: filtersActive || status !== "all"
+												? t.receipts.noReceiptsMatch
+												: t.receipts.noReceiptsThisWeek}
 								</p>
 							</IzCard>
 						) : (
-							days.map(({ day, rows, total }) => (
-								<div key={day}>
+							days.map(({ day: dayIso, rows, total, kindTotal }) => (
+								<div key={dayIso}>
 									<div className="mb-1.5 flex items-baseline justify-between gap-2">
 										<p className="iz-tiny font-bold tracking-wide">
-											{formatDay(day)}
+											{formatDay(dayIso, locale)}
 										</p>
 										<p className="iz-tiny iz-muted2">
 											{fill(
@@ -902,7 +1095,18 @@ export function AgencyReceiptsPanel({
 													: t.agencyReceipts.receiptCountMany,
 												{ n: rows.length },
 											)}{" "}
-											· {formatRM(total)}
+											·{" "}
+											{/* "Tips RM 175.00 of RM 320.00" — the selected bucket
+											    against the night's whole take. The total is never
+											    replaced: a heading that silently became the tips
+											    figure would make a RM 320 night read as RM 175. */}
+											{kinds.length > 0
+												? fill(t.agencyReceipts.kindSubtotalOf, {
+														kind: kinds.map((k) => t.money[k]).join(" + "),
+														sub: formatRM(kindTotal),
+														total: formatRM(total),
+													})
+												: formatRM(total)}
 										</p>
 									</div>
 									{/*
@@ -936,6 +1140,7 @@ export function AgencyReceiptsPanel({
 													receipt={receipt}
 													canReview={canReview}
 													busy={isReviewing}
+													kinds={kinds}
 													onReview={(next) => void decide(receipt, next)}
 													onOpenPv={onOpenPv}
 												/>

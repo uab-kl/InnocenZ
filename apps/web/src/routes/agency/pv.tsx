@@ -46,6 +46,7 @@ import {
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
 import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
+import type { MoneyKind } from "@agency-portal/lib/payroll-kind-day";
 import {
 	DEMO_PV_ISSUED_WEEKS_AGO,
 	demoPayrollWeekBoundsForWeeksAgo,
@@ -621,6 +622,32 @@ function AgencyPV() {
 				: lastWeekBounds;
 
 	/**
+	 * WHICH MONEY and WHICH NIGHT — one selection, read by the Receipts feed and
+	 * the Dispute queue alike (owner, 3 Sep 2026).
+	 *
+	 * Held HERE rather than inside either panel because it is one question asked
+	 * of two views of the same money: a reviewer narrowing to Thursday's tips on
+	 * the paper wants the claims about Thursday's tips when they tap across, and
+	 * two private copies would make them re-pick — or worse, quietly disagree,
+	 * with the receipts list showing Thursday while the queue beside it showed
+	 * the whole week. The same reason the week tab lives here.
+	 */
+	const [moneyKinds, setMoneyKinds] = useState<MoneyKind[]>([]);
+	const [moneyDay, setMoneyDay] = useState<string | null>(null);
+
+	/**
+	 * A day belongs to ONE week, so switching weeks has to let it go.
+	 *
+	 * Keeping it would leave "Thu 3 Sep" selected over a week that does not
+	 * contain it — every list empty, and the chip that emptied them not even on
+	 * the strip to be un-clicked. The buckets are week-agnostic and stay.
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies(payrollWeekTab): the tab is the TRIGGER, not a value the effect reads — it exists to clear the day when the week changes.
+	useEffect(() => {
+		setMoneyDay(null);
+	}, [payrollWeekTab]);
+
+	/**
 	 * The dispute / overtime counts on the sub-tab labels, scoped to the SELECTED
 	 * week — a dispute by its contested day, a claim by the night it was worked.
 	 *
@@ -1068,6 +1095,10 @@ function AgencyPV() {
 				<DisputeQueuePanel
 					weekStartIso={activeWeekBounds.weekStartIso}
 					weekEndIso={activeWeekBounds.weekEndIso}
+					kinds={moneyKinds}
+					day={moneyDay}
+					onKindsChange={setMoneyKinds}
+					onDayChange={setMoneyDay}
 				/>
 			)}
 			{pvSubTab === "overtime" && (
@@ -1300,6 +1331,10 @@ function AgencyPV() {
 					weekStartIso={activeWeekBounds.weekStartIso}
 					weekEndIso={activeWeekBounds.weekEndIso}
 					focusReceiptId={receiptFromSearch}
+					kinds={moneyKinds}
+					day={moneyDay}
+					onKindsChange={setMoneyKinds}
+					onDayChange={setMoneyDay}
 					onOpenPv={(voucherId) => setDetailId(voucherId)}
 				/>
 			)}

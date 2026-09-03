@@ -1,10 +1,17 @@
 import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
+import { PayrollKindDayFilter } from "@agency-portal/components/agency/PayrollKindDayFilter";
 import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { ShiftFactsBlock } from "@agency-portal/components/agency/ShiftFactsBlock";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import {
+	disputeMatchesKinds,
+	type KindSelection,
+	MONEY_KINDS,
+	type MoneyKind,
+} from "@agency-portal/lib/payroll-kind-day";
 import {
 	DISPUTE_COMPONENT_LABEL,
 	receiptsForDispute,
@@ -22,7 +29,9 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
 import type {
 	AgencyReceipt,
 	PaymentVoucherDispute,
@@ -33,11 +42,20 @@ function formatRM(value: string | null): string {
 	return `RM ${n.toFixed(2)}`;
 }
 
-/** yyyy-MM-dd -> "Tue 21 Jul", matching how the PR saw the cell they tapped. */
-function formatDay(iso: string): string {
+/**
+ * yyyy-MM-dd -> "Tue 29 Jul" / "周二 29 7月".
+ *
+ * Takes the LOCALE. This hardcoded "en-GB", which `date-label.ts` names as a
+ * bug at its own definition: the language is the portal choice, not the
+ * machine's, so the heading stayed English under the 中文 switch. Harmless
+ * until the Drinks/Tips strip landed above it — its day chips resolve through
+ * the `dates` dictionary, so the two sat side by side reading 周四 3 and
+ * "Thu 3 Sept" about the same night.
+ */
+function formatDay(iso: string, locale: PortalLocale): string {
 	const d = new Date(`${iso}T00:00:00`);
 	if (Number.isNaN(d.getTime())) return iso;
-	return d.toLocaleDateString("en-GB", {
+	return d.toLocaleDateString(dateLocaleTag(locale), {
 		weekday: "short",
 		day: "numeric",
 		month: "short",
@@ -283,7 +301,7 @@ function DisputeRow({
 	busy: boolean;
 	receipts: AgencyReceipt[];
 }) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const [note, setNote] = useState("");
 	const [rejecting, setRejecting] = useState(false);
 	/** Undecided claims open themselves — see the header button below. */
@@ -336,7 +354,7 @@ function DisputeRow({
 							· {t.money[DISPUTE_COMPONENT_LABEL[dispute.component]]}
 						</div>
 						<p className="iz-tiny iz-muted mt-0.5">
-							{formatDay(dispute.disputeDate)}
+							{formatDay(dispute.disputeDate, locale)}
 							{dispute.voucher.weekStart && dispute.voucher.weekEnd
 								? ` · ${fill(t.agencyQueues.weekFromTo, {
 										from: dispute.voucher.weekStart,
@@ -570,9 +588,24 @@ function disputeInWeek(
 export function DisputeQueuePanel({
 	weekStartIso,
 	weekEndIso,
+	kinds,
+	day,
+	onKindsChange,
+	onDayChange,
 }: {
 	weekStartIso: string;
 	weekEndIso: string;
+	/**
+	 * WHICH MONEY and WHICH NIGHT — owned by the Payroll route, not by this
+	 * panel, so the answer survives a hop to the Receipts sub-tab and back. A
+	 * reviewer asking "Thursday's tips" is asking it of the paper AND of the
+	 * claim about the paper, and making them re-pick on each tab would turn one
+	 * question into two.
+	 */
+	kinds: KindSelection;
+	day: string | null;
+	onKindsChange: (next: MoneyKind[]) => void;
+	onDayChange: (next: string | null) => void;
 }) {
 	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
@@ -629,7 +662,16 @@ export function DisputeQueuePanel({
 		[allDisputes, weekStartIso, weekEndIso],
 	);
 
-	const disputes = useMemo(() => {
+	/**
+	 * The week's claims under the SCOPE chips and the search box — everything the
+	 * Drinks/Tips + day strip then counts over.
+	 *
+	 * Split out from the final list on purpose: the strip's counts have to be
+	 * computed against what the chips above it have already narrowed to, or a day
+	 * chip reading (2) opens an empty list because both of those two are Resolved
+	 * and the scope is Open.
+	 */
+	const base = useMemo(() => {
 		const byScope = weekDisputes.filter((d) =>
 			scope === "all"
 				? true
@@ -657,6 +699,67 @@ export function DisputeQueuePanel({
 				.some((field) => String(field).toLowerCase().includes(q)),
 		);
 	}, [weekDisputes, scope, search]);
+
+	/**
+	 * CROSS-FACETED counts — each row counted with the OTHER row applied.
+	 *
+	 * Count a facet against its own choice and every unpicked chip reads (0) the
+	 * instant you pick one, which looks like the data disappeared. Count it
+	 * against nothing and a chip promises rows the list cannot show. Neither
+	 * number is defensible; this one is.
+	 *
+	 * The day test is written out in each memo rather than lifted to a shared
+	 * closure: a closure re-made every render is not a dependency React can
+	 * compare, so the memos would re-run on every keystroke in the search box.
+	 */
+	const kindCounts = useMemo(() => {
+		const onDay = base.filter((d) => day === null || d.disputeDate === day);
+		return Object.fromEntries(
+			MONEY_KINDS.map((k) => [
+				k,
+				onDay.filter((d) => d.component === k).length,
+			]),
+		) as Record<MoneyKind, number>;
+	}, [base, day]);
+
+	const inKinds = useMemo(
+		() => base.filter((d) => disputeMatchesKinds(d, kinds)),
+		[base, kinds],
+	);
+
+	const dayCounts = useMemo(() => {
+		const counts: Record<string, number> = {};
+		for (const d of inKinds) {
+			if (!d.disputeDate) continue;
+			counts[d.disputeDate] = (counts[d.disputeDate] ?? 0) + 1;
+		}
+		return counts;
+	}, [inKinds]);
+
+	const disputes = useMemo(
+		() => inKinds.filter((d) => day === null || d.disputeDate === day),
+		[inKinds, day],
+	);
+
+	/**
+	 * Claims NO chip in the strip can reach.
+	 *
+	 * A tips claim hidden by the Drinks chip is not hidden — its count is sitting
+	 * on the Tips chip, one click away. A WAGES or OTHERS claim is different:
+	 * neither bucket is offered (the agency cannot add those lines and the PR
+	 * cannot dispute them, so filtering by them would be a chip that never
+	 * decides anything), which means its absence is invisible. An undecided claim
+	 * is why a week refuses to send, so it gets a sentence rather than a silence
+	 * — the same rule as the off-week line below.
+	 */
+	const hiddenByKind = useMemo(() => {
+		if (kinds.length === 0) return 0;
+		return base
+			.filter((d) => day === null || d.disputeDate === day)
+			.filter((d) => !(MONEY_KINDS as readonly string[]).includes(d.component))
+			.length;
+	}, [base, kinds, day]);
+
 	// One query for the whole queue, not one per row — react-query dedupes on the
 	// shared key, and the rows only ever read from it.
 	const { receipts } = useAgencyReceipts();
@@ -726,6 +829,37 @@ export function DisputeQueuePanel({
 					</div>
 				)}
 
+				{/* WHICH MONEY, WHICH NIGHT — the same strip the Receipts sub-tab draws,
+				    from the same component, reading the same selection. Five claims for
+				    one PR on one night read "· Tips", "· Drinks", "· Tips" … and were
+				    otherwise identical; nothing on this screen could be asked for just
+				    one of them. Under the scope chips rather than above them because it
+				    narrows what they have already partitioned. */}
+				{!isLoading && weekDisputes.length > 0 && (
+					<PayrollKindDayFilter
+						weekStartIso={weekStartIso}
+						weekEndIso={weekEndIso}
+						kinds={kinds}
+						day={day}
+						onKindsChange={onKindsChange}
+						onDayChange={onDayChange}
+						kindCounts={kindCounts}
+						dayCounts={dayCounts}
+						allDaysCount={inKinds.length}
+					/>
+				)}
+
+				{hiddenByKind > 0 && (
+					<p className="iz-tiny mt-1.5 text-[var(--iz-amber)]">
+						{fill(
+							hiddenByKind === 1
+								? t.agencyQueues.claimsHiddenByKindOne
+								: t.agencyQueues.claimsHiddenByKindMany,
+							{ n: hiddenByKind },
+						)}
+					</p>
+				)}
+
 				{/* Three different silences, three different sentences. "No open
 				    disputes" was printed for all of them, so a settled claim and a
 				    week nobody has ever disputed looked identical. Now scoped to the
@@ -749,23 +883,37 @@ export function DisputeQueuePanel({
 				)}
 				{!isLoading && weekDisputes.length > 0 && disputes.length === 0 && (
 					<p className="iz-tiny iz-muted">
-						{search.trim()
-							? fill(
-									scope === "all"
-										? t.agencyQueues.nothingMatchesAny
-										: scope === "open"
-											? t.agencyQueues.nothingMatchesOpen
-											: t.agencyQueues.nothingMatchesResolved,
-									{ q: search.trim() },
-								)
-							: scope === "open"
+						{/*
+						 * The STRIP is checked first, but ONLY when it is what emptied
+						 * the list — `base.length > 0` means the scope chips and the
+						 * search still had claims and the strip removed them.
+						 *
+						 * Without that guard the sentence lies in the commonest case on
+						 * this screen: the queue opens on Open, this week has none open
+						 * and five settled, so `base` is already empty and "clear the
+						 * strip above to widen it" points at a control that cannot bring
+						 * anything back. The chip actually hiding them is Resolved, one
+						 * row up.
+						 */}
+						{base.length > 0 && (kinds.length > 0 || day !== null)
+							? t.payroll.nothingForKindDay
+							: search.trim()
 								? fill(
-										resolvedCount === 1
-											? t.agencyQueues.nothingWaitingOne
-											: t.agencyQueues.nothingWaitingMany,
-										{ n: resolvedCount },
+										scope === "all"
+											? t.agencyQueues.nothingMatchesAny
+											: scope === "open"
+												? t.agencyQueues.nothingMatchesOpen
+												: t.agencyQueues.nothingMatchesResolved,
+										{ q: search.trim() },
 									)
-								: t.agencyQueues.noneSettledYet}
+								: scope === "open"
+									? fill(
+											resolvedCount === 1
+												? t.agencyQueues.nothingWaitingOne
+												: t.agencyQueues.nothingWaitingMany,
+											{ n: resolvedCount },
+										)
+									: t.agencyQueues.noneSettledYet}
 					</p>
 				)}
 
