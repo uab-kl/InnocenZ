@@ -24,6 +24,14 @@ const sizes = {
 		tagline: "text-sm",
 		motto: "text-sm",
 	},
+	/** Sized for the auth pages' side panel — between md and lg. */
+	auth: {
+		mark: "h-36 w-36 sm:h-44 sm:w-44",
+		horizontal: "h-14",
+		wordmark: "text-[3.375rem] sm:text-[3.875rem]",
+		tagline: "text-[1.0625rem] sm:text-[1.125rem]",
+		motto: "text-[1.125rem] sm:text-[1.25rem]",
+	},
 	lg: {
 		mark: "h-40 w-40 sm:h-44 sm:w-44",
 		horizontal: "h-14 sm:h-16",

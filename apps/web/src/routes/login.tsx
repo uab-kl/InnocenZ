@@ -355,10 +355,10 @@ function LoginPage() {
 				<LoginAsideBackdrop />
 
 				<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
-					<BrandLogo variant="stacked" size="hero" showTagline showMotto />
+					<BrandLogo variant="stacked" size="auth" showTagline showMotto />
 
-					<div className="mt-12 max-w-lg">
-						<p className="login-subheading text-foreground/80">
+					<div className="mt-8 max-w-xl">
+						<p className="login-aside-lede text-foreground/80">
 							{t.authPages.loginAsideDescription}
 						</p>
 					</div>
@@ -387,23 +387,23 @@ function LoginPage() {
 				 * place a first-time visitor can choose a language — before they have
 				 * an account for the preference to be remembered on.
 				 */}
-				<div className="mb-10 flex w-fit flex-wrap items-center gap-4 lg:absolute lg:right-12 lg:top-12 lg:mb-0">
+				<div className="mb-8 flex w-fit flex-wrap items-center gap-3 lg:absolute lg:right-12 lg:top-12 lg:mb-0">
 					<PortalLanguageSwitcher variant="header" />
 					<a
 						href="/"
-						className="login-back inline-flex w-fit items-center gap-3 font-semibold uppercase tracking-[0.12em] text-foreground/70 transition-colors hover:text-gold-bright"
+						className="login-back inline-flex w-fit items-center gap-2 font-semibold uppercase tracking-[0.12em] text-foreground/70 transition-colors hover:text-gold-bright"
 					>
-						<ArrowLeft className="h-6 w-6" />
+						<ArrowLeft className="h-4 w-4" />
 						{t.webShell.backToHome}
 					</a>
 				</div>
 
-				<div className="mx-auto w-full max-w-145">
-					<div className="mb-10 flex justify-center lg:hidden">
-						<BrandLogo variant="stacked" size="hero" showTagline showMotto />
+				<div className="mx-auto w-full max-w-120">
+					<div className="mb-6 flex justify-center lg:hidden">
+						<BrandLogo variant="stacked" size="md" showTagline showMotto />
 					</div>
 
-					<div className="mb-8">
+					<div className="mb-6">
 						<h1 className="login-heading text-foreground">
 							<span className="login-heading-line">
 								{t.authPages.loginHeadingLine1}
@@ -414,12 +414,12 @@ function LoginPage() {
 								</span>
 							</span>
 						</h1>
-						<p className="login-subheading mt-4 text-muted-foreground">
+						<p className="login-subheading mt-2 text-muted-foreground">
 							{t.authPages.loginSubheading}
 						</p>
 					</div>
 
-					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-8 shadow-glow-gold-lg backdrop-blur-md sm:p-10">
+					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-6 shadow-glow-gold-lg backdrop-blur-md sm:p-7">
 						<form
 							id="login-form"
 							aria-label={t.authPages.loginFormLabel}
@@ -428,7 +428,7 @@ function LoginPage() {
 								form.handleSubmit();
 							}}
 						>
-							<FieldGroup className="gap-6">
+							<FieldGroup className="gap-4">
 								<form.Field name="email">
 									{(field) => {
 										const isInvalid =
@@ -445,7 +445,7 @@ function LoginPage() {
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
 														<Mail
-															className="size-5 text-royal-gold"
+															className="size-4 text-royal-gold"
 															strokeWidth={1.75}
 															aria-hidden
 														/>
@@ -508,7 +508,7 @@ function LoginPage() {
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
 														<Lock
-															className="size-5 text-royal-gold"
+															className="size-4 text-royal-gold"
 															strokeWidth={1.75}
 															aria-hidden
 														/>
@@ -574,7 +574,7 @@ function LoginPage() {
 									role="alert"
 									className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-xl text-destructive"
 								>
-									<AlertCircle className="mt-0.5 h-6 w-6 shrink-0" />
+									<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
 									<span>{loginErrorText(error, t)}</span>
 								</div>
 							)}
@@ -592,7 +592,7 @@ function LoginPage() {
 									>
 										{isSubmitting ? (
 											<>
-												<Loader2 className="h-6 w-6 animate-spin" />
+												<Loader2 className="h-4 w-4 animate-spin" />
 												{t.authPages.signingIn}
 											</>
 										) : (

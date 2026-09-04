@@ -284,6 +284,28 @@ function PortalSidebar({
 	);
 }
 
+/**
+ * The one identity string every Agency / Outlet portal prints:
+ * `Organisation (Role)` — e.g. "Velvet 23 (Manager)", "Atlas PR (Owner)".
+ *
+ * The greeting used to print the signed-in PERSON's name, which told a manager
+ * who is seated at two venues nothing about which one this screen is acting
+ * for. The organisation is the fact that decides what the screen may do, and
+ * the role is the fact that decides how much of it. The person's own name is
+ * still one click away on their profile.
+ *
+ * Falls back to the person's name when an org name has not loaded yet, and to
+ * the bare role when neither is known — never renders an empty bracket.
+ */
+function portalIdentityLabel(
+	orgName: string,
+	ownerName: string,
+	subLabel: string,
+) {
+	const name = orgName.trim() || ownerName.trim();
+	return name ? `${name} (${subLabel})` : subLabel;
+}
+
 function isAgencyHomePath(pathname: string) {
 	return /\/agency\/?$/.test(pathname);
 }
@@ -322,7 +344,7 @@ function PortalHeader({
 				<h1 className="font-sora text-xl font-extrabold tracking-tight text-[var(--iz-txt)] md:text-2xl">
 					{portalGreeting(t)},{" "}
 					<span className="text-[var(--iz-gold-l)]">
-						{ownerName.trim() || orgName}
+						{portalIdentityLabel(orgName, ownerName, subLabel)}
 					</span>
 				</h1>
 				{showDatetime &&
@@ -354,8 +376,8 @@ function PortalHeader({
 				<Link
 					to={portalProfilePath(portal)}
 					className="iz-portal-header-profile"
-					title={`${ownerName} · ${subLabel}`}
-					aria-label={`${t.shell.profile} · ${ownerName}`}
+					title={portalIdentityLabel(orgName, ownerName, subLabel)}
+					aria-label={`${t.shell.profile} · ${portalIdentityLabel(orgName, ownerName, subLabel)}`}
 				>
 					<PortalAvatar
 						portal={portal}

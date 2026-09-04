@@ -40,6 +40,7 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 
 ### Environment and operations
 
+- [Page zoom + blank screenshots](page-zoom-and-blank-screenshots.md) — `zoom` scales a whole page but NOT `svh`/`vw`; the Browser pane shoots the landing page blank below the fold, use chrome-devtools
 - [InnocenZ env gotchas](innocenz-env-gotchas.md) — /api/v1 + login shape, port 7777 owned by user's tsx watch, migrate:deploy, pnpm/Defender fix, GateGuard, Excel regen, tsc baselines
 - [Running the PR app](innocenz-run-the-pr-app.md) — `node tools/scripts/dev-mobile-web.mjs`, port 8081, backend first; also how to click a nav tab that has no accessible role
 - [InnocenZ daily test tracker](innocenz-daily-test-tracker.md) — 4-role daily run-through: TEST_SCRIPT.md is source of truth (Option 2, no automation); Doc regenerated on request

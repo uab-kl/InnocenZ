@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 
@@ -218,4 +219,45 @@ export function useTick(interval = 1500) {
 	}, [interval]);
 
 	return t;
+}
+
+/**
+ * Info card that shows only its title until the reader asks for more.
+ *
+ * Default CLOSED — the landing page stacks 27 of these across three grids, and
+ * every one of them shouting its body copy at once is what made the page read
+ * as noise. A native <details> is used rather than useState so the closed state
+ * costs no JS, keyboard and screen-reader semantics come for free, and browser
+ * find-in-page can still reach the hidden copy.
+ */
+export function CollapsibleCard({
+	head,
+	title,
+	titleClassName,
+	className,
+	children,
+}: {
+	/** Icon tile / index number rendered before the title. */
+	head?: ReactNode;
+	title: string;
+	titleClassName?: string;
+	className?: string;
+	children: ReactNode;
+}) {
+	return (
+		<details
+			className={`hz-glass hz-collapse${className ? ` ${className}` : ""}`}
+		>
+			<summary className="hz-collapse__summary">
+				{head}
+				<span
+					className={`hz-display hz-collapse__title${titleClassName ? ` ${titleClassName}` : ""}`}
+				>
+					{title}
+				</span>
+				<ChevronDown className="hz-collapse__chevron" size={18} aria-hidden />
+			</summary>
+			<div className="hz-collapse__body">{children}</div>
+		</details>
+	);
 }

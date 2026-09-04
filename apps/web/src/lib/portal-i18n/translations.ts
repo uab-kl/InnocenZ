@@ -61,7 +61,7 @@ const en = {
 		profile: "Profile",
 		demoData: "Demo data",
 		demoDataHint:
-			"Fixture data. This session was never authenticated against the backend, so nothing here is real and nothing you do will be saved.",
+			"Fixture data. This session was never authenticated, so nothing here is real and nothing you do is saved.",
 		goodMorning: "Good morning",
 		goodAfternoon: "Good afternoon",
 		goodEvening: "Good evening",
@@ -307,11 +307,11 @@ const en = {
 		resetToWorkspaceRates: "Reset to workspace rates",
 		loadingYourPrs: "Loading your PRs…",
 		noPrsToNameYet:
-			"No PRs to name yet — you can only request PRs who have worked a shift at your venue. Post the shift without naming anyone and the agency will staff it.",
+			"No PRs to name yet — you can only request PRs who have worked at your venue. Post without naming anyone and the agency will staff it.",
 		notAvailableYet: "Not available yet",
 		accessRestricted: "Access restricted",
 		servicesComingLater:
-			"Ordering agency services is coming in a later release. Your role will have access when it does — nothing needs changing on your account.",
+			"Ordering agency services comes in a later release. Your role will have access then — nothing to change on your account.",
 		roleCannotPost: "Your outlet role cannot post shifts or order services.",
 		couldNotPost: "Could not post shifts — please try again",
 		dailyLimitReached: "Daily PR limit reached for the selected date(s)",
@@ -352,7 +352,7 @@ const en = {
 		preferredLanguages: "Preferred languages",
 		languages: "Languages",
 		languagesHint:
-			"Spoken by your PRs — a plus, not a requirement. PRs who don't speak these can still be assigned. Use Others for anything not listed.",
+			"Spoken by your PRs — a plus, not a requirement. Use Others for anything not listed.",
 		noLanguagesOnProfiles:
 			"No languages on your PRs' profiles yet — add one with Others.",
 		plusOthers: "+ Others",
@@ -450,7 +450,7 @@ const en = {
 			"This clashes with your shift {other} — your shifts cannot overlap, so change this time or move that one first",
 		tapEditDrinksCommission: "Tap to edit drinks commission",
 		noApprovedAgencyYet:
-			"No approved agency yet. Add one in Settings and wait for them to accept — until then there is nobody to send this job to.",
+			"No approved agency yet. Add one in Settings and wait for them to accept.",
 		atLeastOneAgency: "A shift has to go to at least one agency.",
 		dontSendTo: "Don’t send to {name}",
 		alsoSendTo: "Also send to {name}",
@@ -485,15 +485,15 @@ const en = {
 			"This event's own price list — later events keep using your Workspace prices.",
 		infoTipLabel: "How this works",
 		helpDates:
-			"Tap days to add or remove them. Inside the calendar: 3 days / 1 week picks a span, and double-tapping one day selects only that day.",
+			"Tap days to add or remove them. In the calendar, 3 days / 1 week picks a span; double-tap a day to select only it.",
 		helpPeopleNeeded:
 			"How many PRs this shift needs. The pay table splits this number across tiers, and Select PRs can name who you want.",
 		helpSelectPrs:
-			"Optional — this list is the roster of the agencies you are posting to. Naming a PR is a request, not a guarantee: the agency decides who it sends, and a request only reaches an agency you posted to. Adding or removing names moves People needed up and down with the list. Slots you leave unnamed are staffed by your agency, and Clear all removes every pick.",
+			"Optional. Naming a PR is a request, not a guarantee — the agency decides who it sends. Unnamed slots they staff.",
 		helpPrices:
 			"Drink and service prices come from your Workspace and apply to every normal event. Use the links to change them there.",
 		helpTierGrid:
-			"Tap a gold cell to set the daily wage. Tap Commission to open drinks & tips %. Target sales is optional. PR count splits People needed across the tiers.",
+			"Tap a gold cell to set the daily wage. Tap Commission for drinks & tips %. Target sales is optional. PR count splits People needed across tiers.",
 		whatYouCanDoHere: "What you can do here",
 		canDoPostJob1:
 			"Post one shift, or several nights at once — 3 days / 1 week in the date picker",
@@ -652,7 +652,7 @@ const en = {
 		nothingDisputedThisWeek:
 			"Nothing disputed in this week. PRs raise these per day and per component from their Payment screen.",
 		noOvertimeThisWeek:
-			"No overtime awaiting a decision in this week. A claim is recorded when a PR checks out later than the shift was scheduled to end.",
+			"No overtime awaiting a decision this week. A claim is recorded when a PR checks out after the scheduled end.",
 		commissionLoggedKpi: "Commission logged",
 		// Dispute queue
 		theShiftBehindFigure: "The shift behind this figure",
@@ -771,7 +771,7 @@ const en = {
 		everyShiftStaffedFor:
 			"Every shift this day is already staffed for {name} — raise a headcount, or pick another day.",
 		everyShiftTierFull:
-			"The {tier} seats are taken on every shift this day, so {name} cannot take one. The seats still open are for other tiers — the venue sets that mix when it posts the job.",
+			"The {tier} seats are taken on every shift this day, so {name} cannot take one. The seats still open are for other tiers.",
 		/** The band's own headline: how big the pile is, in one line. */
 		openDemandSummary: "{shifts} shifts · {seats} seats to fill",
 		openDemandOneShift: "1 shift · {seats} seats to fill",
@@ -837,7 +837,7 @@ const en = {
 		autoAssignNoFreePrs: "{slots} on {day} — no free PRs",
 		autoAssignTitle: "Assign available PR",
 		autoAssignIntro:
-			"Ranked by tier, then fewest shifts this week. Select the ones you want, then confirm — nothing is assigned until you do.",
+			"Ranked by tier, then fewest shifts this week. Nothing is assigned until you confirm.",
 		autoAssignSelectedOf: "{n}/{total} selected",
 		autoAssignSelectAll: "Select all {n}",
 		autoAssignClear: "Clear",
@@ -888,7 +888,7 @@ const en = {
 		stampCoverage:
 			"{stamped}/{rostered} stamped · {inRange}/{withFix} within fence",
 		positionsNote:
-			"Positions are recorded at check-in and check-out only — this is not live tracking, and each time below is when that fix was taken.",
+			"Recorded at check-in and check-out only, not live tracking. Each time below is when that fix was taken.",
 		unpinnedVenueNote:
 			" Venues with no saved pin accept every check-in without a location check.",
 		/**
@@ -941,7 +941,7 @@ const en = {
 		sealedClosedWhy:
 			"This shift is sealed: its payroll is closed, so no one can be added to it now.",
 		tierSplitUnavailable:
-			"Another agency holds {n} of these seats and their tier wasn't reported, so the per-tier check can't run on this shift — the assign may still be refused.",
+			"Another agency holds {n} of these seats and did not report their tier, so the per-tier check cannot run — the assign may still be refused.",
 		tierNotOnShift: "{tier} not on this shift",
 		commissionOnlyNoDayRate: "Commission only · no day rate",
 		noRateSetFor: "No rate set for {tier}",
@@ -1179,9 +1179,9 @@ const en = {
 		keepAssignment: "Keep assignment",
 		/** Why the edit sheet offers nothing to change on a night already worked. */
 		shiftAlreadyPassed:
-			"This shift has already passed. It is now the record of a night worked — the attendance and the pay hang off it — so the PR can no longer be moved or taken off it. To correct it, mark the shift no-show.",
+			"This shift has already passed — the attendance and the pay hang off it, so the PR cannot be moved or removed. To correct it, mark the shift no-show.",
 		prAlreadyCheckedIn:
-			"This PR has already checked in. They can no longer be moved to another outlet or taken off this shift — the attendance and the pay hang off this assignment. To correct it, mark the shift no-show.",
+			"This PR has already checked in — attendance and pay hang off this assignment, so they cannot be moved or removed. To correct it, mark the shift no-show.",
 		remove: "Remove",
 		/** "12 of 40" above the shift table. */
 		countOf: "of",
@@ -1354,7 +1354,7 @@ const en = {
 		shortNoticeOrderWarning:
 			"Short notice must be fewer hours than free cancel, or the {pct}% band never applies.",
 		footer:
-			"Every enabled rule applies to all PRs. Fines apply per breach and deduct from the next payment voucher. Set a fine to RM 0 for a warning only.",
+			"Enabled rules apply to all PRs. Fines apply per breach and deduct from the next voucher. RM 0 means a warning only.",
 	},
 	/**
 	 * Ethnicity shown on a PR profile — DISPLAY ONLY, same rule as `languages`.
@@ -1491,9 +1491,9 @@ const en = {
 		askForDifferentFigure:
 			"Ask InnocenZ admin for a different figure. Your current price stands until they answer.",
 		asksToLeaveCustom:
-			"Asks to leave Custom for the tier your weekly PVs fall into. InnocenZ admin resolves or cancels it in Plan Request — you stay on Custom until then.",
+			"Asks to leave Custom for the tier your weekly PVs fall into. InnocenZ admin resolves it in Plan Request — you stay on Custom until then.",
 		tierChosenByPv:
-			"Your tier is chosen by the PVs you issue each payroll week — there is nothing to pick. Past 150 PV the rate card runs out and InnocenZ admin is notified to negotiate a Custom price.",
+			"Your tier follows the PVs you issue each payroll week — there is nothing to pick. Past 150 PV, InnocenZ admin is notified to negotiate a Custom price.",
 		referenceTiers:
 			"Reference tiers — your charge each week follows PVs issued in that payroll week",
 		perWeek: "/Week",
@@ -1509,14 +1509,14 @@ const en = {
 		resetPendingAdmin: "Reset · pending admin",
 		pricePendingAdmin: "Price · pending admin",
 		oneRowPerPeriod:
-			"One row per billing period — agencies are billed weekly, Sunday to Saturday, the same week your payroll runs on. A period stays Unpaid until InnocenZ marks the payment received.",
+			"One row per billing period — agencies are billed weekly, Sunday to Saturday. A period stays Unpaid until InnocenZ marks the payment received.",
 		moneyComingIn:
-			"Money coming in, not the subscription above — one statement per outlet per week, drafted from completed shifts. InnocenZ does not move this money; you and the outlet settle it between yourselves.",
+			"Money coming in, not the subscription above — one statement per outlet per week from completed shifts. You and the outlet settle it yourselves.",
 		overduePartOfOutstanding:
 			"Overdue is part of outstanding, not on top of it",
 		loadingCollections: "Loading collections…",
 		noCollections:
-			"Nothing here. Outlet billing is settled with the venue directly, so the app no longer raises collections — this list keeps past statements only.",
+			"Nothing here. Outlet billing is settled with the venue directly, so this list keeps past statements only.",
 		markSettled: "Mark settled",
 		markedSettled: "{outlet} marked settled",
 		couldNotUpdateInvoice:
@@ -1592,9 +1592,9 @@ const en = {
 		methodFpx: "Bank direct debit",
 		methodTransfer: "Bank transfer",
 		methodCardNote:
-			"Visa, Mastercard and others. Each period is charged automatically once a payment gateway is connected; a declined charge leaves that period unpaid, to pay by FPX.",
+			"Visa, Mastercard and others. Charged automatically once a payment gateway is connected. A declined charge leaves that period to pay by FPX.",
 		methodFpxNote:
-			"You authorise this once at your bank and each period is taken automatically after that. A debit that bounces leaves that period unpaid, to pay by FPX.",
+			"Authorise once at your bank and each period is taken automatically. A bounced debit leaves that period to pay by FPX.",
 		methodTransferNote:
 			"You transfer each period yourself and InnocenZ marks it received. Nothing is ever charged automatically.",
 		/**
@@ -1614,12 +1614,12 @@ const en = {
 		 * promise neither this app nor Touch 'n Go can keep.
 		 */
 		methodEwalletNote:
-			"Touch 'n Go, GrabPay, ShopeePay or Boost. You approve each payment in your wallet app — nothing is ever taken automatically.",
+			"Touch 'n Go, GrabPay, ShopeePay or Boost. You approve each payment in your wallet app — nothing is automatic.",
 		yourWallet: "Your e-wallet",
 		chooseWalletPlaceholder: "Choose your e-wallet…",
 		chooseWallet: "Choose the e-wallet you will pay from.",
 		walletPushNote:
-			"InnocenZ records which wallet you use. Sending you a payment request needs a payment gateway, which is not connected yet.",
+			"InnocenZ records which wallet you use. Payment requests need a payment gateway, which is not connected yet.",
 		mandatePending:
 			"Waiting for your bank to approve this direct debit. Nothing is debited until it does.",
 		addPaymentMethod: "Add payment method",
@@ -1629,7 +1629,7 @@ const en = {
 		savedFpx: "Bank direct debit",
 		/** Optional-ness, said before the picker; and the way back to "none". */
 		methodOptional:
-			"Optional. Save a card or a bank direct debit and each period is taken automatically. With nothing saved — or if a debit bounces — you pay the unpaid periods by FPX from Payment history.",
+			"Optional. Save a card or direct debit and each period is taken automatically. With nothing saved — or after a failed debit — pay by FPX from Payment history.",
 		removePaymentMethod: "Remove payment method",
 		removeMethodNote:
 			"Removing it turns auto-debit off — you will pay each period by FPX from Payment history instead.",
@@ -1682,7 +1682,7 @@ const en = {
 		 */
 		sendLinksTo: "Send payment links to",
 		linksAlsoReachYou:
-			"Optional — the link also reaches your owner and finance accounts in the app and by WhatsApp, and there is a Pay now button on your Today page.",
+			"Optional — the link also reaches your owner and finance accounts in-app and by WhatsApp, and Today has a Pay now button.",
 		methodFpxLinkNote:
 			"We send you a payment link each period and you pay at your own bank — every Malaysian bank, nothing to set up.",
 		savedFpxLink: "FPX",
@@ -1707,7 +1707,7 @@ const en = {
 		 * its own; only the manual "Ask admin for a price" pops this.
 		 */
 		settleBeforeCustomAsk:
-			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before asking for a Custom price. Resetting to the normal rate card stays available anytime.",
+			"{amount} unpaid across {n} billing period(s) — settle with InnocenZ before asking for a Custom price. Resetting to the rate card stays available.",
 
 		/**
 		 * The bank picker. NOTE there is no account-number string here and there
@@ -1720,7 +1720,7 @@ const en = {
 		bankRedirectNote:
 			"You will be sent to your bank to authorise this. InnocenZ never sees or stores your account number.",
 		mandateNotLiveYet:
-			"InnocenZ records which bank you chose. Sending you there to authorise needs a payment gateway, which is not connected yet.",
+			"InnocenZ records which bank you chose. Authorising there needs a payment gateway, which is not connected yet.",
 		transferRecordedNote:
 			"You transfer each period yourself; InnocenZ records it once an admin confirms the money arrived.",
 
@@ -1870,7 +1870,7 @@ const en = {
 
 		signatureOnFile: "Signature on file",
 		signatureHint:
-			"Draw it once here, then sign a payment voucher with a single tap. You still open and review each voucher — this only saves you redrawing.",
+			"Draw it once here, then sign a voucher with a single tap. You still open and review each voucher.",
 		yourSignatureOnFile: "Your signature on file",
 		drawSignature: "Draw the signature you want kept on file",
 		signAs: "Sign as",
@@ -1967,7 +1967,7 @@ const en = {
 		searched: "Searched: {address}",
 		useThisLocation: "Use this location",
 		removeConfirm:
-			"Remove the pin? Attendance verification switches off — every check-in here is accepted again, from anywhere, unmeasured.",
+			"Remove the pin? Attendance verification switches off — every check-in here is accepted again, from anywhere.",
 		keepThePin: "Keep the pin",
 		removing: "Removing…",
 		yesRemoveIt: "Yes, remove it",
@@ -1985,7 +1985,7 @@ const en = {
 	agencyLinks: {
 		agencies: "Agencies",
 		blurb:
-			"The agencies allowed to staff this outlet. Add one to send a request — they choose whether to accept. You can post a job to any approved agency.",
+			"The agencies allowed to staff this outlet. Add one to send a request — they choose whether to accept.",
 		loading: "Loading agencies…",
 		noneYet:
 			"No agencies yet. Add one below — until an agency approves you, Post Job has nobody to send work to.",
@@ -2010,7 +2010,7 @@ const en = {
 		requestAgainHint:
 			"Asking again needs their approval, the same as the first time.",
 		removeApprovedWarning:
-			"You will not be able to post new jobs to them. Shifts already posted stay as they are, and they keep access to finish them until the last one has passed. Working together again means asking and waiting for them to accept.",
+			"You cannot post new jobs to them. Shifts already posted stand and they keep access until the last one passes. Working together again means asking again.",
 		removePendingWarning:
 			"Your request will be withdrawn. You can send it again at any time.",
 		allAdded: "All agencies already added",
@@ -2108,19 +2108,19 @@ const en = {
 		requestAdminQuote: "Request admin quote",
 		paymentHistory: "Payment history",
 		oneRowPerPeriod:
-			"One row per billing period — venues are billed monthly, from the day you subscribed. A period stays Unpaid until InnocenZ marks the payment received.",
+			"One row per billing period — venues are billed monthly from the day you subscribed. A period stays Unpaid until InnocenZ marks it received.",
 		prWorkOwed: "PR work · owed to your agency",
 		prWorkOwedBody:
-			"Separate from the InnocenZ subscription above — one statement per week, built from shifts your venue actually completed. InnocenZ does not take this payment; you settle it with your agency directly, and they mark it received.",
+			"Not the InnocenZ subscription above — one statement per week from shifts your venue completed. You settle it with your agency directly.",
 		owedNow: "Owed now",
 		overdue: "Overdue",
 		paid: "Paid",
 		overduePartOfOwed: "Overdue is part of what you owe, not on top of it",
 		multipleAgencies:
-			"More than one agency bills this venue. A statement records which agency raised it, but not their name, so the rows below cannot say who each one is from.",
+			"More than one agency bills this venue. A statement does not record the agency's name, so the rows below cannot say who each is from.",
 		loadingStatements: "Loading statements…",
 		noStatements:
-			"No statements. Your agency settles this venue's billing with you directly rather than through the app, so nothing new is raised here — past statements stay listed.",
+			"No statements. Your agency settles this venue's billing with you directly, not through the app — past statements stay listed.",
 		prWorkWeek: "PR work · {week}",
 		completedShiftOne: "{n} completed shift",
 		completedShiftMany: "{n} completed shifts",
@@ -2138,12 +2138,12 @@ const en = {
 		 * request that cannot succeed. POS asks and cancels are never gated.
 		 */
 		settleBeforeSwitch:
-			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before switching plans. POS add-on requests and cancellation stay available anytime.",
+			"{amount} unpaid across {n} billing period(s) — settle with InnocenZ before switching plans. POS requests and cancellation stay available.",
 		/** POS actions proceed — this only states the debt beside them. */
 		unpaidReminderPos:
-			"Reminder: {amount} across {n} unpaid billing period(s) is still outstanding — please settle with InnocenZ. This request still goes through.",
+			"Reminder: {amount} across {n} unpaid billing period(s) is outstanding. This request still goes through.",
 		settleBeforeRequote:
-			"You still owe {amount} across {n} unpaid billing period(s) — settle with InnocenZ before asking for a new POS price. Cancelling POS stays available anytime.",
+			"{amount} unpaid across {n} billing period(s) — settle with InnocenZ before asking for a new POS price. Cancelling POS stays available.",
 		nothingToRenew: "No active subscription — nothing to renew",
 		cardSaved: "Card saved for subscription billing",
 		couldNotSaveCard: "Could not save the card — try again",
@@ -2215,7 +2215,7 @@ const en = {
 		overStandardShift: " over a {n}-hour standard shift",
 		overEachTierShift: " over each tier's standard shift",
 		otRuleTail:
-			" — OT is 1.5× the hourly rate. Both follow the shift you actually book: a shorter shift makes every hour, and every overtime hour, worth more.",
+			" — OT is 1.5× the hourly rate. Both follow the shift you book: a shorter shift makes every hour worth more.",
 		tapEditDailyPay: "Tap to edit daily / shift pay",
 		tapSetTargetSales: "Tap to set target sales (optional)",
 		tapEditHappyHourCommission: "Tap to edit happy-hour drink commission",
@@ -2457,7 +2457,7 @@ const en = {
 		noUnderfill:
 			"No underfill · {amount} best-effort save ({pct}% of {unused})",
 		cutlostExplainer:
-			"Cutlost is planned wages for open (unfilled) seats only. Early releases pay exact hours worked; commissions stay separate. Best effort recovers {pct}% of unused wages as savings — that does not add to cutlost. Reductions need agency approval.",
+			"Cutlost is planned wages for unfilled seats only. Early releases pay hours worked, commissions separate. Best effort saves {pct}% of unused wages. Reductions need agency approval.",
 		cutOneSlot: "Cut 1 open slot",
 		cutNSlots: "Cut {n} open slots",
 		cutSlotsHint:
@@ -2505,7 +2505,7 @@ const en = {
 		tonightTotal: "Tonight total",
 		weeklyReconciliation: "Weekly reconciliation",
 		reconciliationHint:
-			"A statement counts completed shifts only, while this total also includes shifts that ran but were never marked completed — so a gap here is worth checking rather than a billing error.",
+			"A statement counts completed shifts only. This total also counts shifts that ran but were never marked completed, so a gap is worth checking.",
 		statement: "Statement",
 		reports: "Reports",
 		confirm: "Confirm",
@@ -2952,7 +2952,7 @@ const en = {
 		venueSignup: "Venue signup",
 		agencyFallback: "Agency",
 		pendingTruncated:
-			"Showing the {shown} most recent of {total} pending items (first {perCategory} per category). Open the category pages to see the rest.",
+			"Showing the {shown} most recent of {total} pending items ({perCategory} per category). Open the category pages for the rest.",
 	},
 	/** Sub-role names, shown under the page title and in the account menu. */
 	roles: {
@@ -3067,7 +3067,7 @@ const en = {
 		endSectionTitle: "End this partnership",
 		endPartnership: "End partnership",
 		endPartnershipWarning:
-			"They will not be able to post new jobs to you. Shifts already posted stay as they are and you keep access to finish them, until the last one has passed.",
+			"They cannot post new jobs to you. Shifts already posted stand and you keep access until the last one passes.",
 		// NOT "the outlet sees this" — the reason is kept on the event log for
 		// your own records. The venue is told the partnership ended and by whom,
 		// not why, so promising otherwise here would be a lie in a text box.
@@ -3239,7 +3239,7 @@ const en = {
 			"You have asked to work with an agency and they have not decided yet. Once one accepts, you can post shifts to them.",
 		/** Post Job banner — the venue has NO agency link at all; the next action is to add one. */
 		noAgencyAddInSettings:
-			"Shifts are filled by PR agencies, so this venue needs at least one. Add one in Settings — they choose whether to accept.",
+			"Shifts are filled by PR agencies, so this venue needs at least one. Add one in Settings.",
 		/** Heading over the composer's draft-shift cart. {date} is already locale-formatted by formatJobDates(). */
 		shiftsForDate: "Shifts for {date}",
 		/** Count of DRAFT SHIFTS in the cart — a time slot, not a PR headcount slot (that is 名额). */
@@ -3640,7 +3640,7 @@ const en = {
 		saves: "Saves",
 		/** What approving a cutlost request does to the PRs it names. */
 		releaseOnApprove:
-			"On approve: paid for hours worked + commissions. They are sent home unless you reassign them to another outlet on the roster.",
+			"On approve: paid for hours worked plus commissions. Sent home unless you reassign them to another outlet.",
 		/** Sub-line on an agency-link request. The requested-at date is appended after a separator. */
 		wantsToLinkTo: "Wants to link to {agency}",
 		/** Pill naming what kind of request the detail pane is showing. */
@@ -3661,7 +3661,7 @@ const en = {
 		/** Alt text for the MC photo opened in the lightbox. */
 		mcDocumentFrom: "MC document from {name}",
 		leaveDecisionNote:
-			"Approving excuses the PR with no penalty and leaves the shift short — it shows up on the roster's backfill worklist for a replacement. Rejecting puts the PR back on the shift.",
+			"Approving excuses the PR with no penalty and leaves the shift short — it goes to the roster's backfill worklist. Rejecting puts the PR back on the shift.",
 		financeCannotApprove: "Finance role cannot approve PR sign-ups.",
 		loadingLeaveRequests: "Loading MC / leave requests…",
 		noCutlostRequests: "No cutlost requests",
@@ -3686,7 +3686,7 @@ const en = {
 		inRun: "In a run",
 		noBankDetails: "No bank details",
 		blockedHint:
-			"These people are signed off but have no bank details, so they cannot be included. Ask them to add their bank in the app.",
+			"Signed off but no bank details, so they cannot be included. Ask them to add their bank in the app.",
 		createRun: "Create payout run",
 		creating: "Creating…",
 		cannotCreate: "Cannot create this run",
@@ -3719,7 +3719,7 @@ const en = {
 		unsignedVoucherOne: "{n} voucher in this week is still not signed",
 		unsignedVoucherMany: "{n} vouchers in this week are still not signed",
 		overdueUnsignedHint:
-			"These are overdue — a PR cannot sign a voucher that was never sent. Review each day, then send it, and it moves to the PR's Payment screen to e-sign.",
+			"Overdue — a PR cannot sign a voucher that was never sent. Review each day, then send it to their Payment screen to e-sign.",
 		/** The week a BACKEND voucher itself covers, printed beside the tab's own week. */
 		weekWorked: "Week worked",
 		/** Chip on the most recently issued voucher in the list. */
@@ -3750,13 +3750,13 @@ const en = {
 		prUpdated: "PR updated",
 		loadingLetterhead: "Loading your agency's letterhead…",
 		letterheadUnavailable:
-			"Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload the page or check your connection.",
+			"Your agency's details could not be loaded, so this voucher cannot be printed yet. Reload or check your connection.",
 		printLayoutNote:
 			"PDF and Excel match the official voucher layout · duplicate payment blocked on send.",
 		signingOpensWhenWeekCloses: "Signing opens when the week closes",
 		/** Half one of a sentence that wraps a bold <b>{payroll.lastWeek}</b>; the tail follows it. */
 		weekStillOpenBody:
-			"This voucher is on the week still in progress ({cycle}), so its figures can still move — a shift tonight, a receipt tomorrow, a penalty recorded before the send. A signature attests to a total, and there is no final total to attest to yet. It appears under",
+			"This voucher is on the week still in progress ({cycle}), so its figures can still move. There is no final total to attest to yet. It appears under",
 		weekStillOpenTail: "once the cycle closes, and signs from there.",
 		signToAttest:
 			"Sign to attest these figures. The PR counter-signs what you sign here, so it comes before the voucher is sent.",
@@ -3780,7 +3780,7 @@ const en = {
 		resendToPr: "Re-send to PR",
 		resolveDisputeAndReassign: "Resolve dispute & reassign",
 		markPaidHint:
-			"Marks this voucher paid and moves it to History. The paid date is stamped once — recording twice cannot re-date a transfer.",
+			"Marks this voucher paid and moves it to History. The paid date is stamped once and cannot be re-dated.",
 		markAsPaid: "Mark as paid",
 		/** {amount} arrives already formatted by formatRM — no currency is baked into the key. */
 		recordedAsPaid: "{amount} recorded as paid",
@@ -3828,23 +3828,23 @@ const en = {
 		saveProfile: "Save profile",
 		suspendNamed: "Suspend {name}?",
 		suspendBody:
-			"This pauses all shift offers and check-ins for this PR until you lift the suspension. Pending roster slots may need to be reassigned.",
+			"Pauses all shift offers and check-ins for this PR until you lift it. Pending roster slots may need reassigning.",
 		confirmSuspend: "Confirm suspend",
 		detachNamed: "Detach {name}?",
 		requestDetachNamed: "Request detach for {name}?",
 		detachTiedBody:
-			"This PR has been tied for {duration} (under 1 year). Direct detach is blocked — submit a request for InnocenZ admin to review.",
+			"Tied for {duration} (under 1 year), so direct detach is blocked — submit a request for InnocenZ admin to review.",
 		detachBody:
 			"Detach removes this PR from your agency roster. They will no longer receive tied shifts or payroll from your agency.",
 		submitAdminRequest: "Submit admin request",
 		confirmDetach: "Confirm detach",
 		/** One whole sentence: the two pay classes sit in a different order in Chinese, which the old <b>-glued fragments could not express. */
 		payClassChangeBody:
-			"{name} moves from {from} to {to}, effective {date}. Shifts already worked or booked keep their original pay; new shifts use the new class.",
+			"{name} moves from {from} to {to} on {date}. Worked and booked shifts keep their original pay; new shifts use the new class.",
 		payClassConflictOne:
-			"{n} upcoming booked shift is not commission-only. Commission-only PRs may only work commission-only shifts — review or reassign these bookings.",
+			"{n} upcoming booked shift is not commission-only. Commission-only PRs cannot work it — review or reassign.",
 		payClassConflictMany:
-			"{n} upcoming booked shifts are not commission-only. Commission-only PRs may only work commission-only shifts — review or reassign these bookings.",
+			"{n} upcoming booked shifts are not commission-only. Commission-only PRs cannot work them — review or reassign.",
 		confirmChange: "Confirm change",
 		outletRequestOne: "{n} outlet request",
 		outletRequestMany: "{n} outlet requests",
@@ -3871,7 +3871,7 @@ const en = {
 			"— no seat for this PR's tier ({staffed}/{quantity})",
 		staffedOf: "{staffed} of {quantity} staffed",
 		unassignExplain:
-			"Unassign {name} from this shift. The assignment is deleted and the slot reopens — use this to undo an assignment, not to cancel a confirmed shift.",
+			"Unassign {name} — the assignment is deleted and the slot reopens. This undoes an assignment, it does not cancel the shift.",
 		unassignConfirmBody:
 			"{name} at {outlet} · {date} · {shift}. The assignment row is deleted and the slot reopens. This cannot be undone.",
 		/** Demo penalty-breach heading, keyed on the stored PenaltyRuleId `minShiftsPerWeek`. Same wording evaluatePrPenalties hard-codes; only the display moves. */
@@ -4181,7 +4181,7 @@ const en = {
 		titleOne: "Broadcast to 1 PR",
 		/** Sheet title for 0 or 2+ recipients — Chinese has no plural, so this is a separate key rather than a trailing "s". */
 		titleMany: "Broadcast to {n} PRs",
-		hint: "Sends a free-text notice to their InnocenZ inbox. There is nothing for them to accept — post a shift if you need an answer back.",
+		hint: "Sends a free-text notice to their InnocenZ inbox. There is nothing to accept — post a shift if you need an answer.",
 		/** Heading over the recipient chips. English is upper-case in the copy itself (no CSS uppercase on that element). */
 		recipientsHeading: "RECIPIENTS",
 		/** Collapses recipients past the sixth chip. */
@@ -4244,7 +4244,7 @@ const en = {
 		statusChanged: "Changed",
 		/** {approved} and {now} arrive already formatted by the caller — no currency lives in this key. */
 		staleWithApproved:
-			"This day changed after it was reviewed — signed off at {approved}, now {now}. The earlier decision no longer counts; review it again.",
+			"This day changed after review — signed off at {approved}, now {now}. The earlier decision no longer counts.",
 		/** Same as staleWithApproved when no signed-off total was recorded. {now} arrives formatted. */
 		staleWithoutApproved:
 			"This day changed after it was reviewed — now {now}. The earlier decision no longer counts; review it again.",
@@ -4262,7 +4262,7 @@ const en = {
 			"No dated lines on this voucher, so there is no day to review. It can be sent as it stands.",
 		/** Per-day, deliberately: the gate reads each day's own status, never an aggregate. */
 		approveEachDayHint:
-			"Approve each day before this voucher goes to the PR. Holding a day blocks the send — including the Monday payout run — until it is approved or cleared.",
+			"Approve each day before this voucher goes to the PR. A held day blocks the send, including the Monday payout run.",
 		approvingDayApprovesReceipts:
 			"Approving a day also approves the receipts on that day. A receipt spanning two days waits until both are approved.",
 		everyDayDecided: "Every day is decided — this voucher can be sent.",
@@ -4304,7 +4304,7 @@ const en = {
 		/** Count form of `receipts.waitingOnYou`; Chinese needs the measure word, so it cannot be built by gluing the count in front. */
 		pendingWaitingOnYou: "{n} waiting on you",
 		pendingReceiptsBlockSend:
-			"This voucher cannot be sent until each of these is approved — and the PR cannot dispute the money behind one until you have.",
+			"This voucher cannot be sent until each of these is approved, and the PR cannot dispute one until then.",
 		/** AgencyReceiptsPanel.tsx carries the same English sentence — see the report's notes if that owner files it too. */
 		readOnlyReceipts:
 			"Your agency role can see these receipts but not approve them — owner and finance review receipts.",
@@ -4352,7 +4352,7 @@ const en = {
 		/** The <summary> of the collapsed explainer under savingReopensHint. */
 		whatThatMeans: "What that means",
 		editCostExplainer:
-			"An approved receipt drops back to waiting on you. A quantity, a commission, a new line or a change of date all move money, so the day has to be approved again before the voucher can be sent. Correcting only the order number moves no money — only the receipt re-opens.",
+			"Editing a quantity, commission, line or date re-opens the day for approval before the voucher can be sent. Correcting only the order number does not.",
 		/** Heading over the editable line list. */
 		items: "Items",
 		unsavedCount: "{n} unsaved",
@@ -4400,12 +4400,12 @@ const en = {
 		outletListUnavailable:
 			"The outlet's list is not available, so a line cannot be verified.",
 		outletPriceVsCommission:
-			"The RM beside each item is {outlet}'s selling price, for matching against the paper. The box you fill in is the PR's commission — a different figure, and yours to state.",
+			"The RM beside each item is {outlet}'s selling price, for matching against the paper. The box you fill in is the PR's commission — a different figure.",
 		/** {kind} arrives already translated (money.drinks / money.tips). */
 		lockedKindHint:
 			"This is a {kind} receipt, so a line added here is {kind} — one paper is one kind.",
 		drinksAndTipsOnly:
-			"Drinks and tips only — wages and overtime come from the check-in and check-out stamps, so those are fixed on the attendance record.",
+			"Drinks and tips only — wages and overtime are fixed by the check-in and check-out stamps.",
 		/** Heading over the order-no / date / time fields. */
 		theReceiptItself: "The receipt itself",
 		orderNoOnPaper: "Order no on the paper",
@@ -4417,7 +4417,7 @@ const en = {
 		timePrinted: "Time printed",
 		saveReceipt: "Save receipt",
 		orderDateSaveHint:
-			"Clearing the order number removes it. Changing the date MOVES this receipt's money onto that day — the day it left and the day it lands on both need approving again, and the date must fall inside this voucher's week.",
+			"Clearing the order number removes it. Changing the date moves the money — both days need approving again, and the date must be inside this voucher's week.",
 		/** Client-side refusal, matching the server's own rule. */
 		quantityRange: "Quantity has to be a whole number from 1 to 999.",
 		/** Blank is NOT zero: a cleared field would post a real instruction to pay nothing. No currency in the key. */
@@ -4451,7 +4451,7 @@ const en = {
 		disputingOne: "The PR is disputing this receipt",
 		disputingMany: "The PR has {n} open claims on this receipt",
 		correctThenSettleHint:
-			"Correct the figures here if the PR is right, then accept or reject the claim under Disputes — an edit alone does not settle it.",
+			"Correct the figures here if the PR is right, then accept or reject under Disputes — an edit alone does not settle it.",
 		noLineItemsOnReceipt:
 			"No line items on this receipt — it adds nothing to the voucher.",
 		/** Passed INTO the shared proof-photo viewer, so it must arrive translated. */
@@ -4475,7 +4475,7 @@ const en = {
 		/** Explains why the banner count can exceed the chip count. */
 		ofThemDisputed: "{n} of them disputed",
 		voucherBlockedHint:
-			"A voucher cannot be sent while one of its receipts is pending — and the PR cannot dispute the money behind it until you decide.",
+			"A voucher cannot be sent while one of its receipts is pending, and the PR cannot dispute it until you decide.",
 		/** Per-day subtotal beside the day's money. */
 		receiptCountOne: "{n} receipt",
 		receiptCountMany: "{n} receipts",
@@ -4545,7 +4545,7 @@ const en = {
 		claimCoversWholeDayMany:
 			"This claim covers the whole day — {n} shifts worked",
 		noReceiptBehindWagesOt:
-			"No receipt behind this — daily wages and OT are calculated from the check-in and check-out stamps, so the correction is to the shift record.",
+			"No receipt behind this — wages and OT come from the check-in and check-out stamps, so correct the shift record.",
 		noReceiptForDayBucket:
 			"No receipt found for this day and bucket. It may have been removed since the dispute was raised.",
 		receiptBehindFigureOne:
@@ -4584,7 +4584,7 @@ const en = {
 			"Nothing waiting on you — {n} already settled. Switch to Resolved to see them.",
 		noneSettledYet: "None settled yet.",
 		acceptingRecordsDecision:
-			"Accepting records the decision and tells the PR. It does not change the money on its own — correct the receipt below first if the PR is right, then accept.",
+			"Accepting records the decision and tells the PR. It does not change the money — correct the receipt below first if the PR is right.",
 		/** Toast. */
 		disputeAccepted: "Dispute accepted",
 		/** Toast. */
@@ -4594,9 +4594,9 @@ const en = {
 		/** Pill on an undecided overtime claim — it blocks its week from being sent. */
 		holdingPayroll: "Holding payroll",
 		overtimeHoldsWeek:
-			"Overtime is paid on the voucher for the week it was worked, so this claim holds w/c {week} from being sent until it is decided.",
+			"Overtime is paid on the week it was worked, so this claim holds w/c {week} from being sent until decided.",
 		overtimeHoldsItsWeek:
-			"Overtime is paid on the voucher for the week it was worked, so this claim holds its week from being sent until it is decided.",
+			"Overtime is paid on the week it was worked, so this claim holds that week from being sent until decided.",
 		/** Recorded overtime minutes, formatted for display only — never a step toward pricing. */
 		durationHoursMinutes: "{h}h {m}m",
 		durationHours: "{h}h",
@@ -4614,7 +4614,7 @@ const en = {
 		overtimeElsewhereMany:
 			"{n} claims in another week still undecided — switch weeks above to decide them.",
 		overtimeQueueHint:
-			"Each claim holds its own payroll week until it is decided. The amount shown is what the approval writes onto the voucher.",
+			"Each claim holds its payroll week until decided. The amount shown is what approval writes onto the voucher.",
 		cancellationFeeOnVoucherOne: "Cancellation fee on this voucher",
 		cancellationFeeOnVoucherMany: "Cancellation fees on this voucher",
 		waiveBeforeSendHint:
@@ -4896,7 +4896,7 @@ const en = {
 		/** Amber banner on profile/settings while the org awaits admin approval. */
 		pendingReviewTitle: "Pending review.",
 		pendingReviewBody:
-			"Your {kind} is awaiting InnocenZ admin approval. You can update your profile here — other portal features unlock after approval.",
+			"Your {kind} is awaiting InnocenZ admin approval. You can update your profile here; other features unlock after approval.",
 		/** Lowercase mid-sentence noun for the two banners above. Not the stored value "outlet". */
 		outletNoun: "outlet",
 		/** Mid-sentence counterpart of outletNoun. Same term as notifications.agencyLabel. */
@@ -5070,7 +5070,7 @@ const en = {
 		awaitingAgencyRequest: "Awaiting agency · {title} · ~{amount} savings",
 		alreadyApplied: "Already applied · {detail}",
 		bestEffortIntro:
-			"Optimized for {event} — release PRs at current time ({clock}). They are paid for hours worked plus commissions; unused wage share ({pct}%) is estimated savings. If not reassigned by agency, they are sent home.",
+			"Optimized for {event} — release PRs at {clock}. Paid for hours worked plus commissions; {pct}% of unused wages is estimated savings. Sent home unless the agency reassigns them.",
 		bestEffortSaveLine: "~{amount} save ({pct}% of {unused} unused wages)",
 		releaseNamesEarly: "Release {names} early",
 		demandPrNeeded: "Demand · {n} PR needed",
@@ -6017,7 +6017,7 @@ const zh: PortalTranslations = {
 		profile: "个人资料",
 		demoData: "演示数据",
 		demoDataHint:
-			"这是演示数据。此登录未连接后端，页面内容并非真实数据，所做的操作也不会被保存。",
+			"这是演示数据。此登录未连接后端，页面内容并非真实，操作也不会被保存。",
 		goodMorning: "早上好",
 		goodAfternoon: "下午好",
 		goodEvening: "晚上好",
@@ -6222,11 +6222,11 @@ const zh: PortalTranslations = {
 		resetToWorkspaceRates: "重置为工作区费率",
 		loadingYourPrs: "正在加载您的 PR…",
 		noPrsToNameYet:
-			"暂无可指定的 PR — 您只能指定曾在本店上过班的 PR。可以先发布班次而不指定人员，由经纪公司安排。",
+			"暂无可指定的 PR — 只能指定曾在本店上过班的 PR。不指定人员直接发布，由经纪公司安排。",
 		notAvailableYet: "暂未开放",
 		accessRestricted: "无访问权限",
 		servicesComingLater:
-			"预订经纪公司增值服务将在后续版本推出。届时您的角色将自动获得访问权限，无需更改账户设置。",
+			"预订经纪公司增值服务将在后续版本推出。届时你的角色会自动获得权限，无需更改账户。",
 		roleCannotPost: "您的门店角色无法发布班次或预订增值服务。",
 		couldNotPost: "班次发布失败 — 请重试",
 		dailyLimitReached: "所选日期已达到每日 PR 人数上限",
@@ -6267,7 +6267,7 @@ const zh: PortalTranslations = {
 		preferredLanguages: "偏好语言",
 		languages: "语言",
 		languagesHint:
-			"指你的 PR 会说的语言 —— 属于加分项，并非硬性要求。不会这些语言的 PR 同样可以被安排。未列出的语言请用「其他」。",
+			"指你的 PR 会说的语言 —— 加分项，非硬性要求。未列出的语言请用「其他」。",
 		noLanguagesOnProfiles: "你的 PR 资料中还没有语言 —— 请用「其他」添加。",
 		plusOthers: "+ 其他",
 		noLanguagesToChoose: "没有可选的语言。",
@@ -6355,7 +6355,7 @@ const zh: PortalTranslations = {
 			"这与你 {other} 的班次冲突 —— 班次之间不能重叠，请改动此时间或先调整那一个",
 		tapEditDrinksCommission: "点击编辑酒水抽成",
 		noApprovedAgencyYet:
-			"还没有已批准的经纪公司。请在设置中添加并等待对方接受 —— 在此之前没有可以派送此职位的对象。",
+			"还没有已批准的经纪公司。请在设置中添加并等待对方接受。",
 		atLeastOneAgency: "班次至少要发送给一家经纪公司。",
 		dontSendTo: "不要发送给 {name}",
 		alsoSendTo: "同时发送给 {name}",
@@ -6389,15 +6389,15 @@ const zh: PortalTranslations = {
 		specialPricesIntro: "本活动专属价格表 — 之后的活动仍沿用工作区价格。",
 		infoTipLabel: "使用说明",
 		helpDates:
-			"点击日期即可添加或移除。日历内：「3 天 / 1 周」可选择连续日期，双击某一天则只选中当天。",
+			"点击日期添加或移除。日历内「3 天 / 1 周」选择连续日期，双击某天则只选当天。",
 		helpPeopleNeeded:
 			"本班次所需的 PR 人数。下方薪酬表会把这个人数分配到各等级，「选择 PR」可指定想要的人。",
 		helpSelectPrs:
-			"可选 — 此列表来自您要发布给的经纪公司名册。指定 PR 只是请求，并不保证一定安排到：最终由经纪公司决定派谁，且请求只会送达您已发布的经纪公司。增加或移除指定的人，「所需人数」会随之增减。未指定的名额由经纪公司安排，「全部清除」可移除所有已选。",
+			"选填。指名 PR 只是请求，不是保证 —— 由经纪公司决定派谁。未指名的名额由经纪公司安排。",
 		helpPrices:
 			"酒水与服务价格来自您的工作区，适用于所有普通活动。可通过链接前往修改。",
 		helpTierGrid:
-			"点击金色单元格设置日薪；点击「佣金」展开酒水与小费 %；目标销售额为选填；「PR 人数」把所需人数分配到各等级。",
+			"点击金色单元格设置日薪；点击「佣金」设置酒水与小费 %；目标销售额选填；「PR 人数」把所需人数分配到各等级。",
 		whatYouCanDoHere: "此页面能做什么",
 		canDoPostJob1:
 			"发布一个班次，或一次发布多晚 — 在日期选择器中用「3 天 / 1 周」",
@@ -6525,7 +6525,7 @@ const zh: PortalTranslations = {
 		nothingDisputedThisWeek:
 			"本周没有争议。PR 可在「收款」页面按日期、按款项类别提出争议。",
 		noOvertimeThisWeek:
-			"本周没有待处理的加班申请。PR 签退时间晚于排定的下班时间时，系统会自动生成加班记录。",
+			"本周没有待处理的加班申请。PR 签退晚于排定下班时间时会自动生成加班记录。",
 		commissionLoggedKpi: "已记录提成",
 		theShiftBehindFigure: "该金额对应的班次",
 		claimCoversWholeDay: "此申诉涵盖全天 — 共 1 个班次",
@@ -6613,7 +6613,7 @@ const zh: PortalTranslations = {
 		everyShiftStaffedFor:
 			"当天所有班次都已排满 {name} — 请增加人数，或改选其他日期。",
 		everyShiftTierFull:
-			"当天每个班次的{tier}名额都已排满，{name} 无法加入。仍有空缺的名额属于其他等级 — 该等级组合由门店发布职位时设定。",
+			"当天每个班次的{tier}名额都已排满，{name} 无法加入。仍有空缺的名额属于其他等级。",
 		openDemandSummary: "{shifts} 个班次 · 待补 {seats} 人",
 		openDemandOneShift: "1 个班次 · 待补 {seats} 人",
 		openDemandNone: "本周没有待分配的需求",
@@ -6669,8 +6669,7 @@ const zh: PortalTranslations = {
 		autoAssignNoOpenSlots: "{day} 没有空缺岗位 — 所有班次已排满",
 		autoAssignNoFreePrs: "{day} 有 {slots} — 但没有空闲的 PR",
 		autoAssignTitle: "分配可用 PR",
-		autoAssignIntro:
-			"按等级排序，其次是本周班次最少的。请勾选你要的，然后确认 —— 未确认前不会分配任何人。",
+		autoAssignIntro: "按等级排序，其次是本周班次最少的。确认前不会分配任何人。",
 		autoAssignSelectedOf: "已选 {n}/{total}",
 		autoAssignSelectAll: "全选 {n} 项",
 		autoAssignClear: "清除",
@@ -6718,7 +6717,7 @@ const zh: PortalTranslations = {
 
 		stampCoverage: "已签到 {stamped}/{rostered} · 围栏内 {inRange}/{withFix}",
 		positionsNote:
-			"位置仅在签到和签退时记录 —— 这不是实时定位，下方每个时间都是当次定位的时刻。",
+			"仅在签到和签退时记录，不是实时定位。下方每个时间都是当次定位的时刻。",
 		unpinnedVenueNote: " 未设置定位点的门店，签到时不做位置校验。",
 		withinFencePin: "围栏内 {inRange}/{total} · 定位点 {radius} 米",
 		noMapPin: "未设置地图定位点 —— 此处签到不做位置校验",
@@ -6755,7 +6754,7 @@ const zh: PortalTranslations = {
 		sealedClosed: "已封存 · 薪资已结算",
 		sealedClosedWhy: "此班次已封存，薪资已结算，无法再添加人员。",
 		tierSplitUnavailable:
-			"其中 {n} 个名额由其他机构填补且未提供等级信息，因此无法对此班次进行等级校验——派班仍可能被拒绝。",
+			"其中 {n} 个名额由其他机构填补且未提供等级，无法进行等级校验 —— 派班仍可能被拒绝。",
 		tierNotOnShift: "此班次不含{tier}",
 		commissionOnlyNoDayRate: "仅抽成 · 无日薪",
 		noRateSetFor: "{tier}未设置费率",
@@ -6977,9 +6976,9 @@ const zh: PortalTranslations = {
 		removeAssignment: "移除排班",
 		keepAssignment: "保留排班",
 		shiftAlreadyPassed:
-			"此班次已结束。它现在是当晚出勤与薪资的记录，因此不能再调动该 PR，也不能将其移出此班次。如需更正，请标记为缺勤。",
+			"此班次已结束 — 出勤与薪资都挂在它上面，因此不能调动或移出该 PR。如需更正，请标记为缺勤。",
 		prAlreadyCheckedIn:
-			"该 PR 已打卡上班。出勤与薪资均挂在这条排班记录上，因此不能再调往其他门店，也不能将其移出此班次。如需更正，请标记为缺勤。",
+			"该 PR 已打卡 — 出勤与薪资挂在这条排班上，因此不能调动或移出。如需更正，请标记为缺勤。",
 		remove: "移除",
 		countOf: "/",
 	},
@@ -7123,7 +7122,7 @@ const zh: PortalTranslations = {
 		shortNoticeOrderWarning:
 			"临时取消的小时数必须小于免费取消，否则 {pct}% 这一档永远不会生效。",
 		footer:
-			"已启用的规则适用于所有 PR。每次违规各计一次罚款，并从下一张薪资单中扣除。将罚款设为 RM 0 则仅作警告。",
+			"已启用的规则适用于所有 PR。每次违规各计一次罚款，从下一张薪资单扣除。设为 RM 0 则仅作警告。",
 	},
 	races: {
 		chinese: "华裔",
@@ -7228,9 +7227,9 @@ const zh: PortalTranslations = {
 		askForDifferentFigure:
 			"可向 InnocenZ 管理员申请其他价格。在他们答复前，仍按当前价格计算。",
 		asksToLeaveCustom:
-			"申请退出定制方案，改用与你每周薪资单数量对应的等级。InnocenZ 管理员会在「方案申请」中处理或取消 —— 在此之前你仍使用定制方案。",
+			"申请退出定制方案，改用与每周薪资单数量对应的等级。InnocenZ 管理员在「方案申请」中处理 —— 在此之前仍用定制方案。",
 		tierChosenByPv:
-			"你的等级由每个薪资周开具的薪资单数量决定 —— 无需手动选择。超过 150 张后标准费率表不再适用，系统会通知 InnocenZ 管理员商定定制价格。",
+			"等级由每个薪资周开具的薪资单数量决定 —— 无需选择。超过 150 张后，系统会通知 InnocenZ 管理员商定定制价格。",
 		referenceTiers: "参考等级 —— 每周费用依据该薪资周实际开具的薪资单数量",
 		perWeek: "/周",
 		requestedWithAdmin: "已提交 · 等待 InnocenZ 管理员处理",
@@ -7244,13 +7243,12 @@ const zh: PortalTranslations = {
 		resetPendingAdmin: "重置 · 等待管理员",
 		pricePendingAdmin: "报价 · 等待管理员",
 		oneRowPerPeriod:
-			"每个计费周期一行 —— 经纪公司按周计费，周日至周六，与你的薪资周一致。在 InnocenZ 确认收款前，该周期显示为未付款。",
+			"每个计费周期一行 —— 经纪公司按周计费，周日至周六。在 InnocenZ 确认收款前显示为未付款。",
 		moneyComingIn:
-			"这是应收款项，与上方的订阅无关 —— 每个门店每周一份对账单，依据已完成的班次生成。InnocenZ 不代收这笔钱，由你与门店自行结算。",
+			"这是应收款项，与上方订阅无关 —— 每个门店每周一份对账单，依据已完成的班次生成。由你与门店自行结算。",
 		overduePartOfOutstanding: "逾期金额已包含在未结金额内，不另行累加",
 		loadingCollections: "正在加载应收款…",
-		noCollections:
-			"暂无内容。门店账单直接与场地结算，应用不再生成新的应收款 —— 此列表仅保留历史对账单。",
+		noCollections: "暂无内容。门店账单直接与场地结算，此列表仅保留历史对账单。",
 		markSettled: "标记为已结算",
 		markedSettled: "{outlet} 已标记为已结算",
 		couldNotUpdateInvoice: "无法更新 {outlet} 的对账单 —— 状态未改变",
@@ -7310,9 +7308,9 @@ const zh: PortalTranslations = {
 		methodFpx: "银行直接扣账",
 		methodTransfer: "银行转账",
 		methodCardNote:
-			"Visa、Mastercard 等。接入支付网关后每个账期将自动扣款；扣款被拒时该账期保持未付，请以 FPX 支付。",
+			"Visa、Mastercard 等。接入支付网关后自动扣款。扣款被拒时，该账期需以 FPX 支付。",
 		methodFpxNote:
-			"在银行一次性授权后，之后每个账期会自动扣款。扣款失败时该账期保持未付，请以 FPX 支付。",
+			"在银行一次性授权后，每个账期自动扣款。扣款失败时，该账期需以 FPX 支付。",
 		methodTransferNote:
 			"每个账期由您自行转账，InnocenZ 收到后标记为已付款，绝不会自动扣款。",
 		lanePlan: "套餐",
@@ -7320,12 +7318,12 @@ const zh: PortalTranslations = {
 		periodsCount: "{n} 个周期",
 		methodEwallet: "电子钱包",
 		methodEwalletNote:
-			"Touch 'n Go、GrabPay、ShopeePay 或 Boost。每笔付款都需要您在钱包应用中确认，系统绝不会自动扣款。",
+			"Touch 'n Go、GrabPay、ShopeePay 或 Boost。每笔付款需在钱包应用中确认，不会自动扣款。",
 		yourWallet: "您的电子钱包",
 		chooseWalletPlaceholder: "请选择电子钱包…",
 		chooseWallet: "请选择您将用于付款的电子钱包。",
 		walletPushNote:
-			"InnocenZ 会记录您选择的钱包。向您发送付款请求需要支付网关，目前尚未接入。",
+			"InnocenZ 会记录你选择的钱包。发送付款请求需要支付网关，目前尚未接入。",
 		mandatePending: "正在等待银行批准此直接扣账授权，批准前不会扣款。",
 		addPaymentMethod: "添加付款方式",
 		editPaymentMethod: "编辑付款方式",
@@ -7333,7 +7331,7 @@ const zh: PortalTranslations = {
 		savedTransfer: "银行转账",
 		savedFpx: "银行直接扣账",
 		methodOptional:
-			"选填。保存银行卡或银行直接扣账后，每个账期会自动扣款。未保存付款方式，或扣款失败时，请在付款记录中以 FPX 支付未付账期。",
+			"选填。保存银行卡或直接扣账后，每个账期自动扣款。未保存或扣款失败时，请在付款记录中以 FPX 支付。",
 		removePaymentMethod: "移除付款方式",
 		removeMethodNote:
 			"移除后将关闭自动扣款 —— 之后每个账期需在付款记录中以 FPX 支付。",
@@ -7371,7 +7369,7 @@ const zh: PortalTranslations = {
 		receiptUpgrade: "升级差额",
 		sendLinksTo: "付款链接发送至",
 		linksAlsoReachYou:
-			"选填 — 付款链接也会通过应用内通知和 WhatsApp 发送给您的负责人和财务账号，Today 页面亦有「立即付款」按钮。",
+			"选填 — 付款链接也会通过应用内通知和 WhatsApp 发送给负责人和财务账号，Today 页面也有「立即付款」按钮。",
 		methodFpxLinkNote:
 			"每个账期我们会发送付款链接，您在自己的银行完成付款 — 支持所有马来西亚银行，无需任何设置。",
 		savedFpxLink: "FPX",
@@ -7384,7 +7382,7 @@ const zh: PortalTranslations = {
 		billingDueSince: "最早未付周期自 {date} 起。",
 		billingDueCta: "打开订阅页面",
 		settleBeforeCustomAsk:
-			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再申请 Custom 价格。随时可重置回普通价目表。",
+			"尚有 {n} 个账期未付，共 {amount} —— 请先与 InnocenZ 结清，再申请 Custom 价格。重置回普通价目表随时可用。",
 
 		yourBank: "您的银行",
 		chooseBankPlaceholder: "请选择银行…",
@@ -7392,7 +7390,7 @@ const zh: PortalTranslations = {
 		bankRedirectNote:
 			"系统会将您转到该银行完成授权。InnocenZ 不会看到或保存您的账户号码。",
 		mandateNotLiveYet:
-			"InnocenZ 会记录您选择的银行。跳转到银行完成授权需要支付网关，目前尚未接入。",
+			"InnocenZ 会记录你选择的银行。跳转银行授权需要支付网关，目前尚未接入。",
 		transferRecordedNote:
 			"每个账期由您自行转账；管理员确认收款后 InnocenZ 才会记录。",
 
@@ -7535,8 +7533,7 @@ const zh: PortalTranslations = {
 		thisMemberFallback: "该成员",
 
 		signatureOnFile: "已存签名",
-		signatureHint:
-			"在此手写一次，之后即可一键签署薪资单。每张薪资单你仍需打开查看 —— 这只是省去重新手写。",
+		signatureHint: "在此手写一次，之后即可一键签署薪资单。每张仍需你打开查看。",
 		yourSignatureOnFile: "你的已存签名",
 		drawSignature: "请手写你想保存的签名",
 		signAs: "签署人",
@@ -7625,7 +7622,7 @@ const zh: PortalTranslations = {
 		searched: "已搜索：{address}",
 		useThisLocation: "使用此位置",
 		removeConfirm:
-			"移除定位点？考勤验证将会关闭 —— 此处的签到会再次被无条件接受，不限地点、不作测量。",
+			"移除定位点？考勤验证将关闭 —— 此处的签到会再次被无条件接受，不限地点。",
 		keepThePin: "保留定位点",
 		removing: "正在移除…",
 		yesRemoveIt: "确认移除",
@@ -7642,7 +7639,7 @@ const zh: PortalTranslations = {
 	agencyLinks: {
 		agencies: "经纪公司",
 		blurb:
-			"允许为本门店配置人员的经纪公司。添加后即发出申请 —— 是否接受由对方决定。你可以向任何已批准的经纪公司发布职位。",
+			"允许为本门店配置人员的经纪公司。添加后即发出申请 —— 是否接受由对方决定。",
 		loading: "正在加载经纪公司…",
 		noneYet:
 			"还没有经纪公司。请在下方添加 —— 在经纪公司批准之前，发布职位没有可以派送的对象。",
@@ -7666,7 +7663,7 @@ const zh: PortalTranslations = {
 		requestAgain: "重新申请",
 		requestAgainHint: "重新申请同样需要对方批准，与首次申请一样。",
 		removeApprovedWarning:
-			"您将无法再向他们发布新的工作。已发布的班次维持不变，在最后一个班次结束之前，他们仍可继续管理这些班次。若要恢复合作，您需要重新申请并等待他们接受。",
+			"你将无法再向他们发布新工作。已发布的班次维持不变，直到最后一个班次结束前他们仍可管理。若要恢复合作，需重新申请。",
 		removePendingWarning: "您的申请将被撤回。您可以随时重新提交。",
 		allAdded: "所有经纪公司都已添加",
 		chooseAgency: "选择经纪公司…",
@@ -7751,19 +7748,19 @@ const zh: PortalTranslations = {
 		requestAdminQuote: "向管理员索取报价",
 		paymentHistory: "付款记录",
 		oneRowPerPeriod:
-			"每个计费周期一行 —— 门店按月计费，从你订阅当天起算。在 InnocenZ 标记收款之前，该周期一直显示为未付款。",
+			"每个计费周期一行 —— 门店按月计费，从订阅当天起算。在 InnocenZ 标记收款前显示为未付款。",
 		prWorkOwed: "PR 工作 · 应付给经纪公司",
 		prWorkOwedBody:
-			"与上方的 InnocenZ 订阅无关 —— 每周一张结算单，根据你门店实际完成的班次生成。InnocenZ 不经手这笔款项；你与经纪公司直接结算，由他们标记收款。",
+			"与上方的 InnocenZ 订阅无关 —— 每周一张结算单，来自你门店完成的班次。由你与经纪公司直接结算。",
 		owedNow: "当前应付",
 		overdue: "逾期",
 		paid: "已付",
 		overduePartOfOwed: "逾期金额包含在应付金额之内，并非额外增加",
 		multipleAgencies:
-			"有多家经纪公司向本门店计费。结算单只记录由哪一方发出，但不含其名称，因此下方各行无法显示分别来自谁。",
+			"有多家经纪公司向本门店计费。结算单不记录经纪公司名称，因此下方各行无法显示来自谁。",
 		loadingStatements: "正在加载结算单…",
 		noStatements:
-			"没有结算单。你的经纪公司直接与你结算本门店的账款，而非通过本应用，因此这里不会再新增 —— 过往结算单仍会保留。",
+			"没有结算单。你的经纪公司直接与你结算本门店账款，不经过应用 —— 过往结算单仍会保留。",
 		prWorkWeek: "PR 工作 · {week}",
 		completedShiftOne: "已完成 {n} 个班次",
 		completedShiftMany: "已完成 {n} 个班次",
@@ -7776,11 +7773,11 @@ const zh: PortalTranslations = {
 		billedMonthly: "按月计费 · {price}",
 		nextRenewal: "下次续订 {date}",
 		settleBeforeSwitch:
-			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再更换方案。POS 附加服务的申请与取消随时可办理。",
+			"尚有 {n} 个账期未付，共 {amount} —— 请先与 InnocenZ 结清，再更换方案。POS 申请与取消随时可办。",
 		unpaidReminderPos:
-			"提醒：您尚有 {n} 个未付账单周期，共 {amount}——请尽快与 InnocenZ 结清。本次申请仍已提交。",
+			"提醒：尚有 {n} 个账期未付，共 {amount}。本次申请仍已提交。",
 		settleBeforeRequote:
-			"您尚有 {n} 个未付账单周期，共 {amount}——请先与 InnocenZ 结清，再申请新的 POS 价格。取消 POS 随时可办理。",
+			"尚有 {n} 个账期未付，共 {amount} —— 请先与 InnocenZ 结清，再申请新的 POS 价格。取消 POS 随时可办。",
 		nothingToRenew: "没有生效中的订阅 —— 无需续订",
 		cardSaved: "银行卡已保存，用于订阅扣款",
 		couldNotSaveCard: "无法保存银行卡 —— 请重试",
@@ -7839,7 +7836,7 @@ const zh: PortalTranslations = {
 		overStandardShift: "（按 {n} 小时标准班次）",
 		overEachTierShift: "（按各等级各自的标准班次）",
 		otRuleTail:
-			" —— 加班时薪为普通时薪的 1.5 倍。两者都随你实际预订的班次变化：班次越短，每一小时以及每个加班小时就越值钱。",
+			" —— 加班时薪为普通时薪的 1.5 倍。两者都随你预订的班次变化：班次越短，每小时越值钱。",
 		tapEditDailyPay: "点击编辑日薪 / 每班工资",
 		tapSetTargetSales: "点击设置销售目标（可选）",
 		tapEditHappyHourCommission: "点击编辑欢乐时段酒水抽成",
@@ -8057,7 +8054,7 @@ const zh: PortalTranslations = {
 		noUnderfill:
 			"无缺员 · 尽力而为节省 {amount}（未使用工资 {unused} 的 {pct}%）",
 		cutlostExplainer:
-			"缺班损失仅指空缺（未配置）名额的计划工资。提前放行按实际工作时数支付；抽成另行计算。尽力而为可收回未使用工资的 {pct}% 作为节省 —— 这部分不计入缺班损失。任何削减都需要经纪公司批准。",
+			"缺班损失仅指空缺名额的计划工资。提前放行按实际工时结算，抽成另计。尽力而为可收回未使用工资的 {pct}%。任何削减都需经纪公司批准。",
 		cutOneSlot: "削减 1 个空缺名额",
 		cutNSlots: "削减 {n} 个空缺名额",
 		cutSlotsHint:
@@ -8104,7 +8101,7 @@ const zh: PortalTranslations = {
 		tonightTotal: "今晚合计",
 		weeklyReconciliation: "每周对账",
 		reconciliationHint:
-			"结算单只计入已完成的班次，而这个合计还包含已开班但从未被标记为完成的班次 —— 因此这里的差额值得核对，未必是计费错误。",
+			"结算单只计入已完成的班次，这个合计还包含已开班但未标记完成的班次，因此差额值得核对。",
 		statement: "结算单",
 		reports: "报表",
 		confirm: "确认",
@@ -8520,7 +8517,7 @@ const zh: PortalTranslations = {
 		venueSignup: "场所注册",
 		agencyFallback: "公司",
 		pendingTruncated:
-			"仅显示最近 {shown} 项，共 {total} 项待审批（每类最多 {perCategory} 项）。请前往各分类页面查看其余事项。",
+			"仅显示最近 {shown} 项，共 {total} 项待审批（每类 {perCategory} 项）。其余请前往各分类页面查看。",
 	},
 	roles: {
 		agencyOwner: "经纪公司东主",
@@ -8626,7 +8623,7 @@ const zh: PortalTranslations = {
 		endSectionTitle: "结束这段合作",
 		endPartnership: "结束合作",
 		endPartnershipWarning:
-			"该门店将无法再向你发布新的工作。已发布的班次维持不变，在最后一个班次结束之前，你仍可继续管理这些班次。",
+			"该门店将无法再向你发布新工作。已发布的班次维持不变，直到最后一个班次结束前你仍可管理。",
 		endReasonHint: "填写备注供你自己存档（选填）。",
 		confirmEndPartnership: "结束合作",
 		appliedOn: " · 申请于 {date}",
@@ -8765,7 +8762,7 @@ const zh: PortalTranslations = {
 		awaitingAgencyDecision:
 			"您已申请与一家经纪公司合作，对方尚未答复。一旦有一家接受，您就可以向他们发布班次。",
 		noAgencyAddInSettings:
-			"班次由 PR 经纪公司配置人员，因此本门店至少需要一家。请在「设置」中添加 —— 是否接受由对方决定。",
+			"班次由 PR 经纪公司配置人员，本门店至少需要一家。请在「设置」中添加。",
 		shiftsForDate: "{date} 的班次",
 		slotCountOne: "1 个时段",
 		slotCountMany: "{n} 个时段",
@@ -9058,7 +9055,7 @@ const zh: PortalTranslations = {
 		requestedAt: "申请于 {date}",
 		saves: "可省",
 		releaseOnApprove:
-			"批准后：按已工作时数结算工资并加上提成。除非你在排班中把他们改派到其他门店，否则他们将直接收工回家。",
+			"批准后：按已工作时数结算工资并加提成。除非你改派到其他门店，否则直接收工。",
 		wantsToLinkTo: "申请关联至 {agency}",
 		agencyLinkRequest: "经纪公司关联申请",
 		approveLink: "批准关联",
@@ -9071,7 +9068,7 @@ const zh: PortalTranslations = {
 		mcDocumentNumbered: "{name} 提交的病假证明 {n}",
 		mcDocumentFrom: "{name} 提交的病假证明",
 		leaveDecisionNote:
-			"批准后 PR 不受任何处罚，该班次会空出一个名额 — 它会出现在排班的补位清单中等待替补。驳回则会让 PR 回到该班次。",
+			"批准后 PR 不受处罚，该班次空出一个名额，会进入排班的补位清单。驳回则让 PR 回到该班次。",
 		financeCannotApprove: "财务角色无法审批 PR 注册申请。",
 		loadingLeaveRequests: "正在加载病假 / 请假申请…",
 		noCutlostRequests: "暂无缺班损失申请",
@@ -9095,7 +9092,7 @@ const zh: PortalTranslations = {
 		inRun: "批次中",
 		noBankDetails: "未填银行资料",
 		blockedHint:
-			"这些人已签收但未填写银行资料，无法纳入本次支付。请提醒他们在应用内填写。",
+			"已签收但未填写银行资料，无法纳入本次支付。请提醒他们在应用内填写。",
 		createRun: "建立支付批次",
 		creating: "建立中…",
 		cannotCreate: "无法建立此批次",
@@ -9127,7 +9124,7 @@ const zh: PortalTranslations = {
 		unsignedVoucherOne: "本周有 {n} 张付款单尚未签署",
 		unsignedVoucherMany: "本周有 {n} 张付款单尚未签署",
 		overdueUnsignedHint:
-			"这些已逾期 — PR 无法签署从未发送的付款单。请逐日审核后发送，付款单便会出现在 PR 的「收款」页面供其电子签署。",
+			"已逾期 — PR 无法签署从未发送的付款单。请逐日审核后发送，付款单会出现在其「收款」页面供签署。",
 		weekWorked: "工作周",
 		latest: "最新",
 		prIdLabel: "PR 编号",
@@ -9148,12 +9145,12 @@ const zh: PortalTranslations = {
 		prUpdated: "PR 已更新于",
 		loadingLetterhead: "正在加载贵公司的信头…",
 		letterheadUnavailable:
-			"无法加载贵公司的资料，此付款单暂时无法打印。请重新加载页面或检查网络连接。",
+			"无法加载贵公司资料，此付款单暂时无法打印。请重新加载或检查网络。",
 		printLayoutNote:
 			"PDF 与 Excel 均与正式付款单版式一致 · 发送时会拦截重复付款。",
 		signingOpensWhenWeekCloses: "本周结算后方可签署",
 		weekStillOpenBody:
-			"此付款单属于仍在进行中的周期（{cycle}），金额仍可能变动 — 今晚的班次、明天的收据、发送前登记的罚款都会影响它。签名是对总额的确认，而目前还没有最终总额。周期结束后，它会出现在",
+			"此付款单属于仍在进行中的周期（{cycle}），金额仍可能变动，目前还没有最终总额可供确认。周期结束后，它会出现在",
 		weekStillOpenTail: "中，可从那里签署。",
 		signToAttest:
 			"签名即确认这些金额。PR 会对您在此处的签名进行会签，因此需在发送付款单之前完成。",
@@ -9168,7 +9165,7 @@ const zh: PortalTranslations = {
 		resendToPr: "重新发送给 PR",
 		resolveDisputeAndReassign: "处理争议并重新指派",
 		markPaidHint:
-			"将此付款单标记为已付款并移入历史记录。付款日期只会记录一次 — 重复登记不会更改转账日期。",
+			"将此付款单标记为已付款并移入历史记录。付款日期只记录一次，无法更改。",
 		markAsPaid: "标记为已付款",
 		recordedAsPaid: "{amount} 已登记为已付款",
 		overriddenByAt: "由 {by} 撤改 · {at}",
@@ -9208,22 +9205,22 @@ const zh: PortalTranslations = {
 		saveProfile: "保存资料",
 		suspendNamed: "确认停用 {name}？",
 		suspendBody:
-			"停用后，该 PR 将无法收到班次邀约，也无法打卡，直到你解除停用为止。已排入的班次可能需要重新指派。",
+			"暂停该 PR 的所有班次邀约与打卡，直到你解除为止。已排入的班次可能需要重新指派。",
 		confirmSuspend: "确认停用",
 		detachNamed: "确认解除与 {name} 的关联？",
 		requestDetachNamed: "申请解除与 {name} 的关联？",
 		detachTiedBody:
-			"该 PR 已绑定 {duration}（不足一年），无法直接解除关联 —— 请提交申请交由 InnocenZ 管理员审核。",
+			"已绑定 {duration}（不足一年），无法直接解除 —— 请提交申请交 InnocenZ 管理员审核。",
 		detachBody:
 			"解除关联会将该 PR 移出你的经纪公司名单，其之后不会再收到你公司的绑定班次或薪资。",
 		submitAdminRequest: "提交管理员申请",
 		confirmDetach: "确认解除关联",
 		payClassChangeBody:
-			"{name} 的薪资级别将由 {from} 变更为 {to}，自 {date} 起生效。已完成或已预订的班次仍按原薪资结算，新班次按新级别计算。",
+			"{name} 的薪资级别 {date} 起由 {from} 变更为 {to}。已完成或已预订的班次仍按原薪资，新班次按新级别。",
 		payClassConflictOne:
-			"有 {n} 个已预订的未来班次不是仅抽成班次。仅抽成的 PR 只能上仅抽成班次 —— 请检查或重新指派这些排班。",
+			"有 {n} 个已预订的未来班次不是仅抽成班次。仅抽成的 PR 无法上这个班 —— 请检查或重新指派。",
 		payClassConflictMany:
-			"有 {n} 个已预订的未来班次不是仅抽成班次。仅抽成的 PR 只能上仅抽成班次 —— 请检查或重新指派这些排班。",
+			"有 {n} 个已预订的未来班次不是仅抽成班次。仅抽成的 PR 无法上这些班 —— 请检查或重新指派。",
 		confirmChange: "确认更改",
 		outletRequestOne: "{n} 条门店请求",
 		outletRequestMany: "{n} 条门店请求",
@@ -9247,7 +9244,7 @@ const zh: PortalTranslations = {
 		swapTargetTierBlocked: "—— 该 PR 的等级没有空位（{staffed}/{quantity}）",
 		staffedOf: "已配 {staffed}/{quantity} 人",
 		unassignExplain:
-			"将 {name} 从此班次移除。该排班记录会被删除，空位重新开放 —— 用于撤销指派，不是取消已确认的班次。",
+			"将 {name} 移出此班次 — 排班记录删除，空位重新开放。这是撤销指派，不是取消班次。",
 		unassignConfirmBody:
 			"{name} · {outlet} · {date} · {shift}。该排班记录将被删除，空位重新开放。此操作无法撤销。",
 		breachBelowMinShifts: "低于每周最少班次",
@@ -9451,7 +9448,7 @@ const zh: PortalTranslations = {
 	agencyBroadcast: {
 		titleOne: "群发给 1 位 PR",
 		titleMany: "群发给 {n} 位 PR",
-		hint: "将一条自由文本通知发送到他们的 InnocenZ 收件箱。这条通知无需 PR 确认 —— 如果需要对方回复，请发布班次。",
+		hint: "向他们的 InnocenZ 收件箱发送一条文字通知。无需对方确认 —— 需要回复请发布班次。",
 		recipientsHeading: "收件人",
 		plusNMore: "另有 {n} 位",
 		subjectLabel: "主题 *",
@@ -9488,7 +9485,7 @@ const zh: PortalTranslations = {
 		statusOpen: "待审核",
 		statusChanged: "已变动",
 		staleWithApproved:
-			"此日在审核后发生变动 — 当时按 {approved} 通过，现为 {now}。此前的决定已失效，请重新审核。",
+			"此日在审核后发生变动 — 当时按 {approved} 通过，现为 {now}。此前的决定已失效。",
 		staleWithoutApproved:
 			"此日在审核后发生变动 — 现为 {now}。此前的决定已失效，请重新审核。",
 		noteLabel: "备注：",
@@ -9501,7 +9498,7 @@ const zh: PortalTranslations = {
 		noDatedLines:
 			"此付款单没有带日期的明细，因此没有需要复核的日期。可以直接发送。",
 		approveEachDayHint:
-			"在把此付款单发送给 PR 之前，请逐日批准。只要有一天被暂缓，发送就会被拦截（包括周一的自动付款任务），直到该日被批准或清除决定为止。",
+			"在把付款单发送给 PR 之前，请逐日批准。有一天被暂缓就会拦截发送，包括周一的付款任务。",
 		approvingDayApprovesReceipts:
 			"批准某一天，也就同时批准了该日的收据。跨两天的收据要等两天都获批才算通过。",
 		everyDayDecided: "每一天都已有决定 — 此付款单可以发送。",
@@ -9532,7 +9529,7 @@ const zh: PortalTranslations = {
 			"未分类的明细产生于款项类别功能之前 — 它们计入总额，但无法按款项类别提出争议。",
 		pendingWaitingOnYou: "{n} 张待您处理",
 		pendingReceiptsBlockSend:
-			"在这些收据全部获批之前，此付款单无法发送 — 在您批准之前，PR 也无法对其背后的金额提出争议。",
+			"这些收据全部获批前，此付款单无法发送；在此之前 PR 也无法提出争议。",
 		readOnlyReceipts:
 			"您的经纪公司角色可以查看这些收据，但无权批准 — 收据由东主和财务审核。",
 	},
@@ -9565,7 +9562,7 @@ const zh: PortalTranslations = {
 			"保存后此收据会重新回到待处理状态；任何金额改动都会使当天的批准失效。",
 		whatThatMeans: "这是什么意思",
 		editCostExplainer:
-			"已批准的收据会退回到待您处理。数量、提成、新增明细或更改日期都会改动金额，因此该日期必须重新批准后才能发送付款单。仅更正订单号不涉及金额 — 只有收据会重新打开。",
+			"修改数量、提成、明细或日期后，该日需重新批准才能发送付款单。仅更正订单号则不需要。",
 		items: "项目明细",
 		unsavedCount: "{n} 项未保存",
 		noLinesYet: "此收据尚未记录任何明细 — 请在下方添加单据上显示的酒水或小费。",
@@ -9593,11 +9590,10 @@ const zh: PortalTranslations = {
 		serviceEntitlementList: "服务项目清单",
 		outletListUnavailable: "门店清单不可用，因此无法核实明细。",
 		outletPriceVsCommission:
-			"每个项目旁的 RM 是{outlet}的售价，用于与单据核对。您填写的是 PR 的提成 — 那是另一个数字，由您填写。",
+			"每个项目旁的 RM 是{outlet}的售价，用于与单据核对。您填写的是 PR 的提成 — 那是另一个数字。",
 		lockedKindHint:
 			"这是一张{kind}收据，因此在此添加的明细也属于{kind} — 一张单据只对应一种类别。",
-		drinksAndTipsOnly:
-			"仅限酒水与小费 — 工资和加班来自签到与签退记录，以考勤记录为准。",
+		drinksAndTipsOnly: "仅限酒水与小费 — 工资和加班由签到与签退记录决定。",
 		theReceiptItself: "收据本身",
 		orderNoOnPaper: "单据上的订单号",
 		egOrderNo: "例如 ORD1111",
@@ -9605,7 +9601,7 @@ const zh: PortalTranslations = {
 		timePrinted: "单据打印时间",
 		saveReceipt: "保存收据",
 		orderDateSaveHint:
-			"清空订单号即删除该订单号。更改日期会把此收据的金额移到该日期 — 移出日和移入日都需要重新批准，且日期必须落在此付款单所属的周内。",
+			"清空订单号即删除。更改日期会移动金额 — 移出日与移入日都需重新批准，且日期必须在此付款单所属的周内。",
 		quantityRange: "数量必须是 1 至 999 之间的整数。",
 		commissionMinLeaveFilled: "提成必须为 0.00 或以上 — 请勿留空。",
 		commissionMin: "提成必须为 0.00 或以上。",
@@ -9626,7 +9622,7 @@ const zh: PortalTranslations = {
 		disputingOne: "PR 正在对此收据提出争议",
 		disputingMany: "PR 对此收据提出了 {n} 项未解决的申诉",
 		correctThenSettleHint:
-			"如果 PR 的说法属实，请在此更正金额，然后到「争议」中接受或驳回该申诉 — 仅修改金额并不会结案。",
+			"若 PR 的说法属实，请在此更正金额，再到「争议」中接受或驳回 — 仅改金额不会结案。",
 		noLineItemsOnReceipt: "此收据没有任何明细 — 不会计入付款单。",
 		receiptScanLabel: "{receiptNo} 扫描件",
 		beforeThisReviewExisted: "早于本审核功能上线",
@@ -9640,7 +9636,7 @@ const zh: PortalTranslations = {
 		awaitingApprovalMany: "{n} 张收据待您批准",
 		ofThemDisputed: "其中 {n} 张有争议",
 		voucherBlockedHint:
-			"只要还有收据处于待处理状态，付款单就无法发送 — 在您做出决定前，PR 也无法对相关金额提出争议。",
+			"只要有收据待处理，付款单就无法发送；在你决定前，PR 也无法提出争议。",
 		receiptCountOne: "{n} 张收据",
 		receiptCountMany: "{n} 张收据",
 		offWeekOne: "另有 {n} 张收据属于其他结算周 — 请切换上方的周标签查看。",
@@ -9682,7 +9678,7 @@ const zh: PortalTranslations = {
 			"对应班次 · 未关联 —— 此争议未指明收据，或该收据没有班次记录。",
 		claimCoversWholeDayMany: "此申诉涵盖全天 — 共 {n} 个班次",
 		noReceiptBehindWagesOt:
-			"此项没有对应收据 —— 日薪与加班按签到、签退时间计算，应更正的是班次记录。",
+			"此项没有对应收据 —— 日薪与加班按签到、签退时间计算，应更正班次记录。",
 		noReceiptForDayBucket:
 			"未找到该日期、该款项类别的收据。可能在争议提出后已被删除。",
 		receiptBehindFigureOne: "该金额对应的收据 —— 若 PR 有理，可在此更正。",
@@ -9713,15 +9709,15 @@ const zh: PortalTranslations = {
 			"暂无待你处理的争议 —— 已处理 {n} 项。切换到「已解决」即可查看。",
 		noneSettledYet: "尚未处理任何争议。",
 		acceptingRecordsDecision:
-			"接受会记录该决定并通知 PR，但本身不会改动金额 —— 若 PR 有理，请先在下方更正收据，再接受。",
+			"接受会记录决定并通知 PR，但不会改动金额 —— 若 PR 有理，请先在下方更正收据。",
 		disputeAccepted: "已接受争议",
 		disputeRejected: "已驳回争议",
 		overtimeTitleCount: "加班（{n}）",
 		holdingPayroll: "暂扣薪资周",
 		overtimeHoldsWeek:
-			"加班计入实际工作那一周的付款单，因此在此申请处理前，{week} 起的那一周无法发送。",
+			"加班计入实际工作那一周的付款单，因此在处理前，{week} 起的那一周无法发送。",
 		overtimeHoldsItsWeek:
-			"加班计入实际工作那一周的付款单，因此在此申请处理前，其所属周次无法发送。",
+			"加班计入实际工作那一周的付款单，因此在处理前，该周无法发送。",
 		durationHoursMinutes: "{h} 小时 {m} 分",
 		durationHours: "{h} 小时",
 		durationMinutes: "{m} 分钟",
@@ -9734,7 +9730,7 @@ const zh: PortalTranslations = {
 		overtimeElsewhereMany:
 			"另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
 		overtimeQueueHint:
-			"每项申请在处理前都会暂扣其所属的薪资周。所示金额即批准后写入付款单的金额。",
+			"每项申请在处理前都会暂扣其薪资周。所示金额即批准后写入付款单的金额。",
 		cancellationFeeOnVoucherOne: "此付款单上的取消费用",
 		cancellationFeeOnVoucherMany: "此付款单上的取消费用",
 		waiveBeforeSendHint:
@@ -9894,7 +9890,7 @@ const zh: PortalTranslations = {
 			"你的{kind}权限目前仅限于此资料页。请联系 InnocenZ 恢复完整门户功能。",
 		pendingReviewTitle: "待审核。",
 		pendingReviewBody:
-			"你的{kind}正在等待 InnocenZ 管理员审批。你可以在此更新资料 —— 其他门户功能将在审批通过后开放。",
+			"你的{kind}正在等待 InnocenZ 管理员审批。你可以在此更新资料，其他功能审批后开放。",
 		outletNoun: "门店",
 		agencyNoun: "经纪公司",
 		editingWhat: "正在编辑 {what}",
@@ -10013,7 +10009,7 @@ const zh: PortalTranslations = {
 		awaitingAgencyRequest: "等待经纪公司 · {title} · 预计省 {amount}",
 		alreadyApplied: "已生效 · {detail}",
 		bestEffortIntro:
-			"针对 {event} 优化 —— 在当前时间（{clock}）提前放行 PR。她们按实际工时结算工资并保留抽成；未使用工资的 {pct}% 计为预计节省。若经纪公司未另行派班，她们将直接下班回家。",
+			"针对 {event} 优化 —— 在 {clock} 提前放行 PR。按实际工时结算工资并保留抽成；未使用工资的 {pct}% 计为预计节省。若经纪公司未改派，她们直接下班。",
 		bestEffortSaveLine: "约省 {amount}（未使用工资 {unused} 的 {pct}%）",
 		releaseNamesEarly: "提前放行 {names}",
 		demandPrNeeded: "需求 · 需要 {n} 位 PR",
