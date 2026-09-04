@@ -434,6 +434,17 @@ html {
 
 .landing-page,
 .login-page {
+  /*
+   * One knob for the whole signed-out surface. The marketing pages and the
+   * login/register screens are laid out almost entirely in hardcoded px, so
+   * a scale here is the only change that shrinks type, spacing, icons and
+   * cards together and by the same amount. Words are untouched - nothing is
+   * cut, everything is drawn ~20% smaller. This is the ONLY place the number
+   * lives: .hz-wrap, the nav bar and the full-height shells all divide it back
+   * out so their own lengths read as visual pixels.
+   */
+  --iz-page-scale: 0.8;
+  zoom: var(--iz-page-scale);
   width: 100%;
   max-width: none;
   font-family: 'Barlow', var(--font-sans);
@@ -441,6 +452,22 @@ html {
   line-height: 1.65;
   background-color: var(--background);
   color: var(--foreground);
+}
+/*
+ * `zoom` deliberately does NOT compensate viewport units, so `100svh` inside a
+ * 0.8-scaled shell paints at 80% of the screen and leaves a bare strip along
+ * the bottom (it showed as a hard edge under the signup brand panel). Divide
+ * the scale back out everywhere these shells lean on a full-viewport box.
+ */
+.landing-page.min-h-screen,
+.landing-page .min-h-screen,
+.login-page.min-h-svh,
+.login-page .min-h-svh {
+  min-height: calc(100svh / var(--iz-page-scale, 0.8));
+}
+
+.login-page .h-svh {
+  height: calc(100svh / var(--iz-page-scale, 0.8));
 }
 
 .brand-wordmark {
@@ -963,45 +990,55 @@ html {
 
 .login-page .login-heading-line {
   display: block;
-  font-size: clamp(2.875rem, 5.8vw, 4.3125rem);
+  font-size: clamp(1.5rem, 2vw, 1.9rem);
 }
 
 .login-page .login-subheading {
-  font-size: clamp(1.4375rem, 2.8vw, 1.75rem);
+  font-size: clamp(0.9375rem, 1.1vw, 1rem);
+  line-height: 1.55;
+}
+
+/*
+ * The side panel's paragraph, deliberately NOT .login-subheading: that one sits
+ * under the form heading in a 408px column and was tuned down to match it, while
+ * this one has half the page to fill and reads as the panel's body copy.
+ */
+.login-page .login-aside-lede {
+  font-size: clamp(1.0625rem, 1.3vw, 1.25rem);
   line-height: 1.6;
 }
 
 .login-page .login-field-label {
-  font-size: 1.4375rem;
+  font-size: 1.0625rem;
   font-weight: 600;
 }
 
 .login-page .login-input {
-  height: 4rem;
-  font-size: 1.4375rem;
+  height: 2.75rem;
+  font-size: 1.0625rem;
 }
 
 .login-page [data-slot="input-group"] {
-  min-height: 4rem;
+  min-height: 2.75rem;
   height: auto;
 }
 
 .login-page [data-slot="input-group-control"] {
-  font-size: 1.4375rem;
+  font-size: 1.0625rem;
 }
 
 .login-page .login-btn {
-  height: 4.25rem;
-  font-size: 1.5625rem;
+  height: 2.9375rem;
+  font-size: 1.125rem;
   font-weight: 700;
 }
 
 .login-page .login-support {
-  font-size: 1.3125rem;
+  font-size: 1rem;
 }
 
 .login-page .login-back {
-  font-size: 1.3125rem;
+  font-size: 0.9375rem;
 }
 
 .login-page .hz-nav-lang {
@@ -1021,7 +1058,7 @@ html {
   background: transparent;
   color: color-mix(in oklab, var(--foreground) 70%, transparent);
   font: inherit;
-  font-size: 1.3125rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1037,20 +1074,20 @@ html {
 }
 
 .login-page .login-footer {
-  font-size: 1.1875rem;
+  font-size: 0.9375rem;
 }
 
 .login-page .login-powered {
-  font-size: 1.125rem;
+  font-size: 0.875rem;
 }
 
 @media (min-width: 1280px) {
   .login-page .login-powered {
-    font-size: 1.25rem;
+    font-size: 0.9375rem;
   }
 
   .login-page .login-footer {
-    font-size: 1.25rem;
+    font-size: 1rem;
   }
 }
 
@@ -1086,11 +1123,11 @@ html {
 }
 
 .signup-page .signup-heading span {
-  font-size: clamp(2.25rem, 4.5vw, 3.25rem);
+  font-size: clamp(1.5rem, 2vw, 1.9rem);
 }
 
 .signup-page .signup-lede {
-  font-size: clamp(1rem, 1.8vw, 1.125rem);
+  font-size: clamp(0.9375rem, 1.1vw, 1rem);
   line-height: 1.55;
 }
 
@@ -1118,8 +1155,8 @@ html {
 }
 
 .signup-page .signup-form .login-btn {
-  height: 3.25rem;
-  font-size: 1.0625rem;
+  height: 2.9375rem;
+  font-size: 1.125rem;
 }
 
 .signup-page .signup-form .login-support {

@@ -56,10 +56,10 @@ function SignupPageContent() {
 					<LoginAsideBackdrop />
 
 					<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
-						<BrandLogo variant="stacked" size="hero" showTagline showMotto />
+						<BrandLogo variant="stacked" size="auth" showTagline showMotto />
 
-						<div className="mt-10 max-w-md">
-							<p className="login-subheading text-foreground/75">
+						<div className="mt-8 max-w-lg">
+							<p className="login-aside-lede text-foreground/75">
 								{copy.aside.description}
 							</p>
 						</div>

@@ -29,18 +29,18 @@ export function AuthCardShell({
 			<main className="relative flex min-h-svh w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14">
 				<Link
 					to="/login"
-					className="login-back mb-10 inline-flex w-fit items-center gap-3 font-semibold uppercase tracking-[0.12em] text-foreground/70 transition-colors hover:text-gold-bright lg:absolute lg:left-12 lg:top-12 lg:mb-0"
+					className="login-back mb-8 inline-flex w-fit items-center gap-2 font-semibold uppercase tracking-[0.12em] text-foreground/70 transition-colors hover:text-gold-bright lg:absolute lg:left-12 lg:top-12 lg:mb-0"
 				>
-					<ArrowLeft className="h-6 w-6" />
+					<ArrowLeft className="h-4 w-4" />
 					Back to sign in
 				</Link>
 
-				<div className="mx-auto w-full max-w-145">
-					<div className="mb-10 flex justify-center">
-						<BrandLogo variant="stacked" size="hero" showTagline />
+				<div className="mx-auto w-full max-w-120">
+					<div className="mb-6 flex justify-center">
+						<BrandLogo variant="stacked" size="md" showTagline />
 					</div>
 
-					<div className="mb-8">
+					<div className="mb-6">
 						<h1 className="login-heading text-foreground">
 							<span className="login-heading-line">{heading}</span>
 							<span className="login-heading-line mt-1">
@@ -49,12 +49,12 @@ export function AuthCardShell({
 								</span>
 							</span>
 						</h1>
-						<p className="login-subheading mt-4 text-muted-foreground">
+						<p className="login-subheading mt-2 text-muted-foreground">
 							{subheading}
 						</p>
 					</div>
 
-					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-8 shadow-glow-gold-lg backdrop-blur-md sm:p-10">
+					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-6 shadow-glow-gold-lg backdrop-blur-md sm:p-7">
 						{children}
 					</div>
 

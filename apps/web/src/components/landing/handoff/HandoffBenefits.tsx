@@ -12,7 +12,7 @@ import {
 import type { ReactNode } from "react";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { useLandingLocale } from "@/lib/landing-i18n";
-import { SectionHead, SplitTitle, Tag } from "./primitives";
+import { CollapsibleCard, SectionHead, SplitTitle, Tag } from "./primitives";
 
 const logos: {
 	name: string;
@@ -481,48 +481,40 @@ export function HandoffWhyInnocenz() {
 					}
 					sub={t.why.sub}
 				/>
-				<div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+				{/* `items-start`: an opened card must not stretch its row-mates. */}
+				<div className="grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-4">
 					{t.why.advantages.map((a, i) => {
 						const Icon = advantageIcons[i];
 						const violet = i % 2 === 1;
 						return (
-							<div
+							<CollapsibleCard
 								key={a.title}
-								className="hz-glass flex min-h-[180px] flex-col gap-3 p-6"
+								title={a.title}
+								head={
+									<span className="flex shrink-0 items-center gap-2.5">
+										<span
+											className="grid h-9 w-9 place-items-center rounded-[10px]"
+											style={{
+												background: violet
+													? "linear-gradient(135deg, rgba(182,124,255,.22), transparent)"
+													: "linear-gradient(135deg, rgba(242,198,107,.22), transparent)",
+												border: `1px solid ${violet ? "rgba(182,124,255,.32)" : "rgba(242,198,107,.32)"}`,
+												color: violet ? "var(--hz-violet)" : "var(--hz-gold)",
+											}}
+										>
+											<Icon size={16} />
+										</span>
+										<span
+											className="hz-mono text-[11px] uppercase tracking-[0.18em]"
+											style={{ color: "var(--hz-ink-mute)" }}
+										>
+											0{i + 1}
+										</span>
+									</span>
+								}
 							>
-								<div className="flex items-center gap-3">
-									<div
-										className="grid h-9 w-9 place-items-center rounded-[10px]"
-										style={{
-											background: violet
-												? "linear-gradient(135deg, rgba(182,124,255,.22), transparent)"
-												: "linear-gradient(135deg, rgba(242,198,107,.22), transparent)",
-											border: `1px solid ${violet ? "rgba(182,124,255,.32)" : "rgba(242,198,107,.32)"}`,
-											color: violet ? "var(--hz-violet)" : "var(--hz-gold)",
-										}}
-									>
-										<Icon size={16} />
-									</div>
-									<div
-										className="hz-mono text-[11px] uppercase tracking-[0.18em]"
-										style={{ color: "var(--hz-ink-mute)" }}
-									>
-										0{i + 1}
-									</div>
-								</div>
-								<div
-									className="hz-display text-lg"
-									style={{ letterSpacing: "-0.02em" }}
-								>
-									{a.title}
-								</div>
-								<div
-									className="text-[13px]"
-									style={{ color: "var(--hz-ink-dim)" }}
-								>
-									{a.desc}
-								</div>
-							</div>
+								{a.desc}
+							</CollapsibleCard>
 						);
 					})}
 				</div>

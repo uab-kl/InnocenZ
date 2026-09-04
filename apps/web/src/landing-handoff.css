@@ -79,7 +79,10 @@
 }
 
 .landing-page .hz-wrap {
-	width: min(1240px, 92vw);
+	/* Centred column with real side gutters — but the numbers below are the
+	   VISUAL width: zoom shrinks every length in here, so the scale is divided
+	   back out and 1400px / 84vw mean 1400px / 84% of the actual screen. */
+	width: calc(min(1400px, 84vw) / var(--iz-page-scale, 0.8));
 	margin: 0 auto;
 	position: relative;
 }
@@ -329,7 +332,8 @@
 		transparent
 	);
 	margin: 0 auto;
-	width: min(1240px, 92vw);
+	/* Matches .hz-wrap so the hairline ends where the copy does. */
+	width: calc(min(1400px, 84vw) / var(--iz-page-scale, 0.8));
 }
 
 /* Background layers */
@@ -425,7 +429,8 @@
 	gap: 32px;
 	padding: 12px 16px 12px 24px;
 	border-radius: 999px;
-	width: min(1180px, 92vw);
+	/* Visual width, like .hz-wrap — kept just inside the content column. */
+	width: calc(min(1330px, 84vw) / var(--iz-page-scale, 0.8));
 	transition: background 0.3s;
 }
 
@@ -887,4 +892,74 @@
 	.landing-page .hz-spotlight {
 		display: none;
 	}
+}
+
+/* —— Collapsible info card ——
+   Default closed: the summary row (icon + title) is the whole card until the
+   reader opens it. `<details>` supplies the state, so there is nothing to
+   hydrate and keyboard/AT behaviour is the platform's own. */
+.landing-page .hz-collapse {
+	padding: 0;
+	transition: border-color 0.2s;
+}
+
+.landing-page .hz-collapse:hover {
+	border-color: var(--hz-line-strong);
+}
+
+.landing-page .hz-collapse__summary {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 18px 20px;
+	cursor: pointer;
+	list-style: none;
+	user-select: none;
+}
+
+/* Safari/Chrome default triangle — the chevron replaces it. */
+.landing-page .hz-collapse__summary::-webkit-details-marker,
+.landing-page .hz-collapse__summary::marker {
+	display: none;
+	content: "";
+}
+
+.landing-page .hz-collapse__summary:focus-visible {
+	outline: 2px solid var(--hz-gold);
+	outline-offset: -2px;
+	border-radius: var(--hz-radius);
+}
+
+.landing-page .hz-collapse__title {
+	flex: 1;
+	min-width: 0;
+	font-size: 17px;
+	letter-spacing: -0.015em;
+	line-height: 1.25;
+}
+
+.landing-page .hz-collapse__title--lg {
+	font-size: 20px;
+	letter-spacing: -0.02em;
+}
+
+.landing-page .hz-collapse__chevron {
+	flex-shrink: 0;
+	color: var(--hz-ink-mute);
+	transition: transform 0.25s;
+}
+
+.landing-page .hz-collapse[open] .hz-collapse__chevron {
+	transform: rotate(180deg);
+}
+
+.landing-page .hz-collapse[open] {
+	border-color: var(--hz-line-strong);
+}
+
+.landing-page .hz-collapse__body {
+	padding: 0 20px 18px;
+	color: var(--hz-ink-dim);
+	font-size: 13px;
+	line-height: 1.55;
 }
