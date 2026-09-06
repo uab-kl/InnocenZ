@@ -898,20 +898,72 @@
    Default closed: the summary row (icon + title) is the whole card until the
    reader opens it. `<details>` supplies the state, so there is nothing to
    hydrate and keyboard/AT behaviour is the platform's own. */
+/*
+ * Open and closed have to be tellable apart at a glance.
+ *
+ * Both states used to change ONLY `border-color`, and hover changed the same
+ * property to a similar value — so in a grid of twelve you could not see which
+ * card you had opened, or which one you were about to. Each state now moves a
+ * different property: hover lifts the surface, open tints it and warms the
+ * edge toward gold.
+ */
+/*
+ * TRANSLUCENT, not black.
+ *
+ * `.hz-glass` paints `rgba(16,15,22,.96) → rgba(10,10,14,.98)` — near-opaque
+ * near-black. On the violet sections that read as twenty-seven black holes
+ * punched through the page rather than panels resting on it, and on the
+ * photo-backed AI section it blanked the image behind each card.
+ *
+ * A white wash at low alpha LIFTS whatever is behind instead of replacing it,
+ * so each card now takes its hue from its own section — violet under Why,
+ * near-black under Platform, stage light under the AI layer — which is what
+ * "glass" was supposed to mean.
+ */
+/*
+ * Deep warm near-black with a champagne hairline — the owner's pick, after
+ * three misses of mine: opaque black, then sheer white glass, then a violet
+ * panel. The richness comes from GOLD AGAINST DARKNESS, the way the hero and
+ * pricing cards already work, rather than from tinting the fill.
+ *
+ * #16111d is warm and sits on the violet side of neutral, so it is nearly
+ * black without being the grey-purple that read as muddy — the gold border
+ * and gold icon tiles carry the card instead of competing with a wash.
+ */
 .landing-page .hz-collapse {
 	padding: 0;
-	transition: border-color 0.2s;
+	background: linear-gradient(180deg, #1a141f, #16111d);
+	border: 1px solid color-mix(in oklab, var(--hz-gold) 28%, transparent);
+	box-shadow:
+		0 10px 30px -16px rgba(0, 0, 0, 0.7),
+		inset 0 1px 0 rgba(255, 255, 255, 0.045);
+	transition:
+		border-color 0.2s ease,
+		background 0.2s ease,
+		box-shadow 0.2s ease,
+		transform 0.2s ease;
+}
+
+/* `.hz-glass::after` lays a second white gradient over every card; on top of
+   the sheen above that was the other half of the milkiness. */
+.landing-page .hz-collapse::after {
+	content: none;
 }
 
 .landing-page .hz-collapse:hover {
-	border-color: var(--hz-line-strong);
+	border-color: color-mix(in oklab, var(--hz-gold) 45%, transparent);
+	background: linear-gradient(180deg, #201826, #1a1422);
+	box-shadow:
+		0 16px 38px -16px rgba(0, 0, 0, 0.75),
+		inset 0 1px 0 rgba(255, 255, 255, 0.07);
+	transform: translateY(-1px);
 }
 
 .landing-page .hz-collapse__summary {
 	display: flex;
 	align-items: center;
 	gap: 14px;
-	padding: 18px 20px;
+	padding: 20px 22px;
 	cursor: pointer;
 	list-style: none;
 	user-select: none;
@@ -930,36 +982,89 @@
 	border-radius: var(--hz-radius);
 }
 
+/*
+ * ONE title size across all 27 cards.
+ *
+ * The three grids had drifted apart — Platform ran a 20px `--lg` title while
+ * the AI-layer and Why grids ran 17px, so cards that look identical carried
+ * different type. They are the same object and now read as one set.
+ */
 .landing-page .hz-collapse__title {
 	flex: 1;
 	min-width: 0;
-	font-size: 17px;
-	letter-spacing: -0.015em;
+	font-size: 21px;
+	letter-spacing: -0.02em;
 	line-height: 1.25;
 }
 
+/* Kept as a no-op alias: HandoffPlatform still passes it, and a modifier that
+   silently changes size is how the three grids drifted in the first place. */
 .landing-page .hz-collapse__title--lg {
-	font-size: 20px;
-	letter-spacing: -0.02em;
+	font-size: 21px;
 }
 
+/* Twelve chevrons at full strength are twelve small distractions; they earn
+   their contrast on hover and when the card is actually open. */
 .landing-page .hz-collapse__chevron {
 	flex-shrink: 0;
 	color: var(--hz-ink-mute);
-	transition: transform 0.25s;
+	opacity: 0.5;
+	transition:
+		transform 0.25s ease,
+		color 0.2s ease,
+		opacity 0.2s ease;
+}
+
+.landing-page .hz-collapse:hover .hz-collapse__chevron,
+.landing-page .hz-collapse[open] .hz-collapse__chevron {
+	opacity: 1;
+	color: var(--hz-gold);
 }
 
 .landing-page .hz-collapse[open] .hz-collapse__chevron {
 	transform: rotate(180deg);
 }
 
+/*
+ * OPEN is deliberately more OPAQUE than closed, not just warmer.
+ *
+ * A closed card shows one large bright title, so it can be sheer glass. An
+ * open one carries body copy — and over the AI section's stage photograph
+ * that copy was landing on whatever the image happened to be doing behind it,
+ * which is why it could not be read. Opening now lays down a near-solid
+ * ground first and keeps the warm tint only as a top wash, so the body always
+ * has the same surface under it regardless of section.
+ */
 .landing-page .hz-collapse[open] {
-	border-color: var(--hz-line-strong);
+	border-color: color-mix(in oklab, var(--hz-gold) 55%, transparent);
+	background: linear-gradient(180deg, #1d1624, #18121f);
+	box-shadow:
+		0 18px 44px -16px rgba(0, 0, 0, 0.78),
+		inset 0 1px 0 rgba(242, 198, 107, 0.14);
 }
 
+/* A thin gold rule under the title once open, so the body reads as revealed
+   content on the SAME ground — no second surface needed. */
+.landing-page .hz-collapse[open] .hz-collapse__summary {
+	border-bottom: 1px solid color-mix(in oklab, var(--hz-gold) 22%, transparent);
+	margin-bottom: 14px;
+}
+
+/*
+ * Body copy sits deliberately BELOW the card title, never level with it.
+ *
+ * 13px read as fine print against a 17-20px title, so the answer to the card
+ * was the title alone and the sentence under it went unread. 15px is the
+ * largest step that keeps the hierarchy honest: 2px under the 17px titles on
+ * the AI-layer and Why grids, 5px under the 20px `--lg` titles on Platform.
+ * Raising it to 17px would make body and title the same size on two of the
+ * three grids, which is the thing being avoided rather than a bolder fix.
+ */
 .landing-page .hz-collapse__body {
 	padding: 0 20px 18px;
-	color: var(--hz-ink-dim);
-	font-size: 13px;
-	line-height: 1.55;
+	/* Was --hz-ink-dim (#a89e8c), which is a caption grey. This is body copy
+	   the reader opened the card FOR, so it takes near-full ink. */
+	color: rgba(246, 239, 225, 0.92);
+	font-size: 16.5px;
+	line-height: 1.6;
 }

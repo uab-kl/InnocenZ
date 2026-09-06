@@ -76,6 +76,143 @@ import {
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { cn } from "@/lib/utils";
 
+/**
+ * The wizard's steps, in page order, and the fields each one owns.
+ *
+ * Doneness is NOT a second copy of the validation rules — the live zod schema
+ * is parsed and its issue paths are bucketed through this table, so a step
+ * turns gold exactly when the form itself would stop complaining about it.
+ * Add a field to the form and it must be listed here, or its step reports
+ * done while the field is still empty.
+ */
+const SIGNUP_STEPS = [
+	{ id: "account-type", section: "accountType", fields: ["accountType"] },
+	{
+		id: "company",
+		section: "companyInfo",
+		fields: [
+			"companyName",
+			"companyRegistrationOld",
+			"companyRegistrationNew",
+			"addressLine1",
+			"addressLine2",
+			"city",
+			"postcode",
+			"stateCode",
+			"countryCode",
+		],
+	},
+	{
+		id: "contact",
+		section: "contactInfo",
+		fields: ["personInCharge", "phoneNum", "email"],
+	},
+	{
+		id: "login",
+		section: "loginCredentials",
+		fields: ["loginEmail", "password", "confirmPassword"],
+	},
+	{ id: "package", section: "packageEnrollment", fields: ["packageId"] },
+	{ id: "branding", section: "branding", fields: ["logoFile"] },
+	{
+		id: "acknowledgements",
+		section: "acknowledgements",
+		fields: [
+			"ackPersonalInfo",
+			"ackDeclarationOfTruth",
+			"ackInformationSharing",
+			"acceptTerms",
+		],
+	},
+] as const;
+
+/**
+ * A sticky spine beside the form on wide screens: one node per step, gold and
+ * ticked once that step validates, so the visitor can see how much of a long
+ * form is actually behind them. Hidden below `2xl`, where there is no room
+ * beside the form without narrowing it, and the section headings are the
+ * only structure needed.
+ */
+function SignupProgressRail({
+	copy,
+	schema,
+	values,
+}: {
+	copy: SignupCopy;
+	schema: ReturnType<typeof createSignupSchema>;
+	values: Record<string, unknown>;
+}) {
+	const failed = useMemo(() => {
+		const result = schema.safeParse(values);
+		const paths = result.success
+			? new Set<string>()
+			: new Set(result.error.issues.map((issue) => String(issue.path[0])));
+		/*
+		 * The passwords-match rule is an OBJECT-level refinement, and zod skips
+		 * those once any field inside has already failed. Without this the login
+		 * step would tick green on two mismatched passwords whenever something
+		 * else on the form was also incomplete.
+		 */
+		if (values.password !== values.confirmPassword)
+			paths.add("confirmPassword");
+		return paths;
+	}, [schema, values]);
+
+	const completed = SIGNUP_STEPS.map((step) =>
+		step.fields.every((name) => !failed.has(name)),
+	);
+	const doneCount = completed.filter(Boolean).length;
+	/* The first unfinished step is where the visitor still has work to do. */
+	const activeIndex = completed.indexOf(false);
+
+	return (
+		<aside
+			className="signup-progress hidden 2xl:block"
+			aria-label={copy.progress.label}
+		>
+			<div className="signup-progress-head">
+				<span className="signup-progress-title">{copy.progress.label}</span>
+				<span className="signup-progress-count">
+					{doneCount}
+					<span>/{SIGNUP_STEPS.length}</span>
+				</span>
+			</div>
+
+			<ol className="signup-progress-list">
+				{SIGNUP_STEPS.map((step, index) => (
+					<li
+						key={step.id}
+						className={cn(
+							"signup-progress-step",
+							completed[index] && "is-done",
+							index === activeIndex && "is-active",
+						)}
+					>
+						<a
+							href={`#signup-step-${step.id}`}
+							className="signup-progress-link"
+							aria-current={index === activeIndex ? "step" : undefined}
+						>
+							<span className="signup-progress-node" aria-hidden="true">
+								{completed[index] ? (
+									<Check className="h-3.5 w-3.5" strokeWidth={3} />
+								) : (
+									index + 1
+								)}
+							</span>
+							<span className="signup-progress-label">
+								{copy.sections[step.section]}
+							</span>
+						</a>
+					</li>
+				))}
+			</ol>
+		</aside>
+	);
+}
+
+type SignupCopy = ReturnType<typeof useLandingLocale>["t"]["signup"];
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
 	return (
 		<h2 className="signup-section-title login-field-label border-b border-royal-gold/20 pb-2 uppercase text-foreground/90">
@@ -253,666 +390,730 @@ export function SignupForm() {
 
 	return (
 		<>
-			<form
-				id="signup-form"
-				className="signup-form"
-				aria-label={copy.heading.line2}
-				noValidate
-				onSubmit={(e) => {
-					e.preventDefault();
-					form.handleSubmit();
-				}}
-			>
-				<form.Field name="accountType">
-					{(field) => (
-						<Field className="mb-8">
-							<SectionTitle>{copy.sections.accountType}</SectionTitle>
-							<div
-								className="mt-4 grid grid-cols-2 gap-3"
-								role="radiogroup"
-								aria-label={copy.sections.accountType}
-							>
-								{signupAccountTypes.map((type) => {
-									const Icon = type.icon;
-									const selected = field.state.value === type.key;
-									const accountCopy = copy.accountTypes[type.key];
-
-									return (
-										// biome-ignore lint/a11y/useSemanticElements: role="radio" on a <button> inside the role="radiogroup" above is the WAI-ARIA composite pattern; a real <input type="radio"> would have to be sr-only behind this card, which hides the focus ring and changes the keyboard flow of the live signup form
-										<button
-											key={type.key}
-											type="button"
-											role="radio"
-											aria-checked={selected}
-											disabled={form.state.isSubmitting}
-											onClick={() => {
-												field.handleChange(type.key);
-												setAccountType(type.key);
-												form.setFieldValue("packageId", "");
-											}}
-											className={cn(
-												"flex flex-col items-start gap-2 rounded-xl border px-4 py-4 text-left transition-all",
-												selected
-													? "border-royal-gold/60 bg-royal-gold/10 shadow-glow-gold"
-													: "border-royal-gold/20 bg-background/40 hover:border-royal-gold/35",
-											)}
-										>
-											<Icon
-												className={cn(
-													"h-6 w-6",
-													selected
-														? "text-gold-bright"
-														: "text-muted-foreground",
-												)}
-											/>
-											<span className="signup-account-title font-semibold text-foreground">
-												{accountCopy.title}
-											</span>
-											<span className="signup-account-desc text-muted-foreground">
-												{accountCopy.description}
-											</span>
-										</button>
-									);
-								})}
-							</div>
-						</Field>
-					)}
-				</form.Field>
-
-				<FieldGroup className="gap-10">
-					<section className="space-y-6">
-						<SectionTitle>{copy.sections.companyInfo}</SectionTitle>
-
-						<form.Field name="companyName">
+			{/* Form column plus the sticky step spine; the spine hides itself
+			    below `2xl` — under that the rail would have to eat into the
+			    form's own 42rem measure to fit. */}
+			<div className="flex items-start gap-8 2xl:gap-12">
+				<form
+					id="signup-form"
+					className="signup-form min-w-0 flex-1 2xl:max-w-2xl"
+					aria-label={copy.heading.line2}
+					noValidate
+					onSubmit={(e) => {
+						e.preventDefault();
+						form.handleSubmit();
+					}}
+				>
+					<section
+						id="signup-step-account-type"
+						className="scroll-mt-28 mb-10 space-y-6"
+					>
+						<form.Field name="accountType">
 							{(field) => (
-								<SignupTextField
-									field={field}
-									label={fields.companyName.label}
-									icon={Building2}
-									placeholder={fields.companyName.placeholder}
-									autoComplete="organization"
-									isSubmitting={form.state.isSubmitting}
-								/>
+								<Field className="mb-8">
+									<SectionTitle>{copy.sections.accountType}</SectionTitle>
+									<div
+										className="mt-4 grid grid-cols-2 gap-3"
+										role="radiogroup"
+										aria-label={copy.sections.accountType}
+									>
+										{signupAccountTypes.map((type) => {
+											const Icon = type.icon;
+											const selected = field.state.value === type.key;
+											const accountCopy = copy.accountTypes[type.key];
+
+											return (
+												// biome-ignore lint/a11y/useSemanticElements: role="radio" on a <button> inside the role="radiogroup" above is the WAI-ARIA composite pattern; a real <input type="radio"> would have to be sr-only behind this card, which hides the focus ring and changes the keyboard flow of the live signup form
+												<button
+													key={type.key}
+													type="button"
+													role="radio"
+													aria-checked={selected}
+													disabled={form.state.isSubmitting}
+													onClick={() => {
+														field.handleChange(type.key);
+														setAccountType(type.key);
+														form.setFieldValue("packageId", "");
+													}}
+													className={cn(
+														"flex flex-col items-center gap-2 rounded-xl border px-4 py-5 text-center transition-all",
+														selected
+															? "border-royal-gold/60 bg-royal-gold/10 shadow-glow-gold"
+															: "border-royal-gold/20 bg-background/40 hover:border-royal-gold/35",
+													)}
+												>
+													{/* A centred tile, matching every other icon on the
+											    signed-out surface. The whole card stacks centred —
+											    two choices side by side read as a pair of buttons,
+											    not as two paragraphs. */}
+													<span
+														className={cn(
+															"grid h-12 w-12 place-items-center rounded-xl border transition-colors",
+															selected
+																? "border-royal-gold/45 bg-royal-gold/15"
+																: "border-royal-gold/20 bg-white/[0.035]",
+														)}
+													>
+														<Icon
+															className={cn(
+																"h-7 w-7",
+																selected
+																	? "text-gold-bright"
+																	: "text-muted-foreground",
+															)}
+														/>
+													</span>
+													<span className="signup-account-title font-semibold text-foreground">
+														{accountCopy.title}
+													</span>
+													<span className="signup-account-desc text-muted-foreground">
+														{accountCopy.description}
+													</span>
+												</button>
+											);
+										})}
+									</div>
+								</Field>
 							)}
 						</form.Field>
+					</section>
 
-						<div className="grid gap-6 sm:grid-cols-2">
-							<form.Field name="companyRegistrationOld">
+					<FieldGroup className="gap-10">
+						<section
+							id="signup-step-company"
+							className="scroll-mt-28 space-y-6"
+						>
+							<SectionTitle>{copy.sections.companyInfo}</SectionTitle>
+
+							<form.Field name="companyName">
 								{(field) => (
 									<SignupTextField
 										field={field}
-										label={fields.companyRegistrationOld.label}
-										icon={BadgeCheck}
-										placeholder={fields.companyRegistrationOld.placeholder}
+										label={fields.companyName.label}
+										icon={Building2}
+										placeholder={fields.companyName.placeholder}
+										autoComplete="organization"
+										isSubmitting={form.state.isSubmitting}
+									/>
+								)}
+							</form.Field>
+
+							<div className="grid gap-6 sm:grid-cols-2">
+								<form.Field name="companyRegistrationOld">
+									{(field) => (
+										<SignupTextField
+											field={field}
+											label={fields.companyRegistrationOld.label}
+											icon={BadgeCheck}
+											placeholder={fields.companyRegistrationOld.placeholder}
+											required={false}
+											isSubmitting={form.state.isSubmitting}
+										/>
+									)}
+								</form.Field>
+
+								<form.Field name="companyRegistrationNew">
+									{(field) => (
+										<SignupTextField
+											field={field}
+											label={fields.companyRegistrationNew.label}
+											icon={BadgeCheck}
+											placeholder={fields.companyRegistrationNew.placeholder}
+											isSubmitting={form.state.isSubmitting}
+										/>
+									)}
+								</form.Field>
+							</div>
+
+							<form.Field name="addressLine1">
+								{(field) => (
+									<SignupTextField
+										field={field}
+										label={fields.addressLine1.label}
+										icon={MapPin}
+										placeholder={fields.addressLine1.placeholder}
+										autoComplete="address-line1"
+										isSubmitting={form.state.isSubmitting}
+									/>
+								)}
+							</form.Field>
+
+							<form.Field name="addressLine2">
+								{(field) => (
+									<SignupTextField
+										field={field}
+										label={fields.addressLine2.label}
+										icon={MapPin}
+										placeholder={fields.addressLine2.placeholder}
+										autoComplete="address-line2"
 										required={false}
 										isSubmitting={form.state.isSubmitting}
 									/>
 								)}
 							</form.Field>
 
-							<form.Field name="companyRegistrationNew">
-								{(field) => (
-									<SignupTextField
-										field={field}
-										label={fields.companyRegistrationNew.label}
-										icon={BadgeCheck}
-										placeholder={fields.companyRegistrationNew.placeholder}
-										isSubmitting={form.state.isSubmitting}
-									/>
-								)}
-							</form.Field>
-						</div>
-
-						<form.Field name="addressLine1">
-							{(field) => (
-								<SignupTextField
-									field={field}
-									label={fields.addressLine1.label}
-									icon={MapPin}
-									placeholder={fields.addressLine1.placeholder}
-									autoComplete="address-line1"
-									required={false}
-									isSubmitting={form.state.isSubmitting}
-								/>
-							)}
-						</form.Field>
-
-						<form.Field name="addressLine2">
-							{(field) => (
-								<SignupTextField
-									field={field}
-									label={fields.addressLine2.label}
-									icon={MapPin}
-									placeholder={fields.addressLine2.placeholder}
-									autoComplete="address-line2"
-									required={false}
-									isSubmitting={form.state.isSubmitting}
-								/>
-							)}
-						</form.Field>
-
-						<div className="grid gap-6 sm:grid-cols-2">
-							<form.Field name="city">
-								{(field) => (
-									<form.Subscribe selector={(state) => state.values.stateCode}>
-										{(stateCode) => {
-											const cities = listCities(
-												DEFAULT_COUNTRY_CODE,
-												stateCode,
-											);
-											if (cities.length === 0) {
+							<div className="grid gap-6 sm:grid-cols-2">
+								<form.Field name="city">
+									{(field) => (
+										<form.Subscribe
+											selector={(state) => state.values.stateCode}
+										>
+											{(stateCode) => {
+												const cities = listCities(
+													DEFAULT_COUNTRY_CODE,
+													stateCode,
+												);
+												if (cities.length === 0) {
+													return (
+														<SignupTextField
+															field={field}
+															label={fields.city.label}
+															icon={MapPin}
+															placeholder={
+																stateCode
+																	? fields.city.placeholder
+																	: fields.city.chooseStateFirst
+															}
+															autoComplete="address-level2"
+															isSubmitting={
+																form.state.isSubmitting || !stateCode
+															}
+														/>
+													);
+												}
 												return (
-													<SignupTextField
-														field={field}
+													<SignupGeoSelect
 														label={fields.city.label}
-														icon={MapPin}
-														placeholder={fields.city.placeholder}
-														autoComplete="address-level2"
-														required={false}
-														isSubmitting={form.state.isSubmitting || !stateCode}
+														required
+														placeholder={
+															stateCode
+																? fields.city.placeholder
+																: fields.city.chooseStateFirst
+														}
+														searchPlaceholder={copy.searchPlaceholder}
+														noResults={copy.noResults}
+														value={field.state.value}
+														disabled={form.state.isSubmitting || !stateCode}
+														options={cities.map((c) => ({
+															value: c.name,
+															label: c.name,
+														}))}
+														onChange={field.handleChange}
 													/>
 												);
-											}
-											return (
-												<SignupGeoSelect
-													label={fields.city.label}
-													placeholder={fields.city.placeholder}
-													searchPlaceholder={copy.searchPlaceholder}
-													noResults={copy.noResults}
-													value={field.state.value}
-													disabled={form.state.isSubmitting || !stateCode}
-													options={cities.map((c) => ({
-														value: c.name,
-														label: c.name,
-													}))}
-													onChange={field.handleChange}
-												/>
-											);
-										}}
-									</form.Subscribe>
-								)}
-							</form.Field>
+											}}
+										</form.Subscribe>
+									)}
+								</form.Field>
 
-							<form.Field name="postcode">
+								<form.Field name="postcode">
+									{(field) => (
+										<SignupTextField
+											field={field}
+											label={fields.postcode.label}
+											icon={MapPin}
+											placeholder={fields.postcode.placeholder}
+											autoComplete="postal-code"
+											isSubmitting={form.state.isSubmitting}
+										/>
+									)}
+								</form.Field>
+							</div>
+
+							<div className="grid gap-6 sm:grid-cols-2">
+								<Field>
+									<FieldLabel className="login-field-label">
+										{fields.country.label}
+									</FieldLabel>
+									<div className="login-input-group flex h-11 w-full items-center rounded-md border border-royal-gold/20 bg-background/40 px-3 text-base leading-normal text-foreground">
+										{fields.country.value}
+									</div>
+									<FieldDescription className="signup-helper text-muted-foreground">
+										{fields.country.notice}
+									</FieldDescription>
+								</Field>
+
+								<form.Field name="stateCode">
+									{(field) => {
+										const states = listStates(DEFAULT_COUNTRY_CODE);
+										return (
+											<SignupGeoSelect
+												label={fields.state.label}
+												required
+												placeholder={fields.state.placeholder}
+												searchPlaceholder={copy.searchPlaceholder}
+												noResults={copy.noResults}
+												value={field.state.value}
+												disabled={form.state.isSubmitting}
+												options={states.map((s) => ({
+													value: s.isoCode,
+													label: s.name,
+												}))}
+												onChange={(next) => {
+													field.handleChange(next);
+													form.setFieldValue("city", "");
+												}}
+											/>
+										);
+									}}
+								</form.Field>
+							</div>
+						</section>
+
+						<section
+							id="signup-step-contact"
+							className="scroll-mt-28 space-y-6"
+						>
+							<SectionTitle>{copy.sections.contactInfo}</SectionTitle>
+
+							<form.Field name="personInCharge">
 								{(field) => (
 									<SignupTextField
 										field={field}
-										label={fields.postcode.label}
-										icon={MapPin}
-										placeholder={fields.postcode.placeholder}
-										autoComplete="postal-code"
-										required={false}
+										label={fields.personInCharge.label}
+										icon={UserRound}
+										placeholder={fields.personInCharge.placeholder}
+										autoComplete="name"
 										isSubmitting={form.state.isSubmitting}
 									/>
 								)}
 							</form.Field>
-						</div>
 
-						<div className="grid gap-6 sm:grid-cols-2">
-							<Field>
-								<FieldLabel className="login-field-label">
-									{fields.country.label}
-								</FieldLabel>
-								<div className="login-input-group flex h-11 w-full items-center rounded-md border border-royal-gold/20 bg-background/40 px-3 text-base leading-normal text-foreground">
-									{fields.country.value}
-								</div>
-								<FieldDescription className="signup-helper text-muted-foreground">
-									{fields.country.notice}
-								</FieldDescription>
-							</Field>
+							<form.Field name="phoneNum">
+								{(field) => (
+									<SignupPhoneField
+										field={field}
+										label={fields.phoneNum.label}
+										placeholder={fields.phoneNum.placeholder}
+										dialDisplay={fields.phoneNum.dialDisplay}
+										dialNotice={fields.phoneNum.dialNotice}
+										isSubmitting={form.state.isSubmitting}
+									/>
+								)}
+							</form.Field>
 
-							<form.Field name="stateCode">
-								{(field) => {
-									const states = listStates(DEFAULT_COUNTRY_CODE);
-									return (
-										<SignupGeoSelect
-											label={fields.state.label}
-											placeholder={fields.state.placeholder}
-											searchPlaceholder={copy.searchPlaceholder}
-											noResults={copy.noResults}
-											value={field.state.value}
-											disabled={form.state.isSubmitting}
-											options={states.map((s) => ({
-												value: s.isoCode,
-												label: s.name,
-											}))}
-											onChange={(next) => {
-												field.handleChange(next);
-												form.setFieldValue("city", "");
-											}}
+							<form.Field name="email">
+								{(field) => (
+									<SignupTextField
+										field={field}
+										label={fields.email.label}
+										icon={Mail}
+										placeholder={fields.email.placeholder}
+										type="email"
+										autoComplete="email"
+										isSubmitting={form.state.isSubmitting}
+										description={fields.email.description}
+										onValueChange={(next) => {
+											if (sameAsCompanyEmail) {
+												form.setFieldValue("loginEmail", next);
+											}
+										}}
+									/>
+								)}
+							</form.Field>
+						</section>
+
+						<section id="signup-step-login" className="scroll-mt-28 space-y-6">
+							<SectionTitle>{copy.sections.loginCredentials}</SectionTitle>
+
+							<form.Field name="loginEmail">
+								{(field) => (
+									<div className="space-y-3">
+										<SignupTextField
+											field={field}
+											label={fields.loginEmail.label}
+											icon={AtSign}
+											placeholder={fields.loginEmail.placeholder}
+											type="email"
+											autoComplete="username"
+											isSubmitting={
+												form.state.isSubmitting || sameAsCompanyEmail
+											}
+											description={fields.loginEmail.description}
 										/>
+										<label className="flex cursor-pointer items-start gap-3 text-foreground">
+											<input
+												type="checkbox"
+												checked={sameAsCompanyEmail}
+												disabled={form.state.isSubmitting}
+												onChange={(event) => {
+													const checked = event.target.checked;
+													setSameAsCompanyEmail(checked);
+													if (checked) {
+														form.setFieldValue(
+															"loginEmail",
+															form.getFieldValue("email"),
+														);
+													}
+												}}
+												className="signup-ack-checkbox mt-0.5 size-5 shrink-0 rounded border border-royal-gold/40 bg-background accent-[var(--royal-gold)]"
+											/>
+											<span className="signup-ack-label text-sm font-medium leading-snug">
+												{fields.loginEmail.sameAsCompanyEmail}
+											</span>
+										</label>
+									</div>
+								)}
+							</form.Field>
+
+							<form.Field
+								name="password"
+								validators={{
+									// Re-run when confirm changes so a fixed match clears the error.
+									onChangeListenTo: ["confirmPassword"],
+									onChange: ({ value }) => {
+										const v = copy.validation;
+										if (!value) return { message: v.passwordRequired };
+										if (value.length < 8) return { message: v.passwordMin };
+										return undefined;
+									},
+								}}
+							>
+								{(field) => (
+									<SignupPasswordField
+										field={field}
+										label={fields.password.label}
+										placeholder={fields.password.placeholder}
+										showPassword={showPassword}
+										onToggle={() => setShowPassword(!showPassword)}
+										isSubmitting={form.state.isSubmitting}
+									/>
+								)}
+							</form.Field>
+
+							<form.Field
+								name="confirmPassword"
+								validators={{
+									// Live match check whenever either password field changes.
+									onChangeListenTo: ["password"],
+									onChange: ({ value, fieldApi }) => {
+										const v = copy.validation;
+										const password = fieldApi.form.getFieldValue("password");
+										if (!value) return { message: v.confirmPasswordRequired };
+										if (value !== password) {
+											return { message: v.passwordsMismatch };
+										}
+										return undefined;
+									},
+								}}
+							>
+								{(field) => (
+									<SignupPasswordField
+										field={field}
+										label={fields.confirmPassword.label}
+										placeholder={fields.confirmPassword.placeholder}
+										showPassword={showConfirmPassword}
+										onToggle={() =>
+											setShowConfirmPassword(!showConfirmPassword)
+										}
+										isSubmitting={form.state.isSubmitting}
+									/>
+								)}
+							</form.Field>
+						</section>
+
+						<section
+							id="signup-step-package"
+							className="scroll-mt-28 space-y-6"
+						>
+							<SectionTitle>{copy.sections.packageEnrollment}</SectionTitle>
+
+							<form.Field name="packageId">
+								{(field) => {
+									const isInvalid =
+										field.state.meta.isDirty && !field.state.meta.isValid;
+									const selected = packages.find(
+										(pkg) => pkg.id === field.state.value,
+									);
+									const empty =
+										!packagesLoading && !packagesError && packages.length === 0;
+
+									return (
+										<Field data-invalid={isInvalid}>
+											<FieldLabel
+												htmlFor={field.name}
+												className="login-field-label"
+											>
+												{fields.package.label}
+												<RequiredMark />
+											</FieldLabel>
+											<Select
+												value={field.state.value || undefined}
+												onValueChange={field.handleChange}
+												disabled={
+													form.state.isSubmitting ||
+													packagesLoading ||
+													packages.length === 0
+												}
+											>
+												<SelectTrigger
+													id={field.name}
+													className="login-input-group h-auto w-full border-royal-gold/20 bg-background/60 py-3"
+												>
+													<SelectValue
+														placeholder={
+															packagesLoading
+																? copy.packages.loadingShort
+																: fields.package.placeholder
+														}
+													/>
+												</SelectTrigger>
+												<SelectContent className="signup-package-select-content">
+													{packages.map((pkg) => (
+														<SelectItem
+															key={pkg.id}
+															value={pkg.id}
+															className="signup-package-item py-3 text-[1.5rem] leading-snug"
+														>
+															{pkg.name} · {pkg.capacity} · {pkg.priceLabel}
+															{pkg.period}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+											{packagesLoading && (
+												<FieldDescription className="signup-helper text-muted-foreground">
+													{copy.packages.loadingLong}
+												</FieldDescription>
+											)}
+											{packagesError && (
+												<FieldDescription className="signup-helper flex flex-wrap items-center gap-2 text-destructive">
+													<span>
+														{copy.packages.loadFailed}: {packagesError}
+													</span>
+													<button
+														type="button"
+														className="underline underline-offset-2"
+														onClick={() => setPackagesTick((n) => n + 1)}
+													>
+														Retry
+													</button>
+												</FieldDescription>
+											)}
+											{empty && (
+												<FieldDescription className="signup-helper text-muted-foreground">
+													No active plans for this account type in the database.
+												</FieldDescription>
+											)}
+											{selected && !packagesLoading && (
+												<FieldDescription className="signup-helper text-muted-foreground">
+													{selected.detail}
+												</FieldDescription>
+											)}
+										</Field>
 									);
 								}}
 							</form.Field>
-						</div>
-					</section>
+						</section>
 
-					<section className="space-y-6">
-						<SectionTitle>{copy.sections.contactInfo}</SectionTitle>
+						<section
+							id="signup-step-branding"
+							className="scroll-mt-28 space-y-6"
+						>
+							<SectionTitle>{copy.sections.branding}</SectionTitle>
 
-						<form.Field name="personInCharge">
-							{(field) => (
-								<SignupTextField
-									field={field}
-									label={fields.personInCharge.label}
-									icon={UserRound}
-									placeholder={fields.personInCharge.placeholder}
-									autoComplete="name"
-									isSubmitting={form.state.isSubmitting}
-								/>
-							)}
-						</form.Field>
+							<form.Subscribe selector={(state) => state.values.accountType}>
+								{(accountType) => {
+									const logoLabel =
+										accountType === "agency"
+											? fields.logo.labelAgency
+											: fields.logo.labelOutlet;
+									const logoUploadTitle =
+										accountType === "agency"
+											? fields.logo.uploadTitleAgency
+											: fields.logo.uploadTitleOutlet;
 
-						<form.Field name="phoneNum">
-							{(field) => (
-								<SignupPhoneField
-									field={field}
-									label={fields.phoneNum.label}
-									placeholder={fields.phoneNum.placeholder}
-									dialDisplay={fields.phoneNum.dialDisplay}
-									dialNotice={fields.phoneNum.dialNotice}
-									isSubmitting={form.state.isSubmitting}
-								/>
-							)}
-						</form.Field>
+									return (
+										<form.Field name="logoFile">
+											{(field) => {
+												const isInvalid =
+													field.state.meta.isDirty && !field.state.meta.isValid;
 
-						<form.Field name="email">
-							{(field) => (
-								<SignupTextField
-									field={field}
-									label={fields.email.label}
-									icon={Mail}
-									placeholder={fields.email.placeholder}
-									type="email"
-									autoComplete="email"
-									isSubmitting={form.state.isSubmitting}
-									description={fields.email.description}
-									onValueChange={(next) => {
-										if (sameAsCompanyEmail) {
-											form.setFieldValue("loginEmail", next);
-										}
-									}}
-								/>
-							)}
-						</form.Field>
-					</section>
+												const clearLogo = () => {
+													field.handleChange(null);
+													if (logoPreview) URL.revokeObjectURL(logoPreview);
+													setLogoPreview(null);
+												};
 
-					<section className="space-y-6">
-						<SectionTitle>{copy.sections.loginCredentials}</SectionTitle>
-
-						<form.Field name="loginEmail">
-							{(field) => (
-								<div className="space-y-3">
-									<SignupTextField
-										field={field}
-										label={fields.loginEmail.label}
-										icon={AtSign}
-										placeholder={fields.loginEmail.placeholder}
-										type="email"
-										autoComplete="username"
-										isSubmitting={form.state.isSubmitting || sameAsCompanyEmail}
-										description={fields.loginEmail.description}
-									/>
-									<label className="flex cursor-pointer items-start gap-3 text-foreground">
-										<input
-											type="checkbox"
-											checked={sameAsCompanyEmail}
-											disabled={form.state.isSubmitting}
-											onChange={(event) => {
-												const checked = event.target.checked;
-												setSameAsCompanyEmail(checked);
-												if (checked) {
-													form.setFieldValue(
-														"loginEmail",
-														form.getFieldValue("email"),
+												const onPickFile = (
+													event: React.ChangeEvent<HTMLInputElement>,
+												) => {
+													const file = event.target.files?.[0] ?? null;
+													field.handleChange(file);
+													if (logoPreview) URL.revokeObjectURL(logoPreview);
+													setLogoPreview(
+														file ? URL.createObjectURL(file) : null,
 													);
-												}
-											}}
-											className="signup-ack-checkbox mt-0.5 size-5 shrink-0 rounded border border-royal-gold/40 bg-background accent-[var(--royal-gold)]"
-										/>
-										<span className="signup-ack-label text-sm font-medium leading-snug">
-											{fields.loginEmail.sameAsCompanyEmail}
-										</span>
-									</label>
-								</div>
-							)}
-						</form.Field>
+													// Allow re-selecting the same file after remove.
+													event.target.value = "";
+												};
 
-						<form.Field
-							name="password"
-							validators={{
-								// Re-run when confirm changes so a fixed match clears the error.
-								onChangeListenTo: ["confirmPassword"],
-								onChange: ({ value }) => {
-									const v = copy.validation;
-									if (!value) return { message: v.passwordRequired };
-									if (value.length < 8) return { message: v.passwordMin };
-									return undefined;
-								},
-							}}
-						>
-							{(field) => (
-								<SignupPasswordField
-									field={field}
-									label={fields.password.label}
-									placeholder={fields.password.placeholder}
-									showPassword={showPassword}
-									onToggle={() => setShowPassword(!showPassword)}
-									isSubmitting={form.state.isSubmitting}
-								/>
-							)}
-						</form.Field>
+												return (
+													<Field data-invalid={isInvalid}>
+														<FieldLabel
+															htmlFor="signup-logo"
+															className="login-field-label"
+														>
+															{logoLabel}
+															<RequiredMark />
+														</FieldLabel>
 
-						<form.Field
-							name="confirmPassword"
-							validators={{
-								// Live match check whenever either password field changes.
-								onChangeListenTo: ["password"],
-								onChange: ({ value, fieldApi }) => {
-									const v = copy.validation;
-									const password = fieldApi.form.getFieldValue("password");
-									if (!value) return { message: v.confirmPasswordRequired };
-									if (value !== password) {
-										return { message: v.passwordsMismatch };
-									}
-									return undefined;
-								},
-							}}
-						>
-							{(field) => (
-								<SignupPasswordField
-									field={field}
-									label={fields.confirmPassword.label}
-									placeholder={fields.confirmPassword.placeholder}
-									showPassword={showConfirmPassword}
-									onToggle={() => setShowConfirmPassword(!showConfirmPassword)}
-									isSubmitting={form.state.isSubmitting}
-								/>
-							)}
-						</form.Field>
-					</section>
-
-					<section className="space-y-6">
-						<SectionTitle>{copy.sections.packageEnrollment}</SectionTitle>
-
-						<form.Field name="packageId">
-							{(field) => {
-								const isInvalid =
-									field.state.meta.isDirty && !field.state.meta.isValid;
-								const selected = packages.find(
-									(pkg) => pkg.id === field.state.value,
-								);
-								const empty =
-									!packagesLoading && !packagesError && packages.length === 0;
-
-								return (
-									<Field data-invalid={isInvalid}>
-										<FieldLabel
-											htmlFor={field.name}
-											className="login-field-label"
-										>
-											{fields.package.label}
-											<RequiredMark />
-										</FieldLabel>
-										<Select
-											value={field.state.value || undefined}
-											onValueChange={field.handleChange}
-											disabled={
-												form.state.isSubmitting ||
-												packagesLoading ||
-												packages.length === 0
-											}
-										>
-											<SelectTrigger
-												id={field.name}
-												className="login-input-group h-auto w-full border-royal-gold/20 bg-background/60 py-3"
-											>
-												<SelectValue
-													placeholder={
-														packagesLoading
-															? copy.packages.loadingShort
-															: fields.package.placeholder
-													}
-												/>
-											</SelectTrigger>
-											<SelectContent className="signup-package-select-content">
-												{packages.map((pkg) => (
-													<SelectItem
-														key={pkg.id}
-														value={pkg.id}
-														className="signup-package-item py-3 text-[1.5rem] leading-snug"
-													>
-														{pkg.name} · {pkg.capacity} · {pkg.priceLabel}
-														{pkg.period}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-										{packagesLoading && (
-											<FieldDescription className="signup-helper text-muted-foreground">
-												{copy.packages.loadingLong}
-											</FieldDescription>
-										)}
-										{packagesError && (
-											<FieldDescription className="signup-helper flex flex-wrap items-center gap-2 text-destructive">
-												<span>
-													{copy.packages.loadFailed}: {packagesError}
-												</span>
-												<button
-													type="button"
-													className="underline underline-offset-2"
-													onClick={() => setPackagesTick((n) => n + 1)}
-												>
-													Retry
-												</button>
-											</FieldDescription>
-										)}
-										{empty && (
-											<FieldDescription className="signup-helper text-muted-foreground">
-												No active plans for this account type in the database.
-											</FieldDescription>
-										)}
-										{selected && !packagesLoading && (
-											<FieldDescription className="signup-helper text-muted-foreground">
-												{selected.detail}
-											</FieldDescription>
-										)}
-									</Field>
-								);
-							}}
-						</form.Field>
-					</section>
-
-					<section className="space-y-6">
-						<SectionTitle>{copy.sections.branding}</SectionTitle>
-
-						<form.Subscribe selector={(state) => state.values.accountType}>
-							{(accountType) => {
-								const logoLabel =
-									accountType === "agency"
-										? fields.logo.labelAgency
-										: fields.logo.labelOutlet;
-								const logoUploadTitle =
-									accountType === "agency"
-										? fields.logo.uploadTitleAgency
-										: fields.logo.uploadTitleOutlet;
-
-								return (
-									<form.Field name="logoFile">
-										{(field) => {
-											const isInvalid =
-												field.state.meta.isDirty && !field.state.meta.isValid;
-
-											const clearLogo = () => {
-												field.handleChange(null);
-												if (logoPreview) URL.revokeObjectURL(logoPreview);
-												setLogoPreview(null);
-											};
-
-											const onPickFile = (
-												event: React.ChangeEvent<HTMLInputElement>,
-											) => {
-												const file = event.target.files?.[0] ?? null;
-												field.handleChange(file);
-												if (logoPreview) URL.revokeObjectURL(logoPreview);
-												setLogoPreview(file ? URL.createObjectURL(file) : null);
-												// Allow re-selecting the same file after remove.
-												event.target.value = "";
-											};
-
-											return (
-												<Field data-invalid={isInvalid}>
-													<FieldLabel
-														htmlFor="signup-logo"
-														className="login-field-label"
-													>
-														{logoLabel}
-														<RequiredMark />
-													</FieldLabel>
-
-													{logoPreview ? (
-														<div className="signup-logo-showcase relative overflow-hidden rounded-2xl border border-royal-gold/25 bg-background/35">
-															<div className="flex flex-col items-center gap-5 px-6 py-8 sm:flex-row sm:items-center sm:gap-8 sm:px-8 sm:py-7">
-																<div className="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-royal-gold/20 bg-[#0c0a12] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] sm:size-32">
-																	<img
-																		src={logoPreview}
-																		alt=""
-																		className="max-h-full max-w-full object-contain p-3"
-																	/>
-																</div>
-																<div className="min-w-0 flex-1 text-center sm:text-left">
-																	<p className="signup-upload-title font-medium text-foreground">
-																		{logoUploadTitle}
-																	</p>
-																	<p className="signup-upload-hint mt-1 text-muted-foreground">
-																		{fields.logo.uploadHint}
-																	</p>
-																	<div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-																		<label
-																			htmlFor="signup-logo"
-																			className={cn(
-																				"inline-flex cursor-pointer items-center justify-center rounded-md border border-royal-gold/35 bg-royal-gold/10 px-3.5 py-2 text-sm font-medium text-gold-bright transition-colors hover:border-royal-gold/55 hover:bg-royal-gold/15",
-																				form.state.isSubmitting &&
-																					"pointer-events-none opacity-60",
-																			)}
-																		>
-																			Change
-																		</label>
-																		<Button
-																			type="button"
-																			variant="ghost"
-																			size="sm"
-																			className="text-muted-foreground hover:text-destructive"
-																			disabled={form.state.isSubmitting}
-																			onClick={clearLogo}
-																		>
-																			Remove
-																		</Button>
+														{logoPreview ? (
+															<div className="signup-logo-showcase relative overflow-hidden rounded-2xl border border-royal-gold/25 bg-background/35">
+																<div className="flex flex-col items-center gap-5 px-6 py-8 sm:flex-row sm:items-center sm:gap-8 sm:px-8 sm:py-7">
+																	<div className="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-royal-gold/20 bg-[#0c0a12] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] sm:size-32">
+																		<img
+																			src={logoPreview}
+																			alt=""
+																			className="max-h-full max-w-full object-contain p-3"
+																		/>
+																	</div>
+																	<div className="min-w-0 flex-1 text-center sm:text-left">
+																		<p className="signup-upload-title font-medium text-foreground">
+																			{logoUploadTitle}
+																		</p>
+																		<p className="signup-upload-hint mt-1 text-muted-foreground">
+																			{fields.logo.uploadHint}
+																		</p>
+																		<div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+																			<label
+																				htmlFor="signup-logo"
+																				className={cn(
+																					"inline-flex cursor-pointer items-center justify-center rounded-md border border-royal-gold/35 bg-royal-gold/10 px-3.5 py-2 text-sm font-medium text-gold-bright transition-colors hover:border-royal-gold/55 hover:bg-royal-gold/15",
+																					form.state.isSubmitting &&
+																						"pointer-events-none opacity-60",
+																				)}
+																			>
+																				Change
+																			</label>
+																			<Button
+																				type="button"
+																				variant="ghost"
+																				size="sm"
+																				className="text-muted-foreground hover:text-destructive"
+																				disabled={form.state.isSubmitting}
+																				onClick={clearLogo}
+																			>
+																				Remove
+																			</Button>
+																		</div>
 																	</div>
 																</div>
+																<input
+																	id="signup-logo"
+																	type="file"
+																	accept="image/png,image/jpeg,image/webp,image/gif"
+																	className="sr-only"
+																	disabled={form.state.isSubmitting}
+																	onChange={onPickFile}
+																/>
 															</div>
-															<input
-																id="signup-logo"
-																type="file"
-																accept="image/png,image/jpeg,image/webp,image/gif"
-																className="sr-only"
-																disabled={form.state.isSubmitting}
-																onChange={onPickFile}
-															/>
-														</div>
-													) : (
-														<label
-															htmlFor="signup-logo"
-															className={cn(
-																"flex min-h-44 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-royal-gold/30 bg-background/40 px-6 py-10 text-center transition-colors hover:border-royal-gold/50 hover:bg-background/55",
-																form.state.isSubmitting &&
-																	"pointer-events-none opacity-60",
-															)}
-														>
-															<ImagePlus className="h-10 w-10 text-royal-gold" />
-															<span className="signup-upload-title font-medium text-foreground">
-																{logoUploadTitle}
-															</span>
-															<span className="signup-upload-hint text-muted-foreground">
-																{fields.logo.uploadHint}
-															</span>
-															<input
-																id="signup-logo"
-																type="file"
-																accept="image/png,image/jpeg,image/webp,image/gif"
-																className="sr-only"
-																disabled={form.state.isSubmitting}
-																onChange={onPickFile}
-															/>
-														</label>
-													)}
-												</Field>
-											);
-										}}
-									</form.Field>
-								);
-							}}
-						</form.Subscribe>
-					</section>
+														) : (
+															<label
+																htmlFor="signup-logo"
+																className={cn(
+																	"flex min-h-44 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-royal-gold/30 bg-background/40 px-6 py-10 text-center transition-colors hover:border-royal-gold/50 hover:bg-background/55",
+																	form.state.isSubmitting &&
+																		"pointer-events-none opacity-60",
+																)}
+															>
+																<ImagePlus className="h-10 w-10 text-royal-gold" />
+																<span className="signup-upload-title font-medium text-foreground">
+																	{logoUploadTitle}
+																</span>
+																<span className="signup-upload-hint text-muted-foreground">
+																	{fields.logo.uploadHint}
+																</span>
+																<input
+																	id="signup-logo"
+																	type="file"
+																	accept="image/png,image/jpeg,image/webp,image/gif"
+																	className="sr-only"
+																	disabled={form.state.isSubmitting}
+																	onChange={onPickFile}
+																/>
+															</label>
+														)}
+													</Field>
+												);
+											}}
+										</form.Field>
+									);
+								}}
+							</form.Subscribe>
+						</section>
 
-					<form.Field name="ackPersonalInfo">
-						{(ackPersonalInfo) => (
-							<form.Field name="ackDeclarationOfTruth">
-								{(ackDeclarationOfTruth) => (
-									<form.Field name="ackInformationSharing">
-										{(ackInformationSharing) => (
-											<form.Field name="acceptTerms">
-												{(acceptTerms) => (
-													<SignupAcknowledgements
-														isSubmitting={form.state.isSubmitting}
-														fields={{
-															ackPersonalInfo,
-															ackDeclarationOfTruth,
-															ackInformationSharing,
-															acceptTerms,
-														}}
-													/>
+						<div id="signup-step-acknowledgements" className="scroll-mt-28">
+							<form.Field name="ackPersonalInfo">
+								{(ackPersonalInfo) => (
+									<form.Field name="ackDeclarationOfTruth">
+										{(ackDeclarationOfTruth) => (
+											<form.Field name="ackInformationSharing">
+												{(ackInformationSharing) => (
+													<form.Field name="acceptTerms">
+														{(acceptTerms) => (
+															<SignupAcknowledgements
+																isSubmitting={form.state.isSubmitting}
+																fields={{
+																	ackPersonalInfo,
+																	ackDeclarationOfTruth,
+																	ackInformationSharing,
+																	acceptTerms,
+																}}
+															/>
+														)}
+													</form.Field>
 												)}
 											</form.Field>
 										)}
 									</form.Field>
 								)}
 							</form.Field>
-						)}
-					</form.Field>
-				</FieldGroup>
+						</div>
+					</FieldGroup>
 
-				<form.Subscribe selector={(state) => state.isSubmitting}>
-					{(isSubmitting) => (
-						<Button
-							type="submit"
-							form="signup-form"
-							className="login-btn mt-8 w-full bg-(image:--gradient-royal) font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95"
-							disabled={isSubmitting}
-							aria-busy={isSubmitting}
+					<form.Subscribe selector={(state) => state.isSubmitting}>
+						{(isSubmitting) => (
+							<Button
+								type="submit"
+								form="signup-form"
+								className="login-btn mt-8 w-full bg-(image:--gradient-royal) font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95"
+								disabled={isSubmitting}
+								aria-busy={isSubmitting}
+							>
+								{isSubmitting ? (
+									<>
+										<Loader2 className="h-6 w-6 animate-spin" />
+										{copy.buttons.creating}
+									</>
+								) : (
+									copy.buttons.createAccount
+								)}
+							</Button>
+						)}
+					</form.Subscribe>
+
+					<p className="login-support mt-8 text-center text-muted-foreground">
+						{copy.footer.alreadyHaveAccount}{" "}
+						<Link
+							to="/login"
+							className="text-gold-bright underline underline-offset-4 hover:text-gold"
 						>
-							{isSubmitting ? (
-								<>
-									<Loader2 className="h-6 w-6 animate-spin" />
-									{copy.buttons.creating}
-								</>
-							) : (
-								copy.buttons.createAccount
-							)}
-						</Button>
+							{copy.footer.signIn}
+						</Link>
+					</p>
+				</form>
+
+				<form.Subscribe selector={(state) => state.values}>
+					{(values) => (
+						<SignupProgressRail
+							copy={copy}
+							schema={signupSchema}
+							values={values}
+						/>
 					)}
 				</form.Subscribe>
-
-				<p className="login-support mt-8 text-center text-muted-foreground">
-					{copy.footer.alreadyHaveAccount}{" "}
-					<Link
-						to="/login"
-						className="text-gold-bright underline underline-offset-4 hover:text-gold"
-					>
-						{copy.footer.signIn}
-					</Link>
-				</p>
-			</form>
+			</div>
 
 			<Dialog
 				open={successOpen}
@@ -1049,6 +1250,7 @@ function SignupGeoSelect({
 	value,
 	options,
 	disabled,
+	required = false,
 	onChange,
 }: {
 	label: string;
@@ -1058,6 +1260,7 @@ function SignupGeoSelect({
 	value: string;
 	options: Array<{ value: string; label: string }>;
 	disabled?: boolean;
+	required?: boolean;
 	onChange: (value: string) => void;
 }) {
 	const [open, setOpen] = useState(false);
@@ -1081,7 +1284,10 @@ function SignupGeoSelect({
 
 	return (
 		<Field>
-			<FieldLabel className="login-field-label">{label}</FieldLabel>
+			<FieldLabel className="login-field-label">
+				{label}
+				{required ? <RequiredMark /> : null}
+			</FieldLabel>
 			<Popover
 				open={open}
 				onOpenChange={(next) => {

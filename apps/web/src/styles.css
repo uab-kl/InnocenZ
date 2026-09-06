@@ -443,7 +443,16 @@ html {
    * lives: .hz-wrap, the nav bar and the full-height shells all divide it back
    * out so their own lengths read as visual pixels.
    */
-  --iz-page-scale: 0.8;
+  /*
+   * 0.8 drew the whole signed-out surface at 80%, so every size below it was
+   * a lie: a 1.0625rem field label landed at ~13.6px and the h1 at ~24px.
+   * That is the single reason the login read as "all the words are too
+   * small" — the CSS was already generous, the page was shrinking it. 0.9
+   * gives back 12.5% across type, spacing and icons together, which is what
+   * this knob exists to move as one; the full-viewport shells below and the
+   * .hz-wrap widths divide it back out, so they need no edit.
+   */
+  --iz-page-scale: 0.9;
   zoom: var(--iz-page-scale);
   width: 100%;
   max-width: none;
@@ -468,6 +477,48 @@ html {
 
 .login-page .h-svh {
   height: calc(100svh / var(--iz-page-scale, 0.8));
+}
+
+/*
+ * The signed-out pages are DESIGNED dark and paint a hardcoded dark ambience,
+ * but the theme is `system` (theme-provider.tsx:5, attribute="class") and
+ * NOTHING on these routes forces `.dark`.
+ *
+ * So on a light-mode OS the tokens stayed light while the backdrop stayed
+ * dark: `--foreground: #3d3450` over a near-black field. On /login the white
+ * `--card` hid it inside the form; everywhere outside that card — the whole
+ * brand column, the support lines, the footer — it was dark-on-dark.
+ *
+ * Pinned on bare `.login-page`, which is the one selector all four affected
+ * routes already share: /login, /signup (signup.tsx:53 carries it),
+ * /forgot-password and /reset-password (via AuthCardShell). One place instead
+ * of twelve, and the siblings are fixed for free. Values copied from `.dark`.
+ */
+.login-page {
+  color-scheme: dark;
+  --background: #1a1726;
+  --foreground: #e8e0f5;
+  --card: #252033;
+  --card-foreground: #e8e0f5;
+  --popover: #252033;
+  --popover-foreground: #e8e0f5;
+  --muted: #2d2840;
+  --muted-foreground: #a99ec0;
+  --accent: #2d2840;
+  --accent-foreground: #e8e0f5;
+  --border: #3d3554;
+  --input: #3d3554;
+  --ring: #b79ce8;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --gold: #b79ce8;
+  --gold-bright: #c5adf0;
+  --lavender: #b79ce8;
+  --royal-gold: #e8c874;
+  --royal-gold-bright: #f5dfa0;
+  --royal-gold-soft: rgba(232, 200, 116, 0.16);
+  --royal-gold-line: rgba(232, 200, 116, 0.5);
+  --gradient-royal: linear-gradient(120deg, #f7e6b0 0%, #e8c874 45%, #c69f43 100%);
 }
 
 .brand-wordmark {
@@ -993,8 +1044,222 @@ html {
   font-size: clamp(1.5rem, 2vw, 1.9rem);
 }
 
+/* ── login ambience ──────────────────────────────────────────────────
+ * A slow-moving field of light behind the whole signed-out page.
+ *
+ * Decoration only: the wrapper is aria-hidden and pointer-events:none, and
+ * sits at z-index 0 under content that carries z-10, so it cannot take a
+ * click or a focus ring. Nothing here reads or writes state.
+ *
+ * Only transform and opacity are animated, which keeps every frame on the
+ * compositor — no layout, no paint of the gradients themselves. The pools are
+ * blurred once and then merely moved.
+ */
+.login-page .login-ambience {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-page .login-ambience__base {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(115% 85% at 10% 0%, rgba(122, 99, 196, 0.30), transparent 58%),
+    radial-gradient(95% 75% at 92% 100%, rgba(201, 154, 46, 0.13), transparent 60%),
+    linear-gradient(158deg, #191325 0%, #12101c 52%, #0d0b13 100%);
+}
+
+.login-page .login-ambience__pool {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  will-change: transform;
+}
+
+/*
+ * Two rotating wedges anchored off-centre — the house light going round.
+ *
+ * This layer is what makes the motion READ. The drifting pools below move a
+ * blurred mass with no edge, which the eye reads as a still haze no matter how
+ * far it travels; a wedge has a boundary, so its passage is legible.
+ */
+.login-page .login-ambience__sweep {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 170vmax;
+  height: 170vmax;
+  margin-left: -85vmax;
+  margin-top: -85vmax;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(228, 184, 74, 0.07) 10deg,
+    rgba(228, 184, 74, 0.02) 26deg,
+    transparent 44deg,
+    transparent 170deg,
+    rgba(140, 105, 225, 0.08) 186deg,
+    rgba(140, 105, 225, 0.02) 204deg,
+    transparent 224deg,
+    transparent 360deg
+  );
+  will-change: transform;
+  animation: iz-login-sweep 34s linear infinite;
+}
+
+/* Violet over the brand half. */
+.login-page .login-ambience__pool--a {
+  left: -10%;
+  top: -14%;
+  width: 46vw;
+  height: 46vw;
+  background: radial-gradient(circle, rgba(122, 99, 196, 0.55), transparent 68%);
+  animation: iz-login-drift-a 21s ease-in-out infinite;
+}
+
+/* Champagne, low and left, so the crest sits in warm light. */
+.login-page .login-ambience__pool--b {
+  left: 2%;
+  bottom: -20%;
+  width: 38vw;
+  height: 38vw;
+  background: radial-gradient(circle, rgba(201, 154, 46, 0.34), transparent 66%);
+  animation: iz-login-drift-b 27s ease-in-out infinite;
+}
+
+/* The form half had no backdrop at all — this is what fills it. */
+.login-page .login-ambience__pool--c {
+  right: -12%;
+  top: 16%;
+  width: 42vw;
+  height: 42vw;
+  background: radial-gradient(circle, rgba(150, 110, 230, 0.32), transparent 70%);
+  animation: iz-login-drift-c 24s ease-in-out infinite;
+}
+
+/*
+ * Raked light lines, masked to the upper-left so they never cross the form.
+ *
+ * Travel is exactly one period (54px), so the loop is seamless with no fade.
+ */
+.login-page .login-ambience__rays {
+  position: absolute;
+  inset: -15% -25%;
+  background-image: repeating-linear-gradient(
+    104deg,
+    rgba(255, 255, 255, 0.045) 0px,
+    rgba(255, 255, 255, 0.045) 1px,
+    transparent 1px,
+    transparent 54px
+  );
+  -webkit-mask-image: radial-gradient(68% 58% at 28% 18%, #000 0%, transparent 76%);
+  mask-image: radial-gradient(68% 58% at 28% 18%, #000 0%, transparent 76%);
+  will-change: transform;
+  animation: iz-login-rays 19s linear infinite;
+}
+
+/* One house light crossing the room, once every 26s. */
+.login-page .login-ambience__beam {
+  position: absolute;
+  top: -40%;
+  left: -35%;
+  width: 55%;
+  height: 180%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(228, 184, 74, 0.08) 42%,
+    rgba(228, 184, 74, 0.16) 50%,
+    rgba(228, 184, 74, 0.08) 58%,
+    transparent
+  );
+  filter: blur(24px);
+  will-change: transform, opacity;
+  animation: iz-login-beam 15s linear infinite;
+}
+
+/* Keeps the wide gradients from banding on a dark panel. */
+.login-page .login-ambience__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Darkens the corners so the form keeps its contrast. */
+.login-page .login-ambience__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(125% 100% at 50% 45%, transparent 42%, rgba(6, 5, 10, 0.58) 100%);
+}
+
+/*
+ * Three-stop loops, not two-stop alternates, so the pools never retrace the
+ * same path and the field never looks like it is breathing in time.
+ *
+ * Each carries an opacity pulse as well as travel: at this blur radius a
+ * change in BRIGHTNESS is far more legible than a change in position, which
+ * is why the first version — 6vw over 34s at flat opacity — read as static.
+ */
+@keyframes iz-login-drift-a {
+  0%   { transform: translate3d(0, 0, 0) scale(1); opacity: 0.75; }
+  38%  { transform: translate3d(13vw, 9vh, 0) scale(1.22); opacity: 1; }
+  71%  { transform: translate3d(5vw, 16vh, 0) scale(1.05); opacity: 0.72; }
+  100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.75; }
+}
+@keyframes iz-login-drift-b {
+  0%   { transform: translate3d(0, 0, 0) scale(1.05); opacity: 0.9; }
+  44%  { transform: translate3d(11vw, -12vh, 0) scale(0.9); opacity: 0.6; }
+  78%  { transform: translate3d(-6vw, -5vh, 0) scale(1.14); opacity: 1; }
+  100% { transform: translate3d(0, 0, 0) scale(1.05); opacity: 0.9; }
+}
+@keyframes iz-login-drift-c {
+  0%   { transform: translate3d(0, 0, 0) scale(0.94); opacity: 0.7; }
+  33%  { transform: translate3d(-14vw, 10vh, 0) scale(1.16); opacity: 1; }
+  69%  { transform: translate3d(-4vw, 20vh, 0) scale(1); opacity: 0.66; }
+  100% { transform: translate3d(0, 0, 0) scale(0.94); opacity: 0.7; }
+}
+@keyframes iz-login-sweep {
+  to { transform: rotate(360deg); }
+}
+/* One period of the repeating gradient — seamless, so no crossfade is needed. */
+@keyframes iz-login-rays {
+  to { transform: translate3d(54px, 0, 0); }
+}
+@keyframes iz-login-beam {
+  0%   { transform: translateX(0) rotate(14deg); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateX(240%) rotate(14deg); opacity: 0; }
+}
+
+/*
+ * Held still, not hidden. Someone who asks for less motion should still get
+ * the designed composition — so the beam parks mid-sweep rather than vanishing.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .login-page .login-ambience__pool,
+  .login-page .login-ambience__sweep,
+  .login-page .login-ambience__rays,
+  .login-page .login-ambience__beam {
+    animation: none;
+  }
+  /* Parked where each layer looks best, not at frame zero. */
+  .login-page .login-ambience__beam {
+    transform: translateX(110%) rotate(14deg);
+    opacity: 1;
+  }
+  .login-page .login-ambience__sweep {
+    transform: rotate(28deg);
+  }
+}
+
 .login-page .login-subheading {
-  font-size: clamp(0.9375rem, 1.1vw, 1rem);
+  font-size: clamp(1rem, 1.15vw, 1.0625rem);
   line-height: 1.55;
 }
 
@@ -1009,32 +1274,38 @@ html {
 }
 
 .login-page .login-field-label {
-  font-size: 1.0625rem;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
+/*
+ * Field sizing, stated in CSS px — remember `.login-page` is zoom: 0.9, so a
+ * 3.5rem field is DRAWN at ~50px. The old 2.75rem landed at ~40px, which is
+ * why it felt cramped: the number looked fine in the stylesheet and was not
+ * fine on screen.
+ */
 .login-page .login-input {
-  height: 2.75rem;
-  font-size: 1.0625rem;
+  height: 3.5rem;
+  font-size: 1.1875rem;
 }
 
 .login-page [data-slot="input-group"] {
-  min-height: 2.75rem;
+  min-height: 3.5rem;
   height: auto;
 }
 
 .login-page [data-slot="input-group-control"] {
-  font-size: 1.0625rem;
+  font-size: 1.1875rem;
 }
 
 .login-page .login-btn {
-  height: 2.9375rem;
-  font-size: 1.125rem;
+  height: 3.625rem;
+  font-size: 1.25rem;
   font-weight: 700;
 }
 
 .login-page .login-support {
-  font-size: 1rem;
+  font-size: 1.0625rem;
 }
 
 .login-page .login-back {
@@ -1097,19 +1368,176 @@ html {
     0 24px 60px rgba(0, 0, 0, 0.35);
 }
 
+/*
+ * The field should look like an invitation to type, not a disabled box.
+ *
+ * At rest it now carries a faint inner lift so it reads as a well on the card
+ * rather than a flat outline; hover warms the border; focus lights the whole
+ * field gold. All three states are reachable by keyboard, and the focus ring
+ * is a real ring rather than a colour swap, so it survives a high-contrast
+ * mode that drops box-shadow-as-decoration.
+ */
 .login-page .login-input-group {
-  border-radius: 0.75rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 0.875rem;
+  background: color-mix(in oklab, var(--royal-gold) 3%, rgba(255, 255, 255, 0.028));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.login-page .login-input-group:hover:not(:focus-within) {
+  border-color: color-mix(in oklab, var(--royal-gold) 34%, transparent);
+  background: color-mix(in oklab, var(--royal-gold) 5%, rgba(255, 255, 255, 0.04));
 }
 
 .login-page .login-input-group:focus-within {
-  border-color: color-mix(in oklab, var(--royal-gold) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--royal-gold) 18%, transparent);
+  border-color: color-mix(in oklab, var(--royal-gold) 62%, transparent);
+  background: color-mix(in oklab, var(--royal-gold) 7%, rgba(255, 255, 255, 0.05));
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--royal-gold) 20%, transparent),
+    0 6px 22px -10px color-mix(in oklab, var(--royal-gold) 42%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* The leading icon lights with its field — a small cue for which one is live. */
+.login-page .login-input-group svg {
+  transition: color 0.18s ease, opacity 0.18s ease;
+  opacity: 0.72;
+}
+.login-page .login-input-group:focus-within svg {
+  opacity: 1;
+}
+
+/*
+ * The headline, scoped to /login by `.login-threshold`.
+ *
+ * It was clamp(1.5rem, 2vw, 1.9rem) — 24-30px authored, so 21.6-27.4 DRAWN
+ * after the 0.9 zoom. That is smaller than the wordmark beside it and barely
+ * larger than the body copy under it, which is why the right column had no
+ * focal point at all.
+ *
+ * The scope matters: `.login-heading-line` is shared with AuthCardShell, and
+ * /forgot-password and /reset-password render it inside a ~480px card where
+ * this size would wrap badly. They keep the bare rule.
+ */
+.login-page.login-threshold .login-heading {
+  line-height: 0.98;
+  letter-spacing: 0.03em;
+}
+
+.login-page.login-threshold .login-heading-line {
+  font-size: clamp(2.5rem, 3.6vw, 3.5rem);
+}
+
+/*
+ * THE RAIL — the page's single horizon.
+ *
+ * The back link and switcher were pinned into the form column's corner with
+ * `lg:absolute`, so the top of the page floated free of everything under it.
+ * As a full-width header they give both columns one line to hang from.
+ *
+ * ⚠️ Scoped to `.login-threshold`, i.e. /login only. /signup keeps its own
+ * `.login-page-toolbar` inside the form column, because its brand column is
+ * `sticky h-svh` and a page-level rail above it would push that column out of
+ * the viewport it is pinned to.
+ */
+.login-page .login-rail {
+  min-height: 5.5rem;
+}
+
+/*
+ * NO horizon hairline under the rail — owner's call, 6 Sep 2026.
+ *
+ * The design panel's winning direction put a gold gradient lintel here as the
+ * page's single horizon. It was built, looked at, and removed on sight: with
+ * the vertical jamb already dividing the two columns, a second full-width rule
+ * across the top boxed the page in rather than anchoring it.
+ *
+ * The rail itself stays — the back link and switcher belong on one line at the
+ * top, not pinned into the form column's corner.
+ */
+
+/*
+ * 中文 falls through to the system sans, which has taller glyphs than the
+ * display face and clips at a sub-1 line-height.
+ */
+.login-page .login-heading:lang(zh) {
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+
+/*
+ * Signup's moving field spans the WHOLE viewport, not just the brand column.
+ *
+ * The node is rendered inside the aside's `sticky h-svh` wrapper, but /signup
+ * scrolls for a long form: left as `absolute inset-0` it would be clipped to
+ * that column, which is why the form half sat flat and dark. `fixed` lifts it
+ * out to the viewport so it covers both halves and — unlike an
+ * `absolute inset-0` at the page root — does NOT stretch its gradients over
+ * the full scroll height or drift away as you move down the form.
+ *
+ * Everything above it already carries `z-10`, and the layer stays
+ * `pointer-events: none`, so nothing here can take a click on a field.
+ */
+.signup-page .login-ambience {
+  position: fixed;
+  inset: 0;
+  /*
+   * `zoom` does NOT compensate viewport units, so a fixed `inset: 0` inside a
+   * 0.9-scaled shell paints at 90% of the screen and leaves a bare strip along
+   * the right and bottom — measured, not assumed. Divide the scale back out,
+   * the same way the .min-h-svh and .h-svh rules above already do.
+   */
+  width: calc(100vw / var(--iz-page-scale, 0.9));
+  height: calc(100svh / var(--iz-page-scale, 0.9));
+}
+
+/* A placeholder that is legible is part of what makes a field look usable. */
+.login-page .login-input::placeholder,
+.login-page [data-slot="input-group-control"]::placeholder {
+  color: color-mix(in oklab, var(--foreground) 46%, transparent);
+}
+
+/*
+ * Autofilled fields must look like the ones you typed.
+ *
+ * Chrome paints its OWN background on `:-webkit-autofill` and it wins over any
+ * background we set, so a remembered email or address came back washed lilac
+ * while a hand-typed password beside it stayed dark — two fields in one form
+ * looking like two different controls.
+ *
+ * The background cannot be overridden directly; the two accepted workarounds
+ * are both here. `transition: background-color 9999s` outruns the moment
+ * Chrome paints it, and the inset shadow covers the swatch with the field's
+ * own colour. `-webkit-text-fill-color` is needed because `color` alone does
+ * not reach autofilled text.
+ *
+ * Scoped to `.login-page`, so it covers /login, /signup, /forgot-password and
+ * /reset-password in one place and touches nothing signed-in.
+ */
+.login-page input:-webkit-autofill,
+.login-page input:-webkit-autofill:hover,
+.login-page input:-webkit-autofill:focus,
+.login-page input:-webkit-autofill:active,
+.login-page textarea:-webkit-autofill,
+.login-page select:-webkit-autofill {
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+  /* The field itself stays transparent so the input-group's own background —
+     including its hover and focus states — shows through unchanged. */
+  -webkit-box-shadow: inset 0 0 0 1000px transparent;
+  box-shadow: inset 0 0 0 1000px transparent;
+  transition:
+    background-color 9999s ease-in-out 0s,
+    color 9999s ease-in-out 0s;
 }
 
 /* —— Signup (long form): denser type + stepped section panels —— */
 .signup-page .signup-kicker {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -1123,16 +1551,16 @@ html {
 }
 
 .signup-page .signup-heading span {
-  font-size: clamp(1.5rem, 2vw, 1.9rem);
+  font-size: clamp(2.25rem, 3.2vw, 3rem);
 }
 
 .signup-page .signup-lede {
-  font-size: clamp(0.9375rem, 1.1vw, 1rem);
+  font-size: clamp(1.0625rem, 1.25vw, 1.1875rem);
   line-height: 1.55;
 }
 
 .signup-page .signup-form .login-field-label {
-  font-size: 0.9375rem;
+  font-size: 1.0625rem;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -1142,21 +1570,184 @@ html {
 .signup-page .signup-form [data-slot="textarea"],
 .signup-page .signup-form [data-slot="select-trigger"],
 .signup-page .signup-form .signup-textarea {
-  font-size: 1rem;
+  font-size: 1.125rem;
   line-height: 1.4;
 }
 
 .signup-page .signup-form .login-input {
-  height: 2.875rem;
+  height: 3.25rem;
+}
+
+/*
+ * Each step of the form is its own panel.
+ *
+ * The six sections ran as one continuous column of fields against the page
+ * background, so the only thing separating Company information from Contact
+ * information was a heading and some air. A bordered surface per section
+ * gives the form visible steps, and — the reason the owner asked — it puts a
+ * ground behind the inputs so they read as WELLS the way /login's do, rather
+ * than as outlines floating on the page.
+ */
+.signup-page .signup-form section {
+	/* Tinted, not filled. The opaque panel read as a slab dropped over the
+	   ambience; a sheer wash stopped reading as one surface at all. 82% is
+	   the settled point: near-solid, with just enough of the moving field
+	   behind it to keep the page from going flat. */
+	border: 1px solid rgba(232, 200, 116, 0.16);
+	border-radius: 1rem;
+	padding: 1.75rem;
+	background: rgba(24, 18, 32, 0.82);
+}
+
+/* ── Sign-up step rail ────────────────────────────────────────────────────
+   A sticky spine beside the form on xl and up. The node is the state: a
+   number while the step is outstanding, a gold tick once it validates, and
+   the connector above it lights with it — so the gold literally fills down
+   the spine as the visitor works. Only ever shown where there is room
+   beside the form; `SignupProgressRail` hides itself below `xl`. */
+.signup-page .signup-progress {
+	position: sticky;
+	top: 7rem;
+	align-self: flex-start;
+	flex: none;
+	width: 13.5rem;
+	padding: 1.25rem 1.25rem 1.5rem;
+	border: 1px solid rgba(232, 200, 116, 0.16);
+	border-radius: 1rem;
+	background: rgba(24, 18, 32, 0.82);
+}
+
+.signup-page .signup-progress-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	margin-bottom: 1rem;
+	padding-bottom: 0.75rem;
+	border-bottom: 1px solid rgba(232, 200, 116, 0.16);
+}
+
+.signup-page .signup-progress-title {
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: rgba(246, 239, 225, 0.55);
+}
+
+.signup-page .signup-progress-count {
+	font-size: 1.125rem;
+	font-weight: 700;
+	color: #e8c874;
+	font-variant-numeric: tabular-nums;
+}
+
+.signup-page .signup-progress-count span {
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: rgba(246, 239, 225, 0.4);
+}
+
+.signup-page .signup-progress-step {
+	position: relative;
+}
+
+/* The connector spans the padding of the two links it joins (0.5rem each). */
+.signup-page .signup-progress-step + .signup-progress-step::before {
+	content: "";
+	position: absolute;
+	top: -0.5rem;
+	left: 0.8125rem;
+	width: 2px;
+	height: 1rem;
+	border-radius: 1px;
+	background: rgba(232, 200, 116, 0.18);
+	transition: background-color 0.2s ease;
+}
+
+.signup-page .signup-progress-step.is-done + .signup-progress-step::before,
+.signup-page .signup-progress-step.is-done::before {
+	background: rgba(232, 200, 116, 0.5);
+}
+
+.signup-page .signup-progress-link {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.5rem 0;
+}
+
+.signup-page .signup-progress-node {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 1.75rem;
+	height: 1.75rem;
+	border: 1px solid rgba(232, 200, 116, 0.22);
+	border-radius: 999px;
+	background: rgba(20, 15, 26, 0.85);
+	font-size: 0.75rem;
+	font-weight: 700;
+	color: rgba(246, 239, 225, 0.45);
+	font-variant-numeric: tabular-nums;
+	transition:
+		border-color 0.2s ease,
+		box-shadow 0.2s ease,
+		color 0.2s ease;
+}
+
+.signup-page .signup-progress-step.is-done .signup-progress-node {
+	border-color: transparent;
+	background-image: var(--gradient-royal);
+	color: #1a1726;
+}
+
+.signup-page .signup-progress-step.is-active .signup-progress-node {
+	border-color: rgba(232, 200, 116, 0.7);
+	color: #e8c874;
+	box-shadow: 0 0 0 4px rgba(232, 200, 116, 0.09);
+}
+
+.signup-page .signup-progress-label {
+	font-size: 0.9375rem;
+	line-height: 1.3;
+	color: rgba(246, 239, 225, 0.42);
+	transition: color 0.2s ease;
+}
+
+.signup-page .signup-progress-step.is-done .signup-progress-label {
+	color: rgba(246, 239, 225, 0.8);
+}
+
+.signup-page .signup-progress-step.is-active .signup-progress-label {
+	font-weight: 600;
+	color: #e8c874;
+}
+
+.signup-page .signup-progress-link:hover .signup-progress-label {
+	color: #f0dfae;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.signup-page .signup-progress-node,
+	.signup-page .signup-progress-label,
+	.signup-page .signup-progress-step::before {
+		transition: none;
+	}
+}
+
+/* The heading is the panel's own header, so its rule spans the padding. */
+.signup-page .signup-form section > .signup-section-title {
+  margin: -0.25rem -0.25rem 0;
 }
 
 .signup-page .signup-form [data-slot="input-group"] {
-  min-height: 2.875rem;
+  min-height: 3.25rem;
 }
 
 .signup-page .signup-form .login-btn {
-  height: 2.9375rem;
-  font-size: 1.125rem;
+  height: 3.375rem;
+  font-size: 1.1875rem;
 }
 
 .signup-page .signup-form .login-support {
@@ -1269,13 +1860,13 @@ html {
 }
 
 .signup-account-title {
-  font-size: 1rem;
+  font-size: 1.25rem;
   font-weight: 650;
   color: var(--foreground);
 }
 
 .signup-account-desc {
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.45;
   color: color-mix(in oklab, var(--muted-foreground) 95%, transparent);
 }

@@ -54,7 +54,10 @@ function DeleteAccountBody() {
 				</Link>
 
 				<div className="mb-10 flex flex-col items-start gap-4">
-					<BrandLogo variant="stacked" size="md" showTagline />
+					{/* Centred mark over flush-left legal text — same as /policy. */}
+					<div className="flex w-full justify-center">
+						<BrandLogo variant="stacked" size="md" showTagline />
+					</div>
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.2em] text-royal-gold">
 							{t.webShell.legalEyebrow}

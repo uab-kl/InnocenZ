@@ -4,6 +4,11 @@ import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { SectionHead, SplitTitle } from "./primitives";
 
+/** The role's accent as a bare colour, for edges and markers. */
+function accentVar(color: "gold" | "violet") {
+	return color === "gold" ? "var(--hz-gold)" : "var(--hz-violet)";
+}
+
 function tintStyle(color: "gold" | "violet") {
 	const isGold = color === "gold";
 	return {
@@ -87,28 +92,43 @@ export function HandoffChallenges() {
 						return (
 							<div
 								key={g.role}
-								className="hz-glass flex flex-col gap-[18px] p-7"
+								className="hz-glass relative flex flex-col gap-[18px] overflow-hidden p-7"
 							>
+								{/*
+								 * A top edge in the role's own tint.
+								 *
+								 * The three cards were identical objects side by side, so
+								 * nothing distinguished them until you read the heading.
+								 * The icon already carries the tint — this just states it
+								 * at card scale, and fades out so it reads as light on an
+								 * edge rather than as a coloured border.
+								 */}
+								<span
+									aria-hidden
+									className="absolute inset-x-0 top-0 h-0.5"
+									style={{
+										background: `linear-gradient(90deg, ${accentVar(g.color)}, transparent 85%)`,
+									}}
+								/>
 								<div className="flex items-center gap-3">
 									<div
-										className="grid h-11 w-11 place-items-center rounded-xl"
+										className="grid h-14 w-14 place-items-center rounded-xl"
 										style={tint}
 									>
-										<Icon size={22} />
+										<Icon size={28} />
 									</div>
-									<div>
-										<div
-											className="hz-mono hz-label uppercase tracking-[0.2em]"
-											style={{ color: "var(--hz-ink-mute)" }}
-										>
-											{t.challenges.forLabel}
-										</div>
-										<div
-											className="hz-display text-[22px]"
-											style={{ letterSpacing: "-0.02em" }}
-										>
-											{g.role}
-										</div>
+									{/*
+									 * The "FOR" eyebrow is dropped. It spent a line above
+									 * every role saying what "Outlet" already says, and
+									 * stacking 10px mono caps over the name made the name
+									 * read as a subtitle to it. The role now carries the
+									 * header alone, two steps larger.
+									 */}
+									<div
+										className="hz-display text-[26px]"
+										style={{ letterSpacing: "-0.02em" }}
+									>
+										{g.role}
 									</div>
 								</div>
 								<div
@@ -122,16 +142,19 @@ export function HandoffChallenges() {
 											className="flex items-start gap-2.5"
 											style={{ color: "var(--hz-ink-dim)" }}
 										>
+											{/*
+											 * A short tick, not a glowing dot.
+											 *
+											 * Twenty-four 5px dots each carrying an 8px glow
+											 * put twenty-four small light sources across the
+											 * row, and they competed with the text they were
+											 * meant to index. A 2px rule at 55% reads as a
+											 * marker and lets the sentence lead.
+											 */}
 											<span
-												className="mt-1.5 shrink-0 rounded-full"
+												className="mt-2.5 h-px w-2 shrink-0"
 												style={{
-													width: 5,
-													height: 5,
-													background:
-														g.color === "gold"
-															? "var(--hz-gold)"
-															: "var(--hz-violet)",
-													boxShadow: `0 0 8px ${g.color === "gold" ? "var(--hz-gold)" : "var(--hz-violet)"}`,
+													background: `color-mix(in oklab, ${accentVar(g.color)} 55%, transparent)`,
 												}}
 											/>
 											{p}
@@ -221,9 +244,16 @@ function FlowNode({
 			>
 				{label}
 			</div>
+			{/*
+			  Sentence case in the body face, not spaced-out mono caps.
+			  At 12px uppercase in a 180px column these three captions broke
+			  into 3-4 ragged lines each, which is what made the strip read as
+			  noise rather than as a sentence. 17px in a wider column lands
+			  every one of them in one or two lines.
+			*/}
 			<div
-				className="hz-mono mx-auto mt-1 max-w-[180px] text-xs uppercase tracking-[0.14em]"
-				style={{ color: "var(--hz-ink-mute)" }}
+				className="mx-auto mt-2 max-w-[230px] text-[17px] leading-snug"
+				style={{ color: "var(--hz-ink-dim)" }}
 			>
 				{desc}
 			</div>

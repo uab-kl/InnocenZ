@@ -53,7 +53,17 @@ function PrivacyPolicyBody() {
 				</Link>
 
 				<div className="mb-10 flex flex-col items-start gap-4">
-					<BrandLogo variant="stacked" size="md" showTagline />
+					{/*
+					 * The mark is centred over the document; the legal text below it
+					 * stays flush left. BrandLogo is internally
+					 * `flex-col items-center text-center`, so on an `items-start`
+					 * parent it sat hard left while its own crest and wordmark were
+					 * centred within it — which read as a misalignment rather than
+					 * as a choice.
+					 */}
+					<div className="flex w-full justify-center">
+						<BrandLogo variant="stacked" size="md" showTagline />
+					</div>
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.2em] text-royal-gold">
 							{t.webShell.legalEyebrow}

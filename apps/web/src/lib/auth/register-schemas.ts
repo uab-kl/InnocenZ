@@ -30,12 +30,27 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.string()
 				.min(1, messages.companyRegistrationNewRequired)
 				.max(50, messages.registrationNumberMax),
-			addressLine1: optionalText(255),
+			/*
+			 * Required, all four — the venue's check-in geofence is found by
+			 * geocoding exactly these columns (`addressQueryFromOutlet`), so an
+			 * outlet that skipped them lands in Settings with nothing to look
+			 * up. Stored identically on the agency branch of `register`, so the
+			 * rule is not split by account type.
+			 * Line 2 stays optional: "floor, suite, landmark" is genuinely not
+			 * always there, and the geocoder does not need it.
+			 */
+			addressLine1: z
+				.string()
+				.min(1, messages.addressLine1Required)
+				.max(255, messages.addressLine1Max),
 			addressLine2: optionalText(255),
-			city: optionalText(100),
-			postcode: optionalText(20),
+			city: z.string().min(1, messages.cityRequired).max(100, messages.cityMax),
+			postcode: z
+				.string()
+				.min(1, messages.postcodeRequired)
+				.max(20, messages.postcodeMax),
 			/** ISO state code for cascading select; empty = unset. */
-			stateCode: optionalText(10),
+			stateCode: z.string().min(1, messages.stateRequired).max(10),
 			/** ISO country code for cascading select; empty = unset. */
 			countryCode: optionalText(10),
 			personInCharge: z
@@ -103,6 +118,13 @@ export type SignupInput = z.infer<ReturnType<typeof createSignupSchema>>;
 /** @deprecated Use createSignupSchema with locale-specific messages */
 export const SignupSchema = createSignupSchema({
 	companyNameRequired: "Company name is required",
+	addressLine1Required: "Street address is required",
+	addressLine1Max: "Address is too long",
+	cityRequired: "City is required",
+	cityMax: "City name is too long",
+	postcodeRequired: "Postcode is required",
+	postcodeMax: "Postcode is too long",
+	stateRequired: "State is required",
 	companyNameMax: "Company name must be 150 characters or fewer",
 	companyRegistrationNewRequired: "New company registration number is required",
 	registrationNumberMax: "Registration number is too long",

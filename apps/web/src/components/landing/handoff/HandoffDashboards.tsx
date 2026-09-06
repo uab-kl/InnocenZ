@@ -70,7 +70,7 @@ function Kpi({
 			}}
 		>
 			<div
-				className="hz-mono text-[9px] uppercase tracking-[0.18em]"
+				className="hz-mono text-[12px] uppercase tracking-[0.14em]"
 				style={{ color: "var(--hz-ink-mute)" }}
 			>
 				{label}
@@ -143,14 +143,14 @@ function OutletDashboard() {
 						}}
 					/>
 					<div
-						className="hz-mono text-[10px] uppercase tracking-[0.18em]"
+						className="hz-mono text-[12px] uppercase tracking-[0.14em]"
 						style={{ color: "var(--hz-ink-dim)" }}
 					>
 						{t.dashboards.liveFloor}
 					</div>
 				</div>
 				<div
-					className="hz-mono text-[10px]"
+					className="hz-mono text-[12px]"
 					style={{ color: "var(--hz-ink-mute)" }}
 				>
 					{t.dashboards.outlet}
@@ -168,7 +168,7 @@ function OutletDashboard() {
 					val={`+${variance.toFixed(1)}%`}
 					tone="violet"
 				/>
-				<Kpi label={t.dashboards.checkedIn} val="31·GPS" tone="violet" />
+				<Kpi label={t.dashboards.checkedIn} val="31 of 38" tone="violet" />
 			</div>
 			<div className="h-px" style={{ background: "var(--hz-line)" }} />
 			<div>
@@ -254,14 +254,14 @@ function AgencyDashboard() {
 				<div className="flex items-center gap-2.5">
 					<Briefcase size={14} className="hz-violet-text" />
 					<div
-						className="hz-mono text-[10px] uppercase tracking-[0.18em]"
+						className="hz-mono text-[12px] uppercase tracking-[0.14em]"
 						style={{ color: "var(--hz-ink-dim)" }}
 					>
 						{t.dashboards.cycleSettles}
 					</div>
 				</div>
 				<div
-					className="hz-mono text-[10px]"
+					className="hz-mono text-[12px]"
 					style={{ color: "var(--hz-ink-mute)" }}
 				>
 					{t.dashboards.agency}

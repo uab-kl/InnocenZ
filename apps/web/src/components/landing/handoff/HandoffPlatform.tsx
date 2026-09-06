@@ -85,10 +85,10 @@ export function HandoffPlatformModules() {
 								titleClassName="hz-collapse__title--lg"
 								head={
 									<div
-										className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px]"
+										className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
 										style={moduleTint(i)}
 									>
-										<Icon size={20} />
+										<Icon size={24} />
 									</div>
 								}
 							>
@@ -176,7 +176,7 @@ export function HandoffAIFeatures() {
 									title={f.title}
 									head={
 										<div
-											className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg"
+											className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
 											style={{
 												background:
 													"linear-gradient(135deg, rgba(182,124,255,.22), transparent)",
@@ -184,7 +184,7 @@ export function HandoffAIFeatures() {
 												color: "var(--hz-violet)",
 											}}
 										>
-											<Icon size={16} />
+											<Icon size={24} />
 										</div>
 									}
 								>

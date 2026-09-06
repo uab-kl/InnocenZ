@@ -28,6 +28,7 @@ export interface SignupTranslations {
 		acknowledgements: string;
 		terms: string;
 	};
+	progress: { label: string };
 	accountTypes: {
 		outlet: { title: string; description: string };
 		agency: { title: string; description: string };
@@ -38,7 +39,7 @@ export interface SignupTranslations {
 		companyRegistrationNew: { label: string; placeholder: string };
 		addressLine1: { label: string; placeholder: string };
 		addressLine2: { label: string; placeholder: string };
-		city: { label: string; placeholder: string };
+		city: { label: string; placeholder: string; chooseStateFirst: string };
 		postcode: { label: string; placeholder: string };
 		state: { label: string; placeholder: string };
 		country: { label: string; value: string; notice: string };
@@ -120,6 +121,13 @@ export interface SignupTranslations {
 	validation: {
 		companyNameRequired: string;
 		companyNameMax: string;
+		addressLine1Required: string;
+		addressLine1Max: string;
+		cityRequired: string;
+		cityMax: string;
+		postcodeRequired: string;
+		postcodeMax: string;
+		stateRequired: string;
 		companyRegistrationNewRequired: string;
 		registrationNumberMax: string;
 		personInChargeRequired: string;
@@ -154,8 +162,13 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			description: "Create an InnocenZ account as an Outlet or PR Agency.",
 		},
 		aside: {
-			description:
-				"Join InnocenZ as an Outlet or PR Agency. Complete your company profile, choose a package, and start managing rosters, shifts, and payroll from one secure portal.",
+			/*
+			 * Kept short on purpose. The heading beside it already says "Sign up
+			 * as an Outlet or PR Agency with your company details and preferred
+			 * package", so the long version restated the form's own instructions
+			 * back at the reader, in the one column meant to carry the brand.
+			 */
+			description: "One portal for rosters, shifts and payroll.",
 			rightsReserved: "All rights reserved.",
 		},
 		backToLogin: "Back to login",
@@ -174,6 +187,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			acknowledgements: "Acknowledgements",
 			terms: "Terms and Conditions",
 		},
+		progress: { label: "Your progress" },
 		accountTypes: {
 			outlet: {
 				title: "Outlet",
@@ -210,6 +224,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			city: {
 				label: "City",
 				placeholder: "Select city",
+				chooseStateFirst: "Choose a state first",
 			},
 			postcode: {
 				label: "Postcode",
@@ -330,6 +345,13 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 		},
 		validation: {
 			companyNameRequired: "Company name is required",
+			addressLine1Required: "Street address is required",
+			addressLine1Max: "Address must be 255 characters or fewer",
+			cityRequired: "City is required",
+			cityMax: "City must be 100 characters or fewer",
+			postcodeRequired: "Postcode is required",
+			postcodeMax: "Postcode must be 20 characters or fewer",
+			stateRequired: "State is required",
 			companyNameMax: "Company name must be 150 characters or fewer",
 			companyRegistrationNewRequired:
 				"New company registration number is required",
@@ -365,8 +387,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			description: "创建 InnocenZ 门店或 PR 代理账户。",
 		},
 		aside: {
-			description:
-				"以门店或 PR 代理身份加入 InnocenZ。完善公司资料、选择套餐，并在一个安全门户中管理排班、班次与薪资。",
+			description: "排班、班次与薪资，一个门户全部搞定。",
 			rightsReserved: "版权所有。",
 		},
 		backToLogin: "返回登录",
@@ -385,6 +406,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			acknowledgements: "确认事项",
 			terms: "条款与条件",
 		},
+		progress: { label: "填写进度" },
 		accountTypes: {
 			outlet: {
 				title: "门店",
@@ -419,6 +441,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			city: {
 				label: "城市",
 				placeholder: "选择城市",
+				chooseStateFirst: "请先选择州属",
 			},
 			postcode: {
 				label: "邮编",
@@ -537,6 +560,13 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 		},
 		validation: {
 			companyNameRequired: "公司名称为必填项",
+			addressLine1Required: "街道地址为必填项",
+			addressLine1Max: "地址不得超过 255 个字符",
+			cityRequired: "城市为必填项",
+			cityMax: "城市名称不得超过 100 个字符",
+			postcodeRequired: "邮政编码为必填项",
+			postcodeMax: "邮政编码不得超过 20 个字符",
+			stateRequired: "州属为必填项",
 			companyNameMax: "公司名称不能超过 150 个字符",
 			companyRegistrationNewRequired: "新公司注册号为必填项",
 			registrationNumberMax: "注册号过长",
