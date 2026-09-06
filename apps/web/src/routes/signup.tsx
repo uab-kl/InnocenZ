@@ -50,26 +50,28 @@ function SignupPageContent() {
 	const copy = t.signup;
 
 	return (
-		<div className="login-page signup-page flex min-h-svh w-full flex-col lg:flex-row">
+		<div className="login-page signup-page relative flex min-h-svh w-full flex-col lg:flex-row">
+			{/*
+			 * The same moving field as /login — sweep, drifting pools, rays,
+			 * grain, vignette. CSS pins it with `position: fixed` (see
+			 * `.signup-page .login-ambience`) because this page SCROLLS: rooted
+			 * as `absolute inset-0` its gradients would stretch over the whole
+			 * scroll height and drift away down the form.
+			 *
+			 * ⚠️ It must be a SIBLING of the columns, not a child of the aside.
+			 * Inside the aside it painted over that column's own `border-r`, so
+			 * the divider between the two halves vanished — a child paints above
+			 * its parent's border. Here the aside comes later in the DOM and its
+			 * border paints above the field, exactly as on /login.
+			 */}
+			<LoginAmbience />
+
 			<aside className="relative hidden w-full shrink-0 lg:block lg:w-[38%] xl:w-[36%]">
 				<div className="sticky top-0 flex h-svh flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 xl:px-14">
-					{/*
-					 * The same moving field as /login, replacing the static
-					 * backdrop — sweep, drifting pools, rays, grain, vignette.
-					 *
-					 * It sits INSIDE this `sticky h-svh` wrapper rather than at the
-					 * page root, which /login can do because /login is one viewport
-					 * tall. Signup scrolls for a long form: rooted at the page it
-					 * would stretch its gradients over the whole scroll height and
-					 * put drifting light behind thirty fields. Here it stays
-					 * viewport-sized and follows the sticky column.
-					 */}
-					<LoginAmbience />
-
 					{/* Vertically centred, matching /login — the owner's call. */}
 					<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
 						{/* Tagline off + short rule, matching /login's brand block. */}
-					<BrandLogo variant="stacked" size="auth" showMotto />
+						<BrandLogo variant="stacked" size="auth" showMotto />
 
 						<span
 							aria-hidden
