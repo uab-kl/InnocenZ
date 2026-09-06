@@ -1443,7 +1443,7 @@ html {
  * `sticky h-svh` and a page-level rail above it would push that column out of
  * the viewport it is pinned to.
  */
-.login-page.login-threshold .login-rail {
+.login-page .login-rail {
   min-height: 5.5rem;
 }
 
@@ -1537,7 +1537,7 @@ html {
 
 /* —— Signup (long form): denser type + stepped section panels —— */
 .signup-page .signup-kicker {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -1555,12 +1555,12 @@ html {
 }
 
 .signup-page .signup-lede {
-  font-size: clamp(0.9375rem, 1.1vw, 1rem);
+  font-size: clamp(1.0625rem, 1.25vw, 1.1875rem);
   line-height: 1.55;
 }
 
 .signup-page .signup-form .login-field-label {
-  font-size: 0.9375rem;
+  font-size: 1.0625rem;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -1570,21 +1570,21 @@ html {
 .signup-page .signup-form [data-slot="textarea"],
 .signup-page .signup-form [data-slot="select-trigger"],
 .signup-page .signup-form .signup-textarea {
-  font-size: 1rem;
+  font-size: 1.125rem;
   line-height: 1.4;
 }
 
 .signup-page .signup-form .login-input {
-  height: 2.875rem;
+  height: 3.25rem;
 }
 
 .signup-page .signup-form [data-slot="input-group"] {
-  min-height: 2.875rem;
+  min-height: 3.25rem;
 }
 
 .signup-page .signup-form .login-btn {
-  height: 2.9375rem;
-  font-size: 1.125rem;
+  height: 3.375rem;
+  font-size: 1.1875rem;
 }
 
 .signup-page .signup-form .login-support {

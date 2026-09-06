@@ -907,16 +907,38 @@
  * different property: hover lifts the surface, open tints it and warms the
  * edge toward gold.
  */
+/*
+ * TRANSLUCENT, not black.
+ *
+ * `.hz-glass` paints `rgba(16,15,22,.96) → rgba(10,10,14,.98)` — near-opaque
+ * near-black. On the violet sections that read as twenty-seven black holes
+ * punched through the page rather than panels resting on it, and on the
+ * photo-backed AI section it blanked the image behind each card.
+ *
+ * A white wash at low alpha LIFTS whatever is behind instead of replacing it,
+ * so each card now takes its hue from its own section — violet under Why,
+ * near-black under Platform, stage light under the AI layer — which is what
+ * "glass" was supposed to mean.
+ */
 .landing-page .hz-collapse {
 	padding: 0;
+	background: linear-gradient(
+		180deg,
+		rgba(255, 255, 255, 0.058),
+		rgba(255, 255, 255, 0.026)
+	);
 	transition:
 		border-color 0.2s ease,
-		background-color 0.2s ease;
+		background 0.2s ease;
 }
 
 .landing-page .hz-collapse:hover {
 	border-color: var(--hz-line-strong);
-	background-color: rgba(255, 255, 255, 0.022);
+	background: linear-gradient(
+		180deg,
+		rgba(255, 255, 255, 0.088),
+		rgba(255, 255, 255, 0.042)
+	);
 }
 
 .landing-page .hz-collapse__summary {
@@ -985,9 +1007,21 @@
 	transform: rotate(180deg);
 }
 
+/*
+ * OPEN is deliberately more OPAQUE than closed, not just warmer.
+ *
+ * A closed card shows one large bright title, so it can be sheer glass. An
+ * open one carries body copy — and over the AI section's stage photograph
+ * that copy was landing on whatever the image happened to be doing behind it,
+ * which is why it could not be read. Opening now lays down a near-solid
+ * ground first and keeps the warm tint only as a top wash, so the body always
+ * has the same surface under it regardless of section.
+ */
 .landing-page .hz-collapse[open] {
-	border-color: color-mix(in oklab, var(--hz-gold) 32%, transparent);
-	background-color: rgba(255, 255, 255, 0.032);
+	border-color: color-mix(in oklab, var(--hz-gold) 34%, transparent);
+	background:
+		linear-gradient(180deg, rgba(242, 198, 107, 0.09), transparent 42%),
+		linear-gradient(180deg, rgba(26, 22, 38, 0.94), rgba(19, 16, 28, 0.97));
 }
 
 /*
@@ -1002,7 +1036,9 @@
  */
 .landing-page .hz-collapse__body {
 	padding: 0 20px 18px;
-	color: var(--hz-ink-dim);
+	/* Was --hz-ink-dim (#a89e8c), which is a caption grey. This is body copy
+	   the reader opened the card FOR, so it takes near-full ink. */
+	color: rgba(246, 239, 225, 0.92);
 	font-size: 16.5px;
 	line-height: 1.6;
 }
