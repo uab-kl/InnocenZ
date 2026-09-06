@@ -91,7 +91,6 @@ function SignupPageContent() {
 						{/* Tagline off + short rule, matching /login's brand block. */}
 						<BrandLogo variant="stacked" size="auth" showMotto />
 
-
 						<div className="mt-9 max-w-[34ch]">
 							<p className="login-aside-lede text-foreground/75">
 								{copy.aside.description}
@@ -121,14 +120,15 @@ function SignupPageContent() {
 			{/* `pt` clears the 5.5rem overlay rail, which is out of flow and so
 			    reserves no space of its own. */}
 			<main className="relative flex min-h-svh w-full min-w-0 flex-1 flex-col px-5 pb-8 pt-24 sm:px-8 lg:px-10 lg:pb-10 lg:pt-28 xl:px-14">
-
 				{/* The brand mark the hidden aside would otherwise carry, on its own
 				    row so it does not compete with the toolbar — as on /login. */}
 				<div className="mb-6 flex justify-center lg:hidden">
 					<BrandLogo variant="horizontal" size="sm" />
 				</div>
 
-				<div className="mx-auto w-full max-w-2xl pb-12">
+				{/* `2xl:max-w-5xl` is room for the step rail beside the form, not a
+					    wider form — `SignupForm` pins its own column at `max-w-2xl`. */}
+				<div className="mx-auto w-full max-w-2xl pb-12 2xl:max-w-5xl">
 					<header className="mb-8 sm:mb-10">
 						<h1 className="signup-heading text-foreground">
 							<span className="block">{copy.heading.line1}</span>
