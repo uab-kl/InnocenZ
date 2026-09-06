@@ -13,10 +13,7 @@ import {
 import { useMemo, useState } from "react";
 import { z } from "zod";
 import { BrandLogo } from "@/components/landing/BrandLogo";
-import {
-	LoginAmbience,
-	LoginAsideBackdrop,
-} from "@/components/landing/LoginDecor";
+import { LoginAmbience } from "@/components/landing/LoginDecor";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Button } from "@/components/ui/button";
 import {
@@ -361,10 +358,28 @@ function LoginPage() {
 			 */}
 			<LoginAmbience />
 
-			<aside className="relative z-10 hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 lg:flex lg:w-[46%] xl:px-16">
-				<LoginAsideBackdrop />
-
-				<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
+			{/*
+			 * LoginAsideBackdrop is deliberately NOT rendered here any more.
+			 * Its three static gradient layers sat on top of the page-wide
+			 * animated field — two lighting rigs pointed at one wall, which is
+			 * what made this column read as mud. The ambience's champagne pool
+			 * now lights the lower band on its own.
+			 * ⚠️ The component itself stays exported: routes/signup.tsx:56
+			 * still renders it.
+			 */}
+			<aside className="relative z-10 hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 pb-10 pt-[9vh] lg:flex lg:w-[46%] xl:px-16">
+				{/*
+				 * Anchored to the top, not centred.
+				 *
+				 * `flex-1 justify-center` split the column's slack into TWO
+				 * gaps — one above the crest, one below the paragraph — which
+				 * is the "void" on this half. Starting the stack at a fixed
+				 * datum and keeping the footer on `mt-auto` collects all of
+				 * that air into ONE band at the bottom, where the champagne
+				 * pool actually falls, so it reads as a lit wall rather than
+				 * as two holes.
+				 */}
+				<div className="relative z-10 flex flex-col items-center text-center">
 					<BrandLogo variant="stacked" size="auth" showTagline showMotto />
 
 					<div className="mt-8 max-w-xl">
@@ -374,7 +389,8 @@ function LoginPage() {
 					</div>
 				</div>
 
-				<div className="relative z-10 mt-auto w-full pt-14">
+				{/* The band's bottom edge — gives the air a boundary to end on. */}
+				<div className="relative z-10 mt-auto w-full border-t border-royal-gold/10 pt-8">
 					<p className="login-footer text-center text-foreground/55 sm:text-left">
 						© {new Date().getFullYear()}{" "}
 						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
