@@ -1446,6 +1446,32 @@ html {
   font-size: clamp(2.25rem, 3.2vw, 3rem);
 }
 
+/*
+ * Signup's moving field spans the WHOLE viewport, not just the brand column.
+ *
+ * The node is rendered inside the aside's `sticky h-svh` wrapper, but /signup
+ * scrolls for a long form: left as `absolute inset-0` it would be clipped to
+ * that column, which is why the form half sat flat and dark. `fixed` lifts it
+ * out to the viewport so it covers both halves and — unlike an
+ * `absolute inset-0` at the page root — does NOT stretch its gradients over
+ * the full scroll height or drift away as you move down the form.
+ *
+ * Everything above it already carries `z-10`, and the layer stays
+ * `pointer-events: none`, so nothing here can take a click on a field.
+ */
+.signup-page .login-ambience {
+  position: fixed;
+  inset: 0;
+  /*
+   * `zoom` does NOT compensate viewport units, so a fixed `inset: 0` inside a
+   * 0.9-scaled shell paints at 90% of the screen and leaves a bare strip along
+   * the right and bottom — measured, not assumed. Divide the scale back out,
+   * the same way the .min-h-svh and .h-svh rules above already do.
+   */
+  width: calc(100vw / var(--iz-page-scale, 0.9));
+  height: calc(100svh / var(--iz-page-scale, 0.9));
+}
+
 /* A placeholder that is legible is part of what makes a field look usable. */
 .login-page .login-input::placeholder,
 .login-page [data-slot="input-group-control"]::placeholder {

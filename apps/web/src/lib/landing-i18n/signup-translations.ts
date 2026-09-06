@@ -154,8 +154,13 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			description: "Create an InnocenZ account as an Outlet or PR Agency.",
 		},
 		aside: {
-			description:
-				"Join InnocenZ as an Outlet or PR Agency. Complete your company profile, choose a package, and start managing rosters, shifts, and payroll from one secure portal.",
+			/*
+			 * Kept short on purpose. The heading beside it already says "Sign up
+			 * as an Outlet or PR Agency with your company details and preferred
+			 * package", so the long version restated the form's own instructions
+			 * back at the reader, in the one column meant to carry the brand.
+			 */
+			description: "One portal for rosters, shifts and payroll.",
 			rightsReserved: "All rights reserved.",
 		},
 		backToLogin: "Back to login",
@@ -365,8 +370,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			description: "创建 InnocenZ 门店或 PR 代理账户。",
 		},
 		aside: {
-			description:
-				"以门店或 PR 代理身份加入 InnocenZ。完善公司资料、选择套餐，并在一个安全门户中管理排班、班次与薪资。",
+			description: "排班、班次与薪资，一个门户全部搞定。",
 			rightsReserved: "版权所有。",
 		},
 		backToLogin: "返回登录",

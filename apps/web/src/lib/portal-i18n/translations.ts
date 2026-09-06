@@ -5824,9 +5824,15 @@ const en = {
 		rightsReserved: "All rights reserved.",
 		/** Link back to /login from the forgot-password footer. */
 		backToSignIn: "Back to sign in",
-		/** The pitch paragraph in the sign-in page's left column. */
-		loginAsideDescription:
-			"The workforce operating platform for nightlife industry. Manage rosters, track shifts, and run payroll from one secure portal.",
+		/**
+		 * One line in the sign-in page's left column.
+		 *
+		 * Deliberately a STATEMENT, not a feature list: /signup's aside already
+		 * carries the functional line ("One portal for rosters, shifts and
+		 * payroll"), and two near-identical sentences across the two pages read
+		 * as filler. This one echoes the landing hero instead.
+		 */
+		loginAsideDescription: "The operating platform for nightlife.",
 		/** First line of the /login h1. loginHeadingAccent finishes the sentence in the royal gradient, and it trails the phrase in both languages. */
 		loginHeadingLine1: "Sign in to your",
 		/** Second, gradient-filled line of the /login h1 — reads as one sentence with loginHeadingLine1. */

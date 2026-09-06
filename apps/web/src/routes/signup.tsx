@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { SignupForm } from "@/components/auth/signup-form";
 import { BrandLogo } from "@/components/landing/BrandLogo";
 import { HandoffLanguageSwitcher } from "@/components/landing/handoff/HandoffLanguageSwitcher";
-import { LoginAsideBackdrop } from "@/components/landing/LoginDecor";
+import { LoginAmbience } from "@/components/landing/LoginDecor";
 import { LandingLocaleProvider, useLandingLocale } from "@/lib/landing-i18n";
 
 /**
@@ -53,7 +53,18 @@ function SignupPageContent() {
 		<div className="login-page signup-page flex min-h-svh w-full flex-col lg:flex-row">
 			<aside className="relative hidden w-full shrink-0 lg:block lg:w-[38%] xl:w-[36%]">
 				<div className="sticky top-0 flex h-svh flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 xl:px-14">
-					<LoginAsideBackdrop />
+					{/*
+					 * The same moving field as /login, replacing the static
+					 * backdrop — sweep, drifting pools, rays, grain, vignette.
+					 *
+					 * It sits INSIDE this `sticky h-svh` wrapper rather than at the
+					 * page root, which /login can do because /login is one viewport
+					 * tall. Signup scrolls for a long form: rooted at the page it
+					 * would stretch its gradients over the whole scroll height and
+					 * put drifting light behind thirty fields. Here it stays
+					 * viewport-sized and follows the sticky column.
+					 */}
+					<LoginAmbience />
 
 					{/* Vertically centred, matching /login — the owner's call. */}
 					<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
