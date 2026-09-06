@@ -1697,13 +1697,13 @@ html {
 }
 
 .signup-account-title {
-  font-size: 1rem;
+  font-size: 1.25rem;
   font-weight: 650;
   color: var(--foreground);
 }
 
 .signup-account-desc {
-  font-size: 0.8125rem;
+  font-size: 1rem;
   line-height: 1.45;
   color: color-mix(in oklab, var(--muted-foreground) 95%, transparent);
 }

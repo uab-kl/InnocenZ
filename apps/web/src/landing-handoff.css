@@ -922,23 +922,40 @@
  */
 .landing-page .hz-collapse {
 	padding: 0;
-	background: linear-gradient(
-		180deg,
-		rgba(255, 255, 255, 0.058),
-		rgba(255, 255, 255, 0.026)
-	);
+	/* A deep violet PANEL, not a wash. The previous sheer white over the AI
+	   section's stage photograph produced fog rather than glass: no edge, no
+	   depth, and the card read as a smudge. This is mostly opaque so it has a
+	   crisp edge, violet rather than black so it belongs to the page, and it
+	   carries a top sheen plus a drop shadow so it sits ABOVE the image
+	   instead of dissolving into it. */
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 45%),
+		linear-gradient(180deg, rgba(40, 32, 60, 0.84), rgba(27, 22, 42, 0.9));
+	box-shadow:
+		0 10px 30px -14px rgba(0, 0, 0, 0.62),
+		inset 0 1px 0 rgba(255, 255, 255, 0.07);
 	transition:
 		border-color 0.2s ease,
-		background 0.2s ease;
+		background 0.2s ease,
+		box-shadow 0.2s ease,
+		transform 0.2s ease;
+}
+
+/* `.hz-glass::after` lays a second white gradient over every card; on top of
+   the sheen above that was the other half of the milkiness. */
+.landing-page .hz-collapse::after {
+	content: none;
 }
 
 .landing-page .hz-collapse:hover {
 	border-color: var(--hz-line-strong);
-	background: linear-gradient(
-		180deg,
-		rgba(255, 255, 255, 0.088),
-		rgba(255, 255, 255, 0.042)
-	);
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.025) 45%),
+		linear-gradient(180deg, rgba(50, 40, 74, 0.88), rgba(33, 27, 50, 0.92));
+	box-shadow:
+		0 16px 38px -14px rgba(0, 0, 0, 0.7),
+		inset 0 1px 0 rgba(255, 255, 255, 0.1);
+	transform: translateY(-1px);
 }
 
 .landing-page .hz-collapse__summary {
@@ -1020,8 +1037,11 @@
 .landing-page .hz-collapse[open] {
 	border-color: color-mix(in oklab, var(--hz-gold) 34%, transparent);
 	background:
-		linear-gradient(180deg, rgba(242, 198, 107, 0.09), transparent 42%),
-		linear-gradient(180deg, rgba(26, 22, 38, 0.94), rgba(19, 16, 28, 0.97));
+		linear-gradient(180deg, rgba(242, 198, 107, 0.11), transparent 46%),
+		linear-gradient(180deg, rgba(38, 30, 56, 0.96), rgba(25, 20, 40, 0.98));
+	box-shadow:
+		0 18px 44px -16px rgba(0, 0, 0, 0.72),
+		inset 0 1px 0 rgba(242, 198, 107, 0.16);
 }
 
 /*

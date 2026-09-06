@@ -297,14 +297,26 @@ export function SignupForm() {
 													: "border-royal-gold/20 bg-background/40 hover:border-royal-gold/35",
 											)}
 										>
-											<Icon
+											{/* A centred tile, matching every other icon on the
+											    signed-out surface — the bare glyph read as an
+											    afterthought floating at the card's corner. */}
+											<span
 												className={cn(
-													"h-6 w-6",
+													"grid h-12 w-12 place-items-center rounded-xl border transition-colors",
 													selected
-														? "text-gold-bright"
-														: "text-muted-foreground",
+														? "border-royal-gold/45 bg-royal-gold/15"
+														: "border-royal-gold/20 bg-white/[0.035]",
 												)}
-											/>
+											>
+												<Icon
+													className={cn(
+														"h-7 w-7",
+														selected
+															? "text-gold-bright"
+															: "text-muted-foreground",
+													)}
+												/>
+											</span>
 											<span className="signup-account-title font-semibold text-foreground">
 												{accountCopy.title}
 											</span>
