@@ -1037,14 +1037,45 @@ html {
   will-change: transform;
 }
 
+/*
+ * Two rotating wedges anchored off-centre — the house light going round.
+ *
+ * This layer is what makes the motion READ. The drifting pools below move a
+ * blurred mass with no edge, which the eye reads as a still haze no matter how
+ * far it travels; a wedge has a boundary, so its passage is legible.
+ */
+.login-page .login-ambience__sweep {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: 170vmax;
+  height: 170vmax;
+  margin-left: -85vmax;
+  margin-top: -85vmax;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(228, 184, 74, 0.07) 10deg,
+    rgba(228, 184, 74, 0.02) 26deg,
+    transparent 44deg,
+    transparent 170deg,
+    rgba(140, 105, 225, 0.08) 186deg,
+    rgba(140, 105, 225, 0.02) 204deg,
+    transparent 224deg,
+    transparent 360deg
+  );
+  will-change: transform;
+  animation: iz-login-sweep 34s linear infinite;
+}
+
 /* Violet over the brand half. */
 .login-page .login-ambience__pool--a {
   left: -10%;
   top: -14%;
   width: 46vw;
   height: 46vw;
-  background: radial-gradient(circle, rgba(122, 99, 196, 0.50), transparent 68%);
-  animation: iz-login-drift-a 34s ease-in-out infinite alternate;
+  background: radial-gradient(circle, rgba(122, 99, 196, 0.55), transparent 68%);
+  animation: iz-login-drift-a 21s ease-in-out infinite;
 }
 
 /* Champagne, low and left, so the crest sits in warm light. */
@@ -1053,8 +1084,8 @@ html {
   bottom: -20%;
   width: 38vw;
   height: 38vw;
-  background: radial-gradient(circle, rgba(201, 154, 46, 0.30), transparent 66%);
-  animation: iz-login-drift-b 44s ease-in-out infinite alternate;
+  background: radial-gradient(circle, rgba(201, 154, 46, 0.34), transparent 66%);
+  animation: iz-login-drift-b 27s ease-in-out infinite;
 }
 
 /* The form half had no backdrop at all — this is what fills it. */
@@ -1063,8 +1094,29 @@ html {
   top: 16%;
   width: 42vw;
   height: 42vw;
-  background: radial-gradient(circle, rgba(150, 110, 230, 0.28), transparent 70%);
-  animation: iz-login-drift-c 38s ease-in-out infinite alternate;
+  background: radial-gradient(circle, rgba(150, 110, 230, 0.32), transparent 70%);
+  animation: iz-login-drift-c 24s ease-in-out infinite;
+}
+
+/*
+ * Raked light lines, masked to the upper-left so they never cross the form.
+ *
+ * Travel is exactly one period (54px), so the loop is seamless with no fade.
+ */
+.login-page .login-ambience__rays {
+  position: absolute;
+  inset: -15% -25%;
+  background-image: repeating-linear-gradient(
+    104deg,
+    rgba(255, 255, 255, 0.045) 0px,
+    rgba(255, 255, 255, 0.045) 1px,
+    transparent 1px,
+    transparent 54px
+  );
+  -webkit-mask-image: radial-gradient(68% 58% at 28% 18%, #000 0%, transparent 76%);
+  mask-image: radial-gradient(68% 58% at 28% 18%, #000 0%, transparent 76%);
+  will-change: transform;
+  animation: iz-login-rays 19s linear infinite;
 }
 
 /* One house light crossing the room, once every 26s. */
@@ -1077,14 +1129,14 @@ html {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(228, 184, 74, 0.05) 44%,
-    rgba(228, 184, 74, 0.09) 50%,
-    rgba(228, 184, 74, 0.05) 56%,
+    rgba(228, 184, 74, 0.08) 42%,
+    rgba(228, 184, 74, 0.16) 50%,
+    rgba(228, 184, 74, 0.08) 58%,
     transparent
   );
   filter: blur(24px);
   will-change: transform, opacity;
-  animation: iz-login-beam 26s linear infinite;
+  animation: iz-login-beam 15s linear infinite;
 }
 
 /* Keeps the wide gradients from banding on a dark panel. */
@@ -1103,22 +1155,43 @@ html {
   background: radial-gradient(125% 100% at 50% 45%, transparent 42%, rgba(6, 5, 10, 0.58) 100%);
 }
 
+/*
+ * Three-stop loops, not two-stop alternates, so the pools never retrace the
+ * same path and the field never looks like it is breathing in time.
+ *
+ * Each carries an opacity pulse as well as travel: at this blur radius a
+ * change in BRIGHTNESS is far more legible than a change in position, which
+ * is why the first version — 6vw over 34s at flat opacity — read as static.
+ */
 @keyframes iz-login-drift-a {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to   { transform: translate3d(6vw, 5vh, 0) scale(1.12); }
+  0%   { transform: translate3d(0, 0, 0) scale(1); opacity: 0.75; }
+  38%  { transform: translate3d(13vw, 9vh, 0) scale(1.22); opacity: 1; }
+  71%  { transform: translate3d(5vw, 16vh, 0) scale(1.05); opacity: 0.72; }
+  100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.75; }
 }
 @keyframes iz-login-drift-b {
-  from { transform: translate3d(0, 0, 0) scale(1.06); }
-  to   { transform: translate3d(-5vw, -6vh, 0) scale(0.94); }
+  0%   { transform: translate3d(0, 0, 0) scale(1.05); opacity: 0.9; }
+  44%  { transform: translate3d(11vw, -12vh, 0) scale(0.9); opacity: 0.6; }
+  78%  { transform: translate3d(-6vw, -5vh, 0) scale(1.14); opacity: 1; }
+  100% { transform: translate3d(0, 0, 0) scale(1.05); opacity: 0.9; }
 }
 @keyframes iz-login-drift-c {
-  from { transform: translate3d(0, 0, 0) scale(0.94); }
-  to   { transform: translate3d(-7vw, 6vh, 0) scale(1.10); }
+  0%   { transform: translate3d(0, 0, 0) scale(0.94); opacity: 0.7; }
+  33%  { transform: translate3d(-14vw, 10vh, 0) scale(1.16); opacity: 1; }
+  69%  { transform: translate3d(-4vw, 20vh, 0) scale(1); opacity: 0.66; }
+  100% { transform: translate3d(0, 0, 0) scale(0.94); opacity: 0.7; }
+}
+@keyframes iz-login-sweep {
+  to { transform: rotate(360deg); }
+}
+/* One period of the repeating gradient — seamless, so no crossfade is needed. */
+@keyframes iz-login-rays {
+  to { transform: translate3d(54px, 0, 0); }
 }
 @keyframes iz-login-beam {
   0%   { transform: translateX(0) rotate(14deg); opacity: 0; }
-  14%  { opacity: 1; }
-  86%  { opacity: 1; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
   100% { transform: translateX(240%) rotate(14deg); opacity: 0; }
 }
 
@@ -1128,12 +1201,18 @@ html {
  */
 @media (prefers-reduced-motion: reduce) {
   .login-page .login-ambience__pool,
+  .login-page .login-ambience__sweep,
+  .login-page .login-ambience__rays,
   .login-page .login-ambience__beam {
     animation: none;
   }
+  /* Parked where each layer looks best, not at frame zero. */
   .login-page .login-ambience__beam {
     transform: translateX(110%) rotate(14deg);
     opacity: 1;
+  }
+  .login-page .login-ambience__sweep {
+    transform: rotate(28deg);
   }
 }
 

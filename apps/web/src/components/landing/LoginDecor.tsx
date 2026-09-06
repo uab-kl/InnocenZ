@@ -14,9 +14,15 @@ export function LoginAmbience() {
 	return (
 		<div aria-hidden className="login-ambience">
 			<div className="login-ambience__base" />
+			{/* Two rotating wedges — the club light. This is what makes the
+			    motion legible; drifting blur alone reads as a static haze. */}
+			<div className="login-ambience__sweep" />
 			<div className="login-ambience__pool login-ambience__pool--a" />
 			<div className="login-ambience__pool login-ambience__pool--b" />
 			<div className="login-ambience__pool login-ambience__pool--c" />
+			{/* Fine raked lines. Gradients have no edges, so nothing in the
+			    field could catch the light until these were added. */}
+			<div className="login-ambience__rays" />
 			<div className="login-ambience__beam" />
 			<div className="login-ambience__grain" />
 			<div className="login-ambience__vignette" />
