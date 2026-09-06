@@ -176,7 +176,7 @@ export function HandoffAIFeatures() {
 									title={f.title}
 									head={
 										<div
-											className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg"
+											className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[11px]"
 											style={{
 												background:
 													"linear-gradient(135deg, rgba(182,124,255,.22), transparent)",
@@ -184,7 +184,7 @@ export function HandoffAIFeatures() {
 												color: "var(--hz-violet)",
 											}}
 										>
-											<Icon size={16} />
+											<Icon size={21} />
 										</div>
 									}
 								>

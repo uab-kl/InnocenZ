@@ -469,10 +469,10 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			titlePrefix: "An AI that runs",
 			titleHighlight: "every night",
 			titleSuffix: "with you.",
-			sub: "Not chat. Not gimmicks. Seven intelligence layers built into the operating platform — forecasting demand, matching PR, spotting leakage, and closing the books.",
+			sub: "Not chat. Not gimmicks. Seven layers that forecast, match and reconcile.",
 			modelContext: "Model context",
 			modelContextDesc:
-				"Trained on live outlet, agency, and PR signals — reconciled every cycle.",
+				"Trained on live outlet, agency and PR signals.",
 			features: enAiFeatures,
 		},
 		dashboards: {
@@ -806,9 +806,9 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			titlePrefix: "与您",
 			titleHighlight: "共赴每个夜晚",
 			titleSuffix: "。",
-			sub: "不是聊天，不是噱头。七个智能层内置于运营平台——预测需求、匹配 PR、发现流失、关账。",
+			sub: "不是聊天，不是噱头。七个智能层，预测、匹配、对账。",
 			modelContext: "模型上下文",
-			modelContextDesc: "基于门店、代理与 PR 实时信号训练——每个周期对账。",
+			modelContextDesc: "基于门店、代理与 PR 的实时信号训练。",
 			features: zhAiFeatures,
 		},
 		dashboards: {
