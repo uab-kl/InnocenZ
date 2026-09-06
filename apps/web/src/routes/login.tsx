@@ -350,7 +350,7 @@ function LoginPage() {
 	});
 
 	return (
-		<div className="login-page login-threshold relative flex min-h-svh w-full flex-col overflow-hidden lg:flex-row">
+		<div className="login-page login-threshold relative flex min-h-svh w-full flex-col overflow-hidden">
 			{/*
 			 * Page-wide moving backdrop. `relative` on this wrapper is what gives
 			 * it a containing block; `overflow-hidden` stops the drifting pools
@@ -359,14 +359,29 @@ function LoginPage() {
 			<LoginAmbience />
 
 			{/*
-			 * LoginAsideBackdrop is deliberately NOT rendered here any more.
-			 * Its three static gradient layers sat on top of the page-wide
-			 * animated field — two lighting rigs pointed at one wall, which is
-			 * what made this column read as mud. The ambience's champagne pool
-			 * now lights the lower band on its own.
-			 * ⚠️ The component itself stays exported: routes/signup.tsx:56
-			 * still renders it.
+			 * THE RAIL — the page's single horizon.
+			 *
+			 * The back link and the language switcher used to be pinned into
+			 * `<main>`'s top-right corner with `lg:absolute`, which let the top
+			 * of the page float free of everything below it. Lifting them into a
+			 * full-width header gives both columns one shared line to hang from,
+			 * and its bottom hairline (`.login-rail::after`) is that line.
+			 *
+			 * Order is back-link left, switcher right, so tab order matches
+			 * reading order: back → language → email.
 			 */}
+			<header className="login-rail absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 px-6 lg:px-12 xl:px-16">
+				<a
+					href="/"
+					className="login-back inline-flex items-center gap-2 font-semibold uppercase tracking-[0.14em] text-foreground/70 transition-colors hover:text-gold-bright"
+				>
+					<ArrowLeft className="h-5 w-5" />
+					{t.webShell.backToHome}
+				</a>
+				<PortalLanguageSwitcher variant="header" />
+			</header>
+
+			<div className="relative z-10 flex w-full flex-1 flex-col lg:flex-row">
 			<aside className="relative z-10 hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 lg:flex lg:w-[46%] xl:px-16">
 				{/*
 				 * Vertically centred — the owner's call after seeing both.
@@ -397,10 +412,6 @@ function LoginPage() {
 
 					{/* A short rule, not a full-width one — it reads as a mark under
 					    the crest rather than as a divider splitting the column. */}
-					<span
-						aria-hidden
-						className="mt-9 block h-px w-16 bg-gradient-to-r from-transparent via-royal-gold/50 to-transparent"
-					/>
 
 					<div className="mt-9 max-w-[34ch]">
 						<p className="login-aside-lede text-foreground/80">
@@ -410,7 +421,7 @@ function LoginPage() {
 				</div>
 
 				{/* The band's bottom edge — gives the air a boundary to end on. */}
-				<div className="relative z-10 mt-auto w-full border-t border-royal-gold/10 pt-8">
+				<div className="relative z-10 mt-auto w-full pt-8">
 					<p className="login-footer text-center text-foreground/55 sm:text-left">
 						© {new Date().getFullYear()}{" "}
 						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
@@ -426,23 +437,7 @@ function LoginPage() {
 				</div>
 			</aside>
 
-			<main className="relative z-10 flex min-h-svh w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20">
-				{/*
-				 * The switcher rides WITH the back link instead of claiming its own
-				 * corner. This page sits outside every portal shell, so it is the only
-				 * place a first-time visitor can choose a language — before they have
-				 * an account for the preference to be remembered on.
-				 */}
-				<div className="mb-8 flex w-fit flex-wrap items-center gap-3 lg:absolute lg:right-12 lg:top-12 lg:mb-0">
-					<PortalLanguageSwitcher variant="header" />
-					<a
-						href="/"
-						className="login-back inline-flex w-fit items-center gap-2 font-semibold uppercase tracking-[0.12em] text-foreground/70 transition-colors hover:text-gold-bright"
-					>
-						<ArrowLeft className="h-4 w-4" />
-						{t.webShell.backToHome}
-					</a>
-				</div>
+			<main className="relative z-10 flex w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20">
 
 				<div className="mx-auto w-full max-w-120">
 					<div className="mb-6 flex justify-center lg:hidden">
@@ -682,6 +677,7 @@ function LoginPage() {
 					</p>
 				</div>
 			</main>
+			</div>
 		</div>
 	);
 }

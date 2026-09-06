@@ -73,10 +73,6 @@ function SignupPageContent() {
 						{/* Tagline off + short rule, matching /login's brand block. */}
 						<BrandLogo variant="stacked" size="auth" showMotto />
 
-						<span
-							aria-hidden
-							className="mt-9 block h-px w-16 bg-gradient-to-r from-transparent via-royal-gold/50 to-transparent"
-						/>
 
 						<div className="mt-9 max-w-[34ch]">
 							<p className="login-aside-lede text-foreground/75">

@@ -1432,6 +1432,34 @@ html {
 }
 
 /*
+ * THE RAIL — the page's single horizon.
+ *
+ * The back link and switcher were pinned into the form column's corner with
+ * `lg:absolute`, so the top of the page floated free of everything under it.
+ * As a full-width header they give both columns one line to hang from.
+ *
+ * ⚠️ Scoped to `.login-threshold`, i.e. /login only. /signup keeps its own
+ * `.login-page-toolbar` inside the form column, because its brand column is
+ * `sticky h-svh` and a page-level rail above it would push that column out of
+ * the viewport it is pinned to.
+ */
+.login-page.login-threshold .login-rail {
+  min-height: 5.5rem;
+}
+
+/*
+ * NO horizon hairline under the rail — owner's call, 6 Sep 2026.
+ *
+ * The design panel's winning direction put a gold gradient lintel here as the
+ * page's single horizon. It was built, looked at, and removed on sight: with
+ * the vertical jamb already dividing the two columns, a second full-width rule
+ * across the top boxed the page in rather than anchoring it.
+ *
+ * The rail itself stays — the back link and switcher belong on one line at the
+ * top, not pinned into the form column's corner.
+ */
+
+/*
  * 中文 falls through to the system sans, which has taller glyphs than the
  * display face and clips at a sub-1 line-height.
  */

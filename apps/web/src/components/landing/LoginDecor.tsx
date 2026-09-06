@@ -30,12 +30,19 @@ export function LoginAmbience() {
 	);
 }
 
-export function LoginAsideBackdrop() {
-	return (
-		<div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-			<div className="absolute inset-0 bg-section-violet" />
-			<div className="absolute inset-0 bg-aurora opacity-35" />
-			<div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,color-mix(in_oklab,var(--royal-gold)_12%,transparent),transparent_55%)]" />
-		</div>
-	);
-}
+/*
+ * `LoginAsideBackdrop` was removed here on 6 Sep 2026.
+ *
+ * It was the pre-ambience login background: three STATIC layers
+ * (bg-section-violet + bg-aurora at 35% + a gold radial). `/login` stopped
+ * rendering it when it turned out to be a second lighting rig over the
+ * animated field, and `/signup` replaced it with `LoginAmbience`, which left
+ * it with no render site at all.
+ *
+ * The `bg-aurora` and `bg-section-violet` utilities it used are NOT dead —
+ * HeroSection and PlatformShowcase still use them, so those stay in
+ * styles.css. The now-inert `.login-page .bg-aurora` reduced-motion selectors
+ * are deliberately left alone: they share a selector list with the live
+ * `.landing-page` half, and splitting that to delete a no-op is more risk
+ * than two dead lines are worth.
+ */
