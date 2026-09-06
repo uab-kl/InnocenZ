@@ -112,10 +112,10 @@ export function HandoffChallenges() {
 								/>
 								<div className="flex items-center gap-3">
 									<div
-										className="grid h-11 w-11 place-items-center rounded-xl"
+										className="grid h-14 w-14 place-items-center rounded-xl"
 										style={tint}
 									>
-										<Icon size={22} />
+										<Icon size={28} />
 									</div>
 									{/*
 									 * The "FOR" eyebrow is dropped. It spent a line above
