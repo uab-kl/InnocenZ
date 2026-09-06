@@ -443,7 +443,16 @@ html {
    * lives: .hz-wrap, the nav bar and the full-height shells all divide it back
    * out so their own lengths read as visual pixels.
    */
-  --iz-page-scale: 0.8;
+  /*
+   * 0.8 drew the whole signed-out surface at 80%, so every size below it was
+   * a lie: a 1.0625rem field label landed at ~13.6px and the h1 at ~24px.
+   * That is the single reason the login read as "all the words are too
+   * small" — the CSS was already generous, the page was shrinking it. 0.9
+   * gives back 12.5% across type, spacing and icons together, which is what
+   * this knob exists to move as one; the full-viewport shells below and the
+   * .hz-wrap widths divide it back out, so they need no edit.
+   */
+  --iz-page-scale: 0.9;
   zoom: var(--iz-page-scale);
   width: 100%;
   max-width: none;
@@ -994,7 +1003,7 @@ html {
 }
 
 .login-page .login-subheading {
-  font-size: clamp(0.9375rem, 1.1vw, 1rem);
+  font-size: clamp(1rem, 1.15vw, 1.0625rem);
   line-height: 1.55;
 }
 

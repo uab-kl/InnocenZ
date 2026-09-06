@@ -221,9 +221,16 @@ function FlowNode({
 			>
 				{label}
 			</div>
+			{/*
+			  Sentence case in the body face, not spaced-out mono caps.
+			  At 12px uppercase in a 180px column these three captions broke
+			  into 3-4 ragged lines each, which is what made the strip read as
+			  noise rather than as a sentence. 17px in a wider column lands
+			  every one of them in one or two lines.
+			*/}
 			<div
-				className="hz-mono mx-auto mt-1 max-w-[180px] text-xs uppercase tracking-[0.14em]"
-				style={{ color: "var(--hz-ink-mute)" }}
+				className="mx-auto mt-2 max-w-[230px] text-[17px] leading-snug"
+				style={{ color: "var(--hz-ink-dim)" }}
 			>
 				{desc}
 			</div>

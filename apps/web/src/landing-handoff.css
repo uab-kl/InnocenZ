@@ -957,9 +957,19 @@
 	border-color: var(--hz-line-strong);
 }
 
+/*
+ * Body copy sits deliberately BELOW the card title, never level with it.
+ *
+ * 13px read as fine print against a 17-20px title, so the answer to the card
+ * was the title alone and the sentence under it went unread. 15px is the
+ * largest step that keeps the hierarchy honest: 2px under the 17px titles on
+ * the AI-layer and Why grids, 5px under the 20px `--lg` titles on Platform.
+ * Raising it to 17px would make body and title the same size on two of the
+ * three grids, which is the thing being avoided rather than a bolder fix.
+ */
 .landing-page .hz-collapse__body {
 	padding: 0 20px 18px;
 	color: var(--hz-ink-dim);
-	font-size: 13px;
-	line-height: 1.55;
+	font-size: 15px;
+	line-height: 1.6;
 }
