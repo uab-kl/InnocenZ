@@ -493,7 +493,7 @@ export function HandoffWhyInnocenz() {
 								head={
 									<span className="flex shrink-0 items-center gap-2.5">
 										<span
-											className="grid h-9 w-9 place-items-center rounded-[10px]"
+											className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
 											style={{
 												background: violet
 													? "linear-gradient(135deg, rgba(182,124,255,.22), transparent)"
@@ -502,7 +502,7 @@ export function HandoffWhyInnocenz() {
 												color: violet ? "var(--hz-violet)" : "var(--hz-gold)",
 											}}
 										>
-											<Icon size={16} />
+											<Icon size={24} />
 										</span>
 										<span
 											className="hz-mono text-[11px] uppercase tracking-[0.18em]"

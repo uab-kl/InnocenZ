@@ -61,7 +61,6 @@ export function HandoffPricing() {
 							<li key={feature}>{feature}</li>
 						))}
 					</ul>
-					<p className="hz-pricing-note">{t.pricing.platformNote}</p>
 				</div>
 
 				<div className="mb-10 flex justify-center">
@@ -276,7 +275,7 @@ export function HandoffFinalCTA() {
 							/>
 						</h2>
 						<p
-							className="mx-auto mt-5 mb-10 max-w-[640px] text-lg"
+							className="mx-auto mt-5 mb-10 max-w-[640px] whitespace-pre-line text-lg"
 							style={{ color: "var(--hz-ink-dim)" }}
 						>
 							{t.cta.sub}

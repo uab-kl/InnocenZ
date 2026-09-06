@@ -923,7 +923,7 @@
 	display: flex;
 	align-items: center;
 	gap: 14px;
-	padding: 18px 20px;
+	padding: 20px 22px;
 	cursor: pointer;
 	list-style: none;
 	user-select: none;
@@ -942,17 +942,25 @@
 	border-radius: var(--hz-radius);
 }
 
+/*
+ * ONE title size across all 27 cards.
+ *
+ * The three grids had drifted apart — Platform ran a 20px `--lg` title while
+ * the AI-layer and Why grids ran 17px, so cards that look identical carried
+ * different type. They are the same object and now read as one set.
+ */
 .landing-page .hz-collapse__title {
 	flex: 1;
 	min-width: 0;
-	font-size: 17px;
-	letter-spacing: -0.015em;
+	font-size: 21px;
+	letter-spacing: -0.02em;
 	line-height: 1.25;
 }
 
+/* Kept as a no-op alias: HandoffPlatform still passes it, and a modifier that
+   silently changes size is how the three grids drifted in the first place. */
 .landing-page .hz-collapse__title--lg {
-	font-size: 20px;
-	letter-spacing: -0.02em;
+	font-size: 21px;
 }
 
 /* Twelve chevrons at full strength are twelve small distractions; they earn
@@ -995,6 +1003,6 @@
 .landing-page .hz-collapse__body {
 	padding: 0 20px 18px;
 	color: var(--hz-ink-dim);
-	font-size: 15px;
+	font-size: 16.5px;
 	line-height: 1.6;
 }
