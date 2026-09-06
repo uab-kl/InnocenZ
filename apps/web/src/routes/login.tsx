@@ -350,7 +350,7 @@ function LoginPage() {
 	});
 
 	return (
-		<div className="login-page relative flex min-h-svh w-full flex-col overflow-hidden lg:flex-row">
+		<div className="login-page login-threshold relative flex min-h-svh w-full flex-col overflow-hidden lg:flex-row">
 			{/*
 			 * Page-wide moving backdrop. `relative` on this wrapper is what gives
 			 * it a containing block; `overflow-hidden` stops the drifting pools
@@ -367,22 +367,42 @@ function LoginPage() {
 			 * ⚠️ The component itself stays exported: routes/signup.tsx:56
 			 * still renders it.
 			 */}
-			<aside className="relative z-10 hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 pb-10 pt-[9vh] lg:flex lg:w-[46%] xl:px-16">
+			<aside className="relative z-10 hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 lg:flex lg:w-[46%] xl:px-16">
 				{/*
-				 * Anchored to the top, not centred.
+				 * Vertically centred — the owner's call after seeing both.
 				 *
-				 * `flex-1 justify-center` split the column's slack into TWO
-				 * gaps — one above the crest, one below the paragraph — which
-				 * is the "void" on this half. Starting the stack at a fixed
-				 * datum and keeping the footer on `mt-auto` collects all of
-				 * that air into ONE band at the bottom, where the champagne
-				 * pool actually falls, so it reads as a lit wall rather than
-				 * as two holes.
+				 * A top datum was tried first (it collects the column's slack
+				 * into one band instead of two gaps), but with a block this
+				 * short in a column this tall it simply moved the emptiness to
+				 * the bottom, where it read as more conspicuous rather than
+				 * less. Centring balances it. The design work that came with
+				 * that experiment — the dropped tagline, the rule, the
+				 * editorial measure — stays.
 				 */}
-				<div className="relative z-10 flex flex-col items-center text-center">
-					<BrandLogo variant="stacked" size="auth" showTagline showMotto />
+				<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
+					{/*
+					 * `showTagline` is deliberately OFF.
+					 *
+					 * It printed "Crowned nightlife" directly under "Connect ·
+					 * Engage · Entertain" — two violet spaced-caps lines of near
+					 * equal weight, so neither won and the block read as a list of
+					 * slogans. The three-verb line is the stronger brand asset and
+					 * keeps it.
+					 *
+					 * It also fixes an i18n hole for free: BrandLogo.tsx:99 hardcodes
+					 * that string as raw English JSX with no dictionary key, so it
+					 * stayed English under 中文.
+					 */}
+					<BrandLogo variant="stacked" size="auth" showMotto />
 
-					<div className="mt-8 max-w-xl">
+					{/* A short rule, not a full-width one — it reads as a mark under
+					    the crest rather than as a divider splitting the column. */}
+					<span
+						aria-hidden
+						className="mt-9 block h-px w-16 bg-gradient-to-r from-transparent via-royal-gold/50 to-transparent"
+					/>
+
+					<div className="mt-9 max-w-[34ch]">
 						<p className="login-aside-lede text-foreground/80">
 							{t.authPages.loginAsideDescription}
 						</p>
@@ -426,7 +446,8 @@ function LoginPage() {
 
 				<div className="mx-auto w-full max-w-120">
 					<div className="mb-6 flex justify-center lg:hidden">
-						<BrandLogo variant="stacked" size="md" showTagline showMotto />
+						{/* Same tagline drop as the aside — the two must not disagree. */}
+						<BrandLogo variant="stacked" size="md" showMotto />
 					</div>
 
 					<div className="mb-6">
@@ -440,9 +461,6 @@ function LoginPage() {
 								</span>
 							</span>
 						</h1>
-						<p className="login-subheading mt-2 text-muted-foreground">
-							{t.authPages.loginSubheading}
-						</p>
 					</div>
 
 					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-7 shadow-glow-gold-lg backdrop-blur-md sm:p-9">

@@ -1410,6 +1410,42 @@ html {
   opacity: 1;
 }
 
+/*
+ * The headline, scoped to /login by `.login-threshold`.
+ *
+ * It was clamp(1.5rem, 2vw, 1.9rem) — 24-30px authored, so 21.6-27.4 DRAWN
+ * after the 0.9 zoom. That is smaller than the wordmark beside it and barely
+ * larger than the body copy under it, which is why the right column had no
+ * focal point at all.
+ *
+ * The scope matters: `.login-heading-line` is shared with AuthCardShell, and
+ * /forgot-password and /reset-password render it inside a ~480px card where
+ * this size would wrap badly. They keep the bare rule.
+ */
+.login-page.login-threshold .login-heading {
+  line-height: 0.98;
+  letter-spacing: 0.03em;
+}
+
+.login-page.login-threshold .login-heading-line {
+  font-size: clamp(2.5rem, 3.6vw, 3.5rem);
+}
+
+/*
+ * 中文 falls through to the system sans, which has taller glyphs than the
+ * display face and clips at a sub-1 line-height.
+ */
+.login-page .login-heading:lang(zh) {
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+/* Signup's own headline, same problem, its own class and a smaller step
+   because it sits above a long dense form rather than two fields. */
+.signup-page .signup-heading span {
+  font-size: clamp(2.25rem, 3.2vw, 3rem);
+}
+
 /* A placeholder that is legible is part of what makes a field look usable. */
 .login-page .login-input::placeholder,
 .login-page [data-slot="input-group-control"]::placeholder {
