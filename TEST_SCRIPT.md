@@ -339,14 +339,24 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ 🟡 The signed-out type pass is measured, not looked at end-to-end (6 Sep 2026)
+### ▶ ✅ CLOSED — the signed-out type pass is verified on all four routes (6 Sep 2026)
 
-`--iz-page-scale` moved **0.8 → 0.9**, which resizes *every* signed-out page at once — login,
-signup, forgot/reset password and the whole landing shell — and only two of those were seen:
-the owner screenshotted the flow strip, and the login was measured in the DOM. The scale exists
-precisely because these pages are laid out in hardcoded px, so the risk is a fixed-width box
-that fitted at 0.8 and now clips. Worth two minutes each on **/signup**, **/forgot-password**
-and **/reset-password** before anyone calls this done.
+`--iz-page-scale` moved **0.8 → 0.9**, resizing every signed-out page at once. All four are
+now measured: **/forgot-password** and **/reset-password** both report h1 **30px**, horizontal
+overflow **0** and zero clipped elements; **/signup** reports overflow **0**. Nothing that fitted
+at 0.8 clips at 0.9.
+
+The check also PROVED the heading scoping was right: `/forgot-password` keeps the bare
+`.login-heading-line` at **30px** while still inheriting the bigger **55px** controls from bare
+`.login-page` — exactly what `AuthCardShell`'s own comment asks for, and what the `/login`-only
+`.login-threshold` scope was built to protect.
+
+⚠️ **It also caught a rule that never applied.** `/signup`'s heading measured **30px**, not the
+36-48px specified: the new rule sat EARLIER in the file than the original
+`.signup-page .signup-heading span`, so at equal specificity the original won. Fixed by editing
+the original in place and deleting the duplicate — one rule for that selector now, measured at
+**48px**. Lesson: when a size does not take, look for a same-specificity rule LATER in the sheet
+before touching the selector.
 
 Two smaller things left deliberately:
 
@@ -357,6 +367,22 @@ Two smaller things left deliberately:
   (`LESS TIME ON MANPOWER PLANNING`) are still spaced-out mono caps wrapping to three lines,
   which is the same defect this slice fixed one section lower. Left alone because the owner
   named the flow strip and the dashboards, not the hero — but it is the obvious next one.
+
+### ▶ 🟡 The brand slogans stay English under 中文 — needs the owner's wording, not a guess (6 Sep 2026)
+
+`BrandLogo.tsx:94` and `:99` hardcode **"Connect · Engage · Entertain"** and **"Crowned
+nightlife"** as raw English JSX with no dictionary key, so both stay English under 中文. Dropping
+`showTagline` from /login and /signup halved the exposure, but the motto still renders there and
+both still render on /policy, /delete-account, AuthCardShell and the landing hero — six call
+sites across TWO dictionaries (`landing-i18n` and `portal-i18n`), which is why it was hardcoded:
+`BrandLogo` cannot safely read either one.
+
+**Deliberately NOT fixed by inventing Chinese copy.** These are brand slogans; plenty of brands
+keep them untranslated on purpose, and choosing Chinese wording for a customer-facing motto is a
+branding decision, not an engineering one. Two cheap ways forward once the owner picks: confirm
+they stay English everywhere (add a comment saying so, and this closes), or supply the 中文
+wording and give `BrandLogo` optional `mottoText` / `taglineText` props that each caller fills
+from its own dictionary.
 
 ⚠️ **Do NOT re-add a PR portal to the web login.** A filled aside with Outlet / PR Agency / PR
 chips was built on 6 Sep and pulled the same day — *"no pr for this login"*. `pickHomePortal`
@@ -2724,6 +2750,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+| 2026-09-06 (xiii) | **A CSS rule that never applied, found by finally checking all four routes.** Closing the verification debt `(v)` opened: `--iz-page-scale` 0.8 → 0.9 resized EVERY signed-out page and only two had been looked at. All four now measured — `/forgot-password` and `/reset-password` both h1 **30px**, horizontal overflow **0**, zero clipped elements; `/signup` overflow **0**. Nothing that fitted at 0.8 clips at 0.9. **The check proved the heading scoping was right:** `/forgot-password` keeps the bare `.login-heading-line` at 30px while still inheriting the bigger **55px** controls from bare `.login-page` — precisely the split `AuthCardShell`'s own comment asks for, and what the `/login`-only `.login-threshold` scope exists to protect. ⚠️ **And it caught a rule that had never taken effect.** `/signup`'s heading measured **30px** when `(vii)` had specified 36-48: the new rule had been appended EARLIER in the sheet than the original `.signup-page .signup-heading span`, so at equal specificity the original won and my rule was dead the moment it shipped. Fixed by editing the original in place and deleting the duplicate — `ruleCount` for that selector is now **1**, measured at **48px**. **This is the second time this session a change looked applied and was not** (the first was the CRLF-blind `str.replace` that silently matched nothing), so the lesson is recorded in §9: when a size does not take, look for a same-specificity rule LATER in the sheet before touching the selector. **Also recorded, not fixed:** the hardcoded English brand slogans in `BrandLogo`. Six call sites across TWO dictionaries, and inventing 中文 wording for a customer-facing brand motto is a branding decision, not an engineering one — §9 carries both ways forward for the owner to pick. | **Auth · verification** | web tsc **0** · four routes measured · duplicate rule proven gone by `ruleCount` |
+
 | 2026-09-06 (xii) | **The landing's three pain cards read as one wall of complaints.** Owner: *"in the home page this part can design it"* — the "Why the nightlife floor breaks" row under the hero. Three faults, no copy touched. **(1) The cards were identical objects.** Same glass, same padding, same rule, side by side, so nothing distinguished Outlet from PR Agency from PR until you read the heading. Each now carries a 2px top edge in its OWN tint, fading out by 85% so it reads as light caught on an edge rather than as a coloured border — the icon already held that tint, this states it at card scale. **(2) The "FOR" eyebrow was dead weight.** 10px mono caps stacked above every role, spending a line to say what "Outlet" already says, and making the role beneath it read as a subtitle. Dropped; the role now carries the header alone at **22 → 26px**. `t.challenges.forLabel` is left in both dictionaries, unused, like `loginSubheading` before it. **(3) Twenty-four glowing dots.** Each pain was a 5x5px dot with an `0 0 8px` glow — eight per card, three cards, so twenty-four small light sources competing with the sentences they were meant to index. Now a 2px tick at 55% of the accent, **no glow**, measured live at 8.5x1px with `box-shadow: none`. The text leads. | **Landing · UI only** | web tsc **0** · role size, edge, marker geometry and glow all measured in the live DOM |
 
 | 2026-09-06 (xi) | **Autofilled fields looked like a different control from the ones you typed.** Owner, with two screenshots: *"you see when the user input , make like the 'password' view after the user input , for the sign in and sign page all also"*. On `/login` a remembered email came back washed LILAC while the hand-typed password beside it stayed dark; on `/signup` the same happened to Address line 1 and 2 while Country did not. **Cause: Chrome paints its own background on `:-webkit-autofill` and it beats any `background` we set** — the giveaway in the screenshots is exactly which fields differed (autofill targets vs hand-typed), not which were focused. Both accepted workarounds are applied together, because neither is sufficient alone: `transition: background-color 9999s` outruns the moment Chrome paints the swatch, and `box-shadow: inset 0 0 0 1000px transparent` covers it while leaving the field transparent so the input-group's own rest/hover/focus backgrounds still show through. `-webkit-text-fill-color` is set because plain `color` does not reach autofilled text. Scoped to bare `.login-page`, so it fixes `/login`, `/signup`, `/forgot-password` and `/reset-password` at once and touches nothing signed-in. ⚠️ **Verified only as far as it can be:** the rule is present in the live stylesheet and `-webkit-text-fill-color` resolves to `rgb(232,224,245)`, but `:-webkit-autofill` matches ONLY when Chrome genuinely autofills — a JS-set value does not trigger it, so the visual result is unconfirmed until a real autofill happens. Recorded rather than claimed. | **Auth · UI only** | web tsc **0** · rule presence and text-fill measured live; autofill paint itself not reproducible synthetically |

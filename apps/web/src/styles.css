@@ -1468,11 +1468,6 @@ html {
   letter-spacing: 0.02em;
 }
 
-/* Signup's own headline, same problem, its own class and a smaller step
-   because it sits above a long dense form rather than two fields. */
-.signup-page .signup-heading span {
-  font-size: clamp(2.25rem, 3.2vw, 3rem);
-}
 
 /*
  * Signup's moving field spans the WHOLE viewport, not just the brand column.
@@ -1556,7 +1551,7 @@ html {
 }
 
 .signup-page .signup-heading span {
-  font-size: clamp(1.5rem, 2vw, 1.9rem);
+  font-size: clamp(2.25rem, 3.2vw, 3rem);
 }
 
 .signup-page .signup-lede {
