@@ -479,6 +479,48 @@ html {
   height: calc(100svh / var(--iz-page-scale, 0.8));
 }
 
+/*
+ * The signed-out pages are DESIGNED dark and paint a hardcoded dark ambience,
+ * but the theme is `system` (theme-provider.tsx:5, attribute="class") and
+ * NOTHING on these routes forces `.dark`.
+ *
+ * So on a light-mode OS the tokens stayed light while the backdrop stayed
+ * dark: `--foreground: #3d3450` over a near-black field. On /login the white
+ * `--card` hid it inside the form; everywhere outside that card — the whole
+ * brand column, the support lines, the footer — it was dark-on-dark.
+ *
+ * Pinned on bare `.login-page`, which is the one selector all four affected
+ * routes already share: /login, /signup (signup.tsx:53 carries it),
+ * /forgot-password and /reset-password (via AuthCardShell). One place instead
+ * of twelve, and the siblings are fixed for free. Values copied from `.dark`.
+ */
+.login-page {
+  color-scheme: dark;
+  --background: #1a1726;
+  --foreground: #e8e0f5;
+  --card: #252033;
+  --card-foreground: #e8e0f5;
+  --popover: #252033;
+  --popover-foreground: #e8e0f5;
+  --muted: #2d2840;
+  --muted-foreground: #a99ec0;
+  --accent: #2d2840;
+  --accent-foreground: #e8e0f5;
+  --border: #3d3554;
+  --input: #3d3554;
+  --ring: #b79ce8;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --gold: #b79ce8;
+  --gold-bright: #c5adf0;
+  --lavender: #b79ce8;
+  --royal-gold: #e8c874;
+  --royal-gold-bright: #f5dfa0;
+  --royal-gold-soft: rgba(232, 200, 116, 0.16);
+  --royal-gold-line: rgba(232, 200, 116, 0.5);
+  --gradient-royal: linear-gradient(120deg, #f7e6b0 0%, #e8c874 45%, #c69f43 100%);
+}
+
 .brand-wordmark {
   font-family: var(--font-brand);
   font-weight: 500;

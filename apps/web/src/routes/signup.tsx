@@ -55,7 +55,14 @@ function SignupPageContent() {
 				<div className="sticky top-0 flex h-svh flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 xl:px-14">
 					<LoginAsideBackdrop />
 
-					<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
+					{/*
+					 * Anchored to a datum, not centred — the same fix as /login.
+					 * `flex-1 justify-center` split this column's slack into two
+					 * gaps, one above the crest and one below the paragraph, which
+					 * is what reads as a void. Dropping both collects the air into
+					 * ONE band above the footer, which keeps its `mt-auto`.
+					 */}
+					<div className="relative z-10 flex flex-col items-center pt-[6vh] text-center">
 						<BrandLogo variant="stacked" size="auth" showTagline showMotto />
 
 						<div className="mt-8 max-w-lg">
