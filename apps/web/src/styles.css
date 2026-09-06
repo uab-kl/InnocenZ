@@ -1506,6 +1506,40 @@ html {
   color: color-mix(in oklab, var(--foreground) 46%, transparent);
 }
 
+/*
+ * Autofilled fields must look like the ones you typed.
+ *
+ * Chrome paints its OWN background on `:-webkit-autofill` and it wins over any
+ * background we set, so a remembered email or address came back washed lilac
+ * while a hand-typed password beside it stayed dark — two fields in one form
+ * looking like two different controls.
+ *
+ * The background cannot be overridden directly; the two accepted workarounds
+ * are both here. `transition: background-color 9999s` outruns the moment
+ * Chrome paints it, and the inset shadow covers the swatch with the field's
+ * own colour. `-webkit-text-fill-color` is needed because `color` alone does
+ * not reach autofilled text.
+ *
+ * Scoped to `.login-page`, so it covers /login, /signup, /forgot-password and
+ * /reset-password in one place and touches nothing signed-in.
+ */
+.login-page input:-webkit-autofill,
+.login-page input:-webkit-autofill:hover,
+.login-page input:-webkit-autofill:focus,
+.login-page input:-webkit-autofill:active,
+.login-page textarea:-webkit-autofill,
+.login-page select:-webkit-autofill {
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+  /* The field itself stays transparent so the input-group's own background —
+     including its hover and focus states — shows through unchanged. */
+  -webkit-box-shadow: inset 0 0 0 1000px transparent;
+  box-shadow: inset 0 0 0 1000px transparent;
+  transition:
+    background-color 9999s ease-in-out 0s,
+    color 9999s ease-in-out 0s;
+}
+
 /* —— Signup (long form): denser type + stepped section panels —— */
 .signup-page .signup-kicker {
   font-size: 0.75rem;
