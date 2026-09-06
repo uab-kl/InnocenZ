@@ -13,7 +13,10 @@ import {
 import { useMemo, useState } from "react";
 import { z } from "zod";
 import { BrandLogo } from "@/components/landing/BrandLogo";
-import { LoginAsideBackdrop } from "@/components/landing/LoginDecor";
+import {
+	LoginAmbience,
+	LoginAsideBackdrop,
+} from "@/components/landing/LoginDecor";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Button } from "@/components/ui/button";
 import {
@@ -350,8 +353,15 @@ function LoginPage() {
 	});
 
 	return (
-		<div className="login-page flex min-h-svh w-full flex-col lg:flex-row">
-			<aside className="relative hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 lg:flex lg:w-[46%] xl:px-16">
+		<div className="login-page relative flex min-h-svh w-full flex-col overflow-hidden lg:flex-row">
+			{/*
+			 * Page-wide moving backdrop. `relative` on this wrapper is what gives
+			 * it a containing block; `overflow-hidden` stops the drifting pools
+			 * widening the document. Both are layout-neutral on a flex container.
+			 */}
+			<LoginAmbience />
+
+			<aside className="relative z-10 hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 lg:flex lg:w-[46%] xl:px-16">
 				<LoginAsideBackdrop />
 
 				<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
@@ -380,7 +390,7 @@ function LoginPage() {
 				</div>
 			</aside>
 
-			<main className="relative flex min-h-svh w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20">
+			<main className="relative z-10 flex min-h-svh w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20">
 				{/*
 				 * The switcher rides WITH the back link instead of claiming its own
 				 * corner. This page sits outside every portal shell, so it is the only

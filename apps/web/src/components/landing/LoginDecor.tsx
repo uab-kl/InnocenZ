@@ -1,3 +1,29 @@
+/**
+ * The signed-out page's moving background — decoration ONLY.
+ *
+ * `aria-hidden`, `pointer-events: none`, and painted beneath every control, so
+ * nothing here can intercept a click or reach a screen reader. It spans the
+ * WHOLE page rather than the aside: the form half carried no backdrop at all,
+ * which is why that side read as flat black beside a decorated left column.
+ *
+ * Every layer animates transform/opacity only, so the work stays on the
+ * compositor and never triggers layout. All of it stops under
+ * `prefers-reduced-motion` — the composition is designed to hold still.
+ */
+export function LoginAmbience() {
+	return (
+		<div aria-hidden className="login-ambience">
+			<div className="login-ambience__base" />
+			<div className="login-ambience__pool login-ambience__pool--a" />
+			<div className="login-ambience__pool login-ambience__pool--b" />
+			<div className="login-ambience__pool login-ambience__pool--c" />
+			<div className="login-ambience__beam" />
+			<div className="login-ambience__grain" />
+			<div className="login-ambience__vignette" />
+		</div>
+	);
+}
+
 export function LoginAsideBackdrop() {
 	return (
 		<div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
