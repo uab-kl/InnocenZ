@@ -1232,32 +1232,38 @@ html {
 }
 
 .login-page .login-field-label {
-  font-size: 1.0625rem;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
+/*
+ * Field sizing, stated in CSS px — remember `.login-page` is zoom: 0.9, so a
+ * 3.5rem field is DRAWN at ~50px. The old 2.75rem landed at ~40px, which is
+ * why it felt cramped: the number looked fine in the stylesheet and was not
+ * fine on screen.
+ */
 .login-page .login-input {
-  height: 2.75rem;
-  font-size: 1.0625rem;
+  height: 3.5rem;
+  font-size: 1.1875rem;
 }
 
 .login-page [data-slot="input-group"] {
-  min-height: 2.75rem;
+  min-height: 3.5rem;
   height: auto;
 }
 
 .login-page [data-slot="input-group-control"] {
-  font-size: 1.0625rem;
+  font-size: 1.1875rem;
 }
 
 .login-page .login-btn {
-  height: 2.9375rem;
-  font-size: 1.125rem;
+  height: 3.625rem;
+  font-size: 1.25rem;
   font-weight: 700;
 }
 
 .login-page .login-support {
-  font-size: 1rem;
+  font-size: 1.0625rem;
 }
 
 .login-page .login-back {
@@ -1320,14 +1326,52 @@ html {
     0 24px 60px rgba(0, 0, 0, 0.35);
 }
 
+/*
+ * The field should look like an invitation to type, not a disabled box.
+ *
+ * At rest it now carries a faint inner lift so it reads as a well on the card
+ * rather than a flat outline; hover warms the border; focus lights the whole
+ * field gold. All three states are reachable by keyboard, and the focus ring
+ * is a real ring rather than a colour swap, so it survives a high-contrast
+ * mode that drops box-shadow-as-decoration.
+ */
 .login-page .login-input-group {
-  border-radius: 0.75rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 0.875rem;
+  background: color-mix(in oklab, var(--royal-gold) 3%, rgba(255, 255, 255, 0.028));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.login-page .login-input-group:hover:not(:focus-within) {
+  border-color: color-mix(in oklab, var(--royal-gold) 34%, transparent);
+  background: color-mix(in oklab, var(--royal-gold) 5%, rgba(255, 255, 255, 0.04));
 }
 
 .login-page .login-input-group:focus-within {
-  border-color: color-mix(in oklab, var(--royal-gold) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--royal-gold) 18%, transparent);
+  border-color: color-mix(in oklab, var(--royal-gold) 62%, transparent);
+  background: color-mix(in oklab, var(--royal-gold) 7%, rgba(255, 255, 255, 0.05));
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--royal-gold) 20%, transparent),
+    0 6px 22px -10px color-mix(in oklab, var(--royal-gold) 42%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* The leading icon lights with its field — a small cue for which one is live. */
+.login-page .login-input-group svg {
+  transition: color 0.18s ease, opacity 0.18s ease;
+  opacity: 0.72;
+}
+.login-page .login-input-group:focus-within svg {
+  opacity: 1;
+}
+
+/* A placeholder that is legible is part of what makes a field look usable. */
+.login-page .login-input::placeholder,
+.login-page [data-slot="input-group-control"]::placeholder {
+  color: color-mix(in oklab, var(--foreground) 46%, transparent);
 }
 
 /* —— Signup (long form): denser type + stepped section panels —— */

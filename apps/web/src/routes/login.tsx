@@ -429,7 +429,7 @@ function LoginPage() {
 						</p>
 					</div>
 
-					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-6 shadow-glow-gold-lg backdrop-blur-md sm:p-7">
+					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-7 shadow-glow-gold-lg backdrop-blur-md sm:p-9">
 						<form
 							id="login-form"
 							aria-label={t.authPages.loginFormLabel}
@@ -438,7 +438,7 @@ function LoginPage() {
 								form.handleSubmit();
 							}}
 						>
-							<FieldGroup className="gap-4">
+							<FieldGroup className="gap-5">
 								<form.Field name="email">
 									{(field) => {
 										const isInvalid =
@@ -455,7 +455,7 @@ function LoginPage() {
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
 														<Mail
-															className="size-4 text-royal-gold"
+															className="size-5 text-royal-gold"
 															strokeWidth={1.75}
 															aria-hidden
 														/>
@@ -518,7 +518,7 @@ function LoginPage() {
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
 														<Lock
-															className="size-4 text-royal-gold"
+															className="size-5 text-royal-gold"
 															strokeWidth={1.75}
 															aria-hidden
 														/>
