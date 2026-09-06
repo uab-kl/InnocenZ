@@ -85,10 +85,10 @@ export function HandoffPlatformModules() {
 								titleClassName="hz-collapse__title--lg"
 								head={
 									<div
-										className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px]"
+										className="grid h-11 w-11 shrink-0 place-items-center rounded-[11px]"
 										style={moduleTint(i)}
 									>
-										<Icon size={20} />
+										<Icon size={23} />
 									</div>
 								}
 							>

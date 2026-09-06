@@ -461,7 +461,7 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			eyebrow: "The Platform",
 			titlePrefix: "Every operation moving\u00A0part.",
 			titleHighlight: "One backbone.",
-			sub: "Twelve modules built for the pace of nightlife — from roster planning at 4pm to signed payment vouchers at 4am.",
+			sub: "Twelve modules, roster to signed payout.",
 			modules: enModules,
 		},
 		ai: {
@@ -798,7 +798,7 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			eyebrow: "平台",
 			titlePrefix: "每个运营环节，",
 			titleHighlight: "一条主干。",
-			sub: "十二个模块为夜生活节奏而建——从下午 4 点排班到凌晨 4 点签署支付凭证。",
+			sub: "十二个模块，从排班到签署发薪。",
 			modules: zhModules,
 		},
 		ai: {

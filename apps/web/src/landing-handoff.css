@@ -898,13 +898,25 @@
    Default closed: the summary row (icon + title) is the whole card until the
    reader opens it. `<details>` supplies the state, so there is nothing to
    hydrate and keyboard/AT behaviour is the platform's own. */
+/*
+ * Open and closed have to be tellable apart at a glance.
+ *
+ * Both states used to change ONLY `border-color`, and hover changed the same
+ * property to a similar value — so in a grid of twelve you could not see which
+ * card you had opened, or which one you were about to. Each state now moves a
+ * different property: hover lifts the surface, open tints it and warms the
+ * edge toward gold.
+ */
 .landing-page .hz-collapse {
 	padding: 0;
-	transition: border-color 0.2s;
+	transition:
+		border-color 0.2s ease,
+		background-color 0.2s ease;
 }
 
 .landing-page .hz-collapse:hover {
 	border-color: var(--hz-line-strong);
+	background-color: rgba(255, 255, 255, 0.022);
 }
 
 .landing-page .hz-collapse__summary {
@@ -943,10 +955,22 @@
 	letter-spacing: -0.02em;
 }
 
+/* Twelve chevrons at full strength are twelve small distractions; they earn
+   their contrast on hover and when the card is actually open. */
 .landing-page .hz-collapse__chevron {
 	flex-shrink: 0;
 	color: var(--hz-ink-mute);
-	transition: transform 0.25s;
+	opacity: 0.5;
+	transition:
+		transform 0.25s ease,
+		color 0.2s ease,
+		opacity 0.2s ease;
+}
+
+.landing-page .hz-collapse:hover .hz-collapse__chevron,
+.landing-page .hz-collapse[open] .hz-collapse__chevron {
+	opacity: 1;
+	color: var(--hz-gold);
 }
 
 .landing-page .hz-collapse[open] .hz-collapse__chevron {
@@ -954,7 +978,8 @@
 }
 
 .landing-page .hz-collapse[open] {
-	border-color: var(--hz-line-strong);
+	border-color: color-mix(in oklab, var(--hz-gold) 32%, transparent);
+	background-color: rgba(255, 255, 255, 0.032);
 }
 
 /*
