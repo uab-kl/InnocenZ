@@ -333,6 +333,38 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'Already checked in', data: null });
       }
 
+      // ONE BODY, ONE SHIFT (owner, 7 Sep 2026: "it does not make sense that a
+      // PR can be in 2 different shifts at one time"). Nothing used to stop a
+      // second stamp, so a PR who forgot to check out was recorded standing
+      // inside two geofences 300 m apart — and both open rows then read as time
+      // being worked. Enforced HERE rather than on the phone: the phone is the
+      // thing being verified, and it does not get to grade itself.
+      //
+      // Cross-agency on purpose (see `findOpenCheckInForUser`) — the constraint
+      // is physical, not organisational.
+      const openElsewhere = await this.shiftAssignmentRepository.findOpenCheckInForUser({
+        userId,
+        prId: pr?.id,
+        excludeAssignmentId: id,
+      });
+      if (openElsewhere) {
+        // 409, not 400: the request is well-formed and conflicts with a state
+        // the PR can clear themselves. The venue and assignment id ride along
+        // so the app can send them straight to that shift's check-out.
+        return res.status(409).json({
+          success: false,
+          message: `Check out of ${openElsewhere.outletName ?? 'your current shift'} first — you are still checked in there`,
+          data: {
+            reason: 'open_check_in_elsewhere',
+            assignmentId: openElsewhere.assignmentId,
+            outletName: openElsewhere.outletName,
+            shiftDate: openElsewhere.shiftDate,
+            slot: openElsewhere.slot,
+            checkInAt: openElsewhere.checkInAt.toISOString(),
+          },
+        });
+      }
+
       // The phone's claimed position. The distance is NOT taken from the body —
       // it is recomputed here from the outlet's own pin, because the phone is
       // the thing being verified and does not get to grade itself.

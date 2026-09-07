@@ -40,9 +40,19 @@ function stampTime(iso: string): string {
  * location in between — so every coordinate here is shown with the time it was
  * taken. A position presented without its age would read as where someone is
  * standing now, which this data cannot support.
+ *
+ * One PR can legitimately appear on TWO venue cards on the same date — two
+ * shifts, two outlets — and the owner read that as the panel double-counting
+ * her. It is not: the rows are different assignments. So a rostered row that has
+ * not stamped says when it is DUE, and, when that PR is still clocked in
+ * somewhere else, which venue that is. Between them the second card explains
+ * itself instead of looking like an unexplained absence.
  */
 export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 	const { t } = usePortalLocale();
+	// One clock reading for the whole render, so two rows of the same shift
+	// cannot land on opposite sides of their start minute.
+	const now = Date.now();
 	const {
 		groups,
 		isLoading,
@@ -220,9 +230,36 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 																</IzPill>
 															</div>
 															<span className="iz-roster-gps-row-meta">
+																{/*
+																	The hour LEADS. One PR can hold a stamped row
+																	at two venues on the same date, and a bare
+																	"45 m · ±13 m" on each gave the reader nothing
+																	to tell the current one from the stale one.
+																*/}
+																{row.checkInAt
+																	? fill(t.rosterGrid.stampedIn, {
+																			time: stampTime(row.checkInAt),
+																		})
+																	: ""}
+																{row.checkOutAt
+																	? fill(t.rosterGrid.stampedOut, {
+																			time: stampTime(row.checkOutAt),
+																		})
+																	: ""}
+																{row.checkInAt ? " · " : ""}
 																{`${Math.round(row.meters)} m`}
 																{row.accuracyM
 																	? ` · ±${Math.round(row.accuracyM)} m`
+																	: ""}
+																{/*
+																	Open here, already stamped in somewhere else.
+																	Marks THIS row as the stale one, which is the
+																	only way two open check-ins can be ordered.
+																*/}
+																{row.sinceCheckedInAt
+																	? fill(t.rosterGrid.sinceCheckedInAt, {
+																			outlet: row.sinceCheckedInAt,
+																		})
 																	: ""}
 															</span>
 														</div>
@@ -266,37 +303,65 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 											</div>
 										))}
 
-										{group.notArrived.map((row) => (
-											<div key={row.assignmentId} className="iz-roster-gps-row">
-												<div className="iz-roster-gps-row-top">
-													<PrFaceBubble
-														name={row.prName}
-														photo={row.prPhoto}
-														className="iz-roster-gps-avatar"
-													/>
-													<div className="min-w-0 flex-1">
-														<div className="iz-roster-gps-row-head">
-															<span className="iz-roster-gps-row-name">
-																{row.prName}
+										{group.notArrived.map((row) => {
+											// Not yet their hour. "Not checked in" is only a finding
+											// once the slot has STARTED; before that it reads as an
+											// absence nobody was owed, which is how a PR due at 12:00
+											// looked missing at 11:20.
+											const notDueYet =
+												row.dueAt !== null &&
+												new Date(row.dueAt).getTime() > now;
+											return (
+												<div
+													key={row.assignmentId}
+													className="iz-roster-gps-row"
+												>
+													<div className="iz-roster-gps-row-top">
+														<PrFaceBubble
+															name={row.prName}
+															photo={row.prPhoto}
+															className="iz-roster-gps-avatar"
+														/>
+														<div className="min-w-0 flex-1">
+															<div className="iz-roster-gps-row-head">
+																<span className="iz-roster-gps-row-name">
+																	{row.prName}
+																</span>
+																<IzPill
+																	variant="ink"
+																	className="iz-roster-gps-row-pill"
+																>
+																	{notDueYet && row.dueAt
+																		? fill(t.rosterGrid.dueAt, {
+																				time: stampTime(row.dueAt),
+																			})
+																		: t.rosterGrid.notCheckedIn}
+																</IzPill>
+															</div>
+															<span className="iz-roster-gps-row-meta">
+																{row.slot
+																	? fill(t.rosterGrid.rosteredSlot, {
+																			slot: row.slot,
+																		})
+																	: t.rosterGrid.rostered}
+																{/*
+																	Answers the question this card otherwise
+																	raises. A PR working two venues in one day
+																	sits on BOTH maps, and the venue they have
+																	not checked out of is the only thing here
+																	that says where they actually are.
+																*/}
+																{row.stillCheckedInAt
+																	? fill(t.rosterGrid.stillCheckedInElsewhere, {
+																			outlet: row.stillCheckedInAt,
+																		})
+																	: ""}
 															</span>
-															<IzPill
-																variant="ink"
-																className="iz-roster-gps-row-pill"
-															>
-																{t.rosterGrid.notCheckedIn}
-															</IzPill>
 														</div>
-														<span className="iz-roster-gps-row-meta">
-															{row.slot
-																? fill(t.rosterGrid.rosteredSlot, {
-																		slot: row.slot,
-																	})
-																: t.rosterGrid.rostered}
-														</span>
 													</div>
 												</div>
-											</div>
-										))}
+											);
+										})}
 									</div>
 								</div>
 							</div>

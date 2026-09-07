@@ -105,6 +105,24 @@ export interface GpsTrackingRow {
 	 * backend leaves these outlets unfenced, and so does this panel.
 	 */
 	outletUnpinned?: boolean;
+	/**
+	 * When this position was stamped, ISO. Optional because the demo generator
+	 * has no real stamps behind its rows; the backed panel always sets it.
+	 *
+	 * A distance with no time is the bug this exists to close: one PR can hold
+	 * rows at two venues on one date, and without the hour there is nothing on
+	 * either row to say which of them is current.
+	 */
+	checkInAt?: string;
+	/** When they checked out, ISO. Absent while the check-in is still open. */
+	checkOutAt?: string;
+	/**
+	 * A venue where this PR stamped in LATER, set only on a row whose own
+	 * check-out never happened. That pair — still open here, already in
+	 * somewhere else — is the only honest way to order two open check-ins, and
+	 * it is what tells the reader which card has gone stale.
+	 */
+	sinceCheckedInAt?: string;
 }
 
 export interface GpsMapBounds {

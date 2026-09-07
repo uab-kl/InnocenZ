@@ -2554,6 +2554,87 @@ export class ShiftAssignmentRepositoryClass {
   }
 
   /**
+   * The one shift this person is still clocked into: a check-in with no
+   * check-out, on any assignment but `excludeAssignmentId`.
+   *
+   * Keyed on the PERSON (`coalesce(user_id, pr_id)`), deliberately NOT on an
+   * agency. A body is in one place; that a second shift belongs to a different
+   * agency changes nothing about whether its PR can also be standing there. So
+   * this looks across every agency the caller works for, which is exactly the
+   * case that produced the bug — one PR held an open 11:10 check-in at one
+   * venue and stamped into another at 11:31, and no rule anywhere objected.
+   *
+   * Excludes NON_STAFFING_STATUSES: a cancelled or excused row that somehow
+   * still carries a stamp is not a shift anyone is working, and must never
+   * become a lock the PR cannot clear.
+   *
+   * Returns the venue and times so the refusal can NAME the shift to close —
+   * "check out first" with nothing to point at is a dead end on a phone.
+   */
+  async findOpenCheckInForUser(params: {
+    userId: string;
+    prId?: string | null;
+    excludeAssignmentId: string;
+  }): Promise<{
+    assignmentId: string;
+    outletName: string | null;
+    shiftDate: string | null;
+    slot: string | null;
+    checkInAt: Date;
+  } | null> {
+    try {
+      const { userId, prId, excludeAssignmentId } = params;
+      const rows = await db
+        .select({
+          assignmentId: ShiftAssignmentTable.id,
+          outletName: OutletTable.name,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          checkInAt: ShiftAssignmentTable.checkInAt,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(
+          and(
+            // Same person, however the row identifies them. A PR is a `user`
+            // now, but older rows carry only pr_id — matching one column alone
+            // would leave half the history unlocked.
+            or(
+              eq(assigneeUserId, userId),
+              ...(prId ? [eq(ShiftAssignmentTable.prId, prId)] : []),
+            ),
+            sql`${ShiftAssignmentTable.id} <> ${excludeAssignmentId}`,
+            sql`${ShiftAssignmentTable.checkInAt} is not null`,
+            sql`${ShiftAssignmentTable.checkOutAt} is null`,
+            notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+          ),
+        )
+        // Newest first: where more than one open stamp exists (only reachable
+        // from rows written before this rule), the latest is the one they are
+        // actually on, and the one worth naming.
+        .orderBy(sql`${ShiftAssignmentTable.checkInAt} desc`)
+        .limit(1);
+
+      const row = rows[0];
+      if (!row?.checkInAt) return null;
+      return {
+        assignmentId: row.assignmentId,
+        outletName: row.outletName,
+        shiftDate: row.shiftDate,
+        slot: row.slot,
+        checkInAt: row.checkInAt,
+      };
+    } catch (error) {
+      logger.error(
+        '[ShiftAssignmentRepository.findOpenCheckInForUser] Error:',
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Attendance position fixes for one agency on one shift date, joined to the
    * shift for its slot and to the outlet for its pin.
    *

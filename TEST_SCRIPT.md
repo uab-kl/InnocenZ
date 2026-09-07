@@ -386,6 +386,23 @@ sweep corrects the RECORD without moving money. See changelog (xii).
 2. **No notification fires on a no-show.** The PR is not told, and neither is the agency. If a black
    mark should reach the person it is about, that is a new notification kind, not part of this job.
 
+### ▶ ⚠️ TWO AGENTS SHARED THIS WORKING TREE (7 Sep 2026)
+
+A second session worked on branch `SL` at the same time as the penalties slice, on a different
+feature — the open-check-in guard (`ONE BODY, ONE SHIFT`) and the attendance-fix panel's GPS
+timestamps. Its changelog rows are **(xv)**, **(xvi)** and **(xviii)**; it wrote them but never
+committed its code, and we raced twice on the row numbering.
+
+Its code was landed by the other session's counterpart, **verified but not authored**: backend
+tsc 0 · 131/131, web tsc 0 · 224/224 (that suite went 209 → 224 on its new
+`use-agency-attendance-fixes.test.ts`). The backend diff was read in full — a cross-agency open
+check-in refused with a 409 that names the venue to close — but nothing of it was reviewed for
+INTENT, and none of it has been exercised on screen.
+
+**If either half of it looks wrong, suspect this.** Two agents in one tree also means
+`translations.ts` and this file were being edited from both sides; a lost edit would show up as a
+missing dictionary key or a vanished changelog row rather than as a conflict.
+
 ### ▶ VERIFY ON SCREEN — automatic recording, and the void that makes it safe (7 Sep 2026)
 
 Built and live; the one part nobody has clicked. Log in as the agency owner, **Payroll → Last Week**:
