@@ -163,20 +163,32 @@ function FeeLine({ row, canSelect }: { row: FeeRow; canSelect: boolean }) {
 			<b className="iz-sm w-20 shrink-0 truncate text-[var(--iz-txt)] sm:w-28">
 				{row.name}
 			</b>
-			<span className="iz-tiny iz-muted2 min-w-0 flex-1 truncate">
+			{/* WRAPS to a second line rather than being cut off.
+			    `truncate` here clipped at roughly 37 characters, which is shorter
+			    than the sentence a penalty row has to say. It cost two attempts at
+			    one fix on 7 Sep 2026: the minimum-shifts breach was given the
+			    opportunity count it was missing, the new text landed past the
+			    ellipsis and the row read exactly as before; reordering it then hid
+			    the other half instead. A row that can only ever show half a
+			    sentence is the bug, not the half it happens to choose. Two lines is
+			    the cap — anything longer still has the full text on the `title`. */}
+			<span className="iz-tiny iz-muted2 line-clamp-2 min-w-0 flex-1">
 				{detail}
 			</span>
-			{/* WHEN, on every row — a fixed column rather than a line of its own
-			    under the ones that happened to carry it. A ledger repeats the date
-			    on every line for the same reason a bank statement does: it is what
-			    you scan for, and it is what was filling the right of the row with
-			    nothing. */}
-			<span
-				className="iz-tiny iz-muted2 w-[6.5rem] shrink-0 text-right tabular-nums"
-				title={row.whenTitle}
-			>
-				{row.when ?? ""}
-			</span>
+			{/* WHEN, on every row that HAS one — a ledger repeats the date on every
+			    line for the reason a bank statement does: it is what you scan for.
+			    But a penalty PROPOSAL carries no date (it is named by the week it
+			    was computed for, not by a day), so on those rows this reserved
+			    6.5rem of empty column and took it straight out of the sentence to
+			    its left. An empty fixed column is not alignment, it is a margin. */}
+			{row.when ? (
+				<span
+					className="iz-tiny iz-muted2 w-[6.5rem] shrink-0 text-right tabular-nums"
+					title={row.whenTitle}
+				>
+					{row.when}
+				</span>
+			) : null}
 			<b className="iz-sm w-[5.5rem] shrink-0 text-right tabular-nums text-[var(--iz-gold-l)]">
 				RM {row.amountRm.toFixed(2)}
 			</b>
