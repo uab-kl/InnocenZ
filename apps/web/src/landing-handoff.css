@@ -82,7 +82,7 @@
 	/* Centred column with real side gutters — but the numbers below are the
 	   VISUAL width: zoom shrinks every length in here, so the scale is divided
 	   back out and 1400px / 84vw mean 1400px / 84% of the actual screen. */
-	width: calc(min(1400px, 84vw) / var(--iz-page-scale, 0.8));
+	width: calc(min(995px, 66vw) / var(--iz-page-scale, 0.8));
 	margin: 0 auto;
 	position: relative;
 }
@@ -333,7 +333,7 @@
 	);
 	margin: 0 auto;
 	/* Matches .hz-wrap so the hairline ends where the copy does. */
-	width: calc(min(1400px, 84vw) / var(--iz-page-scale, 0.8));
+	width: calc(min(995px, 66vw) / var(--iz-page-scale, 0.8));
 }
 
 /* Background layers */
@@ -430,7 +430,7 @@
 	padding: 12px 16px 12px 24px;
 	border-radius: 999px;
 	/* Visual width, like .hz-wrap — kept just inside the content column. */
-	width: calc(min(1330px, 84vw) / var(--iz-page-scale, 0.8));
+	width: calc(min(1104px, 76.5vw) / var(--iz-page-scale, 0.8));
 	transition: background 0.3s;
 }
 
@@ -563,7 +563,7 @@
 }
 
 .landing-page .hz-hero-h1 {
-	font-size: clamp(52px, 7.2vw, 108px);
+	font-size: clamp(52px, 5vw, 74px);
 	margin: 20px 0 24px;
 }
 
@@ -1067,4 +1067,92 @@
 	color: rgba(246, 239, 225, 0.92);
 	font-size: 16.5px;
 	line-height: 1.6;
+}
+
+/* Platform — three phase panels (owner, 7 Sep 2026). The twelve modules sit in
+   the order a night actually runs: plan it, run the floor, close the money.
+   Rows inside a panel instead of twelve loose cards; icons, tints and the 21px
+   title are unchanged. Panels take the card recipe from .hz-collapse above. */
+.landing-page .hz-phases {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 22px;
+	align-items: start;
+}
+.landing-page .hz-phase {
+	position: relative;
+	padding: 22px 22px 8px;
+	border-radius: var(--hz-radius);
+	background: linear-gradient(180deg, #1a141f, #16111d);
+	border: 1px solid color-mix(in oklab, var(--hz-gold) 28%, transparent);
+	box-shadow:
+		0 10px 30px -16px rgba(0, 0, 0, 0.7),
+		inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+.landing-page .hz-phase::before {
+	content: "";
+	position: absolute;
+	left: 22px;
+	right: 22px;
+	top: 0;
+	height: 1px;
+	background: linear-gradient(
+		90deg,
+		transparent,
+		color-mix(in oklab, var(--hz-gold) 55%, transparent),
+		transparent
+	);
+}
+.landing-page .hz-phase__s {
+	font-family: var(--hz-font-mono);
+	font-size: 13px;
+	letter-spacing: 0.08em;
+	color: var(--hz-ink-mute);
+	margin-top: 3px;
+}
+.landing-page .hz-phase__rule {
+	margin: 16px 0 2px;
+}
+.landing-page .hz-collapse.hz-collapse--row {
+	background: none;
+	border: 0;
+	border-top: 1px solid rgba(246, 239, 225, 0.08);
+	border-radius: 0;
+	box-shadow: none;
+}
+.landing-page .hz-collapse.hz-collapse--row:hover {
+	background: rgba(255, 255, 255, 0.025);
+	border-color: rgba(246, 239, 225, 0.08);
+	box-shadow: none;
+	transform: none;
+}
+.landing-page .hz-collapse--row .hz-collapse__summary {
+	padding: 14px 4px;
+}
+.landing-page .hz-collapse--row .hz-collapse__body {
+	padding: 0 4px 14px 66px;
+}
+@media (max-width: 900px) {
+	.landing-page .hz-phases {
+		grid-template-columns: 1fr;
+	}
+}
+/* Row body aligns under the title, not the tile: 4px summary padding + the
+   3rem tile (51px at the 17px root) + 14px gap. An open row keeps a faint
+   tint so the state reads without the card's gold border; the focus ring
+   stays square on a square row. */
+.landing-page .hz-collapse--row .hz-collapse__body {
+	padding-left: calc(4px + 3rem + 14px);
+}
+.landing-page .hz-collapse.hz-collapse--row[open] {
+	background: rgba(255, 255, 255, 0.03);
+}
+.landing-page .hz-collapse--row .hz-collapse__summary:focus-visible {
+	border-radius: 8px;
+}
+
+/* Footer sits a step further in than the body column (owner, 7 Sep 2026: footer and
+   header +20%, body +10%). Same zoom compensation as .hz-wrap. */
+.landing-page footer .hz-wrap {
+	width: calc(min(1177px, 78.5vw) / var(--iz-page-scale, 0.8));
 }

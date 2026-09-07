@@ -125,7 +125,7 @@ export function HandoffChallenges() {
 									 * header alone, two steps larger.
 									 */}
 									<div
-										className="hz-display text-[26px]"
+										className="hz-display hz-gold-text text-[26px]"
 										style={{ letterSpacing: "-0.02em" }}
 									>
 										{g.role}
@@ -239,7 +239,7 @@ function FlowNode({
 				/>
 			</div>
 			<div
-				className="hz-display mt-3.5 text-2xl"
+				className="hz-display hz-gold-text mt-3.5 text-2xl"
 				style={{ letterSpacing: "-0.02em" }}
 			>
 				{label}

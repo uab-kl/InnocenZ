@@ -5,9 +5,9 @@ type PoweredByBadgeProps = {
 export function PoweredByBadge({ className }: PoweredByBadgeProps) {
 	return (
 		<div
-			className={`flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/95 px-3 py-1.5 shadow-md shadow-black/10 ${className ?? ""}`}
+			className={`flex w-fit items-center gap-2 rounded-full bg-transparent px-0 py-1.5 ${className ?? ""}`}
 		>
-			<span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+			<span className="text-[9px] font-semibold uppercase tracking-[0.1em] text-white">
 				Powered by
 			</span>
 			<img

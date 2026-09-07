@@ -414,7 +414,7 @@ export function HandoffBenefits() {
 							)}
 							<div className="flex flex-1 flex-col gap-4 px-[26px] pt-[22px] pb-7">
 								<div
-									className="hz-display text-2xl"
+									className="hz-display hz-gold-text text-2xl"
 									style={{ letterSpacing: "-0.02em" }}
 								>
 									{c.role}
@@ -503,12 +503,6 @@ export function HandoffWhyInnocenz() {
 											}}
 										>
 											<Icon size={24} />
-										</span>
-										<span
-											className="hz-mono text-[11px] uppercase tracking-[0.18em]"
-											style={{ color: "var(--hz-ink-mute)" }}
-										>
-											0{i + 1}
 										</span>
 									</span>
 								}

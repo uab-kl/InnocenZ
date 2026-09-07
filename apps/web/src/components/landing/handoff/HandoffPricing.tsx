@@ -306,7 +306,10 @@ export function HandoffFooter() {
 			<div className="hz-wrap">
 				<div
 					className="hz-foot-grid grid gap-10"
-					style={{ gridTemplateColumns: "1.5fr 1fr 1fr 1fr" }}
+					style={{
+						gridTemplateColumns: "auto auto auto auto",
+						justifyContent: "space-between",
+					}}
 				>
 					<div>
 						<div className="flex items-center gap-3.5">
@@ -349,8 +352,11 @@ export function HandoffFooter() {
 						</div>
 					))}
 				</div>
+			</div>
+			<div className="mt-[60px] border-t" />
+			<div className="hz-wrap">
 				<div
-					className="mt-[60px] flex flex-wrap items-center justify-between gap-3 border-t pt-6"
+					className="flex flex-wrap items-center justify-between gap-3 pt-6"
 					style={{ borderColor: "var(--hz-line)" }}
 				>
 					<div

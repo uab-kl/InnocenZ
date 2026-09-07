@@ -4,32 +4,58 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "innocenz-admin", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "innocenz-admin",
+        "dev"
+      ],
       "port": 3000
     },
     {
       "name": "web-3001",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "innocenz-admin", "dev", "--port", "3001"],
+      "runtimeArgs": [
+        "--filter",
+        "innocenz-admin",
+        "dev",
+        "--port",
+        "3001"
+      ],
       "port": 3001
     },
     {
       "name": "backend",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "innocenz-backend", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "innocenz-backend",
+        "dev"
+      ],
       "port": 7777
     },
     {
       "name": "mobile",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["tools/scripts/dev-mobile.mjs"],
+      "runtimeArgs": [
+        "tools/scripts/dev-mobile.mjs"
+      ],
       "port": 8081
     },
     {
       "name": "mobile-web",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["tools/scripts/dev-mobile-web.mjs"],
+      "runtimeArgs": [
+        "tools/scripts/dev-mobile-web.mjs"
+      ],
       "port": 8081
+    },
+    {
+      "name": "demo-scratch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:/Users/jinkg/AppData/Local/Temp/claude/C--Users-jinkg-Downloads-InnocenZ-InnocenZ/c859d97e-51a0-4e6c-8a92-002eb43ad2da/scratchpad/serve.mjs"
+      ],
+      "port": 4173
     }
   ]
 }
