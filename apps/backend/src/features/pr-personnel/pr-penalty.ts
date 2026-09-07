@@ -144,14 +144,19 @@ export function evaluatePrPenalties(
         breaches.push({
           ruleType: rule.ruleType,
           label: 'Below minimum shifts',
-          // THE OPPORTUNITY IS PART OF THE SENTENCE, not just part of the test.
+          // THE OPPORTUNITY COMES FIRST, and the order is the whole fix.
           //
           // This read "1 of 3 shifts this week", which the agency owner read as
           // "she was only GIVEN 1 of the 3" and reasonably called unfair — the
           // number that justifies the fine, the 3 chances she actually had, was
-          // the one number the row never printed (reported 7 Sep 2026). A charge
-          // taken out of someone's pay has to carry its own evidence.
-          detail: `${window.shiftsThisWeek} of ${min} shifts worked · ${opportunity} offered`,
+          // the one number the row never printed (reported 7 Sep 2026).
+          //
+          // ⚠️ Appending it was not enough, and that was the second mistake the
+          // same day: the panel renders this detail in a `truncate` span with
+          // the full text only in a hover title, so "… · 3 offered" landed past
+          // the ellipsis and the row read exactly as it had before. Anything
+          // that must be SEEN goes at the FRONT of a string that gets clipped.
+          detail: `${opportunity} offered · ${window.shiftsThisWeek} of ${min} worked`,
           fineCents: cents(rule.fineRm),
         });
       }
