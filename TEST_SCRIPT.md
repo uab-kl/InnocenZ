@@ -406,6 +406,27 @@ INTENT, and none of it has been exercised on screen.
 `translations.ts` and this file were being edited from both sides; a lost edit would show up as a
 missing dictionary key or a vanished changelog row rather than as a conflict.
 
+**It happened again, later the same day** — the tree was CLEAN when the geo-fence slice **(xxi)**
+started and carried eight foreign files by the time it finished. Still uncommitted, and **covered
+by no changelog row**:
+
+```
+ M agency-portal/components/Nav.tsx · components/portal/PortalShell.tsx
+ M agency-portal/agency-app-overrides.css · prototype-theme.css
+?? agency-portal/components/portal/NavAlertBadge.tsx · portal/PortalNavAlerts.tsx
+?? agency-portal/lib/portal-nav-alerts.ts · lib/portal-nav-alerts.test.ts
+```
+
+A nav alert-badge feature, by the look of it. **No §10 row was written for it, deliberately** — a
+changelog row asserts that something was built AND checked, and none of it was authored, read for
+intent or run here. Writing one to satisfy the doc rule would put a claim in this file that nobody
+can stand behind, which is the one failure mode §10 exists to prevent. The other session owns that
+row.
+
+⚠️ **`translations.ts` was edited from both sides again** in that window — (xxi) added ten
+`geofence.*` keys to both halves. If a nav-alert string renders as its own key, or a geo-fence
+string does, this is why: check BOTH language halves before assuming the key was never added.
+
 ### ▶ VERIFY ON SCREEN — automatic recording, and the void that makes it safe (7 Sep 2026)
 
 Built and live; the one part nobody has clicked. Log in as the agency owner, **Payroll → Last Week**:
