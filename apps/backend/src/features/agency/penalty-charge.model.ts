@@ -40,6 +40,23 @@ export const PenaltyChargeTable = MainSchema.table(
     /** NULL = owed, not yet billed. The Finance head's whole question. */
     chargedAt: timestamp('charged_at', { withTimezone: true }),
     chargedVoucherId: uuid('charged_voucher_id'),
+    /**
+     * THE AGENCY CANCELLED THIS CHARGE (0151).
+     *
+     * Sealing became automatic on 7 Sep 2026, so a charge now exists without
+     * anyone having chosen it — and the owner's condition for that was that the
+     * agency can undo one. A separate stamp rather than a delete, because
+     * `seal()` inserts ON CONFLICT DO NOTHING against the (agency, pr, rule,
+     * week) unique index: a deleted row would be recreated by the very next
+     * weekly run, while a voided row keeps the slot and the decision sticks.
+     *
+     * "Never billed" and "cancelled" are different facts, and `chargedAt IS
+     * NULL` cannot hold both — without this a voided charge keeps resurfacing
+     * on the Finance list and gets billed anyway.
+     */
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidedBy: varchar('voided_by'),
+    voidReason: varchar('void_reason', { length: 500 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull().default('system'),

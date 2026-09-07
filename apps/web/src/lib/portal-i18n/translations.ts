@@ -629,6 +629,14 @@ const en = {
 		thisWeeksPenalties: "This week's penalties",
 		addToVoucher: "Add to voucher",
 		adding: "Adding…",
+		/* VOIDING a recorded penalty (0151) — the half that makes automatic
+		   sealing acceptable. Two labels because the button confirms itself:
+		   there is no un-void, so the first click must not be able to do it. */
+		voidPenalty: "Void",
+		voidConfirm: "Void — confirm",
+		voiding: "Voiding…",
+		penaltiesVoided: "{n} penalty voided — it will not be billed.",
+		couldNotVoid: "Could not void this penalty.",
 		carriedOver: "Carried over",
 		/* The three group headings on that panel. They were hardcoded English
 		   inside the component while the headings around them came from here. */
@@ -905,6 +913,31 @@ const en = {
 		checkedInNoPosition: "Checked in {time} · no position recorded",
 		rosteredSlot: "Rostered · {slot}",
 		rostered: "Rostered",
+		/**
+		 * Replaces "Not checked in" while the slot has not started yet. Before the
+		 * start there is nothing to report — the pill has to say when someone is
+		 * expected, not read as absence from a shift that has not begun.
+		 */
+		dueAt: "Due {time}",
+		/**
+		 * Every stamped row leads with its own hour. The card header's "latest"
+		 * is the group's newest stamp and says nothing about the row beneath it,
+		 * so a row showing only a distance read as a position held right now.
+		 */
+		stampedIn: "In {time}",
+		stampedOut: " · out {time}",
+		/**
+		 * The check-in here was never closed and the PR has since stamped in
+		 * elsewhere. Says only that a later stamp exists — not that they left,
+		 * which no record here can show.
+		 */
+		sinceCheckedInAt: " · since checked in at {outlet}",
+		/**
+		 * Why the same PR appears on a second venue's card: they are still clocked
+		 * in somewhere else. Worded "still checked in at", not "is at" — a check-in
+		 * with no check-out is a record, and the only position this panel holds.
+		 */
+		stillCheckedInElsewhere: " · still checked in at {outlet}",
 
 		/* Planning week grid. */
 		weekOf: "Week · {label}",
@@ -6544,6 +6577,11 @@ const zh: PortalTranslations = {
 		thisWeeksPenalties: "本周罚款",
 		addToVoucher: "加入付款单",
 		adding: "添加中…",
+		voidPenalty: "作废",
+		voidConfirm: "作废 —— 确认",
+		voiding: "作废中…",
+		penaltiesVoided: "已作废 {n} 项罚款，不会计入账单。",
+		couldNotVoid: "无法作废该罚款。",
 		carriedOver: "已结转",
 		weeklyPenalties: "每周罚款",
 		cancellationFees: "取消费用",
@@ -6765,6 +6803,11 @@ const zh: PortalTranslations = {
 		checkedInNoPosition: "{time} 已签到 · 未记录位置",
 		rosteredSlot: "已排班 · {slot}",
 		rostered: "已排班",
+		dueAt: "预计 {time} 到岗",
+		stampedIn: "{time} 签到",
+		stampedOut: " · {time} 签退",
+		sinceCheckedInAt: " · 之后已在 {outlet} 签到",
+		stillCheckedInElsewhere: " · 仍在 {outlet} 签到中（未签退）",
 
 		weekOf: "本周 · {label}",
 		loadingRoster: "正在加载排班…",

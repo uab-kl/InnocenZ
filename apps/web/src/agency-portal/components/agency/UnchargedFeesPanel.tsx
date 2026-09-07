@@ -342,6 +342,8 @@ export function UnchargedFeesPanel({
 		isError,
 		isMarking,
 		markCharged,
+		isVoiding,
+		voidCharges,
 	} = useAgencyUncharged();
 	/*
 	 * Who is in breach, computed server-side and read-only.
@@ -393,6 +395,11 @@ export function UnchargedFeesPanel({
 	   a click to admit it has contents; collapsing it is a choice the operator
 	   makes after reading, not a state it starts in. */
 	const [open, setOpen] = useState(true);
+	/* Voiding is irreversible from this screen — there is no un-void endpoint —
+	   so it takes a second click that states what it will do. Same restraint the
+	   overtime queue uses, for the same reason: the first click should not be
+	   able to cancel a charge on its own. */
+	const [confirmVoid, setConfirmVoid] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [selectedCharges, setSelectedCharges] = useState<Set<string>>(
 		new Set(),
@@ -733,6 +740,42 @@ export function UnchargedFeesPanel({
 							>
 								{isMarking ? t.payroll.adding : t.payroll.addToVoucher}
 							</button>
+							{/* VOID, offered only for recorded PENALTIES (0151).
+							    A cancellation fee is not voided here — it has its own
+							    forgive, on the assignment, with its own rules about the
+							    voucher window. Offering one control for both would put a
+							    button on rows it cannot act on. */}
+							{selectedCharges.size > 0 && (
+								<button
+									type="button"
+									disabled={isVoiding}
+									onClick={() => {
+										if (!confirmVoid) {
+											setConfirmVoid(true);
+											return;
+										}
+										setConfirmVoid(false);
+										void voidCharges([...selectedCharges])
+											.then((res) => {
+												toast(
+													fill(t.payroll.penaltiesVoided, {
+														n: res.voided,
+													}),
+													res.voided > 0 ? "success" : "warn",
+												);
+												setSelectedCharges(new Set());
+											})
+											.catch(() => toast(t.payroll.couldNotVoid, "warn"));
+									}}
+									className="rounded-lg border border-[var(--iz-line2)] px-2.5 py-1.5 text-xs font-semibold text-[var(--iz-red,#e5484d)] disabled:opacity-60"
+								>
+									{isVoiding
+										? t.payroll.voiding
+										: confirmVoid
+											? t.payroll.voidConfirm
+											: t.payroll.voidPenalty}
+								</button>
+							)}
 						</div>
 					)}
 				</>
