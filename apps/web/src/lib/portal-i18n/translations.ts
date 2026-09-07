@@ -1860,9 +1860,25 @@ const en = {
 		verifyNewMobile: "Verify new mobile",
 		enterSixDigitCode: "Enter the 6-digit code sent to",
 		verifyAndSave: "Verify & save",
+		/*
+		 * ONE ROLE, ONE NAME — these must stay word-for-word identical to the
+		 * `roles` section above (owner's call, 7 Sep 2026).
+		 *
+		 * The two lists label the same five roles from different sources: `roles`
+		 * is keyed by the client's sub-role, these by the server's stored
+		 * `role_name` through `portalRoleLabel`. While one read "Agency Finance"
+		 * and the other "Finance" the gap read as two registers; once both were
+		 * short, "Financial Head" in the header beside "Finance" in the member
+		 * dropdown reads as a bug. Change a role's wording in BOTH places or in
+		 * neither.
+		 *
+		 * Display only, and matching is unaffected: `portalRoleLabel` tests the
+		 * stored English name (`owner`, `finance`, `ops head`…) and
+		 * `SUB_ROLE_TITLE_ICONS` is keyed by it too — never by these strings.
+		 */
 		roleOwner: "Owner",
-		roleFinance: "Finance",
-		roleOps: "Ops",
+		roleFinance: "Financial Head",
+		roleOps: "Ops Head",
 		roleDirector: "Director",
 		roleGuarantor: "Guarantor",
 		memberFallback: "member",
@@ -2955,16 +2971,31 @@ const en = {
 			"Showing the {shown} most recent of {total} pending items ({perCategory} per category). Open the category pages for the rest.",
 	},
 	/** Sub-role names, shown under the page title and in the account menu. */
+	/**
+	 * THE ROLE ONLY — never the organisation it is held at.
+	 *
+	 * Every one of these renders somewhere that has already said which portal you
+	 * are in: the header prints `Organisation (Role)` so the org name carries it
+	 * ("Atlas Agency (Owner)"), and the other three sites are gated on an
+	 * `/agency` or `/outlet` path. "Agency Owner" inside Atlas Agency's own header
+	 * said "agency" twice and the role once (owner's call, 7 Sep 2026).
+	 *
+	 * Agency and outlet therefore share wording — two keys, one string — which is
+	 * right rather than duplication: it is the same role at two kinds of
+	 * organisation, and no screen shows both at once. Put the prefix back only if
+	 * some surface ever lists roles ACROSS portals, where "Owner" alone would not
+	 * say whose.
+	 */
 	roles: {
-		agencyOwner: "Agency Owner",
-		agencyFinance: "Agency Finance",
-		agencyDirector: "Agency Director",
-		agencyGuarantor: "Agency Guarantor",
-		outletOwner: "Outlet Owner",
-		outletFinance: "Outlet Finance",
-		outletOps: "Outlet Ops Head",
-		outletDirector: "Outlet Director",
-		outletGuarantor: "Outlet Guarantor",
+		agencyOwner: "Owner",
+		agencyFinance: "Financial Head",
+		agencyDirector: "Director",
+		agencyGuarantor: "Guarantor",
+		outletOwner: "Owner",
+		outletFinance: "Financial Head",
+		outletOps: "Ops Head",
+		outletDirector: "Director",
+		outletGuarantor: "Guarantor",
 	},
 	/** Agency → Payroll → Receipts sub-tab. */
 	receipts: {
@@ -7530,10 +7561,16 @@ const zh: PortalTranslations = {
 		verifyNewMobile: "验证新手机号",
 		enterSixDigitCode: "请输入发送至以下号码的 6 位验证码",
 		verifyAndSave: "验证并保存",
+		/*
+		 * Word-for-word identical to the `roles` section — see the EN block.
+		 * `roleDirector` moved 董事 → 总监 to match: 董事 is a BOARD director,
+		 * 总监 the head-of-function these lanes actually mean, and the two lists
+		 * cannot name one role two ways.
+		 */
 		roleOwner: "东主",
-		roleFinance: "财务",
+		roleFinance: "财务主管",
 		roleOps: "运营主管",
-		roleDirector: "董事",
+		roleDirector: "总监",
 		roleGuarantor: "担保人",
 		memberFallback: "成员",
 		thisMemberFallback: "该成员",
@@ -8525,16 +8562,17 @@ const zh: PortalTranslations = {
 		pendingTruncated:
 			"仅显示最近 {shown} 项，共 {total} 项待审批（每类 {perCategory} 项）。其余请前往各分类页面查看。",
 	},
+	/** See the EN block: the role only — the header's org name says whose. */
 	roles: {
-		agencyOwner: "经纪公司东主",
-		agencyFinance: "经纪公司财务",
-		agencyDirector: "经纪公司总监",
-		agencyGuarantor: "经纪公司担保人",
-		outletOwner: "门店东主",
-		outletFinance: "门店财务",
-		outletOps: "门店运营主管",
-		outletDirector: "门店总监",
-		outletGuarantor: "门店担保人",
+		agencyOwner: "东主",
+		agencyFinance: "财务主管",
+		agencyDirector: "总监",
+		agencyGuarantor: "担保人",
+		outletOwner: "东主",
+		outletFinance: "财务主管",
+		outletOps: "运营主管",
+		outletDirector: "总监",
+		outletGuarantor: "担保人",
 	},
 	receipts: {
 		receipts: "收据",

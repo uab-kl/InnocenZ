@@ -47,6 +47,7 @@ import {
 } from "@agency-portal/lib/agency-payroll";
 import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
 import type { MoneyKind } from "@agency-portal/lib/payroll-kind-day";
+import { dayBelongsToWeekTab } from "@agency-portal/lib/payroll-week-scope";
 import {
 	DEMO_PV_ISSUED_WEEKS_AGO,
 	demoPayrollWeekBoundsForWeeksAgo,
@@ -665,33 +666,53 @@ function AgencyPV() {
 	 * These read the same two lists the panels themselves filter, and must use the
 	 * same anchor, or the badge says 1 while the panel below it says none. That
 	 * disagreement is worse than either number alone: it makes the screen look
-	 * broken rather than empty.
+	 * broken rather than empty. `dayBelongsToWeekTab` is that shared anchor.
 	 */
+	/*
+	 * The payment week is a CATCH-ALL, for the queues as it already was for the
+	 * vouchers (see `lastLastWeekPvs`). Reported 7 Sep 2026: two overtime claims
+	 * worked on 20 and 22 Aug — the week of 16–22 Aug, one week older than this
+	 * window — blocked their voucher's send while all three Overtime tabs read 0,
+	 * because every tab tested strict containment and the claims had simply aged
+	 * past the last of them. The voucher they block is still on this tab, rescued
+	 * by the same reasoning; the claims were not. An item leaves these queues by
+	 * being DECIDED, never by growing old.
+	 */
+	const weekIncludesOlder = payrollWeekTab === "last_last_week";
+
 	const weekOpenDisputes = useMemo(
 		() =>
-			openDisputes.filter(
-				(d) =>
-					d.disputeDate &&
-					d.disputeDate >= activeWeekBounds.weekStartIso &&
-					d.disputeDate <= activeWeekBounds.weekEndIso,
+			openDisputes.filter((d) =>
+				dayBelongsToWeekTab(
+					d.disputeDate,
+					activeWeekBounds.weekStartIso,
+					activeWeekBounds.weekEndIso,
+					weekIncludesOlder,
+				),
 			),
-		[openDisputes, activeWeekBounds.weekStartIso, activeWeekBounds.weekEndIso],
+		[
+			openDisputes,
+			activeWeekBounds.weekStartIso,
+			activeWeekBounds.weekEndIso,
+			weekIncludesOlder,
+		],
 	);
 
 	const weekPendingOtClaims = useMemo(
 		() =>
-			pendingOtClaims.filter((c) => {
-				if (!c.shiftDate) return false;
-				const day = c.shiftDate.slice(0, 10);
-				return (
-					day >= activeWeekBounds.weekStartIso &&
-					day <= activeWeekBounds.weekEndIso
-				);
-			}),
+			pendingOtClaims.filter((c) =>
+				dayBelongsToWeekTab(
+					c.shiftDate,
+					activeWeekBounds.weekStartIso,
+					activeWeekBounds.weekEndIso,
+					weekIncludesOlder,
+				),
+			),
 		[
 			pendingOtClaims,
 			activeWeekBounds.weekStartIso,
 			activeWeekBounds.weekEndIso,
+			weekIncludesOlder,
 		],
 	);
 
@@ -718,6 +739,24 @@ function AgencyPV() {
 		payrollWeekTab !== "last_last_week" ||
 		weekPendingOtClaims.length > 0 ||
 		pvSubTab === "overtime";
+
+	/*
+	 * AND THE SAME FOR DISPUTES, for the same reason and on the same terms.
+	 *
+	 * Disputes was hidden outright on the payment week on the identical premise
+	 * ("by then a voucher's figures are settled"), and that premise had already
+	 * been shown not to hold for Overtime. With the catch-all above, an open
+	 * dispute older than the oldest window now lands on THIS tab — so hiding the
+	 * tab unconditionally would recreate the 7 Sep bug in the other queue: the
+	 * panel's own "switch weeks above" line would name a week offering no tab to
+	 * switch to. It appears exactly when there is something open to decide, so a
+	 * genuinely settled payment week still shows no Disputes tab, which is the
+	 * case the owner's rule was written for.
+	 */
+	const showDisputesTab =
+		payrollWeekTab !== "last_last_week" ||
+		weekOpenDisputes.length > 0 ||
+		pvSubTab === "disputes";
 
 	const activeWeekStats = useMemo(() => {
 		const signed = weekTabPvs.filter((p) => p.status === "SIGNED");
@@ -779,18 +818,14 @@ function AgencyPV() {
 	const selectPayrollWeekTab = (tab: PayrollWeekTab) => {
 		setPayrollWeekTab(tab);
 		setStatusFilter("all");
-		// The payment week hides Disputes, so landing on it while that is selected
-		// would leave a panel open with no tab above it — and no way back except
-		// guessing. Fall back to the tab that always exists.
-		//
-		// Overtime is NOT bounced any more: `showOvertimeTab` keeps its button
-		// rendered whenever it is the selected tab, so the panel and its tab arrive
-		// together. Bouncing it was the other half of the 3 Sep report — following
-		// the panel's own "switch weeks above" advice landed the user on the
-		// Vouchers tab instead, which reads as the claims having disappeared.
-		if (tab === "last_last_week" && pvSubTab === "disputes") {
-			setPvSubTab("vouchers");
-		}
+		// NEITHER queue is bounced any more. `showOvertimeTab` / `showDisputesTab`
+		// keep a button rendered whenever it is the selected tab, so the panel and
+		// its tab always arrive together — no panel open with no tab above it, and
+		// no way back except guessing. Bouncing was the other half of the 3 Sep
+		// report: following the panel's own "switch weeks above" advice landed the
+		// user on the Vouchers tab instead, which reads as the claims having
+		// disappeared. Disputes joined it on 7 Sep, when the payment week became
+		// the tab that holds aged open claims.
 		// Drop the incoming ?status/?pv/?tab. They are an instruction about where to
 		// land, and once the user has picked a tab themselves that instruction is
 		// spent — leaving it in the URL lets the effect above re-apply it on the next
@@ -1085,11 +1120,13 @@ function AgencyPV() {
 				>
 					{t.receipts.receipts} ({activeWeekReceipts.length})
 				</button>
-				{/* Disputes is hidden on the PAYMENT week (owner's rule, 3 Aug 2026):
+				{/* Disputes was hidden on the PAYMENT week (owner's rule, 3 Aug 2026):
 				    by then a voucher's figures are settled, and a dispute belongs to a
 				    week still under review. Overtime USED to be hidden by this same
 				    rule and no longer is — see `showOvertimeTab` for why the premise
-				    stopped holding.
+				    stopped holding, and `showDisputesTab` for why the same answer now
+				    applies here: the payment week holds aged open claims, so it has to
+				    be able to show them.
 				    Both ARE week-scoped (owner's rule, 11 Aug 2026): *"the dispute
 				    should sit with the week it is disputed at"*. They were not, and one
 				    claim appeared under every week with an identical count while the
@@ -1098,7 +1135,7 @@ function AgencyPV() {
 				    has not been thrown away: each panel counts its off-week open items
 				    on a line of its own, and the agency home lists every open one
 				    regardless of week. */}
-				{payrollWeekTab !== "last_last_week" && (
+				{showDisputesTab && (
 					<button
 						type="button"
 						className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
@@ -1124,6 +1161,7 @@ function AgencyPV() {
 				<DisputeQueuePanel
 					weekStartIso={activeWeekBounds.weekStartIso}
 					weekEndIso={activeWeekBounds.weekEndIso}
+					includesOlder={weekIncludesOlder}
 					kinds={moneyKinds}
 					day={moneyDay}
 					onKindsChange={setMoneyKinds}
@@ -1134,6 +1172,7 @@ function AgencyPV() {
 				<OvertimeQueuePanel
 					weekStartIso={activeWeekBounds.weekStartIso}
 					weekEndIso={activeWeekBounds.weekEndIso}
+					includesOlder={weekIncludesOlder}
 				/>
 			)}
 
