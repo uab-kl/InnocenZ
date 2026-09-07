@@ -167,8 +167,29 @@ export function receiptsInPayrollWeek(
 	receipts: AgencyReceipt[],
 	weekStartIso: string,
 	weekEndIso: string,
+	/**
+	 * THE PAYMENT WEEK'S AGE CATCH-ALL — true on that tab only.
+	 *
+	 * The voucher list has had one for a while: `lastLastWeekPvs` deliberately
+	 * holds every unpaid voucher from any week, because an overdue one used to
+	 * age past all three windows and match no tab at all. Receipts never got the
+	 * same treatment and needed it more: a PENDING receipt BLOCKS its voucher
+	 * from being sent, so an aged one left the voucher sitting on the payment
+	 * week refusing to send, with the receipt explaining why reachable from
+	 * nowhere on the page. Found 7 Sep 2026 with two live rows — `weekStart`
+	 * 2026-08-02 and 2026-08-09 against a payment week of 23-29 Aug.
+	 *
+	 * Only PENDING rows are rescued, and the voucher catch-all drops PAID for the
+	 * same reason: what must not age out is what is UNFINISHED. Sweeping up
+	 * nineteen verified receipts from June would bury the two that need someone.
+	 */
+	includesOlder = false,
 ): AgencyReceipt[] {
-	return receipts.filter((r) => inPayrollWeek(r, weekStartIso, weekEndIso));
+	return receipts.filter((r) => {
+		if (inPayrollWeek(r, weekStartIso, weekEndIso)) return true;
+		if (!includesOlder || r.status !== "pending") return false;
+		return (r.weekStart ?? workingDayIso(r)) < weekStartIso;
+	});
 }
 
 /**
@@ -566,6 +587,7 @@ function ReceiptRow({
 export function AgencyReceiptsPanel({
 	weekStartIso,
 	weekEndIso,
+	includesOlder = false,
 	onOpenPv,
 	focusReceiptId,
 	kinds,
@@ -575,6 +597,8 @@ export function AgencyReceiptsPanel({
 }: {
 	weekStartIso: string;
 	weekEndIso: string;
+	/** Payment week only — see `receiptsInPayrollWeek`. */
+	includesOlder?: boolean;
 	onOpenPv?: (voucherId: string) => void;
 	/** Deep-linked receipt to scroll to — see the effect below. */
 	focusReceiptId?: string;
@@ -632,8 +656,9 @@ export function AgencyReceiptsPanel({
 	const [showFilters, setShowFilters] = useState(false);
 
 	const weekReceipts = useMemo(
-		() => receiptsInPayrollWeek(receipts, weekStartIso, weekEndIso),
-		[receipts, weekStartIso, weekEndIso],
+		() =>
+			receiptsInPayrollWeek(receipts, weekStartIso, weekEndIso, includesOlder),
+		[receipts, weekStartIso, weekEndIso, includesOlder],
 	);
 	const offWeekCount = receipts.length - weekReceipts.length;
 

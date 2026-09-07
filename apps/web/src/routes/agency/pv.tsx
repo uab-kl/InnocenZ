@@ -46,6 +46,13 @@ import {
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
 import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
+import {
+	countPvsNeedingAction,
+	countReceiptsNeedingAction,
+	type PayrollWeekWork,
+	payrollWeekWork,
+	voucherIdsWithOpenDispute,
+} from "@agency-portal/lib/payroll-action-counts";
 import type { MoneyKind } from "@agency-portal/lib/payroll-kind-day";
 import { dayBelongsToWeekTab } from "@agency-portal/lib/payroll-week-scope";
 import {
@@ -490,11 +497,43 @@ function AgencyPV() {
 		 * Duplication across tabs is deliberate and pre-existing: an agency
 		 * looking for a voucher by the week it was WORKED still finds it there.
 		 */
-		const seen = new Set(inWindow.map((p) => p.id));
-		const stillOutstanding = payrollActivePvs.filter((p) => !seen.has(p.id));
+		/*
+		 * WHAT THE OTHER TWO TABS ALREADY SHOW IS NOT REPEATED HERE.
+		 *
+		 * Owner's rule, 7 Sep 2026: *"Payment Week should not show what is in Last
+		 * Week and This Week, as those are to let them sort it out between the
+		 * Agency and PR. The Payment Week is to only let them see the ones that
+		 * are missed out by Last Week and the rest of the PVs that need to be
+		 * paid."* Two tabs for two jobs — the newer weeks are where a voucher is
+		 * still being settled with the PR, this one is what has fallen out of that
+		 * conversation and what is left to pay.
+		 *
+		 * It also makes the strip ADD UP. This list used to append every unpaid
+		 * voucher regardless of age, so one voucher was counted under Last Week
+		 * and again here, and the three tab totals could not be summed to anything
+		 * — which read as the sidebar dropping a week rather than as the tabs
+		 * repeating one. Now each outstanding thing is on exactly one tab, and
+		 * This Week + Last Week + Payment Week is the sidebar's number.
+		 *
+		 * ⚠️ The AGE RESCUE this list exists for is untouched: a voucher older
+		 * than every window still lands here (PV-000006 is the case, see above).
+		 * Only vouchers the newer tabs are ALREADY showing are dropped, and
+		 * dropping those hides nothing — they are one tab away, under the week
+		 * they were worked, which is where the owner wants them answered.
+		 */
+		const shownElsewhere = new Set([
+			...inWindow.map((p) => p.id),
+			...thisWeekPvs.map((p) => p.id),
+			...lastWeekPvs.map((p) => p.id),
+		]);
+		const stillOutstanding = payrollActivePvs.filter(
+			(p) => !shownElsewhere.has(p.id),
+		);
 		return [...inWindow, ...stillOutstanding];
 	}, [
 		payrollActivePvs,
+		thisWeekPvs,
+		lastWeekPvs,
 		lastWeekBounds.weekStartIso,
 		lastLastWeekBounds.weekStartIso,
 		lastLastWeekBounds.weekEndIso,
@@ -680,41 +719,84 @@ function AgencyPV() {
 	 */
 	const weekIncludesOlder = payrollWeekTab === "last_last_week";
 
-	const weekOpenDisputes = useMemo(
-		() =>
-			openDisputes.filter((d) =>
-				dayBelongsToWeekTab(
-					d.disputeDate,
-					activeWeekBounds.weekStartIso,
-					activeWeekBounds.weekEndIso,
-					weekIncludesOlder,
+	/**
+	 * OUTSTANDING WORK, FOR ALL THREE WEEKS AT ONCE.
+	 *
+	 * One derivation feeds both strips: each WEEK tab shows this week's `total`,
+	 * and the four SUB-TABS under whichever week is open show its four parts. The
+	 * alternative — counting the active week for the sub-tabs and the other two
+	 * weeks somewhere else — is two rules for one question, and the day they
+	 * disagree the screen tells you a week is quiet while its own sub-tabs list
+	 * work.
+	 *
+	 * All three weeks are computed on every render rather than lazily, because
+	 * the whole point of a number on a tab you are NOT looking at is to be right
+	 * before you look. The inputs are already in memory: the three voucher lists
+	 * are memoised above, and disputes/receipts/overtime are single unpaginated
+	 * queries the page holds anyway.
+	 *
+	 * ⚠️ `includesOlder` is TRUE only for the payment week. It is the catch-all —
+	 * anything older than the oldest window lands there — so counting it on the
+	 * other two would report the same aged claim under every tab, which is the
+	 * "filter leaking between weeks" fault this scoping was written to fix.
+	 */
+	const weekWork = useMemo(() => {
+		// Built ONCE from every open claim, never per week — see
+		// `countPvsNeedingAction` for why a windowed set moves the double-count
+		// into the next week instead of removing it.
+		const disputedVoucherIds = voucherIdsWithOpenDispute(openDisputes);
+		const forWeek = (
+			pvs: readonly { id: string; status: PrPvStatus }[],
+			bounds: { weekStartIso: string; weekEndIso: string },
+			includesOlder: boolean,
+		) =>
+			payrollWeekWork({
+				vouchers: countPvsNeedingAction(pvs, disputedVoucherIds),
+				receipts: countReceiptsNeedingAction(
+					receiptsInPayrollWeek(
+						backendReceipts,
+						bounds.weekStartIso,
+						bounds.weekEndIso,
+						includesOlder,
+					),
 				),
-			),
-		[
-			openDisputes,
-			activeWeekBounds.weekStartIso,
-			activeWeekBounds.weekEndIso,
-			weekIncludesOlder,
-		],
-	);
+				disputes: openDisputes.filter((d) =>
+					dayBelongsToWeekTab(
+						d.disputeDate,
+						bounds.weekStartIso,
+						bounds.weekEndIso,
+						includesOlder,
+					),
+				).length,
+				overtime: pendingOtClaims.filter((c) =>
+					dayBelongsToWeekTab(
+						c.shiftDate,
+						bounds.weekStartIso,
+						bounds.weekEndIso,
+						includesOlder,
+					),
+				).length,
+			});
 
-	const weekPendingOtClaims = useMemo(
-		() =>
-			pendingOtClaims.filter((c) =>
-				dayBelongsToWeekTab(
-					c.shiftDate,
-					activeWeekBounds.weekStartIso,
-					activeWeekBounds.weekEndIso,
-					weekIncludesOlder,
-				),
-			),
-		[
-			pendingOtClaims,
-			activeWeekBounds.weekStartIso,
-			activeWeekBounds.weekEndIso,
-			weekIncludesOlder,
-		],
-	);
+		return {
+			this_week: forWeek(thisWeekPvs, thisWeekBounds, false),
+			last_week: forWeek(lastWeekPvs, lastWeekBounds, false),
+			last_last_week: forWeek(lastLastWeekPvs, lastLastWeekBounds, true),
+		} satisfies Record<PayrollWeekTab, PayrollWeekWork>;
+	}, [
+		thisWeekPvs,
+		lastWeekPvs,
+		lastLastWeekPvs,
+		thisWeekBounds,
+		lastWeekBounds,
+		lastLastWeekBounds,
+		backendReceipts,
+		openDisputes,
+		pendingOtClaims,
+	]);
+
+	/** The open week's four sub-tab numbers — the same four the tab above sums. */
+	const activeWeekWork = weekWork[payrollWeekTab];
 
 	/*
 	 * IS THE OVERTIME TAB OFFERED ON THIS WEEK?
@@ -737,7 +819,7 @@ function AgencyPV() {
 	 */
 	const showOvertimeTab =
 		payrollWeekTab !== "last_last_week" ||
-		weekPendingOtClaims.length > 0 ||
+		activeWeekWork.overtime > 0 ||
 		pvSubTab === "overtime";
 
 	/*
@@ -755,7 +837,7 @@ function AgencyPV() {
 	 */
 	const showDisputesTab =
 		payrollWeekTab !== "last_last_week" ||
-		weekOpenDisputes.length > 0 ||
+		activeWeekWork.disputes > 0 ||
 		pvSubTab === "disputes";
 
 	const activeWeekStats = useMemo(() => {
@@ -780,28 +862,6 @@ function AgencyPV() {
 	const activeWeekBilling = useMemo(
 		() => agencySubscriptionBillingForWeeklyPv(activeWeekStats.pvCount, t),
 		[activeWeekStats.pvCount, t],
-	);
-
-	/**
-	 * The DATABASE's receipts for the selected week — what the Receipts sub-tab
-	 * counts and lists.
-	 *
-	 * Anchored on the voucher's own `week_start`, the same containment rule the
-	 * voucher rows use, rather than on when the receipt was uploaded: a receipt
-	 * logged on Monday for last week's shift is last week's money.
-	 */
-	const activeWeekReceipts = useMemo(
-		() =>
-			receiptsInPayrollWeek(
-				backendReceipts,
-				activeWeekBounds.weekStartIso,
-				activeWeekBounds.weekEndIso,
-			),
-		[
-			backendReceipts,
-			activeWeekBounds.weekStartIso,
-			activeWeekBounds.weekEndIso,
-		],
 	);
 
 	/**
@@ -1006,21 +1066,21 @@ function AgencyPV() {
 					className={`iz-payroll-tab${payrollWeekTab === "this_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("this_week")}
 				>
-					{t.payroll.thisWeek}
+					{t.payroll.thisWeek} ({weekWork.this_week.total})
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("last_week")}
 				>
-					{t.payroll.lastWeek}
+					{t.payroll.lastWeek} ({weekWork.last_week.total})
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_last_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("last_last_week")}
 				>
-					{t.payroll.paymentWeek}
+					{t.payroll.paymentWeek} ({weekWork.last_last_week.total})
 				</button>
 			</div>
 
@@ -1111,14 +1171,14 @@ function AgencyPV() {
 					className={`iz-payroll-tab${pvSubTab === "vouchers" ? " on" : ""}`}
 					onClick={() => selectPvSubTab("vouchers")}
 				>
-					{t.payroll.paymentVouchers} ({weekTabPvs.length})
+					{t.payroll.paymentVouchers} ({activeWeekWork.vouchers})
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${pvSubTab === "receipts" ? " on" : ""}`}
 					onClick={() => selectPvSubTab("receipts")}
 				>
-					{t.receipts.receipts} ({activeWeekReceipts.length})
+					{t.receipts.receipts} ({activeWeekWork.receipts})
 				</button>
 				{/* Disputes was hidden on the PAYMENT week (owner's rule, 3 Aug 2026):
 				    by then a voucher's figures are settled, and a dispute belongs to a
@@ -1141,7 +1201,7 @@ function AgencyPV() {
 						className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
 						onClick={() => selectPvSubTab("disputes")}
 					>
-						{t.agencyHome.disputes} ({weekOpenDisputes.length})
+						{t.agencyHome.disputes} ({activeWeekWork.disputes})
 					</button>
 				)}
 				{/* See `showOvertimeTab`: on the payment week this is offered only
@@ -1152,7 +1212,7 @@ function AgencyPV() {
 						className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
 						onClick={() => selectPvSubTab("overtime")}
 					>
-						{t.payroll.overtime} ({weekPendingOtClaims.length})
+						{t.payroll.overtime} ({activeWeekWork.overtime})
 					</button>
 				)}
 			</div>
@@ -1391,6 +1451,7 @@ function AgencyPV() {
 				<AgencyReceiptsPanel
 					weekStartIso={activeWeekBounds.weekStartIso}
 					weekEndIso={activeWeekBounds.weekEndIso}
+					includesOlder={weekIncludesOlder}
 					focusReceiptId={receiptFromSearch}
 					kinds={moneyKinds}
 					day={moneyDay}

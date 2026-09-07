@@ -19526,10 +19526,14 @@ html:has(.iz-pr-app) {
 		--iz-portal-sidebar-w: 72px;
 	}
 
+	/* `:not(.iz-nav-alert)` — the LABEL, not every span. This band collapses
+	   the rail on its own, without the `data-collapsed` attribute, so it needs
+	   the same exemption the manual toggle has or a count badge vanishes on
+	   every tablet-width screen. */
 	.iz-portal-sidebar-brand p,
 	.iz-portal-sidebar-identity > div,
-	.iz-portal-nav-link span,
-	.iz-portal-sidebar-foot .iz-portal-nav-link span {
+	.iz-portal-nav-link span:not(.iz-nav-alert),
+	.iz-portal-sidebar-foot .iz-portal-nav-link span:not(.iz-nav-alert) {
 		display: none;
 	}
 

@@ -5,7 +5,13 @@ import {
 	type NavItem,
 	navIsActive,
 } from "@agency-portal/components/Nav";
+import {
+	NavAlertBadge,
+	navAlertAriaSuffix,
+	useNavAlerts,
+} from "@agency-portal/components/portal/NavAlertBadge";
 import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotificationBell";
+import { PortalNavAlerts } from "@agency-portal/components/portal/PortalNavAlerts";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
@@ -215,14 +221,23 @@ function PortalSidebarLink({
 	onNavigate?: () => void;
 }) {
 	const active = navIsActive(pathname, item.to);
+	const { t } = usePortalLocale();
+	const alert = useNavAlerts()[item.to];
 	return (
 		<Link
 			to={item.to}
 			className={`iz-portal-nav-link${active ? " on" : ""}`}
 			onClick={onNavigate}
+			/*
+			 * The count is announced HERE, on the link, and hidden on the pill
+			 * itself. A screen reader reading "Payroll" and then a bare "7" says
+			 * nothing about what seven is.
+			 */
+			aria-label={`${item.label}${navAlertAriaSuffix(alert?.count, t.shell.navAlertWaiting)}`}
 		>
 			<item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
 			<span>{item.label}</span>
+			{alert && <NavAlertBadge count={alert.count} tone={alert.tone} />}
 		</Link>
 	);
 }
@@ -465,52 +480,56 @@ export function PortalShell({
 		});
 
 	return (
-		<div
-			className="iz-portal"
-			data-portal={portal}
-			data-collapsed={collapsed ? "true" : undefined}
-		>
-			<PortalSidebar portal={portal} items={localiseNav(sidebarItems, t)} />
-
-			<button
-				type="button"
-				className="iz-portal-collapse-toggle"
-				onClick={toggleCollapsed}
-				aria-label={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
-				title={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
+		<PortalNavAlerts portal={portal}>
+			<div
+				className="iz-portal"
+				data-portal={portal}
+				data-collapsed={collapsed ? "true" : undefined}
 			>
-				{collapsed ? (
-					<ChevronRight className="h-4 w-4" strokeWidth={2} />
-				) : (
-					<ChevronLeft className="h-4 w-4" strokeWidth={2} />
-				)}
-			</button>
+				<PortalSidebar portal={portal} items={localiseNav(sidebarItems, t)} />
 
-			<div className="iz-portal-main">
-				<PortalHeader
-					portal={portal}
-					orgName={orgName}
-					ownerName={
-						me?.username?.trim() ||
-						me?.displayName?.trim() ||
-						owner.ownerName.trim() ||
-						""
+				<button
+					type="button"
+					className="iz-portal-collapse-toggle"
+					onClick={toggleCollapsed}
+					aria-label={
+						collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar
 					}
-					avatarPhoto={personalPhoto}
-					subLabel={subLabel}
-					demoData={demoData}
-				/>
+					title={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
+				>
+					{collapsed ? (
+						<ChevronRight className="h-4 w-4" strokeWidth={2} />
+					) : (
+						<ChevronLeft className="h-4 w-4" strokeWidth={2} />
+					)}
+				</button>
 
-				<div className="iz-portal-viewport">{children}</div>
-			</div>
+				<div className="iz-portal-main">
+					<PortalHeader
+						portal={portal}
+						orgName={orgName}
+						ownerName={
+							me?.username?.trim() ||
+							me?.displayName?.trim() ||
+							owner.ownerName.trim() ||
+							""
+						}
+						avatarPhoto={personalPhoto}
+						subLabel={subLabel}
+						demoData={demoData}
+					/>
 
-			{navItems.length > 0 && (
-				<div className="iz-portal-mobile-footer md:hidden">
-					<BottomNav items={localiseNav(navItems, t)} />
+					<div className="iz-portal-viewport">{children}</div>
 				</div>
-			)}
 
-			{overlay}
-		</div>
+				{navItems.length > 0 && (
+					<div className="iz-portal-mobile-footer md:hidden">
+						<BottomNav items={localiseNav(navItems, t)} />
+					</div>
+				)}
+
+				{overlay}
+			</div>
+		</PortalNavAlerts>
 	);
 }

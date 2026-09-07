@@ -686,7 +686,15 @@ const en = {
 		outletFallback: "Outlet",
 		inProgressNotClosed: "in progress · not yet closed",
 		/** Payment Week holds every UNPAID voucher now, not a date range. */
-		outstandingVouchersPrefix: "Every voucher still outstanding",
+		/**
+		 * ⚠️ NOT "every voucher still outstanding" any more. The Payment Week tab
+		 * stopped repeating what This Week and Last Week already show (owner, 7 Sep
+		 * 2026), so a voucher being settled with the PR on a newer tab is
+		 * deliberately absent from this list. The old wording described a list this
+		 * had stopped being, which is the worse half of the same bug it was written
+		 * to fix.
+		 */
+		outstandingVouchersPrefix: "Left to pay · not on the newer weeks",
 		readyToPay: "ready to pay",
 		notSignedYet: "not signed yet",
 		signedCountSuffix: "signed",
@@ -6633,7 +6641,7 @@ const zh: PortalTranslations = {
 		saved: "已保存",
 		outletFallback: "门店",
 		inProgressNotClosed: "进行中 · 尚未结算",
-		outstandingVouchersPrefix: "所有未结付款单",
+		outstandingVouchersPrefix: "待付款 · 不含较新周次",
 		readyToPay: "可付款",
 		notSignedYet: "张尚未签署",
 		signedCountSuffix: "张已签署",
