@@ -118,12 +118,29 @@ export type GeocodePrecision =
 	| "APPROXIMATE";
 
 /** One address-lookup suggestion. Saves nothing until the operator commits it. */
+/**
+ * The six address columns a match maps onto — see the backend's
+ * `addressPartsFromComponents`. Committing a pin found by free-text search
+ * writes these too, so the venue's address and its fence never describe two
+ * different places.
+ */
+export interface GeocodeAddressParts {
+	addressLine1: string;
+	addressLine2: string;
+	city: string;
+	postcode: string;
+	state: string;
+	country: string;
+}
+
 export interface GeocodeCandidate {
 	formattedAddress: string;
 	lat: number;
 	lng: number;
 	precision: GeocodePrecision;
 	placeId: string;
+	/** Absent from a backend older than the address-sync change. */
+	components?: GeocodeAddressParts;
 }
 
 export interface GeocodeCandidatesApiResponse {

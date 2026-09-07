@@ -1,3 +1,7 @@
+import {
+	type OrgAddress,
+	resolveOrgAddressForSave,
+} from "@agency-portal/lib/org-address";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -10,6 +14,7 @@ import {
 	geocodeOutletAddress,
 	geocodeOutletFreeText,
 	setOutletGeoFence,
+	updateOutlet,
 } from "@/services/outlet";
 
 /** A committed pin. Radius is metres; the server defaults it to 50. */
@@ -17,6 +22,16 @@ export interface OutletPin {
 	lat: number;
 	lng: number;
 	radius: number;
+}
+
+/**
+ * A pin, plus the address it came from when the operator asked for both to
+ * move together. Omitting `address` moves the pin alone — which is right for
+ * a radius-only save, and wrong for a pin found by searching a different
+ * venue.
+ */
+export interface OutletPinCommit extends OutletPin {
+	address?: OrgAddress;
 }
 
 export const DEFAULT_GEO_FENCE_RADIUS = 50;
@@ -121,12 +136,29 @@ export function useOutletGeoFence() {
 	});
 
 	const saveMut = useMutation({
-		mutationFn: (next: OutletPin) =>
-			setOutletGeoFence(
+		// Address FIRST, pin second, and the order is the whole point: PATCH
+		// /outlet re-geocodes a changed address and moves the pin itself, so
+		// committing the operator's chosen candidate afterwards is what makes
+		// their pick — not Google's top match — the one that survives.
+		//
+		// If the second call fails the venue is still self-consistent: address
+		// and pin both describe the new place, just not the exact candidate.
+		// Reversing the order would leave the opposite — a pin the address
+		// contradicts, which is the bug this whole path exists to prevent.
+		mutationFn: async (next: OutletPinCommit) => {
+			if (next.address) {
+				await updateOutlet(
+					outletId as string,
+					resolveOrgAddressForSave(next.address),
+					logout,
+				);
+			}
+			return setOutletGeoFence(
 				outletId as string,
 				{ lat: next.lat, lng: next.lng, geoFenceRadius: next.radius },
 				logout,
-			),
+			);
+		},
 		onSuccess: () => {
 			setCandidates([]);
 			setSearchedAddress(null);
@@ -155,7 +187,7 @@ export function useOutletGeoFence() {
 		isSaving: saveMut.isPending,
 		isClearing: clearMut.isPending,
 		lookup: (address?: string) => lookupMut.mutateAsync(address),
-		save: (next: OutletPin) => saveMut.mutateAsync(next),
+		save: (next: OutletPinCommit) => saveMut.mutateAsync(next),
 		clearPin: () => clearMut.mutateAsync(),
 		saveError: saveMut.error
 			? messageFromError(saveMut.error, "Could not save the pin.")

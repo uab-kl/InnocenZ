@@ -62,6 +62,8 @@ const en = {
 		demoData: "Demo data",
 		demoDataHint:
 			"Fixture data. This session was never authenticated, so nothing here is real and nothing you do is saved.",
+		/** Screen-reader only: "Payroll, 7 waiting". */
+		navAlertWaiting: "waiting",
 		goodMorning: "Good morning",
 		goodAfternoon: "Good afternoon",
 		goodEvening: "Good evening",
@@ -2015,6 +2017,16 @@ const en = {
 		searchAnotherAddress: "Search another address",
 		searched: "Searched: {address}",
 		useThisLocation: "Use this location",
+		useThisLocationAndAddress: "Use this location and address",
+		alsoUpdateVenueAddress:
+			"Also update the venue address to match this location",
+		addressBecomes: "Venue address becomes: {address}",
+		addressStays: "Venue address stays: {address}",
+		noAddressOnFile: "none on file",
+		addressWillDiffer:
+			"The pin and the venue address will then describe different places — the fence measures from the pin.",
+		pinAndAddressSaved: "Check-in pin and venue address saved",
+		couldNotSaveLocation: "Could not save the location",
 		removeConfirm:
 			"Remove the pin? Attendance verification switches off — every check-in here is accepted again, from anywhere.",
 		keepThePin: "Keep the pin",
@@ -6088,6 +6100,7 @@ const zh: PortalTranslations = {
 		demoData: "演示数据",
 		demoDataHint:
 			"这是演示数据。此登录未连接后端，页面内容并非真实，操作也不会被保存。",
+		navAlertWaiting: "项待处理",
 		goodMorning: "早上好",
 		goodAfternoon: "下午好",
 		goodEvening: "晚上好",
@@ -7707,6 +7720,15 @@ const zh: PortalTranslations = {
 		searchAnotherAddress: "搜索其他地址",
 		searched: "已搜索：{address}",
 		useThisLocation: "使用此位置",
+		useThisLocationAndAddress: "使用此位置并更新地址",
+		alsoUpdateVenueAddress: "同时将门店地址更新为此位置",
+		addressBecomes: "门店地址将变为：{address}",
+		addressStays: "门店地址维持不变：{address}",
+		noAddressOnFile: "尚未填写",
+		addressWillDiffer:
+			"定位点与门店地址将指向不同的地点 —— 围栏是以定位点为准测量的。",
+		pinAndAddressSaved: "签到定位点与门店地址已保存",
+		couldNotSaveLocation: "无法保存位置",
 		removeConfirm:
 			"移除定位点？考勤验证将关闭 —— 此处的签到会再次被无条件接受，不限地点。",
 		keepThePin: "保留定位点",
