@@ -161,6 +161,18 @@ router.post(
   ...canRecordCharges,
   agencyPenaltyRuleController.sealWeek.bind(agencyPenaltyRuleController),
 );
+// VOID one recorded penalty (0151). Same gate as recording one, and for the
+// reason the waive below shares it: cancelling a charge at a price policy
+// already set is bookkeeping, not a policy decision. This is the half that
+// makes automatic sealing acceptable — a charge nobody chose has to be one
+// somebody can undo.
+//
+// 4-segment path, so it cannot collide with '/:id/penalties/seal' (3).
+router.post(
+  '/:id/penalties/:chargeId/void',
+  ...canRecordCharges,
+  agencyPenaltyRuleController.voidCharge.bind(agencyPenaltyRuleController),
+);
 router.post(
   '/:id/uncharged/mark-charged',
   ...canRecordCharges,

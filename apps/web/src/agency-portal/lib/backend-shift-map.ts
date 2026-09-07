@@ -242,7 +242,7 @@ function liveRosterStatus(
  * on-duty PR silently vanishes from the roster day view + live GPS panel.
  * Normalize to the viewer's calendar date; plain date strings pass through.
  */
-function localDateIso(value: string): string {
+export function localDateIso(value: string): string {
 	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
 	const d = new Date(value);
 	return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString("en-CA");

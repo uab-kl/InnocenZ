@@ -354,9 +354,17 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                       // the details they want.
                       defaultOpen={false}
                       onCheckIn={() => {
-                        // First card owns the live Check-In pick; a second
-                        // same-day shift pins Check-In to its own row id.
-                        focus(i === 0 ? null : s.id);
+                        // The card you TAP is the shift you get — always pin it.
+                        //
+                        // This used to pass null for the first card, trusting it
+                        // to be whatever `pickActive` would choose. That held
+                        // only while one shift could be open at a time. With two
+                        // open check-ins the auto-pick landed on the OTHER row,
+                        // so both cards opened the same shift and the first one
+                        // could never be checked out of. A pin that already
+                        // matches the auto-pick costs nothing, and `active`
+                        // falls back on its own once a row stops being viewable.
+                        focus(s.id);
                         onNavigate('checkin');
                       }}
                     />

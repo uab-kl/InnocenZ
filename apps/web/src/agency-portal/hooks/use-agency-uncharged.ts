@@ -7,6 +7,7 @@ import {
 	markUnchargedCollected,
 	sealPenaltyWeek,
 	type UnchargedResponse,
+	voidPenaltyCharge,
 } from "@/services/agency-uncharged";
 
 /**
@@ -56,6 +57,37 @@ export function useAgencyUncharged() {
 			queryClient.invalidateQueries({ queryKey: ["agency-uncharged"] }),
 	});
 
+	/**
+	 * CANCEL recorded penalties so they are never billed (0151).
+	 *
+	 * Sequential rather than parallel: each void is its own decision on its own
+	 * row, and the server refuses one that is already on a voucher. Firing them
+	 * together would make a partial failure impossible to describe — some voided,
+	 * some refused, one message. In order, the first refusal is the answer.
+	 */
+	const voidMut = useMutation({
+		mutationFn: async (vars: {
+			chargeIds: string[];
+			reason?: string | null;
+		}) => {
+			let voided = 0;
+			for (const id of vars.chargeIds) {
+				const result = await voidPenaltyCharge(
+					agencyId as string,
+					id,
+					vars.reason ?? null,
+					logout,
+				);
+				if (result.success) voided += 1;
+			}
+			return { voided };
+		},
+		// Settled, not onSuccess: a refusal means this list is stale in exactly
+		// the case where the screen most needs re-reading.
+		onSettled: () =>
+			queryClient.invalidateQueries({ queryKey: ["agency-uncharged"] }),
+	});
+
 	const data = query.data?.data ?? null;
 
 	return {
@@ -81,5 +113,8 @@ export function useAgencyUncharged() {
 			}),
 		sealWeek: (weekStart: string, weekEnd: string) =>
 			sealMut.mutateAsync({ weekStart, weekEnd }),
+		isVoiding: voidMut.isPending,
+		voidCharges: (chargeIds: string[], reason?: string | null) =>
+			voidMut.mutateAsync({ chargeIds, reason }),
 	};
 }
