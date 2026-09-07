@@ -128,6 +128,30 @@ export async function sealPenaltyWeek(
 	return response.data;
 }
 
+/**
+ * CANCEL one recorded penalty, so it is never billed (0151).
+ *
+ * The other half of automatic sealing: since 7 Sep 2026 a charge appears
+ * without anyone choosing it, so the agency's decision is no longer "shall I
+ * record this?" but "shall I keep it?". The server refuses a charge already on
+ * a voucher — at that point the money has moved and the reversal is a credit on
+ * a later voucher, not a deletion here — so its refusal is worth surfacing
+ * verbatim rather than flattening into "could not void".
+ */
+export async function voidPenaltyCharge(
+	agencyId: string,
+	chargeId: string,
+	reason: string | null,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post(
+		`/agency/${agencyId}/penalties/${chargeId}/void`,
+		reason ? { reason } : {},
+	);
+	return response.data;
+}
+
 /** One live breach for a week — a proposal, not yet a debt. */
 export interface PenaltyProposal {
 	prId: string;

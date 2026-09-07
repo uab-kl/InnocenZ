@@ -12,6 +12,7 @@ import {
 	MONEY_KINDS,
 	type MoneyKind,
 } from "@agency-portal/lib/payroll-kind-day";
+import { dayBelongsToWeekTab } from "@agency-portal/lib/payroll-week-scope";
 import {
 	DISPUTE_COMPONENT_LABEL,
 	receiptsForDispute,
@@ -578,16 +579,20 @@ function disputeInWeek(
 	dispute: PaymentVoucherDispute,
 	weekStartIso: string,
 	weekEndIso: string,
+	includesOlder: boolean,
 ): boolean {
-	if (!dispute.disputeDate) return false;
-	return (
-		dispute.disputeDate >= weekStartIso && dispute.disputeDate <= weekEndIso
+	return dayBelongsToWeekTab(
+		dispute.disputeDate,
+		weekStartIso,
+		weekEndIso,
+		includesOlder,
 	);
 }
 
 export function DisputeQueuePanel({
 	weekStartIso,
 	weekEndIso,
+	includesOlder = false,
 	kinds,
 	day,
 	onKindsChange,
@@ -595,6 +600,14 @@ export function DisputeQueuePanel({
 }: {
 	weekStartIso: string;
 	weekEndIso: string;
+	/**
+	 * The PAYMENT WEEK, which also holds every dispute OLDER than its window —
+	 * the same catch-all the Overtime queue and the voucher list use, for the
+	 * same reason: without it a claim that aged past the oldest tab is counted by
+	 * the "open elsewhere" line below and shown by no tab at all. See
+	 * `dayBelongsToWeekTab`.
+	 */
+	includesOlder?: boolean;
 	/**
 	 * WHICH MONEY and WHICH NIGHT — owned by the Payroll route, not by this
 	 * panel, so the answer survives a hop to the Receipts sub-tab and back. A
@@ -639,8 +652,11 @@ export function DisputeQueuePanel({
 	 * it reads as the filter leaking between weeks.
 	 */
 	const weekDisputes = useMemo(
-		() => allDisputes.filter((d) => disputeInWeek(d, weekStartIso, weekEndIso)),
-		[allDisputes, weekStartIso, weekEndIso],
+		() =>
+			allDisputes.filter((d) =>
+				disputeInWeek(d, weekStartIso, weekEndIso, includesOlder),
+			),
+		[allDisputes, weekStartIso, weekEndIso, includesOlder],
 	);
 
 	const openCount = weekDisputes.filter(isOpenDispute).length;
@@ -657,9 +673,11 @@ export function DisputeQueuePanel({
 	const openElsewhere = useMemo(
 		() =>
 			allDisputes.filter(
-				(d) => isOpenDispute(d) && !disputeInWeek(d, weekStartIso, weekEndIso),
+				(d) =>
+					isOpenDispute(d) &&
+					!disputeInWeek(d, weekStartIso, weekEndIso, includesOlder),
 			).length,
-		[allDisputes, weekStartIso, weekEndIso],
+		[allDisputes, weekStartIso, weekEndIso, includesOlder],
 	);
 
 	/**

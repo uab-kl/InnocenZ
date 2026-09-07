@@ -569,6 +569,100 @@ export class AgencyPenaltyRuleControllerClass {
    * having actually edited the voucher would drain this list while collecting
    * nothing — the exact failure the list was built to expose.
    */
+  /**
+   * SEAL A CLOSED WEEK WITH NOBODY WATCHING — what the weekly job calls.
+   *
+   * Deliberately a method on this controller rather than a copy of the loop
+   * inside the job: `evaluateWeek` is the one evaluator, and a job that
+   * re-derived breaches its own way would eventually record a figure the
+   * agency's own screen never showed. It takes no `req`, so nothing about it
+   * depends on an HTTP caller.
+   *
+   * No `only` filter, unlike the endpoint: the job runs on a week that has
+   * ALREADY CLOSED, so every rule is final — that is the whole precondition,
+   * and it is the caller's to honour.
+   */
+  async sealClosedWeek(
+    agencyId: string,
+    weekStart: string,
+    weekEnd: string,
+    actor: string,
+    options: { dryRun?: boolean } = {},
+  ): Promise<{ sealed: number; evaluated: number }> {
+    const { rules, proposals } = await this.evaluateWeek(agencyId, weekStart, weekEnd);
+    if (rules.length === 0) return { sealed: 0, evaluated: 0 };
+    // A dry run still EVALUATES — it just does not write. Reporting the count
+    // without doing the work is what makes it worth running before the first
+    // real one; a dry run that skipped the evaluation would only report that
+    // agencies exist.
+    if (options.dryRun) return { sealed: 0, evaluated: proposals.length };
+    const sealed = await this.penaltyChargeRepository.seal(agencyId, proposals, actor);
+    return { sealed, evaluated: proposals.length };
+  }
+
+  /**
+   * THE AGENCY CANCELS ONE RECORDED PENALTY (0151).
+   *
+   * The condition the owner attached to automatic sealing on 7 Sep 2026: "i
+   * want it to be auto-recorded but once it is recorded then the Agency can
+   * decide whether they want to delete/void it". Before that day nothing ever
+   * sealed a proposal at all, so "recorded" was a state no charge could reach
+   * and there was nothing to undo.
+   *
+   * A VOID, not a delete. `seal()` inserts ON CONFLICT DO NOTHING against the
+   * (agency, pr, rule, week) unique index, so a deleted row is recreated by the
+   * next weekly run — the breach behind it is still true. A voided row keeps
+   * the slot, which is what makes the decision outlive the job.
+   *
+   * Refuses a charge already billed: once it is on a voucher the money has
+   * moved, and the honest reversal is a credit on a later voucher rather than
+   * clearing the debt out from under a line that still exists. Same window rule
+   * as waiving a cancellation fee.
+   */
+  async voidCharge(req: Request, res: Response) {
+    try {
+      const agencyId = paramId(req.params.id);
+      const chargeId = paramId(req.params.chargeId);
+      // `paramId` does not validate and this segment is behind no schema, so a
+      // non-uuid would reach Postgres and come back as a 500 about input
+      // syntax, which tells the caller nothing about what they did wrong.
+      if (!/^[0-9a-f-]{36}$/i.test(chargeId)) {
+        return res.status(400).json({ success: false, message: 'Invalid charge id', data: null });
+      }
+      const reasonRaw = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      const reason = reasonRaw.slice(0, 500) || null;
+
+      const result = await this.penaltyChargeRepository.voidCharge(
+        agencyId,
+        chargeId,
+        getActor(req),
+        reason,
+      );
+      if (!result.ok) {
+        return result.reason === 'billed'
+          ? res.status(409).json({
+              success: false,
+              message:
+                'This penalty is already on a voucher, so it cannot be voided. ' +
+                "Credit it on next week's voucher instead.",
+              data: null,
+            })
+          : res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: result.alreadyVoided
+          ? 'This penalty was already voided.'
+          : 'Penalty voided. It will not be billed.',
+        data: { chargeId, voided: true },
+      });
+    } catch (error) {
+      logger.error('[AgencyPenaltyRuleController.voidCharge] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async markCharged(req: Request, res: Response) {
     try {
       const agencyId = paramId(req.params.id);

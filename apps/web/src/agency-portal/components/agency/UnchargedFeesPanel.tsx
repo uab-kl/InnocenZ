@@ -163,20 +163,32 @@ function FeeLine({ row, canSelect }: { row: FeeRow; canSelect: boolean }) {
 			<b className="iz-sm w-20 shrink-0 truncate text-[var(--iz-txt)] sm:w-28">
 				{row.name}
 			</b>
-			<span className="iz-tiny iz-muted2 min-w-0 flex-1 truncate">
+			{/* WRAPS to a second line rather than being cut off.
+			    `truncate` here clipped at roughly 37 characters, which is shorter
+			    than the sentence a penalty row has to say. It cost two attempts at
+			    one fix on 7 Sep 2026: the minimum-shifts breach was given the
+			    opportunity count it was missing, the new text landed past the
+			    ellipsis and the row read exactly as before; reordering it then hid
+			    the other half instead. A row that can only ever show half a
+			    sentence is the bug, not the half it happens to choose. Two lines is
+			    the cap — anything longer still has the full text on the `title`. */}
+			<span className="iz-tiny iz-muted2 line-clamp-2 min-w-0 flex-1">
 				{detail}
 			</span>
-			{/* WHEN, on every row — a fixed column rather than a line of its own
-			    under the ones that happened to carry it. A ledger repeats the date
-			    on every line for the same reason a bank statement does: it is what
-			    you scan for, and it is what was filling the right of the row with
-			    nothing. */}
-			<span
-				className="iz-tiny iz-muted2 w-[6.5rem] shrink-0 text-right tabular-nums"
-				title={row.whenTitle}
-			>
-				{row.when ?? ""}
-			</span>
+			{/* WHEN, on every row that HAS one — a ledger repeats the date on every
+			    line for the reason a bank statement does: it is what you scan for.
+			    But a penalty PROPOSAL carries no date (it is named by the week it
+			    was computed for, not by a day), so on those rows this reserved
+			    6.5rem of empty column and took it straight out of the sentence to
+			    its left. An empty fixed column is not alignment, it is a margin. */}
+			{row.when ? (
+				<span
+					className="iz-tiny iz-muted2 w-[6.5rem] shrink-0 text-right tabular-nums"
+					title={row.whenTitle}
+				>
+					{row.when}
+				</span>
+			) : null}
 			<b className="iz-sm w-[5.5rem] shrink-0 text-right tabular-nums text-[var(--iz-gold-l)]">
 				RM {row.amountRm.toFixed(2)}
 			</b>
@@ -330,6 +342,8 @@ export function UnchargedFeesPanel({
 		isError,
 		isMarking,
 		markCharged,
+		isVoiding,
+		voidCharges,
 	} = useAgencyUncharged();
 	/*
 	 * Who is in breach, computed server-side and read-only.
@@ -381,6 +395,11 @@ export function UnchargedFeesPanel({
 	   a click to admit it has contents; collapsing it is a choice the operator
 	   makes after reading, not a state it starts in. */
 	const [open, setOpen] = useState(true);
+	/* Voiding is irreversible from this screen — there is no un-void endpoint —
+	   so it takes a second click that states what it will do. Same restraint the
+	   overtime queue uses, for the same reason: the first click should not be
+	   able to cancel a charge on its own. */
+	const [confirmVoid, setConfirmVoid] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [selectedCharges, setSelectedCharges] = useState<Set<string>>(
 		new Set(),
@@ -670,57 +689,123 @@ export function UnchargedFeesPanel({
 						/>
 					)}
 
+					{/* THE TWO ACTIONS TRAVEL TOGETHER, on the right.
+					    `justify-between` over three children strands the middle one:
+					    the count sat far left, "Add to voucher" floated in the centre
+					    with nothing to belong to, and Void was pinned to the opposite
+					    edge — so the pair read as two unrelated controls rather than
+					    one decision with two answers. The summary keeps the left; the
+					    buttons share a group on the right. */}
 					{canMark && selected.size + selectedCharges.size > 0 && (
-						<div className="mt-2 flex items-center justify-between gap-2 border-t border-[var(--iz-line)] pt-2">
+						<div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--iz-line)] pt-2">
 							<span className="iz-tiny iz-muted2">
 								{fill(t.agencyQueues.selectedTotal, {
 									n: selected.size + selectedCharges.size,
 									amount: `RM ${selectedTotal.toFixed(2)}`,
 								})}
 							</span>
-							<button
-								type="button"
-								disabled={isMarking}
-								onClick={() => {
-									// Always report the outcome. The most important case is
-									// the SILENT one: a voucher already sent refuses the line,
-									// the row stays outstanding, and without this the operator
-									// sees the list simply not change and assumes it worked.
-									void markCharged(
-										{
-											assignmentIds: [...selected],
-											chargeIds: [...selectedCharges],
-										},
-										null,
-									)
-										.then((res) => {
-											const d = res?.data as
-												| { charged?: number; failed?: { reason: string }[] }
-												| null
-												| undefined;
-											const failed = d?.failed ?? [];
-											if ((d?.charged ?? 0) > 0 && failed.length === 0) {
-												toast(res.message, "success");
-											} else if ((d?.charged ?? 0) > 0) {
-												toast(
-													`${res.message} · ${failed[0]?.reason ?? ""}`,
-													"warn",
-												);
-											} else {
-												toast(
-													failed[0]?.reason ?? t.payroll.nothingWasAdded,
-													"warn",
-												);
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									disabled={isMarking}
+									onClick={() => {
+										// Always report the outcome. The most important case is
+										// the SILENT one: a voucher already sent refuses the line,
+										// the row stays outstanding, and without this the operator
+										// sees the list simply not change and assumes it worked.
+										void markCharged(
+											{
+												assignmentIds: [...selected],
+												chargeIds: [...selectedCharges],
+											},
+											null,
+										)
+											.then((res) => {
+												const d = res?.data as
+													| { charged?: number; failed?: { reason: string }[] }
+													| null
+													| undefined;
+												const failed = d?.failed ?? [];
+												if ((d?.charged ?? 0) > 0 && failed.length === 0) {
+													toast(res.message, "success");
+												} else if ((d?.charged ?? 0) > 0) {
+													toast(
+														`${res.message} · ${failed[0]?.reason ?? ""}`,
+														"warn",
+													);
+												} else {
+													toast(
+														failed[0]?.reason ?? t.payroll.nothingWasAdded,
+														"warn",
+													);
+												}
+												setSelected(new Set());
+												setSelectedCharges(new Set());
+											})
+											.catch(() =>
+												toast(t.payroll.couldNotAddToVoucher, "warn"),
+											);
+									}}
+									/* CHAMPAGNE GOLD, because this is the action that moves
+								   money — the portal's own rule (owner, 2 Sep 2026: "this
+								   colour, save or make payment"). It rendered as a grey
+								   pill while Void carried the only colour on the row, so
+								   the destructive answer looked like the primary one.
+								   `--iz-grad-accent` is the same gradient `.iz-btn-gold`
+								   uses; NOT `--iz-gold`, which is the violet the prototype
+								   misnamed. Written as an arbitrary PROPERTY, not `bg-[…]`
+								   — a gradient set as background-color paints nothing. */
+									className="rounded-lg [background:var(--iz-grad-accent)] px-3 py-1.5 text-xs font-bold text-[#241a08] shadow-[0_10px_22px_-12px_rgba(201,155,78,0.6)] transition hover:brightness-105 disabled:opacity-60"
+								>
+									{isMarking ? t.payroll.adding : t.payroll.addToVoucher}
+								</button>
+								{/* VOID, offered only for recorded PENALTIES (0151).
+							    A cancellation fee is not voided here — it has its own
+							    forgive, on the assignment, with its own rules about the
+							    voucher window. Offering one control for both would put a
+							    button on rows it cannot act on. */}
+								{selectedCharges.size > 0 && (
+									<button
+										type="button"
+										disabled={isVoiding}
+										onClick={() => {
+											if (!confirmVoid) {
+												setConfirmVoid(true);
+												return;
 											}
-											setSelected(new Set());
-											setSelectedCharges(new Set());
-										})
-										.catch(() => toast(t.payroll.couldNotAddToVoucher, "warn"));
-								}}
-								className="rounded-lg border border-[var(--iz-line2)] px-2.5 py-1.5 text-xs font-semibold text-[var(--iz-txt)] disabled:opacity-60"
-							>
-								{isMarking ? t.payroll.adding : t.payroll.addToVoucher}
-							</button>
+											setConfirmVoid(false);
+											void voidCharges([...selectedCharges])
+												.then((res) => {
+													toast(
+														fill(t.payroll.penaltiesVoided, {
+															n: res.voided,
+														}),
+														res.voided > 0 ? "success" : "warn",
+													);
+													setSelectedCharges(new Set());
+												})
+												.catch(() => toast(t.payroll.couldNotVoid, "warn"));
+										}}
+										/* QUIETER THAN THE GOLD, and it stays quiet until asked.
+									   A destructive action should be reachable, not
+									   advertised: a hairline in its own red at rest, and
+									   only once it is armed does it fill in — so the second
+									   click looks different from the first, which is the
+									   whole point of asking twice. */
+										className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition disabled:opacity-60 ${
+											confirmVoid
+												? "border-[rgba(229,72,77,0.55)] bg-[rgba(229,72,77,0.14)] text-[var(--iz-red,#e5484d)]"
+												: "border-[rgba(229,72,77,0.28)] text-[var(--iz-red,#e5484d)] hover:bg-[rgba(229,72,77,0.08)]"
+										}`}
+									>
+										{isVoiding
+											? t.payroll.voiding
+											: confirmVoid
+												? t.payroll.voidConfirm
+												: t.payroll.voidPenalty}
+									</button>
+								)}
+							</div>
 						</div>
 					)}
 				</>

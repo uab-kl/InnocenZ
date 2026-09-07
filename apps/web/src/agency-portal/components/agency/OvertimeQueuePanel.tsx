@@ -1,5 +1,6 @@
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
+import { dayBelongsToWeekTab } from "@agency-portal/lib/payroll-week-scope";
 import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Check, Clock, X } from "lucide-react";
@@ -201,18 +202,32 @@ function claimInWeek(
 	claim: PendingOvertimeClaim,
 	weekStartIso: string,
 	weekEndIso: string,
+	includesOlder: boolean,
 ): boolean {
-	if (!claim.shiftDate) return false;
-	const day = claim.shiftDate.slice(0, 10);
-	return day >= weekStartIso && day <= weekEndIso;
+	return dayBelongsToWeekTab(
+		claim.shiftDate,
+		weekStartIso,
+		weekEndIso,
+		includesOlder,
+	);
 }
 
 export function OvertimeQueuePanel({
 	weekStartIso,
 	weekEndIso,
+	includesOlder = false,
 }: {
 	weekStartIso: string;
 	weekEndIso: string;
+	/**
+	 * The PAYMENT WEEK, which also holds every claim OLDER than its window.
+	 *
+	 * Without it a claim that aged past the oldest tab had no screen at all: it
+	 * still blocked its voucher's send, that voucher was still listed by the same
+	 * tab's own voucher catch-all, and the amber line below still told the agency
+	 * to switch to a week the strip did not offer. See `dayBelongsToWeekTab`.
+	 */
+	includesOlder?: boolean;
 }) {
 	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
@@ -228,8 +243,11 @@ export function OvertimeQueuePanel({
 	 * receipt counts that did move with the tab.
 	 */
 	const claims = useMemo(
-		() => allClaims.filter((c) => claimInWeek(c, weekStartIso, weekEndIso)),
-		[allClaims, weekStartIso, weekEndIso],
+		() =>
+			allClaims.filter((c) =>
+				claimInWeek(c, weekStartIso, weekEndIso, includesOlder),
+			),
+		[allClaims, weekStartIso, weekEndIso, includesOlder],
 	);
 	/**
 	 * Undecided claims in OTHER weeks — counted, not listed. An undecided claim is
