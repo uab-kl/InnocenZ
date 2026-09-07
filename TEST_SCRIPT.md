@@ -339,48 +339,29 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ DECIDE — an RM 50 minimum-shifts fine that rests on two unresolved rows (7 Sep 2026)
+### ▶ ✅ CLOSED — unresolved past assignments, and the fine that could not explain itself (7 Sep 2026)
 
-Owner asked why **Last Week** proposes a below-minimum fine for Vicky when she "only got assigned
-fewer than 3". Re-derived from the LIVE database, not from the code
-(`_probe-minshifts-lastweek.ts`): she was assigned **exactly 3**, so the opportunity guard passed
-legitimately. Atlas, 30 Aug – 05 Sep, **all three on one day, 3 Sep, at UAB Emhub**:
+Both from the (xi) diagnosis. `no-show-sweep.job.ts` closes out any assignment with no check-in a few
+hours after its shift ends (at the shift's end when another shift follows), and the minimum-shifts
+breach now prints `1 of 3 shifts worked · 3 offered`. Vicky's two 3 Sep rows read `no_show` live, and
+the RM 50 is unchanged — `no_show` and `assigned` count identically in `attendanceWindow`, so the
+sweep corrects the RECORD without moving money. See changelog (xii).
 
-| shift | status |
-|---|---|
-| 10:00 – 11:00 | `assigned` — never checked in, never cancelled |
-| 11:00 – 12:00 | **completed** |
-| 16:00 – 20:00 | `assigned` — never checked in, never cancelled |
+**Two things it deliberately did NOT do:**
 
-`opportunity = 3 − 0 excused − 0 paid cancels = 3`, `completed 1 < 3` → breach, RM 50. Both of the
-owner's premises came out the other way: the guard for "never given three" exists and works
-(`pr-penalty.ts:137`), and the week ENDING is what creates the row — `min_shifts_per_week` is in
-`WEEK_END_ONLY_RULES` and is deliberately not evaluated until the week closes.
+1. **19 unresolved assignments older than the 30-day lookback are still `assigned`** (oldest 24 Jul).
+   The job counts them in its log every run and leaves them. Rewriting months of history is a
+   decision for a person: say the word and it is a one-run change to the lookback.
+2. **No notification fires on a no-show.** The PR is not told, and neither is the agency. If a black
+   mark should reach the person it is about, that is a new notification kind, not part of this job.
 
-**Three calls for the owner, in order of consequence:**
+### ▶ DECIDE — should a weekly minimum be satisfiable inside a single day? (7 Sep 2026)
 
-1. **Nothing ever closes out a past `assigned` row.** Two shifts sit `assigned` days after their
-   date — no no-show, no cancellation. The 20 Aug rule counts an unresolved past assignment as
-   "offered and not worked", so this fine rests on a state nobody confirmed. If those two were
-   actually dropped, the RM 50 is simply wrong and no screen would say so. **This is the one that
-   can make the charge incorrect.**
-2. **All three chances were the same day.** A *weekly* minimum of 3 was decided inside 3 Sep. If the
-   minimum measures commitment across a week, same-day slots should not each count as a weekly
-   chance. (The shape — 10:00-11:00 and 11:00-12:00 back-to-back at one venue — also resembles the
-   17 Aug duplicate-shift test data.)
-3. **The row hides the number that justifies it.** The detail is `${completed} of ${min}` → "1 of 3
-   shifts this week", which reads as "1 of the 3 you were OFFERED" — exactly how the owner read it.
-   It never prints assigned=3. Display-only fix, touches no money rule; ready to do on the word.
-
-⚠️ **And no proposal can be acted on at all.** The "Record penalties" button went on 24 Aug and was
-the only caller of `POST /agency/:id/penalties/seal`, so nothing in the web app turns a proposal into
-a `penalty_charge`, and "Add to voucher" needs a `chargeId` only sealing creates. Every "Not yet
-recorded" row is permanent: it cannot be recorded and it cannot be dismissed. Already flagged in
-`UnchargedFeesPanel`'s own comment, restated here because it is now blocking a real charge.
-
-Smaller, same panel: the proposal row prints "Victoria Tan …" while the sealed rows print "Vicky" —
-two name formats in one card. Unverified; check which resolver each uses.
-
+Untouched from (xi), and now the only part of that report still open. Vicky's three chances were all
+on 3 Sep, so a rule named "minimum shifts per WEEK" was decided inside one day. If the minimum
+measures commitment across a week, same-day slots should not each count as a weekly chance — that is
+a change to `attendanceWindow`'s `assigned_this_week` (count DISTINCT `shift_date` rather than rows),
+and it would lower some existing fines. Owner's call because it is a money rule.
 ### ▶ ✅ MOSTLY CLOSED — the payment-week catch-all, confirmed by the owner (7 Sep 2026)
 
 Owner confirmed the Overtime fix on screen: the two 20/22 Aug claims now reach the **Payment Week**
@@ -2814,6 +2795,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+| 2026-09-07 (xii) | **Nothing in the product ever closed out a shift nobody turned up for — now something does, every 15 minutes.** Owner, after the (xi) diagnosis: *"those 2 are past shifts where 'Vicky' did not show up so actually its supposed to be a no-show … a few hours past the time and if there is not check-in record then it will be marked a no-show. In the case that they have back to back shifts then it should make it no-show when the shift ends"*. **(a) `no-show-sweep.job.ts`** (`*/15 * * * *`, on the existing scheduler so it inherits the overlap guard and the throw-swallow). Cutoff = **shift END + 3h grace**, measured from the end and never the start, because a PR who arrives an hour late has still worked the shift. **Back-to-back falls out of one clamp:** when the PR has another shift starting before the grace is up they have physically moved on and no late check-in is possible, so the cutoff moves to that start — which for a shift beginning exactly as this one ends IS the shift's end, the owner's rule. Never earlier than the shift's own end whatever the next one claims (an overlapping roster is a rostering mistake and must not shorten someone's chance to work). Peers are counted **across agencies** — a person cannot be in two places whoever booked them — which is safe because the clamp only ever brings forward a decision the grace would reach anyway. A slot with no clock in it (`Late night`) is **not judged at all**: an unknown is not an absence. `draft` shifts excluded; the UPDATE repeats the `status='assigned' AND check_in_at IS NULL` terms so a PR checking in mid-sweep wins the race. Lookback bounded at **30 days**, older rows left and COUNTED in the log rather than silently rewritten — the first run would otherwise be the largest write this table has ever seen. **(b) The fine's wording** now carries the number that justifies it: `1 of 3 shifts worked · 3 offered`, where it read "1 of 3 shifts this week" and the owner reasonably read that as "she was only GIVEN 1 of 3". ⚠️ **The sweep MOVES NO MONEY and that is the point** — `attendanceWindow` counts `no_show` and `assigned` identically, so every penalty, voucher and total is untouched; what changes is that the record states what happened. Vicky's RM 50 is still RM 50, now resting on two rows that say `no_show` instead of two nobody had resolved. | **Backend · scheduler + penalties** | ✅ backend tsc **0** · **122/122** (12 new, all on the pure cutoff — back-to-back, overlap, overnight, no-clock, and the grace measured from the end). Dry-run first against the live DB: **9 rows in range, 19 older left alone**. Then verified LIVE — both of Vicky's 3 Sep rows now read `no_show`, and re-running the min-shifts probe returns the identical `assigned=3 / opportunity=3 / completed=1 → BREACH RM 50`, proving no money moved. The running backend's own scheduler swept them on the 10:45 tick; the manual `--apply` seconds later found nothing left to do, which is the job proving itself in situ. |
+
 | 2026-09-07 (xi) | **Diagnosis only, no code shipped: the "Not yet recorded" RM 50 is correct by its rule, and the rule is resting on something nobody confirmed.** Owner: *"why there is a 'Not Yet Recorded' penalty in the Last Week tab … there should no longer be a Penalty … when they only got assigned a number fewer than 3"*. **Both premises came out the other way, and only the live database could say so** — the code alone would have supported either reading. Vicky was assigned **exactly 3** that week, so `opportunity = assigned − excused − paidCancellations` (`pr-penalty.ts:137`, the guard written on 20 Aug precisely for "you cannot work shifts you were never given") passed legitimately at 3 ≥ 3, and `completed 1 < 3` fired. And the week ENDING is what creates the row, not what should clear it: `min_shifts_per_week` is the only member of `WEEK_END_ONLY_RULES`, deliberately unevaluated until the week closes because "1 of 3" on a Tuesday is not yet a fact — which is exactly why This Week showed no proposal and Last Week did. **The real finding is the shape of the week:** all three assignments are on ONE day, 3 Sep at UAB Emhub, and the two she did not work are still `assigned` days later — never checked into, never cancelled. So a *weekly* minimum was decided inside a single day, and the fine rests on two rows no one has resolved. Three owner calls now in §9, ranked: (1) nothing closes out a past `assigned` row — the one that can make this RM 50 actually wrong; (2) whether same-day slots should each count as a weekly chance; (3) the row prints `${completed} of ${min}` = "1 of 3 shifts this week", which reads as "1 of the 3 you were OFFERED" and never shows assigned=3 — the display defect that produced the owner's question, fixable without touching a money rule. ⚠️ Also restated: since the 24 Aug removal of "Record penalties", NOTHING in the web app calls the seal endpoint, so every proposal is permanent — it cannot be recorded and cannot be dismissed. **Method note worth keeping: a rule this conditional cannot be judged by reading it. Four terms decided the outcome and only one was visible on screen.** | **Agency · Payroll penalties · investigation** | Re-derived from the live DB with the new read-only probe `_probe-minshifts-lastweek.ts` (writes nothing; replicates `attendanceWindow` + `evaluatePenalties` per PR and prints the raw assignment rows behind any breach). No production code changed. |
 
 | 2026-09-07 (x) | **The second role list, aligned — one role, one name, in both languages.** Shortening `t.roles.*` in (ix) left it a near-twin of `t.profile.role*`, the labels `portalRoleLabel` puts on the server's stored `role_name` in the member list, the role dropdowns, the invite preview and the admin header. Owner and Guarantor already matched; three did not, and a near-miss reads as a bug where the old "Agency Finance" vs "Finance" read as two registers. Owner's call: **Financial Head · Ops Head · 总监**. So `profile.roleFinance` "Finance" → **"Financial Head"**, `roleOps` "Ops" → **"Ops Head"**, and Chinese `roleDirector` **董事 → 总监** — 董事 is a BOARD director where these lanes mean the head of a function, so that one was a mistranslation as much as a mismatch. Display only: `portalRoleLabel` matches on the stored ENGLISH name (`owner`, `finance`, `ops head`…) and `SUB_ROLE_TITLE_ICONS` is keyed by it too — never by these strings — so nothing that resolves a role changed, only what it prints. **Pinned by a test rather than a comment** (`role-labels.test.ts`, 12 cases): every role must read identically in both lists in EN and 中文, and no `roles.*` value may contain agency/outlet/经纪公司/门店. The next person to reword one list will not know the other exists; now the suite tells them. | **Agency + Outlet + Admin · copy** | ✅ web tsc **0** · **209/209** (12 new) · biome clean on the new file · both lists confirmed identical in BOTH languages by fetching the module the dev server is serving |

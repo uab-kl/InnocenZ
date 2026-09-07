@@ -2,6 +2,7 @@ import { scheduler } from './scheduler.js';
 import { WEEKLY_PAYOUT_JOB } from './weekly-payout.job.js';
 import { SUBSCRIPTION_INVOICE_JOB } from './subscription-invoice.job.js';
 import { AGENCY_TIER_JOB } from './agency-tier.job.js';
+import { NO_SHOW_SWEEP_JOB } from './no-show-sweep.job.js';
 
 /**
  * Every background job in the system, in one list.
@@ -21,4 +22,7 @@ export function registerJobs(): void {
   scheduler.register(WEEKLY_PAYOUT_JOB);
   scheduler.register(SUBSCRIPTION_INVOICE_JOB);
   scheduler.register(AGENCY_TIER_JOB);
+  // The only job here that runs on a clock rather than a calendar: an absence
+  // becomes a fact a few hours after the shift ends, not once a week.
+  scheduler.register(NO_SHOW_SWEEP_JOB);
 }

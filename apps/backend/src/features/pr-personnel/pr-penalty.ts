@@ -144,7 +144,14 @@ export function evaluatePrPenalties(
         breaches.push({
           ruleType: rule.ruleType,
           label: 'Below minimum shifts',
-          detail: `${window.shiftsThisWeek} of ${min} shifts this week`,
+          // THE OPPORTUNITY IS PART OF THE SENTENCE, not just part of the test.
+          //
+          // This read "1 of 3 shifts this week", which the agency owner read as
+          // "she was only GIVEN 1 of the 3" and reasonably called unfair — the
+          // number that justifies the fine, the 3 chances she actually had, was
+          // the one number the row never printed (reported 7 Sep 2026). A charge
+          // taken out of someone's pay has to carry its own evidence.
+          detail: `${window.shiftsThisWeek} of ${min} shifts worked · ${opportunity} offered`,
           fineCents: cents(rule.fineRm),
         });
       }
