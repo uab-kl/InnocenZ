@@ -1,6 +1,10 @@
 import { AccountAvatarCard } from "@agency-portal/components/auth/AccountAvatarCard";
 import { SecuritySettingsSheets } from "@agency-portal/components/auth/SecuritySettingsSheets";
-import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
+import {
+	IzCard,
+	IzPageTitle,
+	IzSectionLabel,
+} from "@agency-portal/components/iz/ui";
 import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
 import { SignatureOnFileCard } from "@agency-portal/components/org/SignatureOnFileCard";
 import { AgencyLinksPanel } from "@agency-portal/components/outlet/AgencyLinksPanel";
@@ -338,9 +342,7 @@ function OutletSettingsPage() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-						{t.outletSettings.accessRestricted}
-					</h2>
+					<IzPageTitle>{t.outletSettings.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">{t.outletSettings.noAccess}</p>
@@ -400,7 +402,7 @@ function OutletSettingsPage() {
 						)}
 					</div>
 				</div>
-				<div className="mt-3 font-sora text-lg font-bold">{owner.orgName}</div>
+				<div className="mt-3 iz-heading text-lg font-bold">{owner.orgName}</div>
 				<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
 				<div
 					className={`mt-1 flex items-center gap-1 iz-tiny ${

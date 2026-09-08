@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F } from '../../theme/theme';
+import { font } from '../../theme/fonts';
 import { Phone } from '../../components/icons';
 import { formatMessage, useLocale } from '../../i18n';
 import { CODE_LENGTH } from './constants';
@@ -110,7 +111,7 @@ const styles = StyleSheet.create({
 		borderColor: C.line,
 	},
 	otpLead: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: C.fsTiny,
 		lineHeight: C.fsTiny * 1.5,
 		color: C.prMuted,
@@ -118,7 +119,7 @@ const styles = StyleSheet.create({
 		maxWidth: 280,
 	},
 	otpHint: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 12,
 		lineHeight: 16,
 		color: C.muted2,
@@ -133,9 +134,8 @@ const styles = StyleSheet.create({
 		borderWidth: 1,
 		borderColor: C.line,
 		backgroundColor: C.bg2,
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 22,
-		fontWeight: '700',
 		letterSpacing: 6,
 		color: C.txt,
 	},
@@ -144,8 +144,8 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		gap: 8,
 	},
-	paste: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.accentL },
-	actionDot: { fontFamily: F.manrope, fontSize: 13, color: C.muted2 },
-	resend: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.accent },
+	paste: { ...font(700), fontSize: 13, color: C.accentL },
+	actionDot: { ...font(), fontSize: 13, color: C.muted2 },
+	resend: { ...font(600), fontSize: 13, color: C.accent },
 	resendOff: { color: C.muted2 },
 });

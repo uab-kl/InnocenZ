@@ -144,6 +144,12 @@ function payrollWeekSundayIso(from = todayYmd()): string {
 export type DemoShift = {
   id: string;
   outlet: string;
+  /**
+   * The agency that booked this shift. Null when the backend has not been
+   * restarted and omits it — the card then hides the row rather than naming
+   * the wrong agency, which for a PR on two rosters is worse than silence.
+   */
+  agency?: string | null;
   /** Full outlet address (from the shift's outlet FK) — where the PR works. */
   address?: string | null;
   event: string;
@@ -634,6 +640,12 @@ export type DemoHistoryWeek = {
   weekEndIso?: string;
   /** The agency's NAME: data, substituted into the heading and never translated. */
   agencyName?: string | null;
+  /**
+   * The agency's LOGO as an R2 object key — resolve with `assetUrl()` at RENDER
+   * time. Null for most agencies, which is why the card draws initials instead
+   * of a placeholder when it is missing.
+   */
+  agencyLogo?: string | null;
 };
 
 export const HISTORY_WEEKS: DemoHistoryWeek[] = [
@@ -814,6 +826,36 @@ export function fmtShiftTimeRange(checkedInAt: string, checkedOutAt: string): st
   return `${fmtTimeFromIso(checkedInAt)} – ${fmtTimeFromIso(checkedOutAt)}`;
 }
 
+/**
+ * The live week’s card id — one per agency once the money can be attributed.
+ *
+ * It used to be the bare constant for every live row. That was right while a
+ * week meant one payer, and stopped being right when a PR could work two
+ * agencies in the same week: both agencies’ days then collapse onto a single
+ * React key and a single expand/collapse toggle — the identical fault
+ * `historyVoucherToHistoryWeek` already fixed for PAST weeks by keying the card
+ * on the voucher instead of on the week.
+ *
+ * A null agency keeps the original id EXACTLY, so a backend that sends no
+ * voucher attribution renders precisely what it rendered before.
+ */
+export const CURRENT_WEEK_ID = 'week-current';
+
+export function currentWeekIdFor(agencyId?: string | null): string {
+  return agencyId ? CURRENT_WEEK_ID + '-' + agencyId : CURRENT_WEEK_ID;
+}
+
+/**
+ * Is this id one of the live week’s cards?
+ *
+ * ⚠️ Use this rather than comparing against CURRENT_WEEK_ID. The equality test
+ * it replaces would read every per-agency live card as ARCHIVED history and
+ * duplicate the whole week onto the screen.
+ */
+export function isCurrentWeekId(weekId: string): boolean {
+  return weekId === CURRENT_WEEK_ID || weekId.startsWith(CURRENT_WEEK_ID + '-');
+}
+
 /** Map sealed check-out (Payment → This week) into History shift cards. */
 export function weekPayRecordToHistoryShift(
   rec: WeekPayRecord,
@@ -823,7 +865,9 @@ export function weekPayRecordToHistoryShift(
   const [y, m, d] = isoToYmd(rec.dateIso);
   const payout = roundRm(rec.wages + rec.drinks + rec.tips + rec.others);
   return {
-    id: `live-${rec.dateIso}`,
+    // The agency belongs in the KEY: two of them can own the same calendar
+    // day, and without it React sees one row and drops the second silently.
+    id: `live-${rec.agencyId ?? 'na'}-${rec.dateIso}`,
     outlet: rec.outlet,
     dateLabel: fmtDFriendly(y, m, d, t),
     dateIso: rec.dateIso,
@@ -834,7 +878,7 @@ export function weekPayRecordToHistoryShift(
     tips: rec.tips,
     others: rec.others,
     status: 'current',
-    weekId: 'week-current',
+    weekId: currentWeekIdFor(rec.agencyId),
   };
 }
 
@@ -885,7 +929,7 @@ export function mergeHistoryShiftsWithWeekPay(
   session: SessionTimes | undefined,
   t: AppTranslations,
 ): DemoHistoryShift[] {
-  const archived = base.filter((s) => s.weekId !== 'week-current');
+  const archived = base.filter((s) => !isCurrentWeekId(s.weekId));
   const live = records.map((rec) =>
     weekPayRecordToHistoryShift(rec, timeRangeForRecord(rec, session, t), t),
   );
@@ -960,6 +1004,23 @@ export type WeekPayRecord = {
   drinks: number;
   tips: number;
   others: number;
+  /**
+   * WHOSE MONEY THIS IS — the agency that owes the day, or null when nothing
+   * can attribute it.
+   *
+   * A PR on two rosters works one WEEK but is paid by two COMPANIES, and the
+   * live week merges both because it is built from LINES rather than from a
+   * voucher. Splitting on this is what lets the current week show one card per
+   * agency, the way the past weeks already do.
+   *
+   * Optional, and null is a real answer rather than a gap: a line whose voucher
+   * cannot be resolved MUST fall into an unattributed bucket, never be folded
+   * under whichever agency happened to sort first. Guessing here would be the
+   * oldest-membership fault again — money shown against the wrong company.
+   */
+  agencyId?: string | null;
+  /** The agency NAME, for display. Data: a company is called what it is called. */
+  agencyName?: string | null;
 };
 
 function emptyWeekSkeleton(weeksAgo: number, baseline = todayYmd()): WeeklyDayPay[] {

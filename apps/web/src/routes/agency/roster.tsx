@@ -11,14 +11,12 @@ import {
 } from "@agency-portal/components/agency/RosterShiftTable";
 import { RosterTimetableFilters } from "@agency-portal/components/agency/RosterTimetableFilters";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
-import {
-	LabelWithIcon,
-	TitleWithIcon,
-} from "@agency-portal/components/iz/TitleWithIcon";
+import { LabelWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
 import {
 	formatRM,
 	IzCard,
 	IzCardTitle,
+	IzPageTitle,
 	IzPill,
 	IzSelect,
 } from "@agency-portal/components/iz/ui";
@@ -436,13 +434,9 @@ function AgencyRoster() {
 	return (
 		<div className="iz-screen iz-roster-page">
 			<header className="iz-roster-head">
-				<TitleWithIcon
-					icon={Calendar}
-					iconClassName="h-4 w-4 shrink-0 text-[var(--iz-gold-l)]"
-					className="font-sora text-lg font-extrabold tracking-tight text-[var(--iz-txt)] md:text-xl"
-				>
+				<IzPageTitle level={1} icon={Calendar} dateTime>
 					{t.nav.roster}
-				</TitleWithIcon>
+				</IzPageTitle>
 				{(outletRequestCount > 0 || swapCount > 0) && (
 					<div className="iz-roster-head-badges">
 						{outletRequestCount > 0 && (
@@ -706,7 +700,7 @@ function AgencyRoster() {
 					<div className="grid gap-2 md:grid-cols-2">
 						{pendingPrSwaps.map((swap) => (
 							<IzCard key={swap.id}>
-								<p className="font-sora text-sm font-bold">
+								<p className="iz-heading text-sm font-bold">
 									{swap.requestingPrName}
 								</p>
 								<p className="iz-tiny iz-muted mt-0.5">

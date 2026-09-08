@@ -44,7 +44,7 @@ export function OtpVerifySheet({
 				}
 				inputMode="numeric"
 				placeholder="123456"
-				className="iz-pv-dispute-input !min-h-0 py-3 text-center font-mono text-lg tracking-[0.35em]"
+				className="iz-pv-dispute-input !min-h-0 py-3 text-center iz-nums text-lg tracking-[0.35em]"
 				aria-label={t.portalUi.oneTimePassword}
 			/>
 			<button

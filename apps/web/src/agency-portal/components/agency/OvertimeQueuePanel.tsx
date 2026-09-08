@@ -9,6 +9,7 @@ import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import type { PendingOvertimeClaim } from "@/services/shift-assignment";
 
 /** yyyy-MM-dd -> "Tue 21 Jul", matching how the roster names the same day. */
@@ -78,18 +79,42 @@ function OvertimeRow({
 		void onDecide(decision);
 	};
 
+	// An R2 object KEY on the wire; the resolver adds the public base. Same
+	// treatment as the dispute and receipt cards, which reach it through
+	// ShiftFactsBlock — this queue carries no such block, so the picture sits
+	// beside the claim's own heading instead.
+	const cover = claim.coverImage?.trim()
+		? resolveProofPhotoUrl(claim.coverImage.trim())
+		: null;
+
 	return (
 		<div className="rounded-xl border border-[var(--iz-line)] p-3">
 			<div className="flex flex-wrap items-start justify-between gap-2">
-				<div>
-					<div className="text-sm font-semibold">
-						{claim.prName ?? t.receipts.unknownPr} ·{" "}
-						{claim.outletName ?? t.table.outlet}
+				<div className="flex min-w-0 gap-2.5">
+					{cover ? (
+						<img
+							src={cover}
+							// The venue is what the picture is of; this queue holds no
+							// event name to reach for. Never an empty alt — the image is
+							// evidence, not decoration.
+							alt={claim.outletName ?? ""}
+							className="h-12 w-16 shrink-0 rounded border border-[var(--iz-line)] object-cover"
+							loading="lazy"
+							onError={(e) => {
+								e.currentTarget.style.display = "none";
+							}}
+						/>
+					) : null}
+					<div className="min-w-0">
+						<div className="text-sm font-semibold">
+							{claim.prName ?? t.receipts.unknownPr} ·{" "}
+							{claim.outletName ?? t.table.outlet}
+						</div>
+						<p className="iz-tiny iz-muted mt-0.5">
+							{formatDay(claim.shiftDate)}
+							{claim.slot ? ` · ${claim.slot}` : ""}
+						</p>
 					</div>
-					<p className="iz-tiny iz-muted mt-0.5">
-						{formatDay(claim.shiftDate)}
-						{claim.slot ? ` · ${claim.slot}` : ""}
-					</p>
 				</div>
 				<span className="iz-pill iz-pill-amber !text-[10px]">
 					{t.agencyQueues.holdingPayroll}
@@ -101,20 +126,20 @@ function OvertimeRow({
 					<span className="iz-tiny iz-muted block">
 						{t.payroll.overtimeWorked}
 					</span>
-					<span className="font-mono">
+					<span className="iz-nums">
 						{formatMinutes(claim.overtimeMinutes, t)}
 					</span>
 				</span>
 				<span>
 					{/* Priced by the server, by the same function the approval uses. */}
 					<span className="iz-tiny iz-muted block">{t.table.pays}</span>
-					<span className="font-mono">RM {claim.amount}</span>
+					<span className="iz-nums">RM {claim.amount}</span>
 				</span>
 				<span>
 					<span className="iz-tiny iz-muted block">
 						{t.payroll.ontoTheWeekOf}
 					</span>
-					<span className="font-mono">
+					<span className="iz-nums">
 						{claim.week ? claim.week.weekStart : "—"}
 					</span>
 				</span>

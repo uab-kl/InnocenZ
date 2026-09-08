@@ -55,7 +55,7 @@ export function BackfillPanel({ canAct }: { canAct: boolean }) {
 				<div className="grid gap-2 md:grid-cols-2">
 					{slots.map((slot) => (
 						<IzCard key={slot.assignmentId}>
-							<p className="font-sora text-sm font-bold">
+							<p className="iz-heading text-sm font-bold">
 								{slot.outletName ?? t.table.outlet} · {slot.shiftDate}
 							</p>
 							<p className="iz-tiny iz-muted mt-0.5">
@@ -188,7 +188,7 @@ function ReplacementSheet({
 								className="flex items-center gap-3 rounded-xl border border-[var(--iz-line)] px-3 py-2"
 							>
 								<div className="min-w-0 flex-1">
-									<p className="truncate font-sora text-sm font-bold text-[var(--iz-txt)]">
+									<p className="truncate iz-heading text-sm font-bold text-[var(--iz-txt)]">
 										{c.prName}
 									</p>
 									{/* `c.tier` is the stored grade — the sentence around it moves

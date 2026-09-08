@@ -5,7 +5,7 @@ import {
 	toggleKind,
 	weekDays,
 } from "@agency-portal/lib/payroll-kind-day";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { weekdayShortLabel } from "@/lib/portal-i18n/date-label";
 
@@ -58,9 +58,29 @@ export interface PayrollKindDayFilterProps {
 	 * anything. Offered as a stated refusal rather than an absence — see below.
 	 */
 	kindsUnavailable?: boolean;
+	/**
+	 * A caller's OWN filters, drawn as a third row inside this same box.
+	 *
+	 * Owner, 7 Sep 2026: the Receipts feed used to keep its PR / outlet / entry
+	 * dropdowns behind a separate "Filters" toggle sitting beside the search box,
+	 * so one panel asked the same question — *narrow this list* — in two places,
+	 * one of them folded shut. They live here now, which is the rule this
+	 * component was already written to: a filter folded behind a toggle is one
+	 * nobody discovers.
+	 *
+	 * Optional, and the Dispute queue passes nothing — its rows have no PR or
+	 * outlet dropdown to offer, and an empty third row would just be a gap.
+	 */
+	children?: ReactNode;
 }
 
-const CHIP = "iz-filter-chip !gap-1 !px-2.5 !py-1 !text-[11px]";
+/* `.iz-filter-chip` is 16px with 9/14 padding at base; this strip deliberately
+   ran it smaller. Owner, 8 Sep 2026: "these filters can increase in size a
+   little bit" — so ONE ladder step, tiny to caption, with padding to match
+   rather than a chip that grew its text and kept its old box. Still under the
+   16px "Show" / "Day" labels beside it, which is the reading order: the label
+   names the question, the chips answer it. */
+const CHIP = "iz-filter-chip !gap-1.5 !px-3 !py-1.5 !text-xs";
 
 export function PayrollKindDayFilter({
 	weekStartIso,
@@ -73,6 +93,7 @@ export function PayrollKindDayFilter({
 	dayCounts,
 	allDaysCount,
 	kindsUnavailable = false,
+	children,
 }: PayrollKindDayFilterProps) {
 	const { t } = usePortalLocale();
 	const days = useMemo(
@@ -119,7 +140,7 @@ export function PayrollKindDayFilter({
 				{dirty && (
 					<button
 						type="button"
-						className="iz-tiny ml-auto text-[var(--iz-gold-l)]"
+						className="iz-tiny text-[var(--iz-gold-l)]"
 						onClick={() => {
 							onKindsChange([]);
 							onDayChange(null);
@@ -128,6 +149,18 @@ export function PayrollKindDayFilter({
 						{t.payroll.clearSelection}
 					</button>
 				)}
+				{/* The caller's own filters ride the END of this row rather than taking a
+				    full-width one of their own. "Show" plus two chips uses about a sixth
+				    of a desktop portal, so a separate row left most of two lines empty
+				    while the selects stretched to ~470px each to fill it — a dropdown
+				    reading "All PRs" does not need 470px. Capped and pushed right, they
+				    fill the gap and land at a sane width; on a narrow screen the flex
+				    wrap drops them onto their own line as before. */}
+				{children ? (
+					<div className="ml-auto flex w-full min-w-0 flex-wrap items-center justify-end gap-2 [&>*]:min-w-0 [&>*]:flex-1 sm:w-auto sm:flex-nowrap lg:max-w-[560px] lg:flex-1">
+						{children}
+					</div>
+				) : null}
 			</div>
 
 			<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -172,6 +205,12 @@ export function PayrollKindDayFilter({
 					);
 				})}
 			</div>
+
+			{/* caller-supplied filter row — same box, one question in one place.
+			    Divided rather than merely spaced: the two rows above are CHIPS that
+			    answer which money and which night, and these are DROPDOWNS that
+			    answer whose — related enough to belong together, distinct enough
+			    that running them into one another would read as one control. */}
 		</div>
 	);
 }

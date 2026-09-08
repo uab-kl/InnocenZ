@@ -10,6 +10,8 @@
     "migrate": "node tools/scripts/migrate.mjs migrate",
     "migrate:deploy": "node tools/scripts/migrate.mjs migrate:deploy",
     "db:reset": "node tools/scripts/migrate.mjs db:reset",
+    "check:type": "node tools/scripts/check-portal-typography.mjs",
+    "check:type:update": "node tools/scripts/check-portal-typography.mjs --update",
     "deploy": "node tools/scripts/deploy.mjs",
     "deploy:staging": "node tools/scripts/deploy.mjs staging",
     "deploy:production": "node tools/scripts/deploy.mjs production"

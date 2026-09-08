@@ -95,6 +95,18 @@ export class VoucherConflictError extends Error {
   }
 }
 
+/**
+ * How a voucher SAYS WHOSE IT IS -- joined through the FK, never copied onto
+ * the voucher row (one fact, one table).
+ *
+ * `agencyLogo` is an R2 OBJECT KEY (`agency/<id>/logo/<file>`), not a URL. The
+ * client joins it to the `r2PublicUrl` the same response carries; sending a
+ * resolved URL here would bake the CDN host into stored-looking data.
+ * It is nullable and often IS null -- most agencies have never uploaded one --
+ * so every consumer needs a fallback, not a placeholder image.
+ */
+type AgencyBadge = { agencyName: string | null; agencyLogo: string | null };
+
 export class PaymentVoucherRepositoryClass {
   /**
    * The next voucher number — `PV-000001`, in the same shape as the receipt
@@ -159,7 +171,27 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
-  private async nextVoucherNo(tx: DbTransaction, bump: number): Promise<string> {
+  /**
+   * The next voucher number FOR ONE AGENCY.
+   *
+   * Numbering is per-agency, not global (owner, 8 Sep 2026). It used to take
+   * MAX over the whole table, so a brand-new agency's very first voucher
+   * inherited the running total of every other agency's — "Why We Met" issued
+   * its first PV and it came out `PV-000013`, carrying Atlas's history on a
+   * document belonging to a different company. An agency's books are its own,
+   * and a voucher number is what it files them under.
+   *
+   * The consequence is that `voucher_no` is NO LONGER globally unique: two
+   * agencies each having a `PV-000001` is now the correct state, which is why
+   * migration 0152 moves the unique index onto (agency_id, voucher_no). The
+   * retry-on-conflict loop below still works — it just races against the other
+   * writers for THIS agency rather than all of them.
+   */
+  private async nextVoucherNo(
+    tx: DbTransaction,
+    bump: number,
+    agencyId: string,
+  ): Promise<string> {
     // MAX of the numeric suffix, not count(*). The original used count()+bump to
     // avoid parsing the stored string, which is true and was still wrong: a count
     // RECYCLES numbers after any delete. Proven live on 31 Jul — deleting three
@@ -177,7 +209,8 @@ export class PaymentVoucherRepositoryClass {
       .select({
         highest: sql<number>`coalesce(max(nullif(regexp_replace(${PaymentVoucherTable.voucherNo}, '\\D', '', 'g'), '')::int), 0)`,
       })
-      .from(PaymentVoucherTable);
+      .from(PaymentVoucherTable)
+      .where(eq(PaymentVoucherTable.agencyId, agencyId));
     return `PV-${String(Number(row?.highest ?? 0) + bump).padStart(6, '0')}`;
   }
 
@@ -190,7 +223,7 @@ export class PaymentVoucherRepositoryClass {
         // A number is allocated here, once, so no reader ever has to invent one.
         let voucher: PaymentVoucherType | undefined;
         for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS && !voucher; bump++) {
-          const voucherNo = await this.nextVoucherNo(tx, bump);
+          const voucherNo = await this.nextVoucherNo(tx, bump, data.agencyId);
           try {
             // SAVEPOINT per attempt (drizzle's nested transaction), and it is
             // load-bearing rather than tidiness. In PostgreSQL a failed statement
@@ -739,7 +772,7 @@ export class PaymentVoucherRepositoryClass {
     prId: string,
     weekStart: string,
     userId?: string | null,
-  ): Promise<(PaymentVoucherWithLines & { agencyName: string | null })[]> {
+  ): Promise<(PaymentVoucherWithLines & AgencyBadge)[]> {
     try {
       // The agency NAME is joined, not stored. Two vouchers in a week differ by
       // who owes the money, and "PV-000012" beside "PV-000019" tells the PR
@@ -747,7 +780,14 @@ export class PaymentVoucherRepositoryClass {
       // them distinguishable on the phone. Read through the FK rather than
       // copied onto the voucher: one fact, one table.
       const rows = await db
-        .select({ voucher: PaymentVoucherTable, agencyName: AgencyTable.name })
+        .select({
+          voucher: PaymentVoucherTable,
+          agencyName: AgencyTable.name,
+          // The company MARK, on the same join as the name and for the same
+          // reason: two cards for one week are otherwise identical. An R2 key,
+          // never a URL -- the client joins it to the base it was given.
+          agencyLogo: AgencyTable.logoImage,
+        })
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(AgencyTable.id, PaymentVoucherTable.agencyId))
         .where(
@@ -758,6 +798,7 @@ export class PaymentVoucherRepositoryClass {
         rows.map(async (row) => ({
           ...row.voucher,
           agencyName: row.agencyName ?? null,
+          agencyLogo: row.agencyLogo ?? null,
           lines: await this.getLines(row.voucher.id),
         })),
       );
@@ -779,7 +820,7 @@ export class PaymentVoucherRepositoryClass {
       excludeWeekStart?: string;
       userId?: string | null;
     },
-  ): Promise<(PaymentVoucherWithLines & { agencyName: string | null })[]> {
+  ): Promise<(PaymentVoucherWithLines & AgencyBadge)[]> {
     try {
       const statuses = opts?.statuses ?? (['signed', 'paid'] as PaymentVoucherStatus[]);
       const conditions = [
@@ -802,16 +843,25 @@ export class PaymentVoucherRepositoryClass {
        * dropping a voucher out of the PR's own history.
        */
       const vouchers = await db
-        .select({ voucher: PaymentVoucherTable, agencyName: AgencyTable.name })
+        .select({
+          voucher: PaymentVoucherTable,
+          agencyName: AgencyTable.name,
+          agencyLogo: AgencyTable.logoImage,
+        })
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(AgencyTable.id, PaymentVoucherTable.agencyId))
         .where(and(...conditions))
         .orderBy(desc(PaymentVoucherTable.weekStart), desc(PaymentVoucherTable.createdAt));
 
-      const withLines: (PaymentVoucherWithLines & { agencyName: string | null })[] = [];
+      const withLines: (PaymentVoucherWithLines & AgencyBadge)[] = [];
       for (const row of vouchers) {
         const lines = await this.getLines(row.voucher.id);
-        withLines.push({ ...row.voucher, lines, agencyName: row.agencyName });
+        withLines.push({
+          ...row.voucher,
+          lines,
+          agencyName: row.agencyName,
+          agencyLogo: row.agencyLogo ?? null,
+        });
       }
       return withLines;
     } catch (error) {
@@ -1197,7 +1247,7 @@ export class PaymentVoucherRepositoryClass {
       // acquired its number later would have gone unnumbered for a whole week.
       const created = await db.transaction(async (tx) => {
         for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS; bump++) {
-          const voucherNo = await this.nextVoucherNo(tx, bump);
+          const voucherNo = await this.nextVoucherNo(tx, bump, data.agencyId);
           try {
             // SAVEPOINT per attempt — see the identical note in create(). Without
             // it the first number clash aborts the whole transaction and attempt 2

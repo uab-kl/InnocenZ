@@ -200,7 +200,7 @@ function DisputeEvidence({
 						className="rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)]/40 p-2.5"
 					>
 						<div className="flex flex-wrap items-center gap-2">
-							<span className="font-mono text-sm font-semibold">
+							<span className="iz-nums text-sm font-semibold">
 								{receipt.orderNo ?? t.payroll.noOrderNo}
 							</span>
 							<span className="iz-tiny iz-muted2">{receipt.receiptNo}</span>
@@ -216,7 +216,7 @@ function DisputeEvidence({
 							<span className={`iz-pill !text-[10px] iz-pill-${tag.variant}`}>
 								{t.receipts[tag.labelKey]}
 							</span>
-							<span className="iz-tiny ml-auto font-mono">
+							<span className="iz-tiny ml-auto iz-nums">
 								{formatRM(disputedSubtotal(receipt, dispute).toFixed(2))}
 							</span>
 						</div>
@@ -366,7 +366,7 @@ function DisputeRow({
 						{/* THE CONTESTED FIGURE, on the header line — a folded card that
 					    named a person and a bucket but no money made the reviewer open
 					    every one to find the big ones. */}
-						<p className="iz-tiny iz-muted2 mt-0.5 font-mono">
+						<p className="iz-tiny iz-muted2 mt-0.5 iz-nums">
 							{formatRM(dispute.disputedAmount)}
 							{dispute.claimedAmount !== null
 								? ` → ${formatRM(dispute.claimedAmount)}`
@@ -411,7 +411,7 @@ function DisputeRow({
 							<span className="iz-tiny iz-muted block">
 								{t.payroll.voucherSaysLabel}
 							</span>
-							<span className="font-mono">
+							<span className="iz-nums">
 								{formatRM(dispute.disputedAmount)}
 							</span>
 						</span>
@@ -420,7 +420,7 @@ function DisputeRow({
 								<span className="iz-tiny iz-muted block">
 									{t.payroll.prClaims}
 								</span>
-								<span className="font-mono">
+								<span className="iz-nums">
 									{formatRM(dispute.claimedAmount)}
 								</span>
 							</span>
@@ -452,7 +452,7 @@ function DisputeRow({
 								{item.quantity}
 								{" · "}
 							</span>
-							<span className="font-mono">{formatRM(item.amount)}</span>
+							<span className="iz-nums">{formatRM(item.amount)}</span>
 						</p>
 					))}
 					{dispute.note && (

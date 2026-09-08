@@ -1983,7 +1983,10 @@ export class PaymentVoucherControllerClass {
    * approval to the other's lines.
    */
   private async mergeWeekVouchers(
-    vouchers: (PaymentVoucherWithLines & { agencyName: string | null })[],
+    vouchers: (PaymentVoucherWithLines & {
+      agencyName: string | null;
+      agencyLogo: string | null;
+    })[],
   ) {
     const parts = await Promise.all(
       vouchers.map(async (voucher) => {
@@ -2048,6 +2051,8 @@ export class PaymentVoucherControllerClass {
         voucherNo: p.voucher.voucherNo,
         agencyId: p.voucher.agencyId,
         agencyName: p.voucher.agencyName,
+        // The R2 key for the company mark; the client joins it to r2PublicUrl.
+        agencyLogo: p.voucher.agencyLogo,
         net: p.voucher.net,
         status: p.voucher.status,
       })),
@@ -2385,6 +2390,7 @@ export class PaymentVoucherControllerClass {
            */
           agencyId: v.agencyId,
           agencyName: v.agencyName,
+          agencyLogo: v.agencyLogo,
           weekStart: v.weekStart,
           weekEnd: v.weekEnd,
           net: v.net,
@@ -3054,6 +3060,10 @@ export class PaymentVoucherControllerClass {
             // Shift END — clamped to the scheduled end, not when the PR left.
             checkOutAt: f.checkOutAt ? f.checkOutAt.toISOString() : null,
             overtimeMinutes: f.overtimeMinutes,
+            // The picture the OUTLET attached when it posted this shift, off the
+            // template it was posted from. An R2 object KEY, never a URL — the
+            // client resolves it against the public base like a proof photo.
+            coverImage: f.templateCoverImage ?? null,
           },
         ]),
       );
@@ -5325,6 +5335,8 @@ export class PaymentVoucherControllerClass {
               // moment the PR left. `overtimeMinutes` carries the real overrun.
               checkOutAt: f.checkOutAt ? f.checkOutAt.toISOString() : null,
               overtimeMinutes: f.overtimeMinutes,
+              // See the note on the receipts feed above: an R2 KEY, not a URL.
+              coverImage: f.templateCoverImage ?? null,
             })),
           voucher: {
             id: voucher.id,

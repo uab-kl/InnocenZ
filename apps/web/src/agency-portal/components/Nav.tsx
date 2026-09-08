@@ -420,7 +420,7 @@ export function AppHeader({
 
 					<div className="flex items-start justify-between gap-2">
 						{title ? (
-							<h1 className="font-sora text-[22px] font-extrabold tracking-tight text-[var(--iz-txt)]">
+							<h1 className="iz-heading text-[22px] font-extrabold tracking-tight text-[var(--iz-txt)]">
 								<TitleWithIcon iconKey={iconKey}>{title}</TitleWithIcon>
 							</h1>
 						) : (

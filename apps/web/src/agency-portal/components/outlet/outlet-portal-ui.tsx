@@ -132,7 +132,7 @@ export function OutletPageHeader({
 						</TitleWithIcon>
 					</p>
 				)}
-				<h2 className="font-sora text-lg font-extrabold leading-snug text-[var(--iz-txt)]">
+				<h2 className="iz-heading text-2xl font-extrabold leading-snug text-[var(--iz-title)]">
 					<TitleWithIcon icon={iconForNav(iconKey ?? title)}>
 						{title}
 					</TitleWithIcon>
@@ -426,7 +426,7 @@ export function OutletCardHeader({
 						<Icon className="h-4 w-4" />
 					</span>
 				)}
-				<span className="font-sora text-sm font-extrabold text-[var(--iz-txt)]">
+				<span className="iz-heading text-sm font-extrabold text-[var(--iz-txt)]">
 					{title}
 				</span>
 				{badge}

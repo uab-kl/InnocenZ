@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import {
   fmtDFriendly,
   formatRM,
@@ -74,6 +75,7 @@ function assignmentToShift(a: ShiftAssignmentRecord, t: AppTranslations): DemoSh
   return {
     id: a.id,
     outlet: a.outletName ?? t.common.outlet,
+    agency: a.agencyName?.trim() || null,
     address: a.outletAddress,
     // `event_name` is nullable; an unnamed shift says so rather than borrowing
     // the generic word "Shift", which read as a real event name on the card.
@@ -698,6 +700,11 @@ function TonightCard({
           <View style={{ flex: 1, minWidth: 0 }}>
             <LabelWithIcon icon={Store} label={t.shifts.outletName} />
             <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
+            {shift.agency ? (
+              <Text style={styles.shiftEventLine} numberOfLines={1}>
+                {t.shifts.agency}: {shift.agency}
+              </Text>
+            ) : null}
             <Text style={styles.shiftEventLine} numberOfLines={1}>
               {shift.event} · {eventKindLabel}
             </Text>
@@ -813,8 +820,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   headerTitle: {
-    fontFamily: F.sora,
-    fontWeight: '800',
+    ...font(800),
     letterSpacing: -0.45,
     color: C.txt,
   },
@@ -850,9 +856,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(167,139,250,0.16)',
   },
   hubToggleText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     lineHeight: 14,
     color: C.prMuted,
   },
@@ -866,9 +871,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   hubBadgeText: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 9,
-    fontWeight: '800',
     color: '#fff',
   },
   hubTabs: {
@@ -892,18 +896,16 @@ const styles = StyleSheet.create({
     borderBottomColor: C.violet,
   },
   hubTabLabel: {
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.66,
     color: C.muted,
     lineHeight: 14,
   },
   hubTabValue: {
     marginTop: 6,
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 17,
-    fontWeight: '800',
     lineHeight: 20,
   },
   sections: {
@@ -924,9 +926,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   shiftEyebrow: {
-    fontFamily: F.manrope,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 1.1,
     color: C.muted2,
     // The eyebrows used to be typed in caps here ('ON DUTY', 'TONIGHT'). They
@@ -947,9 +948,8 @@ const styles = StyleSheet.create({
   },
   shiftVenueName: {
     marginTop: 2,
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 18,
-    fontWeight: '800',
     lineHeight: 22,
     color: C.txt,
   },
@@ -961,7 +961,7 @@ const styles = StyleSheet.create({
    */
   shiftEventLine: {
     marginTop: 3,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 16,
     color: C.prMuted2,
@@ -974,7 +974,7 @@ const styles = StyleSheet.create({
   },
   shiftAddrText: {
     flex: 1,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted2,
@@ -994,9 +994,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   shiftFactValue: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     lineHeight: 20,
     color: C.txt,
     textAlign: 'right',
@@ -1011,7 +1010,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.03)',
   },
   shiftEventText: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.muted,
@@ -1048,9 +1047,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   overdueKey: {
-    fontFamily: F.manrope,
+    ...font(700),
     fontSize: C.fsTiny - 1,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.prMuted,
     paddingTop: 1,
@@ -1058,14 +1056,13 @@ const styles = StyleSheet.create({
   overdueVal: {
     flex: 1,
     minWidth: 0,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: C.fsTiny + 1,
-    fontWeight: '700',
     color: C.txt,
     textAlign: 'right',
   },
   overdueWarn: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsTiny,
     lineHeight: C.fsTiny * 1.45,
     // The champagne this card is already built from (todoIcon's chip and the
@@ -1090,19 +1087,18 @@ const styles = StyleSheet.create({
    * uses and invite the flattened row to be rebuilt.
    */
   todoTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 18,
-    fontWeight: '700',
     color: C.txt,
   },
   servicesBlurb: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
     lineHeight: 18,
   },
   servicesToast: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.green,
   },
@@ -1117,27 +1113,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
   serviceTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: C.txt,
   },
   serviceSub: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
   ordersTitle: {
     marginTop: 8,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 1,
     color: C.muted2,
   },
   scheduleMeta: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsTiny,
     lineHeight: C.fsTiny * 1.4,
     color: C.prMuted,

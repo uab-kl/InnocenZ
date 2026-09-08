@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import {
   DAY_SHORT,
   MONTH_SHORT,
@@ -3571,15 +3572,14 @@ const styles = StyleSheet.create({
     backgroundColor: C.amberBg,
   },
   bankNudgeBody: { flex: 1 },
-  bankNudgeTitle: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.txt },
-  bankNudgeText: { marginTop: 3, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  bankNudgeTitle: { ...font(700), fontSize: 14, color: C.txt },
+  bankNudgeText: { marginTop: 3, ...font(), fontSize: 12, color: C.prMuted },
   // Looks like the link it is — the whole card is the tap target, but a card
   // with no visible action reads as a notice you cannot act on.
   bankNudgeAction: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.amber,
     textDecorationLine: 'underline',
   },
@@ -3592,8 +3592,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   headerTitle: {
-    fontFamily: F.sora,
-    fontWeight: '800',
+    ...font(800),
     letterSpacing: -0.45,
     color: C.txt,
   },
@@ -3617,14 +3616,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(183,156,232,0.1)',
   },
   weekTabTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.muted,
   },
   weekTabSub: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
     textAlign: 'center',
@@ -3650,23 +3648,20 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   sectionTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     letterSpacing: 1.2,
     color: C.txt,
   },
   sectionFrac: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.goldL,
   },
   sectionAction: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.goldL,
   },
   sectionBody: {
@@ -3677,16 +3672,14 @@ const styles = StyleSheet.create({
   },
   weekCaption: {
     marginTop: 12,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.txt,
   },
   weekCaptionRange: {
     marginTop: 2,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.txt,
   },
   thisHead: {
@@ -3698,7 +3691,7 @@ const styles = StyleSheet.create({
   },
   verified: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
   },
@@ -3706,19 +3699,19 @@ const styles = StyleSheet.create({
   otCaption: { color: C.amber },
   reviewCaption: {
     marginTop: 8,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
   },
   verifiedTiny: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
   },
   emptyWeekHint: {
     marginTop: 10,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
@@ -3728,7 +3721,7 @@ const styles = StyleSheet.create({
   gridCorner: { width: 78 },
   gridLabel: {
     width: 78,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.muted2,
   },
@@ -3741,16 +3734,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240,138,138,0.1)',
   },
   gridDay: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.muted2,
   },
-  gridDate: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
+  gridDate: { ...font(), fontSize: 11, color: C.prMuted },
   gridVal: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.txt,
   },
   gridValPending: { color: C.amber },
@@ -3791,9 +3782,8 @@ const styles = StyleSheet.create({
    * day shown as settled is a wrong answer about money.
    */
   statusPill: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 8,
-    fontWeight: '800',
     letterSpacing: 0.3,
     color: C.amber,
     textAlign: 'center',
@@ -3860,9 +3850,8 @@ const styles = StyleSheet.create({
   rcptSquareOn: { borderColor: C.accent, backgroundColor: C.accent },
   rcptChipText: {
     flex: 1,
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.muted2,
   },
   rcptChipTextOn: {
@@ -3871,7 +3860,7 @@ const styles = StyleSheet.create({
   },
   pickedHint: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
@@ -3890,20 +3879,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240,138,138,0.12)',
   },
   sheetCloseText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: C.red,
   },
   claimTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 18,
-    fontWeight: '800',
     color: C.txt,
   },
   claimDay: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
@@ -3921,20 +3908,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   claimComponent: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 14,
-    fontWeight: '800',
     color: C.txt,
   },
   claimState: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 10,
-    fontWeight: '800',
     letterSpacing: 0.6,
   },
   claimMeta: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
@@ -3951,17 +3936,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   claimShiftHead: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     color: C.accentL,
   },
   /* Champagne, matching the evidence sheet's tag exactly — the PR sees the
      same event on both surfaces and should not have to check it is the same. */
   claimEventTag: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.4,
     color: '#e8c27a',
     borderWidth: 1,
@@ -3974,15 +3957,14 @@ const styles = StyleSheet.create({
   },
   claimShiftMeta: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
   },
   claimItem: {
     marginTop: 3,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.txt,
   },
   claimCancel: {
@@ -3996,28 +3978,26 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   claimCancelText: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     color: C.red,
   },
   claimNote: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.muted2,
   },
   claimAnswer: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.goldL,
   },
   /** Voucher-level DISPUTED chip in the This-week card header. */
   disputePill: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.6,
     color: C.red,
     backgroundColor: C.redBg,
@@ -4029,7 +4009,7 @@ const styles = StyleSheet.create({
   },
   disputeHint: {
     marginTop: 10,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
@@ -4044,40 +4024,37 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   disputeBannerTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 13,
-    fontWeight: '800',
     color: C.red,
   },
   disputeBannerBody: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.txt,
   },
   disputeBannerHint: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted,
   },
 
   footNote: {
     marginTop: 10,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.muted2,
     textAlign: 'center',
   },
   footBold: {
-    fontFamily: F.sora,
-    fontWeight: '800',
+    ...font(800),
     color: C.txt,
   },
   footTotal: {
-    fontFamily: F.sora,
-    fontWeight: '800',
+    ...font(800),
     color: C.accent,
   },
   backdrop: {
@@ -4109,14 +4086,13 @@ const styles = StyleSheet.create({
     maxHeight: '90%',
   },
   sheetTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 20,
-    fontWeight: '800',
     color: C.txt,
   },
   sheetSub: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
     lineHeight: 18,
@@ -4132,17 +4108,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   targetPillText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.goldL,
   },
   fieldLabel: {
     marginTop: 12,
     marginBottom: 4,
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.8,
     color: C.prMuted2,
   },
@@ -4164,15 +4138,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(183,156,232,0.14)',
   },
   presetChipText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.txt,
   },
   input: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -4195,19 +4167,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   attachBtnText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     color: C.txt,
   },
   attachOptional: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.muted2,
   },
   attachHint: {
     marginTop: 8,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
     lineHeight: 16,
@@ -4257,9 +4228,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.03)',
   },
   backBtnText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: C.prMuted,
   },
   submitBtn: {
@@ -4269,9 +4239,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: '#241a08',
   },
   dangerBtn: {
@@ -4284,16 +4253,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240,138,138,0.12)',
   },
   dangerBtnText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: C.red,
   },
   cancel: { marginTop: 10, alignItems: 'center', padding: 10 },
   cancelText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.muted,
   },
 });

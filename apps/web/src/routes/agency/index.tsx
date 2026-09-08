@@ -1,6 +1,6 @@
 import { IconGuide } from "@agency-portal/components/iz/IconGuide";
 import { UnpaidBillingBanner } from "@agency-portal/components/iz/UnpaidBillingBanner";
-import { formatRM } from "@agency-portal/components/iz/ui";
+import { formatRM, IzPageTitle } from "@agency-portal/components/iz/ui";
 import { AgencyHomeHubTabs } from "@agency-portal/components/portal/AgencyHomeHubTabs";
 import { AiSuggestionsPanel } from "@agency-portal/components/portal/AiSuggestionsPanel";
 import { useAgencyOutlets } from "@agency-portal/hooks/use-agency-outlets";
@@ -170,6 +170,15 @@ function AgencyHub() {
 
 	return (
 		<div className="iz-screen iz-portal-page">
+			{/* The page names itself, like every other page in both portals.
+			    This heading and its clock used to be drawn by the SHELL, on a
+			    path test, which is why the date sat above the title on Roster and
+			    below it here. `iconKey` takes the ENGLISH lookup key, not the
+			    rendered words: `iconForNav` matches on text, so a translated
+			    "今天" would resolve to a "?" glyph. */}
+			<IzPageTitle level={1} iconKey="Today" dateTime>
+				{t.common.today}
+			</IzPageTitle>
 			<div className="iz-portal-kpi-grid iz-portal-desktop-only">
 				<KpiTile
 					label={t.agencyHome.totalPr}

@@ -608,6 +608,8 @@ const en = {
 		 * changes; only the words a human reads do.
 		 */
 		statusPendingReview: "Pending Agency Review",
+		/** PENDING_REVIEW + SENT together — everything still unsigned. */
+		statusPendingAny: "Pending reviews",
 		statusSent: "Pending PR Review",
 		statusSigned: "To pay",
 		statusDisputed: "Disputed",
@@ -697,7 +699,6 @@ const en = {
 		outstandingVouchersPrefix: "Left to pay · not on the newer weeks",
 		readyToPay: "ready to pay",
 		notSignedYet: "not signed yet",
-		signedCountSuffix: "signed",
 		useToRecordTransfer: "to record each bank transfer",
 		paidInHistory: "paid in History",
 		use: "use",
@@ -731,6 +732,7 @@ const en = {
 		source: "Source",
 		search: "Search",
 		name: "Name",
+		allNames: "All names",
 		outlet: "Outlet",
 		status: "Status",
 		date: "Date",
@@ -1510,6 +1512,25 @@ const en = {
 		agingCurrent: "Current",
 		agingDueSoon: "Due soon",
 		agingOverdue: "Overdue",
+		/** Due date on a billing period row. {date} is already formatted. */
+		dueOn: "Due {date}",
+		/** How late a period is. {n} whole days past its due date. */
+		overdueByDays: "{n} days overdue",
+		/** Singular twin of `overdueByDays`. A whole sentence, not an "s". */
+		overdueByOneDay: "1 day overdue",
+		/** How long is left. {n} whole days until the due date. */
+		dueInDays: "Due in {n} days",
+		/** Singular twin of `dueInDays` — "Due in 1 days" shipped without it. */
+		dueInOneDay: "Due tomorrow",
+		/** The period being used right now — payable early, never late. */
+		currentPeriodNotDue: "Current period",
+		/**
+		 * The red warning above the payable list. Deliberately reports what is
+		 * LATE, not what is unpaid: the unpaid total includes the period running
+		 * now, and a warning that is always on is a warning nobody reads.
+		 */
+		overdueWarning:
+			"{amount} is past its due date across {n} billing period(s). The oldest was due {date} — {days} days ago.",
 		noAccess: "You do not have access to subscription billing.",
 		financeReadOnly: "Finance view — read-only · contact owner to update card",
 		lastPayrollWeek: "Last payroll week · {cycle}",
@@ -1744,6 +1765,20 @@ const en = {
 		billingDueMany: "{amount} outstanding across {n} billing periods.",
 		billingDueSince: "Oldest unpaid period starts {date}.",
 		billingDueCta: "Open Subscription",
+		/**
+		 * THE SERIOUS VARIANT. Shown only once something is genuinely past its due
+		 * date — the ordinary `billingDue*` wording covers money merely unpaid.
+		 *
+		 * It states facts and stops. It does NOT threaten suspension or service
+		 * interruption: nothing in this platform suspends an organisation for an
+		 * unpaid subscription, and a warning implying a consequence the code will
+		 * never deliver is a bluff that gets called the first time it is ignored.
+		 */
+		billingOverdueTitle: "Subscription payment overdue",
+		/** {late} is the already-localized "N days overdue" fragment. */
+		billingOverdueOne: "{amount} is overdue — it was due {date}, {late}.",
+		billingOverdueMany:
+			"{amount} is overdue across {n} billing periods. The oldest was due {date}, {late}.",
 		/**
 		 * The agency's one gated ask. Leaving Custom is never gated — dropping
 		 * cost must not be blocked by debt — and the Sunday auto-tier moves on
@@ -3800,8 +3835,6 @@ const en = {
 	},
 	agencyPv: {
 		/** Singular/plural spelled out — the code used to splice in "s"/"is"/"are". */
-		unsignedVoucherOne: "{n} voucher in this week is still not signed",
-		unsignedVoucherMany: "{n} vouchers in this week are still not signed",
 		overdueUnsignedHint:
 			"Overdue — a PR cannot sign a voucher that was never sent. Review each day, then send it to their Payment screen to e-sign.",
 		/** The week a BACKEND voucher itself covers, printed beside the tab's own week. */
@@ -4725,6 +4758,8 @@ const en = {
 		noticeHours: "{n}h notice",
 		/** {amount} arrives already carrying RM. */
 		notYetBilledOutstanding: "{n} not yet billed · {amount} outstanding",
+		/** The count now rides on the header badge, so this half stands alone. */
+		outstandingAmount: "{amount} outstanding",
 		/** Both amounts arrive already carrying RM. */
 		weeklyPlusCancellations:
 			"({weekly} weekly + {cancellations} cancellations)",
@@ -6581,6 +6616,7 @@ const zh: PortalTranslations = {
 		excelDownloaded: "付款单 Excel 已下载",
 		receiptDownloaded: "付款收据已下载",
 		statusPendingReview: "待经纪公司审核",
+		statusPendingAny: "待审核",
 		statusSent: "待 PR 确认",
 		statusSigned: "待付款",
 		statusDisputed: "有争议",
@@ -6644,7 +6680,6 @@ const zh: PortalTranslations = {
 		outstandingVouchersPrefix: "待付款 · 不含较新周次",
 		readyToPay: "可付款",
 		notSignedYet: "张尚未签署",
-		signedCountSuffix: "张已签署",
 		useToRecordTransfer: "登记每笔银行转账",
 		paidInHistory: "张已付款（见历史记录）",
 		use: "使用",
@@ -6670,6 +6705,7 @@ const zh: PortalTranslations = {
 		source: "来源",
 		search: "搜索",
 		name: "姓名",
+		allNames: "全部姓名",
 		outlet: "门店",
 		status: "状态",
 		date: "日期",
@@ -7303,6 +7339,13 @@ const zh: PortalTranslations = {
 	},
 	subscription: {
 		agingCurrent: "未到期",
+		dueOn: "到期日 {date}",
+		overdueByDays: "逾期 {n} 天",
+		overdueByOneDay: "逾期 1 天",
+		dueInDays: "{n} 天后到期",
+		dueInOneDay: "明天到期",
+		currentPeriodNotDue: "本期",
+		overdueWarning: "{n} 个计费周期共 {amount} 已逾期。最早一笔到期日为 {date}，已逾期 {days} 天。",
 		agingDueSoon: "即将到期",
 		agingOverdue: "已逾期",
 		noAccess: "你没有查看订阅账单的权限。",
@@ -7482,6 +7525,10 @@ const zh: PortalTranslations = {
 		billingDueMany: "尚有 {amount} 未付，共 {n} 个账单周期。",
 		billingDueSince: "最早未付周期自 {date} 起。",
 		billingDueCta: "打开订阅页面",
+		billingOverdueTitle: "订阅付款已逾期",
+		billingOverdueOne: "{amount} 已逾期 — 到期日 {date}，{late}。",
+		billingOverdueMany:
+			"{n} 个计费周期共 {amount} 已逾期。最早一笔到期日 {date}，{late}。",
 		settleBeforeCustomAsk:
 			"尚有 {n} 个账期未付，共 {amount} —— 请先与 InnocenZ 结清，再申请 Custom 价格。重置回普通价目表随时可用。",
 
@@ -9238,8 +9285,6 @@ const zh: PortalTranslations = {
 		itemCancelled: "已取消",
 	},
 	agencyPv: {
-		unsignedVoucherOne: "本周有 {n} 张付款单尚未签署",
-		unsignedVoucherMany: "本周有 {n} 张付款单尚未签署",
 		overdueUnsignedHint:
 			"已逾期 — PR 无法签署从未发送的付款单。请逐日审核后发送，付款单会出现在其「收款」页面供签署。",
 		weekWorked: "工作周",
@@ -9867,6 +9912,7 @@ const zh: PortalTranslations = {
 		cancelledAfterStart: "开工后取消",
 		noticeHours: "提前 {n} 小时通知",
 		notYetBilledOutstanding: "{n} 项尚未入账 · 未收 {amount}",
+		outstandingAmount: "未收 {amount}",
 		weeklyPlusCancellations: "（每周罚款 {weekly} + 取消费用 {cancellations}）",
 		addBeforeSendingPv: "请在发送付款单前加入这些费用",
 		selectedTotal: "已选 {n} 项 · {amount}",

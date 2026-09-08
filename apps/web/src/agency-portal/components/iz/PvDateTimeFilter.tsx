@@ -176,7 +176,7 @@ export function PvDateTimeFilter({
 			/>
 			<div className="iz-grid2">
 				<div className="iz-field !mb-0">
-					{/* biome-ignore lint/a11y/noLabelWithoutControl: caption only — IzTimeInput renders its own <button> and already carries the matching aria-label, and it exposes no `id`, so an htmlFor here would dangle. It stays a <label> because `.iz-field label` in prototype-theme.css is an ELEMENT selector: a <span> would silently drop the uppercase 10.5px Sora typography. */}
+					{/* biome-ignore lint/a11y/noLabelWithoutControl: caption only — IzTimeInput renders its own <button> and already carries the matching aria-label, and it exposes no `id`, so an htmlFor here would dangle. It stays a <label> because `.iz-field label` in prototype-theme.css is an ELEMENT selector: a <span> would silently drop the uppercase caption typography. */}
 					<label className={compact ? "!text-[10px]" : undefined}>
 						{t.izPv.fromTime}
 					</label>
@@ -188,7 +188,7 @@ export function PvDateTimeFilter({
 					/>
 				</div>
 				<div className="iz-field !mb-0">
-					{/* biome-ignore lint/a11y/noLabelWithoutControl: caption only — IzTimeInput renders its own <button> and already carries the matching aria-label, and it exposes no `id`, so an htmlFor here would dangle. It stays a <label> because `.iz-field label` in prototype-theme.css is an ELEMENT selector: a <span> would silently drop the uppercase 10.5px Sora typography. */}
+					{/* biome-ignore lint/a11y/noLabelWithoutControl: caption only — IzTimeInput renders its own <button> and already carries the matching aria-label, and it exposes no `id`, so an htmlFor here would dangle. It stays a <label> because `.iz-field label` in prototype-theme.css is an ELEMENT selector: a <span> would silently drop the uppercase caption typography. */}
 					<label className={compact ? "!text-[10px]" : undefined}>
 						{t.izPv.toTime}
 					</label>

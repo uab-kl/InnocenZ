@@ -63,7 +63,7 @@ export function PortalAuthFrame({
 						</TitleWithIcon>
 					</p>
 
-					<h1 className="font-sora mt-8 text-[32px] font-extrabold leading-tight text-[var(--iz-txt)]">
+					<h1 className="iz-heading mt-8 text-2xl font-extrabold leading-tight text-[var(--iz-txt)]">
 						<TitleWithIcon icon={LogIn}>
 							{t.portalUi.signInTo}{" "}
 							<TitleWithIcon icon={PortalIcon}>{label}</TitleWithIcon>

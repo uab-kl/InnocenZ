@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import {
   formatRM,
   weekPayGridTotal,
@@ -1108,9 +1109,8 @@ const styles = StyleSheet.create({
   },
   back: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   backText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 16,
-    fontWeight: '700',
     color: C.txt,
   },
   statusRow: {
@@ -1120,9 +1120,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   pvId: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.prMuted,
   },
   banner: {
@@ -1138,14 +1137,13 @@ const styles = StyleSheet.create({
     backgroundColor: C.redBg,
   },
   bannerTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.txt,
   },
   bannerBody: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
@@ -1158,23 +1156,21 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   sectionLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 1,
     color: C.muted2,
   },
   weekLabel: {
     marginTop: 4,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 16,
-    fontWeight: '700',
     color: C.txt,
   },
   gridRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   gridLabel: {
     width: 78,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.muted2,
   },
@@ -1187,16 +1183,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240,138,138,0.1)',
   },
   gridDay: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.muted2,
   },
-  gridDate: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
+  gridDate: { ...font(), fontSize: 11, color: C.prMuted },
   gridVal: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.txt,
   },
   gridValDisputed: { color: C.red },
@@ -1205,9 +1199,8 @@ const styles = StyleSheet.create({
   /** The label, same red as its cells: the whole line reads as one thing. */
   gridLabelDeduction: { color: C.red },
   statusPill: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 8,
-    fontWeight: '800',
     letterSpacing: 0.3,
     color: C.green,
     textAlign: 'center',
@@ -1215,7 +1208,7 @@ const styles = StyleSheet.create({
   statusPillDisputed: { color: C.red },
   tapHint: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
     textAlign: 'center',
@@ -1230,20 +1223,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
   summaryK: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
   summaryV: {
     marginTop: 4,
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 28,
-    fontWeight: '800',
     color: C.accentL,
   },
-  summaryBody: { fontFamily: F.manrope, fontSize: 14, color: C.txt },
+  summaryBody: { ...font(), fontSize: 14, color: C.txt },
   collapse: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1252,16 +1243,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   collapseTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 1,
     color: C.muted2,
   },
   collapseAction: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     color: C.goldL,
   },
   receiptBox: {
@@ -1280,28 +1269,25 @@ const styles = StyleSheet.create({
     borderBottomColor: C.line,
   },
   receiptRef: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.txt,
   },
   receiptMeta: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
   receiptRight: { alignItems: 'flex-end', gap: 4 },
   receiptMatched: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     color: C.green,
   },
   receiptDetailsLink: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.goldL,
   },
   sigCard: {
@@ -1313,7 +1299,7 @@ const styles = StyleSheet.create({
   },
   sigRole: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
   },
@@ -1323,12 +1309,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  signedText: { flex: 1, fontFamily: F.manrope, fontSize: 13, color: C.green },
+  signedText: { flex: 1, ...font(), fontSize: 13, color: C.green },
   pendingSig: {
     marginTop: 8,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.amber,
   },
   primary: {
@@ -1341,16 +1326,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   primaryText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 16,
-    fontWeight: '700',
     color: '#241a08',
   },
   soft: { marginTop: 12, alignItems: 'center', padding: 10 },
   softText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.goldL,
   },
   paidBox: {
@@ -1365,9 +1348,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(93,217,160,0.35)',
   },
   paidText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.green,
   },
   backdrop: {
@@ -1394,31 +1376,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sheetTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 20,
-    fontWeight: '800',
     color: C.txt,
   },
   sheetHint: {
     marginTop: 6,
     marginBottom: 8,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
   },
   detailK: {
     marginTop: 12,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
   detailV: {
     marginTop: 4,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: C.txt,
   },
   detailFoot: {
@@ -1431,15 +1410,14 @@ const styles = StyleSheet.create({
     borderTopColor: C.line,
   },
   detailFootL: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
     flex: 1,
   },
   detailFootR: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 16,
-    fontWeight: '800',
     color: C.txt,
   },
   matchedBanner: {
@@ -1455,30 +1433,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(93,217,160,0.35)',
   },
   matchedBannerText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.green,
   },
   fieldLabel: {
     marginTop: 10,
     marginBottom: 4,
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.8,
     color: C.prMuted2,
   },
   sigAsName: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: C.txt,
   },
   input: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 16,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -1498,9 +1472,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   targetPillText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.goldL,
   },
   presetWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
@@ -1517,9 +1490,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(183,156,232,0.14)',
   },
   presetChipText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.txt,
   },
   sigPad: {
@@ -1541,9 +1513,8 @@ const styles = StyleSheet.create({
   },
   sheetCancel: { marginTop: 10, alignItems: 'center', padding: 10 },
   sheetCancelText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.muted,
   },
   dangerBtn: {
@@ -1556,9 +1527,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.4)',
   },
   dangerBtnText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 16,
-    fontWeight: '700',
     color: C.red,
   },
 });

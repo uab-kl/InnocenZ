@@ -340,7 +340,7 @@ export function LiveWorkforceTable({
 
 	const panelHead = (
 		<div className="iz-portal-panel-head">
-			<h3 className="font-sora text-base font-bold">{panelTitle}</h3>
+			<h3 className="iz-heading text-base font-bold">{panelTitle}</h3>
 			{headerLink}
 		</div>
 	);
@@ -581,7 +581,7 @@ export function LiveWorkforceList({
 	return (
 		<section className="iz-portal-panel">
 			<div className="iz-portal-panel-head">
-				<h3 className="font-sora text-base font-bold">
+				<h3 className="iz-heading text-base font-bold">
 					{t.portalShell.prRosterTonight}
 				</h3>
 				<span className="iz-tiny iz-muted">

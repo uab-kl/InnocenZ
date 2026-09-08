@@ -1,0 +1,58 @@
+import { makeSplicer } from './tmp-eol.mjs';
+const T = String.fromCharCode(9);
+const I = (n) => T.repeat(n);
+const f = makeSplicer('apps/web/src/agency-portal/components/iz/UnpaidBillingBanner.tsx');
+
+f.block(
+[
+I(3) + '<p className="iz-tiny iz-muted mt-1">',
+I(4) + '{billing.periods === 1',
+I(5) + '? fill(t.subscription.billingDueOne, {',
+I(6) + 'amount: formatRM(billing.total),',
+I(6) + '})',
+I(5) + ': fill(t.subscription.billingDueMany, {',
+I(6) + 'amount: formatRM(billing.total),',
+I(6) + 'n: billing.periods,',
+I(6) + '})}',
+I(4) + '{billing.oldestPeriodStart',
+I(5) + '? ` ${fill(t.subscription.billingDueSince, {',
+I(6) + 'date: billing.oldestPeriodStart,',
+I(6) + '})}`',
+I(5) + ': ""}',
+I(3) + '</p>',
+],
+[
+I(3) + '<p className="iz-tiny iz-muted mt-1">',
+I(4) + '{isOverdue',
+I(5) + '? late.count === 1',
+I(6) + '? fill(t.subscription.billingOverdueOne, {',
+I(7) + 'amount: formatRM(late.amountRm),',
+I(7) + 'date: formatDueDate(late.oldestDueIso),',
+I(7) + 'late: lateness,',
+I(7) + '})',
+I(6) + ': fill(t.subscription.billingOverdueMany, {',
+I(7) + 'amount: formatRM(late.amountRm),',
+I(7) + 'n: late.count,',
+I(7) + 'date: formatDueDate(late.oldestDueIso),',
+I(7) + 'late: lateness,',
+I(7) + '})',
+I(5) + ': billing.periods === 1',
+I(6) + '? fill(t.subscription.billingDueOne, {',
+I(7) + 'amount: formatRM(billing.total),',
+I(7) + '})',
+I(6) + ': fill(t.subscription.billingDueMany, {',
+I(7) + 'amount: formatRM(billing.total),',
+I(7) + 'n: billing.periods,',
+I(7) + '})}',
+I(4) + '{/* Only on the calm variant: once something is overdue the sentence',
+I(4) + '    above already names the DUE date, which is the actionable one. A',
+I(4) + '    period START date says nothing about when payment was expected.',
+I(4) + '    Formatted either way \u2014 it printed a raw `2026-08-16` before. */}',
+I(4) + '{!isOverdue && billing.oldestPeriodStart',
+I(5) + '? ` ${fill(t.subscription.billingDueSince, {',
+I(6) + 'date: formatDueDate(billing.oldestPeriodStart),',
+I(6) + '})}`',
+I(5) + ': ""}',
+I(3) + '</p>',
+]);
+f.save();

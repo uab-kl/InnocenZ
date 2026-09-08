@@ -1,7 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatMessage, useLocale } from '../../i18n';
+import { AgencyLogo } from '../../components/AgencyLogo';
 import { C, F } from '../../theme/theme';
+import { font } from '../../theme/fonts';
 import { IzButton } from '../../components/ui';
 import { Building2, Check, Search, UserIcon } from '../../components/icons';
 import { assetUrl, type PublicAgency } from '../../lib/api';
@@ -23,44 +25,6 @@ type Props = {
 	setAgencySearch: (v: string) => void;
 	loadAgencies: () => void;
 };
-
-/** Agency list thumb — paints `logoUrl` from `agency/{id}/logo/…` on the CDN. */
-function AgencyLogo({
-	logoUrl,
-	logoImage,
-	name,
-	selected,
-}: {
-	logoUrl?: string | null;
-	logoImage?: string | null;
-	name: string;
-	selected: boolean;
-}) {
-	const uri = (logoUrl || assetUrl(logoImage) || '').trim() || null;
-	const [broken, setBroken] = useState(false);
-	React.useEffect(() => {
-		setBroken(false);
-	}, [uri]);
-	const show = Boolean(uri) && !broken;
-	const initial = name.trim().charAt(0).toUpperCase() || '?';
-	return (
-		<View style={[agencyStyles.avatar, selected && agencyStyles.avatarOn]}>
-			{show ? (
-				<Image
-					key={uri!}
-					source={{ uri: uri! }}
-					style={agencyStyles.avatarImg}
-					resizeMode="cover"
-					onError={() => setBroken(true)}
-				/>
-			) : (
-				<Text style={[agencyStyles.avatarInitial, selected && agencyStyles.avatarInitialOn]}>
-					{initial}
-				</Text>
-			)}
-		</View>
-	);
-}
 
 function PathCard({
 	title,
@@ -308,14 +272,13 @@ const pathStyles = StyleSheet.create({
 	},
 	copy: { flex: 1, gap: 3 },
 	title: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 15,
-		fontWeight: '700',
 		color: C.txt,
 	},
 	titleOn: { color: C.accentL },
 	body: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 12,
 		lineHeight: 16,
 		color: C.muted2,
@@ -353,7 +316,7 @@ const agencyStyles = StyleSheet.create({
 	},
 	searchInput: {
 		flex: 1,
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 15,
 		color: C.txt,
 		paddingVertical: 12,
@@ -377,34 +340,7 @@ const agencyStyles = StyleSheet.create({
 	},
 	rowLast: { borderBottomWidth: 0 },
 	rowOn: { backgroundColor: 'rgba(227,184,119,0.08)' },
-	avatar: {
-		width: 34,
-		height: 34,
-		borderRadius: 10,
-		alignItems: 'center',
-		justifyContent: 'center',
-		backgroundColor: C.glass2,
-		borderWidth: 1,
-		borderColor: C.line,
-		overflow: 'hidden',
-		position: 'relative',
-	},
-	avatarImg: {
-		width: 34,
-		height: 34,
-	},
-	avatarOn: {
-		backgroundColor: 'rgba(227,184,119,0.14)',
-		borderColor: 'rgba(227,184,119,0.35)',
-	},
-	avatarInitial: {
-		fontFamily: F.sora,
-		fontSize: 14,
-		fontWeight: '700',
-		color: C.prMuted,
-	},
-	avatarInitialOn: { color: C.accent },
-	name: { flex: 1, fontFamily: F.sora, fontSize: 15, fontWeight: '600', color: C.prMuted },
+	name: { flex: 1, ...font(600), fontSize: 15, color: C.prMuted },
 	nameOn: { color: C.accentL },
 	check: {
 		width: 22,
@@ -439,7 +375,7 @@ const agencyStyles = StyleSheet.create({
 		backgroundColor: C.violetInk,
 	},
 	calloutText: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 13,
 		lineHeight: 18,
 		color: C.violetL,

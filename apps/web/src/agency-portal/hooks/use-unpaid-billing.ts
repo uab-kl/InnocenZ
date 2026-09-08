@@ -1,4 +1,9 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import {
+	countBillingWindows,
+	overdueSummary,
+	type OverdueSummary,
+} from "@agency-portal/lib/subscription-due";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -10,10 +15,22 @@ export interface UnpaidBillingState {
 	backed: boolean;
 	/** Total still owed to InnocenZ, in ringgit. 0 when nothing is outstanding. */
 	total: number;
-	/** How many billing periods make that up. */
+	/**
+	 * How many billing PERIODS make that up — not how many invoice rows.
+	 *
+	 * An outlet pays a plan and a POS add-on for the same window, so the rows
+	 * outnumber the periods and this read "5 billing periods" above two of them.
+	 */
 	periods: number;
 	/** Earliest unpaid period start, `YYYY-MM-DD` — the one owed longest. */
 	oldestPeriodStart: string | null;
+	/**
+	 * What is actually LATE inside that total, by the shared due-date rule.
+	 *
+	 * Separate from `total` on purpose: the total includes the period being used
+	 * right now, which nobody is late with. The banner escalates on THIS.
+	 */
+	overdue: OverdueSummary;
 	isLoading: boolean;
 }
 
@@ -78,8 +95,14 @@ export function useUnpaidBilling(
 		return {
 			backed,
 			total: cents / 100,
-			periods: invoices.length,
+			periods: countBillingWindows(invoices),
 			oldestPeriodStart: oldest,
+			/*
+			 * The cadence argument is only a fallback — every row carries its own
+			 * `billingCycle`, joined from `member_subscription`. Read once here so
+			 * the banner and the subscription page cannot disagree about "today".
+			 */
+			overdue: overdueSummary(invoices, "weekly", new Date()),
 			isLoading: query.isLoading,
 		};
 	}, [backed, query.data, query.isLoading]);

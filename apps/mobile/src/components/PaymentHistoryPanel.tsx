@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { formatRM } from '../lib/demo-shifts';
 import { paymentHistoryOutlets, type HistPayWeek } from '../lib/demo-payment-history';
 import {
@@ -768,8 +769,7 @@ function WeekCard({
                         width: 80,
                         textAlign: 'right',
                         color: l.debit ? C.red : C.accentL,
-                        fontFamily: F.sora,
-                        fontWeight: '700',
+                        ...font(700),
                       },
                     ]}
                   >
@@ -778,7 +778,7 @@ function WeekCard({
                 </View>
               ))}
               <View style={[styles.lineRow, styles.netRow]}>
-                <Text style={[styles.td, { width: 280, fontFamily: F.sora, fontWeight: '700' }]}>
+                <Text style={[styles.td, { width: 280, ...font(700) }]}>
                   {t.payHistory.netPayable}
                 </Text>
                 <Text
@@ -788,8 +788,7 @@ function WeekCard({
                       width: 80,
                       textAlign: 'right',
                       color: C.accentL,
-                      fontFamily: F.sora,
-                      fontWeight: '800',
+                      ...font(800),
                     },
                   ]}
                 >
@@ -967,9 +966,8 @@ const styles = StyleSheet.create({
   },
   secTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   secTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     letterSpacing: 1.2,
     color: C.txt,
   },
@@ -983,7 +981,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line,
   },
-  filterBtnText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.muted },
+  filterBtnText: { ...font(600), fontSize: 12, color: C.muted },
   filterBadge: {
     minWidth: 16,
     height: 16,
@@ -993,7 +991,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 3,
   },
-  filterBadgeText: { fontFamily: F.sora, fontSize: 9, fontWeight: '800', color: '#241a08' },
+  filterBadgeText: { ...font(800), fontSize: 9, color: '#241a08' },
   search: {
     marginTop: 10,
     flexDirection: 'row',
@@ -1006,7 +1004,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
-  searchInput: { flex: 1, fontFamily: F.manrope, fontSize: 14, color: C.txt, padding: 0 },
+  searchInput: { flex: 1, ...font(), fontSize: 14, color: C.txt, padding: 0 },
   filterRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   timeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   filterField: {
@@ -1019,9 +1017,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
   filterFieldLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
@@ -1031,7 +1028,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  filterFieldValue: { flex: 1, fontFamily: F.manrope, fontSize: 12, color: C.txt },
+  filterFieldValue: { flex: 1, ...font(), fontSize: 12, color: C.txt },
   selectList: {
     marginTop: 8,
     borderRadius: 12,
@@ -1047,7 +1044,7 @@ const styles = StyleSheet.create({
     borderBottomColor: C.line,
   },
   selectRowOn: { backgroundColor: 'rgba(183,156,232,0.1)' },
-  selectText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  selectText: { ...font(600), fontSize: 13, color: C.txt },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   chip: {
     paddingHorizontal: 14,
@@ -1057,8 +1054,8 @@ const styles = StyleSheet.create({
     borderColor: C.line,
   },
   chipOn: { borderColor: C.violet, backgroundColor: C.violetInk },
-  chipText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.muted },
-  clearAll: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.goldL },
+  chipText: { ...font(600), fontSize: 13, color: C.muted },
+  clearAll: { ...font(600), fontSize: 12, color: C.goldL },
   statRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
   statTile: {
     flex: 1,
@@ -1072,29 +1069,28 @@ const styles = StyleSheet.create({
   },
   statTileAccent: { borderColor: 'rgba(232,194,122,0.28)' },
   statValue: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 14,
-    fontWeight: '800',
     color: C.txt,
     flexShrink: 1,
   },
-  statLabel: { fontFamily: F.manrope, fontSize: 11, color: C.muted2 },
+  statLabel: { ...font(), fontSize: 11, color: C.muted2 },
   summaryLine: {
     marginTop: 10,
     textAlign: 'center',
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
   },
   toast: {
     marginTop: 8,
     textAlign: 'center',
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.green,
   },
   list: { gap: 10, marginTop: 14 },
   empty: { alignItems: 'center', gap: 12, paddingVertical: 28 },
-  emptyText: { fontFamily: F.manrope, fontSize: 14, color: C.prMuted },
+  emptyText: { ...font(), fontSize: 14, color: C.prMuted },
   card: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1107,11 +1103,11 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   cardTitleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  cardWeek: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.txt },
-  cardSub: { marginTop: 3, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  cardMeta: { marginTop: 4, fontFamily: F.sora, fontSize: 12, fontWeight: '700' },
+  cardWeek: { ...font(700), fontSize: 15, color: C.txt },
+  cardSub: { marginTop: 3, ...font(), fontSize: 12, color: C.prMuted },
+  cardMeta: { marginTop: 4, ...font(700), fontSize: 12 },
   cardRight: { alignItems: 'flex-end', gap: 8 },
-  cardNet: { fontFamily: F.sora, fontSize: 16, fontWeight: '800', color: C.accentL },
+  cardNet: { ...font(800), fontSize: 16, color: C.accentL },
   metrics: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1124,13 +1120,12 @@ const styles = StyleSheet.create({
   },
   metric: { minWidth: '45%', flexGrow: 1 },
   metricLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.6,
     color: C.muted2,
   },
-  metricVal: { marginTop: 2, fontFamily: F.sora, fontSize: 14, fontWeight: '700' },
+  metricVal: { marginTop: 2, ...font(700), fontSize: 14 },
   cardBody: {
     paddingHorizontal: 14,
     paddingBottom: 14,
@@ -1139,26 +1134,24 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   breakdownTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 11,
-    fontWeight: '800',
     letterSpacing: 1,
     color: C.muted2,
   },
-  breakdownNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
+  breakdownNote: { marginTop: 4, ...font(), fontSize: 11, color: C.prMuted2 },
   lineHead: { flexDirection: 'row', marginTop: 10, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: C.line },
   lineRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(232,224,245,0.06)' },
   netRow: { borderBottomWidth: 0, marginTop: 4 },
   th: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.6,
     color: C.muted2,
   },
-  td: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  tdTiny: { fontFamily: F.manrope, fontSize: 10, color: C.muted2 },
-  bankRef: { marginTop: 8, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  td: { ...font(), fontSize: 12, color: C.prMuted },
+  tdTiny: { ...font(), fontSize: 10, color: C.muted2 },
+  bankRef: { marginTop: 8, ...font(), fontSize: 12, color: C.prMuted },
   actions: { marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   backdrop: {
     flex: 1,
@@ -1186,13 +1179,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
+  sheetTitle: { ...font(800), fontSize: 20, color: C.txt },
   fieldLabel: {
     marginTop: 12,
     marginBottom: 4,
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.8,
     color: C.prMuted2,
   },
@@ -1207,12 +1199,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
-  sheetFieldText: { flex: 1, fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt },
-  sheetFieldInput: { flex: 1, fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt, padding: 0 },
+  sheetFieldText: { flex: 1, ...font(600), fontSize: 14, color: C.txt },
+  sheetFieldInput: { flex: 1, ...font(600), fontSize: 14, color: C.txt, padding: 0 },
   netInput: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 15,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -1227,7 +1218,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  applyText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: '#241a08' },
+  applyText: { ...font(700), fontSize: 16, color: '#241a08' },
   clearBtn: {
     marginTop: 10,
     borderRadius: 12,
@@ -1237,5 +1228,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line2,
   },
-  clearBtnText: { fontFamily: F.sora, fontSize: 15, fontWeight: '600', color: C.txt },
+  clearBtnText: { ...font(600), fontSize: 15, color: C.txt },
 });

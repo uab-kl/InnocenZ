@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale } from '../i18n';
 import { ImagePlus, XIcon, ZoomIn } from './icons';
 import { lockPhoneScroll, unlockPhoneScroll, scrollPhoneBy, autoScrollDirectionForFinger, refreshPhoneScrollWindow } from '../lib/phone-scroll';
@@ -646,7 +647,7 @@ const styles = StyleSheet.create({
   hint: {
     marginHorizontal: PAD,
     marginBottom: 8,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.violetL,
   },
@@ -711,9 +712,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   metaIndex: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     color: 'rgba(255,255,255,0.88)',
     letterSpacing: 0.4,
   },
@@ -730,9 +730,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyLabel: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     color: 'rgba(183,156,232,0.55)',
     letterSpacing: 0.6,
   },

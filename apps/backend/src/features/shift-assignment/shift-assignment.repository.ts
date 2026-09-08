@@ -224,6 +224,16 @@ export type AssignmentShiftFacts = {
   /** 'normal' | 'special' — never null (DB default). */
   eventKind: string;
   outletName: string | null;
+  /**
+   * The image the OUTLET linked the shift with, off the template it was posted
+   * from. An R2 object KEY, never a URL.
+   *
+   * `listByIdsForPrs` has SELECTED and returned this all along; the type never
+   * declared it, so every caller silently had the property stripped and no
+   * screen could reach it. Declared now, which is what lets the receipts and
+   * dispute feeds carry it out to the client.
+   */
+  templateCoverImage: string | null;
   checkInAt: Date | null;
   /** Shift END, clamped — see the warning above. */
   checkOutAt: Date | null;
@@ -2510,6 +2520,8 @@ export class ShiftAssignmentRepositoryClass {
       outletName: string | null;
       overtimeMinutes: number | null;
       payAmount: string | null;
+      /** The image the OUTLET linked the shift with. R2 object KEY, not a URL. */
+      coverImage: string | null;
       /** The FULL day rate — what overtime is priced on. See `overtimeBasisAmount`. */
       dayRateAmount: string | null;
       /** The shift's window — the divisor for both pay and the overtime rate. */
@@ -2529,12 +2541,19 @@ export class ShiftAssignmentRepositoryClass {
           outletName: OutletTable.name,
           overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
           payAmount: ShiftAssignmentTable.payAmount,
+          coverImage: ShiftTemplateTable.coverImage,
           dayRateAmount: ShiftAssignmentTable.dayRateAmount,
           scheduledMinutes: ShiftAssignmentTable.scheduledMinutes,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        // LEFT, not inner: a shift posted without a template is normal, and
+        // inner-joining here would silently drop those claims from the queue.
+        .leftJoin(
+          ShiftTemplateTable,
+          eq(ShiftTemplateTable.id, ShiftTable.templateId),
+        )
         .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .where(

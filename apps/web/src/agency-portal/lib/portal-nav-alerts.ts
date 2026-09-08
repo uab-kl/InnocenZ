@@ -73,16 +73,22 @@ export interface AgencyNavAlertInput {
  * mean inventing nav items; summing them answers the question the rail is
  * actually asked, which is "is there anything through that door".
  *
- * The sum takes RED the moment a dispute is in it. A mixed pile that contains
- * somebody contesting their wages is a red pile: the strongest thing in the
- * stack sets the colour, exactly as the home hub colours its dispute tab.
+ * PAYROLL IS ALWAYS RED (owner, 8 Sep 2026). It used to turn red only when a
+ * dispute was in the pile and sit amber otherwise, which meant the one row on
+ * the rail that is always about MONEY changed colour depending on which of its
+ * four queues happened to be filled — and the payroll tabs it opens are red
+ * throughout. One row, one colour, matching the page behind it.
+ *
+ * The dispute is not lost by this: it still has its own count on the Disputes
+ * sub-tab, and the page's own copy names it. What is lost is a colour CHANGE
+ * nobody was watching for on a row they read as "money waiting" either way.
  */
 export function agencyNavAlerts(input: AgencyNavAlertInput): NavAlertMap {
 	const payroll =
 		input.vouchers + input.disputes + input.receipts + input.overtime;
 	return compact([
 		["/agency/pending", alert(input.approvals, "amber")],
-		["/agency/pv", alert(payroll, input.disputes > 0 ? "red" : "amber")],
+		["/agency/pv", alert(payroll, "red")],
 		["/agency/subscription", alert(input.unpaidPeriods, "amber")],
 	]);
 }

@@ -14,6 +14,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { assetUrl } from '../lib/api';
 import type { IconComponent } from './icons';
 
@@ -172,8 +173,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   avatarInitial: {
-    fontFamily: F.sora,
-    fontWeight: '800',
+    ...font(800),
     color: '#fff',
   },
   pill: {
@@ -184,9 +184,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   pillText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     lineHeight: 14,
   },
   btn: {
@@ -209,9 +208,8 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
   },
   btnText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 18,
-    fontWeight: '700',
     letterSpacing: 0.2,
   },
   btnTextSm: {
@@ -228,7 +226,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyDashedText: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsTiny,
     lineHeight: C.fsTiny * 1.55,
     color: C.prMuted2,
@@ -240,9 +238,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   labelWithIconText: {
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
   },
   wordmark: {
     fontFamily: F.playfair,

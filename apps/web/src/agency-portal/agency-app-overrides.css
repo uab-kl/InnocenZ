@@ -41,7 +41,7 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 /* "Full roster" hub link — match the section title's font size (the portal's
  * scoped text-base computes to 22.5px, which 1rem does not). */
 [data-portal="agency"] .iz-portal-hub-link {
-	font-size: 22.5px !important;
+	font-size: 22px !important;
 }
 
 /* ── Collapse-to-icons sidebar ─────────────────────────────────────────────
@@ -207,7 +207,7 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 	height: 20px;
 	padding: 0 6px;
 	border-radius: 999px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	line-height: 1;
@@ -266,7 +266,7 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 	min-width: 16px;
 	height: 16px;
 	padding: 0 4px;
-	font-size: 10px;
+	font-size: 11px;
 }
 
 /*

@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 /** Exactly what react-dom's createPortal accepts as a container. */
 type PortalHost = Parameters<typeof createPortal>[1];
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { PHONE_SCREEN_ID } from './PhoneFrame';
 
 /** How far under the vertical center the toast sits. */
@@ -133,10 +134,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(183, 156, 232, 0.45)',
   },
   text: {
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '600',
     color: C.green,
     textAlign: 'center',
   },

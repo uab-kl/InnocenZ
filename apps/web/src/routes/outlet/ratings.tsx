@@ -51,7 +51,7 @@ function RatingCard({ rating }: { rating: OutletRating }) {
 		<li className="rounded-xl border border-[var(--iz-line)] bg-white/[0.02] p-4">
 			<div className="flex items-start justify-between gap-3">
 				<div className="min-w-0">
-					<p className="truncate font-sora text-sm font-bold">
+					<p className="truncate iz-heading text-sm font-bold">
 						{rating.prName || "Unnamed PR"}
 					</p>
 					<div className="mt-1 flex items-center gap-2">
@@ -143,7 +143,7 @@ function RatingsPage() {
 			{ratings.length > 0 && (
 				<div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--iz-line)] bg-white/[0.02] px-4 py-3">
 					<div className="flex items-center gap-2">
-						<span className="font-sora text-xl font-bold">
+						<span className="iz-heading text-xl font-bold">
 							{average?.toFixed(1)}
 						</span>
 						<StarRow stars={Math.round(average ?? 0)} />

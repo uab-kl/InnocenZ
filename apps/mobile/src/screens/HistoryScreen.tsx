@@ -5,6 +5,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale } from '../i18n';
 import { useViewportSize } from '../lib/viewport';
 import { PaymentHistoryPanel } from '../components/PaymentHistoryPanel';
@@ -72,7 +73,7 @@ const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
   pageHeader: { paddingTop: 2 },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
-  headerTitle: { fontFamily: F.sora, fontWeight: '800', letterSpacing: -0.45, color: C.txt },
+  headerTitle: { ...font(800), letterSpacing: -0.45, color: C.txt },
   hubToggle: {
     flexDirection: 'row',
     marginTop: 12,
@@ -94,5 +95,5 @@ const styles = StyleSheet.create({
   },
   hubBtnOn: { backgroundColor: 'rgba(232,194,122,0.14)' },
   hubBtnOnPay: { backgroundColor: 'rgba(167,139,250,0.16)' },
-  hubText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.prMuted },
+  hubText: { ...font(600), fontSize: 12, color: C.prMuted },
 });

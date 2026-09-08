@@ -60,7 +60,13 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
    * allocation must not block a real voucher, and reads as "unnumbered" rather
    * than as somebody else's number.
    */
-  voucherNo: varchar('voucher_no', { length: 40 }).unique(),
+  /**
+   * Per-AGENCY sequence, 'PV-000001'. NOT globally unique since 0152: two
+   * agencies each having a PV-000001 is correct, and the uniqueness that
+   * matters lives on (agency_id, voucher_no) as an index. Dropping .unique()
+   * here keeps the model from re-asserting the old rule on a fresh push.
+   */
+  voucherNo: varchar('voucher_no', { length: 40 }),
   prName: varchar('pr_name', { length: 255 }).notNull(),
   prIc: varchar('pr_ic', { length: 100 }),
   outlet: varchar('outlet', { length: 255 }),

@@ -17,9 +17,11 @@ import {
 	IzKpiLabel,
 	IzPageTitle,
 	IzPill,
+	IzSelect,
 } from "@agency-portal/components/iz/ui";
 import { PortalBackButton } from "@agency-portal/components/Nav";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { NavAlertBadge } from "@agency-portal/components/portal/NavAlertBadge";
 import { PrSignaturePad } from "@agency-portal/components/pr/PrSignaturePad";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
@@ -35,7 +37,6 @@ import { useMySignature } from "@agency-portal/hooks/use-my-signature";
 import { usePvIssuer } from "@agency-portal/hooks/use-pv-issuer";
 import {
 	agencySubscriptionBillingForWeeklyPv,
-	nowAgencyDateTime,
 	ownedByAgency,
 } from "@agency-portal/lib/agency-demo";
 import {
@@ -182,7 +183,14 @@ function statusPill(status: PrPvStatus) {
 	return pvStatusPillVariant(status);
 }
 
-type PvStatusFilter = "all" | "TO_PAY" | PrPvStatus;
+/**
+ * `PENDING_ANY` is the only value here that is not one status: it is
+ * PENDING_REVIEW + SENT, the two ways a voucher can be unsigned. The payment
+ * week splits on exactly that line — money that can move versus money that
+ * cannot — and asking someone to hold two chips in their head to see one pile
+ * is how a queue stops being read.
+ */
+type PvStatusFilter = "all" | "TO_PAY" | "PENDING_ANY" | PrPvStatus;
 
 type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
 
@@ -272,15 +280,26 @@ const PV_STATUS_FILTERS: {
 	{ value: "SENT", label: (t) => t.payroll.statusSent },
 	{ value: "DISPUTED", label: (t) => t.payroll.statusDisputed },
 	{ value: "TO_PAY", label: (t) => t.payroll.statusSigned },
+	{ value: "PENDING_ANY", label: (t) => t.payroll.statusPendingAny },
 ];
 
 function statusFiltersForWeek(tab: PayrollWeekTab) {
 	// "To pay" only means something once a PR has signed, which cannot have
 	// happened for a week still running or one awaiting review.
 	if (tab === "last_week" || tab === "this_week") {
-		return PV_STATUS_FILTERS.filter((f) => f.value !== "TO_PAY");
+		// Nothing is signed yet on these weeks, so "unsigned" would select the
+		// whole tab — the granular chips are what distinguishes them there.
+		return PV_STATUS_FILTERS.filter(
+			(f) => f.value !== "TO_PAY" && f.value !== "PENDING_ANY",
+		);
 	}
-	return PV_STATUS_FILTERS;
+	// The payment week asks ONE question — can this money move? — so it offers
+	// the split and drops the two chips it is made of. Keeping all four would
+	// let someone pick "Pending Agency Review" and believe they were looking at
+	// everything still stuck, while the PR-review pile sat one chip away.
+	return PV_STATUS_FILTERS.filter(
+		(f) => f.value !== "PENDING_REVIEW" && f.value !== "SENT",
+	);
 }
 
 /**
@@ -360,10 +379,14 @@ function AgencyPV() {
 	// would turn a visible blocker into an invisible one.
 	const { disputes: openDisputes } = useAgencyDisputes();
 	const { claims: pendingOtClaims } = useAgencyOvertime();
+	/* Which PR's vouchers to show. Keyed on the PR ID, never the printed label:
+	   two people can share a legal name, and the label carries a nickname that
+	   an edit to the roster would change under a filter still holding the old
+	   spelling. */
+	const [prFilter, setPrFilter] = useState<string>("");
 	const [statusFilter, setStatusFilter] = useState<PvStatusFilter>("all");
 	// Count only — the panel below runs the same query and React Query dedupes it.
 	const { receipts: backendReceipts } = useAgencyReceipts();
-	const { date, time } = nowAgencyDateTime();
 
 	const payrollActivePvs = useMemo(
 		() => prPaymentVouchers.filter((p) => p.status !== "PAID"),
@@ -852,10 +875,6 @@ function AgencyPV() {
 			pendingPayout:
 				Math.round(signed.reduce((sum, p) => sum + getPvNetTotal(p), 0) * 100) /
 				100,
-			signedCount: signed.length,
-			signedTotal:
-				Math.round(signed.reduce((sum, p) => sum + getPvNetTotal(p), 0) * 100) /
-				100,
 		};
 	}, [weekTabPvs, agencyPRs]);
 
@@ -907,13 +926,35 @@ function AgencyPV() {
 		clearLandingParams();
 	};
 
-	const statusFilteredPvs = useMemo(() => {
-		if (statusFilter === "all") return weekTabPvs;
-		if (statusFilter === "TO_PAY" || statusFilter === "SIGNED") {
-			return weekTabPvs.filter((p) => p.status === "SIGNED");
+	const prOptions = useMemo(() => {
+		const byId = new Map<string, string>();
+		for (const p of weekTabPvs) {
+			if (p.prId) byId.set(p.prId, resolvePvPrLabel(p, agencyPRs));
 		}
-		return weekTabPvs.filter((p) => p.status === statusFilter);
-	}, [weekTabPvs, statusFilter]);
+		return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+	}, [weekTabPvs, agencyPRs]);
+
+	// A PR who has no voucher on the week just switched to cannot stay selected,
+	// or the list empties and reads as a week with no work in it.
+	useEffect(() => {
+		if (prFilter && !prOptions.some(([id]) => id === prFilter)) setPrFilter("");
+	}, [prFilter, prOptions]);
+
+	const statusFilteredPvs = useMemo(() => {
+		const rows = prFilter
+			? weekTabPvs.filter((p) => p.prId === prFilter)
+			: weekTabPvs;
+		if (statusFilter === "all") return rows;
+		if (statusFilter === "TO_PAY" || statusFilter === "SIGNED") {
+			return rows.filter((p) => p.status === "SIGNED");
+		}
+		if (statusFilter === "PENDING_ANY") {
+			return rows.filter(
+				(p) => p.status === "PENDING_REVIEW" || p.status === "SENT",
+			);
+		}
+		return rows.filter((p) => p.status === statusFilter);
+	}, [weekTabPvs, statusFilter, prFilter]);
 
 	// The status chips apply on every tab now, including the payment week. They
 	// were bypassed there because that tab held only SIGNED vouchers and a filter
@@ -972,7 +1013,10 @@ function AgencyPV() {
 		// "To pay" is offered only on the Payment Week tab; leaving it selected while
 		// switching to a week that cannot have signed vouchers filters the list to
 		// nothing and reads as an empty week.
-		if (payrollWeekTab !== "last_last_week" && statusFilter === "TO_PAY") {
+		if (
+			payrollWeekTab !== "last_last_week" &&
+			(statusFilter === "TO_PAY" || statusFilter === "PENDING_ANY")
+		) {
 			setStatusFilter("all");
 		}
 	}, [payrollWeekTab, statusFilter]);
@@ -986,18 +1030,23 @@ function AgencyPV() {
 			TO_PAY: 0,
 			DISPUTED: 0,
 			PAID: 0,
+			PENDING_ANY: 0,
 		};
 		for (const p of weekTabPvs) {
 			counts[p.status] += 1;
 			if (p.status === "SIGNED") counts.TO_PAY += 1;
+			if (p.status === "PENDING_REVIEW" || p.status === "SENT") {
+				counts.PENDING_ANY += 1;
+			}
 		}
 		return counts;
 	}, [weekTabPvs]);
 
-	const hasActiveFilters = statusFilter !== "all";
+	const hasActiveFilters = statusFilter !== "all" || prFilter !== "";
 
 	const clearFilters = () => {
 		setStatusFilter("all");
+		setPrFilter("");
 	};
 
 	const detail = prPaymentVouchers.find((p) => p.id === detailId);
@@ -1034,14 +1083,26 @@ function AgencyPV() {
 	return (
 		<div className="iz-screen">
 			<header>
-				<IzPageTitle>{t.payroll.title}</IzPageTitle>
-				<p className="iz-tiny iz-muted mt-0.5">
-					{date} · {time} · {t.history.cycleLabel}{" "}
-					<span className="text-[var(--iz-gold-l)]">{PAYROLL_CYCLE.range}</span>
-					<IzPill variant="violet" className="ml-1.5 !py-0 !text-[9px]">
-						{t.payroll.perItemCalc}
-					</IzPill>
-				</p>
+				{/* The cycle and the calc pill ride INSIDE the one date line rather
+				    than forming a second one: they are more facts about today, not a
+				    separate subtitle. */}
+				<IzPageTitle
+					dateTime
+					meta={
+						<>
+							{" · "}
+							{t.history.cycleLabel}{" "}
+							<span className="text-[var(--iz-gold-l)]">
+								{PAYROLL_CYCLE.range}
+							</span>
+							<IzPill variant="violet" className="ml-1.5 !py-0 !text-[9px]">
+								{t.payroll.perItemCalc}
+							</IzPill>
+						</>
+					}
+				>
+					{t.payroll.title}
+				</IzPageTitle>
 				<p className="iz-tiny iz-muted2 mt-1">
 					{AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t)} ·{" "}
 					{t.payroll.signingChainHint}
@@ -1066,21 +1127,24 @@ function AgencyPV() {
 					className={`iz-payroll-tab${payrollWeekTab === "this_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("this_week")}
 				>
-					{t.payroll.thisWeek} ({weekWork.this_week.total})
+					{t.payroll.thisWeek}
+					<NavAlertBadge count={weekWork.this_week.total} tone="red" />
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("last_week")}
 				>
-					{t.payroll.lastWeek} ({weekWork.last_week.total})
+					{t.payroll.lastWeek}
+					<NavAlertBadge count={weekWork.last_week.total} tone="red" />
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_last_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("last_last_week")}
 				>
-					{t.payroll.paymentWeek} ({weekWork.last_last_week.total})
+					{t.payroll.paymentWeek}
+					<NavAlertBadge count={weekWork.last_last_week.total} tone="red" />
 				</button>
 			</div>
 
@@ -1171,14 +1235,16 @@ function AgencyPV() {
 					className={`iz-payroll-tab${pvSubTab === "vouchers" ? " on" : ""}`}
 					onClick={() => selectPvSubTab("vouchers")}
 				>
-					{t.payroll.paymentVouchers} ({activeWeekWork.vouchers})
+					{t.payroll.paymentVouchers}
+					<NavAlertBadge count={activeWeekWork.vouchers} tone="red" />
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${pvSubTab === "receipts" ? " on" : ""}`}
 					onClick={() => selectPvSubTab("receipts")}
 				>
-					{t.receipts.receipts} ({activeWeekWork.receipts})
+					{t.receipts.receipts}
+					<NavAlertBadge count={activeWeekWork.receipts} tone="red" />
 				</button>
 				{/* Disputes was hidden on the PAYMENT week (owner's rule, 3 Aug 2026):
 				    by then a voucher's figures are settled, and a dispute belongs to a
@@ -1201,7 +1267,8 @@ function AgencyPV() {
 						className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
 						onClick={() => selectPvSubTab("disputes")}
 					>
-						{t.agencyHome.disputes} ({activeWeekWork.disputes})
+						{t.agencyHome.disputes}
+						<NavAlertBadge count={activeWeekWork.disputes} tone="red" />
 					</button>
 				)}
 				{/* See `showOvertimeTab`: on the payment week this is offered only
@@ -1212,7 +1279,8 @@ function AgencyPV() {
 						className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
 						onClick={() => selectPvSubTab("overtime")}
 					>
-						{t.payroll.overtime} ({activeWeekWork.overtime})
+						{t.payroll.overtime}
+						<NavAlertBadge count={activeWeekWork.overtime} tone="red" />
 					</button>
 				)}
 			</div>
@@ -1247,32 +1315,21 @@ function AgencyPV() {
 							flat
 							className="!mb-2.5 border-[rgba(232,194,122,.3)] bg-[linear-gradient(180deg,rgba(232,194,122,.05),transparent)]"
 						>
-							<div className="iz-between">
-								<div>
-									<p className="iz-sm font-bold">
-										{t.payroll.signedPvsManualPayment}
-									</p>
-									{/* The "pays each PR individually — no scheduled auto-transfer"
-									    line was removed (owner's call, 17 Aug 2026): it describes
-									    how the product works rather than telling the agency
-									    anything actionable, and the counts line below already says
-									    what to do. */}
-									<p className="iz-tiny iz-muted2 mt-0.5">
-										{activeWeekStats.signedCount} {t.payroll.signedCountSuffix}{" "}
-										· {t.payroll.use} <b>{t.payroll.toPay}</b>{" "}
-										{t.payroll.useToRecordTransfer} ·{" "}
-										<Link
-											to="/agency/history"
-											search={{ tab: "paid" }}
-											className="text-[var(--iz-gold-l)]"
-										>
-											{paid} {t.payroll.paidInHistory}
-										</Link>
-									</p>
-								</div>
-								<b className="font-sora text-base text-[var(--iz-gold)]">
-									{formatRM(activeWeekStats.signedTotal)}
-								</b>
+							<div>
+								<p className="iz-sm font-bold">
+									{t.payroll.signedPvsManualPayment}
+								</p>
+								<p className="iz-tiny iz-muted2 mt-0.5">
+									{t.payroll.use} <b>{t.payroll.toPay}</b>{" "}
+									{t.payroll.useToRecordTransfer} ·{" "}
+									<Link
+										to="/agency/history"
+										search={{ tab: "paid" }}
+										className="text-[var(--iz-gold-l)]"
+									>
+										{paid} {t.payroll.paidInHistory}
+									</Link>
+								</p>
 							</div>
 							<p className="iz-tiny iz-muted2 mt-2">
 								{t.payroll.duplicatePaymentBlocked}
@@ -1289,72 +1346,88 @@ function AgencyPV() {
 								    splices in: Chinese has no plural and no verb agreement, so a
 								    template stitched out of English inflections cannot be
 								    translated at all — only the English can be repaired. */}
-								<p className="iz-sm font-bold text-[var(--iz-amber)]">
-									{fill(
-										unsignedPaymentWeekPvs.length === 1
-											? t.agencyPv.unsignedVoucherOne
-											: t.agencyPv.unsignedVoucherMany,
-										{ n: unsignedPaymentWeekPvs.length },
-									)}
-								</p>
 								{/* The whole reason this card exists: by the payment week a voucher
 								    should already be signed, so one that is not has fallen out of
 								    the flow — and before this tab showed it, nothing anywhere in
-								    the product would ever have mentioned it again. */}
-								<p className="iz-tiny iz-muted2 mt-0.5">
+								    the product would ever have mentioned it again.
+
+								    The bold COUNT that used to sit above this is gone: the Pending
+								    reviews chip one row below carries the same number, and a card
+								    whose headline is a figure printed twice reads as two problems
+								    rather than one. */}
+								<p className="iz-sm text-[var(--iz-amber)]">
 									{t.agencyPv.overdueUnsignedHint}
 								</p>
-								<ul className="mt-1.5 space-y-0.5">
-									{unsignedPaymentWeekPvs.map((p) => (
-										<li key={p.id} className="iz-tiny iz-muted2">
-											{/* `resolvePvPrLabel`, not `resolvePvPrName` — the sibling
-										    list below already used the label, so one screen printed
-										    "Victoria Tan Mei Lin" here and "(Vicky) Victoria Tan Mei
-										    Lin" there, for the same PR. */}
-											{resolvePvPrLabel(p, agencyPRs)} ·{" "}
-											{formatRM(getPvNetTotal(p))} ·{" "}
-											{agencyPvStatusLabel(p.status, t)}
-										</li>
-									))}
-								</ul>
+								{/* The LIST used to live here — PR, amount, status, one row
+								    each. Removed once the payment week gained its "Pending
+								    reviews" chip (owner, 8 Sep 2026): that chip selects exactly
+								    this set, and the voucher cards it reveals carry the same
+								    three facts plus the IC, the week worked and a status badge.
+								    Two renderings of one list is how they start disagreeing, and
+								    the weaker one was costing a screenful above the stronger.
+
+								    The two sentences above STAY. A count on a chip cannot say
+								    "overdue", and it cannot say that a PR is unable to sign
+								    something that was never sent — which is the whole reason a
+								    voucher sits here. */}
 							</IzCard>
 						)}
-					{payrollWeekTab !== "last_last_week" && (
-						<IzCard flat className="!mb-2.5">
-							<div className="flex items-center gap-2 iz-tiny iz-muted">
-								<Filter className="h-3.5 w-3.5 shrink-0" />
-								{t.payroll.filterAndSort}
-								{hasActiveFilters && (
-									<button
-										type="button"
-										className="ml-auto text-[var(--iz-gold-l)]"
-										onClick={clearFilters}
-									>
-										{t.payroll.clearAll}
-									</button>
-								)}
-							</div>
+					{/* Rendered on EVERY week — `visibleStatusFilters` decides WHICH chips
+					    each week offers, so the payment week gets All / Disputed / To pay /
+					    Pending reviews and the newer weeks keep their granular ones. */}
+					<IzCard flat className="!mb-2.5">
+						<div className="flex items-center gap-2 iz-tiny iz-muted">
+							<Filter className="h-3.5 w-3.5 shrink-0" />
+							{t.payroll.filterAndSort}
+							{hasActiveFilters && (
+								<button
+									type="button"
+									className="ml-auto text-[var(--iz-gold-l)]"
+									onClick={clearFilters}
+								>
+									{t.payroll.clearAll}
+								</button>
+							)}
+						</div>
 
-							<p className="iz-filter-group-label">{t.table.status}</p>
-							<div className="iz-filter-chips">
-								{visibleStatusFilters.map((f) => {
-									const active = statusFilter === f.value;
-									const count = statusCounts[f.value];
-									return (
-										<button
-											key={f.value}
-											type="button"
-											className={`iz-filter-chip${active ? " on" : ""}`}
-											onClick={() => setStatusFilter(f.value)}
-										>
-											{f.label(t)}
-											<span className="iz-filter-chip__count">({count})</span>
-										</button>
-									);
-								})}
+						<div className="iz-filter-groups">
+							<div className="iz-filter-group">
+								<p className="iz-filter-group-label">{t.table.pr}</p>
+								<IzSelect
+									block
+									value={prFilter}
+									onChange={(e) => setPrFilter(e.target.value)}
+								>
+									<option value="">{t.receipts.allPrs}</option>
+									{prOptions.map(([id, label]) => (
+										<option key={id} value={id}>
+											{label}
+										</option>
+									))}
+								</IzSelect>
 							</div>
-						</IzCard>
-					)}
+							<div className="iz-filter-group iz-filter-group--grow">
+								<p className="iz-filter-group-label">{t.table.status}</p>
+								<div className="iz-filter-chips">
+									{visibleStatusFilters.map((f) => {
+										const active = statusFilter === f.value;
+										const count = statusCounts[f.value];
+										return (
+											<button
+												key={f.value}
+												type="button"
+												className={`iz-filter-chip${active ? " on" : ""}`}
+												onClick={() => setStatusFilter(f.value)}
+											>
+												{f.label(t)}
+												<span className="iz-filter-chip__count">({count})</span>
+											</button>
+										);
+									})}
+								</div>
+							</div>
+						</div>
+					</IzCard>
 
 					{filteredVouchers.length === 0 ? (
 						/* The empty state stays FULL WIDTH — it is a sentence about the
@@ -1392,10 +1465,18 @@ function AgencyPV() {
 									onClick={() => setDetailId(pv.id)}
 								>
 									<div className="min-w-0">
-										<div className="font-sora break-words text-[15px] font-bold">
-											{pv.id}
-										</div>
-										<p className="iz-tiny iz-muted mt-0.5">
+										{pv.voucherNo?.trim() ? (
+											<div className="iz-heading break-words text-base font-bold">
+												{pv.voucherNo.trim()}
+											</div>
+										) : null}
+										<p
+											className={
+												pv.voucherNo?.trim()
+													? "iz-tiny iz-muted mt-0.5"
+													: "iz-heading break-words text-base font-bold"
+											}
+										>
 											{resolvePvPrLabel(pv, agencyPRs)} · {pv.outlet}
 										</p>
 										{pv.prIc && (
@@ -1433,7 +1514,7 @@ function AgencyPV() {
 										<IzPill variant={statusPill(pv.status)}>
 											{agencyPvStatusLabel(pv.status, t)}
 										</IzPill>
-										<div className="iz-ledger font-sora mt-1.5 text-base font-bold">
+										<div className="iz-ledger iz-heading mt-1.5 text-base font-bold">
 											{formatRM(getPvNetTotal(pv))}
 										</div>
 										<p className="iz-tiny iz-muted2 mt-0.5">
@@ -1518,12 +1599,12 @@ function ReceiptScanRow({
 			<div className="iz-between items-start gap-2">
 				<div className="min-w-0">
 					<div className="flex flex-wrap items-center gap-2">
-						<p className="font-sora text-sm font-bold">{scan.receiptRef}</p>
+						<p className="iz-heading text-base font-bold">{scan.receiptRef}</p>
 						{scan.logSource === "manual" && (
 							<IzPill variant="amber">{t.agencyHub.selfLog}</IzPill>
 						)}
 					</div>
-					<p className="iz-tiny iz-muted2 mt-0.5 font-mono">{scan.id}</p>
+					<p className="iz-tiny iz-muted2 mt-0.5 iz-nums">{scan.id}</p>
 					<p className="iz-tiny iz-muted mt-0.5">
 						{scan.prName} · {scan.outlet}
 					</p>
@@ -1694,9 +1775,7 @@ function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
 			    into the literal. Chinese has no case, so the class is a no-op there —
 			    a second all-caps key would have been a second term for a heading the
 			    dictionary already names. */}
-			<p className="iz-tiny iz-muted2 mb-2 tracking-wide uppercase">
-				{t.payroll.fourPartBreakdown}
-			</p>
+			<p className="iz-card-sect mb-2">{t.payroll.fourPartBreakdown}</p>
 			{rows.map((r) => (
 				<div key={r.key} className="iz-v-sum">
 					<span className="iz-muted">{r.label}</span>
@@ -1906,7 +1985,7 @@ function PvDetail({
 			<PvWorkflowRail status={pv.status} />
 
 			<IzCard flat className="mb-2">
-				<p className="iz-tiny iz-muted2">{t.payroll.dualSignPv}</p>
+				<p className="iz-card-sect">{t.payroll.dualSignPv}</p>
 				{/*
 					WHO SIGNED, AND AS WHAT — both read off this voucher.
 					

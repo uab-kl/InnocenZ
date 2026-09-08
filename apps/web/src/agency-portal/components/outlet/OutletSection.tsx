@@ -91,7 +91,7 @@ export function OutletSection({
 				<div className="flex items-center gap-2 py-0.5">
 					<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
 						<div className="min-w-0">
-							<div className="iz-outlet-section-title flex items-center gap-1.5 font-sora text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--iz-muted)]">
+							<div className="iz-outlet-section-title flex items-center gap-1.5 iz-heading text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--iz-muted)]">
 								{sectionTitle}
 							</div>
 							{hint && (

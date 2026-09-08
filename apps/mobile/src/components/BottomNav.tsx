@@ -5,6 +5,7 @@
 import React, { useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale } from '../i18n';
 import { Briefcase, HistoryIcon, MapPin, UserIcon, Wallet, type IconComponent } from './icons';
 
@@ -75,9 +76,8 @@ const styles = StyleSheet.create({
     ...webOnly({ boxShadow: '0 0 8px rgba(183,156,232,0.6)' }),
   },
   label: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     letterSpacing: 0.3,
   },
 });

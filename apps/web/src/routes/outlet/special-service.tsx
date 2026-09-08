@@ -1,4 +1,4 @@
-import { IzCard } from "@agency-portal/components/iz/ui";
+import { IzCard, IzPageTitle } from "@agency-portal/components/iz/ui";
 import { OUTLET_SERVICES_ENABLED } from "@agency-portal/lib/phase-flags";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
@@ -26,9 +26,7 @@ function OutletSpecialServiceRedirect() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-						{t.postJob.notAvailableYet}
-					</h2>
+					<IzPageTitle>{t.postJob.notAvailableYet}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
@@ -43,9 +41,7 @@ function OutletSpecialServiceRedirect() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-						{t.postJob.accessRestricted}
-					</h2>
+					<IzPageTitle>{t.postJob.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">

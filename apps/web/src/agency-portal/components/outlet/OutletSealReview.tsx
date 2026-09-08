@@ -69,7 +69,7 @@ export function OutletSealReview({
 			<div className="mt-3 space-y-2">
 				{rows.map((r) => (
 					<IzCard key={r.prId} flat className="!py-2.5">
-						<div className="font-sora text-sm font-bold">{r.prName}</div>
+						<div className="iz-heading text-sm font-bold">{r.prName}</div>
 						<div className="mt-1 grid grid-cols-3 gap-1 text-[10px] text-[var(--iz-muted)]">
 							<span>{fill(t.outletPanels.hoursCount, { n: r.hours })}</span>
 							<span>{fill(t.today.drinksCount, { n: r.drinks })}</span>
@@ -87,7 +87,7 @@ export function OutletSealReview({
 			</div>
 			{rows.length > 0 && (
 				<div className="iz-v-sum tot mt-3">
-					<span className="font-sora font-bold">{t.today.totalPayroll}</span>
+					<span className="iz-heading font-bold">{t.today.totalPayroll}</span>
 					<span className="iz-ledger text-[var(--iz-gold)]">
 						{formatRM(total)}
 					</span>

@@ -267,7 +267,7 @@ export function Comcard3dPreviewCard({
 			)}
 			<div className="iz-comcard-3d-preview-card-meta">
 				<div className="flex items-center justify-between gap-1">
-					<p className="min-w-0 truncate font-sora text-[11px] font-bold leading-tight text-[var(--iz-txt)]">
+					<p className="min-w-0 truncate iz-heading text-[11px] font-bold leading-tight text-[var(--iz-txt)]">
 						{pr.name}
 					</p>
 					{/* `> 0`, not `!= null`: every backend PR carries `rating: 0` as a
@@ -302,7 +302,7 @@ export function Comcard3dPreviewCard({
 function ComcardStat({ label, value }: { label: string; value: string }) {
 	return (
 		<div className="text-center">
-			<div className="font-sora text-lg font-extrabold text-[var(--iz-gold-l)]">
+			<div className="iz-heading text-lg font-extrabold text-[var(--iz-gold-l)]">
 				{value}
 			</div>
 			<div className="iz-tiny iz-muted2 mt-0.5 tracking-wide">{label}</div>

@@ -28,6 +28,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale } from '../i18n';
 import { XIcon, ZoomIn } from './icons';
 
@@ -548,7 +549,7 @@ const s = StyleSheet.create({
     borderColor: 'rgba(240,110,130,0.45)',
     backgroundColor: 'rgba(240,110,130,0.14)',
   },
-  returnText: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.red },
+  returnText: { ...font(700), fontSize: 13, color: C.red },
   imgFrame: { width: '100%', height: '72%', overflow: 'hidden' },
   img: { width: '100%', height: '100%' },
   controls: {
@@ -568,11 +569,11 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.25)',
   },
   zoomBtnOff: { opacity: 0.35 },
-  zoomBtnText: { fontFamily: F.sora, fontSize: 20, fontWeight: '700', color: '#fff', lineHeight: 24 },
-  zoomPct: { fontFamily: F.manrope, fontSize: 13, color: C.txt, minWidth: 48, textAlign: 'center' },
+  zoomBtnText: { ...font(700), fontSize: 20, color: '#fff', lineHeight: 24 },
+  zoomPct: { ...font(), fontSize: 13, color: C.txt, minWidth: 48, textAlign: 'center' },
   hint: {
     marginTop: 10,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.muted2,
   },

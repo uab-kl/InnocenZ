@@ -35,17 +35,25 @@ describe("agencyNavAlerts", () => {
 			overtime: 4,
 		});
 
-		expect(alerts["/agency/pv"]).toEqual({ count: 7, tone: "amber" });
+		expect(alerts["/agency/pv"]?.count).toBe(7);
 	});
 
-	it("turns Payroll red when a dispute is in the pile", () => {
-		const alerts = agencyNavAlerts({
+	it("keeps Payroll red whether or not a dispute is in the pile", () => {
+		const withDispute = agencyNavAlerts({
 			...NO_AGENCY_WORK,
 			vouchers: 1,
 			disputes: 1,
 		});
+		const withoutDispute = agencyNavAlerts({
+			...NO_AGENCY_WORK,
+			vouchers: 1,
+			receipts: 1,
+		});
 
-		expect(alerts["/agency/pv"]).toEqual({ count: 2, tone: "red" });
+		// Both arms, deliberately: asserting only the dispute case would pass
+		// against the old conditional it replaced.
+		expect(withDispute["/agency/pv"]).toEqual({ count: 2, tone: "red" });
+		expect(withoutDispute["/agency/pv"]).toEqual({ count: 2, tone: "red" });
 	});
 
 	it("keeps unpaid billing amber — waiting money is not a dispute", () => {

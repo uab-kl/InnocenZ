@@ -12,6 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 // lucide — there is no arrow-swap glyph, so the venue icon carries the meaning.
 import { Store } from './icons';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale, type AppLocale } from '../i18n';
 import { IzButton } from './ui';
 import type { OutletSwapRecord } from '../lib/api';
@@ -141,32 +142,30 @@ const styles = StyleSheet.create({
   },
   head: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headText: {
-    fontFamily: F.sora,
-    fontWeight: '700',
+    ...font(700),
     fontSize: 10,
     letterSpacing: 1,
     color: C.violet,
   },
   move: {
-    fontFamily: F.sora,
-    fontWeight: '700',
+    ...font(700),
     fontSize: 15,
     color: C.txt,
     marginTop: 2,
   },
   arrow: { color: C.violet },
-  meta: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  event: { fontFamily: F.manrope, fontSize: 12, color: C.accent },
+  meta: { ...font(), fontSize: 12, color: C.prMuted },
+  event: { ...font(), fontSize: 12, color: C.accent },
   note: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.muted,
     fontStyle: 'italic',
     marginTop: 2,
   },
-  hint: { fontFamily: F.manrope, fontSize: 11, color: C.muted, marginTop: 4 },
+  hint: { ...font(), fontSize: 11, color: C.muted, marginTop: 4 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 8 },
   action: { flex: 1 },
-  error: { fontFamily: F.manrope, fontSize: 12, color: C.red },
-  travelWarning: { fontFamily: F.manrope, fontSize: 12, color: C.amber },
+  error: { ...font(), fontSize: 12, color: C.red },
+  travelWarning: { ...font(), fontSize: 12, color: C.amber },
 });

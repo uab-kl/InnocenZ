@@ -12,7 +12,7 @@ import {
 } from "@agency-portal/components/portal/NavAlertBadge";
 import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotificationBell";
 import { PortalNavAlerts } from "@agency-portal/components/portal/PortalNavAlerts";
-import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
+
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
 import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
@@ -88,6 +88,7 @@ const OUTLET_EXTRAS: ExtraNavItem[] = [
 	},
 ];
 
+/** "Good morning" / "Good afternoon" / "Good evening", by the wall clock. */
 function portalGreeting(t: PortalTranslations) {
 	const h = new Date().getHours();
 	if (h < 12) return t.shell.goodMorning;
@@ -245,24 +246,52 @@ function PortalSidebarLink({
 function PortalSidebar({
 	portal,
 	items,
+	identity,
 	onNavigate,
 }: {
 	portal: PortalKind;
 	items: NavItem[];
+	/** Who this rail is acting for — the same parts the greeting prints. */
+	identity: { name: string; role: string };
 	onNavigate?: () => void;
 }) {
 	const { pathname } = useLocation();
 	const { t } = usePortalLocale();
+	const portalKindLabel =
+		portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal;
 
 	return (
 		<aside className="iz-portal-sidebar">
 			<div className="iz-portal-sidebar-brand">
 				<InnocenZLogoHorizontal className="iz-portal-sidebar-logo" />
-				<p className="iz-tiny iz-muted mt-2">
+				{/*
+				  WHO this rail is acting for, where the portal KIND used to be.
+				
+				  "Agency portal" answered a question the icon beside it already
+				  answers, and never the one that matters to somebody holding two
+				  logins: WHICH agency. The kind is still reachable — it stays on the
+				  block as a tooltip and as real (visually hidden) text, so a screen
+				  reader is told no less than it used to be.
+				
+				  ⚠️ That hidden text is a SPAN, not an `aria-label`. A bare <p> has the
+				  `generic` role, which supports no accessible name at all -- an
+				  aria-label there is licensed to be dropped entirely, and the portal
+				  kind would have been announced to nobody.
+				*/}
+				<p className="iz-portal-sidebar-org mt-2" title={portalKindLabel}>
+					<span className="sr-only">{portalKindLabel} · </span>
 					<TitleWithIcon
 						icon={iconForNav(portal === "agency" ? "PR Agency" : "Outlet")}
 					>
-						{portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal}
+						<span className="iz-portal-sidebar-org__name">
+							{identity.name}
+							{identity.role ? (
+								<span className="iz-portal-sidebar-org__role">
+									{" "}
+									({identity.role})
+								</span>
+							) : null}
+						</span>
 					</TitleWithIcon>
 				</p>
 			</div>
@@ -312,21 +341,23 @@ function PortalSidebar({
  * Falls back to the person's name when an org name has not loaded yet, and to
  * the bare role when neither is known — never renders an empty bracket.
  */
+function portalIdentityParts(
+	orgName: string,
+	ownerName: string,
+	subLabel: string,
+): { name: string; role: string } {
+	const name = orgName.trim() || ownerName.trim();
+	// No org and no person: the role IS the label, and gets no bracket of its own.
+	return name ? { name, role: subLabel } : { name: subLabel, role: "" };
+}
+
 function portalIdentityLabel(
 	orgName: string,
 	ownerName: string,
 	subLabel: string,
 ) {
-	const name = orgName.trim() || ownerName.trim();
-	return name ? `${name} (${subLabel})` : subLabel;
-}
-
-function isAgencyHomePath(pathname: string) {
-	return /\/agency\/?$/.test(pathname);
-}
-
-function isAgencyRosterPath(pathname: string) {
-	return pathname.startsWith("/agency/roster");
+	const { name, role } = portalIdentityParts(orgName, ownerName, subLabel);
+	return role ? `${name} (${role})` : name;
 }
 
 function PortalHeader({
@@ -344,39 +375,28 @@ function PortalHeader({
 	subLabel: string;
 	demoData: boolean;
 }) {
-	const { pathname } = useLocation();
 	const { t } = usePortalLocale();
-	const onAgencyHome = portal === "agency" && isAgencyHomePath(pathname);
-	const onAgencyRoster = portal === "agency" && isAgencyRosterPath(pathname);
-	const showDatetime = onAgencyHome || onAgencyRoster;
-	const { date, time } = showDatetime
-		? nowAgencyDateTime()
-		: { date: "", time: "" };
 
 	return (
 		<header className="iz-portal-header">
-			<div className="min-w-0">
-				<h1 className="font-sora text-xl font-extrabold tracking-tight text-[var(--iz-txt)] md:text-2xl">
-					{portalGreeting(t)},{" "}
-					<span className="text-[var(--iz-gold-l)]">
-						{portalIdentityLabel(orgName, ownerName, subLabel)}
-					</span>
-				</h1>
-				{showDatetime &&
-					(onAgencyRoster ? (
-						<p className="iz-tiny iz-muted2 mt-1">
-							{date} · {time}
-						</p>
-					) : (
-						<p className="iz-portal-header-datetime">
-							<span className="iz-tiny iz-muted2 uppercase tracking-widest">
-								{t.common.today}
-							</span>
-							<span className="font-sora text-lg font-extrabold leading-snug text-[var(--iz-txt)]">
-								{date} · {time}
-							</span>
-						</p>
-					))}
+			{/*
+			  THE GREETING, AND ONLY THE GREETING (owner, 8 Sep 2026).
+			
+			  It used to read "Good afternoon, <Org> (Role)". The name and role moved
+			  to the sidebar, where they say WHICH company this session is acting for;
+			  keeping them here as well had the header repeating the rail two inches
+			  away. The greeting itself stays, because it is the one warm line on an
+			  operations screen and it costs nothing.
+			
+			  It is deliberately QUIETER than the page title below it: a pleasantry
+			  outranking the name of the page is what made the old 28px greeting tie
+			  with "Payroll & PV" for the eye.
+			
+			  The clock is NOT here — it lives in `IzPageDateTime`, under the page
+			  title, on every page rather than on the two this header knew about.
+			*/}
+			<div className="min-w-0 flex-1">
+				<p className="iz-portal-greeting">{portalGreeting(t)}</p>
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
 				{demoData && (
@@ -435,6 +455,19 @@ export function PortalShell({
 			? AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t)
 			: OUTLET_SUB_ROLE_LABELS[outletSubRole ?? "outlet_owner"](t);
 
+	/*
+	 * Hoisted out of the header's props: the SIDEBAR prints this identity too
+	 * now, and two copies of the fallback chain would be two chances to differ.
+	 * Both sides read `portalIdentityParts`, so the rail and the greeting can
+	 * only ever say the same thing.
+	 */
+	const ownerName =
+		me?.username?.trim() ||
+		me?.displayName?.trim() ||
+		owner.ownerName.trim() ||
+		"";
+	const identity = portalIdentityParts(orgName, ownerName, subLabel);
+
 	const orgProfileOnly =
 		getPortalSessionKind() === "real" &&
 		(portal === "agency"
@@ -486,7 +519,11 @@ export function PortalShell({
 				data-portal={portal}
 				data-collapsed={collapsed ? "true" : undefined}
 			>
-				<PortalSidebar portal={portal} items={localiseNav(sidebarItems, t)} />
+				<PortalSidebar
+					portal={portal}
+					items={localiseNav(sidebarItems, t)}
+					identity={identity}
+				/>
 
 				<button
 					type="button"
@@ -508,12 +545,7 @@ export function PortalShell({
 					<PortalHeader
 						portal={portal}
 						orgName={orgName}
-						ownerName={
-							me?.username?.trim() ||
-							me?.displayName?.trim() ||
-							owner.ownerName.trim() ||
-							""
-						}
+						ownerName={ownerName}
 						avatarPhoto={personalPhoto}
 						subLabel={subLabel}
 						demoData={demoData}
