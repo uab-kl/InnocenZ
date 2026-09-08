@@ -22,9 +22,15 @@ else
   exit 1
 fi
 
-DEPLOY_ENV="${DEPLOY_ENV_FROM_CALLER:-${DEPLOY_ENV:-staging}}"
-FRONTEND_CONTAINER_NAME="${FRONTEND_CONTAINER_NAME:-innocenz-frontend}"
-BACKEND_CONTAINER_NAME="${BACKEND_CONTAINER_NAME:-innocenz-backend}"
+# Strip CR/LF from anything that came out of .env. A file saved on Windows
+# gives every value a trailing \r that is invisible in `echo` — and the moment
+# one lands inside the JSON below, python refuses the whole document with
+# "Invalid control character", which used to fail an already-successful deploy.
+strip_cr() { printf '%s' "$1" | tr -d '\r\n'; }
+
+DEPLOY_ENV="$(strip_cr "${DEPLOY_ENV_FROM_CALLER:-${DEPLOY_ENV:-staging}}")"
+FRONTEND_CONTAINER_NAME="$(strip_cr "${FRONTEND_CONTAINER_NAME:-innocenz-frontend}")"
+BACKEND_CONTAINER_NAME="$(strip_cr "${BACKEND_CONTAINER_NAME:-innocenz-backend}")"
 
 MAX_ATTEMPTS=5
 WAIT_SECONDS=10
@@ -95,8 +101,12 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
 
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    FRONTEND_ID=$(docker inspect --format='{{.Image}}' "${FRONTEND_CONTAINER_NAME}" 2>/dev/null || echo "unknown")
-    BACKEND_ID=$(docker inspect --format='{{.Image}}' "${BACKEND_CONTAINER_NAME}" 2>/dev/null || echo "unknown")
+    # Also stripped: `docker inspect` on a name it cannot resolve prints a
+    # multi-line error, and a newline inside a JSON string is the same refusal.
+    FRONTEND_ID="$(strip_cr "$(docker inspect --format='{{.Image}}' "${FRONTEND_CONTAINER_NAME}" 2>/dev/null || true)")"
+    BACKEND_ID="$(strip_cr "$(docker inspect --format='{{.Image}}' "${BACKEND_CONTAINER_NAME}" 2>/dev/null || true)")"
+    FRONTEND_ID="${FRONTEND_ID:-unknown}"
+    BACKEND_ID="${BACKEND_ID:-unknown}"
 
     JSON_OUTPUT=$(cat <<EOF
 {
@@ -131,7 +141,7 @@ with open('$HISTORY_FILE', 'r+') as f:
     f.seek(0)
     json.dump(data, f, indent=2)
     f.truncate()
-" "$JSON_OUTPUT"
+" "$JSON_OUTPUT" || echo "WARNING: could not append to ${HISTORY_FILE} — the deployment itself SUCCEEDED."
 
     echo "Saved logs to target folder: ./${LOG_DIR}/"
     fi
