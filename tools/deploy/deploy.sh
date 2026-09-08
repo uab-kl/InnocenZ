@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 # Image tags + optional DEPLOY_ENV / container names (written by deploy.mjs).
 # CI exports DEPLOY_ENV over ssh, but `source .env` below re-defines it from
 # whatever the box was provisioned as — which made a PRODUCTION rollout write
-# its logs to deploy_logs/staging/. The caller's value has to survive the
+# its logs to logs/staging/. The caller's value has to survive the
 # source, so remember it first and let it win.
 DEPLOY_ENV_FROM_CALLER="${DEPLOY_ENV:-}"
 
@@ -29,7 +29,7 @@ BACKEND_CONTAINER_NAME="${BACKEND_CONTAINER_NAME:-innocenz-backend}"
 MAX_ATTEMPTS=5
 WAIT_SECONDS=10
 
-LOG_DIR="deploy_logs/${DEPLOY_ENV}"
+LOG_DIR="logs/${DEPLOY_ENV}"
 HISTORY_FILE="${LOG_DIR}/history.json"
 
 if [ ! -f .env.backend ]; then
@@ -82,12 +82,12 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     echo "=== Logging deployment info ==="
     # A failed log write must NOT fail the deploy — the new containers are
     # already serving by this point. Under `set -e` a redirect into an
-    # unwritable deploy_logs/ (owned by another user) aborted the script with
+    # unwritable logs/ (owned by another user) aborted the script with
     # exit 1, reporting a successful production rollout as a failed one.
     if ! mkdir -p "$LOG_DIR" 2>/dev/null || ! touch "${LOG_DIR}/.writetest" 2>/dev/null; then
       echo "WARNING: ${LOG_DIR} is not writable — skipping logs."
       echo "  The deployment itself SUCCEEDED. Fix logging with:"
-      echo "    sudo chown -R \"\$(id -un)\":\"\$(id -gn)\" $(pwd)/deploy_logs"
+      echo "    sudo chown -R \"\$(id -un)\":\"\$(id -gn)\" $(pwd)/logs"
       LOG_DIR=""
     else
       rm -f "${LOG_DIR}/.writetest"

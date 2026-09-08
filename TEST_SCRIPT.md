@@ -347,7 +347,7 @@ then died on `deploy_logs/staging/current.json: Permission denied` (§10 i). Fou
 1. **Push the new `deploy.sh` to the box.** CI copies nothing; production still runs the old
    down-first script. Use the CR-stripping pipe in §10 (i) — a plain `scp` from a Windows
    checkout ships CRLF and the shebang fails.
-2. **`sudo chown -R cicd:cicd ~/innocenz/deploy_logs`** — the new script degrades gracefully,
+2. **`sudo chown -R cicd:cicd ~/innocenz/logs`** (LOG_DIR now points at `logs/<env>`, the path the owner named, not `deploy_logs/`) — the new script degrades gracefully,
    but the deploy history is not being written.
 3. **🔴 Which database did production actually come up on?** The job died BEFORE its own
    runtime check. That box's `.env` said `DEPLOY_ENV=staging`, so `.env.backend` may be
