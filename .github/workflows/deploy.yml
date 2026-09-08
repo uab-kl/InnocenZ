@@ -172,7 +172,7 @@ jobs:
     # success() is explicit on purpose. Putting any `if:` on a job REPLACES the
     # implicit success() that `needs:` normally applies, so without it a failed
     # build would still roll out - pointing the server at image tags that were
-    # never pushed, and deploy.sh removes the old local images before it pulls.
+    # never pushed, and deploy.sh removes superseded images only AFTER the new ones are up.
     if: success() && github.event.inputs.deploy != 'false'
     runs-on: ubuntu-latest
     env:

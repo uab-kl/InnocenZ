@@ -136,7 +136,7 @@ export function Tag({
 	const isGold = color === "gold";
 	return (
 		<span
-			className="hz-mono hz-label"
+			className="hz-mono hz-label whitespace-nowrap text-center"
 			style={{
 				letterSpacing: "0.14em",
 				textTransform: "uppercase",

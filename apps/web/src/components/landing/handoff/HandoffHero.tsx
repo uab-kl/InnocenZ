@@ -211,7 +211,7 @@ function OrbitBadge() {
 
 function Stat({ kpi, label }: { kpi: React.ReactNode; label: string }) {
 	return (
-		<div style={{ minWidth: 150 }}>
+		<div style={{ flex: "1 1 120px", minWidth: 0 }}>
 			<div className="hz-display hz-gold-text hz-stat-kpi">{kpi}</div>
 			<div className="hz-stat-label">{label}</div>
 		</div>
@@ -245,7 +245,7 @@ export function HandoffHero() {
 							<Play size={14} /> {t.hero.watchPlatform}
 						</a>
 					</div>
-					<div className="mt-14 flex flex-wrap gap-8">
+					<div className="mt-14 flex flex-wrap gap-5">
 						<Stat
 							kpi={
 								<>

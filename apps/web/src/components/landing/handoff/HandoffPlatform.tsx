@@ -33,6 +33,13 @@ const moduleIcons: LucideIcon[] = [
 	Shield,
 ];
 
+/** Module indices per phase: plan the night, run the floor, close the money. */
+const PHASES = [
+	[0, 1, 5, 4],
+	[6, 10, 8, 7],
+	[3, 2, 9, 11],
+] as const;
+
 const aiIcons: LucideIcon[] = [
 	TrendingUp,
 	Brain,
@@ -71,29 +78,61 @@ export function HandoffPlatformModules() {
 					sub={t.platform.sub}
 				/>
 				{/*
-				  `items-start` matters here: the cards open one at a time, and a
-				  stretched grid row would grow every sibling to match whichever
-				  card the reader expanded.
+				  Three phases, four modules each — the order a night actually runs in.
+				  Indices into t.platform.modules are kept, so every module keeps the
+				  icon and tint it has always had. Panels align to the top so a card
+				  opening in one column does not stretch its neighbours.
 				*/}
-				<div className="grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-4">
-					{t.platform.modules.map((m, i) => {
-						const Icon = moduleIcons[i];
+				<div className="hz-phases">
+					{PHASES.map((idx, p) => {
+						const phase = t.platform.phases[p];
 						return (
-							<CollapsibleCard
-								key={m.title}
-								title={m.title}
-								titleClassName="hz-collapse__title--lg"
-								head={
+							<div key={phase.label} className="hz-phase">
+								{/* Same head as the Challenges cards: tint tile, 26px display title, hairline. */}
+								<div className="flex items-center gap-3">
 									<div
-										className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
-										style={moduleTint(i)}
+										className="grid h-14 w-14 shrink-0 place-items-center rounded-xl"
+										style={moduleTint(p)}
 									>
-										<Icon size={24} />
+										<span className="hz-display text-[24px]">{p + 1}</span>
 									</div>
-								}
-							>
-								{m.desc}
-							</CollapsibleCard>
+									<div className="min-w-0">
+										<div
+											className="hz-display hz-gold-text text-[26px]"
+											style={{ letterSpacing: "-0.02em" }}
+										>
+											{phase.label}
+										</div>
+										<div className="hz-phase__s">{phase.sub}</div>
+									</div>
+								</div>
+								<div
+									className="hz-phase__rule h-px"
+									style={{ background: "var(--hz-line)" }}
+								/>
+								{idx.map((i) => {
+									const m = t.platform.modules[i];
+									const Icon = moduleIcons[i];
+									return (
+										<CollapsibleCard
+											key={m.title}
+											className="hz-collapse--row"
+											title={m.title}
+											titleClassName="hz-collapse__title--lg"
+											head={
+												<div
+													className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
+													style={moduleTint(i)}
+												>
+													<Icon size={24} />
+												</div>
+											}
+										>
+											{m.desc}
+										</CollapsibleCard>
+									);
+								})}
+							</div>
 						);
 					})}
 				</div>

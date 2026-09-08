@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
@@ -6,7 +7,6 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
-import { execSync } from "node:child_process";
 import pkg from "../../package.json" with { type: "json" };
 
 // Opt-in: `VITE_TANSTACK_DEVTOOLS=1 pnpm dev:web` — slows SSR when Metro co-runs.
@@ -80,6 +80,8 @@ const config = defineConfig({
 		exclude: ["country-state-city"],
 	},
 	server: {
+		// Bind 0.0.0.0 so a phone on the same Wi-Fi can load the portal by LAN IP.
+		host: true,
 		// Proxy only backend-owned /img paths so Vite can still serve marketing
 		// assets from apps/web/public/img (landing, UAB badge, etc.).
 		// Profile/gallery images stay same-origin to avoid CORP blocks.
@@ -136,7 +138,10 @@ const config = defineConfig({
 		// Cost: one ~20 MB server file, ~680 ms cold start (91 ms warm) — measured.
 		// REMOVE THIS once nitro stops splitting that chunk, and re-run the boot check
 		// in TEST_SCRIPT.md §8 rather than trusting a green `nx build`.
-		nitro({ inlineDynamicImports: true, rollupConfig: { external: [/^@sentry\//] } }),
+		nitro({
+			inlineDynamicImports: true,
+			rollupConfig: { external: [/^@sentry\//] },
+		}),
 		tailwindcss(),
 		tanstackStart(),
 		viteReact(),

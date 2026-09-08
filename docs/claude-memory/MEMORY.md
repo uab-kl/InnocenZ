@@ -1,6 +1,6 @@
 # Memory Index
 
-All 145 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
+All 158 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
 are kept identical in BOTH directions — see [Sync memory mirrors](sync-memory-mirrors.md).
 Dated session history is NOT here: it lives in `TEST_SCRIPT.md` §8/§10. Rules live in `CLAUDE.md`.
 The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stops + schema), not a log.
@@ -168,3 +168,18 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 - [Workspace rating verified merged](workspace-rating-verified-merged.md) — "Outlet Workspace + Ratings built, live-verified, and merged to main; open follow-ups"
 - [Workspace tier rate daily wage](workspace-tier-rate-daily-wage.md) — outlet_tier_rate now stores DAILY wage in a renamed daily_wage col; migration 0047 APPLIED (rename+backfill+outlet_id); daily-wage bug fixed
 - [Write never landed check first](write-never-landed-check-first.md) — "31 Jul 2026: 'the PR added a receipt / raised a dispute and the agency cannot see it' — BOTH writes never reached the shared DB. Before debugging any PR→Agency visibility report, prove the row exists. Includes the live snapshot, the mobile API-URL resolution, and the two schema column names probes keep getting wrong"
+
+### Newly added - file these into a section above
+
+- [Client guard stricter than server](client-guard-stricter-than-server.md) — "A client-side filter STRICTER than the server's refuses work the API would accept — and agency-scoped reads make it asymmetric, so the same person is offered at one agency and invisible at the other; found 3 Sep 2026 in auto-assign, whose busy rule was a DAY while the server's was a WINDOW"
+- [Innocenz cross agency busy rule](innocenz-cross-agency-busy-rule.md) — "Many agencies may book one PR on the same DAY but never overlapping TIMES; busy state is shown as times only — never which agency/venue; warn, don't block"
+- [Innocenz dev environment](innocenz-dev-environment.md) — InnocenZ dev-server/env quirks and ECC GateGuard hooks that shape how to work in this repo
+- [Innocenz mc leave flow](innocenz-mc-leave-flow.md) — MC/leave has no table of its own — it rides shift_assignment (status enum + notes + leave_proof_photos jsonb)
+- [Innocenz metro watcher wedge](innocenz-metro-watcher-wedge.md) — Blank localhost:8081 root cause — Metro watcher 240s startup timeout on Windows under dev:all load; patched to 900s; corrupt-cache guard in dev scripts
+- [Innocenz plan change flow](innocenz-plan-change-flow.md) — Business rules the user specified for the admin Plan Request / Plan Change pages (July 2026)
+- [Innocenz pr mobile app](innocenz-pr-mobile-app.md) — apps/mobile is the PR app (port of InnocenZ-proto /host view); demo login +60123456789/password; shift data still demo-only
+- [Innocenz remote db](innocenz-remote-db.md) — "Backend depends on remote Postgres postgres.gremoryyx.com:6543/innocenz-test; DNS for that host vanished 2026-07-29, and DB outages masquerade as \"Invalid credentials\""
+- [Innocenz shift day rule](innocenz-shift-day-rule.md) — "A shift belongs to the day its START time falls on — an overnight shift is filed under the day it began, never the day it ends"
+- [Innocenz status colour code](innocenz-status-colour-code.md) — "Owner's platform-wide colour code for money/review status — green settled, amber waiting (pending AND approved), white mixed, red disputed/deducted; applies to PR app, agency receipts, and PVs"
+- [Innocenz system map](innocenz-system-map.md) — "The four InnocenZ surfaces (PR mobile, Agency web, Outlet web, Admin web) and the end-to-end shift/money workflow connecting them"
+- [Innocenz web auth guards](innocenz-web-auth-guards.md) — "How InnocenZ web route guards actually execute (SSR no-op, ssr:false requirement, role guard design, react-query hidden-tab retry pause)"

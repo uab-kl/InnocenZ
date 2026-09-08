@@ -69,6 +69,7 @@ export interface LandingTranslations {
 		titleHighlight: string;
 		sub: string;
 		modules: { title: string; desc: string }[];
+		phases: { label: string; sub: string }[];
 	};
 	ai: {
 		eyebrow: string;
@@ -463,6 +464,11 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			titleHighlight: "One backbone.",
 			sub: "Twelve modules, roster to signed payout.",
 			modules: enModules,
+			phases: [
+				{ label: "Plan the night", sub: "roster · match · book" },
+				{ label: "Run the floor", sub: "check in · scan · watch" },
+				{ label: "Close the money", sub: "calculate · pay · prove" },
+			],
 		},
 		ai: {
 			eyebrow: "The AI Layer",
@@ -471,8 +477,7 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			titleSuffix: "with you.",
 			sub: "Not chat. Not gimmicks. Seven layers that forecast, match and reconcile.",
 			modelContext: "Model context",
-			modelContextDesc:
-				"Trained on live outlet, agency and PR signals.",
+			modelContextDesc: "Trained on live outlet, agency and PR signals.",
 			features: enAiFeatures,
 		},
 		dashboards: {
@@ -686,7 +691,7 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 		},
 		footer: {
 			tagline:
-				"The AI-powered operating platform for Outlet, PR Agency, and the workforce that runs the night.",
+				"The AI-powered operating platform for Outlet, PR Agency and PR.",
 			copyright: "Crowned nightlife · All rights reserved",
 			columns: [
 				{
@@ -800,6 +805,11 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			titleHighlight: "一条主干。",
 			sub: "十二个模块，从排班到签署发薪。",
 			modules: zhModules,
+			phases: [
+				{ label: "规划夜晚", sub: "排班 · 匹配 · 预订" },
+				{ label: "运营现场", sub: "签到 · 扫描 · 监看" },
+				{ label: "结清款项", sub: "核算 · 支付 · 留证" },
+			],
 		},
 		ai: {
 			eyebrow: "AI 层",
@@ -1020,7 +1030,7 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			seePricing: "查看定价",
 		},
 		footer: {
-			tagline: "面向娱乐场所、PR 代理与一线人员的 AI 驱动运营平台。",
+			tagline: "面向门店、PR 代理与 PR 的 AI 驱动运营平台。",
 			copyright: "Crowned nightlife · 保留所有权利",
 			columns: [
 				{ title: "平台", links: ["概览", "AI 层", "仪表盘", "模块", "安全"] },
