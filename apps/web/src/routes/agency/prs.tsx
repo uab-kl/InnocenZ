@@ -77,6 +77,7 @@ import {
 	MousePointerClick,
 	Pencil,
 	RotateCcw,
+	Search,
 	Star,
 	UserMinus,
 } from "lucide-react";
@@ -250,6 +251,7 @@ function AgencyManagePRs() {
 			.filter((x) => x.breaches.length > 0)
 			.sort((a, b) => b.total - a.total);
 	}, [agencyPRs, rawPenaltyRules]);
+	const [nameQuery, setNameQuery] = useState("");
 	const [ageMin, setAgeMin] = useState("");
 	const [ratingMin, setRatingMin] = useState("");
 	const [lang, setLang] = useState("");
@@ -300,6 +302,10 @@ function AgencyManagePRs() {
 			sortAgencyPrsByName(
 				agencyPRs.filter((p) => {
 					if (p.detached) return false;
+					if (nameQuery.trim()) {
+						const label = formatPayeeLabel(p.name, p.icName).toLowerCase();
+						if (!label.includes(nameQuery.trim().toLowerCase())) return false;
+					}
 					if (ageMin && (p.age ?? 0) < Number(ageMin)) return false;
 					// Judge the real average, not the `rating: 0` placeholder every
 					// backend PR carries — that made any Min-rating filter empty the grid.
@@ -319,7 +325,17 @@ function AgencyManagePRs() {
 					return true;
 				}),
 			),
-		[agencyPRs, ratings, ageMin, ratingMin, lang, race, place, expMin],
+		[
+			agencyPRs,
+			ratings,
+			nameQuery,
+			ageMin,
+			ratingMin,
+			lang,
+			race,
+			place,
+			expMin,
+		],
 	);
 
 	/*
@@ -335,6 +351,7 @@ function AgencyManagePRs() {
 		[agencyPRs],
 	);
 	const activeFilterCount = [
+		nameQuery,
 		ageMin,
 		ratingMin,
 		expMin,
@@ -343,6 +360,7 @@ function AgencyManagePRs() {
 		place,
 	].filter(Boolean).length;
 	const clearPrFilters = () => {
+		setNameQuery("");
 		setAgeMin("");
 		setRatingMin("");
 		setExpMin("");
@@ -674,6 +692,25 @@ function AgencyManagePRs() {
 				</div>
 
 				<div className="iz-roster-filterbar__row">
+					<label className="iz-roster-filterbar__field">
+						<span className="iz-roster-filterbar__label">{t.filters.name}</span>
+						{/* `__input` is a BARE input on purpose — no border, transparent —
+						    and the box is drawn by `__inputwrap` around it, or by the
+						    `--num` modifier on the numeric fields. Used on its own it
+						    renders as loose text beside boxed neighbours, which is exactly
+						    how this field first shipped. The wrapper also gives the search
+						    icon somewhere to live and carries the focus ring. */}
+						<span className="iz-roster-filterbar__inputwrap">
+							<Search className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted2)]" />
+							<input
+								type="search"
+								className="iz-roster-filterbar__input"
+								placeholder={t.filters.allNames}
+								value={nameQuery}
+								onChange={(e) => setNameQuery(e.target.value)}
+							/>
+						</span>
+					</label>
 					<label className="iz-roster-filterbar__field">
 						<span className="iz-roster-filterbar__label">{t.managePr.age}</span>
 						<input
@@ -1209,7 +1246,7 @@ function AgencyPrDetail({
 									/>
 								</div>
 							) : (
-								<div className="font-sora text-[17px] font-bold">
+								<div className="iz-heading text-base font-bold">
 									{formatPayeeLabel(display.name, display.icName)}
 								</div>
 							)}

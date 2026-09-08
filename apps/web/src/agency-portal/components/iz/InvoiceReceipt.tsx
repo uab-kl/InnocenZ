@@ -124,7 +124,7 @@ export function InvoiceReceipt({ invoiceId }: { invoiceId: string }) {
 					<span className="iz-sm font-semibold">
 						{t.subscription.receiptTotal}
 					</span>
-					<span className="font-sora text-base font-bold text-[var(--iz-green)]">
+					<span className="iz-heading text-base font-bold text-[var(--iz-green)]">
 						{formatRM(Number(settled?.amount ?? invoice.amount))}
 					</span>
 				</div>

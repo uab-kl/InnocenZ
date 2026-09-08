@@ -9,7 +9,7 @@ import {
 import { PrFaceBubble } from "@agency-portal/components/agency/PrFaceBubble";
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
-import { IzCard, IzPill } from "@agency-portal/components/iz/ui";
+import { IzCard, IzPageTitle, IzPill } from "@agency-portal/components/iz/ui";
 import {
 	canGeneratePortfolioComcard,
 	PortfolioComcardVisual,
@@ -21,7 +21,7 @@ import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval
 import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
 import { usePrPhotoById } from "@agency-portal/hooks/use-pr-photo";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
-import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
+
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import {
 	cutlostRequestDetail,
@@ -1148,7 +1148,7 @@ function CutlostDetailPanel({
 			<div className="iz-approvals-cutlost-summary">
 				<Icon className="h-4 w-4 shrink-0 text-[var(--iz-gold-l)]" />
 				<div className="min-w-0">
-					<p className="font-sora text-sm font-bold text-[var(--iz-txt)]">
+					<p className="iz-heading text-sm font-bold text-[var(--iz-txt)]">
 						{cutlostRequestTitle(req)}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">
@@ -1433,7 +1433,7 @@ function LeaveDetailPanel({
 			<div className="iz-approvals-info-grid">
 				<div className="iz-approvals-info-card">
 					<h3 className="iz-approvals-info-title">{t.approvals.reasonGiven}</h3>
-					<p className="iz-tiny iz-muted">
+					<p className="iz-sm iz-muted">
 						{req.notes?.trim() ? (
 							<>&ldquo;{req.notes.trim()}&rdquo;</>
 						) : (
@@ -1513,14 +1513,20 @@ function AgencyPending() {
 	// harmful click.
 	const toast = useStore((s) => s.toast);
 	const canApprovePrSignups = useAgencyCan()("approvePrSignups");
-	const { date, time } = nowAgencyDateTime();
+
 	const prPhotoById = usePrPhotoById();
 	const [tab, setTab] = useState<Tab>("signups");
 	// Outlet-Linking is master/detail like the other tabs, so its filter and
 	// selection live here rather than inside the panel — the list and the detail
 	// render into two different containers and must agree on both.
+	// Opens on WORKING WITH YOU, not on the decision queue (owner, 8 Sep 2026).
+	// A link request is a rare event and `pending` is empty almost every day, so
+	// the tab greeted its owner with "No outlets are waiting for a decision" —
+	// true, and useless. The venues an agency actually supplies is the answer to
+	// the question the tab is usually opened to ask. The pending chip still
+	// carries its own count, so a real request is not hidden by this.
 	const [outletLinkFilter, setOutletLinkFilter] =
-		useState<AgencyOutletApproveStatus>("pending");
+		useState<AgencyOutletApproveStatus>("approved");
 	const [selectedOutletLinkId, setSelectedOutletLinkId] = useState<
 		string | null
 	>(null);
@@ -1592,9 +1598,21 @@ function AgencyPending() {
 	 * history as its approved JOIN and in Rejected history as its refused
 	 * DEPARTURE, so `userId` alone would collide.
 	 */
+	/**
+	 * Agency-Tied opens on APPROVED — the PRs actually working with this agency
+	 * — matching Outlet-Linking (owner, 8 Sep 2026). "Current" is a work queue
+	 * that is empty most days, so the tab used to open on nothing.
+	 *
+	 * ⚠️ This filter is SHARED with Cancel Agency, and `approved` means the
+	 * opposite thing there: a departure that went through, i.e. someone who has
+	 * LEFT. Opening a departures queue on people who already left would be worse
+	 * than what it replaced, so the two PR tabs seed their own default as you
+	 * enter them — see the tab buttons below. Both still keep whatever you pick
+	 * while you stay on the tab.
+	 */
 	const [tiedFilter, setTiedFilter] = useState<
 		"pending" | "approved" | "rejected" | "all"
-	>("pending");
+	>("approved");
 	const group = TAB_GROUP[tab];
 	const tiedKind: "join" | "leave" = tab === "cancel" ? "leave" : "join";
 	const tiedCounts = useMemo(
@@ -1748,10 +1766,9 @@ function AgencyPending() {
 			<div className="iz-approvals-layout">
 				<aside className="iz-approvals-sidebar">
 					<header className="iz-approvals-sidebar-head">
-						<h1 className="iz-approvals-title">{t.approvals.title}</h1>
-						<p className="iz-tiny iz-muted2 mt-0.5">
-							{date} · {time}
-						</p>
+						<IzPageTitle level={1} dateTime>
+							{t.approvals.title}
+						</IzPageTitle>
 					</header>
 
 					{/* Two groups first, their queues underneath — so the reader picks
@@ -1783,7 +1800,11 @@ function AgencyPending() {
 								<button
 									type="button"
 									className={cn("iz-approvals-tab", tab === "signups" && "on")}
-									onClick={() => setTab("signups")}
+									onClick={() => {
+										setTab("signups");
+										// Who works here — see the note on `tiedFilter`.
+										setTiedFilter("approved");
+									}}
 								>
 									{t.approvals.agencyTied} (
 									{tiedCounts.joinCurrent + agencyLinkRequests.length})
@@ -1791,7 +1812,12 @@ function AgencyPending() {
 								<button
 									type="button"
 									className={cn("iz-approvals-tab", tab === "cancel" && "on")}
-									onClick={() => setTab("cancel")}
+									onClick={() => {
+										setTab("cancel");
+										// A departures queue opens on what still needs deciding,
+										// NOT on `approved`, which here means already gone.
+										setTiedFilter("pending");
+									}}
 								>
 									{/* Departures live on their OWN tab so approving one can
 									    never be mistaken for accepting a PR under the agency. */}

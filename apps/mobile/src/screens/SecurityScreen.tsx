@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { usePrNav } from '../lib/pr-nav';
 import { useSession } from '../lib/session';
 import { formatMessage, useLocale } from '../i18n';
@@ -447,20 +448,19 @@ function Field({
 const styles = StyleSheet.create({
   screen: { paddingTop: 10, paddingHorizontal: 18, paddingBottom: 26 },
   back: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 12 },
-  backText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: C.txt },
+  backText: { ...font(700), fontSize: 16, color: C.txt },
   eyebrow: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 1.68,
     color: '#c4b4d8',
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
-  title: { fontFamily: F.sora, fontSize: 26, fontWeight: '800', color: C.txt },
-  meta: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.prMuted, lineHeight: 18 },
+  title: { ...font(800), fontSize: 26, color: C.txt },
+  meta: { marginTop: 8, ...font(), fontSize: 13, color: C.prMuted, lineHeight: 18 },
   toast: {
     marginTop: 10,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.green,
   },
@@ -476,8 +476,8 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   dangerCard: { borderColor: 'rgba(240,138,138,0.35)' },
-  cardTitle: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.txt },
-  cardSub: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  cardTitle: { ...font(700), fontSize: 15, color: C.txt },
+  cardSub: { marginTop: 2, ...font(), fontSize: 12, color: C.prMuted },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(6,3,12,0.65)',
@@ -495,9 +495,9 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt, marginBottom: 8 },
-  sheetHint: { fontFamily: F.manrope, fontSize: 13, color: C.prMuted, marginBottom: 8, lineHeight: 18 },
-  sheetError: { marginTop: 10, fontFamily: F.manrope, fontSize: 13, color: C.red },
+  sheetTitle: { ...font(800), fontSize: 20, color: C.txt, marginBottom: 8 },
+  sheetHint: { ...font(), fontSize: 13, color: C.prMuted, marginBottom: 8, lineHeight: 18 },
+  sheetError: { marginTop: 10, ...font(), fontSize: 13, color: C.red },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -506,11 +506,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.line,
   },
-  menuLabel: { fontFamily: F.sora, fontSize: 15, fontWeight: '600', color: C.txt },
+  menuLabel: { ...font(600), fontSize: 15, color: C.txt },
   fieldLabel: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.8,
     color: C.prMuted2,
     marginBottom: 4,
@@ -518,9 +517,8 @@ const styles = StyleSheet.create({
   phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
   phoneInput: { flex: 1 },
   input: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 16,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -535,9 +533,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  primaryText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: '#241a08' },
+  primaryText: { ...font(700), fontSize: 16, color: '#241a08' },
   sheetCancel: { marginTop: 10, alignItems: 'center', padding: 10 },
-  sheetCancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
+  sheetCancelText: { ...font(600), fontSize: 14, color: C.muted },
   dangerBtn: {
     marginTop: 12,
     borderRadius: 12,
@@ -547,5 +545,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(240,138,138,0.4)',
   },
-  dangerBtnText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: C.red },
+  dangerBtnText: { ...font(700), fontSize: 16, color: C.red },
 });

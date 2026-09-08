@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { ApiError } from '../lib/api';
 import { useKeyboardHeight } from '../lib/keyboard';
 import {
@@ -413,7 +414,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
   },
   brandLine: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     letterSpacing: 0.4,
     color: C.prMuted,
@@ -425,14 +426,13 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   title: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 22,
-    fontWeight: '700',
     letterSpacing: -0.3,
     color: C.txt,
   },
   subtitle: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 15,
     lineHeight: 22,
     color: C.prMuted,
@@ -443,9 +443,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   fieldLabel: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: C.muted,
@@ -480,13 +479,12 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     paddingVertical: Platform.OS === 'ios' ? 14 : 10,
-    fontFamily: F.sora,
+    ...font(500),
     fontSize: 16,
-    fontWeight: '500',
     color: C.txt,
   },
   error: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 14,
     lineHeight: 20,
     color: C.red,
@@ -498,9 +496,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   forgotText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     color: C.accentL,
   },
   cta: {
@@ -512,13 +509,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   signUpText: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 15,
     color: C.prMuted,
   },
   signUpAccent: {
-    fontFamily: F.sora,
-    fontWeight: '700',
+    ...font(700),
     color: C.accentL,
   },
 });

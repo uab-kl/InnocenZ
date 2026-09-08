@@ -33,6 +33,7 @@ import {
 	demoPvIssueIsoForWeeksAgo,
 } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
+import { countBillingWindows } from "@agency-portal/lib/subscription-due";
 import { periodLabel } from "@agency-portal/lib/subscription-record";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
@@ -371,7 +372,7 @@ function AgencySubscription() {
 			toast(
 				fill(t.subscription.settleBeforeCustomAsk, {
 					amount: formatRM(cents / 100),
-					n: owing.length,
+					n: countBillingWindows(owing),
 				}),
 				"warn",
 			);
@@ -451,7 +452,7 @@ function AgencySubscription() {
 								cycle: payrollWeek.cycle,
 							})}
 						</p>
-						<p className="mt-1 font-sora text-base font-bold">
+						<p className="mt-1 iz-heading text-base font-bold">
 							{heroPvCount === null
 								? t.subscription.loadingCard
 								: fill(
@@ -507,7 +508,7 @@ function AgencySubscription() {
 						<div className="flex flex-wrap items-start justify-between gap-3">
 							<div className="min-w-0">
 								<div className="flex flex-wrap items-center gap-2">
-									<p className="font-sora text-base font-bold">
+									<p className="iz-heading text-base font-bold">
 										{t.agencyMisc.custom}
 									</p>
 									<IzPill variant="violet">{t.agencyMisc.negotiated}</IzPill>
@@ -630,7 +631,7 @@ function AgencySubscription() {
 							<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 								<div className="min-w-0">
 									<div className="flex flex-wrap items-center gap-2">
-										<p className="font-sora text-sm font-bold">{plan.label}</p>
+										<p className="iz-heading text-sm font-bold">{plan.label}</p>
 										{isBilledTier && (
 											<IzPill variant="green">{t.agencyMisc.yourTier}</IzPill>
 										)}
@@ -647,7 +648,7 @@ function AgencySubscription() {
 								<div className="shrink-0 sm:text-right">
 									<div className="flex items-center gap-1.5 text-[var(--iz-txt)] sm:justify-end">
 										<Users className="h-4 w-4 text-[var(--iz-gold)]" />
-										<span className="font-sora text-sm font-bold">
+										<span className="iz-heading text-sm font-bold">
 											{planCapacityLabel(
 												"agency",
 												plan.id,
@@ -751,14 +752,14 @@ function AgencySubscription() {
 						<div className="grid grid-cols-3 gap-2 text-center">
 							<div>
 								<p className="iz-tiny iz-muted2">{t.agencyMisc.outstanding}</p>
-								<p className="mt-1 font-sora text-base font-bold text-[var(--iz-gold-l)]">
+								<p className="mt-1 iz-heading text-base font-bold text-[var(--iz-gold-l)]">
 									{formatRM(collections.totals.outstandingRm)}
 								</p>
 							</div>
 							<div>
 								<p className="iz-tiny iz-muted2">{t.agencyMisc.overdue}</p>
 								<p
-									className={`mt-1 font-sora text-base font-bold ${
+									className={`mt-1 iz-heading text-base font-bold ${
 										collections.totals.overdueRm > 0
 											? "text-[var(--iz-red-l,#ff8080)]"
 											: ""
@@ -769,7 +770,7 @@ function AgencySubscription() {
 							</div>
 							<div>
 								<p className="iz-tiny iz-muted2">{t.agencyMisc.settled}</p>
-								<p className="mt-1 font-sora text-base font-bold">
+								<p className="mt-1 iz-heading text-base font-bold">
 									{formatRM(collections.totals.settledRm)}
 								</p>
 							</div>

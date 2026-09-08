@@ -202,7 +202,7 @@ export function PostJobShiftCardHeader({
 				<span className="iz-post-job-shift-head__icon" aria-hidden>
 					<Calendar className="h-4 w-4" />
 				</span>
-				<span className="font-sora text-sm font-extrabold text-[var(--iz-txt)]">
+				<span className="iz-heading text-sm font-extrabold text-[var(--iz-txt)]">
 					{title}
 				</span>
 			</div>
@@ -270,7 +270,7 @@ export function PostJobTierSectionHeader() {
 				<Info className="h-3.5 w-3.5" />
 			</span>
 			<div className="min-w-0">
-				<p className="font-sora text-sm font-extrabold text-[var(--iz-txt)]">
+				<p className="iz-heading text-sm font-extrabold text-[var(--iz-txt)]">
 					{t.postJob.payByPrTier}
 				</p>
 				<p className="mt-0.5 text-xs leading-snug text-[var(--iz-muted2)]">

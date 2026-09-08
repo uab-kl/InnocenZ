@@ -16,6 +16,7 @@ import React, { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
 import type { PrWeekShift } from '../lib/api';
@@ -786,15 +787,14 @@ const s = StyleSheet.create({
      */
     maxHeight: '90%',
   },
-  title: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
+  title: { ...font(800), fontSize: 18, color: C.txt },
   total: {
     marginTop: 2,
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 26,
-    fontWeight: '800',
     color: C.accentL,
   },
-  hint: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  hint: { marginTop: 6, ...font(), fontSize: 12, color: C.prMuted },
   warn: {
     marginTop: 10,
     padding: 10,
@@ -803,7 +803,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(240,138,138,0.35)',
   },
-  warnText: { fontFamily: F.manrope, fontSize: 12, color: C.red },
+  warnText: { ...font(), fontSize: 12, color: C.red },
   /*
    * SHRINKS to whatever the sheet has left, rather than a fixed 420.
    *
@@ -815,7 +815,7 @@ const s = StyleSheet.create({
    */
   scroll: { marginTop: 12, flexShrink: 1 },
   empty: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.muted2,
     paddingVertical: 16,
@@ -843,15 +843,13 @@ const s = StyleSheet.create({
   shiftTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   shiftDay: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.txt,
   },
   eventTag: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.4,
     color: '#e8c27a',
     borderWidth: 1,
@@ -863,23 +861,22 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   shiftHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  shiftSubtotal: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.txt },
-  shiftMore: { marginTop: 4, fontFamily: F.manrope, fontSize: 11, color: C.violetL },
-  chevron: { fontFamily: F.sora, fontSize: 16, lineHeight: 18, color: C.prMuted },
+  shiftSubtotal: { ...font(800), fontSize: 14, color: C.txt },
+  shiftMore: { marginTop: 4, ...font(), fontSize: 11, color: C.violetL },
+  chevron: { ...font(), fontSize: 16, lineHeight: 18, color: C.prMuted },
   chevronOpen: { transform: [{ rotate: '180deg' }] },
-  shiftTitle: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.violetL },
-  shiftSlot: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  shiftNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
+  shiftTitle: { ...font(800), fontSize: 14, color: C.violetL },
+  shiftSlot: { marginTop: 2, ...font(), fontSize: 12, color: C.prMuted },
+  shiftNote: { marginTop: 4, ...font(), fontSize: 12, color: C.muted2 },
   stampRow: { flexDirection: 'row', marginTop: 10, gap: 12 },
   stampCol: { flex: 1 },
   stampK: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
-  stampV: { marginTop: 3, fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
+  stampV: { marginTop: 3, ...font(700), fontSize: 13, color: C.txt },
   receipt: {
     marginTop: 10,
     marginLeft: 10,
@@ -889,9 +886,8 @@ const s = StyleSheet.create({
   },
   receiptHead: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   claimTag: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 9,
-    fontWeight: '800',
     letterSpacing: 0.6,
     borderRadius: 999,
     borderWidth: 1,
@@ -928,30 +924,29 @@ const s = StyleSheet.create({
   cellClaimOpen: { backgroundColor: C.redBg, borderColor: 'rgba(240,138,138,0.35)' },
   cellClaimSettled: { backgroundColor: C.greenBg, borderColor: 'rgba(93,217,160,0.35)' },
   cellClaimText: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     backgroundColor: 'transparent',
     borderWidth: 0,
   },
-  orderNo: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: C.accentL },
-  receiptNo: { fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
+  orderNo: { ...font(800), fontSize: 15, color: C.accentL },
+  receiptNo: { ...font(), fontSize: 12, color: C.muted2 },
   receiptMeta: {
     marginTop: 2,
     marginBottom: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
   },
   tr: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
   th: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
-  td: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  tdMoney: { fontFamily: F.sora, fontWeight: '700', color: C.accentL },
+  td: { ...font(), fontSize: 12, color: C.prMuted },
+  tdMoney: { ...font(700), color: C.accentL },
   thumbs: { flexDirection: 'row', gap: 8, marginTop: 8 },
   /*
    * 96, not 64. A printed receipt at 64px is a grey smudge — big enough to
@@ -976,7 +971,7 @@ const s = StyleSheet.create({
     borderColor: 'rgba(227,184,119,0.45)',
     backgroundColor: 'rgba(227,184,119,0.14)',
   },
-  actBtnText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.accentL },
+  actBtnText: { ...font(700), fontSize: 15, color: C.accentL },
   /** Red = dismiss — mirrors PaymentScreen's dangerBtn exactly. */
   closeBtn: {
     borderRadius: 12,
@@ -986,13 +981,12 @@ const s = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.45)',
     backgroundColor: 'rgba(240,138,138,0.12)',
   },
-  closeBtnText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
+  closeBtnText: { ...font(700), fontSize: 15, color: C.red },
   groupTotal: {
     marginTop: 8,
     textAlign: 'right',
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.prMuted,
   },
 });

@@ -7,6 +7,7 @@
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import type { PrReceiptLine } from '../lib/api';
 import { resolveProofPhotoUri } from '../lib/proof-photo';
 import { formatMessage, useLocale, type AppTranslations } from '../i18n';
@@ -126,14 +127,13 @@ const s = StyleSheet.create({
     padding: 12,
   },
   title: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 13,
-    fontWeight: '800',
     color: C.goldL,
   },
   group: { marginTop: 10 },
   groupLabel: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
     marginBottom: 6,

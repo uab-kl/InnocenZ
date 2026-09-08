@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { ApiError, resetPasswordWithOtp, sendPrOtp, verifyPrOtp } from '../lib/api';
 import {
   loadPhoneCountryCode,
@@ -321,24 +322,23 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  title: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt, marginBottom: 8 },
+  title: { ...font(800), fontSize: 20, color: C.txt, marginBottom: 8 },
   hint: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
     marginBottom: 12,
     lineHeight: 18,
   },
   info: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.green,
     marginBottom: 8,
   },
   label: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.8,
     color: C.prMuted2,
     marginBottom: 4,
@@ -347,9 +347,8 @@ const styles = StyleSheet.create({
   phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
   phoneInput: { flex: 1 },
   input: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 16,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -358,14 +357,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
-  error: { marginTop: 10, fontFamily: F.manrope, fontSize: 13, color: C.red },
+  error: { marginTop: 10, ...font(), fontSize: 13, color: C.red },
   primary: {
     marginTop: 16,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
-  primaryText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: '#241a08' },
+  primaryText: { ...font(700), fontSize: 16, color: '#241a08' },
   cancel: { marginTop: 10, alignItems: 'center', padding: 10 },
-  cancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
+  cancelText: { ...font(600), fontSize: 14, color: C.muted },
 });

@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import {
   AlertTriangle,
   Briefcase,
@@ -1654,9 +1655,8 @@ const styles = StyleSheet.create({
   },
   rulesTitle: {
     flex: 1,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: C.txt,
@@ -1674,8 +1674,8 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 6,
   },
-  ruleWhen: { fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
-  ruleOut: { fontFamily: F.sora, fontSize: 13, fontWeight: '700' },
+  ruleWhen: { ...font(), fontSize: 13, color: C.prMuted },
+  ruleOut: { ...font(700), fontSize: 13 },
   calWrap: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1686,9 +1686,8 @@ const styles = StyleSheet.create({
   calNav: { flexDirection: 'row', gap: 10, marginBottom: 8 },
   navField: { flex: 1 },
   navLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 1,
     color: C.muted2,
     marginBottom: 4,
@@ -1705,9 +1704,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
   selectText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.txt,
   },
   yearChips: {
@@ -1725,9 +1723,8 @@ const styles = StyleSheet.create({
   },
   yearChipOn: { borderColor: C.violet, backgroundColor: C.violetInk },
   yearChipText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.muted,
   },
   monthChips: {
@@ -1744,14 +1741,13 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   monthChipOn: { borderColor: C.line2, backgroundColor: C.glass2 },
-  monthChipText: { fontFamily: F.manrope, fontSize: 11, color: C.muted2 },
+  monthChipText: { ...font(), fontSize: 11, color: C.muted2 },
   weekdays: { flexDirection: 'row', marginBottom: 4 },
   weekday: {
     flex: 1,
     textAlign: 'center',
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     color: C.muted2,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
@@ -1768,7 +1764,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayToday: { borderWidth: 2, borderColor: C.goldL },
-  dayNum: { fontFamily: F.sora, fontSize: 13, fontWeight: '700' },
+  dayNum: { ...font(700), fontSize: 13 },
   legend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1778,9 +1774,9 @@ const styles = StyleSheet.create({
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   swatch: { width: 10, height: 10, borderRadius: 999 },
-  legendLabel: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
+  legendLabel: { ...font(), fontSize: 11, color: C.prMuted },
   blockError: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsTiny,
     color: C.red,
     textAlign: 'center',
@@ -1793,7 +1789,7 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     borderRadius: 12,
     padding: 12,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsSm,
     color: C.txt,
     textAlignVertical: 'top',
@@ -1812,7 +1808,7 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     alignItems: 'center',
   },
-  reasonCancelText: { fontFamily: F.sora, fontSize: C.fsSm, color: C.prMuted },
+  reasonCancelText: { ...font(), fontSize: C.fsSm, color: C.prMuted },
   reasonConfirmBtn: {
     flex: 1,
     paddingVertical: 12,
@@ -1823,9 +1819,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   reasonConfirmText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: C.fsSm,
-    fontWeight: '600',
     color: C.red,
   },
   // The two pick actions share a line and split it evenly; `flex: 1` on the
@@ -1849,9 +1844,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(232,194,122,0.06)',
   },
   mcPickText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.goldL,
   },
   mcThumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
@@ -1878,22 +1872,20 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
   },
   mcThumbXText: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 13,
-    fontWeight: '800',
     color: C.red,
   },
   mcHint: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
   },
   missedDate: {
     marginTop: 4,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.txt,
   },
   missedRow: {
@@ -1905,20 +1897,19 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   missedOutlet: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: C.txt,
   },
   missedMeta: {
     marginTop: 3,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
   missedNote: {
     marginTop: 12,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted2,
   },
@@ -1930,17 +1921,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   ttTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: C.muted,
   },
   refreshText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     color: C.goldL,
   },
   empty: {
@@ -1952,7 +1941,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   emptyText: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsTiny,
     color: C.prMuted2,
     textAlign: 'center',
@@ -1996,21 +1985,20 @@ const styles = StyleSheet.create({
   ttThumb: { width: 76, height: 76 },
   ttEventLine: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.muted,
   },
   ttWhenLine: {
     marginTop: 2,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.txt,
   },
   ttAddrCompact: {
     flex: 1,
     minWidth: 0,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
   },
@@ -2034,9 +2022,8 @@ const styles = StyleSheet.create({
     // Without this the Text refuses to give ground and the badge overflows its
     // own pill — `flexShrink` on the parent alone is not enough in RN.
     flexShrink: 1,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.6,
     color: C.violetL,
   },
@@ -2048,20 +2035,18 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   ttOutlet: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 16,
-    fontWeight: '700',
     color: C.txt,
   },
   ttFieldLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
   ttFieldValue: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 14,
     color: C.prMuted,
     marginTop: 2,
@@ -2077,7 +2062,7 @@ const styles = StyleSheet.create({
   },
   ttAddrValue: {
     flex: 1,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
     lineHeight: 18,
@@ -2102,16 +2087,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240,138,138,0.08)',
   },
   cancelText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.red,
   },
   cancelPenaltyText: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     color: C.red,
     opacity: 0.85,
   },
@@ -2126,9 +2109,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(232,198,106,0.08)',
   },
   leaveText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.amber,
   },
   leavePendingNote: {
@@ -2145,9 +2127,8 @@ const styles = StyleSheet.create({
   },
   leavePendingText: {
     flex: 1,
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.amber,
   },
   leaveRejectedNote: {
@@ -2164,9 +2145,8 @@ const styles = StyleSheet.create({
   },
   leaveRejectedText: {
     flex: 1,
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.red,
   },
   leaveSubmitBtn: {
@@ -2179,9 +2159,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(93,217,160,0.12)',
   },
   leaveSubmitText: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 15,
-    fontWeight: '800',
     color: C.green,
   },
   cancelBackdrop: {
@@ -2212,20 +2191,18 @@ const styles = StyleSheet.create({
   },
   cancelHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   cancelHeaderTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 20,
-    fontWeight: '800',
     color: C.txt,
   },
   cancelHeaderSub: {
     marginTop: 4,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.prMuted,
   },
   cancelNote: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
@@ -2250,14 +2227,13 @@ const styles = StyleSheet.create({
     backgroundColor: C.greenBg,
   },
   penaltyBannerTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 15,
-    fontWeight: '800',
     color: C.txt,
   },
   penaltyBannerBody: {
     marginTop: 3,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
@@ -2271,9 +2247,8 @@ const styles = StyleSheet.create({
   },
   rulesCardHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rulesCardTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     letterSpacing: 0.8,
     color: C.txt,
   },
@@ -2285,30 +2260,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
   ruleCardWhen: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.txt,
   },
   ruleCardOut: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
   },
   cancelFieldLabel: {
     marginTop: 14,
     marginBottom: 4,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.prMuted2,
   },
   cancelInput: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -2321,7 +2292,7 @@ const styles = StyleSheet.create({
   },
   cancelErrorText: {
     marginTop: 8,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.red,
   },
@@ -2335,16 +2306,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240,138,138,0.12)',
   },
   cancelAcceptText: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 15,
-    fontWeight: '800',
     color: C.red,
   },
   cancelBackBtn: { marginTop: 10, alignItems: 'center', padding: 10 },
   cancelBackText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.muted,
   },
 });

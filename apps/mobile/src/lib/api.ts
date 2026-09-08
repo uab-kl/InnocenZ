@@ -1843,6 +1843,11 @@ export type PrCurrentWeek = {
     agencyId: string;
     /** Joined through the FK — what tells the PR the two PVs apart. */
     agencyName: string | null;
+    /**
+     * The agency’s LOGO as an R2 object key, or null — see `assetUrl()`. Null is
+     * the COMMON case, so the card falls back to initials, never a placeholder.
+     */
+    agencyLogo?: string | null;
     net: string;
     status: string | null;
   }[];
@@ -1981,6 +1986,15 @@ export type PrHistoryVoucher = {
    */
   agencyId?: string | null;
   agencyName?: string | null;
+  /**
+   * The agency’s LOGO as an R2 object key (`agency/<id>/logo/<file>`), or null.
+   *
+   * A key, not a URL — join it with `assetUrl()`, which resolves it against the
+   * `r2PublicUrl` the same response carries. NULL IS THE COMMON CASE (most
+   * agencies have never uploaded one), so every render site needs an initials
+   * fallback rather than a placeholder image.
+   */
+  agencyLogo?: string | null;
   /** The stored voucher number (0075) — print it rather than deriving one. */
   voucherNo?: string | null;
   weekStart: string | null;

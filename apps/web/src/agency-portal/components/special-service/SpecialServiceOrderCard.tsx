@@ -65,7 +65,7 @@ export function SpecialServiceOrderCard({
 		<IzCard flat className="iz-between items-start gap-3">
 			<div className="min-w-0">
 				<div className="flex flex-wrap items-center gap-1.5">
-					<span className="font-sora text-sm font-bold text-[var(--iz-violet-l)]">
+					<span className="iz-heading text-sm font-bold text-[var(--iz-violet-l)]">
 						{row.id}
 					</span>
 					<IzPill
@@ -78,7 +78,7 @@ export function SpecialServiceOrderCard({
 						{INITIATOR_LABEL[row.initiatedBy]?.(t) ?? row.initiatedBy}
 					</IzPill>
 				</div>
-				<p className="mt-1 font-sora text-sm font-semibold text-[var(--iz-txt)]">
+				<p className="mt-1 iz-heading text-sm font-semibold text-[var(--iz-txt)]">
 					{row.prName}
 				</p>
 				<p className="iz-tiny iz-muted mt-0.5">
@@ -126,7 +126,7 @@ export function SpecialServiceOrderCard({
 				{!isLeaveAgencyService(row.serviceType) ? (
 					<>
 						<div className="iz-tiny iz-muted2">{t.ssPortal.out}</div>
-						<div className="iz-ledger font-sora text-base font-bold text-[var(--iz-gold-l)]">
+						<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-gold-l)]">
 							{row.amountOut > 0 ? formatRM(row.amountOut) : t.ssPortal.tbc}
 						</div>
 						{row.amountIn > 0 && (

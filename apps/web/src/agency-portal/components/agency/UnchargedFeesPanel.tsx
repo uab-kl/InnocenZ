@@ -1,4 +1,5 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
+import { NavAlertBadge } from "@agency-portal/components/portal/NavAlertBadge";
 import { useAgencyPenaltyProposals } from "@agency-portal/hooks/use-agency-penalty-proposals";
 import { useAgencyUncharged } from "@agency-portal/hooks/use-agency-uncharged";
 import { useStore } from "@agency-portal/lib/store";
@@ -391,10 +392,15 @@ export function UnchargedFeesPanel({
 	const pendingRm = pending.reduce((n, p) => n + Number(p.fineRm ?? 0), 0);
 
 	const toast = useStore((s) => s.toast);
-	/* Open by default. A panel about money owed and not billed should never need
-	   a click to admit it has contents; collapsing it is a choice the operator
-	   makes after reading, not a state it starts in. */
-	const [open, setOpen] = useState(true);
+	/* CLOSED by default (owner, 8 Sep 2026), reversing the note that used to sit
+	   here — it argued the panel should never need a click to admit it has
+	   contents. It no longer does: the header now carries the count as a badge
+	   and the money as words, so a shut panel already says "4 · RM 180.00
+	   outstanding" and "Add these before sending the PV". What the open state
+	   added was several rows of names and dates above the vouchers the operator
+	   came to this tab for. The argument was right; the header just answers it
+	   now. */
+	const [open, setOpen] = useState(false);
 	/* Voiding is irreversible from this screen — there is no un-void endpoint —
 	   so it takes a second click that states what it will do. Same restraint the
 	   overtime queue uses, for the same reason: the first click should not be
@@ -614,7 +620,7 @@ export function UnchargedFeesPanel({
 				type="button"
 				onClick={() => setOpen((v) => !v)}
 				aria-expanded={open}
-				className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-left"
+				className="iz-fees-head flex w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-left"
 			>
 				<ChevronDown
 					className={`h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)] transition-transform ${
@@ -625,12 +631,16 @@ export function UnchargedFeesPanel({
 				<b className="iz-tiny uppercase tracking-wide text-[var(--iz-gold-l)]">
 					{t.payroll.unchargedPenaltiesFees}
 				</b>
+				{/* The same pill the rail and the payroll tabs carry, so a pile of
+				    work looks like a pile of work wherever it is met. It counts what
+				    is NOT YET BILLED — the bar's own headline number, the one the
+				    sentence beside it spells out — and not the "not yet recorded"
+				    figure further along, which is a different debt nobody has
+				    accepted. Nothing renders at zero. */}
+				<NavAlertBadge count={count} tone="red" />
 				<span className="iz-tiny iz-muted2">
 					·{" "}
-					{fill(t.agencyQueues.notYetBilledOutstanding, {
-						n: count,
-						amount: `RM ${totalRm}`,
-					})}
+					{fill(t.agencyQueues.outstandingAmount, { amount: `RM ${totalRm}` })}
 					{penalties.length > 0 && cancellations.length > 0
 						? ` ${fill(t.agencyQueues.weeklyPlusCancellations, {
 								weekly: `RM ${penaltiesRm}`,

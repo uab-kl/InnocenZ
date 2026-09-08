@@ -852,7 +852,7 @@ export function OutletTodayOperationPanel({
 				{comcardPreviewPr && (
 					<div className="iz-outlet-comcard-sheet">
 						<p className="iz-outlet-comcard-sheet__meta">
-							<span className="font-sora font-bold text-[var(--iz-txt)]">
+							<span className="iz-heading font-bold text-[var(--iz-txt)]">
 								{comcardPreviewPr.name}
 							</span>
 							{(() => {
@@ -961,7 +961,7 @@ export function OutletTodayOperationPanel({
 											})
 								}
 							/>
-							<h3 className="font-sora text-lg font-bold">
+							<h3 className="iz-heading text-lg font-bold">
 								Rate {openPrData.name}
 							</h3>
 						</div>

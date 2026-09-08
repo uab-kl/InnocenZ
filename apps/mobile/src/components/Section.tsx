@@ -10,6 +10,7 @@
 import React, { type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale } from '../i18n';
 import { ChevronDown, type IconComponent } from './icons';
 
@@ -86,16 +87,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   title: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     letterSpacing: 1.44,
     color: C.txt,
   },
   action: {
-    fontFamily: F.manrope,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 0.24,
     color: C.goldL,
     marginTop: 4,

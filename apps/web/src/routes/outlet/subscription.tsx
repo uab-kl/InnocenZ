@@ -33,6 +33,7 @@ import {
 	tonightShiftOutletName,
 } from "@agency-portal/lib/portal-sync";
 import { useStore } from "@agency-portal/lib/store";
+import { countBillingWindows } from "@agency-portal/lib/subscription-due";
 import { periodLabel } from "@agency-portal/lib/subscription-record";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
@@ -478,7 +479,7 @@ function OutletSubscriptionPage() {
 		);
 		return fill(t.outletSubscription.settleBeforeRequote, {
 			amount: formatRM(cents / 100),
-			n: owing.length,
+			n: countBillingWindows(owing),
 		});
 	}, [backend.backed, backend.addonAmountRm, backend.paymentHistory, t]);
 
@@ -530,7 +531,7 @@ function OutletSubscriptionPage() {
 		toast(
 			fill(t.outletSubscription.unpaidReminderPos, {
 				amount: formatRM(cents / 100),
-				n: owing.length,
+				n: countBillingWindows(owing),
 			}),
 			"warn",
 		);
@@ -555,7 +556,7 @@ function OutletSubscriptionPage() {
 				toast(
 					fill(t.outletSubscription.settleBeforeRequote, {
 						amount: formatRM(cents / 100),
-						n: owing.length,
+						n: countBillingWindows(owing),
 					}),
 					"warn",
 				);
@@ -696,7 +697,7 @@ function OutletSubscriptionPage() {
 				toast(
 					fill(t.outletSubscription.settleBeforeSwitch, {
 						amount: formatRM(cents / 100),
-						n: owing.length,
+						n: countBillingWindows(owing),
 					}),
 					"warn",
 				);
@@ -796,7 +797,7 @@ function OutletSubscriptionPage() {
 							<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 								<div className="min-w-0">
 									<div className="flex flex-wrap items-center gap-2">
-										<p className="font-sora text-sm font-bold">{plan.label}</p>
+										<p className="iz-heading text-sm font-bold">{plan.label}</p>
 										{isCurrent && (
 											<IzPill variant="green">
 												{t.outletSubscription.current}
@@ -824,7 +825,7 @@ function OutletSubscriptionPage() {
 								<div className="shrink-0 sm:text-right">
 									<div className="flex items-center gap-1.5 text-[var(--iz-txt)] sm:justify-end">
 										<Users className="h-4 w-4 text-[var(--iz-gold)]" />
-										<span className="font-sora text-sm font-bold">
+										<span className="iz-heading text-sm font-bold">
 											{planCapacityLabel(
 												"outlet",
 												plan.id,
@@ -945,7 +946,7 @@ function OutletSubscriptionPage() {
 								<p className="iz-tiny iz-muted2">
 									{t.outletSubscription.owedNow}
 								</p>
-								<p className="mt-1 font-sora text-base font-bold text-[var(--iz-gold-l)]">
+								<p className="mt-1 iz-heading text-base font-bold text-[var(--iz-gold-l)]">
 									{formatRM(collections.totals.owedRm)}
 								</p>
 							</div>
@@ -954,7 +955,7 @@ function OutletSubscriptionPage() {
 									{t.outletSubscription.overdue}
 								</p>
 								<p
-									className={`mt-1 font-sora text-base font-bold ${
+									className={`mt-1 iz-heading text-base font-bold ${
 										collections.totals.overdueRm > 0
 											? "text-[var(--iz-red-l,#ff8080)]"
 											: ""
@@ -965,7 +966,7 @@ function OutletSubscriptionPage() {
 							</div>
 							<div>
 								<p className="iz-tiny iz-muted2">{t.outletSubscription.paid}</p>
-								<p className="mt-1 font-sora text-base font-bold">
+								<p className="mt-1 iz-heading text-base font-bold">
 									{formatRM(collections.totals.settledRm)}
 								</p>
 							</div>

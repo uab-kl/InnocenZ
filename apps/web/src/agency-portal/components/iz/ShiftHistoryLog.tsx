@@ -666,7 +666,7 @@ export function ShiftHistoryLog({
 											className="!mb-0 w-full text-left transition-colors hover:border-[var(--iz-gold-d)]"
 										>
 											<div className="iz-between items-start gap-2">
-												<p className="font-sora text-sm font-bold">
+												<p className="iz-heading text-sm font-bold">
 													{rollup.venue}
 												</p>
 												<span className="iz-tiny iz-muted2 flex items-center gap-1">
@@ -758,7 +758,7 @@ export function ShiftHistoryLog({
 						{detailOutletPrRollups.map((rollup) => (
 							<IzCard key={rollup.prId} flat>
 								<div className="iz-between items-start gap-2">
-									<p className="font-sora text-sm font-bold">{rollup.prName}</p>
+									<p className="iz-heading text-sm font-bold">{rollup.prName}</p>
 									<span className="iz-tiny iz-muted2">
 										{fill(t.history.countPair, {
 											a: fill(
@@ -819,13 +819,13 @@ function ShiftHistoryShiftCard({
 		<IzCard flat>
 			<div className="iz-between items-start gap-2">
 				<div>
-					<p className="font-sora text-sm font-bold">{row.dateDisplay}</p>
+					<p className="iz-heading text-sm font-bold">{row.dateDisplay}</p>
 					<p className="iz-tiny iz-muted mt-0.5">
 						{shiftHistorySubline(row, portal)}
 					</p>
 				</div>
 				<div className="text-right">
-					<div className="font-sora text-sm font-bold text-[var(--iz-gold-l)]">
+					<div className="iz-heading text-sm font-bold text-[var(--iz-gold-l)]">
 						{formatRM(breakdown.totalPayout)}
 					</div>
 					<p className="iz-tiny iz-muted2">
@@ -1019,7 +1019,7 @@ function VenueHistoryCard({
 				<div className="iz-venue-hist-card__name">{rollup.venue}</div>
 				<div className="flex shrink-0 items-center gap-1.5">
 					<div className="text-right">
-						<div className="font-sora text-sm font-bold text-[var(--iz-gold-l)]">
+						<div className="iz-heading text-sm font-bold text-[var(--iz-gold-l)]">
 							{fill(
 								rollup.shiftCount === 1
 									? t.rosterGrid.shiftCountOne
@@ -1093,10 +1093,10 @@ function PrHistoryCard({
 	const body = (
 		<>
 			<div className="iz-between items-start gap-2">
-				<div className="font-sora text-[16px] font-bold">{rollup.prName}</div>
+				<div className="iz-heading text-[16px] font-bold">{rollup.prName}</div>
 				<div className="flex shrink-0 items-center gap-1.5">
 					<div className="text-right">
-						<div className="font-sora text-sm font-bold text-[var(--iz-gold-l)]">
+						<div className="iz-heading text-sm font-bold text-[var(--iz-gold-l)]">
 							{fill(
 								rollup.shiftCount === 1
 									? t.rosterGrid.shiftCountOne

@@ -182,7 +182,7 @@ export function PrWeeklyPaymentWeekCard({
 						{prPvStatusLabel(pv.status, t)}
 					</PrStatusPill>
 				)}
-				<span className="iz-pr-week-pay-collapsible__verified font-sora text-base font-extrabold text-[var(--iz-violet-l)]">
+				<span className="iz-pr-week-pay-collapsible__verified iz-heading text-base font-extrabold text-[var(--iz-violet-l)]">
 					{summary.verifiedDayCount}/7
 				</span>
 				<span className="iz-collapsible-section__chev" aria-hidden>
@@ -200,13 +200,13 @@ export function PrWeeklyPaymentWeekCard({
 						<div className="iz-pr-week-pay-card__head">
 							<div>
 								<p className="iz-pr-week-pay-card__title">{title}</p>
-								<p className="font-sora text-sm font-bold text-[var(--iz-txt)]">
+								<p className="iz-heading text-sm font-bold text-[var(--iz-txt)]">
 									{summary.weekLabel}
 								</p>
 							</div>
 							<div className="text-right">
 								<p className="iz-tiny iz-muted2">{t.prPortal.verifiedDays}</p>
-								<p className="font-sora text-base font-extrabold text-[var(--iz-violet-l)]">
+								<p className="iz-heading text-base font-extrabold text-[var(--iz-violet-l)]">
 									{summary.verifiedDayCount}/7
 								</p>
 							</div>

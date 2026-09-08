@@ -347,7 +347,7 @@ export function OutletCutLossActions({
 				</p>
 				{bestEffortPlan ? (
 					<>
-						<p className="mt-4 font-sora text-2xl font-bold tabular-nums text-[var(--iz-green)]">
+						<p className="mt-4 iz-heading text-2xl font-bold tabular-nums text-[var(--iz-green)]">
 							{formatCutLossSavings(
 								bestEffortPlan.estimatedSavings,
 								cutLoss,

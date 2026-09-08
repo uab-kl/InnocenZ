@@ -24,6 +24,32 @@ const GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
 /** Google returns a rooftop/approximate hint; it is worth showing the operator. */
 export type GeocodePrecision = 'ROOFTOP' | 'RANGE_INTERPOLATED' | 'GEOMETRIC_CENTER' | 'APPROXIMATE';
 
+/**
+ * The six address columns an outlet row stores, as this candidate would write
+ * them.
+ *
+ * A candidate used to carry coordinates only, so committing one found from a
+ * typed address moved the pin and left `address_line_1` describing the OLD
+ * venue — the two then named different places, and nothing on screen said
+ * which one the fence was measuring from. Carrying the address the pin came
+ * from is what lets one save keep both halves in step.
+ */
+export interface GeocodeAddressParts {
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  postcode: string;
+  state: string;
+  country: string;
+}
+
+/** One entry of Google's `address_components` array. */
+interface GoogleAddressComponent {
+  long_name: string;
+  short_name: string;
+  types: string[];
+}
+
 export interface GeocodeCandidate {
   formattedAddress: string;
   lat: number;
@@ -31,6 +57,105 @@ export interface GeocodeCandidate {
   /** ROOFTOP is a real building; APPROXIMATE can be a whole suburb. */
   precision: GeocodePrecision;
   placeId: string;
+  /** The same place, split into the outlet's address columns. */
+  components: GeocodeAddressParts;
+}
+
+/** Non-empty parts, comma-joined — Google's own order, no invented words. */
+function joinParts(parts: Array<string | undefined>): string {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => !!part)
+    .join(', ');
+}
+
+const lower = (value: string) => value.trim().toLowerCase();
+
+/**
+ * `formatted_address` minus the tail the structured columns already carry.
+ *
+ * Trimming from the END only, and stopping at the first segment that does not
+ * match: a street legitimately named after its city ("Jalan Kuala Lumpur")
+ * must survive, and it would not if this filtered the whole list.
+ */
+function streetSegments(
+  formattedAddress: string,
+  tail: { city: string; state: string; postcode: string; country: string },
+): string[] {
+  const known = new Set(
+    [
+      tail.country,
+      tail.state,
+      tail.city,
+      tail.postcode,
+      // Google prints the pair as one segment: "47810 Petaling Jaya".
+      `${tail.postcode} ${tail.city}`,
+    ]
+      .map((part) => lower(part))
+      .filter(Boolean),
+  );
+
+  const segments = formattedAddress
+    .split(',')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  let end = segments.length;
+  while (end > 0 && known.has(lower(segments[end - 1] as string))) end -= 1;
+  return segments.slice(0, end);
+}
+
+/**
+ * One geocoded match -> the outlet's six address columns.
+ *
+ * City / postcode / state / country come from the COMPONENTS, which are the
+ * only reliable way to tell a suburb from a city — a positional split of the
+ * formatted string puts one in the other's column as often as not.
+ *
+ * Lines 1 and 2 come from the formatted string instead, precisely because it
+ * is what the operator just read on the candidate card. Rebuilding them from
+ * `premise` + `street_number` + `route` silently drops everything Google
+ * carries in component types nobody enumerated — a floor, an atrium, a wing —
+ * so the address saved would be thinner than the one they picked. The split
+ * point is the route: everything up to the street goes on line 1, the rest
+ * (the taman, the section) on line 2.
+ */
+export function addressPartsFromComponents(
+  components: GoogleAddressComponent[] | undefined,
+  formattedAddress: string,
+): GeocodeAddressParts {
+  const list = components ?? [];
+  const pick = (type: string): string =>
+    list.find((component) => component.types.includes(type))?.long_name.trim() ?? '';
+
+  const city =
+    pick('locality') || pick('administrative_area_level_2') || pick('sublocality_level_1');
+  const state = pick('administrative_area_level_1');
+  const postcode = pick('postal_code');
+  const country = pick('country');
+
+  const head = streetSegments(formattedAddress, { city, state, postcode, country });
+  const route = pick('route');
+  const routeAt = route
+    ? head.findIndex((segment) => lower(segment).includes(lower(route)))
+    : -1;
+  const split = routeAt >= 0 ? routeAt + 1 : 1;
+
+  // No formatted address to read (an empty or unparseable match) — rebuild the
+  // street line from whatever components did come back rather than saving "".
+  const fallback = joinParts([
+    pick('premise') || pick('establishment') || pick('point_of_interest'),
+    pick('subpremise'),
+    [pick('street_number'), route].filter(Boolean).join(' '),
+  ]);
+
+  return {
+    addressLine1: head.slice(0, split).join(', ') || fallback,
+    addressLine2: head.length > split ? head.slice(split).join(', ') : '',
+    city,
+    postcode,
+    state,
+    country,
+  };
 }
 
 export type GeocodeOutcome =
@@ -92,6 +217,7 @@ export async function geocodeAddress(address: string): Promise<GeocodeOutcome> {
       results?: Array<{
         formatted_address: string;
         place_id: string;
+        address_components?: GoogleAddressComponent[];
         geometry: { location: { lat: number; lng: number }; location_type: GeocodePrecision };
       }>;
     };
@@ -112,6 +238,7 @@ export async function geocodeAddress(address: string): Promise<GeocodeOutcome> {
       lng: r.geometry.location.lng,
       precision: r.geometry.location_type,
       placeId: r.place_id,
+      components: addressPartsFromComponents(r.address_components, r.formatted_address),
     }));
 
     if (candidates.length === 0) {

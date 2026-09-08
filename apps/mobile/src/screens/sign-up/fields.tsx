@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatMessage, useLocale } from '../../i18n';
 import { C, F } from '../../theme/theme';
+import { font } from '../../theme/fonts';
 import { Calendar, Check, ChevronDown } from '../../components/icons';
 import { useKeyboardHeight } from '../../lib/keyboard';
 import { reportFocusFromView, useKeyboardScroll } from './keyboard-scroll';
@@ -683,22 +684,21 @@ export const fieldStyles = StyleSheet.create({
 	inline: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
 	field: { marginBottom: 12 },
 	fieldLabel: {
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 13,
-		fontWeight: '600',
 		letterSpacing: 0.3,
 		color: C.prMuted,
 		marginBottom: 6,
 	},
 	hint: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 12,
 		lineHeight: 16,
 		color: C.muted2,
 		marginTop: 5,
 	},
 	fieldError: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 12,
 		lineHeight: 16,
 		color: C.red,
@@ -718,17 +718,15 @@ export const fieldStyles = StyleSheet.create({
 	input: {
 		flex: 1,
 		paddingVertical: 12,
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 16,
-		fontWeight: '600',
 		color: C.txt,
 	},
 	pickerValue: {
 		flex: 1,
 		paddingVertical: 12,
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 16,
-		fontWeight: '600',
 		color: C.txt,
 	},
 	pickerPlaceholder: { color: C.muted2, fontWeight: '500' },
@@ -744,15 +742,14 @@ export const fieldStyles = StyleSheet.create({
 	},
 	pickerSearch: {
 		paddingVertical: 11,
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 15,
-		fontWeight: '600',
 		color: C.txt,
 	},
 	pickerEmpty: {
 		paddingVertical: 20,
 		paddingHorizontal: 18,
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 14,
 		color: C.muted2,
 		textAlign: 'center',
@@ -772,9 +769,8 @@ export const fieldStyles = StyleSheet.create({
 		paddingTop: 14,
 	},
 	pickerSheetTitle: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 15,
-		fontWeight: '700',
 		color: C.txt,
 		paddingHorizontal: 18,
 		marginBottom: 8,
@@ -793,16 +789,14 @@ export const fieldStyles = StyleSheet.create({
 	pickerSheetRowOn: { backgroundColor: 'rgba(227,184,119,0.10)' },
 	pickerSheetRowText: {
 		flex: 1,
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 16,
-		fontWeight: '600',
 		color: C.prMuted,
 	},
 	pickerSheetRowTextOn: { color: C.accent },
 	pickerMeta: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 15,
-		fontWeight: '700',
 		color: C.muted2,
 		marginRight: 4,
 	},
@@ -817,9 +811,8 @@ export const fieldStyles = StyleSheet.create({
 		borderColor: C.line,
 	},
 	pickerCancelText: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 15,
-		fontWeight: '700',
 		color: C.prMuted,
 	},
 	dateCols: {
@@ -831,9 +824,8 @@ export const fieldStyles = StyleSheet.create({
 	},
 	dateCol: { flex: 1 },
 	dateColLabel: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 11,
-		fontWeight: '700',
 		letterSpacing: 0.8,
 		color: C.muted2,
 		marginBottom: 6,
@@ -848,7 +840,7 @@ export const fieldStyles = StyleSheet.create({
 	},
 	dateColRow: { paddingVertical: 10, alignItems: 'center' },
 	dateColRowOn: { backgroundColor: 'rgba(227,184,119,0.14)' },
-	dateColText: { fontFamily: F.sora, fontSize: 15, fontWeight: '600', color: C.prMuted },
+	dateColText: { ...font(600), fontSize: 15, color: C.prMuted },
 	dateColTextOn: { color: C.accent, fontWeight: '700' },
 	dateConfirm: {
 		marginHorizontal: 14,
@@ -858,9 +850,8 @@ export const fieldStyles = StyleSheet.create({
 		backgroundColor: C.accent,
 	},
 	dateConfirmText: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 15,
-		fontWeight: '700',
 		color: '#241a08',
 	},
 	choice: {
@@ -873,10 +864,10 @@ export const fieldStyles = StyleSheet.create({
 		backgroundColor: C.bg2,
 	},
 	choiceOn: { borderColor: C.accent },
-	choiceText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.prMuted },
+	choiceText: { ...font(700), fontSize: 15, color: C.prMuted },
 	choiceTextOn: { color: C.accent },
 	note: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: C.fsTiny,
 		lineHeight: C.fsTiny * 1.45,
 		color: C.muted2,
@@ -890,13 +881,12 @@ export const fieldStyles = StyleSheet.create({
 		borderBottomWidth: 1,
 		borderBottomColor: C.line,
 	},
-	summaryLabel: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.muted2 },
+	summaryLabel: { ...font(600), fontSize: 13, color: C.muted2 },
 	summaryValue: {
 		flex: 1,
 		textAlign: 'right',
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 13,
-		fontWeight: '600',
 		color: C.txt,
 	},
 	langTags: {
@@ -918,15 +908,13 @@ export const fieldStyles = StyleSheet.create({
 		backgroundColor: 'rgba(227,184,119,0.10)',
 	},
 	langTagText: {
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 13,
-		fontWeight: '600',
 		color: C.accentL,
 	},
 	langTagX: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 15,
-		fontWeight: '700',
 		color: C.muted2,
 		lineHeight: 16,
 	},
@@ -946,9 +934,8 @@ export const fieldStyles = StyleSheet.create({
 		borderWidth: 1,
 		borderColor: C.line,
 		backgroundColor: C.bg,
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 15,
-		fontWeight: '600',
 		color: C.txt,
 	},
 	langOtherAdd: {
@@ -959,9 +946,8 @@ export const fieldStyles = StyleSheet.create({
 	},
 	langOtherAddOff: { opacity: 0.4 },
 	langOtherAddText: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 14,
-		fontWeight: '700',
 		color: '#241a08',
 	},
 });

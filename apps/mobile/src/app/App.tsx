@@ -4,9 +4,11 @@
  * Rebuild stamp: 2026-07-20T00:30Z
  */
 import React, { useEffect, useState } from 'react';
-import { StatusBar } from 'react-native';
+import { Platform, StatusBar } from 'react-native';
 import { AppSafeAreaProvider } from '../lib/safe-area';
+import { useFonts } from 'expo-font';
 import { ensureWebFonts } from '../theme/theme';
+import { MANROPE_ASSETS } from '../theme/fonts';
 import { SessionProvider, useSession } from '../lib/session';
 import { ShiftSessionProvider } from '../lib/shift-session';
 import { ActiveShiftProvider } from '../lib/active-shift';
@@ -102,15 +104,57 @@ function AppShell() {
   );
 }
 
-export const App = () => (
-  <AppSafeAreaProvider>
-    <LocaleProvider>
-      <SessionProvider>
-        <StatusBar barStyle="light-content" />
-        <AppShell />
-      </SessionProvider>
-    </LocaleProvider>
-  </AppSafeAreaProvider>
-);
+/**
+ * Fonts are registered BEFORE anything draws, and the app waits for them.
+ *
+ * ⚠️ The wait is the point. React Native does not fail when a family is
+ * missing — it silently substitutes the system face, which is exactly how this
+ * app spent its whole life rendering San Francisco while the code said Sora.
+ * Painting a frame before the faces land would reintroduce that in miniature:
+ * a flash of the wrong typeface on every cold start.
+ *
+ * `error` is surfaced rather than swallowed. If a face fails to load the app
+ * still runs — it simply looks wrong — and a silent fallback is the one outcome
+ * this whole change exists to prevent, so it is logged loudly.
+ *
+ * On web `useFonts` resolves immediately; `ensureWebFonts()` above already
+ * injected the same family through a stylesheet link.
+ */
+export const App = () => {
+  const [fontsLoaded, fontError] = useFonts(MANROPE_ASSETS);
+
+  useEffect(() => {
+    if (fontError) {
+      console.error(
+        '[fonts] Manrope failed to load — the app is rendering the system face:',
+        fontError,
+      );
+    }
+  }, [fontError]);
+
+  /*
+   * Hold the frame until the faces are in — ON NATIVE ONLY.
+   *
+   * ⚠️ Gating the WEB build blanked the whole app: `#root` rendered 0 children
+   * indefinitely, with no console error to explain it. `ensureWebFonts()` above
+   * already injects the same family through a stylesheet link there, so the gate
+   * bought nothing on web and cost everything.
+   *
+   * A load ERROR never blocks either: the app then renders with the system face,
+   * which is wrong-looking but usable, and a blank screen is neither.
+   */
+  if (Platform.OS !== 'web' && !fontsLoaded && !fontError) return null;
+
+  return (
+    <AppSafeAreaProvider>
+      <LocaleProvider>
+        <SessionProvider>
+          <StatusBar barStyle="light-content" />
+          <AppShell />
+        </SessionProvider>
+      </LocaleProvider>
+    </AppSafeAreaProvider>
+  );
+};
 
 export default App;

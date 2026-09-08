@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { fmtClock, fmtDTopbar, formatRM, todayYmd, weekPvIssueDayLabel } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
@@ -368,9 +369,8 @@ const styles = StyleSheet.create({
     maxWidth: '42%',
   },
   backText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.goldL,
   },
   identityCompact: {
@@ -380,9 +380,8 @@ const styles = StyleSheet.create({
     maxWidth: 90,
   },
   nameCompact: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.txt,
   },
   meta: {
@@ -390,17 +389,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   name: {
-    fontFamily: F.sora,
-    fontWeight: '800',
+    ...font(800),
     fontSize: 16,
     lineHeight: 18,
     letterSpacing: -0.2,
     color: C.txt,
   },
   role: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     letterSpacing: 0.3,
     color: C.goldL,
     marginTop: 2,
@@ -420,16 +417,14 @@ const styles = StyleSheet.create({
     borderLeftColor: C.line,
   },
   date: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.2,
     color: C.muted,
   },
   time: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     letterSpacing: 0.3,
     color: C.txt,
     fontVariant: ['tabular-nums'],
@@ -457,9 +452,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeText: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 9,
-    fontWeight: '800',
     color: '#fff',
   },
   sheetBackdrop: {
@@ -494,7 +488,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  markAllText: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.violetL },
+  markAllText: { ...font(700), fontSize: 12, color: C.violetL },
   sheetCloseBtn: {
     marginTop: 12,
     borderRadius: 12,
@@ -504,15 +498,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.45)',
     backgroundColor: 'rgba(240,138,138,0.12)',
   },
-  sheetCloseText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
+  sheetCloseText: { ...font(700), fontSize: 15, color: C.red },
   sheetTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 22,
-    fontWeight: '800',
     color: C.txt,
   },
   sheetHint: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsTiny,
     lineHeight: C.fsTiny * 1.55,
     color: C.prMuted,
@@ -543,9 +536,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   notifTitle: {
-    fontFamily: F.manrope,
+    ...font(700),
     fontSize: C.fsSm,
-    fontWeight: '700',
     color: C.txt,
   },
   newPill: {
@@ -557,20 +549,19 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   newPillText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.amber,
   },
   notifBody: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsTiny,
     lineHeight: C.fsTiny * 1.55,
     color: C.prMuted,
     marginTop: 4,
   },
   notifAt: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: C.fsTiny,
     color: C.prMuted2,
     marginTop: 4,

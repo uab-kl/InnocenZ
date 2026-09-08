@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import {
   ApiError,
   requestAgencyLeave,
@@ -112,6 +113,15 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    * request would fire on the first, accidental tap.
    */
   const [leaveTarget, setLeaveTarget] = useState<{ id: string; name: string } | null>(null);
+  /**
+   * The server's refusal to a leave request, shown INSIDE the agency menu.
+   *
+   * It used to go to the screen-level `error`, which renders far from the
+   * agencies control and after the menu has been scrolled past — so the PR saw
+   * a tick that would not stick and a sentence somewhere else, with nothing
+   * connecting them. This is the one place the answer means anything.
+   */
+  const [leaveError, setLeaveError] = useState<string | null>(null);
   /** Portfolio gallery accordion — closed by default; count + chevron still show. */
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   /** Real agencies from the backend — the checkbox list the PR picks from. */
@@ -347,13 +357,17 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     const name = leaveTarget.name;
     setLeaveTarget(null);
     setError(null);
+    setLeaveError(null);
     try {
       await requestAgencyLeave(token, leaveTarget.id);
       setAgencyMenuOpen(false);
       await reloadMyLinks();
       showToast(formatMessage(t.profile.departureRequested, { name }));
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t.profile.departureFailed);
+      // Stays in the menu, beside the agency that refused — see `leaveError`.
+      setLeaveError(
+        e instanceof ApiError ? e.message : t.profile.departureFailed,
+      );
     }
   };
 
@@ -876,7 +890,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <Pressable
                   style={[styles.agencyBtn, agencyLocked && { opacity: 0.6 }]}
                   disabled={agencyLocked}
-                  onPress={() => setAgencyMenuOpen((o) => !o)}
+                  onPress={() => {
+                    // A refusal answers ONE attempt. Closing the menu ends it,
+                    // or reopening would show the reason for a request the PR
+                    // has not made again.
+                    setLeaveError(null);
+                    setAgencyMenuOpen((o) => !o);
+                  }}
                 >
                   <Text style={styles.agencyBtnText} numberOfLines={1}>
                     {agencyLabel}
@@ -956,6 +976,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         </Pressable>
                       );
                     })}
+                    {leaveError && (
+                      <View style={styles.agencyLeaveConfirm}>
+                        <Text style={styles.agencyLeaveError}>{leaveError}</Text>
+                      </View>
+                    )}
                     {leaveTarget && (
                       <View style={styles.agencyLeaveConfirm}>
                         {/* Brief on purpose — if anything is still unsettled,
@@ -1528,9 +1553,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   appLangLabel: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.muted,
   },
   hero: {
@@ -1550,9 +1574,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   eyebrow: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 1.68,
     color: '#c4b4d8',
   },
@@ -1570,9 +1593,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.amberBg,
   },
   badgeText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.prMuted,
   },
   profileRow: {
@@ -1597,26 +1619,23 @@ const styles = StyleSheet.create({
   },
   profileBody: { flex: 1, minWidth: 0 },
   name: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 26,
-    fontWeight: '800',
     color: C.txt,
     letterSpacing: -0.4,
   },
-  icName: { marginTop: 2, fontFamily: F.manrope, fontSize: 14, color: C.prMuted },
-  contact: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted2 },
+  icName: { marginTop: 2, ...font(), fontSize: 14, color: C.prMuted },
+  contact: { marginTop: 2, ...font(), fontSize: 12, color: C.prMuted2 },
   fieldLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 0.6,
     color: C.muted2,
     marginBottom: 3,
   },
   input: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 15,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -1643,9 +1662,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(232,194,122,0.3)',
   },
-  tierText: { fontFamily: F.sora, fontSize: 11, fontWeight: '800', color: C.accentL },
-  metaText: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  metaIc: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted2 },
+  tierText: { ...font(800), fontSize: 11, color: C.accentL },
+  metaText: { ...font(), fontSize: 12, color: C.prMuted },
+  metaIc: { ...font(), fontSize: 12, color: C.prMuted2 },
   agencyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1658,7 +1677,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
-  agencyBtnText: { flex: 1, fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt },
+  agencyBtnText: { flex: 1, ...font(600), fontSize: 14, color: C.txt },
   agencyMenu: {
     marginTop: 6,
     borderRadius: 12,
@@ -1672,6 +1691,7 @@ const styles = StyleSheet.create({
     borderTopColor: C.line,
     padding: 10,
   },
+  agencyLeaveError: { ...font(), fontSize: 12, color: C.red, lineHeight: 17 },
   agencyRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1681,7 +1701,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: C.line,
   },
-  agencyRowText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt },
+  agencyRowText: { ...font(600), fontSize: 14, color: C.txt },
   check: {
     width: 16,
     height: 16,
@@ -1710,13 +1730,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   comcardHint: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.muted,
     textAlign: 'center',
   },
   comcardSavedHint: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.green,
     textAlign: 'center',
@@ -1735,7 +1755,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   collageEmptyText: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     lineHeight: 18,
     color: C.prMuted,
@@ -1770,14 +1790,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   comcardOverlayName: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 15,
     lineHeight: 18,
-    fontWeight: '800',
     color: '#111',
   },
   comcardOverlayStats: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 10,
     lineHeight: 13,
     marginTop: 1,
@@ -1802,9 +1821,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.18)',
   },
   measureLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.blue,
   },
@@ -1817,9 +1835,8 @@ const styles = StyleSheet.create({
   },
   measureValue: {
     flexShrink: 1,
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 22,
-    fontWeight: '800',
     color: C.txt,
   },
   measureInput: {
@@ -1828,19 +1845,18 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 1,
     minWidth: 0,
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 22,
-    fontWeight: '800',
     color: C.txt,
     padding: 0,
   },
-  measureSuffix: { flexShrink: 0, fontFamily: F.manrope, fontSize: 12, color: C.blue },
+  measureSuffix: { flexShrink: 0, ...font(), fontSize: 12, color: C.blue },
   /** Locked measurement — greyed, but still legible: it is real data, not absent data. */
   measureLabelLocked: { color: C.muted2 },
   measureInputLocked: { color: C.muted, opacity: 0.7 },
   measureLockNote: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 10,
     lineHeight: 13,
     color: C.muted2,
@@ -1853,13 +1869,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     letterSpacing: 0.4,
     color: C.violetL,
   },
-  sectionHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
+  sectionHint: { ...font(), fontSize: 11, color: C.prMuted },
   galleryHead: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -1889,7 +1904,7 @@ const styles = StyleSheet.create({
   },
   galleryHeadText: { flex: 1, minWidth: 0, gap: 2 },
   gallerySub: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     lineHeight: 15,
     color: C.prMuted,
@@ -1903,13 +1918,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(183,156,232,0.1)',
   },
   galleryCountNum: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.violetL,
   },
   galleryCountDen: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted,
   },
@@ -1928,7 +1942,7 @@ const styles = StyleSheet.create({
   },
   portfolioBusyText: {
     flex: 1,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.violetL,
   },
@@ -1941,31 +1955,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(183,156,232,0.3)',
   },
-  langPillText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.violetL },
-  langEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
-  bankValue: { marginTop: 8, fontFamily: F.manrope, fontSize: 14, color: C.txt },
+  langPillText: { ...font(600), fontSize: 12, color: C.violetL },
+  langEmptyText: { marginTop: 8, ...font(), fontSize: 13, color: C.prMuted },
+  bankValue: { marginTop: 8, ...font(), fontSize: 14, color: C.txt },
   // Tabular figures: an account number is read digit by digit against a bank
   // statement, and a proportional font makes that needlessly hard.
   bankAccount: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 14,
     color: C.txt,
     fontVariant: ['tabular-nums'],
     letterSpacing: 0.5,
   },
-  bankEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.amber },
-  bankHint: { marginTop: 8, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  bankEmptyText: { marginTop: 8, ...font(), fontSize: 13, color: C.amber },
+  bankHint: { marginTop: 8, ...font(), fontSize: 12, color: C.prMuted },
   agencyLoadError: {
     marginTop: 8,
     marginBottom: 10,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.red,
   },
-  metaPending: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.amber },
+  metaPending: { marginTop: 2, ...font(), fontSize: 11, color: C.amber },
   langPickerWrap: { marginTop: 8 },
-  error: { marginTop: 10, fontFamily: F.manrope, fontSize: 13, color: C.red },
+  error: { marginTop: 10, ...font(), fontSize: 13, color: C.red },
   actions: { marginTop: 16 },
   securityBtn: {
     marginTop: 14,
@@ -1978,7 +1992,7 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
     paddingVertical: 14,
   },
-  securityText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt },
+  securityText: { ...font(600), fontSize: 14, color: C.txt },
   signOutBtn: {
     marginTop: 14,
     marginBottom: 8,
@@ -1988,5 +2002,5 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  signOutText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.red },
+  signOutText: { ...font(600), fontSize: 14, color: C.red },
 });

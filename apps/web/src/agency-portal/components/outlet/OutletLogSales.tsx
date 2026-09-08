@@ -130,7 +130,7 @@ export function OutletShiftSalesPanel({
 					<span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
 						{label ?? t.today.logSales}
 					</span>
-					<span className="font-sora ml-auto text-xs font-bold text-[var(--iz-green)]">
+					<span className="iz-heading ml-auto text-xs font-bold text-[var(--iz-green)]">
 						RM {liveSales.toLocaleString()}
 					</span>
 					<ChevronDown
@@ -161,7 +161,7 @@ export function OutletShiftSalesPanel({
 				<span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
 					{label ?? t.today.logSales}
 				</span>
-				<span className="font-sora ml-auto text-sm font-bold text-[var(--iz-green)]">
+				<span className="iz-heading ml-auto text-sm font-bold text-[var(--iz-green)]">
 					RM {liveSales.toLocaleString()}
 				</span>
 			</div>

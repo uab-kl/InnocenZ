@@ -22,7 +22,7 @@ export function PortalProfile({
 					<div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-primary text-3xl shadow-glow">
 						{(user?.name ?? defaultName[0]).toUpperCase()}
 					</div>
-					<div className="mt-3 text-lg font-display font-semibold">
+					<div className="mt-3 text-lg iz-heading font-semibold">
 						{user?.name ?? defaultName}
 					</div>
 					<div className="text-[11px] text-muted-foreground">

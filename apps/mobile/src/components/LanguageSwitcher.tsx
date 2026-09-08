@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale, type AppLocale } from '../i18n';
 import { ChevronDown } from './icons';
 
@@ -87,9 +88,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   triggerText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     color: C.muted,
     letterSpacing: 0.2,
   },
@@ -111,9 +111,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sheetTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.muted,
     marginBottom: 4,
     letterSpacing: 0.4,
@@ -130,9 +129,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(227,184,119,0.35)',
   },
   optionText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 16,
-    fontWeight: '600',
     color: C.txt,
   },
   optionTextActive: {
@@ -144,9 +142,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   cancelText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.muted,
   },
 });

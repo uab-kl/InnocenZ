@@ -259,10 +259,10 @@ function EarningsTooltip({
 	const row = payload[0].payload;
 	return (
 		<div className="rounded-lg border border-[var(--iz-line2)] bg-[var(--iz-panel)] px-3 py-2 text-xs shadow-xl">
-			<p className="font-sora text-[11px] font-bold text-[var(--iz-txt)]">
+			<p className="iz-heading text-[11px] font-bold text-[var(--iz-txt)]">
 				{row.dayFull} · {row.dateDisplay}
 			</p>
-			<p className="mt-1 font-mono text-sm font-semibold tabular-nums text-[var(--iz-gold-l)]">
+			<p className="mt-1 iz-nums text-sm font-semibold tabular-nums text-[var(--iz-gold-l)]">
 				{formatRM(row.earned)}
 			</p>
 			<p className="mt-1 text-[10px] text-[var(--iz-muted2)]">
@@ -789,22 +789,22 @@ export function OutletSalesDashboard() {
 														key={row.dateIso}
 														className="grid grid-cols-[3rem_1fr_5.5rem_5.5rem_5.5rem_6rem] items-center gap-2 rounded-lg border border-[var(--iz-line)] bg-black/15 px-2 py-1.5"
 													>
-														<span className="font-sora text-xs font-bold text-[var(--iz-txt)]">
+														<span className="iz-heading text-xs font-bold text-[var(--iz-txt)]">
 															{row.dayLabel}
 														</span>
 														<span className="truncate text-[10px] text-[var(--iz-muted2)]">
 															{row.dateDisplay}
 														</span>
-														<span className="text-right font-mono text-[10px] tabular-nums text-[var(--iz-muted)]">
+														<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
 															{formatRM(row.drinkSales)}
 														</span>
-														<span className="text-right font-mono text-[10px] tabular-nums text-[var(--iz-muted)]">
+														<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
 															{formatRM(row.tipsSales)}
 														</span>
-														<span className="text-right font-mono text-[10px] tabular-nums text-[var(--iz-muted)]">
+														<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
 															{formatRM(row.serviceSales)}
 														</span>
-														<span className="text-right font-mono text-[10px] font-semibold tabular-nums text-[var(--iz-gold-l)]">
+														<span className="text-right iz-nums text-[10px] font-semibold tabular-nums text-[var(--iz-gold-l)]">
 															{formatRM(row.total)}
 														</span>
 													</div>
@@ -849,7 +849,7 @@ export function OutletSalesDashboard() {
 														{row.agency}
 													</p>
 												</div>
-												<span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-amber-400/90">
+												<span className="shrink-0 iz-nums text-xs font-semibold tabular-nums text-amber-400/90">
 													{formatRM(row.spend)}
 												</span>
 											</div>
@@ -938,7 +938,7 @@ export function OutletSalesDashboard() {
 										dataKey="chartTick"
 										tickLine={false}
 										axisLine={false}
-										tick={{ fill: "var(--iz-muted2)", fontSize: 10 }}
+										tick={{ fill: "var(--iz-muted2)", fontSize: 11 }}
 										interval={0}
 									/>
 									<YAxis hide domain={[0, "auto"]} />
@@ -959,7 +959,7 @@ export function OutletSalesDashboard() {
 												formatCompactRm(Number(value))
 											}
 											fill="var(--iz-gold-l)"
-											fontSize={9}
+											fontSize={11}
 											fontWeight={700}
 										/>
 									</Bar>
@@ -999,7 +999,7 @@ export function OutletSalesDashboard() {
 										className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-2 rounded-xl border border-[var(--iz-line)] bg-black/15 px-3 py-2 sm:grid-cols-[3rem_1fr_6.5rem_6.5rem_6.5rem]"
 									>
 										<div className="min-w-0">
-											<span className="block font-sora text-xs font-bold text-[var(--iz-txt)]">
+											<span className="block iz-heading text-xs font-bold text-[var(--iz-txt)]">
 												{row.dayFull}
 											</span>
 											<span className="iz-tiny iz-muted2">
@@ -1019,13 +1019,13 @@ export function OutletSalesDashboard() {
 												{formatRM(row.sales)} − {formatRM(row.prCost)}
 											</p>
 										</div>
-										<span className="hidden whitespace-nowrap text-right font-mono text-[10px] tabular-nums text-[var(--iz-muted)] sm:block">
+										<span className="hidden whitespace-nowrap text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)] sm:block">
 											{formatRM(row.sales)}
 										</span>
-										<span className="hidden whitespace-nowrap text-right font-mono text-[10px] tabular-nums text-amber-400/80 sm:block">
+										<span className="hidden whitespace-nowrap text-right iz-nums text-[10px] tabular-nums text-amber-400/80 sm:block">
 											−{formatRM(row.prCost)}
 										</span>
-										<span className="whitespace-nowrap text-right font-mono text-xs font-semibold tabular-nums text-[var(--iz-gold-l)]">
+										<span className="whitespace-nowrap text-right iz-nums text-xs font-semibold tabular-nums text-[var(--iz-gold-l)]">
 											{formatRM(row.earned)}
 										</span>
 										<span className="col-span-full text-[10px] text-[var(--iz-muted2)] sm:hidden">

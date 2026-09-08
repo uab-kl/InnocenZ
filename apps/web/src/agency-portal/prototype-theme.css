@@ -1,4 +1,7 @@
-/* InnocenZ prototype design — Sora + Manrope, Lavender Dream */
+/* InnocenZ prototype design — Manrope, Lavender Dream.
+   One font, one eight-step size ladder, and titles in their own colour.
+   The header used to read "Sora + Manrope"; Sora was never loaded, so the 243
+   rules asking for it fell back to Arial. See the type scale in :root below. */
 
 :root {
 	--iz-bg: #1a1726;
@@ -66,21 +69,84 @@
 	--iz-traffic-green: #2ee6a6;
 	--iz-traffic-green-bg: rgba(46, 230, 166, 0.16);
 
-	/* Readable type scale — outlet, agency, PR, admin.
-     Bumped one step for a more legible, easier-to-scan UI across every role.
-     20px base keeps body copy comfortable on both web portals and the PR phone view. */
-	--iz-fs-base: 20px;
-	--iz-fs-tiny: 17px;
-	--iz-fs-sm: 19px;
-	--iz-fs-label: 16px;
+	/* ── ONE TYPE LADDER · agency, outlet, PR, admin ──────────────────────────
+     Eight steps, and nothing between them. Before this, 27 different px values
+     were in use and a size meant nothing: a `text-[8px]` micro-label rendered
+     at 15px, larger than `.iz-tiny` at 14px, because the readability override
+     layer bumped whichever selectors someone happened to list. Size now encodes
+     ONE thing — depth in the hierarchy — so a bigger word is always a more
+     important word. Reach for the role name, never a raw px value. */
+	--iz-fs-micro: 11px; /* dense grid cells, superscripts */
+	--iz-fs-tiny: 12px; /* badges, pills, counts, meta */
+	--iz-fs-caption: 14px; /* hints, table headers, timestamps */
+	--iz-fs-label: 16px; /* field labels, nav, secondary copy */
+	--iz-fs-body: 18px; /* DEFAULT — body copy, table cells */
+	--iz-fs-title: 22px; /* card + sheet titles */
+	--iz-fs-head: 28px; /* page and section headings */
+	--iz-fs-display: 34px; /* KPI numbers, hero figures */
+
+	/* Legacy aliases — kept so older rules keep resolving, re-pointed onto the
+     ladder rather than left as free-floating values. */
+	--iz-fs-base: var(--iz-fs-body);
+	--iz-fs-sm: var(--iz-fs-label);
+
+	/* The rem BASIS for the portals. Deliberately NOT a ladder step: Tailwind's
+     spacing utilities (p-4, gap-2 …) are rem too, so lowering this would shrink
+     every gutter in both portals, not just the type. Type is pinned in px on
+     the ladder above; this only keeps the existing layout rhythm. */
 	--iz-portal-fs: 20px;
+
+	/* ── ONE FONT ─────────────────────────────────────────────────────────────
+     Every family in this file resolves here. 243 rules used to ask for "Sora",
+     which is not in the webfont import in styles.css and never was — so all of
+     that text silently fell back to Arial, while the ~20 rules asking for
+     Manrope got real Manrope. That split is what read as the font changing at
+     random between panels. Manrope is already loaded, so this costs no request. */
+	--iz-font: "Manrope", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+	/* Titles carry their own colour so hierarchy survives even where two lines
+     share a size. Lavender is the brand accent; champagne gold stays reserved
+     for "act" on buttons, per the portal button-colour rule. */
+	--iz-title: var(--iz-violet-l);
 }
 
-.font-sora {
-	font-family: "Sora", sans-serif;
+/* Marks heading and figure text. It sets no face of its own — the portal shell
+   already supplies the one font — but several size rules select on it, so it
+   stays as a hook rather than becoming dead markup. */
+.iz-heading {
+	font-family: var(--iz-font);
 }
-.font-manrope {
-	font-family: "Manrope", sans-serif;
+
+/* A section heading INSIDE a card or sheet. Distinct from `.iz-sect-label`,
+   which groups whole cards and carries a rule and 26px of air above it — this one
+   sits tight inside a card that is already bounded. */
+.iz-card-sect {
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-label);
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--iz-title);
+}
+
+/* The ROLE half of the portal greeting. "Atlas Agency (Owner)" is two facts of
+   different weight — the organisation decides what the screen may do, the role
+   decides how much of it — so the role sits one ladder step under the name
+   rather than sharing its size and reading as one long title.
+
+   A step rather than an `em` fraction: 0.8em of the heading would land on
+   22.4px, a value on no scale, and it would drift again the next time the
+   greeting moves. This tracks the ladder instead. */
+.iz-heading-role {
+	font-size: var(--iz-fs-title);
+	font-weight: 700;
+}
+
+/* Tabular numerals in the one font: what `font-mono` was actually reached for. */
+.iz-nums {
+	font-family: var(--iz-font);
+	font-variant-numeric: tabular-nums;
+	font-feature-settings: "tnum";
 }
 
 /* App shell — phone frame on desktop */
@@ -105,7 +171,7 @@
 		),
 		radial-gradient(500px 300px at 50% 50%, rgba(0, 0, 0, 0.35), transparent);
 	color: var(--iz-txt);
-	font-family: "Manrope", sans-serif;
+	font-family: var(--iz-font);
 }
 
 .iz-phone {
@@ -155,7 +221,7 @@
 	color: var(--iz-txt);
 	z-index: 50;
 	flex-shrink: 0;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 
 .iz-viewport {
@@ -236,7 +302,7 @@
 
 /* Typography */
 .iz-wordmark {
-	font-family: "Playfair Display", Georgia, serif;
+	font-family: var(--iz-font);
 	font-weight: 700;
 	letter-spacing: 0.2px;
 	font-size: 22px;
@@ -271,7 +337,7 @@
 .iz-ledger {
 	font-variant-numeric: tabular-nums;
 	font-feature-settings: "tnum";
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 
 /* Map legacy Tailwind card shells to prototype cards */
@@ -282,13 +348,13 @@
 
 /* Section label */
 .iz-sect-label {
-	font-family: "Sora", sans-serif;
-	font-size: var(--iz-fs-label);
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-body);
 	letter-spacing: 1.6px;
 	text-transform: uppercase;
 	color: var(--iz-accent-l);
 	margin: 26px 2px 12px;
-	font-weight: 700;
+	font-weight: 800;
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -373,9 +439,9 @@
 	padding: 14px 16px;
 	cursor: pointer;
 	list-style: none;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 700;
-	font-size: 17px;
+	font-size: 16px;
 	color: var(--iz-txt);
 	user-select: none;
 }
@@ -448,13 +514,13 @@
 	min-width: 0;
 }
 .iz-icon-guide__label {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 700;
-	font-size: 17px;
+	font-size: 16px;
 	color: var(--iz-txt);
 }
 .iz-icon-guide__meaning {
-	font-size: 15px;
+	font-size: 14px;
 	line-height: 1.4;
 	color: var(--iz-muted);
 }
@@ -515,7 +581,7 @@
 	padding: 14px;
 	font-size: 18px;
 	font-weight: 700;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	cursor: pointer;
 	display: flex;
 	align-items: center;
@@ -831,7 +897,7 @@
 	font-size: 12px;
 	font-weight: 600;
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
-	font-family: "Sora", system-ui, sans-serif;
+	font-family: var(--iz-font);
 }
 .iz-gmaps-marker-label-pr {
 	top: auto;
@@ -846,9 +912,9 @@
 	border-radius: 50%;
 	background: #4285f4;
 	color: #fff;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 700;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	border: 3px solid #fff;
 	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
@@ -969,7 +1035,7 @@
 	bottom: 4px;
 	margin: 0;
 	padding: 2px 4px;
-	font-size: 10px;
+	font-size: 11px;
 	color: #5f6368;
 	background: rgba(255, 255, 255, 0.82);
 	border-radius: 2px;
@@ -1043,7 +1109,7 @@
 	border-radius: 999px;
 	background: var(--iz-grad-gold);
 	color: #1a1726;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 800;
 	font-size: 12px;
 }
@@ -1057,9 +1123,9 @@
 	gap: 4px;
 	padding: 3px 8px 3px 6px;
 	border-radius: 999px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 800;
-	font-size: 9.5px;
+	font-size: 11px;
 	letter-spacing: 0.02em;
 	line-height: 1.4;
 	border: 1px solid transparent;
@@ -1171,12 +1237,12 @@
 }
 .iz-comcard-field label {
 	display: block;
-	font-size: 9.5px;
+	font-size: 11px;
 	letter-spacing: 0.6px;
 	text-transform: uppercase;
 	color: var(--iz-muted2);
 	margin-bottom: 6px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 700;
 }
 .iz-comcard-field input {
@@ -1186,8 +1252,8 @@
 	border-radius: 11px;
 	padding: 10px 8px;
 	color: var(--iz-gold-l);
-	font-family: "Sora", sans-serif;
-	font-size: 17px;
+	font-family: var(--iz-font);
+	font-size: 16px;
 	font-weight: 700;
 	text-align: center;
 }
@@ -1234,7 +1300,7 @@
 }
 .iz-comcard-field-locknote {
 	margin-top: 6px;
-	font-size: 10px;
+	font-size: 11px;
 	line-height: 1.35;
 	color: var(--iz-muted2);
 }
@@ -1261,7 +1327,7 @@
 	top: 10px;
 	left: 10px;
 	z-index: 2;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 800;
 	letter-spacing: 0.14em;
@@ -1290,8 +1356,8 @@
 	right: 0;
 	z-index: 2;
 	text-align: center;
-	font-family: "Sora", sans-serif;
-	font-size: 8.5px;
+	font-family: var(--iz-font);
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	color: rgba(183, 156, 232, 0.88);
@@ -1410,7 +1476,7 @@
 	gap: 6px;
 	flex-shrink: 0;
 }
-.iz-comcard-3d-preview--sheet .iz-comcard-3d-preview-stats .font-sora {
+.iz-comcard-3d-preview--sheet .iz-comcard-3d-preview-stats .iz-heading {
 	font-size: 18px;
 	line-height: 1.1;
 }
@@ -1502,12 +1568,12 @@
 .iz-comcard-3d-preview--card .iz-comcard-3d-preview-plate {
 	top: 6px;
 	left: 6px;
-	font-size: 10px;
+	font-size: 11px;
 	letter-spacing: 0.1em;
 }
 .iz-comcard-3d-preview--card .iz-comcard-3d-preview-measures {
 	bottom: 5px;
-	font-size: 7.5px;
+	font-size: 11px;
 }
 .iz-comcard-3d-preview--card .iz-comcard-3d-preview-floor {
 	bottom: 14%;
@@ -1520,10 +1586,10 @@
 	border-radius: 8px;
 }
 .iz-comcard-3d-preview--card-compact .iz-comcard-3d-preview-plate {
-	font-size: 9px;
+	font-size: 11px;
 }
 .iz-comcard-3d-preview--card-compact .iz-comcard-3d-preview-measures {
-	font-size: 9px;
+	font-size: 11px;
 }
 .iz-comcard-3d-preview-card-meta {
 	padding: 6px 0 0;
@@ -1591,7 +1657,7 @@
 	color: var(--iz-muted);
 	font-size: 12px;
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	cursor: pointer;
 	transition: 0.15s;
 }
@@ -1635,7 +1701,7 @@
 	margin-bottom: 14px;
 }
 .iz-pr-account-hero__eyebrow {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.16em;
@@ -1654,7 +1720,7 @@
 	align-items: center;
 	padding: 4px 9px;
 	border-radius: 999px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
@@ -1676,7 +1742,7 @@
 .iz-pr-account-hero__avatar {
 	width: 80px !important;
 	height: 80px !important;
-	font-size: 1.75rem;
+	font-size: var(--iz-fs-display);
 	border-radius: 22px !important;
 	box-shadow:
 		0 10px 28px rgba(0, 0, 0, 0.32),
@@ -1688,7 +1754,7 @@
 	padding-top: 2px;
 }
 .iz-pr-account-hero__name {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 22px;
 	font-weight: 800;
 	line-height: 1.15;
@@ -1719,7 +1785,7 @@
 }
 .iz-pr-account-hero__meta-text,
 .iz-pr-account-hero__meta-ic {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	line-height: 1.3;
 }
@@ -1797,8 +1863,8 @@
 	margin-top: 12px;
 	padding: 0 4px;
 }
-.iz-pr-account-hero__comcard-visual .iz-comcard-3d-preview-stats .font-sora {
-	font-size: 17px;
+.iz-pr-account-hero__comcard-visual .iz-comcard-3d-preview-stats .iz-heading {
+	font-size: 16px;
 }
 .iz-pr-account-hero__comcard-hint {
 	position: relative;
@@ -1916,7 +1982,7 @@
 }
 .iz-portfolio-comcard__name {
 	margin: 0;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 5.33cqw;
 	font-weight: 800;
 	line-height: 1.2;
@@ -1940,7 +2006,7 @@
 	z-index: 3;
 	padding: 3px 8px;
 	border-radius: 999px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
@@ -1972,8 +2038,8 @@
 .iz-pr-measure-field label {
 	display: block;
 	margin-bottom: 4px;
-	font-family: "Sora", sans-serif;
-	font-size: 10px;
+	font-family: var(--iz-font);
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -2000,15 +2066,15 @@
 	border: none;
 	background: transparent;
 	color: var(--iz-txt);
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	text-align: center;
 	outline: none;
 }
 .iz-pr-measure-field__suffix {
 	flex-shrink: 0;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 600;
 	color: var(--iz-muted);
@@ -2032,16 +2098,16 @@
 	border: 1px solid var(--iz-line);
 }
 .iz-pr-account-hero__kpi-cell .l {
-	font-family: "Sora", sans-serif;
-	font-size: 10px;
+	font-family: var(--iz-font);
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-muted);
 }
 .iz-pr-account-hero__kpi-cell .n {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	line-height: 1.1;
 	color: var(--iz-txt);
@@ -2062,12 +2128,12 @@
 	justify-content: space-between;
 	gap: 8px;
 	margin-bottom: 8px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	color: var(--iz-muted);
 }
 .iz-pr-account-hero__lifecycle-head b {
-	font-size: 13px;
+	font-size: 12px;
 	color: var(--iz-gold-l);
 }
 .iz-pr-account-hero__bar {
@@ -2090,7 +2156,7 @@
 	justify-content: space-between;
 	gap: 8px;
 	margin-bottom: 10px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.14em;
@@ -2167,7 +2233,7 @@
 }
 
 .iz-pr-page-header__label {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 600;
 	letter-spacing: 0.14em;
@@ -2181,12 +2247,12 @@
 
 .iz-pr-page-header__title {
 	margin-top: 6px;
-	font-family: "Sora", sans-serif;
-	font-size: clamp(1.4rem, 5.2vw, 1.75rem);
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-title);
 	font-weight: 800;
 	line-height: 1.12;
 	letter-spacing: -0.45px;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 
 .iz-pr-page-header__accent {
@@ -2220,7 +2286,7 @@
 	border: none;
 	border-radius: 11px;
 	background: none;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 600;
 	line-height: 1.2;
@@ -2290,14 +2356,14 @@
 	line-height: 1.5;
 }
 .iz-pr-app .iz-tiny {
-	font-size: 17px;
+	font-size: 16px;
 	line-height: 1.55;
 }
 .iz-pr-app .iz-sm {
-	font-size: 19px;
+	font-size: 18px;
 }
 .iz-pr-app .iz-sect-label {
-	font-size: 15px;
+	font-size: 14px;
 	color: #d8c8ec;
 }
 .iz-pr-app .iz-btn {
@@ -2307,10 +2373,10 @@
 	font-size: 16px;
 }
 .iz-pr-app .iz-chip {
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-pr-app .iz-pill {
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-pr-app .iz-cardttl {
 	font-size: 22px;
@@ -2319,7 +2385,7 @@
 	font-size: 18px;
 }
 .iz-pr-app .iz-data-table th {
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-pr-app .text-xs {
 	font-size: 16px !important;
@@ -2330,31 +2396,31 @@
 	line-height: 1.45rem !important;
 }
 .iz-pr-app .text-base {
-	font-size: 19px !important;
+	font-size: 18px !important;
 }
 .iz-pr-app .text-lg {
-	font-size: 21px !important;
+	font-size: 22px !important;
 }
 .iz-pr-app .text-\[7px\],
 .iz-pr-app .text-\[8px\],
 .iz-pr-app .text-\[9px\],
 .iz-pr-app .text-\[10px\] {
-	font-size: 15px !important;
+	font-size: 14px !important;
 }
 .iz-pr-app .text-\[11px\] {
-	font-size: 17px !important;
+	font-size: 16px !important;
 }
 .iz-pr-app .iz-pr-shift-status__time-cell .l {
 	font-size: 14px;
 }
 .iz-pr-app .iz-pr-shift-status__time-cell .n {
-	font-size: 17px;
+	font-size: 16px;
 }
 .iz-pr-app .iz-pr-shift-status__table {
-	font-size: 17px;
+	font-size: 16px;
 }
 .iz-pr-app .iz-pr-shift-status__table thead th {
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-pr-app .iz-muted {
 	color: var(--iz-pr-muted);
@@ -2476,8 +2542,8 @@
 }
 .iz-pr-shift-status__time-cell .l {
 	display: block;
-	font-family: "Sora", sans-serif;
-	font-size: 10px;
+	font-family: var(--iz-font);
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -2486,7 +2552,7 @@
 .iz-pr-shift-status__time-cell .n {
 	display: block;
 	margin-top: 4px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	line-height: 1.3;
@@ -2499,7 +2565,7 @@
 	border: 1px solid rgba(183, 156, 232, 0.14);
 }
 .iz-pr-shift-status__targets-label {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.12em;
@@ -2514,20 +2580,20 @@
 	flex-wrap: wrap;
 }
 .iz-pr-shift-status__target-price .v {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 22px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
 	line-height: 1.1;
 }
 .iz-pr-shift-status__target-price .sep {
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-muted2);
 }
 .iz-pr-shift-status__target-price .t {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-muted);
 }
@@ -2568,7 +2634,7 @@
 .iz-pr-shift-status__targets-grid .v {
 	display: block;
 	margin-top: 2px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -2629,14 +2695,14 @@
 }
 .iz-pr-shift-status__qty {
 	min-width: 32px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-txt);
 	white-space: nowrap;
 }
 .iz-pr-shift-status__item-label {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -2652,7 +2718,7 @@
 }
 .iz-pr-shift-status__money {
 	white-space: nowrap;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 700;
 }
 .iz-pr-shift-status__money.wages {
@@ -2668,7 +2734,7 @@
 	vertical-align: middle;
 }
 .iz-pr-shift-status__payout {
-	font-size: 13px;
+	font-size: 12px;
 	white-space: nowrap;
 }
 .iz-pr-shift-status__ok {
@@ -2702,7 +2768,7 @@
 	border: 1px solid rgba(167, 139, 250, 0.35);
 	background: rgba(167, 139, 250, 0.1);
 	color: var(--iz-violet-l);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	line-height: 1.2;
@@ -2793,7 +2859,7 @@
 .iz-pr-outlet-brief:not(.is-open) .iz-pr-outlet-brief__hero-mark {
 	width: 44px;
 	height: 44px;
-	font-size: 1.35rem;
+	font-size: var(--iz-fs-head);
 }
 .iz-pr-outlet-brief__hero-head {
 	position: relative;
@@ -2825,7 +2891,7 @@
 .iz-pr-outlet-brief__status-v {
 	display: block;
 	margin-top: 2px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
@@ -2857,7 +2923,7 @@
 	margin-top: 8px;
 }
 .iz-pr-outlet-brief__assign {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
@@ -2876,8 +2942,8 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-family: "Sora", sans-serif;
-	font-size: 1.75rem;
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-display);
 	font-weight: 800;
 	color: rgba(255, 255, 255, 0.9);
 	background: rgba(255, 255, 255, 0.12);
@@ -2891,8 +2957,8 @@
 	min-width: 0;
 }
 .iz-pr-outlet-brief__name {
-	font-family: "Sora", sans-serif;
-	font-size: 21px;
+	font-family: var(--iz-font);
+	font-size: 22px;
 	font-weight: 800;
 	line-height: 1.15;
 	color: #fff;
@@ -2939,7 +3005,7 @@
 	border-top: 1px solid var(--iz-line);
 }
 .iz-pr-outlet-brief__meta-k {
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -2947,7 +3013,7 @@
 }
 .iz-pr-outlet-brief__meta-v {
 	margin-top: 3px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	line-height: 1.3;
@@ -2965,7 +3031,7 @@
 }
 
 .iz-pr-week-pay__net {
-	font-size: 13px;
+	font-size: 12px;
 	white-space: nowrap;
 }
 
@@ -3023,8 +3089,8 @@
 }
 .iz-pr-week-pay__day .n {
 	display: block;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 800;
 	color: var(--iz-txt);
 }
@@ -3042,7 +3108,7 @@
 	text-align: center;
 	padding: 7px 4px;
 	border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 700;
 	color: var(--iz-txt);
 }
@@ -3062,7 +3128,7 @@
 	font-weight: 500;
 }
 .iz-pr-week-pay__status-pill {
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
@@ -3071,7 +3137,7 @@
 .iz-pr-week-pay__total-h {
 	text-align: right;
 	padding: 8px 0 8px 6px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 800;
 	color: var(--iz-gold-l);
 	white-space: nowrap;
@@ -3085,7 +3151,7 @@
 }
 .iz-pr-week-pay--large .iz-pr-week-pay__table {
 	min-width: 100%;
-	font-size: 13px;
+	font-size: 12px;
 }
 .iz-pr-week-pay--large .iz-pr-week-pay__corner {
 	width: 88px;
@@ -3098,7 +3164,7 @@
 	font-size: 12px;
 }
 .iz-pr-week-pay--large .iz-pr-week-pay__day .n {
-	font-size: 17px;
+	font-size: 16px;
 }
 .iz-pr-week-pay--large .iz-pr-week-pay__row-label {
 	font-size: 12px;
@@ -3106,7 +3172,7 @@
 }
 .iz-pr-week-pay--large .iz-pr-week-pay__table tbody td {
 	padding: 11px 6px;
-	font-size: 13px;
+	font-size: 12px;
 }
 .iz-pr-week-pay--large .iz-pr-week-pay__net {
 	font-size: 16px;
@@ -3133,10 +3199,10 @@
 	margin-bottom: 12px;
 }
 .iz-pr-week-pay-card__title {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 	letter-spacing: -0.02em;
 }
 .iz-pr-week-pay-collapsible {
@@ -3215,7 +3281,7 @@
 	border: none;
 	background: rgba(255, 107, 107, 0.14);
 	color: var(--iz-red);
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.03em;
 	text-transform: uppercase;
@@ -3243,10 +3309,10 @@
 	);
 }
 .iz-pay-hist-hero__title {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-pay-hist-list {
 	display: flex;
@@ -3295,8 +3361,8 @@
 }
 .iz-pay-hist-card__metrics .v {
 	display: block;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 800;
 	margin-top: 2px;
 }
@@ -3368,7 +3434,7 @@
 	);
 }
 .iz-pr-shift-scan-row__label {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -3549,8 +3615,8 @@
 	background: rgba(0, 0, 0, 0.25);
 }
 .iz-self-log-form__prefix {
-	font-family: "Sora", sans-serif;
-	font-size: 19px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
 }
@@ -3559,8 +3625,8 @@
 	min-width: 0;
 	border: none;
 	background: transparent;
-	font-family: "Sora", sans-serif;
-	font-size: 24px;
+	font-family: var(--iz-font);
+	font-size: 22px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	outline: none;
@@ -3573,7 +3639,7 @@
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.2);
 	color: var(--iz-txt);
-	font-size: 13px;
+	font-size: 12px;
 	resize: vertical;
 }
 .iz-self-log-form__submit {
@@ -3588,8 +3654,8 @@
 	border-bottom: 1px solid var(--iz-line);
 }
 .iz-self-log-outlet-head__title {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
 	text-transform: uppercase;
@@ -3654,8 +3720,8 @@
 .iz-self-log-drink-row__qty-val {
 	min-width: 24px;
 	text-align: center;
-	font-family: "Sora", sans-serif;
-	font-size: 17px;
+	font-family: var(--iz-font);
+	font-size: 16px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
 }
@@ -3677,8 +3743,8 @@
 	color: var(--iz-muted);
 }
 .iz-self-log-summary__total {
-	font-family: "Sora", sans-serif;
-	font-size: 19px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
 }
@@ -3707,11 +3773,11 @@
 	margin-bottom: 18px;
 }
 .iz-security-card__title {
-	font-family: "Sora", sans-serif;
-	font-size: 21px;
+	font-family: var(--iz-font);
+	font-size: 22px;
 	font-weight: 800;
 	letter-spacing: -0.35px;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 	line-height: 1.2;
 }
 .iz-security-form {
@@ -3751,9 +3817,9 @@
 	border: 1px solid rgba(255, 117, 117, 0.28);
 	background: var(--iz-red-bg);
 	color: var(--iz-red);
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
-	font-family: "Manrope", sans-serif;
+	font-family: var(--iz-font);
 	cursor: pointer;
 	transition: 0.15s;
 	text-align: left;
@@ -3792,16 +3858,16 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
 	color: var(--iz-muted);
 }
 .iz-account-security__current {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-txt);
 	word-break: break-word;
@@ -3812,7 +3878,7 @@
 	border: 1px solid var(--iz-line);
 	background: var(--iz-bg2);
 	padding: 10px 12px;
-	font-size: 15px;
+	font-size: 14px;
 	color: var(--iz-txt);
 	outline: none;
 }
@@ -3872,8 +3938,8 @@
 
 .iz-security-menu-row__label {
 	display: block;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-txt);
 }
@@ -4049,7 +4115,7 @@
 	padding-bottom: 0;
 }
 .iz-pv-sum-lbl {
-	font-size: 13px;
+	font-size: 12px;
 	color: var(--iz-muted2);
 	flex-shrink: 0;
 }
@@ -4068,7 +4134,7 @@
 	white-space: nowrap;
 }
 .iz-pv-sum-table td {
-	font-size: 13px;
+	font-size: 12px;
 	vertical-align: top;
 }
 .iz-pv-sum-table tfoot td {
@@ -4098,15 +4164,15 @@
 	);
 }
 .iz-pv-summary-hero-lbl {
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: 0.06em;
+	font-size: var(--iz-fs-label);
+	font-weight: 800;
+	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--iz-muted2);
+	color: var(--iz-title);
 }
 .iz-pv-summary-hero-amt {
 	margin-top: 4px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 28px;
 	font-weight: 800;
 	line-height: 1.1;
@@ -4140,7 +4206,7 @@
 }
 .iz-pv-summary-hero-amt--compact {
 	margin-top: 0;
-	font-size: 24px;
+	font-size: 22px;
 }
 .iz-pv-summary-details-chevron {
 	color: var(--iz-muted);
@@ -4168,7 +4234,7 @@
 }
 .iz-pv-summary-lbl {
 	flex-shrink: 0;
-	font-size: 13px;
+	font-size: 12px;
 	color: var(--iz-muted2);
 }
 .iz-pv-summary-val {
@@ -4188,11 +4254,11 @@
 	background: rgba(0, 0, 0, 0.12);
 }
 .iz-pv-summary-bank-lbl {
-	font-size: 12px;
-	font-weight: 700;
+	font-size: var(--iz-fs-label);
+	font-weight: 800;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--iz-muted2);
+	color: var(--iz-title);
 	margin-bottom: 4px;
 }
 .iz-pv-summary-bank-val {
@@ -4209,11 +4275,11 @@
 }
 .iz-pv-summary-table-h {
 	padding: 12px 16px 10px;
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.1em;
+	font-size: var(--iz-fs-label);
+	font-weight: 800;
+	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--iz-muted2);
+	color: var(--iz-title);
 	border-bottom: 1px solid var(--iz-line);
 }
 
@@ -4231,7 +4297,7 @@
 	min-width: 0;
 }
 .iz-pv-detail-id {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-muted);
@@ -4286,7 +4352,7 @@
 	margin: 0 0 10px;
 	text-align: center;
 	font-family: Georgia, "Times New Roman", serif;
-	font-size: 24px;
+	font-size: 22px;
 	font-weight: 700;
 	letter-spacing: 0.03em;
 	color: #111;
@@ -4300,7 +4366,7 @@
 }
 .iz-pv-doc-issuer strong {
 	display: block;
-	font-size: 10.5px;
+	font-size: 11px;
 	color: #222;
 	margin-bottom: 4px;
 }
@@ -4400,7 +4466,7 @@
 	background: #e8e8e8;
 	font-weight: 700;
 	text-align: left;
-	font-size: 9.5px;
+	font-size: 11px;
 	white-space: nowrap;
 }
 .iz-pv-doc-items tbody tr:not(.blank):hover {
@@ -4515,7 +4581,7 @@
 		width: 96px;
 	}
 	.iz-pv-doc-title {
-		font-size: 26px;
+		font-size: 28px;
 		text-align: center;
 	}
 	.iz-pv-doc-top {
@@ -4539,8 +4605,8 @@
 }
 
 .iz-stat-tile .n {
-	font-family: "Sora", sans-serif;
-	font-size: 21px;
+	font-family: var(--iz-font);
+	font-size: 22px;
 	font-weight: 800;
 	line-height: 1.1;
 }
@@ -4557,7 +4623,7 @@
 	text-transform: uppercase;
 }
 .iz-feature-card .big-num {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 800;
 	font-size: 28px;
 	color: var(--iz-gold-l);
@@ -4574,9 +4640,9 @@
 	gap: 5px;
 	padding: 6px 12px;
 	border-radius: 999px;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	letter-spacing: 0.4px;
 	line-height: 1.4;
 }
@@ -4666,14 +4732,14 @@
 	align-items: center;
 	padding-top: 0;
 	padding-bottom: 0;
-	font-size: 15px !important;
+	font-size: 14px !important;
 }
 .iz-job-composer-bar .iz-chip {
 	min-height: 38px;
 	align-items: center;
 	padding-top: 0;
 	padding-bottom: 0;
-	font-size: 15px !important;
+	font-size: 14px !important;
 }
 .iz-job-composer-slot {
 	min-width: 0;
@@ -4688,8 +4754,8 @@
 	border-radius: 10px;
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-txt);
 	outline: none;
@@ -4698,7 +4764,7 @@
 		background 0.15s;
 }
 .iz-job-composer-bar .iz-job-composer-slot:not(.iz-time-picker)::placeholder {
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 600;
 }
 .iz-job-composer-bar .iz-job-composer-slot:not(.iz-time-picker):focus {
@@ -4712,8 +4778,8 @@
 	border-radius: 10px;
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-txt);
 	box-shadow: none;
@@ -4747,8 +4813,8 @@
 }
 .iz-job-posting-micro-label {
 	display: block;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
@@ -4801,8 +4867,8 @@
 	min-width: 0;
 }
 .iz-job-posting-input {
-	font-family: "Sora", sans-serif;
-	font-size: 17px;
+	font-family: var(--iz-font);
+	font-size: 16px;
 	font-weight: 600;
 	color: var(--iz-green);
 	outline: none;
@@ -4847,7 +4913,7 @@
 	box-shadow: none !important;
 	padding-left: 0;
 	padding-right: 28px;
-	font-size: 17px;
+	font-size: 16px;
 	font-weight: 600;
 }
 .iz-job-posting-textarea {
@@ -4860,8 +4926,8 @@
 	border-radius: 10px;
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
-	font-family: "Manrope", sans-serif;
-	font-size: 17px;
+	font-family: var(--iz-font);
+	font-size: 16px;
 	line-height: 1.45;
 	color: var(--iz-txt);
 	resize: none;
@@ -4874,7 +4940,7 @@
 }
 .iz-job-posting-textarea::placeholder {
 	color: var(--iz-muted2);
-	font-size: 17px;
+	font-size: 16px;
 }
 .iz-job-posting-textarea:focus {
 	border-color: rgba(232, 194, 122, 0.4);
@@ -4882,7 +4948,7 @@
 }
 .iz-job-posting-type-summary {
 	margin-top: 8px;
-	font-size: 17px;
+	font-size: 16px;
 	line-height: 1.45;
 	color: var(--iz-muted2);
 }
@@ -4900,8 +4966,8 @@
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	padding: 8px 14px;
-	font-family: "Sora", sans-serif;
-	font-size: 17px;
+	font-family: var(--iz-font);
+	font-size: 16px;
 	font-weight: 700;
 	line-height: 1.3;
 	color: var(--iz-muted);
@@ -4945,8 +5011,8 @@
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	padding: 5px 12px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-muted);
 	white-space: nowrap;
@@ -4967,7 +5033,7 @@
 }
 .iz-agency-job-posting .iz-roster-filter-label,
 .iz-special-service-filters--job-posting .iz-roster-filter-label {
-	font-size: 15px;
+	font-size: 14px;
 	letter-spacing: 0.1em;
 }
 .iz-special-service-filter-field--bare {
@@ -4981,7 +5047,7 @@
 }
 .iz-job-postings-table {
 	min-width: 760px;
-	font-size: 17px;
+	font-size: 16px;
 }
 .iz-job-postings-table th {
 	padding: 10px 12px;
@@ -5006,7 +5072,7 @@
 }
 .iz-job-posting-col-type {
 	color: var(--iz-txt);
-	font-size: 17px;
+	font-size: 16px;
 	font-weight: 700;
 }
 .iz-job-posting-col-time {
@@ -5020,7 +5086,7 @@
 }
 .iz-job-posting-col-cost {
 	color: var(--iz-txt);
-	font-size: 17px;
+	font-size: 16px;
 	font-weight: 700;
 }
 .iz-job-posting-budget {
@@ -5153,7 +5219,7 @@
 	color: var(--iz-muted2);
 }
 .iz-post-job-dock-stats__value {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
 	line-height: 1.2;
@@ -5198,7 +5264,7 @@
 	padding: 10px 12px;
 }
 .iz-post-job-legend__title {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.12em;
@@ -5250,7 +5316,7 @@
 	align-items: center;
 	gap: 10px;
 	margin-top: 20px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 800;
 	letter-spacing: 0.16em;
@@ -5382,7 +5448,7 @@
 	background: rgba(255, 255, 255, 0.02);
 }
 .iz-post-job-help-panel__title {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 800;
 	letter-spacing: 0.14em;
@@ -5401,7 +5467,7 @@
 	padding: 0;
 }
 .iz-post-job-help-panel__list li::before {
-	content: "¹3 a0 a0";
+	content: "–  ";
 	color: var(--iz-green);
 	font-weight: 700;
 }
@@ -5417,10 +5483,10 @@
 	gap: 10px;
 }
 .iz-event-picker__title {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-event-picker__tabs {
 	display: flex;
@@ -5438,7 +5504,7 @@
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 800;
 	letter-spacing: 0.16em;
@@ -5513,7 +5579,7 @@
 }
 .iz-event-card__sub {
 	padding: 2px 9px 0;
-	font-size: 10px;
+	font-size: 11px;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-muted2);
@@ -5571,10 +5637,10 @@
 	gap: 10px;
 }
 .iz-event-editor__title {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-event-editor__body {
 	display: flex;
@@ -5680,7 +5746,7 @@
 	flex-direction: column;
 	align-items: flex-start;
 	gap: 2px;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
 }
@@ -5700,7 +5766,7 @@
 	max-width: 100%;
 }
 .iz-chosen-event-bar__kind {
-	font-size: 10px;
+	font-size: 11px;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	font-weight: 800;
@@ -5731,7 +5797,7 @@
 	align-items: flex-start;
 	gap: 5px;
 	margin-top: 5px;
-	font-size: 12.5px;
+	font-size: 12px;
 	color: var(--iz-muted);
 	line-height: 1.45;
 }
@@ -5775,7 +5841,7 @@
 	border-radius: 999px;
 	border: 1px solid rgba(255, 255, 255, 0.28);
 	background: rgba(0, 0, 0, 0.62);
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 800;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
@@ -5900,8 +5966,8 @@
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	padding: 6px 10px;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-muted);
 	transition:
@@ -6057,7 +6123,7 @@
 	color: #f0e4ff;
 }
 .iz-post-job-tier-col__name {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 800;
 	color: var(--iz-muted);
@@ -6091,7 +6157,7 @@
 	min-width: 0;
 	max-width: 2.5rem;
 	text-align: center;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
@@ -6130,8 +6196,8 @@
 .iz-post-job-tier-col__count input {
 	width: 100%;
 	text-align: center;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
 }
@@ -6233,7 +6299,7 @@
 }
 .iz-post-job-tier-col-head__label {
 	text-align: center;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	line-height: 1.25;
@@ -6382,10 +6448,10 @@
 	padding: 12px;
 }
 .iz-post-job-summary-card__title {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 	margin-bottom: 10px;
 }
 .iz-post-job-summary-card__row {
@@ -6412,7 +6478,7 @@
 	line-height: 1.3;
 }
 .iz-post-job-summary-card__value {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
 	line-height: 1.2;
@@ -6424,7 +6490,7 @@
 	font-size: 22px;
 }
 .iz-post-job-summary-card__value--gold {
-	font-size: 19px;
+	font-size: 18px;
 	color: var(--iz-gold-l);
 }
 .iz-post-job-aside-btn {
@@ -6437,7 +6503,7 @@
 	border: 1px solid rgba(183, 156, 232, 0.38);
 	background: transparent;
 	color: var(--iz-txt);
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 700;
 	cursor: pointer;
 	transition:
@@ -6458,7 +6524,7 @@
 	border: none;
 	background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
 	color: #0a1a10;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	cursor: pointer;
@@ -6519,7 +6585,7 @@
 	border: 1px solid rgba(183, 156, 232, 0.35);
 	background: rgba(183, 156, 232, 0.1);
 	padding: 3px 9px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-violet-l);
@@ -6648,78 +6714,77 @@
 
 /* Outlet portal — larger type across all pages */
 [data-portal="outlet"] .iz-portal-main {
-	--iz-portal-fs: 20px;
-	font-size: var(--iz-portal-fs);
+	font-size: var(--iz-fs-body);
 }
 [data-portal="outlet"] .iz-portal-main .iz-tiny {
-	font-size: 18px;
+	font-size: var(--iz-fs-label);
 	line-height: 1.5;
 }
 [data-portal="outlet"] .iz-portal-main .iz-sm {
-	font-size: 19px;
+	font-size: var(--iz-fs-label);
 }
 [data-portal="outlet"] .iz-portal-main .iz-sect-label {
-	font-size: 16px;
+	font-size: var(--iz-fs-body);
 }
 [data-portal="outlet"] .iz-portal-main .iz-profile-field__label {
-	font-size: 16px;
+	font-size: var(--iz-fs-caption);
 }
 [data-portal="outlet"] .iz-portal-main .iz-profile-field__value,
 [data-portal="outlet"] .iz-portal-main .iz-profile-field__input {
-	font-size: 19px;
+	font-size: var(--iz-fs-body);
 }
 [data-portal="outlet"] .iz-portal-main .iz-profile-field__hint {
-	font-size: 18px;
+	font-size: var(--iz-fs-tiny);
 }
 [data-portal="outlet"] .iz-portal-main .text-xs {
-	font-size: 0.9375rem !important;
-	line-height: 1.35rem !important;
+	font-size: var(--iz-fs-caption) !important;
+	line-height: 1.45 !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-sm {
-	font-size: 1.0625rem !important;
-	line-height: 1.5rem !important;
+	font-size: var(--iz-fs-label) !important;
+	line-height: 1.45 !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-base {
-	font-size: 1.125rem !important;
+	font-size: var(--iz-fs-body) !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-lg,
-[data-portal="outlet"] .iz-portal-main h2.font-sora.text-lg {
-	font-size: 1.375rem !important;
-	line-height: 1.75rem !important;
+[data-portal="outlet"] .iz-portal-main h2.iz-heading.text-lg {
+	font-size: var(--iz-fs-title) !important;
+	line-height: 1.35 !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-xl {
-	font-size: 1.5625rem !important;
+	font-size: var(--iz-fs-head) !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-\[7px\] {
-	font-size: 14px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-\[8px\] {
-	font-size: 15px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-\[9px\] {
-	font-size: 16px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-\[10px\] {
-	font-size: 17px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
 [data-portal="outlet"] .iz-portal-main .text-\[11px\] {
-	font-size: 18px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
-[data-portal="outlet"] .iz-portal-main header h2.font-sora {
-	font-size: 1.5rem;
+[data-portal="outlet"] .iz-portal-main header h2.iz-heading {
+	font-size: var(--iz-fs-head);
 }
 [data-portal="outlet"] .iz-portal-main .iz-collapsible-section__title {
-	font-size: 18px;
+	font-size: var(--iz-fs-body);
 }
 [data-portal="outlet"] .iz-portal-main .iz-collapsible-section__hint,
 [data-portal="outlet"] .iz-portal-main .iz-collapsible-section__action {
-	font-size: 16px;
+	font-size: var(--iz-fs-caption);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-section-title {
-	font-size: 16px !important;
+	font-size: var(--iz-fs-title) !important;
 }
 [data-portal="outlet"] .iz-portal-main .iz-job-posting-micro-label {
-	font-size: 16px;
+	font-size: var(--iz-fs-tiny);
 }
 [data-portal="outlet"] .iz-portal-main .iz-job-posting-input {
 	font-size: 18px;
@@ -6734,7 +6799,7 @@
 	font-size: 18px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-job-postings-table th {
-	font-size: 15px;
+	font-size: 14px;
 }
 [data-portal="outlet"]
 	.iz-portal-main
@@ -6745,43 +6810,43 @@
 	.iz-special-service-filters--job-posting
 	.iz-special-service-filter-date
 	.iz-roster-planning-date-trigger {
-	font-size: 18px;
+	font-size: var(--iz-fs-label);
 }
 [data-portal="outlet"] .iz-portal-main .iz-pill {
-	font-size: 16px;
+	font-size: var(--iz-fs-tiny);
 }
 [data-portal="outlet"] .iz-portal-main .iz-chip {
-	font-size: 18px;
+	font-size: var(--iz-fs-caption);
 }
 [data-portal="outlet"] .iz-portal-main .iz-btn {
-	font-size: 21px;
+	font-size: var(--iz-fs-label);
 }
 [data-portal="outlet"] .iz-portal-main .iz-cardttl {
-	font-size: 1.25rem;
+	font-size: var(--iz-fs-title);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-page-eyebrow {
-	font-size: 14px;
+	font-size: var(--iz-fs-tiny);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-page-hint {
-	font-size: 16px;
+	font-size: var(--iz-fs-caption);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-empty {
-	font-size: 17px;
+	font-size: var(--iz-fs-caption);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-ta-card__label {
 	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-ta-card__kind {
-	font-size: 13px;
+	font-size: 12px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-ta-card__value {
-	font-size: 19px;
+	font-size: 18px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-ta-card__gap {
-	font-size: 15px;
+	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-stat-chip__label {
-	font-size: 13px;
+	font-size: 12px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-stat-chip__value {
 	font-size: 18px;
@@ -6796,16 +6861,16 @@
 	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-job-status-badge {
-	font-size: 16px;
+	font-size: var(--iz-fs-tiny);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-stat-cell .l {
-	font-size: 13px;
+	font-size: 12px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-stat-cell .n {
 	font-size: 18px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-quick-chip {
-	font-size: 16px;
+	font-size: var(--iz-fs-caption);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-pr-tonight-card__ops {
 	font-size: 18px;
@@ -6816,31 +6881,31 @@
 	padding: 11px 12px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-pr-tonight-card .iz-pill {
-	font-size: 15px;
+	font-size: var(--iz-fs-tiny);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-shift-metric__label {
-	font-size: 13px;
+	font-size: 12px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-shift-metric__value {
-	font-size: 1.125rem;
+	font-size: var(--iz-fs-title);
 }
 [data-portal="outlet"]
 	.iz-portal-main
 	.iz-outlet-shift-metric--ink
 	.iz-outlet-shift-metric__value {
-	font-size: 1.0625rem;
+	font-size: var(--iz-fs-label);
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-shift-metric__tiers {
-	font-size: 15px;
+	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-tier-request-table {
-	font-size: 17px;
+	font-size: 16px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-tier-request-table th {
 	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-tier-request-table td {
-	font-size: 17px;
+	font-size: 16px;
 }
 [data-portal="outlet"]
 	.iz-portal-main
@@ -6858,7 +6923,7 @@
 	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-hist-shift-metric .v {
-	font-size: 17px;
+	font-size: 16px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-hist-shift-earn-cell .l {
 	font-size: 14px;
@@ -6867,34 +6932,34 @@
 	font-size: 18px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-hist-shift-range {
-	font-size: 17px;
+	font-size: 16px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-report-tabs__btn {
-	font-size: 15px;
+	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-report-hero__label,
 [data-portal="outlet"] .iz-portal-main .iz-outlet-report-hero__formula {
-	font-size: 15px;
+	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-report-badge {
 	font-size: 14px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-report-metric__label,
 [data-portal="outlet"] .iz-portal-main .iz-outlet-report-expand__tile-label {
-	font-size: 13px;
+	font-size: 12px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-outlet-report-metric__value,
 [data-portal="outlet"] .iz-portal-main .iz-outlet-report-expand__tile-value {
 	font-size: 18px;
 }
 [data-portal="outlet"] .iz-portal-main .iz-portal-table {
-	font-size: 18px;
+	font-size: var(--iz-fs-label);
 }
 [data-portal="outlet"] .iz-portal-main .iz-portal-table th {
-	font-size: 16px;
+	font-size: var(--iz-fs-label);
 }
 [data-portal="outlet"] .iz-portal-main .iz-portal-table-name {
-	font-size: 20px;
+	font-size: var(--iz-fs-label);
 }
 .iz-outlet-page {
 	display: flex;
@@ -6909,7 +6974,7 @@
 	padding-top: 4px;
 }
 .iz-outlet-page-eyebrow {
-	font-size: 12px;
+	font-size: var(--iz-fs-tiny);
 	font-weight: 700;
 	letter-spacing: 0.14em;
 	text-transform: uppercase;
@@ -6917,12 +6982,12 @@
 }
 .iz-outlet-page-hint {
 	margin-top: 2px;
-	font-size: 12px;
+	font-size: var(--iz-fs-caption);
 	line-height: 1.4;
 	color: var(--iz-muted2);
 }
 .iz-outlet-empty {
-	font-size: 13px;
+	font-size: var(--iz-fs-caption);
 	color: var(--iz-muted);
 }
 .iz-outlet-tier-icon {
@@ -6999,7 +7064,7 @@
 	color: var(--iz-outlet-data-target, var(--iz-violet-l));
 }
 .iz-outlet-ta-card__value {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
 	line-height: 1.2;
@@ -7054,7 +7119,7 @@
 .iz-outlet-stat-chip__value {
 	display: block;
 	margin-top: 2px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -7123,7 +7188,7 @@
 }
 .iz-outlet-shift-kpi-row .iz-outlet-stat-chip__label {
 	flex-shrink: 0;
-	font-size: 10px;
+	font-size: 11px;
 	letter-spacing: 0.05em;
 	line-height: 1.25;
 }
@@ -7134,7 +7199,7 @@
 	justify-content: center;
 	width: 100%;
 	margin-top: 0;
-	font-size: 1.9rem;
+	font-size: var(--iz-fs-display);
 	line-height: 1;
 	text-align: center;
 }
@@ -7142,7 +7207,7 @@
 	.iz-portal-main
 	.iz-outlet-shift-kpi-row
 	.iz-outlet-stat-chip__value {
-	font-size: 1.9rem;
+	font-size: var(--iz-fs-display);
 }
 .iz-outlet-shift-kpi-row .iz-outlet-ta-card {
 	height: 100%;
@@ -7153,17 +7218,17 @@
 	gap: 4px;
 }
 .iz-outlet-shift-kpi-row .iz-outlet-ta-card__label {
-	font-size: 10px;
+	font-size: 11px;
 	letter-spacing: 0.05em;
 }
 .iz-outlet-shift-kpi-row .iz-outlet-ta-card__rows {
 	gap: 4px;
 }
 .iz-outlet-shift-kpi-row .iz-outlet-ta-card__kind {
-	font-size: 10px;
+	font-size: 11px;
 }
 .iz-outlet-shift-kpi-row .iz-outlet-ta-card__value {
-	font-size: 13px;
+	font-size: 12px;
 }
 .iz-outlet-shift-kpi-row .iz-outlet-ta-card__gap {
 	margin-top: 4px;
@@ -7175,7 +7240,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	font-size: 9px !important;
+	font-size: 11px !important;
 	padding: 2px 5px !important;
 	letter-spacing: 0;
 }
@@ -7202,7 +7267,7 @@
 }
 .iz-outlet-shift-stat-hero .iz-outlet-stat-chip__value {
 	margin-top: 6px;
-	font-size: 1.65rem;
+	font-size: var(--iz-fs-display);
 	line-height: 1.1;
 }
 
@@ -7286,8 +7351,8 @@
 	white-space: nowrap;
 }
 .iz-outlet-tonight-summary-table tbody td {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	line-height: 1.2;
 	color: var(--iz-txt);
@@ -7406,7 +7471,7 @@
 	white-space: nowrap;
 }
 .iz-outlet-live-earnings-table__id {
-	font-family: ui-monospace, monospace;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	color: var(--iz-muted);
 	white-space: nowrap;
@@ -7434,7 +7499,7 @@
 	font-variant-numeric: tabular-nums;
 }
 .iz-outlet-live-earnings-table__total {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
 	color: #f87171;
@@ -7482,7 +7547,7 @@
 }
 .iz-outlet-pr-earnings-sheet__id {
 	margin-top: 2px;
-	font-family: ui-monospace, monospace;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	color: var(--iz-muted);
 	word-break: break-all;
@@ -7563,8 +7628,8 @@
 	color: var(--iz-muted2);
 }
 .iz-outlet-pr-earnings-sheet__total span:last-child {
-	font-family: "Sora", sans-serif;
-	font-size: 21px;
+	font-family: var(--iz-font);
+	font-size: 22px;
 	font-weight: 800;
 	font-variant-numeric: tabular-nums;
 	color: #f87171;
@@ -7584,20 +7649,20 @@
 	max-height: min(92vh, 900px);
 }
 .iz-sheet--live-sales .iz-cardttl {
-	font-size: 1.35rem;
+	font-size: var(--iz-fs-head);
 }
 .iz-sheet--live-sales .iz-sm {
-	font-size: 15px;
+	font-size: 14px;
 	line-height: 1.45;
 }
 .iz-sheet--live-sales .iz-outlet-pr-earnings-sheet__row dd {
-	font-size: 17px;
+	font-size: 16px;
 }
 .iz-sheet--live-sales .iz-outlet-pr-earnings-sheet__total span:last-child {
 	font-size: 22px;
 }
 .iz-sheet--live-sales .iz-btn {
-	font-size: 17px;
+	font-size: 16px;
 }
 
 /* Labor cost report — budget monitoring style on Today page */
@@ -7649,10 +7714,10 @@
 }
 .iz-outlet-labor-report__title {
 	margin: 0;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-outlet-labor-report__period {
 	font-size: 12px;
@@ -7701,8 +7766,8 @@
 	margin: 0;
 	padding: 14px 12px;
 	text-align: center;
-	font-family: "Sora", sans-serif;
-	font-size: 1.65rem;
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-display);
 	font-weight: 800;
 	line-height: 1.1;
 	color: var(--iz-txt);
@@ -7949,8 +8014,8 @@
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	padding: 6px 11px 6px 8px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	line-height: 1.2;
 	white-space: nowrap;
@@ -8014,7 +8079,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 800;
 	color: #fff;
 	font-size: 18px;
@@ -8050,13 +8115,13 @@
 	width: 72px;
 	height: 72px;
 	border-radius: 20px;
-	font-size: 26px;
+	font-size: 28px;
 }
 .iz-avatar--xl {
 	width: 96px;
 	height: 96px;
 	border-radius: 24px;
-	font-size: 32px;
+	font-size: 34px;
 }
 .iz-avatar--xl.iz-avatar-photo--logo img {
 	object-position: 50% 55%;
@@ -8119,8 +8184,8 @@
 .iz-settings-profile {
 	gap: 2px;
 }
-.iz-settings-profile .font-sora.text-lg {
-	font-size: 1.35rem;
+.iz-settings-profile .iz-heading.text-lg {
+	font-size: var(--iz-fs-head);
 }
 
 /* Profile settings — clear view vs edit */
@@ -8138,7 +8203,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	font-size: var(--iz-fs-label);
+	font-size: var(--iz-fs-caption);
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
@@ -8153,8 +8218,8 @@
 }
 .iz-profile-field__value {
 	margin: 0;
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: var(--iz-fs-sm);
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-body);
 	font-weight: 650;
 	line-height: 1.35;
 	color: var(--iz-txt);
@@ -8173,7 +8238,7 @@
 	border: 1px solid rgba(217, 185, 122, 0.45);
 	background: rgba(8, 5, 15, 0.45);
 	color: var(--iz-txt);
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: var(--iz-fs-sm);
 	font-weight: 650;
 	outline: none;
@@ -8245,8 +8310,8 @@
 }
 .iz-profile-edit-banner__title {
 	margin: 0;
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 750;
 	color: var(--iz-amber);
 }
@@ -8273,7 +8338,7 @@
 .iz-profile-photo-actions__change {
 	min-height: 36px;
 	padding-inline: 14px;
-	font-size: 13px;
+	font-size: 12px;
 }
 .iz-profile-photo-actions__remove {
 	border: none;
@@ -8313,12 +8378,12 @@
 	width: 100%;
 	min-height: 48px;
 	justify-content: center;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	gap: 8px;
 }
 .iz-profile-edit-dock__cancel {
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-profile-edit-dock__save {
 	font-weight: 750;
@@ -8380,7 +8445,7 @@
 }
 .iz-outlet-stat-cell .n {
 	margin-top: 4px;
-	font-family: var(--font-sora, inherit);
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	line-height: 1.2;
@@ -8421,7 +8486,7 @@
 	border-bottom-color: var(--iz-violet);
 }
 .iz-agency-home-tab .l {
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
@@ -8433,8 +8498,8 @@
 }
 .iz-agency-home-tab .n {
 	margin-top: 6px;
-	font-family: var(--font-sora, inherit);
-	font-size: 20px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 800;
 	line-height: 1.2;
 	color: var(--iz-txt);
@@ -8444,7 +8509,7 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 3px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-violet);
@@ -8466,7 +8531,7 @@
 	letter-spacing: 0.06em;
 }
 .iz-pr-home-tabs .iz-agency-home-tab .n {
-	font-size: 17px;
+	font-size: 16px;
 }
 .iz-pr-home-tabs .iz-agency-home-tab .n.truncate {
 	overflow: hidden;
@@ -8514,7 +8579,7 @@
 }
 .iz-pr-shift-card__venue-name {
 	margin-top: 2px;
-	font-family: var(--font-sora, inherit);
+	font-family: var(--iz-font);
 	font-size: 18px;
 	font-weight: 800;
 	line-height: 1.2;
@@ -8539,8 +8604,8 @@
 	color: var(--iz-muted2);
 }
 .iz-pr-shift-card__fact-v {
-	font-family: var(--font-sora, inherit);
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	line-height: 1.3;
 	color: var(--iz-txt);
@@ -8570,7 +8635,7 @@
 	border-radius: 999px;
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.03);
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-txt);
 	transition: opacity 0.15s ease;
@@ -8637,7 +8702,7 @@
 	background: var(--iz-bg2);
 }
 .iz-outlet-shift-metric__label {
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
@@ -8656,8 +8721,8 @@
 	color: var(--iz-muted2);
 }
 .iz-outlet-shift-metric__value {
-	font-family: var(--font-sora, inherit);
-	font-size: 1rem;
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-title);
 	font-weight: 800;
 	line-height: 1.15;
 	font-variant-numeric: tabular-nums;
@@ -8671,7 +8736,6 @@
 }
 .iz-outlet-shift-metric--ink .iz-outlet-shift-metric__value {
 	color: var(--iz-txt);
-	font-size: 0.95rem;
 }
 .iz-outlet-shift-metric__tiers {
 	display: block;
@@ -8684,8 +8748,8 @@
 	display: inline-flex;
 	align-items: baseline;
 	gap: 2px;
-	font-family: var(--font-sora, inherit);
-	font-size: 1.05rem;
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-title);
 	font-weight: 800;
 	line-height: 1;
 	font-variant-numeric: tabular-nums;
@@ -8762,11 +8826,11 @@
 	box-shadow: 0 0 18px rgba(167, 139, 250, 0.12);
 }
 .iz-outlet-pos-addon__title {
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 1.125rem;
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-title);
 	font-weight: 800;
 	line-height: 1.25;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-outlet-pos-addon__subtitle {
 	margin-top: 4px;
@@ -8776,7 +8840,7 @@
 }
 .iz-outlet-pos-addon__lead {
 	margin-top: 12px;
-	font-size: 15px;
+	font-size: 14px;
 	line-height: 1.5;
 	color: var(--iz-muted2);
 }
@@ -8798,7 +8862,7 @@
 .iz-outlet-pos-addon__cta {
 	margin-top: 16px;
 	width: 100%;
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-outlet-pos-addon__sent {
 	margin-top: 14px;
@@ -8811,7 +8875,7 @@
 	font-size: 16px;
 	font-weight: 700;
 	line-height: 1.3;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-outlet-pos-addon__sent-body {
 	margin-top: 6px;
@@ -8849,8 +8913,8 @@
 	border-bottom: 1px solid var(--iz-line);
 }
 .iz-outlet-tier-request-table td.tabular-nums {
-	font-family: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 }
 .iz-outlet-tier-request-table tbody tr:last-child td {
@@ -8864,12 +8928,12 @@
 	white-space: nowrap;
 }
 .iz-outlet-tier-request-table__target {
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-green);
 }
 .iz-outlet-tier-request-table__commission {
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-txt);
 }
@@ -9035,9 +9099,9 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-logo-tile span {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 900;
-	font-size: 36px;
+	font-size: 34px;
 	color: #1a1726;
 	text-shadow: 0 1px 1px rgba(255, 255, 255, 0.4);
 }
@@ -9090,7 +9154,7 @@ button.iz-pr-offer-row:hover {
 		0 0 30px -8px rgba(183, 156, 232, 0.4);
 }
 .iz-role-card h4 {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 700;
 	margin-bottom: 3px;
@@ -9098,7 +9162,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 }
 .iz-role-card p {
-	font-size: 11.5px;
+	font-size: 12px;
 	color: var(--iz-muted);
 	line-height: 1.45;
 }
@@ -9145,10 +9209,10 @@ button.iz-pr-offer-row:hover {
 	border-radius: 10px;
 	background: var(--iz-glass2);
 	border: 1px solid var(--iz-line);
-	font-size: 15px;
+	font-size: 14px;
 	color: var(--iz-muted);
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	letter-spacing: 0.2px;
 	transition: 0.15s;
 	white-space: nowrap;
@@ -9177,7 +9241,7 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid var(--iz-line);
 	font-size: 16px;
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	letter-spacing: 0.2px;
 	color: var(--iz-txt);
 	cursor: pointer;
@@ -9272,7 +9336,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 	font-size: 16px;
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 .iz-phone-field__num:focus {
 	outline: none;
@@ -9305,8 +9369,8 @@ button.iz-pr-offer-row:hover {
  * `.iz-hist-select-trigger` so it can only ever be defined in one place.
  */
 .iz-txn-filter-heading {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
@@ -9362,7 +9426,7 @@ button.iz-pr-offer-row:hover {
 	cursor: pointer;
 }
 .iz-venue-hist-card__name {
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: 22px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -9387,8 +9451,8 @@ button.iz-pr-offer-row:hover {
 }
 .iz-txn-metric .value {
 	margin-top: 6px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
 }
@@ -9444,7 +9508,7 @@ button.iz-pr-offer-row:hover {
 	}
 }
 .iz-outlet-hist-section-label {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 800;
 	letter-spacing: 0.12em;
@@ -9548,7 +9612,7 @@ button.iz-pr-offer-row:hover {
 	border-radius: 999px;
 	background: rgba(255, 255, 255, 0.12);
 	color: var(--iz-muted2);
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 800;
 	box-shadow: 0 0 0 2px rgba(30, 28, 38, 0.95);
 }
@@ -9646,8 +9710,8 @@ button.iz-pr-offer-row:hover {
 	color: rgba(255, 255, 255, 0.26);
 }
 .iz-outlet-hist-card__name {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	white-space: nowrap;
@@ -9668,7 +9732,7 @@ button.iz-pr-offer-row:hover {
 	text-align: right;
 }
 .iz-outlet-hist-card__shift-count {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -9729,8 +9793,8 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-metric__value {
 	display: block;
 	margin-top: 6px;
-	font-family: "Sora", sans-serif;
-	font-size: 17px;
+	font-family: var(--iz-font);
+	font-size: 16px;
 	font-weight: 800;
 	line-height: 1.1;
 }
@@ -9784,7 +9848,7 @@ button.iz-pr-offer-row:hover {
 	height: 18px;
 }
 .iz-shift-metric-label--lg .iz-shift-metric-label__text {
-	font-size: 13px;
+	font-size: 12px;
 	letter-spacing: 0.04em;
 }
 .iz-shift-metric-label--earned,
@@ -9813,8 +9877,8 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid rgba(183, 156, 232, 0.35);
 	background: rgba(18, 15, 28, 0.88);
 	color: var(--iz-accent-l);
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	cursor: pointer;
 	transition:
@@ -9860,7 +9924,7 @@ button.iz-pr-offer-row:hover {
 		inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .iz-outlet-hist-metrics-guide__title {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	letter-spacing: 0.06em;
@@ -9930,7 +9994,7 @@ button.iz-pr-offer-row:hover {
 	height: 17px;
 }
 .iz-txn-metric .label .iz-shift-metric-label--lg .iz-shift-metric-label__text {
-	font-size: 13px;
+	font-size: 12px;
 }
 .iz-txn-metric .label .iz-shift-metric-label--lg .iz-shift-metric-label__icon {
 	width: 18px;
@@ -9977,7 +10041,7 @@ button.iz-pr-offer-row:hover {
 		gap: 6px;
 	}
 	.iz-outlet-hist-metric__value {
-		font-size: 15px;
+		font-size: 14px;
 	}
 	.iz-outlet-hist-bar__label {
 		display: none;
@@ -10023,7 +10087,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-shift-log-summary__metric-label {
 	display: block;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -10032,8 +10096,8 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-shift-log-summary__metric-value {
 	display: block;
 	margin-top: 5px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	line-height: 1.1;
@@ -10093,10 +10157,10 @@ button.iz-pr-offer-row:hover {
 }
 .iz-hist-money-breakdown__card-title {
 	margin: 0;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-hist-money-breakdown__card-sub {
 	margin: 2px 0 0;
@@ -10110,7 +10174,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-hist-money-breakdown__card-total {
 	margin: 0;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: #4ade80;
@@ -10147,7 +10211,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-hist-money-breakdown__metric-label {
 	display: block;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -10164,15 +10228,15 @@ button.iz-pr-offer-row:hover {
 .iz-hist-money-breakdown__metric-hint {
 	display: block;
 	margin-top: 3px;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 600;
 	color: var(--iz-muted2);
 }
 .iz-hist-money-breakdown__metric-value {
 	display: block;
 	margin-top: 5px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	line-height: 1.1;
@@ -10232,7 +10296,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-shift-log-card__date {
 	margin: 0;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -10249,7 +10313,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-shift-log-card__total {
 	margin: 0;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: #4ade80;
@@ -10278,7 +10342,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-shift-log-card__metric-label {
 	display: block;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -10287,7 +10351,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-shift-log-card__metric-value {
 	display: block;
 	margin-top: 5px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -10402,8 +10466,8 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-report-hero__value {
 	margin-top: 4px;
-	font-family: "Sora", sans-serif;
-	font-size: clamp(1.75rem, 4vw, 2rem);
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-head);
 	font-weight: 800;
 	line-height: 1.1;
 	color: var(--iz-gold-l);
@@ -10507,8 +10571,8 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-report-metric__value {
 	margin-top: 6px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
 }
@@ -10537,8 +10601,8 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-report-expand__tile-value {
 	margin-top: 4px;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: var(--iz-txt);
 }
@@ -10600,10 +10664,10 @@ button.iz-pr-offer-row:hover {
 	border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 .iz-outlet-report-chart__title {
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-outlet-report-chart__hint {
 	margin-top: 2px;
@@ -10634,10 +10698,10 @@ button.iz-pr-offer-row:hover {
 	margin-bottom: 12px;
 }
 .iz-outlet-report-sidebar__title {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 	margin: 0;
 }
 .iz-outlet-report-sidebar__badge {
@@ -10696,8 +10760,8 @@ button.iz-pr-offer-row:hover {
 	font-weight: 800;
 }
 .iz-outlet-report-pr-card__name {
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	white-space: nowrap;
@@ -10715,8 +10779,8 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-report-pr-card__earned {
 	flex-shrink: 0;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
 	white-space: nowrap;
@@ -10748,7 +10812,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-report-pr-bar__label {
 	flex-shrink: 0;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 600;
 	color: var(--iz-muted2);
 	white-space: nowrap;
@@ -10814,7 +10878,7 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	color: var(--iz-txt);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.12px;
@@ -10848,7 +10912,7 @@ button.iz-pr-offer-row:hover {
 	gap: 7px;
 	padding: 0 16px 0 13px;
 	border-radius: 999px;
-	font-size: 15px;
+	font-size: 14px;
 }
 /* Larger Cancel edit control on Settings / Profile */
 .iz-topbar-back--cancel {
@@ -10943,7 +11007,7 @@ button.iz-pr-offer-row:hover {
 	line-height: 1.1;
 }
 .iz-topbar-date {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.2px;
@@ -10951,7 +11015,7 @@ button.iz-pr-offer-row:hover {
 	white-space: nowrap;
 }
 .iz-topbar-time {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
@@ -10965,10 +11029,10 @@ button.iz-pr-offer-row:hover {
 		gap: 0;
 	}
 	.iz-topbar-date {
-		font-size: 10px;
+		font-size: 11px;
 	}
 	.iz-topbar-time {
-		font-size: 13px;
+		font-size: 12px;
 	}
 	.iz-topbar-role {
 		display: none;
@@ -10979,7 +11043,7 @@ button.iz-pr-offer-row:hover {
 	flex: 1;
 }
 .iz-topbar-name {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 800;
 	font-size: 16px;
 	line-height: 1.15;
@@ -10990,10 +11054,10 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 }
 .iz-topbar-role {
-	font-size: 13px;
+	font-size: 12px;
 	color: var(--iz-gold-l);
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	letter-spacing: 0.3px;
 	white-space: nowrap;
 	overflow: hidden;
@@ -11112,8 +11176,8 @@ button.iz-pr-offer-row:hover {
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .iz-hub-hero h2 {
-	font-family: "Sora", sans-serif;
-	font-size: 24px;
+	font-family: var(--iz-font);
+	font-size: 22px;
 	font-weight: 800;
 	letter-spacing: -0.4px;
 	color: var(--iz-txt);
@@ -11139,7 +11203,7 @@ button.iz-pr-offer-row:hover {
 	text-align: center;
 }
 .iz-hub-stat .n {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 18px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -11193,10 +11257,10 @@ button.iz-pr-offer-row:hover {
 }
 .iz-hub-quick-card .title {
 	margin-top: 10px;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-hub-quick-card .desc {
 	margin-top: 4px;
@@ -11257,14 +11321,14 @@ button.iz-pr-offer-row:hover {
 	border-color: rgba(57, 217, 138, 0.2);
 }
 .iz-hub-nav-card .title {
-	font-family: "Sora", sans-serif;
-	font-size: 13.5px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-hub-nav-card .desc {
 	margin-top: 3px;
-	font-size: 10.5px;
+	font-size: 11px;
 	color: var(--iz-muted2);
 	line-height: 1.35;
 }
@@ -11331,9 +11395,9 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	align-items: center;
 	gap: 5px;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	cursor: pointer;
 	padding: 6px 0;
 	transition: 0.18s;
@@ -11419,13 +11483,13 @@ button.iz-pr-offer-row:hover {
 /* Field */
 .iz-field label {
 	display: block;
-	font-size: 10.5px;
+	font-size: 11px;
 	color: var(--iz-muted);
 	margin-bottom: 7px;
 	font-weight: 700;
 	letter-spacing: 0.5px;
 	text-transform: uppercase;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 .iz-field input {
 	width: 100%;
@@ -11434,8 +11498,8 @@ button.iz-pr-offer-row:hover {
 	border-radius: 13px;
 	padding: 13px;
 	color: var(--iz-txt);
-	font-size: 15px;
-	font-family: "Manrope", sans-serif;
+	font-size: 14px;
+	font-family: var(--iz-font);
 	transition: 0.15s;
 }
 .iz-field input:focus {
@@ -11461,8 +11525,8 @@ button.iz-pr-offer-row:hover {
 	border-radius: 13px;
 	padding: 13px;
 	color: var(--iz-txt);
-	font-size: 15px;
-	font-family: "Manrope", sans-serif;
+	font-size: 14px;
+	font-family: var(--iz-font);
 	line-height: 1.55;
 	/* Vertical only — horizontal resize escapes the sheet. */
 	resize: vertical;
@@ -11499,7 +11563,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-big-num {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 800;
 	letter-spacing: -1.2px;
 	color: var(--iz-txt);
@@ -11733,8 +11797,8 @@ button.iz-pr-offer-row:hover {
 	margin-bottom: 14px;
 }
 .iz-sheet-head h3 {
-	font-family: "Sora", sans-serif;
-	font-size: 21px;
+	font-family: var(--iz-font);
+	font-size: 22px;
 	font-weight: 800;
 	letter-spacing: -0.35px;
 	color: var(--iz-txt);
@@ -11772,7 +11836,7 @@ button.iz-pr-offer-row:hover {
 	border-radius: 10px;
 	background: rgba(255, 255, 255, 0.04);
 	border: 1px solid var(--iz-line);
-	font-size: 10.5px;
+	font-size: 11px;
 	font-weight: 600;
 	color: var(--iz-muted);
 }
@@ -11782,7 +11846,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-field-label {
 	display: block;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.1em;
@@ -11799,7 +11863,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 	font-size: 16px;
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	transition:
 		border-color 0.15s,
 		box-shadow 0.15s;
@@ -11828,7 +11892,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-muted2);
 	font-size: 16px;
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	text-align: left;
 	cursor: pointer;
 	transition:
@@ -11881,7 +11945,7 @@ button.iz-pr-offer-row:hover {
 	border: none;
 	background: transparent;
 	font-size: 16px;
-	font-family: "Manrope", sans-serif;
+	font-family: var(--iz-font);
 	color: var(--iz-txt);
 	outline: none;
 }
@@ -11910,7 +11974,7 @@ button.iz-pr-offer-row:hover {
 	background: transparent;
 	color: var(--iz-txt);
 	font-size: 16px;
-	font-family: "Manrope", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 500;
 	text-align: left;
 	cursor: pointer;
@@ -11950,7 +12014,7 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	color: var(--iz-txt);
-	font-family: "Manrope", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 600;
 	text-align: left;
@@ -12038,7 +12102,7 @@ button.iz-pr-offer-row:hover {
 	border-radius: 9px;
 	background: transparent;
 	color: var(--iz-muted);
-	font-family: "Manrope", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
@@ -12071,9 +12135,9 @@ button.iz-pr-offer-row:hover {
 	top: 50%;
 	transform: translateY(-50%);
 	pointer-events: none;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 600;
-	font-family: "Manrope", sans-serif;
+	font-family: var(--iz-font);
 }
 .iz-time-input-ph {
 	color: var(--iz-muted2);
@@ -12104,8 +12168,8 @@ button.iz-pr-offer-row:hover {
 	border-radius: 14px;
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.03);
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-muted);
 	text-align: center;
@@ -12141,11 +12205,39 @@ button.iz-pr-offer-row:hover {
 }
 
 /* Inline filter chips — payroll, GPS, list filters */
+/* PR and STATUS side by side. Two stacked blocks left a full-width select
+   holding the words "All PRs" and pushed the chips onto their own line; the
+   card is wide and the two questions are short. Wraps to stacked below ~640px,
+   where side-by-side would squeeze the chips into a column. */
+.iz-filter-groups {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 12px 22px;
+}
+
+.iz-filter-group {
+	min-width: 0;
+}
+
+/* The chips take the slack: they are the group whose width is content, and a
+   select stretched to fill a row is the thing being fixed here. */
+.iz-filter-group--grow {
+	flex: 1 1 320px;
+}
+
+/* Wide enough for a full payee label — "(Vicky) Victoria Tan Mei Lin" — and no
+   wider. `block` on IzSelect means 100%, which is what the cap is against. */
+.iz-filter-group .iz-select {
+	min-width: 200px;
+	max-width: 300px;
+}
+
 .iz-filter-group-label {
 	margin-top: 0.75rem;
 	margin-bottom: 0.375rem;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -12167,7 +12259,7 @@ button.iz-pr-offer-row:hover {
 	border-radius: 999px;
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.05);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 700;
 	color: var(--iz-muted);
@@ -12217,7 +12309,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-sheet-preview .v {
 	margin-top: 4px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
@@ -12244,7 +12336,7 @@ button.iz-pr-offer-row:hover {
 	flex: 0 1 auto;
 	min-width: 0;
 	padding: 8px 14px !important;
-	font-size: 13px !important;
+	font-size: 12px !important;
 	white-space: nowrap;
 }
 
@@ -12305,8 +12397,8 @@ button.iz-pr-offer-row:hover {
 	background: none;
 	padding: 6px 14px;
 	border-radius: 999px;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 600;
 	color: #b8a8cc;
 	cursor: pointer;
@@ -12334,18 +12426,14 @@ button.iz-pr-offer-row:hover {
 .iz-roster-date-live {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: 7px;
 	min-height: 34px;
-	min-width: 96px;
 	flex: 0 0 auto;
-	padding: 0 12px;
-	border-radius: 10px;
-	border: 1px solid var(--iz-line);
-	background: rgba(255, 255, 255, 0.03);
-	font-family: "Sora", sans-serif;
-	font-size: 12px;
+	padding: 0 2px;
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-label);
 	font-weight: 600;
-	color: var(--iz-txt);
+	color: var(--iz-muted);
 	cursor: default;
 	user-select: none;
 }
@@ -12367,8 +12455,8 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid var(--iz-line2);
 	border-radius: 8px;
 	background: rgba(255, 255, 255, 0.03);
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-txt);
 	cursor: pointer;
@@ -12466,7 +12554,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-planning-week-cal-picker .rdp-weekday {
-	font-size: 10px;
+	font-size: 11px;
 	flex: 1 1 0;
 	min-width: 0;
 	width: auto;
@@ -12493,7 +12581,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-planning-week-cal .iz-tiny {
-	font-size: 10px;
+	font-size: 11px;
 	line-height: 1.35;
 	margin-top: 6px !important;
 }
@@ -12531,11 +12619,24 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-planning-week-cal
+	.rdp-day.iz-roster-cal-in-week:has(button[data-selected-single="true"])::before {
+	background: var(--iz-violet);
+	/* Its own corners, whatever the day's position in the row — the first/last
+	   child rules above square off the band's inner edges, which would clip this
+	   segment flat against its neighbour. */
+	border-radius: 8px !important;
+	inset: 2px 0;
+	left: 1px;
+	right: 1px;
+}
+
+.iz-roster-planning-week-cal
 	.rdp-day.iz-roster-cal-in-week
 	button[data-selected-single="true"] {
-	background: var(--iz-violet) !important;
+	/* The fill is the band segment behind this button now. */
+	background: transparent !important;
 	color: #fff !important;
-	box-shadow: 0 0 0 2px rgba(183, 156, 232, 0.35);
+	box-shadow: none;
 }
 
 .iz-roster-cal-has-shifts {
@@ -12568,7 +12669,7 @@ button.iz-pr-offer-row:hover {
 	border-radius: 10px;
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.03);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-txt);
@@ -12586,24 +12687,47 @@ button.iz-pr-offer-row:hover {
 .iz-payroll-tab {
 	flex: 1 1 auto;
 	min-width: 0;
+	min-height: 44px;
 	border-radius: 999px;
-	border: 1px solid var(--iz-line);
-	padding: 7px 10px;
-	font-family: "Sora", sans-serif;
-	font-size: 11px;
-	font-weight: 600;
+	border: 1px solid var(--iz-line2);
+	padding: 11px 18px;
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-label);
+	font-weight: 700;
 	line-height: 1.2;
-	color: var(--iz-muted);
-	background: transparent;
+	color: var(--iz-txt);
+	background: var(--iz-glass);
 	cursor: pointer;
 	transition: 0.15s;
 	white-space: nowrap;
 }
 
+/* The tab now holds a LABEL and a count pill, so it has to lay them out. */
+.iz-payroll-tab {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+/* `.iz-nav-alert` carries `margin-left: auto` for the sidebar, where the pill
+   belongs at the far edge of a full-width row. On a centred tab that would
+   shove it away from the word it counts. */
+.iz-payroll-tab .iz-nav-alert,
+.iz-fees-head .iz-nav-alert {
+	margin-left: 0;
+}
+
+.iz-payroll-tab:not(.on):hover {
+	border-color: rgba(183, 156, 232, 0.42);
+	background: var(--iz-glass2);
+}
+
 .iz-payroll-tab.on {
-	border-color: var(--iz-gold);
-	background: rgba(232, 194, 122, 0.12);
-	color: var(--iz-gold-l);
+	border-color: var(--iz-violet);
+	background: var(--iz-violet-ink);
+	color: var(--iz-violet-l);
+	box-shadow: inset 0 0 0 1px rgba(183, 156, 232, 0.35);
 }
 
 .iz-special-service-offer {
@@ -12671,7 +12795,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-special-service-catalog__label {
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -12692,15 +12816,15 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-special-service-catalog__rate {
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
 }
 
 .iz-special-service-catalog__unit {
 	margin-top: 2px;
-	font-size: 10px;
+	font-size: 11px;
 	color: var(--iz-muted2);
 }
 
@@ -12748,7 +12872,7 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid var(--iz-line2);
 	border-radius: 10px;
 	background: rgba(255, 255, 255, 0.03);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 18px;
 	font-weight: 600;
 	color: var(--iz-txt);
@@ -12810,7 +12934,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-special-service-filters--compact .iz-roster-filter-label {
-	font-size: 15px;
+	font-size: 14px;
 }
 
 .iz-special-service-filters--compact
@@ -12823,7 +12947,7 @@ button.iz-pr-offer-row:hover {
 	.iz-special-service-filters-grid
 	.iz-special-service-filter-control
 	.iz-time-picker-btn {
-	font-size: 17px;
+	font-size: 16px;
 	min-height: 40px;
 }
 
@@ -12849,8 +12973,7 @@ button.iz-pr-offer-row:hover {
 
 @media (min-width: 768px) {
 	.iz-payroll-tab {
-		font-size: 12px;
-		padding: 8px 12px;
+		padding: 13px 22px;
 	}
 }
 
@@ -12861,7 +12984,7 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-filters-card .iz-tiny,
 .iz-roster-shift-filters-head .iz-tiny,
 .iz-special-service-filters-head .iz-tiny {
-	font-size: 18px;
+	font-size: var(--iz-fs-label);
 }
 
 .iz-pr-manage-header {
@@ -12883,7 +13006,7 @@ button.iz-pr-offer-row:hover {
 	min-height: 36px;
 	padding: 0 14px;
 	border-radius: 10px;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-bg2);
@@ -12915,14 +13038,14 @@ button.iz-pr-offer-row:hover {
 	margin-bottom: 12px;
 }
 .iz-pr-manage-stats__count {
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: 22px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	letter-spacing: 0.02em;
 }
 .iz-pr-manage-stats__active {
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: #4ade8a;
 }
@@ -13027,7 +13150,7 @@ button.iz-pr-offer-row:hover {
 	right: 8px;
 	top: 8px;
 	z-index: 2;
-	font-size: 10px !important;
+	font-size: 11px !important;
 	padding: 2px 8px !important;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
@@ -13045,7 +13168,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-pr-manage-card__name {
 	min-width: 0;
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: 18px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -13058,7 +13181,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	gap: 4px;
 	flex-shrink: 0;
-	font-size: 17px;
+	font-size: 16px;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	color: var(--iz-gold-l, var(--iz-gold));
@@ -13092,7 +13215,7 @@ button.iz-pr-offer-row:hover {
    it reports that more exist, the profile is where you read them. */
 .iz-pr-manage-card__more-langs {
 	flex-shrink: 0;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-muted2);
 	cursor: default;
@@ -13122,7 +13245,7 @@ button.iz-pr-offer-row:hover {
 	min-width: 0;
 }
 .iz-pr-manage-card__metric-label {
-	font-size: 13px;
+	font-size: 12px;
 	/* Was muted2 — at this size the labels were dim as well as small, and the
 	   ask was legibility, not just scale. */
 	color: var(--iz-muted);
@@ -13238,7 +13361,7 @@ button.iz-pr-offer-row:hover {
 	object-fit: contain;
 }
 .iz-outlet-manage-card__name {
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: 22px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -13248,14 +13371,14 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-manage-card__rate {
 	margin-top: 3px;
-	font-size: 15px;
+	font-size: 14px;
 	color: var(--iz-muted2);
 }
 .iz-outlet-manage-card__events {
 	flex-shrink: 0;
 	padding: 5px 12px;
 	border-radius: 999px;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	line-height: 1.2;
 }
@@ -13286,15 +13409,15 @@ button.iz-pr-offer-row:hover {
 	);
 }
 .iz-outlet-manage-card__kpi-label {
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-muted2);
 }
 .iz-outlet-manage-card__kpi-value {
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 26px;
+	font-family: var(--iz-font);
+	font-size: 28px;
 	font-weight: 800;
 	line-height: 1;
 	color: var(--iz-txt);
@@ -13308,8 +13431,8 @@ button.iz-pr-offer-row:hover {
 	color: var(--outlet-accent, #4ade8a);
 }
 .iz-outlet-manage-card__kpi-empty {
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 26px;
+	font-family: var(--iz-font);
+	font-size: 28px;
 	font-weight: 700;
 	line-height: 1;
 	color: var(--iz-muted2);
@@ -13322,7 +13445,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-manage-card__meta {
 	min-width: 0;
-	font-size: 15px;
+	font-size: 14px;
 	color: var(--iz-muted2);
 	white-space: nowrap;
 	overflow: hidden;
@@ -13330,7 +13453,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-manage-card__legend {
 	flex-shrink: 0;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-amber);
 }
@@ -13390,13 +13513,13 @@ button.iz-pr-offer-row:hover {
 	color: #bbf7d0;
 }
 .iz-outlet-manage-page .iz-pr-manage-stats__count {
-	font-size: 24px;
+	font-size: 22px;
 }
 .iz-outlet-manage-page .iz-tiny,
 .iz-outlet-manage-page .iz-pr-manage-header__btn,
 .iz-outlet-manage-page .iz-link,
 .iz-outlet-manage-page .iz-btn {
-	font-size: 15px;
+	font-size: 14px;
 }
 
 /* ── Agency outlet detail (Velvet 23 drill-down) ── */
@@ -13420,7 +13543,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-page .iz-outlet-detail-shift-future__action,
 .iz-outlet-detail-page .iz-outlet-detail-shift-note,
 .iz-outlet-detail-page .iz-outlet-detail-section__badge {
-	font-size: 15px;
+	font-size: 14px;
 }
 /*
  * The roomier back pill — Manage Outlet's, and now Payroll's PV detail.
@@ -13459,10 +13582,10 @@ button.iz-pr-offer-row:hover {
 	color: #c4b5fd;
 }
 .iz-outlet-detail-head__title {
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: 22px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 	line-height: 1.2;
 }
 .iz-outlet-detail-head__meta {
@@ -13504,7 +13627,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-detail-kpi__value {
 	margin-top: 8px;
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: 28px;
 	font-weight: 800;
 	line-height: 1;
@@ -13543,8 +13666,8 @@ button.iz-pr-offer-row:hover {
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
@@ -13568,7 +13691,7 @@ button.iz-pr-offer-row:hover {
 	background: rgba(0, 0, 0, 0.18);
 }
 .iz-outlet-detail-tier-table [class*="text-[9px]"] {
-	font-size: 15px !important;
+	font-size: 14px !important;
 }
 .iz-outlet-detail-empty {
 	padding: 20px;
@@ -13576,7 +13699,7 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid var(--iz-line);
 	text-align: center;
 	color: var(--iz-muted2);
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-outlet-detail-shift-groups {
 	display: flex;
@@ -13616,8 +13739,8 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-muted2);
 }
 .iz-outlet-detail-group-head__stats-value {
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 20px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	line-height: 1.2;
@@ -13631,14 +13754,14 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-detail-group-head__stats-open {
 	margin-left: 6px;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-amber);
 }
 /* The met-demand counterpart of __stats-open; only one of the two ever shows. */
 .iz-outlet-detail-group-head__stats-filled {
 	margin-left: 6px;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-green);
 }
@@ -13684,10 +13807,10 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-detail-shift-card__title,
 .iz-outlet-detail-shift-future__title {
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 17px;
+	font-family: var(--iz-font);
+	font-size: 16px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 	line-height: 1.3;
 }
 .iz-outlet-detail-shift-card__when {
@@ -13713,7 +13836,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-detail-shift-badge {
 	flex-shrink: 0;
-	font-size: 15px !important;
+	font-size: 14px !important;
 	padding: 4px 10px !important;
 }
 .iz-outlet-detail-shift-source {
@@ -13774,7 +13897,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-detail-metric__value,
 .iz-outlet-detail-metric__nums {
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-size: 22px;
 	font-weight: 800;
 	line-height: 1.1;
@@ -13791,14 +13914,14 @@ button.iz-pr-offer-row:hover {
 	color: #4ade8a;
 }
 .iz-outlet-detail-metric__open {
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-amber);
 }
 /* Same slot as __open, opposite news — amber means "still needs people", green
    means the demand is met. They never render together. */
 .iz-outlet-detail-metric__filled {
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-green);
 }
@@ -13864,8 +13987,8 @@ button.iz-pr-offer-row:hover {
 	text-align: right;
 }
 .iz-outlet-detail-shift-future__pay {
-	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 20px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 800;
 	color: var(--iz-gold-l);
 }
@@ -13917,8 +14040,8 @@ button.iz-pr-offer-row:hover {
 
 .iz-roster-kpi .n {
 	display: block;
-	font-family: "Sora", sans-serif;
-	font-size: 20px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 800;
 	letter-spacing: -0.3px;
 	line-height: 1.1;
@@ -13931,7 +14054,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-kpi .l {
 	display: block;
 	margin-top: 4px;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
@@ -13943,7 +14066,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-gps-section .iz-outlet-section-title {
-	font-size: 10px;
+	font-size: 11px;
 }
 
 .iz-roster-gps-live-dot {
@@ -14016,8 +14139,8 @@ button.iz-pr-offer-row:hover {
 	border: none;
 	background: none;
 	padding: 0;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.25;
@@ -14122,8 +14245,8 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-gps-row-name {
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.25;
@@ -14135,7 +14258,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-roster-gps-row-pill {
 	flex-shrink: 0;
-	font-size: 10px !important;
+	font-size: 11px !important;
 	padding: 2px 7px !important;
 }
 
@@ -14181,7 +14304,7 @@ button.iz-pr-offer-row:hover {
 	flex: 1 1 auto;
 }
 .iz-roster-filterbar__title {
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 800;
 	letter-spacing: 0.09em;
 	text-transform: uppercase;
@@ -14297,7 +14420,7 @@ button.iz-pr-offer-row:hover {
 	border: 0;
 	background: transparent;
 	color: var(--iz-txt);
-	font-size: 15px;
+	font-size: 14px;
 	outline: none;
 }
 .iz-roster-filterbar__input::placeholder {
@@ -14325,7 +14448,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-filterbar__dash {
 	color: var(--iz-muted2);
-	font-size: 15px;
+	font-size: 14px;
 	flex-shrink: 0;
 }
 .iz-roster-filterbar__time {
@@ -14473,14 +14596,6 @@ button.iz-pr-offer-row:hover {
 	padding: 0 2px 4px;
 }
 
-.iz-approvals-title {
-	font-family: "Sora", sans-serif;
-	font-size: 18px;
-	font-weight: 700;
-	color: var(--iz-txt);
-	line-height: 1.2;
-}
-
 /*
  * PR vs Outlet — the two things an agency approves.
  *
@@ -14555,16 +14670,17 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-approvals-tab {
-	padding: 8px 6px;
+	padding: 11px 8px;
 	border-radius: 10px;
-	border: 1px solid var(--iz-line);
-	background: transparent;
-	color: var(--iz-muted);
-	font-family: "Sora", sans-serif;
-	/* 10px + tight horizontal padding keeps the longest label
-     ("Agency-Tied (0)") on a single line at a third of the sidebar. */
-	font-size: 10px;
-	font-weight: 600;
+	border: 1px solid var(--iz-line2);
+	background: var(--iz-glass);
+	color: var(--iz-txt);
+	font-family: var(--iz-font);
+	/* Tight horizontal padding keeps the longest label ("Agency-Tied (0)") on a
+     single line at a third of the sidebar — which is why this strip takes ONE
+     step up from the old 11px and not the label step the payroll tabs took. */
+	font-size: var(--iz-fs-caption);
+	font-weight: 700;
 	text-align: center;
 	/* Deliberately NOT nowrap: at the sidebar's 330px floor the longest label is
      a few px over a third of the row, and wrapping the count onto a second line
@@ -14593,7 +14709,7 @@ button.iz-pr-offer-row:hover {
 	border: 1px dashed rgba(183, 156, 232, 0.45);
 	background: transparent;
 	color: var(--iz-violet-l);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 600;
 	cursor: pointer;
@@ -14643,8 +14759,8 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-list-item .name {
 	display: block;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.25;
@@ -14670,7 +14786,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	padding: 2px 7px;
 	border-radius: 999px;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 600;
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.25);
@@ -14707,7 +14823,7 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	flex-shrink: 0;
 	border-radius: 10px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 700;
 	color: #fff;
 }
@@ -14721,7 +14837,7 @@ button.iz-pr-offer-row:hover {
 .iz-approvals-avatar.sm {
 	width: 46px;
 	height: 46px;
-	font-size: 17px;
+	font-size: 16px;
 }
 
 .iz-approvals-avatar.md {
@@ -14815,8 +14931,8 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-approvals-detail-name {
-	font-family: "Sora", sans-serif;
-	font-size: 20px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.2;
@@ -14851,7 +14967,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-info-title {
 	margin-bottom: 10px;
-	font-size: 10px;
+	font-size: var(--iz-fs-caption);
 	font-weight: 700;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
@@ -14869,7 +14985,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	gap: 8px;
 	margin-top: 8px;
-	font-size: 12px;
+	font-size: var(--iz-fs-label);
 	color: var(--iz-muted);
 }
 
@@ -14906,7 +15022,7 @@ button.iz-pr-offer-row:hover {
  */
 .iz-portal-main .iz-approvals-verify-badge {
 	padding: 4px 9px;
-	font-size: 11.5px;
+	font-size: 12px;
 	line-height: 1.4;
 }
 .iz-portal-main .iz-approvals-subfilter .iz-chip {
@@ -14929,8 +15045,8 @@ button.iz-pr-offer-row:hover {
 .iz-approvals-info-line--lead {
 	flex-wrap: wrap;
 	margin-top: 2px;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-text, #f0e8ff);
 }
@@ -14938,8 +15054,8 @@ button.iz-pr-offer-row:hover {
 /* Champagne, the same tag the PR app puts on its own shift cards, so one
    shift does not look like two different things across the two apps. */
 .iz-approvals-event-tag {
-	font-family: "Sora", sans-serif;
-	font-size: 9px;
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-tiny);
 	font-weight: 800;
 	letter-spacing: 0.4px;
 	color: #e8c27a;
@@ -15006,14 +15122,14 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-approvals-doc-tab .t {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
 }
 
 .iz-approvals-doc-tab .s {
-	font-size: 10px;
+	font-size: 11px;
 	color: var(--iz-muted);
 }
 
@@ -15081,14 +15197,14 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-approvals-doc-card .t {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
 }
 
 .iz-approvals-doc-card .s {
-	font-size: 10px;
+	font-size: 11px;
 	color: var(--iz-muted);
 }
 
@@ -15185,7 +15301,7 @@ button.iz-pr-offer-row:hover {
 .iz-approvals-doc-cell .cell-label {
 	flex-shrink: 0;
 	padding: 8px 10px 0;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.05em;
 	text-transform: uppercase;
@@ -15351,8 +15467,8 @@ button.iz-pr-offer-row:hover {
 	border-radius: 12px;
 	background: var(--iz-violet);
 	color: #fff;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	cursor: pointer;
 	transition:
@@ -15409,14 +15525,14 @@ button.iz-pr-offer-row:hover {
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	color: #b8a8cc;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 
 .iz-roster-timetable-filters-stats {
 	font-size: 11px;
 	font-weight: 600;
 	color: #b8a8cc;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 
 .iz-roster-timetable-filters-primary {
@@ -15475,7 +15591,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-timetable-filters--compact .iz-time-picker-btn {
 	height: 38px;
 	min-height: 38px;
-	font-size: 13px;
+	font-size: 12px;
 }
 
 .iz-roster-planning-panel .iz-roster-week {
@@ -15563,7 +15679,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-roster-week-day-col .dow {
 	display: block;
-	font-size: 10px;
+	font-size: 11px;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 	color: #b8a8cc;
@@ -15610,7 +15726,7 @@ button.iz-pr-offer-row:hover {
 	-webkit-box-orient: vertical;
 	-webkit-line-clamp: 2;
 	overflow: hidden;
-	font-family: var(--font-sora, inherit);
+	font-family: var(--iz-font);
 	font-size: 11px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -15626,7 +15742,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-week-pr .rating {
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 600;
 	color: var(--iz-gold-l);
 }
@@ -15704,7 +15820,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-week-cell--filled .shift {
-	font-size: 10px;
+	font-size: 11px;
 	color: #b8a8cc;
 	max-width: 100%;
 	overflow: hidden;
@@ -15713,7 +15829,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-week-cell--filled .status {
-	font-size: 9px;
+	font-size: 11px;
 	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
@@ -15890,7 +16006,7 @@ button.iz-pr-offer-row:hover {
 	margin-bottom: 8px;
 }
 .iz-roster-demand-band-title {
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 800;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
@@ -15954,8 +16070,8 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-gold-l);
 }
 .iz-roster-demand-outlet-name {
-	font-family: "Sora", sans-serif;
-	font-size: 17px;
+	font-family: var(--iz-font);
+	font-size: 16px;
 	font-weight: 800;
 	color: var(--iz-txt);
 	min-width: 0;
@@ -15965,7 +16081,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-demand-outlet-count {
 	flex: 0 0 auto;
-	font-size: 13px;
+	font-size: 12px;
 	color: var(--iz-muted);
 	font-variant-numeric: tabular-nums;
 }
@@ -16072,8 +16188,8 @@ button.iz-pr-offer-row:hover {
 	flex: 1 1 auto;
 }
 .iz-demand-sheet-outlet {
-	font-family: "Sora", sans-serif;
-	font-size: 19px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 800;
 	line-height: 1.25;
 	color: var(--iz-txt);
@@ -16083,14 +16199,14 @@ button.iz-pr-offer-row:hover {
 }
 .iz-demand-sheet-slot {
 	margin-top: 3px;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-gold-l);
 	font-variant-numeric: tabular-nums;
 }
 .iz-demand-sheet-event {
 	margin-top: 2px;
-	font-size: 13.5px;
+	font-size: 14px;
 	color: var(--iz-muted2);
 	line-height: 1.4;
 }
@@ -16099,7 +16215,7 @@ button.iz-pr-offer-row:hover {
 	/* `.iz-pill` is 15px/6px-12px by default and the old markup crushed it to
 	   10px with a `!text-[10px]`. This is a real step down from the pill's own
 	   size, not a whisper. */
-	font-size: 12.5px !important;
+	font-size: 12px !important;
 	padding: 4px 10px;
 }
 .iz-demand-sheet-section {
@@ -16110,7 +16226,7 @@ button.iz-pr-offer-row:hover {
 	padding-bottom: 14px;
 }
 .iz-demand-sheet-heading {
-	font-size: 11.5px;
+	font-size: 12px;
 	font-weight: 800;
 	text-transform: uppercase;
 	letter-spacing: 0.09em;
@@ -16124,7 +16240,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-demand-sheet-empty {
 	margin-top: 6px;
-	font-size: 13.5px;
+	font-size: 14px;
 	color: var(--iz-muted2);
 }
 .iz-roster-demand-band-rail {
@@ -16241,7 +16357,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-week-cell--unavailable .status {
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
@@ -16264,7 +16380,7 @@ button.iz-pr-offer-row:hover {
 	overflow: hidden;
 	max-width: 100%;
 	padding: 0 4px;
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 500;
 	line-height: 1.25;
 	text-align: center;
@@ -16287,7 +16403,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-week-empty {
 	padding: 24px 16px;
 	text-align: center;
-	font-size: 13px;
+	font-size: 12px;
 	color: var(--iz-muted);
 }
 
@@ -16324,7 +16440,7 @@ button.iz-pr-offer-row:hover {
 	padding: 8px 10px;
 	border: none;
 	background: none;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 600;
 	color: var(--iz-gold-l);
@@ -16460,7 +16576,7 @@ button.iz-pr-offer-row:hover {
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 	color: #e8dff7;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	line-height: 1.25;
 	min-height: 2.5em;
 	display: flex;
@@ -16503,8 +16619,8 @@ button.iz-pr-offer-row:hover {
 	border: none;
 	background: transparent;
 	color: var(--iz-txt);
-	font-size: 13px;
-	font-family: "Sora", sans-serif;
+	font-size: 12px;
+	font-family: var(--iz-font);
 	font-weight: 600;
 	letter-spacing: 0.2px;
 	outline: none;
@@ -16526,8 +16642,8 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid var(--iz-line);
 	background-color: var(--iz-panel2);
 	color: var(--iz-txt);
-	font-size: 13px;
-	font-family: "Sora", sans-serif;
+	font-size: 12px;
+	font-family: var(--iz-font);
 	font-weight: 600;
 	letter-spacing: 0.2px;
 	outline: none;
@@ -16542,7 +16658,7 @@ button.iz-pr-offer-row:hover {
 	height: 38px;
 	min-height: 38px;
 	padding: 0 28px 0 10px;
-	font-size: 13px;
+	font-size: 12px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -16560,8 +16676,8 @@ button.iz-pr-offer-row:hover {
 	border-radius: 10px;
 	border: 1px solid var(--iz-line);
 	background-color: var(--iz-panel2);
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 600;
 	letter-spacing: 0.2px;
 	color: var(--iz-txt);
@@ -16597,7 +16713,7 @@ button.iz-pr-offer-row:hover {
 	padding: 6px 10px;
 	border: none;
 	background: none;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 600;
 	color: var(--iz-gold-l);
@@ -16618,7 +16734,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-table {
 	width: 100%;
 	border-collapse: collapse;
-	font-size: 17px;
+	font-size: 16px;
 }
 
 .iz-roster-table th {
@@ -16629,7 +16745,7 @@ button.iz-pr-offer-row:hover {
 	text-transform: uppercase;
 	letter-spacing: 0.12em;
 	color: #e8dff7;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	border-bottom: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.15);
 	white-space: nowrap;
@@ -16742,12 +16858,12 @@ button.iz-pr-offer-row:hover {
 	}
 }
 .iz-cardttl {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-weight: 700;
-	font-size: 21px;
+	font-size: 22px;
 	margin-bottom: 3px;
 	letter-spacing: -0.3px;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 
 /* PR shift ring card */
@@ -16807,8 +16923,8 @@ button.iz-pr-offer-row:hover {
 	border: none;
 	background: transparent;
 	color: var(--iz-txt);
-	font-size: 17px;
-	font-family: "Manrope", sans-serif;
+	font-size: 16px;
+	font-family: var(--iz-font);
 	padding: 10px 0;
 }
 .iz-hist-search input:focus {
@@ -16841,7 +16957,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-gold-l);
 	font-size: 12px;
 	font-weight: 600;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	cursor: pointer;
 }
 .iz-hist-chip--on {
@@ -16874,8 +16990,8 @@ button.iz-pr-offer-row:hover {
 	border-radius: 13px;
 	padding: 13px 36px 13px 13px;
 	color: var(--iz-txt);
-	font-size: 15px;
-	font-family: "Manrope", sans-serif;
+	font-size: 14px;
+	font-family: var(--iz-font);
 }
 .iz-hist-select:focus {
 	outline: none;
@@ -16915,7 +17031,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-hist-picker-label {
 	flex: 1;
-	font-size: 15px;
+	font-size: 14px;
 	color: var(--iz-txt);
 	pointer-events: none;
 	min-width: 0;
@@ -16945,7 +17061,7 @@ button.iz-pr-offer-row:hover {
 .iz-hist-cal [class*="caption"],
 .iz-hist-cal [class*="weekday"] {
 	color: var(--iz-muted);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 .iz-hist-cal button {
 	color: var(--iz-txt);
@@ -16988,7 +17104,7 @@ button.iz-pr-offer-row:hover {
 	border-radius: 10px;
 	background: var(--iz-bg2);
 	color: var(--iz-txt);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 600;
 	padding: 9px 32px 9px 10px;
@@ -17059,8 +17175,8 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-muted2);
 }
 .iz-outlet-report-range-target-value {
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-gold-l);
 	line-height: 1.3;
@@ -17147,7 +17263,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	justify-content: center;
 	border-radius: 999px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 800;
 }
@@ -17171,7 +17287,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-report-range-legend-value {
 	display: block;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -17189,7 +17305,7 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	flex-shrink: 0;
 	align-items: center;
-	font-size: 15px;
+	font-size: 14px;
 	color: var(--iz-muted2);
 }
 .iz-outlet-report-cal-popover[data-range-step="end"]
@@ -17228,7 +17344,7 @@ button.iz-pr-offer-row:hover {
 	min-width: 0 !important;
 	min-height: 0 !important;
 	padding: 0 !important;
-	font-size: 0.75rem !important;
+	font-size: var(--iz-fs-label) !important;
 	line-height: 1;
 	border-radius: 6px;
 }
@@ -17265,7 +17381,7 @@ button.iz-pr-offer-row:hover {
 	position: absolute;
 	top: 1px;
 	right: 3px;
-	font-size: 9px;
+	font-size: 11px;
 	font-weight: 800;
 	line-height: 1;
 	opacity: 0.85;
@@ -17277,7 +17393,7 @@ button.iz-pr-offer-row:hover {
 	position: absolute;
 	top: 1px;
 	right: 3px;
-	font-size: 9px;
+	font-size: 11px;
 	font-weight: 800;
 	line-height: 1;
 	opacity: 0.9;
@@ -17331,7 +17447,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-muted2);
 }
 .iz-hist-range-target-value {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-violet-l);
@@ -17435,7 +17551,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-pr-schedule-cal .iz-pr-cal-weekday {
 	text-align: center;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-muted);
 	padding: 0;
@@ -17462,7 +17578,7 @@ button.iz-pr-offer-row:hover {
 	min-width: 0 !important;
 	min-height: 0 !important;
 	padding: 0 !important;
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 600;
 	border-radius: 12px;
 	line-height: 1;
@@ -17617,7 +17733,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 }
 .iz-outlet-ops-cal-month {
-	font-family: var(--font-sora, inherit);
+	font-family: var(--iz-font);
 	font-size: 18px;
 	font-weight: 800;
 	color: var(--iz-txt);
@@ -17632,7 +17748,7 @@ button.iz-pr-offer-row:hover {
 	justify-content: flex-end;
 	justify-self: end;
 	margin: 0;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-muted2);
 }
@@ -17721,7 +17837,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-ops-cal-weekday {
 	text-align: center;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	color: var(--iz-muted2);
@@ -17767,7 +17883,7 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	min-width: 1.15rem;
 	height: 1.15rem;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--iz-muted);
 	border-radius: 999px;
@@ -17817,7 +17933,7 @@ button.iz-pr-offer-row:hover {
 	border: 1px solid rgba(255, 255, 255, 0.05);
 	border-left-width: 4px;
 	padding: 5px 7px;
-	font-size: 13px;
+	font-size: 12px;
 	line-height: 1.3;
 	cursor: pointer;
 	background: rgba(0, 0, 0, 0.35);
@@ -17880,8 +17996,8 @@ button.iz-pr-offer-row:hover {
 	grid-column: 1 / -1;
 	display: block;
 	font-weight: 700;
-	font-size: 13px;
-	color: var(--iz-txt);
+	font-size: 12px;
+	color: var(--iz-title);
 	line-height: 1.3;
 	min-width: 0;
 	overflow: hidden;
@@ -17899,7 +18015,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	border-radius: 5px;
 	padding: 1px 4px;
-	font-family: var(--font-sora, "Sora", sans-serif);
+	font-family: var(--iz-font);
 	font-variant-numeric: tabular-nums;
 	font-size: 11px;
 	font-weight: 800;
@@ -17932,7 +18048,7 @@ button.iz-pr-offer-row:hover {
 	border-radius: 999px;
 	background: rgba(212, 196, 245, 0.12);
 	color: var(--iz-violet-l, #d4c4f5);
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 800;
 	line-height: 1.25;
 	padding: 2px 12px;
@@ -17988,7 +18104,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-ops-cal-daylist-row__title {
 	font-size: 18px;
 	font-weight: 700;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -17996,7 +18112,7 @@ button.iz-pr-offer-row:hover {
 /* The staffing chip is shared with the grid, where it must stay dense. In the
    sheet it has room to reach the portal's pill scale. */
 .iz-outlet-ops-cal-daylist-row .iz-outlet-ops-cal-fill {
-	font-size: 15px;
+	font-size: 14px;
 	padding: 3px 9px;
 	border-radius: 7px;
 }
@@ -18132,13 +18248,13 @@ button.iz-pr-offer-row:hover {
 }
 .iz-hist-custom-select label {
 	display: block;
-	font-size: 15px;
+	font-size: 14px;
 	color: var(--iz-muted);
 	margin-bottom: 7px;
 	font-weight: 700;
 	letter-spacing: 0.5px;
 	text-transform: uppercase;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 .iz-hist-custom-select.compact label {
 	font-size: 14px;
@@ -18162,8 +18278,8 @@ button.iz-pr-offer-row:hover {
 	border-radius: 13px;
 	background: rgba(255, 255, 255, 0.03);
 	color: var(--iz-txt);
-	font-size: 17px;
-	font-family: "Manrope", sans-serif;
+	font-size: 16px;
+	font-family: var(--iz-font);
 	cursor: pointer;
 	text-align: left;
 	transition:
@@ -18215,8 +18331,8 @@ button.iz-pr-offer-row:hover {
 	padding: 10px 11px;
 	background: transparent;
 	color: var(--iz-txt);
-	font-size: 15px;
-	font-family: "Manrope", sans-serif;
+	font-size: 14px;
+	font-family: var(--iz-font);
 	text-align: left;
 	cursor: pointer;
 }
@@ -18235,8 +18351,8 @@ button.iz-pr-offer-row:hover {
 	border-radius: 13px;
 	padding: 12px 13px;
 	color: var(--iz-txt);
-	font-size: 15px;
-	font-family: "Manrope", sans-serif;
+	font-size: 14px;
+	font-family: var(--iz-font);
 	transition: 0.15s;
 }
 .iz-hist-num-input::placeholder {
@@ -18290,8 +18406,8 @@ button.iz-agency-row:hover {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: #fff;
 	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
@@ -18336,7 +18452,7 @@ button.iz-agency-row:hover {
 	padding: 10px 8px;
 	font-size: 12px;
 	font-weight: 700;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	color: var(--iz-muted);
 	background: transparent;
 	cursor: pointer;
@@ -18363,7 +18479,7 @@ button.iz-agency-row:hover {
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-bg2);
 	color: var(--iz-muted);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 600;
 	text-align: center;
@@ -18410,8 +18526,8 @@ button.iz-agency-row:hover {
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	color: var(--iz-txt);
-	font-family: "Manrope", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 600;
 	text-align: left;
 	cursor: pointer;
@@ -18430,7 +18546,7 @@ button.iz-agency-row:hover {
 }
 .iz-hist-outlet-opt .c {
 	flex-shrink: 0;
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-muted2);
 }
@@ -18468,8 +18584,8 @@ button.iz-agency-row:hover {
 	line-height: 1.25;
 }
 .iz-hist-shift-earn-cell .v {
-	font-family: "Sora", sans-serif;
-	font-size: clamp(11px, 3.2vw, 14px);
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-micro);
 	font-weight: 800;
 	color: var(--iz-txt);
 	line-height: 1.2;
@@ -18477,7 +18593,7 @@ button.iz-agency-row:hover {
 	word-break: break-word;
 }
 .iz-hist-shift-earn-cell.primary .v {
-	font-size: clamp(12px, 3.6vw, 15px);
+	font-size: var(--iz-fs-tiny);
 	color: var(--iz-gold-l);
 }
 .iz-hist-shift-range {
@@ -18487,7 +18603,7 @@ button.iz-agency-row:hover {
 	padding: 8px 12px;
 	border-bottom: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-muted);
 }
@@ -18566,17 +18682,17 @@ button.iz-agency-row:hover {
 }
 .iz-hist-payroll-week__title {
 	display: block;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 800;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-hist-payroll-week__hint {
 	display: block;
 	margin-top: 4px;
-	font-size: 13px;
+	font-size: 12px;
 	line-height: 1.35;
 	color: var(--iz-muted);
 }
@@ -18666,12 +18782,12 @@ button.iz-agency-row:hover {
 }
 .iz-collapsible-section__title {
 	display: block;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 800;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-collapsible-section__hint {
 	display: block;
@@ -18739,8 +18855,8 @@ button.iz-agency-row:hover {
 .iz-hist-shift-metric .v {
 	display: block;
 	margin-top: 4px;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	line-height: 1.25;
 	color: var(--iz-txt);
@@ -18770,8 +18886,8 @@ button.iz-agency-row:hover {
 	text-align: left;
 }
 .iz-data-table th {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 	color: var(--iz-muted2);
@@ -18798,8 +18914,8 @@ button.iz-agency-row:hover {
 	border-radius: 13px;
 	padding: 12px 13px;
 	color: var(--iz-txt);
-	font-size: 15px;
-	font-family: "Manrope", sans-serif;
+	font-size: 14px;
+	font-family: var(--iz-font);
 	line-height: 1.45;
 	transition: 0.15s;
 }
@@ -18968,8 +19084,8 @@ html:has(.iz-pr-app) {
 			transparent 55%
 		);
 	color: var(--iz-txt);
-	font-family: "Manrope", sans-serif;
-	font-size: var(--iz-portal-fs);
+	font-family: var(--iz-font);
+	font-size: var(--iz-fs-body);
 	line-height: 1.5;
 }
 
@@ -18977,24 +19093,24 @@ html:has(.iz-pr-app) {
 .iz-portal-main .iz-tiny,
 .iz-portal-auth .iz-tiny,
 .iz-portal > main .iz-tiny {
-	font-size: 18px;
+	font-size: var(--iz-fs-label);
 	line-height: 1.55;
 }
 .iz-portal-main .iz-sm,
 .iz-portal-auth .iz-sm,
 .iz-portal > main .iz-sm {
-	font-size: 19px;
+	font-size: var(--iz-fs-label);
 }
 .iz-portal-main .iz-sect-label,
 .iz-portal-auth .iz-sect-label,
 .iz-portal > main .iz-sect-label {
-	font-size: 16px;
+	font-size: var(--iz-fs-body);
 	letter-spacing: 1.5px;
 }
 .iz-portal-main .iz-profile-field__label,
 .iz-portal-auth .iz-profile-field__label,
 .iz-portal > main .iz-profile-field__label {
-	font-size: 16px;
+	font-size: var(--iz-fs-caption);
 }
 .iz-portal-main .iz-profile-field__value,
 .iz-portal-main .iz-profile-field__input,
@@ -19002,41 +19118,41 @@ html:has(.iz-pr-app) {
 .iz-portal-auth .iz-profile-field__input,
 .iz-portal > main .iz-profile-field__value,
 .iz-portal > main .iz-profile-field__input {
-	font-size: 19px;
+	font-size: var(--iz-fs-body);
 }
 .iz-portal-main .iz-profile-field__hint,
 .iz-portal-auth .iz-profile-field__hint,
 .iz-portal > main .iz-profile-field__hint {
-	font-size: 17px;
+	font-size: var(--iz-fs-tiny);
 }
 .iz-portal-main .iz-btn,
 .iz-portal-auth .iz-btn,
 .iz-portal > main .iz-btn {
-	font-size: 21px;
+	font-size: var(--iz-fs-label);
 	padding: 14px 16px;
 }
 .iz-portal-main .iz-btn-sm,
 .iz-portal-auth .iz-btn-sm,
 .iz-portal > main .iz-btn-sm {
-	font-size: 18px;
+	font-size: var(--iz-fs-caption);
 	padding: 10px 14px;
 }
 .iz-portal-main .iz-pill,
 .iz-portal-auth .iz-pill,
 .iz-portal > main .iz-pill {
-	font-size: 16px;
+	font-size: var(--iz-fs-tiny);
 	padding: 6px 12px;
 }
 .iz-portal-main .iz-chip,
 .iz-portal-auth .iz-chip,
 .iz-portal > main .iz-chip {
-	font-size: 18px;
+	font-size: var(--iz-fs-caption);
 	padding: 7px 12px;
 }
 .iz-portal-main .iz-select,
 .iz-portal-auth .iz-select,
 .iz-portal > main .iz-select {
-	font-size: 18px;
+	font-size: var(--iz-fs-label);
 	padding: 10px 32px 10px 12px;
 }
 .iz-portal-main .iz-field label,
@@ -19045,7 +19161,7 @@ html:has(.iz-pr-app) {
 .iz-portal-auth .iz-field-label,
 .iz-portal > main .iz-field label,
 .iz-portal > main .iz-field-label {
-	font-size: 18px;
+	font-size: var(--iz-fs-caption);
 }
 .iz-portal-main .iz-field input,
 .iz-portal-main .iz-field textarea,
@@ -19059,30 +19175,30 @@ html:has(.iz-pr-app) {
 .iz-portal > main .iz-field textarea,
 .iz-portal > main .iz-field select,
 .iz-portal > main .iz-field-input {
-	font-size: 19px;
+	font-size: var(--iz-fs-body);
 }
 .iz-portal-main .iz-card,
 .iz-portal-auth .iz-card,
 .iz-portal > main .iz-card {
-	font-size: 19px;
+	font-size: var(--iz-fs-body);
 }
 .iz-portal-main .iz-cardttl,
 .iz-portal-auth .iz-cardttl {
-	font-size: 22px;
+	font-size: var(--iz-fs-title);
 }
 .iz-portal-main .iz-portal-table {
-	font-size: 18px;
+	font-size: var(--iz-fs-label);
 }
 .iz-portal-main .iz-portal-table th,
 .iz-portal > main .iz-portal-table th {
-	font-size: 16px;
+	font-size: var(--iz-fs-label);
 }
 .iz-portal > main .iz-portal-table {
-	font-size: 18px;
+	font-size: var(--iz-fs-label);
 }
 .iz-portal-main .iz-portal-table-name,
 .iz-portal > main .iz-portal-table-name {
-	font-size: 19px;
+	font-size: var(--iz-fs-label);
 }
 .iz-portal-main .iz-portal-kpi .l,
 .iz-portal > main .iz-portal-kpi .l {
@@ -19094,16 +19210,16 @@ html:has(.iz-pr-app) {
 }
 .iz-portal-main .iz-time-picker-btn,
 .iz-portal > main .iz-time-picker-btn {
-	font-size: 17px;
+	font-size: 16px;
 	min-height: 42px;
 }
 .iz-portal-main .iz-time-picker-col-btn,
 .iz-portal > main .iz-time-picker-col-btn {
-	font-size: 17px;
+	font-size: 16px;
 }
 .iz-portal-main .iz-outlet-report-range-target-label,
 .iz-portal > main .iz-outlet-report-range-target-label {
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-portal-main .iz-outlet-report-range-target-value,
 .iz-portal > main .iz-outlet-report-range-target-value {
@@ -19112,92 +19228,92 @@ html:has(.iz-pr-app) {
 .iz-portal-main .text-xs,
 .iz-portal-auth .text-xs,
 .iz-portal > main .text-xs {
-	font-size: 0.9375rem !important;
-	line-height: 1.35rem !important;
+	font-size: var(--iz-fs-caption) !important;
+	line-height: 1.45 !important;
 }
 .iz-portal-main .text-sm,
 .iz-portal-auth .text-sm,
 .iz-portal > main .text-sm {
-	font-size: 1.0625rem !important;
-	line-height: 1.45rem !important;
+	font-size: var(--iz-fs-label) !important;
+	line-height: 1.45 !important;
 }
 .iz-portal-main .text-base,
 .iz-portal-auth .text-base,
 .iz-portal > main .text-base {
-	font-size: 1.125rem !important;
+	font-size: var(--iz-fs-body) !important;
 }
 .iz-portal-main .text-lg,
 .iz-portal-auth .text-lg,
-.iz-portal-main h2.font-sora.text-lg,
-.iz-portal-auth h2.font-sora.text-lg,
+.iz-portal-main h2.iz-heading.text-lg,
+.iz-portal-auth h2.iz-heading.text-lg,
 .iz-portal > main .text-lg,
-.iz-portal > main h2.font-sora.text-lg {
-	font-size: 1.375rem !important;
-	line-height: 1.65rem !important;
+.iz-portal > main h2.iz-heading.text-lg {
+	font-size: var(--iz-fs-title) !important;
+	line-height: 1.35 !important;
 }
 .iz-portal-main .text-xl,
 .iz-portal-auth .text-xl,
 .iz-portal > main .text-xl {
-	font-size: 1.5625rem !important;
+	font-size: var(--iz-fs-head) !important;
 }
 .iz-portal-main .text-2xl,
 .iz-portal-auth .text-2xl,
 .iz-portal > main .text-2xl {
-	font-size: 1.8125rem !important;
+	font-size: var(--iz-fs-display) !important;
 }
 .iz-portal-main .text-\[7px\],
 .iz-portal-auth .text-\[7px\],
 .iz-portal > main .text-\[7px\],
 .iz-portal > header .text-\[7px\] {
-	font-size: 15px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
 .iz-portal-main .text-\[8px\],
 .iz-portal-auth .text-\[8px\],
 .iz-portal > main .text-\[8px\],
 .iz-portal > header .text-\[8px\] {
-	font-size: 15px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
 .iz-portal-main .text-\[9px\],
 .iz-portal-auth .text-\[9px\],
 .iz-portal > main .text-\[9px\],
 .iz-portal > header .text-\[9px\] {
-	font-size: 16px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
 .iz-portal-main .text-\[10px\],
 .iz-portal-auth .text-\[10px\],
 .iz-portal > main .text-\[10px\],
 .iz-portal > header .text-\[10px\] {
-	font-size: 16px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
 .iz-portal-main .text-\[11px\],
 .iz-portal-auth .text-\[11px\],
 .iz-portal > main .text-\[11px\],
 .iz-portal > header .text-\[11px\] {
-	font-size: 17px !important;
+	font-size: var(--iz-fs-tiny) !important;
 }
-.iz-portal-main header h2.font-sora,
-.iz-portal > header .font-sora.text-sm {
-	font-size: 1.125rem;
+.iz-portal-main header h2.iz-heading,
+.iz-portal > header .iz-heading.text-sm {
+	font-size: var(--iz-fs-head);
 }
 .iz-portal-main .iz-portal-header h1,
 .iz-portal > header h1 {
-	font-size: 1.45rem;
+	font-size: var(--iz-fs-head);
 }
 @media (min-width: 768px) {
 	.iz-portal-main .iz-portal-header h1,
 	.iz-portal > header h1 {
-		font-size: 1.85rem;
+		font-size: var(--iz-fs-display);
 	}
 }
 .iz-portal-main .iz-collapsible-section__title,
 .iz-portal > main .iz-collapsible-section__title {
-	font-size: 18px;
+	font-size: var(--iz-fs-body);
 }
 .iz-portal-main .iz-collapsible-section__hint,
 .iz-portal-main .iz-collapsible-section__action,
 .iz-portal > main .iz-collapsible-section__hint,
 .iz-portal > main .iz-collapsible-section__action {
-	font-size: 16px;
+	font-size: var(--iz-fs-caption);
 }
 .iz-portal-main .iz-roster-table,
 .iz-portal > main .iz-roster-table {
@@ -19205,7 +19321,7 @@ html:has(.iz-pr-app) {
 }
 .iz-portal-main .iz-roster-table th,
 .iz-portal > main .iz-roster-table th {
-	font-size: 15px;
+	font-size: 14px;
 }
 .iz-portal-main .iz-pr-week-pay__table,
 .iz-portal > main .iz-pr-week-pay__table {
@@ -19227,7 +19343,7 @@ html:has(.iz-pr-app) {
 .iz-pr-app .iz-tabbar button,
 .iz-pr-tabbar a,
 .iz-pr-tabbar button {
-	font-size: 13px;
+	font-size: 12px;
 }
 
 .iz-portal-sidebar {
@@ -19250,17 +19366,17 @@ html:has(.iz-pr-app) {
 }
 
 .iz-portal-sidebar .iz-portal-nav-link {
-	font-size: 17px;
+	font-size: 16px;
 	padding: 10px 12px;
 }
 
 .iz-portal-sidebar .iz-wordmark,
 .iz-portal-sidebar .iz-wordmark.text-lg {
-	font-size: 21px !important;
+	font-size: 22px !important;
 }
 
 .iz-portal-sidebar .iz-tiny {
-	font-size: 15px;
+	font-size: 14px;
 }
 
 .iz-portal-sidebar-brand {
@@ -19283,7 +19399,89 @@ html:has(.iz-pr-app) {
 }
 
 .iz-portal-sidebar-logo .iz-logo-horizontal__wordmark {
-	font-size: 21px;
+	font-size: 22px;
+}
+
+/*
+ * WHO the rail is acting for, under the logo -- where "Agency portal" was.
+ *
+ * Sized from the ladder, NOT from `.iz-heading-role`: that rule is 22px, which
+ * is a step DOWN from the 34px greeting it was written for and a step UP from
+ * anything in this rail -- reusing it here would print the role larger than the
+ * organisation it qualifies.
+ */
+/*
+ * The header greeting. Deliberately QUIETER than the page title beneath it:
+ * it used to be 28px and tie with "Payroll & PV" for the eye, which put a
+ * pleasantry level with the name of the page.
+ */
+.iz-portal-greeting {
+	/*
+	 * 18 → 22 → 28 across three owner passes on 8 Sep 2026. This is the top of
+	 * the ladder below `display`, and the size the greeting carried before today.
+	 *
+	 * It tied with the page title back then — but that greeting also carried the
+	 * organisation and role, and the two sat in the SAME block. Now the identity
+	 * is in the rail, this is three words, and it lives in the header bar while
+	 * the title lives in the page body below it. So the pair is separated by
+	 * REGION and by COLOUR — near-white here against the title's lavender
+	 * `--iz-title` — rather than by size alone, which is what failed before.
+	 */
+	/*
+	 * ⚠️ 34, NOT the 32 that was asked for — 32px is not a rung.
+	 *
+	 * The ladder goes … head 28 · display 34, and `check:type` fails a raw
+	 * `32px`. Inventing a rung between the two for one element is precisely the
+	 * disease the ladder cured (27 sizes, none of them a decision). 34 is the
+	 * nearest step and 2px from the request; say so rather than quietly shipping
+	 * 28 or quietly breaking the rule.
+	 */
+	font-size: var(--iz-fs-display);
+	font-weight: 800;
+	/*
+	 * THE app's gold — `--iz-accent` #e3b877, the exact colour the InnocenZ logo
+	 * in the rail above is painted (sampled off the rendered SVG, not chosen by
+	 * token name). The greeting and the mark now match.
+	 *
+	 * ⚠️ Not `--iz-accent-l` (#f2d9a0): that is a lighter TINT of the same gold
+	 * and reads as a different colour sitting inches from the logo.
+	 * ⚠️ Not `--iz-amber` (#e8c66a): spoken for twice over — it means WAITING in
+	 * the receipt/PV status code and carries "act" on a button, so a greeting in
+	 * it would read as a status.
+	 * ⚠️ Not `--iz-gold-l`, which despite its name is #d4c4f5, a LAVENDER — the
+	 * whole `--iz-gold*` family in this theme is violet.
+	 */
+	color: var(--iz-accent);
+	letter-spacing: -0.01em;
+}
+
+/*
+ * The page clock. ONE size, ONE colour, ONE margin, wherever it appears --
+ * this replaced four hand-written variants that differed in all three.
+ */
+.iz-page-datetime {
+	margin-top: 2px;
+	font-size: var(--iz-fs-caption);
+	color: var(--iz-muted2, var(--iz-muted));
+}
+
+.iz-portal-sidebar-org {
+	margin-top: 8px;
+	color: var(--iz-txt);
+}
+
+.iz-portal-sidebar-org__name {
+	font-size: var(--iz-fs-label);
+	font-weight: 800;
+	/* A company name is not a slug: let a long one wrap rather than clip. */
+	overflow-wrap: anywhere;
+}
+
+/* Slightly smaller than the name it qualifies -- the owner's standing rule. */
+.iz-portal-sidebar-org__role {
+	font-size: var(--iz-fs-caption);
+	font-weight: 700;
+	color: var(--iz-muted);
 }
 
 .iz-portal-sidebar-identity {
@@ -19327,7 +19525,7 @@ html:has(.iz-pr-app) {
 	padding: 10px 12px;
 	border-radius: 12px;
 	color: var(--iz-muted);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 600;
 	text-decoration: none;
@@ -19419,7 +19617,7 @@ html:has(.iz-pr-app) {
 	border: 1px solid rgba(255, 117, 117, 0.28);
 	background: rgba(255, 117, 117, 0.06);
 	color: var(--iz-red);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 600;
 	cursor: pointer;
@@ -19526,10 +19724,14 @@ html:has(.iz-pr-app) {
 		--iz-portal-sidebar-w: 72px;
 	}
 
+	/* `:not(.iz-nav-alert)` — the LABEL, not every span. This band collapses
+	   the rail on its own, without the `data-collapsed` attribute, so it needs
+	   the same exemption the manual toggle has or a count badge vanishes on
+	   every tablet-width screen. */
 	.iz-portal-sidebar-brand p,
 	.iz-portal-sidebar-identity > div,
-	.iz-portal-nav-link span,
-	.iz-portal-sidebar-foot .iz-portal-nav-link span {
+	.iz-portal-nav-link span:not(.iz-nav-alert),
+	.iz-portal-sidebar-foot .iz-portal-nav-link span:not(.iz-nav-alert) {
 		display: none;
 	}
 
@@ -19637,7 +19839,7 @@ html:has(.iz-pr-app) {
 	   for all three `.n` size rules below, so the tile keeps a single answer
 	   to "how big is the number" no matter which of them wins the cascade. */
 	container-type: inline-size;
-	--iz-kpi-num: clamp(18px, 11cqi, 28px);
+	--iz-kpi-num: var(--iz-fs-body);
 	border-radius: 16px;
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
@@ -19681,11 +19883,11 @@ html:has(.iz-pr-app) {
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
 	color: var(--iz-accent-d);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 }
 
 .iz-portal-kpi .n {
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: var(--iz-kpi-num);
 	font-weight: 800;
 	margin-top: 8px;
@@ -19728,7 +19930,7 @@ html:has(.iz-pr-app) {
 	text-transform: uppercase;
 	letter-spacing: 0.12em;
 	color: #e8dff7;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	border-bottom: 1px solid var(--iz-line);
 }
 
@@ -19745,8 +19947,8 @@ html:has(.iz-pr-app) {
 }
 
 .iz-portal-table-name {
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-txt);
 }
@@ -19770,8 +19972,8 @@ html:has(.iz-pr-app) {
 	border-radius: 10px;
 	background: rgba(159, 122, 234, 0.28);
 	color: #f0e8ff;
-	font-family: "Sora", sans-serif;
-	font-size: 13px;
+	font-family: var(--iz-font);
+	font-size: 12px;
 	font-weight: 700;
 	flex-shrink: 0;
 	/* The photo variant puts an <img> in here, and the tile is rounded. */
@@ -19887,7 +20089,7 @@ html:has(.iz-pr-app) {
 	background: rgba(212, 175, 55, 0.16);
 	border: 1px solid rgba(212, 175, 55, 0.35);
 	color: var(--iz-gold-l);
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.02em;
@@ -19993,7 +20195,7 @@ html:has(.iz-pr-app) {
 	align-items: center;
 	gap: 8px;
 	margin-bottom: 10px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	text-transform: uppercase;
@@ -20057,7 +20259,7 @@ html:has(.iz-pr-app) {
 	border: 1px solid var(--iz-line2);
 	font-size: 12px;
 	font-weight: 700;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	color: var(--iz-muted);
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -20091,7 +20293,7 @@ html:has(.iz-pr-app) {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -20146,8 +20348,8 @@ html:has(.iz-pr-app) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-family: "Sora", sans-serif;
-	font-size: 19px;
+	font-family: var(--iz-font);
+	font-size: 18px;
 	font-weight: 800;
 	color: #fff;
 	flex-shrink: 0;
@@ -20175,8 +20377,8 @@ html:has(.iz-pr-app) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 800;
 	color: #fff;
 	flex-shrink: 0;
@@ -20219,7 +20421,7 @@ html:has(.iz-pr-app) {
 	justify-content: space-between;
 	gap: 8px;
 	padding: 12px 14px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 14px;
 	font-weight: 700;
 	color: var(--iz-txt);
@@ -20265,10 +20467,10 @@ html:has(.iz-pr-app) {
 }
 .iz-reg-ack-card__title {
 	margin: 0 0 12px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-reg-ack-row {
 	display: flex;
@@ -20290,8 +20492,8 @@ html:has(.iz-pr-app) {
 .iz-reg-ack-link {
 	display: block;
 	text-align: left;
-	font-family: "Sora", sans-serif;
-	font-size: 15px;
+	font-family: var(--iz-font);
+	font-size: 14px;
 	font-weight: 700;
 	color: #4da3ff;
 	text-decoration: underline;
@@ -20305,10 +20507,10 @@ html:has(.iz-pr-app) {
 }
 .iz-reg-terms-block__title {
 	margin: 0 0 10px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 16px;
 	font-weight: 800;
-	color: var(--iz-txt);
+	color: var(--iz-title);
 }
 .iz-reg-terms-row {
 	display: flex;
@@ -20346,7 +20548,7 @@ html:has(.iz-pr-app) {
 	display: inline-block;
 	padding: 5px 11px;
 	border-radius: 999px;
-	font-family: "Sora", sans-serif;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.1em;
@@ -20389,8 +20591,8 @@ html:has(.iz-pr-app) {
 			transparent 55%
 		);
 	color: var(--iz-txt);
-	font-family: "Manrope", sans-serif;
-	font-size: 21px;
+	font-family: var(--iz-font);
+	font-size: 22px;
 	line-height: 1.5;
 }
 
@@ -20476,7 +20678,7 @@ html:has(.iz-pr-app) {
 	z-index: 45;
 	pointer-events: none;
 	user-select: none;
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-family: var(--iz-font);
 	font-size: 12px;
 	line-height: 1;
 	color: var(--iz-muted2);
@@ -20496,13 +20698,13 @@ html:has(.iz-pr-app) {
 
 /* Agency portal — readable type on roster, PR management (home KPIs match global portal scale) */
 [data-portal="agency"] .iz-portal-main .iz-agency-home-tab .l {
-	font-size: 13px;
+	font-size: 12px;
 }
 [data-portal="agency"] .iz-portal-main .iz-agency-home-tab .n {
-	font-size: 20px;
+	font-size: 18px;
 }
 [data-portal="agency"] .iz-portal-main .iz-portal-hub-link {
-	font-size: 15px;
+	font-size: 14px;
 }
 [data-portal="agency"] .iz-portal-main .iz-portal-hub-link svg {
 	width: 15px;
@@ -20512,13 +20714,13 @@ html:has(.iz-pr-app) {
 	font-size: 18px;
 }
 [data-portal="agency"] .iz-portal-main .iz-roster-table th {
-	font-size: 15px;
+	font-size: 14px;
 }
 [data-portal="agency"] .iz-portal-main .iz-pr-manage-filters-card .iz-tiny {
 	font-size: 18px;
 }
 [data-portal="agency"] .iz-portal-main .iz-roster-filter-label {
-	font-size: 15px;
+	font-size: 14px;
 }
 [data-portal="agency"]
 	.iz-portal-main
@@ -20540,7 +20742,7 @@ html:has(.iz-pr-app) {
 	.iz-portal-main
 	.iz-roster-shift-filters-grid
 	.iz-time-picker-btn {
-	font-size: 13px !important;
+	font-size: 12px !important;
 	height: 38px;
 	min-height: 38px;
 }
@@ -20560,15 +20762,15 @@ html:has(.iz-pr-app) {
 	.iz-portal-main
 	.iz-roster-timetable-filters--compact
 	.iz-time-picker-btn {
-	font-size: 13px !important;
+	font-size: 12px !important;
 	height: 38px;
 	min-height: 38px;
 }
 [data-portal="agency"] .iz-portal-main .iz-roster-toggle button {
-	font-size: 17px;
+	font-size: 16px;
 }
 [data-portal="agency"] .iz-portal-main .iz-roster-planning-date-trigger {
-	font-size: 13px;
+	font-size: 12px;
 	min-height: 34px;
 }
 [data-portal="agency"] .iz-portal-main .iz-portal-kpi .l {
@@ -20581,7 +20783,7 @@ html:has(.iz-pr-app) {
 	font-size: 18px;
 }
 [data-portal="agency"] .iz-portal-main .iz-data-table th {
-	font-size: 15px;
+	font-size: 14px;
 }
 
 /* Admin portal — header + main content readability */
@@ -20598,7 +20800,7 @@ html:has(.iz-pr-app) {
 	font-size: 18px;
 }
 .iz-portal > main .iz-data-table th {
-	font-size: 15px;
+	font-size: 14px;
 }
 
 /*
@@ -20640,7 +20842,7 @@ html:has(.iz-pr-app) {
 }
 
 .iz-roster-week-busy .status {
-	font-size: 9px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
@@ -20648,7 +20850,7 @@ html:has(.iz-pr-app) {
 }
 
 .iz-roster-week-busy .time {
-	font-size: 10px;
+	font-size: 11px;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	line-height: 1.15;
@@ -20656,4 +20858,287 @@ html:has(.iz-pr-app) {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	max-width: 100%;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TITLES CARRY THEIR OWN COLOUR · agency + outlet
+   ═══════════════════════════════════════════════════════════════════════════
+   Every heading used to be var(--iz-txt) — the same off-white as the sentence
+   under it — so the only thing separating a title from body copy was weight,
+   and on a dense page that is not enough to see. Titles are now lavender
+   (--iz-title), body stays off-white, supporting copy stays muted: three
+   levels, readable at a glance without any change in size.
+
+   Champagne gold is deliberately NOT used here. Gold means "act" on this
+   product (save / pay), and a heading is not an action.
+
+   Scoped to the portals so the PR phone view and the admin app are untouched,
+   and re-excluding .iz-pv-doc: the printed payment voucher is a black-on-white
+   document that has to keep matching the PDF and Excel it prints beside. */
+.iz-portal :is(h1, h2, h3, h4),
+.iz-portal-auth :is(h1, h2, h3, h4),
+.iz-portal .iz-outlet-section-title,
+.iz-portal .iz-outlet-detail-head__title,
+.iz-portal .iz-outlet-detail-section__title,
+.iz-portal .iz-hist-money-breakdown__card-title,
+.iz-portal .iz-hist-payroll-week__title,
+.iz-portal .iz-outlet-report-chart__title,
+.iz-portal .iz-outlet-report-sidebar__title,
+.iz-portal .iz-outlet-labor-report__title,
+.iz-portal .iz-post-job-summary-card__title,
+.iz-portal .iz-post-job-help-panel__title,
+.iz-portal .iz-post-job-legend__title,
+.iz-portal .iz-roster-filterbar__title,
+.iz-portal .iz-roster-demand-band-title,
+.iz-portal .iz-roster-timetable-filters-title,
+.iz-portal .iz-event-editor__title,
+.iz-portal .iz-event-picker__title,
+.iz-portal .iz-security-card__title,
+.iz-portal .iz-account-security__title {
+	color: var(--iz-title);
+}
+
+/* The section eyebrow moves off champagne onto the title colour with the rest
+   of the hierarchy, for the same reason: gold belongs to buttons. */
+.iz-portal .iz-sect-label,
+.iz-portal-auth .iz-sect-label {
+	color: var(--iz-title);
+}
+
+/* The printed voucher keeps its document colours. */
+.iz-portal .iz-pv-doc :is(h1, h2, h3, h4),
+.iz-portal .iz-pv-doc [class*="title"] {
+	color: #111;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PORTALLED CONTENT · the ladder has to follow the UI out of the tree
+   ═══════════════════════════════════════════════════════════════════════════
+   Every size rule above is scoped to `.iz-portal-main` / `.iz-portal-auth` /
+   `.iz-portal > main` — and a sheet is none of those. `iz/Sheet.tsx` mounts
+   through `createPortal(…, document.body)`, and every Radix dialog, popover,
+   dropdown and drawer does the same, so all of that markup is a SIBLING of
+   `.iz-portal`, not a descendant. Measured, not assumed: inside a sheet
+   `.iz-tiny` came out 12px against the portal's 14, `text-xs` 15px against 14,
+   `text-sm` 17.5px against 16, `text-[9px]` stayed a literal 9px — under the
+   floor — and an `h3` rendered 20px in body colour instead of 18px lavender.
+
+   That is most of Receipts, Disputes and Overtime: those queues open their
+   detail in a sheet. So the ladder is re-stated here against
+   `body:has(.iz-portal)`, which matches the whole document — portalled
+   subtrees included — but only while a portal is actually on screen. Values are
+   identical to the scoped rules above, so nothing inside `.iz-portal` moves;
+   this only reaches the markup that had escaped. */
+body:has(.iz-portal) .text-xs,
+body:has(.iz-portal-auth) .text-xs {
+	font-size: var(--iz-fs-caption) !important;
+	line-height: 1.45 !important;
+}
+body:has(.iz-portal) .text-sm,
+body:has(.iz-portal-auth) .text-sm {
+	font-size: var(--iz-fs-label) !important;
+	line-height: 1.45 !important;
+}
+body:has(.iz-portal) .text-base,
+body:has(.iz-portal-auth) .text-base {
+	font-size: var(--iz-fs-body) !important;
+}
+body:has(.iz-portal) .text-lg,
+body:has(.iz-portal-auth) .text-lg {
+	font-size: var(--iz-fs-title) !important;
+	line-height: 1.35 !important;
+}
+body:has(.iz-portal) .text-xl,
+body:has(.iz-portal-auth) .text-xl {
+	font-size: var(--iz-fs-head) !important;
+}
+/* text-3xl was never remapped at all — it rendered Tailwind's 1.875rem against
+   the portal's 20px root, i.e. 37.5px, a size on no ladder anywhere. */
+body:has(.iz-portal) .text-2xl,
+body:has(.iz-portal) .text-3xl,
+body:has(.iz-portal-auth) .text-2xl,
+body:has(.iz-portal-auth) .text-3xl {
+	font-size: var(--iz-fs-display) !important;
+}
+body:has(.iz-portal) .text-\[7px\],
+body:has(.iz-portal-auth) .text-\[7px\],
+body:has(.iz-portal) .text-\[8px\],
+body:has(.iz-portal-auth) .text-\[8px\],
+body:has(.iz-portal) .text-\[9px\],
+body:has(.iz-portal-auth) .text-\[9px\],
+body:has(.iz-portal) .text-\[10px\],
+body:has(.iz-portal-auth) .text-\[10px\],
+body:has(.iz-portal) .text-\[11px\],
+body:has(.iz-portal-auth) .text-\[11px\] {
+	font-size: var(--iz-fs-tiny) !important;
+}
+body:has(.iz-portal) .iz-tiny,
+body:has(.iz-portal-auth) .iz-tiny {
+	font-size: var(--iz-fs-label);
+}
+
+/* A sheet inherits from <body>, which is the 20px REM BASIS — not a ladder
+   step — so any text in it without a size class rendered 20px while the same
+   text one layer up in the portal rendered 18px. The basis stays 20px (it also
+   drives Tailwind's rem spacing); the sheet's own text sits on the ladder. */
+body:has(.iz-portal) .iz-sheet,
+body:has(.iz-portal) [role="dialog"],
+body:has(.iz-portal) [data-radix-popper-content-wrapper],
+body:has(.iz-portal-auth) .iz-sheet {
+	font-size: var(--iz-fs-body);
+}
+body:has(.iz-portal) .iz-sm,
+body:has(.iz-portal-auth) .iz-sm {
+	font-size: var(--iz-fs-label);
+}
+body:has(.iz-portal) .iz-pill,
+body:has(.iz-portal-auth) .iz-pill {
+	font-size: var(--iz-fs-tiny);
+}
+
+/* Titles inside portalled content, for the same reason. */
+body:has(.iz-portal) .iz-sheet :is(h1, h2, h3, h4),
+body:has(.iz-portal) [data-radix-popper-content-wrapper] :is(h1, h2, h3, h4),
+body:has(.iz-portal) [role="dialog"] :is(h1, h2, h3, h4),
+body:has(.iz-portal-auth) .iz-sheet :is(h1, h2, h3, h4) {
+	color: var(--iz-title);
+}
+
+/* ── ONE FONT, including the utilities that opt out of it ──────────────────
+   `iz-nums` appears 26 times across 8 files — and every one of them is a
+   NUMBER: a voucher id, an amount, an OTP. Monospace was reached for to get
+   digits to line up, which `tabular-nums` does inside the one font, so this
+   keeps the alignment and drops the second typeface. `font-display` (Bebas
+   Neue) was a third. Neither belongs on a portal screen meant to read as one
+   product. The class names now lie — see TEST_SCRIPT §9, which already tracks
+   the same debt for the old `.font-sora` / `.font-manrope`, both since renamed. */
+/* `font-display` (Bebas Neue) is honest on the landing pages and in the admin
+   app, so it is not renamed there — but it must not smuggle a second face into
+   a portal screen if one ever lands here again. */
+body:has(.iz-portal) .font-display,
+body:has(.iz-portal-auth) .font-display {
+	font-family: var(--iz-font);
+}
+
+/* The printed voucher opts out of all of it, again: it is a black-on-white
+   document that has to keep matching the PDF and Excel it prints beside. */
+body:has(.iz-portal) .iz-pv-doc :is(h1, h2, h3, h4),
+body:has(.iz-portal) .iz-pv-doc [class*="title"] {
+	color: #111;
+}
+
+/* ── Why this block is LAYERED and the ones above are not ──────────────────
+   Tailwind emits `!text-[9px]` into `@layer utilities` as an `!important`
+   declaration. For IMPORTANT declarations the cascade REVERSES layer order, and
+   un-layered styles lose to layered ones — so the first attempt at this block
+   sat unlayered, matched the element (verified with `el.matches`), carried
+   `!important` and higher specificity, and still lost 9px to Tailwind. Joining
+   the same layer puts the two rules back on ordinary footing, where specificity
+   decides and `body:has(.iz-portal) .!text-[9px]` (0,2,1) beats
+   `.!text-[9px]` (0,1,0). The non-bang remaps above need none of this:
+   plain `.text-xs` is not important, so an un-layered important rule wins. */
+@layer utilities {
+	/* ═══════════════════════════════════════════════════════════════════════════
+	   BANG VARIANTS · Tailwind's `!` prefix makes a DIFFERENT class
+	   ═══════════════════════════════════════════════════════════════════════════
+	   Found on the live agency Payroll page, not in the source: a "Per-item calc"
+	   pill rendered at 9px while every ladder check said the page was clean. The
+	   markup says `!text-[9px]`, and Tailwind emits that as `.!text-[9px]` —
+	   a different class name from `.text-[9px]`, which is all the remaps above
+	   ever matched. So 163 call sites across the two portals kept their literal
+	   values: `!text-xs` x44, `!text-[10px]` x38, `!text-[9px]` x32,
+	   `!text-[11px]` x19, `!text-sm` x18, `!text-[12px]` x9, `!text-[8px]` x3.
+
+	   The bang exists to beat a component rule, which it still does — these keep
+	   the author's intent of "override whatever else is here" while landing on a
+	   ladder step instead of a number someone typed. */
+	body:has(.iz-portal) .\!text-xs,
+	body:has(.iz-portal-auth) .\!text-xs {
+		font-size: var(--iz-fs-caption) !important;
+	}
+	body:has(.iz-portal) .\!text-sm,
+	body:has(.iz-portal-auth) .\!text-sm {
+		font-size: var(--iz-fs-label) !important;
+	}
+	body:has(.iz-portal) .\!text-base,
+	body:has(.iz-portal-auth) .\!text-base {
+		font-size: var(--iz-fs-body) !important;
+	}
+	body:has(.iz-portal) .\!text-lg,
+	body:has(.iz-portal-auth) .\!text-lg {
+		font-size: var(--iz-fs-title) !important;
+	}
+	body:has(.iz-portal) .\!text-xl,
+	body:has(.iz-portal-auth) .\!text-xl {
+		font-size: var(--iz-fs-head) !important;
+	}
+	body:has(.iz-portal) .\!text-2xl,
+	body:has(.iz-portal-auth) .\!text-2xl {
+		font-size: var(--iz-fs-display) !important;
+	}
+	body:has(.iz-portal) .\!text-3xl,
+	body:has(.iz-portal-auth) .\!text-3xl {
+		font-size: var(--iz-fs-display) !important;
+	}
+	body:has(.iz-portal) .\!text-\[7px\],
+	body:has(.iz-portal-auth) .\!text-\[7px\],
+	body:has(.iz-portal) .\!text-\[8px\],
+	body:has(.iz-portal-auth) .\!text-\[8px\],
+	body:has(.iz-portal) .\!text-\[9px\],
+	body:has(.iz-portal-auth) .\!text-\[9px\],
+	body:has(.iz-portal) .\!text-\[10px\],
+	body:has(.iz-portal-auth) .\!text-\[10px\],
+	body:has(.iz-portal) .\!text-\[11px\],
+	body:has(.iz-portal-auth) .\!text-\[11px\],
+	body:has(.iz-portal) .\!text-\[12px\],
+	body:has(.iz-portal-auth) .\!text-\[12px\] {
+		font-size: var(--iz-fs-tiny) !important;
+	}
+}
+
+/* ── STEPPED, NOT FLUID ────────────────────────────────────────────────────
+   These four were `clamp()`, which interpolates and therefore renders sizes
+   BETWEEN ladder steps — the outlet Billing hero measured 31.64px on screen,
+   a number from no scale at all. They now sit at their small step by default
+   and take the next step up once there is room, so a narrow phone is still
+   protected from overflow and every rendered value is a step. */
+@media (min-width: 640px) {
+	.iz-pr-page-header__title {
+		font-size: var(--iz-fs-head);
+	}
+	.iz-outlet-report-hero__value {
+		font-size: var(--iz-fs-display);
+	}
+	.iz-hist-shift-earn-cell .v {
+		font-size: var(--iz-fs-caption);
+	}
+	.iz-hist-shift-earn-cell.primary .v {
+		font-size: var(--iz-fs-caption);
+	}
+}
+
+/* ── KPI NUMBER · stepped, keeping the anti-wrap protection ────────────────
+   This was `clamp(18px, 11cqi, 28px)`, and the reason is real and still
+   honoured: four tiles in a 1280px row leave each about 239px, where a flat
+   28px breaks "RM 123,456.78" onto a second line. But a clamp INTERPOLATES,
+   so the live agency home rendered its KPI at 19.10px — a size from no scale.
+   The tile is already `container-type: inline-size`, so the same measurement
+   drives container queries instead, and every value it can produce is a step.
+   The variable is kept, not bypassed: three `.n` rules read it, and the tile
+   should keep one answer to "how big is the number". */
+.iz-stat-tile .n,
+.iz-portal-kpi .n {
+	--iz-kpi-num: var(--iz-fs-body);
+}
+@container (min-width: 190px) {
+	.iz-stat-tile .n,
+	.iz-portal-kpi .n {
+		--iz-kpi-num: var(--iz-fs-title);
+	}
+}
+@container (min-width: 280px) {
+	.iz-stat-tile .n,
+	.iz-portal-kpi .n {
+		--iz-kpi-num: var(--iz-fs-head);
+	}
 }

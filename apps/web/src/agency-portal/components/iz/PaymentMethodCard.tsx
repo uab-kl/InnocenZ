@@ -445,7 +445,7 @@ export function PaymentMethodCard({
 									borderRadius: "13px",
 									padding: "13px",
 									color: "var(--iz-txt)",
-									fontSize: "15px",
+									fontSize: "16px",
 									fontFamily: '"Manrope", sans-serif',
 								}}
 							>

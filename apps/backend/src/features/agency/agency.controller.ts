@@ -384,6 +384,9 @@ export class AgencyControllerClass {
           const blockers = await this.agencyPrRepository.listLeaveBlockers(
             agencyId,
             userId,
+            // NAMED here, counts only for the PR: this reader has to go and
+            // settle these exact papers, so the numbers are the instruction.
+            { named: true },
           );
           if (blockers.length > 0) {
             return res.status(409).json({

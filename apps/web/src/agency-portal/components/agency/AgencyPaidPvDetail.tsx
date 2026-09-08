@@ -86,7 +86,7 @@ export function AgencyPaidPvDetail({
 			</div>
 
 			<IzCard flat className="mb-2">
-				<p className="iz-tiny iz-muted2">{t.payroll.fourPartBreakdown}</p>
+				<p className="iz-card-sect">{t.payroll.fourPartBreakdown}</p>
 				{breakdownRows.map((r) => (
 					<div key={r.key} className="iz-v-sum">
 						<span className="iz-muted">{r.label}</span>
@@ -109,7 +109,7 @@ export function AgencyPaidPvDetail({
 				>
 					{receiptScans.map((scan) => (
 						<IzCard key={scan.id} flat className="mb-2">
-							<p className="font-sora text-sm font-bold">{scan.receiptRef}</p>
+							<p className="iz-heading text-sm font-bold">{scan.receiptRef}</p>
 							<p className="iz-tiny iz-muted mt-0.5">
 								{scan.outlet} · {formatRM(scan.totalLogged)}{" "}
 								{t.payroll.loggedSuffix}

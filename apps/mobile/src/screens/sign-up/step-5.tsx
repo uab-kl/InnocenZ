@@ -18,6 +18,7 @@ import {
 } from '../../lib/photo-file';
 import { formatMessage, useLocale } from '../../i18n';
 import { C, F, GRADIENTS, grad } from '../../theme/theme';
+import { font } from '../../theme/fonts';
 import { Camera, Check, Eye, EyeOff, ImagePlus, XIcon } from '../../components/icons';
 import {
 	getPrDisclaimerFromCopy,
@@ -730,35 +731,31 @@ const styles = StyleSheet.create({
 		backgroundColor: 'rgba(183,156,232,0.18)',
 	},
 	heroInitial: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 28,
-		fontWeight: '700',
 		color: C.violetL,
 	},
 	heroBody: { flex: 1, minWidth: 0 },
 	heroNick: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 18,
-		fontWeight: '700',
 		color: C.txt,
 	},
 	heroLegal: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 14,
 		color: C.prMuted,
 		marginTop: 2,
 	},
 	heroPhone: {
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 13,
-		fontWeight: '600',
 		color: C.accent,
 		marginTop: 6,
 	},
 	sectionEyebrow: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 11,
-		fontWeight: '700',
 		letterSpacing: 1.2,
 		color: C.muted2,
 		marginBottom: 8,
@@ -779,9 +776,8 @@ const styles = StyleSheet.create({
 		marginBottom: 8,
 	},
 	optionalPill: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 11,
-		fontWeight: '700',
 		color: C.muted2,
 		letterSpacing: 0.4,
 		paddingHorizontal: 8,
@@ -834,7 +830,7 @@ const styles = StyleSheet.create({
 		padding: 20,
 	},
 	collageEmptyText: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 13,
 		lineHeight: 18,
 		color: C.prMuted,
@@ -852,21 +848,19 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 	},
 	comcardOverlayName: {
-		fontFamily: F.sora,
+		...font(800),
 		fontSize: 14,
-		fontWeight: '800',
 		color: '#111',
 	},
 	comcardOverlayStats: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 11,
 		color: '#333',
 	},
 	singleSide: { flex: 1, minWidth: 0, justifyContent: 'center' },
 	photoTitle: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 13,
-		fontWeight: '700',
 		color: C.txt,
 	},
 	photoImg: { width: '100%', height: '100%' },
@@ -877,7 +871,7 @@ const styles = StyleSheet.create({
 		gap: 6,
 	},
 	photoEmptyText: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 12,
 		color: C.muted2,
 	},
@@ -893,14 +887,14 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 	},
 	photoHint: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 12,
 		lineHeight: 16,
 		color: C.muted2,
 		marginBottom: 8,
 	},
 	photoError: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 12,
 		color: C.red,
 		marginBottom: 6,
@@ -919,9 +913,8 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 10,
 	},
 	softBtnText: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 12,
-		fontWeight: '700',
 		color: C.prMuted,
 	},
 	primaryBtn: {
@@ -934,9 +927,8 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 10,
 	},
 	primaryBtnText: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 12,
-		fontWeight: '700',
 		color: '#241a08',
 	},
 	grid: {
@@ -978,16 +970,14 @@ const styles = StyleSheet.create({
 		gap: 5,
 	},
 	cellBadgeText: {
-		fontFamily: F.sora,
+		...font(800),
 		fontSize: 12,
-		fontWeight: '800',
 		color: C.txt,
 		letterSpacing: 0.6,
 	},
 	cellBadgeTag: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 9,
-		fontWeight: '700',
 		letterSpacing: 0.5,
 		color: '#241a08',
 		backgroundColor: C.accent,
@@ -1031,9 +1021,8 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 	},
 	addTitle: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 12,
-		fontWeight: '700',
 		color: C.violetL,
 	},
 	addActions: {
@@ -1049,15 +1038,13 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 6,
 	},
 	addText: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 11,
-		fontWeight: '700',
 		color: C.accent,
 	},
 	addTextMuted: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 11,
-		fontWeight: '700',
 		color: C.prMuted,
 	},
 	card: {
@@ -1069,9 +1056,8 @@ const styles = StyleSheet.create({
 		marginBottom: 10,
 	},
 	cardTitle: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 14,
-		fontWeight: '700',
 		color: C.accentL,
 		marginBottom: 10,
 	},
@@ -1084,22 +1070,20 @@ const styles = StyleSheet.create({
 		borderTopColor: C.line,
 	},
 	factLabel: {
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 12,
-		fontWeight: '600',
 		color: C.muted2,
 		flexShrink: 0,
 	},
 	factValue: {
 		flex: 1,
-		fontFamily: F.manrope,
+		...font(600),
 		fontSize: 13,
-		fontWeight: '600',
 		color: C.txt,
 		textAlign: 'right',
 	},
 	addressText: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 14,
 		lineHeight: 20,
 		color: C.txt,
@@ -1113,7 +1097,7 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 4,
 	},
 	revealText: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 13,
 		color: C.muted2,
 	},
@@ -1159,20 +1143,19 @@ const styles = StyleSheet.create({
 	},
 	ackLabelCol: { flex: 1, minWidth: 0, gap: 2 },
 	ackLink: {
-		fontFamily: F.sora,
+		...font(600),
 		fontSize: 12,
-		fontWeight: '600',
 		color: C.accentL,
 		textDecorationLine: 'underline',
 	},
 	ackTermsText: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 12,
 		lineHeight: 16,
 		color: C.txt,
 	},
 	ackError: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 11,
 		color: C.red,
 	},
@@ -1194,14 +1177,13 @@ const styles = StyleSheet.create({
 	},
 	modalScroll: { flexGrow: 0 },
 	modalTitle: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 15,
-		fontWeight: '700',
 		color: C.txt,
 		marginBottom: 8,
 	},
 	modalBody: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: 13,
 		lineHeight: 19,
 		color: C.prMuted,
@@ -1214,9 +1196,8 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 	},
 	modalDoneText: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 13,
-		fontWeight: '700',
 		color: '#241a08',
 	},
 });

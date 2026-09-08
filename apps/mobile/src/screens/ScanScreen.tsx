@@ -24,6 +24,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { formatRM, todayYmd, ymdToIso } from '../lib/demo-shifts';
 import { fmtAttendanceStamp } from '../lib/shift-session';
 import { useActiveShift } from '../lib/active-shift';
@@ -1421,28 +1422,26 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     flex: 1,
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 24,
-    fontWeight: '800',
     letterSpacing: -0.4,
     color: C.txt,
   },
   pageSub: {
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
   },
   gate: { alignItems: 'center', paddingVertical: 40, gap: 10 },
   gateTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 20,
-    fontWeight: '800',
     color: C.txt,
   },
   gateBody: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 14,
     color: C.prMuted,
     textAlign: 'center',
@@ -1456,21 +1455,19 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   activeTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.goldL,
   },
   activeMeta: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
   },
   activeBold: {
-    fontFamily: F.sora,
-    fontWeight: '700',
+    ...font(700),
     color: C.txt,
   },
   card: {
@@ -1492,7 +1489,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   scanIdleHint: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
@@ -1500,28 +1497,27 @@ const styles = StyleSheet.create({
   },
   scanScanning: {
     marginTop: 12,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.violetL,
     textAlign: 'center',
   },
   scanIssueText: {
     marginBottom: 8,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.amber,
   },
   ocrBlock: { alignSelf: 'stretch' },
   ocrHead: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     color: C.violetL,
     marginBottom: 6,
   },
   ocrLine: {
-    fontFamily: F.sora,
+    ...font(),
     fontSize: 11,
     lineHeight: 17,
     color: C.txt,
@@ -1529,7 +1525,7 @@ const styles = StyleSheet.create({
   // A field the paper printed but the shift-date check threw out — muted, since
   // it is an explanation of the blank above it, not a value.
   ocrLineDropped: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 10,
     lineHeight: 15,
     color: C.prMuted,
@@ -1537,7 +1533,7 @@ const styles = StyleSheet.create({
   },
   cardMeta: {
     marginTop: 10,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     color: C.prMuted,
   },
@@ -1552,16 +1548,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 15,
-    fontWeight: '700',
     color: C.txt,
   },
   soft: { marginTop: 10, alignItems: 'center', paddingVertical: 6 },
   softAmber: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.amber,
     textAlign: 'center',
   },
@@ -1576,9 +1570,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.03)',
   },
   softText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.prMuted,
   },
   tipCard: {
@@ -1594,7 +1587,7 @@ const styles = StyleSheet.create({
   },
   tipText: {
     flex: 1,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
@@ -1610,30 +1603,27 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   manualPillText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.amber,
   },
   fieldLabel: {
     marginTop: 12,
     marginBottom: 4,
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.8,
     color: C.prMuted2,
   },
   menuHint: {
     marginBottom: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
   input: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 16,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -1651,21 +1641,20 @@ const styles = StyleSheet.create({
     borderBottomColor: C.line,
   },
   drinkName: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.txt,
   },
-  drinkUnit: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  drinkUnit: { ...font(), fontSize: 12, color: C.prMuted },
   /** Amber, because it asks the PR to look at the paper — it is not an error. */
   qtyAssumed: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.amber,
     marginTop: 2,
   },
   ocrToggle: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.violetL,
     marginTop: 6,
@@ -1678,13 +1667,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   ocrRawLine: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.txt,
     lineHeight: 16,
   },
   ocrRawHint: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted,
     marginTop: 6,
@@ -1705,13 +1694,12 @@ const styles = StyleSheet.create({
     borderColor: C.goldL,
   },
   missingAddText: {
-    fontFamily: F.manrope,
+    ...font(700),
     fontSize: 12,
     color: C.goldL,
-    fontWeight: '700',
   },
   missingHint: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted,
     marginTop: 8,
@@ -1726,20 +1714,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  qtyBtnText: { fontFamily: F.sora, fontSize: 18, color: C.txt },
+  qtyBtnText: { ...font(), fontSize: 18, color: C.txt },
   qtyVal: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 16,
-    fontWeight: '700',
     color: C.txt,
     minWidth: 20,
     textAlign: 'center',
   },
   okRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   okTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 18,
-    fontWeight: '800',
     color: C.txt,
   },
   loggedActions: {
@@ -1750,7 +1736,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     marginTop: 10,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.red,
     textAlign: 'center',
@@ -1765,14 +1751,13 @@ const styles = StyleSheet.create({
   },
   proofHeadRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   proofTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 13,
-    fontWeight: '800',
     color: C.goldL,
   },
   proofHint: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
@@ -1791,9 +1776,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   proofBtnText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     color: C.txt,
   },
   proofThumbs: {
@@ -1827,9 +1811,8 @@ const styles = StyleSheet.create({
   },
   proofReminder: {
     marginTop: 10,
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     color: C.amber,
   },
   // Proto-style self-log (host.scan) pieces
@@ -1845,15 +1828,14 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   selfLogHeadTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 13,
-    fontWeight: '800',
     letterSpacing: 1,
     color: C.goldL,
   },
   selfLogHeadSub: {
     marginTop: 3,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     lineHeight: 15,
     color: C.prMuted,
@@ -1871,7 +1853,7 @@ const styles = StyleSheet.create({
   },
   selfLogScanHint: {
     marginTop: 8,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
@@ -1888,9 +1870,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.accent,
   },
   selfLogScanBtnText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: '#241a08',
   },
   selfLogSummary: {
@@ -1907,19 +1888,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   selfLogSummaryLabel: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },
   selfLogSummaryTotal: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 18,
-    fontWeight: '800',
     color: C.txt,
   },
   selfLogSummaryComm: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.prMuted,
   },

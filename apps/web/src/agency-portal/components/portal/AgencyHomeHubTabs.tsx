@@ -354,7 +354,7 @@ export function AgencyHomeHubTabs({
 			{activeTab === "approvals" && showApprovals && (
 				<>
 					<div className="iz-portal-panel-head">
-						<h3 className="font-sora text-base font-bold">
+						<h3 className="iz-heading text-base font-bold">
 							{t.agencyHub.pendingApprovalsTitle}
 						</h3>
 						<HubPanelLink
@@ -543,7 +543,7 @@ export function AgencyHomeHubTabs({
 			{activeTab === "review" && showPayroll && (
 				<>
 					<div className="iz-portal-panel-head">
-						<h3 className="font-sora text-base font-bold">
+						<h3 className="iz-heading text-base font-bold">
 							{t.agencyHub.pvPendingReviewTitle}
 						</h3>
 						<HubPanelLink
@@ -611,7 +611,7 @@ export function AgencyHomeHubTabs({
 			{activeTab === "disputes" && showPayroll && (
 				<>
 					<div className="iz-portal-panel-head">
-						<h3 className="font-sora text-base font-bold">
+						<h3 className="iz-heading text-base font-bold">
 							{t.agencyHub.openDisputesTitle}
 						</h3>
 						{/* `?tab=disputes`, NOT `?status=DISPUTED`. The claim's voucher is
@@ -691,7 +691,7 @@ export function AgencyHomeHubTabs({
 			{activeTab === "receipts" && showPayroll && (
 				<>
 					<div className="iz-portal-panel-head">
-						<h3 className="font-sora text-base font-bold">
+						<h3 className="iz-heading text-base font-bold">
 							{t.agencyHub.receiptsWaitingTitle}
 						</h3>
 						<HubPanelLink
@@ -782,7 +782,7 @@ export function AgencyHomeHubTabs({
 			{activeTab === "overtime" && showPayroll && (
 				<>
 					<div className="iz-portal-panel-head">
-						<h3 className="font-sora text-base font-bold">
+						<h3 className="iz-heading text-base font-bold">
 							{t.agencyHub.overtimeAwaitingTitle}
 						</h3>
 						<HubPanelLink

@@ -97,7 +97,7 @@ export function Logo({
 			<InnocenZWordmark className={wordSize} />
 			{showTagline && size !== "sm" && (
 				<p
-					className="font-sora text-[10px] font-bold tracking-[0.3em] text-[var(--iz-gold)]"
+					className="iz-heading text-[10px] font-bold tracking-[0.3em] text-[var(--iz-gold)]"
 					style={{ letterSpacing: "3px" }}
 				>
 					WORK · FLOW · ELEGANCE

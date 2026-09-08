@@ -379,6 +379,12 @@ export interface PendingOvertimeClaim {
 	slot: string | null;
 	outletName: string | null;
 	overtimeMinutes: number | null;
+	/**
+	 * The image the OUTLET linked this shift with. R2 object KEY, not a URL —
+	 * resolve with `resolveProofPhotoUrl`. Same field and same meaning as
+	 * `DisputeShift.coverImage`, deliberately spelled the same way.
+	 */
+	coverImage: string | null;
 	// numeric(12,2), serialized as a string — the sealed daily wage the hourly
 	// overtime rate is derived from.
 	payAmount: string | null;

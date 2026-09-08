@@ -363,7 +363,7 @@ function AgencyProfile() {
 						)}
 					</div>
 				</div>
-				<div className="mt-3 font-sora text-lg font-bold">{owner.orgName}</div>
+				<div className="mt-3 iz-heading text-lg font-bold">{owner.orgName}</div>
 				<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
 				<div
 					className={`mt-1 flex items-center gap-1 iz-tiny ${
