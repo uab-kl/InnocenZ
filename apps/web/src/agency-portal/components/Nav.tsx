@@ -38,9 +38,23 @@ export function navIsActive(pathname: string, to: string) {
 export function BottomNav({
 	items,
 	className,
+	trailing,
 }: {
 	items: NavItem[];
 	className?: string;
+	/**
+	 * Rendered as the last cell of the bar, beside the links.
+	 *
+	 * This bar is the ONLY navigation a phone gets — `.iz-portal-sidebar` is
+	 * `display: none` below 768px — and it was handed the BASE nav list while
+	 * the sidebar got the MERGED one. Everything the merge adds (Settings,
+	 * Subscription, Workspace, Manage PR / Manage Outlet) therefore had no
+	 * route to it on a phone at all, and neither did Sign out, which lives in
+	 * the sidebar foot. `trailing` is where the overflow control goes;
+	 * `.iz-tabbar` already styles `button` identically to `a`, so it needs no
+	 * new chrome.
+	 */
+	trailing?: ReactNode;
 }) {
 	const { pathname } = useLocation();
 
@@ -62,6 +76,8 @@ export function BottomNav({
 					</Link>
 				);
 			})}
+
+			{trailing}
 		</nav>
 	);
 }

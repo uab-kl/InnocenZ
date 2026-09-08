@@ -20,8 +20,13 @@ import {
 	useOutletCanFor,
 } from "@agency-portal/lib/use-portal-can";
 import { Link, useLocation } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import {
+	ChevronLeft,
+	ChevronRight,
+	LogOut,
+	Menu as MenuIcon,
+} from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
@@ -464,6 +469,28 @@ export function PortalShell({
 			return next;
 		});
 
+	// Phone-only drawer carrying the full rail. Deliberately NOT persisted the
+	// way `collapsed` is: a drawer that reopened itself on the next page load
+	// would cover the screen someone had just navigated to.
+	const [menuOpen, setMenuOpen] = useState(false);
+	const closeMenu = useCallback(() => setMenuOpen(false), []);
+	useEffect(() => {
+		if (!menuOpen) return;
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setMenuOpen(false);
+		};
+		window.addEventListener("keydown", onKey);
+		// The panel sits over a scrolling viewport, so without this a touch drag
+		// anywhere on the scrim scrolls the page underneath and the drawer
+		// appears to float over content that is moving on its own.
+		const previousOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+		return () => {
+			window.removeEventListener("keydown", onKey);
+			document.body.style.overflow = previousOverflow;
+		};
+	}, [menuOpen]);
+
 	return (
 		<div
 			className="iz-portal"
@@ -506,7 +533,65 @@ export function PortalShell({
 
 			{navItems.length > 0 && (
 				<div className="iz-portal-mobile-footer md:hidden">
-					<BottomNav items={localiseNav(navItems, t)} />
+					<BottomNav
+						items={localiseNav(navItems, t)}
+						trailing={
+							/*
+							  The phone's way into everything the tab bar cannot hold.
+							  The bar is fed `navItems` (the base list) while the rail is
+							  fed `sidebarItems` (base + permitted extras), so without
+							  this the extras — Settings, Subscription, Workspace,
+							  Manage PR, Manage Outlet — plus the language switcher and
+							  Sign out were all unreachable below 768px.
+							*/
+							<button
+								type="button"
+								onClick={() => setMenuOpen(true)}
+								aria-haspopup="dialog"
+								aria-expanded={menuOpen}
+								data-active={menuOpen ? "true" : undefined}
+								className={menuOpen ? "on" : ""}
+							>
+								<MenuIcon className="h-5 w-5" strokeWidth={1.8} />
+								<span>{t.shell.menu}</span>
+							</button>
+						}
+					/>
+				</div>
+			)}
+
+			{menuOpen && (
+				<div className="iz-portal-drawer md:hidden">
+					{/*
+					  The scrim is a real button, not a click-handled div: it is the
+					  primary way out on a touch screen, and a div would be invisible
+					  to a keyboard and to a screen reader.
+					*/}
+					<button
+						type="button"
+						className="iz-portal-drawer__scrim"
+						aria-label={t.shell.closeMenu}
+						onClick={closeMenu}
+					/>
+					<div
+						className="iz-portal-drawer__panel"
+						role="dialog"
+						aria-modal="true"
+						aria-label={t.shell.menu}
+					>
+						{/*
+						  The SAME component the desktop rail renders, with the SAME
+						  merged and permission-filtered list — so a phone can never
+						  drift out of step with what a desktop shows. `onNavigate`
+						  already existed on PortalSidebar for exactly this and had no
+						  caller until now.
+						*/}
+						<PortalSidebar
+							portal={portal}
+							items={localiseNav(sidebarItems, t)}
+							onNavigate={closeMenu}
+						/>
+					</div>
 				</div>
 			)}
 

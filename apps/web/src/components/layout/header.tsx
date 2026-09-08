@@ -20,6 +20,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getBusinessSectionByKey } from "@/constants/business-sections";
 import { sidebarSections } from "@/constants/links";
 import { getRbacSectionByKey } from "@/constants/rbac-sections";
@@ -182,28 +183,57 @@ export function Header() {
 	const avatarSrc = apiAssetUrl(user?.profileImage);
 
 	return (
-		<header className="flex h-16 items-center justify-between border-b bg-background px-6">
-			<nav
-				aria-label={t.admin.breadcrumb}
-				className="flex items-center gap-2 text-sm font-semibold"
-			>
-				{breadcrumbCrumbs.map((crumb) => (
-					<span key={crumb.key} className="flex items-center gap-2">
-						{!crumb.isFirst && (
-							<span className="text-muted-foreground" aria-hidden="true">
-								›
-							</span>
-						)}
-						<span
-							className={crumb.isLast ? "text-primary" : "text-foreground/80"}
-						>
-							{crumb.segment}
-						</span>
-					</span>
-				))}
-			</nav>
+		<header className="flex h-16 items-center justify-between gap-2 border-b bg-background px-4 md:px-6">
+			<div className="flex min-w-0 items-center gap-1">
+				{/*
+				  Below 768px `ui/sidebar.tsx` swaps the rail for an off-canvas
+				  Sheet, and NOTHING in the app rendered a control to open it —
+				  `SidebarTrigger` had no call site anywhere in the tree. So on a
+				  phone the admin had exactly one reachable page: whichever one was
+				  already on screen. Dashboard, Business, RBAC, User management,
+				  Audit log and Service were all unreachable, with nothing on
+				  screen to suggest anything was missing. Desktop keeps the
+				  always-open rail, so this is hidden from `md:` up rather than
+				  rendered and ignored.
+				*/}
+				<SidebarTrigger className="-ml-1 size-9 shrink-0 md:hidden" />
 
-			<div className="flex items-center gap-1">
+				<nav
+					aria-label={t.admin.breadcrumb}
+					className="flex min-w-0 items-center gap-2 text-sm font-semibold"
+				>
+					{breadcrumbCrumbs.map((crumb) => (
+						<span
+							key={crumb.key}
+							/*
+							  The trail is the one thing in this bar that grows without
+							  bound. At 375px a three-deep trail pushed the bell and the
+							  avatar off the right edge, so on a phone everything but the
+							  LEAF folds away — the leaf is the crumb that says where you
+							  are, and the ancestors are now one tap away in the drawer.
+							*/
+							className={`flex min-w-0 items-center gap-2${
+								crumb.isLast ? "" : " hidden sm:flex"
+							}`}
+						>
+							{!crumb.isFirst && (
+								<span className="text-muted-foreground" aria-hidden="true">
+									›
+								</span>
+							)}
+							<span
+								className={`truncate ${
+									crumb.isLast ? "text-primary" : "text-foreground/80"
+								}`}
+							>
+								{crumb.segment}
+							</span>
+						</span>
+					))}
+				</nav>
+			</div>
+
+			<div className="flex shrink-0 items-center gap-1">
 				{/*
 				  Left of the theme toggle, inside the existing control cluster.
 				  It adds no overlay and no portal, so the breadcrumb on the left

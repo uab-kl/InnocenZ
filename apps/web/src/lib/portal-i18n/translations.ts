@@ -57,6 +57,15 @@ const en = {
 		signOut: "Sign out",
 		expandSidebar: "Expand sidebar",
 		collapseSidebar: "Collapse sidebar",
+		/**
+		 * The phone tab bar's overflow tab, and the drawer it opens.
+		 *
+		 * Deliberately "Menu" and not "More": the drawer carries the whole rail
+		 * — every nav destination, the language switcher and Sign out — so it is
+		 * the menu, not a bin for leftovers.
+		 */
+		menu: "Menu",
+		closeMenu: "Close menu",
 		notifications: "Notifications",
 		profile: "Profile",
 		demoData: "Demo data",
@@ -6083,6 +6092,8 @@ const zh: PortalTranslations = {
 		signOut: "退出登录",
 		expandSidebar: "展开侧栏",
 		collapseSidebar: "收起侧栏",
+		menu: "菜单",
+		closeMenu: "关闭菜单",
 		notifications: "通知",
 		profile: "个人资料",
 		demoData: "演示数据",
