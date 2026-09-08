@@ -16,7 +16,7 @@ servers without colliding.
    - generates a `Caddyfile` for `DEPLOY_DOMAIN` and `.env` (image tags + `DEPLOY_ENV`), and `scp`s them plus the rest of `tools/deploy/` to the server
    - uploads **`.env.backend.<env>` / `.env.frontend.<env>` only if those real files exist** — never the empty `.example` (so a deploy cannot wipe staging DB/R2 with a blank template)
    - `ssh`'s in to create the `innocenz-<env>-network` Docker network (if missing) and run `deploy.sh`
-2. `tools/deploy/deploy.sh` (on the server) stops the old containers, drops the old cached images, retries `docker compose pull` up to 5 times, then `docker compose up -d`.
+2. `tools/deploy/deploy.sh` (on the server) retries `docker compose pull` up to 5 times **while the old containers keep serving traffic**, then swaps them with `docker compose up -d --force-recreate`, then removes the superseded images. A pull that never succeeds leaves the previous version running.
 
 **Note:** `pnpm deploy` (no suffix) does not work — `deploy` is a command
 reserved by pnpm itself. Always use `pnpm deploy:staging` / `pnpm deploy:production`
