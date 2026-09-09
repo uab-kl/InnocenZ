@@ -21291,6 +21291,7 @@ body:has(.iz-portal) .iz-pv-doc [class*="title"] {
 }
 .iz-avatar-crop__actions .iz-btn {
 	flex: 1;
+}
 /* ===========================================================================
    Phone chrome for the Outlet / PR Agency portals.
 
