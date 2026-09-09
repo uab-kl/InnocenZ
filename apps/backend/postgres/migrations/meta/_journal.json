@@ -1107,6 +1107,20 @@
       "when": 1792790000000,
       "tag": "0157_billing_starts_at_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 158,
+      "version": "7",
+      "when": 1792791000000,
+      "tag": "0158_user_member_code_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1792792000000,
+      "tag": "0159_membership_member_code_not_null",
+      "breakpoints": true
     }
   ]
 }

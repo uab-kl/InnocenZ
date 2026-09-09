@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { nextOrgMemberCode } from '@/util/member-code';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
@@ -201,6 +202,8 @@ export async function seedSampleOrgs(): Promise<void> {
         outletId: velvetId,
         userId,
         status: 'active',
+        // NOT NULL since 0159 — a seed mints one exactly like the app does.
+        memberCode: await nextOrgMemberCode('outlet', velvetId),
         createdBy: ACTOR,
         updatedBy: ACTOR,
       });

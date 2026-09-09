@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { integer, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 
@@ -15,7 +16,24 @@ export const UserTable = MainSchema.table('user', {
      * (INNPR0001) or an admin (INNADM0001). Organisation operators are keyed
      * per membership instead, on agency_user / outlet_user (0154).
      */
-    memberCode: varchar('member_code', { length: 32 }),
+    /**
+     * NOT NULL since 0158, with a sequence-backed DEFAULT so no insert — app or
+     * seed script — can create an account without one. The default is the FLOOR
+     * id (INNUSR…); `ensureAccountCode()` upgrades it to the organisation, admin
+     * or PR id as soon as the account becomes something more specific.
+     */
+    memberCode: varchar('member_code', { length: 32 })
+      .notNull()
+      /*
+       * The DEFAULT is declared here as well as in 0158, and it has to be: a
+       * bare .notNull() makes drizzle demand the field on EVERY insert, even
+       * though Postgres would have supplied one. Naming the default keeps the
+       * eleven insert sites working untouched and keeps the model honest about
+       * what the column does.
+       */
+      .default(
+        sql`('INNUSR' || lpad(nextval('main.user_member_code_seq')::text, 4, '0'))`,
+      ),
     passwordHash: varchar('password_hash', { length: 255 }),
     status: varchar('status', { length: 100 }).$type<UserStatus>().notNull(),
     /**

@@ -25,7 +25,10 @@ import { PortalTable } from '@/features/rbac/portal/portal.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { UserTable } from '@/features/user/user.model';
-import { reserveOrgPrefix } from '@/util/member-code';
+import {
+  ensureAccountCodeFromMembership,
+  reserveOrgPrefix,
+} from '@/util/member-code';
 
 /** owner, then guarantor, then the rest — the owner's stated order. */
 const LANE_RANK: Record<string, number> = {
@@ -241,5 +244,35 @@ console.log('PRs');
 await backfillPeople('PR', 'pr');
 console.log('ADMINS');
 await backfillPeople('ADM', 'admin');
+
+// Org operators hold no PR/admin id of their own, so their `user` row was left
+// null by design — until the owner asked for no nulls at all (9 Sep 2026). The
+// account now mirrors the FIRST membership id issued to that person; the
+// membership row is still the authoritative one.
+console.log('ORG OPERATORS (account row mirrors the first membership id)');
+{
+  const operators = await db
+    .select({ id: UserTable.id, username: UserTable.username })
+    .from(UserTable)
+    .where(isNull(UserTable.memberCode))
+    .orderBy(asc(UserTable.createdAt), asc(UserTable.id));
+  let filled = 0;
+  for (const person of operators) {
+    await ensureAccountCodeFromMembership(person.id);
+    const [after] = await db
+      .select({ code: UserTable.memberCode })
+      .from(UserTable)
+      .where(eq(UserTable.id, person.id));
+    if (after?.code) {
+      filled += 1;
+      console.log(`  ${after.code}  ${person.username}`);
+    } else {
+      console.log(`  (no membership to take an id from)  ${person.username}`);
+    }
+  }
+  if (operators.length === 0) console.log('  (none missing)');
+  else console.log(`  ${filled} of ${operators.length} filled`);
+}
+
 console.log('done');
 process.exit(0);
