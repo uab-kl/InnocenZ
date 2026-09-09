@@ -350,6 +350,31 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ OPEN — new venues start with PLACEHOLDER event covers (created 9 Sep 2026 by the templates work)
+
+Creating an outlet now creates its 12 starter event cards
+(`features/shift-template/starter-templates.ts`, on both the sign-up and admin
+paths), but it writes **no cover pictures** — sign-up will not wait on an R2
+upload, so the gallery renders its styled placeholder until the venue uploads
+its own through the edit pencil.
+
+That is deliberate, and it leaves one real gap: **the 8 default pictures have no
+committed source.** They exist only as R2 objects and in a folder on one
+machine's disk (`seed-shift-templates.ts` still reads
+`SEED_COVERS_DIR ?? 'C:/Users/jinkg/Pictures'`). The three venues created on
+9 Sep have covers only because they were copied from an existing venue's public
+objects by hand. A venue created tomorrow starts with placeholders, and nobody
+on another machine can fill them.
+
+**To close it:** commit the 8 images into the repo (or an asset the backend can
+read) and have `createStarterTemplates` upload them per-venue — one object per
+template per outlet, never a shared key, because deleting one venue's card
+deletes the R2 object and would blank another's picture.
+
+⚠️ Whatever fills covers must NOT re-create the cards themselves. They are the
+venue's examples to delete; re-running the seeding resurrects removed cards,
+which is the failure `initRoles()` already has with roles.
+
 ### ▶ OPEN — "Adjust crop" disappears on reload (found 9 Sep 2026, corrects X78)
 
 The owner opened the outlet profile for **Hide-in Bistro & Lounge**, which has a
