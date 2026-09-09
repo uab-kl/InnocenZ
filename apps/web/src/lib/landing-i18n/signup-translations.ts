@@ -37,13 +37,29 @@ export interface SignupTranslations {
 		companyName: { label: string; placeholder: string };
 		companyRegistrationOld: { label: string; placeholder: string };
 		companyRegistrationNew: { label: string; placeholder: string };
+		businessLicense: { label: string; placeholder: string };
 		addressLine1: { label: string; placeholder: string };
 		addressLine2: { label: string; placeholder: string };
 		city: { label: string; placeholder: string; chooseStateFirst: string };
 		postcode: { label: string; placeholder: string };
 		state: { label: string; placeholder: string };
 		country: { label: string; value: string; notice: string };
-		personInCharge: { label: string; placeholder: string };
+		personInCharge: { label: string; placeholder: string; hint: string };
+		idType: {
+			label: string;
+			nric: string;
+			passport: string;
+		};
+		idNo: {
+			label: string;
+			placeholderNric: string;
+			placeholderPassport: string;
+		};
+		gender: { label: string; male: string; female: string; hint: string };
+		dob: { label: string; placeholder: string };
+		nationality: { label: string; placeholder: string };
+		/** Read back to the person from their own IC — `{date}` and `{age}`. */
+		icDerived: string;
 		phoneNum: {
 			label: string;
 			placeholder: string;
@@ -129,9 +145,21 @@ export interface SignupTranslations {
 		postcodeMax: string;
 		stateRequired: string;
 		companyRegistrationNewRequired: string;
+		companyRegistrationNewFormat: string;
+		companyRegistrationOldFormat: string;
+		businessLicenseRequired: string;
+		businessLicenseMax: string;
 		registrationNumberMax: string;
 		personInChargeRequired: string;
 		personInChargeMax: string;
+		idTypeRequired: string;
+		genderRequired: string;
+		idNoRequired: string;
+		idNoMax: string;
+		nricInvalid: string;
+		genderMismatch: string;
+		dobRequired: string;
+		nationalityRequired: string;
 		phoneRequired: string;
 		phoneMax: string;
 		phoneMin: string;
@@ -211,7 +239,11 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			},
 			companyRegistrationNew: {
 				label: "New company registration number",
-				placeholder: "e.g. 202401012345",
+				placeholder: "e.g. 202601024567",
+			},
+			businessLicense: {
+				label: "Business license",
+				placeholder: "e.g. DBKL.BP.2026.01452",
 			},
 			addressLine1: {
 				label: "Address line 1",
@@ -240,9 +272,29 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				notice: "We currently support Malaysia only.",
 			},
 			personInCharge: {
-				label: "Person in charge",
-				placeholder: "Full name of primary contact",
+				label: "Full name (as per IC)",
+				placeholder: "Exactly as printed on the IC",
+				hint: "This is the name on your account and on every document we issue.",
 			},
+			idType: {
+				label: "ID type",
+				nric: "NRIC (Malaysian)",
+				passport: "Passport",
+			},
+			idNo: {
+				label: "ID number",
+				placeholderNric: "e.g. 950312-14-8821",
+				placeholderPassport: "e.g. A12345678",
+			},
+			gender: {
+				label: "Gender",
+				male: "Male",
+				female: "Female",
+				hint: "Your IC states this too — we check the two against each other.",
+			},
+			dob: { label: "Date of birth", placeholder: "YYYY-MM-DD" },
+			nationality: { label: "Nationality", placeholder: "e.g. Singaporean" },
+			icDerived: "From your IC: born {date} · age {age}",
 			phoneNum: {
 				label: "Contact number",
 				placeholder: "e.g. 123456789",
@@ -356,8 +408,24 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			companyRegistrationNewRequired:
 				"New company registration number is required",
 			registrationNumberMax: "Registration number is too long",
-			personInChargeRequired: "Person in charge is required",
+			companyRegistrationNewFormat:
+				"SSM numbers are 12 digits — year, entity code, running number (e.g. 202601024567)",
+			companyRegistrationOldFormat:
+				"The old format is digits and a letter, e.g. 1456789-W",
+			businessLicenseRequired: "Business license is required",
+			businessLicenseMax: "Business license is too long",
+			personInChargeRequired: "Full name is required",
 			personInChargeMax: "Name must be 100 characters or fewer",
+			idTypeRequired: "Choose an ID type",
+			genderRequired: "Gender is required",
+			idNoRequired: "ID number is required",
+			idNoMax: "ID number must be 32 characters or fewer",
+			nricInvalid:
+				"That is not a valid NRIC — 12 digits beginning with the birth date",
+			genderMismatch:
+				"This does not match your IC number — check the number and the selection",
+			dobRequired: "Date of birth is required (YYYY-MM-DD)",
+			nationalityRequired: "Nationality is required",
 			phoneRequired: "Please enter a valid mobile number",
 			phoneMax: "Mobile number is too long",
 			phoneMin: "That mobile number looks too short",
@@ -428,7 +496,11 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			},
 			companyRegistrationNew: {
 				label: "新公司注册号",
-				placeholder: "例如 202401012345",
+				placeholder: "例如 202601024567",
+			},
+			businessLicense: {
+				label: "营业执照",
+				placeholder: "例如 DBKL.BP.2026.01452",
 			},
 			addressLine1: {
 				label: "地址第一行",
@@ -457,9 +529,29 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				notice: "目前仅支持马来西亚。",
 			},
 			personInCharge: {
-				label: "负责人",
-				placeholder: "主要联系人全名",
+				label: "全名（与身份证一致）",
+				placeholder: "请填写身份证上的名字",
+				hint: "该名字将用于您的账号与我们签发的所有单据。",
 			},
+			idType: {
+				label: "证件类型",
+				nric: "身份证（马来西亚）",
+				passport: "护照",
+			},
+			idNo: {
+				label: "证件号码",
+				placeholderNric: "例如 950312-14-8821",
+				placeholderPassport: "例如 A12345678",
+			},
+			gender: {
+				label: "性别",
+				male: "男",
+				female: "女",
+				hint: "身份证也包含性别，我们会核对两者。",
+			},
+			dob: { label: "出生日期", placeholder: "YYYY-MM-DD" },
+			nationality: { label: "国籍", placeholder: "例如 新加坡" },
+			icDerived: "根据身份证：出生于 {date} · 年龄 {age}",
 			phoneNum: {
 				label: "联系电话",
 				placeholder: "例如 123456789",
@@ -570,8 +662,21 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			companyNameMax: "公司名称不能超过 150 个字符",
 			companyRegistrationNewRequired: "新公司注册号为必填项",
 			registrationNumberMax: "注册号过长",
-			personInChargeRequired: "负责人为必填项",
+			companyRegistrationNewFormat:
+				"SSM 注册号为 12 位数字 — 年份、实体代码、流水号（例如 202601024567）",
+			companyRegistrationOldFormat: "旧格式为数字加字母，例如 1456789-W",
+			businessLicenseRequired: "营业执照为必填项",
+			businessLicenseMax: "营业执照号过长",
+			personInChargeRequired: "全名为必填项",
 			personInChargeMax: "姓名不能超过 100 个字符",
+			idTypeRequired: "请选择证件类型",
+			genderRequired: "性别为必填项",
+			idNoRequired: "证件号码为必填项",
+			idNoMax: "证件号码不能超过 32 个字符",
+			nricInvalid: "身份证号码无效 — 应为 12 位数字，开头为出生日期",
+			genderMismatch: "与身份证号码不符 — 请核对号码与所选性别",
+			dobRequired: "出生日期为必填项（YYYY-MM-DD）",
+			nationalityRequired: "国籍为必填项",
 			phoneRequired: "请输入有效的手机号码",
 			phoneMax: "手机号码过长",
 			phoneMin: "手机号码过短",

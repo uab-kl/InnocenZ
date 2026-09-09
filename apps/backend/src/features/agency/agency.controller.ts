@@ -520,6 +520,55 @@ export class AgencyControllerClass {
       });
     }
   }
+
+  /**
+   * ADMIN — every agency operator on the platform, paginated.
+   *
+   * The "Team members" screen. `GET /:id/members` answers for ONE agency and
+   * `/memberships` is a batch lookup that needs the userIds up front, so before
+   * this there was no way to ask "who operates the agencies".
+   */
+  async listTeamMembers(req: Request, res: Response) {
+    try {
+      /*
+       * Guarded, unlike the older admin lists: `Number('abc')` is NaN and
+       * `Number(req.query.pageSize ?? 10)` hands NaN straight to `.limit()`.
+       * The upper bound is this endpoint's own — a row here carries a person's
+       * email and phone, so an unbounded pageSize is a bulk export.
+       */
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 10));
+      const statusParam = req.query.status as string | undefined;
+      const { rows, totalCount } = await this.agencyMemberRepository.listAllEnriched({
+        search: req.query.search as string | undefined,
+        agencyId: req.query.agencyId as string | undefined,
+        status: !statusParam || statusParam === 'all' ? undefined : statusParam,
+        page,
+        pageSize,
+      });
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: rows,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      });
+    } catch (error) {
+      logger.error('[AgencyController.listTeamMembers] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
 
   async list(req: Request, res: Response) {
     try {

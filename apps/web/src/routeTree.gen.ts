@@ -69,10 +69,14 @@ import { Route as AdminServicePlanChangesRouteImport } from './routes/admin/serv
 import { Route as AdminServicePlanPaymentRouteImport } from './routes/admin/service/plan-payment'
 import { Route as AdminServiceRequestsRouteImport } from './routes/admin/service/requests'
 import { Route as AdminUserManagementAdminRouteImport } from './routes/admin/user-management/admin'
-import { Route as AdminUserManagementAgencyRouteImport } from './routes/admin/user-management/agency'
+import { Route as AdminUserManagementAgencyTeamRouteImport } from './routes/admin/user-management/agency-team'
 import { Route as AdminUserManagementLegacyMemberRouteImport } from './routes/admin/user-management/legacy-member'
-import { Route as AdminUserManagementOutletRouteImport } from './routes/admin/user-management/outlet'
+import { Route as AdminUserManagementOutletTeamRouteImport } from './routes/admin/user-management/outlet-team'
 import { Route as AdminUserManagementPrRouteImport } from './routes/admin/user-management/pr'
+import { Route as AdminUserManagementAgencyIndexRouteImport } from './routes/admin/user-management/agency/index'
+import { Route as AdminUserManagementOutletIndexRouteImport } from './routes/admin/user-management/outlet/index'
+import { Route as AdminUserManagementAgencyAgencyIdMemberUserIdRouteImport } from './routes/admin/user-management/agency/$agencyId/member/$userId'
+import { Route as AdminUserManagementOutletOutletIdMemberUserIdRouteImport } from './routes/admin/user-management/outlet/$outletId/member/$userId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -378,10 +382,10 @@ const AdminUserManagementAdminRoute =
     path: '/admin',
     getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
-const AdminUserManagementAgencyRoute =
-  AdminUserManagementAgencyRouteImport.update({
-    id: '/agency',
-    path: '/agency',
+const AdminUserManagementAgencyTeamRoute =
+  AdminUserManagementAgencyTeamRouteImport.update({
+    id: '/agency-team',
+    path: '/agency-team',
     getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
 const AdminUserManagementLegacyMemberRoute =
@@ -390,10 +394,10 @@ const AdminUserManagementLegacyMemberRoute =
     path: '/legacy-member',
     getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
-const AdminUserManagementOutletRoute =
-  AdminUserManagementOutletRouteImport.update({
-    id: '/outlet',
-    path: '/outlet',
+const AdminUserManagementOutletTeamRoute =
+  AdminUserManagementOutletTeamRouteImport.update({
+    id: '/outlet-team',
+    path: '/outlet-team',
     getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
 const AdminUserManagementPrRoute = AdminUserManagementPrRouteImport.update({
@@ -401,6 +405,30 @@ const AdminUserManagementPrRoute = AdminUserManagementPrRouteImport.update({
   path: '/pr',
   getParentRoute: () => AdminUserManagementRouteRoute,
 } as any)
+const AdminUserManagementAgencyIndexRoute =
+  AdminUserManagementAgencyIndexRouteImport.update({
+    id: '/agency/',
+    path: '/agency/',
+    getParentRoute: () => AdminUserManagementRouteRoute,
+  } as any)
+const AdminUserManagementOutletIndexRoute =
+  AdminUserManagementOutletIndexRouteImport.update({
+    id: '/outlet/',
+    path: '/outlet/',
+    getParentRoute: () => AdminUserManagementRouteRoute,
+  } as any)
+const AdminUserManagementAgencyAgencyIdMemberUserIdRoute =
+  AdminUserManagementAgencyAgencyIdMemberUserIdRouteImport.update({
+    id: '/agency/$agencyId/member/$userId',
+    path: '/agency/$agencyId/member/$userId',
+    getParentRoute: () => AdminUserManagementRouteRoute,
+  } as any)
+const AdminUserManagementOutletOutletIdMemberUserIdRoute =
+  AdminUserManagementOutletOutletIdMemberUserIdRouteImport.update({
+    id: '/outlet/$outletId/member/$userId',
+    path: '/outlet/$outletId/member/$userId',
+    getParentRoute: () => AdminUserManagementRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -462,11 +490,15 @@ export interface FileRoutesByFullPath {
   '/admin/service/plan-payment': typeof AdminServicePlanPaymentRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
-  '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/agency-team': typeof AdminUserManagementAgencyTeamRoute
   '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
-  '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
+  '/admin/user-management/outlet-team': typeof AdminUserManagementOutletTeamRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log/': typeof AdminAuditLogIndexRoute
+  '/admin/user-management/agency/': typeof AdminUserManagementAgencyIndexRoute
+  '/admin/user-management/outlet/': typeof AdminUserManagementOutletIndexRoute
+  '/admin/user-management/agency/$agencyId/member/$userId': typeof AdminUserManagementAgencyAgencyIdMemberUserIdRoute
+  '/admin/user-management/outlet/$outletId/member/$userId': typeof AdminUserManagementOutletOutletIdMemberUserIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -525,11 +557,15 @@ export interface FileRoutesByTo {
   '/admin/service/plan-payment': typeof AdminServicePlanPaymentRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
-  '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/agency-team': typeof AdminUserManagementAgencyTeamRoute
   '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
-  '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
+  '/admin/user-management/outlet-team': typeof AdminUserManagementOutletTeamRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log': typeof AdminAuditLogIndexRoute
+  '/admin/user-management/agency': typeof AdminUserManagementAgencyIndexRoute
+  '/admin/user-management/outlet': typeof AdminUserManagementOutletIndexRoute
+  '/admin/user-management/agency/$agencyId/member/$userId': typeof AdminUserManagementAgencyAgencyIdMemberUserIdRoute
+  '/admin/user-management/outlet/$outletId/member/$userId': typeof AdminUserManagementOutletOutletIdMemberUserIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -592,11 +628,15 @@ export interface FileRoutesById {
   '/admin/service/plan-payment': typeof AdminServicePlanPaymentRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
-  '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/agency-team': typeof AdminUserManagementAgencyTeamRoute
   '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
-  '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
+  '/admin/user-management/outlet-team': typeof AdminUserManagementOutletTeamRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log/': typeof AdminAuditLogIndexRoute
+  '/admin/user-management/agency/': typeof AdminUserManagementAgencyIndexRoute
+  '/admin/user-management/outlet/': typeof AdminUserManagementOutletIndexRoute
+  '/admin/user-management/agency/$agencyId/member/$userId': typeof AdminUserManagementAgencyAgencyIdMemberUserIdRoute
+  '/admin/user-management/outlet/$outletId/member/$userId': typeof AdminUserManagementOutletOutletIdMemberUserIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -660,11 +700,15 @@ export interface FileRouteTypes {
     | '/admin/service/plan-payment'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
-    | '/admin/user-management/agency'
+    | '/admin/user-management/agency-team'
     | '/admin/user-management/legacy-member'
-    | '/admin/user-management/outlet'
+    | '/admin/user-management/outlet-team'
     | '/admin/user-management/pr'
     | '/admin/audit-log/'
+    | '/admin/user-management/agency/'
+    | '/admin/user-management/outlet/'
+    | '/admin/user-management/agency/$agencyId/member/$userId'
+    | '/admin/user-management/outlet/$outletId/member/$userId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -723,11 +767,15 @@ export interface FileRouteTypes {
     | '/admin/service/plan-payment'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
-    | '/admin/user-management/agency'
+    | '/admin/user-management/agency-team'
     | '/admin/user-management/legacy-member'
-    | '/admin/user-management/outlet'
+    | '/admin/user-management/outlet-team'
     | '/admin/user-management/pr'
     | '/admin/audit-log'
+    | '/admin/user-management/agency'
+    | '/admin/user-management/outlet'
+    | '/admin/user-management/agency/$agencyId/member/$userId'
+    | '/admin/user-management/outlet/$outletId/member/$userId'
   id:
     | '__root__'
     | '/'
@@ -789,11 +837,15 @@ export interface FileRouteTypes {
     | '/admin/service/plan-payment'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
-    | '/admin/user-management/agency'
+    | '/admin/user-management/agency-team'
     | '/admin/user-management/legacy-member'
-    | '/admin/user-management/outlet'
+    | '/admin/user-management/outlet-team'
     | '/admin/user-management/pr'
     | '/admin/audit-log/'
+    | '/admin/user-management/agency/'
+    | '/admin/user-management/outlet/'
+    | '/admin/user-management/agency/$agencyId/member/$userId'
+    | '/admin/user-management/outlet/$outletId/member/$userId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1235,11 +1287,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUserManagementAdminRouteImport
       parentRoute: typeof AdminUserManagementRouteRoute
     }
-    '/admin/user-management/agency': {
-      id: '/admin/user-management/agency'
-      path: '/agency'
-      fullPath: '/admin/user-management/agency'
-      preLoaderRoute: typeof AdminUserManagementAgencyRouteImport
+    '/admin/user-management/agency-team': {
+      id: '/admin/user-management/agency-team'
+      path: '/agency-team'
+      fullPath: '/admin/user-management/agency-team'
+      preLoaderRoute: typeof AdminUserManagementAgencyTeamRouteImport
       parentRoute: typeof AdminUserManagementRouteRoute
     }
     '/admin/user-management/legacy-member': {
@@ -1249,11 +1301,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUserManagementLegacyMemberRouteImport
       parentRoute: typeof AdminUserManagementRouteRoute
     }
-    '/admin/user-management/outlet': {
-      id: '/admin/user-management/outlet'
-      path: '/outlet'
-      fullPath: '/admin/user-management/outlet'
-      preLoaderRoute: typeof AdminUserManagementOutletRouteImport
+    '/admin/user-management/outlet-team': {
+      id: '/admin/user-management/outlet-team'
+      path: '/outlet-team'
+      fullPath: '/admin/user-management/outlet-team'
+      preLoaderRoute: typeof AdminUserManagementOutletTeamRouteImport
       parentRoute: typeof AdminUserManagementRouteRoute
     }
     '/admin/user-management/pr': {
@@ -1261,6 +1313,34 @@ declare module '@tanstack/react-router' {
       path: '/pr'
       fullPath: '/admin/user-management/pr'
       preLoaderRoute: typeof AdminUserManagementPrRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
+    }
+    '/admin/user-management/agency/': {
+      id: '/admin/user-management/agency/'
+      path: '/agency'
+      fullPath: '/admin/user-management/agency/'
+      preLoaderRoute: typeof AdminUserManagementAgencyIndexRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
+    }
+    '/admin/user-management/outlet/': {
+      id: '/admin/user-management/outlet/'
+      path: '/outlet'
+      fullPath: '/admin/user-management/outlet/'
+      preLoaderRoute: typeof AdminUserManagementOutletIndexRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
+    }
+    '/admin/user-management/agency/$agencyId/member/$userId': {
+      id: '/admin/user-management/agency/$agencyId/member/$userId'
+      path: '/agency/$agencyId/member/$userId'
+      fullPath: '/admin/user-management/agency/$agencyId/member/$userId'
+      preLoaderRoute: typeof AdminUserManagementAgencyAgencyIdMemberUserIdRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
+    }
+    '/admin/user-management/outlet/$outletId/member/$userId': {
+      id: '/admin/user-management/outlet/$outletId/member/$userId'
+      path: '/outlet/$outletId/member/$userId'
+      fullPath: '/admin/user-management/outlet/$outletId/member/$userId'
+      preLoaderRoute: typeof AdminUserManagementOutletOutletIdMemberUserIdRouteImport
       parentRoute: typeof AdminUserManagementRouteRoute
     }
   }
@@ -1314,19 +1394,29 @@ const AdminRbacRouteRouteWithChildren = AdminRbacRouteRoute._addFileChildren(
 
 interface AdminUserManagementRouteRouteChildren {
   AdminUserManagementAdminRoute: typeof AdminUserManagementAdminRoute
-  AdminUserManagementAgencyRoute: typeof AdminUserManagementAgencyRoute
+  AdminUserManagementAgencyTeamRoute: typeof AdminUserManagementAgencyTeamRoute
   AdminUserManagementLegacyMemberRoute: typeof AdminUserManagementLegacyMemberRoute
-  AdminUserManagementOutletRoute: typeof AdminUserManagementOutletRoute
+  AdminUserManagementOutletTeamRoute: typeof AdminUserManagementOutletTeamRoute
   AdminUserManagementPrRoute: typeof AdminUserManagementPrRoute
+  AdminUserManagementAgencyIndexRoute: typeof AdminUserManagementAgencyIndexRoute
+  AdminUserManagementOutletIndexRoute: typeof AdminUserManagementOutletIndexRoute
+  AdminUserManagementAgencyAgencyIdMemberUserIdRoute: typeof AdminUserManagementAgencyAgencyIdMemberUserIdRoute
+  AdminUserManagementOutletOutletIdMemberUserIdRoute: typeof AdminUserManagementOutletOutletIdMemberUserIdRoute
 }
 
 const AdminUserManagementRouteRouteChildren: AdminUserManagementRouteRouteChildren =
   {
     AdminUserManagementAdminRoute: AdminUserManagementAdminRoute,
-    AdminUserManagementAgencyRoute: AdminUserManagementAgencyRoute,
+    AdminUserManagementAgencyTeamRoute: AdminUserManagementAgencyTeamRoute,
     AdminUserManagementLegacyMemberRoute: AdminUserManagementLegacyMemberRoute,
-    AdminUserManagementOutletRoute: AdminUserManagementOutletRoute,
+    AdminUserManagementOutletTeamRoute: AdminUserManagementOutletTeamRoute,
     AdminUserManagementPrRoute: AdminUserManagementPrRoute,
+    AdminUserManagementAgencyIndexRoute: AdminUserManagementAgencyIndexRoute,
+    AdminUserManagementOutletIndexRoute: AdminUserManagementOutletIndexRoute,
+    AdminUserManagementAgencyAgencyIdMemberUserIdRoute:
+      AdminUserManagementAgencyAgencyIdMemberUserIdRoute,
+    AdminUserManagementOutletOutletIdMemberUserIdRoute:
+      AdminUserManagementOutletOutletIdMemberUserIdRoute,
   }
 
 const AdminUserManagementRouteRouteWithChildren =

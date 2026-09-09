@@ -3,10 +3,17 @@ export interface PrAgencyRef {
 
 	name: string;
 
-	code: string;
+	/** The agency’s member-id stem, INNATAGY — what the roster cell prints beside
+	    the name. Null until an id has been minted at that agency. */
+	code: string | null;
 }
 
 export interface PrUser {
+	/** Human-readable platform id — INNPR0001. ONE global sequence: a PR keeps the
+	    same id across every agency they join, unlike an operator, whose id is
+	    minted per organisation. */
+	memberCode: string | null;
+
 	id: string;
 
 	email: string;
@@ -36,6 +43,57 @@ export interface PrUser {
 	comcardHeightCm: number | null;
 
 	comcardWeightKg: number | null;
+
+	comcardBustCm: number | null;
+
+	comcardWaistCm: number | null;
+
+	comcardHipCm: number | null;
+
+	/**
+	 * Whole years as the API derived them — from the IC when it encodes a date,
+	 * else from `dob`. Null when the account has neither.
+	 */
+	age: number | null;
+
+	/** Languages picked at sign-up Step 1. Empty array, never null, so callers can map it. */
+	languages: string[];
+
+	/**
+	 * The two ID scans from sign-up Step 4, as R2 object keys — run them through
+	 * `apiAssetUrl` before putting them in a `src`. Back is null for a passport,
+	 * which is captured as a single page.
+	 */
+	idPhotoFront: string | null;
+
+	idPhotoBack: string | null;
+
+	/** Home address, sign-up Step 2. */
+	addressLine1: string | null;
+
+	addressLine2: string | null;
+
+	city: string | null;
+
+	postcode: string | null;
+
+	state: string | null;
+
+	country: string | null;
+
+	bankName: string | null;
+
+	bankAccountNo: string | null;
+
+	/**
+	 * Whether a drawn signature is on file — deliberately a boolean and not the
+	 * ink. The stored value is a full data-URL, and an admin list has no use for
+	 * a forgeable artefact it would then carry in memory for every row on screen.
+	 */
+	hasSignature: boolean;
+
+	/** `draft` | `pending` | `verified` | `rejected` — the profile's own review state. */
+	verificationStatus: string | null;
 
 	status: string;
 

@@ -157,3 +157,21 @@ export async function fetchOutletAgencyLinks(
 	);
 	return response.data.data ?? [];
 }
+
+/**
+ * ADMIN — every venue one named agency is linked to.
+ *
+ * The mirror of `fetchOutletAgencyLinks`, and distinct from
+ * `fetchAgencyOutletLinks`, which answers "my agency" from the caller's own
+ * memberships and so is useless to an admin, who has none.
+ */
+export async function fetchAgencyOutletLinksById(
+	agencyId: string,
+	onRefreshFail: () => void,
+): Promise<AgencyOutletLink[]> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<AgencyOutletLinksApiResponse>(
+		`/agency-outlet/agency/${agencyId}`,
+	);
+	return response.data.data ?? [];
+}

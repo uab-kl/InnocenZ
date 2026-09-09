@@ -15,6 +15,9 @@ export type OutletMemberSubRole =
 export interface Outlet {
 	id: string;
 	name: string;
+	/** The letters this venue’s member ids are built from — `EM` gives
+	    INNEMOLT0001. Null until an id has been minted here (0154). */
+	memberCodePrefix?: string | null;
 	logoImage: string | null;
 	addressLine1: string | null;
 	addressLine2: string | null;
@@ -23,6 +26,8 @@ export interface Outlet {
 	state: string | null;
 	country: string | null;
 	businessLicense: string | null;
+	/** The pre-2019 registration number, shown in brackets after the new one. */
+	registrationNoOld?: string | null;
 	ssmNo: string | null;
 	lat: string | null;
 	lng: string | null;
@@ -42,6 +47,9 @@ export interface Outlet {
 }
 
 export interface OutletMember {
+	/** Human-readable id for THIS membership — INNATAGY0001. Null only for a row
+	    the backfill has not reached. */
+	memberCode?: string | null;
 	id: string;
 	outletId: string;
 	userId: string;
@@ -54,6 +62,38 @@ export interface OutletMember {
 	username?: string;
 	email?: string | null;
 	phoneNum?: string | null;
+}
+
+/**
+ * One row of the admin's cross-venue "Team members" list —
+ * `GET /outlet/team-members`. The venue twin of `AgencyTeamMember`.
+ */
+export interface OutletTeamMember {
+	/** Human-readable id for THIS membership — INNATAGY0001. Null only for a row
+	    the backfill has not reached. */
+	memberCode?: string | null;
+	id: string;
+	outletId: string;
+	userId: string;
+	/** Derived from RBAC, not a column. */
+	subRole: OutletMemberSubRole;
+	status: string;
+	createdAt: string;
+	updatedAt: string;
+	createdBy: string;
+	updatedBy: string;
+	username?: string;
+	email?: string | null;
+	phoneNum?: string | null;
+	outletName: string;
+	outletStatus: string;
+}
+
+export interface OutletTeamMembersApiResponse {
+	success: boolean;
+	message: string;
+	data: OutletTeamMember[];
+	pagination: OutletPagination;
 }
 
 export interface OutletPagination {
@@ -94,6 +134,8 @@ export interface OutletMembersApiResponse {
 /** One outlet membership joined to its outlet — resolves a signed-in operator's
  * own outlet + role at session start. */
 export interface OutletMembership {
+	/** THIS membership’s own id — INNEMOLT0001. */
+	memberCode?: string | null;
 	membershipId: string;
 	userId: string;
 	outletId: string;

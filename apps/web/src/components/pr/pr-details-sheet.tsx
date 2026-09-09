@@ -1,27 +1,37 @@
 import {
+	Banknote,
 	Building2,
 	Cake,
 	CalendarDays,
+	CreditCard,
 	Fingerprint,
 	Flag,
+	Globe,
 	Hash,
+	Home,
 	IdCard,
 	Images,
+	Languages,
 	Mail,
+	MapPin,
 	Megaphone,
+	PenLine,
 	Phone,
 	Ruler,
+	ShieldCheck,
 	User,
 	UserRound,
 	Users,
 	Weight,
 } from "lucide-react";
+import { useState } from "react";
 import {
 	AccountStatusCard,
 	apiAssetUrl,
 	DetailField,
 	DetailSection,
 	DetailsHero,
+	ScanLightbox,
 	SystemInfoCard,
 } from "@/components/organization/details-sheet-parts";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +45,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import { raceLabel } from "@/lib/portal-i18n/language-label";
+import { languageListLabel, raceLabel } from "@/lib/portal-i18n/language-label";
 import { formatDate, statusColors } from "@/lib/utils";
 import type { PrUser } from "@/services/pr";
 
@@ -68,6 +78,86 @@ function ageFromDob(dob: string | null): number | null {
 	return age >= 0 ? age : null;
 }
 
+/**
+ * One side of the ID exactly as sign-up Step 4 captured it.
+ *
+ * The value on `PrUser` is an R2 object key, so it goes through `apiAssetUrl`
+ * before it reaches a `src` — a raw key renders as a broken image.
+ *
+ * Opens a zooming viewer, not a new tab. The first cut linked out on the theory
+ * that one gesture for every image on the page beat two viewers — but a new tab
+ * shows the scan fit-to-window, which for a MyKad is still too small to read the
+ * number off, and it takes the admin out of the record they were checking. The
+ * whole reason to look at an IC is to read it, so zoom is the feature.
+ *
+ * A missing slot reads as "not uploaded" rather than an empty frame, because it
+ * usually is not a fault: a passport is captured as a single page, so the back
+ * is legitimately absent for every PR who signed up with one.
+ */
+function IdDocTile({
+	label,
+	src,
+	emptyLabel,
+	openLabel,
+	onOpen,
+}: {
+	label: string;
+	src: string | undefined;
+	emptyLabel: string;
+	openLabel: string;
+	onOpen: () => void;
+}) {
+	return (
+		<div className="space-y-1.5">
+			<div className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+				{label}
+			</div>
+			{src ? (
+				<button
+					type="button"
+					onClick={onOpen}
+					aria-label={openLabel}
+					className="block w-full cursor-zoom-in overflow-hidden rounded-md border border-(--lavender-soft)/30 bg-black/40"
+				>
+					<img
+						src={src}
+						alt={label}
+						className="aspect-[16/10] w-full object-contain"
+						loading="lazy"
+						onError={(e) => {
+							e.currentTarget.style.opacity = "0.25";
+						}}
+					/>
+				</button>
+			) : (
+				<p className="rounded-md border border-dashed border-(--lavender-soft)/40 px-3 py-6 text-center text-base text-muted-foreground">
+					{emptyLabel}
+				</p>
+			)}
+		</div>
+	);
+}
+
+/**
+ * The profile's own review state — a small stored enum, so it is translated
+ * rather than printed raw. Anything unrecognised falls through to the stored
+ * value: the column is free-form varchar on the API side, and inventing a
+ * label for a state we do not know about would be worse than showing it.
+ */
+function verificationLabel(
+	raw: string | null,
+	t: ReturnType<typeof usePortalLocale>["t"],
+): string | null {
+	if (!raw) return null;
+	const map: Record<string, string> = {
+		draft: t.adminPr.verifyDraft,
+		pending: t.adminPr.verifyPending,
+		verified: t.adminPr.verifyVerified,
+		rejected: t.adminPr.verifyRejected,
+	};
+	return map[raw.trim().toLowerCase()] ?? raw;
+}
+
 export function PrDetailsSheet({
 	user,
 	open,
@@ -76,7 +166,14 @@ export function PrDetailsSheet({
 	busy = false,
 }: PrDetailsSheetProps) {
 	const { t } = usePortalLocale();
-	const age = user ? ageFromDob(user.dob) : null;
+	// Which scan the zooming viewer is showing, or null when it is closed. Held
+	// here rather than inside IdDocTile so only one can ever be open.
+	const [scan, setScan] = useState<{ src: string; alt: string } | null>(null);
+	// The API derives age from the IC before falling back to `dob` (ic-dob.ts),
+	// which is the owner's rule that age follows the IC. Prefer the served value
+	// and keep the local computation only for a response that predates it —
+	// recomputing from `dob` alone would disagree with every other surface.
+	const age = user ? (user.age ?? ageFromDob(user.dob)) : null;
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -138,6 +235,13 @@ export function PrDetailsSheet({
 
 							<TabsContent value="personal" className="space-y-3 pt-2">
 								<DetailSection title={t.adminPr.sectionIdentity}>
+									{/* A PR carries ONE id for the whole platform — it does not change
+									    when they join a second agency, so it leads the section. */}
+									<DetailField
+										icon={Hash}
+										label={t.adminOrg.memberCodeLabel}
+										value={user.memberCode}
+									/>
 									<DetailField
 										icon={Megaphone}
 										label={t.adminPr.fieldDisplayName}
@@ -181,9 +285,57 @@ export function PrDetailsSheet({
 										value={user.nationality}
 									/>
 									<DetailField
+										icon={Languages}
+										label={t.adminPr.languages}
+										value={
+											user.languages.length > 0
+												? languageListLabel(user.languages, t)
+												: null
+										}
+									/>
+									<DetailField
 										icon={CalendarDays}
 										label={t.adminPr.joined}
 										value={formatDate(user.createdAt)}
+									/>
+								</DetailSection>
+
+								<DetailSection
+									title={t.adminPr.sectionIdDocuments}
+									description={t.adminPr.idDocumentsHint}
+								>
+									<IdDocTile
+										label={t.adminPr.idFront}
+										src={apiAssetUrl(user.idPhotoFront)}
+										emptyLabel={t.adminPr.idPhotoMissing}
+										openLabel={t.adminPr.openScan}
+										onOpen={() => {
+											const src = apiAssetUrl(user.idPhotoFront);
+											if (src) setScan({ src, alt: t.adminPr.idFront });
+										}}
+									/>
+									<IdDocTile
+										label={t.adminPr.idBack}
+										src={apiAssetUrl(user.idPhotoBack)}
+										emptyLabel={t.adminPr.idPhotoMissing}
+										openLabel={t.adminPr.openScan}
+										onOpen={() => {
+											const src = apiAssetUrl(user.idPhotoBack);
+											if (src) setScan({ src, alt: t.adminPr.idBack });
+										}}
+									/>
+								</DetailSection>
+
+								<DetailSection title={t.adminPr.sectionVerification}>
+									<DetailField
+										icon={ShieldCheck}
+										label={t.adminPr.verificationStatus}
+										value={verificationLabel(user.verificationStatus, t)}
+									/>
+									<DetailField
+										icon={PenLine}
+										label={t.adminPr.signatureOnFile}
+										value={user.hasSignature ? t.common.yes : t.common.no}
 									/>
 								</DetailSection>
 							</TabsContent>
@@ -201,6 +353,58 @@ export function PrDetailsSheet({
 										label={t.adminPr.phone}
 										value={user.phoneNum}
 										href={user.phoneNum ? `tel:${user.phoneNum}` : undefined}
+									/>
+								</DetailSection>
+
+								<DetailSection
+									title={t.adminPr.sectionAddress}
+									description={t.adminPr.addressHint}
+								>
+									<DetailField
+										icon={Home}
+										label={t.adminPr.addressLine1}
+										value={user.addressLine1}
+									/>
+									<DetailField
+										icon={Home}
+										label={t.adminPr.addressLine2}
+										value={user.addressLine2}
+									/>
+									<DetailField
+										icon={MapPin}
+										label={t.adminPr.city}
+										value={user.city}
+									/>
+									<DetailField
+										icon={Hash}
+										label={t.adminPr.postcode}
+										value={user.postcode}
+									/>
+									<DetailField
+										icon={MapPin}
+										label={t.adminPr.state}
+										value={user.state}
+									/>
+									<DetailField
+										icon={Globe}
+										label={t.adminPr.country}
+										value={user.country}
+									/>
+								</DetailSection>
+
+								<DetailSection
+									title={t.adminPr.sectionPayout}
+									description={t.adminPr.payoutHint}
+								>
+									<DetailField
+										icon={Banknote}
+										label={t.adminPr.bankName}
+										value={user.bankName}
+									/>
+									<DetailField
+										icon={CreditCard}
+										label={t.adminPr.bankAccountNo}
+										value={user.bankAccountNo}
 									/>
 								</DetailSection>
 							</TabsContent>
@@ -228,6 +432,33 @@ export function PrDetailsSheet({
 										value={
 											user.comcardWeightKg != null
 												? `${user.comcardWeightKg} kg`
+												: null
+										}
+									/>
+									<DetailField
+										icon={Ruler}
+										label={t.adminPr.bust}
+										value={
+											user.comcardBustCm != null
+												? `${user.comcardBustCm} cm`
+												: null
+										}
+									/>
+									<DetailField
+										icon={Ruler}
+										label={t.adminPr.waist}
+										value={
+											user.comcardWaistCm != null
+												? `${user.comcardWaistCm} cm`
+												: null
+										}
+									/>
+									<DetailField
+										icon={Ruler}
+										label={t.adminPr.hip}
+										value={
+											user.comcardHipCm != null
+												? `${user.comcardHipCm} cm`
 												: null
 										}
 									/>
@@ -307,7 +538,7 @@ export function PrDetailsSheet({
 													</div>
 													<div className="flex items-center gap-1 text-sm text-muted-foreground">
 														<Hash className="h-3.5 w-3.5" />
-														{agency.code}
+														{agency.code ?? "—"}
 													</div>
 												</div>
 												<Badge
@@ -332,6 +563,16 @@ export function PrDetailsSheet({
 					</div>
 				)}
 			</SheetContent>
+
+			{/* Sibling of SheetContent, and portalled to <body> from inside — see
+			    ScanLightbox on why a fixed layer cannot escape a Sheet otherwise. */}
+			{scan && (
+				<ScanLightbox
+					src={scan.src}
+					alt={scan.alt}
+					onClose={() => setScan(null)}
+				/>
+			)}
 		</Sheet>
 	);
 }

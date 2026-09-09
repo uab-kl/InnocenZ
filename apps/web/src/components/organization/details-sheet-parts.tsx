@@ -6,10 +6,22 @@ import {
 	Clock,
 	Info,
 	Loader2,
+	Minus,
+	Plus,
+	RotateCcw,
 	UserCog,
 	UserRound,
+	X,
 } from "lucide-react";
-import { type ComponentType, type ReactNode, useEffect, useState } from "react";
+import {
+	type ComponentType,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { env } from "@/env";
@@ -24,6 +36,215 @@ import {
 } from "./org-status";
 
 const DEFAULT_PROFILE_IMAGE = "/img/blank-profile-picture.png";
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 6;
+const ZOOM_STEP = 0.5;
+
+/**
+ * Full-screen image viewer with zoom and pan, for identity scans.
+ *
+ * WHY IT EXISTS when `agency-portal/.../ProofPhotoViewer.tsx` already has a
+ * `PhotoLightbox`: that one is styled with `iz-*` classes from
+ * `agency-portal/prototype-theme.css`, which the agency shell imports and
+ * `styles.css` does not. Reusing it here would have rendered its whole toolbar
+ * unstyled on the admin pages. The behaviour below is deliberately the same
+ * design as that component's, including the two lessons it paid for:
+ *
+ *  1. PORTALLED TO <body>, z-300. This opens from inside a Sheet, and a
+ *     translucent transformed ancestor becomes the containing block for
+ *     `position: fixed`, trapping z-index in its own stacking context. No
+ *     z-index wins that from within the subtree; the layer has to leave it.
+ *  2. Wheel zoom on a NATIVE listener with `{ passive: false }`. React registers
+ *     wheel handlers passively, so `preventDefault` inside `onWheel` is ignored
+ *     and warns — the scan would zoom AND the page behind the backdrop would
+ *     scroll away underneath it.
+ *
+ * Pan is enabled only above 1×: dragging an unzoomed image does nothing useful
+ * and makes the backdrop feel broken.
+ */
+export function ScanLightbox({
+	src,
+	alt,
+	onClose,
+}: {
+	src: string;
+	alt: string;
+	onClose: () => void;
+}) {
+	const { t } = usePortalLocale();
+	const [zoom, setZoom] = useState(1);
+	const [offset, setOffset] = useState({ x: 0, y: 0 });
+	const [dragFrom, setDragFrom] = useState<{ x: number; y: number } | null>(
+		null,
+	);
+
+	// The wheel handler needs the CURRENT zoom without re-binding a native
+	// listener on every zoom change, so it reads this rather than the state.
+	const zoomRef = useRef(1);
+	zoomRef.current = zoom;
+	const surfaceRef = useRef<HTMLDivElement | null>(null);
+
+	const zoomTo = useCallback((next: number) => {
+		const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+		setZoom(clamped);
+		// Snapping back to centre at 1× stops the scan being left parked
+		// off-screen from an earlier pan, which reads as a failed load.
+		if (clamped === MIN_ZOOM) setOffset({ x: 0, y: 0 });
+	}, []);
+
+	useEffect(() => {
+		const el = surfaceRef.current;
+		if (!el) return;
+		// Exponential rather than a fixed step: a trackpad emits many small deltas
+		// and a mouse wheel a few large ones, and multiplying keeps both feeling
+		// like one gesture. The buttons keep their coarse step.
+		const onWheel = (e: WheelEvent) => {
+			e.preventDefault();
+			zoomTo(zoomRef.current * Math.exp(-e.deltaY * 0.0015));
+		};
+		el.addEventListener("wheel", onWheel, { passive: false });
+		return () => el.removeEventListener("wheel", onWheel);
+	}, [zoomTo]);
+
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") onClose();
+			if (e.key === "+" || e.key === "=") zoomTo(zoomRef.current + ZOOM_STEP);
+			if (e.key === "-") zoomTo(zoomRef.current - ZOOM_STEP);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [onClose, zoomTo]);
+
+	return createPortal(
+		<div
+			// This layer IS a modal: the role gives the mouse handler something to
+			// hang off, and tells assistive tech the sheet behind it is inert.
+			role="dialog"
+			aria-modal="true"
+			aria-label={alt}
+			ref={surfaceRef}
+			className="fixed inset-0 z-[300] flex flex-col bg-black/85 backdrop-blur-sm"
+			/**
+			 * `pointerEvents: auto` is LOAD-BEARING, not defensive styling.
+			 *
+			 * Radix sets `pointer-events: none` on <body> for as long as a modal
+			 * Sheet is open, so that nothing behind it can be clicked. This layer is
+			 * portalled to <body> to escape the Sheet's stacking context, which puts
+			 * it OUTSIDE the subtree Radix re-enables — so it inherited the block and
+			 * every button in the toolbar silently did nothing.
+			 *
+			 * The symptom is worth remembering: a programmatic `.click()` still
+			 * worked and the zoom state updated correctly, because dispatching an
+			 * event bypasses hit-testing entirely. Only a real pointer was refused.
+			 * "The handler is fine, so the button is fine" is exactly the wrong
+			 * conclusion — the handler was never the thing being blocked.
+			 */
+			style={{ pointerEvents: "auto" }}
+			// Backdrop click closes; a click on the image must not, or a pan that
+			// ends over the backdrop would dismiss the viewer mid-drag.
+			onMouseDown={(e) => {
+				if (e.target === e.currentTarget) onClose();
+			}}
+		>
+			<div className="flex items-center gap-2 p-3">
+				<span className="mr-auto truncate text-sm text-white/70">{alt}</span>
+				<Button
+					size="sm"
+					variant="secondary"
+					className="h-8 px-2"
+					onClick={() => zoomTo(zoom - ZOOM_STEP)}
+					disabled={zoom <= MIN_ZOOM}
+					aria-label={t.adminPr.zoomOut}
+				>
+					<Minus className="h-4 w-4" />
+				</Button>
+				<span className="w-14 text-center text-sm tabular-nums text-white/70">
+					{Math.round(zoom * 100)}%
+				</span>
+				<Button
+					size="sm"
+					variant="secondary"
+					className="h-8 px-2"
+					onClick={() => zoomTo(zoom + ZOOM_STEP)}
+					disabled={zoom >= MAX_ZOOM}
+					aria-label={t.adminPr.zoomIn}
+				>
+					<Plus className="h-4 w-4" />
+				</Button>
+				<Button
+					size="sm"
+					variant="secondary"
+					className="h-8 px-2"
+					onClick={() => {
+						setZoom(1);
+						setOffset({ x: 0, y: 0 });
+					}}
+					aria-label={t.adminPr.zoomReset}
+				>
+					<RotateCcw className="h-4 w-4" />
+				</Button>
+				<Button
+					size="sm"
+					variant="secondary"
+					className="h-8 px-2"
+					onClick={onClose}
+					aria-label={t.common.close}
+				>
+					<X className="h-4 w-4" />
+				</Button>
+			</div>
+
+			<div className="flex flex-1 items-center justify-center overflow-hidden p-4">
+				{/* A real <button> carries the gesture, not the <img>.
+				    Putting `role="button"` on the image satisfied nothing: an image
+				    is non-interactive, so the role was flagged twice over, and the
+				    hand-rolled Enter/Space handler was re-implementing what a button
+				    does natively. Dragging still pans, because mousedown calls
+				    preventDefault before the button can start a selection, and the
+				    click that ends a drag is ignored while zoomed in. */}
+				<button
+					type="button"
+					aria-label={alt}
+					className={
+						zoom > MIN_ZOOM
+							? dragFrom
+								? "flex max-h-full cursor-grabbing items-center justify-center"
+								: "flex max-h-full cursor-grab items-center justify-center"
+							: "flex max-h-full cursor-zoom-in items-center justify-center"
+					}
+					onMouseDown={(e) => {
+						if (zoom <= MIN_ZOOM) return;
+						e.preventDefault();
+						setDragFrom({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+					}}
+					onMouseMove={(e) => {
+						if (!dragFrom) return;
+						setOffset({ x: e.clientX - dragFrom.x, y: e.clientY - dragFrom.y });
+					}}
+					onMouseUp={() => setDragFrom(null)}
+					onMouseLeave={() => setDragFrom(null)}
+					// Click-to-zoom, so the first instinct on a too-small scan works
+					// without hunting for the toolbar. Enter and Space reach this too.
+					onClick={() => zoomTo(zoom > MIN_ZOOM ? MIN_ZOOM : 2.5)}
+				>
+					<img
+						src={src}
+						alt={alt}
+						draggable={false}
+						className="max-h-full max-w-full select-none"
+						style={{
+							transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+							transition: dragFrom ? "none" : "transform 120ms ease-out",
+						}}
+					/>
+				</button>
+			</div>
+		</div>,
+		document.body,
+	);
+}
 
 /** Resolve a stored asset ref (R2 key, full URL, or /img/…) to a browser URL. */
 export function apiAssetUrl(

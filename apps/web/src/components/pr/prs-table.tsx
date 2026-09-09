@@ -41,6 +41,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { orgMemberIdStem } from "@/lib/member-code";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
@@ -182,7 +183,7 @@ export function PrsTable({
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={8} className="h-32">
+									<TableCell colSpan={9} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>{t.adminPr.loadingPrs}</span>
@@ -191,7 +192,7 @@ export function PrsTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={8} className="h-32">
+									<TableCell colSpan={9} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -209,7 +210,7 @@ export function PrsTable({
 								</TableRow>
 							) : users.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={8} className="h-32">
+									<TableCell colSpan={9} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Megaphone className="h-6 w-6" />
 											<span>{t.adminPr.noPrsFound}</span>
@@ -374,7 +375,9 @@ function AgencyFilterCombobox({
 		? agencies.filter(
 				(agency) =>
 					agency.name.toLowerCase().includes(needle) ||
-					agency.agencyCode?.toLowerCase().includes(needle),
+					orgMemberIdStem("agency", agency.memberCodePrefix)
+						?.toLowerCase()
+						.includes(needle),
 			)
 		: agencies;
 
@@ -438,7 +441,7 @@ function AgencyFilterCombobox({
 								<span className="truncate">{agency.name}</span>
 								<span className="flex shrink-0 items-center gap-1.5">
 									<span className="font-mono text-xs text-muted-foreground">
-										{agency.agencyCode}
+										{orgMemberIdStem("agency", agency.memberCodePrefix) ?? "—"}
 									</span>
 									{value === agency.id && <Check className="h-4 w-4" />}
 								</span>
@@ -505,7 +508,7 @@ function PrAgenciesCell({ agencies }: { agencies: PrUser["agencies"] }) {
 						>
 							<span className="min-w-0 break-words">{agency.name}</span>
 							<span className="shrink-0 font-mono text-xs text-muted-foreground">
-								{agency.code}
+								{agency.code ?? "—"}
 							</span>
 						</li>
 					))}

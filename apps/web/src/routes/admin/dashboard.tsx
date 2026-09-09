@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DonutChart, type DonutSlice } from "@/components/ui/donut-chart";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useAuth } from "@/lib/auth-context";
+import { orgMemberIdStem } from "@/lib/member-code";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -573,7 +574,7 @@ function DashboardComponent() {
 				id: `agency-${agency.id}`,
 				title: fill(t.admin.todoApproveAgency, { name: agency.name }),
 				detail: fill(t.admin.todoApproveAgencyDetail, {
-					code: agency.agencyCode,
+					code: orgMemberIdStem("agency", agency.memberCodePrefix) ?? "—",
 					date: formatDate(agency.createdAt),
 				}),
 				badge: t.admin.badgeOrgApproval,
@@ -681,7 +682,7 @@ function DashboardComponent() {
 			(a: Agency): RegRow => ({
 				id: `agency-${a.id}`,
 				name: a.name,
-				code: a.agencyCode,
+				code: orgMemberIdStem("agency", a.memberCodePrefix) ?? "—",
 				kind: "agency",
 				typeLabel: t.admin.navPrAgency,
 				typeTone: "lavender",

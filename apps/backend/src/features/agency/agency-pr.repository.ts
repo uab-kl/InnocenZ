@@ -188,6 +188,7 @@ export class AgencyPrRepository {
           agencyId: AgencyPrTable.agencyId,
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
+          memberCodePrefix: AgencyTable.memberCodePrefix,
           approveStatus: AgencyPrTable.approveStatus,
           tier: AgencyPrTable.tier,
         })

@@ -18,6 +18,10 @@ import { UserRepositoryClass as UserRepository } from '@/features/user/user.repo
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository.js';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository.js';
 import {
+  dobFromNric,
+  genderFromNric,
+} from '@/features/pr-personnel/ic-dob.js';
+import {
   portalCodeForAccountType,
   roleNameForAccountType,
   SIGNUP_ACCOUNT_TYPES,
@@ -443,6 +447,7 @@ export class AuthControllerClass {
       accountType?: SignupAccountType;
       companyName?: string;
       companyRegistrationOld?: string;
+      businessLicense?: string;
       companyRegistrationNew?: string;
       /** @deprecated Prefer addressLine1. */
       companyAddress?: string;
@@ -513,6 +518,8 @@ export class AuthControllerClass {
             name,
             agencyCode,
             ssmNo,
+            businessLicense: body.businessLicense ?? null,
+            registrationNoOld: body.companyRegistrationOld ?? null,
             contactName,
             contactEmail,
             contactPhone,
@@ -568,7 +575,14 @@ export class AuthControllerClass {
           postcode,
           state,
           country: country ?? 'Malaysia',
-          businessLicense: body.companyRegistrationOld ?? null,
+          businessLicense: body.businessLicense ?? null,
+          registrationNoOld: body.companyRegistrationOld ?? null,
+          // 0155 gave these three a home. They were computed above and thrown
+          // away here, which looked on screen like a venue that answered
+          // nothing rather than one whose answers were discarded.
+          contactName,
+          contactEmail,
+          contactPhone,
           ssmNo,
           status: 'pending_review',
           // `onboarded_by_agency_id` is deliberately NOT set. Sign-up no longer
@@ -928,9 +942,38 @@ export class AuthControllerClass {
         (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') &&
         parsedBody.personInCharge
       ) {
-        // Web org signup: PIC name only. Company address lives on agency/outlet.
+        // Web org signup. The company ADDRESS lives on agency/outlet; the owner's
+        // IDENTITY lives here, and since 9 Sep 2026 sign-up asks for it: the name
+        // as printed on the IC, the id itself, and the gender.
+        //
+        // 🔴 THE IC IS THE AUTHORITY FOR THE BIRTH DATE, exactly as it already is
+        // for a PR's age (`derivedAge`). The client sends a date; this recomputes
+        // it from the number and uses its own answer, so a hand-edited request
+        // cannot age its owner.
+        const derivedDob = dobFromNric(parsedBody.idNo) ?? parsedBody.dob ?? null;
+        const icGender = genderFromNric(parsedBody.idNo);
+        // Gender is asked AND derived, and they must agree — the owner's
+        // double-confirmation. Silently overwriting the person with the parity
+        // digit is what this avoids: on this database that digit already
+        // contradicts two accounts whose names are not ambiguous.
+        if (icGender && parsedBody.gender && icGender !== parsedBody.gender) {
+          return res.status(400).json({
+            success: false,
+            message: `The IC number says ${icGender} but ${parsedBody.gender} was selected — check the ID number`,
+            data: null,
+          });
+        }
         await this.userProfileRepository.update(user.id, {
           fullName: parsedBody.personInCharge,
+          ...(parsedBody.idType ? { idType: parsedBody.idType } : {}),
+          ...(parsedBody.idNo ? { idNo: parsedBody.idNo } : {}),
+          ...(derivedDob ? { dob: derivedDob } : {}),
+          ...(icGender ?? parsedBody.gender
+            ? { gender: icGender ?? parsedBody.gender }
+            : {}),
+          ...(parsedBody.nationality
+            ? { nationality: parsedBody.nationality }
+            : {}),
           updatedBy: actor,
         });
       } else if (isPublicPr) {

@@ -1,6 +1,7 @@
-import { and, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, count, eq, ilike, inArray, or } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
+import { nextOrgMemberCode } from '@/util/member-code';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
@@ -15,6 +16,14 @@ import {
   AgencyTable,
 } from './agency.model';
 
+/** One row of the admin cross-agency "Team members" list: the membership,
+  * the person, and the agency it belongs to. */
+export type AgencyTeamMemberRow = AgencyMemberEnriched & {
+  agencyName: string;
+  agencyCode: string;
+  agencyStatus: string;
+};
+
 export type AgencyMemberEnriched = AgencyUserType & {
   /** Derived from `user_role` → `role` (agency portal). */
   subRole: AgencyUserSubRole;
@@ -26,6 +35,9 @@ export type AgencyMemberEnriched = AgencyUserType & {
 /** `agencyStatus` is the organisation's status (`pending_review` / `active` / …),
  * distinct from the membership row's own `status`. */
 export type AgencyMembershipWithAgency = {
+  /** This membership’s own id — INNATAGY0001. Selected all along; naming it here
+      is what lets it reach the client. */
+  memberCode: string | null;
   membershipId: string;
   userId: string;
   agencyId: string;
@@ -64,7 +76,13 @@ async function agencyLanesByUserIds(
     .from(UserRoleTable)
     .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
     .leftJoin(PortalTable, eq(PortalTable.id, RoleTable.portalId))
-    .where(inArray(UserRoleTable.userId, userIds));
+    .where(inArray(UserRoleTable.userId, userIds))
+    // ORDERED, for the same reason listByUser below carries one: `laneFromRoleHints`
+    // takes the FIRST hint matching the portal, so with no ORDER BY a person holding
+    // two agency-portal roles got whichever row Postgres happened to emit — free to
+    // change after a VACUUM or a plan change. The lane is what the team lists group
+    // on, so an unstable winner moves someone between departments between requests.
+    .orderBy(RoleTable.roleName, UserRoleTable.roleId);
 
   const byUser = new Map<string, RoleJoinRow[]>();
   for (const row of rows) {
@@ -85,15 +103,39 @@ async function agencyLanesByUserIds(
 }
 
 export class AgencyMemberRepositoryClass {
+  /**
+   * The ONLY insert into this table — so the human-readable id is minted here,
+   * where every path that creates a membership must pass: sign-up (inside its
+   * own transaction, which this inherits through ) and invite-accept.
+   *
+   * A caller may pass its own ; the backfill does. Otherwise one is
+   * issued now, numbered within this organisation.
+   */
   async add(
     data: Omit<AgencyUserInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     tx?: DbTransaction,
   ): Promise<AgencyUserType> {
     try {
       const dbClient = tx ?? db;
+      const withCode = data.memberCode
+        ? data
+        : {
+            ...data,
+            // `tx` is passed on purpose: sign-up creates the agency and this row
+            // in ONE transaction, and a lookup outside it cannot see the agency.
+            memberCode:
+              (await nextOrgMemberCode('agency', data.agencyId, tx)) ?? null,
+          };
+      // A missing id is the one failure this must never do QUIETLY: a null reads
+      // exactly like a row the backfill has not reached, so nobody goes looking.
+      if (!withCode.memberCode) {
+        logger.error(
+          `[AgencyMemberRepository.add] NO MEMBER ID minted for agency ${data.agencyId} — the organisation is missing or its name has no letters`,
+        );
+      }
       const [member] = await dbClient
         .insert(AgencyUserTable)
-        .values(data)
+        .values(withCode)
         .returning();
       logger.info('[AgencyMemberRepository.add] Member added:', member.id);
       return member;
@@ -194,6 +236,7 @@ export class AgencyMemberRepositoryClass {
           agencyId: AgencyUserTable.agencyId,
           userId: AgencyUserTable.userId,
           status: AgencyUserTable.status,
+          memberCode: AgencyUserTable.memberCode,
           createdAt: AgencyUserTable.createdAt,
           updatedAt: AgencyUserTable.updatedAt,
           createdBy: AgencyUserTable.createdBy,
@@ -219,6 +262,103 @@ export class AgencyMemberRepositoryClass {
     } catch (error) {
       logger.error('[AgencyMemberRepository.listByAgency] Error:', error);
       return [];
+    }
+  }
+
+  /**
+   * Every agency operator on the platform, across ALL agencies — the admin's
+   * "Team members" screen.
+   *
+   * Not a variant of `listByAgency`: that one is hard-wired to a single
+   * `agency_id`, has no LIMIT/OFFSET, and never joins `agency`, so a row could
+   * not say which agency it belongs to.
+   *
+   * `subRole` is returned per row but is deliberately NOT a filter here. The
+   * lane is DERIVED per user (user_role → role → portal) after the page is
+   * fetched, so filtering on it would drop rows from an already-paginated page
+   * and hand the caller short pages with a total that disagrees. Filter on what
+   * the database actually stores; the lane is for reading.
+   */
+  async listAllEnriched(options: {
+    search?: string;
+    status?: string;
+    /** Narrow to ONE agency — the deep link from that agency's Team tab. */
+    agencyId?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ rows: AgencyTeamMemberRow[]; totalCount: number }> {
+    try {
+      const conditions = [];
+      if (options.agencyId) {
+        conditions.push(eq(AgencyUserTable.agencyId, options.agencyId));
+      }
+      if (options.status) {
+        conditions.push(eq(AgencyUserTable.status, options.status));
+      }
+      if (options.search?.trim()) {
+        const term = `%${options.search.trim()}%`;
+        conditions.push(
+          or(
+            ilike(UserTable.username, term),
+            ilike(UserTable.email, term),
+            ilike(UserTable.phoneNum, term),
+            // The agency name too: "show me everyone at Atlas" is the first
+            // thing anyone types into a cross-organisation list.
+            ilike(AgencyTable.name, term),
+            ilike(AgencyTable.agencyCode, term),
+          )!,
+        );
+      }
+      const where = conditions.length ? and(...conditions) : undefined;
+
+      const [{ value: totalCount }] = await db
+        .select({ value: count() })
+        .from(AgencyUserTable)
+        .innerJoin(UserTable, eq(UserTable.id, AgencyUserTable.userId))
+        .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyUserTable.agencyId))
+        .where(where);
+
+      const rows = await db
+        .select({
+          id: AgencyUserTable.id,
+          agencyId: AgencyUserTable.agencyId,
+          userId: AgencyUserTable.userId,
+          status: AgencyUserTable.status,
+          memberCode: AgencyUserTable.memberCode,
+          createdAt: AgencyUserTable.createdAt,
+          updatedAt: AgencyUserTable.updatedAt,
+          createdBy: AgencyUserTable.createdBy,
+          updatedBy: AgencyUserTable.updatedBy,
+          username: UserTable.username,
+          email: UserTable.email,
+          phoneNum: UserTable.phoneNum,
+          agencyName: AgencyTable.name,
+          agencyCode: AgencyTable.agencyCode,
+          agencyStatus: AgencyTable.status,
+        })
+        .from(AgencyUserTable)
+        .innerJoin(UserTable, eq(UserTable.id, AgencyUserTable.userId))
+        .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyUserTable.agencyId))
+        .where(where)
+        // Organisation first, then the person: the screen is read by agency.
+        // `id` last so the order is TOTAL — two members created in the same
+        // transaction share a timestamp, and a partial order lets a row appear
+        // on two pages or on neither.
+        .orderBy(AgencyTable.name, UserTable.username, AgencyUserTable.id)
+        .limit(options.pageSize)
+        .offset((options.page - 1) * options.pageSize);
+
+      const lanes = await agencyLanesByUserIds(rows.map((r) => r.userId));
+      return {
+        rows: rows.map((r) => ({
+          ...r,
+          subRole: lanes.get(r.userId) ?? ('owner' as AgencyUserSubRole),
+        })),
+        totalCount: Number(totalCount ?? 0),
+      };
+    } catch (error) {
+      logger.error('[AgencyMemberRepository.listAllEnriched] Error:', error);
+      return { rows: [], totalCount: 0 };
     }
   }
 
@@ -274,6 +414,7 @@ export class AgencyMemberRepositoryClass {
           agencyCode: AgencyTable.agencyCode,
           agencyStatus: AgencyTable.status,
           status: AgencyUserTable.status,
+          memberCode: AgencyUserTable.memberCode,
         })
         .from(AgencyUserTable)
         .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyUserTable.agencyId))

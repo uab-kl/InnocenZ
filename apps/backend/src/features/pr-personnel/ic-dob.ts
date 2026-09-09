@@ -101,3 +101,23 @@ export function derivedAge(
   const dob = fromIc ?? input.dob ?? null;
   return { dob, age: ageFromDob(dob, today), fromIc: fromIc != null };
 }
+
+/**
+ * The gender encoded in a Malaysian NRIC: the LAST digit, odd = male, even =
+ * female. Null for anything that is not a 12-digit NRIC — a passport number
+ * carries no gender any more than it carries a birth date.
+ *
+ * ⚠️ Treat the answer as evidence, not as the person. On this database the
+ * parity digit contradicts two accounts whose names are unambiguous (Victoria,
+ * and Nurul Aina BINTI Rahman), so sign-up asks the owner to state their gender
+ * as well and refuses when the two disagree, rather than quietly overwriting a
+ * person with an arithmetic fact about their id number.
+ */
+export function genderFromNric(
+  idNo: string | null | undefined,
+): 'male' | 'female' | null {
+  if (!idNo) return null;
+  const digits = digitsOnly(idNo);
+  if (digits.length !== NRIC_DIGITS) return null;
+  return Number(digits[NRIC_DIGITS - 1]) % 2 === 1 ? 'male' : 'female';
+}
