@@ -1,7 +1,10 @@
 import { and, count, eq, ilike, inArray, or } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
-import { nextOrgMemberCode } from '@/util/member-code';
+import {
+  ensureAccountCodeFromMembership,
+  nextOrgMemberCode,
+} from '@/util/member-code';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
@@ -112,31 +115,40 @@ export class AgencyMemberRepositoryClass {
    * issued now, numbered within this organisation.
    */
   async add(
-    data: Omit<AgencyUserInsertType, 'id' | 'createdAt' | 'updatedAt'>,
+    /*
+     * `memberCode` is OPTIONAL here even though the column is NOT NULL: this
+     * function mints it. Callers that already hold one (the backfill, a
+     * transfer) may pass it; nobody else should have to know how ids are made.
+     */
+    data: Omit<AgencyUserInsertType, 'id' | 'createdAt' | 'updatedAt' | 'memberCode'> & {
+      memberCode?: string;
+    },
     tx?: DbTransaction,
   ): Promise<AgencyUserType> {
     try {
       const dbClient = tx ?? db;
-      const withCode = data.memberCode
-        ? data
-        : {
-            ...data,
-            // `tx` is passed on purpose: sign-up creates the agency and this row
-            // in ONE transaction, and a lookup outside it cannot see the agency.
-            memberCode:
-              (await nextOrgMemberCode('agency', data.agencyId, tx)) ?? null,
-          };
-      // A missing id is the one failure this must never do QUIETLY: a null reads
-      // exactly like a row the backfill has not reached, so nobody goes looking.
-      if (!withCode.memberCode) {
-        logger.error(
-          `[AgencyMemberRepository.add] NO MEMBER ID minted for agency ${data.agencyId} — the organisation is missing or its name has no letters`,
-        );
-      }
+      const withCode = {
+        ...data,
+        /*
+         * `tx` is passed on purpose: sign-up creates the agency and this row in
+         * ONE transaction, and a lookup outside it cannot see the agency.
+         *
+         * Not a ternary any more: the column is NOT NULL (0159), so this has to
+         * resolve to a string on BOTH branches — a caller-supplied id or a
+         * freshly minted one. `nextOrgMemberCode` throws rather than returning
+         * nothing, which aborts the membership instead of weakening it.
+         */
+        memberCode:
+          data.memberCode ?? (await nextOrgMemberCode('agency', data.agencyId, tx)),
+      };
       const [member] = await dbClient
         .insert(AgencyUserTable)
         .values(withCode)
         .returning();
+      // The same id is mirrored onto `user` so no account is left without one
+      // (owner, 9 Sep 2026). This row stays authoritative — see the note on
+      // `ensureAccountCodeFromMembership`.
+      await ensureAccountCodeFromMembership(data.userId, tx);
       logger.info('[AgencyMemberRepository.add] Member added:', member.id);
       return member;
     } catch (error) {

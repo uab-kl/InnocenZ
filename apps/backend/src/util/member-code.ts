@@ -82,6 +82,25 @@ export function suggestOrgPrefix(name: string): string | null {
 }
 
 /**
+ * Two letters derived from the organisation's own id.
+ *
+ * The floor for `reserveOrgPrefix`. A name with no letters in it used to mean
+ * no prefix, which meant no member id — a quiet null then, a NOT NULL violation
+ * now (0159). Deterministic, so the same organisation always proposes the same
+ * letters, and it still passes through the uniqueness loop below like any other
+ * suggestion.
+ */
+function lettersFromId(id: string): string {
+  let hash = 0x811c9dc5;
+  for (const char of id) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  return `${A[hash % 26]}${A[(hash >>> 8) % 26]}`;
+}
+
+/**
  * The suggestion, made unique against the organisations that already hold one.
  *
  * Two agencies called "Atlas" both suggest AT; the second becomes AT2. A taken
@@ -92,8 +111,10 @@ export async function reserveOrgPrefix(
   kind: MemberCodeOrgKind,
   name: string,
   tx?: DbTransaction,
+  /** Used only when the name yields no letters at all. */
+  orgId?: string,
 ): Promise<string | null> {
-  const base = suggestOrgPrefix(name);
+  const base = suggestOrgPrefix(name) ?? (orgId ? lettersFromId(orgId) : null);
   if (!base) return null;
   const dbClient = tx ?? db;
   for (let n = 1; n <= 99; n += 1) {
@@ -144,7 +165,7 @@ export async function nextOrgMemberCode(
   kind: MemberCodeOrgKind,
   orgId: string,
   tx?: DbTransaction,
-): Promise<string | null> {
+): Promise<string> {
   // 🔴 EVERY read below goes through the CALLER’S transaction when there is one.
   // Sign-up creates the organisation and its first member in one transaction, so
   // a lookup on the pooled `db` connection cannot see the organisation yet: it
@@ -175,12 +196,16 @@ export async function nextOrgMemberCode(
             .where(eq(OutletTable.id, orgId))
             .limit(1)
         )[0];
-  if (!org) return null;
+  // A missing organisation is a broken FK, not a missing id — say so here
+  // rather than returning a null the NOT NULL column will reject anyway.
+  if (!org) throw new Error(`[member-code] no ${kind} row for ${orgId}`);
 
   let prefix = org.prefix;
   if (!prefix) {
-    prefix = await reserveOrgPrefix(kind, org.name, tx);
-    if (!prefix) return null;
+    prefix = await reserveOrgPrefix(kind, org.name, tx, orgId);
+    if (!prefix) {
+      throw new Error(`[member-code] could not reserve a prefix for ${kind} ${orgId}`);
+    }
     if (kind === 'agency') {
       await dbClient
         .update(AgencyTable)
@@ -319,8 +344,23 @@ export async function issueOrgMemberCode<T>(
  * One global sequence per family, stored on `user`, because a PR keeps their id
  * as they move between agencies.
  */
+/**
+ * Families of id that belong to a PERSON rather than to a membership.
+ *
+ * `USR` is the floor: an account that is not a PR, not an admin and belongs to
+ * no organisation still gets an id, because the owner's rule is that no row is
+ * ever null (9 Sep 2026). It is deliberately the LAST resort — an id that says
+ * only "an account" is worth less than one that says which organisation.
+ */
+export type PersonFamily = 'PR' | 'ADM' | 'USR';
+
+/** Anything issued as the floor family, and therefore still upgradable. */
+function isFallbackCode(code: string | null | undefined): boolean {
+  return Boolean(code?.startsWith(`${BRAND}USR`));
+}
+
 export async function issuePersonCode<T>(
-  family: 'PR' | 'ADM',
+  family: PersonFamily,
   issue: (code: string) => Promise<T>,
 ): Promise<T | null> {
   const head = `${BRAND}${family}`;
@@ -361,33 +401,114 @@ export async function issuePersonCode<T>(
  * who is neither a PR nor an admin gets none.
  */
 export async function ensurePersonCode(userId: string): Promise<void> {
-  const [existing] = await db
+  await ensureAccountCode(userId);
+}
+
+/**
+ * The one rule for what id an ACCOUNT row carries, applied in order:
+ *
+ *   1. an organisation membership  ->  that membership's id (INNATAGY0001)
+ *   2. the admin role              ->  INNADM0001
+ *   3. the PR role                 ->  INNPR0001
+ *   4. none of the above           ->  INNUSR0001, the floor
+ *
+ * The organisation comes FIRST because that is what the owner asked for — an
+ * id should say where a person works. The floor exists so no row is ever null;
+ * the database now enforces that with a DEFAULT and a NOT NULL (0158), and
+ * this is what upgrades the placeholder the moment the account becomes
+ * something more specific.
+ *
+ * A real id is NEVER rewritten — only a floor id is replaced. An id that keeps
+ * changing is not an id, and support quoting one back from an email would be
+ * quoting a value that has since moved.
+ */
+export async function ensureAccountCode(
+  userId: string,
+  tx?: DbTransaction,
+): Promise<void> {
+  const dbClient = tx ?? db;
+  const [existing] = await dbClient
     .select({ code: UserTable.memberCode })
     .from(UserTable)
     .where(eq(UserTable.id, userId))
     .limit(1);
-  if (!existing || existing.code) return;
+  if (!existing) return;
+  if (existing.code && !isFallbackCode(existing.code)) return;
 
-  const roles = await db
+  const set = async (code: string) => {
+    await dbClient
+      .update(UserTable)
+      .set({ memberCode: code })
+      .where(eq(UserTable.id, userId));
+  };
+
+  // 1. An organisation the person operates. Two memberships mean two ids, so
+  //    the FIRST issued wins: it is the one they have been known by longest and
+  //    the only choice that does not move when they join somewhere new.
+  const memberships = [
+    ...(await dbClient
+      .select({ code: AgencyUserTable.memberCode, at: AgencyUserTable.createdAt })
+      .from(AgencyUserTable)
+      .where(
+        and(eq(AgencyUserTable.userId, userId), isNotNull(AgencyUserTable.memberCode)),
+      )),
+    ...(await dbClient
+      .select({ code: OutletUserTable.memberCode, at: OutletUserTable.createdAt })
+      .from(OutletUserTable)
+      .where(
+        and(eq(OutletUserTable.userId, userId), isNotNull(OutletUserTable.memberCode)),
+      )),
+  ].sort((a, b) => Number(new Date(a.at)) - Number(new Date(b.at)));
+  const fromOrg = memberships.find((m) => m.code)?.code;
+  if (fromOrg) {
+    await set(fromOrg);
+    return;
+  }
+
+  // 2 & 3. Admin outranks PR, as it did before this ladder existed.
+  const roles = await dbClient
     .select({ roleName: RoleTable.roleName })
     .from(UserRoleTable)
     .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
     .where(eq(UserRoleTable.userId, userId));
   const names = roles.map((r) => (r.roleName ?? '').toLowerCase());
-  const family = names.includes('admin')
-    ? ('ADM' as const)
+  const family: PersonFamily = names.includes('admin')
+    ? 'ADM'
     : names.includes('pr')
-      ? ('PR' as const)
-      : null;
-  if (!family) return;
+      ? 'PR'
+      : 'USR';
+
+  // 4. Already holding a floor id and still nothing better to say — leave it.
+  if (family === 'USR' && existing.code) return;
 
   await issuePersonCode(family, async (code) => {
-    await db
-      .update(UserTable)
-      .set({ memberCode: code })
-      .where(eq(UserTable.id, userId));
+    await set(code);
     return code;
   });
+}
+
+/**
+ * Give an ORG OPERATOR an id on their `user` row as well.
+ *
+ * ⚠️ This DUPLICATES `agency_user.member_code` / `outlet_user.member_code`, which
+ * the project’s database rules forbid — one fact, one table. It is here because
+ * the owner asked for it directly (9 Sep 2026: *"not null all must have thier
+ * member id"*), having found 22 null rows in `main."user"`.
+ *
+ * The MEMBERSHIP ROW REMAINS AUTHORITATIVE. A person operating two
+ * organisations holds two ids, and only one string can sit on the account, so
+ * this copies the FIRST one issued to them — the id they have been known by
+ * longest, and the only choice that does not change when they join somewhere
+ * new. Every screen that shows an id in the context of an organisation reads
+ * the membership, not this.
+ *
+ * Idempotent: a row that already holds an id is never rewritten.
+ */
+export async function ensureAccountCodeFromMembership(
+  userId: string,
+  tx?: DbTransaction,
+): Promise<void> {
+  await ensureAccountCode(userId, tx);
 }
 
 /**

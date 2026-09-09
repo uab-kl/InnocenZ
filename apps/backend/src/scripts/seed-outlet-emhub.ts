@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { nextOrgMemberCode } from '@/util/member-code';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
@@ -200,6 +201,7 @@ async function ensureOwnerMembership(userId: string, outletId: string): Promise<
     outletId,
     userId,
     status: 'active',
+    memberCode: await nextOrgMemberCode('outlet', outletId),
     createdBy: ACTOR,
     updatedBy: ACTOR,
   });

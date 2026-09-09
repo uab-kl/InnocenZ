@@ -69,7 +69,9 @@ export const AgencyUserTable = MainSchema.table('agency_user', {
    * Per membership, not per person: someone operating two organisations holds a
    * different id in each, because the id names the organisation (0154).
    */
-  memberCode: varchar('member_code', { length: 32 }),
+  /** This membership’s id — INNATAGY0001. NOT NULL since 0159; `add()`
+      always mints one and throws rather than writing without it. */
+  memberCode: varchar('member_code', { length: 32 }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),

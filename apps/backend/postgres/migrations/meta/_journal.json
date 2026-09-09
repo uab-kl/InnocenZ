@@ -1100,6 +1100,20 @@
       "when": 1792393000000,
       "tag": "0156_org_registration_no_old",
       "breakpoints": true
+    },
+    {
+      "idx": 158,
+      "version": "7",
+      "when": 1792791000000,
+      "tag": "0158_user_member_code_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1792792000000,
+      "tag": "0159_membership_member_code_not_null",
+      "breakpoints": true
     }
   ]
 }
