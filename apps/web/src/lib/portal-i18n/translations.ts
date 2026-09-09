@@ -2498,6 +2498,15 @@ const en = {
 			"Your request is with the agency. As soon as one accepts, you can post shifts and they will staff them.",
 		agenciesFillShifts:
 			"PR agencies fill your shifts, so this venue needs at least one before it can post a job.",
+		/** Prices reminder — a venue cannot record what it sold without these. */
+		pricesNotSetTitle: "Set your prices before your first night",
+		pricesNotSetBody:
+			"{items} still have no prices. Every night is priced from these lists — the drink and service lines on a shift, and the receipts your PRs sign.",
+		pricesGoToWorkspace: "Set prices in Workspace",
+		pricesDrinks: "Drinks",
+		pricesTips: "Tips",
+		pricesServices: "Services",
+		pricesListJoin: ", ",
 		eventTypePrefix: "Event type ·",
 		serviceEntitlement: "Service Entitlement",
 		dressCodeLabel: "Dress Code:",
@@ -8160,6 +8169,14 @@ const zh: PortalTranslations = {
 			"你的申请正在经纪公司处。一旦有一家接受，你就可以发布班次，由他们负责配置人员。",
 		agenciesFillShifts:
 			"PR 经纪公司负责为你的班次配置人员，因此本门店至少需要一家才能发布职位。",
+		pricesNotSetTitle: "开始营业前请先设置价格",
+		pricesNotSetBody:
+			"{items}尚未设置价格。每晚的金额都按这些价目表计算——班次上的酒水与服务项目，以及 PR 签收的收据。",
+		pricesGoToWorkspace: "前往工作区设置价格",
+		pricesDrinks: "酒水",
+		pricesTips: "小费",
+		pricesServices: "服务项目",
+		pricesListJoin: "、",
 		eventTypePrefix: "活动类型 ·",
 		serviceEntitlement: "服务项目",
 		dressCodeLabel: "着装要求：",
