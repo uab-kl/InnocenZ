@@ -34,6 +34,7 @@ import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type PortalKind = "agency" | "outlet";
@@ -89,11 +90,33 @@ const OUTLET_EXTRAS: ExtraNavItem[] = [
 ];
 
 /** "Good morning" / "Good afternoon" / "Good evening", by the wall clock. */
-function portalGreeting(t: PortalTranslations) {
+function greetingForHour(t: PortalTranslations) {
 	const h = new Date().getHours();
 	if (h < 12) return t.shell.goodMorning;
 	if (h < 17) return t.shell.goodAfternoon;
 	return t.shell.goodEvening;
+}
+
+/**
+ * "Good morning, Vicky" — the greeting plus the signed-in person's OWN name
+ * (owner, 9 Sep 2026).
+ *
+ * The name is whatever that account carries as its name; `PortalShell` resolves
+ * it once (`me.username` → the org record's owner name) and hands the same
+ * string to the avatar and the rail, so the three can never disagree.
+ *
+ * ⚠️ This is the PERSON, not the organisation. The org and role were moved out
+ * of this header on 8 Sep because the sidebar already prints them two inches
+ * away; putting the person's name here adds a fact the rail does NOT carry
+ * rather than re-running that duplication.
+ *
+ * Falls back to the bare greeting while `/auth/me` is still in flight, and for
+ * a session with no name at all — never "Good morning, " with a dangling comma.
+ */
+function portalGreeting(t: PortalTranslations, personName: string) {
+	const greeting = greetingForHour(t);
+	const name = personName.trim();
+	return name ? fill(t.shell.greetingNamed, { greeting, name }) : greeting;
 }
 
 /**
@@ -376,27 +399,35 @@ function PortalHeader({
 	demoData: boolean;
 }) {
 	const { t } = usePortalLocale();
+	const greeting = portalGreeting(t, ownerName);
 
 	return (
 		<header className="iz-portal-header">
 			{/*
-			  THE GREETING, AND ONLY THE GREETING (owner, 8 Sep 2026).
-			
-			  It used to read "Good afternoon, <Org> (Role)". The name and role moved
+			  THE GREETING AND THE PERSON — NOTHING ELSE (owner, 8 Sep 2026;
+			  the name added 9 Sep 2026).
+
+			  It used to read "Good afternoon, <Org> (Role)". The ORG and ROLE moved
 			  to the sidebar, where they say WHICH company this session is acting for;
 			  keeping them here as well had the header repeating the rail two inches
-			  away. The greeting itself stays, because it is the one warm line on an
-			  operations screen and it costs nothing.
-			
+			  away. What is here now is the signed-in PERSON's own name — a fact the
+			  rail does not carry, so this is not that duplication coming back.
+
 			  It is deliberately QUIETER than the page title below it: a pleasantry
 			  outranking the name of the page is what made the old 28px greeting tie
 			  with "Payroll & PV" for the eye.
-			
+
+			  `truncate` because the name is user-typed and this line is 34px: without
+			  it a long one wraps the header or pushes the bell and avatar off a narrow
+			  screen. The full string stays available as the element's `title`.
+
 			  The clock is NOT here — it lives in `IzPageDateTime`, under the page
 			  title, on every page rather than on the two this header knew about.
 			*/}
 			<div className="min-w-0 flex-1">
-				<p className="iz-portal-greeting">{portalGreeting(t)}</p>
+				<p className="iz-portal-greeting truncate" title={greeting}>
+					{greeting}
+				</p>
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
 				{demoData && (
