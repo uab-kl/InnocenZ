@@ -39,6 +39,7 @@ import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type PortalKind = "agency" | "outlet";
@@ -94,11 +95,33 @@ const OUTLET_EXTRAS: ExtraNavItem[] = [
 ];
 
 /** "Good morning" / "Good afternoon" / "Good evening", by the wall clock. */
-function portalGreeting(t: PortalTranslations) {
+function greetingForHour(t: PortalTranslations) {
 	const h = new Date().getHours();
 	if (h < 12) return t.shell.goodMorning;
 	if (h < 17) return t.shell.goodAfternoon;
 	return t.shell.goodEvening;
+}
+
+/**
+ * "Good morning, Vicky" — the greeting plus the signed-in person's OWN name
+ * (owner, 9 Sep 2026).
+ *
+ * The name is whatever that account carries as its name; `PortalShell` resolves
+ * it once (`me.username` → the org record's owner name) and hands the same
+ * string to the avatar and the rail, so the three can never disagree.
+ *
+ * ⚠️ This is the PERSON, not the organisation. The org and role were moved out
+ * of this header on 8 Sep because the sidebar already prints them two inches
+ * away; putting the person's name here adds a fact the rail does NOT carry
+ * rather than re-running that duplication.
+ *
+ * Falls back to the bare greeting while `/auth/me` is still in flight, and for
+ * a session with no name at all — never "Good morning, " with a dangling comma.
+ */
+function portalGreeting(t: PortalTranslations, personName: string) {
+	const greeting = greetingForHour(t);
+	const name = personName.trim();
+	return name ? fill(t.shell.greetingNamed, { greeting, name }) : greeting;
 }
 
 /**
@@ -381,27 +404,35 @@ function PortalHeader({
 	demoData: boolean;
 }) {
 	const { t } = usePortalLocale();
+	const greeting = portalGreeting(t, ownerName);
 
 	return (
 		<header className="iz-portal-header">
 			{/*
-			  THE GREETING, AND ONLY THE GREETING (owner, 8 Sep 2026).
-			
-			  It used to read "Good afternoon, <Org> (Role)". The name and role moved
+			  THE GREETING AND THE PERSON — NOTHING ELSE (owner, 8 Sep 2026;
+			  the name added 9 Sep 2026).
+
+			  It used to read "Good afternoon, <Org> (Role)". The ORG and ROLE moved
 			  to the sidebar, where they say WHICH company this session is acting for;
 			  keeping them here as well had the header repeating the rail two inches
-			  away. The greeting itself stays, because it is the one warm line on an
-			  operations screen and it costs nothing.
-			
+			  away. What is here now is the signed-in PERSON's own name — a fact the
+			  rail does not carry, so this is not that duplication coming back.
+
 			  It is deliberately QUIETER than the page title below it: a pleasantry
 			  outranking the name of the page is what made the old 28px greeting tie
 			  with "Payroll & PV" for the eye.
-			
+
+			  `truncate` because the name is user-typed and this line is 34px: without
+			  it a long one wraps the header or pushes the bell and avatar off a narrow
+			  screen. The full string stays available as the element's `title`.
+
 			  The clock is NOT here — it lives in `IzPageDateTime`, under the page
 			  title, on every page rather than on the two this header knew about.
 			*/}
 			<div className="min-w-0 flex-1">
-				<p className="iz-portal-greeting">{portalGreeting(t)}</p>
+				<p className="iz-portal-greeting truncate" title={greeting}>
+					{greeting}
+				</p>
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
 				{demoData && (
@@ -581,12 +612,12 @@ export function PortalShell({
 					<div className="iz-portal-viewport">{children}</div>
 				</div>
 
-			{navItems.length > 0 && (
-				<div className="iz-portal-mobile-footer md:hidden">
-					<BottomNav
-						items={localiseNav(navItems, t)}
-						trailing={
-							/*
+				{navItems.length > 0 && (
+					<div className="iz-portal-mobile-footer md:hidden">
+						<BottomNav
+							items={localiseNav(navItems, t)}
+							trailing={
+								/*
 							  The phone's way into everything the tab bar cannot hold.
 							  The bar is fed `navItems` (the base list) while the rail is
 							  fed `sidebarItems` (base + permitted extras), so without
@@ -594,56 +625,64 @@ export function PortalShell({
 							  Manage PR, Manage Outlet — plus the language switcher and
 							  Sign out were all unreachable below 768px.
 							*/
-							<button
-								type="button"
-								onClick={() => setMenuOpen(true)}
-								aria-haspopup="dialog"
-								aria-expanded={menuOpen}
-								data-active={menuOpen ? "true" : undefined}
-								className={menuOpen ? "on" : ""}
-							>
-								<MenuIcon className="h-5 w-5" strokeWidth={1.8} />
-								<span>{t.shell.menu}</span>
-							</button>
-						}
-					/>
-				</div>
-			)}
+								<button
+									type="button"
+									onClick={() => setMenuOpen(true)}
+									aria-haspopup="dialog"
+									aria-expanded={menuOpen}
+									data-active={menuOpen ? "true" : undefined}
+									className={menuOpen ? "on" : ""}
+								>
+									<MenuIcon className="h-5 w-5" strokeWidth={1.8} />
+									<span>{t.shell.menu}</span>
+								</button>
+							}
+						/>
+					</div>
+				)}
 
-			{menuOpen && (
-				<div className="iz-portal-drawer md:hidden">
-					{/*
+				{menuOpen && (
+					<div className="iz-portal-drawer md:hidden">
+						{/*
 					  The scrim is a real button, not a click-handled div: it is the
 					  primary way out on a touch screen, and a div would be invisible
 					  to a keyboard and to a screen reader.
 					*/}
-					<button
-						type="button"
-						className="iz-portal-drawer__scrim"
-						aria-label={t.shell.closeMenu}
-						onClick={closeMenu}
-					/>
-					<div
-						className="iz-portal-drawer__panel"
-						role="dialog"
-						aria-modal="true"
-						aria-label={t.shell.menu}
-					>
-						{/*
+						<button
+							type="button"
+							className="iz-portal-drawer__scrim"
+							aria-label={t.shell.closeMenu}
+							onClick={closeMenu}
+						/>
+						<div
+							className="iz-portal-drawer__panel"
+							role="dialog"
+							aria-modal="true"
+							aria-label={t.shell.menu}
+						>
+							{/*
 						  The SAME component the desktop rail renders, with the SAME
 						  merged and permission-filtered list — so a phone can never
 						  drift out of step with what a desktop shows. `onNavigate`
 						  already existed on PortalSidebar for exactly this and had no
 						  caller until now.
+
+						  `identity` became REQUIRED when the rail started naming the
+						  signed-in person. That landed on SL while this drawer landed on
+						  main, so the two merged textually without ever touching each
+						  other and only the typecheck caught that the combination was
+						  incomplete. Passing it keeps the promise made just above: the
+						  phone shows exactly what the desktop rail shows.
 						*/}
-						<PortalSidebar
-							portal={portal}
-							items={localiseNav(sidebarItems, t)}
-							onNavigate={closeMenu}
-						/>
+							<PortalSidebar
+								portal={portal}
+								items={localiseNav(sidebarItems, t)}
+								identity={identity}
+								onNavigate={closeMenu}
+							/>
+						</div>
 					</div>
-				</div>
-			)}
+				)}
 
 				{overlay}
 			</div>

@@ -8,6 +8,7 @@ import {
   r2DeleteStoredRef,
   r2PutObject,
 } from '@/util/r2';
+import { type CropState, saveCropSource } from '@/util/crop-source';
 
 export const DEFAULT_PROFILE_IMAGE = '/img/blank-profile-picture.png';
 export const PROFILE_IMAGE_UPLOAD_DIR = path.join(process.cwd(), 'public', 'img', 'users');
@@ -81,6 +82,16 @@ function fileBuffer(file: Express.Multer.File): Buffer {
 export async function saveProfileImageFile(
   user: { id: string; fullName?: string | null | undefined },
   file: Express.Multer.File,
+  /**
+   * The ORIGINAL the person picked, before the crop sheet framed it, plus where
+   * they left the frame — stored beside the avatar so "Adjust crop" survives a
+   * reload. Optional, so an older client that sends only the cropped file keeps
+   * working and simply gets no sidecar.
+   */
+  cropSource?: {
+    sourceDataUrl?: string | null;
+    state?: CropState | null;
+  },
 ): Promise<string> {
   const ext = path.extname(file.originalname).toLowerCase();
   if (!ALLOWED_PROFILE_IMAGE_EXTENSIONS.has(ext)) {
@@ -99,6 +110,15 @@ export async function saveProfileImageFile(
     const key = profileImageObjectKey(user.id, filename);
     try {
       const storedKey = await r2PutObject({ key, body, contentType });
+      // Only on the R2 path: the disk fallback below serves from `/img/...`,
+      // which has no folder to put a sidecar beside. Adjust stays session-only
+      // there, which is the same behaviour that surface had before.
+      await saveCropSource({
+        imageKey: storedKey,
+        sourceDataUrl: cropSource?.sourceDataUrl,
+        fileName: file.originalname,
+        state: cropSource?.state,
+      });
       // Clean up multer temp file if disk storage was used.
       if (file.path) {
         try {

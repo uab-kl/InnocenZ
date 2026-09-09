@@ -1,10 +1,19 @@
+import {
+	type AvatarCropResult,
+	AvatarCropSheet,
+	fileFromCropResult,
+	type PendingAvatarPick,
+} from "@agency-portal/components/portal/AvatarCropSheet";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
 import { useQueryClient } from "@tanstack/react-query";
-import { Camera, Check, Loader2, User } from "lucide-react";
-import { useRef, useState } from "react";
+import { Camera, Check, Crop, Loader2, User } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
-import { uploadMyProfileImage } from "@/lib/auth/profile-api";
+import {
+	fetchMyProfileImageSource,
+	uploadMyProfileImage,
+} from "@/lib/auth/profile-api";
 import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
@@ -25,6 +34,56 @@ export function AccountAvatarCard() {
 	const [preview, setPreview] = useState<string | null>(null);
 	const [uploading, setUploading] = useState(false);
 	const [justUploaded, setJustUploaded] = useState(false);
+	/** Picked but not yet framed — the crop sheet owns it until confirmed. */
+	const [pendingPhoto, setPendingPhoto] = useState<PendingAvatarPick | null>(
+		null,
+	);
+	/**
+	 * The ORIGINAL image behind the uploaded avatar, plus where it was framed,
+	 * so Adjust re-crops the full-resolution source rather than the output.
+	 *
+	 * No longer cleared on reload: the original is now stored beside the avatar
+	 * in R2 and read back through the API below. It still cannot be read from the
+	 * R2 public host directly — that host sends no CORS header, so its pixels
+	 * could never go back on a canvas — which is precisely why the server serves
+	 * it instead.
+	 */
+	const [photoSource, setPhotoSource] = useState<PendingAvatarPick | null>(
+		null,
+	);
+
+	/**
+	 * Recover the stored original on mount, so Adjust is offered for a photo
+	 * uploaded in an earlier session rather than only the one just picked.
+	 *
+	 * ⚠️ Stored with the FUNCTIONAL updater — `prev ?? fetched` — so a response
+	 * that lands after the person has picked a new file cannot overwrite the
+	 * image they are framing, without making `photoSource` a dependency that
+	 * would re-run this effect the moment a pick set it. Silent on failure: no
+	 * source simply means no Adjust, exactly how this card behaved before.
+	 */
+	useEffect(() => {
+		if (!me?.id) return;
+		let cancelled = false;
+		void fetchMyProfileImageSource(me.id).then((source) => {
+			if (cancelled || !source) return;
+			setPhotoSource(
+				(prev) =>
+					prev ?? {
+						dataUrl: source.dataUrl,
+						fileName: source.fileName,
+						contentType: source.contentType,
+						state: source.state ?? undefined,
+						// No original was kept: this is the saved crop, and the sheet
+						// says so rather than pretending a re-crop is free.
+						fallback: source.fallback,
+					},
+			);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [me?.id]);
 
 	const savedUrl = apiAssetUrl(me?.profileImage);
 	const src = preview ?? savedUrl ?? null;
@@ -33,7 +92,7 @@ export function AccountAvatarCard() {
 		me?.username?.trim()[0]?.toUpperCase() ||
 		"?";
 
-	const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+	const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		e.target.value = "";
 		if (!file || !me?.id) return;
@@ -46,15 +105,53 @@ export function AccountAvatarCard() {
 			return;
 		}
 
-		const objectUrl = URL.createObjectURL(file);
-		setPreview(objectUrl);
+		// The crop sheet stands between the picker and the POST. This upload is
+		// immediate and has no draft to undo — so framing has to happen BEFORE
+		// the request, not after it.
+		const reader = new FileReader();
+		reader.onload = () => {
+			const picked: PendingAvatarPick = {
+				dataUrl: reader.result as string,
+				fileName: file.name || "avatar.png",
+				contentType: file.type || "image/png",
+			};
+			setPhotoSource(picked);
+			setPendingPhoto(picked);
+		};
+		reader.onerror = () => toast(t.profile.cropFailed, "warn");
+		reader.readAsDataURL(file);
+	};
+
+	/** Reopen the sheet on the ORIGINAL image, framed where it was left. */
+	const adjustCrop = () => {
+		if (!photoSource || uploading) return;
+		setPendingPhoto(photoSource);
+	};
+
+	const uploadCropped = async (result: AvatarCropResult) => {
+		if (!me?.id) return;
+		setPendingPhoto(null);
+		// Remember the framing so the next Adjust opens where this one ended.
+		setPhotoSource((s) => (s ? { ...s, state: result.state } : s));
+		// The cropped square IS the preview — no object URL to revoke, and what
+		// is on screen while the request runs is what the request is sending.
+		setPreview(result.dataUrl);
 		setUploading(true);
 		setJustUploaded(false);
 		try {
-			await uploadMyProfileImage(me.id, file);
+			await uploadMyProfileImage(me.id, fileFromCropResult(result), {
+				// The un-cropped ORIGINAL travels with the cropped file, so a later
+				// session can re-frame the real source instead of the output.
+				// ⚠️ A FALLBACK IS NEVER STORED AS AN ORIGINAL — it is the
+				// already-cropped image, and saving it as the source would enshrine a
+				// degraded picture and compound the loss on every later adjust.
+				sourceDataUrl: photoSource?.fallback
+					? null
+					: (photoSource?.dataUrl ?? null),
+				state: photoSource?.fallback ? null : result.state,
+			});
 			await queryClient.invalidateQueries({ queryKey: profileQueryKey });
 			setPreview(null);
-			URL.revokeObjectURL(objectUrl);
 			setJustUploaded(true);
 			toast(t.profile.photoUploaded, "success");
 		} catch (err) {
@@ -63,7 +160,6 @@ export function AccountAvatarCard() {
 				"warn",
 			);
 			setPreview(null);
-			URL.revokeObjectURL(objectUrl);
 			setJustUploaded(false);
 		} finally {
 			setUploading(false);
@@ -80,6 +176,12 @@ export function AccountAvatarCard() {
 				accept={ACCEPTED}
 				className="sr-only"
 				onChange={onPick}
+			/>
+			<AvatarCropSheet
+				open={Boolean(pendingPhoto)}
+				pick={pendingPhoto}
+				onCancel={() => setPendingPhoto(null)}
+				onConfirm={uploadCropped}
 			/>
 			<div className="flex flex-wrap items-center gap-3">
 				<div className="relative shrink-0">
@@ -108,6 +210,17 @@ export function AccountAvatarCard() {
 					</p>
 				</div>
 				{/* `.iz-btn` is width:100% by default — without auto/sm it crushes the copy. */}
+				{photoSource && (
+					<button
+						type="button"
+						className="iz-btn iz-btn-soft iz-btn-sm shrink-0 !w-auto"
+						disabled={uploading}
+						onClick={adjustCrop}
+					>
+						<Crop className="h-3.5 w-3.5" />
+						{t.profile.cropAdjust}
+					</button>
+				)}
 				<button
 					type="button"
 					className="iz-btn iz-btn-soft iz-btn-sm shrink-0 !w-auto"

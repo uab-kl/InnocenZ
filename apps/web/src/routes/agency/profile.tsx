@@ -7,6 +7,11 @@ import {
 } from "@agency-portal/components/iz/ui";
 import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
 import { SignatureOnFileCard } from "@agency-portal/components/org/SignatureOnFileCard";
+import {
+	type AvatarCropResult,
+	AvatarCropSheet,
+	type PendingAvatarPick,
+} from "@agency-portal/components/portal/AvatarCropSheet";
 import { PendingReviewBanner } from "@agency-portal/components/portal/PendingReviewBanner";
 import { ProfileAddressFields } from "@agency-portal/components/portal/profile-address-fields";
 import {
@@ -41,14 +46,16 @@ import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Building2, Mail, Phone, Shield, User } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	isOrgPendingReview,
 	isOrgSuspended,
 } from "@/components/organization/org-status";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { fetchAgencyLogoSource } from "@/services/agency/agency";
 
 export const Route = createFileRoute("/agency/profile")({
 	component: AgencyProfile,
@@ -75,6 +82,8 @@ function AgencyProfile() {
 	const toast = useStore((s) => s.toast);
 	// Real login → overlay the real agency identity in read mode (see the hook).
 	const profile = useAgencyProfile();
+	/** Same refresh-failure handler every service call in this portal uses. */
+	const { logout } = useAuth();
 	const [editing, setEditing] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [securityOpen, setSecurityOpen] = useState(false);
@@ -89,6 +98,67 @@ function AgencyProfile() {
 		contentType: string;
 	} | null>(null);
 	const [logoCleared, setLogoCleared] = useState(false);
+	/** Picked but not yet framed — the crop sheet owns it until it is confirmed. */
+	const [pendingPhoto, setPendingPhoto] = useState<PendingAvatarPick | null>(
+		null,
+	);
+	/**
+	 * The ORIGINAL image behind the current draft photo, plus where it was
+	 * framed. Kept so Adjust re-crops the full-resolution source at the previous
+	 * framing instead of re-cropping the already-cropped output, which would
+	 * discard everything outside the old square and soften the rest each pass.
+	 */
+	const [photoSource, setPhotoSource] = useState<PendingAvatarPick | null>(
+		null,
+	);
+	/**
+	 * The source as the SERVER last described it — what the saved logo was made
+	 * from. Held in a ref so entering or cancelling an edit can restore it, rather
+	 * than resetting to null and losing Adjust for the rest of the visit. Whether
+	 * that reset bit depended on the fetch landing before the click, so the
+	 * button came and went by luck. Outlet Settings carries the same fix.
+	 */
+	const storedSource = useRef<PendingAvatarPick | null>(null);
+
+	/**
+	 * Load the stored ORIGINAL so "Adjust crop" works on a logo saved in an
+	 * earlier session — the outlet Settings twin, and for the same reason: until
+	 * this existed the button vanished on every reload.
+	 *
+	 * Fetched from the API, never the public R2 URL, which sends no CORS header:
+	 * the browser cannot read those bytes and cannot export a canvas drawn from
+	 * them. A null answer is ordinary and simply leaves Adjust hidden.
+	 *
+	 * ⚠️ Stored with the FUNCTIONAL updater — `prev ?? fetched` — so a response
+	 * that lands after the owner has picked a new file cannot replace the image
+	 * they are framing, without making `photoSource` a dependency that would
+	 * re-run this effect the moment a pick set it.
+	 */
+	useEffect(() => {
+		const agencyId = profile.agencyId;
+		if (!agencyId) return;
+		let cancelled = false;
+		void fetchAgencyLogoSource(agencyId, logout).then((source) => {
+			if (cancelled || !source) return;
+			const fetched: PendingAvatarPick = {
+				dataUrl: source.dataUrl,
+				fileName: source.fileName,
+				contentType: source.contentType,
+				state: source.state ?? undefined,
+				// No original was kept: this is the saved crop, and the sheet says so
+				// rather than pretending a re-crop is free.
+				fallback: source.fallback,
+			};
+			// Remembered even if a pick already won the race below, so entering or
+			// cancelling an edit can come back to it.
+			storedSource.current = fetched;
+			setPhotoSource((prev) => prev ?? fetched);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [profile.agencyId, logout]);
+
 	const avatarFileRef = useRef<HTMLInputElement>(null);
 	const can = useAgencyCan();
 	const canEdit = can("editSettings");
@@ -158,6 +228,12 @@ function AgencyProfile() {
 		}
 		setLogoMeta(null);
 		setLogoCleared(false);
+		setPendingPhoto(null);
+		// Back to the SAVED logo's source, not to nothing: the stored original
+		// still describes the logo on the row, so Adjust stays available. Setting
+		// null here is what made the button appear or vanish depending on whether
+		// the fetch had landed before Edit was clicked.
+		setPhotoSource(storedSource.current);
 		setEditing(true);
 	};
 
@@ -178,6 +254,12 @@ function AgencyProfile() {
 		}
 		setLogoMeta(null);
 		setLogoCleared(false);
+		setPendingPhoto(null);
+		// Back to the SAVED logo's source, not to nothing: the stored original
+		// still describes the logo on the row, so Adjust stays available. Setting
+		// null here is what made the button appear or vanish depending on whether
+		// the fetch had landed before Edit was clicked.
+		setPhotoSource(storedSource.current);
 		setEditing(false);
 	};
 
@@ -200,15 +282,37 @@ function AgencyProfile() {
 		}
 		const reader = new FileReader();
 		reader.onload = () => {
-			update({ avatarPhoto: reader.result as string });
-			setLogoMeta({
+			// Straight into the crop sheet — the draft only takes the FRAMED
+			// image, so nothing can be saved that the owner never looked at.
+			const picked: PendingAvatarPick = {
+				dataUrl: reader.result as string,
 				fileName: file.name || "logo.png",
 				contentType: file.type || "image/png",
-			});
-			setLogoCleared(false);
-			toast(t.profile.logoSelected, "success");
+			};
+			setPhotoSource(picked);
+			setPendingPhoto(picked);
 		};
 		reader.readAsDataURL(file);
+	};
+
+	/** Reopen the sheet on the ORIGINAL image, framed where it was left. */
+	const adjustCrop = () => {
+		if (!editing || !photoSource) return;
+		setPendingPhoto(photoSource);
+	};
+
+	const applyCroppedPhoto = (result: AvatarCropResult) => {
+		update({ avatarPhoto: result.dataUrl });
+		setLogoMeta({
+			fileName: result.fileName,
+			contentType: result.contentType,
+		});
+		setLogoCleared(false);
+		// Remember the framing, not just the bytes, so the next Adjust opens
+		// where this one ended rather than back at centred-and-1×.
+		setPhotoSource((s) => (s ? { ...s, state: result.state } : s));
+		setPendingPhoto(null);
+		toast(t.profile.logoSelected, "success");
 	};
 
 	const saveEdit = async () => {
@@ -245,6 +349,18 @@ function AgencyProfile() {
 					...(logoIsNew
 						? {
 								logoDataUrl: nextLogo,
+								// The un-cropped ORIGINAL and its framing travel WITH the
+								// logo, so a later session re-opens the crop sheet on the real
+								// source instead of re-cropping the cropped square.
+								// ⚠️ A FALLBACK IS NEVER STORED AS AN ORIGINAL — it is the
+								// already-cropped image, and saving it as the source would
+								// let the loss compound on every later adjust.
+								logoSourceDataUrl: photoSource?.fallback
+									? null
+									: (photoSource?.dataUrl ?? null),
+								logoCropState: photoSource?.fallback
+									? null
+									: (photoSource?.state ?? null),
 								logoFileName: logoMeta?.fileName,
 								logoContentType: logoMeta?.contentType,
 							}
@@ -349,6 +465,12 @@ function AgencyProfile() {
 					className="sr-only"
 					onChange={onAvatarFilePick}
 				/>
+				<AvatarCropSheet
+					open={Boolean(pendingPhoto)}
+					pick={pendingPhoto}
+					onCancel={() => setPendingPhoto(null)}
+					onConfirm={applyCroppedPhoto}
+				/>
 				<div className="relative">
 					<div
 						className={`iz-avatar iz-avatar--xl${owner.avatarPhoto ? " iz-avatar-photo" : ""}`}
@@ -389,12 +511,19 @@ function AgencyProfile() {
 					<ProfilePhotoActions
 						hasPhoto={Boolean(draft.avatarPhoto)}
 						onChangePhoto={openAvatarUpload}
+						// Both, deliberately: a source can outlive the photo it came
+						// from — remove the logo, save, then edit again, and the
+						// restored source would otherwise offer Adjust on nothing.
+						onAdjustPhoto={
+							draft.avatarPhoto && photoSource ? adjustCrop : undefined
+						}
 						onRemovePhoto={
 							draft.avatarPhoto
 								? () => {
 										update({ avatarPhoto: null });
 										setLogoMeta(null);
 										setLogoCleared(true);
+										setPhotoSource(null);
 									}
 								: undefined
 						}

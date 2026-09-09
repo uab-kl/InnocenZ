@@ -53,6 +53,9 @@ import {
   enrolOrgOnPlan,
   resolveEnrollablePlan,
 } from '@/features/subscription/enroll-plan.js';
+import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
+import { startBillingOnApproval } from '@/features/subscription/start-billing.js';
+import { readCropSource } from '@/util/crop-source';
 
 function parseSubRole(value: unknown): AgencyUserSubRole | undefined {
   if (typeof value !== 'string') return undefined;
@@ -83,6 +86,9 @@ export class AgencyControllerClass {
     // An admin-created agency must land on a plan, same rule as sign-up.
     private subscriptionRepository: SubscriptionRepositoryClass,
     private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
+    // Approval starts the billing meter, and opens the first period there and
+    // then rather than leaving it to the 03:00 job.
+    private subscriptionInvoiceRepository: SubscriptionInvoiceRepositoryClass,
   ) {}
 
   /**
@@ -789,7 +795,17 @@ export class AgencyControllerClass {
           data: null,
         });
       }
-      const { logoBase64, logoFileName, logoContentType, clearLogo, ...rest } =
+      // `logoSourceDataUrl`/`logoCropState` are pulled out with the other logo
+      // fields: they belong to the R2 sidecar, not to the agency row.
+      const {
+        logoBase64,
+        logoFileName,
+        logoContentType,
+        logoSourceDataUrl,
+        logoCropState,
+        clearLogo,
+        ...rest
+      } =
         parsed.data;
       let agency = await this.agencyRepository.update(id, {
         ...rest,
@@ -817,6 +833,8 @@ export class AgencyControllerClass {
             fileName: logoFileName,
             contentType: logoContentType,
             base64: logoBase64,
+            sourceDataUrl: logoSourceDataUrl,
+            cropState: logoCropState,
           });
           const withLogo = await this.agencyRepository.update(id, {
             logoImage: logoKey,
@@ -851,6 +869,34 @@ export class AgencyControllerClass {
     }
   }
 
+  /**
+   * The ORIGINAL behind this agency's logo — the outlet handler's twin. Served
+   * by the server because the public r2.dev host sends no CORS header, so the
+   * browser can neither `fetch` the original nor draw it into a canvas it is
+   * still allowed to export. `data: null` means "no sidecar", which is the
+   * ordinary answer for any logo uploaded before this shipped.
+   */
+  async getLogoSource(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const agency = await this.agencyRepository.getById(id);
+      if (!agency) {
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const source = await readCropSource(agency.logoImage);
+      res.status(200).json({ success: true, message: 'OK', data: source });
+    } catch (error) {
+      logger.error('[AgencyController.getLogoSource] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
   async approve(req: Request, res: Response) {
     try {
       const id = paramId(req.params.id);
@@ -862,6 +908,23 @@ export class AgencyControllerClass {
         return res
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      /**
+       * THE MONEY STARTS HERE (owner's call, 9 Sep 2026) — the outlet handler's
+       * twin, and deliberately the same shared call rather than a second copy of
+       * the rule. An agency bills WEEKLY, so its first period is the payroll
+       * week (Sun–Sat) containing this approval, not a month.
+       *
+       * Awaited but never fatal, and re-approving a suspended agency stamps
+       * nothing; see `startBillingOnApproval`.
+       */
+      await startBillingOnApproval({
+        memberSubscriptionRepository: this.memberSubscriptionRepository,
+        subscriptionInvoiceRepository: this.subscriptionInvoiceRepository,
+        subscriberType: 'agency',
+        subscriberId: id,
+        actor: getActor(req),
+      });
 
       // Notify the agency owner — approval already persisted; email failure must not roll it back.
       try {

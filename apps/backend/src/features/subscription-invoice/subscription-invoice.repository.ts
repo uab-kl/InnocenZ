@@ -554,6 +554,10 @@ export class SubscriptionInvoiceRepositoryClass {
           currency: MemberSubscriptionTable.currency,
           billingCycle: MemberSubscriptionTable.billingCycle,
           startedAt: MemberSubscriptionTable.startedAt,
+          // When the METER starts, which is not when they subscribed (0157).
+          // NULL = enrolled but awaiting admin approval; see the lane anchor
+          // below, which refuses to bill a lane that has none.
+          billingStartsAt: MemberSubscriptionTable.billingStartsAt,
           endedAt: MemberSubscriptionTable.endedAt,
           // Read beside endedAt so a lane that was cancelled WITHOUT an end date
           // is not billed forever — see stillSubscribed below.
@@ -615,9 +619,37 @@ export class SubscriptionInvoiceRepositoryClass {
         const ordered = [...rowsInLane].sort(
           (a, b) => a.startedAt.getTime() - b.startedAt.getTime(),
         );
-        const anchor = ordered[0];
         const latest = ordered[ordered.length - 1];
-        if (!anchor || !latest) continue;
+        if (!ordered[0] || !latest) continue;
+
+        /**
+         * THE LANE'S BILLING ANCHOR — the earliest day any row on it became
+         * billable, which since 0157 is NOT simply the day the org subscribed.
+         *
+         * An org self-registers as `pending_review` and is confined to
+         * Settings/Profile until an admin approves it, so `enrolOrgOnPlan`
+         * leaves `billing_starts_at` NULL and `/approve` stamps it. Reading
+         * `ordered[0].startedAt` here — as this did — billed a full month from
+         * the day the venue could first open an address form.
+         *
+         * ⚠️ A LANE WITH NO ANCHOR IS NOT BILLED AT ALL. That is the point: an
+         * org nobody ever approves accrues nothing, instead of a column of
+         * unpaid periods somebody must later cancel and credit. It is also why
+         * `create()` defaults the column and a plan switch inherits it — a lane
+         * that silently lost its anchor would silently stop being invoiced, and
+         * nothing reports an invoice that was never raised.
+         *
+         * The EARLIEST rather than the latest, so a mid-month tier switch keeps
+         * the calendar it already had — the same reason this was `ordered[0]`.
+         */
+        const anchoredAt = ordered.reduce<Date | null>(
+          (earliest, row) =>
+            row.billingStartsAt && (!earliest || row.billingStartsAt < earliest)
+              ? row.billingStartsAt
+              : earliest,
+          null,
+        );
+        if (!anchoredAt) continue;
 
         // ONE BILLING CALENDAR PER LANE, anchored on the day the org first
         // subscribed in it. Anchoring per subscription row instead opened a
@@ -662,7 +694,7 @@ export class SubscriptionInvoiceRepositoryClass {
 
         const periods = billingPeriodsFor({
           billingCycle: latest.billingCycle,
-          startedAt: anchor.startedAt,
+          startedAt: anchoredAt,
           endedAt: lastEnded,
           today,
         });

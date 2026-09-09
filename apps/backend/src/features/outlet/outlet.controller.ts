@@ -20,6 +20,7 @@ import {
 } from '@/schema/outlet.schema';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
+import { createStarterTemplates } from '@/features/shift-template/starter-templates.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import { addressQueryFromOutlet, geocodeAddress } from './geocode';
 import { OutletFilter, OutletStatus } from './outlet.model';
@@ -44,6 +45,9 @@ import {
   enrolOrgOnPlan,
   resolveEnrollablePlan,
 } from '@/features/subscription/enroll-plan.js';
+import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
+import { startBillingOnApproval } from '@/features/subscription/start-billing.js';
+import { readCropSource } from '@/util/crop-source';
 
 export class OutletControllerClass {
   constructor(
@@ -61,8 +65,11 @@ export class OutletControllerClass {
     // An admin-created venue must land on a plan, same rule as sign-up.
     private subscriptionRepository: SubscriptionRepositoryClass,
     private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
+    // Approval starts the billing meter, and opens the first period there and
+    // then rather than leaving it to the 03:00 job.
+    private subscriptionInvoiceRepository: SubscriptionInvoiceRepositoryClass,
   ) {}
-
+
   /**
    * ADMIN — every outlet operator on the platform, paginated.
    *
@@ -294,6 +301,26 @@ export class OutletControllerClass {
         });
         return created;
       });
+
+      // Same starter cards a self-registered venue gets. An admin-created venue
+      // is the SECOND way an outlet comes into existence, and wiring this to
+      // sign-up alone would mean the gallery depended on which door the venue
+      // came through. Allowed to fail on its own — the venue is already real.
+      try {
+        const cards = await createStarterTemplates({
+          outletId: outlet.id,
+          actor,
+        });
+        logger.info('[OutletController.create] Starter templates created', {
+          outletId: outlet.id,
+          cards,
+        });
+      } catch (error) {
+        logger.error(
+          '[OutletController.create] Starter templates failed (venue kept)',
+          error,
+        );
+      }
       res
         .status(201)
         .json({ success: true, message: 'Outlet created', data: outlet });
@@ -324,6 +351,11 @@ export class OutletControllerClass {
         logoBase64,
         logoFileName,
         logoContentType,
+        // Pulled OUT of `rest` like the other logo fields: they belong to the
+        // R2 sidecar, not to the outlet row, and spreading them into the update
+        // would push columns the table does not have.
+        logoSourceDataUrl,
+        logoCropState,
         clearLogo,
         ...rest
       } = parsed.data;
@@ -365,6 +397,8 @@ export class OutletControllerClass {
             fileName: logoFileName,
             contentType: logoContentType,
             base64: logoBase64,
+            sourceDataUrl: logoSourceDataUrl,
+            cropState: logoCropState,
           });
           const withLogo = await this.outletRepository.update(id, {
             logoImage: logoKey,
@@ -573,6 +607,36 @@ export class OutletControllerClass {
     }
   }
 
+  /**
+   * The ORIGINAL behind this venue's logo, so the crop sheet can reopen it.
+   *
+   * Served by the server because the browser cannot reach it: the public r2.dev
+   * host sends no CORS header, so a `fetch` is blocked and a canvas drawn from
+   * that image is tainted, which makes `toDataURL()` throw. `data: null` is an
+   * ordinary answer — every logo uploaded before this shipped has no sidecar,
+   * and the client then hides Adjust exactly as it does today.
+   */
+  async getLogoSource(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const outlet = await this.outletRepository.getById(id);
+      if (!outlet) {
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const source = await readCropSource(outlet.logoImage);
+      res.status(200).json({ success: true, message: 'OK', data: source });
+    } catch (error) {
+      logger.error('[OutletController.getLogoSource] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
   async approve(req: Request, res: Response) {
     try {
       const id = paramId(req.params.id);
@@ -584,6 +648,27 @@ export class OutletControllerClass {
         return res
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      /**
+       * THE MONEY STARTS HERE (owner's call, 9 Sep 2026).
+       *
+       * A venue is billed from the day it is let in, not the day it registered:
+       * until this line runs it was confined to Settings/Profile and could not
+       * post a single shift. `enrolOrgOnPlan` left `billing_starts_at` NULL at
+       * sign-up and this stamps it, then opens the first period immediately so
+       * the admin has a row to mark paid without waiting for the nightly job.
+       *
+       * Awaited but never fatal — it cannot throw, and a billing failure must
+       * not report an approval that HAS been persisted as having failed.
+       * Re-approving a suspended venue stamps nothing, by design.
+       */
+      await startBillingOnApproval({
+        memberSubscriptionRepository: this.memberSubscriptionRepository,
+        subscriptionInvoiceRepository: this.subscriptionInvoiceRepository,
+        subscriberType: 'outlet',
+        subscriberId: id,
+        actor: getActor(req),
+      });
 
       // Notify the outlet owner — approval already persisted; email failure must not roll it back.
       try {

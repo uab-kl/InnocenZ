@@ -201,6 +201,10 @@ export function useOutletProfile() {
 			location?: string;
 			/** New logo as a data URL (`data:image/…;base64,…`). */
 			logoDataUrl?: string | null;
+			/** The ORIGINAL behind `logoDataUrl`, and where the frame was left —
+			 * stored beside the logo so "Adjust crop" survives a reload. */
+			logoSourceDataUrl?: string | null;
+			logoCropState?: { zoom: number; fx: number; fy: number } | null;
 			logoFileName?: string;
 			logoContentType?: string;
 			/** True when the owner cleared the logo. */
@@ -229,6 +233,15 @@ export function useOutletProfile() {
 				outletPatch.logoBase64 = payload.logoDataUrl;
 				outletPatch.logoFileName = payload.logoFileName || "logo.png";
 				outletPatch.logoContentType = payload.logoContentType || "image/png";
+				// Only alongside a new logo — the sidecar describes THIS image, so
+				// sending it without one would leave a source that no longer
+				// matches what is on screen.
+				if (payload.logoSourceDataUrl?.startsWith("data:")) {
+					outletPatch.logoSourceDataUrl = payload.logoSourceDataUrl;
+				}
+				if (payload.logoCropState) {
+					outletPatch.logoCropState = payload.logoCropState;
+				}
 			}
 
 			const outletPromise =

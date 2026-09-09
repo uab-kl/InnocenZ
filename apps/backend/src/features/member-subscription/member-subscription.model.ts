@@ -54,6 +54,26 @@ export const MemberSubscriptionTable = MainSchema.table('member_subscription', {
   // quote that agreed it. Migration 0081.
   adminRequestId: uuid('admin_request_id'),
   startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+  /**
+   * WHEN THE METER STARTS — which is not when they subscribed. Migration 0157.
+   *
+   * `started_at` answers "when did this org take this plan", and it is stamped
+   * the moment the org row is created. But a self-registered org is created
+   * `pending_review`, and the portal then confines it to Settings/Profile — no
+   * nav at all until an admin approves it. Billing from `started_at` charged a
+   * full month from the day a venue gained access to an address form, and kept
+   * that day as its anchor for the life of the account.
+   *
+   * NULL MEANS ENROLLED BUT NOT YET BILLABLE, and the invoice generator skips a
+   * lane no row of which carries an anchor — so an org that is never approved is
+   * never invoiced, rather than accruing periods somebody must cancel and credit.
+   *
+   * ⚠️ Only `enrolOrgOnPlan` writes NULL. Every other door — a plan switch, an
+   * add-on, a seed — goes through `create()`, which defaults this to the row's
+   * own `started_at`. A switch additionally INHERITS the lane's existing anchor,
+   * so moving tier never re-anchors the billing calendar.
+   */
+  billingStartsAt: timestamp('billing_starts_at', { withTimezone: true }),
   endedAt: timestamp('ended_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

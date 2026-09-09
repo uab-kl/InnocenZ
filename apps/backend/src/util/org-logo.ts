@@ -26,6 +26,7 @@
 import path from 'node:path';
 import { sanitizePathSegment } from '@/util/profile-image';
 import { r2Configured, r2PutObject } from '@/util/r2';
+import { type CropState, saveCropSource } from '@/util/crop-source';
 import { slugifyUsername } from '@/util/user-folder';
 
 export type OrgLogoKind = 'agency' | 'outlet';
@@ -107,6 +108,15 @@ export async function saveOrgLogoFromBase64(input: {
   fileName: string;
   contentType?: string;
   base64: string;
+  /**
+   * The ORIGINAL the owner picked, before the crop sheet framed it, as a
+   * `data:` URL — stored beside the logo so "Adjust crop" survives a reload.
+   * Optional: a caller with no original (an older client, a seed) simply stores
+   * no sidecar, and Adjust stays session-only for that image.
+   */
+  sourceDataUrl?: string | null;
+  /** Where the frame was left, so Adjust reopens there rather than centred. */
+  cropState?: CropState | null;
 }): Promise<string> {
   if (!r2Configured()) {
     throw new Error('Image storage (R2) is not configured on this server');
@@ -136,5 +146,17 @@ export async function saveOrgLogoFromBase64(input: {
   // Unique name so a re-upload never serves a cached previous logo.
   const filename = `logo-${Date.now()}${ext}`;
   const key = orgLogoObjectKey(input.kind, input.orgId, input.orgName, filename);
-  return r2PutObject({ key, body, contentType });
+  const storedKey = await r2PutObject({ key, body, contentType });
+
+  // AFTER the logo itself, and unable to fail the save: the venue's visible
+  // logo is written and about to be recorded on the row, so a sidecar that
+  // cannot be stored must cost the re-crop convenience, never the upload.
+  await saveCropSource({
+    imageKey: storedKey,
+    sourceDataUrl: input.sourceDataUrl,
+    fileName: input.fileName,
+    state: input.cropState,
+  });
+
+  return storedKey;
 }

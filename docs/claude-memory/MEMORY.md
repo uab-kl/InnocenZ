@@ -9,6 +9,8 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 
 - [InnocenZ database rules](innocenz-database-rules.md) — reuse tables, 4 audit columns together, FK-only (no name copies), id-first PKs, UI writes persist + called by primary id; `main.pr` is gone (a PR is a `user`)
 - [Verify against test script](verify-against-test-script.md) — check every InnocenZ change against TEST_SCRIPT.md and add new requirements into it
+- [New outlet starter templates](new-outlet-needs-starter-templates.md) — created automatically at outlet creation; they are the venue's examples to delete, so nothing may re-run the seeding
+- [Seeds never write a signature](seeds-never-write-a-signature.md) — `signature_ink` is an attestation the PV sign button pre-loads; only the person's own PUT may write it, and `updated_by` names who touched the ROW, not the field
 - [Sync memory mirrors](sync-memory-mirrors.md) — mirror this memory to repo docs/claude-memory in BOTH directions + keep CLAUDE.md current; the Excel workbook is the flow book, never a memory tab
 - [Confirm every agency action](innocenz-confirm-every-action.md) — approve/edit/save must show the server's own success sentence; silence reads as failure and invites a second, harmful click
 - [InnocenZ mobile flexible UI](innocenz-mobile-flexible-ui.md) — sheets/screens flex to any phone; safe-area insets not fixed pixels; no Pressable over ScrollView; gold=act red=close

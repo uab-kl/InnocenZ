@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -88,6 +89,43 @@ export async function r2PutObject(input: {
     }),
   );
   return input.key;
+}
+
+/**
+ * Read one object back, or null when it is not there.
+ *
+ * ⚠️ THE BROWSER CANNOT DO THIS ITSELF, which is the whole reason this exists.
+ * The public r2.dev host returns NO `Access-Control-Allow-Origin` header —
+ * verified against a live 200 on 9 Sep 2026 — so `fetch()` is blocked, and an
+ * `<img crossOrigin="anonymous">` fails to load outright. Drawing the image
+ * WITHOUT that attribute works but taints the canvas, and `toDataURL()` on a
+ * tainted canvas throws. Plain `<img src>` display is unaffected, which is why
+ * nothing has needed this until now: showing an avatar never reads its pixels.
+ *
+ * So anything that has to re-READ stored bytes (re-cropping a saved photo)
+ * goes through the server. Returns null rather than throwing on a miss: a
+ * caller asking "is there a source for this image?" gets an ordinary no.
+ */
+export async function r2GetObject(
+  key: string,
+): Promise<{ body: Buffer; contentType: string } | null> {
+  try {
+    const result = await getClient().send(
+      new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME!, Key: key }),
+    );
+    if (!result.Body) return null;
+    const bytes = await result.Body.transformToByteArray();
+    return {
+      body: Buffer.from(bytes),
+      contentType: result.ContentType ?? 'application/octet-stream',
+    };
+  } catch (error) {
+    // A miss is the normal answer for any image saved before this feature, so
+    // it is logged at debug rather than warn — otherwise every legacy logo
+    // would file an error report every time someone opened Settings.
+    logger.debug?.('[r2] get missed (ignored)', { key, error });
+    return null;
+  }
 }
 
 export async function r2DeleteObject(key: string): Promise<void> {

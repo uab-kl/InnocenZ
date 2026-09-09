@@ -1,6 +1,7 @@
 import { IconGuide } from "@agency-portal/components/iz/IconGuide";
 import { UnpaidBillingBanner } from "@agency-portal/components/iz/UnpaidBillingBanner";
 import { OutletBookings } from "@agency-portal/components/outlet/OutletBookings";
+import { OutletPriceSetupBanner } from "@agency-portal/components/outlet/OutletPriceSetupBanner";
 import { OutletReconciliationBanner } from "@agency-portal/components/outlet/OutletReconciliationBanner";
 import {
 	OutletPage,
@@ -86,6 +87,13 @@ function OutletHome() {
 					)}
 				</div>
 			)}
+
+			{/* Prices before people: a venue can be staffed with empty price lists,
+			    and the gap only surfaces when somebody tries to log what was sold —
+			    mid-shift, with PRs already on the floor. Sits under the agency
+			    banner because linking an agency is the step that must come first;
+			    hidden entirely once each list carries a price. */}
+			<OutletPriceSetupBanner />
 
 			<OutletBookings
 				shifts={backend.backed ? backend.shifts : undefined}
