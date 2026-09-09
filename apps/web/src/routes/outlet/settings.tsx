@@ -173,6 +173,9 @@ function OutletSettingsPage() {
 						fileName: source.fileName,
 						contentType: source.contentType,
 						state: source.state ?? undefined,
+						// No original was kept: this is the saved crop, and the sheet
+						// says so rather than pretending a re-crop is free.
+						fallback: source.fallback,
 					},
 			);
 		});
@@ -373,8 +376,17 @@ function OutletSettingsPage() {
 								// The un-cropped ORIGINAL and its framing travel WITH the
 								// logo, so a later session re-opens the crop sheet on the real
 								// source instead of re-cropping the cropped square.
-								logoSourceDataUrl: photoSource?.dataUrl ?? null,
-								logoCropState: photoSource?.state ?? null,
+								// ⚠️ A FALLBACK IS NEVER STORED AS AN ORIGINAL. It is the
+								// already-cropped image; saving it as the source would
+								// enshrine a degraded picture and let every later adjust
+								// compound the loss. Staying sourceless keeps the venue
+								// honestly in fallback mode until a real photo is uploaded.
+								logoSourceDataUrl: photoSource?.fallback
+									? null
+									: (photoSource?.dataUrl ?? null),
+								logoCropState: photoSource?.fallback
+									? null
+									: (photoSource?.state ?? null),
 							}
 						: {}),
 					...(logoCleared && !logoIsNew ? { clearLogo: true } : {}),

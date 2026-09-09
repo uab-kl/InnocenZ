@@ -1,5 +1,5 @@
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
-import { Move, RotateCcw, X, ZoomIn } from "lucide-react";
+import { Move, RotateCcw, TriangleAlert, X, ZoomIn } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
@@ -39,6 +39,13 @@ export type PendingAvatarPick = {
 	 * outside the old frame and soften what is left, a little more each pass.
 	 */
 	state?: CropState;
+	/**
+	 * TRUE when this is the ALREADY-CROPPED saved image, because no original was
+	 * stored — every photo uploaded before the sidecar existed. Re-cropping it
+	 * can only take more away and soften what is left, so the sheet warns, and
+	 * the caller must NOT re-store it as an original or the loss compounds.
+	 */
+	fallback?: boolean;
 };
 
 /** Square edge of the saved image. Small enough to post, sharp on a 96px hero. */
@@ -374,6 +381,21 @@ export function AvatarCropSheet({
 			</div>
 
 			<div className="iz-avatar-crop">
+				{/*
+				 * WORKING FROM THE SAVED CROP, not an original — say so.
+				 *
+				 * Photos uploaded before the original was kept have none, and it
+				 * cannot be reconstructed. The sheet still opens (a lossy adjust
+				 * beats no adjust) but this is the one case where the picture can
+				 * only get tighter and softer, and someone reaching for "let me undo
+				 * my crop" needs to know that is not on offer before they try.
+				 */}
+				{pick?.fallback ? (
+					<p className="iz-avatar-crop__hint iz-avatar-crop__hint--warn">
+						<TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden />
+						{t.profile.cropFallbackWarning}
+					</p>
+				) : null}
 				<p className="iz-avatar-crop__hint">
 					<Move className="h-3.5 w-3.5 shrink-0" aria-hidden />
 					{t.profile.cropHint}

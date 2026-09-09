@@ -42,6 +42,8 @@ export type ProfileImageSource = {
 	fileName: string;
 	contentType: string;
 	state: { zoom: number; fx: number; fy: number } | null;
+	/** True when no original was stored: this is the already-cropped image. */
+	fallback: boolean;
 };
 
 /**

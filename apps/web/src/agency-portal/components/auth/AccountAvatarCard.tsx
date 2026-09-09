@@ -74,6 +74,9 @@ export function AccountAvatarCard() {
 						fileName: source.fileName,
 						contentType: source.contentType,
 						state: source.state ?? undefined,
+						// No original was kept: this is the saved crop, and the sheet
+						// says so rather than pretending a re-crop is free.
+						fallback: source.fallback,
 					},
 			);
 		});
@@ -139,8 +142,13 @@ export function AccountAvatarCard() {
 			await uploadMyProfileImage(me.id, fileFromCropResult(result), {
 				// The un-cropped ORIGINAL travels with the cropped file, so a later
 				// session can re-frame the real source instead of the output.
-				sourceDataUrl: photoSource?.dataUrl ?? null,
-				state: result.state,
+				// ⚠️ A FALLBACK IS NEVER STORED AS AN ORIGINAL — it is the
+				// already-cropped image, and saving it as the source would enshrine a
+				// degraded picture and compound the loss on every later adjust.
+				sourceDataUrl: photoSource?.fallback
+					? null
+					: (photoSource?.dataUrl ?? null),
+				state: photoSource?.fallback ? null : result.state,
 			});
 			await queryClient.invalidateQueries({ queryKey: profileQueryKey });
 			setPreview(null);

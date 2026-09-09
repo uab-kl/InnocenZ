@@ -21163,6 +21163,16 @@ body:has(.iz-portal) .iz-pv-doc [class*="title"] {
 	font-size: var(--iz-fs-tiny);
 	color: var(--iz-muted);
 }
+/* Shown only when no original was stored, so the re-crop is lossy. Amber, not
+   red: nothing has gone wrong and nothing is blocked — the picture simply
+   cannot get better from here, only tighter. Carries no font tokens of its own,
+   inheriting family and --iz-fs-tiny from .iz-avatar-crop__hint above, so it
+   stays on the ladder by construction. */
+.iz-avatar-crop__hint--warn {
+	color: var(--iz-amber, #d99a2b);
+	text-align: center;
+	text-wrap: balance;
+}
 .iz-avatar-crop__frame {
 	/* It IS a <button> — focusable so the arrow keys can nudge the crop — so
 	   the browser's button chrome has to be undone before it can be a frame. */

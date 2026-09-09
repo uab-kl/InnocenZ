@@ -2009,6 +2009,14 @@ const en = {
 		addPhoto: "Add photo",
 		cropTitle: "Position your photo",
 		cropHint: "Drag the image to choose what shows",
+		/**
+		 * Shown ONLY when no original was stored — every photo uploaded before the
+		 * original was kept. It names what can and cannot be done here, because
+		 * the obvious reason to open this sheet, "let me undo my crop", is the one
+		 * thing it cannot do in this state.
+		 */
+		cropFallbackWarning:
+			"Working from the saved photo — the original wasn't kept, so this can only crop tighter, and quality drops a little each time.",
 		cropZoom: "Zoom",
 		cropReset: "Reset",
 		cropPreview: "How it will look",
@@ -7751,6 +7759,8 @@ const zh: PortalTranslations = {
 		addPhoto: "添加照片",
 		cropTitle: "调整照片位置",
 		cropHint: "拖动图片，选择要显示的部分",
+		cropFallbackWarning:
+			"正在使用已保存的照片——原图未保留，因此只能裁得更小，且每次调整画质都会略有下降。",
 		cropZoom: "缩放",
 		cropReset: "重置",
 		cropPreview: "显示效果",

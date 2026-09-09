@@ -139,6 +139,9 @@ function AgencyProfile() {
 						fileName: source.fileName,
 						contentType: source.contentType,
 						state: source.state ?? undefined,
+						// No original was kept: this is the saved crop, and the sheet
+						// says so rather than pretending a re-crop is free.
+						fallback: source.fallback,
 					},
 			);
 		});
@@ -332,8 +335,15 @@ function AgencyProfile() {
 								// The un-cropped ORIGINAL and its framing travel WITH the
 								// logo, so a later session re-opens the crop sheet on the real
 								// source instead of re-cropping the cropped square.
-								logoSourceDataUrl: photoSource?.dataUrl ?? null,
-								logoCropState: photoSource?.state ?? null,
+								// ⚠️ A FALLBACK IS NEVER STORED AS AN ORIGINAL — it is the
+								// already-cropped image, and saving it as the source would
+								// let the loss compound on every later adjust.
+								logoSourceDataUrl: photoSource?.fallback
+									? null
+									: (photoSource?.dataUrl ?? null),
+								logoCropState: photoSource?.fallback
+									? null
+									: (photoSource?.state ?? null),
 								logoFileName: logoMeta?.fileName,
 								logoContentType: logoMeta?.contentType,
 							}

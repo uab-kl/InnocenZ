@@ -34,11 +34,26 @@ export type CropState = { zoom: number; fx: number; fy: number };
 
 /** What the sheet needs to reopen on the original at its previous framing. */
 export type CropSource = {
-  /** `data:image/…;base64,…` of the ORIGINAL, un-cropped. */
+  /** `data:image/…;base64,…` — the ORIGINAL, or the saved crop when `fallback`. */
   dataUrl: string;
   fileName: string;
   contentType: string;
   state: CropState | null;
+  /**
+   * TRUE when no original was stored and this is the ALREADY-CROPPED image.
+   *
+   * Every picture uploaded before the sidecar existed is in this state, and its
+   * original is not recoverable — it was never kept. Re-cropping the crop is
+   * lossy by construction: it can only take MORE away, never bring back what is
+   * outside the existing square, and it softens what remains.
+   *
+   * Returned anyway (owner's call, 9 Sep 2026) because for those images the
+   * comparison is not "lossy versus sharp", it is "lossy versus no button at
+   * all". The flag exists so the sheet can say so plainly, and so the client
+   * knows not to store this image as if it were an original — that would
+   * enshrine a degraded picture as the source and let the loss compound.
+   */
+  fallback: boolean;
 };
 
 /**
@@ -174,7 +189,31 @@ export async function readCropSource(
     if (!folder) return null;
 
     const manifestObject = await r2GetObject(`${folder}${MANIFEST_NAME}`);
-    if (!manifestObject) return null;
+    /**
+     * NO MANIFEST — fall back to the SAVED IMAGE ITSELF.
+     *
+     * The original was never stored for anything uploaded before this feature,
+     * and it cannot be reconstructed. Returning the crop lets the sheet open at
+     * all; the `fallback` flag tells the client what it is holding, so it can
+     * warn and can refuse to re-store it as an original.
+     *
+     * Served from here rather than fetched by the browser for the same reason
+     * the whole read path is server-side: the public host sends no CORS header,
+     * so a canvas drawn from that image could never be exported.
+     */
+    if (!manifestObject) {
+      const saved = await r2GetObject(imageKey);
+      if (!saved) return null;
+      return {
+        dataUrl: `data:${saved.contentType};base64,${saved.body.toString('base64')}`,
+        fileName: path.basename(imageKey),
+        contentType: saved.contentType,
+        // No framing was ever recorded, and the crop IS the frame — the sheet
+        // opens it fitted, which is exactly where it was left.
+        state: null,
+        fallback: true,
+      };
+    }
 
     const parsed = JSON.parse(manifestObject.body.toString('utf8')) as Manifest;
     if (!parsed?.sourceKey) return null;
@@ -201,6 +240,8 @@ export async function readCropSource(
       fileName: parsed.fileName || 'source.png',
       contentType,
       state: isCropState(parsed.state) ? parsed.state : null,
+      // A real stored original: re-cropping it loses nothing.
+      fallback: false,
     };
   } catch (error) {
     logger.warn('[crop-source] could not read original (ignored)', {
