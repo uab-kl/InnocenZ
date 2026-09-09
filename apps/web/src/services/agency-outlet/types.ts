@@ -21,6 +21,9 @@ export type OutletAgencyLink = {
 	agencyId: string;
 	agencyName: string;
 	agencyCode: string;
+	/** Stem of that agency’s member ids — `AT` gives INNATAGY0001. Shown in place
+	    of `agencyCode`, which numbers the organisation, not a person. */
+	memberCodePrefix?: string | null;
 	approveStatus: AgencyOutletApproveStatus;
 	rejectReason: string | null;
 	/**
@@ -116,6 +119,9 @@ export type AgencyDirectoryEntry = {
 	id: string;
 	name: string;
 	agencyCode: string;
+	/** Stem of that agency’s member ids — `AT` gives INNATAGY0001. Shown in place
+	    of `agencyCode`, which numbers the organisation, not a person. */
+	memberCodePrefix?: string | null;
 };
 
 export type AgencyDirectoryApiResponse = {

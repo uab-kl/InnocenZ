@@ -14,6 +14,7 @@ import {
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
+import { orgMemberIdStem } from "@/lib/member-code";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -136,7 +137,7 @@ function PendingApprovalsPage() {
 				typeLabel: t.rbac.typePrAgency,
 				icon: Building2,
 				name: a.name,
-				detail: fill(t.rbac.codePrefix, { code: a.agencyCode }),
+				detail: orgMemberIdStem("agency", a.memberCodePrefix) ?? "—",
 				date: formatDate(a.createdAt),
 				createdAt: a.createdAt,
 				href: "/admin/user-management/agency",

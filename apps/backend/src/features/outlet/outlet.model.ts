@@ -26,6 +26,8 @@ export type OutletUserSubRole = (typeof outletUserSubRoleValues)[number];
 export const OutletTable = MainSchema.table('outlet', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
+  /** Letter code venue member ids are built from — INN + <this> + OLT + 0001 (0154). */
+  memberCodePrefix: varchar('member_code_prefix', { length: 8 }),
   logoImage: varchar('logo_image'),
   addressLine1: varchar('address_line_1', { length: 255 }),
   addressLine2: varchar('address_line_2', { length: 255 }),
@@ -33,8 +35,16 @@ export const OutletTable = MainSchema.table('outlet', {
   postcode: varchar('postcode', { length: 20 }),
   state: varchar('state', { length: 100 }),
   country: varchar('country', { length: 100 }).default('Malaysia'),
+  /** The licence to trade — asked for outright at sign-up, NOT the old-format
+      registration number that used to be written here. */
   businessLicense: varchar('business_license', { length: 100 }),
   ssmNo: varchar('ssm_no', { length: 100 }),
+  registrationNoOld: varchar('registration_no_old', { length: 50 }),
+  // Asked at sign-up since the form existed; they had nowhere to land until
+  // 0155, so a venue’s contact person, email and phone were read and dropped.
+  contactName: varchar('contact_name', { length: 100 }),
+  contactEmail: varchar('contact_email', { length: 255 }),
+  contactPhone: varchar('contact_phone', { length: 50 }),
   lat: decimal('lat', { precision: 10, scale: 8 }),
   lng: decimal('lng', { precision: 11, scale: 8 }),
   geoFenceRadius: integer('geo_fence_radius').default(50), // metres
@@ -64,6 +74,13 @@ export const OutletUserTable = MainSchema.table('outlet_user', {
   outletId: uuid('outlet_id').notNull().references(() => OutletTable.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => UserTable.id, { onDelete: 'cascade' }),
   status: varchar('status', { length: 50 }).notNull().default('active'),
+  /**
+   * The human-readable id for THIS membership — INN + org code + AGY|OLT + 0001.
+   *
+   * Per membership, not per person: someone operating two organisations holds a
+   * different id in each, because the id names the organisation (0154).
+   */
+  memberCode: varchar('member_code', { length: 32 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),

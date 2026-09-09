@@ -123,6 +123,28 @@ export class AgencyOutletControllerClass {
     }
   }
 
+  /**
+   * ADMIN — every venue one named agency is linked to. The mirror of
+   * `listForOutlet`, and the reason it had to exist: the admin's agency sheet
+   * could show a venue's agencies but not an agency's venues, so the one
+   * question support actually asks — which venues does this agency staff —
+   * had no answer on the screen. `listLinks` cannot serve it: that one reads
+   * the CALLER's agency, and an admin has none.
+   */
+  async listForAgency(req: Request, res: Response) {
+    try {
+      const links = await this.agencyOutletRepository.listByAgency(
+        this.param(req, 'agencyId'),
+      );
+      return res.json({ success: true, message: 'Outlet links', data: links });
+    } catch (error) {
+      logger.error('[AgencyOutletController.listForAgency] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: 'Failed to load outlet links', data: null });
+    }
+  }
+
   /** Outlet Settings — every agency this venue is linked to, in any state. */
   async listMine(req: Request, res: Response) {
     try {

@@ -35,6 +35,8 @@ const LABELS: Record<string, keyof PortalTranslations["admin"]> = {
 	"sidebar-user-outlet": "navOutlet",
 	"sidebar-user-pr": "navPr",
 	"sidebar-user-legacy-member": "navLegacyMember",
+	"sidebar-team-agency": "navAgencyTeam",
+	"sidebar-team-outlet": "navOutletTeam",
 	"sidebar-service-requests": "navPlanRequest",
 	"sidebar-service-plan-changes": "navPlanChange",
 	"sidebar-service-plan-payment": "navPlanPayment",

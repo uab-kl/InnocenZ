@@ -23,7 +23,21 @@ import {
 } from '@/features/user/user-profile/user-profile.model';
 import { UserType } from '@/features/user/user.model';
 
-export const USER_ID_DOC_UPLOAD_DIR = path.join(PROFILE_IMAGE_UPLOAD_DIR, 'id-docs');
+/**
+ * `ic-docs`, renamed from `id-docs` on 8 Sep 2026 at the owner's request — the
+ * folder holds IC scans and now says so.
+ *
+ * The LEGACY segment is still recognised on READ, and the refs already stored
+ * were moved by `scripts/migrate-ic-doc-keys.ts`. Both halves matter: renaming
+ * what we write without still matching what we already wrote would orphan every
+ * scan already on disk — they would stop counting as identity documents, so
+ * `deleteUserIdDocFile` would skip them and a stale IC would survive an account
+ * wipe that was supposed to remove it.
+ */
+const IC_DOC_SEGMENT = 'ic-docs';
+const LEGACY_IC_DOC_SEGMENT = 'id-docs';
+
+export const USER_ID_DOC_UPLOAD_DIR = path.join(PROFILE_IMAGE_UPLOAD_DIR, IC_DOC_SEGMENT);
 
 const CONTENT_TYPE_BY_EXT: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -38,14 +52,18 @@ export function ensureUserIdDocDir(): void {
 }
 
 export function idDocPublicPath(userId: string, side: 'front' | 'back', ext: string): string {
-  return `/img/users/id-docs/${userId}-${side}${ext}`;
+  return `/img/users/${IC_DOC_SEGMENT}/${userId}-${side}${ext}`;
 }
 
+/** Matches the current segment AND the pre-rename one — see the note above. */
 export function isUserIdDocPath(pathname: string | null | undefined): boolean {
-  return Boolean(pathname?.startsWith('/img/users/id-docs/'));
+  return Boolean(
+    pathname?.startsWith(`/img/users/${IC_DOC_SEGMENT}/`) ||
+      pathname?.startsWith(`/img/users/${LEGACY_IC_DOC_SEGMENT}/`),
+  );
 }
 
-/** R2 key: user/{userId}/id-docs/{side}-{timestamp}{ext} */
+/** R2 key: user/{userId}/ic-docs/{side}-{timestamp}{ext} */
 export function idDocObjectKey(
   userId: string,
   side: 'front' | 'back',
@@ -53,7 +71,7 @@ export function idDocObjectKey(
 ): string {
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || `id-${side}`;
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/${userFolder(userId)}/id-docs/${safeName}${ext}`;
+  return `user/${userFolder(userId)}/${IC_DOC_SEGMENT}/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {

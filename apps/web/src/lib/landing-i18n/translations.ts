@@ -393,7 +393,7 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			titleLine1: "The Operating Platform for",
 			titleLine2: "Nightlife.",
 			subtitle:
-				"One place for the venue, the agency and the PR — from the first check-in to the final signed payout.",
+				"One place for the venue, the agency and the PR\n— from the first check-in to the final signed payout.",
 			watchPlatform: "Watch the platform",
 			stat1: "less time on manpower planning",
 			stat2: "digital receipt → payout",
@@ -734,7 +734,7 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			titleLine1: "夜生活运营平台",
 			titleLine2: "为夜而生。",
 			subtitle:
-				"将门店、PR 代理与 PR 连接于同一智能生态系统——从首次签到到最终签字发薪。",
+				"将门店、PR 代理与 PR 连接于同一智能生态系统\n——从首次签到到最终签字发薪。",
 			watchPlatform: "观看平台演示",
 			stat1: "人力规划时间更少",
 			stat2: "数字收据 → 发薪",

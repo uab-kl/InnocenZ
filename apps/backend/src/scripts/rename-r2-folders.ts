@@ -237,20 +237,53 @@ async function main() {
 
   const moves = new Map<string, string>();
 
-  for (const kind of ['agency', 'outlet'] as const) {
-    const folders = await orgFolders(kind);
-    for (const key of await listAll(s3, `${kind}/`)) {
-      const next = planOrgKey(key, folders);
-      if (next) moves.set(key, next);
+  /**
+   * `--only-ic-docs` runs the `id-docs` → `ic-docs` segment rename ALONE.
+   *
+   * The folder passes below are still finding unrelated work — outlet logos,
+   * event-type images, a comcard — left over from the named-folder migration.
+   * Sweeping those along with a rename someone asked for would move assets
+   * nobody mentioned, in the same breath, and an operator reading "renaming the
+   * IC folder" would have no reason to expect it. Two migrations, two decisions.
+   */
+  const ONLY_IC_DOCS = process.argv.includes('--only-ic-docs');
+
+  if (!ONLY_IC_DOCS) {
+    for (const kind of ['agency', 'outlet'] as const) {
+      const folders = await orgFolders(kind);
+      for (const key of await listAll(s3, `${kind}/`)) {
+        const next = planOrgKey(key, folders);
+        if (next) moves.set(key, next);
+      }
     }
   }
 
   // Every user's target folder, straight from the primed cache.
   const ids = toRows<{ id: string }>(await db.execute(sql`select id from main."user"`));
   const userTargets = new Map(ids.map((r) => [r.id, userFolder(r.id)]));
-  for (const key of await listAll(s3, 'user/')) {
-    const next = planUserKey(key, userTargets);
-    if (next) moves.set(key, next);
+  const userKeys = await listAll(s3, 'user/');
+  if (!ONLY_IC_DOCS) {
+    for (const key of userKeys) {
+      const next = planUserKey(key, userTargets);
+      if (next) moves.set(key, next);
+    }
+  }
+
+  /**
+   * `id-docs` → `ic-docs` (owner, 8 Sep 2026 — the folder holds IC scans and
+   * should say so). `idDocObjectKey` now writes the new segment; this moves what
+   * was already written so the two agree.
+   *
+   * Composed ON TOP of whatever the folder pass planned, rather than added
+   * beside it: a key can need both fixes at once, and two separate entries for
+   * the same source would race — the second would overwrite the first's target
+   * and one of the two changes would be silently lost. Reading the planned
+   * target back out of `moves` makes the passes compose instead of compete.
+   */
+  for (const key of userKeys) {
+    const planned = moves.get(key) ?? key;
+    const renamed = planned.replace('/id-docs/', '/ic-docs/');
+    if (renamed !== key) moves.set(key, renamed);
   }
 
   if (moves.size === 0) {

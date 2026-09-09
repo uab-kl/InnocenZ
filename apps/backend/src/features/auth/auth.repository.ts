@@ -1,4 +1,5 @@
 import { db } from '@/db/index';
+import { ensurePersonCode } from '@/util/member-code';
 import { eq, inArray, and, SQL, or, ilike, asc, desc, sql } from 'drizzle-orm';
 import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { logger } from '@/util/logger.js';
@@ -201,6 +202,9 @@ export class AuthRepositoryClass {
         );
         return user;
       });
+      // AFTER the transaction: the id depends on the role that was just granted,
+      // and a PR or admin without one is an account nobody can quote.
+      await ensurePersonCode(newUser.id);
       logger.info('[AuthRepository.createUserWithRole] User created with role:', newUser.email);
       return newUser;
     } catch (error) {

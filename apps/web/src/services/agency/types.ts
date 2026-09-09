@@ -44,6 +44,9 @@ export interface PrAgencyLink {
 	agencyId: string;
 	agencyName: string;
 	agencyCode: string;
+	/** Stem of that agency’s member ids — `AT` gives INNATAGY0001. Shown in place
+	    of `agencyCode`, which numbers the organisation, not a person. */
+	memberCodePrefix?: string | null;
 	approveStatus: AgencyPrApproveStatus;
 }
 
@@ -103,6 +106,15 @@ export interface Agency {
 	id: string;
 	name: string;
 	agencyCode: string;
+	/** Licence to trade — asked at sign-up, stored on the agency row since 0156.
+	    Null for every agency registered before the question existed. */
+	businessLicense?: string | null;
+	/** The pre-2019 registration number, shown in brackets after the new one. */
+	registrationNoOld?: string | null;
+	/** The letters this agency’s member ids are built from — `AT` gives
+	    INNATAGY0001. Null until an id has been minted here (0154). NOT the same
+	    thing as `agencyCode`, which is a random six-digit org number. */
+	memberCodePrefix?: string | null;
 	ssmNo: string;
 	contactName: string | null;
 	contactEmail: string | null;
@@ -122,6 +134,9 @@ export interface Agency {
 }
 
 export interface AgencyMember {
+	/** Human-readable id for THIS membership — INNATAGY0001. Null only for a row
+	    the backfill has not reached. */
+	memberCode?: string | null;
 	id: string;
 	agencyId: string;
 	userId: string;
@@ -146,6 +161,52 @@ export interface AgencyMembership {
 	agencyStatus: string;
 	subRole: AgencyUserSubRole;
 	status: string;
+	/** THIS membership’s own id — INNATAGY0001. */
+	memberCode?: string | null;
+}
+
+/**
+ * One row of the admin's cross-agency "Team members" list —
+ * `GET /agency/team-members`. The membership, the person, and the agency it
+ * belongs to, which is what makes it readable outside any one agency.
+ */
+export interface AgencyTeamMember {
+	/** Human-readable id for THIS membership — INNATAGY0001. Null only for a row
+	    the backfill has not reached. */
+	memberCode?: string | null;
+	id: string;
+	agencyId: string;
+	userId: string;
+	/** Derived from RBAC, not a column — see the repository's note. */
+	subRole: AgencyUserSubRole;
+	status: string;
+	createdAt: string;
+	updatedAt: string;
+	createdBy: string;
+	updatedBy: string;
+	username?: string;
+	email?: string | null;
+	phoneNum?: string | null;
+	agencyName: string;
+	agencyCode: string;
+	agencyStatus: string;
+}
+
+export interface AgencyTeamMembersApiResponse {
+	success: boolean;
+	message: string;
+	data: AgencyTeamMember[];
+	pagination: AgencyPagination;
+}
+
+/** Shared by both team-member lists. `status: "all"` means do not filter. */
+export interface TeamMembersQueryParams {
+	/** Narrow to ONE organisation — the deep link from its Team tab. */
+	orgId?: string;
+	page?: number;
+	pageSize?: number;
+	search?: string;
+	status?: string;
 }
 
 export interface AgencyPagination {

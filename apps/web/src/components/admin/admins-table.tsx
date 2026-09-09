@@ -151,7 +151,7 @@ export function AdminsTable({
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={5} className="h-32">
+									<TableCell colSpan={6} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>{t.admin.loadingAdmins}</span>
@@ -160,7 +160,7 @@ export function AdminsTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={5} className="h-32">
+									<TableCell colSpan={6} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -178,7 +178,7 @@ export function AdminsTable({
 								</TableRow>
 							) : admins.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={5} className="h-32">
+									<TableCell colSpan={6} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Shield className="h-6 w-6" />
 											<span>{t.admin.noAdminsFound}</span>

@@ -143,7 +143,7 @@
 	padding: 14px 22px;
 	border-radius: 999px;
 	font-family: var(--hz-font-sans);
-	font-size: 19px;
+	font-size: 16px;
 	font-weight: 500;
 	letter-spacing: 0.01em;
 	border: 1px solid transparent;
@@ -243,7 +243,7 @@
 
 .landing-page .hz-section-head p {
 	color: var(--hz-ink-dim);
-	font-size: 26px;
+	font-size: 16px;
 	margin: 0;
 	max-width: 640px;
 }
@@ -255,7 +255,7 @@
 }
 
 .landing-page .hz-pricing-intro {
-	font-size: 22px !important;
+	font-size: 16px !important;
 	line-height: 1.45;
 	color: var(--hz-ink-dim);
 }
@@ -280,7 +280,7 @@
 .landing-page .hz-pricing-features li {
 	position: relative;
 	padding-left: 14px;
-	font-size: 18px;
+	font-size: 16px;
 	line-height: 1.35;
 	color: var(--hz-ink-dim);
 	white-space: nowrap;
@@ -303,7 +303,7 @@
 }
 
 .landing-page .hz-pricing-note {
-	font-size: 19px !important;
+	font-size: 16px !important;
 	line-height: 1.4;
 	color: var(--hz-ink-mute) !important;
 	max-width: 720px;
@@ -463,7 +463,7 @@
 	background: transparent;
 	color: var(--hz-ink-dim);
 	font: inherit;
-	font-size: 19px;
+	font-size: 16px;
 	line-height: 1;
 	cursor: pointer;
 	transition: color 0.2s;
@@ -531,7 +531,7 @@
 	align-items: center;
 	color: var(--hz-ink-dim);
 	text-decoration: none;
-	font-size: 19px;
+	font-size: 16px;
 	line-height: 1;
 	transition: color 0.2s;
 }
@@ -568,7 +568,7 @@
 }
 
 .landing-page .hz-hero-sub {
-	font-size: 25px;
+	font-size: 19px;
 	color: var(--hz-ink-dim);
 	max-width: 520px;
 	margin: 0 0 36px;
@@ -581,7 +581,7 @@
 
 .landing-page .hz-stat-label {
 	color: var(--hz-ink-mute);
-	font-size: 17px;
+	font-size: 16px;
 	margin-top: 6px;
 	max-width: 180px;
 	text-transform: uppercase;
@@ -772,54 +772,67 @@
 		0 6px 20px -4px rgba(0, 0, 0, 0.55);
 }
 
-/* Secondary copy — +8px over design handoff sizes */
+/*
+ * Secondary copy — home page only (.landing-page is set in HandoffHomePage
+ * and nowhere else). Every non-title size here is 6px below the inflated
+ * values the 6 Sep "bigger type" pass left behind: -10px first, then +4px
+ * back when 12px read too small on a full-width screen, so 16px is now the
+ * floor (~14.4 visual px after --iz-page-scale 0.9). Titles are NOT in this
+ * pass: anything carrying .hz-display, the section h2, the hero h1, the stat
+ * KPI and the collapse titles keep the sizes they had.
+ */
 .landing-page .text-xs {
-	font-size: 20px !important;
+	font-size: 16px !important;
 }
 
 .landing-page .text-sm {
-	font-size: 22px !important;
+	font-size: 16px !important;
 }
 
 .landing-page .text-base {
-	font-size: 24px !important;
+	font-size: 18px !important;
+}
+
+/* Body paragraphs in the AI and pricing sections (text-lg is never a title). */
+.landing-page .text-lg {
+	font-size: 16px !important;
 }
 
 .landing-page .text-\[9px\],
 .landing-page .text-\[10px\],
 .landing-page .text-\[11px\] {
-	font-size: 21px !important;
+	font-size: 16px !important;
 }
 
 .landing-page .text-\[12\.5px\] {
-	font-size: 20.5px !important;
+	font-size: 16px !important;
 }
 
 .landing-page .text-\[13px\] {
-	font-size: 21px !important;
+	font-size: 16px !important;
 }
 
 .landing-page .text-\[13\.5px\] {
-	font-size: 21.5px !important;
+	font-size: 16px !important;
 }
 
 .landing-page .text-\[17px\] {
-	font-size: 25px !important;
+	font-size: 19px !important;
 }
 
 .landing-page .hz-pain-list li {
-	font-size: 24px;
+	font-size: 18px;
 	line-height: 1.45;
 	color: var(--hz-ink-dim);
 }
 
 .landing-page .hz-label {
-	font-size: 21px;
+	font-size: 16px;
 }
 
 /* Hero orbit badge — fixed small label, sits on ring without covering logo */
 .landing-page .hz-orbit-pill {
-	font-size: 15px !important;
+	font-size: 16px !important;
 	letter-spacing: 0.12em;
 	line-height: 1.15;
 	gap: 5px;
@@ -1065,7 +1078,7 @@
 	/* Was --hz-ink-dim (#a89e8c), which is a caption grey. This is body copy
 	   the reader opened the card FOR, so it takes near-full ink. */
 	color: rgba(246, 239, 225, 0.92);
-	font-size: 16.5px;
+	font-size: 16px;
 	line-height: 1.6;
 }
 
@@ -1105,7 +1118,7 @@
 }
 .landing-page .hz-phase__s {
 	font-family: var(--hz-font-mono);
-	font-size: 13px;
+	font-size: 16px;
 	letter-spacing: 0.08em;
 	color: var(--hz-ink-mute);
 	margin-top: 3px;
@@ -1130,20 +1143,18 @@
 	padding: 14px 4px;
 }
 .landing-page .hz-collapse--row .hz-collapse__body {
-	padding: 0 4px 14px 66px;
+	padding: 0 4px 14px;
 }
 @media (max-width: 900px) {
 	.landing-page .hz-phases {
 		grid-template-columns: 1fr;
 	}
 }
-/* Row body aligns under the title, not the tile: 4px summary padding + the
-   3rem tile (51px at the 17px root) + 14px gap. An open row keeps a faint
-   tint so the state reads without the card's gold border; the focus ring
-   stays square on a square row. */
-.landing-page .hz-collapse--row .hz-collapse__body {
-	padding-left: calc(4px + 3rem + 14px);
-}
+/* Row body starts at the row's own left edge (4px), NOT indented under the
+   title — owner, 8 Sep 2026, comparing a phase row against a plain card:
+   the 69px tile-and-gap indent read as a second column. An open row keeps a
+   faint tint so the state reads without the card's gold border; the focus
+   ring stays square on a square row. */
 .landing-page .hz-collapse.hz-collapse--row[open] {
 	background: rgba(255, 255, 255, 0.03);
 }

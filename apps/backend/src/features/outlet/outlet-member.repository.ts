@@ -1,6 +1,7 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, ilike, inArray, or } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
+import { nextOrgMemberCode } from '@/util/member-code';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
@@ -15,6 +16,13 @@ import {
   OutletTable,
 } from './outlet.model';
 
+/** One row of the admin cross-venue "Team members" list: the membership, the
+  * person, and the venue it belongs to. */
+export type OutletTeamMemberRow = OutletMemberEnriched & {
+  outletName: string;
+  outletStatus: string;
+};
+
 export type OutletMemberEnriched = OutletUserType & {
   /** Derived from `user_role` → `role` (outlet portal). */
   subRole: OutletUserSubRole;
@@ -28,6 +36,8 @@ export type OutletMemberEnriched = OutletUserType & {
  * `outletStatus` is the organisation's status (`pending_review` / `active` / …),
  * distinct from the membership row's own `status`. */
 export type OutletMembershipWithOutlet = {
+  /** This membership’s own id — INNEMOLT0001. */
+  memberCode: string | null;
   membershipId: string;
   userId: string;
   outletId: string;
@@ -53,7 +63,11 @@ async function outletLanesByUserIds(
     .from(UserRoleTable)
     .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
     .leftJoin(PortalTable, eq(PortalTable.id, RoleTable.portalId))
-    .where(inArray(UserRoleTable.userId, userIds));
+    .where(inArray(UserRoleTable.userId, userIds))
+    // ORDERED — the twin of the agency lane query. `laneFromRoleHints` takes the
+    // FIRST hint for the portal, so without this a member holding two outlet-portal
+    // roles lands in an arbitrary department that can change between requests.
+    .orderBy(RoleTable.roleName, UserRoleTable.roleId);
 
   const byUser = new Map<
     string,
@@ -74,15 +88,39 @@ async function outletLanesByUserIds(
 }
 
 export class OutletMemberRepositoryClass {
+  /**
+   * The ONLY insert into this table — so the human-readable id is minted here,
+   * where every path that creates a membership must pass: sign-up (inside its
+   * own transaction, which this inherits through ) and invite-accept.
+   *
+   * A caller may pass its own ; the backfill does. Otherwise one is
+   * issued now, numbered within this organisation.
+   */
   async add(
     data: Omit<OutletUserInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     tx?: DbTransaction,
   ): Promise<OutletUserType> {
     try {
       const dbClient = tx ?? db;
+      const withCode = data.memberCode
+        ? data
+        : {
+            ...data,
+            // `tx` is passed on purpose: sign-up creates the venue and this row
+            // in ONE transaction, and a lookup outside it cannot see the venue.
+            memberCode:
+              (await nextOrgMemberCode('outlet', data.outletId, tx)) ?? null,
+          };
+      // A missing id is the one failure this must never do QUIETLY: a null reads
+      // exactly like a row the backfill has not reached, so nobody goes looking.
+      if (!withCode.memberCode) {
+        logger.error(
+          `[OutletMemberRepository.add] NO MEMBER ID minted for outlet ${data.outletId} — the organisation is missing or its name has no letters`,
+        );
+      }
       const [member] = await dbClient
         .insert(OutletUserTable)
-        .values(data)
+        .values(withCode)
         .returning();
       logger.info('[OutletMemberRepository.add] Member added:', member.id);
       return member;
@@ -170,6 +208,7 @@ export class OutletMemberRepositoryClass {
           outletId: OutletUserTable.outletId,
           userId: OutletUserTable.userId,
           status: OutletUserTable.status,
+          memberCode: OutletUserTable.memberCode,
           createdAt: OutletUserTable.createdAt,
           updatedAt: OutletUserTable.updatedAt,
           createdBy: OutletUserTable.createdBy,
@@ -194,6 +233,93 @@ export class OutletMemberRepositoryClass {
         error,
       );
       return [];
+    }
+  }
+
+  /**
+   * Every venue operator on the platform, across ALL venues — the admin's
+   * "Team members" screen. The twin of `AgencyMemberRepository.listAllEnriched`,
+   * including its rule that `subRole` is returned but NOT filterable: the lane
+   * is derived per user after the page is fetched, so filtering it would punch
+   * holes in an already-paginated page.
+   *
+   * `listByOutletWithUser` above could not be widened — it takes no options at
+   * all, has no LIMIT/OFFSET and never joins `outlet`.
+   */
+  async listAllEnriched(options: {
+    search?: string;
+    status?: string;
+    /** Narrow to ONE venue — the deep link from that venue's Team tab. */
+    outletId?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ rows: OutletTeamMemberRow[]; totalCount: number }> {
+    try {
+      const conditions = [];
+      if (options.outletId) {
+        conditions.push(eq(OutletUserTable.outletId, options.outletId));
+      }
+      if (options.status) {
+        conditions.push(eq(OutletUserTable.status, options.status));
+      }
+      if (options.search?.trim()) {
+        const term = `%${options.search.trim()}%`;
+        conditions.push(
+          or(
+            ilike(UserTable.username, term),
+            ilike(UserTable.email, term),
+            ilike(UserTable.phoneNum, term),
+            ilike(OutletTable.name, term),
+          )!,
+        );
+      }
+      const where = conditions.length ? and(...conditions) : undefined;
+
+      const [{ value: totalCount }] = await db
+        .select({ value: count() })
+        .from(OutletUserTable)
+        .innerJoin(UserTable, eq(UserTable.id, OutletUserTable.userId))
+        .innerJoin(OutletTable, eq(OutletTable.id, OutletUserTable.outletId))
+        .where(where);
+
+      const rows = await db
+        .select({
+          id: OutletUserTable.id,
+          outletId: OutletUserTable.outletId,
+          userId: OutletUserTable.userId,
+          status: OutletUserTable.status,
+          memberCode: OutletUserTable.memberCode,
+          createdAt: OutletUserTable.createdAt,
+          updatedAt: OutletUserTable.updatedAt,
+          createdBy: OutletUserTable.createdBy,
+          updatedBy: OutletUserTable.updatedBy,
+          username: UserTable.username,
+          email: UserTable.email,
+          phoneNum: UserTable.phoneNum,
+          outletName: OutletTable.name,
+          outletStatus: OutletTable.status,
+        })
+        .from(OutletUserTable)
+        .innerJoin(UserTable, eq(UserTable.id, OutletUserTable.userId))
+        .innerJoin(OutletTable, eq(OutletTable.id, OutletUserTable.outletId))
+        .where(where)
+        // Venue, then person, then id — a TOTAL order, so no row lands on two
+        // pages when two memberships share a created_at.
+        .orderBy(OutletTable.name, UserTable.username, OutletUserTable.id)
+        .limit(options.pageSize)
+        .offset((options.page - 1) * options.pageSize);
+
+      const lanes = await outletLanesByUserIds(rows.map((r) => r.userId));
+      return {
+        rows: rows.map((r) => ({
+          ...r,
+          subRole: lanes.get(r.userId) ?? ('owner' as OutletUserSubRole),
+        })),
+        totalCount: Number(totalCount ?? 0),
+      };
+    } catch (error) {
+      logger.error('[OutletMemberRepository.listAllEnriched] Error:', error);
+      return { rows: [], totalCount: 0 };
     }
   }
 
@@ -238,6 +364,7 @@ export class OutletMemberRepositoryClass {
           outletName: OutletTable.name,
           outletStatus: OutletTable.status,
           status: OutletUserTable.status,
+          memberCode: OutletUserTable.memberCode,
         })
         .from(OutletUserTable)
         .innerJoin(OutletTable, eq(OutletTable.id, OutletUserTable.outletId))

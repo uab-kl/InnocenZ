@@ -1,4 +1,7 @@
 export interface AdminUser {
+	/** Human-readable platform id — INNADM0001. Null until the backfill or the
+	    role grant has minted one. */
+	memberCode: string | null;
 	id: string;
 	email: string;
 	displayName: string;

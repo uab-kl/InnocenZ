@@ -33,6 +33,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { orgMemberIdStem } from "@/lib/member-code";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { formatDate, getErrorMessage } from "@/lib/utils";
@@ -148,7 +149,7 @@ export function AgenciesTable({
 							<TableRow>
 								<TableHead className="w-10" />
 								<TableHead>{t.admin.colName}</TableHead>
-								<TableHead>{t.adminOrg.colCode}</TableHead>
+								<TableHead>{t.adminOrg.memberCodePrefix}</TableHead>
 								<TableHead>{t.adminUsers.colContact}</TableHead>
 								<TableHead className="w-[140px]">{t.admin.colStatus}</TableHead>
 								<TableHead className="w-[140px]">
@@ -228,7 +229,8 @@ export function AgenciesTable({
 												</div>
 											</TableCell>
 											<TableCell className="font-mono text-base">
-												{agency.agencyCode}
+												{orgMemberIdStem("agency", agency.memberCodePrefix) ??
+													"—"}
 											</TableCell>
 											<TableCell>
 												<div className="text-base">

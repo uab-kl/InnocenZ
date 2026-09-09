@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { genderFromNric, isNricShaped } from "@/lib/ic-identity";
 import type { SignupTranslations } from "@/lib/landing-i18n/signup-translations";
 
 function imageFileSchema(messages: SignupTranslations["validation"]) {
@@ -23,13 +24,35 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.string()
 				.min(1, messages.companyNameRequired)
 				.max(150, messages.companyNameMax),
+			/* Optional, and only checked WHEN GIVEN: the pre-2019 number is digits
+			   and a check letter (1456789-W). */
 			companyRegistrationOld: z
 				.string()
-				.max(50, messages.registrationNumberMax),
+				.max(50, messages.registrationNumberMax)
+				.refine(
+					(value): boolean =>
+						value.trim() === "" || /^d{6,9}-[A-Z]$/i.test(value.trim()),
+					messages.companyRegistrationOldFormat,
+				),
+			/* SSM has issued ONE format since 2019: twelve digits, no letters and no
+			   separators — year of incorporation, entity code, running number. The
+			   old style with its check letter goes in the field above, which is why
+			   this one can be strict. */
 			companyRegistrationNew: z
 				.string()
 				.min(1, messages.companyRegistrationNewRequired)
-				.max(50, messages.registrationNumberMax),
+				.max(50, messages.registrationNumberMax)
+				.refine(
+					(value): boolean => /^d{12}$/.test(value.trim()),
+					messages.companyRegistrationNewFormat,
+				),
+			/** The licence to trade — a different document from either registration
+			    number, and required of agencies and venues alike. */
+			businessLicense: z
+				.string()
+				.trim()
+				.min(1, messages.businessLicenseRequired)
+				.max(100, messages.businessLicenseMax),
 			/*
 			 * Required, all four — the venue's check-in geofence is found by
 			 * geocoding exactly these columns (`addressQueryFromOutlet`), so an
@@ -53,10 +76,37 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 			stateCode: z.string().min(1, messages.stateRequired).max(10),
 			/** ISO country code for cascading select; empty = unset. */
 			countryCode: optionalText(10),
+			/** The name AS PRINTED ON THE IC — relabelled, not renamed: it is still
+			    `personInCharge` on the wire and still becomes `user_profile.fullName`. */
 			personInCharge: z
 				.string()
 				.min(1, messages.personInChargeRequired)
 				.max(100, messages.personInChargeMax),
+			/** Kept as a plain string, not an enum: the field defaults to NRIC and a
+			    zod enum message here would read as a type error rather than a prompt. */
+			idType: z.string().min(1, messages.idTypeRequired),
+			idNo: z
+				.string()
+				.trim()
+				.min(1, messages.idNoRequired)
+				.max(32, messages.idNoMax),
+			/**
+			 * Asked even when the NRIC already encodes it. The superRefine below
+			 * refuses a disagreement rather than letting either side win quietly —
+			 * the owner’s double confirmation.
+			 */
+			gender: z.string().refine(
+				// The annotation is load-bearing: without it TypeScript infers a
+				// TYPE PREDICATE from the comparison, narrowing this field to the
+				// union and leaving the form’s plain string unable to satisfy it.
+				(value): boolean => value === "male" || value === "female",
+				messages.genderRequired,
+			),
+			/** Passport only — an NRIC carries the date, so the field is hidden and
+			    the derived value is shown instead. */
+			dob: optionalText(10),
+			/** Passport only. NRIC implies Malaysian, which the API also enforces. */
+			nationality: optionalText(100),
 			phoneNum: z
 				.string()
 				.trim()
@@ -108,6 +158,46 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 		.refine((data) => data.password === data.confirmPassword, {
 			message: messages.passwordsMismatch,
 			path: ["confirmPassword"],
+		})
+		.superRefine((data, ctx) => {
+			if (data.idType === "NRIC") {
+				// A 12-digit number whose first six digits are a real date. Checked
+				// here because everything downstream — birth date, age, gender — is
+				// read OUT of these digits, so a malformed one is not a cosmetic
+				// problem: it is an account with no birth date.
+				if (!isNricShaped(data.idNo)) {
+					ctx.addIssue({
+						code: "custom",
+						message: messages.nricInvalid,
+						path: ["idNo"],
+					});
+					return;
+				}
+				const fromIc = genderFromNric(data.idNo);
+				if (fromIc && fromIc !== data.gender) {
+					ctx.addIssue({
+						code: "custom",
+						message: messages.genderMismatch,
+						path: ["gender"],
+					});
+				}
+				return;
+			}
+			// A passport encodes neither, so both are asked for outright.
+			if (!/^d{4}-d{2}-d{2}$/.test(data.dob)) {
+				ctx.addIssue({
+					code: "custom",
+					message: messages.dobRequired,
+					path: ["dob"],
+				});
+			}
+			if (!data.nationality.trim()) {
+				ctx.addIssue({
+					code: "custom",
+					message: messages.nationalityRequired,
+					path: ["nationality"],
+				});
+			}
 		});
 	// The outlet-must-name-an-agency rule was removed with the multi-agency
 	// cutover: a venue links its agencies in Settings and each one approves.
@@ -118,6 +208,19 @@ export type SignupInput = z.infer<ReturnType<typeof createSignupSchema>>;
 /** @deprecated Use createSignupSchema with locale-specific messages */
 export const SignupSchema = createSignupSchema({
 	companyNameRequired: "Company name is required",
+	companyRegistrationNewFormat: "SSM numbers are 12 digits (e.g. 202601024567)",
+	companyRegistrationOldFormat:
+		"The old format is digits and a letter, e.g. 1456789-W",
+	businessLicenseRequired: "Business license is required",
+	businessLicenseMax: "Business license is too long",
+	idTypeRequired: "Choose an ID type",
+	genderRequired: "Gender is required",
+	idNoRequired: "ID number is required",
+	idNoMax: "ID number must be 32 characters or fewer",
+	nricInvalid: "That is not a valid NRIC",
+	genderMismatch: "This does not match your IC number",
+	dobRequired: "Date of birth is required (YYYY-MM-DD)",
+	nationalityRequired: "Nationality is required",
 	addressLine1Required: "Street address is required",
 	addressLine1Max: "Address is too long",
 	cityRequired: "City is required",

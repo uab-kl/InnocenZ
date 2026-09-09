@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { kickToLogin } from "@/lib/auth/guards";
+import { orgMemberIdStem } from "@/lib/member-code";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -271,7 +272,7 @@ export function AgencyLinksPanel({
 										{link.agencyName}
 									</div>
 									<div className="iz-tiny iz-muted truncate leading-tight">
-										{link.agencyCode}
+										{orgMemberIdStem("agency", link.memberCodePrefix) ?? "—"}
 									</div>
 									{link.approveStatus === "rejected" && link.rejectReason && (
 										<div className="iz-tiny mt-1 text-rose-400">
@@ -369,7 +370,8 @@ export function AgencyLinksPanel({
 							</option>
 							{addable.map((agency) => (
 								<option key={agency.id} value={agency.id}>
-									{agency.name} · {agency.agencyCode}
+									{agency.name} ·{" "}
+									{orgMemberIdStem("agency", agency.memberCodePrefix) ?? "—"}
 								</option>
 							))}
 						</select>
