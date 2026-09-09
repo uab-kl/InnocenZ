@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Camera, Check, Lock, Pencil, X } from "lucide-react";
+import { Camera, Check, Crop, Lock, Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -157,10 +157,21 @@ export function ProfileEditTrigger({
 /** Photo controls that read clearly when editing (not a tiny corner icon alone). */
 export function ProfilePhotoActions({
 	onChangePhoto,
+	onAdjustPhoto,
 	onRemovePhoto,
 	hasPhoto,
 }: {
 	onChangePhoto: () => void;
+	/**
+	 * Reopen the crop sheet on the image ALREADY picked this session.
+	 *
+	 * Absent once the page is reloaded, and that is not an oversight: the saved
+	 * photo is served from the R2 public host, which refuses cross-origin reads,
+	 * so its pixels cannot be put back on a canvas. Offering the button anyway
+	 * would give a control that fails only for the people who did not just
+	 * upload — the ones most likely to press it.
+	 */
+	onAdjustPhoto?: () => void;
 	onRemovePhoto?: () => void;
 	hasPhoto: boolean;
 }) {
@@ -175,6 +186,16 @@ export function ProfilePhotoActions({
 				<Camera className="h-4 w-4" />
 				{hasPhoto ? t.profile.changePhoto : t.profile.addPhoto}
 			</button>
+			{onAdjustPhoto && (
+				<button
+					type="button"
+					className="iz-btn iz-btn-soft iz-profile-photo-actions__change"
+					onClick={onAdjustPhoto}
+				>
+					<Crop className="h-4 w-4" />
+					{t.profile.cropAdjust}
+				</button>
+			)}
 			{hasPhoto && onRemovePhoto && (
 				<button
 					type="button"

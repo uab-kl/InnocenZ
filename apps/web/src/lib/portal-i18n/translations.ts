@@ -67,6 +67,16 @@ const en = {
 		goodMorning: "Good morning",
 		goodAfternoon: "Good afternoon",
 		goodEvening: "Good evening",
+		/**
+		 * The greeting with the signed-in person's own name — "Good morning, Vicky".
+		 *
+		 * ONE whole-sentence template rather than a ", " join, because the comma
+		 * itself is language: Chinese sets a FULL-WIDTH "，" here, and a hard-coded
+		 * ASCII comma between two translated halves would render as a Latin
+		 * punctuation mark inside a Chinese line. The holes also let a language
+		 * that needs the name first move it.
+		 */
+		greetingNamed: "{greeting}, {name}",
 	},
 	/**
 	 * The notification bell, its sheet, and the SOS detail that sheet opens.
@@ -1997,6 +2007,16 @@ const en = {
 		editProfile: "Edit profile",
 		changePhoto: "Change photo",
 		addPhoto: "Add photo",
+		cropTitle: "Position your photo",
+		cropHint: "Drag the image to choose what shows",
+		cropZoom: "Zoom",
+		cropReset: "Reset",
+		cropPreview: "How it will look",
+		cropUse: "Use this photo",
+		cropAdjust: "Adjust crop",
+		cropFrameLabel:
+			"Photo crop area — drag to move, arrow keys to nudge, + and − to zoom",
+		cropFailed: "Could not prepare that image — try another file",
 	},
 	/** Outlet → Settings. The venue's own profile, staff and notifications. */
 	outletSettings: {
@@ -6156,6 +6176,7 @@ const zh: PortalTranslations = {
 		goodMorning: "早上好",
 		goodAfternoon: "下午好",
 		goodEvening: "晚上好",
+		greetingNamed: "{greeting}，{name}",
 	},
 	notifications: {
 		title: "通知",
@@ -7354,7 +7375,8 @@ const zh: PortalTranslations = {
 		dueInDays: "{n} 天后到期",
 		dueInOneDay: "明天到期",
 		currentPeriodNotDue: "本期",
-		overdueWarning: "{n} 个计费周期共 {amount} 已逾期。最早一笔到期日为 {date}，已逾期 {days} 天。",
+		overdueWarning:
+			"{n} 个计费周期共 {amount} 已逾期。最早一笔到期日为 {date}，已逾期 {days} 天。",
 		agingDueSoon: "即将到期",
 		agingOverdue: "已逾期",
 		noAccess: "你没有查看订阅账单的权限。",
@@ -7727,6 +7749,15 @@ const zh: PortalTranslations = {
 		editProfile: "编辑资料",
 		changePhoto: "更换照片",
 		addPhoto: "添加照片",
+		cropTitle: "调整照片位置",
+		cropHint: "拖动图片，选择要显示的部分",
+		cropZoom: "缩放",
+		cropReset: "重置",
+		cropPreview: "显示效果",
+		cropUse: "使用这张照片",
+		cropAdjust: "调整裁剪",
+		cropFrameLabel: "照片裁剪区域 —— 拖动可移动，方向键微调，+ 和 − 缩放",
+		cropFailed: "无法处理这张图片 —— 请换一个文件",
 	},
 	outletSettings: {
 		accessRestricted: "访问受限",
