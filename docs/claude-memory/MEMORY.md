@@ -1,6 +1,6 @@
 # Memory Index
 
-All 159 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
+All 161 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
 are kept identical in BOTH directions — see [Sync memory mirrors](sync-memory-mirrors.md).
 Dated session history is NOT here: it lives in `TEST_SCRIPT.md` §8/§10. Rules live in `CLAUDE.md`.
 The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stops + schema), not a log.
@@ -187,3 +187,8 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 ### Newly added - file these into a section above
 
 - [Ic authority is field scoped](ic-authority-is-field-scoped.md) — "A rule load-bearing for one field is not automatically true of the next it touches — 'the IC wins' is right for dob (the digits ARE the date) and wrong for gender on demo ICs"
+
+### Newly added - file these into a section above
+
+- [Typography is enforced by a check](typography-is-enforced-by-a-check.md) — "STANDING RULE (owner, 8 Sep 2026) — run `pnpm check:type` on portal work; it is a ratchet over 1,004 known raw values, never re-baseline to hide a new breach"
+- [Warn before adding a migration](warn-before-adding-a-migration.md) — "STANDING RULE (owner, 8 Sep 2026) — say so and wait before adding any database migration; never slip one into a larger change"
