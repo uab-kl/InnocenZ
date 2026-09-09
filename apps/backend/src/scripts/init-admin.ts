@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { ensurePersonCode } from '@/util/member-code';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
@@ -82,6 +83,9 @@ export async function initAdmin(): Promise<void> {
       });
     }
 
+    // Runs on EVERY boot and on every migrate, so it doubles as the backfill
+    // for an admin that predates the id scheme. No-op once one is held.
+    await ensurePersonCode(existingUser.id);
     logger.info(`Default admin ready: ${DEFAULT_ADMIN_EMAIL}`);
     return;
   }
@@ -109,6 +113,9 @@ export async function initAdmin(): Promise<void> {
     .returning();
 
   await ensureAdminRoleForUser(user.id, adminRoleId);
+  // This path inserts the user row directly, so it reaches no creation hook —
+  // the id has to be issued here or the env-seeded admin never gets one.
+  await ensurePersonCode(user.id);
   await db.insert(UserProfileTable).values({
     userId: user.id,
     createdBy: ACTOR,

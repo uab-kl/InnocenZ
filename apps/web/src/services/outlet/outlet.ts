@@ -1,5 +1,8 @@
 import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
+// The team-member query shape is identical on both portals and is declared
+// once, on the agency side, rather than kept in step in two files.
+import type { TeamMembersQueryParams } from "@/services/agency";
 import type {
 	GeocodeCandidatesApiResponse,
 	GeoFencePayload,
@@ -10,6 +13,7 @@ import type {
 	OutletMembershipsApiResponse,
 	OutletsApiResponse,
 	OutletsQueryParams,
+	OutletTeamMembersApiResponse,
 } from "./types";
 
 export async function fetchOutlets(
@@ -212,18 +216,23 @@ export async function clearOutletGeoFence(
 }
 
 /**
- * All active outlet memberships for a single user, across every sub-role. Used
- * to resolve the signed-in operator's own outlet + role at session start
- * (mirrors fetchAgencyMembershipsForUser).
+ * Outlet memberships for a single user, across every sub-role. Used to resolve
+ * the signed-in operator's own outlet + role at session start, and by the admin
+ * member page to list every venue one person belongs to (mirrors
+ * fetchAgencyMembershipsForUser, including the admin-unfiltered rule).
+ *
+ * `status` defaults to `active` — a switched-off membership must not resolve a
+ * session. Pass `"all"` when auditing rather than authenticating.
  */
 export async function fetchOutletMembershipsForUser(
 	userId: string,
 	onRefreshFail: () => void,
+	options: { status?: "active" | "all" } = {},
 ): Promise<OutletMembershipsApiResponse> {
 	const client = getClient(onRefreshFail);
 	const queryString = buildQueryParams({
 		userIds: userId,
-		status: "active",
+		status: options.status ?? "active",
 	});
 	const response = await client.get<OutletMembershipsApiResponse>(
 		`/outlet/memberships${queryString}`,
@@ -287,6 +296,28 @@ export async function removeOutletMember(
 	return response.data;
 }
 
+/**
+ * ADMIN — every venue operator on the platform, paginated. The twin of
+ * `fetchAgencyTeamMembers`; `fetchOutletMembers` is scoped to one venue.
+ */
+export async function fetchOutletTeamMembers(
+	params: TeamMembersQueryParams,
+	onRefreshFail: () => void,
+): Promise<OutletTeamMembersApiResponse> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		page: params.page,
+		pageSize: params.pageSize,
+		search: params.search,
+		status: params.status,
+		// The server names it per portal; the screen speaks one word.
+		outletId: params.orgId,
+	});
+	const response = await client.get<OutletTeamMembersApiResponse>(
+		`/outlet/team-members${queryString}`,
+	);
+	return response.data;
+}
 export async function fetchOutletMembers(
 	outletId: string,
 	onRefreshFail: () => void,

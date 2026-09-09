@@ -1,5 +1,6 @@
 import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
+import { orgMemberIdStem } from "@/lib/member-code";
 import type { BackendUser } from "@/services/admin/mappers";
 import { fetchPrAgencyLinks } from "@/services/agency";
 import { getRoleIdByName } from "@/services/rbac/roles";
@@ -12,6 +13,7 @@ import type {
 
 function mapPrUser(user: BackendUser, agencies: PrAgencyRef[] = []): PrUser {
 	return {
+		memberCode: user.memberCode ?? null,
 		id: user.id,
 		email: user.email ?? "",
 		phoneNum: user.phoneNum ?? "",
@@ -27,6 +29,31 @@ function mapPrUser(user: BackendUser, agencies: PrAgencyRef[] = []): PrUser {
 		portfolioPhotos: user.profile?.portfolioPhotos ?? [],
 		comcardHeightCm: user.profile?.comcardHeightCm ?? null,
 		comcardWeightKg: user.profile?.comcardWeightKg ?? null,
+		comcardBustCm: user.profile?.comcardBustCm ?? null,
+		comcardWaistCm: user.profile?.comcardWaistCm ?? null,
+		comcardHipCm: user.profile?.comcardHipCm ?? null,
+		// Age comes from the API, which derives it from the IC before falling back
+		// to `dob` — the owner's rule that age follows the IC. Recomputing it here
+		// from `dob` alone would quietly disagree with every other surface.
+		age: user.profile?.age ?? null,
+		languages: user.profile?.languages ?? [],
+		// Both ID scans, the address and the bank pair have been in this response
+		// all along (withUserProfiles → toUserProfileResponse); admin and agency are
+		// exempt from the outlet redaction. They were absent from the admin PR sheet
+		// because THIS mapper never copied them, not because the API withheld them.
+		idPhotoFront: user.profile?.idPhotoFront ?? null,
+		idPhotoBack: user.profile?.idPhotoBack ?? null,
+		addressLine1: user.profile?.addressLine1 ?? null,
+		addressLine2: user.profile?.addressLine2 ?? null,
+		city: user.profile?.city ?? null,
+		postcode: user.profile?.postcode ?? null,
+		state: user.profile?.state ?? null,
+		country: user.profile?.country ?? null,
+		bankName: user.profile?.bankName ?? null,
+		bankAccountNo: user.profile?.bankAccountNo ?? null,
+		// Presence only — the ink itself is a data-URL and never leaves this line.
+		hasSignature: Boolean(user.profile?.signatureInk),
+		verificationStatus: user.profile?.verificationStatus ?? null,
 		status: user.status,
 		agencies,
 		createdAt: user.createdAt,
@@ -39,6 +66,7 @@ function mapPrUser(user: BackendUser, agencies: PrAgencyRef[] = []): PrUser {
 function matchesSearch(user: PrUser, search: string): boolean {
 	const q = search.toLowerCase();
 	return (
+		(user.memberCode?.toLowerCase().includes(q) ?? false) ||
 		user.displayName.toLowerCase().includes(q) ||
 		user.legalName.toLowerCase().includes(q) ||
 		(user.idNo?.toLowerCase().includes(q) ?? false) ||
@@ -47,7 +75,7 @@ function matchesSearch(user: PrUser, search: string): boolean {
 		user.agencies.some(
 			(agency) =>
 				agency.name.toLowerCase().includes(q) ||
-				agency.code.toLowerCase().includes(q),
+				(agency.code?.toLowerCase().includes(q) ?? false),
 		)
 	);
 }
@@ -105,7 +133,7 @@ export async function fetchPrUsers(
 		list.push({
 			id: link.agencyId,
 			name: link.agencyName,
-			code: link.agencyCode,
+			code: orgMemberIdStem("agency", link.memberCodePrefix),
 		});
 		agenciesByUser.set(link.userId, list);
 	}

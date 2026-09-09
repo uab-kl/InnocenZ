@@ -1081,6 +1081,27 @@
       "breakpoints": true
     },
     {
+      "idx": 154,
+      "version": "7",
+      "when": 1792391000000,
+      "tag": "0154_member_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1792392000000,
+      "tag": "0155_org_contact_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1792393000000,
+      "tag": "0156_org_registration_no_old",
+      "breakpoints": true
+    },
+    {
       "idx": 157,
       "version": "7",
       "when": 1792790000000,

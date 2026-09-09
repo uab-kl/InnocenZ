@@ -136,6 +136,9 @@ export type OutletAgencyLink = {
   agencyId: string;
   agencyName: string;
   agencyCode: string;
+  /** Stem of this agency’s member ids — `AT` gives INNATAGY0001. What the admin
+      and outlet screens show in place of `agencyCode`. Null before the first id. */
+  memberCodePrefix: string | null;
   approveStatus: AgencyOutletApproveStatus;
   rejectReason: string | null;
   /**

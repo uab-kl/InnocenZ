@@ -57,6 +57,15 @@ const en = {
 		signOut: "Sign out",
 		expandSidebar: "Expand sidebar",
 		collapseSidebar: "Collapse sidebar",
+		/**
+		 * The phone tab bar's overflow tab, and the drawer it opens.
+		 *
+		 * Deliberately "Menu" and not "More": the drawer carries the whole rail
+		 * — every nav destination, the language switcher and Sign out — so it is
+		 * the menu, not a bin for leftovers.
+		 */
+		menu: "Menu",
+		closeMenu: "Close menu",
 		notifications: "Notifications",
 		profile: "Profile",
 		demoData: "Demo data",
@@ -2723,6 +2732,8 @@ const en = {
 		navOutlet: "Outlet",
 		navPr: "PR",
 		navLegacyMember: "Legacy Member",
+		navAgencyTeam: "PR Agency Team",
+		navOutletTeam: "Outlet Team",
 		navPlanRequest: "Plan Request",
 		navPlanChange: "Plan Change",
 		navPlanPayment: "Plan Payment",
@@ -5596,9 +5607,49 @@ const en = {
 		dateOfBirth: "Date of birth",
 		/** Label only. The value is free text and renders as saved. */
 		nationality: "Nationality",
+		/** Languages the PR picked at sign-up. Values go through languageListLabel(). */
+		languages: "Languages",
 		/** When the PR account was created. */
 		joined: "Joined",
+		/**
+		 * The two ID scans from sign-up Step 4. "Identity documents" rather than
+		 * "IC photos": a foreign PR signs up with a passport, and calling that an
+		 * IC would be wrong on the one screen an admin uses to check it.
+		 */
+		sectionIdDocuments: "Identity documents",
+		idDocumentsHint: "Captured at sign-up. Click a scan to open it full size.",
+		idFront: "Front",
+		/** A passport is captured as one page, so this slot is empty by design for one. */
+		idBack: "Back",
+		idPhotoMissing: "Not uploaded",
+		/** Accessible name for the scan tile — it opens the zooming viewer. */
+		openScan: "Open scan to zoom",
+		zoomIn: "Zoom in",
+		zoomOut: "Zoom out",
+		zoomReset: "Reset zoom",
+		sectionVerification: "Verification",
+		/** Label only — the value is a stored enum resolved by verificationLabel(). */
+		verificationStatus: "Status",
+		verifyDraft: "Draft",
+		verifyPending: "Pending review",
+		verifyVerified: "Verified",
+		verifyRejected: "Rejected",
+		/** Yes/no — the signature itself is never rendered here. */
+		signatureOnFile: "Signature on file",
 		sectionContact: "Contact information",
+		/** Home address, sign-up Step 2. Same zh as the settings block — one term per field. */
+		sectionAddress: "Home address",
+		addressHint: "The address the PR gave when signing up",
+		addressLine1: "Address line 1",
+		addressLine2: "Address line 2",
+		city: "City",
+		postcode: "Postcode",
+		state: "State",
+		country: "Country",
+		sectionPayout: "Payout details",
+		payoutHint: "Bank account wages are paid into",
+		bankName: "Bank",
+		bankAccountNo: "Account number",
 		/** Admin chrome ABOUT the comcard — the card itself is not rendered here, so this follows the viewer's language. Same zh as approvals.comcard. */
 		sectionComcard: "Comcard",
 		comcardHint: "Measurements shown on the PR's comcard",
@@ -5606,6 +5657,10 @@ const en = {
 		height: "Height",
 		/** Same zh as managePr.statWeight. The unit (kg) rides on the value. */
 		weight: "Weight",
+		/** The three comcard measurements. Units (cm) ride on the values. */
+		bust: "Bust",
+		waist: "Waist",
+		hip: "Hip",
 		age: "Age",
 		/** Age formatted at the call site — ageFromDob() runs outside React and returns the number only. */
 		ageYears: "{n} years",
@@ -5724,6 +5779,86 @@ const en = {
 		/** Catch-all section for sub-roles TEAM_GROUPS does not name. */
 		otherMembers: "Other members",
 		teamOwnerHint: "Venue owner · signs up the outlet and manages settings",
+		/** The agency's own owner lane — the venue wording above says "outlet", which is wrong on the agency sheet. */
+		teamAgencyOwnerHint:
+			"Agency owner · signs up the agency and manages settings",
+		/* ── The member page (admin), reached from either Team tab ───────────── */
+		memberPageTitle: "Team member",
+		/* ── The cross-organisation "Team members" screens ─────────────────── */
+		teamMembersTitle: "Team members",
+		/* The human-readable account id (INNATAGY0001). Called an ID on screen, never a code — agency_code already owns that word. */
+		memberAge: "Age",
+		memberCodeLabel: "Member ID",
+		memberCodePrefix: "Member ID prefix",
+		/* Deactivating a membership REVOKES the portal role behind it, so the two directions are not symmetric and neither is silent. */
+		memberDeactivateTitle: "Switch this membership off?",
+		memberDeactivateBody:
+			"They lose their portal role for this organisation as well, so switching them back on will ask you which lane to restore. Their login and any other organisation they belong to are untouched.",
+		memberActivateTitle: "Switch this membership back on",
+		memberActivateBody:
+			"Their old lane went with the role that was revoked, so choose the one they are coming back as.",
+		/* The org sheet's Team tab is a doorway to the full list, not a second copy of it. */
+		teamTabDoorwayHint:
+			"Everyone on this team, with search, filters and their full records, lives on the Team members page.",
+		teamTabOpenList: "Open this team",
+		teamMembersOneOrg: "One organisation",
+		teamMembersShowAll: "Show every organisation",
+		teamMembersAgencyHint:
+			"Every operator across every PR agency — owners, financial heads, guarantors and directors.",
+		teamMembersOutletHint:
+			"Every operator across every venue — owners, financial heads, ops heads, guarantors and directors.",
+		/* Said on the card, not in a tooltip: the lane is derived per PERSON from their portal role, so someone in two organisations shows the same sub-role on both rows. */
+		teamMembersLaneNote:
+			"Sub-role comes from the person's portal role, so it reads the same in every organisation they belong to.",
+		teamMembersSearchPlaceholder: "Search people or organisations…",
+		teamMembersSearchAria:
+			"Search team members by name, email, phone or organisation",
+		teamMembersNone: "No team member matches this search.",
+		teamMembersShowing: "Showing {from} - {to} of {total} team members",
+		memberPageHint:
+			"Everything the platform holds on this person, and every organisation they belong to.",
+		memberNotInTeam: "This person is no longer on this organisation's team.",
+		memberRoleHere: "Role in this organisation",
+		memberRoleHereHint: "The lane this person works in, and when they joined.",
+		memberSubRole: "Sub-role",
+		membershipStatus: "Membership status",
+		membershipId: "Membership ID",
+		memberAccount: "Account",
+		memberAccountHint: "The login itself — separate from the membership above.",
+		memberLoginEmail: "Login email",
+		memberAccountStatus: "Account status",
+		memberLanguage: "Language",
+		memberUserId: "User ID",
+		memberPersonal: "Personal details",
+		memberPersonalHint:
+			"From the person's own profile. Most organisation operators never fill this in — an invite only asks for an email.",
+		memberFullName: "Full name",
+		memberNationality: "Nationality",
+		memberGender: "Gender",
+		memberDob: "Date of birth",
+		memberIdType: "ID type",
+		memberIdNo: "ID number",
+		memberOrgs: "Organisations",
+		memberOrgsHint:
+			"Every agency and venue this person belongs to, including the one you came from.",
+		memberOrgsNone: "No organisation membership on record.",
+		memberOrgThis: "You are here",
+		memberGrants: "Portal roles granted",
+		/* The sub-role above is DERIVED from these grants and is lossy: the fold keeps one role per portal and falls back to Owner when nothing matches. Saying so on the page is what stops an admin trusting a lane nobody granted. */
+		memberGrantsHint:
+			"The actual RBAC grants. The sub-role above is derived from these, and reads Owner when none match.",
+		memberGrantsNone:
+			"No portal role granted — the sub-role above is a fallback, not a grant.",
+		memberLoading: "Loading member…",
+		/** Agency sheet · the address captured at sign-up. A venue says "venueLocation" because its address is also where the shift happens. */
+		agencyAddress: "Registered address",
+		/** Agency sheet · the mirror of linkedAgencies on the venue sheet. */
+		linkedOutlets: "Linked venues",
+		linkedOutletsHint:
+			"Venues this agency may staff, and requests still waiting on a decision.",
+		noOutletsLinked: "No venue is linked to this agency yet.",
+		/** {n} venues have said yes — the count that decides whether this agency can be booked at all. */
+		outletsApprovedCount: "{n} approved",
 		/** The admin sheet's shorter spelling; outletSettings.financeHeadHint is the outlet's own longer one and carries the Sunday due date. */
 		teamFinanceHint: "Weekly reconciliation · billing sign-off",
 		teamGuarantorHint:
@@ -6175,6 +6310,8 @@ const zh: PortalTranslations = {
 		signOut: "退出登录",
 		expandSidebar: "展开侧栏",
 		collapseSidebar: "收起侧栏",
+		menu: "菜单",
+		closeMenu: "关闭菜单",
 		notifications: "通知",
 		profile: "个人资料",
 		demoData: "演示数据",
@@ -8388,6 +8525,8 @@ const zh: PortalTranslations = {
 		navOutlet: "门店",
 		navPr: "PR",
 		navLegacyMember: "旧版会员",
+		navAgencyTeam: "PR 代理团队",
+		navOutletTeam: "门店团队",
 		navPlanRequest: "套餐申请",
 		navPlanChange: "套餐变更",
 		navPlanPayment: "套餐付款",
@@ -10502,12 +10641,44 @@ const zh: PortalTranslations = {
 		race: "种族",
 		dateOfBirth: "出生日期",
 		nationality: "国籍",
+		languages: "语言",
 		joined: "加入时间",
+		sectionIdDocuments: "身份证件",
+		idDocumentsHint: "注册时拍摄。点击证件照片可查看原图。",
+		idFront: "正面",
+		idBack: "背面",
+		idPhotoMissing: "未上传",
+		openScan: "打开证件照片放大查看",
+		zoomIn: "放大",
+		zoomOut: "缩小",
+		zoomReset: "重置缩放",
+		sectionVerification: "认证",
+		verificationStatus: "状态",
+		verifyDraft: "草稿",
+		verifyPending: "待审核",
+		verifyVerified: "已认证",
+		verifyRejected: "已拒绝",
+		signatureOnFile: "已存签名",
 		sectionContact: "联系方式",
+		sectionAddress: "住址",
+		addressHint: "该 PR 注册时填写的住址",
+		addressLine1: "地址第一行",
+		addressLine2: "地址第二行",
+		city: "城市",
+		postcode: "邮政编码",
+		state: "州属",
+		country: "国家",
+		sectionPayout: "收款信息",
+		payoutHint: "发放工资所使用的银行账户",
+		bankName: "银行",
+		bankAccountNo: "银行账号",
 		sectionComcard: "模卡",
 		comcardHint: "该 PR 模卡上显示的身材信息",
 		height: "身高",
 		weight: "体重",
+		bust: "胸围",
+		waist: "腰围",
+		hip: "臀围",
 		age: "年龄",
 		ageYears: "{n} 岁",
 		portfolioGalleryCount: "作品集相册（{n}）",
@@ -10584,6 +10755,67 @@ const zh: PortalTranslations = {
 		joinedOn: "加入于 {date}",
 		otherMembers: "其他成员",
 		teamOwnerHint: "场所东主 · 注册门店并管理设置",
+		teamAgencyOwnerHint: "代理东主 · 注册代理并管理设置",
+		memberPageTitle: "团队成员",
+		teamMembersTitle: "团队成员",
+		memberAge: "年龄",
+		memberCodeLabel: "成员编号",
+		memberCodePrefix: "成员编号前缀",
+		memberDeactivateTitle: "停用此成员身份？",
+		memberDeactivateBody: "其在本机构的门户角色也会一并撤销，因此重新启用时需要您指定恢复的职能。其登录账户以及所属的其他机构不受影响。",
+		memberActivateTitle: "重新启用此成员身份",
+		memberActivateBody: "原有职能已随被撤销的角色一并失效，请选择其恢复后的职能。",
+		teamTabDoorwayHint:
+			"该团队的全部成员，连同搜索、筛选与完整档案，都在“团队成员”页面中。",
+		teamTabOpenList: "打开此团队",
+		teamMembersOneOrg: "单一机构",
+		teamMembersShowAll: "显示所有机构",
+		teamMembersAgencyHint:
+			"所有 PR 代理的全部操作人员 — 东主、财务主管、担保人与总监。",
+		teamMembersOutletHint:
+			"所有门店的全部操作人员 — 东主、财务主管、运营主管、担保人与总监。",
+		teamMembersLaneNote:
+			"子角色来自该成员的门户角色，因此在其所属的每一个机构中都相同。",
+		teamMembersSearchPlaceholder: "搜索成员或机构…",
+		teamMembersSearchAria: "按姓名、邮箱、电话或机构搜索团队成员",
+		teamMembersNone: "没有符合此搜索的团队成员。",
+		teamMembersShowing: "显示第 {from} - {to} 位，共 {total} 位团队成员",
+		memberPageHint: "平台掌握的该成员全部资料，以及其所属的每一个机构。",
+		memberNotInTeam: "该成员已不在此机构的团队中。",
+		memberRoleHere: "在本机构的角色",
+		memberRoleHereHint: "该成员所属的职能，以及加入时间。",
+		memberSubRole: "子角色",
+		membershipStatus: "成员状态",
+		membershipId: "成员记录 ID",
+		memberAccount: "账户",
+		memberAccountHint: "登录账户本身 — 与上方的成员身份分开。",
+		memberLoginEmail: "登录邮箱",
+		memberAccountStatus: "账户状态",
+		memberLanguage: "语言",
+		memberUserId: "用户 ID",
+		memberPersonal: "个人资料",
+		memberPersonalHint:
+			"来自本人填写的档案。多数机构操作人员从未填写 — 邀请时只需要邮箱。",
+		memberFullName: "全名",
+		memberNationality: "国籍",
+		memberGender: "性别",
+		memberDob: "出生日期",
+		memberIdType: "证件类型",
+		memberIdNo: "证件号码",
+		memberOrgs: "所属机构",
+		memberOrgsHint: "该成员所属的每一家代理与门店，包括您当前进入的这一家。",
+		memberOrgsNone: "没有任何机构成员记录。",
+		memberOrgThis: "当前所在",
+		memberGrants: "已授予的门户角色",
+		memberGrantsHint:
+			"真正的 RBAC 授权。上方的子角色由此推导，若无匹配则显示为东主。",
+		memberGrantsNone: "未授予任何门户角色 — 上方的子角色只是回退值，并非授权。",
+		memberLoading: "正在加载成员…",
+		agencyAddress: "注册地址",
+		linkedOutlets: "已关联门店",
+		linkedOutletsHint: "此代理可派工的门店，以及仍在等待决定的申请。",
+		noOutletsLinked: "此代理尚未关联任何门店。",
+		outletsApprovedCount: "已批准 {n} 家",
 		teamFinanceHint: "每周对账 · 账单签核",
 		teamGuarantorHint: "代东主行事 · 东主不在时享有同等权限",
 		teamDirectorHint: "仅查看 · 可浏览所有页面，不能作任何更改",

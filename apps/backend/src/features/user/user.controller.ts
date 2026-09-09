@@ -481,6 +481,26 @@ export class UserControllerClass {
         });
       }
 
+      // Gender is DERIVED from the NRIC at sign-up and checked against what the
+      // person said, but the parity digit is wrong about real people — two on
+      // this database. An admin may correct it; the id and the birth date it
+      // encodes are not correctable here (see the one-time heal below).
+      const genderRaw =
+        typeof req.body?.gender === 'string' ? req.body.gender.trim().toLowerCase() : undefined;
+      if (genderRaw !== undefined) {
+        if (genderRaw !== 'male' && genderRaw !== 'female') {
+          return res.status(400).json({
+            success: false,
+            message: 'Gender must be male or female',
+            data: null,
+          });
+        }
+        await this.userProfileRepository.update(id, {
+          gender: genderRaw,
+          updatedBy: actor,
+        });
+      }
+
       // One-time identity heal: allow saving idType/idNo/dob only while the
       // profile still has no ID (e.g. older register path that dropped them).
       const idTypeRaw =

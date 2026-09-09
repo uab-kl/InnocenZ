@@ -46,6 +46,15 @@ router.get(
   agencyOutletController.listForOutlet.bind(agencyOutletController),
 );
 
+// The same read from the other side, and admin-only for the same reason: it
+// enumerates which venues an agency serves, which is the agency's commercial
+// information (see the agency lane's note below).
+router.get(
+  '/agency/:agencyId',
+  requireRole('admin'),
+  agencyOutletController.listForAgency.bind(agencyOutletController),
+);
+
 // ── AGENCY LANE ──────────────────────────────────────────────────────────────
 // `agency` only. An outlet must not read this: it would enumerate which OTHER
 // venues an agency serves — the agency's commercial information, and none of

@@ -29,7 +29,7 @@ import {
 	fetchAgencyById,
 } from "@/services/agency";
 
-export const Route = createFileRoute("/admin/user-management/agency")({
+export const Route = createFileRoute("/admin/user-management/agency/")({
 	component: AgencyOrgsPage,
 	validateSearch: (search: Record<string, unknown>): { focus?: string } =>
 		typeof search.focus === "string" ? { focus: search.focus } : {},

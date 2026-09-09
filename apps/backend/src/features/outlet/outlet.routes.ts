@@ -34,6 +34,14 @@ router.get(
   canReadOutlet,
   outletController.geocode.bind(outletController),
 );
+// ADMIN — the cross-venue "Team members" screen. Declared BEFORE '/:id',
+// or 'team-members' is captured as an outlet id and 404s.
+router.get(
+  '/team-members',
+  requireRole('admin'),
+  outletController.listTeamMembers.bind(outletController),
+);
+
 router.get(
   '/:id',
   canReadOutlet,

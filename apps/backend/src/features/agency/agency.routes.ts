@@ -32,6 +32,14 @@ router.get(
   requireRole('admin', 'agency', 'pr'),
   agencyController.listPrLinks.bind(agencyController),
 );
+// ADMIN — the cross-agency "Team members" screen. Declared BEFORE '/:id',
+// or 'team-members' is captured as an agency id and 404s.
+router.get(
+  '/team-members',
+  requireAdmin,
+  agencyController.listTeamMembers.bind(agencyController),
+);
+
 router.get(
   '/:id',
   requireRole('admin', 'agency', 'outlet'),

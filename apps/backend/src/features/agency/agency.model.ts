@@ -24,8 +24,21 @@ export const AgencyTable = MainSchema.table('agency', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
   agencyCode: varchar('agency_code', { length: 6 }).notNull().unique(),
+  /**
+   * The letter code member ids are built from — INN + <this> + AGY + 0001.
+   *
+   * NOT : that column already holds a registration number for one
+   * live agency and an out-of-sequence value for another, so ids built on it
+   * would read as INN120219AGY0001. Auto-suggested from the name, editable by
+   * an admin, and frozen once any member holds an id (0154).
+   */
+  memberCodePrefix: varchar('member_code_prefix', { length: 8 }),
   ssmNo: varchar('ssm_no', { length: 100 }).notNull(),
   logoImage: varchar('logo_image'),
+  // The old-format registration number. The venue table has always had one;
+  // the agency’s was collected and discarded until 0155.
+  businessLicense: varchar('business_license', { length: 100 }),
+  registrationNoOld: varchar('registration_no_old', { length: 50 }),
   contactName: varchar('contact_name', { length: 100 }),
   contactEmail: varchar('contact_email', { length: 255 }),
   contactPhone: varchar('contact_phone', { length: 50 }),
@@ -50,6 +63,13 @@ export const AgencyUserTable = MainSchema.table('agency_user', {
   agencyId: uuid('agency_id').notNull().references(() => AgencyTable.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => UserTable.id, { onDelete: 'cascade' }),
   status: varchar('status', { length: 50 }).notNull().default('active'),
+  /**
+   * The human-readable id for THIS membership — INN + org code + AGY|OLT + 0001.
+   *
+   * Per membership, not per person: someone operating two organisations holds a
+   * different id in each, because the id names the organisation (0154).
+   */
+  memberCode: varchar('member_code', { length: 32 }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),

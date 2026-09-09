@@ -86,13 +86,21 @@ export class AgencyOutletRepository {
    * yields 100 silently), and a picker that quietly omits agencies is worse than
    * a long one. Agencies number in the dozens.
    */
-  async listDirectory(): Promise<{ id: string; name: string; agencyCode: string }[]> {
+  async listDirectory(): Promise<
+    {
+      id: string;
+      name: string;
+      agencyCode: string;
+      memberCodePrefix: string | null;
+    }[]
+  > {
     try {
       return await db
         .select({
           id: AgencyTable.id,
           name: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
+          memberCodePrefix: AgencyTable.memberCodePrefix,
         })
         .from(AgencyTable)
         .orderBy(AgencyTable.name);
@@ -111,6 +119,7 @@ export class AgencyOutletRepository {
           agencyId: AgencyOutletTable.agencyId,
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
+          memberCodePrefix: AgencyTable.memberCodePrefix,
           approveStatus: AgencyOutletTable.approveStatus,
           rejectReason: AgencyOutletTable.rejectReason,
           // Correlated subqueries, not a join, for the same reason the outlet
