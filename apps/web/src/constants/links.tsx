@@ -5,11 +5,13 @@ import {
 	FileText,
 	Handshake,
 	LayoutDashboard,
-	// LayoutGrid, // only used by the hidden Jobs & Special Services entry below
+	// LayoutGrid,
+	// only used by the hidden Jobs & Special Services entry below
 	ReceiptText,
 	Settings,
 	Shield,
 	Users,
+	UsersRound,
 } from "lucide-react";
 import { z } from "zod";
 import { businessSections } from "@/constants/business-sections";
@@ -53,6 +55,32 @@ export type SidebarSection = {
 	items: SidebarNavItem[];
 };
 
+/**
+ * The cross-organisation operator list belonging to each user type, keyed by the
+ * `userTypes` key so the spread below stays one expression. A type with no entry
+ * contributes nothing.
+ */
+const TEAM_ENTRIES: Record<string, SidebarNavItem[] | undefined> = {
+	agency: [
+		{
+			key: "sidebar-team-agency",
+			title: "PR Agency Team",
+			href: "/admin/user-management/agency-team",
+			icon: UsersRound,
+			allowedPermission: ["*"],
+		},
+	],
+	outlet: [
+		{
+			key: "sidebar-team-outlet",
+			title: "Outlet Team",
+			href: "/admin/user-management/outlet-team",
+			icon: UsersRound,
+			allowedPermission: ["*"],
+		},
+	],
+};
+
 export const sidebarSections: SidebarSection[] = [
 	{
 		key: "overview",
@@ -85,13 +113,26 @@ export const sidebarSections: SidebarSection[] = [
 				icon: section.icon,
 				allowedPermission: ["*"],
 			})),
-			...userTypes.map((type) => ({
-				key: `sidebar-user-${type.key}`,
-				title: type.title,
-				href: type.href,
-				icon: type.icon,
-				allowedPermission: ["*"],
-			})),
+			/*
+			 * Each organisation type, followed immediately by its own cross-org team
+			 * list — flatMap rather than a second spread, so "PR Agency Team" cannot
+			 * drift away from "PR Agency" the next time a user type is added.
+			 *
+			 * The team hrefs are SIBLINGS of the org pages (`agency-team`, not
+			 * `agency/team`) and must stay that way: `isActive` and the breadcrumb
+			 * resolver are both trailing-slash prefix matches over this same array,
+			 * so a child path would highlight two rows and crumb as "PR Agency".
+			 */
+			...userTypes.flatMap((type) => [
+				{
+					key: `sidebar-user-${type.key}`,
+					title: type.title,
+					href: type.href,
+					icon: type.icon,
+					allowedPermission: ["*"],
+				},
+				...(TEAM_ENTRIES[type.key] ?? []),
+			]),
 		],
 	},
 	{

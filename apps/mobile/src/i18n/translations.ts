@@ -277,6 +277,8 @@ export type AppTranslations = {
     normalShift: string;
     specialEvent: string;
     outletName: string;
+    /** Who booked the night — a PR on two rosters cannot tell otherwise. */
+    agency: string;
     /** Today hub value when the PR has no shift at all today (not "cancelled" — simply a day off). */
     off: string;
     noShiftToday: string;
@@ -602,10 +604,14 @@ export type AppTranslations = {
     calLegendNote: string;
     /** Uppercase heading of the live week's History card. {range} is the already-localized week range (schedule.weekRangeSameMonth / weekRangeCrossMonth), e.g. '23–29 Aug 2026'. Distinct from history.statusCurrent ('Current'), the amber pill on the same card. */
     weekTitleCurrent: string;
+    /** Segmented tab over the History week list: the live, unissued week. */
+    tabCurrentWeek: string;
+    /** Segmented tab over the History week list: the weeks that have a PV. */
+    tabPayrollWeeks: string;
+    /** Empty state under the Payroll tab before the PR has ever been issued a PV. */
+    noPayrollWeeksYet: string;
     /** Heading of a past week's History card when the agency is unknown. {range} is the already-localized week range. */
     weekTitlePayroll: string;
-    /** Heading of a past week's History card when the agency is known — a PR on two rosters gets one card PER AGENCY for the same week, otherwise identical down to the venue. {agency} is the company's NAME and is substituted verbatim, never translated. */
-    weekTitlePayrollAgency: string;
   };
   signup: {
     title: string;
@@ -1753,6 +1759,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       normalShift: 'Normal shift',
       specialEvent: 'Special event',
       outletName: 'Outlet name',
+      agency: 'Agency',
       off: 'Off',
       noShiftToday: 'No shift scheduled for today.',
       nothingToDo: 'Nothing to do',
@@ -1985,8 +1992,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       calLegendWorked: 'Worked · has record',
       calLegendNote: 'Any date up to today · empty days show no rows.',
       weekTitleCurrent: 'CURRENT WEEK · {range}',
+      tabCurrentWeek: 'Current week',
+      tabPayrollWeeks: 'Payroll weeks',
+      noPayrollWeeksYet: 'No payroll weeks yet — your first PV appears here once your agency issues it.',
       weekTitlePayroll: 'PAYROLL WEEK · {range}',
-      weekTitlePayrollAgency: 'PAYROLL WEEK · {range} · {agency}',
     },
     signup: {
       title: 'Create account',
@@ -2842,6 +2851,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       normalShift: '常规班次',
       specialEvent: '特别活动',
       outletName: '门店名称',
+      agency: '经纪公司',
       off: '休息',
       noShiftToday: '今日没有安排班次。',
       nothingToDo: '暂无待办',
@@ -3073,8 +3083,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       calLegendWorked: '已出勤 · 有记录',
       calLegendNote: '可选至今天为止的任意日期 · 无记录的日期不会显示内容。',
       weekTitleCurrent: '本周 · {range}',
+      tabCurrentWeek: '本周',
+      tabPayrollWeeks: '薪资周',
+      noPayrollWeeksYet: '暂无薪资周 — 代理开具首张付款凭证后会显示在这里。',
       weekTitlePayroll: '薪资周 · {range}',
-      weekTitlePayrollAgency: '薪资周 · {range} · {agency}',
     },
     signup: {
       title: '创建账号',
@@ -3930,6 +3942,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       normalShift: '常規班次',
       specialEvent: '特別活動',
       outletName: '門店名稱',
+      agency: '經紀公司',
       off: '休息',
       noShiftToday: '今日沒有安排班次。',
       nothingToDo: '暫無待辦',
@@ -4161,8 +4174,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       calLegendWorked: '已出勤 · 有紀錄',
       calLegendNote: '可選至今天為止的任意日期 · 無紀錄的日期不會顯示內容。',
       weekTitleCurrent: '本週 · {range}',
+      tabCurrentWeek: '本週',
+      tabPayrollWeeks: '薪資週',
+      noPayrollWeeksYet: '暫無薪資週 — 代理開具首張付款憑證後會顯示在這裡。',
       weekTitlePayroll: '薪資週 · {range}',
-      weekTitlePayrollAgency: '薪資週 · {range} · {agency}',
     },
     signup: {
       title: '建立帳號',

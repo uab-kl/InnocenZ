@@ -8,6 +8,7 @@ import type { HistPayLine, HistPayStatus, HistPayWeek } from './demo-payment-his
 import {
   DAY_NAMES,
   MONTH_NAMES,
+  currentWeekIdFor,
   fmtDFriendly,
   isoToYmd,
   type DemoHistoryShift,
@@ -255,15 +256,13 @@ export function historyVoucherToHistoryWeek(v: PrHistoryVoucher): DemoHistoryWee
     id: `week-${asIsoDate(v.weekStart) ?? 'na'}-${v.voucherId}`,
     /*
      * English FALLBACK only — the card's heading is rebuilt per-locale by
-     * `ShiftHistoryPanel` from the ISO bounds and `agencyName` below. This
-     * string is what it shows when a row has no week bounds to format from.
+     * `ShiftHistoryPanel` from the ISO bounds. This string is what it shows
+     * when a row has no week bounds to format from.
      *
-     * The agency still rides the title: two cards for one week are otherwise
-     * identical down to the venue, with only the PV number differing.
+     * NO AGENCY in it: the card draws `agencyName` on its own line beside the
+     * logo, so composing it here too would print the company twice.
      */
-    title: v.agencyName
-      ? `PAYROLL WEEK · ${range} · ${v.agencyName}`
-      : `PAYROLL WEEK · ${range}`,
+    title: `PAYROLL WEEK · ${range}`,
     kind: 'payroll',
     // ⚠️ MATCHING KEY — `weekLabelsMatch` pairs this week with its voucher on
     // this exact English string. It is not what the card prints.
@@ -272,6 +271,8 @@ export function historyVoucherToHistoryWeek(v: PrHistoryVoucher): DemoHistoryWee
     weekStartIso: asIsoDate(v.weekStart) ?? undefined,
     weekEndIso: asIsoDate(v.weekEnd) ?? undefined,
     agencyName: v.agencyName ?? null,
+    // An R2 KEY, carried raw. `AgencyLogo` resolves it at render time.
+    agencyLogo: v.agencyLogo ?? null,
   };
 }
 
@@ -351,16 +352,46 @@ export function historyVoucherToShifts(
     });
 }
 
-export function currentWeekHistoryMeta(weekStart: string, weekEnd: string): DemoHistoryWeek {
+/**
+ * The live week’s card — one per AGENCY when the week’s money can be attributed.
+ *
+ * `agency` is optional and omitting it reproduces the single unattributed card
+ * exactly, which is what a backend sending no `vouchers[]` still gets. When it
+ * is given, the id keys on the agency for the same reason
+ * `historyVoucherToHistoryWeek` keys on the voucher: two cards for one week are
+ * otherwise identical down to the venue, and a shared id makes them share a
+ * React key and one expand/collapse toggle.
+ */
+export function currentWeekHistoryMeta(
+  weekStart: string,
+  weekEnd: string,
+  /**
+   * ⚠️ `logo` is REQUIRED, deliberately, though it is nullable.
+   *
+   * It was optional for one commit and the only caller silently omitted it, so
+   * every live card drew an initials monogram while the agency’s real logo sat
+   * in the payload — a bug the compiler had every fact it needed to catch and
+   * was told not to. Required means a caller must ANSWER the question, and
+   * `null` ("this agency has none") is a real answer.
+   */
+  agency?: { id: string; name: string | null; logo: string | null } | null,
+): DemoHistoryWeek {
   const range = formatRangeLabel(weekStart, weekEnd);
   return {
-    id: 'week-current',
-    // English FALLBACK — see `historyVoucherToHistoryWeek` above.
+    id: currentWeekIdFor(agency?.id),
+    /*
+     * English FALLBACK — see `historyVoucherToHistoryWeek` above.
+     *
+     * NO AGENCY in it: the card draws `agencyName` on its own line beside the
+     * logo, so composing it here too would print the company twice.
+     */
     title: `CURRENT WEEK · ${range}`,
     kind: 'current',
     weekLabel: range,
     pvRef: 'PV pending Sunday',
     weekStartIso: asIsoDate(weekStart) ?? undefined,
     weekEndIso: asIsoDate(weekEnd) ?? undefined,
+    agencyName: agency?.name ?? null,
+    agencyLogo: agency?.logo ?? null,
   };
 }

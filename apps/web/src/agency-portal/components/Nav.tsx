@@ -1,4 +1,9 @@
 import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
+import {
+	NavAlertBadge,
+	navAlertAriaSuffix,
+	useNavAlerts,
+} from "@agency-portal/components/portal/NavAlertBadge";
 import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
 import { goToWelcome } from "@agency-portal/lib/go-welcome";
 import {
@@ -38,16 +43,35 @@ export function navIsActive(pathname: string, to: string) {
 export function BottomNav({
 	items,
 	className,
+	trailing,
 }: {
 	items: NavItem[];
 	className?: string;
+	/**
+	 * Rendered as the last cell of the bar, beside the links.
+	 *
+	 * This bar is the ONLY navigation a phone gets — `.iz-portal-sidebar` is
+	 * `display: none` below 768px — and it was handed the BASE nav list while
+	 * the sidebar got the MERGED one. Everything the merge adds (Settings,
+	 * Subscription, Workspace, Manage PR / Manage Outlet) therefore had no
+	 * route to it on a phone at all, and neither did Sign out, which lives in
+	 * the sidebar foot. `trailing` is where the overflow control goes;
+	 * `.iz-tabbar` already styles `button` identically to `a`, so it needs no
+	 * new chrome.
+	 */
+	trailing?: ReactNode;
 }) {
 	const { pathname } = useLocation();
+	const { t } = usePortalLocale();
+	// The SAME map the sidebar reads. A phone-width session sees only this bar,
+	// so a badge that lived on the rail alone would not exist for them at all.
+	const alerts = useNavAlerts();
 
 	return (
 		<nav className={className ? `iz-tabbar ${className}` : "iz-tabbar"}>
 			{items.map((i) => {
 				const isActive = navIsActive(pathname, i.to);
+				const alert = alerts[i.to];
 
 				return (
 					<Link
@@ -55,13 +79,22 @@ export function BottomNav({
 						to={i.to}
 						className={isActive ? "on" : ""}
 						data-active={isActive ? "true" : undefined}
+						aria-label={`${i.label}${navAlertAriaSuffix(alert?.count, t.shell.navAlertWaiting)}`}
 					>
-						<i.icon className="h-5 w-5" strokeWidth={1.8} />
+						{/* The pill hangs off the ICON here, not off the row: a tab bar
+						    stacks its icon over its label, so a badge placed beside the
+						    label would sit under the icon instead of on it. */}
+						<span className="iz-tabbar-icon">
+							<i.icon className="h-5 w-5" strokeWidth={1.8} />
+							{alert && <NavAlertBadge count={alert.count} tone={alert.tone} />}
+						</span>
 
 						<span>{i.label}</span>
 					</Link>
 				);
 			})}
+
+			{trailing}
 		</nav>
 	);
 }
@@ -403,7 +436,7 @@ export function AppHeader({
 
 					<div className="flex items-start justify-between gap-2">
 						{title ? (
-							<h1 className="font-sora text-[22px] font-extrabold tracking-tight text-[var(--iz-txt)]">
+							<h1 className="iz-heading text-[22px] font-extrabold tracking-tight text-[var(--iz-txt)]">
 								<TitleWithIcon iconKey={iconKey}>{title}</TitleWithIcon>
 							</h1>
 						) : (

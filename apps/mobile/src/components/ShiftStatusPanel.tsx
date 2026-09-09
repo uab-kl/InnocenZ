@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale, formatMessage } from '../i18n';
 import { formatRM } from '../lib/demo-shifts';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
@@ -762,17 +763,15 @@ const styles = StyleSheet.create({
   },
   timeLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   timeLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
   timeValue: {
     marginTop: 6,
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 12,
-    fontWeight: '700',
     color: C.txt,
     lineHeight: 16,
   },
@@ -784,9 +783,8 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   targetsLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 1,
     color: C.muted,
   },
@@ -798,13 +796,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   targetV: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 28,
-    fontWeight: '800',
     color: C.violetL,
     letterSpacing: -0.5,
   },
-  targetT: { fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
+  targetT: { ...font(), fontSize: 13, color: C.prMuted },
   bar: {
     marginTop: 12,
     height: 4,
@@ -828,9 +825,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   scanCatLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.txt,
   },
   scanBtn: {
@@ -846,9 +842,8 @@ const styles = StyleSheet.create({
   },
   scanBtnSelf: { backgroundColor: 'rgba(183,156,232,0.08)' },
   scanBtnText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     color: C.txt,
   },
   statusSec: {
@@ -867,9 +862,8 @@ const styles = StyleSheet.create({
   },
   statusTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     letterSpacing: 1.2,
     color: C.txt,
   },
@@ -877,7 +871,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 10,
     marginTop: 4,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.goldL,
   },
@@ -912,36 +906,33 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   totalsLabel: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 10,
-    fontWeight: '800',
     letterSpacing: 0.8,
     color: C.muted,
   },
   totalsHint: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
   },
-  totalsComm: { fontFamily: F.sora, fontWeight: '800', color: C.accentL },
+  totalsComm: { ...font(800), color: C.accentL },
   th: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
-  td: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  td: { ...font(), fontSize: 12, color: C.prMuted },
   tdLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.txt,
   },
   tdDetail: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted,
   },
@@ -965,9 +956,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(183,156,232,0.3)',
   },
   badgeSealedText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.violetL,
   },
   badgePending: {
@@ -983,9 +973,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,198,106,0.35)',
   },
   badgePendingText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.amber,
   },
   /**
@@ -1007,9 +996,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(232,198,106,0.35)',
   },
   badgeApprovedText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.amber,
   },
   badgeMatched: {
@@ -1025,9 +1013,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(93,217,160,0.35)',
   },
   badgeMatchedText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.green,
   },
   gallery: {
@@ -1039,15 +1026,14 @@ const styles = StyleSheet.create({
   },
   galleryHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   galleryLabel: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 11,
-    fontWeight: '800',
     letterSpacing: 0.8,
     color: C.goldL,
   },
   gallerySub: {
     marginTop: 2,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.prMuted2,
   },
@@ -1088,9 +1074,8 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   galleryAddText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 13,
-    fontWeight: '600',
     color: C.txt,
   },
 });

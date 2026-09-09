@@ -55,7 +55,7 @@ export function TierSalesTargetChip({
 			</span>
 			<span
 				className={cn(
-					"font-sora font-extrabold tabular-nums text-[var(--iz-green)] leading-none",
+					"iz-heading font-extrabold tabular-nums text-[var(--iz-green)] leading-none",
 					compact ? "text-[10px]" : "text-[11px]",
 				)}
 			>
@@ -128,7 +128,7 @@ export function TierRatePill({
 			</span>
 			<span
 				className={cn(
-					"shrink-0 font-sora text-[11px] font-extrabold tabular-nums leading-tight",
+					"shrink-0 iz-heading text-[11px] font-extrabold tabular-nums leading-tight",
 					selected ? "text-[var(--iz-gold-l)]" : "text-[var(--iz-txt)]",
 				)}
 			>

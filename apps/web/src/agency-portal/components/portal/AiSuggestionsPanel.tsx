@@ -50,7 +50,7 @@ export function AiSuggestionsPanel() {
 				</div>
 				<div className="iz-portal-ai-btn__body">
 					<div className="min-w-0 flex-1">
-						<div className="font-sora text-sm font-semibold leading-snug">
+						<div className="iz-heading text-sm font-semibold leading-snug">
 							{t.agencyHome.openRosterPlanning}
 						</div>
 						<p className="iz-tiny iz-muted mt-0.5">
@@ -106,7 +106,7 @@ export function AiSuggestionsPanel() {
 				</div>
 				<div className="iz-portal-ai-btn__body">
 					<div className="min-w-0 flex-1">
-						<div className="font-sora text-sm font-semibold leading-snug">
+						<div className="iz-heading text-sm font-semibold leading-snug">
 							{title}
 						</div>
 						<p className="iz-tiny iz-muted mt-0.5">{desc}</p>

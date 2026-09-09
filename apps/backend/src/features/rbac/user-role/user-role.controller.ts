@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { ensurePersonCode } from '@/util/member-code';
 import { UserRoleRepositoryClass } from './user-role.repository';
 import { UserRoleSchema, UpdateUserRoleSchema } from '@/schema/rbac.schema';
 import { getActor } from '@/util/actor';
@@ -101,6 +102,10 @@ export class UserRoleControllerClass {
         createdBy: actor,
         updatedBy: actor,
       });
+
+      // Promotion creates no user row, so no creation hook fires — this is the
+      // only place a newly-made admin can be given an id.
+      await ensurePersonCode(parsed.data.userId);
 
       return res.status(201).json({ success: true, message: 'Role assigned to user', data });
     } catch {

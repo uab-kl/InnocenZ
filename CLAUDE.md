@@ -130,5 +130,53 @@ described 106 gaps against 141.
 - **Real outlet/agency logins: NEVER leave Velvet/Atlas demo data on screen.**
   Use `BLANK_OUTLET_*` / `BLANK_AGENCY_*` in `buildBlankPortalReset` and Settings
   overlays — not `DEFAULT_*`. See `.cursor/rules/no-demo-data-on-real-sessions.mdc`.
+- **TYPOGRAPHY IS ENFORCED, NOT ADVISED (owner, 8 Sep 2026).** The ladder rule below is now a
+  check, because a rule nothing runs is a rule that erodes — that is how the portals
+  reached 27 sizes and a font that was never loaded.
+
+  ```bash
+  pnpm check:type          # fails on any NEW breach
+  pnpm check:type:update   # bank an improvement into the baseline
+  ```
+
+  `tools/scripts/check-portal-typography.mjs` scans `agency-portal/`, `routes/agency/`
+  and `routes/outlet/` for four things: **A** a `font-family` that is not
+  `var(--iz-font)`, **B** a `font-size` that is not a `--iz-fs-*` step, **C** a Tailwind
+  class NAMING a font (`font-sora` / `font-manrope` / `font-display` / `font-mono`), and
+  **D** an arbitrary size (`text-[13px]`, **and its `!text-[13px]` twin** — they are
+  different classes, which is how 163 call sites escaped the ladder unseen).
+
+  ⚠️ **It is a RATCHET, not a zero.** The 7 Sep pass put every RENDERED element on the
+  ladder using override layers, so the source still carries **1,004 raw values** that the
+  cascade normalises. Demanding zero would fail on day one and be switched off on day two.
+  Today’s counts are frozen per file+rule in `portal-typography-baseline.json`; the check
+  fails only when a count GROWS. Fixing legacy is always welcome — `--update` banks it and
+  the baseline can then only tighten. **Never re-baseline to make a new breach go away.**
+
+  A genuine exception goes in `EXCEPT[]` in that script **with its reason** (today: the
+  `.iz-pv-doc` printed voucher, and container-query sizes) — never by disabling the check.
+
+  ⚠️ This checks the SOURCE. It does not replace measuring the rendered page: the 7 Sep
+  bugs were found by `getComputedStyle` in a live browser, not by reading files.
+
+- **Portal type comes from the ladder, never from a raw px value (owner, 7 Sep 2026).**
+  `prototype-theme.css` `:root` defines ONE font (`--iz-font`) and EIGHT sizes —
+  `--iz-fs-` `micro` 11 · `tiny` 12 · `caption` 14 · `label` 16 · `body` 18 ·
+  `title` 22 · `head` 28 · `display` 34. Size encodes depth in the hierarchy and
+  nothing else. Adding a raw `font-size: 13px` or a new family is what produced 27
+  different sizes and a "Sora" that **was never loaded in any import** — 243 rules
+  silently rendering Arial beside real Manrope. Titles take `--iz-title` (lavender);
+  champagne gold stays reserved for *act* on buttons. Two deliberate exceptions:
+  `.iz-pv-doc` (the printed voucher keeps Segoe UI + Georgia to match its PDF/Excel)
+  and `clamp()`/`cqw` sizes that are meant to be responsive.
+  ⚠️ **Tailwind's `!` prefix makes a DIFFERENT class** — `!text-[9px]` compiles to
+  `.!text-[9px]`, which a rule written for `.text-[9px]` never matches. And for
+  `!important` declarations the cascade REVERSES layer order, so an un-layered override
+  LOSES to Tailwind's `@layer utilities`: the portal's bang remaps live inside
+  `@layer utilities` for exactly that reason. ⚠️ **`clamp()` interpolates**, so it renders
+  values between steps — size fluidly with a breakpoint or a container query, never a clamp.
+  ⚠️ The font classes are `iz-heading` (heading/figure hook) and `iz-nums` (tabular
+  numerals). `font-sora`, `font-manrope` and portal `font-mono` are GONE — they named
+  fonts that were not loaded. `font-mono`/`font-display` outside the portals are real.
 
 <!-- nx configuration end-->

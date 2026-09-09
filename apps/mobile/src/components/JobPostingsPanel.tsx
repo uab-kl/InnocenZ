@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { DAY_SHORT, MONTH_SHORT, formatRM } from '../lib/demo-shifts';
 import {
   SERVICE_OFFERS,
@@ -803,7 +804,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   bannerText: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted2,
@@ -822,13 +823,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterTitle: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 1,
     color: C.muted2,
   },
-  filterCount: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.goldL },
+  filterCount: { ...font(700), fontSize: 12, color: C.goldL },
   filterGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   filterField: {
     flexGrow: 1,
@@ -844,9 +844,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(183,156,232,0.08)',
   },
   filterFieldLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
   },
@@ -857,7 +856,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 4,
   },
-  filterFieldValue: { flex: 1, fontFamily: F.manrope, fontSize: 12, color: C.txt },
+  filterFieldValue: { flex: 1, ...font(), fontSize: 12, color: C.txt },
   selectList: {
     marginTop: 8,
     borderRadius: 12,
@@ -876,9 +875,9 @@ const styles = StyleSheet.create({
     borderBottomColor: C.line,
   },
   selectRowOn: { backgroundColor: 'rgba(183,156,232,0.1)' },
-  selectText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  selectText: { ...font(600), fontSize: 13, color: C.txt },
   clearBtn: { marginTop: 10, alignSelf: 'flex-start' },
-  clearText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.goldL },
+  clearText: { ...font(600), fontSize: 12, color: C.goldL },
   ordersSec: {
     marginTop: 12,
     borderRadius: 14,
@@ -895,14 +894,13 @@ const styles = StyleSheet.create({
   },
   ordersTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   ordersTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     letterSpacing: 1.44,
     color: C.txt,
   },
-  ordersHint: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  tapHint: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, fontWeight: '600', color: C.goldL },
+  ordersHint: { marginTop: 2, ...font(), fontSize: 12, color: C.prMuted },
+  tapHint: { marginTop: 4, ...font(600), fontSize: 12, color: C.goldL },
   ordersBody: { paddingHorizontal: 12, paddingBottom: 12, gap: 10, borderTopWidth: 1, borderTopColor: C.line },
   orderCard: {
     marginTop: 10,
@@ -915,7 +913,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.15)',
   },
   orderTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  orderId: { fontFamily: F.sora, fontSize: 13, fontWeight: '800', color: C.violetL },
+  orderId: { ...font(800), fontSize: 13, color: C.violetL },
   initPill: {
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -923,15 +921,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line2,
   },
-  initPillText: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.muted },
-  orderPr: { marginTop: 6, fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.txt },
-  orderMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
-  orderDesc: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.prMuted2 },
-  orderMoney: { marginTop: 4, fontFamily: F.manrope, fontSize: 11, color: C.muted2 },
+  initPillText: { ...font(700), fontSize: 10, color: C.muted },
+  orderPr: { marginTop: 6, ...font(700), fontSize: 14, color: C.txt },
+  orderMeta: { marginTop: 2, ...font(), fontSize: 12, color: C.prMuted },
+  orderDesc: { marginTop: 4, ...font(), fontSize: 12, color: C.prMuted2 },
+  orderMoney: { marginTop: 4, ...font(), fontSize: 11, color: C.muted2 },
   orderOut: { alignItems: 'flex-end', minWidth: 72 },
-  orderOutLabel: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.muted2 },
-  orderOutAmt: { marginTop: 2, fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.accentL },
-  orderInAmt: { marginTop: 4, fontFamily: F.manrope, fontSize: 11, color: C.green },
+  orderOutLabel: { ...font(700), fontSize: 10, color: C.muted2 },
+  orderOutAmt: { marginTop: 2, ...font(800), fontSize: 14, color: C.accentL },
+  orderInAmt: { marginTop: 4, ...font(), fontSize: 11, color: C.green },
   guide: {
     marginTop: 14,
     marginBottom: 8,
@@ -941,8 +939,8 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   guideHd: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  guideTitle: { flex: 1, fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
-  guideBody: { marginTop: 8, fontFamily: F.manrope, fontSize: 12, color: C.prMuted, lineHeight: 17 },
+  guideTitle: { flex: 1, ...font(700), fontSize: 13, color: C.txt },
+  guideBody: { marginTop: 8, ...font(), fontSize: 12, color: C.prMuted, lineHeight: 17 },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(6,3,12,0.65)',
@@ -965,14 +963,13 @@ const styles = StyleSheet.create({
   sheetScroll: {
     paddingBottom: 16,
   },
-  sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
-  sheetSub: { marginTop: 6, fontFamily: F.manrope, fontSize: 13, color: C.prMuted, lineHeight: 18 },
+  sheetTitle: { ...font(800), fontSize: 20, color: C.txt },
+  sheetSub: { marginTop: 6, ...font(), fontSize: 13, color: C.prMuted, lineHeight: 18 },
   fieldLabel: {
     marginTop: 12,
     marginBottom: 4,
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 11,
-    fontWeight: '600',
     letterSpacing: 0.8,
     color: C.prMuted2,
   },
@@ -992,8 +989,8 @@ const styles = StyleSheet.create({
     borderBottomColor: C.line,
   },
   offerRowOn: { backgroundColor: 'rgba(183,156,232,0.1)' },
-  offerLabel: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
-  offerSummary: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  offerLabel: { ...font(600), fontSize: 13, color: C.txt },
+  offerSummary: { marginTop: 6, ...font(), fontSize: 12, color: C.prMuted },
   timeTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1011,9 +1008,8 @@ const styles = StyleSheet.create({
   },
   timeTriggerLabel: {
     flex: 1,
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 15,
-    fontWeight: '600',
     color: C.txt,
   },
   timePopover: {
@@ -1044,18 +1040,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(183,156,232,0.18)',
   },
   timeColText: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 14,
-    fontWeight: '600',
     color: C.muted,
   },
   timeColTextOn: {
     color: C.goldL,
   },
   input: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 15,
-    fontWeight: '600',
     color: C.txt,
     borderWidth: 1,
     borderColor: C.line2,
@@ -1070,14 +1064,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
-  submitText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: '#241a08' },
+  submitText: { ...font(700), fontSize: 16, color: '#241a08' },
   submitError: {
     marginTop: 12,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: '#ff8a8a',
     textAlign: 'center',
   },
   cancel: { marginTop: 10, alignItems: 'center', padding: 10 },
-  cancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
+  cancelText: { ...font(600), fontSize: 14, color: C.muted },
 });

@@ -1,5 +1,5 @@
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
-import { IzSectionLabel } from "@agency-portal/components/iz/ui";
+import { IzPageTitle, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
 import { EventTemplatePicker } from "@agency-portal/components/outlet/EventTemplatePicker";
 import {
@@ -830,11 +830,11 @@ function PostJobPage() {
 		return (
 			<div className="iz-screen">
 				<header className="pt-1">
-					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
+					<IzPageTitle>
 						{blockedByPhase
 							? t.postJob.notAvailableYet
 							: t.postJob.accessRestricted}
-					</h2>
+					</IzPageTitle>
 				</header>
 
 				<p className="iz-tiny iz-muted mt-3 rounded-2xl border border-dashed border-[var(--iz-line)] px-4 py-8 text-center">

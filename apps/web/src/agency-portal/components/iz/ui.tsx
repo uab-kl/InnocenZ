@@ -4,6 +4,7 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@agency-portal/components/ui/popover";
+import { nowAgencyDateTime } from "@agency-portal/lib/portal-clock";
 import type { TrafficLevel } from "@agency-portal/lib/traffic-status";
 import { cn } from "@agency-portal/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -189,36 +190,94 @@ export function IzCardTitle({
 	);
 }
 
+/**
+ * THE date/time line — one component, one wording, one place: directly under
+ * the page title, never above it and never in the shell header.
+ *
+ * It used to be written out by hand at four call sites, and drifted at every
+ * one: `iz-tiny iz-muted2 mt-0.5` on Approvals, `iz-tiny iz-muted mt-0.5` on
+ * Payroll, `iz-tiny iz-muted2 mt-1` ABOVE the Roster title in the shell header,
+ * and a two-line block on Today. Rendered by `IzPageTitle` rather than left for
+ * each page to place, because a convention every page has to remember is what
+ * produced four different answers in the first place.
+ */
+export function IzPageDateTime({ children }: { children?: ReactNode }) {
+	const { date, time } = nowAgencyDateTime();
+	return (
+		<p className="iz-page-datetime">
+			{date} · {time}
+			{children}
+		</p>
+	);
+}
+
 export function IzPageTitle({
 	children,
 	level = 2,
 	size = "lg",
 	className,
 	icon,
+	iconKey,
+	dateTime = false,
+	meta,
 }: {
 	children: ReactNode;
 	level?: 1 | 2 | 3;
 	size?: "lg" | "xl";
 	className?: string;
 	icon?: LucideIcon | null;
+	/**
+	 * ENGLISH icon lookup key. Pass it whenever `children` are translated —
+	 * `iconForNav` matches on the WORDS, so a rendered 今天 resolves to a "?".
+	 */
+	iconKey?: string;
+	/** Print the wall clock under this title. See `IzPageDateTime`. */
+	dateTime?: boolean;
+	/** Extra context appended INSIDE the date line (a cycle range, a pill). */
+	meta?: ReactNode;
 }) {
 	const Tag = `h${level}` as "h1" | "h2" | "h3";
+	// Sizes name LADDER steps, never raw pixels: the portals map text-lg / -xl /
+	// -2xl onto --iz-fs-title / -head / -display. `text-[22px]` was an arbitrary
+	// value the ladder could not see, and it made the BIGGER option smaller —
+	// 22px against text-lg's 27.5px — so `size="xl"` shrank a page title.
 	const sizeClass =
 		size === "xl"
-			? "text-[22px] tracking-tight"
+			? "text-3xl tracking-tight"
 			: level === 3
-				? "text-lg"
-				: "text-lg leading-snug";
-	return (
+				? "text-xl"
+				: "text-2xl leading-snug";
+	const heading = (
 		<Tag
 			className={cn(
-				"font-sora font-extrabold text-[var(--iz-txt)]",
+				"iz-heading font-extrabold text-[var(--iz-title)]",
 				sizeClass,
 				className,
 			)}
 		>
-			<TitleWithIcon icon={icon}>{children}</TitleWithIcon>
+			<TitleWithIcon icon={icon} iconKey={iconKey}>
+				{children}
+			</TitleWithIcon>
 		</Tag>
+	);
+
+	/*
+	 * NO WRAPPER when there is no clock — every existing caller keeps the exact
+	 * markup it had, so nothing that positions the heading has to change.
+	 *
+	 * WITH a clock the two MUST be wrapped, because a fragment emits them as two
+	 * siblings and a flex parent then lays them out side by side: on the Roster
+	 * page (`.iz-roster-head` is `flex` + `space-between`) the date was pushed to
+	 * the far right of the row, level with the title, while every non-flex page
+	 * put it underneath. One block means the pair travels together and reads the
+	 * same wherever it is dropped.
+	 */
+	if (!dateTime) return heading;
+	return (
+		<div className="min-w-0">
+			{heading}
+			<IzPageDateTime>{meta}</IzPageDateTime>
+		</div>
 	);
 }
 

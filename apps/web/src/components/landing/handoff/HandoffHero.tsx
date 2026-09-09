@@ -236,7 +236,7 @@ export function HandoffHero() {
 							{t.hero.titleLine2}
 						</em>
 					</h1>
-					<p className="hz-hero-sub">{t.hero.subtitle}</p>
+					<p className="hz-hero-sub whitespace-pre-line">{t.hero.subtitle}</p>
 					<div className="flex flex-wrap gap-3.5">
 						<a href="/login" className="hz-btn hz-btn-gold">
 							{t.nav.login} <span className="hz-arrow">→</span>

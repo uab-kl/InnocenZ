@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../../theme/theme';
+import { font } from '../../theme/fonts';
 import {
 	ApiError,
 	checkPrRegisterAvailability,
@@ -581,22 +582,20 @@ const styles = StyleSheet.create({
 		marginBottom: 8,
 	},
 	eyebrow: {
-		fontFamily: F.sora,
+		...font(700),
 		fontSize: 11,
-		fontWeight: '700',
 		letterSpacing: 1.6,
 		color: C.muted2,
 	},
 	titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
 	title: {
-		fontFamily: F.sora,
+		...font(800),
 		fontSize: 22,
-		fontWeight: '800',
 		letterSpacing: -0.3,
 		color: C.txt,
 	},
 	subtitle: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: C.fsTiny,
 		color: C.prMuted,
 		marginTop: 2,
@@ -626,22 +625,21 @@ const styles = StyleSheet.create({
 		borderColor: 'rgba(255,255,255,0.12)',
 	},
 	toastText: {
-		fontFamily: F.manrope,
+		...font(600),
 		fontSize: 13,
 		lineHeight: 18,
-		fontWeight: '600',
 		color: '#fff',
 		textAlign: 'center',
 	},
 	error: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: C.fsTiny,
 		lineHeight: C.fsTiny * 1.4,
 		color: C.red,
 		marginTop: 8,
 	},
 	notice: {
-		fontFamily: F.manrope,
+		...font(),
 		fontSize: C.fsTiny,
 		lineHeight: C.fsTiny * 1.4,
 		color: C.green,

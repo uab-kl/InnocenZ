@@ -39,7 +39,6 @@ import {
 	RotateCcw,
 	ScanLine,
 	Search,
-	SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -167,8 +166,29 @@ export function receiptsInPayrollWeek(
 	receipts: AgencyReceipt[],
 	weekStartIso: string,
 	weekEndIso: string,
+	/**
+	 * THE PAYMENT WEEK'S AGE CATCH-ALL — true on that tab only.
+	 *
+	 * The voucher list has had one for a while: `lastLastWeekPvs` deliberately
+	 * holds every unpaid voucher from any week, because an overdue one used to
+	 * age past all three windows and match no tab at all. Receipts never got the
+	 * same treatment and needed it more: a PENDING receipt BLOCKS its voucher
+	 * from being sent, so an aged one left the voucher sitting on the payment
+	 * week refusing to send, with the receipt explaining why reachable from
+	 * nowhere on the page. Found 7 Sep 2026 with two live rows — `weekStart`
+	 * 2026-08-02 and 2026-08-09 against a payment week of 23-29 Aug.
+	 *
+	 * Only PENDING rows are rescued, and the voucher catch-all drops PAID for the
+	 * same reason: what must not age out is what is UNFINISHED. Sweeping up
+	 * nineteen verified receipts from June would bury the two that need someone.
+	 */
+	includesOlder = false,
 ): AgencyReceipt[] {
-	return receipts.filter((r) => inPayrollWeek(r, weekStartIso, weekEndIso));
+	return receipts.filter((r) => {
+		if (inPayrollWeek(r, weekStartIso, weekEndIso)) return true;
+		if (!includesOlder || r.status !== "pending") return false;
+		return (r.weekStart ?? workingDayIso(r)) < weekStartIso;
+	});
 }
 
 /**
@@ -264,7 +284,7 @@ function ReceiptRow({
 					<div className="min-w-0">
 						<div className="flex flex-wrap items-center gap-1.5">
 							<ScanLine className="h-3.5 w-3.5 shrink-0" />
-							<span className="font-mono text-sm font-bold">
+							<span className="iz-nums text-sm font-bold">
 								{receipt.receiptNo}
 							</span>
 							<IzPill
@@ -418,7 +438,7 @@ function ReceiptRow({
 											<span className="font-bold tracking-wide">
 												<KindLabel kind={group.kind} />
 											</span>
-											<span className="iz-muted2 font-mono">
+											<span className="iz-muted2 iz-nums">
 												{formatRM(group.total)}
 											</span>
 										</div>
@@ -566,6 +586,7 @@ function ReceiptRow({
 export function AgencyReceiptsPanel({
 	weekStartIso,
 	weekEndIso,
+	includesOlder = false,
 	onOpenPv,
 	focusReceiptId,
 	kinds,
@@ -575,6 +596,8 @@ export function AgencyReceiptsPanel({
 }: {
 	weekStartIso: string;
 	weekEndIso: string;
+	/** Payment week only — see `receiptsInPayrollWeek`. */
+	includesOlder?: boolean;
 	onOpenPv?: (voucherId: string) => void;
 	/** Deep-linked receipt to scroll to — see the effect below. */
 	focusReceiptId?: string;
@@ -629,11 +652,11 @@ export function AgencyReceiptsPanel({
 	const [prId, setPrId] = useState("");
 	const [outlet, setOutlet] = useState("");
 	const [source, setSource] = useState<"" | AgencyReceipt["source"]>("");
-	const [showFilters, setShowFilters] = useState(false);
 
 	const weekReceipts = useMemo(
-		() => receiptsInPayrollWeek(receipts, weekStartIso, weekEndIso),
-		[receipts, weekStartIso, weekEndIso],
+		() =>
+			receiptsInPayrollWeek(receipts, weekStartIso, weekEndIso, includesOlder),
+		[receipts, weekStartIso, weekEndIso, includesOlder],
 	);
 	const offWeekCount = receipts.length - weekReceipts.length;
 
@@ -862,7 +885,7 @@ export function AgencyReceiptsPanel({
 				<>
 					<div className="grid grid-cols-3 gap-2">
 						<IzCard flat className="!mb-0">
-							<p className="font-sora text-lg font-extrabold">
+							<p className="iz-heading text-lg font-extrabold">
 								{statusCounts.all}
 							</p>
 							<p className="iz-tiny iz-muted2">{t.receipts.receipts}</p>
@@ -872,14 +895,14 @@ export function AgencyReceiptsPanel({
 							className={`!mb-0${pendingAll > 0 ? " border-[rgba(244,183,64,.4)]" : ""}`}
 						>
 							<p
-								className={`font-sora text-lg font-extrabold${pendingAll > 0 ? " text-[var(--iz-amber,#d9b97a)]" : ""}`}
+								className={`iz-heading text-lg font-extrabold${pendingAll > 0 ? " text-[var(--iz-amber,#d9b97a)]" : ""}`}
 							>
 								{pendingAll}
 							</p>
 							<p className="iz-tiny iz-muted2">{t.receipts.waitingOnYou}</p>
 						</IzCard>
 						<IzCard flat className="!mb-0">
-							<p className="iz-ledger font-sora text-lg font-extrabold">
+							<p className="iz-ledger iz-heading text-lg font-extrabold">
 								{formatRM(weekTotal)}
 							</p>
 							<p className="iz-tiny iz-muted2">{t.receipts.commissionLogged}</p>
@@ -981,36 +1004,7 @@ export function AgencyReceiptsPanel({
 							dayCounts={dayCounts}
 							allDaysCount={inKinds.length}
 							kindsUnavailable={kindsUnavailable}
-						/>
-					)}
-
-					<div className="mt-2 flex items-center gap-2">
-						<div className="relative flex-1">
-							<Search
-								className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--iz-muted)]"
-								aria-hidden
-							/>
-							<input
-								type="search"
-								className="w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] py-1.5 pr-2 pl-7 text-xs"
-								placeholder={t.receipts.searchPlaceholder}
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								aria-label={t.receipts.searchReceipts}
-							/>
-						</div>
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft !h-8 !px-2.5 !text-[11px]"
-							onClick={() => setShowFilters((v) => !v)}
-							aria-expanded={showFilters}
 						>
-							<SlidersHorizontal className="mr-1 h-3 w-3" /> {t.payroll.filters}
-						</button>
-					</div>
-
-					{showFilters && (
-						<div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)]/60 p-2.5 sm:grid-cols-3">
 							<IzSelect
 								block
 								className="!text-xs"
@@ -1059,8 +1053,25 @@ export function AgencyReceiptsPanel({
 									{t.payroll.clearFilters}
 								</button>
 							)}
-						</div>
+						</PayrollKindDayFilter>
 					)}
+
+					<div className="mt-2 flex items-center gap-2">
+						<div className="relative flex-1">
+							<Search
+								className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--iz-muted)]"
+								aria-hidden
+							/>
+							<input
+								type="search"
+								className="w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] py-1.5 pr-2 pl-7 text-xs"
+								placeholder={t.receipts.searchPlaceholder}
+								value={search}
+								onChange={(e) => setSearch(e.target.value)}
+								aria-label={t.receipts.searchReceipts}
+							/>
+						</div>
+					</div>
 
 					<div className="mt-3 space-y-3">
 						{days.length === 0 ? (

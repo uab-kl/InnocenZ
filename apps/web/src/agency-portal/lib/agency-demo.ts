@@ -2318,18 +2318,9 @@ export const OUTLET_NAMES = [
 	...new Set(OUTLET_COMMISSION_RULES.map((r) => r.outlet)),
 ];
 
-export function nowAgencyDateTime() {
-	const d = new Date();
-	return {
-		date: d.toLocaleDateString("en-MY", {
-			weekday: "short",
-			day: "numeric",
-			month: "short",
-			year: "numeric",
-		}),
-		time: d.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" }),
-	};
-}
+// `nowAgencyDateTime` now lives in `lib/portal-clock.ts` -- it is a pure date
+// formatter and nothing about it was ever demo data, but sitting here meant
+// every page that wanted the time pulled this whole module in to get it.
 
 const DEMO_LAYOUT_ROSTER_IDS = new Set(["rs2", "rs3", "rs4"]);
 /** Demo slots — seed outletSwap state wins on hydrate (clears stale agency swap requests). */

@@ -71,7 +71,20 @@ export async function registerUser(
 		companyName: input.companyName,
 		companyRegistrationOld: optionalField(input.companyRegistrationOld),
 		companyRegistrationNew: input.companyRegistrationNew,
+		businessLicense: input.businessLicense.trim(),
 		personInCharge: input.personInCharge,
+		// Owner identity — written to `user_profile`, not to the organisation row.
+		// The server RE-DERIVES the birth date and the gender from an NRIC and
+		// stores its own answer, so what goes up here is a proposal, not a fact.
+		idType: input.idType,
+		idNo: input.idNo.trim(),
+		gender: input.gender,
+		...(input.idType === "NRIC"
+			? { nationality: "Malaysian" }
+			: {
+					dob: optionalField(input.dob),
+					nationality: optionalField(input.nationality),
+				}),
 		contactEmail: input.email,
 		packageId: input.packageId,
 		accountType: input.accountType,

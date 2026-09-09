@@ -1127,7 +1127,7 @@ export function RosterBackendTimetable({
 						<ChevronLeft className="h-4 w-4" />
 					</button>
 					<div className="min-w-0 text-center">
-						<p className="font-sora text-sm font-bold text-[var(--iz-txt)]">
+						<p className="iz-heading text-sm font-bold text-[var(--iz-txt)]">
 							{fill(t.rosterGrid.weekOf, { label: weekLabel })}
 						</p>
 						<p className="iz-tiny iz-muted2">
@@ -2052,7 +2052,7 @@ function AssignBackendCellSheet({
 										)}
 										<div className="min-w-0 flex-1 text-left">
 											<div className="flex flex-wrap items-center gap-1.5">
-												<span className="font-sora text-sm font-bold text-[var(--iz-txt)]">
+												<span className="iz-heading text-sm font-bold text-[var(--iz-txt)]">
 													{outlet}
 												</span>
 												<span className="iz-tiny iz-muted">

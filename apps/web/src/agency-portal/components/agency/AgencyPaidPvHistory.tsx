@@ -193,7 +193,7 @@ export function AgencyPaidPvHistory({
 								onClick={() => setDetailId(pv.id)}
 							>
 								<div className="min-w-0">
-									<div className="font-sora text-[15px] font-bold">{pv.id}</div>
+									<div className="iz-heading text-base font-bold">{pv.id}</div>
 									<p className="iz-tiny iz-muted mt-0.5">
 										{resolvePvPrName(pv, agencyPRs)} · {pv.outlet}
 									</p>
@@ -216,7 +216,7 @@ export function AgencyPaidPvHistory({
 									<IzPill variant={pvStatusPillVariant(pv.status)}>
 										{t.history.paid}
 									</IzPill>
-									<div className="iz-ledger font-sora mt-1.5 text-base font-bold">
+									<div className="iz-ledger iz-heading mt-1.5 text-base font-bold">
 										{formatRM(getPvNetTotal(pv))}
 									</div>
 									<p className="iz-tiny iz-muted2 mt-0.5">
@@ -227,7 +227,7 @@ export function AgencyPaidPvHistory({
 											<p className="iz-tiny font-semibold uppercase tracking-wide text-[var(--iz-green-l)]">
 												{t.history.datePaid}
 											</p>
-											<p className="font-sora mt-0.5 text-sm font-bold leading-tight text-[var(--iz-txt)]">
+											<p className="iz-heading mt-0.5 text-sm font-bold leading-tight text-[var(--iz-txt)]">
 												{pv.paidAt}
 											</p>
 										</div>

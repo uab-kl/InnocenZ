@@ -399,7 +399,7 @@ export function GpsRoadMap({
 
 			{selected ? (
 				<div className="iz-gmaps-infowindow">
-					<p className="font-sora text-xs font-bold text-[#202124]">
+					<p className="iz-heading text-xs font-bold text-[#202124]">
 						{selected.prName}
 					</p>
 					<p className="text-[10px] text-[#5f6368]">

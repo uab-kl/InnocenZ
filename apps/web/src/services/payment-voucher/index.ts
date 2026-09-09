@@ -893,6 +893,13 @@ export interface DisputeShift {
 	/** Shift END, clamped — see the warning above. */
 	checkOutAt: string | null;
 	overtimeMinutes: number | null;
+	/**
+	 * The image the OUTLET linked this shift with, taken from the template it was
+	 * posted off. An R2 object KEY, not a URL — resolve with
+	 * `resolveProofPhotoUrl`. Null when the shift was posted without a template,
+	 * or the template carries no cover.
+	 */
+	coverImage: string | null;
 }
 
 export interface PaymentVoucherDispute {

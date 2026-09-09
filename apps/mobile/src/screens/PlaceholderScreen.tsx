@@ -5,6 +5,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useViewportSize } from '../lib/viewport';
 import { TopBar } from '../components/TopBar';
 import { EmptyDashed } from '../components/ui';
@@ -62,9 +63,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerLabel: {
-    fontFamily: F.sora,
+    ...font(600),
     fontSize: 12,
-    fontWeight: '600',
     letterSpacing: 1.68,
     color: '#c4b4d8',
   },
@@ -75,8 +75,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   headerTitle: {
-    fontFamily: F.sora,
-    fontWeight: '800',
+    ...font(800),
     letterSpacing: -0.45,
     color: C.txt,
   },

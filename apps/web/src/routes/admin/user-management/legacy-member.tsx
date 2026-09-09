@@ -54,6 +54,7 @@ import {
 import { getUserTypeByKey } from "@/constants/user-types";
 import { useAccountActions } from "@/hooks/use-account-actions";
 import { useAuth } from "@/lib/auth-context";
+import { orgMemberIdStem } from "@/lib/member-code";
 import { toMutationError } from "@/lib/mutation-error";
 import {
 	adminNavLabel,
@@ -195,7 +196,8 @@ function mapAgencyRow(agency: Agency, t: PortalTranslations): LegacyRow {
 		id: agency.id,
 		role: "agency",
 		name: agency.name,
-		code: agency.agencyCode || agency.ssmNo || "—",
+		code:
+			orgMemberIdStem("agency", agency.memberCodePrefix) || agency.ssmNo || "—",
 		contact: agency.contactName || "—",
 		detail: [agency.contactEmail, agency.contactPhone]
 			.filter(Boolean)

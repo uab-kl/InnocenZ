@@ -4,6 +4,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { useLocale } from '../i18n';
 
 const LOGO = require('../../assets/images/innocenz-logo.png');
@@ -186,7 +187,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   caption: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 14,
     letterSpacing: 0.3,
     color: C.prMuted,

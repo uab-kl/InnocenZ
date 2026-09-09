@@ -8,7 +8,7 @@ import {
 } from "@agency-portal/components/outlet/outlet-portal-ui";
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { useOutletToday } from "@agency-portal/hooks/use-outlet-today";
-import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
+import { nowAgencyDateTime } from "@agency-portal/lib/portal-clock";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -37,14 +37,21 @@ function OutletHome() {
 				</p>
 			)}
 
+			{/* The page is named after itself, like every other page in both
+			    portals (owner, 8 Sep 2026). It used to print the DATE as its title
+			    with "Today" demoted to the eyebrow — the same inversion the agency
+			    home had, and the reason this was the one outlet page whose heading
+			    did not match its own sidebar row. The clock keeps its place, one
+			    step down in the hint, where it has always belonged: it is what is
+			    true about today, not what the page is.
+
+			    `iconKey` takes the ENGLISH lookup key, not the rendered words:
+			    `iconForNav` matches on text, so a translated "今天" resolves to a
+			    "?" glyph instead of the Home icon. */}
 			<OutletPageHeader
-				eyebrow={t.common.today}
-				// English lookup key for the eyebrow icon: `iconForNav` matches on the
-				// text, so the translated "今天" would resolve to a "?" glyph instead
-				// of the Home icon.
-				eyebrowIconKey="Today"
-				title={`${date} · ${time}`}
-				hint={t.outletHome.liveShiftHint}
+				title={t.common.today}
+				iconKey="Today"
+				hint={`${date} · ${time} · ${t.outletHome.liveShiftHint}`}
 			/>
 
 			{/* Money the venue owes InnocenZ, above the staffing banners: a shift it

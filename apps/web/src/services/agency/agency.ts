@@ -9,8 +9,10 @@ import type {
 	AgencyMembershipsApiResponse,
 	AgencyMembersQueryParams,
 	AgencyPr,
+	AgencyTeamMembersApiResponse,
 	BroadcastToPrsApiResponse,
 	PrAgencyLink,
+	TeamMembersQueryParams,
 } from "./types";
 
 export async function fetchAgencies(
@@ -125,6 +127,32 @@ export async function broadcastToPrs(
 	return response.data;
 }
 
+/**
+ * ADMIN — every agency operator on the platform, paginated.
+ *
+ * Distinct from `fetchAgencyMembers`, which is scoped to ONE agency. The
+ * endpoint is admin-only, and the alternative — paging every agency and
+ * firing one member call each — is the client-side fan-out this repo has
+ * been bitten by before.
+ */
+export async function fetchAgencyTeamMembers(
+	params: TeamMembersQueryParams,
+	onRefreshFail: () => void,
+): Promise<AgencyTeamMembersApiResponse> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		page: params.page,
+		pageSize: params.pageSize,
+		search: params.search,
+		status: params.status,
+		// The server names it per portal; the screen speaks one word.
+		agencyId: params.orgId,
+	});
+	const response = await client.get<AgencyTeamMembersApiResponse>(
+		`/agency/team-members${queryString}`,
+	);
+	return response.data;
+}
 export async function fetchAgencyMembers(
 	agencyId: string,
 	params: AgencyMembersQueryParams = {},
@@ -234,22 +262,30 @@ export async function removeAgencyMember(
 }
 
 /**
- * All active agency memberships for a single user, across every sub-role. Used
- * to resolve the signed-in operator's own agency + role at session start.
- * Unlike fetchAgencyMembershipsByUsers (which defaults to the `pr` sub-role for
- * roster lookups), this omits the sub-role filter so owner/finance rows return.
+ * Agency memberships for a single user, across every sub-role. Used to resolve
+ * the signed-in operator's own agency + role at session start, and by the admin
+ * member page to list every agency one person belongs to.
+ *
+ * ADMIN callers get the UNFILTERED list; everyone else is clamped server-side to
+ * their own agency, so this cannot be used to enumerate a rival's staff.
+ *
+ * `status` defaults to `active` because the session lookup must not resolve an
+ * operator through a membership that has been switched off. Pass `"all"` when
+ * the caller is auditing rather than authenticating.
  */
 export async function fetchAgencyMembershipsForUser(
 	userId: string,
 	onRefreshFail: () => void,
+	options: { status?: "active" | "all" } = {},
 ): Promise<AgencyMembershipsApiResponse> {
 	const client = getClient(onRefreshFail);
 	const queryString = buildQueryParams({
 		userIds: userId,
-		// Without this the endpoint falls back to its `pr` default and an
-		// operator's own owner/finance row is filtered out.
+		// Kept explicit: the endpoint's own default has since changed to every
+		// sub-role, but stating it here means a future default cannot silently
+		// filter an operator's owner/finance row back out.
 		subRole: "all",
-		status: "active",
+		status: options.status ?? "active",
 	});
 	const response = await client.get<AgencyMembershipsApiResponse>(
 		`/agency/memberships${queryString}`,

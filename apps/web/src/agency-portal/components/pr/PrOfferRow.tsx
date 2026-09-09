@@ -22,7 +22,7 @@ export function PrOfferRow({
 		<>
 			<div className="min-w-0 flex-1">
 				<div className="flex items-center gap-2">
-					<span className="font-sora truncate text-[13px] font-bold text-[var(--iz-txt)]">
+					<span className="iz-heading truncate text-xs font-bold text-[var(--iz-txt)]">
 						{title}
 					</span>
 					{badge}
@@ -33,7 +33,7 @@ export function PrOfferRow({
 			</div>
 			<div className="flex shrink-0 items-center gap-2 pl-2">
 				{amount && (
-					<span className="font-sora text-sm font-extrabold text-[var(--iz-gold-l)]">
+					<span className="iz-heading text-sm font-extrabold text-[var(--iz-gold-l)]">
 						{amount}
 					</span>
 				)}

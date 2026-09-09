@@ -5,8 +5,14 @@ import {
 	type NavItem,
 	navIsActive,
 } from "@agency-portal/components/Nav";
+import {
+	NavAlertBadge,
+	navAlertAriaSuffix,
+	useNavAlerts,
+} from "@agency-portal/components/portal/NavAlertBadge";
 import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotificationBell";
-import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
+import { PortalNavAlerts } from "@agency-portal/components/portal/PortalNavAlerts";
+
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
 import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
@@ -20,8 +26,13 @@ import {
 	useOutletCanFor,
 } from "@agency-portal/lib/use-portal-can";
 import { Link, useLocation } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import {
+	ChevronLeft,
+	ChevronRight,
+	LogOut,
+	Menu as MenuIcon,
+} from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
@@ -82,6 +93,7 @@ const OUTLET_EXTRAS: ExtraNavItem[] = [
 	},
 ];
 
+/** "Good morning" / "Good afternoon" / "Good evening", by the wall clock. */
 function portalGreeting(t: PortalTranslations) {
 	const h = new Date().getHours();
 	if (h < 12) return t.shell.goodMorning;
@@ -215,14 +227,23 @@ function PortalSidebarLink({
 	onNavigate?: () => void;
 }) {
 	const active = navIsActive(pathname, item.to);
+	const { t } = usePortalLocale();
+	const alert = useNavAlerts()[item.to];
 	return (
 		<Link
 			to={item.to}
 			className={`iz-portal-nav-link${active ? " on" : ""}`}
 			onClick={onNavigate}
+			/*
+			 * The count is announced HERE, on the link, and hidden on the pill
+			 * itself. A screen reader reading "Payroll" and then a bare "7" says
+			 * nothing about what seven is.
+			 */
+			aria-label={`${item.label}${navAlertAriaSuffix(alert?.count, t.shell.navAlertWaiting)}`}
 		>
 			<item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
 			<span>{item.label}</span>
+			{alert && <NavAlertBadge count={alert.count} tone={alert.tone} />}
 		</Link>
 	);
 }
@@ -230,24 +251,52 @@ function PortalSidebarLink({
 function PortalSidebar({
 	portal,
 	items,
+	identity,
 	onNavigate,
 }: {
 	portal: PortalKind;
 	items: NavItem[];
+	/** Who this rail is acting for — the same parts the greeting prints. */
+	identity: { name: string; role: string };
 	onNavigate?: () => void;
 }) {
 	const { pathname } = useLocation();
 	const { t } = usePortalLocale();
+	const portalKindLabel =
+		portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal;
 
 	return (
 		<aside className="iz-portal-sidebar">
 			<div className="iz-portal-sidebar-brand">
 				<InnocenZLogoHorizontal className="iz-portal-sidebar-logo" />
-				<p className="iz-tiny iz-muted mt-2">
+				{/*
+				  WHO this rail is acting for, where the portal KIND used to be.
+				
+				  "Agency portal" answered a question the icon beside it already
+				  answers, and never the one that matters to somebody holding two
+				  logins: WHICH agency. The kind is still reachable — it stays on the
+				  block as a tooltip and as real (visually hidden) text, so a screen
+				  reader is told no less than it used to be.
+				
+				  ⚠️ That hidden text is a SPAN, not an `aria-label`. A bare <p> has the
+				  `generic` role, which supports no accessible name at all -- an
+				  aria-label there is licensed to be dropped entirely, and the portal
+				  kind would have been announced to nobody.
+				*/}
+				<p className="iz-portal-sidebar-org mt-2" title={portalKindLabel}>
+					<span className="sr-only">{portalKindLabel} · </span>
 					<TitleWithIcon
 						icon={iconForNav(portal === "agency" ? "PR Agency" : "Outlet")}
 					>
-						{portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal}
+						<span className="iz-portal-sidebar-org__name">
+							{identity.name}
+							{identity.role ? (
+								<span className="iz-portal-sidebar-org__role">
+									{" "}
+									({identity.role})
+								</span>
+							) : null}
+						</span>
 					</TitleWithIcon>
 				</p>
 			</div>
@@ -297,21 +346,23 @@ function PortalSidebar({
  * Falls back to the person's name when an org name has not loaded yet, and to
  * the bare role when neither is known — never renders an empty bracket.
  */
+function portalIdentityParts(
+	orgName: string,
+	ownerName: string,
+	subLabel: string,
+): { name: string; role: string } {
+	const name = orgName.trim() || ownerName.trim();
+	// No org and no person: the role IS the label, and gets no bracket of its own.
+	return name ? { name, role: subLabel } : { name: subLabel, role: "" };
+}
+
 function portalIdentityLabel(
 	orgName: string,
 	ownerName: string,
 	subLabel: string,
 ) {
-	const name = orgName.trim() || ownerName.trim();
-	return name ? `${name} (${subLabel})` : subLabel;
-}
-
-function isAgencyHomePath(pathname: string) {
-	return /\/agency\/?$/.test(pathname);
-}
-
-function isAgencyRosterPath(pathname: string) {
-	return pathname.startsWith("/agency/roster");
+	const { name, role } = portalIdentityParts(orgName, ownerName, subLabel);
+	return role ? `${name} (${role})` : name;
 }
 
 function PortalHeader({
@@ -329,39 +380,28 @@ function PortalHeader({
 	subLabel: string;
 	demoData: boolean;
 }) {
-	const { pathname } = useLocation();
 	const { t } = usePortalLocale();
-	const onAgencyHome = portal === "agency" && isAgencyHomePath(pathname);
-	const onAgencyRoster = portal === "agency" && isAgencyRosterPath(pathname);
-	const showDatetime = onAgencyHome || onAgencyRoster;
-	const { date, time } = showDatetime
-		? nowAgencyDateTime()
-		: { date: "", time: "" };
 
 	return (
 		<header className="iz-portal-header">
-			<div className="min-w-0">
-				<h1 className="font-sora text-xl font-extrabold tracking-tight text-[var(--iz-txt)] md:text-2xl">
-					{portalGreeting(t)},{" "}
-					<span className="text-[var(--iz-gold-l)]">
-						{portalIdentityLabel(orgName, ownerName, subLabel)}
-					</span>
-				</h1>
-				{showDatetime &&
-					(onAgencyRoster ? (
-						<p className="iz-tiny iz-muted2 mt-1">
-							{date} · {time}
-						</p>
-					) : (
-						<p className="iz-portal-header-datetime">
-							<span className="iz-tiny iz-muted2 uppercase tracking-widest">
-								{t.common.today}
-							</span>
-							<span className="font-sora text-lg font-extrabold leading-snug text-[var(--iz-txt)]">
-								{date} · {time}
-							</span>
-						</p>
-					))}
+			{/*
+			  THE GREETING, AND ONLY THE GREETING (owner, 8 Sep 2026).
+			
+			  It used to read "Good afternoon, <Org> (Role)". The name and role moved
+			  to the sidebar, where they say WHICH company this session is acting for;
+			  keeping them here as well had the header repeating the rail two inches
+			  away. The greeting itself stays, because it is the one warm line on an
+			  operations screen and it costs nothing.
+			
+			  It is deliberately QUIETER than the page title below it: a pleasantry
+			  outranking the name of the page is what made the old 28px greeting tie
+			  with "Payroll & PV" for the eye.
+			
+			  The clock is NOT here — it lives in `IzPageDateTime`, under the page
+			  title, on every page rather than on the two this header knew about.
+			*/}
+			<div className="min-w-0 flex-1">
+				<p className="iz-portal-greeting">{portalGreeting(t)}</p>
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
 				{demoData && (
@@ -420,6 +460,19 @@ export function PortalShell({
 			? AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t)
 			: OUTLET_SUB_ROLE_LABELS[outletSubRole ?? "outlet_owner"](t);
 
+	/*
+	 * Hoisted out of the header's props: the SIDEBAR prints this identity too
+	 * now, and two copies of the fallback chain would be two chances to differ.
+	 * Both sides read `portalIdentityParts`, so the rail and the greeting can
+	 * only ever say the same thing.
+	 */
+	const ownerName =
+		me?.username?.trim() ||
+		me?.displayName?.trim() ||
+		owner.ownerName.trim() ||
+		"";
+	const identity = portalIdentityParts(orgName, ownerName, subLabel);
+
 	const orgProfileOnly =
 		getPortalSessionKind() === "real" &&
 		(portal === "agency"
@@ -464,53 +517,136 @@ export function PortalShell({
 			return next;
 		});
 
+	// Phone-only drawer carrying the full rail. Deliberately NOT persisted the
+	// way `collapsed` is: a drawer that reopened itself on the next page load
+	// would cover the screen someone had just navigated to.
+	const [menuOpen, setMenuOpen] = useState(false);
+	const closeMenu = useCallback(() => setMenuOpen(false), []);
+	useEffect(() => {
+		if (!menuOpen) return;
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setMenuOpen(false);
+		};
+		window.addEventListener("keydown", onKey);
+		// The panel sits over a scrolling viewport, so without this a touch drag
+		// anywhere on the scrim scrolls the page underneath and the drawer
+		// appears to float over content that is moving on its own.
+		const previousOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+		return () => {
+			window.removeEventListener("keydown", onKey);
+			document.body.style.overflow = previousOverflow;
+		};
+	}, [menuOpen]);
+
 	return (
-		<div
-			className="iz-portal"
-			data-portal={portal}
-			data-collapsed={collapsed ? "true" : undefined}
-		>
-			<PortalSidebar portal={portal} items={localiseNav(sidebarItems, t)} />
-
-			<button
-				type="button"
-				className="iz-portal-collapse-toggle"
-				onClick={toggleCollapsed}
-				aria-label={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
-				title={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
+		<PortalNavAlerts portal={portal}>
+			<div
+				className="iz-portal"
+				data-portal={portal}
+				data-collapsed={collapsed ? "true" : undefined}
 			>
-				{collapsed ? (
-					<ChevronRight className="h-4 w-4" strokeWidth={2} />
-				) : (
-					<ChevronLeft className="h-4 w-4" strokeWidth={2} />
-				)}
-			</button>
-
-			<div className="iz-portal-main">
-				<PortalHeader
+				<PortalSidebar
 					portal={portal}
-					orgName={orgName}
-					ownerName={
-						me?.username?.trim() ||
-						me?.displayName?.trim() ||
-						owner.ownerName.trim() ||
-						""
-					}
-					avatarPhoto={personalPhoto}
-					subLabel={subLabel}
-					demoData={demoData}
+					items={localiseNav(sidebarItems, t)}
+					identity={identity}
 				/>
 
-				<div className="iz-portal-viewport">{children}</div>
-			</div>
+				<button
+					type="button"
+					className="iz-portal-collapse-toggle"
+					onClick={toggleCollapsed}
+					aria-label={
+						collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar
+					}
+					title={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
+				>
+					{collapsed ? (
+						<ChevronRight className="h-4 w-4" strokeWidth={2} />
+					) : (
+						<ChevronLeft className="h-4 w-4" strokeWidth={2} />
+					)}
+				</button>
+
+				<div className="iz-portal-main">
+					<PortalHeader
+						portal={portal}
+						orgName={orgName}
+						ownerName={ownerName}
+						avatarPhoto={personalPhoto}
+						subLabel={subLabel}
+						demoData={demoData}
+					/>
+
+					<div className="iz-portal-viewport">{children}</div>
+				</div>
 
 			{navItems.length > 0 && (
 				<div className="iz-portal-mobile-footer md:hidden">
-					<BottomNav items={localiseNav(navItems, t)} />
+					<BottomNav
+						items={localiseNav(navItems, t)}
+						trailing={
+							/*
+							  The phone's way into everything the tab bar cannot hold.
+							  The bar is fed `navItems` (the base list) while the rail is
+							  fed `sidebarItems` (base + permitted extras), so without
+							  this the extras — Settings, Subscription, Workspace,
+							  Manage PR, Manage Outlet — plus the language switcher and
+							  Sign out were all unreachable below 768px.
+							*/
+							<button
+								type="button"
+								onClick={() => setMenuOpen(true)}
+								aria-haspopup="dialog"
+								aria-expanded={menuOpen}
+								data-active={menuOpen ? "true" : undefined}
+								className={menuOpen ? "on" : ""}
+							>
+								<MenuIcon className="h-5 w-5" strokeWidth={1.8} />
+								<span>{t.shell.menu}</span>
+							</button>
+						}
+					/>
 				</div>
 			)}
 
-			{overlay}
-		</div>
+			{menuOpen && (
+				<div className="iz-portal-drawer md:hidden">
+					{/*
+					  The scrim is a real button, not a click-handled div: it is the
+					  primary way out on a touch screen, and a div would be invisible
+					  to a keyboard and to a screen reader.
+					*/}
+					<button
+						type="button"
+						className="iz-portal-drawer__scrim"
+						aria-label={t.shell.closeMenu}
+						onClick={closeMenu}
+					/>
+					<div
+						className="iz-portal-drawer__panel"
+						role="dialog"
+						aria-modal="true"
+						aria-label={t.shell.menu}
+					>
+						{/*
+						  The SAME component the desktop rail renders, with the SAME
+						  merged and permission-filtered list — so a phone can never
+						  drift out of step with what a desktop shows. `onNavigate`
+						  already existed on PortalSidebar for exactly this and had no
+						  caller until now.
+						*/}
+						<PortalSidebar
+							portal={portal}
+							items={localiseNav(sidebarItems, t)}
+							onNavigate={closeMenu}
+						/>
+					</div>
+				</div>
+			)}
+
+				{overlay}
+			</div>
+		</PortalNavAlerts>
 	);
 }

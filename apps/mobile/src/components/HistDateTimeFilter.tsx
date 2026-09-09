@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
+import { font } from '../theme/fonts';
 import { todayYmd, ymdToIso } from '../lib/demo-shifts';
 import {
   calendarNavYears,
@@ -593,30 +594,36 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   timeModalTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 12,
-    fontWeight: '800',
     letterSpacing: 0.8,
     color: C.muted2,
     marginBottom: 10,
   },
+  /*
+   * ⚠️ KEEP IN STEP WITH `filterField` IN ShiftHistoryPanel.
+   *
+   * Date / From time / To time sit in the same block as Outlet / Status and
+   * are the same control, but the two components style them separately — so
+   * the row read as five identical captions and any change to one half left
+   * the other behind. Same border, radius, padding and type here.
+   */
   filterField: {
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: C.line,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderColor: C.line2,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    backgroundColor: 'rgba(0,0,0,0.22)',
   },
   filterFieldOpen: {
     borderColor: 'rgba(232,194,122,0.45)',
     backgroundColor: 'rgba(232,194,122,0.06)',
   },
   filterFieldLabel: {
-    fontFamily: F.sora,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    ...font(800),
+    fontSize: 11,
+    letterSpacing: 0.6,
     color: C.muted2,
   },
   filterFieldValueRow: {
@@ -625,8 +632,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  filterFieldValue: { flex: 1, fontFamily: F.manrope, fontSize: 12, color: C.txt },
-  clearX: { fontFamily: F.sora, fontSize: 14, color: C.muted, paddingHorizontal: 4 },
+  filterFieldValue: { flex: 1, ...font(600), fontSize: 14, color: C.txt },
+  clearX: { ...font(), fontSize: 14, color: C.muted, paddingHorizontal: 4 },
   cal: {
     marginTop: 8,
     borderRadius: 14,
@@ -639,9 +646,8 @@ const styles = StyleSheet.create({
   calNav: { flexDirection: 'row', gap: 10, marginBottom: 8 },
   navField: { flex: 1, minWidth: 0 },
   navLabel: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 9,
-    fontWeight: '700',
     letterSpacing: 0.6,
     color: C.muted2,
     marginBottom: 4,
@@ -661,7 +667,7 @@ const styles = StyleSheet.create({
   selectOpen: {
     borderColor: 'rgba(183,156,232,0.45)',
   },
-  selectText: { flex: 1, fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  selectText: { flex: 1, ...font(600), fontSize: 13, color: C.txt },
   chipScroll: { marginBottom: 10, maxHeight: 44 },
   chipRow: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
   chip: {
@@ -676,14 +682,13 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(183,156,232,0.55)',
     backgroundColor: 'rgba(183,156,232,0.18)',
   },
-  chipText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.muted },
+  chipText: { ...font(600), fontSize: 12, color: C.muted },
   chipTextOn: { color: C.violetL },
   weekdays: { flexDirection: 'row', marginBottom: 6 },
   weekdayCell: { flex: 1, alignItems: 'center' },
   weekday: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 10,
-    fontWeight: '700',
     color: C.muted2,
   },
   grid: { width: '100%' },
@@ -705,7 +710,7 @@ const styles = StyleSheet.create({
   dayFuture: { opacity: 0.35 },
   daySelected: { backgroundColor: C.violetL },
   dayToday: { borderWidth: 1, borderColor: 'rgba(183,156,232,0.55)' },
-  dayNum: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt },
+  dayNum: { ...font(600), fontSize: 14, color: C.txt },
   dayNumOutside: { color: C.muted2, fontWeight: '500' },
   dayNumFuture: { color: C.muted2 },
   dayNumSelected: { color: '#1a1228', fontWeight: '800' },
@@ -732,8 +737,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: C.goldL,
   },
-  legendText: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
-  legendNote: { fontFamily: F.manrope, fontSize: 10, color: C.muted2, lineHeight: 14 },
+  legendText: { ...font(), fontSize: 11, color: C.prMuted },
+  legendNote: { ...font(), fontSize: 10, color: C.muted2, lineHeight: 14 },
   timeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   timePopover: {
     marginTop: 6,
@@ -752,7 +757,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   timeColBtnOn: { backgroundColor: 'rgba(232,194,122,0.15)' },
-  timeColText: { fontFamily: F.sora, fontSize: 14, color: C.muted },
+  timeColText: { ...font(), fontSize: 14, color: C.muted },
   timeColTextOn: { color: C.goldL, fontWeight: '700' },
   timeDone: {
     marginTop: 8,
@@ -761,10 +766,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: 'rgba(232,194,122,0.12)',
   },
-  timeDoneText: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.goldL },
+  timeDoneText: { ...font(700), fontSize: 13, color: C.goldL },
   hint: {
     marginTop: 6,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 11,
     color: C.muted2,
     lineHeight: 15,

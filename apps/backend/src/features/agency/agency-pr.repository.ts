@@ -188,6 +188,7 @@ export class AgencyPrRepository {
           agencyId: AgencyPrTable.agencyId,
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
+          memberCodePrefix: AgencyTable.memberCodePrefix,
           approveStatus: AgencyPrTable.approveStatus,
           tier: AgencyPrTable.tier,
         })
@@ -383,7 +384,11 @@ export class AgencyPrRepository {
    * post-0089, but old rows may carry only one, and a gate scoped to a single
    * column would let a money-owed PR leave through the other.
    */
-  async listLeaveBlockers(agencyId: string, userId: string): Promise<string[]> {
+  async listLeaveBlockers(
+    agencyId: string,
+    userId: string,
+    opts: { named?: boolean } = {},
+  ): Promise<string[]> {
     const blockers: string[] = [];
     try {
       const payee = or(
@@ -396,13 +401,21 @@ export class AgencyPrRepository {
         .from(PaymentVoucherTable)
         .where(and(eq(PaymentVoucherTable.agencyId, agencyId), payee, ne(PaymentVoucherTable.status, 'paid')));
       if (unpaid.length > 0) {
-        // Name the papers — "2 vouchers unpaid" alone sends the PR hunting.
-        const named = unpaid
-          .slice(0, 3)
-          .map((v) => `${v.voucherNo ?? 'unnumbered'} — ${v.status}`)
-          .join(', ');
+        const count = `${unpaid.length} unpaid payment voucher${unpaid.length === 1 ? '' : 's'}`;
+        // Named for the AGENCY only. The PR sees the count alone: they cannot
+        // settle a voucher, and the papers are already listed on their Payment
+        // screen, so numbers in a refusal were noise. The agency has to go and
+        // pay these exact ones.
+        const named = opts.named
+          ? unpaid
+              .slice(0, 3)
+              .map((v) => v.voucherNo ?? 'unnumbered')
+              .join(', ')
+          : '';
         blockers.push(
-          `${unpaid.length} payment voucher${unpaid.length === 1 ? ' is' : 's are'} not fully paid yet (${named}${unpaid.length > 3 ? ', …' : ''})`,
+          named
+            ? `${count} (${named}${unpaid.length > 3 ? ', …' : ''})`
+            : count,
         );
       }
 
@@ -415,7 +428,7 @@ export class AgencyPrRepository {
         );
       if ((openDisputes?.count ?? 0) > 0) {
         blockers.push(
-          `${openDisputes.count} dispute${openDisputes.count === 1 ? ' is' : 's are'} still open on those vouchers`,
+          `${openDisputes.count} open dispute${openDisputes.count === 1 ? '' : 's'}`,
         );
       }
 
@@ -445,7 +458,7 @@ export class AgencyPrRepository {
         );
       if ((activeShifts?.count ?? 0) > 0) {
         blockers.push(
-          `${activeShifts.count} upcoming or unfinished shift${activeShifts.count === 1 ? '' : 's'} with this agency`,
+          `${activeShifts.count} upcoming or unfinished shift${activeShifts.count === 1 ? '' : 's'}`,
         );
       }
 

@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatMessage, useLocale } from '../../i18n';
 import type { SignupFieldCopy } from '../../i18n/signup-copy';
 import { C, F, GRADIENTS, grad } from '../../theme/theme';
+import { font } from '../../theme/fonts';
 import { Camera, Check, Shield } from '../../components/icons';
 import { captureFromCamera } from '../../lib/photo-file';
 import {
@@ -673,7 +674,7 @@ const styles = StyleSheet.create({
   },
   introBody: {
     flex: 1,
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 13,
     lineHeight: 18,
     color: C.prMuted,
@@ -687,9 +688,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.panel,
   },
   label: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.txt,
     marginBottom: 8,
   },
@@ -710,7 +710,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.bg2,
   },
   ocrLine: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.muted2,
@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
   ocrOk: { color: C.green },
   ocrBad: { color: C.red },
   error: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     color: C.red,
     marginTop: 4,
@@ -736,9 +736,8 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   btnPrimaryText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: '#241a08',
   },
   btnSoft: {
@@ -752,9 +751,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnSoftText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.prMuted,
   },
   okBanner: {
@@ -771,13 +769,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   okBannerText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 13,
-    fontWeight: '700',
     color: C.green,
   },
   okBannerHint: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 12,
     lineHeight: 17,
     color: C.prMuted,
@@ -799,14 +796,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   promptTitle: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 18,
-    fontWeight: '800',
     color: C.txt,
     textAlign: 'center',
   },
   promptBody: {
-    fontFamily: F.manrope,
+    ...font(),
     fontSize: 14,
     lineHeight: 20,
     color: C.prMuted,
@@ -821,16 +817,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   promptEnableText: {
-    fontFamily: F.sora,
+    ...font(800),
     fontSize: 15,
-    fontWeight: '800',
     color: '#241a08',
   },
   promptCancel: { paddingVertical: 10, paddingHorizontal: 16 },
   promptCancelText: {
-    fontFamily: F.sora,
+    ...font(700),
     fontSize: 14,
-    fontWeight: '700',
     color: C.muted2,
   },
 });

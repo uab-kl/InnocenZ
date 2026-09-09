@@ -41,7 +41,7 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 /* "Full roster" hub link — match the section title's font size (the portal's
  * scoped text-base computes to 22.5px, which 1rem does not). */
 [data-portal="agency"] .iz-portal-hub-link {
-	font-size: 22.5px !important;
+	font-size: 22px !important;
 }
 
 /* ── Collapse-to-icons sidebar ─────────────────────────────────────────────
@@ -99,6 +99,23 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 	background: color-mix(in oklab, var(--iz-panel, #211c30) 80%, #fff);
 }
 
+/*
+ * COLLAPSED RAIL: 72px of icon, no label, and `margin-left:auto` with nothing
+ * to push against would drop the pill straight onto the icon. It becomes a
+ * corner dot instead — still visible, still coloured, no number, because two
+ * digits do not fit over an 18px glyph and a clipped "12" reading as "1" is
+ * worse than no number at all.
+ *
+ * The positioning context is set here on the BASE selector rather than inside
+ * each collapsed rule. Both triggers need it, one of them lives in a media
+ * query, and a lower-specificity rule declared after a higher-specificity one
+ * is exactly the descending-specificity trap — so it is declared once, first,
+ * and a relatively-positioned nav link costs nothing when no badge is present.
+ */
+.iz-portal-nav-link {
+	position: relative;
+}
+
 /* Collapsed state: icon-only rail. */
 .iz-portal[data-collapsed="true"] {
 	--iz-portal-sidebar-w: 72px;
@@ -114,7 +131,14 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 	padding-left: 0;
 	padding-right: 0;
 }
-.iz-portal[data-collapsed="true"] .iz-portal-nav-link > span {
+/*
+ * The LABEL, not every span. This was a bare `> span`, and the count badge is
+ * also a direct span child — so adding one to the rail gave it a pill that was
+ * `display: none` the moment anybody collapsed the sidebar. Nothing failed and
+ * nothing warned: the badge was in the DOM, measuring 0x0.
+ */
+.iz-portal[data-collapsed="true"] .iz-portal-nav-link
+	> span:not(.iz-nav-alert) {
 	display: none;
 }
 .iz-portal[data-collapsed="true"] .iz-portal-sidebar-brand {
@@ -162,4 +186,107 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 }
 .iz-portal[data-collapsed="true"] .iz-portal-sidebar-foot {
 	min-width: 0;
+}
+
+/*
+ * NAV COUNT BADGES — the pill beside a sidebar row or over a tab-bar icon.
+ *
+ * Colour follows the owner's status code (23 Aug 2026): AMBER is waiting and
+ * RED is disputed or deducted. So a backlog of sign-ups, receipts or unpaid
+ * periods is amber, and only a pile containing a PR contesting their money goes
+ * red. `portal-nav-alerts.ts` decides which; this only paints it.
+ *
+ * `margin-left: auto` pushes it to the far edge of the rail, the way the source
+ * design puts its counts — which also means the row needs no extra structure.
+ */
+.iz-nav-alert {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 20px;
+	height: 20px;
+	padding: 0 6px;
+	border-radius: 999px;
+	font-family: var(--iz-font);
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	margin-left: auto;
+	border: 1px solid transparent;
+}
+
+.iz-nav-alert[data-tone="amber"] {
+	color: #12100c;
+	background: var(--iz-amber, #e8c27a);
+	border-color: color-mix(in oklab, var(--iz-amber, #e8c27a) 70%, #000);
+}
+
+.iz-nav-alert[data-tone="red"] {
+	color: #fff;
+	background: var(--iz-red, #ff6b6b);
+	border-color: color-mix(in oklab, var(--iz-red, #ff6b6b) 70%, #000);
+}
+
+/* `.iz-portal-nav-link` in the middle is load-bearing: the mobile tab bar lives
+   INSIDE `.iz-portal` too, so the unscoped selector shrank its numbered pill to a
+   dot on every phone whose user had once collapsed the desktop rail — a setting
+   that persists in localStorage and has nothing to do with a phone. */
+.iz-portal[data-collapsed="true"] .iz-portal-nav-link .iz-nav-alert {
+	position: absolute;
+	top: 4px;
+	right: 10px;
+	min-width: 10px;
+	width: 10px;
+	height: 10px;
+	padding: 0;
+	margin-left: 0;
+	font-size: 0;
+	overflow: hidden;
+}
+
+/*
+ * MOBILE TAB BAR: the pill rides the icon, so the icon needs to be the
+ * positioning context. Without this wrapper the badge would anchor to the whole
+ * link and land between the icon and its label.
+ */
+.iz-tabbar-icon {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.iz-tabbar-icon .iz-nav-alert {
+	position: absolute;
+	top: -6px;
+	left: 100%;
+	transform: translateX(-40%);
+	margin-left: 0;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	font-size: 11px;
+}
+
+/*
+ * THE TABLET BAND collapses the rail by media query alone — no
+ * `data-collapsed` attribute — so the corner-dot rule above cannot see it.
+ * Same treatment, second trigger. Two ways to reach one visual state is a
+ * shape worth remembering: the first fix looked complete and was blind to
+ * every screen between 768px and 1023px.
+ */
+@media (min-width: 768px) and (max-width: 1023px) {
+	.iz-portal-nav-link .iz-nav-alert {
+		position: absolute;
+		top: 4px;
+		right: 10px;
+		min-width: 10px;
+		width: 10px;
+		height: 10px;
+		padding: 0;
+		margin-left: 0;
+		font-size: 0;
+		overflow: hidden;
+	}
 }

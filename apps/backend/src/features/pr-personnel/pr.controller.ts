@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { ensurePersonCode } from '@/util/member-code';
 import { randomUUID } from 'crypto';
 import type { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 import { PrRepositoryClass } from './pr.repository';
@@ -804,6 +805,9 @@ export class PrControllerClass {
             // Unique (user, role) — ignore if already assigned.
           }
         }
+        // The PR id follows the role, not the user row: this path creates the
+        // account first and grants  a statement later.
+        await ensurePersonCode(userId);
       }
 
       await this.userProfileRepository.update(userId, {

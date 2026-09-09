@@ -131,7 +131,7 @@ export function PrComcardPickerThumb({
 					style={{ fontSize: "5.33cqw", padding: "0.105em 0.501em" }}
 				>
 					{/* Not `truncate` — the plate widens for the name instead of cutting it. */}
-					<p className="whitespace-nowrap font-sora font-extrabold leading-tight tracking-wide text-[#111]">
+					<p className="whitespace-nowrap iz-heading font-extrabold leading-tight tracking-wide text-[#111]">
 						{pr.name}
 					</p>
 					<p

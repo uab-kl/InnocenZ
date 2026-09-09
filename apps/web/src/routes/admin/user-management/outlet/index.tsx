@@ -29,7 +29,7 @@ import {
 	type OutletsQueryParams,
 } from "@/services/outlet";
 
-export const Route = createFileRoute("/admin/user-management/outlet")({
+export const Route = createFileRoute("/admin/user-management/outlet/")({
 	component: OutletOrgsPage,
 	validateSearch: (search: Record<string, unknown>): { focus?: string } =>
 		typeof search.focus === "string" ? { focus: search.focus } : {},

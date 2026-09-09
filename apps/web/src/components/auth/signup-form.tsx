@@ -5,11 +5,15 @@ import {
 	AtSign,
 	BadgeCheck,
 	Building2,
+	CalendarDays,
 	Check,
 	CheckCircle2,
 	ChevronsUpDown,
 	Eye,
 	EyeOff,
+	FileText,
+	Globe,
+	IdCard,
 	ImagePlus,
 	Loader2,
 	Lock,
@@ -73,6 +77,7 @@ import {
 	listCities,
 	listStates,
 } from "@/lib/geo/country-state-city";
+import { ageFromDob, dobFromNric, genderFromNric } from "@/lib/ic-identity";
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { cn } from "@/lib/utils";
 
@@ -94,6 +99,7 @@ const SIGNUP_STEPS = [
 			"companyName",
 			"companyRegistrationOld",
 			"companyRegistrationNew",
+			"businessLicense",
 			"addressLine1",
 			"addressLine2",
 			"city",
@@ -105,7 +111,16 @@ const SIGNUP_STEPS = [
 	{
 		id: "contact",
 		section: "contactInfo",
-		fields: ["personInCharge", "phoneNum", "email"],
+		fields: [
+			"personInCharge",
+			"idType",
+			"idNo",
+			"gender",
+			"dob",
+			"nationality",
+			"phoneNum",
+			"email",
+		],
 	},
 	{
 		id: "login",
@@ -270,6 +285,7 @@ export function SignupForm() {
 			companyName: "",
 			companyRegistrationOld: "",
 			companyRegistrationNew: "",
+			businessLicense: "",
 			addressLine1: "",
 			addressLine2: "",
 			city: "",
@@ -277,6 +293,13 @@ export function SignupForm() {
 			stateCode: "",
 			countryCode: DEFAULT_COUNTRY_CODE,
 			personInCharge: "",
+			// NRIC is the default because almost every owner holds one, and it is the
+			// branch that fills in the birth date, age and gender by itself.
+			idType: "NRIC",
+			idNo: "",
+			gender: "",
+			dob: "",
+			nationality: "",
 			phoneNum: "",
 			email: "",
 			loginEmail: "",
@@ -525,6 +548,21 @@ export function SignupForm() {
 								</form.Field>
 							</div>
 
+							{/* Its own row under the two registration numbers, because it is a
+							    third document and not a variant of either: SSM registers the
+							    company, the licence permits it to trade. */}
+							<form.Field name="businessLicense">
+								{(field) => (
+									<SignupTextField
+										field={field}
+										label={fields.businessLicense.label}
+										icon={FileText}
+										placeholder={fields.businessLicense.placeholder}
+										isSubmitting={form.state.isSubmitting}
+									/>
+								)}
+							</form.Field>
+
 							<form.Field name="addressLine1">
 								{(field) => (
 									<SignupTextField
@@ -673,11 +711,167 @@ export function SignupForm() {
 										label={fields.personInCharge.label}
 										icon={UserRound}
 										placeholder={fields.personInCharge.placeholder}
+										description={fields.personInCharge.hint}
 										autoComplete="name"
 										isSubmitting={form.state.isSubmitting}
 									/>
 								)}
 							</form.Field>
+
+							{/*
+							 * IDENTITY. Until 9 Sep 2026 organisation sign-up asked for a
+							 * name, a phone and an email — which is why every owner’s IC,
+							 * birth date and gender read as blank on the admin screens while
+							 * PR sign-up had collected all three since day one.
+							 */}
+							<form.Field name="idType">
+								{(field) => (
+									<SignupChoiceField
+										name={field.name}
+										label={fields.idType.label}
+										value={field.state.value}
+										onChange={(next) => field.handleChange(next)}
+										disabled={form.state.isSubmitting}
+										options={[
+											{ value: "NRIC", label: fields.idType.nric },
+											{ value: "Passport", label: fields.idType.passport },
+										]}
+									/>
+								)}
+							</form.Field>
+
+							<form.Subscribe selector={(state) => state.values.idType}>
+								{(idType) => (
+									<>
+										<form.Field name="idNo">
+											{(field) => (
+												<SignupTextField
+													field={field}
+													label={fields.idNo.label}
+													icon={IdCard}
+													placeholder={
+														idType === "NRIC"
+															? fields.idNo.placeholderNric
+															: fields.idNo.placeholderPassport
+													}
+													/*
+													 * Read the IC back to its owner AS THEY TYPE. The
+													 * server derives the same two values and stores its
+													 * own answer, so this is not the source of anything
+													 * — it is the only moment the one person who knows
+													 * the date is looking at what the number says.
+													 */
+													description={
+														idType === "NRIC"
+															? (icReadback(
+																	field.state.value,
+																	fields.icDerived,
+																) ?? undefined)
+															: undefined
+													}
+													isSubmitting={form.state.isSubmitting}
+												/>
+											)}
+										</form.Field>
+
+										{/*
+										 * The IC cross-check lives HERE and not only in the schema.
+										 * A zod `.superRefine` on the object does not run until
+										 * every field in it parses, so on a form this long the
+										 * mismatch would stay silent until the very last field was
+										 * filled — which is the wrong moment to learn that the id
+										 * number was mistyped. The schema keeps its copy so a
+										 * submit cannot slip past; this one is what the person sees.
+										 */}
+										<form.Field
+											name="gender"
+											validators={{
+												onChangeListenTo: ["idNo", "idType"],
+												onChange: ({ value, fieldApi }) => {
+													if (!value) return undefined;
+													if (
+														fieldApi.form.getFieldValue("idType") !== "NRIC"
+													) {
+														return undefined;
+													}
+													const fromIc = genderFromNric(
+														fieldApi.form.getFieldValue("idNo"),
+													);
+													return fromIc && fromIc !== value
+														? copy.validation.genderMismatch
+														: undefined;
+												},
+											}}
+										>
+											{(field) => (
+												<SignupChoiceField
+													name={field.name}
+													label={fields.gender.label}
+													value={field.state.value}
+													onChange={(next) => field.handleChange(next)}
+													disabled={form.state.isSubmitting}
+													hint={
+														idType === "NRIC" ? fields.gender.hint : undefined
+													}
+													invalid={
+														field.state.meta.isDirty &&
+														!field.state.meta.isValid
+													}
+													/* Guarded on `isDirty`, exactly like the text fields:
+													   an untouched form was greeting every visitor with
+													   “Gender is required” before they had typed anything. */
+													error={
+														field.state.meta.isDirty &&
+														!field.state.meta.isValid
+															? field.state.meta.errors
+																	.map((e) =>
+																		typeof e === "string"
+																			? e
+																			: (e?.message ?? ""),
+																	)
+																	.filter(Boolean)[0]
+															: undefined
+													}
+													options={[
+														{ value: "male", label: fields.gender.male },
+														{ value: "female", label: fields.gender.female },
+													]}
+												/>
+											)}
+										</form.Field>
+
+										{/* A passport carries neither a birth date nor a gender, so
+										    the two facts the NRIC would have supplied are asked for
+										    outright — and only then. */}
+										{idType !== "NRIC" && (
+											<>
+												<form.Field name="dob">
+													{(field) => (
+														<SignupTextField
+															field={field}
+															label={fields.dob.label}
+															icon={CalendarDays}
+															placeholder={fields.dob.placeholder}
+															isSubmitting={form.state.isSubmitting}
+														/>
+													)}
+												</form.Field>
+												<form.Field name="nationality">
+													{(field) => (
+														<SignupTextField
+															field={field}
+															label={fields.nationality.label}
+															icon={Globe}
+															placeholder={fields.nationality.placeholder}
+															isSubmitting={form.state.isSubmitting}
+														/>
+													)}
+												</form.Field>
+											</>
+										)}
+									</>
+								)}
+							</form.Subscribe>
 
 							<form.Field name="phoneNum">
 								{(field) => (
@@ -1187,6 +1381,107 @@ interface SignupTextFieldProps {
 	onValueChange?: (value: string) => void;
 }
 
+/**
+ * What the IC says, as one line under the number field: `From your IC: born
+ * 1995-03-12 · age 31`. Null while the number is not yet a whole NRIC, so the
+ * line appears when it becomes true rather than flickering a wrong date on the
+ * way there.
+ */
+function icReadback(idNo: string, template: string): string | null {
+	const dob = dobFromNric(idNo);
+	if (!dob) return null;
+	const age = ageFromDob(dob);
+	return fillTemplate(template, {
+		date: dob,
+		age: age == null ? "—" : String(age),
+	});
+}
+
+/** `{name}` → value. The landing dictionary has no fill helper of its own. */
+function fillTemplate(
+	template: string,
+	values: Record<string, string>,
+): string {
+	return template.replace(/\{(\w+)\}/g, (whole, key: string) =>
+		key in values ? values[key] : whole,
+	);
+}
+
+/**
+ * Two or three exclusive pills — ID type, gender. A radiogroup of buttons
+ * rather than a <select>: both choices are always visible, which is what makes
+ * a wrong one obvious, and it matches the account-type cards at the top of the
+ * same form.
+ */
+function SignupChoiceField({
+	name,
+	label,
+	value,
+	onChange,
+	options,
+	disabled,
+	hint,
+	invalid,
+	error,
+}: {
+	name: string;
+	label: string;
+	value: string;
+	onChange: (next: string) => void;
+	options: { value: string; label: string }[];
+	disabled?: boolean;
+	hint?: string;
+	invalid?: boolean;
+	error?: string;
+}) {
+	return (
+		<Field data-invalid={invalid}>
+			<FieldLabel htmlFor={name} className="login-field-label">
+				{label}
+				<RequiredMark />
+			</FieldLabel>
+			<div
+				id={name}
+				role="radiogroup"
+				aria-label={label}
+				className="grid grid-cols-2 gap-3"
+			>
+				{options.map((option) => {
+					const selected = value === option.value;
+					return (
+						// biome-ignore lint/a11y/useSemanticElements: role="radio" on a <button> inside role="radiogroup" is the WAI-ARIA composite pattern the account-type cards above already use
+						<button
+							key={option.value}
+							type="button"
+							role="radio"
+							aria-checked={selected}
+							disabled={disabled}
+							onClick={() => onChange(option.value)}
+							className={cn(
+								"rounded-xl border px-4 py-3 text-center text-sm font-medium transition-all",
+								selected
+									? "border-royal-gold/60 bg-royal-gold/10 text-foreground shadow-glow-gold"
+									: "border-royal-gold/20 bg-background/40 text-muted-foreground hover:border-royal-gold/35",
+							)}
+						>
+							{option.label}
+						</button>
+					);
+				})}
+			</div>
+			{(error ?? hint) && (
+				<FieldDescription
+					className={cn(
+						"signup-helper",
+						error ? "text-destructive" : "text-muted-foreground",
+					)}
+				>
+					{error ?? hint}
+				</FieldDescription>
+			)}
+		</Field>
+	);
+}
 function SignupTextField({
 	field,
 	label,

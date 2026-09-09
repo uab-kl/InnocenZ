@@ -441,7 +441,7 @@ function TimetableRow({
 					<SourceBadge source={entry.source} label={entry.sourceLabel} />
 					<div className="mt-2 flex flex-wrap items-center gap-2">
 						<CalendarDays className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted2)]" />
-						<span className="font-sora text-sm font-bold">{entry.outlet}</span>
+						<span className="iz-heading text-sm font-bold">{entry.outlet}</span>
 						<PrStatusPill variant={entry.statusVariant}>
 							{entry.statusLabel}
 						</PrStatusPill>

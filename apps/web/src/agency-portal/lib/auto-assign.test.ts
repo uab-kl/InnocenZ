@@ -364,9 +364,7 @@ describe("buildAutoAssignPlan — rival bookings, as times only", () => {
 			// Requested too, to prove the venue's ask does not override a real
 			// clash — she cannot work it, and no ranking can change that.
 			requested: new Map([["shift-1", new Set(["vicky"])]]),
-			crossAgencyBusy: [
-				{ userId: "vicky", date: DATE, slot: "22:00 - 04:00" },
-			],
+			crossAgencyBusy: [{ userId: "vicky", date: DATE, slot: "22:00 - 04:00" }],
 		});
 		expect(plan.pairs.map((p) => p.prId)).toEqual(["abby"]);
 	});
@@ -374,9 +372,7 @@ describe("buildAutoAssignPlan — rival bookings, as times only", () => {
 	test("a rival booking at another hour does not hide them", () => {
 		const plan = planWith({
 			prs: [pr("vicky", "Vicky")],
-			crossAgencyBusy: [
-				{ userId: "vicky", date: DATE, slot: "10:00 - 11:00" },
-			],
+			crossAgencyBusy: [{ userId: "vicky", date: DATE, slot: "10:00 - 11:00" }],
 		});
 		expect(plan.pairs.map((p) => p.prId)).toEqual(["vicky"]);
 	});
@@ -429,9 +425,7 @@ describe("validateAutoAssignPairs — the pre-write re-check agrees", () => {
 			pairs: [pair],
 			shifts: [shift()],
 			assignments: [],
-			crossAgencyBusy: [
-				{ userId: "vicky", date: DATE, slot: "22:00 - 04:00" },
-			],
+			crossAgencyBusy: [{ userId: "vicky", date: DATE, slot: "22:00 - 04:00" }],
 		});
 		expect(valid).toEqual([]);
 		expect(dropped[0]?.reason).toBe("pr-busy");

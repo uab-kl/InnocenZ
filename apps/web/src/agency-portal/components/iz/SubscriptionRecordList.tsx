@@ -1,5 +1,11 @@
 import { InvoiceReceipt } from "@agency-portal/components/iz/InvoiceReceipt";
 import { formatRM, IzCard, IzPill } from "@agency-portal/components/iz/ui";
+import {
+	countBillingWindows,
+	dueStatusFor,
+	formatDueDate,
+	overdueSummary,
+} from "@agency-portal/lib/subscription-due";
 import { periodLabel } from "@agency-portal/lib/subscription-record";
 import { useMutation } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
@@ -146,11 +152,14 @@ export function PaymentHistoryList({
 					<p className="iz-tiny font-semibold uppercase tracking-wide text-[var(--iz-green)]">
 						{t.subscription.statusPaid}
 					</p>
-					<p className="mt-0.5 font-sora text-base font-bold text-[var(--iz-green)]">
+					<p className="mt-0.5 iz-heading text-base font-bold text-[var(--iz-green)]">
 						{formatRM(sum(paid))}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">
-						{fill(t.subscription.periodsCount, { n: paid.length })}
+						{/* PERIODS, not invoice rows — see `countBillingWindows`. */}
+						{fill(t.subscription.periodsCount, {
+							n: countBillingWindows(paid),
+						})}
 					</p>
 				</button>
 				<button
@@ -164,11 +173,13 @@ export function PaymentHistoryList({
 					<p className="iz-tiny font-semibold uppercase tracking-wide text-amber-300">
 						{t.subscription.statusUnpaid}
 					</p>
-					<p className="mt-0.5 font-sora text-base font-bold text-amber-300">
+					<p className="mt-0.5 iz-heading text-base font-bold text-amber-300">
 						{formatRM(sum(unpaid))}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">
-						{fill(t.subscription.periodsCount, { n: unpaid.length })}
+						{fill(t.subscription.periodsCount, {
+							n: countBillingWindows(unpaid),
+						})}
 					</p>
 				</button>
 			</div>
@@ -182,6 +193,7 @@ export function PaymentHistoryList({
 					</IzCard>
 				) : (
 					<div className="space-y-2">
+						<OverduePaymentWarning invoices={unpaid} />
 						<p className="iz-tiny iz-muted2">{t.subscription.selectToPay}</p>
 						{groupByPeriod(unpaid).map((group) => (
 							<PeriodCard
@@ -268,6 +280,104 @@ export function PaymentHistoryList({
  * the lanes sit under it with their own figures and status — and the window's
  * total beside the date when there is more than one lane to add up.
  */
+/**
+ * THE RED WARNING: what is genuinely LATE.
+ *
+ * ⚠️ It reports OVERDUE money, never unpaid money, and the difference is the
+ * whole reason it earns a place on the screen. The amber UNPAID tile above
+ * already counts every open period INCLUDING the one being used right now — an
+ * agency that pays on time, every week, always has one of those. Warning on
+ * "unpaid" would put a red banner in front of a customer who owes nothing yet,
+ * every single week, and a warning that is always on is a warning nobody reads.
+ *
+ * Red, not amber, and that is deliberate against the house rule that amber
+ * means WAITING: nobody is waiting here. The money is late. `UnpaidBillingBanner`
+ * on the home page stays amber precisely because it reports the other thing.
+ *
+ * Renders NOTHING when nothing is late.
+ */
+function OverduePaymentWarning({
+	invoices,
+}: {
+	invoices: SubscriptionInvoice[];
+}) {
+	const { t } = usePortalLocale();
+	/*
+	 * The clock is read ONCE per render and passed down, so every row and the
+	 * summary agree on what "today" is. Separate `new Date()` calls a few lines
+	 * apart can straddle midnight and print a period as both due and overdue.
+	 */
+	const summary = overdueSummary(invoices, "weekly", new Date());
+	if (summary.count === 0) return null;
+	return (
+		<div className="iz-card iz-card-flat border-[rgba(240,138,138,.45)] bg-[rgba(240,138,138,.08)]">
+			<p className="iz-sm font-bold text-[var(--iz-red)]">
+				{t.subscription.agingOverdue}
+			</p>
+			<p className="iz-tiny iz-muted mt-1">
+				{fill(t.subscription.overdueWarning, {
+					amount: formatRM(summary.amountRm),
+					n: summary.count,
+					date: formatDueDate(summary.oldestDueIso),
+					days: summary.oldestDaysOverdue,
+				})}
+			</p>
+		</div>
+	);
+}
+
+/**
+ * "Due 29 Aug 2026 · 10 days overdue" under a period that still owes.
+ *
+ * Takes the period’s ROWS rather than one invoice because a period can hold
+ * several lanes (an outlet’s plan beside its POS add-on). They share a window,
+ * so they share a due date; the WORST bucket wins the pill, because a period is
+ * as late as its latest part.
+ */
+function PeriodDueLine({ rows }: { rows: SubscriptionInvoice[] }) {
+	const { t } = usePortalLocale();
+	const today = new Date();
+	const owing = rows.filter((row) => row.status !== "paid");
+	const first = owing[0];
+	if (!first) return null;
+	// `billingCycle` rides on the invoice, so the fallback here is never the
+	// thing deciding the term — it only keeps the types honest.
+	const status = dueStatusFor(first, "weekly", today);
+	if (!status.dueIso) return null;
+
+	const tone =
+		status.bucket === "overdue"
+			? "text-[var(--iz-red)]"
+			: status.bucket === "due_soon"
+				? "text-amber-300"
+				: "iz-muted2";
+
+	/*
+	 * ONE is a different sentence, not the plural with the "s" filed off.
+	 * "Due in 1 days" reached the screen before this existed — and the same
+	 * trap sits on the overdue side the first day something is a day late.
+	 * Two whole strings per case, because Chinese has no plural to append.
+	 */
+	const suffix =
+		status.bucket === "overdue"
+			? status.daysOverdue === 1
+				? t.subscription.overdueByOneDay
+				: fill(t.subscription.overdueByDays, { n: status.daysOverdue })
+			: status.periodInProgress
+				? t.subscription.currentPeriodNotDue
+				: status.daysUntilDue === 1
+					? t.subscription.dueInOneDay
+					: fill(t.subscription.dueInDays, { n: status.daysUntilDue });
+
+	return (
+		<span className={`iz-tiny block truncate ${tone}`}>
+			{fill(t.subscription.dueOn, { date: formatDueDate(status.dueIso) })}
+			{" · "}
+			{suffix}
+		</span>
+	);
+}
+
 function PeriodCard({
 	rows,
 	laneOf,
@@ -344,8 +454,14 @@ function PeriodCard({
 				>
 					<span className="flex min-w-0 items-center gap-2">
 						<Receipt className="h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
-						<span className="iz-sm truncate font-semibold">
-							{periodLabel(first.periodStart, first.periodEnd)}
+						<span className="min-w-0">
+							<span className="iz-sm block truncate font-semibold">
+								{periodLabel(first.periodStart, first.periodEnd)}
+							</span>
+							{/* WHEN it has to be paid, under WHICH period it is for. Only on
+							    a period that still owes: a settled one has a paid stamp in
+							    its rows, and a due date beside that answers nothing. */}
+							<PeriodDueLine rows={rows} />
 						</span>
 					</span>
 					<span className="flex shrink-0 items-center gap-2">

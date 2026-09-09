@@ -1,0 +1,21 @@
+-- Give the OLD-format registration number its own column, so the business
+-- licence can have `business_license` back.
+--
+-- Sign-up asks three different things and, until now, had two places to put
+-- them: the old registration number was being written into `business_license`
+-- because that column happened to be free. It is not free — Velvet 23 holds
+-- `BL-57626` there, next to SSM `SSM-864650-X`, which is exactly the point:
+-- a licence to trade and a company registration are different documents, and
+-- one column cannot hold both without the screen lying about which it shows.
+--
+-- So from here: `ssm_no` = the new registration number, `registration_no_old`
+-- = the old-format one, `business_license` = the licence, asked for outright
+-- and required of both organisation kinds (owner, 9 Sep 2026: "add one more
+-- row under the registration number a 'business license' required at sign up
+-- page for agency and outlet").
+--
+-- Nullable on both tables: every existing row predates the question, and the
+-- venues carrying a real licence keep it untouched.
+ALTER TABLE "main"."agency" ADD COLUMN IF NOT EXISTS "registration_no_old" varchar(50);
+--> statement-breakpoint
+ALTER TABLE "main"."outlet" ADD COLUMN IF NOT EXISTS "registration_no_old" varchar(50);

@@ -18,7 +18,7 @@ export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
 	return (
 		<div className="iz-receipt-slip">
 			<div className="iz-scanbox iz-receipt-slip__capture">
-				<div className="font-sora w-full text-left text-[11px] leading-relaxed text-[var(--iz-txt)]">
+				<div className="iz-heading w-full text-left text-[11px] leading-relaxed text-[var(--iz-txt)]">
 					<b className="text-[var(--iz-violet-l)]">
 						{manual
 							? t.prMedia.manualEntryBanner

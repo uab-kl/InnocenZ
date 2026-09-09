@@ -58,6 +58,9 @@ const registerProfileFields = {
   nationality: z.string().trim().min(1).max(100).optional(),
   idType: z.enum(idTypeValues).optional(),
   idNo: z.string().trim().min(1).max(32).optional(),
+  /** Stated by the person. The NRIC also encodes one; the two must agree — see
+      the org branch of `register`. */
+  gender: z.enum(['male', 'female']).optional(),
   dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be YYYY-MM-DD').optional(),
   addressLine1: z.string().trim().min(1).max(255).optional(),
   addressLine2: z
@@ -110,6 +113,9 @@ const registerOrgFields = {
     .optional()
     .transform((value) => (value ? value : undefined)),
   companyRegistrationNew: z.string().trim().min(1).max(50).optional(),
+  /** Licence to trade. Required of BOTH kinds since 9 Sep 2026 — it used to be
+      inferred from `companyRegistrationOld`, which is a different document. */
+  businessLicense: z.string().trim().min(1).max(100).optional(),
   companyAddress: z.string().trim().min(1).max(500).optional(),
   personInCharge: z.string().trim().min(1).max(100).optional(),
   /** PIC contact email (may differ from login `email`). */
@@ -183,7 +189,14 @@ const RegisterSchema = z
     const required: Array<[keyof typeof data, string]> = [
       ['companyName', 'Company name is required'],
       ['companyRegistrationNew', 'Company registration (new) is required'],
-      ['personInCharge', 'Person in charge is required'],
+      ['businessLicense', 'Business license is required'],
+      ['personInCharge', 'Full name (as per IC) is required'],
+      // Identity at ORGANISATION sign-up (owner, 9 Sep 2026). It used to ask for
+      // a name, a phone and an email, which is why every owner’s IC, birth date
+      // and gender read as blank on the admin screens.
+      ['idType', 'ID type is required'],
+      ['idNo', 'ID number is required'],
+      ['gender', 'Gender is required'],
       ['password', 'Password must be at least 6 characters long'],
       // No outlet or agency may exist without a subscription plan (owner's
       // call, 2 Sep 2026). The field was `.optional()` while the form marked it

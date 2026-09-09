@@ -10,6 +10,12 @@ export const UserTable = MainSchema.table('user', {
     phoneNum: varchar('phone_num').unique(),
     profileImage: varchar('profile_image'),
     username: varchar('username', { length: 100 }).notNull(),
+    /**
+     * Human-readable id for a person who belongs to no organisation — a PR
+     * (INNPR0001) or an admin (INNADM0001). Organisation operators are keyed
+     * per membership instead, on agency_user / outlet_user (0154).
+     */
+    memberCode: varchar('member_code', { length: 32 }),
     passwordHash: varchar('password_hash', { length: 255 }),
     status: varchar('status', { length: 100 }).$type<UserStatus>().notNull(),
     /**
