@@ -111,6 +111,14 @@ function AgencyProfile() {
 	const [photoSource, setPhotoSource] = useState<PendingAvatarPick | null>(
 		null,
 	);
+	/**
+	 * The source as the SERVER last described it — what the saved logo was made
+	 * from. Held in a ref so entering or cancelling an edit can restore it, rather
+	 * than resetting to null and losing Adjust for the rest of the visit. Whether
+	 * that reset bit depended on the fetch landing before the click, so the
+	 * button came and went by luck. Outlet Settings carries the same fix.
+	 */
+	const storedSource = useRef<PendingAvatarPick | null>(null);
 
 	/**
 	 * Load the stored ORIGINAL so "Adjust crop" works on a logo saved in an
@@ -132,18 +140,19 @@ function AgencyProfile() {
 		let cancelled = false;
 		void fetchAgencyLogoSource(agencyId, logout).then((source) => {
 			if (cancelled || !source) return;
-			setPhotoSource(
-				(prev) =>
-					prev ?? {
-						dataUrl: source.dataUrl,
-						fileName: source.fileName,
-						contentType: source.contentType,
-						state: source.state ?? undefined,
-						// No original was kept: this is the saved crop, and the sheet
-						// says so rather than pretending a re-crop is free.
-						fallback: source.fallback,
-					},
-			);
+			const fetched: PendingAvatarPick = {
+				dataUrl: source.dataUrl,
+				fileName: source.fileName,
+				contentType: source.contentType,
+				state: source.state ?? undefined,
+				// No original was kept: this is the saved crop, and the sheet says so
+				// rather than pretending a re-crop is free.
+				fallback: source.fallback,
+			};
+			// Remembered even if a pick already won the race below, so entering or
+			// cancelling an edit can come back to it.
+			storedSource.current = fetched;
+			setPhotoSource((prev) => prev ?? fetched);
 		});
 		return () => {
 			cancelled = true;
@@ -220,7 +229,11 @@ function AgencyProfile() {
 		setLogoMeta(null);
 		setLogoCleared(false);
 		setPendingPhoto(null);
-		setPhotoSource(null);
+		// Back to the SAVED logo's source, not to nothing: the stored original
+		// still describes the logo on the row, so Adjust stays available. Setting
+		// null here is what made the button appear or vanish depending on whether
+		// the fetch had landed before Edit was clicked.
+		setPhotoSource(storedSource.current);
 		setEditing(true);
 	};
 
@@ -242,7 +255,11 @@ function AgencyProfile() {
 		setLogoMeta(null);
 		setLogoCleared(false);
 		setPendingPhoto(null);
-		setPhotoSource(null);
+		// Back to the SAVED logo's source, not to nothing: the stored original
+		// still describes the logo on the row, so Adjust stays available. Setting
+		// null here is what made the button appear or vanish depending on whether
+		// the fetch had landed before Edit was clicked.
+		setPhotoSource(storedSource.current);
 		setEditing(false);
 	};
 
@@ -494,7 +511,12 @@ function AgencyProfile() {
 					<ProfilePhotoActions
 						hasPhoto={Boolean(draft.avatarPhoto)}
 						onChangePhoto={openAvatarUpload}
-						onAdjustPhoto={photoSource ? adjustCrop : undefined}
+						// Both, deliberately: a source can outlive the photo it came
+						// from — remove the logo, save, then edit again, and the
+						// restored source would otherwise offer Adjust on nothing.
+						onAdjustPhoto={
+							draft.avatarPhoto && photoSource ? adjustCrop : undefined
+						}
 						onRemovePhoto={
 							draft.avatarPhoto
 								? () => {
