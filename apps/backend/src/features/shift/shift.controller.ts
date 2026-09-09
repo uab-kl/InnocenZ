@@ -150,6 +150,39 @@ export class ShiftControllerClass {
   }
 
   /**
+   * Is this venue live enough to post work — as a refusal message, or null.
+   *
+   * ONLY `active` MAY POST. A `pending_review` venue has not been let in yet, a
+   * `suspended` one has been shut out, and an `inactive` one cannot even sign
+   * in. All three are already refused by the portal's own routing
+   * (`isOrgProfileOnly` → no nav at all), but that lives in apps/web, and a
+   * client-side gate is a UI convenience rather than a rule.
+   *
+   * ⚠️ A LOOKUP FAILURE DOES NOT REFUSE. `getById` returns null both for "no
+   * such venue" and for a query that threw, and a database blip must not take
+   * every venue offline at once — the same rule `planCapacityRefusal` follows
+   * for its own `unknown` case, and the reason `PlanLookup` distinguishes the
+   * two at all. A missing outlet id is caught by the scope checks above this,
+   * which run first.
+   *
+   * The message names the state, because the venue's own status is something
+   * its own people can already see, and "contact InnocenZ" with no reason is
+   * what sends someone to reset a password that was never the problem.
+   */
+  private async venueNotLiveRefusal(outletId: string): Promise<string | null> {
+    const outlet = await this.outletRepository.getById(outletId);
+    if (!outlet) return null;
+    if (outlet.status === 'active') return null;
+    if (outlet.status === 'pending_review') {
+      return (
+        'This venue is still awaiting InnocenZ approval, so it cannot post shifts yet. ' +
+        'You will be notified as soon as it is approved.'
+      );
+    }
+    return `This venue is ${outlet.status} and cannot post shifts. Contact InnocenZ to restore access.`;
+  }
+
+  /**
    * A venue's own shifts must not collide in time — as a refusal message, or null.
    *
    * OWNER'S RULE (17 Aug 2026): "I don't want an outlet to have clashing time for
@@ -482,6 +515,26 @@ export class ShiftControllerClass {
       });
       if (clash) {
         return res.status(409).json({ success: false, message: clash, data: null });
+      }
+
+      /**
+       * THE VENUE IS ACTUALLY LIVE — checked on the SERVER, which it never was.
+       *
+       * The portal has always confined a `pending_review` or `suspended` venue
+       * to Settings/Profile, but that is `canAccessOutletPath()` in apps/web:
+       * client RBAC. Nothing on this path ever read `outlet.status` — the only
+       * `outletRepository.getById` calls in this file fetch a venue NAME for a
+       * notification — so the API accepted a post from a venue the UI had locked
+       * out. That was survivable while billing ran from sign-up; now that the
+       * meter starts at approval (0157), it would be work done for free.
+       *
+       * Verified against the live database before shipping: all 8 outlets are
+       * `active` and all 4 venues that have ever posted are `active`, so this
+       * takes nobody offline today.
+       */
+      const notLive = await this.venueNotLiveRefusal(shiftData.outletId);
+      if (notLive) {
+        return res.status(403).json({ success: false, message: notLive, data: null });
       }
 
       // THE VENUE'S PLAN, enforced. Until now this cap lived only in the Post

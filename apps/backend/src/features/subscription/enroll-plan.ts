@@ -86,6 +86,26 @@ export async function enrolOrgOnPlan(input: {
       billingCycle: input.plan.billingCycle,
       status: 'active',
       startedAt: new Date(),
+      /**
+       * ENROLLED, NOT YET BILLABLE — the one place in the codebase that writes
+       * this NULL deliberately (migration 0157, owner's call 9 Sep 2026).
+       *
+       * All three doors here create the org as `pending_review`, and the portal
+       * confines a pending org to Settings/Profile: no Today, no Post Job, no
+       * Calendar, no History. Anchoring the billing month on this moment charged
+       * a full RM 999 from the day a venue gained access to an address form, and
+       * kept that day as its anchor for the life of the account.
+       *
+       * The meter starts at `/approve`, which stamps this column. Until then the
+       * invoice generator finds no anchor on the lane and opens nothing — so a
+       * venue that is never approved is never invoiced, rather than accruing
+       * periods somebody has to cancel and credit.
+       *
+       * ⚠️ Written EXPLICITLY because `create()` defaults an absent key to
+       * `started_at`. Deleting this line does not fail a build or a test; it
+       * quietly restores bill-from-sign-up.
+       */
+      billingStartsAt: null,
       createdBy: input.actor,
       updatedBy: input.actor,
     },

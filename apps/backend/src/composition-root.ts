@@ -207,6 +207,8 @@ export const outletController = new OutletControllerClass(
   // Admin-created venues must land on a plan, same rule as sign-up.
   subscriptionRepository,
   memberSubscriptionRepository,
+  // Approving a venue starts its billing meter and opens the first period.
+  subscriptionInvoiceRepository,
 );
 
 export const orgMemberInviteController = new OrgMemberInviteControllerClass(
@@ -312,6 +314,8 @@ export const agencyController = new AgencyControllerClass(
   // Admin-created agencies must land on a plan, same rule as sign-up.
   subscriptionRepository,
   memberSubscriptionRepository,
+  // Approving an agency starts its billing meter and opens the first period.
+  subscriptionInvoiceRepository,
 );
 
 export const specialServiceRepository = new SpecialServiceRepositoryClass();

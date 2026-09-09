@@ -41,6 +41,7 @@ import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
+import { createStarterTemplates } from '@/features/shift-template/starter-templates.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import {
@@ -606,6 +607,26 @@ export class AuthControllerClass {
         actor,
         tx,
       });
+      // Starter event cards. Written after the venue exists, and allowed to
+      // fail without taking the registration with them — see
+      // starter-templates.ts: a venue that outlives its plan cannot be billed,
+      // but a venue short a few example cards just makes one.
+      try {
+        const cards = await createStarterTemplates({
+          outletId: outlet.id,
+          actor,
+          tx,
+        });
+        logger.info('[AuthController.register] Starter templates created', {
+          outletId: outlet.id,
+          cards,
+        });
+      } catch (error) {
+        logger.error(
+          '[AuthController.register] Starter templates failed (venue kept)',
+          error,
+        );
+      }
       logger.info('[AuthController.register] Outlet created for signup', {
         outletId: outlet.id,
         userId,

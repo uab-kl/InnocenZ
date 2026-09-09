@@ -93,6 +93,19 @@ export async function applyPlanChangeToLedger(params: {
       billingCycle: plan.billingCycle,
       status: 'active',
       startedAt: endedAt,
+      /**
+       * A SWITCH INHERITS THE LANE'S BILLING ANCHOR — it never re-anchors it.
+       *
+       * `generateMissing` already takes a lane's calendar from its EARLIEST
+       * anchor, so this row's value cannot move a billing day on its own. It is
+       * carried across anyway for the case where the earliest row does not
+       * survive, and for the one case where the difference is visible: an org
+       * still awaiting approval carries NULL, and a plan change made before that
+       * approval must leave it unbilled rather than starting the meter on the
+       * switch. Omitted entirely when nothing was closed, so `create()` applies
+       * its bill-from-now default for a genuine first plan.
+       */
+      ...(previous ? { billingStartsAt: previous.billingStartsAt } : {}),
       createdBy: actor,
       updatedBy: actor,
     });
