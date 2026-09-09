@@ -47,6 +47,7 @@ import {
 } from '@/features/subscription/enroll-plan.js';
 import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import { startBillingOnApproval } from '@/features/subscription/start-billing.js';
+import { readCropSource } from '@/util/crop-source';
 
 export class OutletControllerClass {
   constructor(
@@ -301,6 +302,11 @@ export class OutletControllerClass {
         logoBase64,
         logoFileName,
         logoContentType,
+        // Pulled OUT of `rest` like the other logo fields: they belong to the
+        // R2 sidecar, not to the outlet row, and spreading them into the update
+        // would push columns the table does not have.
+        logoSourceDataUrl,
+        logoCropState,
         clearLogo,
         ...rest
       } = parsed.data;
@@ -342,6 +348,8 @@ export class OutletControllerClass {
             fileName: logoFileName,
             contentType: logoContentType,
             base64: logoBase64,
+            sourceDataUrl: logoSourceDataUrl,
+            cropState: logoCropState,
           });
           const withLogo = await this.outletRepository.update(id, {
             logoImage: logoKey,
@@ -542,6 +550,36 @@ export class OutletControllerClass {
       });
     } catch (error) {
       logger.error('[OutletController.geocodeOwnAddress] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * The ORIGINAL behind this venue's logo, so the crop sheet can reopen it.
+   *
+   * Served by the server because the browser cannot reach it: the public r2.dev
+   * host sends no CORS header, so a `fetch` is blocked and a canvas drawn from
+   * that image is tainted, which makes `toDataURL()` throw. `data: null` is an
+   * ordinary answer — every logo uploaded before this shipped has no sidecar,
+   * and the client then hides Adjust exactly as it does today.
+   */
+  async getLogoSource(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const outlet = await this.outletRepository.getById(id);
+      if (!outlet) {
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const source = await readCropSource(outlet.logoImage);
+      res.status(200).json({ success: true, message: 'OK', data: source });
+    } catch (error) {
+      logger.error('[OutletController.getLogoSource] Error:', error);
       res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,

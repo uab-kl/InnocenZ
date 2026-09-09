@@ -87,6 +87,16 @@ router.delete(
   outletOwnerOfParam,
   outletController.clearGeoFence.bind(outletController),
 );
+// The un-cropped original behind the venue's logo, so "Adjust crop" survives a
+// reload. Guarded like editing the logo — `canEditOutlet` + `outletOwnerOfParam`
+// — because only someone who may REPLACE the logo has any use for re-framing
+// it, and the original may show more of the picture than the logo does.
+router.get(
+  '/:id/logo-source',
+  canEditOutlet,
+  outletOwnerOfParam,
+  outletController.getLogoSource.bind(outletController),
+);
 router.patch(
   '/:id/approve',
   requireAdmin,

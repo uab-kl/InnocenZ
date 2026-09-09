@@ -33,6 +33,15 @@ export const UpdateOutletSchema = CreateOutletSchema.partial().extend({
   logoBase64: z.string().min(1).optional(),
   logoFileName: z.string().trim().min(1).max(255).optional(),
   logoContentType: z.string().trim().min(1).max(100).optional(),
+  /**
+   * The ORIGINAL picked image and where the crop frame was left — stored beside
+   * the logo in R2 so "Adjust crop" survives a reload. Optional: an older
+   * client sends neither and simply gets no sidecar.
+   */
+  logoSourceDataUrl: z.string().min(1).optional(),
+  logoCropState: z
+    .object({ zoom: z.number(), fx: z.number(), fy: z.number() })
+    .optional(),
   /** Clear `logo_image` without uploading a replacement. */
   clearLogo: z.boolean().optional(),
 });

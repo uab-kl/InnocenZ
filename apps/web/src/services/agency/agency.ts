@@ -69,6 +69,10 @@ export async function updateAgency(
 		logoBase64?: string;
 		logoFileName?: string;
 		logoContentType?: string;
+		/** The un-cropped ORIGINAL and its framing, stored beside the logo so
+		 * "Adjust crop" survives a reload. */
+		logoSourceDataUrl?: string;
+		logoCropState?: { zoom: number; fx: number; fy: number };
 		clearLogo?: boolean;
 	},
 	onRefreshFail: () => void,
@@ -79,6 +83,35 @@ export async function updateAgency(
 		payload,
 	);
 	return response.data;
+}
+
+/** The un-cropped original behind an agency's logo, plus where the frame was left. */
+export type AgencyLogoSource = {
+	dataUrl: string;
+	fileName: string;
+	contentType: string;
+	state: { zoom: number; fx: number; fy: number } | null;
+};
+
+/**
+ * Fetch the stored original so "Adjust crop" works after a reload — the outlet
+ * function's twin. Goes through the API because the public R2 host sends no
+ * CORS header, so the browser can neither fetch the original nor export a
+ * canvas drawn from it. `null` means no stored source; the caller hides Adjust.
+ */
+export async function fetchAgencyLogoSource(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<AgencyLogoSource | null> {
+	try {
+		const client = getClient(onRefreshFail);
+		const response = await client.get<{ data: AgencyLogoSource | null }>(
+			`/agency/${id}/logo-source`,
+		);
+		return response.data?.data ?? null;
+	} catch {
+		return null;
+	}
 }
 
 export async function approveAgency(

@@ -11,6 +11,28 @@ import {
   deleteProfileImageFile,
   saveProfileImageFile,
 } from '@/util/profile-image';
+import { type CropState, readCropSource } from '@/util/crop-source';
+
+/**
+ * The crop state as it arrives from a multipart form: a JSON string, or absent.
+ *
+ * Returns null on anything unparseable rather than throwing — a bad field must
+ * cost the previous framing (Adjust reopens centred), never the upload itself.
+ * `saveCropSource` validates the shape again before storing it.
+ */
+function parseCropStateField(raw: unknown): CropState | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<CropState>;
+    return typeof parsed?.zoom === 'number' &&
+      typeof parsed?.fx === 'number' &&
+      typeof parsed?.fy === 'number'
+      ? { zoom: parsed.zoom, fx: parsed.fx, fy: parsed.fy }
+      : null;
+  } catch {
+    return null;
+  }
+}
 import {
   deletePortfolioImageFile,
   normalizePortfolioSlots,
@@ -625,6 +647,33 @@ export class UserControllerClass {
     }
   }
 
+  /**
+   * The ORIGINAL behind this person's avatar, so the crop sheet can reopen it.
+   *
+   * Served by the server because the browser cannot reach it: the public r2.dev
+   * host sends no CORS header, so a `fetch` is blocked and a canvas drawn from
+   * that image is tainted (see `r2GetObject`). The response is the un-cropped
+   * picture as a data URL, which is exactly what the sheet already consumes.
+   *
+   * `data: null` is an ordinary answer, not an error — every avatar uploaded
+   * before this shipped has no sidecar, and the client then hides Adjust just
+   * as it does today.
+   */
+  async getProfileImageSource(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const user = await this.userRepository.getUserById(id);
+      if (!user) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const source = await readCropSource(user.profileImage);
+      res.status(200).json({ success: true, message: 'OK', data: source });
+    } catch (error) {
+      logger.error('[UserController.getProfileImageSource] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async uploadProfileImage(req: Request, res: Response) {
     try {
       const id = paramId(req.params.id);
@@ -667,6 +716,14 @@ export class UserControllerClass {
           fullName: profile?.fullName ?? existingUser.username,
         },
         req.file,
+        // Multer puts non-file parts on `req.body`, so the original and its
+        // framing ride along as ordinary text fields rather than a second file
+        // upload — the crop sheet already holds the original as a data URL.
+        {
+          sourceDataUrl:
+            typeof req.body?.sourceDataUrl === 'string' ? req.body.sourceDataUrl : null,
+          state: parseCropStateField(req.body?.cropState),
+        },
       );
       // Only remove the previous object when the key changed (e.g. .jpg → .png).
       // Same key is overwritten by PutObject — deleting after would wipe the new file.

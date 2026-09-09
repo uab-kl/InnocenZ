@@ -36,9 +36,54 @@ export async function updateMyDisplayName(
 	return response.data.data;
 }
 
+/** The un-cropped original behind an avatar, plus where the frame was left. */
+export type ProfileImageSource = {
+	dataUrl: string;
+	fileName: string;
+	contentType: string;
+	state: { zoom: number; fx: number; fy: number } | null;
+};
+
+/**
+ * The stored original, so "Adjust crop" works on an avatar uploaded in an
+ * earlier session.
+ *
+ * Read through the API rather than the R2 public host, which sends no CORS
+ * header — the browser cannot fetch those bytes, and an image loaded from there
+ * taints the canvas the crop sheet exports from. `null` means no stored source
+ * (every avatar predating this), and the card then hides Adjust as before.
+ */
+export async function fetchMyProfileImageSource(
+	userId: string,
+): Promise<ProfileImageSource | null> {
+	try {
+		const token = getAccessToken();
+		if (!token) return null;
+		const response = await fetch(
+			`${env.VITE_API_URL}/v1/user/${userId}/profile-image-source`,
+			{ headers: { Authorization: `Bearer ${token}` } },
+		);
+		if (!response.ok) return null;
+		const payload = (await response.json()) as ApiResponse<ProfileImageSource>;
+		return payload.data ?? null;
+	} catch {
+		// Never breaks the card: no source simply means no Adjust button.
+		return null;
+	}
+}
+
 export async function uploadMyProfileImage(
 	userId: string,
 	file: File,
+	/**
+	 * The ORIGINAL as picked, and its framing — stored beside the avatar so
+	 * Adjust survives a reload. Optional, so any caller that only has the
+	 * cropped file keeps working.
+	 */
+	cropSource?: {
+		sourceDataUrl?: string | null;
+		state?: { zoom: number; fx: number; fy: number } | null;
+	},
 ): Promise<UpdatedUser> {
 	const token = getAccessToken();
 	if (!token) {
@@ -48,6 +93,14 @@ export async function uploadMyProfileImage(
 
 	const form = new FormData();
 	form.append("profileImage", file);
+	// Ordinary text parts, not a second file: the crop sheet already holds the
+	// original as a data URL, and multer puts non-file fields on `req.body`.
+	if (cropSource?.sourceDataUrl?.startsWith("data:")) {
+		form.append("sourceDataUrl", cropSource.sourceDataUrl);
+	}
+	if (cropSource?.state) {
+		form.append("cropState", JSON.stringify(cropSource.state));
+	}
 
 	// Use fetch so the browser sets multipart boundary (axios defaults to JSON).
 	const response = await fetch(

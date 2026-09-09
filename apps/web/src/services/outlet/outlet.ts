@@ -68,6 +68,10 @@ export async function updateOutlet(
 		logoBase64?: string;
 		logoFileName?: string;
 		logoContentType?: string;
+		/** The un-cropped ORIGINAL and its framing, stored beside the logo so
+		 * "Adjust crop" survives a reload. */
+		logoSourceDataUrl?: string;
+		logoCropState?: { zoom: number; fx: number; fy: number };
 		clearLogo?: boolean;
 	},
 	onRefreshFail: () => void,
@@ -78,6 +82,39 @@ export async function updateOutlet(
 		payload,
 	);
 	return response.data;
+}
+
+/** The un-cropped original behind a venue's logo, plus where the frame was left. */
+export type LogoSource = {
+	dataUrl: string;
+	fileName: string;
+	contentType: string;
+	state: { zoom: number; fx: number; fy: number } | null;
+};
+
+/**
+ * Fetch the stored original so "Adjust crop" works after a reload.
+ *
+ * Goes through the API rather than the public R2 URL because that host sends no
+ * CORS header: the browser cannot `fetch` it, and an image loaded from it taints
+ * the canvas the crop sheet exports from. `null` is the ordinary answer for a
+ * logo uploaded before this shipped — the caller then hides Adjust.
+ */
+export async function fetchOutletLogoSource(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<LogoSource | null> {
+	try {
+		const client = getClient(onRefreshFail);
+		const response = await client.get<{ data: LogoSource | null }>(
+			`/outlet/${id}/logo-source`,
+		);
+		return response.data?.data ?? null;
+	} catch {
+		// A missing or forbidden source must never break Settings; it only means
+		// no Adjust, which is exactly how this screen behaved before.
+		return null;
+	}
 }
 
 export async function approveOutlet(

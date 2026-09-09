@@ -151,6 +151,10 @@ export function useAgencyProfile() {
 			ic?: string;
 			address?: OrgAddress;
 			logoDataUrl?: string | null;
+			/** The ORIGINAL behind `logoDataUrl`, and where the frame was left —
+			 * stored beside the logo so "Adjust crop" survives a reload. */
+			logoSourceDataUrl?: string | null;
+			logoCropState?: { zoom: number; fx: number; fy: number } | null;
 			logoFileName?: string;
 			logoContentType?: string;
 			clearLogo?: boolean;
@@ -169,6 +173,15 @@ export function useAgencyProfile() {
 								logoBase64: payload.logoDataUrl,
 								logoFileName: payload.logoFileName || "logo.png",
 								logoContentType: payload.logoContentType || "image/png",
+								// Only alongside a new logo — the sidecar describes THIS
+								// image, so sending it without one would leave a stored
+								// source that no longer matches what is on screen.
+								...(payload.logoSourceDataUrl?.startsWith("data:")
+									? { logoSourceDataUrl: payload.logoSourceDataUrl }
+									: {}),
+								...(payload.logoCropState
+									? { logoCropState: payload.logoCropState }
+									: {}),
 							}
 						: {}),
 				},

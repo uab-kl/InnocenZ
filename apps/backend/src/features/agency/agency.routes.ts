@@ -60,6 +60,17 @@ router.put(
   refuseOrgStatusChange(),
   agencyController.update.bind(agencyController),
 );
+// The un-cropped original behind the agency's logo, so "Adjust crop" survives a
+// reload. Guarded exactly like editing the record — `requireRole` +
+// `agencyOwnerOfParam`, the SCOPED owner check — because only someone who may
+// replace the logo has any use for re-framing it, and the original may show
+// more of the picture than the logo does.
+router.get(
+  '/:id/logo-source',
+  requireRole('admin', 'agency'),
+  agencyOwnerOfParam,
+  agencyController.getLogoSource.bind(agencyController),
+);
 router.patch(
   '/:id/approve',
   requireAdmin,

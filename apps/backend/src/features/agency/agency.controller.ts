@@ -55,6 +55,7 @@ import {
 } from '@/features/subscription/enroll-plan.js';
 import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import { startBillingOnApproval } from '@/features/subscription/start-billing.js';
+import { readCropSource } from '@/util/crop-source';
 
 function parseSubRole(value: unknown): AgencyUserSubRole | undefined {
   if (typeof value !== 'string') return undefined;
@@ -744,7 +745,17 @@ export class AgencyControllerClass {
           data: null,
         });
       }
-      const { logoBase64, logoFileName, logoContentType, clearLogo, ...rest } =
+      // `logoSourceDataUrl`/`logoCropState` are pulled out with the other logo
+      // fields: they belong to the R2 sidecar, not to the agency row.
+      const {
+        logoBase64,
+        logoFileName,
+        logoContentType,
+        logoSourceDataUrl,
+        logoCropState,
+        clearLogo,
+        ...rest
+      } =
         parsed.data;
       let agency = await this.agencyRepository.update(id, {
         ...rest,
@@ -772,6 +783,8 @@ export class AgencyControllerClass {
             fileName: logoFileName,
             contentType: logoContentType,
             base64: logoBase64,
+            sourceDataUrl: logoSourceDataUrl,
+            cropState: logoCropState,
           });
           const withLogo = await this.agencyRepository.update(id, {
             logoImage: logoKey,
@@ -798,6 +811,34 @@ export class AgencyControllerClass {
         .json({ success: true, message: 'Agency updated', data: agency });
     } catch (error) {
       logger.error('[AgencyController.update] Error:', error);
+      res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * The ORIGINAL behind this agency's logo — the outlet handler's twin. Served
+   * by the server because the public r2.dev host sends no CORS header, so the
+   * browser can neither `fetch` the original nor draw it into a canvas it is
+   * still allowed to export. `data: null` means "no sidecar", which is the
+   * ordinary answer for any logo uploaded before this shipped.
+   */
+  async getLogoSource(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const agency = await this.agencyRepository.getById(id);
+      if (!agency) {
+        return res
+          .status(404)
+          .json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const source = await readCropSource(agency.logoImage);
+      res.status(200).json({ success: true, message: 'OK', data: source });
+    } catch (error) {
+      logger.error('[AgencyController.getLogoSource] Error:', error);
       res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,

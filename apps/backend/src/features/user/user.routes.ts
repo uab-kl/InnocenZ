@@ -50,6 +50,13 @@ router.patch('/:id/status', requireRole('admin'), userController.setStatus.bind(
 // Self soft-delete (Play / App Store). POST avoids DELETE+body flakiness on mobile.
 router.post('/:id/delete', userController.deleteOwnAccount.bind(userController));
 router.patch('/:id', userController.updateProfile.bind(userController));
+// The un-cropped original behind the avatar, so "Adjust crop" survives a
+// reload. Same access as the avatar it belongs to — it reveals the picture the
+// person uploaded of themselves and nothing else.
+router.get(
+  '/:id/profile-image-source',
+  userController.getProfileImageSource.bind(userController),
+);
 router.post('/:id/profile-image', (req, res, next) => {
   uploadProfileImage.single('profileImage')(req, res, (err) => {
     if (err) {
