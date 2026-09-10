@@ -39,7 +39,9 @@ export function RosterTimetableFilters({
 	const statusSelectId = useId();
 
 	return (
-		<div className="iz-roster-filterbar">
+		// `--fill`: every field shares the row, rather than the search taking the
+		// slack and leaving the row ending short of the panel edge.
+		<div className="iz-roster-filterbar iz-roster-filterbar--fill">
 			<div className="iz-roster-filterbar__head">
 				<span className="iz-roster-filterbar__title">{t.filters.filters}</span>
 				<span className="iz-roster-filterbar__spacer" />

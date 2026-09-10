@@ -332,6 +332,33 @@ function pendingRequestKind(p: PendingPR) {
 	return p.requestKind ?? "join";
 }
 
+/**
+ * What the request IS NOW — not what was once asked for.
+ *
+ * A decided request keeps its kind forever, so labelling this badge by KIND
+ * alone left an approved join reading "Join request" long after the PR had
+ * joined, sitting directly above a line that said "Membership approved". The
+ * two halves of one card were describing different moments, which is what the
+ * owner spotted.
+ *
+ * ⚠️ Lives at module scope beside `pendingRequestKind` because BOTH the list
+ * row and the detail header need it. The list already told this story properly
+ * — an approved join there read "Member" — and the detail header did not: one
+ * fact rendered twice from two copies of the logic is exactly how the two came
+ * to disagree. One place to change now.
+ *
+ * Pending is the only state that still names the ASK, because that is the only
+ * state where the ask is the point — somebody has to decide it.
+ */
+function pendingStandingLabel(p: PendingPR, t: PortalTranslations) {
+	const isLeave = pendingRequestKind(p) === "leave";
+	if (p.status === "approved")
+		return isLeave ? t.approvals.departureApproved : t.approvals.member;
+	if (p.status === "rejected")
+		return isLeave ? t.approvals.departureRejected : t.approvals.joinRejected;
+	return isLeave ? t.approvals.leaveRequest : t.approvals.joinRequest;
+}
+
 function VerificationBadge({
 	ok,
 	label,
@@ -944,7 +971,7 @@ function SignupDetailPanel({
 							</IzPill>
 						)}
 						<IzPill variant={isLeave ? "amber" : "violet"} className="mt-1.5">
-							{isLeave ? t.approvals.leaveRequest : t.approvals.joinRequest}
+							{pendingStandingLabel(signup, t)}
 						</IzPill>
 						{decided && (
 							<p className="iz-approvals-detail-meta mt-1">
@@ -2006,17 +2033,7 @@ function AgencyPending() {
 																		: "gallery",
 																)}
 															>
-																{p.requestKind === "leave"
-																	? p.status === "approved"
-																		? t.approvals.departureApproved
-																		: p.status === "rejected"
-																			? t.approvals.departureRejected
-																			: t.approvals.leaveRequest
-																	: p.status === "approved"
-																		? t.approvals.member
-																		: p.status === "rejected"
-																			? t.approvals.joinRejected
-																			: t.approvals.joinRequest}
+																{pendingStandingLabel(p, t)}
 															</span>
 															<VerificationBadge
 																ok={!!p.hasIcPhotos}
