@@ -20,6 +20,7 @@ import {
 } from '@/schema/outlet.schema';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
+import { createDefaultRateCard } from '@/features/outlet-workspace/default-rate-card.js';
 import { createStarterTemplates } from '@/features/shift-template/starter-templates.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import { addressQueryFromOutlet, geocodeAddress } from './geocode';
@@ -318,6 +319,26 @@ export class OutletControllerClass {
       } catch (error) {
         logger.error(
           '[OutletController.create] Starter templates failed (venue kept)',
+          error,
+        );
+      }
+
+      // The venue's opening rate card. Same reasoning as the cards above — an
+      // admin-created venue must not differ from a self-registered one — and
+      // the same blast radius: a venue with no card can still save its
+      // Workspace, so this may not take the creation down with it.
+      try {
+        const tiers = await createDefaultRateCard({
+          outletId: outlet.id,
+          actor,
+        });
+        logger.info('[OutletController.create] Default rate card created', {
+          outletId: outlet.id,
+          tiers,
+        });
+      } catch (error) {
+        logger.error(
+          '[OutletController.create] Default rate card failed (venue kept)',
           error,
         );
       }

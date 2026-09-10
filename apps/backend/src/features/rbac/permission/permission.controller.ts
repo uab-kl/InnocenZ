@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PermissionRepositoryClass } from './permission.repository';
 import { PermissionType } from './permission.model';
-import { PermissionSchema } from '@/schema/rbac.schema';
+import { PermissionSchema, UpdatePermissionSchema } from '@/schema/rbac.schema';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { Error } from '@/error/index';
@@ -61,7 +61,7 @@ export class PermissionControllerClass {
 
   async updatePermission(req: Request, res: Response) {
     try {
-      const parsed = PermissionSchema.partial().safeParse(req.body);
+      const parsed = UpdatePermissionSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
       const data = await this.permissionRepository.updatePermission(paramId(req.params.id), {
         ...parsed.data,

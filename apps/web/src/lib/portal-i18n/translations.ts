@@ -1779,10 +1779,19 @@ const en = {
 		 * connected, so a "Pay now" here would be a button that cannot work. The
 		 * link goes to Subscription, where the periods are listed one by one.
 		 */
-		billingDueTitle: "Subscription payment due",
-		billingDueOne: "{amount} outstanding for 1 billing period.",
-		billingDueMany: "{amount} outstanding across {n} billing periods.",
-		billingDueSince: "Oldest unpaid period starts {date}.",
+		billingDueTitle: "Subscription due",
+		/**
+		 * The line UNDER the amount, which the banner now prints large on its
+		 * own — so these say what the amount is FOR and nothing else. They used
+		 * to carry the figure inside a sentence ("{amount} outstanding for 1
+		 * billing period."), which is how the one fact anybody reads ended up
+		 * mid-paragraph at the size of the words around it.
+		 */
+		billingDueOne: "1 unpaid period",
+		billingDueMany: "{n} unpaid periods",
+		/** Twins of the pair above for when the oldest period start is known. */
+		billingDueOneSince: "1 unpaid period, from {date}",
+		billingDueManySince: "{n} unpaid periods, oldest from {date}",
 		billingDueCta: "Open Subscription",
 		/**
 		 * THE SERIOUS VARIANT. Shown only once something is genuinely past its due
@@ -1793,11 +1802,10 @@ const en = {
 		 * unpaid subscription, and a warning implying a consequence the code will
 		 * never deliver is a bluff that gets called the first time it is ignored.
 		 */
-		billingOverdueTitle: "Subscription payment overdue",
+		billingOverdueTitle: "Subscription overdue",
 		/** {late} is the already-localized "N days overdue" fragment. */
-		billingOverdueOne: "{amount} is overdue — it was due {date}, {late}.",
-		billingOverdueMany:
-			"{amount} is overdue across {n} billing periods. The oldest was due {date}, {late}.",
+		billingOverdueOne: "Was due {date} · {late}",
+		billingOverdueMany: "{n} periods · oldest was due {date} · {late}",
 		/**
 		 * The agency's one gated ask. Leaving Custom is never gated — dropping
 		 * cost must not be blocked by debt — and the Sunday auto-tier moves on
@@ -2536,14 +2544,19 @@ const en = {
 		agenciesFillShifts:
 			"PR agencies fill your shifts, so this venue needs at least one before it can post a job.",
 		/** Prices reminder — a venue cannot record what it sold without these. */
-		pricesNotSetTitle: "Set your prices before your first night",
+		pricesNotSetTitle: "Set your prices",
+		/**
+		 * The missing lists are CHIPS beside this line now, not words inside it,
+		 * so the sentence no longer names them — it says why they matter. The
+		 * version that spelled them out ran to three clauses and buried the one
+		 * thing to do.
+		 */
 		pricesNotSetBody:
-			"{items} still have no prices. Every night is priced from these lists — the drink and service lines on a shift, and the receipts your PRs sign.",
+			"Shifts and the receipts your PRs sign are priced from these lists.",
 		pricesGoToWorkspace: "Set prices in Workspace",
 		pricesDrinks: "Drinks",
 		pricesTips: "Tips",
 		pricesServices: "Services",
-		pricesListJoin: ", ",
 		eventTypePrefix: "Event type ·",
 		serviceEntitlement: "Service Entitlement",
 		dressCodeLabel: "Dress Code:",
@@ -7697,14 +7710,14 @@ const zh: PortalTranslations = {
 			"InnocenZ 会记录您以 FPX 付款。每期的付款链接需要接入 Fiuu，目前尚未接入。",
 
 		billingDueTitle: "订阅费待付",
-		billingDueOne: "尚有 {amount} 未付，共 1 个账单周期。",
-		billingDueMany: "尚有 {amount} 未付，共 {n} 个账单周期。",
-		billingDueSince: "最早未付周期自 {date} 起。",
+		billingDueOne: "1 个账单周期未付",
+		billingDueMany: "{n} 个账单周期未付",
+		billingDueOneSince: "1 个账单周期未付，自 {date} 起",
+		billingDueManySince: "{n} 个账单周期未付，最早自 {date} 起",
 		billingDueCta: "打开订阅页面",
-		billingOverdueTitle: "订阅付款已逾期",
-		billingOverdueOne: "{amount} 已逾期 — 到期日 {date}，{late}。",
-		billingOverdueMany:
-			"{n} 个计费周期共 {amount} 已逾期。最早一笔到期日 {date}，{late}。",
+		billingOverdueTitle: "订阅费已逾期",
+		billingOverdueOne: "到期日 {date} · {late}",
+		billingOverdueMany: "共 {n} 个周期 · 最早到期日 {date} · {late}",
 		settleBeforeCustomAsk:
 			"尚有 {n} 个账期未付，共 {amount} —— 请先与 InnocenZ 结清，再申请 Custom 价格。重置回普通价目表随时可用。",
 
@@ -8347,14 +8360,12 @@ const zh: PortalTranslations = {
 			"你的申请正在经纪公司处。一旦有一家接受，你就可以发布班次，由他们负责配置人员。",
 		agenciesFillShifts:
 			"PR 经纪公司负责为你的班次配置人员，因此本门店至少需要一家才能发布职位。",
-		pricesNotSetTitle: "开始营业前请先设置价格",
-		pricesNotSetBody:
-			"{items}尚未设置价格。每晚的金额都按这些价目表计算——班次上的酒水与服务项目，以及 PR 签收的收据。",
+		pricesNotSetTitle: "请先设置价格",
+		pricesNotSetBody: "班次金额与 PR 签收的收据都按这些价目表计算。",
 		pricesGoToWorkspace: "前往工作区设置价格",
 		pricesDrinks: "酒水",
 		pricesTips: "小费",
 		pricesServices: "服务项目",
-		pricesListJoin: "、",
 		eventTypePrefix: "活动类型 ·",
 		serviceEntitlement: "服务项目",
 		dressCodeLabel: "着装要求：",
@@ -10762,9 +10773,11 @@ const zh: PortalTranslations = {
 		memberCodeLabel: "成员编号",
 		memberCodePrefix: "成员编号前缀",
 		memberDeactivateTitle: "停用此成员身份？",
-		memberDeactivateBody: "其在本机构的门户角色也会一并撤销，因此重新启用时需要您指定恢复的职能。其登录账户以及所属的其他机构不受影响。",
+		memberDeactivateBody:
+			"其在本机构的门户角色也会一并撤销，因此重新启用时需要您指定恢复的职能。其登录账户以及所属的其他机构不受影响。",
 		memberActivateTitle: "重新启用此成员身份",
-		memberActivateBody: "原有职能已随被撤销的角色一并失效，请选择其恢复后的职能。",
+		memberActivateBody:
+			"原有职能已随被撤销的角色一并失效，请选择其恢复后的职能。",
 		teamTabDoorwayHint:
 			"该团队的全部成员，连同搜索、筛选与完整档案，都在“团队成员”页面中。",
 		teamTabOpenList: "打开此团队",

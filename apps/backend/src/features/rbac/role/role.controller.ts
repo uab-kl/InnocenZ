@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { RoleRepositoryClass } from './role.repository';
 import { RoleType } from './role.model';
-import { RoleSchema } from '@/schema/rbac.schema';
+import { RoleSchema, UpdateRoleSchema } from '@/schema/rbac.schema';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { Error } from '@/error/index';
@@ -102,7 +102,7 @@ export class RoleControllerClass {
 
   async updateRole(req: Request, res: Response) {
     try {
-      const parsed = RoleSchema.partial().safeParse(req.body);
+      const parsed = UpdateRoleSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
       }

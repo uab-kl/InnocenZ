@@ -12619,7 +12619,9 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-planning-week-cal
-	.rdp-day.iz-roster-cal-in-week:has(button[data-selected-single="true"])::before {
+	.rdp-day.iz-roster-cal-in-week:has(
+		button[data-selected-single="true"]
+	)::before {
 	background: var(--iz-violet);
 	/* Its own corners, whatever the day's position in the row — the first/last
 	   child rules above square off the band's inner edges, which would clip this
@@ -13349,16 +13351,45 @@ button.iz-pr-offer-row:hover {
  * `contain`, NOT `cover`: a logo is artwork with edges that mean something — a
  * wordmark cropped to fill a square stops being readable, which is the opposite
  * of what an identity tile is for. Faces tolerate cropping; brands do not.
+ * (Measured: of the six venue logos on the live registry five are exactly
+ * square, so `contain` costs them nothing and only Velvet 23 — 200×148 — is
+ * letterboxed at all. `cover` would crop that one wordmark for no gain.)
+ *
+ * NO padding, and the image takes the tile's own radius: a venue logo is
+ * already artwork with its own margin baked in, so insetting it by 4px just
+ * shrank a 48px chip to 40px and left the accent tint showing as a ring around
+ * a HARD-CORNERED square sitting inside a rounded tile. Filling the tile and
+ * inheriting its radius is what makes these read as identity chips rather than
+ * as stickers dropped on a coloured pad.
  */
 .iz-outlet-logo-tile {
 	overflow: hidden;
-	padding: 4px;
+	padding: 0;
+	/* Seats a black logo — three of the six are on black — on the card, so the
+	   tile reads as a tile and not as a hole punched in it. */
+	box-shadow: inset 0 0 0 1px var(--iz-line2);
 }
 .iz-outlet-logo-tile img {
 	display: block;
 	width: 100%;
 	height: 100%;
 	object-fit: contain;
+	border-radius: inherit;
+	/*
+	 * The backdrop behind a letterboxed or TRANSPARENT logo, and it lives on the
+	 * img rather than the tile for a reason: the tile's background belongs to the
+	 * card's accent modifier (`.iz-outlet-manage-card--cyan .iz-…__icon`, two
+	 * classes), which a one-class rule here would lose to. Under `contain` the
+	 * img box is the whole tile, so painting it here covers exactly the same area
+	 * without entering that fight.
+	 *
+	 * OPAQUE, not a glass token: a translucent neutral layered over the accent
+	 * tint still reads as the accent — tried, and Velvet 23's bars stayed cyan.
+	 * `--iz-panel2` is roughly what glass-over-card composites to, so it replaces
+	 * the tint outright while staying light enough that a cut-out PNG with a dark
+	 * subject (`Testing 2` is one) keeps its silhouette instead of dissolving.
+	 */
+	background: var(--iz-panel2);
 }
 .iz-outlet-manage-card__name {
 	font-family: var(--iz-font);
@@ -13560,7 +13591,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-back,
 /* Layout-only now: the pill LOOK moved into the base .iz-topbar-back, so a
    page can no longer look different by forgetting the modifier. */
-.iz-topbar-back--pill {
+	.iz-topbar-back--pill {
 	align-self: flex-start;
 	margin-bottom: 8px;
 }
@@ -19695,7 +19726,7 @@ html:has(.iz-pr-app) {
 	}
 
 	/* Sidebar already shows identity — slim topbar: back + actions only */
-		/* The MINIMAL topbar is just the floating Return pill. The sticky glass
+	/* The MINIMAL topbar is just the floating Return pill. The sticky glass
 	   above is sized by its grid to full width on real topbars  but minimal
 	   is inline-flex, so the glass shrank to the button and rendered as a
 	   dark box parked behind the pill (owner's screenshot, 27 Aug). Two
@@ -21414,4 +21445,150 @@ body:has(.iz-portal) .iz-pv-doc [class*="title"] {
 	.iz-portal-drawer__panel {
 		animation: none;
 	}
+}
+/* ── ATTENTION BANNER · Today, both portals ───────────────────────────────
+   ONE frame for the strips that say "this needs you before the night starts":
+   money owed to InnocenZ, prices never filled in.
+
+   ONE ROW, READ LEFT TO RIGHT (owner, 10 Sep 2026: "the right side is very
+   empty ... use the space efficiently ... try not to use so many font sizes").
+   These sit full-bleed across a portal page, so a stacked card left two thirds
+   of the strip blank and cost four lines of height to say one sentence. Now
+   label → figure → detail → way out, in that order, on a single line that
+   wraps only when the page is genuinely narrow.
+
+   TWO SIZES, NOT FOUR. Everything inherits the strip's own size except the
+   figure, which is one step up -- written as the ladder vars themselves, never
+   as an alias of them, because `pnpm check:type` reads the DECLARATION and a
+   var pointing at a var is a breach as far as it can see. It is right to say
+   so: a hop the check cannot follow is a hop a reader cannot trust either. Hierarchy is carried by COLOUR and WEIGHT instead — the tone
+   on the label, full-strength text on the figure, muted on the detail — so the
+   strip stays legible without a size for every role. The pair it replaced used
+   four steps and still read flat, because in the outlet portal the readability
+   layer collapsed two of them onto 16px anyway. */
+.iz-alert {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+	margin-bottom: 12px;
+	padding: 11px 16px;
+	border-radius: 14px;
+	border: 1px solid var(--iz-alert-line);
+	background: var(--iz-alert-bg);
+	font-size: var(--iz-fs-label);
+	text-decoration: none;
+	transition:
+		background 0.15s ease,
+		border-color 0.15s ease;
+}
+a.iz-alert:hover {
+	background: var(--iz-alert-bg-hover);
+	border-color: var(--iz-alert-line-hover);
+}
+/* Amber = waiting, red = past its date. Same pair the receipts use. */
+.iz-alert--amber {
+	--iz-alert-tone: var(--iz-amber);
+	--iz-alert-line: rgba(232, 198, 106, 0.4);
+	--iz-alert-line-hover: rgba(232, 198, 106, 0.55);
+	--iz-alert-bg: rgba(232, 198, 106, 0.09);
+	--iz-alert-bg-hover: rgba(232, 198, 106, 0.14);
+	--iz-alert-soft: rgba(232, 198, 106, 0.14);
+}
+.iz-alert--red {
+	--iz-alert-tone: var(--iz-red);
+	--iz-alert-line: rgba(240, 138, 138, 0.42);
+	--iz-alert-line-hover: rgba(240, 138, 138, 0.58);
+	--iz-alert-bg: rgba(240, 138, 138, 0.09);
+	--iz-alert-bg-hover: rgba(240, 138, 138, 0.15);
+	--iz-alert-soft: rgba(240, 138, 138, 0.16);
+}
+.iz-alert__head {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+}
+.iz-alert__icon {
+	width: 17px;
+	height: 17px;
+	flex: none;
+	color: var(--iz-alert-tone);
+}
+.iz-alert__title {
+	font-weight: 800;
+	line-height: 1.3;
+	color: var(--iz-alert-tone);
+	white-space: nowrap;
+}
+/* The one fact anybody reads: the amount owed. Full-strength text colour, not
+   the tone — the tone already carries urgency on the label and the border, and
+   a red number on a red wash is harder to read, not more serious. */
+.iz-alert__figure {
+	flex: none;
+	font-size: var(--iz-fs-title);
+	font-weight: 800;
+	line-height: 1.2;
+	color: var(--iz-txt);
+	white-space: nowrap;
+}
+/* Takes the slack, which is what pins the way out to the right edge. */
+.iz-alert__meta {
+	flex: 1 1 240px;
+	min-width: 0;
+	line-height: 1.4;
+	color: var(--iz-muted);
+}
+/* What is missing, as things rather than as a clause. Three chips are counted
+   at a glance; "Drinks, Tips, Services still have no prices" is read. */
+.iz-alert__chips {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+}
+.iz-alert__chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: var(--iz-alert-soft);
+	color: var(--iz-alert-tone);
+	font-weight: 700;
+	line-height: 1.4;
+	white-space: nowrap;
+}
+/* Outlined rather than underlined: at the end of a wide row it needs an edge
+   of its own to read as the target. Never champagne gold — that stays on act
+   buttons, and this only navigates. */
+.iz-alert__cta {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex: none;
+	margin-left: auto;
+	padding: 6px 13px;
+	border-radius: 999px;
+	border: 1px solid var(--iz-alert-line);
+	font-weight: 700;
+	line-height: 1.3;
+	color: var(--iz-txt);
+	text-decoration: none;
+	white-space: nowrap;
+}
+a.iz-alert:hover .iz-alert__cta,
+.iz-alert__cta:hover {
+	border-color: var(--iz-alert-tone);
+	color: var(--iz-alert-tone);
+}
+
+/* The outlet portal reads at one step up throughout (see the readability layer
+   above). Both of the banner's sizes move together, so the gap between them —
+   the only hierarchy the strip has left — survives the bump. */
+[data-portal="outlet"] .iz-portal-main .iz-alert {
+	font-size: var(--iz-fs-body);
+}
+[data-portal="outlet"] .iz-portal-main .iz-alert__figure {
+	font-size: var(--iz-fs-head);
 }
