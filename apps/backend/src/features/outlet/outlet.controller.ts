@@ -8,6 +8,12 @@ import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
+import {
+  ensureAccountCodeFromMembership,
+  isPendingOrgCode,
+  issueOrgMemberCode,
+} from '@/util/member-code';
+import { refuseUninvitableAccount } from '@/util/invitable-account';
 import { logger } from '@/util/logger';
 import { guardMemberChange } from '@/util/member-change-guard';
 import {
@@ -1021,6 +1027,25 @@ export class OutletControllerClass {
         });
       }
 
+      /*
+       * Only an existing, loginable, non-admin account may be invited — one
+       * rule, both portals, checked again in `accept`. See
+       * `util/invitable-account.ts` for why it is refused HERE and not only
+       * at the end of the emailed link.
+       */
+      const uninvitable = await refuseUninvitableAccount(
+        {
+          userRepository: this.userRepository,
+          userRoleRepository: this.userRoleRepository,
+        },
+        email,
+      );
+      if (uninvitable) {
+        return res
+          .status(409)
+          .json({ success: false, message: uninvitable, data: null });
+      }
+
       const actor = getActor(req);
       const secret = createOrgMemberInviteSecret();
       const pending = await this.inviteRepository.findPendingByOrgEmail({
@@ -1324,6 +1349,28 @@ export class OutletControllerClass {
         return res
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      /*
+       * ⚠️ THE VENUE'S ID IS EARNED HERE, NOT AT SIGN-UP (0161) — the agency
+       * twin carries the full account of why. A row from the public member
+       * sign-up holds an `INNPND` placeholder, because a request is not a
+       * membership; this is the moment it becomes one. Issued exactly once,
+       * since the test is on the PLACEHOLDER and never on a real code.
+       */
+      if (parsed.data.status === 'active' && isPendingOrgCode(memberRow.memberCode)) {
+        await issueOrgMemberCode('outlet', outletId, async (code) => {
+          await this.outletMemberRepository.update(memberId, {
+            memberCode: code,
+            updatedBy: actor,
+          });
+          return code;
+        });
+      }
+      // AFTER the id above, never before — running it first would mirror the
+      // placeholder onto the account. A no-op for anybody already holding one.
+      if (parsed.data.status === 'active') {
+        await ensureAccountCodeFromMembership(target.userId);
       }
 
       // Deactivating here IS removing, so it revokes the same way — see the

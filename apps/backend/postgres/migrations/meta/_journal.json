@@ -1128,6 +1128,13 @@
       "when": 1792793000000,
       "tag": "0160_membership_sub_role",
       "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "7",
+      "when": 1792794000000,
+      "tag": "0161_member_code_on_approval",
+      "breakpoints": true
     }
   ]
 }

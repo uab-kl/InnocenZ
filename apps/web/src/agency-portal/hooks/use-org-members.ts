@@ -24,6 +24,17 @@ export interface OrgMember {
 	username?: string;
 	email?: string | null;
 	phoneNum?: string | null;
+	/**
+	 * Everything below was ALREADY on the wire — the repository selected it and
+	 * the endpoint returned it. Only this type stopped it reaching the screen,
+	 * which is why the review pane had a name and an email and nothing else to
+	 * decide on. `profileImage` is the one genuinely new column (0161-era).
+	 */
+	profileImage?: string | null;
+	/** This membership's own id — INNATAGY0001. Null until one is issued. */
+	memberCode?: string | null;
+	/** When they ASKED — an ISO string off the wire, never a Date. */
+	createdAt?: string | null;
 }
 
 /** The one cache key holding an organisation's member list. */

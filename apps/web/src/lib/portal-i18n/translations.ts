@@ -3338,14 +3338,21 @@ const en = {
 		cancelAgency: "Cancel Agency",
 		joinRequest: "Join request",
 		joinRejected: "Join rejected",
-		member: "Member",
+		/* An approved JOIN, named as what the PR now IS. Deliberately NOT
+		   "Member": a PR is under an agency — an `agency_pr` row carrying a
+		   tier — while a member of the organisation is staff on `user_role`,
+		   invited through Settings. Two different relationships that both read
+		   "Member" in this portal until the owner caught it, 10 Sep 2026: "pr is
+		   pr who under which agency organisation, not the membership of the
+		   organisation". Keep the two vocabularies apart on screen. */
+		agencyPr: "Agency PR",
 		leaveRequest: "Leave request",
 		departureApproved: "Departure approved",
 		departureRejected: "Departure rejected",
 		approveDeparture: "Approve departure",
 		rejectDepartureNamed: "Reject {name}'s departure",
 		departureReasonSentToPr:
-			"Reason is sent to PR — required to reject a departure. The membership continues.",
+			"Reason is sent to PR — required to reject a departure. The PR stays under this agency.",
 		selectDepartureToReview: "Select a departure request to review",
 		noDepartureRequests: "No departure requests waiting",
 		noPendingSignups: "No pending sign-ups",
@@ -3888,12 +3895,13 @@ const en = {
 		ownerInvite: "Owner invite",
 		/** Comcard tab sub-label when there is no photo comcard, only the 3D silhouette. */
 		comcard3dPreview: "3D preview",
-		/** History line on a decided JOIN request. */
-		membershipApproved: "Membership approved",
+		/** History line on a decided JOIN request. Names the RELATIONSHIP, not a
+		 * membership: an approved PR is under this agency, never on its team. */
+		joinApprovedDetail: "Approved — now a PR under this agency",
 		/** History line on a decided LEAVE request. Longer than approvals.departureApproved, which is the list badge. */
 		departureApprovedDetail: "Departure approved — no longer under this agency",
 		/** History line on a refused LEAVE request. */
-		departureRejectedDetail: "Departure rejected — membership continues",
+		departureRejectedDetail: "Departure rejected — still under this agency",
 		/** Accessible name on the zoom button wrapping a document photo. */
 		enlargeNamed: "Enlarge {name}",
 		/** Alt text and accessible name for one portfolio photo cell. */
@@ -5064,6 +5072,50 @@ const en = {
 		shiftsAtVenueForPr: "{shifts} at {venue} · {name}",
 	},
 	portalUi: {
+		/**
+		 * The "New Member" queue — people who asked to JOIN, from the member
+		 * sign-up. Distinct from an invite, which the organisation started.
+		 */
+		noPendingMembers: "No one is waiting to join right now.",
+		/** The queue's own name — on the agency Approvals tabs and above the
+		    outlet's team list. "New member" not "Requests": the reader is being
+		    told WHO is waiting, not what kind of paperwork it is. */
+		newMembers: "New member",
+		/** The queue's filter. "Waiting" is the work; the other two are the
+		    record — the same split every other approvals queue here uses. */
+		membersWaiting: "Waiting",
+		membersActive: "On the team",
+		membersAll: "All",
+		/** What they ASKED for — a suggestion, not the decision. */
+		requestedRole: "Asked to join as",
+		/** The decision, which is the owner's and may differ from the request. */
+		roleToGrant: "Role to grant",
+		approveJoin: "Approve",
+		declineJoin: "Decline",
+		approveFailed: "Could not approve this request",
+		declineFailed: "Could not decline this request",
+		/*
+		 * THE REVIEW PANE — the right half of the Approvals screen, which the
+		 * member queue used to leave blank because it approved inline. An owner is
+		 * deciding whether to let a STRANGER into their payroll, and a name plus an
+		 * email is not enough to decide on; this is where the rest goes.
+		 */
+		selectMember: "Select someone to review their request",
+		selectMemberHint: "Their details, and the decision, appear here.",
+		memberRequestHeading: "What they asked for",
+		memberContactHeading: "How to reach them",
+		memberAccountHeading: "Their account",
+		appliedOn: "Applied",
+		accountId: "Member ID",
+		noPhoto: "No photo",
+		memberEmail: "Email",
+		memberPhone: "Mobile",
+		memberNoPhone: "Not given",
+		/** The decision block's own heading, above the picker and the buttons. */
+		decideHeading: "Your decision",
+		decideHint:
+			"They asked for one title; the one you pick here is the one they get.",
+		alreadyOnTeam: "Already on the team",
 		/** SidebarTrigger's sr-only label and SidebarRail's aria-label + title. Distinct from shell.expandSidebar / shell.collapseSidebar: this control flips, it does not name a direction. */
 		toggleSidebar: "Toggle Sidebar",
 		/** Screen-reader-only title of the mobile sidebar Sheet. */
@@ -6151,6 +6203,10 @@ const en = {
 		 * ask is the failure this screen exists to prevent.
 		 */
 		membershipInactive: "You were removed from this organisation",
+		/** A join request nobody has decided on yet — the OPPOSITE of removed,
+		    and it must never borrow that wording. Nothing has gone wrong; they
+		    are waiting, and the organisation is the one to chase. */
+		membershipPending: "Waiting for this organisation to approve you",
 		orgInactive: "This organisation is deactivated",
 		unavailable: "Unavailable",
 		/** Heading over the cards that cannot be entered. */
@@ -6232,10 +6288,39 @@ const en = {
 			"Sign out and sign in with the {portal} account to open it. A link cannot carry a sign-in between browsers — if it could, anyone who received it would be signed in as you.",
 		noPortalBody:
 			"Your account role does not have a web portal on InnocenZ yet. Please contact support if you believe this is a mistake.",
+		/*
+		 * WAITING, NOT REFUSED. An account that has just asked to join a team
+		 * holds no portal role — which is the same state as "no portal at all",
+		 * and used to render the same red refusal. It was a flat contradiction of
+		 * the sign-up screen the person had seen seconds earlier ("you can sign in
+		 * now"), and it reads as a rejection of a request nobody has looked at.
+		 * Amber, per the standing colour code: waiting is not a failure.
+		 */
+		waitingTitle: "Waiting for approval",
+		waitingBody:
+			"{org} has your request to join as {role}. Sign in again once they approve you — nothing else is needed from you.",
+		waitingHint:
+			"Approval is theirs to give, and they set your final role. If it is taking too long, contact them directly.",
 		/** /no-access primary button in the wrong-portal case. */
 		signOutSwitchAccount: "Sign out and switch account",
 		/** Same button in the no-portal case — it also signs out, then lands on /login. */
 		backToLogin: "Back to login",
+		checkingSession: "Checking your account…",
+		/** Shown to the RIGHT person, naming the account — a shared computer must
+		    not let somebody accept another person's invitation by accident. */
+		acceptAsHint: "You are signed in as {email}. Accept to join this team.",
+		acceptInvitation: "Accept invitation",
+		accepting: "Joining…",
+		signInToAccept: "Sign in to accept",
+		/** Nobody is signed in. Says WHY there is no sign-up form here: an
+		    invitation only ever goes to an account that already exists. */
+		signInToAcceptHint:
+			"This invitation was sent to {email}. Sign in to that account to accept it — invitations are only sent to accounts that already exist.",
+		/** The WRONG person is signed in. Kept separate from the line above:
+		    telling somebody already signed in to "sign in" is the message that
+		    makes a person try the same thing twice. */
+		signedInAsOther:
+			"You are signed in as {current}, but this invitation was sent to {invited}. Sign out and sign in as {invited} to accept it.",
 	},
 	authPages: {
 		/** Field label over the email input on /login and /forgot-password. */
@@ -9163,7 +9248,7 @@ const zh: PortalTranslations = {
 		cancelAgency: "解约申请",
 		joinRequest: "加入申请",
 		joinRejected: "加入已拒绝",
-		member: "已加入",
+		agencyPr: "签约 PR",
 		leaveRequest: "解约申请",
 		departureApproved: "解约已批准",
 		departureRejected: "解约已拒绝",
@@ -9553,7 +9638,7 @@ const zh: PortalTranslations = {
 		icNumber: "身份证号",
 		ownerInvite: "东主邀请",
 		comcard3dPreview: "3D 预览",
-		membershipApproved: "已批准加入本经纪公司",
+		joinApprovedDetail: "已批准 — 现为本经纪公司签约 PR",
 		departureApprovedDetail: "解约已批准 — 已不再隶属本经纪公司",
 		departureRejectedDetail: "解约已驳回 — 合作关系继续",
 		enlargeNamed: "放大{name}",
@@ -10344,6 +10429,31 @@ const zh: PortalTranslations = {
 		shiftsAtVenueForPr: "{name} 在 {venue} 的 {shifts}",
 	},
 	portalUi: {
+		noPendingMembers: "目前没有待审批的加入申请。",
+		newMembers: "新成员",
+		membersWaiting: "待审批",
+		membersActive: "已在团队",
+		membersAll: "全部",
+		requestedRole: "申请职位",
+		roleToGrant: "授予职位",
+		approveJoin: "通过",
+		declineJoin: "拒绝",
+		approveFailed: "无法通过此申请",
+		declineFailed: "无法拒绝此申请",
+		selectMember: "选择一位申请人查看详情",
+		selectMemberHint: "对方的资料与审批操作会显示在这里。",
+		memberRequestHeading: "申请内容",
+		memberContactHeading: "联系方式",
+		memberAccountHeading: "账号信息",
+		appliedOn: "申请时间",
+		accountId: "成员编号",
+		noPhoto: "未上传照片",
+		memberEmail: "邮箱",
+		memberPhone: "手机号",
+		memberNoPhone: "未填写",
+		decideHeading: "您的决定",
+		decideHint: "对方申请的是一个职位；最终由您在此选定。",
+		alreadyOnTeam: "已在团队中",
 		toggleSidebar: "切换侧栏",
 		sidebar: "侧栏",
 		sidebarSrHint: "显示移动端侧栏。",
@@ -11080,6 +11190,7 @@ const zh: PortalTranslations = {
 		outlets: "门店",
 		memberId: "会员编号",
 		membershipInactive: "您已被移出该组织",
+		membershipPending: "等待该组织审批",
 		orgInactive: "该组织已停用",
 		unavailable: "不可用",
 		noLongerAvailable: "已不可用",
@@ -11132,8 +11243,22 @@ const zh: PortalTranslations = {
 			"请退出登录，改用{portal}的账号登录后再打开此链接。链接无法在浏览器之间传递登录状态 —— 否则任何拿到该链接的人都会以您的身份登录。",
 		noPortalBody:
 			"您的账号角色在 InnocenZ 上暂时没有网页门户。如果您认为这是误判，请联系客服。",
+		waitingTitle: "等待审批",
+		waitingBody:
+			"{org} 已收到您以「{role}」加入团队的申请。通过后重新登录即可，无需其他操作。",
+		waitingHint:
+			"审批由该机构决定，最终职位也由他们设定。如长时间未处理，请直接联系他们。",
 		signOutSwitchAccount: "退出登录并切换账号",
 		backToLogin: "返回登录页",
+		checkingSession: "正在检查您的账号…",
+		acceptAsHint: "您当前以 {email} 登录。接受邀请即可加入该团队。",
+		acceptInvitation: "接受邀请",
+		accepting: "正在加入…",
+		signInToAccept: "登录以接受",
+		signInToAcceptHint:
+			"此邀请发送至 {email}。请使用该账号登录以接受 —— 邀请仅发送给已存在的账号。",
+		signedInAsOther:
+			"您当前以 {current} 登录，但此邀请发送至 {invited}。请退出并以 {invited} 登录后接受。",
 	},
 	authPages: {
 		emailLabel: "电子邮箱",

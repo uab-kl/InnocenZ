@@ -229,6 +229,19 @@ const ALL_NAV: OutletNavItem[] = [
 	// 	icon: iconForNav("Ratings"),
 	// 	permission: "viewLiveDashboard",
 	// },
+	/*
+	 * PEOPLE ASKING TO JOIN — the venue's one approval queue.
+	 *
+	 * `viewSettings`, which is exactly who could reach the queue when it lived
+	 * inside Settings: moving it to a page of its own must not quietly change
+	 * WHO can see it. The server still decides who may actually approve.
+	 */
+	{
+		to: "/outlet/approvals",
+		label: "Approvals",
+		icon: iconForNav("Approvals"),
+		permission: "viewSettings",
+	},
 	{
 		to: "/outlet/history",
 		label: "History",
@@ -316,6 +329,7 @@ export function canAccessOutletPath(
 	if (pathname.startsWith("/outlet/billing")) {
 		return can("viewBilling") || can("viewSalesDashboard");
 	}
+	if (pathname.startsWith("/outlet/approvals")) return can("viewSettings");
 	if (pathname.startsWith("/outlet/subscription")) return can("viewSettings");
 	if (pathname.startsWith("/outlet/workspace")) return can("viewWorkspace");
 	if (pathname.startsWith("/outlet/settings")) return can("viewSettings");

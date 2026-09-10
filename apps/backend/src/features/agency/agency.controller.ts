@@ -9,9 +9,15 @@ import { notify, notifyMany } from '@/features/notification/notify';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
+import { refuseUninvitableAccount } from '@/util/invitable-account';
 import { pickAgencyId } from '@/util/org-scope';
 import { logger } from '@/util/logger';
 import { guardMemberChange } from '@/util/member-change-guard';
+import {
+  ensureAccountCodeFromMembership,
+  isPendingOrgCode,
+  issueOrgMemberCode,
+} from '@/util/member-code';
 import {
   CreateAgencySchema,
   UpdateAgencySchema,
@@ -1289,6 +1295,25 @@ export class AgencyControllerClass {
         });
       }
 
+      /*
+       * Only an existing, loginable, non-admin account may be invited — one
+       * rule, both portals, checked again in `accept`. See
+       * `util/invitable-account.ts` for why it is refused HERE and not only
+       * at the end of the emailed link.
+       */
+      const uninvitable = await refuseUninvitableAccount(
+        {
+          userRepository: this.userRepository,
+          userRoleRepository: this.userRoleRepository,
+        },
+        email,
+      );
+      if (uninvitable) {
+        return res
+          .status(409)
+          .json({ success: false, message: uninvitable, data: null });
+      }
+
       const actor = getActor(req);
       const secret = createOrgMemberInviteSecret();
       const pending = await this.inviteRepository.findPendingByOrgEmail({
@@ -1619,6 +1644,40 @@ export class AgencyControllerClass {
        * `user_role` row surviving, so a deactivated operator still clears
        * `requireRole('agency')` and stays a signed-in agency account.
        */
+
+      /*
+       * ⚠️ THE ORGANISATION ID IS EARNED HERE, NOT AT SIGN-UP (0161).
+       *
+       * A row created by the public member sign-up carries an `INNPND`
+       * placeholder, because a request is not a membership. This is the moment
+       * it becomes one, so this is where the agency's real next number is
+       * issued — and it is issued exactly once, since the test is on the
+       * PLACEHOLDER and never on a code that is already real. An id that can
+       * change is not an id.
+       *
+       * `issueOrgMemberCode` rather than a bare `nextOrgMemberCode`: the number
+       * comes from a read-then-write, and two owners approving at the same
+       * instant would compute the same one. The unique index refuses the
+       * second, and this retries it — reading more carefully cannot make a
+       * read-then-write safe.
+       */
+      if (parsed.data.status === 'active' && isPendingOrgCode(memberRow.memberCode)) {
+        await issueOrgMemberCode('agency', agencyId, async (code) => {
+          await this.agencyMemberRepository.update(memberId, {
+            memberCode: code,
+            updatedBy: actor,
+          });
+          return code;
+        });
+      }
+      /*
+       * AFTER the id above, never before: this mirrors the membership id onto
+       * the account, and running it first would copy the placeholder. It is a
+       * no-op for anybody who already holds a real id.
+       */
+      if (parsed.data.status === 'active') {
+        await ensureAccountCodeFromMembership(target.userId);
+      }
       if (parsed.data.status != null && parsed.data.status !== 'active') {
         await this.revokeAgencyPortalRoleIfLastMembership(target.userId);
       }

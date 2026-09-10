@@ -105,13 +105,26 @@ export const UpdateOutletMemberSchema = z.object({
   status: z.string().optional(),
 });
 
-export const AcceptOrgMemberInviteSchema = z
+/**
+ * PUBLIC team-member sign-up (owner, 10 Sep 2026).
+ *
+ * The web sign-up page registers ORGANISATIONS; this registers a PERSON who
+ * wants to work in one. `join` is OPTIONAL on purpose — owner: *"if no, any
+ * outlet or agency send link to that user via email also can invite to their
+ * orgs team"*. Registering with no organisation leaves an account any org can
+ * later invite; registering with one raises a request that org approves.
+ *
+ * ⚠️ `subRole` here is what the person ASKS FOR, never what they get. The
+ * membership is written `status: 'pending'`, which every guard and scope
+ * resolver already treats as no access at all, and the owner names the real
+ * title when approving. Owner and Guarantor are refused for the same reason
+ * they cannot be invited: nobody outside an organisation may hand themselves
+ * its top lane.
+ */
+export const RegisterOrgMemberSchema = z
   .object({
-    token: z.string().trim().min(16).max(128),
-    /** Display name — stored as username + user_profile.full_name. */
     name: z.string().trim().min(1, 'Name is required').max(100),
-    /** Defaults to the invited email when omitted. */
-    email: z.string().trim().email('Invalid email').optional(),
+    email: z.string().trim().email('Invalid email'),
     phoneNum: z
       .string()
       .trim()
@@ -120,10 +133,77 @@ export const AcceptOrgMemberInviteSchema = z
       .transform((v) => (v && v.length > 0 ? v : undefined)),
     password: z.string().min(6, 'Password must be at least 6 characters'),
     confirmPassword: z.string().min(6, 'Confirm your password'),
+    join: z
+      .object({
+        kind: z.enum(['agency', 'outlet']),
+        orgId: z.string().uuid('Choose an organisation'),
+        subRole: z.string().trim().min(1).max(50),
+      })
+      .optional(),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: 'Passwords do not match',
     path: ['confirmPassword'],
+  })
+  .refine((d) => !d.join || !['owner', 'guarantor'].includes(d.join.subRole), {
+    message: 'Choose Finance, Director or Ops Head — Owner is set by the organisation',
+    path: ['join', 'subRole'],
+  });
+
+export type RegisterOrgMemberInput = z.infer<typeof RegisterOrgMemberSchema>;
+
+export const AcceptOrgMemberInviteSchema = z
+  .object({
+    /**
+     * The emailed link's raw token. OPTIONAL since the profile-settings panel
+     * exists: the database stores only the token's HASH, so a signed-in person
+     * looking at their own pending invitations has no raw token to send and
+     * names the invitation by id instead.
+     *
+     * `inviteId` is safe to accept on: it identifies an invitation but
+     * authorises nothing. `accept` independently requires a session whose
+     * email IS the invited address, so an id belonging to somebody else is
+     * refused exactly as a stolen link would be.
+     */
+    token: z.string().trim().min(16).max(128).optional(),
+    inviteId: z.string().uuid().optional(),
+    /** Display name — no longer written anywhere; kept so older clients that
+        still send it are not rejected. */
+    name: z.string().trim().min(1).max(100).optional(),
+    /** Defaults to the invited email when omitted. */
+    email: z.string().trim().email('Invalid email').optional(),
+    phoneNum: z
+      .string()
+      .trim()
+      .max(32)
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    /**
+     * OPTIONAL, because an invite can now be accepted two ways and only one
+     * of them involves a credential.
+     *
+     * A stranger accepting from the emailed link is creating an account, so
+     * they must choose a password. Somebody who ALREADY has an InnocenZ
+     * account accepts while signed in, from their profile settings — and that
+     * path must never write a password, because writing one is how an invite
+     * addressed to an existing address became a way to overwrite that
+     * account's credentials. The controller enforces which case is which; the
+     * schema only stops requiring a password the second case has no business
+     * supplying.
+     */
+    password: z
+      .string()
+      .min(6, 'Password must be at least 6 characters')
+      .optional(),
+    confirmPassword: z.string().min(6, 'Confirm your password').optional(),
+  })
+  .refine((d) => !d.password || d.password === d.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  })
+  .refine((d) => Boolean(d.token || d.inviteId), {
+    message: 'Which invitation? Send a token or an inviteId.',
+    path: ['token'],
   });
 
 export type SetOutletOnboardingAgencyInput = z.infer<typeof SetOutletOnboardingAgencySchema>;

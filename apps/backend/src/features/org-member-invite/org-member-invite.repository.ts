@@ -1,4 +1,4 @@
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, gt } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -33,6 +33,22 @@ export class OrgMemberInviteRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[OrgMemberInviteRepository.update] Error:', error);
+      return null;
+    }
+  }
+
+  /** One invitation by its primary id — the profile panel's accept path. The
+   * id authorises nothing on its own; `accept` proves the session owns it. */
+  async getById(id: string): Promise<OrgMemberInviteType | null> {
+    try {
+      const [row] = await db
+        .select()
+        .from(OrgMemberInviteTable)
+        .where(eq(OrgMemberInviteTable.id, id))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[OrgMemberInviteRepository.getById] Error:', error);
       return null;
     }
   }
@@ -83,6 +99,38 @@ export class OrgMemberInviteRepositoryClass {
         .orderBy(desc(OrgMemberInviteTable.createdAt));
     } catch (error) {
       logger.error('[OrgMemberInviteRepository.listPendingByAgency] Error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Every live invitation waiting for ONE PERSON, across every organisation —
+   * what the profile-settings panel shows a signed-in user.
+   *
+   * Keyed on the EMAIL rather than a user id, because an invite is written
+   * before its recipient necessarily has an account, so there is no id to key
+   * on at the time it is created. The caller passes `req.user`'s own email, so
+   * this can only ever return that person's own invitations.
+   *
+   * Expiry is filtered HERE rather than by the caller: a pending row whose
+   * `expires_at` has passed is not an offer, and listing it would invite a
+   * click that can only 410.
+   */
+  async listPendingByEmail(email: string): Promise<OrgMemberInviteType[]> {
+    try {
+      return await db
+        .select()
+        .from(OrgMemberInviteTable)
+        .where(
+          and(
+            eq(OrgMemberInviteTable.email, email),
+            eq(OrgMemberInviteTable.status, 'pending'),
+            gt(OrgMemberInviteTable.expiresAt, new Date()),
+          ),
+        )
+        .orderBy(OrgMemberInviteTable.createdAt);
+    } catch (error) {
+      logger.error('[OrgMemberInviteRepository.listPendingByEmail] Error:', error);
       return [];
     }
   }

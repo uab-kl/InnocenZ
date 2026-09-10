@@ -98,6 +98,16 @@ export interface OutletNavAlertInput {
 	shiftsNeedingStaff: number;
 	/** Unpaid billing periods this outlet owes InnocenZ. */
 	unpaidPeriods: number;
+	/**
+	 * People asking to join this venue's team.
+	 *
+	 * ⚠️ It points at the venue's own Approvals page. It first pointed at
+	 * SETTINGS, because that is where the queue used to live — buried below the
+	 * profile and the notification toggles, where the owner went looking for it
+	 * twice and did not find it. The page moved; this must move with it, or the
+	 * badge sends the reader to a page that no longer holds the thing it counts.
+	 */
+	pendingMembers: number;
 }
 
 /**
@@ -112,6 +122,7 @@ export interface OutletNavAlertInput {
 export function outletNavAlerts(input: OutletNavAlertInput): NavAlertMap {
 	return compact([
 		["/outlet", alert(input.shiftsNeedingStaff, "amber")],
+		["/outlet/approvals", alert(input.pendingMembers, "amber")],
 		["/outlet/subscription", alert(input.unpaidPeriods, "amber")],
 	]);
 }

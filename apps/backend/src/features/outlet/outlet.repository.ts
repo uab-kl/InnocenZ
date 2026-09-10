@@ -68,6 +68,31 @@ export class OutletRepositoryClass {
     }
   }
 
+  /**
+   * Active venues for the member sign-up picker — id and name only.
+   *
+   * The twin of `AgencyRepository.listActiveNames`, and public for the same
+   * reason: somebody choosing which venue to ask to join has no account yet,
+   * so this cannot sit behind the JWT guard. Deliberately narrow — no ssm, no
+   * licence, no address, no contacts. A name and an id is all a picker needs,
+   * and everything else on this table is the venue's own business.
+   */
+  async listActiveNames(
+    limit = 200,
+  ): Promise<Array<{ id: string; name: string }>> {
+    try {
+      return await db
+        .select({ id: OutletTable.id, name: OutletTable.name })
+        .from(OutletTable)
+        .where(eq(OutletTable.status, 'active'))
+        .orderBy(OutletTable.name)
+        .limit(limit);
+    } catch (error) {
+      logger.error('[OutletRepository.listActiveNames] Error:', error);
+      return [];
+    }
+  }
+
   async listPaginated(params: {
     filter?: OutletFilter;
     page: number;

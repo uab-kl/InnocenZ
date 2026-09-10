@@ -66,16 +66,40 @@ describe("agencyNavAlerts", () => {
 describe("outletNavAlerts", () => {
 	it("returns no badges when nothing is waiting", () => {
 		expect(
-			outletNavAlerts({ shiftsNeedingStaff: 0, unpaidPeriods: 0 }),
+			outletNavAlerts({
+				shiftsNeedingStaff: 0,
+				unpaidPeriods: 0,
+				pendingMembers: 0,
+			}),
 		).toEqual({});
 	});
 
 	it("badges Today with short-staffed shifts and Subscription with unpaid periods", () => {
 		expect(
-			outletNavAlerts({ shiftsNeedingStaff: 2, unpaidPeriods: 1 }),
+			outletNavAlerts({
+				shiftsNeedingStaff: 2,
+				unpaidPeriods: 1,
+				pendingMembers: 0,
+			}),
 		).toEqual({
 			"/outlet": { count: 2, tone: "amber" },
 			"/outlet/subscription": { count: 1, tone: "amber" },
+		});
+	});
+
+	/*
+	 * The venue's Approvals page is one click from anywhere, but only this badge
+	 * says there is any reason to open it.
+	 */
+	it("badges Approvals with people asking to join the team", () => {
+		expect(
+			outletNavAlerts({
+				shiftsNeedingStaff: 0,
+				unpaidPeriods: 0,
+				pendingMembers: 3,
+			}),
+		).toEqual({
+			"/outlet/approvals": { count: 3, tone: "amber" },
 		});
 	});
 });

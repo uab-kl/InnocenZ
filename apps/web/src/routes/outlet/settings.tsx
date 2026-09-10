@@ -714,6 +714,16 @@ function OutletSettingsPage() {
 				</>
 			)}
 
+			{/*
+			 * ⚠️ THE JOIN QUEUE IS NO LONGER HERE — it is `/outlet/approvals`, a
+			 * page of its own with the agency layout, carrying a rail badge.
+			 *
+			 * It lived here, below the profile and the notification toggles, and the
+			 * owner went looking for it twice without finding it. What stays behind
+			 * is a POINTER, not a second copy: two places to approve the same person
+			 * is two places for the role grant to be got right or wrong.
+			 */}
+
 			{/* Real staff from `outlet_user` (owner / finance / ops). */}
 			{!editing && (
 				<OrgMembersPanel

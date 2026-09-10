@@ -2,6 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
 import axios from "axios";
 import {
+	ArrowRight,
 	AtSign,
 	BadgeCheck,
 	Building2,
@@ -22,6 +23,7 @@ import {
 	MapPin,
 	Phone,
 	Search,
+	UserPlus,
 	UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -495,6 +497,59 @@ export function SignupForm() {
 												</button>
 											);
 										})}
+									</div>
+
+									{/*
+									 * THE THIRD DOOR, and deliberately NOT a third tile.
+									 *
+									 * The two above register an ORGANISATION — they carry a
+									 * company, an SSM number and a subscription. A person
+									 * joining a team that already exists answers none of that,
+									 * so putting them side by side would offer three things
+									 * that look alike and behave nothing alike. A link says
+									 * "you are on the wrong page" without pretending to be a
+									 * fourth of the same kind.
+									 */}
+									{/*
+									 * ⚠️ A CALLOUT, because a one-line link under two big tiles
+									 * loses every time.
+									 *
+									 * These read as three ways to sign up and they are not: the
+									 * tiles REGISTER A COMPANY — SSM number, subscription, billing
+									 * anchor — while this adds a PERSON to a company that already
+									 * exists. Somebody joining their employer's team picks Outlet,
+									 * is asked for a business licence, and either abandons the
+									 * form or invents one. Both readers are named here so each
+									 * can rule themselves out.
+									 *
+									 * Below the tiles, not above: the two account types are what
+									 * most visitors come for, and this is the exception that
+									 * catches the rest.
+									 */}
+									<div className="mt-5 rounded-xl border border-royal-gold/25 bg-background/50 p-4">
+										<p className="text-xs leading-relaxed text-muted-foreground">
+											{copy.memberSignup.linkOwnerHint}
+										</p>
+										<div className="mt-3 flex items-start gap-3 border-t border-royal-gold/15 pt-3">
+											<span className="grid size-9 shrink-0 place-items-center rounded-lg border border-royal-gold/25 bg-royal-gold/10">
+												<UserPlus className="size-4 text-gold-bright" />
+											</span>
+											<div className="min-w-0">
+												<p className="font-semibold text-foreground">
+													{copy.memberSignup.linkPrompt}
+												</p>
+												<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+													{copy.memberSignup.linkBody}
+												</p>
+												<Link
+													to="/signup-member"
+													className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-royal-gold/40 bg-royal-gold/10 px-3 py-2 font-semibold text-gold-bright transition-colors hover:border-royal-gold/60 hover:bg-royal-gold/15"
+												>
+													{copy.memberSignup.linkAction}
+													<ArrowRight className="size-4" />
+												</Link>
+											</div>
+										</div>
 									</div>
 								</Field>
 							)}

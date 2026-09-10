@@ -281,9 +281,11 @@ function OrgGroup({
 					 */
 					const blockedReason = org.enterable
 						? null
-						: org.membershipStatus !== "active"
-							? t.chooseOrg.membershipInactive
-							: t.chooseOrg.orgInactive;
+						: org.membershipStatus === "pending"
+							? t.chooseOrg.membershipPending
+							: org.membershipStatus !== "active"
+								? t.chooseOrg.membershipInactive
+								: t.chooseOrg.orgInactive;
 					return (
 						<li key={`${org.kind}:${org.id}`}>
 							<button

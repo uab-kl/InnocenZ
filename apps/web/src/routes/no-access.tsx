@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ShieldAlert } from "lucide-react";
+import { Clock, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -8,6 +8,7 @@ import {
 	usePortalLocale,
 } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 import { portalCodeLabel } from "@/lib/portal-i18n/rbac-label";
 
 export const noAccessTitle = "No Access | Innocenz";
@@ -43,6 +44,23 @@ function NoAccessBody() {
 	const needsLabel = needs ? portalCodeLabel(needs, t) : undefined;
 
 	/*
+	 * ⚠️ THE THIRD SITUATION — asked to join, nobody has answered yet.
+	 *
+	 * A pending membership grants nothing, so such an account holds no portal
+	 * role and reaches this page by the same route as a genuinely portal-less
+	 * one. The two are NOT the same thing to the person reading the screen:
+	 * rendering the red refusal for both contradicted, word for word, the
+	 * sign-up confirmation they had seen seconds earlier ("you can sign in
+	 * now, and the team opens once they approve you").
+	 *
+	 * Only when there is no `needs` — a wrong-portal link is a different
+	 * problem, and a pending request is not the answer to it.
+	 */
+	const waiting = needs
+		? undefined
+		: user?.organisations?.find((o) => o.membershipStatus === "pending");
+
+	/*
 	 * Two different situations share this page.
 	 *
 	 * WRONG PORTAL (`needs` present) — the visitor opened a link belonging to a
@@ -58,17 +76,42 @@ function NoAccessBody() {
 	return (
 		<div className="fixed inset-0 z-50 flex min-h-svh w-full items-center justify-center bg-background px-6">
 			<div className="flex w-full max-w-xl flex-col items-center text-center">
-				<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-destructive/30 bg-destructive/15">
-					<ShieldAlert className="h-9 w-9 text-destructive" strokeWidth={1.5} />
-				</div>
+				{/* Amber for waiting, red only for a real refusal — the standing status
+				    colour code, which every receipt surface already follows. */}
+				{waiting ? (
+					<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/15">
+						<Clock className="h-9 w-9 text-amber-400" strokeWidth={1.5} />
+					</div>
+				) : (
+					<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-destructive/30 bg-destructive/15">
+						<ShieldAlert
+							className="h-9 w-9 text-destructive"
+							strokeWidth={1.5}
+						/>
+					</div>
+				)}
 
 				<h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-					{needsLabel
-						? fill(t.invitePages.linkNeedsPortal, { portal: needsLabel })
-						: t.invitePages.noPortalTitle}
+					{waiting
+						? t.invitePages.waitingTitle
+						: needsLabel
+							? fill(t.invitePages.linkNeedsPortal, { portal: needsLabel })
+							: t.invitePages.noPortalTitle}
 				</h1>
 
-				{needsLabel ? (
+				{waiting ? (
+					<>
+						<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
+							{fill(t.invitePages.waitingBody, {
+								org: waiting.name,
+								role: portalRoleLabel(waiting.subRole, t),
+							})}
+						</p>
+						<p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+							{t.invitePages.waitingHint}
+						</p>
+					</>
+				) : needsLabel ? (
 					<>
 						<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
 							{t.invitePages.signedInAs}{" "}

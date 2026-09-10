@@ -10,12 +10,16 @@ import { UserRepositoryClass } from '@/features/user/user.repository.js';
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository.js';
 import type { UserType } from '@/features/user/user.model.js';
 import { Error } from '@/error/index.js';
-import { AcceptOrgMemberInviteSchema } from '@/schema/outlet.schema.js';
+import { portalRoleName } from '@/types/rbac-constant.js';
+import {
+  AcceptOrgMemberInviteSchema,
+  RegisterOrgMemberSchema,
+} from '@/schema/outlet.schema.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { hashPassword } from '@/util/password.js';
+import { saveProfileImageFile } from '@/util/profile-image.js';
 import { normalizeInviteEmail, hashOrgMemberInviteToken } from '@/util/org-member-invite.js';
-import { normalizePhoneDigits } from '@/features/auth/phone-verification.repository.js';
 
 /**
  * Public accept for outlet/agency team invites.
@@ -46,8 +50,18 @@ export class OrgMemberInviteControllerClass {
         });
       }
 
-      const tokenHash = hashOrgMemberInviteToken(parsed.data.token);
-      const invite = await this.inviteRepository.getByToken(tokenHash);
+      /*
+       * BY LINK OR BY ID — the same invitation either way. The emailed link
+       * carries a raw token (only its hash is stored, so it is looked up by
+       * hash); the profile-settings panel has no raw token and names the row.
+       * Neither identifier authorises anything on its own: the session checks
+       * below decide, and they are identical for both paths.
+       */
+      const invite = parsed.data.token
+        ? await this.inviteRepository.getByToken(
+            hashOrgMemberInviteToken(parsed.data.token),
+          )
+        : await this.inviteRepository.getById(parsed.data.inviteId!);
       if (!invite) {
         return res.status(404).json({
           success: false,
@@ -91,40 +105,79 @@ export class OrgMemberInviteControllerClass {
       }
 
       const inviteEmail = normalizeInviteEmail(invite.email);
-      const chosenEmail = normalizeInviteEmail(
-        parsed.data.email?.trim() || inviteEmail,
-      );
-      const name = parsed.data.name.trim();
-      const phoneRaw = parsed.data.phoneNum?.trim();
-      const phoneNum =
-        phoneRaw && phoneRaw.length > 0
-          ? normalizePhoneDigits(phoneRaw)
-          : null;
 
-      if (phoneNum && phoneNum.length > 0 && phoneNum.length < 8) {
-        return res.status(400).json({
+      /**
+       * ONLY A SIGNED-IN, ALREADY-EXISTING ACCOUNT MAY ACCEPT (owner,
+       * 10 Sep 2026: *"the signed up and can log in account only can be
+       * invited to a team member"*).
+       *
+       * This replaces a flow that took a name, an email, a phone number and a
+       * PASSWORD, and created or updated an account from them. Two things were
+       * wrong with that, and the second was a live account takeover:
+       *
+       *  1. It let an organisation conjure a member out of an email address.
+       *     A team member is now somebody who signed up themselves and can
+       *     already log in; the invite grants them a ROLE, it does not mint
+       *     them an identity.
+       *
+       *  2. ⚠️ **It could overwrite an existing account's password.** When the
+       *     invited address already had an account, the old `resolveInviteUser`
+       *     found that account and wrote the submitted `passwordHash` onto it.
+       *     Combined with `addMember` returning the raw `acceptUrl` to the
+       *     INVITER, any organisation owner could invite an existing address —
+       *     an admin's — read the accept link out of their own API response,
+       *     open it, and set a new password on that account. Nothing here
+       *     writes a credential any more.
+       *
+       * The identity comes from the SESSION, never from the request body, so
+       * there is nothing for a caller to assert about who they are.
+       */
+      if (!req.user?.id) {
+        return res.status(401).json({
           success: false,
-          message: 'Phone number looks too short',
+          message:
+            'Sign in to accept this invitation — invitations can only be sent to accounts that already exist.',
+          data: null,
+        });
+      }
+      const user = await this.userRepository.getUserById(req.user.id);
+      if (!user) {
+        return res
+          .status(401)
+          .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      /*
+       * The signed-in account must BE the invited one. Without this, anybody
+       * holding the link could accept it into their own account — the token
+       * would become a bearer credential for somebody else's invitation.
+       */
+      if (normalizeInviteEmail(user.email ?? '') !== inviteEmail) {
+        return res.status(403).json({
+          success: false,
+          message:
+            'This invitation was sent to a different account — sign in as that account to accept it.',
           data: null,
         });
       }
 
-      const resolved = await this.resolveInviteUser({
-        inviteEmail,
-        chosenEmail,
-        name,
-        phoneNum: phoneNum && phoneNum.length >= 8 ? phoneNum : null,
-        password: parsed.data.password,
-      });
-      if ('error' in resolved) {
-        return res.status(resolved.error.status).json({
+      /*
+       * ⚠️ AN ADMIN IS NOT AN ORGANISATION'S TEAM MEMBER (owner, 10 Sep 2026).
+       * The platform admin console belongs to no organisation, and an admin
+       * holding a membership would be judged by that organisation's job title
+       * on every guard that reads the membership row. Refused at BOTH ends —
+       * here, and at invite creation, because a refusal only at accept time
+       * leaves the owner believing the invitation is on its way.
+       */
+      const heldRoles = await this.userRoleRepository.getUserRoles(user.id);
+      if (heldRoles.some((r) => r.roleName === portalRoleName.ADMIN)) {
+        return res.status(409).json({
           success: false,
-          message: resolved.error.message,
+          message:
+            'This account is an InnocenZ admin and cannot join an organisation team.',
           data: null,
         });
       }
-
-      const user = resolved.user;
       const actor = getActor(req) || user.id;
       const role = await this.roleRepository.getRoleById(invite.roleId);
       if (!role) {
@@ -153,6 +206,230 @@ export class OrgMemberInviteControllerClass {
     } catch (error) {
       logger.error('[OrgMemberInviteController.accept] Error:', error);
       res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * EVERY INVITATION WAITING FOR THE SIGNED-IN PERSON — the profile-settings
+   * panel.
+   *
+   * The `/mine` pattern: the email is derived from the session and never taken
+   * from the request, so this cannot be pointed at somebody else's mailbox.
+   *
+   * The organisation is NAMED here rather than returning a bare id, because a
+   * row saying only "you have been invited" is not something anyone can act
+   * on. `expired` rows are already filtered out by the repository — an
+   * invitation that can only 410 should not be offered a button.
+   */
+  /**
+   * PUBLIC team-member sign-up — register a PERSON, optionally asking to join
+   * one organisation.
+   *
+   * The other half of how somebody joins a team. `accept` handles the
+   * organisation reaching out (invite by email); this handles the person
+   * reaching in, and the organisation approves. Both end at the same place: a
+   * membership row the owner turns active, naming the title.
+   *
+   * ⚠️ NO ROLE IS GRANTED HERE, and that is the entire safety of the endpoint
+   * being public. The account is created with no `user_role` at all and, when
+   * an organisation is named, a membership with `status: 'pending'` — which
+   * `resolveOrgScope`, `holdsAgencyLane` and every `requireRole` guard already
+   * read as no access. The role arrives only when an owner approves, through
+   * `updateMember`, which is an act by a signed-in member of that
+   * organisation. So a stranger can create a request; only the organisation
+   * can turn it into access.
+   *
+   * ⚠️ `subRole` is what they ASK for. The owner names the real title on
+   * approval; the schema already refuses owner/guarantor so nobody can ask to
+   * arrive at the top.
+   */
+  async registerMember(req: Request, res: Response) {
+    try {
+      /*
+       * The form is multipart (it carries a photo), so every field arrives as a
+       * string and a nested object arrives as JSON text. Parsed before
+       * validation rather than after, so the schema still sees the real shape
+       * and its refinements — owner/guarantor, password match — still apply.
+       */
+      const raw = { ...(req.body as Record<string, unknown>) };
+      if (typeof raw.join === 'string') {
+        try {
+          raw.join = raw.join.trim() ? JSON.parse(raw.join) : undefined;
+        } catch {
+          return res.status(400).json({
+            success: false,
+            message: 'Could not read the organisation you chose.',
+            data: null,
+          });
+        }
+      }
+      const parsed = RegisterOrgMemberSchema.safeParse(raw);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message ?? 'Invalid request',
+          data: null,
+        });
+      }
+      const input = parsed.data;
+      const email = normalizeInviteEmail(input.email);
+
+      // The email must be free. Reusing one would either hijack an existing
+      // account or create a second login for the same person.
+      const emailTaken = await this.userRepository.getUserByLoginMethod(
+        'email',
+        email,
+      );
+      if (emailTaken) {
+        return res.status(409).json({
+          success: false,
+          message: 'That email already has an account — sign in instead.',
+          data: null,
+        });
+      }
+
+      /*
+       * The organisation is verified BEFORE the account is created, so a bad
+       * id cannot leave a half-registered person behind with nothing to join.
+       * It must also be ACTIVE: a request to join a switched-off organisation
+       * has nobody who can approve it.
+       */
+      let org: { id: string; name: string } | null = null;
+      if (input.join) {
+        const found =
+          input.join.kind === 'agency'
+            ? await this.agencyRepository.getById(input.join.orgId)
+            : await this.outletRepository.getById(input.join.orgId);
+        if (!found || found.status !== 'active') {
+          return res.status(404).json({
+            success: false,
+            message: 'That organisation is not available to join.',
+            data: null,
+          });
+        }
+        org = { id: found.id, name: found.name };
+      }
+
+      const passwordHash = await hashPassword(input.password);
+      const user = await this.userRepository.createUser({
+        email,
+        phoneNum: input.phoneNum ?? null,
+        username: input.name.slice(0, 100),
+        passwordHash,
+        status: 'active',
+        createdBy: 'member-signup',
+        updatedBy: 'member-signup',
+      });
+      await this.userProfileRepository.update(user.id, {
+        fullName: input.name,
+        updatedBy: 'member-signup',
+      });
+
+      /*
+       * AFTER the profile row exists — `saveProfileImageFile` builds its R2 key
+       * from `user_profile.full_name`, so saving the photo first would file it
+       * under a name that is not there yet. Same ordering as `/register`.
+       */
+      if (req.file) {
+        const profileImage = await saveProfileImageFile(
+          { id: user.id, fullName: input.name },
+          req.file,
+        );
+        await this.userRepository.updateUser(
+          { profileImage, updatedBy: 'member-signup' },
+          user.id,
+        );
+      }
+
+      if (input.join && org) {
+        const membership = {
+          userId: user.id,
+          // Asked for, not granted — see the note above.
+          subRole: input.join.subRole,
+          status: 'pending',
+          createdBy: user.id,
+          updatedBy: user.id,
+        };
+        if (input.join.kind === 'agency') {
+          await this.agencyMemberRepository.add({
+            ...membership,
+            agencyId: org.id,
+          });
+        } else {
+          await this.outletMemberRepository.add({
+            ...membership,
+            outletId: org.id,
+          });
+        }
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: org
+          ? `Account created — ${org.name} will review your request to join.`
+          : 'Account created — an organisation can now invite you to their team.',
+        data: {
+          userId: user.id,
+          email,
+          requestedOrgName: org?.name ?? null,
+          requestedOrgKind: input.join?.kind ?? null,
+        },
+      });
+    } catch (error) {
+      logger.error('[OrgMemberInviteController.registerMember] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  async listMine(req: Request, res: Response) {
+    try {
+      if (!req.user?.id) {
+        return res
+          .status(401)
+          .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+      const me = await this.userRepository.getUserById(req.user.id);
+      if (!me?.email) {
+        // No email on the account means nothing could have been addressed to
+        // it — an empty list, not an error.
+        return res.status(200).json({ success: true, message: 'OK', data: [] });
+      }
+
+      const invites = await this.inviteRepository.listPendingByEmail(
+        normalizeInviteEmail(me.email),
+      );
+
+      const data = await Promise.all(
+        invites.map(async (i) => {
+          const org = i.agencyId
+            ? await this.agencyRepository.getById(i.agencyId)
+            : i.outletId
+              ? await this.outletRepository.getById(i.outletId)
+              : null;
+          return {
+            id: i.id,
+            kind: i.agencyId ? ('agency' as const) : ('outlet' as const),
+            orgId: i.agencyId ?? i.outletId,
+            orgName: org?.name ?? null,
+            subRole: i.subRole,
+            expiresAt: i.expiresAt,
+            createdAt: i.createdAt,
+          };
+        }),
+      );
+
+      return res.status(200).json({ success: true, message: 'OK', data });
+    } catch (error) {
+      logger.error('[OrgMemberInviteController.listMine] Error:', error);
+      return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
         data: null,
@@ -219,115 +496,22 @@ export class OrgMemberInviteControllerClass {
   }
 
   /**
-   * Create or update the invitee account from the first-login form.
-   * Lookup starts from the invited email; form may change email / set phone.
+   * `resolveInviteUser` WAS HERE AND IS DELETED (10 Sep 2026).
+   *
+   * It took a name, an email, a phone number and a password off the request
+   * body and either CREATED an account or UPDATED an existing one. Both
+   * halves are now wrong by rule: an invitation grants a role to somebody who
+   * already signed up, so there is no account to create — and the update half
+   * wrote `passwordHash` onto whatever account already held the invited
+   * address, which, with `addMember` handing the raw accept link back to the
+   * inviter, was an account-takeover path an organisation owner could run
+   * against an admin.
+   *
+   * `accept` now reads the person off the SESSION and writes no credential at
+   * all. Nothing should reconstruct this: if an invitee has no account, the
+   * answer is that they sign up first, not that the invite makes one.
    */
-  private async resolveInviteUser(input: {
-    inviteEmail: string;
-    chosenEmail: string;
-    name: string;
-    phoneNum: string | null;
-    password: string;
-  }): Promise<{ user: UserType } | { error: { status: number; message: string } }> {
-    const passwordHash = await hashPassword(input.password);
-    const username =
-      input.name.slice(0, 100) ||
-      input.chosenEmail.split('@')[0]?.slice(0, 100) ||
-      'member';
 
-    if (input.phoneNum) {
-      const phoneOwner = await this.userRepository.getUserByLoginMethod(
-        'phone',
-        input.phoneNum,
-      );
-      // Allow if same person we'll attach to below
-      let inviteUser = await this.userRepository.getUserByLoginMethod(
-        'email',
-        input.inviteEmail,
-      );
-      if (phoneOwner && (!inviteUser || phoneOwner.id !== inviteUser.id)) {
-        const chosenOwner = await this.userRepository.getUserByLoginMethod(
-          'email',
-          input.chosenEmail,
-        );
-        if (!chosenOwner || phoneOwner.id !== chosenOwner.id) {
-          return {
-            error: {
-              status: 409,
-              message: 'That phone number already has an account',
-            },
-          };
-        }
-      }
-    }
-
-    let user = await this.userRepository.getUserByLoginMethod(
-      'email',
-      input.inviteEmail,
-    );
-
-    if (!user && input.chosenEmail !== input.inviteEmail) {
-      user = await this.userRepository.getUserByLoginMethod(
-        'email',
-        input.chosenEmail,
-      );
-    }
-
-    if (!user) {
-      // New account — chosen email must be free (already checked via lookup).
-      user = await this.userRepository.createUser({
-        email: input.chosenEmail,
-        phoneNum: input.phoneNum,
-        username,
-        passwordHash,
-        status: 'active',
-        createdBy: 'invite',
-        updatedBy: 'invite',
-      });
-      await this.userProfileRepository.update(user.id, {
-        fullName: input.name,
-        updatedBy: 'invite',
-      });
-      return { user };
-    }
-
-    // Existing account (invited email or chosen email).
-    if (input.chosenEmail !== user.email) {
-      const clash = await this.userRepository.getUserByLoginMethod(
-        'email',
-        input.chosenEmail,
-      );
-      if (clash && clash.id !== user.id) {
-        return {
-          error: {
-            status: 409,
-            message: 'That email already has an account — use another or sign in',
-          },
-        };
-      }
-    }
-
-    const updated = await this.userRepository.updateUser(
-      {
-        email: input.chosenEmail,
-        username,
-        passwordHash,
-        ...(input.phoneNum ? { phoneNum: input.phoneNum } : {}),
-        updatedBy: 'invite',
-      },
-      user.id,
-    );
-    if (!updated) {
-      return {
-        error: { status: 500, message: 'Could not update account' },
-      };
-    }
-    await this.userProfileRepository.update(user.id, {
-      fullName: input.name,
-      updatedBy: 'invite',
-    });
-    return { user: updated };
-  }
 
   private async acceptOutlet(
     res: Response,

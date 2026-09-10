@@ -29,6 +29,16 @@ export type OutletMemberEnriched = OutletUserType & {
   username: string;
   email: string | null;
   phoneNum: string | null;
+  /**
+   * The applicant's own photo, for the review screen.
+   *
+   * The member sign-up asks for one on the promise that it "helps the
+   * organisation recognise you when they review your request" — a promise the
+   * review screen could not keep, because this list never selected the
+   * column. An owner admitting a stranger to their finances is the reader who
+   * most needs a face beside the name.
+   */
+  profileImage: string | null;
   /** WHO LAST SWITCHED THIS MEMBERSHIP OFF, by name — joined from
    * `updated_by`, never stored. Null for `'system'` or a deleted account.
    * See `util/actor-name.ts`; twin of `AgencyMemberEnriched.updatedByName`. */
@@ -89,19 +99,32 @@ export class OutletMemberRepositoryClass {
   ): Promise<OutletUserType> {
     try {
       const dbClient = tx ?? db;
+      /*
+       * ⚠️ A REAL ID ONLY FOR SOMEBODY WHO IS ACTUALLY JOINING (0161).
+       *
+       * This used to mint unconditionally, and `register-member` inserts at
+       * `pending` — so merely ASKING to join took the venue's next number,
+       * permanently: ids are never reused, so declining the request burned it.
+       * Now a pending row falls through to the column DEFAULT and takes an
+       * `INNPND` placeholder, and `updateMember` mints the real id at the
+       * moment of approval.
+       *
+       * `tx` is passed on purpose: sign-up creates the venue and this row in ONE
+       * transaction, and a lookup outside it cannot see the venue.
+       *
+       * A caller-supplied id still wins (the backfill, a transfer), and
+       * `nextOrgMemberCode` still throws rather than returning nothing, which
+       * aborts the membership instead of weakening it.
+       */
+      const minted =
+        data.memberCode ??
+        (data.status === 'active'
+          ? await nextOrgMemberCode('outlet', data.outletId, tx)
+          : undefined);
       const withCode = {
         ...data,
-        /*
-         * `tx` is passed on purpose: sign-up creates the venue and this row in
-         * ONE transaction, and a lookup outside it cannot see the venue.
-         *
-         * Not a ternary any more: the column is NOT NULL (0159), so this has to
-         * resolve to a string on BOTH branches — a caller-supplied id or a
-         * freshly minted one. `nextOrgMemberCode` throws rather than returning
-         * nothing, which aborts the membership instead of weakening it.
-         */
-        memberCode:
-          data.memberCode ?? (await nextOrgMemberCode('outlet', data.outletId, tx)),
+        // Omitted, not null — omitting is what lets the DEFAULT fire.
+        ...(minted ? { memberCode: minted } : {}),
       };
       const [member] = await dbClient
         .insert(OutletUserTable)
@@ -206,6 +229,7 @@ export class OutletMemberRepositoryClass {
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
+          profileImage: UserTable.profileImage,
         })
         .from(OutletUserTable)
         .innerJoin(UserTable, eq(UserTable.id, OutletUserTable.userId))
@@ -288,6 +312,7 @@ export class OutletMemberRepositoryClass {
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
+          profileImage: UserTable.profileImage,
           outletName: OutletTable.name,
           outletStatus: OutletTable.status,
         })

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { UserTable } from '@/features/user/user.model';
@@ -91,9 +92,24 @@ export const AgencyUserTable = MainSchema.table('agency_user', {
    * Per membership, not per person: someone operating two organisations holds a
    * different id in each, because the id names the organisation (0154).
    */
-  /** This membership’s id — INNATAGY0001. NOT NULL since 0159; `add()`
-      always mints one and throws rather than writing without it. */
-  memberCode: varchar('member_code', { length: 32 }).notNull(),
+  /**
+   * This membership’s id — INNATAGY0001. NOT NULL since 0159.
+   *
+   * ⚠️ THE DEFAULT IS A PLACEHOLDER, NOT AN ID (0161). A row created at
+   * `pending` — somebody who has ASKED to join — takes `INNPND0001` from the
+   * database, and only `updateMember` turns that into the organisation's real
+   * next number when an owner approves them. Minting the real one at INSERT is
+   * what handed a stranger `INNATAGY0005` and burned the number when the
+   * request was declined.
+   *
+   * Declared here as well as in the migration so the insert TYPE knows the
+   * column is optional; `pnpm check:drift` is what keeps the two honest.
+   */
+  memberCode: varchar('member_code', { length: 32 })
+    .notNull()
+    .default(
+      sql`'INNPND' || lpad(nextval('"main"."pending_member_code_seq"')::text, 4, '0')`,
+    ),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),
