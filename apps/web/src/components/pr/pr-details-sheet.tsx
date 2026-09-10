@@ -541,11 +541,26 @@ export function PrDetailsSheet({
 														{agency.code ?? "—"}
 													</div>
 												</div>
+												{/* "Linked" describes a live partnership. Once an admin
+												    switches the agency off, saying Linked in green is the
+												    screen answering a question nobody asked while hiding
+												    the one that matters. */}
 												<Badge
 													variant="outline"
-													className={statusColors.active}
+													className={
+														agency.status && agency.status !== "active"
+															? statusColors.inactive
+															: statusColors.active
+													}
+													title={
+														agency.status && agency.status !== "active"
+															? t.adminOrg.orgDeactivatedHint
+															: undefined
+													}
 												>
-													{t.adminPr.linked}
+													{agency.status && agency.status !== "active"
+														? t.adminOrg.orgDeactivatedBadge
+														: t.adminPr.linked}
 												</Badge>
 											</li>
 										))}

@@ -64,6 +64,51 @@ export function activeAgencyId(
  * to. Agency membership wins when a user somehow holds both, and the outlet
  * fallback lets a venue operator read the shifts/rosters/sales at its own venues.
  */
+/**
+ * The organisation the caller says they are working in, straight off the
+ * request. Never trusted on its own — every reader below checks it against a
+ * membership first.
+ */
+export function pickedOrgId(req: Request): string | null {
+  const raw = req.header('x-org-id');
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  return value ? value : null;
+}
+
+
+/**
+ * WHICH AGENCY, given a caller's memberships and their request.
+ *
+ * Exported because this rule was hand-copied into four places that do not
+ * import each other — `payment-voucher.controller` twice (its private
+ * `resolveScope`, and again inline inside `listAgencyReceipts`),
+ * `payout-batch.controller`, and `pr.controller` — and every copy ended at
+ * `activeAgencyId`, the OLDEST active membership.
+ *
+ * That was survivable while nothing else could disagree with it. It stopped
+ * being survivable when the GUARDS became organisation-aware: a guard that
+ * honours a verified `x-org-id` while the handler beside it takes the oldest
+ * membership will approve the finance lane at agency B and then write agency
+ * A's voucher. Guard and handler must answer this question the same way, so
+ * they now answer it with the same function.
+ *
+ * The header is VERIFIED, never trusted — honoured only when it names a
+ * membership active for this caller — and an unknown or stale value falls
+ * through to the previous behaviour rather than failing the request.
+ */
+export function pickAgencyId(
+  req: Request,
+  memberships: readonly { agencyId: string; status: string }[],
+): string | null {
+  const requested = pickedOrgId(req);
+  const chosen = requested
+    ? memberships.find(
+        (m) => m.status === 'active' && m.agencyId === requested,
+      )?.agencyId
+    : undefined;
+  return chosen ?? activeAgencyId(memberships);
+}
+
 export async function resolveOrgScope(
   req: Request,
   deps: OrgScopeDeps,
@@ -82,7 +127,23 @@ export async function resolveOrgScope(
    * gated by `requireRole('agency')` alone did not, and those include reads of
    * the roster and of money.
    */
-  const agencyId = activeAgencyId(memberships);
+  /**
+   * WHICH agency, when the caller staffs more than one.
+   *
+   * `activeAgencyId` answers with the FIRST active membership, which after
+   * `listByUser`'s ordering is the OLDEST — deterministic, but nobody chose
+   * it. A person at two agencies would silently operate only the older one on
+   * every call site of this function, and the newer agency would look like it
+   * had invited somebody who never arrived. That is the same find-the-first
+   * shape that twice sent a PR's money to the wrong agency.
+   *
+   * So the caller may NAME one, and the header is verified rather than
+   * trusted: it is honoured only when it matches a membership that is active
+   * for this user. An unknown, foreign or deactivated id falls through to the
+   * old behaviour instead of failing the request — a stale pick in a browser
+   * tab must not lock someone out of a portal they can legitimately use.
+   */
+  const agencyId = pickAgencyId(req, memberships);
   if (agencyId) {
     return { isAdmin: false, agencyId, outletIds: [] };
   }
@@ -90,12 +151,78 @@ export async function resolveOrgScope(
   const outletMemberships = await deps.outletMemberRepository.listByUser(
     user.id,
   );
-  const outletIds = [
+  const activeOutletIds = [
     ...new Set(
       outletMemberships
         .filter((m) => m.status === 'active')
         .map((m) => m.outletId),
     ),
   ];
+  /*
+   * The venue side narrows rather than picks. A venue operator's scope is
+   * normally EVERY venue they staff — several hooks depend on that — so a
+   * choice here clamps the set to the one they named, and only when they
+   * really staff it. Naming nothing keeps every venue, exactly as before.
+   */
+  const wanted = pickedOrgId(req);
+  const outletIds =
+    wanted && activeOutletIds.includes(wanted) ? [wanted] : activeOutletIds;
   return { isAdmin: false, agencyId: null, outletIds };
+}
+
+/**
+ * WHICH ORGANISATION IS THIS CALLER ACTING IN — one answer, for the guards
+ * and the handlers alike.
+ *
+ * The middleware has to know this before it can judge a job title, and the
+ * handler has to know it before it writes. If they answer separately they
+ * will eventually answer differently, and the failure mode is the worst
+ * available: the guard approves the finance lane at agency B while the
+ * handler writes agency A's voucher. So there is one ladder, here.
+ *
+ * The ladder, in order, with no other options:
+ *   1. an id the request NAMES (a path param, or a validated body field),
+ *   2. the `x-org-id` header,
+ *   3. the caller's single active membership, if they have exactly one,
+ *   4. null — meaning the caller must be told to name one (400).
+ *
+ * ⚠️ Steps 1 and 2 are VERIFIED, never trusted: an id only survives if it
+ * names a membership that is active for this user. A foreign or stale id
+ * therefore falls THROUGH rather than being honoured or 403-ing.
+ *
+ * ⚠️ Step 3 is deliberately `exactly one`, not `the first one`. The
+ * oldest-membership pick (`activeAgencyId`) is deterministic and nobody
+ * chose it; using it as a fallback here would silently re-create the bug
+ * this whole change exists to remove. Ambiguity must reach the caller as a
+ * question, not be resolved by an accident of insertion order.
+ *
+ * Returns null for an admin: they act on organisations, not within one, so
+ * the caller decides what that means (usually: an explicit id is required).
+ */
+export async function resolveActingOrgId(
+  req: Request,
+  deps: OrgScopeDeps,
+  org: 'agency' | 'outlet',
+  explicitId?: string | null,
+): Promise<string | null> {
+  const user = req.user;
+  if (!user) return null;
+
+  const memberships =
+    org === 'agency'
+      ? (await deps.agencyMemberRepository.listByUser(user.id)).map((m) => ({
+          orgId: m.agencyId,
+          status: m.status,
+        }))
+      : (await deps.outletMemberRepository.listByUser(user.id)).map((m) => ({
+          orgId: m.outletId,
+          status: m.status,
+        }));
+  const active = memberships.filter((m) => m.status === 'active');
+
+  const named = explicitId?.trim() || pickedOrgId(req);
+  if (named && active.some((m) => m.orgId === named)) return named;
+
+  const distinct = [...new Set(active.map((m) => m.orgId))];
+  return distinct.length === 1 ? distinct[0] : null;
 }

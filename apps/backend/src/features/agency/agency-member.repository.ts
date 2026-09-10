@@ -7,10 +7,6 @@ import {
 } from '@/util/member-code';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
-import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
-import { RoleTable } from '@/features/rbac/role/role.model';
-import { PortalTable } from '@/features/rbac/portal/portal.model';
-import { laneFromRoleHints } from '@/features/rbac/portal-role-map';
 import {
   AgencyUserTable,
   AgencyUserInsertType,
@@ -64,46 +60,20 @@ type RoleJoinRow = {
   portalCode: string | null;
 };
 
-async function agencyLanesByUserIds(
-  userIds: string[],
-): Promise<Map<string, AgencyUserSubRole>> {
-  const map = new Map<string, AgencyUserSubRole>();
-  if (userIds.length === 0) return map;
-
-  const rows = await db
-    .select({
-      userId: UserRoleTable.userId,
-      roleName: RoleTable.roleName,
-      portalCode: PortalTable.code,
-    })
-    .from(UserRoleTable)
-    .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
-    .leftJoin(PortalTable, eq(PortalTable.id, RoleTable.portalId))
-    .where(inArray(UserRoleTable.userId, userIds))
-    // ORDERED, for the same reason listByUser below carries one: `laneFromRoleHints`
-    // takes the FIRST hint matching the portal, so with no ORDER BY a person holding
-    // two agency-portal roles got whichever row Postgres happened to emit — free to
-    // change after a VACUUM or a plan change. The lane is what the team lists group
-    // on, so an unstable winner moves someone between departments between requests.
-    .orderBy(RoleTable.roleName, UserRoleTable.roleId);
-
-  const byUser = new Map<string, RoleJoinRow[]>();
-  for (const row of rows) {
-    const list = byUser.get(row.userId) ?? [];
-    list.push(row);
-    byUser.set(row.userId, list);
-  }
-  for (const userId of userIds) {
-    const hints = (byUser.get(userId) ?? []).map((r) => ({
-      portalCode: r.portalCode,
-      roleName: r.roleName ?? 'Owner',
-    }));
-    // No ops-head fold here any more: `laneFromRoleHints('agency', …)` is now
-    // typed to the two lanes an agency actually issues, so it was unreachable.
-    map.set(userId, laneFromRoleHints('agency', hints));
-  }
-  return map;
-}
+/**
+ * WHERE A JOB TITLE COMES FROM, since 0160: the membership row itself.
+ *
+ * There used to be a `agencyLanesByUserIds` here that joined
+ * `user_role → role → portal`, folded the result through `laneFromRoleHints`
+ * and returned a Map keyed on USER id. It could not be organisation-aware:
+ * `user_role` has no organisation on it, so one person held one title across
+ * every agency they belonged to, and every fallback in that chain landed
+ * on `owner` — a member with no role read as a full-privilege owner.
+ *
+ * `agency_user.sub_role` answers the question directly, so the
+ * derivation is DELETED rather than fixed. `user_role` still answers the
+ * other question — may this person open the portal at all.
+ */
 
 export class AgencyMemberRepositoryClass {
   /**
@@ -196,8 +166,7 @@ export class AgencyMemberRepositoryClass {
   ): Promise<(AgencyUserType & { subRole: AgencyUserSubRole }) | null> {
     const member = await this.getById(id);
     if (!member) return null;
-    const lanes = await agencyLanesByUserIds([member.userId]);
-    return { ...member, subRole: lanes.get(member.userId) ?? 'owner' };
+    return { ...member, subRole: member.subRole as AgencyUserSubRole };
   }
 
   async getByAgencyAndUser(
@@ -248,6 +217,7 @@ export class AgencyMemberRepositoryClass {
           agencyId: AgencyUserTable.agencyId,
           userId: AgencyUserTable.userId,
           status: AgencyUserTable.status,
+          subRole: AgencyUserTable.subRole,
           memberCode: AgencyUserTable.memberCode,
           createdAt: AgencyUserTable.createdAt,
           updatedAt: AgencyUserTable.updatedAt,
@@ -262,10 +232,9 @@ export class AgencyMemberRepositoryClass {
         .where(and(...conditions))
         .orderBy(AgencyUserTable.createdAt);
 
-      const lanes = await agencyLanesByUserIds(rows.map((r) => r.userId));
       const enriched = rows.map((r) => ({
         ...r,
-        subRole: lanes.get(r.userId) ?? ('owner' as AgencyUserSubRole),
+        subRole: r.subRole as AgencyUserSubRole,
       }));
       if (options.subRole) {
         return enriched.filter((r) => r.subRole === options.subRole);
@@ -285,11 +254,16 @@ export class AgencyMemberRepositoryClass {
    * `agency_id`, has no LIMIT/OFFSET, and never joins `agency`, so a row could
    * not say which agency it belongs to.
    *
-   * `subRole` is returned per row but is deliberately NOT a filter here. The
-   * lane is DERIVED per user (user_role → role → portal) after the page is
-   * fetched, so filtering on it would drop rows from an already-paginated page
-   * and hand the caller short pages with a total that disagrees. Filter on what
-   * the database actually stores; the lane is for reading.
+   * `subRole` is returned per row and, SINCE 0160, could legitimately become
+   * a filter here — it is a column on the row now, so it would go in the
+   * WHERE clause before LIMIT/OFFSET like any other.
+   *
+   * It is still not offered, but the reason has changed and the old one must
+   * not be quoted back: it used to be that the lane was DERIVED per user
+   * after the page was fetched, so filtering would have dropped rows from an
+   * already-paginated page and handed back short pages with a total that
+   * disagreed. That constraint is gone. Adding the filter is now a product
+   * decision about the admin screen, not a thing the data forbids.
    */
   async listAllEnriched(options: {
     search?: string;
@@ -336,6 +310,7 @@ export class AgencyMemberRepositoryClass {
           agencyId: AgencyUserTable.agencyId,
           userId: AgencyUserTable.userId,
           status: AgencyUserTable.status,
+          subRole: AgencyUserTable.subRole,
           memberCode: AgencyUserTable.memberCode,
           createdAt: AgencyUserTable.createdAt,
           updatedAt: AgencyUserTable.updatedAt,
@@ -360,11 +335,10 @@ export class AgencyMemberRepositoryClass {
         .limit(options.pageSize)
         .offset((options.page - 1) * options.pageSize);
 
-      const lanes = await agencyLanesByUserIds(rows.map((r) => r.userId));
       return {
         rows: rows.map((r) => ({
           ...r,
-          subRole: lanes.get(r.userId) ?? ('owner' as AgencyUserSubRole),
+          subRole: r.subRole as AgencyUserSubRole,
         })),
         totalCount: Number(totalCount ?? 0),
       };
@@ -426,6 +400,7 @@ export class AgencyMemberRepositoryClass {
           agencyCode: AgencyTable.agencyCode,
           agencyStatus: AgencyTable.status,
           status: AgencyUserTable.status,
+          subRole: AgencyUserTable.subRole,
           memberCode: AgencyUserTable.memberCode,
         })
         .from(AgencyUserTable)
@@ -433,10 +408,9 @@ export class AgencyMemberRepositoryClass {
         .where(and(...conditions))
         .orderBy(AgencyTable.name);
 
-      const lanes = await agencyLanesByUserIds(rows.map((r) => r.userId));
       const enriched = rows.map((r) => ({
         ...r,
-        subRole: lanes.get(r.userId) ?? ('owner' as AgencyUserSubRole),
+        subRole: r.subRole as AgencyUserSubRole,
       }));
       if (options.subRole) {
         return enriched.filter((r) => r.subRole === options.subRole);

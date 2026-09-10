@@ -188,7 +188,7 @@ import {
   PaymentVoucherWithLines,
 } from './payment-voucher.model';
 import type { PrType } from '@/features/pr-personnel/pr.model';
-import { activeAgencyId } from '@/util/org-scope.js';
+import { pickAgencyId } from '@/util/org-scope.js';
 // The outlet's floor-sales mirror. A LEAF module by design — importing the
 // shift-sale feature wholesale from here would close a cycle.
 import {
@@ -898,7 +898,7 @@ export class PaymentVoucherControllerClass {
     // Those writes sit behind `requirePermission('payment_voucher','update')`,
     // which reads `user_role` and never asks about membership at all.
     const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    return { isAdmin: false, agencyId: activeAgencyId(memberships) };
+    return { isAdmin: false, agencyId: pickAgencyId(req, memberships) };
   }
 
   async list(req: Request, res: Response) {
@@ -3005,7 +3005,7 @@ export class PaymentVoucherControllerClass {
         const memberships = await this.agencyMemberRepository.listByUser(
           user.id,
         );
-        agencyId = activeAgencyId(memberships);
+        agencyId = pickAgencyId(req, memberships);
       }
       if (!agencyId) {
         return res.status(403).json({

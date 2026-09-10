@@ -3,8 +3,13 @@ import { nextOrgMemberCode } from '@/util/member-code';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { AgencyTable, AgencyUserTable } from '@/features/agency/agency.model';
+import {
+  AgencyTable,
+  type AgencyUserSubRole,
+  AgencyUserTable,
+} from '@/features/agency/agency.model';
 import { PortalTable } from '@/features/rbac/portal/portal.model';
+import { inferMembershipSubRole } from '@/features/rbac/portal-role-map';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
@@ -165,7 +170,11 @@ async function ensureRole(userId: string, roleId: string): Promise<void> {
  * Membership is TENANCY — which organisation this person belongs to. How much
  * they may do there comes from `user_role` → `role`, never from this row.
  */
-async function ensureMembership(userId: string, agencyId: string): Promise<void> {
+async function ensureMembership(
+  userId: string,
+  agencyId: string,
+  subRole: AgencyUserSubRole,
+): Promise<void> {
   const [existing] = await db
     .select({ id: AgencyUserTable.id })
     .from(AgencyUserTable)
@@ -176,7 +185,7 @@ async function ensureMembership(userId: string, agencyId: string): Promise<void>
     // Scope resolution ignores anything but an active row — make sure it is one.
     await db
       .update(AgencyUserTable)
-      .set({ status: 'active', updatedBy: ACTOR, updatedAt: new Date() })
+      .set({ status: 'active', subRole, updatedBy: ACTOR, updatedAt: new Date() })
       .where(eq(AgencyUserTable.id, existing.id));
     return;
   }
@@ -184,6 +193,7 @@ async function ensureMembership(userId: string, agencyId: string): Promise<void>
   await db.insert(AgencyUserTable).values({
     agencyId,
     userId,
+    subRole,
     status: 'active',
     memberCode: await nextOrgMemberCode('agency', agencyId),
     createdBy: ACTOR,
@@ -215,7 +225,13 @@ export async function seedAtlasAgencyRoleAccounts(): Promise<void> {
 
     const user = await upsertUser(account.email, account.username, passwordHash);
     await ensureRole(user.id, roleId);
-    await ensureMembership(user.id, agency.id);
+    // The membership row is now the authority on the title, so it must agree
+    // with the portal role granted beside it — both derived from one name.
+    await ensureMembership(
+      user.id,
+      agency.id,
+      inferMembershipSubRole('agency', account.roleName),
+    );
 
     logger.info(
       `[${ACTOR}] ${account.email} → ${account.roleName} @ agency ${agency.id} ` +

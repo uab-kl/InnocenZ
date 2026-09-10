@@ -1,3 +1,14 @@
+/** One organisation this account actually works in (an ACTIVE membership). */
+export interface UserOrganisation {
+	kind: "agency" | "outlet";
+	id: string;
+	name: string;
+	/** Backend lane on the membership row: owner | finance | director | … */
+	subRole: string;
+	/** This person's member id INSIDE this organisation — INNATAGY0001. */
+	memberCode: string | null;
+}
+
 export interface User {
 	id: string;
 	email: string;
@@ -18,6 +29,15 @@ export interface User {
 	preferredLocale?: string | null;
 	/** Portal codes from /auth/me (`admin` | `agency` | `outlet`). */
 	portals: string[];
+	/**
+	 * WHICH agencies and venues this person works in — active memberships only.
+	 *
+	 * `portals` says what KIND of portal they may open and stops there, so it
+	 * cannot answer "which agency?" for somebody who staffs two. This list is
+	 * what the chooser counts: one goes straight through, two or more are asked.
+	 * Empty for an admin, who belongs to no organisation.
+	 */
+	organisations: UserOrganisation[];
 	readPermission: string[];
 	createPermission: string[];
 	updatePermission: string[];

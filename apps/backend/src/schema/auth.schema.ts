@@ -53,15 +53,31 @@ const comcardCm = z.coerce.number().int().min(40).max(250);
 const comcardKg = z.coerce.number().int().min(25).max(250);
 
 /** Optional `user_profile` fields — mobile PR signup fills these on register. */
+/**
+ * An empty string is ABSENT, not invalid.
+ *
+ * `.min(1).optional()` rejects `''` — zod sees a value that is present and too
+ * short — so a client that sends every key and leaves some blank gets a 400
+ * naming a field the person deliberately skipped. The PR wizard does exactly
+ * that, and since 10 Sep four of its fields are optional, so this is the
+ * ordinary path rather than an edge. Coercing here also protects an app build
+ * already sitting on someone's phone.
+ */
+const blankIsAbsent = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    schema,
+  );
+
 const registerProfileFields = {
-  fullName: z.string().trim().min(1).max(255).optional(),
-  nationality: z.string().trim().min(1).max(100).optional(),
-  idType: z.enum(idTypeValues).optional(),
-  idNo: z.string().trim().min(1).max(32).optional(),
+  fullName: blankIsAbsent(z.string().trim().min(1).max(255).optional()),
+  nationality: blankIsAbsent(z.string().trim().min(1).max(100).optional()),
+  idType: blankIsAbsent(z.enum(idTypeValues).optional()),
+  idNo: blankIsAbsent(z.string().trim().min(1).max(32).optional()),
   /** Stated by the person. The NRIC also encodes one; the two must agree — see
       the org branch of `register`. */
   gender: z.enum(['male', 'female']).optional(),
-  dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be YYYY-MM-DD').optional(),
+  dob: blankIsAbsent(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be YYYY-MM-DD').optional()),
   addressLine1: z.string().trim().min(1).max(255).optional(),
   addressLine2: z
     .string()
@@ -177,7 +193,17 @@ const RegisterSchema = z
   .superRefine((data, ctx) => {
     if (data.idType === 'NRIC') {
       const nationality = data.nationality?.trim().toLowerCase() ?? '';
-      if (nationality !== 'malaysian') {
+      /*
+       * A BLANK nationality is allowed to mean Malaysian here.
+       *
+       * Nationality became optional for PR sign-up on 10 Sep 2026, and an NRIC
+       * is a Malaysian document by definition — so refusing the pair
+       * "NRIC + nothing stated" would reject the ordinary case and force the
+       * PR to answer a question the id itself already answers. A nationality
+       * that is stated and is NOT Malaysian is still a contradiction worth
+       * refusing.
+       */
+      if (nationality && nationality !== 'malaysian') {
         ctx.addIssue({
           code: 'custom',
           message: 'NRIC is only for Malaysian nationality',

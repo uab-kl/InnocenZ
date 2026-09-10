@@ -21,6 +21,12 @@ export type OutletAgencyLink = {
 	agencyId: string;
 	agencyName: string;
 	agencyCode: string;
+	/**
+	 * The counterpart organisation's OWN status, not the link's. `inactive`
+	 * means an admin deactivated it: the relationship stands, but nobody there
+	 * can sign in to act on it, so every surface showing this link has to say so.
+	 */
+	agencyStatus?: string | null;
 	/** Stem of that agency’s member ids — `AT` gives INNATAGY0001. Shown in place
 	    of `agencyCode`, which numbers the organisation, not a person. */
 	memberCodePrefix?: string | null;

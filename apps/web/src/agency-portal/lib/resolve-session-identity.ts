@@ -11,11 +11,18 @@
  * Both the login path and the portal mount path call these, so there is one
  * resolution rule rather than two that can drift.
  *
+ * When the person was asked WHICH organisation (the chooser, for anyone in
+ * two or more), their answer is handed to the picker, so the identity on screen
+ * and the scope the server resolves describe the same organisation. Without it
+ * the two disagree: the header names the strongest membership while the data
+ * below it comes from the oldest.
+ *
  * Returns null on any failure — the caller decides what an unresolvable
  * identity means, and must NOT treat it as "this account has no org".
  */
 import type { AgencySessionIdentity } from "@agency-portal/lib/agency-identity";
 import type { OutletSessionIdentity } from "@agency-portal/lib/outlet-identity";
+import { getActiveOrgId } from "@/lib/active-org";
 import { kickToLogin } from "@/lib/auth/guards";
 
 export async function resolveOutletIdentityForUser(
@@ -30,7 +37,10 @@ export async function resolveOutletIdentityForUser(
 			userId,
 			kickToLogin,
 		);
-		const primary = identityLib.pickPrimaryMembership(res.data);
+		const primary = identityLib.pickPrimaryMembership(
+			res.data,
+			getActiveOrgId("outlet"),
+		);
 		return primary ? identityLib.identityFromMembership(primary) : null;
 	} catch {
 		return null;
@@ -49,7 +59,10 @@ export async function resolveAgencyIdentityForUser(
 			userId,
 			kickToLogin,
 		);
-		const primary = identityLib.pickPrimaryMembership(res.data);
+		const primary = identityLib.pickPrimaryMembership(
+			res.data,
+			getActiveOrgId("agency"),
+		);
 		return primary ? identityLib.identityFromMembership(primary) : null;
 	} catch {
 		return null;

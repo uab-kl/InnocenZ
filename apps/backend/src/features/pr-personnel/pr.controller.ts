@@ -32,7 +32,7 @@ import {
   refreshStoredComcard,
   touchesComcard,
 } from '@/util/comcard-refresh.js';
-import { activeAgencyId } from '@/util/org-scope.js';
+import { pickAgencyId } from '@/util/org-scope.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -418,7 +418,7 @@ export class PrControllerClass {
     // inactive membership resolved an agencyId here too, so a removed operator
     // kept the roster they had just lost.
     const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    const agencyId = activeAgencyId(memberships);
+    const agencyId = pickAgencyId(req, memberships);
     if (agencyId) {
       return { isAdmin: false, agencyId, outletIds: [] };
     }

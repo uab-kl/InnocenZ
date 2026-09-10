@@ -274,6 +274,16 @@ export function AgencyLinksPanel({
 									<div className="iz-tiny iz-muted truncate leading-tight">
 										{orgMemberIdStem("agency", link.memberCodePrefix) ?? "—"}
 									</div>
+									{/* The venue is the party left waiting when an agency is
+									    switched off: the partnership still stands, but nobody
+									    there can sign in to answer a request. Saying so here is
+									    the difference between "they are slow" and "they are
+									    closed". */}
+									{link.agencyStatus && link.agencyStatus !== "active" && (
+										<div className="iz-tiny mt-1 text-amber-400">
+											{t.adminOrg.orgDeactivatedBadge}
+										</div>
+									)}
 									{link.approveStatus === "rejected" && link.rejectReason && (
 										<div className="iz-tiny mt-1 text-rose-400">
 											{link.rejectReason}

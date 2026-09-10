@@ -785,7 +785,20 @@ export const fieldStyles = StyleSheet.create({
 		borderTopWidth: StyleSheet.hairlineWidth,
 		borderTopColor: C.line,
 	},
-	pickerFlag: { fontSize: 22, width: 30, textAlign: 'center' },
+	/*
+	 * The colour is load-bearing, not decoration. This slot holds an emoji flag
+	 * when the country has one and the two-letter CODE when it does not — and a
+	 * Text with no colour falls back to BLACK on React Native, which on this
+	 * dark sheet renders the code invisible while every emoji beside it looks
+	 * fine. Emoji carry their own colour, so setting this costs nothing there.
+	 */
+	pickerFlag: {
+		fontSize: 18,
+		width: 30,
+		textAlign: 'center',
+		color: C.muted2,
+		...font(600),
+	},
 	pickerSheetRowOn: { backgroundColor: 'rgba(227,184,119,0.10)' },
 	pickerSheetRowText: {
 		flex: 1,

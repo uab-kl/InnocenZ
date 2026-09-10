@@ -142,6 +142,9 @@ async function run(): Promise<void> {
       agencyId: agency.id,
       userId: user.id,
       status: 'active',
+      // NOT NULL since 0160 — the title now belongs to the membership, and
+      // the account this seed creates is the agency's owner.
+      subRole: 'owner',
       // NOT NULL since 0159 — a seed mints one exactly like the app does.
       memberCode: await nextOrgMemberCode('agency', agency.id),
       createdBy: ACTOR,

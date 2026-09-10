@@ -189,6 +189,10 @@ export class AgencyPrRepository {
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
           memberCodePrefix: AgencyTable.memberCodePrefix,
+          // A PR keeps seeing an agency she belongs to after it is switched
+          // off — that is her history. She must be told it IS switched off,
+          // rather than left to wonder why nothing comes from it any more.
+          agencyStatus: AgencyTable.status,
           approveStatus: AgencyPrTable.approveStatus,
           tier: AgencyPrTable.tier,
         })

@@ -20,6 +20,13 @@ interface MeResponse {
 	profileImage?: string | null;
 	r2PublicUrl?: string | null;
 	portals?: string[];
+	organisations?: {
+		kind: "agency" | "outlet";
+		id: string;
+		name: string;
+		subRole: string;
+		memberCode?: string | null;
+	}[];
 	/** UI language saved on the account (migration 0122): "en" | "zh" | null. */
 	preferredLocale?: string | null;
 	roles: {
@@ -74,6 +81,15 @@ export async function fetchProfile(): Promise<User> {
 		preferredLocale: profile.preferredLocale ?? null,
 		roles: profile.roles.map((r) => r.roleName),
 		portals: profile.portals ?? [],
+		// Absent on an older backend — read as "no organisation known", which
+		// makes the chooser skip rather than block a login it cannot describe.
+		organisations: (profile.organisations ?? []).map((o) => ({
+			kind: o.kind,
+			id: o.id,
+			name: o.name,
+			subRole: o.subRole,
+			memberCode: o.memberCode ?? null,
+		})),
 		readPermission: profile.permissions
 			.filter((p) => p.permissionType === "read")
 			.map((p) => p.moduleName),

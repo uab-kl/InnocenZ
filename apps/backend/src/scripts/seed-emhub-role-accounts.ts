@@ -3,8 +3,13 @@ import { nextOrgMemberCode } from '@/util/member-code';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { OutletTable, OutletUserTable } from '@/features/outlet/outlet.model';
+import {
+  OutletTable,
+  type OutletUserSubRole,
+  OutletUserTable,
+} from '@/features/outlet/outlet.model';
 import { PortalTable } from '@/features/rbac/portal/portal.model';
+import { inferMembershipSubRole } from '@/features/rbac/portal-role-map';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
@@ -166,7 +171,11 @@ async function ensureRole(userId: string, roleId: string): Promise<void> {
  * Membership is TENANCY — which venue this person belongs to. How much they may
  * do there comes from `user_role` → `role`, never from this row.
  */
-async function ensureMembership(userId: string, outletId: string): Promise<void> {
+async function ensureMembership(
+  userId: string,
+  outletId: string,
+  subRole: OutletUserSubRole,
+): Promise<void> {
   const [existing] = await db
     .select({ id: OutletUserTable.id })
     .from(OutletUserTable)
@@ -177,7 +186,7 @@ async function ensureMembership(userId: string, outletId: string): Promise<void>
     // Scope resolution ignores anything but an active row — make sure it is one.
     await db
       .update(OutletUserTable)
-      .set({ status: 'active', updatedBy: ACTOR, updatedAt: new Date() })
+      .set({ status: 'active', subRole, updatedBy: ACTOR, updatedAt: new Date() })
       .where(eq(OutletUserTable.id, existing.id));
     return;
   }
@@ -185,6 +194,7 @@ async function ensureMembership(userId: string, outletId: string): Promise<void>
   await db.insert(OutletUserTable).values({
     outletId,
     userId,
+    subRole,
     status: 'active',
     memberCode: await nextOrgMemberCode('outlet', outletId),
     createdBy: ACTOR,
@@ -216,7 +226,13 @@ export async function seedEmhubRoleAccounts(): Promise<void> {
 
     const user = await upsertUser(account.email, account.username, passwordHash);
     await ensureRole(user.id, roleId);
-    await ensureMembership(user.id, outlet.id);
+    // See the agency twin: the row's title and the granted portal role come
+    // from one name, so they cannot disagree.
+    await ensureMembership(
+      user.id,
+      outlet.id,
+      inferMembershipSubRole('outlet', account.roleName),
+    );
 
     logger.info(
       `[${ACTOR}] ${account.email} → ${account.roleName} @ outlet ${outlet.id} ` +

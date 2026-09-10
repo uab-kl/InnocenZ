@@ -541,6 +541,10 @@ export class AuthControllerClass {
             agencyId: agency.id,
             userId,
             status: 'active',
+            // The person who signs the organisation up owns it. Stated, never
+            // defaulted — the column has no default precisely so a forgotten
+            // title is a refused insert rather than a silent 'owner'.
+            subRole: 'owner',
             createdBy: actor,
             updatedBy: actor,
           },
@@ -601,6 +605,8 @@ export class AuthControllerClass {
           outletId: outlet.id,
           userId,
           status: 'active',
+          // The venue's creator owns it — see the agency twin above.
+          subRole: 'owner',
           createdBy: actor,
           updatedBy: actor,
         },
@@ -659,7 +665,12 @@ export class AuthControllerClass {
       const parsed = z
         .object({
           phoneNum: z.string().min(8, 'Phone number is required'),
-          idNo: z.string().trim().min(4, 'ID number is required'),
+          /*
+           * OPTIONAL since 10 Sep 2026: a PR may sign up without an ID at all,
+           * so this gate can only answer the half it was given. The phone is
+           * still checked, because that IS the PR's login.
+           */
+          idNo: z.string().trim().optional(),
         })
         .safeParse(req.body);
       if (!parsed.success) {
@@ -683,12 +694,19 @@ export class AuthControllerClass {
         }
       }
 
-      const existingId = await this.userProfileRepository.findByNormalizedIdNo(parsed.data.idNo);
-      if (existingId) {
-        conflicts.push({
-          field: 'idNo',
-          message: 'That ID number already has an account. Sign in, or check the number.',
-        });
+      // Only ask when there is something to ask about. An absent id cannot
+      // collide with anything, and `findByNormalizedIdNo('')` would be a
+      // question about every blank profile on the platform.
+      if (parsed.data.idNo && parsed.data.idNo.length >= 4) {
+        const existingId = await this.userProfileRepository.findByNormalizedIdNo(
+          parsed.data.idNo,
+        );
+        if (existingId) {
+          conflicts.push({
+            field: 'idNo',
+            message: 'That ID number already has an account. Sign in, or check the number.',
+          });
+        }
       }
 
       if (conflicts.length > 0) {
@@ -899,30 +917,43 @@ export class AuthControllerClass {
 
       // createUserWithRole only inserts an empty user_profile — fill identity /
       // address from the PR wizard (or any register body that sends them).
-      if (
-        parsedBody.fullName &&
-        parsedBody.nationality &&
-        parsedBody.idType &&
-        parsedBody.idNo &&
-        parsedBody.dob &&
-        parsedBody.addressLine1 &&
-        parsedBody.city &&
-        parsedBody.postcode &&
-        parsedBody.state &&
-        parsedBody.country
-      ) {
+      /*
+       * 🔴 WRITE WHAT ARRIVED, not all-or-nothing.
+       *
+       * This used to demand ten fields together, so a PR missing any ONE of
+       * them had every other answer discarded — name, address, languages and
+       * comcard alike — and then fell through to a 400. Since nationality, ID
+       * type, birth date and ID number became optional for the PR app (owner,
+       * 10 Sep 2026), that condition would have rejected the ordinary case.
+       *
+       * The name is the one thing worth gating on: a profile row with no name
+       * is not a person, and the wizard requires it. Everything below is
+       * spread in only when present, so a blank stays blank rather than
+       * overwriting a value with undefined.
+       */
+      if (parsedBody.fullName) {
         const savedProfile = await this.userProfileRepository.update(user.id, {
           fullName: parsedBody.fullName,
-          nationality: parsedBody.nationality,
-          idType: parsedBody.idType,
-          idNo: parsedBody.idNo,
-          dob: parsedBody.dob,
-          addressLine1: parsedBody.addressLine1,
-          addressLine2: parsedBody.addressLine2 ?? null,
-          city: parsedBody.city,
-          postcode: parsedBody.postcode,
-          state: parsedBody.state,
-          country: parsedBody.country,
+          ...(parsedBody.nationality
+            ? { nationality: parsedBody.nationality }
+            : {}),
+          ...(parsedBody.idType ? { idType: parsedBody.idType } : {}),
+          ...(parsedBody.idNo ? { idNo: parsedBody.idNo } : {}),
+          // The IC wins on the birth date, as it does everywhere else: when the
+          // number encodes one, that is the answer, whatever the client typed.
+          ...((dobFromNric(parsedBody.idNo) ?? parsedBody.dob)
+            ? { dob: dobFromNric(parsedBody.idNo) ?? parsedBody.dob }
+            : {}),
+          ...(parsedBody.addressLine1
+            ? { addressLine1: parsedBody.addressLine1 }
+            : {}),
+          ...(parsedBody.addressLine2 !== undefined
+            ? { addressLine2: parsedBody.addressLine2 ?? null }
+            : {}),
+          ...(parsedBody.city ? { city: parsedBody.city } : {}),
+          ...(parsedBody.postcode ? { postcode: parsedBody.postcode } : {}),
+          ...(parsedBody.state ? { state: parsedBody.state } : {}),
+          ...(parsedBody.country ? { country: parsedBody.country } : {}),
           ...(parsedBody.comcardHeightCm != null
             ? { comcardHeightCm: parsedBody.comcardHeightCm }
             : {}),
@@ -944,12 +975,30 @@ export class AuthControllerClass {
           verificationStatus: 'pending',
           updatedBy: actor,
         });
-        // Public PR sign-up is useless without a persisted ID number — refuse
-        // rather than returning 201 with a blank profile.
-        if (isPublicPr && (!savedProfile?.idNo || !savedProfile.idType)) {
+        /*
+         * This used to 500 when a public PR sign-up produced no stored id —
+         * correct while the id was mandatory, and wrong now that it is not
+         * (owner, 10 Sep 2026). What still deserves a refusal is the row not
+         * being written AT ALL, which means the write failed rather than the
+         * PR declining to answer.
+         *
+         * An id that was SENT and did not land is still a fault, so that case
+         * keeps its 500: silently dropping an id someone typed is how a PR
+         * ends up unable to be paid.
+         */
+        if (isPublicPr && !savedProfile) {
+          logger.error('[AuthController.register] Profile row not written', {
+            userId: user.id,
+          });
+          return res.status(500).json({
+            success: false,
+            message: 'Could not save your details — please try again',
+            data: null,
+          });
+        }
+        if (isPublicPr && parsedBody.idNo && !savedProfile?.idNo) {
           logger.error('[AuthController.register] Identity not persisted after profile update', {
             userId: user.id,
-            hasRow: Boolean(savedProfile),
             idNo: parsedBody.idNo,
             idType: parsedBody.idType,
           });
@@ -998,9 +1047,11 @@ export class AuthControllerClass {
           updatedBy: actor,
         });
       } else if (isPublicPr) {
+        // Only the NAME is required of a PR now. Everything else the wizard
+        // asks for may be filled in later.
         return res.status(400).json({
           success: false,
-          message: 'Profile details including ID number are required for PR sign-up',
+          message: 'A full name is required for PR sign-up',
           data: null,
         });
       }
@@ -1188,12 +1239,51 @@ export class AuthControllerClass {
         ...new Set(roles.map((r) => r.portalCode).filter((c): c is string => Boolean(c))),
       ];
 
+      /**
+       * WHICH organisations this person actually works in.
+       *
+       * `portals` says what KIND of portal they may open; it cannot say which
+       * agency or venue, and a person may staff several. The client needs the
+       * list to decide whether to ask them to choose after signing in — one
+       * organisation goes straight through, two or more must be asked, because
+       * the server would otherwise pick the oldest and never mention it.
+       *
+       * Active memberships only: an inactive one is not somewhere they can
+       * work, and offering it would produce a choice the scope resolver then
+       * refuses.
+       */
+      const [agencyMemberships, outletMemberships] = await Promise.all([
+        this.agencyMemberRepository.listMembershipsByUserIds([user.id], {
+          status: 'active',
+        }),
+        this.outletMemberRepository.listMembershipsByUserIds([user.id], {
+          status: 'active',
+        }),
+      ]);
+      const organisations = [
+        ...agencyMemberships.map((m) => ({
+          kind: 'agency' as const,
+          id: m.agencyId,
+          name: m.agencyName,
+          subRole: m.subRole,
+          memberCode: m.memberCode ?? null,
+        })),
+        ...outletMemberships.map((m) => ({
+          kind: 'outlet' as const,
+          id: m.outletId,
+          name: m.outletName,
+          subRole: m.subRole,
+          memberCode: m.memberCode ?? null,
+        })),
+      ];
+
       return res.status(200).json({
         success: true,
         message: 'OK',
         data: {
           ...withUserProfile(user, profile),
           portals,
+          organisations,
           roles: roles.map((r) => ({
             id: r.roleId,
             roleName: r.roleName,

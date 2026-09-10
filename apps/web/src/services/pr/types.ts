@@ -6,6 +6,13 @@ export interface PrAgencyRef {
 	/** The agency’s member-id stem, INNATAGY — what the roster cell prints beside
 	    the name. Null until an id has been minted at that agency. */
 	code: string | null;
+
+	/**
+	 * The AGENCY's own status. A PR keeps her membership after an admin
+	 * deactivates the agency — it is her history — so the row has to say the
+	 * other side is switched off rather than showing a plain "Linked".
+	 */
+	status?: string | null;
 }
 
 export interface PrUser {

@@ -134,6 +134,7 @@ export async function fetchPrUsers(
 			id: link.agencyId,
 			name: link.agencyName,
 			code: orgMemberIdStem("agency", link.memberCodePrefix),
+			status: link.agencyStatus ?? null,
 		});
 		agenciesByUser.set(link.userId, list);
 	}

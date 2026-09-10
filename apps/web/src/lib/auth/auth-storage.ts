@@ -10,6 +10,8 @@
  * static — to whoever signed in on it: only a login or sign-out performed in
  * that tab can change what it holds.
  */
+import { clearActiveOrg } from "@/lib/active-org";
+
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 const TOKEN_EXPIRY_KEY = "token_expiry";
@@ -109,6 +111,15 @@ export function clearAuthTokens(): void {
 	removeAccessToken();
 	removeRefreshToken();
 	removeTokenExpiry();
+	/*
+	 * The chosen organisation goes with them.
+	 *
+	 * This is the ONE place sign-out and every forced kick funnel through, which
+	 * is why it lives here rather than beside each of them: a choice that
+	 * outlived its session would greet the next person on this machine with
+	 * someone else's agency name in the header.
+	 */
+	clearActiveOrg();
 }
 
 export function saveAuthTokens(

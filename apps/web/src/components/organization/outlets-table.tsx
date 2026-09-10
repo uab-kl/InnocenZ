@@ -5,6 +5,7 @@ import {
 	Eye,
 	Loader2,
 	RefreshCw,
+	Search,
 	Store,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -53,6 +55,9 @@ interface OutletsTableProps {
 	error: Error | null;
 	statusFilter: OrgStatusFilter;
 	onStatusFilterChange: (value: OrgStatusFilter) => void;
+	/** Raw box contents — the route debounces before it becomes a query. */
+	search: string;
+	onSearchChange: (value: string) => void;
 	onPageChange: (page: number) => void;
 	onRetry: () => void;
 	onApprove: (id: string) => void;
@@ -73,6 +78,8 @@ export function OutletsTable({
 	error,
 	statusFilter,
 	onStatusFilterChange,
+	search,
+	onSearchChange,
 	onPageChange,
 	onRetry,
 	onApprove,
@@ -97,27 +104,41 @@ export function OutletsTable({
 						<CardDescription>{t.admin.outletOrganizationsHint}</CardDescription>
 					</div>
 
-					<Select
-						value={statusFilter}
-						onValueChange={(value) =>
-							onStatusFilterChange(value as OrgStatusFilter)
-						}
-					>
-						<SelectTrigger
-							className="sm:w-48"
-							aria-label={t.admin.filterByStatus}
+					{/* Same shape as the agency table's bar: the box sits BEFORE the
+					    status select, so both org screens read identically. */}
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+						<div className="relative sm:w-56">
+							<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+							<Input
+								value={search}
+								onChange={(e) => onSearchChange(e.target.value)}
+								placeholder={t.adminOrg.searchOutletsPlaceholder}
+								className="pl-8"
+								aria-label={t.adminOrg.searchOutletsAria}
+							/>
+						</div>
+						<Select
+							value={statusFilter}
+							onValueChange={(value) =>
+								onStatusFilterChange(value as OrgStatusFilter)
+							}
 						>
-							<SelectValue placeholder={t.admin.filterByStatus} />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-							{ORG_STATUSES.map((status) => (
-								<SelectItem key={status} value={status}>
-									{orgStatusLabel(status, t)}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+							<SelectTrigger
+								className="sm:w-48"
+								aria-label={t.admin.filterByStatus}
+							>
+								<SelectValue placeholder={t.admin.filterByStatus} />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+								{ORG_STATUSES.map((status) => (
+									<SelectItem key={status} value={status}>
+										{orgStatusLabel(status, t)}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
 				</div>
 			</CardHeader>
 

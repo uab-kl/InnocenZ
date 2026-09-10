@@ -28,6 +28,10 @@ import {
 	InputGroupButton,
 	InputGroupInput,
 } from "@/components/ui/input-group";
+import {
+	enterOrganisation,
+	shouldChooseOrganisation,
+} from "@/lib/auth/enter-organisation";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
@@ -203,10 +207,6 @@ function LoginPage() {
 		onSubmit: async ({ value }) => {
 			setError(null);
 
-			const { startAgencyRealSession, startOutletRealSession } = await import(
-				"@/lib/auth/agency-demo-session"
-			);
-
 			// Demo accounts for the ported portals (client-side demo data, no
 			// backend). DEV-ONLY: `import.meta.env.DEV` is replaced with the literal
 			// `false` at build time, so this whole branch — and the dynamic import
@@ -273,51 +273,51 @@ function LoginPage() {
 						? requestedNext
 						: null;
 
-				if (home === "agency") {
-					await startAgencyRealSession({
-						id: profile.id,
-						email: profile.email || value.email,
-						displayName: profile.displayName,
-						username: profile.username,
-					});
-					const { getAgencyIdentity } = await import(
-						"@agency-portal/lib/agency-identity"
-					);
-					const { AGENCY_PENDING_PROFILE_PATH } = await import(
-						"@agency-portal/lib/agency-rbac"
-					);
-					const { isOrgProfileOnly } = await import(
-						"@/components/organization/org-status"
-					);
-					const identity = getAgencyIdentity();
+				/**
+				 * WHICH organisation, for anyone who works in two or more.
+				 *
+				 * `home` only ever said what KIND of portal to open. Somebody at two
+				 * agencies was silently given whichever one the resolvers picked — the
+				 * OLDEST membership on the server, the STRONGEST lane in the browser —
+				 * and the other was unreachable from any screen. Ask instead (owner,
+				 * 10 Sep 2026). One organisation still goes straight through, and an
+				 * admin never comes here at all: see `shouldChooseOrganisation`.
+				 *
+				 * The deep link rides along, so a link that survived the sign-in still
+				 * survives the choice.
+				 */
+				if (shouldChooseOrganisation(profile)) {
 					hardNavigate(
-						isOrgProfileOnly(identity?.agencyStatus)
-							? AGENCY_PENDING_PROFILE_PATH
-							: (nextAllowed ?? "/agency"),
+						nextAllowed
+							? `/choose-organisation?next=${encodeURIComponent(nextAllowed)}`
+							: "/choose-organisation",
 					);
 					return;
 				}
-				if (home === "outlet") {
-					await startOutletRealSession({
-						id: profile.id,
-						email: profile.email || value.email,
-						displayName: profile.displayName,
-						username: profile.username,
-					});
-					const { getOutletIdentity } = await import(
-						"@agency-portal/lib/outlet-identity"
-					);
-					const { OUTLET_PENDING_PROFILE_PATH } = await import(
-						"@agency-portal/lib/outlet-rbac"
-					);
-					const { isOrgProfileOnly } = await import(
-						"@/components/organization/org-status"
-					);
-					const identity = getOutletIdentity();
-					hardNavigate(
-						isOrgProfileOnly(identity?.outletStatus)
-							? OUTLET_PENDING_PROFILE_PATH
-							: (nextAllowed ?? "/outlet"),
+
+				if (home === "agency" || home === "outlet") {
+					/*
+					 * At most one match, by the branch above. Naming it — rather than
+					 * leaving the server to fall back to its own pick — is what puts the
+					 * same organisation on screen and in scope from the first request.
+					 *
+					 * No membership at all still opens the portal: that is a person whose
+					 * role grants the portal while their membership row is missing or
+					 * unreadable, and refusing them here would be a new way to be locked
+					 * out of a portal they could open yesterday. With no id to send, both
+					 * sides fall back exactly as they did before.
+					 */
+					const only = profile.organisations.find((o) => o.kind === home);
+					await enterOrganisation(
+						{
+							id: profile.id,
+							email: profile.email || value.email,
+							displayName: profile.displayName,
+							username: profile.username,
+						},
+						only ?? null,
+						home,
+						nextAllowed,
 					);
 					return;
 				}
@@ -382,301 +382,308 @@ function LoginPage() {
 			</header>
 
 			<div className="relative z-10 flex w-full flex-1 flex-col lg:flex-row">
-			<aside className="relative z-10 hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 lg:flex lg:w-[46%] xl:px-16">
-				{/*
-				 * Vertically centred — the owner's call after seeing both.
-				 *
-				 * A top datum was tried first (it collects the column's slack
-				 * into one band instead of two gaps), but with a block this
-				 * short in a column this tall it simply moved the emptiness to
-				 * the bottom, where it read as more conspicuous rather than
-				 * less. Centring balances it. The design work that came with
-				 * that experiment — the dropped tagline, the rule, the
-				 * editorial measure — stays.
-				 */}
-				<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
+				<aside className="relative z-10 hidden min-h-svh w-full shrink-0 flex-col overflow-hidden border-r border-royal-gold/20 px-10 py-14 lg:flex lg:w-[46%] xl:px-16">
 					{/*
-					 * `showTagline` is deliberately OFF.
+					 * Vertically centred — the owner's call after seeing both.
 					 *
-					 * It printed "Crowned nightlife" directly under "Connect ·
-					 * Engage · Entertain" — two violet spaced-caps lines of near
-					 * equal weight, so neither won and the block read as a list of
-					 * slogans. The three-verb line is the stronger brand asset and
-					 * keeps it.
-					 *
-					 * It also fixes an i18n hole for free: BrandLogo.tsx:99 hardcodes
-					 * that string as raw English JSX with no dictionary key, so it
-					 * stayed English under 中文.
+					 * A top datum was tried first (it collects the column's slack
+					 * into one band instead of two gaps), but with a block this
+					 * short in a column this tall it simply moved the emptiness to
+					 * the bottom, where it read as more conspicuous rather than
+					 * less. Centring balances it. The design work that came with
+					 * that experiment — the dropped tagline, the rule, the
+					 * editorial measure — stays.
 					 */}
-					<BrandLogo variant="stacked" size="auth" showMotto />
+					<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
+						{/*
+						 * `showTagline` is deliberately OFF.
+						 *
+						 * It printed "Crowned nightlife" directly under "Connect ·
+						 * Engage · Entertain" — two violet spaced-caps lines of near
+						 * equal weight, so neither won and the block read as a list of
+						 * slogans. The three-verb line is the stronger brand asset and
+						 * keeps it.
+						 *
+						 * It also fixes an i18n hole for free: BrandLogo.tsx:99 hardcodes
+						 * that string as raw English JSX with no dictionary key, so it
+						 * stayed English under 中文.
+						 */}
+						<BrandLogo variant="stacked" size="auth" showMotto />
 
-					{/* A short rule, not a full-width one — it reads as a mark under
+						{/* A short rule, not a full-width one — it reads as a mark under
 					    the crest rather than as a divider splitting the column. */}
 
-					<div className="mt-9 max-w-[34ch]">
-						<p className="login-aside-lede text-foreground/80">
-							{t.authPages.loginAsideDescription}
+						<div className="mt-9 max-w-[34ch]">
+							<p className="login-aside-lede text-foreground/80">
+								{t.authPages.loginAsideDescription}
+							</p>
+						</div>
+					</div>
+
+					{/* The band's bottom edge — gives the air a boundary to end on. */}
+					<div className="relative z-10 mt-auto w-full pt-8">
+						<p className="login-footer text-center text-foreground/55 sm:text-left">
+							© {new Date().getFullYear()}{" "}
+							<span className="brand-wordmark text-gradient-royal">
+								InnocenZ
+							</span>
+							. {t.authPages.rightsReserved}
+							{" · "}
+							<a
+								href="/policy"
+								className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
+							>
+								{t.webShell.privacyPolicyTitle}
+							</a>
 						</p>
 					</div>
-				</div>
+				</aside>
 
-				{/* The band's bottom edge — gives the air a boundary to end on. */}
-				<div className="relative z-10 mt-auto w-full pt-8">
-					<p className="login-footer text-center text-foreground/55 sm:text-left">
-						© {new Date().getFullYear()}{" "}
-						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
-						. {t.authPages.rightsReserved}
-						{" · "}
-						<a
-							href="/policy"
-							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
-						>
-							{t.webShell.privacyPolicyTitle}
-						</a>
-					</p>
-				</div>
-			</aside>
+				<main className="relative z-10 flex w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20">
+					<div className="mx-auto w-full max-w-120">
+						<div className="mb-6 flex justify-center lg:hidden">
+							{/* Same tagline drop as the aside — the two must not disagree. */}
+							<BrandLogo variant="stacked" size="md" showMotto />
+						</div>
 
-			<main className="relative z-10 flex w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14 xl:px-20">
-
-				<div className="mx-auto w-full max-w-120">
-					<div className="mb-6 flex justify-center lg:hidden">
-						{/* Same tagline drop as the aside — the two must not disagree. */}
-						<BrandLogo variant="stacked" size="md" showMotto />
-					</div>
-
-					<div className="mb-6">
-						<h1 className="login-heading text-foreground">
-							<span className="login-heading-line">
-								{t.authPages.loginHeadingLine1}
-							</span>
-							<span className="login-heading-line mt-1">
-								<span className="text-gradient-royal drop-shadow-[0_0_20px_color-mix(in_oklab,var(--royal-gold)_35%,transparent)]">
-									{t.authPages.loginHeadingAccent}
+						<div className="mb-6">
+							<h1 className="login-heading text-foreground">
+								<span className="login-heading-line">
+									{t.authPages.loginHeadingLine1}
 								</span>
-							</span>
-						</h1>
-					</div>
+								<span className="login-heading-line mt-1">
+									<span className="text-gradient-royal drop-shadow-[0_0_20px_color-mix(in_oklab,var(--royal-gold)_35%,transparent)]">
+										{t.authPages.loginHeadingAccent}
+									</span>
+								</span>
+							</h1>
+						</div>
 
-					<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-7 shadow-glow-gold-lg backdrop-blur-md sm:p-9">
-						<form
-							id="login-form"
-							aria-label={t.authPages.loginFormLabel}
-							onSubmit={(e) => {
-								e.preventDefault();
-								form.handleSubmit();
-							}}
-						>
-							<FieldGroup className="gap-5">
-								<form.Field name="email">
-									{(field) => {
-										const isInvalid =
-											field.state.meta.isDirty && !field.state.meta.isValid;
-										const errorId = `${field.name}-error`;
-										return (
-											<Field data-invalid={isInvalid}>
-												<FieldLabel
-													htmlFor={field.name}
-													className="login-field-label"
-												>
-													{t.authPages.emailLabel}
-												</FieldLabel>
-												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
-													<InputGroupAddon align="inline-start">
-														<Mail
-															className="size-5 text-royal-gold"
-															strokeWidth={1.75}
-															aria-hidden
-														/>
-													</InputGroupAddon>
-													<InputGroupInput
-														id={field.name}
-														name={field.name}
-														type="email"
-														placeholder={EMAIL_PLACEHOLDER}
-														value={field.state.value}
-														onBlur={field.handleBlur}
-														onChange={(e) => field.handleChange(e.target.value)}
-														disabled={form.state.isSubmitting}
-														aria-invalid={isInvalid}
-														aria-describedby={isInvalid ? errorId : undefined}
-														autoComplete="email"
-														autoFocus
-														className="login-input"
-													/>
-												</InputGroup>
-												{isInvalid && (
-													<FieldError
-														id={errorId}
-														errors={field.state.meta.errors}
-														className="text-lg"
-													/>
-												)}
-											</Field>
-										);
-									}}
-								</form.Field>
-
-								<form.Field name="password">
-									{(field) => {
-										const isInvalid =
-											field.state.meta.isDirty && !field.state.meta.isValid;
-										const errorId = `${field.name}-error`;
-										return (
-											<Field data-invalid={isInvalid}>
-												<div className="flex flex-wrap items-baseline justify-between gap-x-4">
+						<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-7 shadow-glow-gold-lg backdrop-blur-md sm:p-9">
+							<form
+								id="login-form"
+								aria-label={t.authPages.loginFormLabel}
+								onSubmit={(e) => {
+									e.preventDefault();
+									form.handleSubmit();
+								}}
+							>
+								<FieldGroup className="gap-5">
+									<form.Field name="email">
+										{(field) => {
+											const isInvalid =
+												field.state.meta.isDirty && !field.state.meta.isValid;
+											const errorId = `${field.name}-error`;
+											return (
+												<Field data-invalid={isInvalid}>
 													<FieldLabel
 														htmlFor={field.name}
 														className="login-field-label"
 													>
-														{t.authPages.passwordLabel}
+														{t.authPages.emailLabel}
 													</FieldLabel>
-													{/* Carries whatever is already typed in the email
-													    field so the reset page starts prefilled. */}
-													<Link
-														to="/forgot-password"
-														search={() => {
-															const typed = form.state.values.email.trim();
-															return typed ? { email: typed } : {};
-														}}
-														className="login-support text-gold-bright underline underline-offset-4 hover:text-gold"
-													>
-														{t.authPages.forgotPasswordLink}
-													</Link>
-												</div>
-												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
-													<InputGroupAddon align="inline-start">
-														<Lock
-															className="size-5 text-royal-gold"
-															strokeWidth={1.75}
-															aria-hidden
-														/>
-													</InputGroupAddon>
-													<InputGroupInput
-														id={field.name}
-														name={field.name}
-														type={showPassword ? "text" : "password"}
-														placeholder={t.authPages.passwordPlaceholder}
-														value={field.state.value}
-														onBlur={field.handleBlur}
-														onChange={(e) => field.handleChange(e.target.value)}
-														disabled={form.state.isSubmitting}
-														aria-invalid={isInvalid}
-														aria-describedby={isInvalid ? errorId : undefined}
-														autoComplete="current-password"
-														className="login-input"
-													/>
-													<InputGroupAddon align="inline-end">
-														<InputGroupButton
-															type="button"
-															onClick={() => setShowPassword(!showPassword)}
-															aria-label={
-																showPassword
-																	? t.webUi.hidePassword
-																	: t.webUi.showPassword
+													<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
+														<InputGroupAddon align="inline-start">
+															<Mail
+																className="size-5 text-royal-gold"
+																strokeWidth={1.75}
+																aria-hidden
+															/>
+														</InputGroupAddon>
+														<InputGroupInput
+															id={field.name}
+															name={field.name}
+															type="email"
+															placeholder={EMAIL_PLACEHOLDER}
+															value={field.state.value}
+															onBlur={field.handleBlur}
+															onChange={(e) =>
+																field.handleChange(e.target.value)
 															}
 															disabled={form.state.isSubmitting}
-															variant="ghost"
-															size="icon-sm"
+															aria-invalid={isInvalid}
+															aria-describedby={isInvalid ? errorId : undefined}
+															autoComplete="email"
+															autoFocus
+															className="login-input"
+														/>
+													</InputGroup>
+													{isInvalid && (
+														<FieldError
+															id={errorId}
+															errors={field.state.meta.errors}
+															className="text-lg"
+														/>
+													)}
+												</Field>
+											);
+										}}
+									</form.Field>
+
+									<form.Field name="password">
+										{(field) => {
+											const isInvalid =
+												field.state.meta.isDirty && !field.state.meta.isValid;
+											const errorId = `${field.name}-error`;
+											return (
+												<Field data-invalid={isInvalid}>
+													<div className="flex flex-wrap items-baseline justify-between gap-x-4">
+														<FieldLabel
+															htmlFor={field.name}
+															className="login-field-label"
 														>
-															{showPassword ? (
-																<EyeOff
-																	className="size-5 text-muted-foreground"
-																	strokeWidth={1.75}
-																	aria-hidden
-																/>
-															) : (
-																<Eye
-																	className="size-5 text-muted-foreground"
-																	strokeWidth={1.75}
-																	aria-hidden
-																/>
-															)}
-														</InputGroupButton>
-													</InputGroupAddon>
-												</InputGroup>
-												{isInvalid && (
-													<FieldError
-														id={errorId}
-														errors={field.state.meta.errors}
-														className="text-lg"
-													/>
-												)}
-											</Field>
-										);
-									}}
-								</form.Field>
-							</FieldGroup>
+															{t.authPages.passwordLabel}
+														</FieldLabel>
+														{/* Carries whatever is already typed in the email
+													    field so the reset page starts prefilled. */}
+														<Link
+															to="/forgot-password"
+															search={() => {
+																const typed = form.state.values.email.trim();
+																return typed ? { email: typed } : {};
+															}}
+															className="login-support text-gold-bright underline underline-offset-4 hover:text-gold"
+														>
+															{t.authPages.forgotPasswordLink}
+														</Link>
+													</div>
+													<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
+														<InputGroupAddon align="inline-start">
+															<Lock
+																className="size-5 text-royal-gold"
+																strokeWidth={1.75}
+																aria-hidden
+															/>
+														</InputGroupAddon>
+														<InputGroupInput
+															id={field.name}
+															name={field.name}
+															type={showPassword ? "text" : "password"}
+															placeholder={t.authPages.passwordPlaceholder}
+															value={field.state.value}
+															onBlur={field.handleBlur}
+															onChange={(e) =>
+																field.handleChange(e.target.value)
+															}
+															disabled={form.state.isSubmitting}
+															aria-invalid={isInvalid}
+															aria-describedby={isInvalid ? errorId : undefined}
+															autoComplete="current-password"
+															className="login-input"
+														/>
+														<InputGroupAddon align="inline-end">
+															<InputGroupButton
+																type="button"
+																onClick={() => setShowPassword(!showPassword)}
+																aria-label={
+																	showPassword
+																		? t.webUi.hidePassword
+																		: t.webUi.showPassword
+																}
+																disabled={form.state.isSubmitting}
+																variant="ghost"
+																size="icon-sm"
+															>
+																{showPassword ? (
+																	<EyeOff
+																		className="size-5 text-muted-foreground"
+																		strokeWidth={1.75}
+																		aria-hidden
+																	/>
+																) : (
+																	<Eye
+																		className="size-5 text-muted-foreground"
+																		strokeWidth={1.75}
+																		aria-hidden
+																	/>
+																)}
+															</InputGroupButton>
+														</InputGroupAddon>
+													</InputGroup>
+													{isInvalid && (
+														<FieldError
+															id={errorId}
+															errors={field.state.meta.errors}
+															className="text-lg"
+														/>
+													)}
+												</Field>
+											);
+										}}
+									</form.Field>
+								</FieldGroup>
 
-							{error && (
-								<div
-									role="alert"
-									className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-xl text-destructive"
-								>
-									<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-									<span>{loginErrorText(error, t)}</span>
-								</div>
-							)}
-
-							<form.Subscribe
-								selector={(state) => [state.isSubmitting, state.canSubmit]}
-							>
-								{([isSubmitting, canSubmit]) => (
-									<Button
-										type="submit"
-										form="login-form"
-										className="login-btn mt-8 w-full bg-[image:var(--gradient-royal)] font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95"
-										disabled={isSubmitting || !canSubmit}
-										aria-busy={isSubmitting}
+								{error && (
+									<div
+										role="alert"
+										className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-xl text-destructive"
 									>
-										{isSubmitting ? (
-											<>
-												<Loader2 className="h-4 w-4 animate-spin" />
-												{t.authPages.signingIn}
-											</>
-										) : (
-											t.authPages.signIn
-										)}
-									</Button>
+										<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+										<span>{loginErrorText(error, t)}</span>
+									</div>
 								)}
-							</form.Subscribe>
-						</form>
+
+								<form.Subscribe
+									selector={(state) => [state.isSubmitting, state.canSubmit]}
+								>
+									{([isSubmitting, canSubmit]) => (
+										<Button
+											type="submit"
+											form="login-form"
+											className="login-btn mt-8 w-full bg-[image:var(--gradient-royal)] font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95"
+											disabled={isSubmitting || !canSubmit}
+											aria-busy={isSubmitting}
+										>
+											{isSubmitting ? (
+												<>
+													<Loader2 className="h-4 w-4 animate-spin" />
+													{t.authPages.signingIn}
+												</>
+											) : (
+												t.authPages.signIn
+											)}
+										</Button>
+									)}
+								</form.Subscribe>
+							</form>
+						</div>
+
+						<p className="login-support mt-8 text-center text-muted-foreground">
+							{t.authPages.needAccount}{" "}
+							<Link
+								to="/signup"
+								className="text-gold-bright underline underline-offset-4 hover:text-gold"
+							>
+								{t.authPages.signUpCta}
+							</Link>
+						</p>
+
+						<p className="login-support mt-3 text-center text-muted-foreground">
+							{t.authPages.needHelp}{" "}
+							<a
+								href="mailto:support@innocenz.com"
+								className="text-gold-bright underline underline-offset-4 hover:text-gold"
+							>
+								{t.authPages.contactSupport}
+							</a>
+						</p>
+
+						<p className="login-footer mt-10 text-center text-foreground/55 lg:hidden">
+							© {new Date().getFullYear()}{" "}
+							<span className="brand-wordmark text-gradient-royal">
+								InnocenZ
+							</span>
+							. {t.authPages.rightsReserved}
+							{" · "}
+							<a
+								href="/policy"
+								className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
+							>
+								{t.webShell.privacyPolicyTitle}
+							</a>
+						</p>
 					</div>
-
-					<p className="login-support mt-8 text-center text-muted-foreground">
-						{t.authPages.needAccount}{" "}
-						<Link
-							to="/signup"
-							className="text-gold-bright underline underline-offset-4 hover:text-gold"
-						>
-							{t.authPages.signUpCta}
-						</Link>
-					</p>
-
-					<p className="login-support mt-3 text-center text-muted-foreground">
-						{t.authPages.needHelp}{" "}
-						<a
-							href="mailto:support@innocenz.com"
-							className="text-gold-bright underline underline-offset-4 hover:text-gold"
-						>
-							{t.authPages.contactSupport}
-						</a>
-					</p>
-
-					<p className="login-footer mt-10 text-center text-foreground/55 lg:hidden">
-						© {new Date().getFullYear()}{" "}
-						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
-						. {t.authPages.rightsReserved}
-						{" · "}
-						<a
-							href="/policy"
-							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
-						>
-							{t.webShell.privacyPolicyTitle}
-						</a>
-					</p>
-				</div>
-			</main>
+				</main>
 			</div>
 		</div>
 	);

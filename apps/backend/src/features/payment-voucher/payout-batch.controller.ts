@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { logger } from '@/util/logger';
 import { getActor } from '@/util/actor';
-import { activeAgencyId } from '@/util/org-scope.js';
+import { pickAgencyId } from '@/util/org-scope.js';
 import { paramId } from '@/util/params';
 import { notify } from '@/features/notification/notify';
 import type { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
@@ -57,7 +57,7 @@ export class PayoutBatchControllerClass {
     const roles = await this.authRepository.getRolesForUserIds([user.id]);
     if (roles.some((r) => r.roleName === 'admin')) return { isAdmin: true, agencyId: null };
     const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    return { isAdmin: false, agencyId: activeAgencyId(memberships) };
+    return { isAdmin: false, agencyId: pickAgencyId(req, memberships) };
   }
 
   /** A batch this caller may touch, or null. Cross-agency reads 404, never 403. */
