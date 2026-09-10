@@ -16,15 +16,14 @@ import {
 } from 'drizzle-orm';
 import { db } from '@/db/index';
 import type { PayeeBank } from './payout-batch.model';
-import { AgencyTable } from '@/features/agency/agency.model';
+import { AgencyTable, AgencyUserTable } from '@/features/agency/agency.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model';
-import { RoleTable } from '@/features/rbac/role/role.model';
-import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
 import { klToday } from './payment-voucher-week';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { prepareLine, resolveComponent } from './payment-voucher-component';
@@ -1132,22 +1131,24 @@ export class PaymentVoucherRepositoryClass {
    * HELD AT THE AGENCY WHOSE VOUCHER IS BEING SIGNED.
    *
    * Read at SIGNING time and then frozen onto the voucher; see
-   * `financeHeadRole`. Null when the signer holds no membership there, which
-   * is a real answer: the document then says who signed without claiming a
-   * title it cannot stand behind.
+   * `financeHeadRole`. Null when the signer holds no active membership there,
+   * which is a real answer: the document then says who signed without
+   * claiming a title it cannot stand behind.
    *
-   * ⚠️ This used to take the FIRST `user_role` row — no ORDER BY, no portal
-   * filter — and its own note conceded the shape: *"if that ever stops being
-   * true this must take the one that authorised the signature, not whichever
-   * row sorts first — an ordering accident is not an attestation."* It has
-   * stopped being true. A person may hold two agency-portal roles (invite
-   * accept adds without pruning, and a title change prunes only when this is
-   * their sole agency), so the old read could print **Owner** under a
-   * signature given as **Finance**, permanently, on an exportable document —
-   * and with no portal predicate it could print `pr` or `admin`.
+   * ⚠️ This used to take the FIRST `user_role` row — no ORDER BY and no portal
+   * predicate — and its own note conceded the shape: *"if that ever stops
+   * being true this must take the one that authorised the signature, not
+   * whichever row sorts first — an ordering accident is not an attestation."*
+   *
+   * It has stopped being true. A person can hold two agency-portal roles
+   * (invite-accept adds without pruning, and a title change prunes only when
+   * this is their sole agency), so the old read could print **Owner** under a
+   * signature given as **Finance** — permanently, on a sealed and exportable
+   * document that never re-derives itself. With no portal filter it could
+   * equally print `pr` or `admin`.
    *
    * Since 0160 the title is a column on the membership, so the question has
-   * an exact answer and this asks it directly.
+   * one exact answer and this asks it of the right agency.
    */
   async getUserRoleName(
     userId: string,

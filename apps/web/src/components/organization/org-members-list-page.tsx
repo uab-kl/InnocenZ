@@ -120,12 +120,15 @@ type Row = {
  * `GET /agency/team-members` and `GET /outlet/team-members` exist for this
  * screen and page in SQL.
  *
- * ⚠️ THE SUB-ROLE COLUMN IS PER-PERSON, NOT PER-MEMBERSHIP. The lane is derived
- * from `user_role → role → portal` with no organisation term, so an operator who
- * belongs to two agencies shows the SAME lane on both rows, and anyone holding
- * no portal role at all reads as Owner. That is invisible on a single-org team
- * tab and obvious here — which is why the card says where the lane comes from
- * instead of letting the column imply it was set per organisation.
+ * THE SUB-ROLE COLUMN IS PER-MEMBERSHIP, since migration 0160. Each row shows
+ * the title held AT THAT ORGANISATION, so one person listed twice can correctly
+ * show Finance on one row and Owner on the other.
+ *
+ * ⚠️ This block used to say the exact opposite, and it was true when written:
+ * the lane was derived from `user_role → role → portal` with no organisation
+ * term, every membership of a person showed the same value, and anyone holding
+ * no portal role read as Owner. If you are reading a comment elsewhere that
+ * still claims that, it is stale — the column is the authority now.
  */
 export function OrgMembersListPage({
 	orgKind,
