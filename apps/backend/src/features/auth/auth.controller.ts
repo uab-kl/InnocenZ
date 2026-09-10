@@ -34,7 +34,10 @@ import { withUserProfile } from '@/util/user-profile-image.js';
 import { z } from 'zod';
 import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.repository.js';
 import { generateSecret, otpauthUri, verifyTotp } from '@/util/totp.js';
-import { suspendedOrgBlock } from '@/features/auth/org-status.js';
+import {
+  orgStatusDeniesSignIn,
+  suspendedOrgBlock,
+} from '@/features/auth/org-status.js';
 import {
   isVerifiedOtpUsable,
   normalizePhoneDigits,
@@ -1248,9 +1251,17 @@ export class AuthControllerClass {
         return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
       }
 
-      // Heal accounts that still have org membership but lost specialized
-      // portal roles (agency_owner / outlet_owner) after the role cleanup.
-      await this.authRepository.ensurePortalRolesFromMembership(user.id);
+      /*
+       * NO ROLE IS MINTED HERE ANY MORE. `/auth/me` used to call
+       * `ensurePortalRolesFromMembership`, which granted a portal role to any
+       * account holding an active membership without one — so a signed-in
+       * request QUIETLY CREATED AUTHORITY. See the tombstone in
+       * `auth.repository.ts` for why that was an escalation after 0160, and
+       * where the one case it was really covering is now fixed instead.
+       *
+       * A read must stay a read. This handler answers what the account HAS;
+       * granting is the job of sign-up, invite acceptance, or an admin.
+       */
 
       const roles = await this.authRepository.getRolesForUserIds([user.id]);
       const permissions = await this.authRepository.getUserPermissions(user.id);
@@ -1269,17 +1280,35 @@ export class AuthControllerClass {
        * organisation goes straight through, two or more must be asked, because
        * the server would otherwise pick the oldest and never mention it.
        *
-       * Active memberships only: an inactive one is not somewhere they can
-       * work, and offering it would produce a choice the scope resolver then
-       * refuses.
+       * ⚠️ EVERY membership is returned, not only the active ones, and each
+       * says whether it can be ENTERED (owner, 10 Sep 2026: *"remember need
+       * for the user to see that the organisation which is banned which is
+       * not"*).
+       *
+       * This list used to be filtered to `status: 'active'`, on the reasoning
+       * that offering a dead membership produces a choice the scope resolver
+       * then refuses. That reasoning is right about ENTERING and wrong about
+       * SHOWING. Deactivation is per-organisation: somebody removed from one
+       * agency while still working at another simply saw that agency vanish,
+       * with nothing to distinguish "you were deactivated here" from "this
+       * organisation never existed". Silence is the one answer that leaves
+       * them with no idea whether to contact anyone.
+       *
+       * So the answer is CARRIED rather than filtered, and `enterable` is
+       * computed HERE — once, on the server — so no client has to re-derive
+       * which combination of two statuses means "you may work here".
+       *
+       * ⚠️ `enterable` is NOT `orgStatus === 'active'`. `orgStatusDeniesSignIn`
+       * is the login gate's own rule and denies `inactive` ONLY:
+       * `pending_review` and `suspended` keep a deliberate profile-only
+       * session, so greying those out would lock owners out of the settings
+       * screen they are meant to reach. Shared with the gate for exactly that
+       * reason — two spellings would drift, and the drift shows up as a picker
+       * that disagrees with the door.
        */
       const [agencyMemberships, outletMemberships] = await Promise.all([
-        this.agencyMemberRepository.listMembershipsByUserIds([user.id], {
-          status: 'active',
-        }),
-        this.outletMemberRepository.listMembershipsByUserIds([user.id], {
-          status: 'active',
-        }),
+        this.agencyMemberRepository.listMembershipsByUserIds([user.id]),
+        this.outletMemberRepository.listMembershipsByUserIds([user.id]),
       ]);
       const organisations = [
         ...agencyMemberships.map((m) => ({
@@ -1288,6 +1317,12 @@ export class AuthControllerClass {
           name: m.agencyName,
           subRole: m.subRole,
           memberCode: m.memberCode ?? null,
+          /** This person's standing INSIDE the organisation. */
+          membershipStatus: m.status,
+          /** The organisation's own standing on the platform. */
+          orgStatus: m.agencyStatus,
+          enterable:
+            m.status === 'active' && !orgStatusDeniesSignIn(m.agencyStatus),
         })),
         ...outletMemberships.map((m) => ({
           kind: 'outlet' as const,
@@ -1295,6 +1330,10 @@ export class AuthControllerClass {
           name: m.outletName,
           subRole: m.subRole,
           memberCode: m.memberCode ?? null,
+          membershipStatus: m.status,
+          orgStatus: m.outletStatus,
+          enterable:
+            m.status === 'active' && !orgStatusDeniesSignIn(m.outletStatus),
         })),
       ];
 

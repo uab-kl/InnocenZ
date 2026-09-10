@@ -9,6 +9,7 @@ import { notify, notifyMany } from '@/features/notification/notify';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
+import { pickAgencyId } from '@/util/org-scope';
 import { logger } from '@/util/logger';
 import { guardMemberChange } from '@/util/member-change-guard';
 import {
@@ -183,7 +184,23 @@ export class AgencyControllerClass {
             status: 'active',
           },
         );
-        const callerAgencyId = own[0]?.agencyId ?? null;
+        /*
+         * The SIXTH copy of the arbitrary-membership pick. The comment above
+         * says "never `own[0]`" and the line beneath it was `own[0]` — the
+         * `status: 'active'` half of that fix landed and the arbitrary-pick
+         * half did not.
+         *
+         * Worse than the fallbacks already removed, because
+         * `listMembershipsByUserIds` orders by `agency.name`: this took the
+         * ALPHABETICALLY FIRST agency, so an operator at "Atlas" and "Delta"
+         * always answered as Atlas and could never see Delta's PR links —
+         * stable, invisible, and nobody chose it.
+         *
+         * `pickAgencyId` is the same function the guards use, so guard and
+         * handler now answer "which organisation" identically. It honours a
+         * VERIFIED `x-org-id` and otherwise falls back exactly as before.
+         */
+        const callerAgencyId = pickAgencyId(req, own);
         if (!callerAgencyId) {
           // An agency-portal account with no agency behind it can answer nothing.
           // Empty, never unfiltered — failing open here is the whole bug.
@@ -700,7 +717,11 @@ export class AgencyControllerClass {
           callerId ? [callerId] : [],
           { status: 'active' },
         );
-        const callerAgencyId = own[0]?.agencyId ?? null;
+        // The SEVENTH copy — same alphabetical-first pick as `listPrLinks`
+        // above, and moved onto the same shared resolver for the same reason.
+        // `resolve-session-identity` is unaffected: it reads only itself, so
+        // `isSelfReadOnly` short-circuits before this branch is reached.
+        const callerAgencyId = pickAgencyId(req, own);
         // No agency behind the account answers nothing. Empty, never unfiltered.
         const scoped = callerAgencyId
           ? memberships.filter((m) => m.agencyId === callerAgencyId)
@@ -1455,10 +1476,32 @@ export class AgencyControllerClass {
         }
       }
 
-      if (
-        parsed.data.subRole != null &&
-        parsed.data.subRole !== target.subRole
-      ) {
+      /**
+       * ⚠️ THE TEST IS "A TITLE WAS NAMED", NOT "THE TITLE CHANGED".
+       *
+       * It used to also require `parsed.data.subRole !== target.subRole`, and
+       * that extra term left the one hole this whole endpoint exists to close.
+       * Reinstating a removed member with the lane they ALREADY held —
+       * `{status:'active', subRole:'finance'}` against a row whose `sub_role`
+       * column already says `finance`, which is exactly what the UI sends
+       * because it pre-selects their remembered lane — matched
+       * `subRole === target.subRole`, skipped this entire block, and therefore
+       * never re-assigned the portal role that removal had revoked. The
+       * member came back ACTIVE WITH NO ROLE.
+       *
+       * That state is not merely broken, it is the state
+       * `ensurePortalRolesFromMembership` existed to paper over: on the next
+       * `/auth/me` it silently minted a role for them. And since 0160 that
+       * heal was far more generous than its name suggested — `holdsAgencyLane`
+       * uses the role only as a DOOR check and reads the authority off
+       * `agency_user.sub_role`, so healing a removed OWNER handed back OWNER
+       * authority, with no invite and nobody's decision behind it.
+       *
+       * Naming the same title is a legitimate, deliberate reinstatement. It
+       * has to grant. The 409 above still covers the other case — reactivating
+       * without naming any title, for somebody whose role is gone.
+       */
+      if (parsed.data.subRole != null) {
         const roleName = portalRoleNameForSubRole(
           'agency',
           parsed.data.subRole,
@@ -1664,7 +1707,10 @@ export class AgencyControllerClass {
           .json({ success: false, message: refusal, data: null });
       }
 
-      const removed = await this.agencyMemberRepository.remove(memberId);
+      const removed = await this.agencyMemberRepository.remove(
+        memberId,
+        getActor(req),
+      );
       if (!removed)
         return res
           .status(404)

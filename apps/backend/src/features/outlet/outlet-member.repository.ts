@@ -1,5 +1,6 @@
 import { and, count, eq, ilike, inArray, or } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { logger } from '@/util/logger';
 import {
   ensureAccountCodeFromMembership,
@@ -28,6 +29,10 @@ export type OutletMemberEnriched = OutletUserType & {
   username: string;
   email: string | null;
   phoneNum: string | null;
+  /** WHO LAST SWITCHED THIS MEMBERSHIP OFF, by name — joined from
+   * `updated_by`, never stored. Null for `'system'` or a deleted account.
+   * See `util/actor-name.ts`; twin of `AgencyMemberEnriched.updatedByName`. */
+  updatedByName: string | null;
 };
 
 /** One outlet membership joined to its outlet — used to resolve a signed-in
@@ -197,12 +202,14 @@ export class OutletMemberRepositoryClass {
           updatedAt: OutletUserTable.updatedAt,
           createdBy: OutletUserTable.createdBy,
           updatedBy: OutletUserTable.updatedBy,
+          updatedByName: actorNameColumn,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
         })
         .from(OutletUserTable)
         .innerJoin(UserTable, eq(UserTable.id, OutletUserTable.userId))
+        .leftJoin(ActorUser, actorJoinOn(OutletUserTable.updatedBy))
         .where(eq(OutletUserTable.outletId, outletId))
         .orderBy(OutletUserTable.createdAt);
 
@@ -277,6 +284,7 @@ export class OutletMemberRepositoryClass {
           updatedAt: OutletUserTable.updatedAt,
           createdBy: OutletUserTable.createdBy,
           updatedBy: OutletUserTable.updatedBy,
+          updatedByName: actorNameColumn,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
@@ -286,6 +294,9 @@ export class OutletMemberRepositoryClass {
         .from(OutletUserTable)
         .innerJoin(UserTable, eq(UserTable.id, OutletUserTable.userId))
         .innerJoin(OutletTable, eq(OutletTable.id, OutletUserTable.outletId))
+        // LEFT — an archive must not hide the rows a cron job or a deleted
+        // account switched off. See `util/actor-name.ts`.
+        .leftJoin(ActorUser, actorJoinOn(OutletUserTable.updatedBy))
         .where(where)
         // Venue, then person, then id — a TOTAL order, so no row lands on two
         // pages when two memberships share a created_at.
@@ -368,12 +379,18 @@ export class OutletMemberRepositoryClass {
     }
   }
 
-  async remove(id: string, tx?: DbTransaction): Promise<boolean> {
+  /** The venue twin of `AgencyMemberRepository.remove` — see the note there
+   * for why `actor` is required rather than optional. */
+  async remove(
+    id: string,
+    actor: string,
+    tx?: DbTransaction,
+  ): Promise<boolean> {
     try {
       const dbClient = tx ?? db;
       await dbClient
         .update(OutletUserTable)
-        .set({ status: 'inactive', updatedAt: new Date() })
+        .set({ status: 'inactive', updatedAt: new Date(), updatedBy: actor })
         .where(eq(OutletUserTable.id, id));
       return true;
     } catch (error) {

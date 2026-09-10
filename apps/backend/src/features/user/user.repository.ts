@@ -1,10 +1,18 @@
-import { eq, and, asc, desc, count, ilike, inArray, SQL, sql, or } from 'drizzle-orm';
+import { eq, and, asc, desc, count, getTableColumns, ilike, inArray, SQL, sql, or } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { UserTable, UserType, UserInsertType, UserFilter } from './user.model';
 import { DbTransaction } from '@/types/db-transaction';
 import { logger } from '@/util/logger';
 import { buildPeriodDateWhere } from '@/util/filter-date-format';
 import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository';
+
+/**
+ * A user row plus WHO LAST TOUCHED IT, by name — the admin archive screen's
+ * "Deactivated by". Resolved through a join, never stored. The twin of
+ * `AgencyWithActor` / `OutletWithActor`; see `util/actor-name.ts`.
+ */
+export type UserWithActor = UserType & { updatedByName: string | null };
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository';
 
 /**
@@ -121,7 +129,7 @@ export class UserRepositoryClass {
     sort?: { field: 'email' | 'phoneNum' | 'username' | 'createdAt' | 'updatedAt'; direction: 'asc' | 'desc' };
     page: number;
     pageSize: number;
-  }): Promise<{ users: UserType[]; totalCount: number }> {
+  }): Promise<{ users: UserWithActor[]; totalCount: number }> {
     try {
       const { filter, sort, page, pageSize } = params;
       const conditions: Array<SQL | undefined> = [];
@@ -188,8 +196,11 @@ export class UserRepositoryClass {
       const totalCount = Number(countRow?.value ?? 0);
 
       const users = await db
-        .select()
+        .select({ ...getTableColumns(UserTable), updatedByName: actorNameColumn })
         .from(UserTable)
+        // WHO SWITCHED IT OFF, by name. LEFT and cast uuid->text, so a row
+        // stamped `'system'` still appears — see `util/actor-name.ts`.
+        .leftJoin(ActorUser, actorJoinOn(UserTable.updatedBy))
         .where(whereClause)
         .orderBy(sortDirection(sortColumn))
         .limit(pageSize)

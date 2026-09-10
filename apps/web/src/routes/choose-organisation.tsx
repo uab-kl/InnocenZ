@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Building2, ChevronRight, Loader2, Store } from "lucide-react";
+import { Ban, Building2, ChevronRight, Loader2, Store } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Button } from "@/components/ui/button";
@@ -96,16 +96,41 @@ function ChooseOrganisationBody() {
 			}
 			if (!isLive()) return;
 
+			/*
+			 * ⚠️ ROUTE ON WHAT CAN BE ENTERED, RENDER EVERYTHING.
+			 *
+			 * `profile.organisations` now carries deactivated memberships too, so
+			 * that they can be SHOWN. Counting the raw list here would decide two
+			 * things wrongly, and the first is the dangerous one:
+			 *
+			 *  * somebody whose ONLY membership is deactivated used to arrive with
+			 *    an empty list and land on the default path — with the wider list
+			 *    they arrive with exactly one, and a `length === 1` test would
+			 *    silently auto-enter the organisation they were removed from;
+			 *  * somebody with one live and one dead membership would be offered a
+			 *    "choice" between one real card and one greyed one.
+			 *
+			 * The list below stays whole — the greyed cards are the point of the
+			 * screen — but only enterable ones are counted, entered, or skipped on.
+			 */
 			const orgs = profile.organisations;
+			const enterable = orgs.filter((o) => o.enterable);
 			// ONE organisation is not a choice — go where they were always going.
-			if (orgs.length === 1) {
-				setPhase({ kind: "entering", profile, orgId: orgs[0].id });
-				await enterOrganisation(profile, orgs[0], orgs[0].kind, next ?? null);
+			if (enterable.length === 1) {
+				const only = enterable[0];
+				setPhase({ kind: "entering", profile, orgId: only.id });
+				await enterOrganisation(profile, only, only.kind, next ?? null);
 				return;
 			}
-			// NONE means an admin, or a membership list that could not be read.
-			// Either way the pre-existing landing rule is the honest answer.
-			if (orgs.length === 0) {
+			/*
+			 * NONE means an admin, a PR (neither holds a membership row at all), a
+			 * membership list that could not be read — or, since the list widened,
+			 * an account whose every membership is deactivated. The pre-existing
+			 * landing rule is still the honest answer for all four: removal revokes
+			 * the portal role, so the last case resolves to `/no-access` rather
+			 * than a portal it cannot use.
+			 */
+			if (enterable.length === 0) {
 				hardNavigate(next ?? defaultLandingPath(profile));
 				return;
 			}
@@ -246,35 +271,75 @@ function OrgGroup({
 				{heading}
 			</h2>
 			<ul className="mt-3 flex flex-col gap-3">
-				{orgs.map((org) => (
-					<li key={`${org.kind}:${org.id}`}>
-						<button
-							type="button"
-							onClick={() => onChoose(org)}
-							className="flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-royal-gold/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						>
-							<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
-								<Icon className="h-5 w-5 text-foreground" strokeWidth={1.5} />
-							</span>
-							<span className="flex min-w-0 flex-1 flex-col">
-								<span className="truncate text-base font-semibold text-foreground">
-									{org.name}
+				{orgs.map((org) => {
+					/*
+					 * WHY this card cannot be opened — the membership, or the whole
+					 * organisation. Checked in that order because the membership is the
+					 * more specific answer: when somebody has been removed AND the
+					 * organisation is switched off, "you were removed" is the one they
+					 * can actually act on.
+					 */
+					const blockedReason = org.enterable
+						? null
+						: org.membershipStatus !== "active"
+							? t.chooseOrg.membershipInactive
+							: t.chooseOrg.orgInactive;
+					return (
+						<li key={`${org.kind}:${org.id}`}>
+							<button
+								type="button"
+								disabled={!org.enterable}
+								onClick={() => onChoose(org)}
+								className={
+									org.enterable
+										? "flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-royal-gold/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										: "flex w-full cursor-not-allowed items-center gap-4 rounded-xl border border-dashed border-border bg-muted/40 px-5 py-4 text-left opacity-70"
+								}
+							>
+								<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
+									{org.enterable ? (
+										<Icon
+											className="h-5 w-5 text-foreground"
+											strokeWidth={1.5}
+										/>
+									) : (
+										<Ban
+											className="h-5 w-5 text-muted-foreground"
+											strokeWidth={1.5}
+										/>
+									)}
 								</span>
-								<span className="mt-0.5 truncate text-sm text-muted-foreground">
-									{portalRoleLabel(org.subRole, t)}
-									{org.memberCode ? (
-										<>
-											{" · "}
-											{t.chooseOrg.memberId}{" "}
-											<span className="font-mono">{org.memberCode}</span>
-										</>
+								<span className="flex min-w-0 flex-1 flex-col">
+									<span className="truncate text-base font-semibold text-foreground">
+										{org.name}
+									</span>
+									<span className="mt-0.5 truncate text-sm text-muted-foreground">
+										{portalRoleLabel(org.subRole, t)}
+										{org.memberCode ? (
+											<>
+												{" · "}
+												{t.chooseOrg.memberId}{" "}
+												<span className="font-mono">{org.memberCode}</span>
+											</>
+										) : null}
+									</span>
+									{blockedReason ? (
+										<span className="mt-1 truncate text-sm text-rose-600 dark:text-rose-400">
+											{blockedReason}
+										</span>
 									) : null}
 								</span>
-							</span>
-							<ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-						</button>
-					</li>
-				))}
+								{org.enterable ? (
+									<ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+								) : (
+									<span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+										{t.chooseOrg.unavailable}
+									</span>
+								)}
+							</button>
+						</li>
+					);
+				})}
 			</ul>
 		</section>
 	);

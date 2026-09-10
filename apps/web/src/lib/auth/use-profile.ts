@@ -26,6 +26,9 @@ interface MeResponse {
 		name: string;
 		subRole: string;
 		memberCode?: string | null;
+		membershipStatus?: string;
+		orgStatus?: string;
+		enterable?: boolean;
 	}[];
 	/** UI language saved on the account (migration 0122): "en" | "zh" | null. */
 	preferredLocale?: string | null;
@@ -89,6 +92,22 @@ export async function fetchProfile(): Promise<User> {
 			name: o.name,
 			subRole: o.subRole,
 			memberCode: o.memberCode ?? null,
+			/*
+			 * ⚠️ THIS MAPPER IS WHERE THE SLICE LIVES OR DIES. It rebuilds each
+			 * organisation field by field, so anything the backend adds and this
+			 * does not copy is dropped before any screen sees it — the failure
+			 * would be a picker whose status is `undefined` on every card, with
+			 * no error anywhere to say why.
+			 *
+			 * The fallbacks describe an OLDER BACKEND, which returned only active
+			 * memberships and no statuses. Reading absence as "active and
+			 * enterable" therefore reproduces exactly the old behaviour rather
+			 * than greying out every organisation against a server that cannot
+			 * answer yet.
+			 */
+			membershipStatus: o.membershipStatus ?? "active",
+			orgStatus: o.orgStatus ?? "active",
+			enterable: o.enterable ?? true,
 		})),
 		readPermission: profile.permissions
 			.filter((p) => p.permissionType === "read")

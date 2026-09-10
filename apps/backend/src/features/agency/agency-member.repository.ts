@@ -1,5 +1,6 @@
 import { and, count, eq, ilike, inArray, or } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { logger } from '@/util/logger';
 import {
   ensureAccountCodeFromMembership,
@@ -29,6 +30,13 @@ export type AgencyMemberEnriched = AgencyUserType & {
   username: string;
   email: string | null;
   phoneNum: string | null;
+  /**
+   * WHO LAST SWITCHED THIS MEMBERSHIP OFF, by name — joined from
+   * `updated_by`, never stored here. Null when the actor was `'system'` or
+   * their account no longer exists; the screen renders its own fallback
+   * rather than being handed an invented name. See `util/actor-name.ts`.
+   */
+  updatedByName: string | null;
 };
 
 /** `agencyStatus` is the organisation's status (`pending_review` / `active` / …),
@@ -223,12 +231,14 @@ export class AgencyMemberRepositoryClass {
           updatedAt: AgencyUserTable.updatedAt,
           createdBy: AgencyUserTable.createdBy,
           updatedBy: AgencyUserTable.updatedBy,
+          updatedByName: actorNameColumn,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
         })
         .from(AgencyUserTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyUserTable.userId))
+        .leftJoin(ActorUser, actorJoinOn(AgencyUserTable.updatedBy))
         .where(and(...conditions))
         .orderBy(AgencyUserTable.createdAt);
 
@@ -316,6 +326,7 @@ export class AgencyMemberRepositoryClass {
           updatedAt: AgencyUserTable.updatedAt,
           createdBy: AgencyUserTable.createdBy,
           updatedBy: AgencyUserTable.updatedBy,
+          updatedByName: actorNameColumn,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
@@ -326,6 +337,10 @@ export class AgencyMemberRepositoryClass {
         .from(AgencyUserTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyUserTable.userId))
         .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyUserTable.agencyId))
+        // LEFT, so a membership ended by `'system'` or by an account since
+        // deleted still appears — an archive that hides its oldest rows is
+        // not an archive. See `util/actor-name.ts`.
+        .leftJoin(ActorUser, actorJoinOn(AgencyUserTable.updatedBy))
         .where(where)
         // Organisation first, then the person: the screen is read by agency.
         // `id` last so the order is TOTAL — two members created in the same
@@ -425,12 +440,32 @@ export class AgencyMemberRepositoryClass {
     }
   }
 
-  async remove(id: string, tx?: DbTransaction): Promise<boolean> {
+  /**
+   * WHO REMOVED THEM is written here, not left to be inferred.
+   *
+   * `actor` is REQUIRED and sits BEFORE the optional `tx` on purpose: the
+   * audit quartet was already on this table and the removal simply never
+   * wrote its half, so the archive screen could say a membership ended but
+   * never who ended it. Making the parameter optional would have let the one
+   * call site keep compiling while still writing nothing — the same shape as
+   * the optional `logo` that shipped a feature which never rendered. A
+   * required parameter makes the compiler name every caller.
+   *
+   * `updated_by` holds a user id, or the literal `'system'` from
+   * `getActor` when there is no authenticated caller — never a name. The
+   * name is read back through a join, so a person who is later renamed is
+   * still named correctly on every row they ever touched.
+   */
+  async remove(
+    id: string,
+    actor: string,
+    tx?: DbTransaction,
+  ): Promise<boolean> {
     try {
       const dbClient = tx ?? db;
       await dbClient
         .update(AgencyUserTable)
-        .set({ status: 'inactive', updatedAt: new Date() })
+        .set({ status: 'inactive', updatedAt: new Date(), updatedBy: actor })
         .where(eq(AgencyUserTable.id, id));
       return true;
     } catch (error) {

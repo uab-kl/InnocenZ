@@ -1101,9 +1101,10 @@ export class PrControllerClass {
     try {
       const id = paramId(req.params.id);
 
-      // Same resolution as update, and for a sharper reason: `removeLink` takes
-      // an agency id, so an oldest-membership answer here detaches the PR from
-      // the wrong agency — for an admin, one that was never asked about.
+      // Same resolution as update, and for a sharper reason: everything below
+      // is scoped to ONE agency, so an oldest-membership answer here detaches
+      // the PR from the wrong one — for an admin, one that was never asked
+      // about. `resolved.agencyId` is the agency the caller is acting in.
       const resolved = await this.resolvePrForCaller(req, res, id, {
         forWrite: true,
       });
@@ -1123,10 +1124,41 @@ export class PrControllerClass {
           getActor(req),
         );
       }
-      await this.prRepository.update(id, {
-        status: 'inactive',
-        updatedBy: getActor(req),
-      });
+
+      /**
+       * ⚠️ `prRepository.update(id, { status: 'inactive' })` USED TO RUN HERE,
+       * AND IT UNDID THE LINE ABOVE. It is deleted, not trimmed.
+       *
+       * That call had exactly one effect, and it was the wrong one. Of its
+       * three write branches, only the `agency_pr` one could fire — the other
+       * two need name/icNo/phone/email, none of which were passed — and that
+       * branch maps `status: 'inactive'` onto `approveStatus: 'rejected'`. So
+       * two statements after writing `'left'`, the row said `'rejected'`.
+       * It never touched `user.status`: the `status` here is the LINK's, not
+       * the account's, so nothing was deactivating a PR's login.
+       *
+       * ⚠️ Three separate harms, and the third outlives the request:
+       *  1. **It lied to the operator.** `'rejected'` renders as *"declined by
+       *     your agency"* on the assignment gate; the PR was not declined,
+       *     they were let go. `'left'` has its own message telling the
+       *     operator to re-add them under Manage PR.
+       *  2. **It could hit the wrong agency.** `update` re-resolved the agency
+       *     through `getByUserId(id)` with no agency argument, which takes the
+       *     OLDEST membership. For a PR on several rosters — 7 accounts here,
+       *     one on four agencies — cancelling at agency B downgraded a
+       *     still-approved row at agency A. `setApproveStatus` above is
+       *     correctly scoped to `resolved.agencyId`; this was the only part of
+       *     the handler that was not.
+       *  3. **It armed a later hard delete.** `syncLinksForUser` DELETES
+       *     `'rejected'` rows and RETAINS `'left'` ones, so the rewrite turned
+       *     a protected record into a deletable one: the PR's next save on
+       *     their own agency picker would erase the membership history that
+       *     `'left'` exists to preserve.
+       *
+       * The money was never at risk either way — `payment_voucher` carries its
+       * own `agency_id` and no read joins `agency_pr` — which is the owner's
+       * rule: cancelling ends the WORK, not the DEBT (10 Sep 2026).
+       */
       res
         .status(200)
         .json({ success: true, message: 'PR removed', data: null });

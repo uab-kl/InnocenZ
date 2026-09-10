@@ -101,7 +101,14 @@ export async function enterOrganisation(
 export function shouldChooseOrganisation(profile: User): boolean {
 	const home = pickHomePortal(profile.portals, profile.roles);
 	if (home !== "agency" && home !== "outlet") return false;
-	return profile.organisations.length > 1;
+	/*
+	 * ⚠️ ENTERABLE ones only. `organisations` now carries deactivated
+	 * memberships too, so a plain `.length > 1` would send somebody who works
+	 * at exactly ONE organisation to a chooser listing that one plus a greyed
+	 * card they cannot pick — a decision with only one possible answer.
+	 * The chooser is for a real choice; the archive belongs on their profile.
+	 */
+	return profile.organisations.filter((o) => o.enterable).length > 1;
 }
 
 /**

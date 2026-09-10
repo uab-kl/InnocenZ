@@ -1,4 +1,13 @@
-/** One organisation this account actually works in (an ACTIVE membership). */
+/**
+ * One organisation this account belongs to — INCLUDING ones it can no longer
+ * enter, which is the whole point of `enterable`.
+ *
+ * This used to be "an ACTIVE membership" and the server filtered the rest out.
+ * A member deactivated at one organisation simply saw it disappear, which is
+ * indistinguishable from never having been there. Deactivation is
+ * per-organisation, so the other organisations keep working and the user has
+ * to be able to tell which one went away and why.
+ */
 export interface UserOrganisation {
 	kind: "agency" | "outlet";
 	id: string;
@@ -7,6 +16,19 @@ export interface UserOrganisation {
 	subRole: string;
 	/** This person's member id INSIDE this organisation — INNATAGY0001. */
 	memberCode: string | null;
+	/** THIS PERSON's standing here: "active" once deactivated becomes "inactive". */
+	membershipStatus: string;
+	/** The ORGANISATION's own standing: active | pending_review | suspended | inactive. */
+	orgStatus: string;
+	/**
+	 * May they actually work here right now? Computed on the SERVER from both
+	 * statuses above, using the login gate's own deny rule — never re-derived
+	 * on the client, so the picker can never disagree with the door.
+	 *
+	 * ⚠️ Not the same as "both statuses are active": a `pending_review` or
+	 * `suspended` organisation is still enterable, with a profile-only session.
+	 */
+	enterable: boolean;
 }
 
 export interface User {

@@ -3554,6 +3554,18 @@ const en = {
 		sortBy: "Sort By",
 		sortOrder: "Sort Order",
 		colUpdated: "Updated",
+		/**
+		 * WHO switched the record off — the column beside "Updated", which only
+		 * ever said WHEN. Deliberately not "Removed by": this one screen lists
+		 * five kinds of record and only one of them was *removed* —
+		 * organisations are suspended, accounts are deactivated — so the header
+		 * has to be true of all five at once.
+		 */
+		colDeactivatedBy: "Deactivated by",
+		/** Shown when `updated_by` names an account that no longer exists. */
+		actorUnknown: "Unknown",
+		/** A scheduler or an unauthenticated path, not a person. */
+		actorSystem: "System",
 		ascending: "Ascending",
 		descending: "Descending",
 		suspendedInactiveRecords: "Suspended & inactive records",
@@ -6131,6 +6143,20 @@ const en = {
 		outlets: "Outlets",
 		/** Prefix on each card for this person’s member id INSIDE that organisation. */
 		memberId: "Member ID",
+		/**
+		 * Why a card cannot be opened. Three DIFFERENT reasons, kept apart on
+		 * purpose: "you were removed from here" and "this whole organisation is
+		 * switched off" are opposite situations — one is about this person, the
+		 * other about everybody — and pointing someone at the wrong person to
+		 * ask is the failure this screen exists to prevent.
+		 */
+		membershipInactive: "You were removed from this organisation",
+		orgInactive: "This organisation is deactivated",
+		unavailable: "Unavailable",
+		/** Heading over the cards that cannot be entered. */
+		noLongerAvailable: "No longer available",
+		noLongerAvailableHint:
+			"Ask an InnocenZ admin to restore access. Your other organisations are unaffected.",
 		loading: "Loading your organisations…",
 		failed: "Could not load your organisations",
 		retry: "Try again",
@@ -9290,6 +9316,9 @@ const zh: PortalTranslations = {
 		sortBy: "排序方式",
 		sortOrder: "排序顺序",
 		colUpdated: "更新时间",
+		colDeactivatedBy: "停用操作人",
+		actorUnknown: "未知",
+		actorSystem: "系统",
 		ascending: "升序",
 		descending: "降序",
 		suspendedInactiveRecords: "已暂停与已停用的记录",
@@ -11050,6 +11079,12 @@ const zh: PortalTranslations = {
 		agencies: "经纪公司",
 		outlets: "门店",
 		memberId: "会员编号",
+		membershipInactive: "您已被移出该组织",
+		orgInactive: "该组织已停用",
+		unavailable: "不可用",
+		noLongerAvailable: "已不可用",
+		noLongerAvailableHint:
+			"请联系 InnocenZ 管理员恢复访问权限。您的其他组织不受影响。",
 		loading: "正在加载您的机构…",
 		failed: "无法加载您的机构",
 		retry: "重试",

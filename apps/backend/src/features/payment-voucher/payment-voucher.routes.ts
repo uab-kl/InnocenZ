@@ -79,8 +79,21 @@ router.post(
 //
 // Declared here, after '/mine/...', for the reason every route in this file is
 // ordered: '/:id/export-ticket' would otherwise let 'mine' match ':id'.
+//
+// ⚠️ THE ROLE GATE IS NAMED HERE BECAUSE THE ROUTER-WIDE ONE CANNOT REACH IT.
+// `router.use(requireRole('admin', 'agency'))` is 20 lines below, and express
+// applies middleware only to routes registered AFTER it — so this route sat
+// behind authentication alone, reachable by ANY signed-in token including a
+// PR's or a venue operator's. Nothing leaked: `createVoucherExportTicket`
+// compares `voucher.agencyId` against the caller's resolved scope and a
+// caller with no agency membership resolves `null`, so they 404. But that
+// handler check was the ONLY thing standing, and it was never meant to be —
+// the route is up here for PATH ORDERING ('/:id/…' would otherwise swallow
+// '/mine/…'), which is a routing concern that silently took a security
+// decision with it. Stated inline so moving the route cannot lose it again.
 router.post(
   '/:id/export-ticket',
+  requireRole('admin', 'agency'),
   paymentVoucherController.createVoucherExportTicket.bind(
     paymentVoucherController,
   ),

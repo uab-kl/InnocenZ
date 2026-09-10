@@ -1193,10 +1193,32 @@ export class OutletControllerClass {
         }
       }
 
-      if (
-        parsed.data.subRole != null &&
-        parsed.data.subRole !== target.subRole
-      ) {
+      /**
+       * ⚠️ THE TEST IS "A TITLE WAS NAMED", NOT "THE TITLE CHANGED".
+       *
+       * It used to also require `parsed.data.subRole !== target.subRole`, and
+       * that extra term left the one hole this whole endpoint exists to close.
+       * Reinstating a removed member with the lane they ALREADY held —
+       * `{status:'active', subRole:'finance'}` against a row whose `sub_role`
+       * column already says `finance`, which is exactly what the UI sends
+       * because it pre-selects their remembered lane — matched
+       * `subRole === target.subRole`, skipped this entire block, and therefore
+       * never re-assigned the portal role that removal had revoked. The
+       * member came back ACTIVE WITH NO ROLE.
+       *
+       * That state is not merely broken, it is the state
+       * `ensurePortalRolesFromMembership` existed to paper over: on the next
+       * `/auth/me` it silently minted a role for them. And since 0160 that
+       * heal was far more generous than its name suggested — `holdsAgencyLane`
+       * uses the role only as a DOOR check and reads the authority off
+       * `agency_user.sub_role`, so healing a removed OWNER handed back OWNER
+       * authority, with no invite and nobody's decision behind it.
+       *
+       * Naming the same title is a legitimate, deliberate reinstatement. It
+       * has to grant. The 409 above still covers the other case — reactivating
+       * without naming any title, for somebody whose role is gone.
+       */
+      if (parsed.data.subRole != null) {
         const roleName = portalRoleNameForSubRole(
           'outlet',
           parsed.data.subRole,
@@ -1393,7 +1415,10 @@ export class OutletControllerClass {
           .json({ success: false, message: refusal, data: null });
       }
 
-      const removed = await this.outletMemberRepository.remove(memberId);
+      const removed = await this.outletMemberRepository.remove(
+        memberId,
+        getActor(req),
+      );
       if (!removed)
         return res
           .status(404)
