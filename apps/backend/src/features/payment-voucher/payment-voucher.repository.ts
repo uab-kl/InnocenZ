@@ -16,15 +16,14 @@ import {
 } from 'drizzle-orm';
 import { db } from '@/db/index';
 import type { PayeeBank } from './payout-batch.model';
-import { AgencyTable } from '@/features/agency/agency.model';
+import { AgencyTable, AgencyUserTable } from '@/features/agency/agency.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model';
-import { RoleTable } from '@/features/rbac/role/role.model';
-import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
 import { klToday } from './payment-voucher-week';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { prepareLine, resolveComponent } from './payment-voucher-component';
@@ -1128,25 +1127,46 @@ export class PaymentVoucherRepositoryClass {
   }
 
   /**
-   * The capacity to record against a signature — 'Owner', 'Finance', …
+   * The capacity to record against a signature — 'Owner', 'Finance', … — AS
+   * HELD AT THE AGENCY WHOSE VOUCHER IS BEING SIGNED.
    *
    * Read at SIGNING time and then frozen onto the voucher; see
-   * `financeHeadRole`. Null when the account holds no role, which is a real
-   * answer: the document then says who signed without claiming a title.
+   * `financeHeadRole`. Null when the signer holds no active membership there,
+   * which is a real answer: the document then says who signed without
+   * claiming a title it cannot stand behind.
    *
-   * Takes the FIRST role. Portal accounts hold one; if that ever stops being
-   * true this must take the one that authorised the signature, not whichever
-   * row sorts first — an ordering accident is not an attestation.
+   * ⚠️ This used to take the FIRST `user_role` row — no ORDER BY and no portal
+   * predicate — and its own note conceded the shape: *"if that ever stops
+   * being true this must take the one that authorised the signature, not
+   * whichever row sorts first — an ordering accident is not an attestation."*
+   *
+   * It has stopped being true. A person can hold two agency-portal roles
+   * (invite-accept adds without pruning, and a title change prunes only when
+   * this is their sole agency), so the old read could print **Owner** under a
+   * signature given as **Finance** — permanently, on a sealed and exportable
+   * document that never re-derives itself. With no portal filter it could
+   * equally print `pr` or `admin`.
+   *
+   * Since 0160 the title is a column on the membership, so the question has
+   * one exact answer and this asks it of the right agency.
    */
-  async getUserRoleName(userId: string): Promise<string | null> {
+  async getUserRoleName(
+    userId: string,
+    agencyId: string,
+  ): Promise<string | null> {
     try {
       const [row] = await db
-        .select({ roleName: RoleTable.roleName })
-        .from(UserRoleTable)
-        .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
-        .where(eq(UserRoleTable.userId, userId))
+        .select({ subRole: AgencyUserTable.subRole })
+        .from(AgencyUserTable)
+        .where(
+          and(
+            eq(AgencyUserTable.userId, userId),
+            eq(AgencyUserTable.agencyId, agencyId),
+            eq(AgencyUserTable.status, 'active'),
+          ),
+        )
         .limit(1);
-      return row?.roleName ?? null;
+      return row ? portalRoleNameForSubRole('agency', row.subRole) : null;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getUserRoleName] Error:', error);
       return null;

@@ -1430,9 +1430,11 @@ export class AgencyControllerClass {
        * in. That state was unreachable until `removeMember` began revoking the
        * role, so this refusal is part of that change, not separate from it.
        *
-       * There is nothing to restore automatically: the sub-role lives on
-       * `user_role`, never on `agency_user` (see the note on AgencyUserTable),
-       * so once the role is gone the member's former lane is gone with it. The
+       * Since 0160 the membership row DOES remember the lane they held —
+       * `agency_user.sub_role` survives removal. What does not survive is the
+       * portal ROLE, which removal revokes, and that is the access this refusal
+       * is about. So the row can still say what they were, and reinstating them
+       * still has to name what they will be. The
        * owner has to say which lane they are restoring.
        */
       const reactivating =

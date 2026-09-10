@@ -9,8 +9,10 @@ import {
 
 export { redactSensitive };
 import {
+  agencyMemberRepository,
   auditLogRepository,
   authRepository,
+  outletMemberRepository,
   moduleRepository,
   permissionRepository,
   rolePermissionRepository,
@@ -21,6 +23,14 @@ import {
 import { logger } from '@/util/logger';
 import { db } from '@/db/index';
 import { paramId } from '@/util/params';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
+import { type OrgScopeDeps, resolveActingOrgId } from '@/util/org-scope';
+
+const orgScopeDeps: OrgScopeDeps = {
+  authRepository,
+  agencyMemberRepository,
+  outletMemberRepository,
+};
 export type AuditActionType =
   | 'CREATE'
   | 'UPDATE'
@@ -277,14 +287,58 @@ export function registerAllAuditOldDataFetchers(): void {
   });
 }
 
-async function getUserRoleNameById(userId: string): Promise<string | null> {
+/**
+ * IN WHAT CAPACITY DID THIS ACTOR ACT — for `audit_log.role`.
+ *
+ * ⚠️ This used to be `roles[0]?.roleName` after an admin special case. Two
+ * things were wrong with it and both matter for a trail: `getUserRoles` has
+ * no ORDER BY, so `[0]` was an insertion-order accident, and the answer was
+ * global, so it could not say which organisation the write landed on. For a
+ * person who is Director at one agency and Finance at another, a permitted
+ * write could be recorded as made by a VIEW-ONLY account — which is exactly
+ * the kind of claim an audit log exists to settle.
+ *
+ * Now it asks the membership of the organisation being acted in. `audit_log`
+ * still has no organisation column of its own, so this records the capacity,
+ * not the venue — but the capacity it records is the true one.
+ *
+ * The fallback is deliberate and unchanged for everyone it covers: an actor
+ * with no agency or venue membership (a PR, a service account) keeps the old
+ * answer, because for them there is no membership to be more precise about.
+ */
+async function getUserRoleNameById(
+  userId: string,
+  req?: Request,
+): Promise<string | null> {
   const roles = await userRoleRepository.getUserRoles(userId);
   if (roles.length === 0) {
     return null;
   }
 
+  // Admin is a platform capacity, not an organisational one — tested first,
+  // exactly as before, and the audit resolvers filter on this string.
   const adminRole = roles.find((role) => role.roleName === 'admin');
-  return adminRole?.roleName ?? roles[0]?.roleName ?? null;
+  if (adminRole) return adminRole.roleName;
+
+  if (req) {
+    for (const org of ['agency', 'outlet'] as const) {
+      const memberships =
+        org === 'agency'
+          ? await agencyMemberRepository.listByUser(userId)
+          : await outletMemberRepository.listByUser(userId);
+      if (!memberships.some((m) => m.status === 'active')) continue;
+      const orgId = await resolveActingOrgId(req, orgScopeDeps, org);
+      if (!orgId) continue;
+      const here = memberships.find(
+        (m) =>
+          m.status === 'active' &&
+          ('agencyId' in m ? m.agencyId : m.outletId) === orgId,
+      );
+      if (here) return portalRoleNameForSubRole(org, here.subRole);
+    }
+  }
+
+  return roles[0]?.roleName ?? null;
 }
 
 export async function resolveAuditActor(
@@ -294,7 +348,10 @@ export async function resolveAuditActor(
   if (req.user?.id) {
     return {
       userId: req.user.id,
-      role: roleOverride !== undefined ? roleOverride : await getUserRoleNameById(req.user.id),
+      role:
+        roleOverride !== undefined
+          ? roleOverride
+          : await getUserRoleNameById(req.user.id, req),
     };
   }
 
@@ -313,7 +370,10 @@ export async function resolveAuditActor(
     req.user = user;
     return {
       userId: user.id,
-      role: roleOverride !== undefined ? roleOverride : await getUserRoleNameById(user.id),
+      role:
+        roleOverride !== undefined
+          ? roleOverride
+          : await getUserRoleNameById(user.id, req),
     };
   } catch {
     return { userId: null, role: null };

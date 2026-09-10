@@ -2306,7 +2306,9 @@ export class PaymentVoucherControllerClass {
         // AND IN WHAT CAPACITY — an owner signing must not be labelled the
         // finance head. Frozen here rather than resolved at render time; see
         // `financeHeadRole` on the model.
-        this.paymentVoucherRepository.getUserRoleName(actor),
+        // …at the agency whose voucher this is, not whichever role row
+        // happened to sort first.
+        this.paymentVoucherRepository.getUserRoleName(actor, existing.agencyId),
       ]);
       const voucher = await this.paymentVoucherRepository.update(id, {
         financeHeadName: signerName ?? actor,
