@@ -201,6 +201,7 @@ async function ensureOwnerMembership(userId: string, outletId: string): Promise<
     outletId,
     userId,
     status: 'active',
+    subRole: 'owner',
     memberCode: await nextOrgMemberCode('outlet', outletId),
     createdBy: ACTOR,
     updatedBy: ACTOR,

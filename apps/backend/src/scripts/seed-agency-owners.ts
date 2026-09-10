@@ -146,6 +146,7 @@ async function ensureOwnerMembership(userId: string, agencyId: string): Promise<
     agencyId,
     userId,
     status: 'active',
+    subRole: 'owner',
     memberCode: await nextOrgMemberCode('agency', agencyId),
     createdBy: ACTOR,
     updatedBy: ACTOR,

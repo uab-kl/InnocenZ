@@ -34,7 +34,7 @@ export const userTypes = [
 		key: "legacy-member",
 		title: "Legacy Member",
 		description:
-			"Review suspended agencies and outlets, and inactive PRs, segmented by role.",
+			"Suspended organizations, deactivated accounts and removed members.",
 		href: "/admin/user-management/legacy-member",
 		icon: Archive,
 	},

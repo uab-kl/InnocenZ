@@ -77,7 +77,8 @@ export function outletSubRoleFromBackend(
 }
 
 /**
- * Choose the membership that should drive the portal: prefer an active owner,
+ * Choose the membership that should drive the portal: the one the person
+ * PICKED if they were asked, else prefer an active owner,
  * then guarantor, finance, ops, director, then any active row, then the first.
  *
  * Ordered by power, so someone holding two memberships lands on the stronger.
@@ -86,12 +87,22 @@ export function outletSubRoleFromBackend(
  */
 export function pickPrimaryMembership(
 	memberships: OutletMembership[],
+	preferredOutletId?: string | null,
 ): OutletMembership | null {
 	if (memberships.length === 0) return null;
 	const active = memberships.filter(
 		(m) => m.status?.toLowerCase() === "active",
 	);
 	const pool = active.length > 0 ? active : memberships;
+	// The person's own answer, when they were asked. It beats the sub-role
+	// ladder below deliberately: that ladder decides which membership is
+	// STRONGEST, which is only the right question while nobody has said which
+	// one they want. Ignored when it names no membership in the pool, so a
+	// stale choice degrades to the old behaviour rather than an empty portal.
+	if (preferredOutletId) {
+		const chosen = pool.find((m) => m.outletId === preferredOutletId);
+		if (chosen) return chosen;
+	}
 	return (
 		pool.find((m) => m.subRole === "owner") ??
 		pool.find((m) => m.subRole === "guarantor") ??

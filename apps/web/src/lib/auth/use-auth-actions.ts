@@ -15,6 +15,8 @@ function loginUserToProfile(user: LoginUser): User {
 		isActive: user.status === "active",
 		roles: [],
 		portals: [],
+		// The login response carries no memberships; /auth/me fills them in.
+		organisations: [],
 		readPermission: ["*"],
 		createPermission: [],
 		updatePermission: [],

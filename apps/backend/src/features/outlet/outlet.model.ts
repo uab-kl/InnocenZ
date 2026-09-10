@@ -75,6 +75,14 @@ export const OutletUserTable = MainSchema.table('outlet_user', {
   userId: uuid('user_id').notNull().references(() => UserTable.id, { onDelete: 'cascade' }),
   status: varchar('status', { length: 50 }).notNull().default('active'),
   /**
+   * WHICH JOB TITLE AT THIS VENUE — owner / finance / operations_head /
+   * director / guarantor. The agency twin's note explains why it lives here
+   * rather than on `user_role`; see AgencyUserTable.subRole.
+   *
+   * ⚠️ NOT NULL with NO DEFAULT. Every insert must name the title.
+   */
+  subRole: varchar('sub_role', { length: 50 }).notNull(),
+  /**
    * The human-readable id for THIS membership — INN + org code + AGY|OLT + 0001.
    *
    * Per membership, not per person: someone operating two organisations holds a

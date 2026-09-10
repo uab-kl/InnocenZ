@@ -589,6 +589,29 @@ export class AgencyControllerClass {
         agencyCode: req.query.agencyCode as string | undefined,
         status: req.query.status as AgencyStatus | undefined,
       };
+
+      /*
+       * A DEACTIVATED agency is invisible to everyone but an admin.
+       *
+       * Owner, 10 Sep 2026: once an admin deactivates an organisation it must
+       * not appear in any screen, search or filter until it is activated
+       * again. `inactive` is the status that already refuses its people at
+       * login (org-status.ts), so leaving it listed here would advertise an
+       * agency nobody at it can sign in to answer for.
+       *
+       * The admin keeps the full list, INCLUDING what they may pass in
+       * `?status=` — reactivating something you cannot see is not possible.
+       * Everyone else is pinned to active and cannot widen it, because a
+       * filter a caller controls is not a filter.
+       */
+      const callerId = getActor(req);
+      const callerRoles = callerId
+        ? await this.authRepository.getRolesForUserIds([callerId])
+        : [];
+      const callerIsAdmin = callerRoles.some(
+        (r) => r.roleName === portalRoleName.ADMIN,
+      );
+      if (!callerIsAdmin) filter.status = 'active';
       const { agencies, totalCount } =
         await this.agencyRepository.listPaginated({ filter, page, pageSize });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -1347,6 +1370,41 @@ export class AgencyControllerClass {
         });
       }
 
+      /**
+       * AND NOT REMOVE YOURSELF EITHER.
+       *
+       * `DELETE /:id/members/:memberId` has always refused self-removal. This
+       * route reaches the SAME removal through a status write — see
+       * "DEACTIVATING HERE IS REMOVING" below — but the self-check above
+       * fires only on a ROLE change, so a body carrying just
+       * `{"status":"inactive"}` walked straight past it. The last owner of a
+       * one-agency account could therefore remove themselves, and the
+       * removal revokes their portal role on the way out, so the endpoint
+       * that would put them back is one they can no longer reach.
+       *
+       * The condition is deliberately identical to the one that TRIGGERS the
+       * revoke further down — anything that is not 'active' — so the refusal
+       * and the effect cannot drift apart. `status` is free text here by
+       * design, which is exactly why the test is 'not active' rather than a
+       * list of words meaning removed.
+       *
+       * No UI offers this today (owner, 10 Sep 2026: *"theres no option in the
+       * edit profile for them to remove themselves but do the fix just as a
+       * prevention anyways"*) — this closes the route, not a live incident.
+       */
+      if (
+        req.user?.id &&
+        target.userId === req.user.id &&
+        parsed.data.status != null &&
+        parsed.data.status !== 'active'
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: 'You cannot remove yourself from the team',
+          data: null,
+        });
+      }
+
       const members = await this.agencyMemberRepository.listByAgency(agencyId);
       const refusal = guardMemberChange({ members, target, next: parsed.data });
       if (refusal) {
@@ -1414,22 +1472,64 @@ export class AgencyControllerClass {
             data: null,
           });
         }
-        const portal = await portalRepository.getPortalByCode('agency');
-        const held = await this.userRoleRepository.getUserRoles(target.userId);
-        for (const r of held) {
-          if (portal && r.portalId === portal.id) {
-            await this.userRoleRepository.removeRoleFromUser(
-              target.userId,
-              r.id,
-            );
-          }
-        }
-        await this.userRoleRepository.assignRoleToUser({
-          userId: target.userId,
-          roleId: nextRole.id,
-          createdBy: actor,
+        /**
+         * THE TITLE IS WRITTEN TO THIS MEMBERSHIP, AND ONLY THIS ONE.
+         *
+         * Owner, 10 Sep 2026: *"it should only change for the organisation,
+         * not all organisation, because that person might have different job
+         * titles with different organisation"*. Since 0160 the title is a
+         * column on the membership row, so a change is one UPDATE against one
+         * agency and cannot reach any other.
+         */
+        await this.agencyMemberRepository.update(memberId, {
+          subRole: parsed.data.subRole,
           updatedBy: actor,
         });
+
+        /**
+         * PORTAL ACCESS is a separate, still-global fact — may this person
+         * open the agency portal at all — and it stays on `user_role`.
+         * So the new title's role is ENSURED rather than swapped in.
+         *
+         * ⚠️ The prune below is conditional, and the condition is the whole
+         * point. Deleting every agency role unconditionally is what
+         * rewrote a person's title at the OTHER organisation, because one of
+         * those rows may be the access their membership there depends on. It
+         * is only safe when this is their only active agency.
+         *
+         * ⚠️ KNOWN GAP, deliberate and recorded: module permissions
+         * (`requirePermission` → `role_permission`) are still resolved from
+         * the union of a person's portal roles with no organisation term. So
+         * for somebody who genuinely staffs two agencys, a demotion
+         * here narrows what the SCREEN offers but not yet what the server
+         * grants. Closing that means giving `userHasPermission` an org
+         * argument — a separate slice, tracked in TEST_SCRIPT §9.
+         */
+        const portal = await portalRepository.getPortalByCode('agency');
+        const held = await this.userRoleRepository.getUserRoles(target.userId);
+        if (!held.some((r) => r.id === nextRole.id)) {
+          await this.userRoleRepository.assignRoleToUser({
+            userId: target.userId,
+            roleId: nextRole.id,
+            createdBy: actor,
+            updatedBy: actor,
+          });
+        }
+        const elsewhere = (
+          await this.agencyMemberRepository.listByUser(target.userId)
+        ).filter(
+          (m) => m.status === 'active' && m.agencyId !== agencyId
+        );
+        if (elsewhere.length === 0) {
+          for (const r of held) {
+            if (portal && r.portalId === portal.id && r.id !== nextRole.id) {
+              await this.userRoleRepository.removeRoleFromUser(
+                target.userId,
+                r.id,
+              );
+            }
+          }
+        }
       }
 
       const memberRow =

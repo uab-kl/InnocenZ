@@ -355,6 +355,88 @@ export class AuthRepositoryClass {
     }
   }
 
+
+  /**
+   * The portal a module belongs to — `agency`, `outlet`, `admin`, or null.
+   *
+   * This is what lets `requirePermission(moduleKey, verb)` work out WHICH
+   * organisation to ask about without every one of its ~40 call sites having
+   * to say so. The module already knew; nothing was reading it.
+   */
+  async modulePortalCode(moduleKey: string): Promise<string | null> {
+    try {
+      const [row] = await db
+        .select({ code: PortalTable.code })
+        .from(ModuleTable)
+        .leftJoin(PortalTable, eq(PortalTable.id, ModuleTable.portalId))
+        .where(
+          and(
+            eq(ModuleTable.moduleKey, moduleKey),
+            eq(ModuleTable.status, 'active'),
+          ),
+        )
+        .limit(1);
+      return row?.code ?? null;
+    } catch (error) {
+      logger.error('[AuthRepository.modulePortalCode] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Does THIS ROLE grant `permissionType` on `moduleKey`?
+   *
+   * The twin of `userHasPermission`, asked of one role instead of the union
+   * of a person's roles. That difference is the point: a person's roles are
+   * global, so the union answers *what may this person do anywhere*, while a
+   * job title belongs to one organisation and must answer *what may they do
+   * HERE*. The caller resolves the title from the membership and passes the
+   * role it maps to.
+   *
+   * Matched by NAME within a portal because that is how the seeds address
+   * roles (`Owner@agency`, `Ops Head@outlet`) and how `portalRoleNameForSubRole`
+   * speaks. Never softens to true on error — an unreadable grant table is not
+   * permission.
+   */
+  async roleHasPermission(
+    roleName: string,
+    portalCode: string,
+    moduleKey: string,
+    permissionType: 'create' | 'read' | 'update',
+  ): Promise<boolean> {
+    try {
+      const [row] = await db
+        .select({ id: RolePermissionTable.id })
+        .from(RoleTable)
+        .innerJoin(PortalTable, eq(PortalTable.id, RoleTable.portalId))
+        .innerJoin(
+          RolePermissionTable,
+          eq(RolePermissionTable.roleId, RoleTable.id),
+        )
+        .innerJoin(
+          PermissionTable,
+          eq(PermissionTable.id, RolePermissionTable.permissionId),
+        )
+        .innerJoin(ModuleTable, eq(ModuleTable.id, PermissionTable.moduleId))
+        .where(
+          and(
+            eq(RoleTable.roleName, roleName),
+            eq(RoleTable.status, 'active'),
+            eq(PortalTable.code, portalCode),
+            eq(PermissionTable.status, 'active'),
+            eq(ModuleTable.status, 'active'),
+            eq(ModuleTable.moduleKey, moduleKey),
+            eq(PermissionTable.permissionType, permissionType),
+          ),
+        )
+        .limit(1);
+      return Boolean(row);
+    } catch (error) {
+      logger.error('[AuthRepository.roleHasPermission] Error:', error);
+      return false;
+    }
+  }
+
   /** True if any of the user's roles belong to the given portal code. */
   async userHasPortal(userId: string, portalCode: string): Promise<boolean> {
     const roles = await this.getRolesForUserIds([userId]);

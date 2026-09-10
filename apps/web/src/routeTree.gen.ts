@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AgencyRouteRouteImport } from './routes/agency/route'
+import { Route as ChooseOrganisationRouteImport } from './routes/choose-organisation'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
@@ -91,6 +92,11 @@ const AdminRouteRoute = AdminRouteRouteImport.update({
 const AgencyRouteRoute = AgencyRouteRouteImport.update({
   id: '/agency',
   path: '/agency',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChooseOrganisationRoute = ChooseOrganisationRouteImport.update({
+  id: '/choose-organisation',
+  path: '/choose-organisation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeleteAccountRoute = DeleteAccountRouteImport.update({
@@ -435,6 +441,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteRouteWithChildren
   '/agency': typeof AgencyRouteRouteWithChildren
   '/outlet': typeof OutletRouteRouteWithChildren
+  '/choose-organisation': typeof ChooseOrganisationRoute
   '/delete-account': typeof DeleteAccountRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -503,6 +510,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
+  '/choose-organisation': typeof ChooseOrganisationRoute
   '/delete-account': typeof DeleteAccountRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -573,6 +581,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteRouteWithChildren
   '/agency': typeof AgencyRouteRouteWithChildren
   '/outlet': typeof OutletRouteRouteWithChildren
+  '/choose-organisation': typeof ChooseOrganisationRoute
   '/delete-account': typeof DeleteAccountRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -645,6 +654,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agency'
     | '/outlet'
+    | '/choose-organisation'
     | '/delete-account'
     | '/forgot-password'
     | '/login'
@@ -713,6 +723,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/choose-organisation'
     | '/delete-account'
     | '/forgot-password'
     | '/login'
@@ -782,6 +793,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agency'
     | '/outlet'
+    | '/choose-organisation'
     | '/delete-account'
     | '/forgot-password'
     | '/login'
@@ -853,6 +865,7 @@ export interface RootRouteChildren {
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   AgencyRouteRoute: typeof AgencyRouteRouteWithChildren
   OutletRouteRoute: typeof OutletRouteRouteWithChildren
+  ChooseOrganisationRoute: typeof ChooseOrganisationRoute
   DeleteAccountRoute: typeof DeleteAccountRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
@@ -886,6 +899,13 @@ declare module '@tanstack/react-router' {
       path: '/agency'
       fullPath: '/agency'
       preLoaderRoute: typeof AgencyRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/choose-organisation': {
+      id: '/choose-organisation'
+      path: '/choose-organisation'
+      fullPath: '/choose-organisation'
+      preLoaderRoute: typeof ChooseOrganisationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/delete-account': {
@@ -1531,6 +1551,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRouteRoute: AdminRouteRouteWithChildren,
   AgencyRouteRoute: AgencyRouteRouteWithChildren,
   OutletRouteRoute: OutletRouteRouteWithChildren,
+  ChooseOrganisationRoute: ChooseOrganisationRoute,
   DeleteAccountRoute: DeleteAccountRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,

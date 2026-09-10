@@ -103,6 +103,10 @@ export class AgencyOutletRepository {
           memberCodePrefix: AgencyTable.memberCodePrefix,
         })
         .from(AgencyTable)
+        // A venue may only ask to work with an agency that is actually open.
+        // This list had NO status term, so a deactivated agency stayed pickable
+        // and the venue's request would land on nobody's desk.
+        .where(eq(AgencyTable.status, 'active'))
         .orderBy(AgencyTable.name);
     } catch (error) {
       logger.error('[AgencyOutletRepository.listDirectory] Error:', error);
@@ -120,6 +124,11 @@ export class AgencyOutletRepository {
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
           memberCodePrefix: AgencyTable.memberCodePrefix,
+          // The AGENCY's own status, not the link's. A partnership already
+          // agreed survives deactivation — the venue simply has to be able to
+          // SEE that the other side is switched off, or it waits on an answer
+          // from people who cannot sign in.
+          agencyStatus: AgencyTable.status,
           approveStatus: AgencyOutletTable.approveStatus,
           rejectReason: AgencyOutletTable.rejectReason,
           // Correlated subqueries, not a join, for the same reason the outlet

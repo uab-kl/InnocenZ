@@ -358,6 +358,9 @@ export class OrgMemberInviteControllerClass {
     if (existing) {
       await this.outletMemberRepository.update(existing.id, {
         status: 'active',
+        // Re-invited with whatever title THIS invite names, which need not be
+        // the one they held before they were removed.
+        subRole: invite.subRole,
         updatedBy: actor,
       });
     } else {
@@ -365,6 +368,7 @@ export class OrgMemberInviteControllerClass {
         outletId,
         userId: user.id,
         status: 'active',
+        subRole: invite.subRole,
         createdBy: actor,
         updatedBy: actor,
       });
@@ -418,6 +422,8 @@ export class OrgMemberInviteControllerClass {
     if (existing) {
       await this.agencyMemberRepository.update(existing.id, {
         status: 'active',
+        // See the venue twin: the invite's title wins over the old one.
+        subRole: invite.subRole,
         updatedBy: actor,
       });
     } else {
@@ -425,6 +431,7 @@ export class OrgMemberInviteControllerClass {
         agencyId,
         userId: user.id,
         status: 'active',
+        subRole: invite.subRole,
         createdBy: actor,
         updatedBy: actor,
       });

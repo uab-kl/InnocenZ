@@ -56,6 +56,8 @@ function OutletOrgsPage() {
 	const { focus } = Route.useSearch();
 	const navigate = Route.useNavigate();
 	const [statusFilter, setStatusFilter] = useState<OrgStatusFilter>("all");
+	const [searchInput, setSearchInput] = useState("");
+	const [debouncedSearch, setDebouncedSearch] = useState("");
 	const [currentPage, setCurrentPage] = useState(1);
 	const [actionId, setActionId] = useState<string | null>(null);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -65,11 +67,23 @@ function OutletOrgsPage() {
 		if (focus) setSelectedId(focus);
 	}, [focus]);
 
+	// 300ms, and the page resets with it — the same shape the agency screen uses.
+	// Without the reset a search from page 3 asks the server for page 3 of a
+	// result set that may only have one page, and answers empty.
+	useEffect(() => {
+		const timer = window.setTimeout(() => {
+			setDebouncedSearch(searchInput.trim());
+			setCurrentPage(1);
+		}, 300);
+		return () => window.clearTimeout(timer);
+	}, [searchInput]);
+
 	const queryParams: OutletsQueryParams = {
 		page: currentPage,
 		pageSize: PAGE_SIZE,
 	};
 	if (statusFilter !== "all") queryParams.status = statusFilter;
+	if (debouncedSearch) queryParams.name = debouncedSearch;
 
 	const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
 		queryKey: ["outlets", queryParams],
@@ -157,6 +171,8 @@ function OutletOrgsPage() {
 					setStatusFilter(value);
 					setCurrentPage(1);
 				}}
+				search={searchInput}
+				onSearchChange={setSearchInput}
 				onPageChange={setCurrentPage}
 				onRetry={() => refetch()}
 				onApprove={(id) => approveMutation.mutate(id)}

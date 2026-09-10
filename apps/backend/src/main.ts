@@ -86,7 +86,22 @@ const corsOptions: cors.CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  /**
+   * ⚠️ A header the browser sends must be named HERE or the request never
+   * happens at all: the preflight refuses it, and the browser reports a CORS
+   * failure rather than anything about the header. Adding x-org-id to the
+   * client without this line broke EVERY authenticated call, /auth/me
+   * included — not just the requests that carry a chosen organisation.
+   */
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    /** Which organisation this session is working in — see org-scope.ts. */
+    'x-org-id',
+  ],
   optionsSuccessStatus: 200,
 };
 

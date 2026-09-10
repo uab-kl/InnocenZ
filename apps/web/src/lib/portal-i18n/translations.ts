@@ -2761,12 +2761,12 @@ const en = {
 		navRbac: "RBAC",
 		navModules: "Modules",
 		navAdmin: "Admin",
-		navPrAgency: "PR Agency",
-		navOutlet: "Outlet",
+		navPrAgency: "Agency Organisations",
+		navOutlet: "Outlet Organisations",
 		navPr: "PR",
 		navLegacyMember: "Legacy Member",
-		navAgencyTeam: "PR Agency Team",
-		navOutletTeam: "Outlet Team",
+		navAgencyTeam: "Agency Members",
+		navOutletTeam: "Outlet Members",
 		navPlanRequest: "Plan Request",
 		navPlanChange: "Plan Change",
 		navPlanPayment: "Plan Payment",
@@ -2948,7 +2948,7 @@ const en = {
 		descOutlet: "Approve and manage Outlet organizations and their members.",
 		descPr: "View PR accounts registered on the platform.",
 		descLegacyMember:
-			"Review suspended agencies and outlets, and inactive PRs, segmented by role.",
+			"Suspended organizations, deactivated accounts and removed members.",
 
 		/* --- User management → Admin --- */
 		adminUsers: "Admin Users",
@@ -3504,8 +3504,16 @@ const en = {
 			"Agency set inactive — its accounts can no longer sign in",
 		agencyDeactivateFailed: "Failed to set the agency inactive",
 		aboutLegacyMember: "About Legacy Member",
+		/**
+		 * Five kinds, three meanings, and the copy has to keep them apart.
+		 *
+		 * It says "currently", not "history of": every row here is a live state,
+		 * so re-inviting a removed member or reactivating an org takes the row off
+		 * this list rather than annotating it. Describing the page as a log would
+		 * promise a record it does not keep.
+		 */
 		aboutLegacyMemberBody:
-			"This list shows suspended Agency and Outlet organizations, plus inactive PR accounts. Filter by Role (not Rank). Reactivating an agency or outlet restores the organization; reactivating a PR re-enables the person's account so they can sign in again.",
+			"Everything currently switched off: suspended organizations, deactivated accounts, and removed members. A removed member may still be active elsewhere — the row names the organization they were removed from. Reactivate organizations and accounts here; restore removed members from that organization's Members page.",
 		searchFilters: "Search Filters",
 		searchFiltersHint:
 			"Find suspended records by name, code, contact, and role.",
@@ -3523,6 +3531,26 @@ const en = {
 		roleOutlet: "Outlet",
 		/** Stays "PR" in both locales — the product's own term for the role, and what the DB stores. */
 		rolePr: "PR",
+		/**
+		 * The two kinds added 10 Sep 2026. They describe PEOPLE, where the three
+		 * above describe organisations and accounts — hence the wording: one names
+		 * what was done TO a membership, the other what was done to an ACCOUNT.
+		 */
+		roleRemovedMember: "Removed Member",
+		roleDisabledAccount: "Deactivated Account",
+		/** Removed, and working nowhere else on the platform. */
+		statusRemoved: "Removed",
+		/**
+		 * Removed HERE and still active somewhere else — the distinction this
+		 * screen exists to make. Without it the row reads as though the person had
+		 * been shut out of the platform, which for a two-organisation operator is
+		 * simply false.
+		 */
+		statusRemovedStillActive: "Removed · active elsewhere",
+		/** `user.status` has three values; printing "Inactive" for a blocked account is a lie the column can avoid. */
+		statusBlockedAccount: "Blocked",
+		/** Goes to the organisation's own Members page, where a lane can be chosen. */
+		openTeam: "Open team",
 		sortBy: "Sort By",
 		sortOrder: "Sort Order",
 		colUpdated: "Updated",
@@ -5766,6 +5794,13 @@ const en = {
 		searchAgenciesPlaceholder: "Search agencies…",
 		/** aria-label on the agency search box. */
 		searchAgenciesAria: "Search agencies by name",
+		/** Badge beside a LINKED organisation an admin has switched off. */
+		orgDeactivatedBadge: "Deactivated",
+		orgDeactivatedHint:
+			"An admin switched this organisation off — nobody there can sign in until it is activated again.",
+		searchOutletsPlaceholder: "Search outlets…",
+		/** aria-label on the venue search box. */
+		searchOutletsAria: "Search outlets by name",
 		/** Agency-table column head over agency_code. The VALUE stays as stored. */
 		colCode: "Code",
 		failedToLoadAgencies: "Failed to load agencies",
@@ -5864,9 +5899,9 @@ const en = {
 			"Every operator across every PR agency — owners, financial heads, guarantors and directors.",
 		teamMembersOutletHint:
 			"Every operator across every venue — owners, financial heads, ops heads, guarantors and directors.",
-		/* Said on the card, not in a tooltip: the lane is derived per PERSON from their portal role, so someone in two organisations shows the same sub-role on both rows. */
+		/* Said on the card, not in a tooltip. Since 0160 the sub-role is a column on the MEMBERSHIP row, so someone in two organisations can hold a different one in each — which is the opposite of what this note used to say, and the reason it had to change with the schema. */
 		teamMembersLaneNote:
-			"Sub-role comes from the person's portal role, so it reads the same in every organisation they belong to.",
+			"Sub-role belongs to the membership, so the same person can hold a different one at each organisation they work in.",
 		teamMembersSearchPlaceholder: "Search people or organisations…",
 		teamMembersSearchAria:
 			"Search team members by name, email, phone or organisation",
@@ -6082,6 +6117,25 @@ const en = {
 		ratingNotePlaceholder4: "Good shift — what would make this a 5 next time?",
 		ratingNotePlaceholder5:
 			"Standout moment — VIP upsell, bottle push, teamwork, or vibe…",
+	},
+	/**
+	 * The organisation chooser — the screen between signing in and the portal,
+	 * shown ONLY to someone who works in two or more agencies or venues.
+	 */
+	chooseOrg: {
+		title: "Choose your organisation",
+		/** Why they are being asked. Says what the choice actually decides, so it does not read as an extra click. */
+		body: "You work in more than one. The portal opens for the one you pick, and shows that organisation’s people, shifts and money only.",
+		/** Group headings over the cards. Plural of the labels used everywhere else. */
+		agencies: "Agencies",
+		outlets: "Outlets",
+		/** Prefix on each card for this person’s member id INSIDE that organisation. */
+		memberId: "Member ID",
+		loading: "Loading your organisations…",
+		failed: "Could not load your organisations",
+		retry: "Try again",
+		/** Answers the obvious next question. Sign-out is the only switch today. */
+		switchHint: "To work in another one, sign out and sign in again.",
 	},
 	invitePages: {
 		/** The /invite/org-member page heading. */
@@ -8577,12 +8631,12 @@ const zh: PortalTranslations = {
 		navRbac: "权限管理",
 		navModules: "模块",
 		navAdmin: "管理员",
-		navPrAgency: "PR 经纪公司",
-		navOutlet: "门店",
+		navPrAgency: "经纪公司",
+		navOutlet: "门店机构",
 		navPr: "PR",
 		navLegacyMember: "旧版会员",
-		navAgencyTeam: "PR 代理团队",
-		navOutletTeam: "门店团队",
+		navAgencyTeam: "经纪公司成员",
+		navOutletTeam: "门店成员",
 		navPlanRequest: "套餐申请",
 		navPlanChange: "套餐变更",
 		navPlanPayment: "套餐付款",
@@ -8754,7 +8808,7 @@ const zh: PortalTranslations = {
 		descAgency: "审批与管理公关公司机构及其成员。",
 		descOutlet: "审批与管理门店机构及其成员。",
 		descPr: "查看平台上已注册的 PR 账户。",
-		descLegacyMember: "按角色查看已暂停的公司与门店，以及已停用的 PR。",
+		descLegacyMember: "已暂停的机构、已停用的账户，以及被移出的成员。",
 
 		adminUsers: "管理员用户",
 		adminUsersHint: "管理 admin 表中的管理员",
@@ -9213,7 +9267,7 @@ const zh: PortalTranslations = {
 		agencyDeactivateFailed: "停用经纪公司失败",
 		aboutLegacyMember: "关于旧版会员",
 		aboutLegacyMemberBody:
-			"此列表显示已暂停的经纪公司与门店机构，以及已停用的 PR 账户。请按角色（而非等级）筛选。重新启用经纪公司或门店会恢复该机构；重新启用 PR 则会恢复本人的账户，使其可以再次登录。",
+			"当前处于停用状态的所有记录：已暂停的机构、已停用的账户，以及被移出的成员。被移出的成员可能仍在其他机构任职——列中会显示其被移出的机构。机构与账户可在此重新启用；被移出的成员请前往该机构的成员页面恢复。",
 		searchFilters: "搜索筛选",
 		searchFiltersHint: "按名称、代码、联系方式和角色查找已暂停的记录。",
 		placeholderName: "姓名 / 机构名称",
@@ -9227,6 +9281,12 @@ const zh: PortalTranslations = {
 		roleAgency: "经纪公司",
 		roleOutlet: "门店",
 		rolePr: "PR",
+		roleRemovedMember: "已移出成员",
+		roleDisabledAccount: "已停用账户",
+		statusRemoved: "已移出",
+		statusRemovedStillActive: "已移出 · 仍在其他机构",
+		statusBlockedAccount: "已封禁",
+		openTeam: "打开成员页",
 		sortBy: "排序方式",
 		sortOrder: "排序顺序",
 		colUpdated: "更新时间",
@@ -10766,6 +10826,13 @@ const zh: PortalTranslations = {
 			"点击某一行可查看经纪公司详情及其名下 PR。可搜索经纪公司或按状态筛选。",
 		searchAgenciesPlaceholder: "搜索经纪公司…",
 		searchAgenciesAria: "按名称搜索经纪公司",
+		/** Badge beside a LINKED organisation an admin has switched off. */
+		orgDeactivatedBadge: "已停用",
+		orgDeactivatedHint:
+			"管理员已停用该机构 — 在重新启用前，该机构人员无法登录。",
+		searchOutletsPlaceholder: "搜索门店…",
+		/** aria-label on the venue search box. */
+		searchOutletsAria: "按名称搜索门店",
 		colCode: "代码",
 		failedToLoadAgencies: "加载经纪公司失败",
 		noAgenciesFound: "未找到经纪公司",
@@ -10833,7 +10900,7 @@ const zh: PortalTranslations = {
 		teamMembersOutletHint:
 			"所有门店的全部操作人员 — 东主、财务主管、运营主管、担保人与总监。",
 		teamMembersLaneNote:
-			"子角色来自该成员的门户角色，因此在其所属的每一个机构中都相同。",
+			"子角色属于其成员身份，因此同一个人在不同机构可以担任不同的职能。",
 		teamMembersSearchPlaceholder: "搜索成员或机构…",
 		teamMembersSearchAria: "按姓名、邮箱、电话或机构搜索团队成员",
 		teamMembersNone: "没有符合此搜索的团队成员。",
@@ -10976,6 +11043,17 @@ const zh: PortalTranslations = {
 		ratingNotePlaceholder3: "表现合格 —— 给下次排班留一条改进建议…",
 		ratingNotePlaceholder4: "表现良好 —— 下次怎样才能拿到 5 星？",
 		ratingNotePlaceholder5: "亮眼表现 —— VIP 加单、开瓶、团队配合或现场气氛…",
+	},
+	chooseOrg: {
+		title: "选择您的机构",
+		body: "您隶属于多个机构。门户将按您选择的机构打开，并仅显示该机构的人员、班次与款项。",
+		agencies: "经纪公司",
+		outlets: "门店",
+		memberId: "会员编号",
+		loading: "正在加载您的机构…",
+		failed: "无法加载您的机构",
+		retry: "重试",
+		switchHint: "如需前往其他机构，请退出后重新登录。",
 	},
 	invitePages: {
 		joinTheTeam: "加入团队",

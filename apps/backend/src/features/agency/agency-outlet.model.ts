@@ -136,6 +136,8 @@ export type OutletAgencyLink = {
   agencyId: string;
   agencyName: string;
   agencyCode: string;
+  /** The agency's OWN status — `inactive` means an admin switched it off. */
+  agencyStatus: string;
   /** Stem of this agency’s member ids — `AT` gives INNATAGY0001. What the admin
       and outlet screens show in place of `agencyCode`. Null before the first id. */
   memberCodePrefix: string | null;

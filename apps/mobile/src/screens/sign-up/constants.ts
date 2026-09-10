@@ -214,10 +214,22 @@ export const MALAYSIAN_NATIONALITY = 'Malaysian';
 export function idTypesForNationality(
 	nationality: string | null | undefined,
 ): readonly (typeof ID_TYPES)[number][] {
-	if (nationality?.trim() === MALAYSIAN_NATIONALITY) {
-		return ID_TYPES;
-	}
-	return ['Passport', 'Work permit'];
+	/*
+	 * NRIC is offered to everyone, and offered FIRST.
+	 *
+	 * It used to appear only once nationality read Malaysian — which, now that
+	 * nationality is optional, meant a PR who had not chosen one was shown a
+	 * picker with no IC in it at all (owner: "why does the ID type missing the
+	 * IC"). Gating the commonest document on an optional field hides it from
+	 * most of the people who hold it.
+	 *
+	 * Work permit is no longer offered (owner: "replace the work permit to
+	 * NRIC"). The value stays legal in the enum and in `ID_TYPES`, because
+	 * accounts already carry it and a stored value must remain describable —
+	 * it simply cannot be chosen any more.
+	 */
+	void nationality;
+	return ['NRIC', 'Passport'];
 }
 
 /** ID-type picker rows — `value` stays the English enum, only the label moves. */

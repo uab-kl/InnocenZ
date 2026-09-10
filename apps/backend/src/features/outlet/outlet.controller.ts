@@ -132,6 +132,21 @@ export class OutletControllerClass {
         // one venue an agency originally signed up.
         linkedToAgencyId: req.query.linkedToAgencyId as string | undefined,
       };
+
+      /*
+       * A DEACTIVATED venue is invisible to everyone but an admin — the same
+       * rule the agency list carries, applied to its twin in the same sweep
+       * rather than left for the next screenshot to find.
+       */
+      const callerId = getActor(req);
+      const callerRoles = callerId
+        ? await this.authRepository.getRolesForUserIds([callerId])
+        : [];
+      const callerIsAdmin = callerRoles.some(
+        (r) => r.roleName === portalRoleName.ADMIN,
+      );
+      if (!callerIsAdmin) filter.status = 'active';
+
       const { outlets, totalCount } = await this.outletRepository.listPaginated(
         { filter, page, pageSize },
       );
@@ -1107,6 +1122,41 @@ export class OutletControllerClass {
         });
       }
 
+      /**
+       * AND NOT REMOVE YOURSELF EITHER.
+       *
+       * `DELETE /:id/members/:memberId` has always refused self-removal. This
+       * route reaches the SAME removal through a status write — see
+       * "DEACTIVATING HERE IS REMOVING" below — but the self-check above
+       * fires only on a ROLE change, so a body carrying just
+       * `{"status":"inactive"}` walked straight past it. The last owner of a
+       * one-venue account could therefore remove themselves, and the
+       * removal revokes their portal role on the way out, so the endpoint
+       * that would put them back is one they can no longer reach.
+       *
+       * The condition is deliberately identical to the one that TRIGGERS the
+       * revoke further down — anything that is not 'active' — so the refusal
+       * and the effect cannot drift apart. `status` is free text here by
+       * design, which is exactly why the test is 'not active' rather than a
+       * list of words meaning removed.
+       *
+       * No UI offers this today (owner, 10 Sep 2026: *"theres no option in the
+       * edit profile for them to remove themselves but do the fix just as a
+       * prevention anyways"*) — this closes the route, not a live incident.
+       */
+      if (
+        req.user?.id &&
+        target.userId === req.user.id &&
+        parsed.data.status != null &&
+        parsed.data.status !== 'active'
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: 'You cannot remove yourself from the team',
+          data: null,
+        });
+      }
+
       const members =
         await this.outletMemberRepository.listByOutletWithUser(outletId);
       const refusal = guardMemberChange({ members, target, next: parsed.data });
@@ -1162,22 +1212,64 @@ export class OutletControllerClass {
             data: null,
           });
         }
-        const portal = await portalRepository.getPortalByCode('outlet');
-        const held = await this.userRoleRepository.getUserRoles(target.userId);
-        for (const r of held) {
-          if (portal && r.portalId === portal.id) {
-            await this.userRoleRepository.removeRoleFromUser(
-              target.userId,
-              r.id,
-            );
-          }
-        }
-        await this.userRoleRepository.assignRoleToUser({
-          userId: target.userId,
-          roleId: nextRole.id,
-          createdBy: actor,
+        /**
+         * THE TITLE IS WRITTEN TO THIS MEMBERSHIP, AND ONLY THIS ONE.
+         *
+         * Owner, 10 Sep 2026: *"it should only change for the organisation,
+         * not all organisation, because that person might have different job
+         * titles with different organisation"*. Since 0160 the title is a
+         * column on the membership row, so a change is one UPDATE against one
+         * venue and cannot reach any other.
+         */
+        await this.outletMemberRepository.update(memberId, {
+          subRole: parsed.data.subRole,
           updatedBy: actor,
         });
+
+        /**
+         * PORTAL ACCESS is a separate, still-global fact — may this person
+         * open the outlet portal at all — and it stays on `user_role`.
+         * So the new title's role is ENSURED rather than swapped in.
+         *
+         * ⚠️ The prune below is conditional, and the condition is the whole
+         * point. Deleting every outlet role unconditionally is what
+         * rewrote a person's title at the OTHER organisation, because one of
+         * those rows may be the access their membership there depends on. It
+         * is only safe when this is their only active venue.
+         *
+         * ⚠️ KNOWN GAP, deliberate and recorded: module permissions
+         * (`requirePermission` → `role_permission`) are still resolved from
+         * the union of a person's portal roles with no organisation term. So
+         * for somebody who genuinely staffs two venues, a demotion
+         * here narrows what the SCREEN offers but not yet what the server
+         * grants. Closing that means giving `userHasPermission` an org
+         * argument — a separate slice, tracked in TEST_SCRIPT §9.
+         */
+        const portal = await portalRepository.getPortalByCode('outlet');
+        const held = await this.userRoleRepository.getUserRoles(target.userId);
+        if (!held.some((r) => r.id === nextRole.id)) {
+          await this.userRoleRepository.assignRoleToUser({
+            userId: target.userId,
+            roleId: nextRole.id,
+            createdBy: actor,
+            updatedBy: actor,
+          });
+        }
+        const elsewhere = (
+          await this.outletMemberRepository.listByUser(target.userId)
+        ).filter(
+          (m) => m.status === 'active' && m.outletId !== outletId
+        );
+        if (elsewhere.length === 0) {
+          for (const r of held) {
+            if (portal && r.portalId === portal.id && r.id !== nextRole.id) {
+              await this.userRoleRepository.removeRoleFromUser(
+                target.userId,
+                r.id,
+              );
+            }
+          }
+        }
       }
 
       const memberRow =

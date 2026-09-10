@@ -202,6 +202,10 @@ export async function seedSampleOrgs(): Promise<void> {
         outletId: velvetId,
         userId,
         status: 'active',
+        // NOT NULL since 0160. VELVET_TEAM above is the authoritative source
+        // for these three lanes — it is also what migration 0160's correction
+        // step reproduces, because 0105 destroyed them in `user_role`.
+        subRole: member.subRole,
         // NOT NULL since 0159 — a seed mints one exactly like the app does.
         memberCode: await nextOrgMemberCode('outlet', velvetId),
         createdBy: ACTOR,

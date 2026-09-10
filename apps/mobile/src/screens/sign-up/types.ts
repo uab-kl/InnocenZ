@@ -201,31 +201,33 @@ export function validateStep(
 		if (localDigits.length < 9) {
 			fields.phone = copy.phoneShort;
 		}
-		if (!draft.nationality.trim()) {
-			fields.nationality = copy.nationalityRequired;
-		}
-		if (!draft.idType) {
-			fields.idType = copy.idTypeRequired;
-		} else if (
+		/*
+		 * Nationality, ID type, date of birth and ID number are OPTIONAL here
+		 * (owner, 10 Sep 2026). A PR can finish sign-up without any of them and
+		 * fill them in later; the agency screens already render an absent
+		 * identity as blank rather than breaking.
+		 *
+		 * What is NOT relaxed is the shape of a value that IS given. An IC that
+		 * does not parse is worse than no IC: age follows the IC on every
+		 * surface, so a malformed one produces a wrong age rather than a
+		 * missing one. Each check below therefore fires only when the field it
+		 * judges has something in it.
+		 */
+		if (
 			draft.idType === 'NRIC' &&
+			draft.nationality.trim() &&
 			draft.nationality.trim() !== MALAYSIAN_NATIONALITY
 		) {
 			fields.idType = copy.nricMalaysianOnly;
 		}
-		if (!draft.dob.trim()) {
-			fields.dob = copy.dobRequired;
-		}
-		if (!draft.idType) {
+		if (draft.idNo.trim() && !draft.idType) {
 			fields.idNo = copy.idNoSelectFirst;
-		} else if (!draft.idNo.trim()) {
-			fields.idNo = copy.idNoRequired;
-		} else if (
-			draft.idType === 'NRIC' &&
-			draft.nationality.trim() === MALAYSIAN_NATIONALITY
-		) {
+		} else if (draft.idType === 'NRIC' && draft.idNo.trim()) {
+			// A blank nationality reads as Malaysian for an NRIC — that is what
+			// the document means, and the server applies the same convention.
 			if (!isValidNricFormat(draft.idNo)) {
 				fields.idNo = formatMessage(copy.nricFormat, { n: NRIC_LENGTH });
-			} else if (draft.dob && !nricMatchesDob(draft.idNo, draft.dob)) {
+			} else if (draft.dob.trim() && !nricMatchesDob(draft.idNo, draft.dob)) {
 				fields.idNo = copy.nricDobPrefix;
 			}
 		}

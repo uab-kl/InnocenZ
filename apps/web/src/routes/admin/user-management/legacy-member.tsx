@@ -5,7 +5,7 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	AlertCircle,
 	Archive,
@@ -15,6 +15,7 @@ import {
 	Loader2,
 	RefreshCw,
 	Search,
+	Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -66,19 +67,28 @@ import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
 	type Agency,
+	type AgencyTeamMember,
 	approveAgency,
 	deactivateAgency,
 	fetchAgencies,
 	fetchAgencyById,
+	fetchAgencyTeamMembers,
 } from "@/services/agency";
 import {
 	approveOutlet,
 	deactivateOutlet,
 	fetchOutletById,
 	fetchOutlets,
+	fetchOutletTeamMembers,
 	type Outlet,
+	type OutletTeamMember,
 } from "@/services/outlet";
 import { fetchPrUsers, type PrUser } from "@/services/pr";
+import {
+	type DisabledAccount,
+	fetchDisabledAccounts,
+	isDeletedAccountTombstone,
+} from "@/services/user";
 
 export const Route = createFileRoute("/admin/user-management/legacy-member")({
 	component: LegacyMemberPage,
@@ -90,13 +100,38 @@ export const Route = createFileRoute("/admin/user-management/legacy-member")({
 const PAGE_SIZE = 10;
 const FETCH_SIZE = 100;
 
-type LegacyRoleFilter = "all" | "agency" | "outlet" | "pr";
+/**
+ * The five kinds this screen collects. The first three are ORGANISATIONS and
+ * ACCOUNTS that were switched off; the last two were added 10 Sep 2026 on the
+ * owner's ask to also show *people* who are no longer where they were:
+ *
+ *  * `member`  — an owner removed them from THEIR agency or venue. The
+ *                membership row survives as `status: inactive`, which is what
+ *                makes them listable at all.
+ *  * `account` — an admin switched the whole ACCOUNT off, so they cannot sign
+ *                in anywhere.
+ *
+ * ⚠️ These two must never be conflated on screen. Somebody removed from one
+ * agency may still be working at another; somebody whose account is off is
+ * out everywhere. Same person, opposite meanings.
+ */
+type LegacyRoleFilter =
+	| "all"
+	| "agency"
+	| "outlet"
+	| "pr"
+	| "member"
+	| "account";
+
+type LegacyKind = Exclude<LegacyRoleFilter, "all">;
+/** The three kinds that have a detail sheet behind them. */
+type DetailKind = "agency" | "outlet" | "pr";
 type SortBy = "name" | "createdAt" | "updatedAt";
 type SortOrder = "asc" | "desc";
 
 type LegacyRow = {
 	id: string;
-	role: "agency" | "outlet" | "pr";
+	role: LegacyKind;
 	name: string;
 	code: string;
 	contact: string;
@@ -105,6 +140,9 @@ type LegacyRow = {
 	statusClass: string;
 	createdAt: string;
 	updatedAt: string;
+	/** `member` rows only — where to send an admin who wants to restore them. */
+	orgKind?: "agency" | "outlet";
+	orgId?: string;
 };
 
 /**
@@ -116,19 +154,21 @@ type LegacyRow = {
  * run: storing `"adminUsers.roleAgency"` here would type-check and then print
  * the key name into the badge.
  */
-const roleLabels: Record<
-	Exclude<LegacyRoleFilter, "all">,
-	(t: PortalTranslations) => string
-> = {
+const roleLabels: Record<LegacyKind, (t: PortalTranslations) => string> = {
 	agency: (t) => t.adminUsers.roleAgency,
 	outlet: (t) => t.adminUsers.roleOutlet,
 	pr: (t) => t.adminUsers.rolePr,
+	member: (t) => t.adminUsers.roleRemovedMember,
+	account: (t) => t.adminUsers.roleDisabledAccount,
 };
 
-const roleBadgeColors: Record<Exclude<LegacyRoleFilter, "all">, string> = {
+const roleBadgeColors: Record<LegacyKind, string> = {
 	agency: "border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
 	outlet: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
 	pr: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+	member: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+	account:
+		"border-slate-500/30 bg-slate-500/10 text-slate-600 dark:text-slate-300",
 };
 
 async function fetchAllAgencies(onRefreshFail: () => void): Promise<Agency[]> {
@@ -181,8 +221,72 @@ async function fetchAllInactivePrs(
 	return rows;
 }
 
+/**
+ * EVERY operator membership on the platform, active ones included.
+ *
+ * `status: "all"` is deliberate and load-bearing. The removed rows alone
+ * would answer "who was removed" but not the question that actually matters
+ * on this screen — whether that person is still working SOMEWHERE ELSE. Only
+ * the full set can answer both, and getting it wrong produces the single most
+ * misleading row this page can render: somebody shown as gone from the
+ * platform who is in fact running another agency this morning.
+ */
+async function fetchAllAgencyMemberships(
+	onRefreshFail: () => void,
+): Promise<AgencyTeamMember[]> {
+	const rows: AgencyTeamMember[] = [];
+	let page = 1;
+	let hasNextPage = true;
+	while (hasNextPage) {
+		const response = await fetchAgencyTeamMembers(
+			{ status: "all", page, pageSize: FETCH_SIZE },
+			onRefreshFail,
+		);
+		rows.push(...response.data);
+		hasNextPage = response.pagination.hasNextPage;
+		page += 1;
+	}
+	return rows;
+}
+
+async function fetchAllOutletMemberships(
+	onRefreshFail: () => void,
+): Promise<OutletTeamMember[]> {
+	const rows: OutletTeamMember[] = [];
+	let page = 1;
+	let hasNextPage = true;
+	while (hasNextPage) {
+		const response = await fetchOutletTeamMembers(
+			{ status: "all", page, pageSize: FETCH_SIZE },
+			onRefreshFail,
+		);
+		rows.push(...response.data);
+		hasNextPage = response.pagination.hasNextPage;
+		page += 1;
+	}
+	return rows;
+}
+
+async function fetchAllDisabledAccounts(
+	onRefreshFail: () => void,
+): Promise<DisabledAccount[]> {
+	const rows: DisabledAccount[] = [];
+	let page = 1;
+	let hasNextPage = true;
+	while (hasNextPage) {
+		const response = await fetchDisabledAccounts(
+			{ status: "inactive", page, pageSize: FETCH_SIZE },
+			onRefreshFail,
+		);
+		rows.push(...response.data);
+		hasNextPage = response.pagination.hasNextPage;
+		page += 1;
+	}
+	return rows;
+}
+
 /*
- * The three mappers take `t` for ONE field: `statusLabel`, which is the only
+ * The mappers take `t` for ONE field: `statusLabel`, which is the only
  * piece of a row that is copy rather than stored data. Everything else here is
  * a name, a code or a contact detail the record itself carries, and stays
  * exactly as the API returned it.
@@ -240,6 +344,82 @@ function mapPrRow(user: PrUser, t: PortalTranslations): LegacyRow {
 	};
 }
 
+/**
+ * A person an owner removed from ONE organisation.
+ *
+ * `activeElsewhere` decides the whole meaning of the row, so it is a required
+ * argument rather than an optional flourish: red says they are not working
+ * anywhere on the platform, amber says they were removed HERE and are still
+ * active somewhere else. The organisation is always named in the row, because
+ * "removed" without a named organisation is the misreading this guards against.
+ *
+ * ⚠️ The lane (`subRole`) is deliberately NOT rendered. It is derived per
+ * PERSON from a global role row with no organisation on it, and every fallback
+ * in that derivation lands on `owner` — so a removed member whose role was
+ * revoked reads as an Owner of the agency that just removed them.
+ */
+function mapRemovedMemberRow(
+	member: {
+		id: string;
+		userId: string;
+		status: string;
+		memberCode?: string | null;
+		username?: string;
+		email?: string | null;
+		phoneNum?: string | null;
+		createdAt: string;
+		updatedAt: string;
+	},
+	orgKind: "agency" | "outlet",
+	orgId: string,
+	orgName: string,
+	activeElsewhere: boolean,
+	t: PortalTranslations,
+): LegacyRow {
+	return {
+		id: member.id,
+		role: "member",
+		name: member.username || "—",
+		code: member.memberCode || "—",
+		contact: orgName,
+		detail: [member.email, member.phoneNum].filter(Boolean).join(" · "),
+		statusLabel: activeElsewhere
+			? t.adminUsers.statusRemovedStillActive
+			: t.adminUsers.statusRemoved,
+		statusClass: activeElsewhere
+			? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+			: orgStatusBadgeColors.inactive,
+		createdAt: member.createdAt,
+		updatedAt: member.updatedAt,
+		orgKind,
+		orgId,
+	};
+}
+
+/** An account an admin switched off — they cannot sign in anywhere. */
+function mapDisabledAccountRow(
+	account: DisabledAccount,
+	t: PortalTranslations,
+): LegacyRow {
+	return {
+		id: account.id,
+		role: "account",
+		name: account.username || "—",
+		code: account.memberCode || "—",
+		contact: account.email || account.phoneNum || "—",
+		detail: [account.email, account.phoneNum].filter(Boolean).join(" · "),
+		// `blocked` and `inactive` both mean cannot sign in, and the column must
+		// not print one when the row says the other.
+		statusLabel:
+			account.status === "blocked"
+				? t.adminUsers.statusBlockedAccount
+				: t.admin.statusInactive,
+		statusClass: orgStatusBadgeColors.inactive,
+		createdAt: account.createdAt,
+		updatedAt: account.updatedAt,
+	};
+}
+
 function LegacyMemberPage() {
 	const { t } = usePortalLocale();
 	const type = getUserTypeByKey("legacy-member")!;
@@ -255,7 +435,7 @@ function LegacyMemberPage() {
 	const [page, setPage] = useState(1);
 	const [actionId, setActionId] = useState<string | null>(null);
 	const [selected, setSelected] = useState<{
-		role: "agency" | "outlet" | "pr";
+		role: DetailKind;
 		id: string;
 	} | null>(null);
 
@@ -286,6 +466,16 @@ function LegacyMemberPage() {
 	const needAgency = roleFilter === "all" || roleFilter === "agency";
 	const needOutlet = roleFilter === "all" || roleFilter === "outlet";
 	const needPr = roleFilter === "all" || roleFilter === "pr";
+	const needMember = roleFilter === "all" || roleFilter === "member";
+	const needAccount = roleFilter === "all" || roleFilter === "account";
+	/*
+	 * The PR list is fetched for the ACCOUNT arm too, even when PR rows are not
+	 * being rendered. An inactive PR is already on this screen under its own
+	 * kind; without their ids the account arm would list the same people a
+	 * second time, with a different badge and a second Reactivate button
+	 * pointing at the very same endpoint.
+	 */
+	const fetchPr = needPr || needAccount;
 
 	const legacyQueries = useQueries({
 		queries: [
@@ -306,30 +496,76 @@ function LegacyMemberPage() {
 			{
 				queryKey: ["legacy-members", "pr", "inactive"],
 				queryFn: () => fetchAllInactivePrs(logout),
-				enabled: needPr,
+				enabled: fetchPr,
+				placeholderData: keepPreviousData,
+				staleTime: 30_000,
+			},
+			{
+				queryKey: ["legacy-members", "agency-memberships", "all"],
+				queryFn: () => fetchAllAgencyMemberships(logout),
+				enabled: needMember,
+				placeholderData: keepPreviousData,
+				staleTime: 30_000,
+			},
+			{
+				queryKey: ["legacy-members", "outlet-memberships", "all"],
+				queryFn: () => fetchAllOutletMemberships(logout),
+				enabled: needMember,
+				placeholderData: keepPreviousData,
+				staleTime: 30_000,
+			},
+			{
+				queryKey: ["legacy-members", "accounts", "inactive"],
+				queryFn: () => fetchAllDisabledAccounts(logout),
+				enabled: needAccount,
 				placeholderData: keepPreviousData,
 				staleTime: 30_000,
 			},
 		],
 	});
 
-	const [agencyQuery, outletQuery, prQuery] = legacyQueries;
+	const [
+		agencyQuery,
+		outletQuery,
+		prQuery,
+		agencyMemberQuery,
+		outletMemberQuery,
+		accountQuery,
+	] = legacyQueries;
+	/*
+	 * Every arm belongs in these unions. A query left out of isLoading renders
+	 * a confident "No suspended records found." while its data is still in
+	 * flight — a false negative on the one screen whose whole job is to prove
+	 * that records still exist.
+	 */
 	const isLoading =
 		(needAgency && agencyQuery.isLoading) ||
 		(needOutlet && outletQuery.isLoading) ||
-		(needPr && prQuery.isLoading);
+		(fetchPr && prQuery.isLoading) ||
+		(needMember && agencyMemberQuery.isLoading) ||
+		(needMember && outletMemberQuery.isLoading) ||
+		(needAccount && accountQuery.isLoading);
 	const isFetching =
 		(needAgency && agencyQuery.isFetching) ||
 		(needOutlet && outletQuery.isFetching) ||
-		(needPr && prQuery.isFetching);
+		(fetchPr && prQuery.isFetching) ||
+		(needMember && agencyMemberQuery.isFetching) ||
+		(needMember && outletMemberQuery.isFetching) ||
+		(needAccount && accountQuery.isFetching);
 	const isError =
 		(needAgency && agencyQuery.isError) ||
 		(needOutlet && outletQuery.isError) ||
-		(needPr && prQuery.isError);
+		(fetchPr && prQuery.isError) ||
+		(needMember && agencyMemberQuery.isError) ||
+		(needMember && outletMemberQuery.isError) ||
+		(needAccount && accountQuery.isError);
 	const error =
 		(needAgency && agencyQuery.error) ||
 		(needOutlet && outletQuery.error) ||
-		(needPr && prQuery.error) ||
+		(fetchPr && prQuery.error) ||
+		(needMember && agencyMemberQuery.error) ||
+		(needMember && outletMemberQuery.error) ||
+		(needAccount && accountQuery.error) ||
 		null;
 
 	const list: LegacyRow[] = [];
@@ -346,6 +582,67 @@ function LegacyMemberPage() {
 	if (needPr) {
 		for (const user of prQuery.data ?? []) {
 			list.push(mapPrRow(user, t));
+		}
+	}
+
+	/*
+	 * REMOVED MEMBERS. Partitioned on status !== "active", never on
+	 * === "inactive": the column is a free varchar(50) and the update schema
+	 * declares it an optional plain string, so a row written with any other
+	 * word is still a person who is not working there — and would vanish from
+	 * a list that matched one literal.
+	 */
+	if (needMember) {
+		const agencyMemberships = agencyMemberQuery.data ?? [];
+		const outletMemberships = outletMemberQuery.data ?? [];
+		const activeSomewhere = new Set<string>();
+		for (const m of agencyMemberships) {
+			if (m.status === "active") activeSomewhere.add(m.userId);
+		}
+		for (const m of outletMemberships) {
+			if (m.status === "active") activeSomewhere.add(m.userId);
+		}
+		for (const m of agencyMemberships) {
+			if (m.status === "active") continue;
+			list.push(
+				mapRemovedMemberRow(
+					m,
+					"agency",
+					m.agencyId,
+					m.agencyName,
+					activeSomewhere.has(m.userId),
+					t,
+				),
+			);
+		}
+		for (const m of outletMemberships) {
+			if (m.status === "active") continue;
+			list.push(
+				mapRemovedMemberRow(
+					m,
+					"outlet",
+					m.outletId,
+					m.outletName,
+					activeSomewhere.has(m.userId),
+					t,
+				),
+			);
+		}
+	}
+
+	/*
+	 * SWITCHED-OFF ACCOUNTS, minus two populations that would be wrong here:
+	 * the inactive PRs this page already lists under their own kind, and the
+	 * self-deleted tombstones, whose photos, email and password the server
+	 * destroyed on their own request — offering those a Reactivate button
+	 * restores a login nobody can use.
+	 */
+	if (needAccount) {
+		const prIds = new Set((prQuery.data ?? []).map((u) => u.id));
+		for (const account of accountQuery.data ?? []) {
+			if (prIds.has(account.id)) continue;
+			if (isDeletedAccountTombstone(account)) continue;
+			list.push(mapDisabledAccountRow(account, t));
 		}
 	}
 
@@ -511,6 +808,20 @@ function LegacyMemberPage() {
 	 * This tab is where a disabled PR ends up, so without this it was the one
 	 * place an account could arrive and never leave.
 	 */
+	/**
+	 * Open the detail sheet, for the kinds that HAVE one.
+	 *
+	 * A removed membership and a switched-off account are not records with a
+	 * profile behind them — they are states of a person described elsewhere.
+	 * Clicking one does nothing rather than opening a sheet built to describe
+	 * a different thing.
+	 */
+	const openDetail = (row: LegacyRow) => {
+		if (row.role === "agency" || row.role === "outlet" || row.role === "pr") {
+			openDetail(row);
+		}
+	};
+
 	const accountActions = useAccountActions({
 		// `roleName` is the STORED role sent to the revoke endpoint; `roleLabel` is
 		// the same fact as a phrase, and the hook drops it mid-sentence, so it has
@@ -616,6 +927,12 @@ function LegacyMemberPage() {
 										{t.adminUsers.roleOutlet}
 									</SelectItem>
 									<SelectItem value="pr">{t.adminUsers.rolePr}</SelectItem>
+									<SelectItem value="member">
+										{t.adminUsers.roleRemovedMember}
+									</SelectItem>
+									<SelectItem value="account">
+										{t.adminUsers.roleDisabledAccount}
+									</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
@@ -768,19 +1085,24 @@ function LegacyMemberPage() {
 										return (
 											<TableRow
 												key={`${row.role}-${row.id}`}
-												className="cursor-pointer"
-												onClick={() =>
-													setSelected({ role: row.role, id: row.id })
+												className={
+													row.role === "member" || row.role === "account"
+														? undefined
+														: "cursor-pointer"
 												}
+												onClick={() => openDetail(row)}
 											>
 												<TableCell>
 													<Button
 														variant="ghost"
 														size="icon"
+														disabled={
+															row.role === "member" || row.role === "account"
+														}
 														className="h-8 w-8"
 														onClick={(e) => {
 															e.stopPropagation();
-															setSelected({ role: row.role, id: row.id });
+															openDetail(row);
 														}}
 														aria-label={fill(t.adminUsers.viewNamed, {
 															name: row.name,
@@ -848,7 +1170,29 @@ function LegacyMemberPage() {
 																{t.adminUsers.reactivate}
 															</Button>
 														)}
-														{row.role === "pr" && (
+														{/*
+														 * A removed membership is NOT restored by a status flip. Removal
+														 * hard-deletes the person's portal role when it was their last
+														 * membership, so the server refuses (409) unless the caller names a
+														 * lane to restore them with. That picker already exists on the
+														 * organisation's own members page — send the admin there rather than
+														 * growing a second copy of it here, and never offer a one-click that
+														 * could only 409. */}
+														{row.role === "member" && row.orgId && (
+															<Button size="sm" variant="outline" asChild>
+																<Link
+																	to={
+																		row.orgKind === "agency"
+																			? "/admin/user-management/agency-team"
+																			: "/admin/user-management/outlet-team"
+																	}
+																>
+																	<Users className="mr-1.5 h-3.5 w-3.5" />
+																	{t.adminUsers.openTeam}
+																</Link>
+															</Button>
+														)}
+														{(row.role === "pr" || row.role === "account") && (
 															<Button
 																size="sm"
 																variant="outline"
@@ -871,9 +1215,10 @@ function LegacyMemberPage() {
 														<Button
 															size="sm"
 															variant="ghost"
-															onClick={() =>
-																setSelected({ role: row.role, id: row.id })
+															disabled={
+																row.role === "member" || row.role === "account"
 															}
+															onClick={() => openDetail(row)}
 														>
 															<Eye className="mr-1.5 h-3.5 w-3.5" />
 															{t.adminUsers.view}

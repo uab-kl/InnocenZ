@@ -7,10 +7,6 @@ import {
 } from '@/util/member-code';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
-import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
-import { RoleTable } from '@/features/rbac/role/role.model';
-import { PortalTable } from '@/features/rbac/portal/portal.model';
-import { laneFromRoleHints } from '@/features/rbac/portal-role-map';
 import {
   OutletUserTable,
   OutletUserInsertType,
@@ -51,44 +47,20 @@ export type OutletMembershipWithOutlet = {
   status: string;
 };
 
-async function outletLanesByUserIds(
-  userIds: string[],
-): Promise<Map<string, OutletUserSubRole>> {
-  const map = new Map<string, OutletUserSubRole>();
-  if (userIds.length === 0) return map;
-
-  const rows = await db
-    .select({
-      userId: UserRoleTable.userId,
-      roleName: RoleTable.roleName,
-      portalCode: PortalTable.code,
-    })
-    .from(UserRoleTable)
-    .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
-    .leftJoin(PortalTable, eq(PortalTable.id, RoleTable.portalId))
-    .where(inArray(UserRoleTable.userId, userIds))
-    // ORDERED — the twin of the agency lane query. `laneFromRoleHints` takes the
-    // FIRST hint for the portal, so without this a member holding two outlet-portal
-    // roles lands in an arbitrary department that can change between requests.
-    .orderBy(RoleTable.roleName, UserRoleTable.roleId);
-
-  const byUser = new Map<
-    string,
-    Array<{ portalCode: string | null; roleName: string }>
-  >();
-  for (const row of rows) {
-    const list = byUser.get(row.userId) ?? [];
-    list.push({
-      portalCode: row.portalCode,
-      roleName: row.roleName ?? 'Owner',
-    });
-    byUser.set(row.userId, list);
-  }
-  for (const userId of userIds) {
-    map.set(userId, laneFromRoleHints('outlet', byUser.get(userId) ?? []));
-  }
-  return map;
-}
+/**
+ * WHERE A JOB TITLE COMES FROM, since 0160: the membership row itself.
+ *
+ * There used to be an `outletLanesByUserIds` here that joined
+ * `user_role → role → portal`, folded the result through `laneFromRoleHints`
+ * and returned a Map keyed on USER id. It could not be organisation-aware:
+ * `user_role` has no organisation on it, so one person held one title across
+ * every venue they staffed, and every fallback in that chain landed on
+ * `owner` — a member with no role read as a full-privilege owner.
+ *
+ * `outlet_user.sub_role` answers the question directly, so the derivation is
+ * DELETED rather than fixed. `user_role` still answers the other question —
+ * may this person open the portal at all.
+ */
 
 export class OutletMemberRepositoryClass {
   /**
@@ -180,8 +152,7 @@ export class OutletMemberRepositoryClass {
   ): Promise<(OutletUserType & { subRole: OutletUserSubRole }) | null> {
     const member = await this.getById(id);
     if (!member) return null;
-    const lanes = await outletLanesByUserIds([member.userId]);
-    return { ...member, subRole: lanes.get(member.userId) ?? 'owner' };
+    return { ...member, subRole: member.subRole as OutletUserSubRole };
   }
 
   async getByOutletAndUser(
@@ -220,6 +191,7 @@ export class OutletMemberRepositoryClass {
           outletId: OutletUserTable.outletId,
           userId: OutletUserTable.userId,
           status: OutletUserTable.status,
+          subRole: OutletUserTable.subRole,
           memberCode: OutletUserTable.memberCode,
           createdAt: OutletUserTable.createdAt,
           updatedAt: OutletUserTable.updatedAt,
@@ -234,10 +206,9 @@ export class OutletMemberRepositoryClass {
         .where(eq(OutletUserTable.outletId, outletId))
         .orderBy(OutletUserTable.createdAt);
 
-      const lanes = await outletLanesByUserIds(rows.map((r) => r.userId));
       return rows.map((r) => ({
         ...r,
-        subRole: lanes.get(r.userId) ?? ('owner' as OutletUserSubRole),
+        subRole: r.subRole as OutletUserSubRole,
       }));
     } catch (error) {
       logger.error(
@@ -300,6 +271,7 @@ export class OutletMemberRepositoryClass {
           outletId: OutletUserTable.outletId,
           userId: OutletUserTable.userId,
           status: OutletUserTable.status,
+          subRole: OutletUserTable.subRole,
           memberCode: OutletUserTable.memberCode,
           createdAt: OutletUserTable.createdAt,
           updatedAt: OutletUserTable.updatedAt,
@@ -321,11 +293,10 @@ export class OutletMemberRepositoryClass {
         .limit(options.pageSize)
         .offset((options.page - 1) * options.pageSize);
 
-      const lanes = await outletLanesByUserIds(rows.map((r) => r.userId));
       return {
         rows: rows.map((r) => ({
           ...r,
-          subRole: lanes.get(r.userId) ?? ('owner' as OutletUserSubRole),
+          subRole: r.subRole as OutletUserSubRole,
         })),
         totalCount: Number(totalCount ?? 0),
       };
@@ -376,6 +347,7 @@ export class OutletMemberRepositoryClass {
           outletName: OutletTable.name,
           outletStatus: OutletTable.status,
           status: OutletUserTable.status,
+          subRole: OutletUserTable.subRole,
           memberCode: OutletUserTable.memberCode,
         })
         .from(OutletUserTable)
@@ -383,10 +355,9 @@ export class OutletMemberRepositoryClass {
         .where(and(...conditions))
         .orderBy(OutletTable.name);
 
-      const lanes = await outletLanesByUserIds(rows.map((r) => r.userId));
       return rows.map((r) => ({
         ...r,
-        subRole: lanes.get(r.userId) ?? ('owner' as OutletUserSubRole),
+        subRole: r.subRole as OutletUserSubRole,
       }));
     } catch (error) {
       logger.error(

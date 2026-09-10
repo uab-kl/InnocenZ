@@ -19,11 +19,16 @@
  * is corrupt and `drizzle-kit generate` cannot run, while hand-authored
  * migrations carried on to 0130. So it was judging a 2026-era database against
  * a 60-migration-old picture and reporting five FALSE problems every single
- * run — `pr` (dropped on purpose in 0095), `agency_user.sub_role` and
- * `outlet_user.sub_role` (dropped in 0107), `outlet_penalty_rule` (moved to
+ * run — `pr` (dropped on purpose in 0095), `outlet_penalty_rule` (moved to
  * agency scope in 0113) and `agency_pr.pr_id`. A check that always fails is a
  * check everyone learns to ignore, and it was also BLIND to real drift in
  * everything added after 0070.
+ *
+ * ⚠️ `agency_user.sub_role` and `outlet_user.sub_role` USED to be listed
+ * above as examples of false drift, because 0107 dropped them. 0160 brought
+ * them back as real columns, so drift reported on those two is now GENUINE.
+ * The names were removed rather than left with a footnote: a stale example
+ * in a note about what to ignore is how a real signal gets ignored.
  *
  * The models are the thing the running code actually reads, so they are the
  * honest reference and they cannot go stale.

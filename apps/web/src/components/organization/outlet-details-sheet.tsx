@@ -101,6 +101,15 @@ function LinkedAgenciesCard({ outlet }: { outlet: Outlet }) {
 												{link.rejectReason}
 											</div>
 										)}
+										{/* The AGENCY's own status, beside the LINK's. The
+										    partnership can be approved and the other side still
+										    switched off — two different facts, and the venue is
+										    owed both. */}
+										{link.agencyStatus && link.agencyStatus !== "active" && (
+											<div className="text-xs text-amber-500">
+												{t.adminOrg.orgDeactivatedBadge}
+											</div>
+										)}
 									</div>
 									<span
 										className={`shrink-0 text-xs ${LINK_STATUS_CLASS[link.approveStatus]}`}

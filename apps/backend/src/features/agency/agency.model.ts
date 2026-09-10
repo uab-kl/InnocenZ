@@ -7,8 +7,9 @@ export type AgencyStatus = (typeof agencyStatusValues)[number];
 export const agencyStatusEnum = MainSchema.enum('agency_status', agencyStatusValues);
 
 /**
- * Sub-roles of a portal operator (API / UI labels). Stored on `user_role`→`role`,
- * not on `agency_user` — membership is tenancy only.
+ * Agency job titles. Since 0160 these are stored ON the membership row
+ * (`agency_user.sub_role`), per organisation. `user_role` now answers only
+ * whether the person may open the agency portal at all.
  */
 export const agencyUserSubRoleValues = [
   'owner',
@@ -63,6 +64,27 @@ export const AgencyUserTable = MainSchema.table('agency_user', {
   agencyId: uuid('agency_id').notNull().references(() => AgencyTable.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => UserTable.id, { onDelete: 'cascade' }),
   status: varchar('status', { length: 50 }).notNull().default('active'),
+  /**
+   * WHICH JOB TITLE AT THIS AGENCY — owner / finance / director / guarantor.
+   *
+   * Restored by 0160. It lived here until 0107 moved it to `user_role`, on the
+   * reasoning that membership is tenancy only. That was wrong in one specific
+   * way: `user_role` has no organisation on it, so the title it held was one
+   * per PERSON across every agency they belong to — somebody who is Finance at
+   * one agency and Owner at another could not be represented, and changing
+   * their title at one rewrote it at the other (owner, 10 Sep 2026: *"they are
+   * not always the same position in different orgs"*).
+   *
+   * `user_role` keeps the OTHER question — may this person open the agency
+   * portal at all. The two are not the same and must not be merged again.
+   *
+   * ⚠️ NOT NULL with NO DEFAULT, deliberately: 0033 warned that losing this
+   * distinction would silently promote every finance operator to owner, and a
+   * default would do exactly that on any insert that forgets it. Every insert
+   * must name the title. Plain varchar, no enum and no CHECK, so adding a lane
+   * needs no migration.
+   */
+  subRole: varchar('sub_role', { length: 50 }).notNull(),
   /**
    * The human-readable id for THIS membership — INN + org code + AGY|OLT + 0001.
    *
