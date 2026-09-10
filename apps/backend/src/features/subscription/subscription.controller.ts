@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { SubscriptionRepositoryClass } from './subscription.repository.js';
 import { Subscription, BillingCycle } from './subscription.model.js';
-import { SubscriptionSchema } from '@/schema/subscription.schema.js';
+import { SubscriptionSchema, UpdateSubscriptionSchema } from '@/schema/subscription.schema.js';
 import { paginate } from '@/util/pagination.js';
 import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
@@ -81,7 +81,7 @@ export class SubscriptionControllerClass {
 
   async updateSubscription(req: Request, res: Response) {
     try {
-      const parsed = SubscriptionSchema.partial().safeParse(req.body);
+      const parsed = UpdateSubscriptionSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
       const id = paramId(req.params.id);
       const actor = getActor(req);

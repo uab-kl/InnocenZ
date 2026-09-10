@@ -2,7 +2,7 @@ import { formatRM } from "@agency-portal/components/iz/ui";
 import { useUnpaidBilling } from "@agency-portal/hooks/use-unpaid-billing";
 import { formatDueDate } from "@agency-portal/lib/subscription-due";
 import { Link } from "@tanstack/react-router";
-import { AlertTriangle, CreditCard } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CreditCard } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
@@ -15,6 +15,16 @@ import { fill } from "@/lib/portal-i18n/fill";
  * and look. The notification raised alongside it reaches the bell; this reaches
  * the eye of anyone who signs in.
  *
+ * ONE ROW: LABEL, AMOUNT, DETAIL, WAY OUT (owner, 10 Sep 2026 -- simplify the
+ * wording, then "the right side is very empty ... use the space efficiently"
+ * and "try not to use so many font sizes"). It began as a number inside a
+ * sentence -- "RM 250.00 is overdue across 2 billing periods. The oldest was
+ * due 29 Aug 2026, 12 days overdue." -- set at the size of the words around it,
+ * which in the outlet portal was also the size of the title: three facts at one
+ * weight, and no way in. Stacking those facts fixed the reading order but left
+ * two thirds of a full-bleed strip blank, so they now run across it in the
+ * order you would say them, and the strip is a line tall instead of four.
+ *
  * AMBER WHILE MERELY UNPAID; RED ONCE GENUINELY OVERDUE (owner, 8 Sep 2026:
  * "make it seem more serious").
  *
@@ -24,7 +34,7 @@ import { fill } from "@/lib/portal-i18n/fill";
  * the amber state meaningful. A banner that looks identical on day one and day
  * fifty-two is one nobody reads by day ten.
  *
- * It escalates on OVERDUE, never on the total — the total includes the period
+ * It escalates on OVERDUE, never on the total -- the total includes the period
  * being used right now, which nobody is late with.
  *
  * NO "PAY NOW" BUTTON, deliberately. No payment gateway is registered, so a pay
@@ -55,65 +65,65 @@ export function UnpaidBillingBanner({
 			? t.subscription.overdueByOneDay
 			: fill(t.subscription.overdueByDays, { n: late.oldestDaysOverdue });
 
+	/*
+	 * Overdue states the LATE amount, not the total: the total includes the
+	 * period in use right now, which nobody is late with. Unchanged from the
+	 * sentence version -- only where the figure is printed has moved.
+	 */
+	const amount = formatRM(isOverdue ? late.amountRm : billing.total);
+
+	/*
+	 * The single line under the figure. Calm variant names the period start when
+	 * there is one; once something is overdue the DUE date is the actionable one
+	 * and a period start says nothing about when payment was expected. Formatted
+	 * either way -- this printed a raw `2026-08-16` before.
+	 */
+	const meta = isOverdue
+		? late.count === 1
+			? fill(t.subscription.billingOverdueOne, {
+					date: formatDueDate(late.oldestDueIso),
+					late: lateness,
+				})
+			: fill(t.subscription.billingOverdueMany, {
+					n: late.count,
+					date: formatDueDate(late.oldestDueIso),
+					late: lateness,
+				})
+		: billing.oldestPeriodStart
+			? billing.periods === 1
+				? fill(t.subscription.billingDueOneSince, {
+						date: formatDueDate(billing.oldestPeriodStart),
+					})
+				: fill(t.subscription.billingDueManySince, {
+						n: billing.periods,
+						date: formatDueDate(billing.oldestPeriodStart),
+					})
+			: billing.periods === 1
+				? t.subscription.billingDueOne
+				: fill(t.subscription.billingDueMany, { n: billing.periods });
+
 	return (
 		<Link
 			to={portal === "agency" ? "/agency/subscription" : "/outlet/subscription"}
-			className={
-				isOverdue
-					? "mb-3 block rounded-xl border border-[rgba(240,138,138,.5)] bg-[rgba(240,138,138,.1)] px-4 py-3 no-underline transition-colors hover:bg-[rgba(240,138,138,.16)]"
-					: "mb-3 block rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3 no-underline transition-colors hover:bg-amber-300/10"
-			}
+			className={`iz-alert ${isOverdue ? "iz-alert--red" : "iz-alert--amber"}`}
 		>
-			<div className="flex items-center gap-2">
+			<span className="iz-alert__head">
 				{isOverdue ? (
-					<AlertTriangle className="h-4 w-4 shrink-0 text-[var(--iz-red)]" />
+					<AlertTriangle className="iz-alert__icon" aria-hidden />
 				) : (
-					<CreditCard className="h-4 w-4 shrink-0 text-amber-300" />
+					<CreditCard className="iz-alert__icon" aria-hidden />
 				)}
-				<p
-					className={`text-sm font-bold ${
-						isOverdue ? "text-[var(--iz-red)]" : "text-amber-300"
-					}`}
-				>
+				<span className="iz-alert__title">
 					{isOverdue
 						? t.subscription.billingOverdueTitle
 						: t.subscription.billingDueTitle}
-				</p>
-			</div>
-			<p className="iz-tiny iz-muted mt-1">
-				{isOverdue
-					? late.count === 1
-						? fill(t.subscription.billingOverdueOne, {
-								amount: formatRM(late.amountRm),
-								date: formatDueDate(late.oldestDueIso),
-								late: lateness,
-							})
-						: fill(t.subscription.billingOverdueMany, {
-								amount: formatRM(late.amountRm),
-								n: late.count,
-								date: formatDueDate(late.oldestDueIso),
-								late: lateness,
-							})
-					: billing.periods === 1
-						? fill(t.subscription.billingDueOne, {
-								amount: formatRM(billing.total),
-							})
-						: fill(t.subscription.billingDueMany, {
-								amount: formatRM(billing.total),
-								n: billing.periods,
-							})}
-				{/* Only on the calm variant. Once something is overdue the sentence
-				    above already names the DUE date, which is the actionable one; a
-				    period START date says nothing about when payment was expected.
-				    Formatted either way — this printed a raw `2026-08-16` before. */}
-				{!isOverdue && billing.oldestPeriodStart
-					? ` ${fill(t.subscription.billingDueSince, {
-							date: formatDueDate(billing.oldestPeriodStart),
-						})}`
-					: ""}
-			</p>
-			<span className="iz-tiny mt-2 inline-block underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]">
+				</span>
+			</span>
+			<span className="iz-alert__figure iz-nums">{amount}</span>
+			<span className="iz-alert__meta">{meta}</span>
+			<span className="iz-alert__cta">
 				{t.subscription.billingDueCta}
+				<ArrowUpRight className="h-3 w-3" aria-hidden />
 			</span>
 		</Link>
 	);

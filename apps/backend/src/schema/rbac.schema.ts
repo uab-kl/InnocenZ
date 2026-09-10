@@ -37,6 +37,30 @@ export const PermissionSchema = z.object({
   status: z.string().default('active'),
 });
 
+/**
+ * PATCH shapes for the three RBAC catalogues.
+ *
+ * Each re-declares `status` WITHOUT the create-time `.default('active')`.
+ * `.partial()` makes a key optional but leaves a default underneath it intact,
+ * so `RoleSchema.partial().parse({ roleName })` answered
+ * `{ roleName, status: 'active' }` — and every controller spreads that straight
+ * into its repository `update()`. Renaming a role, module or permission that an
+ * admin had deliberately deactivated silently switched it back on, undoing the
+ * `inactiveRole` / `inactiveModule` / `inactivePermission` endpoints that sit a
+ * few lines below each one. See the note on `UpdateOutletSchema`.
+ */
+export const UpdateRoleSchema = RoleSchema.partial().extend({
+  status: z.string().optional(),
+});
+
+export const UpdateModuleSchema = ModuleSchema.partial().extend({
+  status: z.string().optional(),
+});
+
+export const UpdatePermissionSchema = PermissionSchema.partial().extend({
+  status: z.string().optional(),
+});
+
 export const RolePermissionSchema = z.object({
   roleId: z.uuid(),
   permissionId: z.uuid(),

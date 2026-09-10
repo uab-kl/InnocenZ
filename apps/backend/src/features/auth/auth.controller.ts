@@ -45,6 +45,7 @@ import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
+import { createDefaultRateCard } from '@/features/outlet-workspace/default-rate-card.js';
 import { createStarterTemplates } from '@/features/shift-template/starter-templates.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
@@ -638,6 +639,26 @@ export class AuthControllerClass {
       } catch (error) {
         logger.error(
           '[AuthController.register] Starter templates failed (venue kept)',
+          error,
+        );
+      }
+      // The venue's opening rate card, on the same terms as the cards above:
+      // written inside the registration transaction, allowed to fail on its
+      // own. A venue that lands with no card falls back to the portal's
+      // client-side default until it saves its Workspace once.
+      try {
+        const tiers = await createDefaultRateCard({
+          outletId: outlet.id,
+          actor,
+          tx,
+        });
+        logger.info('[AuthController.register] Default rate card created', {
+          outletId: outlet.id,
+          tiers,
+        });
+      } catch (error) {
+        logger.error(
+          '[AuthController.register] Default rate card failed (venue kept)',
           error,
         );
       }

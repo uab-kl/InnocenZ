@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { ModuleRepositoryClass } from './module.repository';
 import { ModuleType } from './module.model';
 import { PermissionRepositoryClass } from '@/features/rbac/permission/permission.repository';
-import { ModuleSchema, withModuleKey } from '@/schema/rbac.schema';
+import { ModuleSchema, UpdateModuleSchema, withModuleKey } from '@/schema/rbac.schema';
 import { permissionTypeValues } from '@/types/rbac-constant';
 import { db } from '@/db/index';
 import { paginate } from '@/util/pagination';
@@ -88,7 +88,7 @@ export class ModuleControllerClass {
 
   async updateModule(req: Request, res: Response) {
     try {
-      const parsed = ModuleSchema.partial().safeParse(req.body);
+      const parsed = UpdateModuleSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
       const patch = { ...parsed.data };
       if (patch.moduleName && !patch.moduleKey) {

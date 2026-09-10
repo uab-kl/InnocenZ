@@ -28,6 +28,19 @@ export const CreateOutletSchema = z.object({
 });
 
 export const UpdateOutletSchema = CreateOutletSchema.partial().extend({
+  /**
+   * Re-declared WITHOUT the create-time `.default(50)`, and that is the whole
+   * point of the line.
+   *
+   * `.partial()` makes a key optional but leaves any `.default()` underneath it
+   * intact, so `UpdateOutletSchema.parse({ name })` used to answer
+   * `{ name, geoFenceRadius: 50 }` — a radius the caller never sent, which the
+   * controller spreads straight onto the row. A venue fenced at 999 m silently
+   * went back to 50 m every time somebody saved its name, address or logo,
+   * locking out staff who were standing on the site. 50 m is right for a NEW
+   * outlet, which has no radius to preserve; on a PATCH there is one.
+   */
+  geoFenceRadius: z.number().int().min(10).max(1000).optional(),
   status: z.enum(outletStatusValues).optional(),
   /** Base64 (or data-URL) logo — uploaded to R2; not a DB column. */
   logoBase64: z.string().min(1).optional(),

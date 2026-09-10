@@ -42,6 +42,13 @@ export const UpdateShiftTemplateSchema = CreateShiftTemplateSchema.omit({
 })
   .partial()
   .extend({
+    /**
+     * Re-declared WITHOUT the create-time `.default('normal')`: `.partial()`
+     * leaves a default in place, so renaming a template — or just replacing its
+     * cover — used to send `eventKind: 'normal'` and quietly demote a special
+     * event back to an ordinary one. See the note on `UpdateOutletSchema`.
+     */
+    eventKind: z.enum(shiftEventKindValues).optional(),
     /** True removes the current cover picture (and its R2 object). */
     removeCover: z.boolean().optional(),
   });
