@@ -1128,25 +1128,44 @@ export class PaymentVoucherRepositoryClass {
   }
 
   /**
-   * The capacity to record against a signature — 'Owner', 'Finance', …
+   * The capacity to record against a signature — 'Owner', 'Finance', … — AS
+   * HELD AT THE AGENCY WHOSE VOUCHER IS BEING SIGNED.
    *
    * Read at SIGNING time and then frozen onto the voucher; see
-   * `financeHeadRole`. Null when the account holds no role, which is a real
-   * answer: the document then says who signed without claiming a title.
+   * `financeHeadRole`. Null when the signer holds no membership there, which
+   * is a real answer: the document then says who signed without claiming a
+   * title it cannot stand behind.
    *
-   * Takes the FIRST role. Portal accounts hold one; if that ever stops being
+   * ⚠️ This used to take the FIRST `user_role` row — no ORDER BY, no portal
+   * filter — and its own note conceded the shape: *"if that ever stops being
    * true this must take the one that authorised the signature, not whichever
-   * row sorts first — an ordering accident is not an attestation.
+   * row sorts first — an ordering accident is not an attestation."* It has
+   * stopped being true. A person may hold two agency-portal roles (invite
+   * accept adds without pruning, and a title change prunes only when this is
+   * their sole agency), so the old read could print **Owner** under a
+   * signature given as **Finance**, permanently, on an exportable document —
+   * and with no portal predicate it could print `pr` or `admin`.
+   *
+   * Since 0160 the title is a column on the membership, so the question has
+   * an exact answer and this asks it directly.
    */
-  async getUserRoleName(userId: string): Promise<string | null> {
+  async getUserRoleName(
+    userId: string,
+    agencyId: string,
+  ): Promise<string | null> {
     try {
       const [row] = await db
-        .select({ roleName: RoleTable.roleName })
-        .from(UserRoleTable)
-        .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
-        .where(eq(UserRoleTable.userId, userId))
+        .select({ subRole: AgencyUserTable.subRole })
+        .from(AgencyUserTable)
+        .where(
+          and(
+            eq(AgencyUserTable.userId, userId),
+            eq(AgencyUserTable.agencyId, agencyId),
+            eq(AgencyUserTable.status, 'active'),
+          ),
+        )
         .limit(1);
-      return row?.roleName ?? null;
+      return row ? portalRoleNameForSubRole('agency', row.subRole) : null;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getUserRoleName] Error:', error);
       return null;
