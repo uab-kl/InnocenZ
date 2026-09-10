@@ -1246,8 +1246,27 @@ export class OutletControllerClass {
          * argument — a separate slice, tracked in TEST_SCRIPT §9.
          */
         const portal = await portalRepository.getPortalByCode('outlet');
+        /*
+         * ⚠️ ONLY IF THEY WILL ACTUALLY BE A MEMBER AFTERWARDS.
+         *
+         * Without this test a body carrying only `{"subRole":"director"}`
+         * against a REMOVED membership re-assigned the portal role and handed
+         * that person their login back — silently, through an endpoint that
+         * reads as an edit rather than a reinstatement. Removal deliberately
+         * revokes the role on the way out; correcting the recorded title of
+         * somebody who has left must not undo that.
+         *
+         * The title above is still written, because a removed member's row
+         * should be able to say what they WERE. Only the access is withheld.
+         * Reinstating them is `{status:'active', subRole:'…'}`, which passes
+         * this test by naming the status explicitly.
+         */
+        const willBeActive =
+          parsed.data.status != null
+            ? parsed.data.status === 'active'
+            : target.status === 'active';
         const held = await this.userRoleRepository.getUserRoles(target.userId);
-        if (!held.some((r) => r.id === nextRole.id)) {
+        if (willBeActive && !held.some((r) => r.id === nextRole.id)) {
           await this.userRoleRepository.assignRoleToUser({
             userId: target.userId,
             roleId: nextRole.id,

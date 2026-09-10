@@ -11,6 +11,7 @@ import { portalRoleName } from '@/types/rbac-constant.js';
 import { paramId } from '@/util/params.js';
 import {
   type OrgScopeDeps,
+  pickAgencyId,
   resolveActingOrgId,
 } from '@/util/org-scope.js';
 
@@ -389,11 +390,19 @@ export function requireOutletScopeByParam(param: string) {
       const agencyMemberships = await agencyMemberRepository.listByUser(
         user.id,
       );
-      const activeAgency = agencyMemberships.find((m) => m.status === 'active');
-      if (activeAgency?.agencyId) {
+      /*
+       * The FIFTH copy of the oldest-membership pick, and the one hiding in
+       * the guard file itself — `find(m => m.status === 'active')` takes an
+       * arbitrary agency to test the outlet link against. For an agency
+       * operator at two agencies that could refuse a venue their OTHER
+       * agency is linked to. `pickAgencyId` honours the verified header
+       * first and falls back to exactly the previous behaviour otherwise.
+       */
+      const actingAgencyId = pickAgencyId(req, agencyMemberships);
+      if (actingAgencyId) {
         const linked =
           await agencyOutletRepository.listApprovedOutletIdsForAgency(
-            activeAgency.agencyId,
+            actingAgencyId,
           );
         if (!linked.includes(outletId)) {
           return res.status(403).json({
