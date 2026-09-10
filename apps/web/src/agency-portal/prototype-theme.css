@@ -12384,6 +12384,123 @@ button.iz-pr-offer-row:hover {
 	background: rgba(0, 0, 0, 0.22);
 }
 
+/*
+ * The roster's figures, inline on the toolbar (owner, 10 Sep 2026) in place of
+ * the `.iz-roster-kpis` card row that used to sit beneath it.
+ *
+ * `margin-left: auto` is what fills the bar: the group is pushed to the right
+ * edge, so the gap the owner reported lands BETWEEN the date control and the
+ * figures instead of after them. It sits on the stats and not on the Manage PR
+ * link because that link is conditional (`canAssign`) — hanging the push off an
+ * optional element leaves the bar collapsing back to the left for anyone who
+ * cannot assign.
+ *
+ * ⚠️ The cells never stretch. Live shows four figures and Planning two, and a
+ * grid of equal columns is exactly what made two cards sprawl across a row
+ * built for four. Laid out left-to-right, a shorter list simply ends.
+ */
+/*
+ * THREE ZONES, not two. The figures take the whole middle and centre
+ * themselves in it; the mode + date cluster holds the left, Manage PR the
+ * right.
+ *
+ * Two earlier attempts both only MOVED the hole. `margin-left: auto` parked the
+ * figures against Manage PR — content at both ends, ~600px of nothing in the
+ * middle. Centring the group split that air in two, which reads as margin
+ * rather than as a gap, but still left the bar looking thin.
+ *
+ * `space-evenly` is what actually fills it: the figures are distributed across
+ * the whole span, and at that spacing the hairline between them stops being a
+ * tight separator and starts working as a column rule. No content was added —
+ * none was available to add — so the fix had to come from distribution.
+ *
+ * ⚠️ Holds up at BOTH counts. Live has four figures and Planning two, and two
+ * items spread across the same span still read as deliberate because the rules
+ * land where a reader expects columns. This is the one arrangement that does
+ * not need a different rule per mode.
+ */
+.iz-roster-stats {
+	display: flex;
+	align-items: center;
+	justify-content: space-evenly;
+	flex-wrap: wrap;
+	gap: 0 14px;
+	flex: 1;
+	min-width: 0;
+}
+/* The date cluster must stop absorbing the slack, or it takes the space the
+   figures are meant to centre in and they end up parked on the right again. */
+.iz-roster-toolbar .iz-roster-filters {
+	flex: 0 1 auto;
+}
+/*
+ * Sizes are one rung up the ladder from where they started (owner, 10 Sep 2026
+ * — micro/caption was hard to read at a glance). They are pitched against their
+ * NEIGHBOURS on the bar, not chosen in isolation: `--iz-fs-label` puts each
+ * figure level with the "Today" control beside it, and `--iz-fs-tiny` puts each
+ * caption level with the Live/Planning toggle. The number is the thing being
+ * read, so it is the largest item on the bar; the caption only has to say which
+ * number it is.
+ */
+.iz-roster-stat {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	white-space: nowrap;
+	font-size: var(--iz-fs-tiny);
+	font-weight: 600;
+	color: var(--iz-muted2);
+}
+/* A hairline between figures, drawn as a pseudo-element on the gap rather than
+   as a border on the cell — a border would also show on the first item of every
+   wrapped row. */
+.iz-roster-stat + .iz-roster-stat::before {
+	content: "";
+	align-self: center;
+	width: 1px;
+	height: 16px;
+	margin-right: 8px;
+	background: var(--iz-line);
+}
+.iz-roster-stat b {
+	font-size: var(--iz-fs-label);
+	font-weight: 800;
+	color: var(--iz-txt);
+	font-variant-numeric: tabular-nums;
+}
+.iz-roster-stat b.money {
+	color: var(--iz-accent-l);
+}
+.iz-roster-stat b.warn {
+	color: var(--iz-amber);
+}
+
+/*
+ * The early-release flag, on the bar because it is the one thing here that is
+ * time-critical. It does NOT replace the banner below, which names who was
+ * released and from where; this is the count that makes the banner get read.
+ *
+ * Amber, not red: nothing has gone wrong — a PR finished early and is available
+ * again. Red stays reserved for disputes and deductions.
+ */
+.iz-roster-alert-chip {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	flex: none;
+	white-space: nowrap;
+	padding: 5px 10px;
+	border-radius: 8px;
+	border: 1px solid rgba(232, 198, 106, 0.3);
+	background: rgba(232, 198, 106, 0.09);
+	/* Matches the stat captions it sits beside — a flag rendered smaller than
+	   the figures next to it reads as less important than them, which is the
+	   opposite of true. */
+	font-size: var(--iz-fs-tiny);
+	font-weight: 700;
+	color: var(--iz-amber);
+}
+
 .iz-roster-toggle {
 	display: inline-flex;
 	padding: 2px;
@@ -12442,6 +12559,36 @@ button.iz-pr-offer-row:hover {
 	position: relative;
 	flex: 1;
 	min-width: 160px;
+}
+
+/*
+ * ON THE ROSTER TOOLBAR the week picker sizes to its content, overriding the
+ * `flex: 1` above (owner, 10 Sep 2026).
+ *
+ * Stretched, the trigger ran about 950px while the calendar it opens is barely
+ * 250px — so the control advertised a width it had no use for, and everything
+ * between the date and the chevron was dead. Live never had this problem:
+ * `.iz-roster-date-live` is `flex: 0 0 auto`, so its CONTAINER stretches while
+ * the control stays its own size, and the slack lands between the control and
+ * the figures. This gives Planning the same shape.
+ *
+ * ⚠️ Scoped to `.iz-roster-toolbar`, NOT changed on the base class:
+ * `RosterPlanningDatePicker` is also used by `AgencyOutletFilters`,
+ * `PayoutRunsPanel` and `SpecialServiceFilters`, where a full-width field is
+ * the right answer and this would quietly shrink it.
+ *
+ * `min-width` rather than pure content sizing, because the label's length
+ * changes with the week — "6–12 Sep 2026" is much shorter than
+ * "27 Sep – 3 Oct 2026", and a trigger that resized as you paged would shunt
+ * the figures beside it left and right.
+ */
+.iz-roster-toolbar .iz-roster-planning-date {
+	flex: 0 1 auto;
+	min-width: 0;
+}
+.iz-roster-toolbar .iz-roster-planning-date-trigger {
+	width: auto;
+	min-width: 200px;
 }
 
 .iz-roster-planning-date-trigger {
@@ -14393,6 +14540,15 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: flex-end;
+	/* ⚠️ Deliberately NOT `space-between`, though the roster toolbar above uses
+	   `space-evenly` for what looks like the same problem. Tried it here and it
+	   was wrong: `AgencyOutletFilters` shares this bar with only TWO controls,
+	   and spreading them threw Status to the far edge with 880px between it and
+	   the search — a lone control marooned across the panel. The difference is
+	   that the toolbar's figures are a READOUT, where even spacing reads as
+	   columns, while these are form fields, where left-alignment is what makes
+	   them scannable and trailing space is unremarkable. The caps below are what
+	   fill the row; alignment is not the tool for it here. */
 	gap: 10px 12px;
 }
 .iz-roster-filterbar__field,
@@ -14404,10 +14560,25 @@ button.iz-pr-offer-row:hover {
 	flex: 0 1 auto;
 }
 /* Search takes the slack: it is the control people reach for first and the one
-   whose content is unbounded. */
+   whose content is unbounded.
+   ⚠️ CAPPED as of 10 Sep 2026 (owner: "the name search bar takes up most of the
+   space"). It was the row's ONLY growing item, so on a wide screen it collected
+   every spare pixel — about 900px of search box next to 148px selects, which
+   read as one giant field with some controls stuck on the end. It still grows
+   first and grows most (`3` against the ranges' `1`); it just stops. */
 .iz-roster-filterbar__field--grow {
-	flex: 1 1 180px;
-	min-width: 160px;
+	flex: 3 1 240px;
+	min-width: 200px;
+	max-width: 460px;
+}
+/* The ranges grow too, so the slack the search no longer takes has somewhere to
+   go that is not a hole at the end of the row. They hold two inputs and a dash,
+   so they earn more width than a select — but they are capped for the same
+   reason the selects are: a control far wider than its content looks broken,
+   not generous. */
+.iz-roster-filterbar__range {
+	flex: 1 1 190px;
+	max-width: 300px;
 }
 /* Capped as well as floored. A select sizes to its LONGEST option, so
    "Leave — awaiting you" alone pushed the status field to 239px and tipped the
@@ -14504,6 +14675,35 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-filterbar--fill .iz-roster-filterbar__field .iz-select {
 	width: 100%;
+	max-width: none;
+}
+/*
+ * The roster bars have RANGES (shift time, payout) where Manage PR had only
+ * single inputs, so `--fill` has to cover them or they stay at their own width
+ * and the row still ends short.
+ *
+ * The two inputs share their cell, which is what un-clips the payout
+ * placeholders: "e.g. 300" was being cut to "e.g. 30(" because the pair was
+ * squeezed into a fixed cell that the 108px floor could not fit inside. Sharing
+ * the row means each cell is wide enough for its own content instead of the
+ * ranges taking whatever the search left over.
+ */
+.iz-roster-filterbar--fill .iz-roster-filterbar__range {
+	flex: 1 1 200px;
+	max-width: none;
+}
+.iz-roster-filterbar--fill .iz-roster-filterbar__rangerow {
+	width: 100%;
+}
+.iz-roster-filterbar--fill .iz-roster-filterbar__time {
+	flex: 1 1 0;
+	min-width: 0;
+	width: 100%;
+}
+/* The search is one field among equals here, so it must not also carry the
+   `--grow` weight and cap from the default bar. */
+.iz-roster-filterbar--fill .iz-roster-filterbar__field--grow {
+	flex: 1.6 1 200px;
 	max-width: none;
 }
 .iz-roster-filterbar--fill .iz-roster-filterbar__input--num {

@@ -41,7 +41,9 @@ export function RosterShiftFilters({
 	const activeCount = countActiveRosterShiftFilters(filters);
 
 	return (
-		<div className="iz-roster-filterbar">
+		// `--fill`: every field shares the row, rather than the search taking the
+		// slack and leaving the row short with the payout placeholders clipped.
+		<div className="iz-roster-filterbar iz-roster-filterbar--fill">
 			<div className="iz-roster-filterbar__head">
 				<span className="iz-roster-filterbar__title">
 					{t.filters.filterShifts}

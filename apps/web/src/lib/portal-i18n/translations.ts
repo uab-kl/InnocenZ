@@ -1230,6 +1230,12 @@ const en = {
 		live: "Live",
 		planning: "Planning",
 		releasedEarlyReassign: "Released early · available to reassign",
+		/**
+		 * The toolbar's flag for the same thing, where a count is the point and
+		 * the names are not — the banner below still lists who. Kept short: this
+		 * sits on one line beside the roster figures.
+		 */
+		releasedEarlyCount: "{n} released early · reassign",
 		pickReplacement: "Pick replacement",
 		replacementPr: "Replacement PR",
 		sendOfferToReplacement: "Send offer to replacement",
@@ -2132,7 +2138,21 @@ const en = {
 	},
 	/** Outlet → Settings → Agencies. Which agencies may staff this venue. */
 	agencyLinks: {
-		agencies: "Agencies",
+		/**
+		 * The venue's end of the same relationship the agency portal calls
+		 * "Outlet Partnership" (owner, 10 Sep 2026) — so the two sides mirror
+		 * each other: 门店合作 there, 经纪公司合作 here.
+		 *
+		 * "Agency Partnerships", not "Agencies": a bare plural noun names a LIST
+		 * of companies, when what the panel actually manages is a standing
+		 * relationship the venue asks for and the agency accepts. The block was
+		 * already half-saying so — `endNamed` reads "End partnership with
+		 * {name}" — which left the heading the odd one out.
+		 *
+		 * ⚠️ The code identity still says links: the block key `agencyLinks`, the
+		 * `agency_outlet` table and `use-agency-outlet-links`.
+		 */
+		agencies: "Agency Partnerships",
 		blurb:
 			"The agencies allowed to staff this outlet. Add one to send a request — they choose whether to accept.",
 		loading: "Loading agencies…",
@@ -3212,7 +3232,21 @@ const en = {
 		enlargeComcard: "Enlarge comcard",
 		openFullSize: "Open full size",
 		empty: "Empty",
-		outletLinking: "Outlet-Linking",
+		/**
+		 * The agency's venue relationships tab.
+		 *
+		 * "Outlet Partnership", not "Outlet-Linking" (owner, 10 Sep 2026):
+		 * linking describes the DATABASE operation, not the thing the agency
+		 * thinks it is doing, which is taking on a venue as a client. The keys
+		 * just below already spoke that way — an accepted link reads "Working
+		 * with you" / 合作中 — so the tab was the odd one out.
+		 *
+		 * ⚠️ The CODE identity is unchanged and still says linking: the key
+		 * `outletLinking`, the tab id `"outlet-linking"`, `use-agency-outlet-links`
+		 * and `services/agency-outlet`. Comments elsewhere still say "the
+		 * Outlet-Linking tab" — they mean this one.
+		 */
+		outletLinking: "Outlet Partnership",
 		linkPending: "Awaiting your decision",
 		linkApproved: "Working with you",
 		linkRejected: "Declined",
@@ -3796,8 +3830,18 @@ const en = {
 		paidCount: "{n} paid",
 	},
 	agencyPending: {
-		/** Prefix before the applicant's legal IC name, beside their floor nickname. */
-		legal: "Legal",
+		/**
+		 * Prefix before the applicant's IC name, beside their floor nickname.
+		 *
+		 * Says "IC Name", not "Legal": the owner read the old label and could not
+		 * tell what it was claiming — "Legal" reads as a STATUS (is this person
+		 * legal?) rather than as the label of the name after it. This is the name
+		 * on the IC, the thing an approver checks the document against, and the
+		 * key just below already renders the number itself as "IC". The row is
+		 * hidden entirely when the IC name matches the working name, so it only
+		 * ever appears when the two genuinely differ.
+		 */
+		legal: "IC Name",
 		/** Label in front of an IC number — and the owner-invite sheet's IC field. */
 		icNumber: "IC",
 		/** Pill on a sign-up the agency owner started, rather than the PR. */
@@ -7290,6 +7334,7 @@ const zh: PortalTranslations = {
 		live: "实时",
 		planning: "排班计划",
 		releasedEarlyReassign: "已提前放班 · 可重新指派",
+		releasedEarlyCount: "{n} 人已提前放班 · 可重新指派",
 		pickReplacement: "选择替班人员",
 		replacementPr: "替班 PR",
 		sendOfferToReplacement: "向替班人员发送邀约",
@@ -8000,7 +8045,7 @@ const zh: PortalTranslations = {
 		precisionApproximate: "大致位置 —— 可能是整个区域",
 	},
 	agencyLinks: {
-		agencies: "经纪公司",
+		agencies: "经纪公司合作",
 		blurb:
 			"允许为本门店配置人员的经纪公司。添加后即发出申请 —— 是否接受由对方决定。",
 		loading: "正在加载经纪公司…",
@@ -8960,7 +9005,7 @@ const zh: PortalTranslations = {
 		enlargeComcard: "放大模卡",
 		openFullSize: "查看原图",
 		empty: "空缺",
-		outletLinking: "门店关联",
+		outletLinking: "门店合作",
 		linkPending: "等待你的决定",
 		linkApproved: "合作中",
 		linkRejected: "已拒绝",

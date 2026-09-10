@@ -11,7 +11,6 @@ import {
 } from "@agency-portal/components/agency/RosterShiftTable";
 import { RosterTimetableFilters } from "@agency-portal/components/agency/RosterTimetableFilters";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
-import { LabelWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
 import {
 	formatRM,
 	IzCard,
@@ -37,7 +36,6 @@ import {
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
-import { iconForLabel } from "@agency-portal/lib/lucide-label-icons";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
@@ -64,6 +62,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
+	AlertCircle,
 	ArrowLeftRight,
 	Calendar,
 	ChevronRight,
@@ -491,7 +490,10 @@ function AgencyRoster() {
 							<span>{t.common.today}</span>
 						</div>
 					) : (
-						<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+						// No `flex-1`: the week picker sizes to its content, so the bar's
+						// slack falls between the control and the figures — the same shape
+						// Live has. See `.iz-roster-toolbar .iz-roster-planning-date`.
+						<div className="flex min-w-0 flex-wrap items-center gap-2">
 							<RosterPlanningDatePicker
 								value={planningDate}
 								onChange={setPlanningDate}
@@ -503,75 +505,76 @@ function AgencyRoster() {
 						</div>
 					)}
 				</div>
+				{/*
+					The roster's figures, on the bar rather than in a card row beneath
+					it (owner, 10 Sep 2026). The cards spent a full row of height to
+					say four short things, and left the bar with ~900px of nothing
+					between "Today" and Manage PR — while PLANNING had the opposite
+					problem, two cards stretched across a width meant for four. Inline
+					and left-to-right, a shorter list simply ends instead of stretching.
+
+					⚠️ Labels are the SAME strings the cards used. A chip is tighter, so
+					shorter wording was tempting — but two vocabularies for one figure is
+					how a number comes to be called different things on different screens.
+				*/}
+				<div className="iz-roster-stats">
+					{viewMode === "live" ? (
+						<>
+							<span className="iz-roster-stat">
+								<b>{plannedCount}</b>
+								{t.roster.plannedPrs}
+							</span>
+							<span className="iz-roster-stat">
+								<b>{activeCount}</b>
+								{t.roster.activePrs}
+							</span>
+							<span className="iz-roster-stat">
+								{/* Amber only when there IS someone missing — a permanent
+								    warning colour on a zero is noise that teaches the eye
+								    to skip the one case that matters. */}
+								<b className={unavailableCount > 0 ? "warn" : undefined}>
+									{unavailableCount}
+								</b>
+								{t.roster.unavailablePrs}
+							</span>
+							<span className="iz-roster-stat">
+								<b className="money">{formatRM(estPayoutLive)}</b>
+								{t.roster.estPayout}
+							</span>
+						</>
+					) : (
+						<>
+							<span className="iz-roster-stat">
+								<b>{weekScheduled.length}</b>
+								{t.roster.prsRosteredThisWeek}
+							</span>
+							<span className="iz-roster-stat">
+								<b className="money">{formatRM(estLabour)}</b>
+								{t.roster.estLabourCost}
+							</span>
+						</>
+					)}
+				</div>
+				{/*
+					The one time-critical thing on this page, flagged where the eye
+					already is. The banner below still lists WHO was released and from
+					where — this is the count, so a full bar is never the resting state:
+					it appears because something needs doing and leaves when it is done.
+				*/}
+				{viewMode === "live" && earlyReleasedAvailable.length > 0 && (
+					<span className="iz-roster-alert-chip">
+						<AlertCircle className="h-3.5 w-3.5 shrink-0" />
+						{fill(t.roster.releasedEarlyCount, {
+							n: earlyReleasedAvailable.length,
+						})}
+					</span>
+				)}
 				{canAssign && (
 					<Link to="/agency/prs" className="iz-roster-pr-link">
 						<Users className="h-3.5 w-3.5" />
 						{t.nav.managePr}
 						<ChevronRight className="h-3.5 w-3.5" />
 					</Link>
-				)}
-			</div>
-
-			<div className={`iz-roster-kpis${viewMode === "live" ? " cols-4" : ""}`}>
-				{viewMode === "live" ? (
-					<>
-						{/* `LabelWithIcon` with no `icon` resolves one from the rendered
-						    text, which is now translated — every KPI glyph would vanish
-						    outside English. Resolve from the ENGLISH label instead.
-						    `iconForLabel`, not `iconForNav`: a miss must stay iconless the
-						    way it is today, never degrade to a "?". */}
-						<div className="iz-roster-kpi">
-							<span className="n">{plannedCount}</span>
-							<LabelWithIcon
-								label={t.roster.plannedPrs}
-								icon={iconForLabel("Planned PRs")}
-								className="l"
-							/>
-						</div>
-						<div className="iz-roster-kpi">
-							<span className="n">{activeCount}</span>
-							<LabelWithIcon
-								label={t.roster.activePrs}
-								icon={iconForLabel("Active PRs")}
-								className="l"
-							/>
-						</div>
-						<div className="iz-roster-kpi">
-							<span className="n">{unavailableCount}</span>
-							<LabelWithIcon
-								label={t.roster.unavailablePrs}
-								icon={iconForLabel("Unavailable PRs")}
-								className="l"
-							/>
-						</div>
-						<div className="iz-roster-kpi">
-							<span className="n gold">{formatRM(estPayoutLive)}</span>
-							<LabelWithIcon
-								label={t.roster.estPayout}
-								icon={iconForLabel("Est payout")}
-								className="l"
-							/>
-						</div>
-					</>
-				) : (
-					<>
-						<div className="iz-roster-kpi">
-							<span className="n">{weekScheduled.length}</span>
-							<LabelWithIcon
-								label={t.roster.prsRosteredThisWeek}
-								icon={iconForLabel("PRs rostered this week")}
-								className="l"
-							/>
-						</div>
-						<div className="iz-roster-kpi">
-							<span className="n gold">{formatRM(estLabour)}</span>
-							<LabelWithIcon
-								label={t.roster.estLabourCost}
-								icon={iconForLabel("Est labour cost")}
-								className="l"
-							/>
-						</div>
-					</>
 				)}
 			</div>
 
