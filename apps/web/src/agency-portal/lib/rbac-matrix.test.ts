@@ -132,14 +132,21 @@ describe("the drift that prompted the rule", () => {
 		expect(outletCan("outlet_ops", "viewHistory")).toBe(true);
 	});
 
-	it("NOBODY can confirm daily — no outlet role holds billing:update", () => {
-		// The matrix used to grant this to Owner, Guarantor and Finance. The
-		// server refuses all three: `billing:update` exists as a permission row
-		// and no role_permission points at it. Grant it in the database and
-		// re-run `pnpm rbac:sync` to bring the button back.
-		expect(outletCan("outlet_owner", "confirmDaily")).toBe(false);
-		expect(outletCan("outlet_guarantor", "confirmDaily")).toBe(false);
+	it("confirm daily is the OWNER's and the guarantor's, not finance's", () => {
+		// `billing:update` was held by NOBODY, so this was refused for every lane
+		// including the owner — on a screen that offered the button. Granted to
+		// the owner (and the guarantor, which shares that list) in `seed-rbac.ts`
+		// on the owner's instruction, 11 Sep 2026.
+		//
+		// ⚠️ Finance stays out, which is the half worth pinning: the standing
+		// rule is "other member cannot make the change for the organisation
+		// except for the owner and the guarantor". The OLD hand-written matrix
+		// granted finance this, and the database never did.
+		expect(outletCan("outlet_owner", "confirmDaily")).toBe(true);
+		expect(outletCan("outlet_guarantor", "confirmDaily")).toBe(true);
 		expect(outletCan("outlet_finance", "confirmDaily")).toBe(false);
+		expect(outletCan("outlet_ops", "confirmDaily")).toBe(false);
+		expect(outletCan("outlet_director", "confirmDaily")).toBe(false);
 	});
 
 	it("still refuses a Director everything that writes", () => {
@@ -147,6 +154,21 @@ describe("the drift that prompted the rule", () => {
 		expect(outletCan("outlet_director", "editSettings")).toBe(false);
 		expect(outletCan("outlet_director", "logSales")).toBe(false);
 		expect(outletCan("outlet_director", "manageWorkspace")).toBe(false);
+	});
+
+	it("lets an agency FINANCIAL HEAD sign a payment voucher", () => {
+		// Owner, 11 Sep 2026: "make sure financial head can sign the pv."
+		// `/agency/pv` gates signing on `raisePv` (payment_voucher:create) and the
+		// override on `overrideSignedPv` (payment_voucher:update); the database
+		// grants finance both, which is the line between this role and Director.
+		// Pinned because the matrix is DERIVED now — revoking the grant would
+		// silently take signing away, and payroll would simply stop.
+		expect(agencyCan("agency_finance", "raisePv")).toBe(true);
+		expect(agencyCan("agency_finance", "viewPv")).toBe(true);
+		expect(agencyCan("agency_finance", "overrideSignedPv")).toBe(true);
+		// A Director oversees and does not sign — the distinction that matters.
+		expect(agencyCan("agency_director", "raisePv")).toBe(false);
+		expect(agencyCan("agency_director", "overrideSignedPv")).toBe(false);
 	});
 
 	it("still refuses agency Finance the owner's lanes", () => {

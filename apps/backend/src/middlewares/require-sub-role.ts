@@ -501,6 +501,70 @@ export function requireOrgMembershipByParam(
   };
 }
 
+/**
+ * THE PERSON WHO PAYS — owner or guarantor, on WHICHEVER portal they are acting
+ * for, scoped to the organisation being paid for.
+ *
+ * Owner, 11 Sep 2026: "the subcription is follow from the organisation owner,
+ * only the owner can make payment fpx and the set and update the payment
+ * method … other member cannot make the change for the organisation except for
+ * the owner and the guarantor."
+ *
+ * ⚠️ `POST /subscription-payment/checkout` carried `requireRole('agency',
+ * 'outlet')` — every lane on both portals. An outlet Finance head, Ops Head or
+ * Director could tick overdue periods and start a REAL FPX checkout, from the
+ * browser or from curl. The controller checks that the invoices belong to the
+ * caller's organisation, which is a different question from whether that person
+ * may spend its money.
+ *
+ * Why not `requirePermission('settings', 'update')`, which is what the portals
+ * already use for "owner or guarantor": that helper resolves ONE portal from
+ * the module key, and `settings` exists as a separate module row on BOTH — so
+ * it would answer for whichever row it happened to find. This route serves both
+ * portals, so it has to ask per portal.
+ *
+ * The lane list is `['owner']` because `holdsAgencyLane` / `holdsOutletLane`
+ * already fold guarantor into owner — the stand-in passes wherever the owner
+ * passes, which is exactly the owner's rule.
+ *
+ * Admin is deliberately NOT admitted, matching the route's own note: an admin
+ * marks money as received, it does not pay on a venue's behalf.
+ */
+export const orgOwnerPaysOnly = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const user = req.user;
+  if (!user) {
+    return res
+      .status(401)
+      .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+  }
+
+  for (const org of ['agency', 'outlet'] as const) {
+    /*
+     * Which organisation is being acted for — `x-org-id` when sent, otherwise
+     * the only active membership. AMBIGUOUS RESOLVES TO NULL and is skipped:
+     * somebody who owns one venue and merely works at another must not have
+     * that ownership answer for the venue they did not name.
+     */
+    const orgId = await resolveActingOrgId(req, orgScopeDeps, org);
+    if (!orgId) continue;
+    const holds =
+      org === 'agency'
+        ? await holdsAgencyLane(user.id, orgId, ['owner'])
+        : await holdsOutletLane(user.id, orgId, ['owner']);
+    if (holds) return next();
+  }
+
+  return res.status(403).json({
+    success: false,
+    message: 'Only the organisation owner can pay a subscription invoice.',
+    data: null,
+  });
+};
+
 export const agencyOwnerOnly = requireAgencySubRole('owner');
 export const agencyOwnerOfParam = requireAgencySubRoleScoped('id', 'owner');
 export const outletOwnerOfParam = requireOutletSubRoleScoped('id', 'owner');

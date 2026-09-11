@@ -14,7 +14,14 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
+import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { changeMyPassword } from "@/lib/auth/password-api";
+import {
+	changeMyPhone,
+	sendPhoneChangeOtp,
+	toWhatsAppNumber,
+	verifyPhoneChangeOtp,
+} from "@/lib/auth/phone-api";
 import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -128,6 +135,14 @@ export function SecuritySettingsSheets({
 
 	const [newName, setNewName] = useState("");
 	const [savingName, setSavingName] = useState(false);
+	/** In flight for send / verify / resend, so nothing can be double-sent. */
+	const [otpBusy, setOtpBusy] = useState(false);
+	/**
+	 * A demo session has no account behind it, so the OTP endpoints would refuse
+	 * it. The prototype keeps its local-only behaviour; only a REAL session
+	 * talks to WhatsApp.
+	 */
+	const isDemoSession = getPortalSessionKind() !== "real";
 
 	const [currentPassword, setCurrentPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
@@ -293,8 +308,14 @@ export function SecuritySettingsSheets({
 		setOtpOpen(true);
 	};
 
-	const requestPhoneOtp = () => {
-		if (!canEdit) return;
+	/**
+	 * ⚠️ NOT gated on `canEdit`, for the same reason as the password and name
+	 * lanes: that prop is the ORGANISATION's `editSettings`, and the number
+	 * being changed here is the SIGNED-IN person's own (`currentUser?.contactNo`
+	 * at both call sites), not the venue's. A Finance head must be able to move
+	 * their own handset.
+	 */
+	const requestPhoneOtp = async () => {
 		const next = newPhone.trim();
 		if (!next) {
 			toast(t.profile.enterMobileNumber, "warn");
@@ -304,34 +325,115 @@ export function SecuritySettingsSheets({
 			toast(t.profile.mobileMustDiffer, "warn");
 			return;
 		}
-		setOtpPending({ field: "phone", value: next });
-		setOtp("");
-		toast(fill(t.profile.otpSentTo, { target: next }), "info");
-		setOtpOpen(true);
-	};
-
-	const verifyContactOtp = () => {
-		if (!otpPending) return;
-		if (!verifyDemoOtp(otp)) {
-			toast(t.profile.invalidOtp, "warn");
+		/*
+		 * A demo session has no account to change, so it keeps the prototype's
+		 * local-only behaviour rather than calling an API that would refuse it.
+		 * A REAL session gets a real WhatsApp code — see `phone-api.ts` for what
+		 * used to happen here instead of a request.
+		 */
+		if (isDemoSession) {
+			setOtpPending({ field: "phone", value: next });
+			setOtp("");
+			toast(fill(t.profile.otpSentTo, { target: next }), "info");
+			setOtpOpen(true);
 			return;
 		}
-		if (otpPending.field === "email") {
-			onUpdateEmail(otpPending.value);
-			setNewEmail("");
-		} else {
-			onUpdateMobile(otpPending.value);
-			setNewPhone("");
+		setOtpBusy(true);
+		try {
+			await sendPhoneChangeOtp(next);
+			setOtpPending({ field: "phone", value: next });
+			setOtp("");
+			toast(fill(t.profile.otpSentTo, { target: next }), "info");
+			setOtpOpen(true);
+		} catch (error) {
+			// Server sentences here are already user-facing, and include the rate
+			// limiter's "too many requests" — which a generic failure would hide.
+			toast(
+				error instanceof Error && error.message
+					? error.message
+					: t.profile.otpSendFailed,
+				"warn",
+			);
+		} finally {
+			setOtpBusy(false);
 		}
-		setOtpPending(null);
-		setOtp("");
-		setOtpOpen(false);
-		backToMenu();
 	};
 
-	const resendOtp = () => {
-		if (!otpPending) return;
-		toast(fill(t.profile.otpResentTo, { target: otpPending.value }), "info");
+	const verifyContactOtp = async () => {
+		if (!otpPending || otpBusy) return;
+
+		if (isDemoSession) {
+			if (!verifyDemoOtp(otp)) {
+				toast(t.profile.invalidOtp, "warn");
+				return;
+			}
+			if (otpPending.field === "email") {
+				onUpdateEmail(otpPending.value);
+				setNewEmail("");
+			} else {
+				onUpdateMobile(otpPending.value);
+				setNewPhone("");
+			}
+			setOtpPending(null);
+			setOtp("");
+			setOtpOpen(false);
+			backToMenu();
+			return;
+		}
+
+		setOtpBusy(true);
+		try {
+			/*
+			 * TWO calls, in this order. `verify` mints a single-use receipt;
+			 * `change` spends it. The receipt is the only proof the server takes,
+			 * and it reads WHOSE number to change from the token rather than the
+			 * body — so this cannot rewrite a colleague's.
+			 */
+			const verificationId = await verifyPhoneChangeOtp(otpPending.value, otp);
+			await changeMyPhone(otpPending.value, verificationId);
+			// The number is rendered from `/auth/me`, so refetch rather than patch:
+			// a hand-written cache entry is a second copy of the answer.
+			await queryClient.invalidateQueries({ queryKey: profileQueryKey });
+			toast(t.profile.mobileUpdated, "success");
+			setNewPhone("");
+			setOtpPending(null);
+			setOtp("");
+			setOtpOpen(false);
+			backToMenu();
+		} catch (error) {
+			// Stays OPEN on failure — a wrong code should be retypeable, and the
+			// server allows five attempts before the code dies.
+			toast(
+				error instanceof Error && error.message
+					? error.message
+					: t.profile.invalidOtp,
+				"warn",
+			);
+		} finally {
+			setOtpBusy(false);
+		}
+	};
+
+	const resendOtp = async () => {
+		if (!otpPending || otpBusy) return;
+		if (isDemoSession) {
+			toast(fill(t.profile.otpResentTo, { target: otpPending.value }), "info");
+			return;
+		}
+		setOtpBusy(true);
+		try {
+			await sendPhoneChangeOtp(otpPending.value);
+			toast(fill(t.profile.otpResentTo, { target: otpPending.value }), "info");
+		} catch (error) {
+			toast(
+				error instanceof Error && error.message
+					? error.message
+					: t.profile.otpSendFailed,
+				"warn",
+			);
+		} finally {
+			setOtpBusy(false);
+		}
 	};
 
 	const otpTitle =
@@ -551,12 +653,30 @@ export function SecuritySettingsSheets({
 							onChange={(e) => setNewPhone(e.target.value)}
 							autoComplete="tel"
 						/>
+						{/*
+						 * THE NUMBER THAT WILL ACTUALLY BE MESSAGED, shown before the
+						 * code is sent rather than after it fails to arrive.
+						 *
+						 * Typing `0188716214` is how the number is written in Malaysia
+						 * and is NOT deliverable — WhatsApp needs the country code. The
+						 * field accepts either and `toWhatsAppNumber` resolves it; this
+						 * line is what makes that visible instead of magic, so a wrong
+						 * country code is caught by eye before a code goes nowhere.
+						 */}
+						{newPhone.trim() ? (
+							<p className="iz-tiny iz-muted mt-1.5">
+								{fill(t.profile.otpWillSendTo, {
+									target: `+${toWhatsAppNumber(newPhone)}`,
+								})}
+							</p>
+						) : null}
 						<button
 							type="button"
 							className="iz-btn iz-btn-primary mt-4 w-full"
+							disabled={otpBusy}
 							onClick={requestPhoneOtp}
 						>
-							{t.profile.sendOtpAndUpdate}
+							{otpBusy ? t.common.loading : t.profile.sendOtpAndUpdate}
 						</button>
 					</>
 				) : (

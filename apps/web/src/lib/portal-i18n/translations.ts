@@ -1980,7 +1980,18 @@ const en = {
 		readOnlyForRole: "Read-only for your role.",
 		otpSentTo: "OTP sent to {target}",
 		otpResentTo: "OTP resent to {target}",
-		invalidOtp: "Invalid OTP — try 123456 for demo",
+		/*
+		 * No longer "try 123456 for demo". On a real session the code now comes
+		 * from WhatsApp, and telling somebody to type 123456 at a server that
+		 * will refuse it five times and then expire the code is worse than
+		 * saying nothing.
+		 */
+		invalidOtp: "That code is not right — check WhatsApp or send a new one",
+		otpSendFailed: "Could not send the code — try again in a moment",
+		/** Shown BEFORE sending, so a missing country code is caught by eye. */
+		otpWillSendTo: "Code goes to {target} on WhatsApp",
+		mobileUpdated: "Mobile number updated",
+		mobileUpdateFailed: "Could not update your mobile number",
 		verifyNewEmail: "Verify new email",
 		verifyNewMobile: "Verify new mobile",
 		enterSixDigitCode: "Enter the 6-digit code sent to",
@@ -8206,7 +8217,11 @@ const zh: PortalTranslations = {
 		readOnlyForRole: "你的角色为只读。",
 		otpSentTo: "验证码已发送至 {target}",
 		otpResentTo: "验证码已重新发送至 {target}",
-		invalidOtp: "验证码不正确 —— 演示环境请输入 123456",
+		invalidOtp: "验证码不正确 —— 请查看 WhatsApp 或重新发送",
+		otpSendFailed: "无法发送验证码 —— 请稍后再试",
+		otpWillSendTo: "验证码将通过 WhatsApp 发送至 {target}",
+		mobileUpdated: "手机号已更新",
+		mobileUpdateFailed: "无法更新你的手机号",
 		verifyNewEmail: "验证新邮箱",
 		verifyNewMobile: "验证新手机号",
 		enterSixDigitCode: "请输入发送至以下号码的 6 位验证码",

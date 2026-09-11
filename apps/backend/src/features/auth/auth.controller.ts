@@ -1717,10 +1717,66 @@ export class AuthControllerClass {
       });
 
       const profile = await this.userProfileRepository.getByUserId(actor.id);
+
+      /*
+       * A NEW TOKEN PAIR, because the caller just invalidated their own.
+       *
+       * ⚠️ THIS IS THE "Unauthorized" BUG. A JWT here carries only
+       * `{ loginMethod, loginCriteria }` — there is no user id in it — and
+       * every authenticated request resolves the account with
+       * `getUserByLoginMethod(payload.loginMethod, payload.loginCriteria)`
+       * (auth.repository.ts). So for somebody who signs in BY PHONE, the
+       * instant this endpoint writes the new number their old token points at
+       * a phone number nobody holds: `authenticateJWT` reads `!user` and
+       * answers 401 `Unauthorized`.
+       *
+       * The write had already succeeded, so the person saw a bare
+       * "Unauthorized" under a code that was correct, and their session was
+       * dead from that moment. Reported from the PR app on 11 Sep 2026.
+       *
+       * Re-issuing here fixes it at the source and costs one signature. Only
+       * for a phone-keyed token: an email-keyed one still resolves fine, and
+       * silently re-binding it would make a session that was never at risk
+       * depend on a number that can change again.
+       *
+       * ⚠️ The same trap is waiting for CHANGE EMAIL. Every agency and outlet
+       * operator signs in by email, so an email-change endpoint must re-issue
+       * exactly like this — or the user id goes in the token and everything
+       * resolves by it, which is the deeper fix and invalidates every live
+       * token on deploy.
+       */
+      let tokens: { accessToken: string; refreshToken: string } | null = null;
+      try {
+        const bearer = req.header('Authorization')?.split(' ')[1];
+        const wasPhoneKeyed =
+          bearer &&
+          this.jwtController.verifyToken(bearer).loginMethod === 'phone';
+        if (wasPhoneKeyed) {
+          const tokenPayload = {
+            loginMethod: 'phone' as const,
+            loginCriteria: storedPhone,
+          };
+          tokens = {
+            accessToken: this.jwtController.generateAccessToken(tokenPayload),
+            refreshToken: this.jwtController.generateRefreshToken(tokenPayload),
+          };
+        }
+      } catch {
+        /*
+         * Not fatal, and deliberately not a 500: the number IS changed by this
+         * point. Failing here would report an error for work that succeeded —
+         * the exact shape of the bug being fixed. The caller signs in again
+         * with the new number instead.
+         */
+        logger.warn(
+          `[AuthController.changePhoneWithOtp] could not re-issue tokens for ${actor.id}`,
+        );
+      }
+
       return res.status(200).json({
         success: true,
         message: 'Phone number updated',
-        data: withUserProfile(updated, profile),
+        data: { ...withUserProfile(updated, profile), ...(tokens ?? {}) },
       });
     } catch (error) {
       logger.error('[AuthController.changePhoneWithOtp] Error:', error);

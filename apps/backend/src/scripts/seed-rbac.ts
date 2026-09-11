@@ -136,21 +136,72 @@ const OUTLET_OWNER: MatrixEntry[] = [
   ['booking', CRU],
   ['rating', CRU],
   ['history', READ],
-  ['billing', READ],
+  /*
+   * RU, not READ — owner's call, 11 Sep 2026 ("do now").
+   *
+   * `billing:update` is what the portals call `confirmDaily`, the daily
+   * reconciliation confirm. The permission row existed and was held by NOBODY,
+   * so the button was refused for every lane INCLUDING the owner, on a screen
+   * that offered it. Granted here rather than in a migration because this
+   * seeder is what actually writes `role_permission` — it runs on every
+   * `migrate:deploy`, so a migration's INSERT would only be a second, quieter
+   * source of the same rows.
+   *
+   * Guarantor gets it too by sharing this list (see the role map below), which
+   * is the standing rule: the stand-in sits at the owner's level. Finance stays
+   * on READ — the owner's line is "other member cannot make the change for the
+   * organisation except for the owner and the guarantor".
+   */
+  ['billing', RU],
   ['sales', CRU],
   ['workspace', CRU],
   ['settings', CRU],
   ['special_service', CRU],
 ];
 
+/**
+ * OUTLET FINANCE — WIDENED TO MATCH THE DATABASE (owner's call, 11 Sep 2026).
+ *
+ * "Follow the latest, what can do what cannot do RBAC for the user. The web
+ * matrix must not lie to user and always must follow the database that actually
+ * what can access what cannot."
+ *
+ * ⚠️ THIS LIST USED TO SAY SEVEN, ALL READ — and it was wrong twice over.
+ *
+ * This seeder only ever ADDS: it "ensures" a role's grants and never removes
+ * one. So while it ensured 7, the live `role_permission` rows held **19**, and
+ * the extra 12 (booking CRU, rating CRU, sales create/update, special_service
+ * create/update, workspace create/update) were left over from an earlier, wider
+ * seeding that nothing could clean up. The server reads those ROWS —
+ * `requirePermission` → `roleHasPermission` — so they are what actually decides
+ * access: an outlet Finance head really can post a job, and `POST /shift`
+ * really does admit them.
+ *
+ * Two things were therefore lying, and the owner's rule settles both:
+ *   · this file, which described a view-only role that does not exist; and
+ *   · a FRESH database, which would have seeded only the 7 — so the same code
+ *     granted different access depending on which database it met. That is the
+ *     web matrix lying in another environment, by a longer route.
+ *
+ * The matrix in `apps/web` is derived from these rows (`pnpm rbac:sync`), so it
+ * already followed the database. This makes the seeder agree with it rather
+ * than quietly contradict it, and makes a new environment reproduce this one.
+ *
+ * ⚠️ `billing` stays READ and `settings` stays READ. Those are the two the
+ * owner drew a line under — "other member cannot make the change for the
+ * organisation except for the owner and the guarantor" — and the database
+ * agrees: Finance holds neither `billing:update` nor `settings:update`.
+ */
 const OUTLET_FINANCE: MatrixEntry[] = [
   ['dashboard', READ],
   ['history', READ],
   ['billing', READ],
-  ['sales', READ],
-  ['workspace', READ],
   ['settings', READ],
-  ['special_service', READ],
+  ['booking', CRU],
+  ['rating', CRU],
+  ['sales', CRU],
+  ['workspace', CRU],
+  ['special_service', CRU],
 ];
 
 const OUTLET_OPS: MatrixEntry[] = [

@@ -18,6 +18,7 @@
 export const OUTLET_ROLE_GRANTS = {
 	outlet_owner: [
 		"billing:read",
+		"billing:update",
 		"booking:create",
 		"booking:read",
 		"booking:update",
@@ -41,6 +42,7 @@ export const OUTLET_ROLE_GRANTS = {
 	],
 	outlet_guarantor: [
 		"billing:read",
+		"billing:update",
 		"booking:create",
 		"booking:read",
 		"booking:update",

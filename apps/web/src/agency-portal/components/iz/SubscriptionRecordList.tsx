@@ -32,9 +32,27 @@ export function PaymentHistoryList({
 	invoices,
 	isLoading,
 	laneOf,
+	canPay = false,
 }: {
 	invoices: SubscriptionInvoice[];
 	isLoading?: boolean;
+	/**
+	 * May this viewer actually SPEND the organisation's money?
+	 *
+	 * Owner, 11 Sep 2026: "only the owner can make payment fpx … other member
+	 * only can see the history that paid or unpaid and the current list."
+	 *
+	 * ⚠️ Defaults to FALSE. This component had no permission prop at all, so the
+	 * tick boxes and "Pay RM X by FPX" rendered for every lane — an outlet
+	 * Finance head could start a real checkout. A default of `true` would
+	 * re-open that hole at any call site that forgets the prop; defaulting
+	 * closed means a forgotten prop hides a button instead of spending money.
+	 *
+	 * The HISTORY is deliberately NOT gated by this: paid and unpaid periods and
+	 * the current list stay readable by every member, which is the other half of
+	 * the same rule.
+	 */
+	canPay?: boolean;
 	/**
 	 * Which lane a period belongs to — the plan, or the POS add-on. Optional so
 	 * the agency screen, which can only ever hold ONE lane, passes nothing and
@@ -194,14 +212,24 @@ export function PaymentHistoryList({
 				) : (
 					<div className="space-y-2">
 						<OverduePaymentWarning invoices={unpaid} />
-						<p className="iz-tiny iz-muted2">{t.subscription.selectToPay}</p>
+						{/*
+						 * "Tick the periods to pay" is an instruction, so it goes with
+						 * the ticking. A member who may not pay still sees WHAT is
+						 * outstanding — that is the list they are entitled to — without
+						 * being told to do something the page will not let them do.
+						 */}
+						{canPay && (
+							<p className="iz-tiny iz-muted2">{t.subscription.selectToPay}</p>
+						)}
 						{groupByPeriod(unpaid).map((group) => (
 							<PeriodCard
 								key={group.key}
 								rows={group.rows}
 								laneOf={laneOf}
 								selected={selected}
-								onToggle={toggle}
+								// No handler, no checkbox — `PeriodCard` renders the box only
+								// when `onToggle` is passed, so this is the whole gate.
+								onToggle={canPay ? toggle : undefined}
 							/>
 						))}
 						{/*
@@ -209,7 +237,7 @@ export function PaymentHistoryList({
 						 * always-present button reads as "you owe this", and the tiles
 						 * above already say that.
 						 */}
-						{selected.size > 0 && (
+						{canPay && selected.size > 0 && (
 							<IzCard flat>
 								<div className="iz-between gap-3">
 									<span className="iz-tiny iz-muted">

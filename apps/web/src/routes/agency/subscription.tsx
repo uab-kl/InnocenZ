@@ -737,6 +737,14 @@ function AgencySubscription() {
 					<PaymentHistoryList
 						invoices={sub.paymentHistory}
 						isLoading={sub.isPaymentHistoryLoading}
+						/*
+						 * The LIST stays readable for everyone; only the spending does
+						 * not — the twin of routes/outlet/subscription.tsx. `canEdit` is
+						 * `settings:update`, which the database grants to the owner and
+						 * the guarantor alone, and the server now admits exactly those
+						 * two to `POST /subscription-payment/checkout`.
+						 */
+						canPay={canEdit}
 					/>
 				</>
 			)}
@@ -909,92 +917,102 @@ function AgencySubscription() {
 				</>
 			)}
 
-			<OutletSection
-				title={t.agencyMisc.paymentMethod}
-				iconKey="Payment method"
-				hint={
-					sub.backed
-						? sub.card
-							? // Two keys, not one sentence: the instrument stamp already had
-								// a key, and the charge date is an optional tail that only a
-								// saved renewal date earns. The stamp comes from the one
-								// shared describer, so a bank transfer does not print
-								// "Card ···· ····" as if its digits had failed to load.
-								describePaymentMethod(sub.card, {
-									transfer: t.subscription.savedTransfer,
-									fpx: t.subscription.savedFpx,
-									fpxLink: t.subscription.savedFpxLink,
-									ewallet: t.subscription.methodEwallet,
-								}) +
-								(realRenewalLabel
-									? fill(
-											// "Next charge" is a promise only an auto-chargeable
-											// rail can keep. A bank transfer and a mandate the
-											// bank has not approved RENEW on that date; nothing
-											// collects on it by itself.
-											willAutoCharge(sub.card)
-												? t.agencyMisc.nextChargeSuffix
-												: t.agencyMisc.renewsOnSuffix,
-											{ date: realRenewalLabel },
-										)
-									: "")
-							: t.subscription.noCardSavedYet
-						: fill(t.subscription.visaNextCharge, {
-								last4: CARD_LAST4,
-								date: renewalDate,
-							})
-				}
-				collapsible
-				defaultOpen={false}
-				className="!mt-5"
-			>
-				<PaymentMethodCard
-					card={sub.backed ? sub.card : null}
-					backed={sub.backed}
-					demoLast4={CARD_LAST4}
-					canEdit={canEdit}
-					isLoading={sub.backed && sub.isCardLoading}
-					isSaving={sub.isSavingCard}
-					billedLabel={fill(t.subscription.billedWeeklyFromUsage, {
-						tier: billedTierLabel,
-						price: billedPriceLabel,
-					})}
-					onSave={async (input) => {
-						const result = await sub.saveCard(input);
-						toast(
-							result.ok
-								? t.subscription.cardSaved
-								: (result.reason ?? t.subscription.couldNotSaveCard),
-							result.ok ? "success" : "warn",
-						);
-						return result.ok;
-					}}
-					isRemoving={sub.isRemovingCard}
-					onRemove={async () => {
-						const result = await sub.removeCard();
-						// The server's own sentence first; the local one only if it sent none.
-						toast(
-							result.message ??
-								(result.ok
-									? t.subscription.methodRemoved
-									: t.subscription.couldNotRemoveMethod),
-							result.ok ? "success" : "warn",
-						);
-						return result.ok;
-					}}
-				/>
-
-				<div className="mt-2 flex items-center gap-2 iz-tiny iz-muted">
-					<Calendar className="h-3.5 w-3.5" />
-					{sub.backed
-						? realRenewalLabel
-							? fill(t.subscription.nextWeeklyCharge, {
-									date: realRenewalLabel,
+			{/*
+			 * THE WHOLE SECTION, not just its Edit button — the twin of
+			 * routes/outlet/subscription.tsx. Owner, 11 Sep 2026: "only the owner
+			 * can make payment and SEE the payment method in the organisation."
+			 * It used to render for every lane with only the edit form behind
+			 * `canEdit`, so a Finance member read the saved instrument — brand,
+			 * last four, expiry and holder — in the collapsed hint.
+			 */}
+			{canEdit && (
+				<OutletSection
+					title={t.agencyMisc.paymentMethod}
+					iconKey="Payment method"
+					hint={
+						sub.backed
+							? sub.card
+								? // Two keys, not one sentence: the instrument stamp already had
+									// a key, and the charge date is an optional tail that only a
+									// saved renewal date earns. The stamp comes from the one
+									// shared describer, so a bank transfer does not print
+									// "Card ···· ····" as if its digits had failed to load.
+									describePaymentMethod(sub.card, {
+										transfer: t.subscription.savedTransfer,
+										fpx: t.subscription.savedFpx,
+										fpxLink: t.subscription.savedFpxLink,
+										ewallet: t.subscription.methodEwallet,
+									}) +
+									(realRenewalLabel
+										? fill(
+												// "Next charge" is a promise only an auto-chargeable
+												// rail can keep. A bank transfer and a mandate the
+												// bank has not approved RENEW on that date; nothing
+												// collects on it by itself.
+												willAutoCharge(sub.card)
+													? t.agencyMisc.nextChargeSuffix
+													: t.agencyMisc.renewsOnSuffix,
+												{ date: realRenewalLabel },
+											)
+										: "")
+								: t.subscription.noCardSavedYet
+							: fill(t.subscription.visaNextCharge, {
+									last4: CARD_LAST4,
+									date: renewalDate,
 								})
-							: t.subscription.nothingToCharge
-						: fill(t.subscription.nextWeeklyCharge, { date: renewalDate })}
-				</div>
-			</OutletSection>
+					}
+					collapsible
+					defaultOpen={false}
+					className="!mt-5"
+				>
+					<PaymentMethodCard
+						card={sub.backed ? sub.card : null}
+						backed={sub.backed}
+						demoLast4={CARD_LAST4}
+						canEdit={canEdit}
+						isLoading={sub.backed && sub.isCardLoading}
+						isSaving={sub.isSavingCard}
+						billedLabel={fill(t.subscription.billedWeeklyFromUsage, {
+							tier: billedTierLabel,
+							price: billedPriceLabel,
+						})}
+						onSave={async (input) => {
+							const result = await sub.saveCard(input);
+							toast(
+								result.ok
+									? t.subscription.cardSaved
+									: (result.reason ?? t.subscription.couldNotSaveCard),
+								result.ok ? "success" : "warn",
+							);
+							return result.ok;
+						}}
+						isRemoving={sub.isRemovingCard}
+						onRemove={async () => {
+							const result = await sub.removeCard();
+							// The server's own sentence first; the local one only if it sent none.
+							toast(
+								result.message ??
+									(result.ok
+										? t.subscription.methodRemoved
+										: t.subscription.couldNotRemoveMethod),
+								result.ok ? "success" : "warn",
+							);
+							return result.ok;
+						}}
+					/>
+
+					<div className="mt-2 flex items-center gap-2 iz-tiny iz-muted">
+						<Calendar className="h-3.5 w-3.5" />
+						{sub.backed
+							? realRenewalLabel
+								? fill(t.subscription.nextWeeklyCharge, {
+										date: realRenewalLabel,
+									})
+								: t.subscription.nothingToCharge
+							: fill(t.subscription.nextWeeklyCharge, { date: renewalDate })}
+					</div>
+				</OutletSection>
+			)}
 		</div>
 	);
 }
