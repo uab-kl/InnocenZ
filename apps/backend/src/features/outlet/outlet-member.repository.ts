@@ -1,7 +1,8 @@
-import { and, count, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, count, eq, ilike, inArray, ne, or } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { logger } from '@/util/logger';
+import type { MembershipStatus } from '@/util/membership-status';
 import {
   ensureAccountCodeFromMembership,
   nextOrgMemberCode,
@@ -275,6 +276,25 @@ export class OutletMemberRepositoryClass {
       }
       if (options.status) {
         conditions.push(eq(OutletUserTable.status, options.status));
+      } else {
+        /*
+         * ⚠️ A DECLINED APPLICANT IS NOT A MEMBER, ON THIS SCREEN EITHER (0162).
+         *
+         * Owner, 11 Sep 2026, finding one in the admin console: "why the decline
+         * member can show and search by the atlas agency?"
+         *
+         * With no status asked for this list had no status condition at all, so a
+         * turned-down request sat among the organisation's members — under a
+         * MEMBER ID column, where the only thing it could show was the `INNPND`
+         * placeholder that exists precisely BECAUSE no id was ever issued.
+         * Searching the organisation's name returned them too.
+         *
+         * Excluded by DEFAULT rather than always: an admin who explicitly picks
+         * "rejected" in the status filter is asking to see them, and answering
+         * that with an empty table would be its own lie. The default is what had
+         * to change, not the admin's reach.
+         */
+        conditions.push(ne(OutletUserTable.status, 'rejected'));
       }
       if (options.search?.trim()) {
         const term = `%${options.search.trim()}%`;
@@ -406,16 +426,32 @@ export class OutletMemberRepositoryClass {
 
   /** The venue twin of `AgencyMemberRepository.remove` — see the note there
    * for why `actor` is required rather than optional. */
+  /**
+   * Take somebody off the roster — a DECLINE or a DEACTIVATION (0162).
+   *
+   * ⚠️ `nextStatus` is REQUIRED, and deliberately not defaulted. This used to
+   * hard-code `'inactive'`, and the two events reach it through the SAME HTTP
+   * call — the Decline button and the Team screen's Remove button both fire
+   * `DELETE /:id/members/:memberId` — so one word was made to mean both
+   * "turned down, never a member" and "was a member, removed". A declined
+   * applicant then showed up on the organisation's roster.
+   *
+   * This function sees only an id and an actor, so it cannot decide; the
+   * CONTROLLER can, because it has already loaded the row. `removalStatusFor`
+   * is that decision, and a required parameter is what stops the next caller
+   * silently inheriting the old conflation.
+   */
   async remove(
     id: string,
     actor: string,
+    nextStatus: MembershipStatus,
     tx?: DbTransaction,
   ): Promise<boolean> {
     try {
       const dbClient = tx ?? db;
       await dbClient
         .update(OutletUserTable)
-        .set({ status: 'inactive', updatedAt: new Date(), updatedBy: actor })
+        .set({ status: nextStatus, updatedAt: new Date(), updatedBy: actor })
         .where(eq(OutletUserTable.id, id));
       return true;
     } catch (error) {

@@ -35,6 +35,16 @@ export interface OrgMember {
 	memberCode?: string | null;
 	/** When they ASKED — an ISO string off the wire, never a Date. */
 	createdAt?: string | null;
+	/** When the decision was made — same shape, same rule. */
+	updatedAt?: string | null;
+	/**
+	 * WHO decided, by name — joined on the server from `updated_by`, never
+	 * stored on the row. Null when the actor was `'system'` or their account is
+	 * gone; the screen renders its own fallback rather than inventing a name.
+	 * The same rule, and the same join, the admin archive screen already uses.
+	 */
+	updatedByName?: string | null;
+	updatedBy?: string | null;
 }
 
 /** The one cache key holding an organisation's member list. */

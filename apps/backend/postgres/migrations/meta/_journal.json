@@ -1135,6 +1135,13 @@
       "when": 1792794000000,
       "tag": "0161_member_code_on_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1792795000000,
+      "tag": "0162_membership_rejected_status",
+      "breakpoints": true
     }
   ]
 }

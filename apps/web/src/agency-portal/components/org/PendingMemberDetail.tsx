@@ -1,4 +1,8 @@
 import {
+	decidedByLabel,
+	memberQueueState,
+} from "@agency-portal/components/org/PendingMembersPanel";
+import {
 	type OrgKind,
 	type OrgMember,
 	serverMessage,
@@ -149,7 +153,12 @@ export function PendingMemberDetail({
 		);
 	}
 
-	const isWaiting = member.status !== "active";
+	const state = memberQueueState(member);
+	const isWaiting = state === "waiting";
+	const isDeclined = state === "declined";
+	// The SAME rule the list beside this pane applies — one answer, not two.
+	const decidedBy = decidedByLabel(member, t);
+	const decidedOn = whenApplied(member.updatedAt, locale);
 	// Belongs to THIS person, or it does not count — see the note above.
 	const picked = choice?.id === member.id ? choice.value : member.subRole;
 	const shownError = error?.id === member.id ? error.message : "";
@@ -169,7 +178,13 @@ export function PendingMemberDetail({
 				) : (
 					<span className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-full border border-border border-dashed bg-muted/40 text-muted-foreground">
 						<UserRound className="h-8 w-8" strokeWidth={1.5} />
-						<span className="text-[10px]">{t.portalUi.noPhoto}</span>
+						{/* A ladder step, never an arbitrary px size: the ladder's floor is
+						    micro (11px), and off-ladder values are what produced 27 different
+						    sizes across the portals. `check:type` catches them, and the rule
+						    is to move the value onto the ladder, never to re-baseline.
+						    ⚠️ Do not name the offending class here either — that checker
+						    scans SOURCE TEXT, so quoting one in a comment re-triggers it. */}
+						<span className="text-xs">{t.portalUi.noPhoto}</span>
 					</span>
 				)}
 				<div className="min-w-0">
@@ -183,6 +198,11 @@ export function PendingMemberDetail({
 							<span className="font-semibold">
 								{portalRoleLabel(member.subRole, t)}
 							</span>
+						</span>
+					) : isDeclined ? (
+						<span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-muted-foreground text-xs">
+							<UserX className="h-3 w-3" />
+							{t.portalUi.declinedRole}
 						</span>
 					) : (
 						<span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-emerald-300 text-xs">
@@ -239,6 +259,50 @@ export function PendingMemberDetail({
 					) : null}
 				</div>
 			</section>
+
+			{/*
+			 * ALREADY ANSWERED — who answered it, and when.
+			 *
+			 * ⚠️ The name comes from `updated_by`, which is the LAST writer, not a
+			 * dedicated approver column — there is none. For somebody admitted
+			 * through this queue that IS the person who decided, and it stays true
+			 * until the membership is edited afterwards.
+			 */}
+			{isWaiting ? null : (
+				<section>
+					<h3 className="mb-1 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+						{t.portalUi.decisionHeading}
+					</h3>
+					<div className="divide-y divide-border rounded-xl border border-border px-4">
+						{/* Only when a HUMAN can be named. `decidedByLabel` returns null
+						    for the machine tokens setup code writes into `updated_by`
+						    (`seed-…`, `member-signup`), and an absent line is honest where
+						    an invented accepter would not be. */}
+						{decidedBy ? (
+							<Row
+								icon={
+									isDeclined ? (
+										<UserX className="h-4 w-4" />
+									) : (
+										<UserCheck className="h-4 w-4" />
+									)
+								}
+								label={
+									isDeclined ? t.portalUi.declinedBy : t.portalUi.acceptedBy
+								}
+								value={decidedBy}
+							/>
+						) : null}
+						{decidedOn ? (
+							<Row
+								icon={<Clock className="h-4 w-4" />}
+								label={t.portalUi.declinedOn}
+								value={decidedOn}
+							/>
+						) : null}
+					</div>
+				</section>
+			)}
 
 			{isWaiting ? (
 				<section>

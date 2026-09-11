@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Clock, ShieldAlert } from "lucide-react";
+import { Clock, ShieldAlert, UserMinus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -61,6 +61,26 @@ function NoAccessBody() {
 		: user?.organisations?.find((o) => o.membershipStatus === "pending");
 
 	/*
+	 * ⚠️ THE FOURTH SITUATION — they WERE on a team and were removed (0162).
+	 *
+	 * Removal revokes the portal role, so somebody deactivated at their only
+	 * organisation holds no role and arrives here by the same route as an
+	 * account that never had one. The generic line then told a former colleague
+	 * that their "account role does not have a web portal yet", as though they
+	 * had never worked anywhere — which is the one thing they know is untrue.
+	 *
+	 * Ranked BELOW `waiting`: somebody can hold a pending request at one
+	 * organisation and a removal at another, and the request is the actionable
+	 * one. A DECLINED request never appears here at all — the server drops
+	 * `rejected` from this list, because being turned down is not a
+	 * relationship to be told about.
+	 */
+	const removed =
+		needs || waiting
+			? undefined
+			: user?.organisations?.find((o) => o.membershipStatus === "inactive");
+
+	/*
 	 * Two different situations share this page.
 	 *
 	 * WRONG PORTAL (`needs` present) — the visitor opened a link belonging to a
@@ -82,6 +102,13 @@ function NoAccessBody() {
 					<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/15">
 						<Clock className="h-9 w-9 text-amber-400" strokeWidth={1.5} />
 					</div>
+				) : removed ? (
+					<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-border bg-muted/40">
+						<UserMinus
+							className="h-9 w-9 text-muted-foreground"
+							strokeWidth={1.5}
+						/>
+					</div>
 				) : (
 					<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-destructive/30 bg-destructive/15">
 						<ShieldAlert
@@ -94,9 +121,11 @@ function NoAccessBody() {
 				<h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
 					{waiting
 						? t.invitePages.waitingTitle
-						: needsLabel
-							? fill(t.invitePages.linkNeedsPortal, { portal: needsLabel })
-							: t.invitePages.noPortalTitle}
+						: removed
+							? t.invitePages.removedTitle
+							: needsLabel
+								? fill(t.invitePages.linkNeedsPortal, { portal: needsLabel })
+								: t.invitePages.noPortalTitle}
 				</h1>
 
 				{waiting ? (
@@ -109,6 +138,15 @@ function NoAccessBody() {
 						</p>
 						<p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
 							{t.invitePages.waitingHint}
+						</p>
+					</>
+				) : removed ? (
+					<>
+						<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
+							{fill(t.invitePages.removedBody, { org: removed.name })}
+						</p>
+						<p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+							{fill(t.invitePages.removedHint, { org: removed.name })}
 						</p>
 					</>
 				) : needsLabel ? (

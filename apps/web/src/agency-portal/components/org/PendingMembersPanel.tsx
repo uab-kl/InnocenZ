@@ -24,6 +24,76 @@ const APPROVABLE: Record<OrgKind, readonly string[]> = {
 	outlet: ["finance", "director", "operations_head"],
 };
 
+/**
+ * WHICH STATE IS THIS ROW IN?
+ *
+ * ⚠️ FOUR STATES, AND THE STATUS NOW SAYS WHICH (0162). It used to have to be
+ * GUESSED: declining and removing both wrote `inactive`, so this read the
+ * member code — an `INNPND` placeholder meant never approved — to tell a
+ * turned-down applicant from a departed colleague. That inference is gone; the
+ * server writes the right word, and `removalStatusFor` decides it from the row
+ * being removed rather than from anything the client sends.
+ *
+ *   waiting      asked to join, nobody has answered
+ *   active       on the team
+ *   declined     asked and was turned down — NEVER a member, and therefore
+ *                absent from the organisation's roster entirely
+ *   deactivated  WAS a member; the owner removed them. Real history, so the
+ *                roster keeps them and marks them inactive.
+ *
+ * ⚠️ Anything else falls to `deactivated`, not to `declined`. The column is a
+ * free varchar, and calling an unrecognised word a declined application would
+ * accuse somebody of being turned down when we simply do not know — whereas
+ * "no longer active" is true of every non-active row.
+ */
+export type MemberQueueState =
+	| "waiting"
+	| "active"
+	| "declined"
+	| "deactivated";
+
+export function memberQueueState(m: { status: string }): MemberQueueState {
+	if (m.status === "active") return "active";
+	if (m.status === "pending") return "waiting";
+	if (m.status === "rejected") return "declined";
+	return "deactivated";
+}
+
+/**
+ * WHO made the decision, said honestly.
+ *
+ * `updatedByName` is the joined real name. When it is null the raw
+ * `updated_by` is either the literal `'system'` or a uuid whose account is
+ * gone — and a bare uuid on screen is worse than saying so. The same ladder
+ * the admin archive screen applies, for the same reason.
+ */
+const ACTOR_UUID =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function decidedByLabel(
+	m: { updatedByName?: string | null; updatedBy?: string | null },
+	t: { portalUi: { actorSystemShort: string; actorUnknownShort: string } },
+): string | null {
+	if (m.updatedByName) return m.updatedByName;
+	const raw = m.updatedBy?.trim();
+	if (!raw) return null;
+	if (raw === "system") return t.portalUi.actorSystemShort;
+	/*
+	 * ⚠️ ONLY A UUID CAN BE A PERSON.
+	 *
+	 * `updated_by` is a varchar and setup code writes TOKENS into it —
+	 * `member-signup`, `seed-atlas-agency-role-accounts`. A row carrying one of
+	 * those was written when the organisation was created; nobody decided it
+	 * through this queue. Printing the token rendered "Accepted by
+	 * seed-atlas-agency-role-a…" on a founding member's row, which is not a
+	 * person, not useful, and not something an owner can act on.
+	 *
+	 * Null means "no human decided this", and the caller shows nothing at all.
+	 * An absent line is honest; an invented decider is not.
+	 */
+	return ACTOR_UUID.test(raw) ? t.portalUi.actorUnknownShort : null;
+}
+
 /** First letter of whatever we can show, for the avatar disc. */
 function initial(name: string | undefined, email: string | null | undefined) {
 	const source = (name || email || "?").trim();
@@ -95,18 +165,47 @@ export function PendingMembersPanel({
 	 * opens on "All" buries the two unanswered rows among forty settled ones.
 	 * The other two are the record, reachable in one click.
 	 */
-	const [filter, setFilter] = useState<"waiting" | "active" | "all">("waiting");
+	/*
+	 * ⚠️ NO "ON THE TEAM" CHIP (owner, 11 Sep 2026: "remove the on the team").
+	 *
+	 * The people already on the team are the TEAM SCREEN's subject, and this
+	 * queue offers nothing to do to them — a tab listing them here was a second
+	 * roster with no actions on it. They remain inside "All", which is the
+	 * record of everyone this queue has ever decided about, and each one now
+	 * says who accepted them.
+	 */
+	const [filter, setFilter] = useState<
+		"waiting" | "declined" | "deactivated" | "all"
+	>("waiting");
 
 	/*
-	 * `status !== "active"` rather than `=== "pending"`: the column is a free
-	 * varchar(50), so a row written with any other word is still somebody who is
-	 * not working here, and would vanish from a list that matched one literal.
-	 * The same reasoning the admin archive screen already applies.
+	 * ⚠️ WAITING USED TO MEAN "NOT ACTIVE", AND THAT SWALLOWED THE DECLINED.
+	 *
+	 * Declining writes `status: 'inactive'`, so a turned-down applicant matched
+	 * `!== "active"` and stayed in the Waiting list — with Approve and Decline
+	 * offered again, as though the decision had never registered. Three states
+	 * now, split by `memberQueueState`, which reads the member id to tell a
+	 * declined applicant from a former colleague.
 	 */
-	const pending = members.filter((m) => m.status !== "active");
-	const active = members.filter((m) => m.status === "active");
+	const pending = members.filter((m) => memberQueueState(m) === "waiting");
+	const declined = members.filter((m) => memberQueueState(m) === "declined");
+	/*
+	 * Owner, 11 Sep 2026: "at the approval page need show that the which and the
+	 * list of user who had been deactivated and deactivated by who". People who
+	 * WERE on the team and were removed — kept apart from the declined, because
+	 * one of the two was never a colleague and the other was.
+	 */
+	const deactivated = members.filter(
+		(m) => memberQueueState(m) === "deactivated",
+	);
 	const waiting =
-		filter === "waiting" ? pending : filter === "active" ? active : members;
+		filter === "waiting"
+			? pending
+			: filter === "declined"
+				? declined
+				: filter === "deactivated"
+					? deactivated
+					: members;
 
 	if (isLoading) {
 		return (
@@ -119,7 +218,8 @@ export function PendingMembersPanel({
 
 	const filters = [
 		["waiting", t.portalUi.membersWaiting, pending.length],
-		["active", t.portalUi.membersActive, active.length],
+		["declined", t.portalUi.membersRejected, declined.length],
+		["deactivated", t.portalUi.membersDeactivated, deactivated.length],
 		["all", t.portalUi.membersAll, members.length],
 	] as const;
 
@@ -163,7 +263,10 @@ export function PendingMembersPanel({
 			{waiting.map((m) => {
 				const choice = picked[m.id] ?? m.subRole;
 				const busy = changeMember.isPending || removeMember.isPending;
-				const isWaiting = m.status !== "active";
+				const state = memberQueueState(m);
+				const isWaiting = state === "waiting";
+				const isDeclined = state === "declined";
+				const isDeactivated = state === "deactivated";
 				const photo = apiAssetUrl(m.profileImage ?? undefined);
 				return (
 					<Wrapper
@@ -185,7 +288,9 @@ export function PendingMembersPanel({
 							 */
 							isWaiting
 								? "border-amber-400/35 bg-amber-400/[0.03]"
-								: "border-border",
+								: isDeclined
+									? "border-border bg-muted/20 opacity-80"
+									: "border-border",
 						)}
 					>
 						<div className="flex flex-col gap-4 @2xl/row:flex-row @2xl/row:items-center @2xl/row:justify-between">
@@ -233,6 +338,37 @@ export function PendingMembersPanel({
 									    is the answer, and the two must not read as the same
 									    thing. A chip rather than a sentence, so it cannot wrap
 									    into a column one word wide. */}
+									{/* WHO let them in. Only under "All", because that list is the
+									    record of every decision this queue has made, and a name is
+									    the whole point of keeping one. Green per the standing colour
+									    code: settled. */}
+									{state === "active" && decidedByLabel(m, t) && (
+										<span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-emerald-300/90 text-xs">
+											<UserCheck className="h-3 w-3 shrink-0" />
+											<span className="truncate">
+												{t.portalUi.acceptedBy}{" "}
+												<span className="font-semibold text-foreground">
+													{decidedByLabel(m, t)}
+												</span>
+											</span>
+										</span>
+									)}
+									{/* WHO turned them down, on the row itself — an owner scanning
+									    the Declined list should not have to open each one to find
+									    out who answered it. */}
+									{(isDeclined || isDeactivated) && decidedByLabel(m, t) && (
+										<span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-muted-foreground text-xs">
+											<UserX className="h-3 w-3 shrink-0" />
+											<span className="truncate">
+												{isDeclined
+													? t.portalUi.declinedBy
+													: t.portalUi.deactivatedBy}{" "}
+												<span className="font-semibold text-foreground">
+													{decidedByLabel(m, t)}
+												</span>
+											</span>
+										</span>
+									)}
 									{isWaiting && (
 										<span className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-amber-200 text-xs">
 											<Clock className="h-3 w-3 shrink-0" />
@@ -257,7 +393,11 @@ export function PendingMembersPanel({
 							 */}
 							{onSelect ? null : !isWaiting ? (
 								<span className="shrink-0 text-muted-foreground text-sm @2xl/row:text-right">
-									{portalRoleLabel(m.subRole, t)}
+									{isDeclined
+										? t.portalUi.declinedRole
+										: isDeactivated
+											? t.portalUi.deactivatedRole
+											: portalRoleLabel(m.subRole, t)}
 								</span>
 							) : (
 								<div className="flex min-w-0 flex-col gap-2 @2xl/row:flex-row @2xl/row:shrink-0 @2xl/row:items-center">

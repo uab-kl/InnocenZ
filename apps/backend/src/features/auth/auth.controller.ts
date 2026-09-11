@@ -1306,10 +1306,35 @@ export class AuthControllerClass {
        * reason — two spellings would drift, and the drift shows up as a picker
        * that disagrees with the door.
        */
-      const [agencyMemberships, outletMemberships] = await Promise.all([
+      const [allAgencyMemberships, allOutletMemberships] = await Promise.all([
         this.agencyMemberRepository.listMembershipsByUserIds([user.id]),
         this.outletMemberRepository.listMembershipsByUserIds([user.id]),
       ]);
+      /*
+       * ⚠️ A DECLINED REQUEST IS NOT AN ORGANISATION YOU BELONG TO (0162).
+       *
+       * Owner, 11 Sep 2026: "if in approval been declined cannot be the orgs
+       * member".
+       *
+       * The note above explains why a DEACTIVATED membership is carried rather
+       * than filtered: somebody removed from one agency while still working at
+       * another deserves to see WHY that agency stopped letting them in, and
+       * silence leaves them with nobody to contact. Every word of that is about
+       * a relationship that EXISTED and ended.
+       *
+       * `rejected` is the opposite case. They asked to join and were turned
+       * down, so there is no relationship to explain — and listing the
+       * organisation, even greyed out, tells them they have standing there that
+       * they do not. It is also the same rule the organisation's own roster
+       * now applies from the other side, which is what keeps the two screens
+       * telling one story.
+       */
+      const agencyMemberships = allAgencyMemberships.filter(
+        (m) => m.status !== 'rejected',
+      );
+      const outletMemberships = allOutletMemberships.filter(
+        (m) => m.status !== 'rejected',
+      );
       const organisations = [
         ...agencyMemberships.map((m) => ({
           kind: 'agency' as const,

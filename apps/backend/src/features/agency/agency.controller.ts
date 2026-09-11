@@ -13,6 +13,7 @@ import { refuseUninvitableAccount } from '@/util/invitable-account';
 import { pickAgencyId } from '@/util/org-scope';
 import { logger } from '@/util/logger';
 import { guardMemberChange } from '@/util/member-change-guard';
+import { removalStatusFor } from '@/util/membership-status';
 import {
   ensureAccountCodeFromMembership,
   isPendingOrgCode,
@@ -1766,9 +1767,25 @@ export class AgencyControllerClass {
           .json({ success: false, message: refusal, data: null });
       }
 
+      /*
+       * ⚠️ WHICH EVENT IS THIS? The route cannot say, so the ROW says (0162).
+       *
+       * Decline and Remove are the same call. A membership that has never been
+       * anything but `pending` was never a member, so taking it away is a
+       * DECLINE and must be recorded as `rejected` — a word the roster excludes,
+       * because somebody who was turned down was never on the team. Anything
+       * else was active, so this is a DEACTIVATION and stays `inactive`, which
+       * the roster keeps and marks.
+       *
+       * Derived from `target`, never from a flag the client sends: the two
+       * buttons then cannot disagree, and a caller that knows nothing about the
+       * distinction still produces the right word.
+       */
+      const nextStatus = removalStatusFor(target.status);
       const removed = await this.agencyMemberRepository.remove(
         memberId,
         getActor(req),
+        nextStatus,
       );
       if (!removed)
         return res

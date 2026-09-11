@@ -5116,6 +5116,53 @@ const en = {
 		decideHint:
 			"They asked for one title; the one you pick here is the one they get.",
 		alreadyOnTeam: "Already on the team",
+		/*
+		 * DECLINED — its own state, not a kind of "waiting".
+		 *
+		 * Declining writes `status: 'inactive'`, and the queue counted anything
+		 * that was not active as still waiting — so a declined person stayed in
+		 * the Waiting list with Approve and Decline offered again, and the
+		 * decision read as though it had not registered.
+		 */
+		membersRejected: "Declined",
+		/*
+		 * DEACTIVATED — a former member, which is NOT a declined applicant.
+		 * Owner, 11 Sep 2026: "deactivate trigger when there is already a orgs
+		 * member, but remove by the owner". They have real history with the
+		 * organisation, so the roster keeps them; this list is where an owner
+		 * sees who was removed and who did it.
+		 */
+		membersDeactivated: "Deactivated",
+		deactivatedRole: "Deactivated",
+		deactivatedBy: "Deactivated by",
+		declinedRole: "Declined",
+		declinedBy: "Declined by",
+		/*
+		 * ⚠️ READ FROM `updated_by`, which is LAST WRITER — not a dedicated
+		 * `approved_by` column, because there isn't one. For somebody admitted
+		 * through this queue it IS the person who approved them, and it stays
+		 * true until someone edits that membership afterwards (a role change on
+		 * the Team screen would move it). Naming a real approver column would be
+		 * a migration; this is honest about what it can see today.
+		 */
+		acceptedBy: "Accepted by",
+		/*
+		 * THE INVITE BOX'S REMINDER (owner, 11 Sep 2026).
+		 *
+		 * An invite can only reach an address that ALREADY has an InnocenZ login —
+		 * `refuseUninvitableAccount` turns away an unknown address, an inactive
+		 * account and an admin's. That rule is right (inviting a stranger's
+		 * address and setting a password on it was an account-takeover hole we
+		 * closed), but the box gave no hint of it, so the failure arrived only
+		 * after typing an address and pressing Invite.
+		 */
+		inviteNeedsAccount:
+			"They must already have an InnocenZ account. Ask them to sign up as a team member first, then invite the address they used.",
+		declinedOn: "Declined on",
+		decisionHeading: "The decision",
+		/** The actor column's two honest fallbacks — never an invented name. */
+		actorSystemShort: "InnocenZ (automatic)",
+		actorUnknownShort: "an account since removed",
 		/** SidebarTrigger's sr-only label and SidebarRail's aria-label + title. Distinct from shell.expandSidebar / shell.collapseSidebar: this control flips, it does not name a direction. */
 		toggleSidebar: "Toggle Sidebar",
 		/** Screen-reader-only title of the mobile sidebar Sheet. */
@@ -6297,6 +6344,20 @@ const en = {
 		 * Amber, per the standing colour code: waiting is not a failure.
 		 */
 		waitingTitle: "Waiting for approval",
+		/*
+		 * REMOVED — the fourth thing /no-access has to be able to say (0162).
+		 *
+		 * Removal revokes the portal role, so somebody deactivated at their only
+		 * organisation holds no role and lands here — where the generic line read
+		 * "your account role does not have a web portal yet", as though they had
+		 * never worked anywhere. They know they worked there; what they need is
+		 * which organisation ended it and who to ask about it.
+		 */
+		removedTitle: "Your access was removed",
+		removedBody:
+			"{org} removed you from their team, so this portal is closed to you. Your account itself is fine — another organisation can still invite you.",
+		removedHint:
+			"If you think this is a mistake, contact {org} directly — reinstating you is theirs to do.",
 		waitingBody:
 			"{org} has your request to join as {role}. Sign in again once they approve you — nothing else is needed from you.",
 		waitingHint:
@@ -10454,6 +10515,19 @@ const zh: PortalTranslations = {
 		decideHeading: "您的决定",
 		decideHint: "对方申请的是一个职位；最终由您在此选定。",
 		alreadyOnTeam: "已在团队中",
+		membersRejected: "已拒绝",
+		membersDeactivated: "已停用",
+		deactivatedRole: "已停用",
+		deactivatedBy: "停用人",
+		declinedRole: "已拒绝",
+		declinedBy: "拒绝人",
+		acceptedBy: "通过人",
+		inviteNeedsAccount:
+			"对方必须已拥有 InnocenZ 账号。请先让对方以「团队成员」身份注册，再邀请其注册时使用的邮箱。",
+		declinedOn: "拒绝时间",
+		decisionHeading: "审批结果",
+		actorSystemShort: "InnocenZ（系统自动）",
+		actorUnknownShort: "已注销的账号",
 		toggleSidebar: "切换侧栏",
 		sidebar: "侧栏",
 		sidebarSrHint: "显示移动端侧栏。",
@@ -11244,6 +11318,10 @@ const zh: PortalTranslations = {
 		noPortalBody:
 			"您的账号角色在 InnocenZ 上暂时没有网页门户。如果您认为这是误判，请联系客服。",
 		waitingTitle: "等待审批",
+		removedTitle: "您的访问权限已被取消",
+		removedBody:
+			"{org} 已将您移出团队，因此该门户已对您关闭。您的账号本身正常，其他机构仍可邀请您加入。",
+		removedHint: "如果您认为这是误操作，请直接联系 {org}，恢复权限由他们决定。",
 		waitingBody:
 			"{org} 已收到您以「{role}」加入团队的申请。通过后重新登录即可，无需其他操作。",
 		waitingHint:

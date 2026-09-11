@@ -123,14 +123,26 @@ function ChooseOrganisationBody() {
 				return;
 			}
 			/*
-			 * NONE means an admin, a PR (neither holds a membership row at all), a
-			 * membership list that could not be read — or, since the list widened,
-			 * an account whose every membership is deactivated. The pre-existing
-			 * landing rule is still the honest answer for all four: removal revokes
-			 * the portal role, so the last case resolves to `/no-access` rather
-			 * than a portal it cannot use.
+			 * ⚠️ NOTHING TO ENTER IS NOT THE SAME AS BELONGING NOWHERE.
+			 *
+			 * Owner, 11 Sep 2026: a person "can see the status can login or not —
+			 * deactivate or active".
+			 *
+			 * NO MEMBERSHIPS AT ALL means an admin, a PR (neither holds a membership
+			 * row) or a list that could not be read, and the landing rule is the
+			 * honest answer for all three.
+			 *
+			 * But an account that HOLDS memberships and can enter none of them was
+			 * being sent to the same place, which is how somebody deactivated at
+			 * their only organisation met a bare "no access" page and could not tell
+			 * being removed from never having been there. They have something to be
+			 * shown, so show it: the cards render greyed, each naming its own reason.
+			 *
+			 * A DECLINED request is deliberately not among them — the server drops
+			 * `rejected` from this list entirely, because somebody turned down was
+			 * never a member and has no standing to be told about.
 			 */
-			if (enterable.length === 0) {
+			if (enterable.length === 0 && orgs.length === 0) {
 				hardNavigate(next ?? defaultLandingPath(profile));
 				return;
 			}
