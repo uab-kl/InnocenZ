@@ -1,6 +1,5 @@
 import type { UserRepositoryClass } from '@/features/user/user.repository.js';
 import type { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository.js';
-import { portalRoleName } from '@/types/rbac-constant.js';
 
 /**
  * ⚠️ THE REPOSITORIES ARE PASSED IN, NOT IMPORTED FROM `composition-root`.
@@ -76,9 +75,26 @@ export async function refuseUninvitableAccount(
   if (account.status !== 'active') {
     return 'That account cannot sign in at the moment — it must be reactivated before it can join a team.';
   }
-  const roles = await deps.userRoleRepository.getUserRoles(account.id);
-  if (roles.some((r) => r.roleName === portalRoleName.ADMIN)) {
-    return 'That account is an InnocenZ admin and cannot join an organisation team.';
-  }
+  /*
+   * ⚠️ ADMINS MAY JOIN A TEAM — reversed by the owner, 11 Sep 2026: "make
+   * admin can be the org team member, because only admin can add admin this
+   * could be fine".
+   *
+   * The refusal that stood here said an admin console belongs to no
+   * organisation, so a membership row would have every organisation-scoped
+   * guard judge that admin by a job title at somebody else's company. The
+   * owner's answer is that the admin role is not self-service — only an
+   * existing admin can create one — so an account holding it is already
+   * trusted, and being Finance at one agency does not dilute that.
+   *
+   * ⚠️ THE TAKEOVER PATH THAT RULE ALSO CLOSED IS CLOSED ELSEWHERE, which is
+   * the only reason lifting this is safe. Before, `addMember` returned the raw
+   * `acceptUrl` to the INVITER and `resolveInviteUser` would SET A PASSWORD on
+   * whatever existing account the invited email named — so inviting an admin's
+   * address handed you their account. `resolveInviteUser` is deleted, and
+   * `accept` now requires the caller to be signed in AS the invited email, so
+   * an invitation can no longer write a credential to anybody. Were either of
+   * those ever undone, this refusal would have to come back with them.
+   */
   return null;
 }

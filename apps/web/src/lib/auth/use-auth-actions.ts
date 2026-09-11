@@ -17,6 +17,7 @@ function loginUserToProfile(user: LoginUser): User {
 		portals: [],
 		// The login response carries no memberships; /auth/me fills them in.
 		organisations: [],
+		declinedRequests: [],
 		readPermission: ["*"],
 		createPermission: [],
 		updatePermission: [],

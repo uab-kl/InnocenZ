@@ -19,6 +19,8 @@
  * the only thing standing between a typo and a value that reads as "not
  * active" everywhere while meaning nothing.
  */
+import { isPendingOrgCode } from '@/util/member-code';
+
 export const MEMBERSHIP_STATUSES = [
   'pending',
   'active',
@@ -42,6 +44,26 @@ export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
  * the two buttons cannot disagree, and a client that knows nothing about this
  * still produces the right word.
  */
-export function removalStatusFor(current: string): MembershipStatus {
-  return current === 'pending' ? 'rejected' : 'inactive';
+export function removalStatusFor(
+  current: string,
+  /**
+   * The row's member id. ⚠️ REQUIRED, and the reason is a trap that only
+   * appears once somebody can RE-REQUEST after being removed.
+   *
+   * `pending` used to be enough to mean "never a member". It stops being
+   * enough the moment a former colleague can ask to come back: their row is
+   * flipped to `pending`, and a second decline would then write `rejected` —
+   * the word that means NEVER a member. They would vanish from the Team
+   * roster, vanish from the Deactivated list, and be hidden from the admin
+   * console by default, while still holding a real organisation id.
+   *
+   * The id settles it, exactly as 0162's backfill did: a real code was minted
+   * on an approval that actually happened, so that person WAS on the team
+   * whatever their row says today. Only an `INNPND` placeholder means the
+   * approval never came.
+   */
+  memberCode: string | null | undefined,
+): MembershipStatus {
+  if (current !== 'pending') return 'inactive';
+  return isPendingOrgCode(memberCode) ? 'rejected' : 'inactive';
 }

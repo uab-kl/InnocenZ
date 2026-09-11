@@ -233,6 +233,15 @@ export interface TeamMembersQueryParams {
 	pageSize?: number;
 	search?: string;
 	status?: string;
+	/**
+	 * Show declined requests too — OFF unless asked.
+	 *
+	 * Only the admin LEGACY MEMBER record sets this. The Members tables list an
+	 * organisation's people, and somebody turned down is not one of them; the
+	 * legacy record is the history of what happened to everyone, where a
+	 * decline is exactly what it exists to show.
+	 */
+	includeRejected?: boolean;
 }
 
 export interface AgencyPagination {

@@ -577,6 +577,8 @@ export class AgencyControllerClass {
         search: req.query.search as string | undefined,
         agencyId: req.query.agencyId as string | undefined,
         status: !statusParam || statusParam === 'all' ? undefined : statusParam,
+        // Opt-in: only the Legacy Member record asks to see declined requests.
+        includeRejected: req.query.includeRejected === 'true',
         page,
         pageSize,
       });
@@ -1781,7 +1783,7 @@ export class AgencyControllerClass {
        * buttons then cannot disagree, and a caller that knows nothing about the
        * distinction still produces the right word.
        */
-      const nextStatus = removalStatusFor(target.status);
+      const nextStatus = removalStatusFor(target.status, target.memberCode);
       const removed = await this.agencyMemberRepository.remove(
         memberId,
         getActor(req),

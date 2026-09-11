@@ -29,7 +29,16 @@ interface MeResponse {
 		membershipStatus?: string;
 		orgStatus?: string;
 		enterable?: boolean;
+		logoImage?: string | null;
 	}[];
+	/**
+	 * Requests this account made that were TURNED DOWN.
+	 *
+	 * ⚠️ Deliberately not inside `organisations` — that list means "where you
+	 * belong", and a declined request is the opposite. Kept apart so no screen
+	 * can render one as a membership by forgetting a flag.
+	 */
+	declinedRequests?: { kind: "agency" | "outlet"; name: string }[];
 	/** UI language saved on the account (migration 0122): "en" | "zh" | null. */
 	preferredLocale?: string | null;
 	roles: {
@@ -86,6 +95,7 @@ export async function fetchProfile(): Promise<User> {
 		portals: profile.portals ?? [],
 		// Absent on an older backend — read as "no organisation known", which
 		// makes the chooser skip rather than block a login it cannot describe.
+		declinedRequests: profile.declinedRequests ?? [],
 		organisations: (profile.organisations ?? []).map((o) => ({
 			kind: o.kind,
 			id: o.id,
@@ -106,6 +116,7 @@ export async function fetchProfile(): Promise<User> {
 			 * answer yet.
 			 */
 			membershipStatus: o.membershipStatus ?? "active",
+			logoImage: o.logoImage ?? null,
 			orgStatus: o.orgStatus ?? "active",
 			enterable: o.enterable ?? true,
 		})),

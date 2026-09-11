@@ -1,4 +1,9 @@
 import { Request, Response } from 'express';
+import {
+  ensureAccountCodeFromMembership,
+  isPendingOrgCode,
+  issueOrgMemberCode,
+} from '@/util/member-code.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
@@ -14,6 +19,7 @@ import { portalRoleName } from '@/types/rbac-constant.js';
 import {
   AcceptOrgMemberInviteSchema,
   RegisterOrgMemberSchema,
+  RequestOrgJoinSchema,
 } from '@/schema/outlet.schema.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
@@ -162,22 +168,18 @@ export class OrgMemberInviteControllerClass {
       }
 
       /*
-       * ⚠️ AN ADMIN IS NOT AN ORGANISATION'S TEAM MEMBER (owner, 10 Sep 2026).
-       * The platform admin console belongs to no organisation, and an admin
-       * holding a membership would be judged by that organisation's job title
-       * on every guard that reads the membership row. Refused at BOTH ends —
-       * here, and at invite creation, because a refusal only at accept time
-       * leaves the owner believing the invitation is on its way.
+       * ⚠️ ADMINS MAY JOIN A TEAM — reversed by the owner, 11 Sep 2026: "make
+       * admin can be the org team member, because only admin can add admin
+       * this could be fine".
+       *
+       * A refusal stood here AND at invite creation, deliberately paired so
+       * that an owner was never left believing an invitation was on its way.
+       * Both are lifted together for the same reason: leaving one would
+       * recreate exactly the half-answer the pairing existed to prevent.
+       * `refuseUninvitableAccount` carries the full account of why it is safe
+       * now — the credential-writing path an admin invitation could once be
+       * turned into no longer exists.
        */
-      const heldRoles = await this.userRoleRepository.getUserRoles(user.id);
-      if (heldRoles.some((r) => r.roleName === portalRoleName.ADMIN)) {
-        return res.status(409).json({
-          success: false,
-          message:
-            'This account is an InnocenZ admin and cannot join an organisation team.',
-          data: null,
-        });
-      }
       const actor = getActor(req) || user.id;
       const role = await this.roleRepository.getRoleById(invite.roleId);
       if (!role) {
@@ -389,6 +391,176 @@ export class OrgMemberInviteControllerClass {
     }
   }
 
+
+  /**
+   * ASK TO JOIN ANOTHER ORGANISATION — the third way onto a team.
+   *
+   * Owner, 11 Sep 2026: "exist account user can join another org now works for
+   * web like outlet, agency". Sign-up creates a PERSON and a request together
+   * and is refused for an address that already exists ("sign in instead"); an
+   * invite is the organisation reaching out. Somebody who already works
+   * somewhere and wants a second job had no way to ASK — they could only wait
+   * to be invited, which is the opposite of asking.
+   *
+   * ⚠️ WHO is asking comes from `req.user`, never from the body. The schema
+   * carries no email, no name and no credential, so this endpoint cannot be
+   * pointed at another account or write one.
+   *
+   * ⚠️ IT GRANTS NOTHING, which is what makes it safe for any signed-in
+   * person. The row is written at `status: 'pending'`, and every scope
+   * resolver and role guard reads a non-active membership as no access at all
+   * — the same reasoning that lets `registerMember` be a public endpoint. Only
+   * `updateMember`, an act by somebody inside that organisation, turns it into
+   * access.
+   */
+  async requestJoin(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user?.id) {
+        return res.status(401).json({
+          success: false,
+          message: 'Sign in first, then ask to join a team.',
+          data: null,
+        });
+      }
+      const parsed = RequestOrgJoinSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message ?? 'Invalid request',
+          data: null,
+        });
+      }
+      const { kind, orgId, subRole } = parsed.data;
+
+      /*
+       * The organisation is checked BEFORE anything is written, and must be
+       * ACTIVE — a request to join a switched-off organisation has nobody who
+       * can answer it. Same test, same wording, as the sign-up path.
+       */
+      const org =
+        kind === 'agency'
+          ? await this.agencyRepository.getById(orgId)
+          : await this.outletRepository.getById(orgId);
+      if (!org || org.status !== 'active') {
+        return res.status(404).json({
+          success: false,
+          message: 'That organisation is not available to join.',
+          data: null,
+        });
+      }
+
+      /*
+       * ⚠️ FOUR STATES A ROW MAY ALREADY BE IN, AND THE DATABASE GUARDS NONE
+       * OF THEM. The only uniqueness on these tables is PARTIAL — `ON (org_id,
+       * user_id) WHERE status = 'active'` (0160) — so a second row is legal
+       * beside any of the four, duplicate `pending` rows included. Every rule
+       * below therefore has to be enforced here.
+       *
+       * ⚠️ `listByUser` rather than `getByAgencyAndUser`: that lookup has no
+       * status filter, no ORDER BY and `limit(1)`, so it returns an ARBITRARY
+       * row the moment a person has two at one organisation — which is exactly
+       * what this endpoint can create.
+       */
+      const mine =
+        kind === 'agency'
+          ? (await this.agencyMemberRepository.listByUser(user.id)).filter(
+              (m) => m.agencyId === orgId,
+            )
+          : (await this.outletMemberRepository.listByUser(user.id)).filter(
+              (m) => m.outletId === orgId,
+            );
+
+      if (mine.some((m) => m.status === 'active')) {
+        return res.status(409).json({
+          success: false,
+          message: `You are already on ${org.name}'s team.`,
+          data: null,
+        });
+      }
+      if (mine.some((m) => m.status === 'pending')) {
+        return res.status(409).json({
+          success: false,
+          message: `You have already asked to join ${org.name} — it is waiting for them to answer.`,
+          data: null,
+        });
+      }
+
+      /*
+       * ⚠️ A FORMER MEMBER'S ROW IS REUSED; A DECLINED ONE IS NOT. The
+       * difference is the member id, and it matters both ways.
+       *
+       * REUSE an `inactive` row: it holds a REAL organisation id, which may
+       * already sit on a payment voucher or in an email. Inserting fresh would
+       * mint them a SECOND real id at the same organisation on approval — the
+       * unique index does not stop it, because the two codes differ — and "an
+       * id that can change is not an id".
+       *
+       * INSERT FRESH after a `rejected` row: it only ever held an `INNPND`
+       * placeholder, so nothing is lost by leaving it alone — and leaving it
+       * alone is the point. Its `updated_by` is the only record that anybody
+       * declined this person; flipping that row back to `pending` would
+       * overwrite the decliner's name with the requester's, and the Declined
+       * list would simply lose them. A decline is an answer, not a ban, so
+       * asking again is allowed — but the first answer must survive it.
+       */
+      const former = mine.find((m) => m.status === 'inactive');
+      const actor = getActor(req);
+      if (former) {
+        const updated =
+          kind === 'agency'
+            ? await this.agencyMemberRepository.update(former.id, {
+                status: 'pending',
+                subRole,
+                updatedBy: actor,
+              })
+            : await this.outletMemberRepository.update(former.id, {
+                status: 'pending',
+                subRole,
+                updatedBy: actor,
+              });
+        if (!updated) {
+          return res.status(500).json({
+            success: false,
+            message: Error.INTERNAL_SERVER_ERROR,
+            data: null,
+          });
+        }
+      } else if (kind === 'agency') {
+        await this.agencyMemberRepository.add({
+          agencyId: orgId,
+          userId: user.id,
+          subRole,
+          status: 'pending',
+          createdBy: user.id,
+          updatedBy: user.id,
+        });
+      } else {
+        await this.outletMemberRepository.add({
+          outletId: orgId,
+          userId: user.id,
+          subRole,
+          status: 'pending',
+          createdBy: user.id,
+          updatedBy: user.id,
+        });
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: `Request sent — ${org.name} will review it.`,
+        data: { kind, orgId, orgName: org.name, subRole },
+      });
+    } catch (error) {
+      logger.error('[OrgMemberInviteController.requestJoin] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
   async listMine(req: Request, res: Response) {
     try {
       if (!req.user?.id) {
@@ -547,6 +719,30 @@ export class OrgMemberInviteControllerClass {
         subRole: invite.subRole,
         updatedBy: actor,
       });
+      /*
+       * ⚠️ MINT THE ID, because this row may never have had one (0161).
+       *
+       * Reuse flips an EXISTING row to active, and that row can be a request
+       * that was pending or declined — carrying the `INNPND` placeholder the
+       * column DEFAULT issues precisely to mean "no id was ever granted".
+       * Without this, accepting an invitation made somebody a full member
+       * permanently stamped `INNPND0007`, and `user.member_code` was never
+       * mirrored either. The `else` branch is already safe on its own:
+       * `add()` mints for a status:'active' insert.
+       *
+       * Gated on the placeholder, so a FORMER member returning keeps the real
+       * id they were always known by — an id that can change is not an id.
+       */
+      if (isPendingOrgCode(existing.memberCode)) {
+        await issueOrgMemberCode('outlet', outletId, async (code) => {
+          await this.outletMemberRepository.update(existing.id, {
+            memberCode: code,
+            updatedBy: actor,
+          });
+          return code;
+        });
+      }
+      await ensureAccountCodeFromMembership(user.id);
     } else {
       await this.outletMemberRepository.add({
         outletId,
@@ -610,6 +806,19 @@ export class OrgMemberInviteControllerClass {
         subRole: invite.subRole,
         updatedBy: actor,
       });
+      // See the venue twin for why: a reused row may still carry the `INNPND`
+      // placeholder, and going active without minting leaves a full member
+      // stamped with the code that means "no id was ever granted".
+      if (isPendingOrgCode(existing.memberCode)) {
+        await issueOrgMemberCode('agency', agencyId, async (code) => {
+          await this.agencyMemberRepository.update(existing.id, {
+            memberCode: code,
+            updatedBy: actor,
+          });
+          return code;
+        });
+      }
+      await ensureAccountCodeFromMembership(user.id);
     } else {
       await this.agencyMemberRepository.add({
         agencyId,

@@ -16,6 +16,15 @@ export interface UserOrganisation {
 	subRole: string;
 	/** This person's member id INSIDE this organisation — INNATAGY0001. */
 	memberCode: string | null;
+	/**
+	 * The organisation's own logo.
+	 *
+	 * Somebody who works in three places is picking between BRANDS, not
+	 * reading a list of names, and every card used to carry the same generic
+	 * building glyph. Null is normal — an organisation that has not uploaded
+	 * one falls back to that glyph rather than to a broken image.
+	 */
+	logoImage?: string | null;
 	/** THIS PERSON's standing here: "active" once deactivated becomes "inactive". */
 	membershipStatus: string;
 	/** The ORGANISATION's own standing: active | pending_review | suspended | inactive. */
@@ -60,6 +69,8 @@ export interface User {
 	 * Empty for an admin, who belongs to no organisation.
 	 */
 	organisations: UserOrganisation[];
+	/** Requests that were declined — an ANSWER, not a place they belong. */
+	declinedRequests: { kind: "agency" | "outlet"; name: string }[];
 	readPermission: string[];
 	createPermission: string[];
 	updatePermission: string[];

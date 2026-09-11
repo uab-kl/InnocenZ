@@ -310,6 +310,7 @@ export async function fetchOutletTeamMembers(
 		pageSize: params.pageSize,
 		search: params.search,
 		status: params.status,
+		includeRejected: params.includeRejected ? "true" : undefined,
 		// The server names it per portal; the screen speaks one word.
 		outletId: params.orgId,
 	});

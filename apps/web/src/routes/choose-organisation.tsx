@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Ban, Building2, ChevronRight, Loader2, Store } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Button } from "@/components/ui/button";
 import type { User, UserOrganisation } from "@/lib/auth";
@@ -298,6 +299,7 @@ function OrgGroup({
 							: org.membershipStatus !== "active"
 								? t.chooseOrg.membershipInactive
 								: t.chooseOrg.orgInactive;
+					const logo = apiAssetUrl(org.logoImage ?? undefined);
 					return (
 						<li key={`${org.kind}:${org.id}`}>
 							<button
@@ -310,15 +312,41 @@ function OrgGroup({
 										: "flex w-full cursor-not-allowed items-center gap-4 rounded-xl border border-dashed border-border bg-muted/40 px-5 py-4 text-left opacity-70"
 								}
 							>
-								<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
-									{org.enterable ? (
-										<Icon
-											className="h-5 w-5 text-foreground"
-											strokeWidth={1.5}
-										/>
-									) : (
+								{/*
+								 * THE ORGANISATION'S OWN LOGO (owner, 11 Sep 2026: "need show
+								 * UI to let user know that which agency/outlet orgs logo").
+								 *
+								 * Somebody who works in three places is picking between
+								 * BRANDS, not reading a list of names — and every card
+								 * carried the same building or shop glyph, so the one thing
+								 * that makes the choice instant was the one thing missing.
+								 *
+								 * ⚠️ Three states, in this order. A BLOCKED card keeps the
+								 * Ban mark whatever logo the organisation has: its job there
+								 * is to say "not this one", and a familiar logo argues the
+								 * opposite. Then the real logo. Then the kind glyph, for an
+								 * organisation that never uploaded one — a null logo is
+								 * normal, not an error, so it falls back rather than
+								 * rendering a broken image.
+								 */}
+								<span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
+									{!org.enterable ? (
 										<Ban
 											className="h-5 w-5 text-muted-foreground"
+											strokeWidth={1.5}
+										/>
+									) : logo ? (
+										/* `object-cover` with matched h/w: `rounded-full` alone
+										   clips a non-square logo to a circle of its own WIDTH,
+										   so a tall one spills past the border. */
+										<img
+											src={logo}
+											alt=""
+											className="h-full w-full object-cover"
+										/>
+									) : (
+										<Icon
+											className="h-5 w-5 text-foreground"
 											strokeWidth={1.5}
 										/>
 									)}

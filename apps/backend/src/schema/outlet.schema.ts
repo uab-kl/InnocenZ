@@ -162,6 +162,42 @@ export const RegisterOrgMemberSchema = z
     path: ['join', 'subRole'],
   });
 
+/**
+ * AN EXISTING ACCOUNT ASKING TO JOIN ANOTHER ORGANISATION (owner, 11 Sep 2026:
+ * "exist account user can join another org now works for web like outlet,
+ * agency").
+ *
+ * The third way into a team. Sign-up creates a PERSON and a request together;
+ * an invite is the organisation reaching out. This is somebody who already has
+ * an account reaching IN — and it was the one path that did not exist, so an
+ * existing member could only ever wait to be invited.
+ *
+ * ⚠️ IT CARRIES NO IDENTITY. There is no email, no name, no password here:
+ * WHO is asking comes from the session, exactly as the `/mine` pattern does,
+ * so this body cannot be pointed at somebody else's account. That is the whole
+ * difference from `RegisterOrgMemberSchema`, which must carry identity
+ * because it is creating the account.
+ *
+ * ⚠️ `subRole` refuses owner and guarantor for the same reason every other
+ * path does: the top lane is handed over by somebody who already holds it,
+ * never asked for by a stranger.
+ */
+export const RequestOrgJoinSchema = z.object({
+  kind: z.enum(['agency', 'outlet']),
+  orgId: z.string().uuid('Choose an organisation'),
+  subRole: z
+    .string()
+    .trim()
+    .min(1)
+    .max(50)
+    .refine((v) => !['owner', 'guarantor'].includes(v.toLowerCase()), {
+      message:
+        'Choose Finance, Director or Ops Head — Owner is set by the organisation',
+    }),
+});
+
+export type RequestOrgJoinInput = z.infer<typeof RequestOrgJoinSchema>;
+
 export type RegisterOrgMemberInput = z.infer<typeof RegisterOrgMemberSchema>;
 
 export const AcceptOrgMemberInviteSchema = z

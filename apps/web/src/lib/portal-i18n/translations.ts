@@ -3543,7 +3543,22 @@ const en = {
 		 * above describe organisations and accounts — hence the wording: one names
 		 * what was done TO a membership, the other what was done to an ACCOUNT.
 		 */
-		roleRemovedMember: "Removed Member",
+		/*
+		 * ⚠️ THE ROLE BADGE SAYS WHAT KIND OF RECORD THIS IS; THE STATUS BADGE
+		 * SAYS WHAT HAPPENED TO IT.
+		 *
+		 * This used to read "Removed Member" for every non-active membership, so
+		 * somebody still WAITING for an owner to answer, and somebody who had been
+		 * DECLINED, both appeared to have been removed from a team they had never
+		 * been on. Owner, 11 Sep 2026: the screen must show "decline by who which
+		 * orgs, deactivate by who which orgs, removed member by who which orgs,
+		 * pending waiting for who which orgs".
+		 */
+		roleRemovedMember: "Team member",
+		/** Asked to join and nobody has answered — the org's Approvals queue. */
+		statusAwaitingOrg: "Waiting · {org}",
+		/** Asked and was turned down. NEVER a member of that organisation. */
+		statusDeclinedByOrg: "Declined",
 		roleDisabledAccount: "Deactivated Account",
 		/** Removed, and working nowhere else on the platform. */
 		statusRemoved: "Removed",
@@ -5158,7 +5173,25 @@ const en = {
 		 */
 		inviteNeedsAccount:
 			"They must already have an InnocenZ account. Ask them to sign up as a team member first, then invite the address they used.",
+		/*
+		 * ⚠️ ONE LABEL PER OUTCOME. "Declined on" was being printed over every
+		 * decided row, including accepted ones — so the owner's own card read
+		 * "Already on the team · Owner" and "DECLINED ON" at the same time. The
+		 * date is the same column either way; the WORD is the whole meaning.
+		 */
 		declinedOn: "Declined on",
+		acceptedOn: "Accepted on",
+		deactivatedOn: "Deactivated on",
+		/*
+		 * Taking an ACTIVE member off the team, from the review pane — the same
+		 * act as the Team screen's bin icon, and the same write, so the two
+		 * cannot diverge (owner, 11 Sep 2026).
+		 */
+		deactivateMember: "Deactivate",
+		deactivateConfirm:
+			"Remove {name} from the team? They lose access immediately, and their record stays under Deactivated.",
+		deactivateFailed: "Could not deactivate this member",
+		cancel: "Cancel",
 		decisionHeading: "The decision",
 		/** The actor column's two honest fallbacks — never an invented name. */
 		actorSystemShort: "InnocenZ (automatic)",
@@ -9453,7 +9486,9 @@ const zh: PortalTranslations = {
 		roleAgency: "经纪公司",
 		roleOutlet: "门店",
 		rolePr: "PR",
-		roleRemovedMember: "已移出成员",
+		roleRemovedMember: "团队成员",
+		statusAwaitingOrg: "等待审批 · {org}",
+		statusDeclinedByOrg: "已拒绝",
 		roleDisabledAccount: "已停用账户",
 		statusRemoved: "已移出",
 		statusRemovedStillActive: "已移出 · 仍在其他机构",
@@ -10525,6 +10560,13 @@ const zh: PortalTranslations = {
 		inviteNeedsAccount:
 			"对方必须已拥有 InnocenZ 账号。请先让对方以「团队成员」身份注册，再邀请其注册时使用的邮箱。",
 		declinedOn: "拒绝时间",
+		acceptedOn: "通过时间",
+		deactivatedOn: "停用时间",
+		deactivateMember: "停用",
+		deactivateConfirm:
+			"确定将 {name} 移出团队？对方会立即失去访问权限，其记录会保留在「已停用」中。",
+		deactivateFailed: "无法停用该成员",
+		cancel: "取消",
 		decisionHeading: "审批结果",
 		actorSystemShort: "InnocenZ（系统自动）",
 		actorUnknownShort: "已注销的账号",

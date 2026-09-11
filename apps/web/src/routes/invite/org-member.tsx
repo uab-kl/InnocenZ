@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/landing/BrandLogo";
 import { hasValidTokens } from "@/lib/auth/auth-storage";
 import { fetchProfile } from "@/lib/auth/use-profile";
-import { getPublicClient } from "@/lib/axios-v1";
+import { getClient, getPublicClient } from "@/lib/axios-v1";
 import {
 	PortalLocaleProvider,
 	usePortalLocale,
@@ -151,7 +151,23 @@ function OrgMemberInvitePage() {
 
 	const acceptMutation = useMutation({
 		mutationFn: async () => {
-			const client = getPublicClient();
+			/*
+			 * ⚠️ THE AUTHENTICATED CLIENT — accept REQUIRES a session now.
+			 *
+			 * This was `getPublicClient()`, which sends no Authorization header, and
+			 * it was right when it was written: accepting used to CREATE the account,
+			 * setting a password straight onto whatever address the invite named.
+			 * That was an account-takeover hole — an owner could invite an admin's
+			 * address and set a password on it — so the server was changed to refuse
+			 * unless the caller is signed in AS the invited email.
+			 *
+			 * The server changed and this call did not, so every accept sent no token
+			 * and got a 401: the whole invite path was dead, silently, with the page
+			 * still rendering "You are signed in as … Accept to join this team".
+			 * The PREVIEW above stays public on purpose — it must answer somebody
+			 * arriving cold from an email, before they have signed in.
+			 */
+			const client = getClient(() => {});
 			const response = await client.post<{
 				success: boolean;
 				message: string;
@@ -311,11 +327,11 @@ function OrgMemberInvitePage() {
 							) : (
 								<>
 									{/*
-									  * Two different situations, never merged: nobody is signed
-									  * in, or the WRONG person is. Telling somebody already
-									  * signed in to "sign in" is the message that makes a
-									  * person try the same thing twice.
-									  */}
+									 * Two different situations, never merged: nobody is signed
+									 * in, or the WRONG person is. Telling somebody already
+									 * signed in to "sign in" is the message that makes a
+									 * person try the same thing twice.
+									 */}
 									<p className="text-sm text-muted-foreground">
 										{myEmail
 											? fill(t.invitePages.signedInAsOther, {

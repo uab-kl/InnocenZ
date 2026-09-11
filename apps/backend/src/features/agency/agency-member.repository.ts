@@ -62,6 +62,9 @@ export type AgencyMembershipWithAgency = {
   agencyName: string;
   agencyCode: string;
   agencyStatus: string;
+  /** The organisation's logo, so the login chooser can show a BRAND
+      rather than the same generic glyph on every card. */
+  logoImage: string | null;
   /** Derived from RBAC, not a column on agency_user. */
   subRole: AgencyUserSubRole;
   status: string;
@@ -303,6 +306,21 @@ export class AgencyMemberRepositoryClass {
   async listAllEnriched(options: {
     search?: string;
     status?: string;
+    /**
+     * Show declined requests too — OFF unless asked (0162).
+     *
+     * Two admin screens read this one endpoint and want opposite things. The
+     * MEMBERS table lists an organisation's people, and a turned-down request
+     * is not one of them — owner: "why the decline member can show and search
+     * by the atlas agency?". The LEGACY MEMBER table is the record of what
+     * happened to everyone, and a decline is exactly the kind of thing it
+     * exists to show — owner: "will show which user is status decline by who
+     * which orgs".
+     *
+     * An explicit opt-in rather than a default, so the safe answer is the one
+     * a caller gets by saying nothing.
+     */
+    includeRejected?: boolean;
     /** Narrow to ONE agency — the deep link from that agency's Team tab. */
     agencyId?: string;
     page: number;
@@ -315,7 +333,7 @@ export class AgencyMemberRepositoryClass {
       }
       if (options.status) {
         conditions.push(eq(AgencyUserTable.status, options.status));
-      } else {
+      } else if (!options.includeRejected) {
         /*
          * ⚠️ A DECLINED APPLICANT IS NOT A MEMBER, ON THIS SCREEN EITHER (0162).
          *
@@ -459,6 +477,17 @@ export class AgencyMemberRepositoryClass {
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
           agencyStatus: AgencyTable.status,
+          /*
+           * THE ORGANISATION'S OWN LOGO, for the login chooser (owner, 11 Sep
+           * 2026: "need show UI to let user know that which agency/outlet orgs
+           * logo, what roles when choose that orgs").
+           *
+           * Somebody who works in three places is picking between BRANDS, not
+           * reading a list of names — and the chooser drew the same generic
+           * building glyph on every card, so the one thing that makes the
+           * choice instant was the one thing missing.
+           */
+          logoImage: AgencyTable.logoImage,
           status: AgencyUserTable.status,
           subRole: AgencyUserTable.subRole,
           memberCode: AgencyUserTable.memberCode,

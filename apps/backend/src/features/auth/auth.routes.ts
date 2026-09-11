@@ -37,6 +37,25 @@ router.post(
 );
 
 /**
+ * ASK TO JOIN ANOTHER ORGANISATION — the third way onto a team.
+ *
+ * ⚠️ `authenticateJWT`, NOT `optional`. Accept is optional-auth so it can
+ * explain itself to somebody arriving cold from an email; this endpoint has no
+ * such reader — it is only ever reached from inside the app by somebody who is
+ * already signed in, and WHO is asking is the one thing it must not take from
+ * the body. A hard guard is the honest shape here.
+ *
+ * It grants nothing: the row is written `pending`, which every scope resolver
+ * and role guard reads as no access at all. Only an owner approving it, through
+ * `updateMember`, turns it into access.
+ */
+router.post(
+  '/org-join-request',
+  authenticateJWT,
+  orgMemberInviteController.requestJoin.bind(orgMemberInviteController),
+);
+
+/**
  * The invitations waiting for the signed-in person — the profile-settings
  * panel. `/mine`: the email comes from the session, never the request.
  */

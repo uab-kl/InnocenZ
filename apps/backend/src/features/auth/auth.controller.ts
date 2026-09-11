@@ -1335,11 +1335,40 @@ export class AuthControllerClass {
       const outletMemberships = allOutletMemberships.filter(
         (m) => m.status !== 'rejected',
       );
+      /*
+       * ⚠️ A DECLINED REQUEST IS NOT AN ORGANISATION — IT IS AN ANSWER.
+       *
+       * Owner, 11 Sep 2026: "if decline then that user can log in but need will
+       * show that … the orgs is decline your request".
+       *
+       * Two of the owner's rules meet here and only look contradictory. A
+       * declined person must NOT appear to belong to that organisation — no
+       * card in the picker, nothing enterable, which is why `rejected` is
+       * filtered out of `organisations` above. But they are still owed the
+       * OUTCOME of a request they made: silence leaves somebody refreshing a
+       * "waiting" page forever for an answer that already came.
+       *
+       * So it travels in its own list with its own meaning. `organisations` is
+       * "where you belong"; this is "what happened to what you asked for".
+       * Carrying a declined row inside `organisations` with a flag would have
+       * put it one missed check away from being rendered as a membership.
+       */
+      const declinedRequests = [
+        ...allAgencyMemberships
+          .filter((m) => m.status === 'rejected')
+          .map((m) => ({ kind: 'agency' as const, name: m.agencyName })),
+        ...allOutletMemberships
+          .filter((m) => m.status === 'rejected')
+          .map((m) => ({ kind: 'outlet' as const, name: m.outletName })),
+      ];
+
       const organisations = [
         ...agencyMemberships.map((m) => ({
           kind: 'agency' as const,
           id: m.agencyId,
           name: m.agencyName,
+          // The BRAND, so the chooser is a glance and not a read.
+          logoImage: m.logoImage ?? null,
           subRole: m.subRole,
           memberCode: m.memberCode ?? null,
           /** This person's standing INSIDE the organisation. */
@@ -1353,6 +1382,7 @@ export class AuthControllerClass {
           kind: 'outlet' as const,
           id: m.outletId,
           name: m.outletName,
+          logoImage: m.logoImage ?? null,
           subRole: m.subRole,
           memberCode: m.memberCode ?? null,
           membershipStatus: m.status,
@@ -1369,6 +1399,8 @@ export class AuthControllerClass {
           ...withUserProfile(user, profile),
           portals,
           organisations,
+          // The ANSWER to a request, not a place they belong — see above.
+          declinedRequests,
           roles: roles.map((r) => ({
             id: r.roleId,
             roleName: r.roleName,

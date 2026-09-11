@@ -20,7 +20,9 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
+import { useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 
 /**
@@ -112,6 +114,9 @@ export function PendingMemberDetail({
 	onDecided: () => void;
 }) {
 	const { t, locale } = usePortalLocale();
+	const { data: me } = useProfile();
+	/** Two-step, like the Team screen's bin: removal is not a single click. */
+	const [confirming, setConfirming] = useState(false);
 	const { members, changeMember, removeMember } = useOrgMembers(kind, orgId);
 	const member: OrgMember | undefined = members.find((m) => m.id === memberId);
 
@@ -156,6 +161,10 @@ export function PendingMemberDetail({
 	const state = memberQueueState(member);
 	const isWaiting = state === "waiting";
 	const isDeclined = state === "declined";
+	const isDeactivated = state === "deactivated";
+	// Never offer to remove YOURSELF — the server refuses it, and a button that
+	// always fails is a worse answer than no button.
+	const isSelf = Boolean(me?.id && member.userId === me.id);
 	// The SAME rule the list beside this pane applies — one answer, not two.
 	const decidedBy = decidedByLabel(member, t);
 	const decidedOn = whenApplied(member.updatedAt, locale);
@@ -296,13 +305,102 @@ export function PendingMemberDetail({
 						{decidedOn ? (
 							<Row
 								icon={<Clock className="h-4 w-4" />}
-								label={t.portalUi.declinedOn}
+								// ⚠️ ONE LABEL PER OUTCOME. This printed "Declined on" over every
+								// decided row, so the owner's own card read "Already on the team ·
+								// Owner" and "DECLINED ON" at the same time. Same column either
+								// way — the WORD carries the whole meaning.
+								label={
+									isDeclined
+										? t.portalUi.declinedOn
+										: isDeactivated
+											? t.portalUi.deactivatedOn
+											: t.portalUi.acceptedOn
+								}
 								value={decidedOn}
 							/>
 						) : null}
 					</div>
 				</section>
 			)}
+
+			{/*
+			 * TAKING AN ACTIVE MEMBER OFF THE TEAM, from the pane already showing
+			 * them (owner, 11 Sep 2026: "under the right panel owner can deactivate
+			 * the now active account, same works with … setting page dustbin remove
+			 * icon").
+			 *
+			 * ⚠️ It is the SAME write as that bin icon — `removeMember`, which the
+			 * server turns into `inactive` through `removalStatusFor` because the row
+			 * is active. A second deactivation path would be a second place for the
+			 * declined-vs-removed distinction to be got wrong, and 0162 exists
+			 * because it was got wrong once already.
+			 *
+			 * ⚠️ NOT OFFERED FOR YOURSELF. The server refuses self-removal and the
+			 * last owner outright, but a button that always fails is a worse answer
+			 * than no button — the Team screen hides its bin for the same reason.
+			 */}
+			{state === "active" && !isSelf ? (
+				<section>
+					<h3 className="mb-1 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+						{t.portalUi.decideHeading}
+					</h3>
+					<div className="rounded-xl border border-border p-4">
+						{confirming ? (
+							<>
+								<p className="text-foreground text-sm">
+									{fill(t.portalUi.deactivateConfirm, {
+										name: member.username || member.email || "",
+									})}
+								</p>
+								{shownError ? (
+									<p className="mt-3 text-red-500 text-sm">{shownError}</p>
+								) : null}
+								<div className="mt-4 flex flex-wrap gap-2">
+									<button
+										type="button"
+										disabled={busy}
+										onClick={() => {
+											setError(null);
+											removeMember.mutate(member.id, {
+												onSuccess: onDecided,
+												onError: (e) =>
+													setError({
+														id: member.id,
+														message: serverMessage(
+															e,
+															t.portalUi.deactivateFailed,
+														),
+													}),
+											});
+										}}
+										className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-red-600 px-4 py-2.5 font-semibold text-sm text-white disabled:opacity-50"
+									>
+										<UserX className="h-4 w-4 shrink-0" />
+										{t.portalUi.deactivateMember}
+									</button>
+									<button
+										type="button"
+										disabled={busy}
+										onClick={() => setConfirming(false)}
+										className="inline-flex flex-1 items-center justify-center rounded-lg border border-border px-4 py-2.5 text-sm disabled:opacity-50"
+									>
+										{t.portalUi.cancel}
+									</button>
+								</div>
+							</>
+						) : (
+							<button
+								type="button"
+								onClick={() => setConfirming(true)}
+								className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/40 px-4 py-2.5 text-red-400 text-sm hover:bg-red-500/10"
+							>
+								<UserX className="h-4 w-4 shrink-0" />
+								{t.portalUi.deactivateMember}
+							</button>
+						)}
+					</div>
+				</section>
+			) : null}
 
 			{isWaiting ? (
 				<section>

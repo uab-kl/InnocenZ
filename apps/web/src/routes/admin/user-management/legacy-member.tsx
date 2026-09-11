@@ -314,7 +314,8 @@ async function fetchAllDisabledAccounts(
  * hex string answers that question no better than a blank does.
  */
 /** A `updated_by` that is a real account id, rather than a service token. */
-const ACTOR_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ACTOR_UUID =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function actorLabel(
 	row: { updatedBy?: string | null; updatedByName?: string | null },
@@ -438,12 +439,37 @@ function mapRemovedMemberRow(
 		code: member.memberCode || "—",
 		contact: orgName,
 		detail: [member.email, member.phoneNum].filter(Boolean).join(" · "),
-		statusLabel: activeElsewhere
-			? t.adminUsers.statusRemovedStillActive
-			: t.adminUsers.statusRemoved,
-		statusClass: activeElsewhere
-			? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-			: orgStatusBadgeColors.inactive,
+		/*
+		 * ⚠️ WHAT ACTUALLY HAPPENED, not one word for three different events.
+		 *
+		 * This said "Removed" for every non-active membership, so a person still
+		 * WAITING for an owner to answer — and a person who had been DECLINED —
+		 * both read as removed from a team they had never been on. Since 0162 the
+		 * status column says which, and an admin needs the difference: the
+		 * waiting one is somebody's unanswered work, the declined one is a
+		 * decision already made, and only the third is a departure.
+		 *
+		 * ⚠️ `activeElsewhere` still qualifies ONLY the removal. Someone pending
+		 * at a second organisation while working at a first is the ordinary case,
+		 * not a caveat — saying "still active elsewhere" over it would imply
+		 * something had ended.
+		 */
+		statusLabel:
+			member.status === "pending"
+				? fill(t.adminUsers.statusAwaitingOrg, { org: orgName })
+				: member.status === "rejected"
+					? t.adminUsers.statusDeclinedByOrg
+					: activeElsewhere
+						? t.adminUsers.statusRemovedStillActive
+						: t.adminUsers.statusRemoved,
+		statusClass:
+			member.status === "pending"
+				? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+				: member.status === "rejected"
+					? "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+					: activeElsewhere
+						? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+						: orgStatusBadgeColors.inactive,
 		createdAt: member.createdAt,
 		updatedAt: member.updatedAt,
 		// The owner or admin who took them out of THIS organisation — not

@@ -100,6 +100,8 @@ export class OutletControllerClass {
         search: req.query.search as string | undefined,
         outletId: req.query.outletId as string | undefined,
         status: !statusParam || statusParam === 'all' ? undefined : statusParam,
+        // Opt-in: only the Legacy Member record asks to see declined requests.
+        includeRejected: req.query.includeRejected === 'true',
         page,
         pageSize,
       });
@@ -1477,7 +1479,7 @@ export class OutletControllerClass {
        * buttons then cannot disagree, and a caller that knows nothing about the
        * distinction still produces the right word.
        */
-      const nextStatus = removalStatusFor(target.status);
+      const nextStatus = removalStatusFor(target.status, target.memberCode);
       const removed = await this.outletMemberRepository.remove(
         memberId,
         getActor(req),
