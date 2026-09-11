@@ -69,6 +69,23 @@ export function activeAgencyId(
  * request. Never trusted on its own — every reader below checks it against a
  * membership first.
  */
+/**
+ * WHICH KIND of organisation the caller says they are working in.
+ *
+ * ⚠️ `x-org-id` alone cannot say whether it names an agency or a venue, so
+ * anything resolving from it had to GUESS by looking the id up in both
+ * membership tables. A pin left on a venue then answered for requests made
+ * from the AGENCY console. The portals now send this beside the id.
+ *
+ * Absent on an older client, and every caller must treat that as "unknown" and
+ * fall back to the behaviour it had before — never as a default of either kind.
+ */
+export function pickedOrgKind(req: Request): 'agency' | 'outlet' | null {
+  const raw = req.header('x-org-kind');
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return value === 'agency' || value === 'outlet' ? value : null;
+}
+
 export function pickedOrgId(req: Request): string | null {
   const raw = req.header('x-org-id');
   const value = typeof raw === 'string' ? raw.trim() : '';
@@ -143,6 +160,48 @@ export async function resolveOrgScope(
    * old behaviour instead of failing the request — a stale pick in a browser
    * tab must not lock someone out of a portal they can legitimately use.
    */
+  /**
+   * ⚠️ A NAMED OUTLET BEATS AN UNNAMED AGENCY.
+   *
+   * The agency branch below used to win outright: hold ONE active agency
+   * membership and this returned `{agencyId, outletIds: []}` without ever
+   * reading the venue side. For anyone who both owns a venue and staffs an
+   * agency — an ordinary thing here — that meant:
+   *
+   *   · every invoice for their own venue failed the ownership test and
+   *     answered 404, so the Pay button worked for nobody but they were told
+   *     "not found" rather than "not allowed"; and
+   *   · the outlet Settings page read and WROTE the agency's payment method,
+   *     because `ownerFor` got an agency scope while the screen said venue.
+   *
+   * The portals send `x-org-id` on every request (axios-v1.ts), so the caller
+   * has already said which organisation they are acting for. Honouring it here
+   * costs one query and removes the guess. Still verified, never trusted: it is
+   * used only when it matches a membership that is ACTIVE for this user, and
+   * anything else falls through to the behaviour below unchanged.
+   */
+  const named = pickedOrgId(req);
+  const namedKind = pickedOrgKind(req);
+  const namesAnAgency = named
+    ? memberships.some((m) => m.status === 'active' && m.agencyId === named)
+    : false;
+  /*
+   * ⚠️ ONLY when the caller SAYS it is a venue. Without the kind this branch
+   * fired on any id that happened to match a venue the caller staffs —
+   * including requests made from the AGENCY console with a stale pin — and
+   * scoped that whole session to the venue. A client too old to send the kind
+   * keeps the previous behaviour (agency wins) rather than getting a guess.
+   */
+  if (named && namedKind === 'outlet' && !namesAnAgency) {
+    const namedOutlets = await deps.outletMemberRepository.listByUser(user.id);
+    const holdsIt = namedOutlets.some(
+      (m) => m.status === 'active' && m.outletId === named,
+    );
+    if (holdsIt) {
+      return { isAdmin: false, agencyId: null, outletIds: [named] };
+    }
+  }
+
   const agencyId = pickAgencyId(req, memberships);
   if (agencyId) {
     return { isAdmin: false, agencyId, outletIds: [] };

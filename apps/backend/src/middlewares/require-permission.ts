@@ -8,7 +8,11 @@ import { Error } from '@/error/index.js';
 import type { PermissionTypeCode } from '@/types/rbac-constant.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
-import { type OrgScopeDeps, resolveActingOrgId } from '@/util/org-scope.js';
+import {
+  type OrgScopeDeps,
+  pickedOrgId,
+  resolveActingOrgId,
+} from '@/util/org-scope.js';
 
 const orgScopeDeps: OrgScopeDeps = {
   authRepository,
@@ -63,7 +67,58 @@ export function requirePermission(
       const roles = await authRepository.getRolesForUserIds([user.id]);
       if (roles.some((r) => r.roleName === portalRoleName.ADMIN)) return next();
 
-      const portalCode = await authRepository.modulePortalCode(moduleKey);
+      /**
+       * WHICH PORTAL — decided by the organisation the caller is ACTING IN,
+       * not by whichever module row the query planner returned first.
+       *
+       * ⚠️ `settings`, `dashboard` and `history` each exist as a separate
+       * module row per portal, and this used to call `modulePortalCode`, which
+       * was `limit(1)` with no ORDER BY. The portal it happened to return then
+       * decided WHICH ORGANISATION the guard asked about — so an outlet
+       * operator's request could be judged against their agency membership, or
+       * the reverse. On a key held by one portal only (every other module) the
+       * answer is unchanged.
+       */
+      const modulePortals = await authRepository.modulePortalCodes(moduleKey);
+      const orgPortals = modulePortals.filter(
+        (c): c is 'agency' | 'outlet' => c === 'agency' || c === 'outlet',
+      );
+      let portalCode: string | null = modulePortals[0] ?? null;
+      if (orgPortals.length === 1) {
+        portalCode = orgPortals[0];
+      } else if (orgPortals.length > 1) {
+        /*
+         * Shared key. The portals send `x-org-id` on every request, so ask
+         * which of these the named organisation actually belongs to; fall back
+         * to the only portal the caller holds an active membership on, and
+         * refuse to guess when both are live and nothing was named.
+         */
+        const named = pickedOrgId(req);
+        const [agencies, outlets] = await Promise.all([
+          agencyMemberRepository.listByUser(user.id),
+          outletMemberRepository.listByUser(user.id),
+        ]);
+        const activeAgency = agencies.filter((m) => m.status === 'active');
+        const activeOutlet = outlets.filter((m) => m.status === 'active');
+        if (named && activeAgency.some((m) => m.agencyId === named)) {
+          portalCode = 'agency';
+        } else if (named && activeOutlet.some((m) => m.outletId === named)) {
+          portalCode = 'outlet';
+        } else if (activeAgency.length > 0 && activeOutlet.length === 0) {
+          portalCode = 'agency';
+        } else if (activeOutlet.length > 0 && activeAgency.length === 0) {
+          portalCode = 'outlet';
+        } else if (activeAgency.length > 0 && activeOutlet.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'Which organisation? Send x-org-id, or name it in the request.',
+            data: null,
+          });
+        } else {
+          portalCode = null;
+        }
+      }
       if (portalCode === 'agency' || portalCode === 'outlet') {
         const memberships =
           portalCode === 'agency'

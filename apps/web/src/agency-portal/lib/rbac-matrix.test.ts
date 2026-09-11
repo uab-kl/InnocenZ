@@ -110,6 +110,146 @@ describe("portal RBAC matrix — derived from the database, not hand-written", (
 });
 
 /**
+ * THE OWNER'S STANDING RULES, CHECKED FOR EVERY LANE — not just the one that
+ * happened to be on screen.
+ *
+ * Owner, 12 Sep 2026: "not only to finance, other members, other account and
+ * role help me to check also."
+ *
+ * Each `it` is one rule stated in the owner's own words, asserted across all
+ * five outlet lanes and all four agency lanes. A new role added to either
+ * portal fails these until somebody decides where it sits, which is the point:
+ * the expensive mistakes here have all been a lane nobody thought about.
+ */
+const OUTLET_LANES = [
+	"outlet_owner",
+	"outlet_guarantor",
+	"outlet_finance",
+	"outlet_ops",
+	"outlet_director",
+] as const;
+const AGENCY_LANES = [
+	"agency_owner",
+	"agency_guarantor",
+	"agency_finance",
+	"agency_director",
+] as const;
+
+describe("the owner's standing rules — every lane, both portals", () => {
+	it("'other member cannot make the change for the organisation except for the owner and the guarantor'", () => {
+		for (const lane of OUTLET_LANES) {
+			const mayChangeTheOrg =
+				lane === "outlet_owner" || lane === "outlet_guarantor";
+			expect(outletCan(lane, "editSettings"), lane).toBe(mayChangeTheOrg);
+		}
+		for (const lane of AGENCY_LANES) {
+			const mayChangeTheOrg =
+				lane === "agency_owner" || lane === "agency_guarantor";
+			expect(agencyCan(lane, "editSettings"), lane).toBe(mayChangeTheOrg);
+		}
+	});
+
+	it("'only the owner can make payment and see the payment method'", () => {
+		// Both the Pay button and the PAYMENT METHOD section are gated on
+		// `editSettings`, and the server agrees twice over: `orgOwnerPaysOnly` on
+		// checkout, and `requirePermission('settings','update')` on the card's
+		// own read and write.
+		for (const lane of OUTLET_LANES) {
+			const mayPay = lane === "outlet_owner" || lane === "outlet_guarantor";
+			expect(outletCan(lane, "editSettings"), lane).toBe(mayPay);
+		}
+		for (const lane of AGENCY_LANES) {
+			const mayPay = lane === "agency_owner" || lane === "agency_guarantor";
+			expect(agencyCan(lane, "editSettings"), lane).toBe(mayPay);
+		}
+	});
+
+	it("'other member only can see the history that paid or unpaid and the current list'", () => {
+		// Seeing the subscription page at all is `viewSettings`, and EVERY lane
+		// keeps it — the rule takes away the spending, never the reading.
+		for (const lane of OUTLET_LANES) {
+			expect(outletCan(lane, "viewSettings"), lane).toBe(true);
+		}
+		for (const lane of AGENCY_LANES) {
+			expect(agencyCan(lane, "viewSettings"), lane).toBe(true);
+		}
+	});
+
+	it("a Director writes NOTHING, on either portal", () => {
+		// The role defined to change nothing. Asserted as a group so a new write
+		// permission has to be considered for it rather than inherited.
+		for (const write of [
+			"postJob",
+			"logSales",
+			"sealShift",
+			"confirmShift",
+			"ratePrs",
+			"manageWorkspace",
+			"manageShiftStaffing",
+			"editSettings",
+			"confirmDaily",
+			"orderSpecialService",
+			"requestCutLoss",
+		] as const) {
+			expect(outletCan("outlet_director", write), write).toBe(false);
+		}
+		for (const write of [
+			"approvePrSignups",
+			"assignShifts",
+			"managePr",
+			"editSettings",
+			"raisePv",
+			"overrideSignedPv",
+			"confirmReconciliation",
+		] as const) {
+			expect(agencyCan("agency_director", write), write).toBe(false);
+		}
+	});
+
+	it("a Guarantor is the owner's equal on both portals — the stand-in rule", () => {
+		// Not "close to" the owner: identical. The role exists for the moment the
+		// owner is unavailable, so any gap is a gap at exactly the wrong time.
+		for (const p of [
+			"postJob",
+			"logSales",
+			"editSettings",
+			"confirmDaily",
+			"viewBilling",
+			"requestCutLoss",
+			"orderSpecialService",
+		] as const) {
+			expect(outletCan("outlet_guarantor", p), p).toBe(
+				outletCan("outlet_owner", p),
+			);
+		}
+		for (const p of [
+			"approvePrSignups",
+			"assignShifts",
+			"managePr",
+			"editSettings",
+			"raisePv",
+			"overrideSignedPv",
+			"viewLiveFloor",
+		] as const) {
+			expect(agencyCan("agency_guarantor", p), p).toBe(
+				agencyCan("agency_owner", p),
+			);
+		}
+	});
+
+	it("every lane can reach its own console — nobody is locked out", () => {
+		// A derived matrix can empty a role by accident; an operator with no
+		// readable screen is indistinguishable from a broken login.
+		for (const lane of OUTLET_LANES) {
+			expect(outletCan(lane, "viewLiveDashboard"), lane).toBe(true);
+		}
+		for (const lane of AGENCY_LANES) {
+			expect(agencyCan(lane, "viewHome"), lane).toBe(true);
+		}
+	});
+});
+
+/**
  * The findings that made the owner ask for this, pinned as regressions.
  *
  * Each was a cell where the hand-written matrix contradicted the database, and

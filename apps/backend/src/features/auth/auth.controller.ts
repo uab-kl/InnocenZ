@@ -5,6 +5,7 @@ import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { Error } from '@/error/index.js';
 import { hashPassword, comparePassword } from '@/util/password.js';
 import { logger } from '@/util/logger.js';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
 import {
   LoginSchema,
   RegisterSchema,
@@ -1264,7 +1265,6 @@ export class AuthControllerClass {
        */
 
       const roles = await this.authRepository.getRolesForUserIds([user.id]);
-      const permissions = await this.authRepository.getUserPermissions(user.id);
       const profile = await this.userProfileRepository.getByUserId(user.id);
 
       const portals = [
@@ -1362,6 +1362,90 @@ export class AuthControllerClass {
           .map((m) => ({ kind: 'outlet' as const, name: m.outletName })),
       ];
 
+      /**
+       * ⚠️ PERMISSIONS COME FROM THE MEMBERSHIP LANE, NOT THE ROLE ROWS.
+       *
+       * This used to be `getUserPermissions(user.id)` — the union of the
+       * account's `user_role` rows — which answers "what may this person do
+       * ANYWHERE". Authority here belongs to the lane they hold IN AN
+       * ORGANISATION, and on real accounts the two had drifted: a venue's
+       * Finance head and its Ops Head both still carried an `Owner` role row
+       * from an earlier grant, so this endpoint handed them `settings:update`
+       * and the portals offered the Edit button, the Pay button and the
+       * payment method — the three the owner's rule reserves for the owner.
+       *
+       * The server never honoured it (`requirePermission` reads the lane), so
+       * every write was refused; it was the SCREEN that lied. Owner, 12 Sep
+       * 2026: "the web matrix must not lie to user and always must follow the
+       * database that actually what can access what cannot."
+       *
+       * Admin keeps its role-row grants: an admin acts on organisations rather
+       * than within one, so there is no membership lane to read.
+       */
+      const lanePairs = [
+        /*
+         * ACTIVE only. `agencyMemberships` / `outletMemberships` keep `pending`
+         * and `inactive` so the chooser can show somebody they are waiting or
+         * switched off — but a lane that cannot sign in must not carry grants.
+         */
+        ...agencyMemberships
+          .filter((m) => m.status === 'active')
+          .map((m) => ({
+            roleName: portalRoleNameForSubRole('agency', m.subRole ?? ''),
+            portalCode: 'agency',
+            orgId: m.agencyId,
+          })),
+        ...outletMemberships
+          .filter((m) => m.status === 'active')
+          .map((m) => ({
+            roleName: portalRoleNameForSubRole('outlet', m.subRole ?? ''),
+            portalCode: 'outlet',
+            orgId: m.outletId,
+          })),
+        ...roles
+          .filter((r) => r.portalCode === 'admin')
+          // Admin acts ON organisations, not within one — no org to tag.
+          .map((r) => ({
+            roleName: r.roleName,
+            portalCode: 'admin',
+            orgId: null as string | null,
+          })),
+      ];
+      const byRole = await this.authRepository.permissionsForRoleNames(
+        // De-duplicated: two venues on the same lane is one set of grants.
+        [
+          ...new Map(
+            lanePairs.map((p) => [`${p.portalCode}/${p.roleName}`, p]),
+          ).values(),
+        ],
+      );
+
+      /**
+       * ⚠️ EVERY GRANT CARRIES THE ORGANISATION IT CAME FROM.
+       *
+       * A flat union is wrong the moment somebody holds DIFFERENT lanes in two
+       * organisations. Owner at venue A and Director at venue B unions to the
+       * owner's set, and the portals — which pick by portal, not by venue —
+       * then showed the Director at B the Edit, Post Job, Seal Shift and Log
+       * Sales controls. The server refused every one (`requirePermission`
+       * resolves the acting org and reads THAT venue's lane), so it was the
+       * screen lying again, in the one case the lane change had not covered.
+       *
+       * So the answer is per organisation: the same role's grants repeated for
+       * each org that holds that lane, tagged with `orgId`. The client keeps
+       * only the grants for the organisation it is actually in.
+       */
+      const grantsFor = (portalCode: string, roleName: string) =>
+        byRole.filter(
+          (g) => g.portalCode === portalCode && g.roleName === roleName,
+        );
+      const permissions = lanePairs.flatMap((pair) =>
+        grantsFor(pair.portalCode, pair.roleName).map((g) => ({
+          ...g,
+          orgId: pair.orgId ?? null,
+        })),
+      );
+
       const organisations = [
         ...agencyMemberships.map((m) => ({
           kind: 'agency' as const,
@@ -1419,6 +1503,8 @@ export class AuthControllerClass {
              * note in `schema/rbac.schema.ts`.
              */
             portalCode: p.portalCode ?? null,
+            /** WHICH organisation this grant is for — null for admin. */
+            orgId: p.orgId ?? null,
           })),
         },
       });

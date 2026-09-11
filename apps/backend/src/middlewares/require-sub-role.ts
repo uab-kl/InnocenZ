@@ -13,6 +13,7 @@ import {
   type OrgScopeDeps,
   pickAgencyId,
   resolveActingOrgId,
+  resolveOrgScope,
 } from '@/util/org-scope.js';
 
 /** The three repositories the shared org resolver needs. */
@@ -542,28 +543,55 @@ export const orgOwnerPaysOnly = async (
       .json({ success: false, message: Error.UNAUTHORIZED, data: null });
   }
 
-  for (const org of ['agency', 'outlet'] as const) {
-    /*
-     * Which organisation is being acted for — `x-org-id` when sent, otherwise
-     * the only active membership. AMBIGUOUS RESOLVES TO NULL and is skipped:
-     * somebody who owns one venue and merely works at another must not have
-     * that ownership answer for the venue they did not name.
-     */
-    const orgId = await resolveActingOrgId(req, orgScopeDeps, org);
-    if (!orgId) continue;
-    const holds =
-      org === 'agency'
-        ? await holdsAgencyLane(user.id, orgId, ['owner'])
-        : await holdsOutletLane(user.id, orgId, ['owner']);
-    if (holds) return next();
+  /*
+   * ⚠️ THE SAME RESOLUTION THE CONTROLLER USES — `resolveOrgScope`, not a
+   * second opinion.
+   *
+   * This guard first looped agency-then-outlet and passed the moment EITHER
+   * said owner, without recording which. The controller then re-resolved the
+   * org its own way, so the org that AUTHORISED was not the org that PAID:
+   * somebody who is Finance at agency A and owns their own venue V passed on
+   * V's ownership, while `resolveOrgScope` hands the controller A — and A's
+   * invoices then satisfied its ownership check. An agency Finance head could
+   * spend the agency's money, which is exactly what this exists to stop.
+   *
+   * Asking the same question the controller asks is the only version that
+   * cannot disagree with it.
+   */
+  const scope = await resolveOrgScope(req, orgScopeDeps);
+
+  if (scope.agencyId) {
+    if (await holdsAgencyLane(user.id, scope.agencyId, ['owner'])) return next();
+    return refuse(res);
   }
 
+  /*
+   * Every venue in scope, not merely one: the controller accepts invoices for
+   * any of them, so ownership of one must not authorise the rest.
+   */
+  if (scope.outletIds.length > 0) {
+    for (const outletId of scope.outletIds) {
+      if (!(await holdsOutletLane(user.id, outletId, ['owner']))) {
+        return refuse(res);
+      }
+    }
+    return next();
+  }
+
+  return res.status(400).json({
+    success: false,
+    message: 'Which organisation? Send x-org-id, or name it in the request.',
+    data: null,
+  });
+};
+
+function refuse(res: Response) {
   return res.status(403).json({
     success: false,
     message: 'Only the organisation owner can pay a subscription invoice.',
     data: null,
   });
-};
+}
 
 export const agencyOwnerOnly = requireAgencySubRole('owner');
 export const agencyOwnerOfParam = requireAgencySubRoleScoped('id', 'owner');

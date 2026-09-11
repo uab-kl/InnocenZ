@@ -436,9 +436,12 @@ function AgencySubscription() {
 			<header>
 				<IzPageTitle>{t.agencyMisc.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{agencyOwner.orgName}</p>
-				{isFinanceReadOnly && (
+				{/* `!canEdit` — see the twin in routes/outlet/subscription.tsx. */}
+				{!canEdit && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-						{t.subscription.financeReadOnly}
+						{isFinanceReadOnly
+							? t.subscription.financeReadOnly
+							: t.subscription.memberReadOnly}
 					</p>
 				)}
 			</header>

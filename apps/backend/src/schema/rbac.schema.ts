@@ -106,4 +106,11 @@ export type RolePermissionGroupType = {
    * the fact that can.
    */
   portalCode?: string | null;
+  /**
+   * The role these grants belong to — optional, set by
+   * `permissionsForRoleNames` so a caller can tag each grant with the
+   * organisation whose lane produced it. `/auth/me` needs that because a flat
+   * union is wrong for anyone holding different lanes in two organisations.
+   */
+  roleName?: string;
 };

@@ -59,6 +59,12 @@ interface MeResponse {
 		 * wherever its key matches — exactly as before this field existed.
 		 */
 		portalCode?: string | null;
+		/**
+		 * WHICH organisation this grant is for. A person can hold DIFFERENT lanes
+		 * in two organisations, so a flat union would hand the second one the
+		 * first's powers. `null` = admin, or a server too old to say.
+		 */
+		orgId?: string | null;
 	}[];
 }
 
@@ -87,6 +93,7 @@ export async function fetchProfile(): Promise<User> {
 			moduleName: p.moduleName,
 			permissionType: p.permissionType,
 			portalCode: p.portalCode ?? null,
+			orgId: p.orgId ?? null,
 		}));
 
 	return {

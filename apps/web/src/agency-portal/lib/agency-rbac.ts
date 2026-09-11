@@ -84,6 +84,8 @@ type ModulePerm = {
 	permissionType: string;
 	/** Which console granted it — see `grantsForPortal`. */
 	portalCode?: string | null;
+	/** Which ORGANISATION granted it — see `grantsForPortal`. */
+	orgId?: string | null;
 };
 
 /**
@@ -142,6 +144,8 @@ export function agencyCan(
 	role: AgencySubRole | null | undefined,
 	permission: Permission,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in, so another org's lane cannot answer. */
+	activeOrgId?: string | null,
 ): boolean {
 	const fallback =
 		ROLE_PERMISSIONS[resolveAgencySubRole(role)].includes(permission);
@@ -152,7 +156,7 @@ export function agencyCan(
 	 * module KEY across portals is what let one console answer the other's
 	 * question; see `grantsForPortal`.
 	 */
-	const grants = grantsForPortal(modulePermissions, "agency");
+	const grants = grantsForPortal(modulePermissions, "agency", activeOrgId);
 	if (!grants.length) return fallback;
 
 	const agencyKeys = new Set(
@@ -216,11 +220,13 @@ export function getAgencyNavItems(
 	role: AgencySubRole | null | undefined,
 	orgStatus?: string | null,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in — see `grantsForPortal`. */
+	activeOrgId?: string | null,
 ): AgencyNavItem[] {
 	if (isOrgProfileOnly(orgStatus)) return [];
 	const r = resolveAgencySubRole(role);
 	return ALL_NAV.filter((item) =>
-		agencyCan(r, item.permission, modulePermissions),
+		agencyCan(r, item.permission, modulePermissions, activeOrgId),
 	);
 }
 
@@ -239,12 +245,15 @@ export function canAccessAgencyPath(
 	pathname: string,
 	orgStatus?: string | null,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in, so another org's lane cannot answer. */
+	activeOrgId?: string | null,
 ): boolean {
 	if (isOrgProfileOnly(orgStatus)) {
 		return pathname.startsWith("/agency/profile");
 	}
 	const r = resolveAgencySubRole(role);
-	const can = (p: Permission) => agencyCan(r, p, modulePermissions);
+	const can = (p: Permission) =>
+		agencyCan(r, p, modulePermissions, activeOrgId);
 	if (pathname === "/agency" || pathname === "/agency/") return can("viewHome");
 	if (pathname.startsWith("/agency/roster")) return can("viewWorkforce");
 	if (pathname.startsWith("/agency/pv")) return can("viewPv");

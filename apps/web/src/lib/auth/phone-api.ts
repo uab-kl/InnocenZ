@@ -32,6 +32,7 @@
  */
 import axios from "axios";
 import { apiErrorCopy } from "@/lib/auth/api-error-copy";
+import { saveAccessToken, saveRefreshToken } from "@/lib/auth/auth-storage";
 import { kickToLogin } from "@/lib/auth/guards";
 import { getClient } from "@/lib/axios-v1";
 
@@ -61,10 +62,10 @@ function serverMessage(error: unknown, fallback: string): Error {
  * ⚠️ YES, AND THIS IS WHY NO CODE ARRIVED. The server's only cleaning is
  * `normalizePhoneDigits` — `value.replace(/\D/g, '')` — which strips spaces and
  * dashes and NOTHING else. It does not add a country code and does not remove
- * a leading zero. So the Malaysian way of writing a number, `0188716214`, went
+ * a leading zero. So the Malaysian way of writing a number, `0123456789`, went
  * to WhatsApp exactly like that, and WhatsApp cannot deliver to it: the code
  * was genuinely sent, to a number that does not exist in E.164. The page then
- * said "OTP sent to 0188716214" and waited for a code nobody could receive.
+ * said "OTP sent to 0123456789" and waited for a code nobody could receive.
  *
  * The PR app never hit this because it has a country-code picker and composes
  * the number with `phoneLoginIdentifier` (apps/mobile/src/lib/phone-prefs.ts).
@@ -72,18 +73,72 @@ function serverMessage(error: unknown, fallback: string): Error {
  * deliberately: two different ideas of "the number" is how an account ends up
  * unreachable on one surface and fine on the other.
  *
- *   "0188716214"       → 60188716214
- *   "+60 18-871 6214"  → 60188716214
- *   "60188716214"      → 60188716214
+ *   "0123456789"       → 60123456789
+ *   "+60 12-345 6789"  → 60123456789
+ *   "60123456789"      → 60123456789
  *
  * A leading `60` is treated as already carrying the country code; a Malaysian
  * mobile is `01x…` locally, so after the zero comes off it can never begin
  * `60` by accident.
  */
 export function toWhatsAppNumber(raw: string, dialCode = "60"): string {
-	const digits = (raw ?? "").replace(/\D/g, "").replace(/^0+/, "");
+	const typed = (raw ?? "").trim();
+	const digits = typed.replace(/\D/g, "");
 	if (!digits) return "";
-	return digits.startsWith(dialCode) ? digits : `${dialCode}${digits}`;
+
+	/*
+	 * OUR OWN DIAL CODE FIRST, before the `+` shortcut below.
+	 *
+	 * "+60 0123456789" is the dial code followed by the LOCAL form — zero and
+	 * all — and it is a very natural thing to type. Returning it untouched gave
+	 * `600123456789`: one digit too long, undeliverable, and long enough to pass
+	 * the server's length check, so the failure was silent. The stray zero has
+	 * to come off whether or not a `+` was typed.
+	 */
+	if (digits.startsWith(dialCode)) {
+		return dialCode + digits.slice(dialCode.length).replace(/^0+/, "");
+	}
+
+	/*
+	 * A leading `+` on anything else means "this is already a full number" —
+	 * honour it. Without this, "+65 8123 4567" became `606581234567`: our dial
+	 * code prepended to a number that already had one, with no way to enter a
+	 * foreign handset at all.
+	 */
+	if (typed.startsWith("+")) return digits;
+
+	// Plain local form — "0123456789" — where the zero stands in for the code.
+	return dialCode + digits.replace(/^0+/, "");
+}
+
+/**
+ * IS THIS A NUMBER WHATSAPP COULD REACH? Returns a reason, or null when fine.
+ *
+ * Owner, 11 Sep 2026: "where you let user know, where is the validation? input
+ * error message."
+ *
+ * ⚠️ There was NO client-side check at all. `toWhatsAppNumber("123")` happily
+ * produces `60123`, the request goes out, and the person waits for a code that
+ * was addressed to nothing — the same silent failure the leading zero caused,
+ * reached by a different route. Catching it here means the mistake is named
+ * beside the field instead of becoming a message that never arrives.
+ *
+ * The rule is deliberately LOOSE — length only, no prefix table. A Malaysian
+ * mobile is `01X` plus 7 or 8 more digits, so `60` + 9 or 10 = 11 or 12. Every
+ * mobile prefix (`010`–`019`) passes without this file having to know which
+ * ones exist, and a landline or a typo does not. Guessing at valid prefixes
+ * would reject real numbers the day a new one is issued, which is worse than
+ * letting the server have the last word — and the server still does.
+ */
+export function phoneNumberProblem(
+	raw: string,
+	copy: { empty: string; tooShort: string; tooLong: string },
+): string | null {
+	const full = toWhatsAppNumber(raw);
+	if (!full) return copy.empty;
+	if (full.length < 11) return copy.tooShort;
+	if (full.length > 12) return copy.tooLong;
+	return null;
 }
 
 export type OtpSendResult = {
@@ -170,13 +225,32 @@ export async function changeMyPhone(
 	const failed = apiErrorCopy().profile.mobileUpdateFailed;
 	const client = getClient(kickToLogin);
 	try {
-		const response = await client.post<ApiResponse<unknown>>(
-			"/auth/phone/change",
-			{ phoneNum: toWhatsAppNumber(phoneNum), verificationId },
-		);
+		const response = await client.post<
+			ApiResponse<{ accessToken?: string; refreshToken?: string } | null>
+		>("/auth/phone/change", {
+			phoneNum: toWhatsAppNumber(phoneNum),
+			verificationId,
+		});
 		if (!response.data.success) {
 			throw new Error(response.data.message || failed);
 		}
+		/*
+		 * ⚠️ STORE THE NEW TOKENS, OR THIS SIGNS THE PERSON OUT.
+		 *
+		 * A JWT here carries only `{loginMethod, loginCriteria}` — no user id —
+		 * and every request resolves the account by looking that criteria up. So
+		 * the moment the number changes, a PHONE-keyed token points at a number
+		 * nobody holds and the very next call answers 401 `Unauthorized`. That is
+		 * the exact bug the PR app hit; the server now re-issues a pair bound to
+		 * the new number, and it only helps if the client actually keeps them.
+		 *
+		 * Absent for an EMAIL-keyed session, which the server deliberately leaves
+		 * alone because its token still resolves — hence the optional read rather
+		 * than a required one.
+		 */
+		const issued = response.data.data;
+		if (issued?.accessToken) saveAccessToken(issued.accessToken);
+		if (issued?.refreshToken) saveRefreshToken(issued.refreshToken);
 	} catch (error) {
 		throw serverMessage(error, failed);
 	}

@@ -407,13 +407,20 @@ export function changePassword(
   });
 }
 
-/** Signed-in phone change — OTP on the new number (purpose=change_phone). */
+/**
+ * Signed-in phone change — OTP on the new number (purpose=change_phone).
+ *
+ * ⚠️ The response carries a FRESH token pair, and the caller must store it.
+ * A JWT here identifies the account by its login credential, not by id, so the
+ * moment the number changes the old token resolves to nobody and every request
+ * after it answers 401 `Unauthorized` — for a change that already succeeded.
+ */
 export function changePhoneWithOtp(
   accessToken: string,
   phoneNum: string,
   verificationId: string,
-): Promise<Me> {
-  return request<Me>('/auth/phone/change', {
+): Promise<Me & { accessToken?: string; refreshToken?: string }> {
+  return request<Me & { accessToken?: string; refreshToken?: string }>('/auth/phone/change', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ phoneNum, verificationId }),

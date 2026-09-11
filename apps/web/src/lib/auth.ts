@@ -87,5 +87,12 @@ export interface User {
 		 * this behaved before the field existed.
 		 */
 		portalCode?: string | null;
+		/**
+		 * WHICH organisation granted it. A person can hold DIFFERENT lanes in two
+		 * organisations — Owner at one venue, Director at another — and a flat
+		 * union hands the second one the first's powers. `null` means admin, or a
+		 * server too old to say, and is treated as "applies anywhere".
+		 */
+		orgId?: string | null;
 	}>;
 }

@@ -329,8 +329,27 @@ export class AuthRepositoryClass {
    * to say so. The module already knew; nothing was reading it.
    */
   async modulePortalCode(moduleKey: string): Promise<string | null> {
+    const codes = await this.modulePortalCodes(moduleKey);
+    return codes[0] ?? null;
+  }
+
+  /**
+   * EVERY portal a module key belongs to — because several belong to more than
+   * one, and `limit(1)` was picking between them by accident.
+   *
+   * ⚠️ `settings`, `dashboard` and `history` each exist as a SEPARATE module row
+   * per portal. `modulePortalCode` asked for one row with no ORDER BY, so which
+   * portal `requirePermission('settings','update')` resolved was whatever the
+   * planner returned first — and that decided WHICH ORGANISATION the guard then
+   * asked about. An outlet operator's request could be judged against their
+   * agency membership, or the reverse.
+   *
+   * Sorted, so a caller that must still choose one gets a stable answer rather
+   * than a different one per query plan.
+   */
+  async modulePortalCodes(moduleKey: string): Promise<string[]> {
     try {
-      const [row] = await db
+      const rows = await db
         .select({ code: PortalTable.code })
         .from(ModuleTable)
         .leftJoin(PortalTable, eq(PortalTable.id, ModuleTable.portalId))
@@ -339,12 +358,15 @@ export class AuthRepositoryClass {
             eq(ModuleTable.moduleKey, moduleKey),
             eq(ModuleTable.status, 'active'),
           ),
-        )
-        .limit(1);
-      return row?.code ?? null;
+        );
+      return [
+        ...new Set(
+          rows.map((r) => r.code).filter((c): c is string => Boolean(c)),
+        ),
+      ].sort();
     } catch (error) {
-      logger.error('[AuthRepository.modulePortalCode] Error:', error);
-      return null;
+      logger.error('[AuthRepository.modulePortalCodes] Error:', error);
+      return [];
     }
   }
 
@@ -363,6 +385,81 @@ export class AuthRepositoryClass {
    * speaks. Never softens to true on error — an unreadable grant table is not
    * permission.
    */
+  /**
+   * EVERY GRANT HELD BY A SET OF (role name, portal) PAIRS.
+   *
+   * ⚠️ The twin of `getUserPermissions`, and it exists because that one asks
+   * the WRONG QUESTION for `/auth/me`. It unions the account's `user_role`
+   * rows, which say what a person may do ANYWHERE; authority here belongs to
+   * the MEMBERSHIP lane, which says what they may do in one organisation. The
+   * two had drifted on real accounts: a venue's Finance head and its Ops Head
+   * both still carried an `Owner` role row from an earlier grant, so
+   * `/auth/me` handed them `settings:update` and the portals offered them the
+   * Edit button, the Pay button and the payment method — the exact three the
+   * owner's rule reserves for the owner.
+   *
+   * The server itself was never fooled: `requirePermission` maps the
+   * membership's `sub_role` through `portalRoleNameForSubRole` and asks
+   * `roleHasPermission`, so every write was refused. It was the SCREEN that
+   * lied, which is the thing the owner asked to stop.
+   *
+   * So `/auth/me` now asks this instead, with the lanes the caller actually
+   * holds. Same table, same rows, same answer as the guard.
+   */
+  async permissionsForRoleNames(
+    pairs: ReadonlyArray<{ roleName: string; portalCode: string }>,
+  ): Promise<RolePermissionGroupType[]> {
+    if (pairs.length === 0) return [];
+    try {
+      const results = await db
+        .select({
+          id: RolePermissionTable.id,
+          roleId: RolePermissionTable.roleId,
+          permissionId: RolePermissionTable.permissionId,
+          permissionType: PermissionTable.permissionType,
+          moduleId: PermissionTable.moduleId,
+          moduleName: ModuleTable.moduleName,
+          moduleKey: ModuleTable.moduleKey,
+          portalCode: PortalTable.code,
+          // Returned so the caller can match a grant back to the lane that
+          // asked for it, and tag it with that lane's organisation.
+          roleName: RoleTable.roleName,
+        })
+        .from(RoleTable)
+        .innerJoin(PortalTable, eq(RoleTable.portalId, PortalTable.id))
+        .innerJoin(RolePermissionTable, eq(RolePermissionTable.roleId, RoleTable.id))
+        .innerJoin(PermissionTable, eq(RolePermissionTable.permissionId, PermissionTable.id))
+        .innerJoin(ModuleTable, eq(PermissionTable.moduleId, ModuleTable.id))
+        .where(
+          and(
+            eq(RoleTable.status, 'active'),
+            eq(PermissionTable.status, 'active'),
+            eq(ModuleTable.status, 'active'),
+            /*
+             * The module must belong to the SAME portal as the role. Without
+             * it a `settings` grant from the agency role would be returned for
+             * an outlet lane, which is the cross-portal confusion the client
+             * `portalCode` filter exists to catch — better not to send it.
+             */
+            eq(ModuleTable.portalId, RoleTable.portalId),
+            or(
+              ...pairs.map((p) =>
+                and(
+                  eq(RoleTable.roleName, p.roleName),
+                  eq(PortalTable.code, p.portalCode),
+                ),
+              ),
+            ),
+          ),
+        );
+      return results;
+    } catch (error) {
+      // Never soften to a wider list: an unreadable grant table is not permission.
+      logger.error('[AuthRepository.permissionsForRoleNames] Error:', error);
+      return [];
+    }
+  }
+
   async roleHasPermission(
     roleName: string,
     portalCode: string,

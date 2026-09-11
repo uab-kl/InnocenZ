@@ -45,7 +45,7 @@ export function SecurityScreen() {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
-  const { me, token, signOut, refreshMe } = useSession();
+  const { me, token, signOut, refreshMe, adoptToken } = useSession();
   const [sheet, setSheet] = useState<Sheet>('menu');
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +130,17 @@ export function SecurityScreen() {
     setError(null);
     try {
       const verified = await verifyPrOtp(fullPhone, otp, 'change_phone');
-      await changePhoneWithOtp(token, fullPhone, verified.verificationId);
+      const updated = await changePhoneWithOtp(token, fullPhone, verified.verificationId);
+      /*
+       * ⚠️ ADOPT THE NEW TOKEN BEFORE ANYTHING ELSE TOUCHES THE API.
+       *
+       * The write has already succeeded at this point, and the token in hand is
+       * now dead: it identifies the account by the OLD phone number, which no
+       * row carries any more. `refreshMe()` on the next line would send it and
+       * collect a 401, and this screen would print "Unauthorized" under a code
+       * that was correct — the change appearing to fail when it did not.
+       */
+      if (updated.accessToken) adoptToken(updated.accessToken);
       await refreshMe();
       setMsg(t.security.phoneUpdated);
       setSheet('menu');

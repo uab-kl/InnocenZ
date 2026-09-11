@@ -79,15 +79,40 @@ export function buildRoleMatrix<Role extends string, Perm extends string>(
 }
 
 export function grantsForPortal<
-	T extends { moduleKey: string; permissionType: string; portalCode?: unknown },
->(modulePermissions: T[] | undefined | null, portalCode: string): T[] {
+	T extends {
+		moduleKey: string;
+		permissionType: string;
+		portalCode?: unknown;
+		orgId?: unknown;
+	},
+>(
+	modulePermissions: T[] | undefined | null,
+	portalCode: string,
+	/**
+	 * The organisation actually being worked in, when one is chosen.
+	 *
+	 * ⚠️ Filtering by portal alone is not enough. A person can hold DIFFERENT
+	 * lanes in two organisations of the SAME kind — Owner at one venue, Director
+	 * at another — and the union then hands the Director the owner's controls at
+	 * the venue where they may do nothing. The server was never fooled (it reads
+	 * that venue's own lane), so it was the screen lying, in the one case the
+	 * per-portal filter could not see.
+	 *
+	 * Omitted, or a grant with no `orgId`, keeps the previous behaviour: an
+	 * older server sends no org and must not be filtered down to nothing.
+	 */
+	activeOrgId?: string | null,
+): T[] {
 	if (!modulePermissions?.length) return [];
-	return modulePermissions.filter(
-		(p) =>
+	return modulePermissions.filter((p) => {
+		const portalOk =
 			p.portalCode === undefined ||
 			p.portalCode === null ||
-			p.portalCode === portalCode,
-	);
+			p.portalCode === portalCode;
+		if (!portalOk) return false;
+		if (!activeOrgId) return true;
+		return p.orgId === undefined || p.orgId === null || p.orgId === activeOrgId;
+	});
 }
 
 /** Feature → module key used by agency portal screens. */

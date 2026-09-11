@@ -240,7 +240,17 @@ const OUTLET_DIRECTOR: MatrixEntry[] = [
 ];
 
 /** Permission matrices for every seeded role (init-roles must run first). */
-const ROLE_GRANTS: RoleGrant[] = [
+/**
+ * Exported so a check can compare INTENT against the live table.
+ *
+ * ⚠️ This seeder only ever ADDS — it "ensures" a role's grants and never
+ * removes one — so the database can hold rows this list does not mention and
+ * nothing notices. That is exactly how outlet Finance came to hold 19 grants
+ * while this file described 7 (11 Sep 2026). `pnpm rbac:seed-check` diffs the
+ * two and fails on any extra, which is the half `pnpm rbac:check` cannot see:
+ * that one proves web == database, this one proves database == intent.
+ */
+export const ROLE_GRANTS: RoleGrant[] = [
   { roleName: portalRoleName.ADMIN, portal: 'admin', grant: '*' },
   { roleName: portalRoleName.OWNER, portal: 'agency', grant: AGENCY_OWNER },
   { roleName: portalRoleName.FINANCE, portal: 'agency', grant: AGENCY_FINANCE },

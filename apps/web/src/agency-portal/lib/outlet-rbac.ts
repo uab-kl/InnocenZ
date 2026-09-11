@@ -85,6 +85,8 @@ type ModulePerm = {
 	permissionType: string;
 	/** Which console granted it — see `grantsForPortal`. */
 	portalCode?: string | null;
+	/** Which ORGANISATION granted it — see `grantsForPortal`. */
+	orgId?: string | null;
 };
 
 /**
@@ -124,9 +126,11 @@ const MATRIX_ONLY: Partial<Record<Permission, readonly OutletSubRole[]>> = {
  *   · Finance could not Post Job. The database grants Finance `booking:create`
  *     and `POST /shift` checks exactly that, so Finance could, and did.
  *   · Ops Head could not see Sales or History. The database grants both.
- *   · The Owner could `confirmDaily`. NO outlet role holds `billing:update`,
- *     so the server refuses everyone — that button cannot work for anybody
- *     until the grant exists.
+ *   · The Owner could `confirmDaily`. At the time NO outlet role held
+ *     `billing:update`, so the server refused everyone — the matrix offered a
+ *     button nobody could press. The owner has since granted it to Owner and
+ *     Guarantor in `seed-rbac.ts`, so it now works for exactly those two;
+ *     Finance, which the old matrix also granted it to, still does not.
  *
  * It now comes from `rbac-grants.generated.ts`, written by
  * `node tools/scripts/sync-rbac-matrix.mjs` from the live table. To change what
@@ -154,6 +158,8 @@ export function outletCan(
 	role: OutletSubRole | null | undefined,
 	permission: Permission,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in, so another org's lane cannot answer. */
+	activeOrgId?: string | null,
 ): boolean {
 	const r = role ?? OUTLET_LEAST_PRIVILEGE;
 	const fallback = ROLE_PERMISSIONS[r].includes(permission);
@@ -164,7 +170,7 @@ export function outletCan(
 	 * separate module row per portal, so an agency grant used to answer an
 	 * outlet question by key alone — see `grantsForPortal`.
 	 */
-	const grants = grantsForPortal(modulePermissions, "outlet");
+	const grants = grantsForPortal(modulePermissions, "outlet", activeOrgId);
 	if (!grants.length) return fallback;
 
 	const outletKeys = new Set(
@@ -260,6 +266,8 @@ export function getOutletNavItems(
 	role: OutletSubRole | null | undefined,
 	orgStatus?: string | null,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in — see `grantsForPortal`. */
+	activeOrgId?: string | null,
 ): OutletNavItem[] {
 	if (isOrgProfileOnly(orgStatus)) return [];
 	const r = role ?? OUTLET_LEAST_PRIVILEGE;
@@ -268,12 +276,33 @@ export function getOutletNavItems(
 			// `viewBookings` is here so a Director keeps the page and loses only the
 			// buttons on it — the owner asked for Post Job read-only rather than gone.
 			return (
-				outletCan(r, "postJob", modulePermissions) ||
-				outletCan(r, "viewBookings", modulePermissions) ||
-				outletCan(r, "orderSpecialService", modulePermissions)
+				outletCan(r, "postJob", modulePermissions, activeOrgId) ||
+				outletCan(r, "viewBookings", modulePermissions, activeOrgId) ||
+				outletCan(r, "orderSpecialService", modulePermissions, activeOrgId)
 			);
 		}
-		return outletCan(r, item.permission, modulePermissions);
+		/*
+		 * REPORTS — the same OR the ROUTE GUARD and the page already use.
+		 *
+		 * `/outlet/billing` renders only the sales dashboard, which the page
+		 * gates on `viewSalesDashboard`, and `canAccessOutletPath` admits
+		 * `viewBilling || viewSalesDashboard`. The nav item asked for
+		 * `viewBilling` alone, which agreed with the other two only because the
+		 * old hand-written matrix gave Ops Head neither permission.
+		 *
+		 * Deriving the matrix from the database changed that: Ops Head holds
+		 * `sales:read` and NO billing row at all — the one outlet lane between
+		 * the two gates. So the sidebar hid a page the database says they may
+		 * read, while the route guard let them in by URL and the Today page
+		 * linked them straight to it. Three gates, one of them the outlier.
+		 */
+		if (item.to === "/outlet/billing") {
+			return (
+				outletCan(r, "viewBilling", modulePermissions, activeOrgId) ||
+				outletCan(r, "viewSalesDashboard", modulePermissions, activeOrgId)
+			);
+		}
+		return outletCan(r, item.permission, modulePermissions, activeOrgId);
 	});
 }
 
@@ -293,12 +322,15 @@ export function canAccessOutletPath(
 	pathname: string,
 	orgStatus?: string | null,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in, so another org's lane cannot answer. */
+	activeOrgId?: string | null,
 ): boolean {
 	if (isOrgProfileOnly(orgStatus)) {
 		return isOutletPendingProfilePath(pathname);
 	}
 	const r = role ?? OUTLET_LEAST_PRIVILEGE;
-	const can = (p: Permission) => outletCan(r, p, modulePermissions);
+	const can = (p: Permission) =>
+		outletCan(r, p, modulePermissions, activeOrgId);
 	if (pathname === "/outlet" || pathname === "/outlet/") {
 		return can("viewLiveDashboard");
 	}

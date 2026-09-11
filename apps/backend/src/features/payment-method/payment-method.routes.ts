@@ -11,9 +11,24 @@ const router = Router();
  * id is accepted from the body. `/mine` sits before the admin list for the same
  * reason it does on admin-request: a literal path must not be shadowed.
  */
+/*
+ * ⚠️ `requirePermission`, not `requireRole` alone — READING the card is now as
+ * restricted as replacing it.
+ *
+ * Owner, 11 Sep 2026: "only the owner can make payment and SEE the payment
+ * method in the organisation." The portals were changed to hide the section
+ * from anyone without `settings:update`, but this endpoint still answered every
+ * member, so the brand, last four, expiry and holder were one fetch away from
+ * somebody the screen deliberately hides them from. A UI-only rule is not a
+ * rule.
+ *
+ * Same guard as `PUT /mine` below, deliberately: owner and guarantor are the
+ * two lanes the database grants `settings:update`, on both portals.
+ */
 router.get(
   '/mine',
   requireRole('outlet', 'agency', 'admin'),
+  requirePermission('settings', 'update'),
   paymentMethodController.getMine.bind(paymentMethodController),
 );
 /**
@@ -31,10 +46,11 @@ router.get(
   requireRole('outlet', 'agency', 'admin'),
   paymentMethodController.wallets.bind(paymentMethodController),
 );
-/** Every rail the org holds, default first — against `/mine`, which is the default alone. */
+/** Every rail the org holds — same reading rule as `/mine` above. */
 router.get(
   '/mine/all',
   requireRole('outlet', 'agency', 'admin'),
+  requirePermission('settings', 'update'),
   paymentMethodController.listMine.bind(paymentMethodController),
 );
 router.put(

@@ -1558,6 +1558,9 @@ const en = {
 			"{amount} is past its due date across {n} billing period(s). The oldest was due {date} — {days} days ago.",
 		noAccess: "You do not have access to subscription billing.",
 		financeReadOnly: "Finance view — read-only · contact owner to update card",
+		/** Every other non-owner lane — Ops Head, Director, anything added later. */
+		memberReadOnly:
+			"Read-only · only the owner can change the plan, pay, or update the card",
 		lastPayrollWeek: "Last payroll week · {cycle}",
 		pvIssuedOne: "{n} PV issued",
 		pvIssuedMany: "{n} PVs issued",
@@ -1987,9 +1990,22 @@ const en = {
 		 * saying nothing.
 		 */
 		invalidOtp: "That code is not right — check WhatsApp or send a new one",
+		/** DEMO sessions send no message — 123456 is the code. */
+		invalidOtpDemo: "Invalid OTP — try 123456 for demo",
+		otpDemoNoMessage: "Demo mode — no message is sent. Enter 123456.",
 		otpSendFailed: "Could not send the code — try again in a moment",
 		/** Shown BEFORE sending, so a missing country code is caught by eye. */
 		otpWillSendTo: "Code goes to {target} on WhatsApp",
+		/** Shown while the box is empty — both formats are accepted. */
+		/** No email-OTP endpoint exists yet — see TEST_SCRIPT §9. */
+		emailChangeUnavailable:
+			"Changing your email is not available yet — contact InnocenZ to update it.",
+		mobileTooShort:
+			"That looks too short for a mobile number — check the digits.",
+		mobileTooLong:
+			"That looks too long for a mobile number — check the digits.",
+		phoneFormatHint:
+			"Type it however you write it — 0123456789 or +60 12-345 6789 both work.",
 		mobileUpdated: "Mobile number updated",
 		mobileUpdateFailed: "Could not update your mobile number",
 		verifyNewEmail: "Verify new email",
@@ -2258,6 +2274,8 @@ const en = {
 		noAccessBilling: "You do not have access to subscription billing.",
 		financeReadOnly:
 			"Finance view — read-only · contact owner to change plan or card",
+		memberReadOnly:
+			"Read-only · only the owner can change the plan, pay, or update the card",
 		plansMonthly: "Plans · monthly",
 		prLimitHint:
 			"PR limit = max specific PRs you name per day (agency fill does not count) · {today} requested today · peak day {peak}",
@@ -5272,6 +5290,7 @@ const en = {
 		verifyOtp: "Verify OTP",
 		/** OtpVerifySheet's secondary button. Channel-neutral on purpose — this sheet serves the email lane (agency/outlet) and the WhatsApp lane alike. */
 		resendOtp: "Resend OTP",
+		resendOtpIn: "Resend in {seconds}s",
 		/** Placeholder under a member's name when the membership row carries no email. */
 		noEmail: "no email",
 		/** OrgMembersPanel, kind === "agency": the invite dropdown fell back to FALLBACK_SUB_ROLES. */
@@ -7889,6 +7908,7 @@ const zh: PortalTranslations = {
 		agingOverdue: "已逾期",
 		noAccess: "你没有查看订阅账单的权限。",
 		financeReadOnly: "财务视图 —— 只读 · 如需更换银行卡请联系东主",
+		memberReadOnly: "只读 · 只有东主可以更改套餐、付款或更新银行卡",
 		lastPayrollWeek: "上一个薪资周 · {cycle}",
 		pvIssuedOne: "已开具 {n} 张薪资单",
 		pvIssuedMany: "已开具 {n} 张薪资单",
@@ -8218,8 +8238,14 @@ const zh: PortalTranslations = {
 		otpSentTo: "验证码已发送至 {target}",
 		otpResentTo: "验证码已重新发送至 {target}",
 		invalidOtp: "验证码不正确 —— 请查看 WhatsApp 或重新发送",
+		invalidOtpDemo: "验证码不正确 —— 演示环境请输入 123456",
+		otpDemoNoMessage: "演示模式 —— 不会发送短信，请输入 123456。",
 		otpSendFailed: "无法发送验证码 —— 请稍后再试",
 		otpWillSendTo: "验证码将通过 WhatsApp 发送至 {target}",
+		emailChangeUnavailable: "暂时无法自行修改邮箱 —— 请联系 InnocenZ 更新。",
+		mobileTooShort: "这个号码位数太少 —— 请检查数字。",
+		mobileTooLong: "这个号码位数太多 —— 请检查数字。",
+		phoneFormatHint: "怎么写都可以 —— 0123456789 或 +60 12-345 6789 都能识别。",
 		mobileUpdated: "手机号已更新",
 		mobileUpdateFailed: "无法更新你的手机号",
 		verifyNewEmail: "验证新邮箱",
@@ -8433,6 +8459,7 @@ const zh: PortalTranslations = {
 	outletSubscription: {
 		noAccessBilling: "你没有权限查看订阅账单。",
 		financeReadOnly: "财务视图 —— 只读 · 如需更改套餐或银行卡请联系东主",
+		memberReadOnly: "只读 · 只有东主可以更改套餐、付款或更新银行卡",
 		plansMonthly: "套餐 · 按月",
 		prLimitHint:
 			"PR 上限 = 你每天可指名的 PR 人数上限（由经纪公司补位的不计入） · 今天已请求 {today} 位 · 峰值日 {peak} 位",
@@ -10656,6 +10683,7 @@ const zh: PortalTranslations = {
 		oneTimePassword: "一次性验证码",
 		verifyOtp: "验证",
 		resendOtp: "重新发送验证码",
+		resendOtpIn: "{seconds} 秒后可重发",
 		noEmail: "无邮箱",
 		rolesLoadFailedAgency: "无法加载经纪公司端角色 —— 使用默认值。",
 		rolesLoadFailedOutlet: "无法加载门店端角色 —— 使用默认值。",

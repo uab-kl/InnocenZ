@@ -3,6 +3,7 @@ import { IzCardTitle } from "@agency-portal/components/iz/ui";
 import { verifyDemoOtp } from "@agency-portal/lib/verify-demo-otp";
 import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function isValidDemoOtp(code: string) {
 	return verifyDemoOtp(code);
@@ -17,6 +18,8 @@ export function OtpVerifySheet({
 	onOtpChange,
 	onVerify,
 	onResend,
+	resendIn = 0,
+	busy = false,
 	verifyLabel,
 	variant = "dialog",
 }: {
@@ -28,6 +31,17 @@ export function OtpVerifySheet({
 	onOtpChange: (value: string) => void;
 	onVerify: () => void;
 	onResend: () => void;
+	/**
+	 * Seconds until Resend is offered again, or 0 when it is available.
+	 *
+	 * ⚠️ The server allows FIVE sends per hour per phone number, and counts the
+	 * ones it refuses. A free-looking button let somebody spend that budget in
+	 * seconds and lock themselves out of their own number, so the wait is shown
+	 * rather than discovered.
+	 */
+	resendIn?: number;
+	/** In flight — verifying and resending must not race each other. */
+	busy?: boolean;
 	verifyLabel?: string;
 	variant?: SheetVariant;
 }) {
@@ -60,8 +74,11 @@ export function OtpVerifySheet({
 				type="button"
 				className="iz-btn iz-btn-soft mt-2.5 w-full"
 				onClick={onResend}
+				disabled={busy || resendIn > 0}
 			>
-				{t.portalUi.resendOtp}
+				{resendIn > 0
+					? fill(t.portalUi.resendOtpIn, { seconds: resendIn })
+					: t.portalUi.resendOtp}
 			</button>
 		</IzSheet>
 	);

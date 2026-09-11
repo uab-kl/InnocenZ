@@ -14,6 +14,8 @@
     "check:type:update": "node tools/scripts/check-portal-typography.mjs --update",
     "rbac:sync": "node tools/scripts/sync-rbac-matrix.mjs",
     "rbac:check": "node tools/scripts/sync-rbac-matrix.mjs --check",
+    "rbac:seed-check": "pnpm --filter innocenz-backend exec tsx --tsconfig tsconfig.json src/scripts/check-rbac-seed.ts",
+    "rbac:roles": "pnpm --filter innocenz-backend exec tsx --tsconfig tsconfig.json src/scripts/reconcile-user-roles.ts",
     "deploy": "node tools/scripts/deploy.mjs",
     "deploy:staging": "node tools/scripts/deploy.mjs staging",
     "deploy:production": "node tools/scripts/deploy.mjs production"

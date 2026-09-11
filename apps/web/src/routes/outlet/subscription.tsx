@@ -767,9 +767,17 @@ function OutletSubscriptionPage() {
 			<header>
 				<IzPageTitle>{t.nav.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{outletOwner.orgName}</p>
-				{isFinanceReadOnly && (
+				{/*
+				 * `!canEdit`, not one named lane. Ops Head and Director also lose
+				 * the plan switch, the Pay button and the payment method, and used
+				 * to be given no reason for any of it — a page with its controls
+				 * quietly missing reads as broken rather than as a rule.
+				 */}
+				{!canEdit && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-						{t.outletSubscription.financeReadOnly}
+						{isFinanceReadOnly
+							? t.outletSubscription.financeReadOnly
+							: t.outletSubscription.memberReadOnly}
 					</p>
 				)}
 			</header>

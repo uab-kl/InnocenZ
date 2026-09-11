@@ -18,6 +18,7 @@ import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { changeMyPassword } from "@/lib/auth/password-api";
 import {
 	changeMyPhone,
+	phoneNumberProblem,
 	sendPhoneChangeOtp,
 	toWhatsAppNumber,
 	verifyPhoneChangeOtp,
@@ -138,6 +139,24 @@ export function SecuritySettingsSheets({
 	/** In flight for send / verify / resend, so nothing can be double-sent. */
 	const [otpBusy, setOtpBusy] = useState(false);
 	/**
+	 * The last refusal from the server, kept ON the pane.
+	 *
+	 * Owner, 11 Sep 2026: "need show error message that this phone num had in
+	 * use in exist account." A toast was already firing, but a toast is gone in
+	 * three seconds and this one is not a passing remark — it is the reason the
+	 * whole action failed, and the person has to change what they typed before
+	 * anything else can happen. So it stays next to the field until they do.
+	 */
+	const [phoneError, setPhoneError] = useState<string | null>(null);
+	/**
+	 * Seconds until Resend is offered again — the server's own `resendAfterSec`.
+	 *
+	 * ⚠️ Five sends per hour per NUMBER, and the refused ones count. Without a
+	 * cooldown a person could spend that budget in seconds on a button that
+	 * looked free, and then be locked out of their own number for the hour.
+	 */
+	const [resendIn, setResendIn] = useState(0);
+	/**
 	 * A demo session has no account behind it, so the OTP endpoints would refuse
 	 * it. The prototype keeps its local-only behaviour; only a REAL session
 	 * talks to WhatsApp.
@@ -157,6 +176,12 @@ export function SecuritySettingsSheets({
 	const [otp, setOtp] = useState("");
 	const [otpOpen, setOtpOpen] = useState(false);
 	const [otpPending, setOtpPending] = useState<OtpPending>(null);
+
+	useEffect(() => {
+		if (resendIn <= 0) return;
+		const id = setTimeout(() => setResendIn((n) => n - 1), 1000);
+		return () => clearTimeout(id);
+	}, [resendIn]);
 
 	useEffect(() => {
 		if (open) {
@@ -293,6 +318,16 @@ export function SecuritySettingsSheets({
 
 	const requestEmailOtp = () => {
 		if (!canEdit) return;
+		/*
+		 * Refused up front on a real session rather than after a code that was
+		 * never sent. `requestEmailOtp` makes no API call — it only toasts "OTP
+		 * sent to <address>" — so an operator used to wait for a message nobody
+		 * dispatched and then collect a phone-number error.
+		 */
+		if (!isDemoSession) {
+			toast(t.profile.emailChangeUnavailable, "warn");
+			return;
+		}
 		const next = newEmail.trim();
 		if (!next || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) {
 			toast(t.profile.enterValidEmail, "warn");
@@ -317,11 +352,28 @@ export function SecuritySettingsSheets({
 	 */
 	const requestPhoneOtp = async () => {
 		const next = newPhone.trim();
-		if (!next) {
-			toast(t.profile.enterMobileNumber, "warn");
+		setPhoneError(null);
+		/*
+		 * Checked BEFORE the request. Without this, "123" becomes `60123`, the
+		 * send succeeds as far as the browser can tell, and the person waits for
+		 * a code addressed to nothing — the same silent failure the leading zero
+		 * used to cause. The server still has the last word on whether the number
+		 * exists; this only catches what is obviously not a number.
+		 */
+		const problem = phoneNumberProblem(next, {
+			empty: t.profile.enterMobileNumber,
+			tooShort: t.profile.mobileTooShort,
+			tooLong: t.profile.mobileTooLong,
+		});
+		if (problem) {
+			setPhoneError(problem);
+			toast(problem, "warn");
 			return;
 		}
-		if (next === mobile.trim()) {
+		if (toWhatsAppNumber(next) === toWhatsAppNumber(mobile)) {
+			// Compared NORMALISED, so "0123456789" and "+60 12-345 6789" are
+			// recognised as the number they already have rather than sent again.
+			setPhoneError(t.profile.mobileMustDiffer);
 			toast(t.profile.mobileMustDiffer, "warn");
 			return;
 		}
@@ -334,26 +386,30 @@ export function SecuritySettingsSheets({
 		if (isDemoSession) {
 			setOtpPending({ field: "phone", value: next });
 			setOtp("");
-			toast(fill(t.profile.otpSentTo, { target: next }), "info");
+			// Not `otpSentTo` — nothing is sent on a demo session, and saying so
+			// left somebody waiting on a handset for a message with no sender.
+			toast(t.profile.otpDemoNoMessage, "info");
 			setOtpOpen(true);
 			return;
 		}
 		setOtpBusy(true);
 		try {
-			await sendPhoneChangeOtp(next);
+			const sent = await sendPhoneChangeOtp(next);
+			setResendIn(sent.resendAfterSec ?? 60);
 			setOtpPending({ field: "phone", value: next });
 			setOtp("");
 			toast(fill(t.profile.otpSentTo, { target: next }), "info");
 			setOtpOpen(true);
 		} catch (error) {
-			// Server sentences here are already user-facing, and include the rate
-			// limiter's "too many requests" — which a generic failure would hide.
-			toast(
+			// Server sentences here are already user-facing, and include BOTH
+			// "That phone number is already in use" and the rate limiter's "too
+			// many requests" — which a generic failure would hide.
+			const message =
 				error instanceof Error && error.message
 					? error.message
-					: t.profile.otpSendFailed,
-				"warn",
-			);
+					: t.profile.otpSendFailed;
+			setPhoneError(message);
+			toast(message, "warn");
 		} finally {
 			setOtpBusy(false);
 		}
@@ -364,7 +420,10 @@ export function SecuritySettingsSheets({
 
 		if (isDemoSession) {
 			if (!verifyDemoOtp(otp)) {
-				toast(t.profile.invalidOtp, "warn");
+				// The DEMO wording. `invalidOtp` now says "check WhatsApp", which is
+				// true on a real session and a lie here — a demo sends no message,
+				// and 123456 is the code.
+				toast(t.profile.invalidOtpDemo, "warn");
 				return;
 			}
 			if (otpPending.field === "email") {
@@ -378,6 +437,25 @@ export function SecuritySettingsSheets({
 			setOtp("");
 			setOtpOpen(false);
 			backToMenu();
+			return;
+		}
+
+		/*
+		 * ⚠️ PHONE ONLY on a real session.
+		 *
+		 * The demo branch above switches on `otpPending.field`; this one used not
+		 * to, so a Change-EMAIL verify ran `verifyPhoneChangeOtp(<an email
+		 * address>)` — `toWhatsAppNumber` strips every non-digit, leaving "", and
+		 * the server answered "Phone number is required" on an email screen. The
+		 * email lane cannot succeed on a real session by any route: there is no
+		 * email-OTP endpoint, and changing an email with no proof is an account
+		 * takeover (deferred by the owner, 11 Sep 2026).
+		 */
+		if (otpPending.field === "email") {
+			toast(t.profile.emailChangeUnavailable, "warn");
+			setOtpPending(null);
+			setOtp("");
+			setOtpOpen(false);
 			return;
 		}
 
@@ -422,7 +500,8 @@ export function SecuritySettingsSheets({
 		}
 		setOtpBusy(true);
 		try {
-			await sendPhoneChangeOtp(otpPending.value);
+			const sent = await sendPhoneChangeOtp(otpPending.value);
+			setResendIn(sent.resendAfterSec ?? 60);
 			toast(fill(t.profile.otpResentTo, { target: otpPending.value }), "info");
 		} catch (error) {
 			toast(
@@ -648,16 +727,20 @@ export function SecuritySettingsSheets({
 							id={newPhoneId}
 							type="tel"
 							className="iz-account-security__input mt-1"
-							placeholder="+60 12-345 6789"
+							placeholder="0123456789"
 							value={newPhone}
-							onChange={(e) => setNewPhone(e.target.value)}
+							onChange={(e) => {
+								setNewPhone(e.target.value);
+								// The refusal was about the number they just replaced.
+								setPhoneError(null);
+							}}
 							autoComplete="tel"
 						/>
 						{/*
 						 * THE NUMBER THAT WILL ACTUALLY BE MESSAGED, shown before the
 						 * code is sent rather than after it fails to arrive.
 						 *
-						 * Typing `0188716214` is how the number is written in Malaysia
+						 * Typing `0123456789` is how the number is written in Malaysia
 						 * and is NOT deliverable — WhatsApp needs the country code. The
 						 * field accepts either and `toWhatsAppNumber` resolves it; this
 						 * line is what makes that visible instead of magic, so a wrong
@@ -668,6 +751,22 @@ export function SecuritySettingsSheets({
 								{fill(t.profile.otpWillSendTo, {
 									target: `+${toWhatsAppNumber(newPhone)}`,
 								})}
+							</p>
+						) : (
+							// Only while the box is empty — once they type, the line above
+							// answers the same question with their actual number.
+							<p className="iz-tiny iz-muted mt-1.5">
+								{t.profile.phoneFormatHint}
+							</p>
+						)}
+						{/*
+						 * STAYS until the number is edited. "That phone number is already
+						 * in use" is the reason the action failed, not a passing remark,
+						 * and a toast is gone in three seconds.
+						 */}
+						{phoneError ? (
+							<p className="iz-tiny mt-1.5 text-[var(--iz-red)]">
+								{phoneError}
 							</p>
 						) : null}
 						<button
@@ -707,6 +806,8 @@ export function SecuritySettingsSheets({
 				onOtpChange={setOtp}
 				onVerify={verifyContactOtp}
 				onResend={resendOtp}
+				resendIn={resendIn}
+				busy={otpBusy}
 				verifyLabel={t.profile.verifyAndSave}
 			/>
 		</>
