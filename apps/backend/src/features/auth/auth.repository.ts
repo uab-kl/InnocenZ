@@ -99,86 +99,35 @@ export class AuthRepositoryClass {
   }
 
   /**
-   * Backfill: an active membership with NO role row for that portal gets the
-   * VIEW-ONLY lane (Director), so the account can sign in and see its
-   * organisation.
+   * `ensurePortalRolesFromMembership` WAS HERE, AND IS DELETED (owner, 10 Sep 2026:
+   * *"the other organisations team members is not allowed to be created
+   * automatically ... unless the organisation send Invite link"*).
    *
-   * It used to grant OWNER. Nothing needs that — a public sign-up is given its
-   * role explicitly by signup-roles.ts — and it meant REVOKING a role silently
-   * promoted the account: strip a Director, and their very next /auth/me handed
-   * them the owner console. A heal must never be an escalation.
-   * Lane is never read from agency_user / outlet_user (column dropped).
+   * It granted a Director role on EVERY `/auth/me` to anyone holding an active
+   * membership with no role for that portal — no invite, no owner decision,
+   * `created_by: 'system'`.
+   *
+   * ⚠️ ITS OWN DOC CLAIMED "a heal must never be an escalation", and since 0160
+   * that claim was false. `holdsAgencyLane` (middlewares/require-sub-role.ts)
+   * uses the role only as a DOOR check — does this account may open the agency
+   * portal — and then reads the AUTHORITY straight off `agency_user.sub_role`.
+   * Because removal deliberately leaves `sub_role` intact so the row can still
+   * say what somebody WAS, healing a removed OWNER handed back OWNER
+   * authority. The grant was written when the lane lived on `user_role`, and
+   * 0160 moved the lane without anyone revisiting this.
+   *
+   * ⚠️ IT WAS NOT DEAD CODE — it was load-bearing for exactly ONE case, and
+   * that case is now fixed at the source rather than healed after the fact:
+   * reinstating a member with the lane they already held
+   * (`{status:'active', subRole:'finance'}` where the column already says
+   * `finance`) used to skip the grant block in `updateMember` and leave the
+   * account active with no role. That gate now tests only that a title was
+   * NAMED. Fix the reinstatement, and there is nothing left to heal.
+   *
+   * A role is now created in exactly three places: organisation sign-up (the
+   * owner, and only the owner), invite acceptance, and an admin acting
+   * deliberately through `/rbac/user-role`.
    */
-  async ensurePortalRolesFromMembership(userId: string): Promise<void> {
-    try {
-      const [agencyMem] = await db
-        .select({ id: AgencyUserTable.id })
-        .from(AgencyUserTable)
-        .where(
-          and(eq(AgencyUserTable.userId, userId), eq(AgencyUserTable.status, 'active')),
-        )
-        .limit(1);
-      const [outletMem] = await db
-        .select({ id: OutletUserTable.id })
-        .from(OutletUserTable)
-        .where(
-          and(eq(OutletUserTable.userId, userId), eq(OutletUserTable.status, 'active')),
-        )
-        .limit(1);
-
-      if (!agencyMem && !outletMem) return;
-
-      const existing = await this.getRolesForUserIds([userId]);
-      const havePortal = new Set(
-        existing.map((r) => r.portalCode).filter((c): c is string => Boolean(c)),
-      );
-
-      const grants: Array<{ roleName: string; portal: 'agency' | 'outlet' }> = [];
-      if (agencyMem && !havePortal.has('agency')) {
-        grants.push({
-          roleName: portalRoleName.DIRECTOR,
-          portal: 'agency',
-        });
-      }
-      if (outletMem && !havePortal.has('outlet')) {
-        grants.push({
-          roleName: portalRoleName.DIRECTOR,
-          portal: 'outlet',
-        });
-      }
-
-      for (const g of grants) {
-        const [portal] = await db
-          .select({ id: PortalTable.id })
-          .from(PortalTable)
-          .where(eq(PortalTable.code, g.portal))
-          .limit(1);
-        if (!portal) continue;
-        const [role] = await db
-          .select({ id: RoleTable.id })
-          .from(RoleTable)
-          .where(
-            and(
-              sql`lower(${RoleTable.roleName}) = ${g.roleName.toLowerCase()}`,
-              eq(RoleTable.portalId, portal.id),
-            ),
-          )
-          .limit(1);
-        if (!role) continue;
-        await this.userRoleRepository.assignRoleToUser({
-          userId,
-          roleId: role.id,
-          createdBy: SYSTEM_ACTOR,
-          updatedBy: SYSTEM_ACTOR,
-        });
-        logger.info(
-          `[AuthRepository.ensurePortalRolesFromMembership] Granted ${g.roleName}@${g.portal} to ${userId}`,
-        );
-      }
-    } catch (error) {
-      logger.error('[AuthRepository.ensurePortalRolesFromMembership] Error:', error);
-    }
-  }
 
   async createUserWithRole(
     userData: Omit<UserInsertType, 'id' | 'createdAt' | 'updatedAt'>,
@@ -266,12 +215,28 @@ export class AuthRepositoryClass {
           moduleId: PermissionTable.moduleId,
           moduleName: ModuleTable.moduleName,
           moduleKey: ModuleTable.moduleKey,
+          /*
+           * The console this grant belongs to. This query is the UNION of every
+           * role the account holds and is deliberately NOT filtered by portal —
+           * one call has to answer for all of them. But `settings`, `dashboard`
+           * and `history` exist as a separate module row on EACH portal, so the
+           * key alone cannot say which console a grant came from, and the web
+           * `canModule()` matches on key + verb. Carrying the portal is what
+           * makes the union safe to hand out; filtering rows away here instead
+           * would break the callers that legitimately read across portals.
+           *
+           * LEFT join: `m_module.portal_id` is nullable, and a module with no
+           * portal must keep behaving exactly as it does today rather than
+           * dropping out of the answer.
+           */
+          portalCode: PortalTable.code,
         })
         .from(UserRoleTable)
         .innerJoin(RoleTable, eq(UserRoleTable.roleId, RoleTable.id))
         .innerJoin(RolePermissionTable, eq(UserRoleTable.roleId, RolePermissionTable.roleId))
         .innerJoin(PermissionTable, eq(RolePermissionTable.permissionId, PermissionTable.id))
         .innerJoin(ModuleTable, eq(PermissionTable.moduleId, ModuleTable.id))
+        .leftJoin(PortalTable, eq(ModuleTable.portalId, PortalTable.id))
         .where(
           and(
             eq(UserRoleTable.userId, userId),
@@ -364,8 +329,27 @@ export class AuthRepositoryClass {
    * to say so. The module already knew; nothing was reading it.
    */
   async modulePortalCode(moduleKey: string): Promise<string | null> {
+    const codes = await this.modulePortalCodes(moduleKey);
+    return codes[0] ?? null;
+  }
+
+  /**
+   * EVERY portal a module key belongs to — because several belong to more than
+   * one, and `limit(1)` was picking between them by accident.
+   *
+   * ⚠️ `settings`, `dashboard` and `history` each exist as a SEPARATE module row
+   * per portal. `modulePortalCode` asked for one row with no ORDER BY, so which
+   * portal `requirePermission('settings','update')` resolved was whatever the
+   * planner returned first — and that decided WHICH ORGANISATION the guard then
+   * asked about. An outlet operator's request could be judged against their
+   * agency membership, or the reverse.
+   *
+   * Sorted, so a caller that must still choose one gets a stable answer rather
+   * than a different one per query plan.
+   */
+  async modulePortalCodes(moduleKey: string): Promise<string[]> {
     try {
-      const [row] = await db
+      const rows = await db
         .select({ code: PortalTable.code })
         .from(ModuleTable)
         .leftJoin(PortalTable, eq(PortalTable.id, ModuleTable.portalId))
@@ -374,12 +358,15 @@ export class AuthRepositoryClass {
             eq(ModuleTable.moduleKey, moduleKey),
             eq(ModuleTable.status, 'active'),
           ),
-        )
-        .limit(1);
-      return row?.code ?? null;
+        );
+      return [
+        ...new Set(
+          rows.map((r) => r.code).filter((c): c is string => Boolean(c)),
+        ),
+      ].sort();
     } catch (error) {
-      logger.error('[AuthRepository.modulePortalCode] Error:', error);
-      return null;
+      logger.error('[AuthRepository.modulePortalCodes] Error:', error);
+      return [];
     }
   }
 
@@ -398,6 +385,81 @@ export class AuthRepositoryClass {
    * speaks. Never softens to true on error — an unreadable grant table is not
    * permission.
    */
+  /**
+   * EVERY GRANT HELD BY A SET OF (role name, portal) PAIRS.
+   *
+   * ⚠️ The twin of `getUserPermissions`, and it exists because that one asks
+   * the WRONG QUESTION for `/auth/me`. It unions the account's `user_role`
+   * rows, which say what a person may do ANYWHERE; authority here belongs to
+   * the MEMBERSHIP lane, which says what they may do in one organisation. The
+   * two had drifted on real accounts: a venue's Finance head and its Ops Head
+   * both still carried an `Owner` role row from an earlier grant, so
+   * `/auth/me` handed them `settings:update` and the portals offered them the
+   * Edit button, the Pay button and the payment method — the exact three the
+   * owner's rule reserves for the owner.
+   *
+   * The server itself was never fooled: `requirePermission` maps the
+   * membership's `sub_role` through `portalRoleNameForSubRole` and asks
+   * `roleHasPermission`, so every write was refused. It was the SCREEN that
+   * lied, which is the thing the owner asked to stop.
+   *
+   * So `/auth/me` now asks this instead, with the lanes the caller actually
+   * holds. Same table, same rows, same answer as the guard.
+   */
+  async permissionsForRoleNames(
+    pairs: ReadonlyArray<{ roleName: string; portalCode: string }>,
+  ): Promise<RolePermissionGroupType[]> {
+    if (pairs.length === 0) return [];
+    try {
+      const results = await db
+        .select({
+          id: RolePermissionTable.id,
+          roleId: RolePermissionTable.roleId,
+          permissionId: RolePermissionTable.permissionId,
+          permissionType: PermissionTable.permissionType,
+          moduleId: PermissionTable.moduleId,
+          moduleName: ModuleTable.moduleName,
+          moduleKey: ModuleTable.moduleKey,
+          portalCode: PortalTable.code,
+          // Returned so the caller can match a grant back to the lane that
+          // asked for it, and tag it with that lane's organisation.
+          roleName: RoleTable.roleName,
+        })
+        .from(RoleTable)
+        .innerJoin(PortalTable, eq(RoleTable.portalId, PortalTable.id))
+        .innerJoin(RolePermissionTable, eq(RolePermissionTable.roleId, RoleTable.id))
+        .innerJoin(PermissionTable, eq(RolePermissionTable.permissionId, PermissionTable.id))
+        .innerJoin(ModuleTable, eq(PermissionTable.moduleId, ModuleTable.id))
+        .where(
+          and(
+            eq(RoleTable.status, 'active'),
+            eq(PermissionTable.status, 'active'),
+            eq(ModuleTable.status, 'active'),
+            /*
+             * The module must belong to the SAME portal as the role. Without
+             * it a `settings` grant from the agency role would be returned for
+             * an outlet lane, which is the cross-portal confusion the client
+             * `portalCode` filter exists to catch — better not to send it.
+             */
+            eq(ModuleTable.portalId, RoleTable.portalId),
+            or(
+              ...pairs.map((p) =>
+                and(
+                  eq(RoleTable.roleName, p.roleName),
+                  eq(PortalTable.code, p.portalCode),
+                ),
+              ),
+            ),
+          ),
+        );
+      return results;
+    } catch (error) {
+      // Never soften to a wider list: an unreadable grant table is not permission.
+      logger.error('[AuthRepository.permissionsForRoleNames] Error:', error);
+      return [];
+    }
+  }
+
   async roleHasPermission(
     roleName: string,
     portalCode: string,

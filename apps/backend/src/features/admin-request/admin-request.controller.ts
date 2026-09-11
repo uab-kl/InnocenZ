@@ -143,6 +143,39 @@ export class AdminRequestControllerClass {
       }
       const actor = getActor(req);
 
+      /**
+       * ⚠️ THE SUBSCRIBER IN THE BODY MUST BE ONE OF THE CALLER'S OWN.
+       *
+       * `requirePermission('settings','update')` proves this person owns SOME
+       * organisation. It says nothing about WHICH, and `subscriberId` arrived
+       * from the body unchecked — so any outlet owner could name a rival venue
+       * and switch its subscription plan, or read back its unpaid period count
+       * and total from the 409 below. Two holes, one missing question.
+       *
+       * Asked with `resolveOrgScope`, the same resolver the `/mine` reads on
+       * this controller already use, so the answer cannot disagree with them.
+       * An admin is exempt: they act on organisations rather than within one.
+       *
+       * A 404, never a 403 — confirming that a named id exists is the leak.
+       */
+      if (parsed.data.subscriberId && parsed.data.subscriberType) {
+        const scope = await resolveOrgScope(req, this.orgScopeDeps);
+        if (!scope.isAdmin) {
+          const mine =
+            parsed.data.subscriberType === 'agency'
+              ? scope.agencyId === parsed.data.subscriberId
+              : scope.outletIds.includes(parsed.data.subscriberId);
+          if (!mine) {
+            logger.warn(
+              `[AdminRequestController.create] ${actor} named ${parsed.data.subscriberType} ${parsed.data.subscriberId}, which is not theirs`,
+            );
+            return res
+              .status(404)
+              .json({ success: false, message: Error.NOT_FOUND, data: null });
+          }
+        }
+      }
+
       // Every request records the plan the subscriber was on when it was raised,
       // whatever its type: the admin drawer's "BEFORE · FROM PLAN" is otherwise
       // empty for POS quotes and contact requests, which tells the admin nothing

@@ -24,6 +24,27 @@ export interface OrgMember {
 	username?: string;
 	email?: string | null;
 	phoneNum?: string | null;
+	/**
+	 * Everything below was ALREADY on the wire — the repository selected it and
+	 * the endpoint returned it. Only this type stopped it reaching the screen,
+	 * which is why the review pane had a name and an email and nothing else to
+	 * decide on. `profileImage` is the one genuinely new column (0161-era).
+	 */
+	profileImage?: string | null;
+	/** This membership's own id — INNATAGY0001. Null until one is issued. */
+	memberCode?: string | null;
+	/** When they ASKED — an ISO string off the wire, never a Date. */
+	createdAt?: string | null;
+	/** When the decision was made — same shape, same rule. */
+	updatedAt?: string | null;
+	/**
+	 * WHO decided, by name — joined on the server from `updated_by`, never
+	 * stored on the row. Null when the actor was `'system'` or their account is
+	 * gone; the screen renders its own fallback rather than inventing a name.
+	 * The same rule, and the same join, the admin archive screen already uses.
+	 */
+	updatedByName?: string | null;
+	updatedBy?: string | null;
 }
 
 /** The one cache key holding an organisation's member list. */

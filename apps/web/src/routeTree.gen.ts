@@ -23,6 +23,7 @@ import { Route as PolicyRouteImport } from './routes/policy'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SignupMemberRouteImport } from './routes/signup-member'
 import { Route as AdminAuditLogRouteRouteImport } from './routes/admin/audit-log/route'
 import { Route as AdminBusinessRouteRouteImport } from './routes/admin/business/route'
 import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
@@ -44,6 +45,7 @@ import { Route as AgencySpecialServiceRouteImport } from './routes/agency/specia
 import { Route as AgencySubscriptionRouteImport } from './routes/agency/subscription'
 import { Route as InviteOrgMemberRouteImport } from './routes/invite/org-member'
 import { Route as OutletIndexRouteImport } from './routes/outlet/index'
+import { Route as OutletApprovalsRouteImport } from './routes/outlet/approvals'
 import { Route as OutletBillingRouteImport } from './routes/outlet/billing'
 import { Route as OutletBookingsRouteImport } from './routes/outlet/bookings'
 import { Route as OutletCalendarRouteImport } from './routes/outlet/calendar'
@@ -147,6 +149,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupMemberRoute = SignupMemberRouteImport.update({
+  id: '/signup-member',
+  path: '/signup-member',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminAuditLogRouteRoute = AdminAuditLogRouteRouteImport.update({
@@ -253,6 +260,11 @@ const InviteOrgMemberRoute = InviteOrgMemberRouteImport.update({
 const OutletIndexRoute = OutletIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletApprovalsRoute = OutletApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
   getParentRoute: () => OutletRouteRoute,
 } as any)
 const OutletBillingRoute = OutletBillingRouteImport.update({
@@ -451,6 +463,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/signup-member': typeof SignupMemberRoute
   '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
   '/admin/rbac': typeof AdminRbacRouteRouteWithChildren
@@ -470,6 +483,7 @@ export interface FileRoutesByFullPath {
   '/agency/special-service': typeof AgencySpecialServiceRoute
   '/agency/subscription': typeof AgencySubscriptionRoute
   '/invite/org-member': typeof InviteOrgMemberRoute
+  '/outlet/approvals': typeof OutletApprovalsRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/calendar': typeof OutletCalendarRoute
@@ -520,6 +534,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/signup-member': typeof SignupMemberRoute
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
   '/admin/rbac': typeof AdminRbacRouteRouteWithChildren
   '/admin/user-management': typeof AdminUserManagementRouteRouteWithChildren
@@ -538,6 +553,7 @@ export interface FileRoutesByTo {
   '/agency/special-service': typeof AgencySpecialServiceRoute
   '/agency/subscription': typeof AgencySubscriptionRoute
   '/invite/org-member': typeof InviteOrgMemberRoute
+  '/outlet/approvals': typeof OutletApprovalsRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/calendar': typeof OutletCalendarRoute
@@ -591,6 +607,7 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/signup-member': typeof SignupMemberRoute
   '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
   '/admin/rbac': typeof AdminRbacRouteRouteWithChildren
@@ -610,6 +627,7 @@ export interface FileRoutesById {
   '/agency/special-service': typeof AgencySpecialServiceRoute
   '/agency/subscription': typeof AgencySubscriptionRoute
   '/invite/org-member': typeof InviteOrgMemberRoute
+  '/outlet/approvals': typeof OutletApprovalsRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/calendar': typeof OutletCalendarRoute
@@ -664,6 +682,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/reset-password'
     | '/signup'
+    | '/signup-member'
     | '/admin/audit-log'
     | '/admin/business'
     | '/admin/rbac'
@@ -683,6 +702,7 @@ export interface FileRouteTypes {
     | '/agency/special-service'
     | '/agency/subscription'
     | '/invite/org-member'
+    | '/outlet/approvals'
     | '/outlet/billing'
     | '/outlet/bookings'
     | '/outlet/calendar'
@@ -733,6 +753,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/reset-password'
     | '/signup'
+    | '/signup-member'
     | '/admin/business'
     | '/admin/rbac'
     | '/admin/user-management'
@@ -751,6 +772,7 @@ export interface FileRouteTypes {
     | '/agency/special-service'
     | '/agency/subscription'
     | '/invite/org-member'
+    | '/outlet/approvals'
     | '/outlet/billing'
     | '/outlet/bookings'
     | '/outlet/calendar'
@@ -803,6 +825,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/reset-password'
     | '/signup'
+    | '/signup-member'
     | '/admin/audit-log'
     | '/admin/business'
     | '/admin/rbac'
@@ -822,6 +845,7 @@ export interface FileRouteTypes {
     | '/agency/special-service'
     | '/agency/subscription'
     | '/invite/org-member'
+    | '/outlet/approvals'
     | '/outlet/billing'
     | '/outlet/bookings'
     | '/outlet/calendar'
@@ -875,6 +899,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
+  SignupMemberRoute: typeof SignupMemberRoute
   InviteOrgMemberRoute: typeof InviteOrgMemberRoute
 }
 
@@ -976,6 +1001,13 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup-member': {
+      id: '/signup-member'
+      path: '/signup-member'
+      fullPath: '/signup-member'
+      preLoaderRoute: typeof SignupMemberRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/audit-log': {
@@ -1123,6 +1155,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/outlet/'
       preLoaderRoute: typeof OutletIndexRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/approvals': {
+      id: '/outlet/approvals'
+      path: '/approvals'
+      fullPath: '/outlet/approvals'
+      preLoaderRoute: typeof OutletApprovalsRouteImport
       parentRoute: typeof OutletRouteRoute
     }
     '/outlet/billing': {
@@ -1513,6 +1552,7 @@ const AgencyRouteRouteWithChildren = AgencyRouteRoute._addFileChildren(
 )
 
 interface OutletRouteRouteChildren {
+  OutletApprovalsRoute: typeof OutletApprovalsRoute
   OutletBillingRoute: typeof OutletBillingRoute
   OutletBookingsRoute: typeof OutletBookingsRoute
   OutletCalendarRoute: typeof OutletCalendarRoute
@@ -1528,6 +1568,7 @@ interface OutletRouteRouteChildren {
 }
 
 const OutletRouteRouteChildren: OutletRouteRouteChildren = {
+  OutletApprovalsRoute: OutletApprovalsRoute,
   OutletBillingRoute: OutletBillingRoute,
   OutletBookingsRoute: OutletBookingsRoute,
   OutletCalendarRoute: OutletCalendarRoute,
@@ -1561,6 +1602,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
+  SignupMemberRoute: SignupMemberRoute,
   InviteOrgMemberRoute: InviteOrgMemberRoute,
 }
 export const routeTree = rootRouteImport

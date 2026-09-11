@@ -294,21 +294,44 @@ export function OrgMembersPanel({
 		}
 	};
 
+	/*
+	 * ⚠️ DECLINED IS DROPPED; DEACTIVATED IS KEPT AND MARKED.
+	 *
+	 * Owner, 11 Sep 2026: "make sure only the member been accepted is the member
+	 * else cannot be the orgs member — why still got show as in the orgs while
+	 * had been declined". This list rendered every row the endpoint returned, so
+	 * somebody who had asked to join and been turned down appeared inside
+	 * "TEAM · 6 MEMBER(S)" wearing an Inactive pill beside real colleagues, and
+	 * was counted in the six.
+	 *
+	 * ⚠️ The line between the two is the owner's, and was drawn twice. Asked
+	 * whether the Inactive row belonged here at all, they first said the roster
+	 * should be current members only — then corrected it the same day:
+	 * "correction this can show inactive". So a REMOVED member stays, marked:
+	 * they worked here, and their row is the shortest record of that. A
+	 * DECLINED applicant never did, so `rejected` is dropped entirely.
+	 *
+	 * WHO removed them, and when, is the Approvals screen's Deactivated list —
+	 * this pill deliberately says only the state, because a roster row is not
+	 * the place to carry an audit trail.
+	 */
+	const roster = members.filter((m) => m.status !== "rejected");
+
 	return (
 		<>
 			<IzSectionLabel>
-				{fill(t.profile.teamCount, { n: members.length })}
+				{fill(t.profile.teamCount, { n: roster.length })}
 			</IzSectionLabel>
 			<IzCard>
 				{isLoading && (
 					<p className="iz-tiny iz-muted2">{t.profile.loadingTeam}</p>
 				)}
 
-				{!isLoading && members.length === 0 && (
+				{!isLoading && roster.length === 0 && (
 					<p className="iz-tiny iz-muted2">{t.profile.noTeamMembers}</p>
 				)}
 
-				{members.map((member) => {
+				{roster.map((member) => {
 					const isSelf = Boolean(me?.id && member.userId === me.id);
 					return (
 						<div
@@ -427,6 +450,19 @@ export function OrgMembersPanel({
 				<>
 					<IzSectionLabel>{t.profile.inviteTeamMember}</IzSectionLabel>
 					<IzCard>
+						{/*
+						 * ⚠️ SAID BEFORE THE ATTEMPT, NOT AFTER IT.
+						 *
+						 * The server refuses an address with no account, an inactive one
+						 * or an admin's (`refuseUninvitableAccount`), and that rule is not
+						 * guessable from an empty email box — so the first anybody learned
+						 * of it was an error after typing a colleague's address. It also
+						 * names the way OUT of the refusal, which the error alone cannot:
+						 * the person signs up as a team member first.
+						 */}
+						<p className="iz-tiny iz-muted mb-3">
+							{t.portalUi.inviteNeedsAccount}
+						</p>
 						<div className="flex flex-wrap items-center gap-2">
 							<span className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-[var(--iz-line)] px-2.5">
 								<Mail className="h-3.5 w-3.5 shrink-0 iz-muted" />

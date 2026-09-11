@@ -26,7 +26,19 @@ interface MeResponse {
 		name: string;
 		subRole: string;
 		memberCode?: string | null;
+		membershipStatus?: string;
+		orgStatus?: string;
+		enterable?: boolean;
+		logoImage?: string | null;
 	}[];
+	/**
+	 * Requests this account made that were TURNED DOWN.
+	 *
+	 * ⚠️ Deliberately not inside `organisations` — that list means "where you
+	 * belong", and a declined request is the opposite. Kept apart so no screen
+	 * can render one as a membership by forgetting a flag.
+	 */
+	declinedRequests?: { kind: "agency" | "outlet"; name: string }[];
 	/** UI language saved on the account (migration 0122): "en" | "zh" | null. */
 	preferredLocale?: string | null;
 	roles: {
@@ -41,6 +53,18 @@ interface MeResponse {
 		moduleKey?: string;
 		permissionId: string;
 		permissionType: "read" | "create" | "update";
+		/**
+		 * The console this grant belongs to. Optional: an older server, or a
+		 * module row with no portal, sends nothing and the grant then applies
+		 * wherever its key matches — exactly as before this field existed.
+		 */
+		portalCode?: string | null;
+		/**
+		 * WHICH organisation this grant is for. A person can hold DIFFERENT lanes
+		 * in two organisations, so a flat union would hand the second one the
+		 * first's powers. `null` = admin, or a server too old to say.
+		 */
+		orgId?: string | null;
 	}[];
 }
 
@@ -68,6 +92,8 @@ export async function fetchProfile(): Promise<User> {
 			moduleKey: p.moduleKey ?? p.moduleName.toLowerCase().replace(/\s+/g, "_"),
 			moduleName: p.moduleName,
 			permissionType: p.permissionType,
+			portalCode: p.portalCode ?? null,
+			orgId: p.orgId ?? null,
 		}));
 
 	return {
@@ -83,12 +109,30 @@ export async function fetchProfile(): Promise<User> {
 		portals: profile.portals ?? [],
 		// Absent on an older backend — read as "no organisation known", which
 		// makes the chooser skip rather than block a login it cannot describe.
+		declinedRequests: profile.declinedRequests ?? [],
 		organisations: (profile.organisations ?? []).map((o) => ({
 			kind: o.kind,
 			id: o.id,
 			name: o.name,
 			subRole: o.subRole,
 			memberCode: o.memberCode ?? null,
+			/*
+			 * ⚠️ THIS MAPPER IS WHERE THE SLICE LIVES OR DIES. It rebuilds each
+			 * organisation field by field, so anything the backend adds and this
+			 * does not copy is dropped before any screen sees it — the failure
+			 * would be a picker whose status is `undefined` on every card, with
+			 * no error anywhere to say why.
+			 *
+			 * The fallbacks describe an OLDER BACKEND, which returned only active
+			 * memberships and no statuses. Reading absence as "active and
+			 * enterable" therefore reproduces exactly the old behaviour rather
+			 * than greying out every organisation against a server that cannot
+			 * answer yet.
+			 */
+			membershipStatus: o.membershipStatus ?? "active",
+			logoImage: o.logoImage ?? null,
+			orgStatus: o.orgStatus ?? "active",
+			enterable: o.enterable ?? true,
 		})),
 		readPermission: profile.permissions
 			.filter((p) => p.permissionType === "read")

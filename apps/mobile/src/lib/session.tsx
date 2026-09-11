@@ -86,6 +86,18 @@ type SessionState = {
     password: string,
   ) => Promise<{ user: Me; accessToken: string }>;
   signOut: () => void;
+  /**
+   * Replace the stored access token with one the SERVER just re-issued.
+   *
+   * ⚠️ Needed because a JWT here carries only `{loginMethod, loginCriteria}` —
+   * no user id — so every request resolves the account by looking that
+   * criteria up. Change the phone number and a phone-keyed token points at a
+   * number nobody holds: the next call answers 401 `Unauthorized`, which is
+   * exactly what the Security screen was showing after a change that had in
+   * fact SUCCEEDED. `/auth/phone/change` now returns a fresh pair; this is how
+   * it gets kept.
+   */
+  adoptToken: (accessToken: string) => void;
   updateProfile: (patch: ProfileUpdate) => Promise<Me>;
   uploadAvatar: (file: Blob, filename?: string) => Promise<void>;
   uploadPortfolioPhoto: (slot: number, file: Blob, filename?: string) => Promise<Me>;
@@ -153,6 +165,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         setToken(null);
       })
       .finally(() => setBooting(false));
+  }, []);
+
+  const adoptToken = useCallback((accessToken: string) => {
+    writeStoredToken(accessToken);
+    setToken(accessToken);
   }, []);
 
   const signIn = useCallback(async (identifier: string, password: string) => {
@@ -267,6 +284,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       booting,
       signIn,
       signOut,
+      adoptToken,
       updateProfile,
       uploadAvatar,
       uploadPortfolioPhoto,
@@ -282,6 +300,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       booting,
       signIn,
       signOut,
+      adoptToken,
       updateProfile,
       uploadAvatar,
       uploadPortfolioPhoto,

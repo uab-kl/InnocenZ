@@ -27,6 +27,34 @@ export async function fetchUserById(
 }
 
 /**
+ * CHANGE YOUR OWN DISPLAYED NAME — `PATCH /user/:id`.
+ *
+ * Owner, 11 Sep 2026: "team member can change their name". The Security
+ * settings sheet could change a password, a phone and an email, but not the
+ * one thing every screen in both portals actually shows.
+ *
+ * ⚠️ BOTH FIELDS, ON PURPOSE — `username` is what the portals render (the
+ * greeting, the Team list, the Approvals card) and `user_profile.full_name` is
+ * what documents and payment vouchers read. Sending only one leaves a person
+ * called two different things depending on which screen you are looking at,
+ * which is how a voucher ends up not matching the roster.
+ *
+ * ⚠️ The server refuses any id but your own with a 403 — identity comes from
+ * the session there, so this is not a place a caller can rename somebody else.
+ */
+export async function updateMyName(
+	userId: string,
+	name: string,
+	onRefreshFail: () => void,
+): Promise<void> {
+	const client = getClient(onRefreshFail);
+	await client.patch(`/user/${userId}`, {
+		username: name.trim(),
+		fullName: name.trim(),
+	});
+}
+
+/**
  * The portal roles granted to one person — `GET /rbac/user-role?userId=`.
  *
  * This is the RAW grant, and it is the honest answer to "what is this person
@@ -79,6 +107,18 @@ export interface DisabledAccount {
 	status: string;
 	createdAt: string;
 	updatedAt: string;
+	/** The admin who switched this account off — raw user id. */
+	updatedBy?: string;
+	/**
+	 * WHO last switched this record off, by NAME — resolved server-side from
+	 * `updatedBy` through a join on `user`, never stored as a column. Null when
+	 * the actor was `'system'` or their account no longer exists.
+	 *
+	 * Optional because it is added by the server projection rather than by any
+	 * caller here: an older cached response simply lacks it, and the archive
+	 * screen renders its own fallback. `updatedBy` beside it keeps the raw id.
+	 */
+	updatedByName?: string | null;
 }
 
 interface DisabledAccountsApiResponse {

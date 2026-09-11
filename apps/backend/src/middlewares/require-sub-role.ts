@@ -13,6 +13,7 @@ import {
   type OrgScopeDeps,
   pickAgencyId,
   resolveActingOrgId,
+  resolveOrgScope,
 } from '@/util/org-scope.js';
 
 /** The three repositories the shared org resolver needs. */
@@ -499,6 +500,97 @@ export function requireOrgMembershipByParam(
       });
     }
   };
+}
+
+/**
+ * THE PERSON WHO PAYS — owner or guarantor, on WHICHEVER portal they are acting
+ * for, scoped to the organisation being paid for.
+ *
+ * Owner, 11 Sep 2026: "the subcription is follow from the organisation owner,
+ * only the owner can make payment fpx and the set and update the payment
+ * method … other member cannot make the change for the organisation except for
+ * the owner and the guarantor."
+ *
+ * ⚠️ `POST /subscription-payment/checkout` carried `requireRole('agency',
+ * 'outlet')` — every lane on both portals. An outlet Finance head, Ops Head or
+ * Director could tick overdue periods and start a REAL FPX checkout, from the
+ * browser or from curl. The controller checks that the invoices belong to the
+ * caller's organisation, which is a different question from whether that person
+ * may spend its money.
+ *
+ * Why not `requirePermission('settings', 'update')`, which is what the portals
+ * already use for "owner or guarantor": that helper resolves ONE portal from
+ * the module key, and `settings` exists as a separate module row on BOTH — so
+ * it would answer for whichever row it happened to find. This route serves both
+ * portals, so it has to ask per portal.
+ *
+ * The lane list is `['owner']` because `holdsAgencyLane` / `holdsOutletLane`
+ * already fold guarantor into owner — the stand-in passes wherever the owner
+ * passes, which is exactly the owner's rule.
+ *
+ * Admin is deliberately NOT admitted, matching the route's own note: an admin
+ * marks money as received, it does not pay on a venue's behalf.
+ */
+export const orgOwnerPaysOnly = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const user = req.user;
+  if (!user) {
+    return res
+      .status(401)
+      .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+  }
+
+  /*
+   * ⚠️ THE SAME RESOLUTION THE CONTROLLER USES — `resolveOrgScope`, not a
+   * second opinion.
+   *
+   * This guard first looped agency-then-outlet and passed the moment EITHER
+   * said owner, without recording which. The controller then re-resolved the
+   * org its own way, so the org that AUTHORISED was not the org that PAID:
+   * somebody who is Finance at agency A and owns their own venue V passed on
+   * V's ownership, while `resolveOrgScope` hands the controller A — and A's
+   * invoices then satisfied its ownership check. An agency Finance head could
+   * spend the agency's money, which is exactly what this exists to stop.
+   *
+   * Asking the same question the controller asks is the only version that
+   * cannot disagree with it.
+   */
+  const scope = await resolveOrgScope(req, orgScopeDeps);
+
+  if (scope.agencyId) {
+    if (await holdsAgencyLane(user.id, scope.agencyId, ['owner'])) return next();
+    return refuse(res);
+  }
+
+  /*
+   * Every venue in scope, not merely one: the controller accepts invoices for
+   * any of them, so ownership of one must not authorise the rest.
+   */
+  if (scope.outletIds.length > 0) {
+    for (const outletId of scope.outletIds) {
+      if (!(await holdsOutletLane(user.id, outletId, ['owner']))) {
+        return refuse(res);
+      }
+    }
+    return next();
+  }
+
+  return res.status(400).json({
+    success: false,
+    message: 'Which organisation? Send x-org-id, or name it in the request.',
+    data: null,
+  });
+};
+
+function refuse(res: Response) {
+  return res.status(403).json({
+    success: false,
+    message: 'Only the organisation owner can pay a subscription invoice.',
+    data: null,
+  });
 }
 
 export const agencyOwnerOnly = requireAgencySubRole('owner');

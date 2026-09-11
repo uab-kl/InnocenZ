@@ -29,6 +29,53 @@ export interface SignupTranslations {
 		terms: string;
 	};
 	progress: { label: string };
+	/**
+	 * The TEAM-MEMBER sign-up — a separate door from the two tiles above.
+	 *
+	 * Those register an ORGANISATION; this registers a PERSON who wants to work
+	 * in one. Kept in this dictionary rather than `portal-i18n` because it is a
+	 * signed-out page and shares this page's locale pick.
+	 */
+	memberSignup: {
+		linkPrompt: string;
+		linkBody: string;
+		linkOwnerHint: string;
+		linkAction: string;
+		title: string;
+		subtitle: string;
+		name: string;
+		email: string;
+		phone: string;
+		optional: string;
+		password: string;
+		confirmPassword: string;
+		orgSection: string;
+		orgHint: string;
+		skipOrg: string;
+		kindOutlet: string;
+		kindAgency: string;
+		chooseOrg: string;
+		searchOrg: string;
+		noOrgMatches: string;
+		clearChoice: string;
+		chooseRole: string;
+		loadingOrgs: string;
+		submit: string;
+		submitting: string;
+		doneTitle: string;
+		donePending: string;
+		doneNoOrg: string;
+		goToLogin: string;
+		roleFinance: string;
+		roleDirector: string;
+		roleOpsHead: string;
+		photo: string;
+		photoHint: string;
+		choosePhoto: string;
+		showPassword: string;
+		hidePassword: string;
+		yourDetails: string;
+	};
 	accountTypes: {
 		outlet: { title: string; description: string };
 		agency: { title: string; description: string };
@@ -216,6 +263,65 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			terms: "Terms and Conditions",
 		},
 		progress: { label: "Your progress" },
+		memberSignup: {
+			/**
+			 * ⚠️ This callout has to answer WHO, not just offer a link.
+			 *
+			 * The two tiles above and this link look like three ways to sign up,
+			 * and they are not: the tiles REGISTER A COMPANY — they ask for an SSM
+			 * number and a subscription — while this one adds a PERSON to a company
+			 * that already exists. Somebody who is simply joining their employer's
+			 * team will pick Outlet, get asked for a business licence, and either
+			 * abandon the form or invent one. So the copy names both readers.
+			 */
+			linkPrompt: "Joining a team that already exists?",
+			linkBody:
+				"For Finance, Directors and Ops Heads. Your organisation approves you and sets your role.",
+			linkOwnerHint:
+				"The two options above register a NEW organisation — owners only.",
+			linkAction: "Sign up as a team member",
+			title: "Join a team",
+			subtitle:
+				"For people joining an outlet or agency that is already on InnocenZ. To register a new organisation, go back and pick Outlet or PR Agency.",
+			name: "Full name",
+			email: "Email",
+			phone: "Mobile",
+			optional: "optional",
+			password: "Password",
+			confirmPassword: "Confirm password",
+			orgSection: "Which organisation?",
+			orgHint:
+				"Pick the outlet or agency you want to join and the role you are asking for. They approve it — the role is theirs to set, and yours is a request.",
+			skipOrg: "I will be invited later",
+			kindOutlet: "Outlet",
+			kindAgency: "PR Agency",
+			chooseOrg: "Choose an organisation",
+			searchOrg: "Type to search by name",
+			noOrgMatches: "No organisation matches that name",
+			clearChoice: "Clear",
+			chooseRole: "Role you are asking for",
+			loadingOrgs: "Loading organisations…",
+			submit: "Create account",
+			submitting: "Creating your account…",
+			doneTitle: "Account created",
+			donePending:
+				"{org} has your request. You can sign in now, and the team opens once they approve you.",
+			doneNoOrg:
+				"You can sign in now. An outlet or agency can invite you to their team by email.",
+			goToLogin: "Go to sign in",
+			roleFinance: "Finance",
+			roleDirector: "Director",
+			roleOpsHead: "Ops Head",
+			photo: "Profile photo",
+			/** Says WHY it is asked for — an owner approving a stranger is the one
+			    reader who needs to recognise this person. */
+			photoHint:
+				"Optional. It helps the organisation recognise you when they review your request.",
+			choosePhoto: "Choose a photo",
+			showPassword: "Show password",
+			hidePassword: "Hide password",
+			yourDetails: "Your details",
+		},
 		accountTypes: {
 			outlet: {
 				title: "Outlet",
@@ -475,6 +581,49 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			terms: "条款与条件",
 		},
 		progress: { label: "填写进度" },
+		memberSignup: {
+			linkPrompt: "要加入已有的团队？",
+			linkBody: "适用于财务、董事与运营主管。由所属机构审批并指定职位。",
+			linkOwnerHint: "上方两个选项用于注册全新机构，仅限所有者。",
+			linkAction: "注册为团队成员",
+			title: "加入团队",
+			subtitle:
+				"适用于加入已在 InnocenZ 上的门店或经纪公司。若要注册新机构，请返回并选择“门店”或“PR 经纪公司”。",
+			name: "姓名",
+			email: "邮箱",
+			phone: "手机号",
+			optional: "选填",
+			password: "密码",
+			confirmPassword: "确认密码",
+			orgSection: "加入哪个机构？",
+			orgHint:
+				"选择您想加入的门店或经纪公司，以及您申请的职位。由对方审批 —— 职位由机构决定，您提交的是申请。",
+			skipOrg: "稍后由机构邀请我",
+			kindOutlet: "门店",
+			kindAgency: "PR 经纪公司",
+			chooseOrg: "选择机构",
+			searchOrg: "输入名称搜索",
+			noOrgMatches: "没有匹配的机构",
+			clearChoice: "清除",
+			chooseRole: "申请的职位",
+			loadingOrgs: "正在加载机构…",
+			submit: "创建账号",
+			submitting: "正在创建账号…",
+			doneTitle: "账号已创建",
+			donePending:
+				"{org} 已收到您的申请。您现在可以登录，待对方审批后即可进入团队。",
+			doneNoOrg: "您现在可以登录。门店或经纪公司可通过邮件邀请您加入团队。",
+			goToLogin: "前往登录",
+			roleFinance: "财务",
+			roleDirector: "董事",
+			roleOpsHead: "运营主管",
+			photo: "头像",
+			photoHint: "选填。方便机构审批时认出您。",
+			choosePhoto: "选择照片",
+			showPassword: "显示密码",
+			hidePassword: "隐藏密码",
+			yourDetails: "您的资料",
+		},
 		accountTypes: {
 			outlet: {
 				title: "门店",

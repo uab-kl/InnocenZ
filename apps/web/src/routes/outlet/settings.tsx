@@ -473,8 +473,14 @@ function OutletSettingsPage() {
 		);
 	}
 
-	const isSubRoleReadOnly =
-		outletSubRole === "outlet_finance" || outletSubRole === "outlet_ops";
+	/**
+	 * The venue's OWN owner, and nobody else — not the Guarantor either.
+	 *
+	 * Deliberately the sub-role rather than `canEdit`: a Guarantor stands in
+	 * for the owner and may edit this record, but the name in the header is
+	 * still the OWNER'S, so "this is you" is false for them too.
+	 */
+	const isOrgOwner = outletSubRole === "outlet_owner";
 	const orgStatus = getOutletIdentity()?.outletStatus;
 
 	return (
@@ -490,11 +496,24 @@ function OutletSettingsPage() {
 					{t.outletSettings.loadingProfile}
 				</p>
 			)}
-			{isSubRoleReadOnly && !editing && (
+			{/*
+			 * `!canEdit`, NOT a list of two sub-roles.
+			 *
+			 * The note named Finance and Ops only, so a DIRECTOR — the other
+			 * read-only lane — got a Settings page with no edit control and no
+			 * word of explanation, which reads as a broken page rather than as
+			 * a rule. Asking the same permission the edit control asks means a
+			 * lane added later cannot be forgotten here: whoever cannot edit is
+			 * told why (owner's rule, 11 Sep 2026 — "other member cannot change
+			 * it, only owner themself can change it").
+			 */}
+			{!canEdit && !editing && (
 				<p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
 					{outletSubRole === "outlet_finance"
 						? t.outletSettings.financeReadOnly
-						: t.outletSettings.opsReadOnly}
+						: outletSubRole === "outlet_ops"
+							? t.outletSettings.opsReadOnly
+							: t.outletSettings.memberReadOnly}
 				</p>
 			)}
 
@@ -539,7 +558,19 @@ function OutletSettingsPage() {
 					</div>
 				</div>
 				<div className="mt-3 iz-heading text-lg font-bold">{owner.orgName}</div>
-				<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
+				{/*
+				 * The owner's name directly under the venue's own name reads as
+				 * "this is you" — true for the owner, and for everybody else it
+				 * put ANOTHER person's name beneath the signed-in operator's
+				 * logo (owner's call, 11 Sep 2026).
+				 *
+				 * NOT a privacy gate. A member still reads the owner's name and
+				 * mobile in OWNER INFORMATION below, which is the one place that
+				 * fact belongs; this line was only ever a duplicate of it.
+				 */}
+				{isOrgOwner ? (
+					<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
+				) : null}
 				<div
 					className={`mt-1 flex items-center gap-1 iz-tiny ${
 						isOrgSuspended(orgStatus)
@@ -713,6 +744,16 @@ function OutletSettingsPage() {
 					</IzCard>
 				</>
 			)}
+
+			{/*
+			 * ⚠️ THE JOIN QUEUE IS NO LONGER HERE — it is `/outlet/approvals`, a
+			 * page of its own with the agency layout, carrying a rail badge.
+			 *
+			 * It lived here, below the profile and the notification toggles, and the
+			 * owner went looking for it twice without finding it. What stays behind
+			 * is a POINTER, not a second copy: two places to approve the same person
+			 * is two places for the role grant to be got right or wrong.
+			 */}
 
 			{/* Real staff from `outlet_user` (owner / finance / ops). */}
 			{!editing && (

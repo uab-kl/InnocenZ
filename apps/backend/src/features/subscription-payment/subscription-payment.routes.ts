@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { subscriptionPaymentController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
+import { orgOwnerPaysOnly } from '@/middlewares/require-sub-role.js';
 
 /**
  * TWO ROUTERS, AND THE SPLIT IS THE WHOLE POINT.
@@ -34,9 +35,22 @@ const router = Router();
  * money received, it does not pay on a venue's behalf. Ownership of every
  * invoice is checked inside against the session, never taken from the body.
  */
+/*
+ * ⚠️ `requireRole('agency', 'outlet')` ALONE was not enough, and this is money.
+ * It admits every lane on both portals, so an outlet Finance head, Ops Head or
+ * Director could tick overdue periods and start a real FPX checkout — the UI
+ * offered it too, because the button carried no permission check at all.
+ * "These invoices belong to your organisation" is a different question from
+ * "you may spend its money", and only the first was being asked.
+ *
+ * `orgOwnerPaysOnly` asks the second: owner or guarantor (the stand-in folds
+ * into owner) of the organisation actually being acted for — owner's rule,
+ * 11 Sep 2026.
+ */
 router.post(
   '/checkout',
   requireRole('agency', 'outlet'),
+  orgOwnerPaysOnly,
   subscriptionPaymentController.checkout.bind(subscriptionPaymentController),
 );
 

@@ -10,6 +10,8 @@ import { PrFaceBubble } from "@agency-portal/components/agency/PrFaceBubble";
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzCard, IzPageTitle, IzPill } from "@agency-portal/components/iz/ui";
+import { PendingMemberDetail } from "@agency-portal/components/org/PendingMemberDetail";
+import { PendingMembersPanel } from "@agency-portal/components/org/PendingMembersPanel";
 import {
 	canGeneratePortfolioComcard,
 	PortfolioComcardVisual,
@@ -19,8 +21,10 @@ import {
 import { portfolioFilledCount } from "@agency-portal/components/pr/PortfolioGalleryPicker";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
 import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
+import { useOrgMembersQuery } from "@agency-portal/hooks/use-org-members";
 import { usePrPhotoById } from "@agency-portal/hooks/use-pr-photo";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
+import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import {
@@ -149,7 +153,14 @@ function PendingComcardVisual({
  * one mixed tab, and the owner asked how to tell the two approvals apart; the
  * answer is that they should never share a list.
  */
-type Tab = "signups" | "cancel" | "cutlost" | "leaves" | "outlet-linking";
+type Tab =
+	| "signups"
+	| "cancel"
+	| "cutlost"
+	| "leaves"
+	| "outlet-linking"
+	/** People asking to JOIN THIS AGENCY as operators — its own group below. */
+	| "members";
 
 /**
  * The two things an agency approves: people, and venues.
@@ -161,7 +172,9 @@ type Tab = "signups" | "cancel" | "cutlost" | "leaves" | "outlet-linking";
  * asks to cut a PR loose and the agency decides — so it belongs with the venue's
  * link request, not with the PR's own join, departure and leave.
  */
-type ApprovalGroup = "pr" | "outlet";
+/** A third group since the member sign-up: people asking to join the AGENCY
+ * itself as operators — neither PRs nor venues. */
+type ApprovalGroup = "pr" | "outlet" | "member";
 
 const TAB_GROUP: Record<Tab, ApprovalGroup> = {
 	signups: "pr",
@@ -169,12 +182,14 @@ const TAB_GROUP: Record<Tab, ApprovalGroup> = {
 	leaves: "pr",
 	cutlost: "outlet",
 	"outlet-linking": "outlet",
+	members: "member",
 };
 
 /** Where each group opens: its first queue. */
 const GROUP_FIRST_TAB: Record<ApprovalGroup, Tab> = {
 	pr: "signups",
 	outlet: "cutlost",
+	member: "members",
 };
 
 /**
@@ -337,23 +352,27 @@ function pendingRequestKind(p: PendingPR) {
  *
  * A decided request keeps its kind forever, so labelling this badge by KIND
  * alone left an approved join reading "Join request" long after the PR had
- * joined, sitting directly above a line that said "Membership approved". The
- * two halves of one card were describing different moments, which is what the
- * owner spotted.
+ * joined, sitting directly above the history line below it. The two halves of
+ * one card were describing different moments, which is what the owner spotted.
  *
  * ⚠️ Lives at module scope beside `pendingRequestKind` because BOTH the list
- * row and the detail header need it. The list already told this story properly
- * — an approved join there read "Member" — and the detail header did not: one
- * fact rendered twice from two copies of the logic is exactly how the two came
- * to disagree. One place to change now.
+ * row and the detail header need it: one fact rendered twice from two copies of
+ * the logic is exactly how the two came to disagree. One place to change now.
  *
  * Pending is the only state that still names the ASK, because that is the only
  * state where the ask is the point — somebody has to decide it.
+ *
+ * ⚠️ An approved join reads "Agency PR", never "Member" (owner, 10 Sep 2026:
+ * "pr is pr who under which agency organisation, not the membership of the
+ * organisation"). A PR is under the agency through `agency_pr` and its tier; a
+ * MEMBER of the organisation is staff carrying a `user_role`, invited from
+ * Settings → OrgMembersPanel. Two different relationships, and this portal
+ * shows both to the same owner — so they must not share a word.
  */
 function pendingStandingLabel(p: PendingPR, t: PortalTranslations) {
 	const isLeave = pendingRequestKind(p) === "leave";
 	if (p.status === "approved")
-		return isLeave ? t.approvals.departureApproved : t.approvals.member;
+		return isLeave ? t.approvals.departureApproved : t.approvals.agencyPr;
 	if (p.status === "rejected")
 		return isLeave ? t.approvals.departureRejected : t.approvals.joinRejected;
 	return isLeave ? t.approvals.leaveRequest : t.approvals.joinRequest;
@@ -978,7 +997,7 @@ function SignupDetailPanel({
 								{signup.status === "approved"
 									? isLeave
 										? t.agencyPending.departureApprovedDetail
-										: t.agencyPending.membershipApproved
+										: t.agencyPending.joinApprovedDetail
 									: isLeave
 										? t.agencyPending.departureRejectedDetail
 										: t.approvals.joinRejected}
@@ -1519,7 +1538,9 @@ export const Route = createFileRoute("/agency/pending")({
 						? "cancel"
 						: search.tab === "outlet-linking"
 							? "outlet-linking"
-							: undefined,
+							: search.tab === "members"
+								? "members"
+								: undefined,
 	}),
 });
 
@@ -1658,6 +1679,25 @@ function AgencyPending() {
 		[signups, backend.approvedHistory, backend.rejectedHistory, tiedKind],
 	);
 
+	/**
+	 * WHO IS ASKING TO JOIN THIS AGENCY — the "New member" group.
+	 *
+	 * The identity is read straight from the stored session pick rather than
+	 * through `useAgencyProfile`: that hook fetches the whole agency record, and
+	 * this screen needs one id. `useOrgMembersQuery` is the SAME key the Team
+	 * screen reads, so approving here refreshes there and vice versa — two
+	 * queries on one key with different filters is a bug this codebase has
+	 * already had once, and the fix was to filter at the reader.
+	 */
+	const memberOrgId = useMemo(() => getAgencyIdentity()?.agencyId ?? null, []);
+	const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+	const pendingMembersQuery = useOrgMembersQuery("agency", memberOrgId);
+	const pendingMemberCount = (pendingMembersQuery.data ?? []).filter(
+		// Not `=== "pending"`: the column is a free varchar, and anything that is
+		// not active is somebody not yet working here.
+		(m) => m.status !== "active",
+	).length;
+
 	const groupCounts = useMemo(
 		() => ({
 			pr: {
@@ -1672,8 +1712,14 @@ function AgencyPending() {
 				count: cutlostRequests.length + outletLinks.pendingCount,
 				loading: outletLinks.pendingIsLoading,
 			},
+			member: {
+				count: pendingMemberCount,
+				loading: pendingMembersQuery.isLoading,
+			},
 		}),
 		[
+			pendingMemberCount,
+			pendingMembersQuery.isLoading,
 			tiedCounts,
 			agencyLinkRequests.length,
 			leaveRequests.length,
@@ -1804,7 +1850,7 @@ function AgencyPending() {
 					    them is still loading: a premature "(0)" claims there is nothing
 					    to do, which is a different statement from "not known yet". */}
 					<div className="iz-approvals-groups" role="tablist">
-						{(["pr", "outlet"] as const).map((g) => (
+						{(["pr", "outlet", "member"] as const).map((g) => (
 							<button
 								key={g}
 								type="button"
@@ -1813,7 +1859,11 @@ function AgencyPending() {
 								className={cn("iz-approvals-group", group === g && "on")}
 								onClick={() => setTab(GROUP_FIRST_TAB[g])}
 							>
-								{g === "pr" ? t.approvals.groupPr : t.approvals.groupOutlet}
+								{g === "pr"
+									? t.approvals.groupPr
+									: g === "outlet"
+										? t.approvals.groupOutlet
+										: t.portalUi.newMembers}
 								<span className="iz-approvals-group__count">
 									{groupCounts[g].loading ? "…" : groupCounts[g].count}
 								</span>
@@ -1859,7 +1909,7 @@ function AgencyPending() {
 									{queue.leaveIsLoading ? "…" : leaveRequests.length})
 								</button>
 							</>
-						) : (
+						) : group === "outlet" ? (
 							<>
 								{/* The venue asks to cut a PR loose early; the agency decides. */}
 								<button
@@ -1885,7 +1935,14 @@ function AgencyPending() {
 									)
 								</button>
 							</>
-						)}
+						) : /*
+						 * The member group has ONE queue, so it needs no sub-tabs — and
+						 * this branch must exist rather than falling through. The
+						 * ternary was binary, so a third group rendered the OUTLET tabs
+						 * underneath its own heading: cutlost and venue-linking offered
+						 * as though they were ways to answer a join request.
+						 */
+						null}
 					</div>
 
 					{tab === "signups" && (
@@ -1919,7 +1976,33 @@ function AgencyPending() {
 						</div>
 					)}
 
-					<div className="iz-approvals-list" hidden={tab === "outlet-linking"}>
+					{/*
+					 * PEOPLE ASKING TO JOIN THE AGENCY, from the member sign-up. The
+					 * approve action is `updateMember` — the same write the Team screen
+					 * uses — so there is one place the portal-role grant can be got
+					 * right or wrong, not two.
+					 */}
+					{tab === "members" && (
+						<div className="iz-approvals-list">
+							<PendingMembersPanel
+								kind="agency"
+								orgId={memberOrgId}
+								selectedId={selectedMemberId}
+								onSelect={setSelectedMemberId}
+							/>
+						</div>
+					)}
+
+					{/*
+					 * ⚠️ `members` joins `outlet-linking` in this guard for the reason
+					 * stated above it: the chain below ends in a cutlost `else`, so a
+					 * tab it does not know about renders the CUTLOST queue under this
+					 * tab's heading rather than nothing.
+					 */}
+					<div
+						className="iz-approvals-list"
+						hidden={tab === "outlet-linking" || tab === "members"}
+					>
 						{tab === "signups" || tab === "cancel" ? (
 							<>
 								{/* Same tuple-map as the MC/Leaves chips below — Current is
@@ -2253,7 +2336,42 @@ function AgencyPending() {
 					</main>
 				)}
 
-				<main className="iz-approvals-detail" hidden={tab === "outlet-linking"}>
+				{/*
+				 * THE PERSON ASKING TO JOIN, in full (owner, 11 Sep 2026: "right hand
+				 * side can see the info of the new members if selected").
+				 *
+				 * This pane used to be suppressed, because the queue approved inline and
+				 * an unhandled tab falls through to the CUTLOST pane. That fall-through
+				 * is still real — which is why this is its OWN main, exactly as
+				 * outlet-linking is, and why `members` stays in the guard below rather
+				 * than being taken out of it.
+				 */}
+				{tab === "members" && (
+					<main className="iz-approvals-detail">
+						<PendingMemberDetail
+							kind="agency"
+							orgId={memberOrgId}
+							memberId={selectedMemberId}
+							// A decided row leaves the Waiting filter, and a pane showing a
+							// row the list no longer holds is how a screen starts lying
+							// about its own state.
+							onDecided={() => setSelectedMemberId(null)}
+						/>
+					</main>
+				)}
+
+				{/*
+				 * ⚠️ `members` hides this pane for the same reason `outlet-linking`
+				 * does, and the symptom was visible on the owner's screenshot: the
+				 * New-member tab rendered the cutlost pane's empty state, so half the
+				 * screen read "Select a cutlost request to review" beside a list of
+				 * people asking to join. The member queue approves INLINE — it has no
+				 * detail to select into, so it should offer no pane.
+				 */}
+				<main
+					className="iz-approvals-detail"
+					hidden={tab === "outlet-linking" || tab === "members"}
+				>
 					{tab === "signups" || tab === "cancel" ? (
 						selectedSignup ? (
 							<SignupDetailPanel

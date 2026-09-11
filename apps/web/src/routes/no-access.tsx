@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ShieldAlert } from "lucide-react";
+import { Clock, ShieldAlert, UserMinus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -8,6 +8,7 @@ import {
 	usePortalLocale,
 } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 import { portalCodeLabel } from "@/lib/portal-i18n/rbac-label";
 
 export const noAccessTitle = "No Access | Innocenz";
@@ -43,6 +44,43 @@ function NoAccessBody() {
 	const needsLabel = needs ? portalCodeLabel(needs, t) : undefined;
 
 	/*
+	 * ⚠️ THE THIRD SITUATION — asked to join, nobody has answered yet.
+	 *
+	 * A pending membership grants nothing, so such an account holds no portal
+	 * role and reaches this page by the same route as a genuinely portal-less
+	 * one. The two are NOT the same thing to the person reading the screen:
+	 * rendering the red refusal for both contradicted, word for word, the
+	 * sign-up confirmation they had seen seconds earlier ("you can sign in
+	 * now, and the team opens once they approve you").
+	 *
+	 * Only when there is no `needs` — a wrong-portal link is a different
+	 * problem, and a pending request is not the answer to it.
+	 */
+	const waiting = needs
+		? undefined
+		: user?.organisations?.find((o) => o.membershipStatus === "pending");
+
+	/*
+	 * ⚠️ THE FOURTH SITUATION — they WERE on a team and were removed (0162).
+	 *
+	 * Removal revokes the portal role, so somebody deactivated at their only
+	 * organisation holds no role and arrives here by the same route as an
+	 * account that never had one. The generic line then told a former colleague
+	 * that their "account role does not have a web portal yet", as though they
+	 * had never worked anywhere — which is the one thing they know is untrue.
+	 *
+	 * Ranked BELOW `waiting`: somebody can hold a pending request at one
+	 * organisation and a removal at another, and the request is the actionable
+	 * one. A DECLINED request never appears here at all — the server drops
+	 * `rejected` from this list, because being turned down is not a
+	 * relationship to be told about.
+	 */
+	const removed =
+		needs || waiting
+			? undefined
+			: user?.organisations?.find((o) => o.membershipStatus === "inactive");
+
+	/*
 	 * Two different situations share this page.
 	 *
 	 * WRONG PORTAL (`needs` present) — the visitor opened a link belonging to a
@@ -58,17 +96,60 @@ function NoAccessBody() {
 	return (
 		<div className="fixed inset-0 z-50 flex min-h-svh w-full items-center justify-center bg-background px-6">
 			<div className="flex w-full max-w-xl flex-col items-center text-center">
-				<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-destructive/30 bg-destructive/15">
-					<ShieldAlert className="h-9 w-9 text-destructive" strokeWidth={1.5} />
-				</div>
+				{/* Amber for waiting, red only for a real refusal — the standing status
+				    colour code, which every receipt surface already follows. */}
+				{waiting ? (
+					<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-amber-400/30 bg-amber-400/15">
+						<Clock className="h-9 w-9 text-amber-400" strokeWidth={1.5} />
+					</div>
+				) : removed ? (
+					<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-border bg-muted/40">
+						<UserMinus
+							className="h-9 w-9 text-muted-foreground"
+							strokeWidth={1.5}
+						/>
+					</div>
+				) : (
+					<div className="mb-10 flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-destructive/30 bg-destructive/15">
+						<ShieldAlert
+							className="h-9 w-9 text-destructive"
+							strokeWidth={1.5}
+						/>
+					</div>
+				)}
 
 				<h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-					{needsLabel
-						? fill(t.invitePages.linkNeedsPortal, { portal: needsLabel })
-						: t.invitePages.noPortalTitle}
+					{waiting
+						? t.invitePages.waitingTitle
+						: removed
+							? t.invitePages.removedTitle
+							: needsLabel
+								? fill(t.invitePages.linkNeedsPortal, { portal: needsLabel })
+								: t.invitePages.noPortalTitle}
 				</h1>
 
-				{needsLabel ? (
+				{waiting ? (
+					<>
+						<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
+							{fill(t.invitePages.waitingBody, {
+								org: waiting.name,
+								role: portalRoleLabel(waiting.subRole, t),
+							})}
+						</p>
+						<p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+							{t.invitePages.waitingHint}
+						</p>
+					</>
+				) : removed ? (
+					<>
+						<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
+							{fill(t.invitePages.removedBody, { org: removed.name })}
+						</p>
+						<p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+							{fill(t.invitePages.removedHint, { org: removed.name })}
+						</p>
+					</>
+				) : needsLabel ? (
 					<>
 						<p className="mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
 							{t.invitePages.signedInAs}{" "}

@@ -649,18 +649,22 @@ export class AgencyPrRepository {
     }
   }
 
-  async removeLink(agencyId: string, userId: string): Promise<boolean> {
-    try {
-      const rows = await db
-        .delete(AgencyPrTable)
-        .where(and(eq(AgencyPrTable.agencyId, agencyId), eq(AgencyPrTable.userId, userId)))
-        .returning({ id: AgencyPrTable.id });
-      return rows.length > 0;
-    } catch (error) {
-      logger.error('[AgencyPrRepository.removeLink] Error:', error);
-      return false;
-    }
-  }
+  /**
+   * `removeLink` WAS HERE AND IS DELETED (10 Sep 2026). It hard-`DELETE`d the
+   * `agency_pr` row, and it had ZERO callers — but it was named like the
+   * obvious way to take a PR off a roster, which is exactly the danger.
+   *
+   * Removing a PR is `setApproveStatus(..., 'left')`. The row must SURVIVE:
+   * the approvals page reads it to draw the Approved chip, a later re-join
+   * relies on flipping the existing row back to `pending` (that is what the
+   * unique key is for — a delete turns the re-join into an insert that
+   * collides with it), and the record of who worked where is history the
+   * platform is not entitled to erase.
+   *
+   * ⚠️ The money never depended on this row — `payment_voucher` carries its
+   * own `agency_id` and no read joins `agency_pr` — so deleting it would not
+   * have hidden a debt. It would have destroyed the explanation for one.
+   */
 
   /**
    * Approvals screen — accept / decline a membership OR departure request.

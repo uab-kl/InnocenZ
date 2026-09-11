@@ -117,6 +117,47 @@ export class RoleControllerClass {
       const nextPortalId =
         parsed.data.portalId !== undefined ? parsed.data.portalId : existing.portalId;
 
+      /**
+       * A SEEDED ROLE'S IDENTITY IS NOT EDITABLE — renaming it is a lockout.
+       *
+       * `requireAdmin` is `requireRole('admin')`, and that middleware matches
+       * the role NAME as an exact, case-sensitive string. So a single
+       * `PUT /rbac/role/:id` carrying `{"roleName":"Administrator"}` against
+       * the admin role locks every administrator out of the platform —
+       * including the caller, and including this very endpoint.
+       *
+       * ⚠️ AND IT DOES NOT SELF-REPAIR, which is what makes it worse than the
+       * `status` case beside it. `init-roles` matches on `lower(role_name)`,
+       * so the renamed row is not recognised on the next boot and a SECOND
+       * 'admin' role is seeded with a different uuid — leaving the accounts
+       * that held the original holding a role no guard answers to.
+       * `deleteRole` already refuses seeded roles for the sibling reason
+       * (a delete would re-create them with a new id); the same identity
+       * argument applies to a rename, and only the refusal was missing.
+       *
+       * ⚠️ DELIBERATELY NARROW — the identity fields only. Deactivating a
+       * seeded role via `status` stays allowed: it is a real feature (the
+       * admin sheet's "Inactive roles grant no access", proven end to end by
+       * `scripts/_probe-role-deactivation.ts`) and `init-roles` DOES force
+       * status back to 'active' on boot, so it is self-correcting. Refusing
+       * that too would turn the Active toggle into a no-op on every role
+       * anybody actually holds.
+       */
+      const portalCode = await this.roleRepository.getPortalCodeForRole(
+        existing.portalId,
+      );
+      if (isSeededRole(existing.roleName, portalCode)) {
+        const renaming = nextName !== existing.roleName;
+        const rehoming = nextPortalId !== existing.portalId;
+        if (renaming || rehoming) {
+          return res.status(409).json({
+            success: false,
+            message: `"${existing.roleName}" is built into the platform — the guards match it by name, so renaming or moving it would lock out everyone who holds it. Its permissions are still editable.`,
+            data: null,
+          });
+        }
+      }
+
       const clash = await this.roleRepository.findByNameAndPortal(
         nextName,
         nextPortalId,

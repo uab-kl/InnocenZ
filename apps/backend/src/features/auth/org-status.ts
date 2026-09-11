@@ -16,6 +16,23 @@ import { OutletTable, OutletUserTable } from '@/features/outlet/outlet.model.js'
  */
 const DENIED_ORG_STATUSES = new Set(['inactive']);
 
+/**
+ * Does this organisation's OWN status deny sign-in?
+ *
+ * Exported so the `/auth/me` organisation list can mark each organisation
+ * enterable-or-not with the SAME rule that the login gate applies. Two
+ * spellings of "which statuses are denied" would eventually disagree, and the
+ * visible failure would be the worst kind: a picker offering an organisation
+ * the gate then refuses, or greying out one the user may legitimately enter.
+ *
+ * ⚠️ `pending_review` and `suspended` are NOT denied — see the note above.
+ * They keep a profile-only session, so they belong on the picker as
+ * enterable, with the portal limiting what they can do once inside.
+ */
+export function orgStatusDeniesSignIn(status: string): boolean {
+  return DENIED_ORG_STATUSES.has(status);
+}
+
 /** One organisation a user belongs to, with the organisation's own status. */
 type Membership = { kind: 'agency' | 'outlet'; name: string | null; status: string };
 

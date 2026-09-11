@@ -140,6 +140,17 @@ type LegacyRow = {
 	statusClass: string;
 	createdAt: string;
 	updatedAt: string;
+	/**
+	 * WHO switched this record off. The "Updated" column has always said WHEN
+	 * and never WHO, which is the one question an archive is asked.
+	 *
+	 * REQUIRED, not optional, and that is the point: five different mappers
+	 * build these rows, and an optional field would let four of them stay
+	 * silent while still compiling — the exact shape of the `logo` bug that
+	 * shipped a feature which never rendered. Every mapper must answer, even
+	 * if the answer is "—".
+	 */
+	deactivatedBy: string;
 	/** `member` rows only — where to send an admin who wants to restore them. */
 	orgKind?: "agency" | "outlet";
 	orgId?: string;
@@ -285,6 +296,46 @@ async function fetchAllDisabledAccounts(
 	return rows;
 }
 
+/**
+ * WHO switched it off, as a label.
+ *
+ * `updatedByName` is resolved server-side by a LEFT JOIN from `updated_by` to
+ * `user` (see `apps/backend/src/util/actor-name.ts`), so it is null in exactly
+ * three cases and they do not mean the same thing:
+ *
+ *   * the actor was the literal `'system'` — a scheduler or an
+ *     unauthenticated path, so there IS no person to name;
+ *   * `updated_by` holds an id whose account has since been deleted — there
+ *     WAS a person and we can no longer say who;
+ *   * the column is empty, which only older rows can be.
+ *
+ * Printing a raw uuid was the alternative and is refused: this screen is read
+ * by an admin deciding whether a removal was legitimate, and a 36-character
+ * hex string answers that question no better than a blank does.
+ */
+/** A `updated_by` that is a real account id, rather than a service token. */
+const ACTOR_UUID =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function actorLabel(
+	row: { updatedBy?: string | null; updatedByName?: string | null },
+	t: PortalTranslations,
+): string {
+	if (row.updatedByName) return row.updatedByName;
+	const raw = row.updatedBy?.trim();
+	if (!raw) return "—";
+	if (raw === "system") return t.adminUsers.actorSystem;
+	/*
+	 * An id-SHAPED value with no name behind it means the account was deleted:
+	 * there was a person and we can no longer say who. Anything else is a
+	 * service token, and those are deliberately descriptive — the live data
+	 * holds `seed-atlas-agency-role-accounts`, `seed-why-we-met` and the like.
+	 * Printing the token beats both alternatives: "Unknown" throws away a true
+	 * answer, and "System" invents a single actor where there were several.
+	 */
+	return ACTOR_UUID.test(raw) ? t.adminUsers.actorUnknown : raw;
+}
+
 /*
  * The mappers take `t` for ONE field: `statusLabel`, which is the only
  * piece of a row that is copy rather than stored data. Everything else here is
@@ -310,6 +361,7 @@ function mapAgencyRow(agency: Agency, t: PortalTranslations): LegacyRow {
 		statusClass: orgStatusBadgeColors.suspended,
 		createdAt: agency.createdAt,
 		updatedAt: agency.updatedAt,
+		deactivatedBy: actorLabel(agency, t),
 	};
 }
 
@@ -326,6 +378,7 @@ function mapOutletRow(outlet: Outlet, t: PortalTranslations): LegacyRow {
 		statusClass: orgStatusBadgeColors.suspended,
 		createdAt: outlet.createdAt,
 		updatedAt: outlet.updatedAt,
+		deactivatedBy: actorLabel(outlet, t),
 	};
 }
 
@@ -341,6 +394,7 @@ function mapPrRow(user: PrUser, t: PortalTranslations): LegacyRow {
 		statusClass: orgStatusBadgeColors.inactive,
 		createdAt: user.createdAt,
 		updatedAt: user.updatedAt,
+		deactivatedBy: actorLabel(user, t),
 	};
 }
 
@@ -369,6 +423,8 @@ function mapRemovedMemberRow(
 		phoneNum?: string | null;
 		createdAt: string;
 		updatedAt: string;
+		updatedBy?: string | null;
+		updatedByName?: string | null;
 	},
 	orgKind: "agency" | "outlet",
 	orgId: string,
@@ -383,14 +439,42 @@ function mapRemovedMemberRow(
 		code: member.memberCode || "—",
 		contact: orgName,
 		detail: [member.email, member.phoneNum].filter(Boolean).join(" · "),
-		statusLabel: activeElsewhere
-			? t.adminUsers.statusRemovedStillActive
-			: t.adminUsers.statusRemoved,
-		statusClass: activeElsewhere
-			? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-			: orgStatusBadgeColors.inactive,
+		/*
+		 * ⚠️ WHAT ACTUALLY HAPPENED, not one word for three different events.
+		 *
+		 * This said "Removed" for every non-active membership, so a person still
+		 * WAITING for an owner to answer — and a person who had been DECLINED —
+		 * both read as removed from a team they had never been on. Since 0162 the
+		 * status column says which, and an admin needs the difference: the
+		 * waiting one is somebody's unanswered work, the declined one is a
+		 * decision already made, and only the third is a departure.
+		 *
+		 * ⚠️ `activeElsewhere` still qualifies ONLY the removal. Someone pending
+		 * at a second organisation while working at a first is the ordinary case,
+		 * not a caveat — saying "still active elsewhere" over it would imply
+		 * something had ended.
+		 */
+		statusLabel:
+			member.status === "pending"
+				? fill(t.adminUsers.statusAwaitingOrg, { org: orgName })
+				: member.status === "rejected"
+					? t.adminUsers.statusDeclinedByOrg
+					: activeElsewhere
+						? t.adminUsers.statusRemovedStillActive
+						: t.adminUsers.statusRemoved,
+		statusClass:
+			member.status === "pending"
+				? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+				: member.status === "rejected"
+					? "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+					: activeElsewhere
+						? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+						: orgStatusBadgeColors.inactive,
 		createdAt: member.createdAt,
 		updatedAt: member.updatedAt,
+		// The owner or admin who took them out of THIS organisation — not
+		// whoever last edited their account.
+		deactivatedBy: actorLabel(member, t),
 		orgKind,
 		orgId,
 	};
@@ -417,6 +501,7 @@ function mapDisabledAccountRow(
 		statusClass: orgStatusBadgeColors.inactive,
 		createdAt: account.createdAt,
 		updatedAt: account.updatedAt,
+		deactivatedBy: actorLabel(account, t),
 	};
 }
 
@@ -1030,6 +1115,9 @@ function LegacyMemberPage() {
 									<TableHead className="w-[150px]">
 										{t.adminUsers.colUpdated}
 									</TableHead>
+									<TableHead className="w-[150px]">
+										{t.adminUsers.colDeactivatedBy}
+									</TableHead>
 									<TableHead className="w-[220px]">
 										{t.admin.colActions}
 									</TableHead>
@@ -1038,7 +1126,7 @@ function LegacyMemberPage() {
 							<TableBody>
 								{showLoading && (
 									<TableRow>
-										<TableCell colSpan={8} className="h-40 text-center">
+										<TableCell colSpan={9} className="h-40 text-center">
 											<Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
 										</TableCell>
 									</TableRow>
@@ -1046,7 +1134,7 @@ function LegacyMemberPage() {
 
 								{!showLoading && isError && (
 									<TableRow>
-										<TableCell colSpan={8} className="h-40 text-center">
+										<TableCell colSpan={9} className="h-40 text-center">
 											<div className="flex flex-col items-center gap-2">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="text-sm text-muted-foreground">
@@ -1067,7 +1155,7 @@ function LegacyMemberPage() {
 
 								{!showLoading && !isError && pageRows.length === 0 && (
 									<TableRow>
-										<TableCell colSpan={8} className="h-40 text-center">
+										<TableCell colSpan={9} className="h-40 text-center">
 											<div className="flex flex-col items-center gap-2 text-muted-foreground">
 												<Archive className="h-8 w-8 opacity-50" />
 												<p className="text-sm">
@@ -1138,6 +1226,9 @@ function LegacyMemberPage() {
 												</TableCell>
 												<TableCell className="text-base text-muted-foreground">
 													{formatDate(row.updatedAt)}
+												</TableCell>
+												<TableCell className="text-base text-muted-foreground">
+													{row.deactivatedBy}
 												</TableCell>
 												<TableCell>
 													{/* Layout-only wrapper: role="none" because the click

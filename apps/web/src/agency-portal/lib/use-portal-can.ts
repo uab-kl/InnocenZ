@@ -17,6 +17,7 @@ import { type AgencySubRole, agencyCan } from "@agency-portal/lib/agency-rbac";
 import { type OutletSubRole, outletCan } from "@agency-portal/lib/outlet-rbac";
 import { useStore } from "@agency-portal/lib/store";
 import { useCallback } from "react";
+import { getActiveOrg } from "@/lib/active-org";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { useProfile } from "@/lib/auth/use-profile";
 
@@ -32,14 +33,28 @@ function useModulePermissions(): ModulePerm[] | undefined {
 		: undefined;
 }
 
+/**
+ * The organisation this tab is working in.
+ *
+ * ⚠️ Without it, somebody holding DIFFERENT lanes in two organisations of the
+ * same kind — Owner at one venue, Director at another — gets the union, and the
+ * Director is shown the owner's controls at the venue where they may do
+ * nothing. The server reads that venue's own lane and refuses; this stops the
+ * screen from claiming otherwise.
+ */
+function useActiveOrgId(): string | null {
+	return getActiveOrg()?.id ?? null;
+}
+
 /** `can("managePr")` for the signed-in agency operator. */
 export function useAgencyCan(): (permission: AgencyPermission) => boolean {
 	const subRole = useStore((s) => s.agencySubRole);
 	const modulePermissions = useModulePermissions();
+	const activeOrgId = useActiveOrgId();
 	return useCallback(
 		(permission: AgencyPermission) =>
-			agencyCan(subRole, permission, modulePermissions),
-		[subRole, modulePermissions],
+			agencyCan(subRole, permission, modulePermissions, activeOrgId),
+		[subRole, modulePermissions, activeOrgId],
 	);
 }
 
@@ -47,10 +62,11 @@ export function useAgencyCan(): (permission: AgencyPermission) => boolean {
 export function useOutletCan(): (permission: OutletPermission) => boolean {
 	const subRole = useStore((s) => s.outletSubRole);
 	const modulePermissions = useModulePermissions();
+	const activeOrgId = useActiveOrgId();
 	return useCallback(
 		(permission: OutletPermission) =>
-			outletCan(subRole, permission, modulePermissions),
-		[subRole, modulePermissions],
+			outletCan(subRole, permission, modulePermissions, activeOrgId),
+		[subRole, modulePermissions, activeOrgId],
 	);
 }
 
@@ -62,10 +78,11 @@ export function useAgencyCanFor(
 	subRole: AgencySubRole | null,
 ): (permission: AgencyPermission) => boolean {
 	const modulePermissions = useModulePermissions();
+	const activeOrgId = useActiveOrgId();
 	return useCallback(
 		(permission: AgencyPermission) =>
-			agencyCan(subRole, permission, modulePermissions),
-		[subRole, modulePermissions],
+			agencyCan(subRole, permission, modulePermissions, activeOrgId),
+		[subRole, modulePermissions, activeOrgId],
 	);
 }
 
@@ -73,9 +90,10 @@ export function useOutletCanFor(
 	subRole: OutletSubRole | null,
 ): (permission: OutletPermission) => boolean {
 	const modulePermissions = useModulePermissions();
+	const activeOrgId = useActiveOrgId();
 	return useCallback(
 		(permission: OutletPermission) =>
-			outletCan(subRole, permission, modulePermissions),
-		[subRole, modulePermissions],
+			outletCan(subRole, permission, modulePermissions, activeOrgId),
+		[subRole, modulePermissions, activeOrgId],
 	);
 }

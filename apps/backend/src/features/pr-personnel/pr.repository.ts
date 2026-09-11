@@ -98,7 +98,32 @@ function hasPrRoleSql(userIdColumn: SQLWrapper) {
  * legitimately matches nothing. */
 function statusFromApproval(approveStatus?: AgencyPrApproveStatus): PrStatus {
   if (approveStatus === 'approved') return 'active';
-  if (approveStatus === 'rejected') return 'inactive';
+  /**
+   * ⚠️ `'left'` IS 'inactive', AND OMITTING IT WAS A LATENT BUG THAT ONLY
+   * SURFACED WHEN THE REMOVAL PATH WAS CORRECTED.
+   *
+   * The live `agency_pr_approve_status` enum has FIVE labels — pending,
+   * approved, rejected, leave_pending, left — while the TS type declares
+   * three, so the compiler reads this function as exhaustive when it is not,
+   * and every unlisted label fell through to `'pending'`.
+   *
+   * That was survivable only by accident: `PrController.remove` wrote `'left'`
+   * and then immediately overwrote it with `'rejected'`, so a cancelled PR
+   * reached this function as `'rejected'` and correctly read `'inactive'`.
+   * Deleting that second write — which was clobbering the right answer onto
+   * the wrong agency — removed the accident, and a cancelled PR would have
+   * started reading as `'pending'`: shown to an admin as *awaiting approval*,
+   * and dropped from the Legacy Member archive, which fetches `inactive`.
+   *
+   * `'left'` and `'rejected'` differ in WHY the person is not on the roster —
+   * let go versus never accepted — and the assignment gate says so in its own
+   * words. For this old three-value vocabulary they are the same fact: not
+   * working here. `'leave_pending'` stays `'pending'` deliberately: that
+   * membership is still live until somebody decides on it.
+   */
+  if (approveStatus === 'rejected' || approveStatus === 'left') {
+    return 'inactive';
+  }
   return 'pending';
 }
 
@@ -830,24 +855,24 @@ export class PrRepositoryClass {
   }
 
   /**
-   * Soft-remove: there is no `pr` row to delete anymore, so "removing" a PR
-   * means rejecting its agency membership — the account itself, and its
-   * history on `shift_assignment` / `payment_voucher`, is untouched.
+   * `remove` WAS HERE AND IS DELETED (10 Sep 2026). It had ZERO callers, and
+   * its doc called it a "soft-remove" — which made it read as the safe option
+   * while it carried three defects at once:
+   *
+   *  1. **It resolved the agency itself**, through `getByUserId(id)` with no
+   *     agency argument, which takes the OLDEST membership. Removing a PR at
+   *     agency B would have rejected their row at agency A.
+   *  2. **It wrote `'rejected'`, not `'left'`** — "never accepted" rather than
+   *     "let go" — which is untrue after somebody has worked there, and which
+   *     `syncLinksForUser` treats as deletable where it keeps `'left'`.
+   *  3. **It hard-coded `updated_by: 'system'`**, discarding the actor, on the
+   *     one table whose audit trail says who ended a working relationship.
+   *
+   * All three are the bugs that were live in `PrController.remove` until they
+   * were fixed there. Leaving a second, worse copy behind — under a friendlier
+   * name — is how a fixed bug comes back.
+   *
+   * Removing a PR is `agencyPrRepository.setApproveStatus(agencyId, userId,
+   * 'left', actor)`, with the agency resolved by `resolvePrForCaller`.
    */
-  async remove(id: string): Promise<boolean> {
-    try {
-      const current = await this.getByUserId(id);
-      if (!current?.agencyId) return false;
-      const [row] = await db
-        .update(AgencyPrTable)
-        .set({ approveStatus: 'rejected', updatedAt: new Date(), updatedBy: 'system' })
-        .where(and(eq(AgencyPrTable.agencyId, current.agencyId), eq(AgencyPrTable.userId, id)))
-        .returning({ id: AgencyPrTable.id });
-      // No row => no membership to reject; a real DB error re-throws below.
-      return !!row;
-    } catch (error) {
-      logger.error('[PrRepository.remove] Error:', error);
-      throw error;
-    }
-  }
 }

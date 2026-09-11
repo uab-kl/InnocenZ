@@ -4,7 +4,9 @@ import axios from "axios";
 import { Check, Loader2, MailWarning } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/landing/BrandLogo";
-import { getPublicClient } from "@/lib/axios-v1";
+import { hasValidTokens } from "@/lib/auth/auth-storage";
+import { fetchProfile } from "@/lib/auth/use-profile";
+import { getClient, getPublicClient } from "@/lib/axios-v1";
 import {
 	PortalLocaleProvider,
 	usePortalLocale,
@@ -74,12 +76,22 @@ function OrgMemberInvitePage() {
 		email: string | null;
 	} | null>(null);
 
-	const [name, setName] = useState("");
-	const [email, setEmail] = useState("");
-	const [phoneNum, setPhoneNum] = useState("");
-	const [password, setPassword] = useState("");
-	const [confirmPassword, setConfirmPassword] = useState("");
-	const [formError, setFormError] = useState("");
+	/**
+	 * WHO IS LOOKING AT THIS PAGE — the whole flow now turns on it.
+	 *
+	 * This page used to collect a name, an email, a phone number and a
+	 * PASSWORD, and the server built or updated an account from them. Both
+	 * halves are gone: an invitation is only ever sent to an account that
+	 * already exists (owner, 10 Sep 2026 — web sign-up registers
+	 * ORGANISATIONS, so an individual only exists as a PR account), and the
+	 * update half could overwrite the password of whoever already held the
+	 * invited address.
+	 *
+	 * `undefined` means "not asked yet", `null` means "asked, nobody is signed
+	 * in". They must stay distinct or the page flashes the signed-out message
+	 * at somebody who is in fact signed in.
+	 */
+	const [myEmail, setMyEmail] = useState<string | null | undefined>(undefined);
 
 	const previewQuery = useQuery({
 		queryKey: ["org-member-invite", token ?? ""],
@@ -116,13 +128,46 @@ function OrgMemberInvitePage() {
 	});
 
 	useEffect(() => {
-		const invited = previewQuery.data?.email?.trim();
-		if (invited && !email) setEmail(invited);
-	}, [previewQuery.data?.email, email]);
+		let live = true;
+		if (!hasValidTokens()) {
+			setMyEmail(null);
+			return;
+		}
+		fetchProfile()
+			.then((p) => {
+				if (live) setMyEmail(p.email?.trim().toLowerCase() || null);
+			})
+			// A failed profile read is not "signed out" in any meaningful sense,
+			// but it is indistinguishable from here, and the signed-out branch is
+			// the safe one: it offers a sign-in link rather than an Accept button
+			// that would 401.
+			.catch(() => {
+				if (live) setMyEmail(null);
+			});
+		return () => {
+			live = false;
+		};
+	}, []);
 
 	const acceptMutation = useMutation({
 		mutationFn: async () => {
-			const client = getPublicClient();
+			/*
+			 * ⚠️ THE AUTHENTICATED CLIENT — accept REQUIRES a session now.
+			 *
+			 * This was `getPublicClient()`, which sends no Authorization header, and
+			 * it was right when it was written: accepting used to CREATE the account,
+			 * setting a password straight onto whatever address the invite named.
+			 * That was an account-takeover hole — an owner could invite an admin's
+			 * address and set a password on it — so the server was changed to refuse
+			 * unless the caller is signed in AS the invited email.
+			 *
+			 * The server changed and this call did not, so every accept sent no token
+			 * and got a 401: the whole invite path was dead, silently, with the page
+			 * still rendering "You are signed in as … Accept to join this team".
+			 * The PREVIEW above stays public on purpose — it must answer somebody
+			 * arriving cold from an email, before they have signed in.
+			 */
+			const client = getClient(() => {});
 			const response = await client.post<{
 				success: boolean;
 				message: string;
@@ -131,14 +176,10 @@ function OrgMemberInvitePage() {
 					orgName: string | null;
 					email?: string | null;
 				} | null;
-			}>("/auth/org-member-invite/accept", {
-				token,
-				name: name.trim(),
-				email: email.trim(),
-				phoneNum: phoneNum.trim() || undefined,
-				password,
-				confirmPassword,
-			});
+				// The TOKEN ALONE. Identity comes from the session on the server,
+				// so there is nothing here for a caller to assert about who they
+				// are — and nothing that could write a credential.
+			}>("/auth/org-member-invite/accept", { token });
 			if (!response.data.success) {
 				throw new Error(response.data.message || t.invitePages.couldNotAccept);
 			}
@@ -150,7 +191,7 @@ function OrgMemberInvitePage() {
 				// Stored kind, kept verbatim — `orgKindLabel` resolves the display
 				// word at render time so a locale switch moves with it.
 				kind: data?.kind ?? "organisation",
-				email: data?.email ?? (email.trim() || null),
+				email: data?.email ?? previewQuery.data?.email ?? null,
 			});
 		},
 	});
@@ -163,27 +204,14 @@ function OrgMemberInvitePage() {
 		[preview, t],
 	);
 
-	function onSubmit(e: React.FormEvent) {
-		e.preventDefault();
-		setFormError("");
-		if (!name.trim()) {
-			setFormError(t.invitePages.enterYourName);
-			return;
-		}
-		if (!email.trim()) {
-			setFormError(t.invitePages.enterYourEmail);
-			return;
-		}
-		if (password.length < 6) {
-			setFormError(t.admin.passwordMinSix);
-			return;
-		}
-		if (password !== confirmPassword) {
-			setFormError(t.invitePages.passwordsDoNotMatch);
-			return;
-		}
-		acceptMutation.mutate();
-	}
+	/*
+	 * The invited address, lower-cased for comparison the same way the server
+	 * normalises it — so "Owner@X.com" on the invite matches "owner@x.com" on
+	 * the account instead of silently reading as a different person.
+	 */
+	const invitedEmail = (previewQuery.data?.email ?? "").trim().toLowerCase();
+	const signedInAsInvitee =
+		myEmail !== undefined && myEmail !== null && myEmail === invitedEmail;
 
 	return (
 		<main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center gap-6 px-6 py-12">
@@ -264,94 +292,66 @@ function OrgMemberInvitePage() {
 							{t.invitePages.membershipAlreadyActive}
 						</p>
 					) : (
-						<form className="space-y-3" onSubmit={onSubmit}>
-							<p className="text-sm text-muted-foreground">
-								{t.invitePages.setUpAccountHint}
-							</p>
-							<label className="block space-y-1 text-sm">
-								<span className="font-medium">{t.invitePages.name}</span>
-								<input
-									required
-									value={name}
-									onChange={(e) => setName(e.target.value)}
-									className="w-full rounded-lg border border-border bg-background px-3 py-2"
-									autoComplete="name"
-								/>
-							</label>
-							<label className="block space-y-1 text-sm">
-								<span className="font-medium">{t.invitePages.email}</span>
-								<input
-									required
-									type="email"
-									value={email}
-									onChange={(e) => setEmail(e.target.value)}
-									className="w-full rounded-lg border border-border bg-background px-3 py-2"
-									autoComplete="email"
-								/>
-							</label>
-							<label className="block space-y-1 text-sm">
-								<span className="font-medium">
-									{t.invitePages.phone}{" "}
-									<span className="font-normal text-muted-foreground">
-										{t.invitePages.optional}
-									</span>
-								</span>
-								<input
-									type="tel"
-									value={phoneNum}
-									onChange={(e) => setPhoneNum(e.target.value)}
-									className="w-full rounded-lg border border-border bg-background px-3 py-2"
-									autoComplete="tel"
-								/>
-							</label>
-							<label className="block space-y-1 text-sm">
-								<span className="font-medium">{t.invitePages.password}</span>
-								<input
-									required
-									type="password"
-									value={password}
-									onChange={(e) => setPassword(e.target.value)}
-									className="w-full rounded-lg border border-border bg-background px-3 py-2"
-									autoComplete="new-password"
-									minLength={6}
-								/>
-							</label>
-							<label className="block space-y-1 text-sm">
-								<span className="font-medium">
-									{t.invitePages.confirmPassword}
-								</span>
-								<input
-									required
-									type="password"
-									value={confirmPassword}
-									onChange={(e) => setConfirmPassword(e.target.value)}
-									className="w-full rounded-lg border border-border bg-background px-3 py-2"
-									autoComplete="new-password"
-									minLength={6}
-								/>
-							</label>
-
-							{(formError || acceptMutation.isError) && (
-								<p className="text-sm text-red-600">
-									{formError || (acceptMutation.error as Error).message}
+						<div className="space-y-3">
+							{myEmail === undefined ? (
+								<p className="flex items-center gap-2 text-sm text-muted-foreground">
+									<Loader2 className="h-4 w-4 animate-spin" />
+									{t.invitePages.checkingSession}
 								</p>
+							) : signedInAsInvitee ? (
+								<>
+									<p className="text-sm text-muted-foreground">
+										{fill(t.invitePages.acceptAsHint, { email: myEmail })}
+									</p>
+									{acceptMutation.isError && (
+										<p className="text-sm text-red-600">
+											{(acceptMutation.error as Error).message}
+										</p>
+									)}
+									<button
+										type="button"
+										onClick={() => acceptMutation.mutate()}
+										className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-3 text-sm font-semibold text-background disabled:opacity-50"
+										disabled={acceptMutation.isPending}
+									>
+										{acceptMutation.isPending ? (
+											<>
+												<Loader2 className="h-4 w-4 animate-spin" />
+												{t.invitePages.accepting}
+											</>
+										) : (
+											t.invitePages.acceptInvitation
+										)}
+									</button>
+								</>
+							) : (
+								<>
+									{/*
+									 * Two different situations, never merged: nobody is signed
+									 * in, or the WRONG person is. Telling somebody already
+									 * signed in to "sign in" is the message that makes a
+									 * person try the same thing twice.
+									 */}
+									<p className="text-sm text-muted-foreground">
+										{myEmail
+											? fill(t.invitePages.signedInAsOther, {
+													current: myEmail,
+													invited: preview.email ?? "",
+												})
+											: fill(t.invitePages.signInToAcceptHint, {
+													email: preview.email ?? "",
+												})}
+									</p>
+									<Link
+										to="/login"
+										search={preview.email ? { email: preview.email } : {}}
+										className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-3 text-sm font-semibold text-background"
+									>
+										{t.invitePages.signInToAccept}
+									</Link>
+								</>
 							)}
-
-							<button
-								type="submit"
-								className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-3 text-sm font-semibold text-background disabled:opacity-50"
-								disabled={acceptMutation.isPending}
-							>
-								{acceptMutation.isPending ? (
-									<>
-										<Loader2 className="h-4 w-4 animate-spin" />
-										{t.invitePages.creatingAccount}
-									</>
-								) : (
-									t.invitePages.createAccountAndJoin
-								)}
-							</button>
-						</form>
+						</div>
 					)}
 
 					{!preview.pending && !preview.expired && (

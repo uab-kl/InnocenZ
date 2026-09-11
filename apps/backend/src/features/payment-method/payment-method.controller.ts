@@ -29,10 +29,26 @@ export class PaymentMethodControllerClass {
    */
   private async ownerFor(req: Request, outletId?: string): Promise<PaymentMethodOwner | null> {
     const scope = await resolveOrgScope(req, this.orgScopeDeps);
-    if (scope.agencyId) return { agencyId: scope.agencyId };
+    /*
+     * ⚠️ A NAMED VENUE FIRST — the agency check used to come before this, so
+     * `outletId` was read only by callers with no agency membership at all.
+     * Anyone who both staffs an agency and operates a venue had the agency
+     * returned regardless: the outlet Settings page then showed, saved and
+     * REPLACED the agency's card while the heading said the venue's name.
+     *
+     * Still verified against the venues they actually hold — accepting the id
+     * as given would let one venue's operator replace another's.
+     */
     if (outletId) {
-      return scope.outletIds.includes(outletId) ? { outletId } : null;
+      if (scope.outletIds.includes(outletId)) return { outletId };
+      /*
+       * Named a venue they do not staff. Falling through to the agency here
+       * would answer a question about venue B with agency A's card, so this is
+       * a refusal rather than a different answer.
+       */
+      return null;
     }
+    if (scope.agencyId) return { agencyId: scope.agencyId };
     return scope.outletIds.length === 1 ? { outletId: scope.outletIds[0] } : null;
   }
 

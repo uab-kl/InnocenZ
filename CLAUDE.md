@@ -97,6 +97,52 @@ described 106 gaps against 141.
    `user_role` now carries both of its FKs. There is no `pr` table — it was dropped; a PR is a
    `user` row and the membership (with its tier) lives on `agency_pr`.
 
+## RBAC comes from the DATABASE (owner, 11 Sep 2026 — non-negotiable)
+
+**"The rbac must ensure what can do what cannot do, ofcourse must from the database … web
+matrix must follow what database given."**
+
+`role_permission` is the authority. The server already obeys it —
+`requirePermission(moduleKey, verb)` resolves the caller's membership of the ACTING org, maps
+that row's `sub_role` to a role name (`portalRoleNameForSubRole`) and asks
+`roleHasPermission`. What the table says is what the API allows.
+
+The portals used to carry a hand-written SECOND copy of that table in
+`outlet-rbac.ts` / `agency-rbac.ts`, and it had drifted **14 cells** — the database won every
+one of them at runtime, so the copy was a stale description contradicting the screen (it
+called outlet Finance "view only" while Post Job sat in their sidebar and `POST /shift`
+admitted them). The matrix is now DERIVED:
+
+```bash
+pnpm rbac:sync     # rewrite apps/web/src/agency-portal/lib/rbac-grants.generated.ts
+pnpm rbac:check    # exit 1 while that snapshot disagrees with the live table
+```
+
+- **To change what a role may do, edit `apps/backend/src/scripts/seed-rbac.ts`, run
+  `pnpm migrate:deploy`, then `pnpm rbac:sync`.** Editing the web matrix does nothing — the next
+  sync overwrites it and `rbac-matrix.test.ts` fails.
+- ⚠️ **`seed-rbac.ts` is what WRITES `role_permission`**, and it runs on every
+  `migrate:deploy`. A migration that INSERTs grants is the wrong tool: 0164 tried it, was
+  ledgered, and never applied (the standing `migrate:deploy` trap), and it would only have been
+  a second quieter source of the same rows.
+- ⚠️ **The seeder only ADDS — it "ensures" and never removes.** That is how outlet Finance came
+  to hold 19 grants while the seeder listed 7 (fixed 11 Sep 2026, the file now matches). Nothing
+  checks seeder-vs-database yet: `rbac:check` only proves web == database. When you change a
+  role, diff the deploy log's "N permissions ensured" against the live rows, and remember that
+  **removing** a grant needs the row deleted by hand.
+- ⚠️ **TWO permissions are deliberately matrix-only**, because the server gates them by LANE and
+  there is no module to grant: outlet `requestCutLoss` (no `cutlost` module — `POST /cutlost`
+  is `requireOutletSubRole('owner','finance','operations_head')`) and agency `viewLiveFloor`
+  (unmapped on purpose so no grant can hand it to finance). Their lane lists live in
+  `MATRIX_ONLY` and must mirror the server's — a wrong entry is a button that collects a 403.
+- ⚠️ `/auth/me` returns the UNION of every role an account holds **across portals**, and
+  `settings` / `dashboard` / `history` are a SEPARATE module row per portal. Every grant now
+  carries `portalCode` and `grantsForPortal()` drops the other console's rows — without it an
+  agency owner who is merely a Finance head at some venue was offered Edit on that venue.
+- ⚠️ **`billing:update` is held by NOBODY on the outlet portal**, so Confirm Daily
+  (`confirmDaily`) is refused for every lane including the Owner. Grant it and re-sync to turn
+  that button back on.
+
 ## Working rules
 
 - **Doc roles:** `CLAUDE.md` = rules only — update ONLY when a rule changes.

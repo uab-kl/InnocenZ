@@ -10,7 +10,7 @@
  * an id that can change is not an id, it is a nickname, and support quoting one
  * back from an email would be quoting a value that has since moved.
  */
-import { and, eq, isNotNull, like, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, like, notLike, sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable, AgencyUserTable } from '@/features/agency/agency.model';
 import { OutletTable, OutletUserTable } from '@/features/outlet/outlet.model';
@@ -22,6 +22,23 @@ import { logger } from '@/util/logger';
 
 const BRAND = 'INN';
 const DIGITS = 4;
+
+/**
+ * The head of a PLACEHOLDER membership id — a row that exists but has not been
+ * approved (0161).
+ *
+ * Somebody who has merely ASKED to join holds one of these, issued by the
+ * column DEFAULT, until an owner approves them and `nextOrgMemberCode` gives
+ * them the organisation's real next number. It reads as obviously-not-an-id on
+ * purpose: anybody seeing `INNPND0007` on a screen should know it is not
+ * something to quote back.
+ *
+ * ⚠️ Every rule asking "does this organisation have issued ids" or "which id
+ * should this account carry" must EXCLUDE these, or a stranger's unanswered
+ * request would freeze the organisation's prefix and overwrite that account's
+ * own id — which is the bug 0161 exists to fix.
+ */
+const PENDING_SEGMENT = 'PND';
 
 /** How many times to re-take the next number when another writer won the race. */
 const MAX_ATTEMPTS = 5;
@@ -359,6 +376,16 @@ function isFallbackCode(code: string | null | undefined): boolean {
   return Boolean(code?.startsWith(`${BRAND}USR`));
 }
 
+/**
+ * Is this a membership id that has not been earned yet? (0161)
+ *
+ * Exported because three separate rules have to agree about it, and three
+ * spellings of "starts with INNPND" would eventually disagree.
+ */
+export function isPendingOrgCode(code: string | null | undefined): boolean {
+  return Boolean(code?.startsWith(`${BRAND}${PENDING_SEGMENT}`));
+}
+
 export async function issuePersonCode<T>(
   family: PersonFamily,
   issue: (code: string) => Promise<T>,
@@ -442,24 +469,46 @@ export async function ensureAccountCode(
       .where(eq(UserTable.id, userId));
   };
 
-  // 1. An organisation the person operates. Two memberships mean two ids, so
-  //    the FIRST issued wins: it is the one they have been known by longest and
-  //    the only choice that does not move when they join somewhere new.
+  /*
+   * 1. An organisation the person OPERATES. Two memberships mean two ids, so
+   *    the FIRST issued wins: it is the one they have been known by longest,
+   *    and the only choice that does not move when they join somewhere new.
+   *
+   * ⚠️ ACTIVE memberships only, and never a placeholder (0161). This used to
+   * take any membership row carrying any id, so the instant somebody ASKED to
+   * join, their account id became that organisation's — permanently, since the
+   * rule above only ever upgrades an `INNUSR` floor. Decline them and they
+   * kept an id belonging to an organisation that had refused them.
+   *
+   * A pending row is a request, not a membership. It says nothing about who
+   * this person is, so it must say nothing about their id.
+   */
   const memberships = [
     ...(await dbClient
       .select({ code: AgencyUserTable.memberCode, at: AgencyUserTable.createdAt })
       .from(AgencyUserTable)
       .where(
-        and(eq(AgencyUserTable.userId, userId), isNotNull(AgencyUserTable.memberCode)),
+        and(
+          eq(AgencyUserTable.userId, userId),
+          eq(AgencyUserTable.status, 'active'),
+          isNotNull(AgencyUserTable.memberCode),
+        ),
       )),
     ...(await dbClient
       .select({ code: OutletUserTable.memberCode, at: OutletUserTable.createdAt })
       .from(OutletUserTable)
       .where(
-        and(eq(OutletUserTable.userId, userId), isNotNull(OutletUserTable.memberCode)),
+        and(
+          eq(OutletUserTable.userId, userId),
+          eq(OutletUserTable.status, 'active'),
+          isNotNull(OutletUserTable.memberCode),
+        ),
       )),
   ].sort((a, b) => Number(new Date(a.at)) - Number(new Date(b.at)));
-  const fromOrg = memberships.find((m) => m.code)?.code;
+  // A placeholder is not an id to inherit — see the note above.
+  const fromOrg = memberships.find(
+    (m) => m.code && !isPendingOrgCode(m.code),
+  )?.code;
   if (fromOrg) {
     await set(fromOrg);
     return;
@@ -517,6 +566,11 @@ export async function ensureAccountCodeFromMembership(
  * The freeze rule: once one id is issued, the organisation's code may not
  * change, because every id already printed on a screen or an email was built
  * from it.
+ *
+ * ⚠️ PLACEHOLDERS DO NOT COUNT (0161). An `INNPND` row carries no organisation
+ * prefix at all — nothing was built from the code, and nobody has been shown
+ * one. Counting them would let a stranger who merely asked to join freeze a
+ * brand-new organisation's letters before its own owner had seen them.
  */
 export async function orgHasIssuedCodes(
   kind: MemberCodeOrgKind,
@@ -531,6 +585,7 @@ export async function orgHasIssuedCodes(
             and(
               eq(AgencyUserTable.agencyId, orgId),
               isNotNull(AgencyUserTable.memberCode),
+              notLike(AgencyUserTable.memberCode, `${BRAND}${PENDING_SEGMENT}%`),
             ),
           )
       : await db
@@ -540,6 +595,7 @@ export async function orgHasIssuedCodes(
             and(
               eq(OutletUserTable.outletId, orgId),
               isNotNull(OutletUserTable.memberCode),
+              notLike(OutletUserTable.memberCode, `${BRAND}${PENDING_SEGMENT}%`),
             ),
           );
   return Number(rows[0]?.n ?? 0) > 0;

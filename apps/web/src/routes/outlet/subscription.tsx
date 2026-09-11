@@ -767,9 +767,17 @@ function OutletSubscriptionPage() {
 			<header>
 				<IzPageTitle>{t.nav.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{outletOwner.orgName}</p>
-				{isFinanceReadOnly && (
+				{/*
+				 * `!canEdit`, not one named lane. Ops Head and Director also lose
+				 * the plan switch, the Pay button and the payment method, and used
+				 * to be given no reason for any of it — a page with its controls
+				 * quietly missing reads as broken rather than as a rule.
+				 */}
+				{!canEdit && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-						{t.outletSubscription.financeReadOnly}
+						{isFinanceReadOnly
+							? t.outletSubscription.financeReadOnly
+							: t.outletSubscription.memberReadOnly}
 					</p>
 				)}
 			</header>
@@ -929,6 +937,13 @@ function OutletSubscriptionPage() {
 						// — and is billed on both every month, so each row says which it
 						// is. The agency screen passes nothing: one lane, no badge needed.
 						laneOf={backend.invoiceLane}
+						/*
+						 * The LIST stays readable for everyone; only the spending does
+						 * not. `canEdit` is `settings:update`, which the database grants
+						 * to the owner and the guarantor alone — the same two the server
+						 * now admits to `POST /subscription-payment/checkout`.
+						 */
+						canPay={canEdit}
 					/>
 				</>
 			)}
@@ -1061,87 +1076,98 @@ function OutletSubscriptionPage() {
 				</>
 			)}
 
-			<OutletSection
-				title={t.agencyMisc.paymentMethod}
-				iconKey="Payment method"
-				hint={
-					backend.backed
-						? backend.card
-							? // The instrument stamp comes from the one shared describer, so a
-								// bank transfer reads as "Bank transfer" rather than
-								// "Card ···· ····". The renewal tail is unchanged.
-								describePaymentMethod(backend.card, {
-									transfer: t.subscription.savedTransfer,
-									fpx: t.subscription.savedFpx,
-									fpxLink: t.subscription.savedFpxLink,
-									ewallet: t.subscription.methodEwallet,
-								}) +
-								(renewalLabel
-									? fill(
-											// Same rule as the agency page: only a rail that can
-											// actually be charged says "next charge".
-											willAutoCharge(backend.card)
-												? t.agencyMisc.nextChargeSuffix
-												: t.agencyMisc.renewsOnSuffix,
-											{ date: renewalLabel },
-										)
-									: "")
-							: t.subscription.noCardSavedYet
-						: fill(t.outletSubscription.demoCardHint, {
-								last4: paymentCardLast4,
-								date: RENEWAL_DATE,
-							})
-				}
-				collapsible
-				defaultOpen={false}
-				className="!mt-5"
-			>
-				<PaymentMethodCard
-					card={backend.backed ? backend.card : null}
-					backed={backend.backed}
-					demoLast4={paymentCardLast4}
-					canEdit={canEdit}
-					isLoading={backend.backed && backend.isCardLoading}
-					isSaving={backend.isSavingCard}
-					billedLabel={
-						currentPlan
-							? fill(t.outletSubscription.billedMonthly, {
-									price: formatRM(currentPlan.monthlyRm),
+			{/*
+			 * THE WHOLE SECTION, not just its Edit button.
+			 *
+			 * Owner, 11 Sep 2026: "only the owner can make payment and SEE the
+			 * payment method in the organisation." It used to render for every
+			 * lane with only the edit form behind `canEdit`, so a Finance head
+			 * read the saved instrument — brand, last four, expiry and holder —
+			 * in the collapsed hint without even opening it.
+			 */}
+			{canEdit && (
+				<OutletSection
+					title={t.agencyMisc.paymentMethod}
+					iconKey="Payment method"
+					hint={
+						backend.backed
+							? backend.card
+								? // The instrument stamp comes from the one shared describer, so a
+									// bank transfer reads as "Bank transfer" rather than
+									// "Card ···· ····". The renewal tail is unchanged.
+									describePaymentMethod(backend.card, {
+										transfer: t.subscription.savedTransfer,
+										fpx: t.subscription.savedFpx,
+										fpxLink: t.subscription.savedFpxLink,
+										ewallet: t.subscription.methodEwallet,
+									}) +
+									(renewalLabel
+										? fill(
+												// Same rule as the agency page: only a rail that can
+												// actually be charged says "next charge".
+												willAutoCharge(backend.card)
+													? t.agencyMisc.nextChargeSuffix
+													: t.agencyMisc.renewsOnSuffix,
+												{ date: renewalLabel },
+											)
+										: "")
+								: t.subscription.noCardSavedYet
+							: fill(t.outletSubscription.demoCardHint, {
+									last4: paymentCardLast4,
+									date: RENEWAL_DATE,
 								})
-							: "—"
 					}
-					onSave={async (input) => {
-						const result = await backend.saveCard(input);
-						toast(
-							result.ok
-								? t.outletSubscription.cardSaved
-								: (result.reason ?? t.outletSubscription.couldNotSaveCard),
-							result.ok ? "success" : "warn",
-						);
-						return result.ok;
-					}}
-					isRemoving={backend.isRemovingCard}
-					onRemove={async () => {
-						const result = await backend.removeCard();
-						// The server's own sentence first; the local one only if it sent none.
-						toast(
-							result.message ??
-								(result.ok
-									? t.subscription.methodRemoved
-									: t.subscription.couldNotRemoveMethod),
-							result.ok ? "success" : "warn",
-						);
-						return result.ok;
-					}}
-				/>
+					collapsible
+					defaultOpen={false}
+					className="!mt-5"
+				>
+					<PaymentMethodCard
+						card={backend.backed ? backend.card : null}
+						backed={backend.backed}
+						demoLast4={paymentCardLast4}
+						canEdit={canEdit}
+						isLoading={backend.backed && backend.isCardLoading}
+						isSaving={backend.isSavingCard}
+						billedLabel={
+							currentPlan
+								? fill(t.outletSubscription.billedMonthly, {
+										price: formatRM(currentPlan.monthlyRm),
+									})
+								: "—"
+						}
+						onSave={async (input) => {
+							const result = await backend.saveCard(input);
+							toast(
+								result.ok
+									? t.outletSubscription.cardSaved
+									: (result.reason ?? t.outletSubscription.couldNotSaveCard),
+								result.ok ? "success" : "warn",
+							);
+							return result.ok;
+						}}
+						isRemoving={backend.isRemovingCard}
+						onRemove={async () => {
+							const result = await backend.removeCard();
+							// The server's own sentence first; the local one only if it sent none.
+							toast(
+								result.message ??
+									(result.ok
+										? t.subscription.methodRemoved
+										: t.subscription.couldNotRemoveMethod),
+								result.ok ? "success" : "warn",
+							);
+							return result.ok;
+						}}
+					/>
 
-				<div className="iz-tiny iz-muted mt-2 flex items-center gap-2">
-					<Calendar className="h-3.5 w-3.5" />
-					{renewalLabel
-						? fill(t.outletSubscription.nextRenewal, { date: renewalLabel })
-						: t.outletSubscription.nothingToRenew}
-				</div>
-			</OutletSection>
+					<div className="iz-tiny iz-muted mt-2 flex items-center gap-2">
+						<Calendar className="h-3.5 w-3.5" />
+						{renewalLabel
+							? fill(t.outletSubscription.nextRenewal, { date: renewalLabel })
+							: t.outletSubscription.nothingToRenew}
+					</div>
+				</OutletSection>
+			)}
 		</div>
 	);
 }

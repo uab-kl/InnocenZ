@@ -44,6 +44,16 @@ export interface Outlet {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	/**
+	 * WHO last switched this record off, by NAME — resolved server-side from
+	 * `updatedBy` through a join on `user`, never stored as a column. Null when
+	 * the actor was `'system'` or their account no longer exists.
+	 *
+	 * Optional because it is added by the server projection rather than by any
+	 * caller here: an older cached response simply lacks it, and the archive
+	 * screen renders its own fallback. `updatedBy` beside it keeps the raw id.
+	 */
+	updatedByName?: string | null;
 }
 
 export interface OutletMember {
@@ -82,6 +92,16 @@ export interface OutletTeamMember {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	/**
+	 * WHO last switched this record off, by NAME — resolved server-side from
+	 * `updatedBy` through a join on `user`, never stored as a column. Null when
+	 * the actor was `'system'` or their account no longer exists.
+	 *
+	 * Optional because it is added by the server projection rather than by any
+	 * caller here: an older cached response simply lacks it, and the archive
+	 * screen renders its own fallback. `updatedBy` beside it keeps the raw id.
+	 */
+	updatedByName?: string | null;
 	username?: string;
 	email?: string | null;
 	phoneNum?: string | null;

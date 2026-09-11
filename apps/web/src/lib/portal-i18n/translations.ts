@@ -1558,6 +1558,9 @@ const en = {
 			"{amount} is past its due date across {n} billing period(s). The oldest was due {date} — {days} days ago.",
 		noAccess: "You do not have access to subscription billing.",
 		financeReadOnly: "Finance view — read-only · contact owner to update card",
+		/** Every other non-owner lane — Ops Head, Director, anything added later. */
+		memberReadOnly:
+			"Read-only · only the owner can change the plan, pay, or update the card",
 		lastPayrollWeek: "Last payroll week · {cycle}",
 		pvIssuedOne: "{n} PV issued",
 		pvIssuedMany: "{n} PVs issued",
@@ -1863,6 +1866,9 @@ const en = {
 	profile: {
 		noAccess: "You do not have access to agency settings.",
 		financeReadOnly: "Finance view — read-only · cannot edit owner settings",
+		/** Every other non-owner lane — Director today, and anything added later. */
+		memberReadOnly:
+			"Read-only. Only the agency owner can edit owner information — you can still change your own login and security below.",
 		icAutoStamps: "IC + e-signature auto-stamps every PV (1st of 2 sigs)",
 		eSignatureOnFile: "E-signature on file ✓",
 		subRoleInviteHint:
@@ -1934,6 +1940,17 @@ const en = {
 		invite: "Invite",
 		securitySettingsTitle: "Security settings",
 		chooseWhatToUpdate: "Choose what you want to update.",
+		/* Your own name — the one row here that is not a credential. */
+		changeName: "Change name",
+		currentName: "Current name",
+		yourName: "Your name",
+		enterYourName: "Enter your name",
+		nameShownHint:
+			"This is the name your team, your approvals and your payment vouchers show.",
+		saveName: "Save name",
+		savingName: "Saving…",
+		nameUpdated: "Name updated",
+		nameUpdateFailed: "Could not update your name",
 		changePassword: "Change password",
 		changePhone: "Change phone",
 		changeEmail: "Change email",
@@ -1966,7 +1983,31 @@ const en = {
 		readOnlyForRole: "Read-only for your role.",
 		otpSentTo: "OTP sent to {target}",
 		otpResentTo: "OTP resent to {target}",
-		invalidOtp: "Invalid OTP — try 123456 for demo",
+		/*
+		 * No longer "try 123456 for demo". On a real session the code now comes
+		 * from WhatsApp, and telling somebody to type 123456 at a server that
+		 * will refuse it five times and then expire the code is worse than
+		 * saying nothing.
+		 */
+		invalidOtp: "That code is not right — check WhatsApp or send a new one",
+		/** DEMO sessions send no message — 123456 is the code. */
+		invalidOtpDemo: "Invalid OTP — try 123456 for demo",
+		otpDemoNoMessage: "Demo mode — no message is sent. Enter 123456.",
+		otpSendFailed: "Could not send the code — try again in a moment",
+		/** Shown BEFORE sending, so a missing country code is caught by eye. */
+		otpWillSendTo: "Code goes to {target} on WhatsApp",
+		/** Shown while the box is empty — both formats are accepted. */
+		/** No email-OTP endpoint exists yet — see TEST_SCRIPT §9. */
+		emailChangeUnavailable:
+			"Changing your email is not available yet — contact InnocenZ to update it.",
+		mobileTooShort:
+			"That looks too short for a mobile number — check the digits.",
+		mobileTooLong:
+			"That looks too long for a mobile number — check the digits.",
+		phoneFormatHint:
+			"Type it however you write it — 0123456789 or +60 12-345 6789 both work.",
+		mobileUpdated: "Mobile number updated",
+		mobileUpdateFailed: "Could not update your mobile number",
 		verifyNewEmail: "Verify new email",
 		verifyNewMobile: "Verify new mobile",
 		enterSixDigitCode: "Enter the 6-digit code sent to",
@@ -2058,6 +2099,9 @@ const en = {
 			"Finance view — read-only. Only the outlet owner can edit owner information.",
 		opsReadOnly:
 			"Ops view — read-only. Only the outlet owner can edit owner information.",
+		/** Every other non-owner lane — Director today, and anything added later. */
+		memberReadOnly:
+			"Read-only. Only the outlet owner can edit owner information — you can still change your own login and security below.",
 		ownerInformation: "Owner information",
 		outletName: "Outlet name",
 		venueOutletName: "Venue / outlet name",
@@ -2230,6 +2274,8 @@ const en = {
 		noAccessBilling: "You do not have access to subscription billing.",
 		financeReadOnly:
 			"Finance view — read-only · contact owner to change plan or card",
+		memberReadOnly:
+			"Read-only · only the owner can change the plan, pay, or update the card",
 		plansMonthly: "Plans · monthly",
 		prLimitHint:
 			"PR limit = max specific PRs you name per day (agency fill does not count) · {today} requested today · peak day {peak}",
@@ -3338,14 +3384,21 @@ const en = {
 		cancelAgency: "Cancel Agency",
 		joinRequest: "Join request",
 		joinRejected: "Join rejected",
-		member: "Member",
+		/* An approved JOIN, named as what the PR now IS. Deliberately NOT
+		   "Member": a PR is under an agency — an `agency_pr` row carrying a
+		   tier — while a member of the organisation is staff on `user_role`,
+		   invited through Settings. Two different relationships that both read
+		   "Member" in this portal until the owner caught it, 10 Sep 2026: "pr is
+		   pr who under which agency organisation, not the membership of the
+		   organisation". Keep the two vocabularies apart on screen. */
+		agencyPr: "Agency PR",
 		leaveRequest: "Leave request",
 		departureApproved: "Departure approved",
 		departureRejected: "Departure rejected",
 		approveDeparture: "Approve departure",
 		rejectDepartureNamed: "Reject {name}'s departure",
 		departureReasonSentToPr:
-			"Reason is sent to PR — required to reject a departure. The membership continues.",
+			"Reason is sent to PR — required to reject a departure. The PR stays under this agency.",
 		selectDepartureToReview: "Select a departure request to review",
 		noDepartureRequests: "No departure requests waiting",
 		noPendingSignups: "No pending sign-ups",
@@ -3536,7 +3589,22 @@ const en = {
 		 * above describe organisations and accounts — hence the wording: one names
 		 * what was done TO a membership, the other what was done to an ACCOUNT.
 		 */
-		roleRemovedMember: "Removed Member",
+		/*
+		 * ⚠️ THE ROLE BADGE SAYS WHAT KIND OF RECORD THIS IS; THE STATUS BADGE
+		 * SAYS WHAT HAPPENED TO IT.
+		 *
+		 * This used to read "Removed Member" for every non-active membership, so
+		 * somebody still WAITING for an owner to answer, and somebody who had been
+		 * DECLINED, both appeared to have been removed from a team they had never
+		 * been on. Owner, 11 Sep 2026: the screen must show "decline by who which
+		 * orgs, deactivate by who which orgs, removed member by who which orgs,
+		 * pending waiting for who which orgs".
+		 */
+		roleRemovedMember: "Team member",
+		/** Asked to join and nobody has answered — the org's Approvals queue. */
+		statusAwaitingOrg: "Waiting · {org}",
+		/** Asked and was turned down. NEVER a member of that organisation. */
+		statusDeclinedByOrg: "Declined",
 		roleDisabledAccount: "Deactivated Account",
 		/** Removed, and working nowhere else on the platform. */
 		statusRemoved: "Removed",
@@ -3554,6 +3622,18 @@ const en = {
 		sortBy: "Sort By",
 		sortOrder: "Sort Order",
 		colUpdated: "Updated",
+		/**
+		 * WHO switched the record off — the column beside "Updated", which only
+		 * ever said WHEN. Deliberately not "Removed by": this one screen lists
+		 * five kinds of record and only one of them was *removed* —
+		 * organisations are suspended, accounts are deactivated — so the header
+		 * has to be true of all five at once.
+		 */
+		colDeactivatedBy: "Deactivated by",
+		/** Shown when `updated_by` names an account that no longer exists. */
+		actorUnknown: "Unknown",
+		/** A scheduler or an unauthenticated path, not a person. */
+		actorSystem: "System",
 		ascending: "Ascending",
 		descending: "Descending",
 		suspendedInactiveRecords: "Suspended & inactive records",
@@ -3876,12 +3956,13 @@ const en = {
 		ownerInvite: "Owner invite",
 		/** Comcard tab sub-label when there is no photo comcard, only the 3D silhouette. */
 		comcard3dPreview: "3D preview",
-		/** History line on a decided JOIN request. */
-		membershipApproved: "Membership approved",
+		/** History line on a decided JOIN request. Names the RELATIONSHIP, not a
+		 * membership: an approved PR is under this agency, never on its team. */
+		joinApprovedDetail: "Approved — now a PR under this agency",
 		/** History line on a decided LEAVE request. Longer than approvals.departureApproved, which is the list badge. */
 		departureApprovedDetail: "Departure approved — no longer under this agency",
 		/** History line on a refused LEAVE request. */
-		departureRejectedDetail: "Departure rejected — membership continues",
+		departureRejectedDetail: "Departure rejected — still under this agency",
 		/** Accessible name on the zoom button wrapping a document photo. */
 		enlargeNamed: "Enlarge {name}",
 		/** Alt text and accessible name for one portfolio photo cell. */
@@ -5052,6 +5133,125 @@ const en = {
 		shiftsAtVenueForPr: "{shifts} at {venue} · {name}",
 	},
 	portalUi: {
+		/**
+		 * The "New Member" queue — people who asked to JOIN, from the member
+		 * sign-up. Distinct from an invite, which the organisation started.
+		 */
+		noPendingMembers: "No one is waiting to join right now.",
+		/** The queue's own name — on the agency Approvals tabs and above the
+		    outlet's team list. "New member" not "Requests": the reader is being
+		    told WHO is waiting, not what kind of paperwork it is. */
+		newMembers: "New member",
+		/** The queue's filter. "Waiting" is the work; the other two are the
+		    record — the same split every other approvals queue here uses. */
+		membersWaiting: "Waiting",
+		membersActive: "On the team",
+		membersAll: "All",
+		/** What they ASKED for — a suggestion, not the decision. */
+		requestedRole: "Asked to join as",
+		/** The decision, which is the owner's and may differ from the request. */
+		roleToGrant: "Role to grant",
+		approveJoin: "Approve",
+		declineJoin: "Decline",
+		approveFailed: "Could not approve this request",
+		declineFailed: "Could not decline this request",
+		/*
+		 * THE REVIEW PANE — the right half of the Approvals screen, which the
+		 * member queue used to leave blank because it approved inline. An owner is
+		 * deciding whether to let a STRANGER into their payroll, and a name plus an
+		 * email is not enough to decide on; this is where the rest goes.
+		 */
+		selectMember: "Select someone to review their request",
+		selectMemberHint: "Their details, and the decision, appear here.",
+		memberRequestHeading: "What they asked for",
+		memberContactHeading: "How to reach them",
+		memberAccountHeading: "Their account",
+		appliedOn: "Applied",
+		accountId: "Member ID",
+		noPhoto: "No photo",
+		memberEmail: "Email",
+		memberPhone: "Mobile",
+		memberNoPhone: "Not given",
+		/** The decision block's own heading, above the picker and the buttons. */
+		decideHeading: "Your decision",
+		decideHint:
+			"They asked for one title; the one you pick here is the one they get.",
+		alreadyOnTeam: "Already on the team",
+		/*
+		 * DECLINED — its own state, not a kind of "waiting".
+		 *
+		 * Declining writes `status: 'inactive'`, and the queue counted anything
+		 * that was not active as still waiting — so a declined person stayed in
+		 * the Waiting list with Approve and Decline offered again, and the
+		 * decision read as though it had not registered.
+		 */
+		membersRejected: "Declined",
+		/*
+		 * DEACTIVATED — a former member, which is NOT a declined applicant.
+		 * Owner, 11 Sep 2026: "deactivate trigger when there is already a orgs
+		 * member, but remove by the owner". They have real history with the
+		 * organisation, so the roster keeps them; this list is where an owner
+		 * sees who was removed and who did it.
+		 */
+		membersDeactivated: "Deactivated",
+		deactivatedRole: "Deactivated",
+		deactivatedBy: "Deactivated by",
+		declinedRole: "Declined",
+		declinedBy: "Declined by",
+		/*
+		 * ⚠️ READ FROM `updated_by`, which is LAST WRITER — not a dedicated
+		 * `approved_by` column, because there isn't one. For somebody admitted
+		 * through this queue it IS the person who approved them, and it stays
+		 * true until someone edits that membership afterwards (a role change on
+		 * the Team screen would move it). Naming a real approver column would be
+		 * a migration; this is honest about what it can see today.
+		 */
+		acceptedBy: "Accepted by",
+		/*
+		 * THE INVITE BOX'S REMINDER (owner, 11 Sep 2026).
+		 *
+		 * An invite can only reach an address that ALREADY has an InnocenZ login —
+		 * `refuseUninvitableAccount` turns away an unknown address, an inactive
+		 * account and an admin's. That rule is right (inviting a stranger's
+		 * address and setting a password on it was an account-takeover hole we
+		 * closed), but the box gave no hint of it, so the failure arrived only
+		 * after typing an address and pressing Invite.
+		 */
+		inviteNeedsAccount:
+			"They must already have an InnocenZ account. Ask them to sign up as a team member first, then invite the address they used.",
+		/*
+		 * ⚠️ ONE LABEL PER OUTCOME. "Declined on" was being printed over every
+		 * decided row, including accepted ones — so the owner's own card read
+		 * "Already on the team · Owner" and "DECLINED ON" at the same time. The
+		 * date is the same column either way; the WORD is the whole meaning.
+		 */
+		declinedOn: "Declined on",
+		acceptedOn: "Accepted on",
+		deactivatedOn: "Deactivated on",
+		/*
+		 * Taking an ACTIVE member off the team, from the review pane — the same
+		 * act as the Team screen's bin icon, and the same write, so the two
+		 * cannot diverge (owner, 11 Sep 2026).
+		 */
+		deactivateMember: "Deactivate",
+		/*
+		 * Changing an existing member's title from the review pane — the same
+		 * control the Team screen carries, and the same write, so the two cannot
+		 * disagree (owner, 11 Sep 2026: "make switch row can be in the approval
+		 * page all section").
+		 */
+		changeRole: "Change their role",
+		saveRole: "Save role",
+		roleSaved: "Role updated",
+		roleSaveFailed: "Could not change this role",
+		deactivateConfirm:
+			"Remove {name} from the team? They lose access immediately, and their record stays under Deactivated.",
+		deactivateFailed: "Could not deactivate this member",
+		cancel: "Cancel",
+		decisionHeading: "The decision",
+		/** The actor column's two honest fallbacks — never an invented name. */
+		actorSystemShort: "InnocenZ (automatic)",
+		actorUnknownShort: "an account since removed",
 		/** SidebarTrigger's sr-only label and SidebarRail's aria-label + title. Distinct from shell.expandSidebar / shell.collapseSidebar: this control flips, it does not name a direction. */
 		toggleSidebar: "Toggle Sidebar",
 		/** Screen-reader-only title of the mobile sidebar Sheet. */
@@ -5090,6 +5290,7 @@ const en = {
 		verifyOtp: "Verify OTP",
 		/** OtpVerifySheet's secondary button. Channel-neutral on purpose — this sheet serves the email lane (agency/outlet) and the WhatsApp lane alike. */
 		resendOtp: "Resend OTP",
+		resendOtpIn: "Resend in {seconds}s",
 		/** Placeholder under a member's name when the membership row carries no email. */
 		noEmail: "no email",
 		/** OrgMembersPanel, kind === "agency": the invite dropdown fell back to FALLBACK_SUB_ROLES. */
@@ -6123,6 +6324,14 @@ const en = {
 	 * shown ONLY to someone who works in two or more agencies or venues.
 	 */
 	chooseOrg: {
+		/*
+		 * The platform console, offered beside the organisations (owner,
+		 * 11 Sep 2026). An admin who is also on a team holds TWO places to be,
+		 * and picking one for them silently is what this screen exists to stop.
+		 */
+		adminConsoleGroup: "INNOCENZ",
+		adminConsoleName: "Admin console",
+		adminConsoleHint: "Platform administration — not an organisation",
 		title: "Choose your organisation",
 		/** Why they are being asked. Says what the choice actually decides, so it does not read as an extra click. */
 		body: "You work in more than one. The portal opens for the one you pick, and shows that organisation’s people, shifts and money only.",
@@ -6131,6 +6340,24 @@ const en = {
 		outlets: "Outlets",
 		/** Prefix on each card for this person’s member id INSIDE that organisation. */
 		memberId: "Member ID",
+		/**
+		 * Why a card cannot be opened. Three DIFFERENT reasons, kept apart on
+		 * purpose: "you were removed from here" and "this whole organisation is
+		 * switched off" are opposite situations — one is about this person, the
+		 * other about everybody — and pointing someone at the wrong person to
+		 * ask is the failure this screen exists to prevent.
+		 */
+		membershipInactive: "You were removed from this organisation",
+		/** A join request nobody has decided on yet — the OPPOSITE of removed,
+		    and it must never borrow that wording. Nothing has gone wrong; they
+		    are waiting, and the organisation is the one to chase. */
+		membershipPending: "Waiting for this organisation to approve you",
+		orgInactive: "This organisation is deactivated",
+		unavailable: "Unavailable",
+		/** Heading over the cards that cannot be entered. */
+		noLongerAvailable: "No longer available",
+		noLongerAvailableHint:
+			"Ask an InnocenZ admin to restore access. Your other organisations are unaffected.",
 		loading: "Loading your organisations…",
 		failed: "Could not load your organisations",
 		retry: "Try again",
@@ -6206,10 +6433,53 @@ const en = {
 			"Sign out and sign in with the {portal} account to open it. A link cannot carry a sign-in between browsers — if it could, anyone who received it would be signed in as you.",
 		noPortalBody:
 			"Your account role does not have a web portal on InnocenZ yet. Please contact support if you believe this is a mistake.",
+		/*
+		 * WAITING, NOT REFUSED. An account that has just asked to join a team
+		 * holds no portal role — which is the same state as "no portal at all",
+		 * and used to render the same red refusal. It was a flat contradiction of
+		 * the sign-up screen the person had seen seconds earlier ("you can sign in
+		 * now"), and it reads as a rejection of a request nobody has looked at.
+		 * Amber, per the standing colour code: waiting is not a failure.
+		 */
+		waitingTitle: "Waiting for approval",
+		/*
+		 * REMOVED — the fourth thing /no-access has to be able to say (0162).
+		 *
+		 * Removal revokes the portal role, so somebody deactivated at their only
+		 * organisation holds no role and lands here — where the generic line read
+		 * "your account role does not have a web portal yet", as though they had
+		 * never worked anywhere. They know they worked there; what they need is
+		 * which organisation ended it and who to ask about it.
+		 */
+		removedTitle: "Your access was removed",
+		removedBody:
+			"{org} removed you from their team, so this portal is closed to you. Your account itself is fine — another organisation can still invite you.",
+		removedHint:
+			"If you think this is a mistake, contact {org} directly — reinstating you is theirs to do.",
+		waitingBody:
+			"{org} has your request to join as {role}. Sign in again once they approve you — nothing else is needed from you.",
+		waitingHint:
+			"Approval is theirs to give, and they set your final role. If it is taking too long, contact them directly.",
 		/** /no-access primary button in the wrong-portal case. */
 		signOutSwitchAccount: "Sign out and switch account",
 		/** Same button in the no-portal case — it also signs out, then lands on /login. */
 		backToLogin: "Back to login",
+		checkingSession: "Checking your account…",
+		/** Shown to the RIGHT person, naming the account — a shared computer must
+		    not let somebody accept another person's invitation by accident. */
+		acceptAsHint: "You are signed in as {email}. Accept to join this team.",
+		acceptInvitation: "Accept invitation",
+		accepting: "Joining…",
+		signInToAccept: "Sign in to accept",
+		/** Nobody is signed in. Says WHY there is no sign-up form here: an
+		    invitation only ever goes to an account that already exists. */
+		signInToAcceptHint:
+			"This invitation was sent to {email}. Sign in to that account to accept it — invitations are only sent to accounts that already exist.",
+		/** The WRONG person is signed in. Kept separate from the line above:
+		    telling somebody already signed in to "sign in" is the message that
+		    makes a person try the same thing twice. */
+		signedInAsOther:
+			"You are signed in as {current}, but this invitation was sent to {invited}. Sign out and sign in as {invited} to accept it.",
 	},
 	authPages: {
 		/** Field label over the email input on /login and /forgot-password. */
@@ -7638,6 +7908,7 @@ const zh: PortalTranslations = {
 		agingOverdue: "已逾期",
 		noAccess: "你没有查看订阅账单的权限。",
 		financeReadOnly: "财务视图 —— 只读 · 如需更换银行卡请联系东主",
+		memberReadOnly: "只读 · 只有东主可以更改套餐、付款或更新银行卡",
 		lastPayrollWeek: "上一个薪资周 · {cycle}",
 		pvIssuedOne: "已开具 {n} 张薪资单",
 		pvIssuedMany: "已开具 {n} 张薪资单",
@@ -7856,6 +8127,8 @@ const zh: PortalTranslations = {
 	profile: {
 		noAccess: "你没有查看经纪公司设置的权限。",
 		financeReadOnly: "财务视图 —— 只读 · 无法修改东主设置",
+		memberReadOnly:
+			"只读。只有经纪公司东主可以编辑东主信息 —— 你仍可在下方修改自己的登录与安全设置。",
 		icAutoStamps: "身份证 + 电子签名会自动加盖到每张薪资单（双签中的第 1 签）",
 		eSignatureOnFile: "已保存电子签名 ✓",
 		subRoleInviteHint: "子角色邀请 · 双签薪资单需要身份证 + 电子签名",
@@ -7924,6 +8197,15 @@ const zh: PortalTranslations = {
 		invite: "发送邀请",
 		securitySettingsTitle: "安全设置",
 		chooseWhatToUpdate: "请选择要修改的项目。",
+		changeName: "修改姓名",
+		currentName: "当前姓名",
+		yourName: "你的姓名",
+		enterYourName: "请输入你的姓名",
+		nameShownHint: "团队名单、审批记录和薪资单上显示的都是这个姓名。",
+		saveName: "保存姓名",
+		savingName: "保存中…",
+		nameUpdated: "姓名已更新",
+		nameUpdateFailed: "无法更新你的姓名",
 		changePassword: "修改密码",
 		changePhone: "修改手机号",
 		changeEmail: "修改邮箱",
@@ -7955,7 +8237,17 @@ const zh: PortalTranslations = {
 		readOnlyForRole: "你的角色为只读。",
 		otpSentTo: "验证码已发送至 {target}",
 		otpResentTo: "验证码已重新发送至 {target}",
-		invalidOtp: "验证码不正确 —— 演示环境请输入 123456",
+		invalidOtp: "验证码不正确 —— 请查看 WhatsApp 或重新发送",
+		invalidOtpDemo: "验证码不正确 —— 演示环境请输入 123456",
+		otpDemoNoMessage: "演示模式 —— 不会发送短信，请输入 123456。",
+		otpSendFailed: "无法发送验证码 —— 请稍后再试",
+		otpWillSendTo: "验证码将通过 WhatsApp 发送至 {target}",
+		emailChangeUnavailable: "暂时无法自行修改邮箱 —— 请联系 InnocenZ 更新。",
+		mobileTooShort: "这个号码位数太少 —— 请检查数字。",
+		mobileTooLong: "这个号码位数太多 —— 请检查数字。",
+		phoneFormatHint: "怎么写都可以 —— 0123456789 或 +60 12-345 6789 都能识别。",
+		mobileUpdated: "手机号已更新",
+		mobileUpdateFailed: "无法更新你的手机号",
 		verifyNewEmail: "验证新邮箱",
 		verifyNewMobile: "验证新手机号",
 		enterSixDigitCode: "请输入发送至以下号码的 6 位验证码",
@@ -8024,6 +8316,8 @@ const zh: PortalTranslations = {
 		loadingProfile: "正在加载你的门店资料…",
 		financeReadOnly: "财务视图 —— 只读。只有门店东主可以编辑负责人信息。",
 		opsReadOnly: "运营视图 —— 只读。只有门店东主可以编辑负责人信息。",
+		memberReadOnly:
+			"只读。只有门店东主可以编辑负责人信息 —— 你仍可在下方修改自己的登录与安全设置。",
 		ownerInformation: "负责人信息",
 		outletName: "门店名称",
 		venueOutletName: "场所 / 门店名称",
@@ -8165,6 +8459,7 @@ const zh: PortalTranslations = {
 	outletSubscription: {
 		noAccessBilling: "你没有权限查看订阅账单。",
 		financeReadOnly: "财务视图 —— 只读 · 如需更改套餐或银行卡请联系东主",
+		memberReadOnly: "只读 · 只有东主可以更改套餐、付款或更新银行卡",
 		plansMonthly: "套餐 · 按月",
 		prLimitHint:
 			"PR 上限 = 你每天可指名的 PR 人数上限（由经纪公司补位的不计入） · 今天已请求 {today} 位 · 峰值日 {peak} 位",
@@ -9137,7 +9432,7 @@ const zh: PortalTranslations = {
 		cancelAgency: "解约申请",
 		joinRequest: "加入申请",
 		joinRejected: "加入已拒绝",
-		member: "已加入",
+		agencyPr: "签约 PR",
 		leaveRequest: "解约申请",
 		departureApproved: "解约已批准",
 		departureRejected: "解约已拒绝",
@@ -9281,7 +9576,9 @@ const zh: PortalTranslations = {
 		roleAgency: "经纪公司",
 		roleOutlet: "门店",
 		rolePr: "PR",
-		roleRemovedMember: "已移出成员",
+		roleRemovedMember: "团队成员",
+		statusAwaitingOrg: "等待审批 · {org}",
+		statusDeclinedByOrg: "已拒绝",
 		roleDisabledAccount: "已停用账户",
 		statusRemoved: "已移出",
 		statusRemovedStillActive: "已移出 · 仍在其他机构",
@@ -9290,6 +9587,9 @@ const zh: PortalTranslations = {
 		sortBy: "排序方式",
 		sortOrder: "排序顺序",
 		colUpdated: "更新时间",
+		colDeactivatedBy: "停用操作人",
+		actorUnknown: "未知",
+		actorSystem: "系统",
 		ascending: "升序",
 		descending: "降序",
 		suspendedInactiveRecords: "已暂停与已停用的记录",
@@ -9524,7 +9824,7 @@ const zh: PortalTranslations = {
 		icNumber: "身份证号",
 		ownerInvite: "东主邀请",
 		comcard3dPreview: "3D 预览",
-		membershipApproved: "已批准加入本经纪公司",
+		joinApprovedDetail: "已批准 — 现为本经纪公司签约 PR",
 		departureApprovedDetail: "解约已批准 — 已不再隶属本经纪公司",
 		departureRejectedDetail: "解约已驳回 — 合作关系继续",
 		enlargeNamed: "放大{name}",
@@ -10315,6 +10615,55 @@ const zh: PortalTranslations = {
 		shiftsAtVenueForPr: "{name} 在 {venue} 的 {shifts}",
 	},
 	portalUi: {
+		noPendingMembers: "目前没有待审批的加入申请。",
+		newMembers: "新成员",
+		membersWaiting: "待审批",
+		membersActive: "已在团队",
+		membersAll: "全部",
+		requestedRole: "申请职位",
+		roleToGrant: "授予职位",
+		approveJoin: "通过",
+		declineJoin: "拒绝",
+		approveFailed: "无法通过此申请",
+		declineFailed: "无法拒绝此申请",
+		selectMember: "选择一位申请人查看详情",
+		selectMemberHint: "对方的资料与审批操作会显示在这里。",
+		memberRequestHeading: "申请内容",
+		memberContactHeading: "联系方式",
+		memberAccountHeading: "账号信息",
+		appliedOn: "申请时间",
+		accountId: "成员编号",
+		noPhoto: "未上传照片",
+		memberEmail: "邮箱",
+		memberPhone: "手机号",
+		memberNoPhone: "未填写",
+		decideHeading: "您的决定",
+		decideHint: "对方申请的是一个职位；最终由您在此选定。",
+		alreadyOnTeam: "已在团队中",
+		membersRejected: "已拒绝",
+		membersDeactivated: "已停用",
+		deactivatedRole: "已停用",
+		deactivatedBy: "停用人",
+		declinedRole: "已拒绝",
+		declinedBy: "拒绝人",
+		acceptedBy: "通过人",
+		inviteNeedsAccount:
+			"对方必须已拥有 InnocenZ 账号。请先让对方以「团队成员」身份注册，再邀请其注册时使用的邮箱。",
+		declinedOn: "拒绝时间",
+		acceptedOn: "通过时间",
+		deactivatedOn: "停用时间",
+		deactivateMember: "停用",
+		changeRole: "更改职位",
+		saveRole: "保存职位",
+		roleSaved: "职位已更新",
+		roleSaveFailed: "无法更改该职位",
+		deactivateConfirm:
+			"确定将 {name} 移出团队？对方会立即失去访问权限，其记录会保留在「已停用」中。",
+		deactivateFailed: "无法停用该成员",
+		cancel: "取消",
+		decisionHeading: "审批结果",
+		actorSystemShort: "InnocenZ（系统自动）",
+		actorUnknownShort: "已注销的账号",
 		toggleSidebar: "切换侧栏",
 		sidebar: "侧栏",
 		sidebarSrHint: "显示移动端侧栏。",
@@ -10334,6 +10683,7 @@ const zh: PortalTranslations = {
 		oneTimePassword: "一次性验证码",
 		verifyOtp: "验证",
 		resendOtp: "重新发送验证码",
+		resendOtpIn: "{seconds} 秒后可重发",
 		noEmail: "无邮箱",
 		rolesLoadFailedAgency: "无法加载经纪公司端角色 —— 使用默认值。",
 		rolesLoadFailedOutlet: "无法加载门店端角色 —— 使用默认值。",
@@ -11045,11 +11395,21 @@ const zh: PortalTranslations = {
 		ratingNotePlaceholder5: "亮眼表现 —— VIP 加单、开瓶、团队配合或现场气氛…",
 	},
 	chooseOrg: {
+		adminConsoleGroup: "INNOCENZ",
+		adminConsoleName: "管理后台",
+		adminConsoleHint: "平台管理 —— 不属于任何机构",
 		title: "选择您的机构",
 		body: "您隶属于多个机构。门户将按您选择的机构打开，并仅显示该机构的人员、班次与款项。",
 		agencies: "经纪公司",
 		outlets: "门店",
 		memberId: "会员编号",
+		membershipInactive: "您已被移出该组织",
+		membershipPending: "等待该组织审批",
+		orgInactive: "该组织已停用",
+		unavailable: "不可用",
+		noLongerAvailable: "已不可用",
+		noLongerAvailableHint:
+			"请联系 InnocenZ 管理员恢复访问权限。您的其他组织不受影响。",
 		loading: "正在加载您的机构…",
 		failed: "无法加载您的机构",
 		retry: "重试",
@@ -11097,8 +11457,26 @@ const zh: PortalTranslations = {
 			"请退出登录，改用{portal}的账号登录后再打开此链接。链接无法在浏览器之间传递登录状态 —— 否则任何拿到该链接的人都会以您的身份登录。",
 		noPortalBody:
 			"您的账号角色在 InnocenZ 上暂时没有网页门户。如果您认为这是误判，请联系客服。",
+		waitingTitle: "等待审批",
+		removedTitle: "您的访问权限已被取消",
+		removedBody:
+			"{org} 已将您移出团队，因此该门户已对您关闭。您的账号本身正常，其他机构仍可邀请您加入。",
+		removedHint: "如果您认为这是误操作，请直接联系 {org}，恢复权限由他们决定。",
+		waitingBody:
+			"{org} 已收到您以「{role}」加入团队的申请。通过后重新登录即可，无需其他操作。",
+		waitingHint:
+			"审批由该机构决定，最终职位也由他们设定。如长时间未处理，请直接联系他们。",
 		signOutSwitchAccount: "退出登录并切换账号",
 		backToLogin: "返回登录页",
+		checkingSession: "正在检查您的账号…",
+		acceptAsHint: "您当前以 {email} 登录。接受邀请即可加入该团队。",
+		acceptInvitation: "接受邀请",
+		accepting: "正在加入…",
+		signInToAccept: "登录以接受",
+		signInToAcceptHint:
+			"此邀请发送至 {email}。请使用该账号登录以接受 —— 邀请仅发送给已存在的账号。",
+		signedInAsOther:
+			"您当前以 {current} 登录，但此邀请发送至 {invited}。请退出并以 {invited} 登录后接受。",
 	},
 	authPages: {
 		emailLabel: "电子邮箱",

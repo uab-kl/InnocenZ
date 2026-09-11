@@ -4,8 +4,10 @@ import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
 import { useAgencyPvs } from "@agency-portal/hooks/use-agency-pvs";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
+import { useOrgMembersQuery } from "@agency-portal/hooks/use-org-members";
 import { useOutletToday } from "@agency-portal/hooks/use-outlet-today";
 import { useUnpaidBilling } from "@agency-portal/hooks/use-unpaid-billing";
+import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
 	countPvsNeedingAction,
 	countReceiptsNeedingAction,
@@ -93,14 +95,22 @@ function AgencyNavAlerts({ children }: { children: ReactNode }) {
 function OutletNavAlerts({ children }: { children: ReactNode }) {
 	const today = useOutletToday();
 	const billing = useUnpaidBilling("outlet");
+	// The same key Settings reads, so badge and panel are one answer.
+	const outletId = useMemo(() => getOutletIdentity()?.outletId ?? null, []);
+	const memberRows = useOrgMembersQuery("outlet", outletId);
+	const pendingMembers = useMemo(
+		() => (memberRows.data ?? []).filter((m) => m.status !== "active").length,
+		[memberRows.data],
+	);
 
 	const alerts = useMemo(
 		() =>
 			outletNavAlerts({
 				shiftsNeedingStaff: countShiftsNeedingStaff(today.shifts),
 				unpaidPeriods: billing.periods,
+				pendingMembers,
 			}),
-		[today.shifts, billing.periods],
+		[today.shifts, billing.periods, pendingMembers],
 	);
 
 	return (

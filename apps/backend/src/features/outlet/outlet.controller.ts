@@ -8,6 +8,9 @@ import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
+import { removalStatusFor } from '@/util/membership-status';
+import { activateOrgMembership } from '@/util/activate-membership';
+import { refuseUninvitableAccount } from '@/util/invitable-account';
 import { logger } from '@/util/logger';
 import { guardMemberChange } from '@/util/member-change-guard';
 import {
@@ -93,6 +96,8 @@ export class OutletControllerClass {
         search: req.query.search as string | undefined,
         outletId: req.query.outletId as string | undefined,
         status: !statusParam || statusParam === 'all' ? undefined : statusParam,
+        // Opt-in: only the Legacy Member record asks to see declined requests.
+        includeRejected: req.query.includeRejected === 'true',
         page,
         pageSize,
       });
@@ -1021,6 +1026,25 @@ export class OutletControllerClass {
         });
       }
 
+      /*
+       * Only an existing, loginable, non-admin account may be invited — one
+       * rule, both portals, checked again in `accept`. See
+       * `util/invitable-account.ts` for why it is refused HERE and not only
+       * at the end of the emailed link.
+       */
+      const uninvitable = await refuseUninvitableAccount(
+        {
+          userRepository: this.userRepository,
+          userRoleRepository: this.userRoleRepository,
+        },
+        email,
+      );
+      if (uninvitable) {
+        return res
+          .status(409)
+          .json({ success: false, message: uninvitable, data: null });
+      }
+
       const actor = getActor(req);
       const secret = createOrgMemberInviteSecret();
       const pending = await this.inviteRepository.findPendingByOrgEmail({
@@ -1193,10 +1217,32 @@ export class OutletControllerClass {
         }
       }
 
-      if (
-        parsed.data.subRole != null &&
-        parsed.data.subRole !== target.subRole
-      ) {
+      /**
+       * ⚠️ THE TEST IS "A TITLE WAS NAMED", NOT "THE TITLE CHANGED".
+       *
+       * It used to also require `parsed.data.subRole !== target.subRole`, and
+       * that extra term left the one hole this whole endpoint exists to close.
+       * Reinstating a removed member with the lane they ALREADY held —
+       * `{status:'active', subRole:'finance'}` against a row whose `sub_role`
+       * column already says `finance`, which is exactly what the UI sends
+       * because it pre-selects their remembered lane — matched
+       * `subRole === target.subRole`, skipped this entire block, and therefore
+       * never re-assigned the portal role that removal had revoked. The
+       * member came back ACTIVE WITH NO ROLE.
+       *
+       * That state is not merely broken, it is the state
+       * `ensurePortalRolesFromMembership` existed to paper over: on the next
+       * `/auth/me` it silently minted a role for them. And since 0160 that
+       * heal was far more generous than its name suggested — `holdsAgencyLane`
+       * uses the role only as a DOOR check and reads the authority off
+       * `agency_user.sub_role`, so healing a removed OWNER handed back OWNER
+       * authority, with no invite and nobody's decision behind it.
+       *
+       * Naming the same title is a legitimate, deliberate reinstatement. It
+       * has to grant. The 409 above still covers the other case — reactivating
+       * without naming any title, for somebody whose role is gone.
+       */
+      if (parsed.data.subRole != null) {
         const roleName = portalRoleNameForSubRole(
           'outlet',
           parsed.data.subRole,
@@ -1304,6 +1350,27 @@ export class OutletControllerClass {
           .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
+      /*
+       * ⚠️ ONE CALL — activating is three writes that must happen together: the
+       * status, the organisation's real id over an `INNPND` placeholder (0161 —
+       * a request is not a membership, so the id is EARNED here), and the
+       * first-activation stamp (0163). They were spread across four sites and
+       * one had already forgotten the id; `activateOrgMembership` carries the
+       * full account of why they are now inseparable.
+       *
+       * The status write above set the row; this settles what that MEANS.
+       */
+      if (parsed.data.status === 'active') {
+        await activateOrgMembership({
+          kind: 'outlet',
+          orgId: outletId,
+          membershipId: memberId,
+          userId: target.userId,
+          actor,
+          current: memberRow,
+        });
+      }
+
       // Deactivating here IS removing, so it revokes the same way — see the
       // agency twin. Revoking only on the DELETE leaves the identical hole one
       // route down.
@@ -1393,7 +1460,29 @@ export class OutletControllerClass {
           .json({ success: false, message: refusal, data: null });
       }
 
-      const removed = await this.outletMemberRepository.remove(memberId);
+      /*
+       * ⚠️ WHICH EVENT IS THIS? The route cannot say, so the ROW says (0162).
+       *
+       * Decline and Remove are the same call. A membership that has never been
+       * anything but `pending` was never a member, so taking it away is a
+       * DECLINE and must be recorded as `rejected` — a word the roster excludes,
+       * because somebody who was turned down was never on the team. Anything
+       * else was active, so this is a DEACTIVATION and stays `inactive`, which
+       * the roster keeps and marks.
+       *
+       * Derived from `target`, never from a flag the client sends: the two
+       * buttons then cannot disagree, and a caller that knows nothing about the
+       * distinction still produces the right word.
+       */
+      const nextStatus = removalStatusFor(
+        target.status,
+        target.firstActivatedAt,
+      );
+      const removed = await this.outletMemberRepository.remove(
+        memberId,
+        getActor(req),
+        nextStatus,
+      );
       if (!removed)
         return res
           .status(404)

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { decimal, integer, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { UserTable } from '@/features/user/user.model';
@@ -88,9 +89,41 @@ export const OutletUserTable = MainSchema.table('outlet_user', {
    * Per membership, not per person: someone operating two organisations holds a
    * different id in each, because the id names the organisation (0154).
    */
-  /** This membership’s id — INNEMOLT0001. NOT NULL since 0159; `add()`
-      always mints one and throws rather than writing without it. */
-  memberCode: varchar('member_code', { length: 32 }).notNull(),
+  /**
+   * This membership’s id — INNEMOLT0001. NOT NULL since 0159.
+   *
+   * ⚠️ THE DEFAULT IS A PLACEHOLDER, NOT AN ID (0161). A row created at
+   * `pending` — somebody who has ASKED to join — takes `INNPND0001` from the
+   * database, and only `updateMember` turns that into the organisation's real
+   * next number when an owner approves them. Minting the real one at INSERT is
+   * what handed a stranger `INNATAGY0005` and burned the number when the
+   * request was declined.
+   *
+   * Declared here as well as in the migration so the insert TYPE knows the
+   * column is optional; `pnpm check:drift` is what keeps the two honest.
+   */
+  memberCode: varchar('member_code', { length: 32 })
+    .notNull()
+    .default(
+      sql`'INNPND' || lpad(nextval('"main"."pending_member_code_seq"')::text, 4, '0')`,
+    ),
+  /**
+   * WHEN THIS PERSON FIRST JOINED — written once, never rewritten (0163).
+   *
+   * NULL means they have never been on the team: a request still waiting, or
+   * one that was turned down. A timestamp means an approval actually
+   * happened, whatever the row says today.
+   *
+   * ⚠️ This is what tells a DECLINED applicant from a DEACTIVATED colleague
+   * when somebody is removed. That used to be deduced from the member id —
+   * sound, but it made one rule depend on another written in five places,
+   * and a former colleague re-labelled "never a member" is the kind of
+   * mistake nobody notices until it is already on a screen.
+   *
+   * ⚠️ NOT part of the audit quartet: `updated_at` churns on every edit;
+   * this does not move after the first activation.
+   */
+  firstActivatedAt: timestamp('first_activated_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),

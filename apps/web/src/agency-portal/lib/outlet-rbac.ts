@@ -1,8 +1,11 @@
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
+import { OUTLET_ROLE_GRANTS } from "@agency-portal/lib/rbac-grants.generated";
 import type { LucideIcon } from "lucide-react";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
 import {
+	buildRoleMatrix,
 	canModule,
+	grantsForPortal,
 	OUTLET_FEATURE_MODULE,
 } from "@/lib/auth/module-permissions";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -64,95 +67,80 @@ type Permission =
 	 *
 	 * Mirrors the backend guard on `POST /cutlost`, which admits the owner,
 	 * finance and ops lanes but not a Director. Matrix-only on purpose (no
-	 * `OUTLET_FEATURE_MODULE` entry): the server gates it by LANE rather than by a
-	 * module grant, because outlet Finance holds no `booking` permission at all
-	 * and a `booking:create` mapping here would disagree with the server.
+	 * `OUTLET_FEATURE_MODULE` entry): the server gates it by LANE, and there is
+	 * no `cutlost` module to grant — see MATRIX_ONLY below.
+	 *
+	 * ⚠️ This note used to say the lane gate existed "because outlet Finance
+	 * holds no `booking` permission at all". That was wrong, and being wrong in
+	 * a comment is how the whole matrix drifted: the database grants Finance
+	 * `booking` create, read and update, and the server admits them.
 	 *
 	 * Without this the button rendered for everyone — the component had no
 	 * permission check at all — so a Director could click it and collect a 403.
 	 */
 	| "requestCutLoss";
 
-type ModulePerm = { moduleKey: string; permissionType: string };
+type ModulePerm = {
+	moduleKey: string;
+	permissionType: string;
+	/** Which console granted it — see `grantsForPortal`. */
+	portalCode?: string | null;
+	/** Which ORGANISATION granted it — see `grantsForPortal`. */
+	orgId?: string | null;
+};
 
-const OUTLET_OWNER_PERMISSIONS: Permission[] = [
-	"postJob",
-	"viewBookings",
-	"viewLiveDashboard",
-	"logSales",
-	"sealShift",
-	"confirmShift",
-	"confirmDaily",
-	"viewBilling",
-	"viewSalesDashboard",
-	"ratePrs",
-	"manageShiftStaffing",
-	"viewHistory",
-	"viewWorkspace",
-	"manageWorkspace",
-	"viewSettings",
-	"editSettings",
-	"orderSpecialService",
-	"requestCutLoss",
-];
-
-const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
-	outlet_owner: OUTLET_OWNER_PERMISSIONS,
-	/**
-	 * The owner's stand-in, at the owner's level — so it SHARES the owner's list
-	 * rather than restating it. Two copies is how "same level as the owner" stops
-	 * being true the first time one of them is edited, and this role is used
-	 * precisely when the owner is not around to notice.
-	 */
-	outlet_guarantor: OUTLET_OWNER_PERMISSIONS,
-	/**
-	 * VIEW ONLY. Every screen the owner sees, no write anywhere on the venue.
-	 *
-	 * `viewSettings` without `editSettings` is what the owner asked for: a
-	 * Director reaches Settings, reads it, and edits only its own login and
-	 * security — which is not an outlet permission at all (every signed-in user
-	 * may change their own password, contact details and MFA), so it needs no
-	 * entry here.
-	 *
-	 * `orderSpecialService` is absent, and that HIDES the nav item and the route
-	 * rather than disabling them — the owner's call, since ordering is the only
-	 * thing that page does.
-	 */
-	outlet_director: [
-		"viewBookings",
-		"viewLiveDashboard",
-		"viewBilling",
-		"viewSalesDashboard",
-		"viewHistory",
-		"viewWorkspace",
-		"viewSettings",
-	],
-	outlet_finance: [
-		"viewLiveDashboard",
-		"viewHistory",
-		"confirmDaily",
-		"viewBilling",
-		"viewSalesDashboard",
-		"viewWorkspace",
-		"viewSettings",
-		"orderSpecialService",
-		"requestCutLoss",
-	],
-	outlet_ops: [
-		"postJob",
-		"viewBookings",
-		"viewLiveDashboard",
-		"logSales",
-		"sealShift",
-		"confirmShift",
-		"ratePrs",
-		"manageShiftStaffing",
-		"viewWorkspace",
-		"viewSettings",
-		"orderSpecialService",
-		"requestCutLoss",
+/**
+ * Gated by LANE on the server, so there is no `role_permission` row to derive
+ * it from — this list must mirror the server's own.
+ *
+ * `POST /cutlost` is `requireOutletSubRole('owner', 'finance', 'operations_head')`
+ * (cutlost.routes.ts), and `holdsOutletLane` folds guarantor into owner, so a
+ * Director is the only lane refused.
+ *
+ * ⚠️ The reason it is lane-gated is simply that there is NO `cutlost` module —
+ * the outlet portal has nine (booking, dashboard, sales, billing, rating,
+ * history, workspace, settings, special_service) and none of them covers this,
+ * so there is no grant to read. The older note here said it was lane-gated
+ * "because outlet Finance holds no `booking` permission at all"; that stopped
+ * being true — the database grants Finance `booking` create, read and update.
+ */
+const MATRIX_ONLY: Partial<Record<Permission, readonly OutletSubRole[]>> = {
+	requestCutLoss: [
+		"outlet_owner",
+		"outlet_guarantor",
+		"outlet_finance",
+		"outlet_ops",
 	],
 };
+
+/**
+ * DERIVED FROM THE DATABASE — owner's rule, 11 Sep 2026: "web matrix must
+ * follow what database given."
+ *
+ * ⚠️ This was a hand-written list, and it had drifted 14 cells from
+ * `role_permission`. The database decided every one of them at runtime (see
+ * `outletCan` below, where a real session's grants answer instead of this), so
+ * the list was never a policy — it was a stale description contradicting the
+ * screen. Three things it claimed:
+ *
+ *   · Finance could not Post Job. The database grants Finance `booking:create`
+ *     and `POST /shift` checks exactly that, so Finance could, and did.
+ *   · Ops Head could not see Sales or History. The database grants both.
+ *   · The Owner could `confirmDaily`. At the time NO outlet role held
+ *     `billing:update`, so the server refused everyone — the matrix offered a
+ *     button nobody could press. The owner has since granted it to Owner and
+ *     Guarantor in `seed-rbac.ts`, so it now works for exactly those two;
+ *     Finance, which the old matrix also granted it to, still does not.
+ *
+ * It now comes from `rbac-grants.generated.ts`, written by
+ * `node tools/scripts/sync-rbac-matrix.mjs` from the live table. To change what
+ * a lane may do, change `role_permission` and re-run the sync; editing here
+ * does nothing, and `--check` fails while the snapshot is stale.
+ */
+const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = buildRoleMatrix<
+	OutletSubRole,
+	Permission
+>(OUTLET_ROLE_GRANTS, OUTLET_FEATURE_MODULE, MATRIX_ONLY);
 
 /**
  * What an outlet operator is treated as when we do not KNOW what they are.
@@ -170,22 +158,30 @@ export function outletCan(
 	role: OutletSubRole | null | undefined,
 	permission: Permission,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in, so another org's lane cannot answer. */
+	activeOrgId?: string | null,
 ): boolean {
 	const r = role ?? OUTLET_LEAST_PRIVILEGE;
 	const fallback = ROLE_PERMISSIONS[r].includes(permission);
 	if (!modulePermissions?.length) return fallback;
 
+	/*
+	 * THIS CONSOLE'S grants only. `settings`, `dashboard` and `history` are a
+	 * separate module row per portal, so an agency grant used to answer an
+	 * outlet question by key alone — see `grantsForPortal`.
+	 */
+	const grants = grantsForPortal(modulePermissions, "outlet", activeOrgId);
+	if (!grants.length) return fallback;
+
 	const outletKeys = new Set(
 		Object.values(OUTLET_FEATURE_MODULE).map((m) => m.key),
 	);
-	const hasOutletGrants = modulePermissions.some((p) =>
-		outletKeys.has(p.moduleKey),
-	);
+	const hasOutletGrants = grants.some((p) => outletKeys.has(p.moduleKey));
 	if (!hasOutletGrants) return fallback;
 
 	const map = OUTLET_FEATURE_MODULE[permission];
 	if (!map) return fallback;
-	return canModule(modulePermissions, map.key, map.type);
+	return canModule(grants, map.key, map.type);
 }
 
 export type OutletNavItem = {
@@ -229,6 +225,19 @@ const ALL_NAV: OutletNavItem[] = [
 	// 	icon: iconForNav("Ratings"),
 	// 	permission: "viewLiveDashboard",
 	// },
+	/*
+	 * PEOPLE ASKING TO JOIN — the venue's one approval queue.
+	 *
+	 * `viewSettings`, which is exactly who could reach the queue when it lived
+	 * inside Settings: moving it to a page of its own must not quietly change
+	 * WHO can see it. The server still decides who may actually approve.
+	 */
+	{
+		to: "/outlet/approvals",
+		label: "Approvals",
+		icon: iconForNav("Approvals"),
+		permission: "viewSettings",
+	},
 	{
 		to: "/outlet/history",
 		label: "History",
@@ -257,6 +266,8 @@ export function getOutletNavItems(
 	role: OutletSubRole | null | undefined,
 	orgStatus?: string | null,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in — see `grantsForPortal`. */
+	activeOrgId?: string | null,
 ): OutletNavItem[] {
 	if (isOrgProfileOnly(orgStatus)) return [];
 	const r = role ?? OUTLET_LEAST_PRIVILEGE;
@@ -265,12 +276,33 @@ export function getOutletNavItems(
 			// `viewBookings` is here so a Director keeps the page and loses only the
 			// buttons on it — the owner asked for Post Job read-only rather than gone.
 			return (
-				outletCan(r, "postJob", modulePermissions) ||
-				outletCan(r, "viewBookings", modulePermissions) ||
-				outletCan(r, "orderSpecialService", modulePermissions)
+				outletCan(r, "postJob", modulePermissions, activeOrgId) ||
+				outletCan(r, "viewBookings", modulePermissions, activeOrgId) ||
+				outletCan(r, "orderSpecialService", modulePermissions, activeOrgId)
 			);
 		}
-		return outletCan(r, item.permission, modulePermissions);
+		/*
+		 * REPORTS — the same OR the ROUTE GUARD and the page already use.
+		 *
+		 * `/outlet/billing` renders only the sales dashboard, which the page
+		 * gates on `viewSalesDashboard`, and `canAccessOutletPath` admits
+		 * `viewBilling || viewSalesDashboard`. The nav item asked for
+		 * `viewBilling` alone, which agreed with the other two only because the
+		 * old hand-written matrix gave Ops Head neither permission.
+		 *
+		 * Deriving the matrix from the database changed that: Ops Head holds
+		 * `sales:read` and NO billing row at all — the one outlet lane between
+		 * the two gates. So the sidebar hid a page the database says they may
+		 * read, while the route guard let them in by URL and the Today page
+		 * linked them straight to it. Three gates, one of them the outlier.
+		 */
+		if (item.to === "/outlet/billing") {
+			return (
+				outletCan(r, "viewBilling", modulePermissions, activeOrgId) ||
+				outletCan(r, "viewSalesDashboard", modulePermissions, activeOrgId)
+			);
+		}
+		return outletCan(r, item.permission, modulePermissions, activeOrgId);
 	});
 }
 
@@ -290,12 +322,15 @@ export function canAccessOutletPath(
 	pathname: string,
 	orgStatus?: string | null,
 	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in, so another org's lane cannot answer. */
+	activeOrgId?: string | null,
 ): boolean {
 	if (isOrgProfileOnly(orgStatus)) {
 		return isOutletPendingProfilePath(pathname);
 	}
 	const r = role ?? OUTLET_LEAST_PRIVILEGE;
-	const can = (p: Permission) => outletCan(r, p, modulePermissions);
+	const can = (p: Permission) =>
+		outletCan(r, p, modulePermissions, activeOrgId);
 	if (pathname === "/outlet" || pathname === "/outlet/") {
 		return can("viewLiveDashboard");
 	}
@@ -316,6 +351,7 @@ export function canAccessOutletPath(
 	if (pathname.startsWith("/outlet/billing")) {
 		return can("viewBilling") || can("viewSalesDashboard");
 	}
+	if (pathname.startsWith("/outlet/approvals")) return can("viewSettings");
 	if (pathname.startsWith("/outlet/subscription")) return can("viewSettings");
 	if (pathname.startsWith("/outlet/workspace")) return can("viewWorkspace");
 	if (pathname.startsWith("/outlet/settings")) return can("viewSettings");

@@ -65,11 +65,20 @@ function AgencyLayout() {
 				// check against, and the effect re-runs on `profile.id`. A refused
 				// cache is re-derived from the account's own memberships and written
 				// back, so a stale lane self-heals with no re-login.
+				//
+				// ⚠️ RE-CHECKED EVERY LOAD, not only when the cache is missing — see the
+				// venue twin. Re-deriving only on a miss meant a lane changed by somebody
+				// ELSE never arrived: the sidebar kept the old title through a refresh,
+				// and only a sign-out and back in fixed it. A person's job title belongs
+				// to the organisation, not to their browser.
 				let identity = profile?.id ? getAgencyIdentity(profile.id) : null;
-				if (!identity && profile?.id) {
-					identity = await resolveAgencyIdentityForUser(profile.id);
+				if (profile?.id) {
+					const fresh = await resolveAgencyIdentityForUser(profile.id);
 					if (cancelled) return;
-					if (identity) saveAgencyIdentity(identity);
+					if (fresh) {
+						identity = fresh;
+						saveAgencyIdentity(fresh);
+					}
 				}
 				if (identity) {
 					const resolved = identity;

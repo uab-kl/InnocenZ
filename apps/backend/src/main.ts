@@ -101,6 +101,17 @@ const corsOptions: cors.CorsOptions = {
     'Origin',
     /** Which organisation this session is working in — see org-scope.ts. */
     'x-org-id',
+    /**
+     * …and WHICH KIND it is, agency or outlet.
+     *
+     * ⚠️ Added the day after the warning above was written, and the warning was
+     * right: shipping `x-org-kind` from the client without naming it here broke
+     * EVERY authenticated call — the preflight refused it, `/auth/me` never
+     * landed, and every portal bounced to the login page. The id alone cannot
+     * say which membership table to look in, which is why the kind travels
+     * with it.
+     */
+    'x-org-kind',
   ],
   optionsSuccessStatus: 200,
 };

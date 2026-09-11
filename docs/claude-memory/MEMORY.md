@@ -8,6 +8,7 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 ### Standing rules — how to work on this project
 
 - [InnocenZ database rules](innocenz-database-rules.md) — reuse tables, 4 audit columns together, FK-only (no name copies), id-first PKs, UI writes persist + called by primary id; `main.pr` is gone (a PR is a `user`)
+- [PR is under an agency, not a member](pr-is-under-an-agency-not-a-member.md) — a PR is an `agency_pr` row under an agency; "member" means org staff on `user_role` and must never label a PR on screen
 - [Verify against test script](verify-against-test-script.md) — check every InnocenZ change against TEST_SCRIPT.md and add new requirements into it
 - [New outlet starter templates](new-outlet-needs-starter-templates.md) — created automatically at outlet creation; they are the venue's examples to delete, so nothing may re-run the seeding
 - [Seeds never write a signature](seeds-never-write-a-signature.md) — `signature_ink` is an attestation the PV sign button pre-loads; only the person's own PUT may write it, and `updated_by` names who touched the ROW, not the field

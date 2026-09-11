@@ -5,6 +5,7 @@ import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { Error } from '@/error/index.js';
 import { hashPassword, comparePassword } from '@/util/password.js';
 import { logger } from '@/util/logger.js';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
 import {
   LoginSchema,
   RegisterSchema,
@@ -34,7 +35,10 @@ import { withUserProfile } from '@/util/user-profile-image.js';
 import { z } from 'zod';
 import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.repository.js';
 import { generateSecret, otpauthUri, verifyTotp } from '@/util/totp.js';
-import { suspendedOrgBlock } from '@/features/auth/org-status.js';
+import {
+  orgStatusDeniesSignIn,
+  suspendedOrgBlock,
+} from '@/features/auth/org-status.js';
 import {
   isVerifiedOtpUsable,
   normalizePhoneDigits,
@@ -1248,12 +1252,19 @@ export class AuthControllerClass {
         return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
       }
 
-      // Heal accounts that still have org membership but lost specialized
-      // portal roles (agency_owner / outlet_owner) after the role cleanup.
-      await this.authRepository.ensurePortalRolesFromMembership(user.id);
+      /*
+       * NO ROLE IS MINTED HERE ANY MORE. `/auth/me` used to call
+       * `ensurePortalRolesFromMembership`, which granted a portal role to any
+       * account holding an active membership without one — so a signed-in
+       * request QUIETLY CREATED AUTHORITY. See the tombstone in
+       * `auth.repository.ts` for why that was an escalation after 0160, and
+       * where the one case it was really covering is now fixed instead.
+       *
+       * A read must stay a read. This handler answers what the account HAS;
+       * granting is the job of sign-up, invite acceptance, or an admin.
+       */
 
       const roles = await this.authRepository.getRolesForUserIds([user.id]);
-      const permissions = await this.authRepository.getUserPermissions(user.id);
       const profile = await this.userProfileRepository.getByUserId(user.id);
 
       const portals = [
@@ -1269,32 +1280,199 @@ export class AuthControllerClass {
        * organisation goes straight through, two or more must be asked, because
        * the server would otherwise pick the oldest and never mention it.
        *
-       * Active memberships only: an inactive one is not somewhere they can
-       * work, and offering it would produce a choice the scope resolver then
-       * refuses.
+       * ⚠️ EVERY membership is returned, not only the active ones, and each
+       * says whether it can be ENTERED (owner, 10 Sep 2026: *"remember need
+       * for the user to see that the organisation which is banned which is
+       * not"*).
+       *
+       * This list used to be filtered to `status: 'active'`, on the reasoning
+       * that offering a dead membership produces a choice the scope resolver
+       * then refuses. That reasoning is right about ENTERING and wrong about
+       * SHOWING. Deactivation is per-organisation: somebody removed from one
+       * agency while still working at another simply saw that agency vanish,
+       * with nothing to distinguish "you were deactivated here" from "this
+       * organisation never existed". Silence is the one answer that leaves
+       * them with no idea whether to contact anyone.
+       *
+       * So the answer is CARRIED rather than filtered, and `enterable` is
+       * computed HERE — once, on the server — so no client has to re-derive
+       * which combination of two statuses means "you may work here".
+       *
+       * ⚠️ `enterable` is NOT `orgStatus === 'active'`. `orgStatusDeniesSignIn`
+       * is the login gate's own rule and denies `inactive` ONLY:
+       * `pending_review` and `suspended` keep a deliberate profile-only
+       * session, so greying those out would lock owners out of the settings
+       * screen they are meant to reach. Shared with the gate for exactly that
+       * reason — two spellings would drift, and the drift shows up as a picker
+       * that disagrees with the door.
        */
-      const [agencyMemberships, outletMemberships] = await Promise.all([
-        this.agencyMemberRepository.listMembershipsByUserIds([user.id], {
-          status: 'active',
-        }),
-        this.outletMemberRepository.listMembershipsByUserIds([user.id], {
-          status: 'active',
-        }),
+      const [allAgencyMemberships, allOutletMemberships] = await Promise.all([
+        this.agencyMemberRepository.listMembershipsByUserIds([user.id]),
+        this.outletMemberRepository.listMembershipsByUserIds([user.id]),
       ]);
+      /*
+       * ⚠️ A DECLINED REQUEST IS NOT AN ORGANISATION YOU BELONG TO (0162).
+       *
+       * Owner, 11 Sep 2026: "if in approval been declined cannot be the orgs
+       * member".
+       *
+       * The note above explains why a DEACTIVATED membership is carried rather
+       * than filtered: somebody removed from one agency while still working at
+       * another deserves to see WHY that agency stopped letting them in, and
+       * silence leaves them with nobody to contact. Every word of that is about
+       * a relationship that EXISTED and ended.
+       *
+       * `rejected` is the opposite case. They asked to join and were turned
+       * down, so there is no relationship to explain — and listing the
+       * organisation, even greyed out, tells them they have standing there that
+       * they do not. It is also the same rule the organisation's own roster
+       * now applies from the other side, which is what keeps the two screens
+       * telling one story.
+       */
+      const agencyMemberships = allAgencyMemberships.filter(
+        (m) => m.status !== 'rejected',
+      );
+      const outletMemberships = allOutletMemberships.filter(
+        (m) => m.status !== 'rejected',
+      );
+      /*
+       * ⚠️ A DECLINED REQUEST IS NOT AN ORGANISATION — IT IS AN ANSWER.
+       *
+       * Owner, 11 Sep 2026: "if decline then that user can log in but need will
+       * show that … the orgs is decline your request".
+       *
+       * Two of the owner's rules meet here and only look contradictory. A
+       * declined person must NOT appear to belong to that organisation — no
+       * card in the picker, nothing enterable, which is why `rejected` is
+       * filtered out of `organisations` above. But they are still owed the
+       * OUTCOME of a request they made: silence leaves somebody refreshing a
+       * "waiting" page forever for an answer that already came.
+       *
+       * So it travels in its own list with its own meaning. `organisations` is
+       * "where you belong"; this is "what happened to what you asked for".
+       * Carrying a declined row inside `organisations` with a flag would have
+       * put it one missed check away from being rendered as a membership.
+       */
+      const declinedRequests = [
+        ...allAgencyMemberships
+          .filter((m) => m.status === 'rejected')
+          .map((m) => ({ kind: 'agency' as const, name: m.agencyName })),
+        ...allOutletMemberships
+          .filter((m) => m.status === 'rejected')
+          .map((m) => ({ kind: 'outlet' as const, name: m.outletName })),
+      ];
+
+      /**
+       * ⚠️ PERMISSIONS COME FROM THE MEMBERSHIP LANE, NOT THE ROLE ROWS.
+       *
+       * This used to be `getUserPermissions(user.id)` — the union of the
+       * account's `user_role` rows — which answers "what may this person do
+       * ANYWHERE". Authority here belongs to the lane they hold IN AN
+       * ORGANISATION, and on real accounts the two had drifted: a venue's
+       * Finance head and its Ops Head both still carried an `Owner` role row
+       * from an earlier grant, so this endpoint handed them `settings:update`
+       * and the portals offered the Edit button, the Pay button and the
+       * payment method — the three the owner's rule reserves for the owner.
+       *
+       * The server never honoured it (`requirePermission` reads the lane), so
+       * every write was refused; it was the SCREEN that lied. Owner, 12 Sep
+       * 2026: "the web matrix must not lie to user and always must follow the
+       * database that actually what can access what cannot."
+       *
+       * Admin keeps its role-row grants: an admin acts on organisations rather
+       * than within one, so there is no membership lane to read.
+       */
+      const lanePairs = [
+        /*
+         * ACTIVE only. `agencyMemberships` / `outletMemberships` keep `pending`
+         * and `inactive` so the chooser can show somebody they are waiting or
+         * switched off — but a lane that cannot sign in must not carry grants.
+         */
+        ...agencyMemberships
+          .filter((m) => m.status === 'active')
+          .map((m) => ({
+            roleName: portalRoleNameForSubRole('agency', m.subRole ?? ''),
+            portalCode: 'agency',
+            orgId: m.agencyId,
+          })),
+        ...outletMemberships
+          .filter((m) => m.status === 'active')
+          .map((m) => ({
+            roleName: portalRoleNameForSubRole('outlet', m.subRole ?? ''),
+            portalCode: 'outlet',
+            orgId: m.outletId,
+          })),
+        ...roles
+          .filter((r) => r.portalCode === 'admin')
+          // Admin acts ON organisations, not within one — no org to tag.
+          .map((r) => ({
+            roleName: r.roleName,
+            portalCode: 'admin',
+            orgId: null as string | null,
+          })),
+      ];
+      const byRole = await this.authRepository.permissionsForRoleNames(
+        // De-duplicated: two venues on the same lane is one set of grants.
+        [
+          ...new Map(
+            lanePairs.map((p) => [`${p.portalCode}/${p.roleName}`, p]),
+          ).values(),
+        ],
+      );
+
+      /**
+       * ⚠️ EVERY GRANT CARRIES THE ORGANISATION IT CAME FROM.
+       *
+       * A flat union is wrong the moment somebody holds DIFFERENT lanes in two
+       * organisations. Owner at venue A and Director at venue B unions to the
+       * owner's set, and the portals — which pick by portal, not by venue —
+       * then showed the Director at B the Edit, Post Job, Seal Shift and Log
+       * Sales controls. The server refused every one (`requirePermission`
+       * resolves the acting org and reads THAT venue's lane), so it was the
+       * screen lying again, in the one case the lane change had not covered.
+       *
+       * So the answer is per organisation: the same role's grants repeated for
+       * each org that holds that lane, tagged with `orgId`. The client keeps
+       * only the grants for the organisation it is actually in.
+       */
+      const grantsFor = (portalCode: string, roleName: string) =>
+        byRole.filter(
+          (g) => g.portalCode === portalCode && g.roleName === roleName,
+        );
+      const permissions = lanePairs.flatMap((pair) =>
+        grantsFor(pair.portalCode, pair.roleName).map((g) => ({
+          ...g,
+          orgId: pair.orgId ?? null,
+        })),
+      );
+
       const organisations = [
         ...agencyMemberships.map((m) => ({
           kind: 'agency' as const,
           id: m.agencyId,
           name: m.agencyName,
+          // The BRAND, so the chooser is a glance and not a read.
+          logoImage: m.logoImage ?? null,
           subRole: m.subRole,
           memberCode: m.memberCode ?? null,
+          /** This person's standing INSIDE the organisation. */
+          membershipStatus: m.status,
+          /** The organisation's own standing on the platform. */
+          orgStatus: m.agencyStatus,
+          enterable:
+            m.status === 'active' && !orgStatusDeniesSignIn(m.agencyStatus),
         })),
         ...outletMemberships.map((m) => ({
           kind: 'outlet' as const,
           id: m.outletId,
           name: m.outletName,
+          logoImage: m.logoImage ?? null,
           subRole: m.subRole,
           memberCode: m.memberCode ?? null,
+          membershipStatus: m.status,
+          orgStatus: m.outletStatus,
+          enterable:
+            m.status === 'active' && !orgStatusDeniesSignIn(m.outletStatus),
         })),
       ];
 
@@ -1305,6 +1483,8 @@ export class AuthControllerClass {
           ...withUserProfile(user, profile),
           portals,
           organisations,
+          // The ANSWER to a request, not a place they belong — see above.
+          declinedRequests,
           roles: roles.map((r) => ({
             id: r.roleId,
             roleName: r.roleName,
@@ -1317,6 +1497,14 @@ export class AuthControllerClass {
             moduleKey: p.moduleKey,
             permissionId: p.permissionId,
             permissionType: p.permissionType,
+            /*
+             * WHICH console the grant is for. Without it the portals cannot tell
+             * an agency `settings:update` from an outlet one — see the field's
+             * note in `schema/rbac.schema.ts`.
+             */
+            portalCode: p.portalCode ?? null,
+            /** WHICH organisation this grant is for — null for admin. */
+            orgId: p.orgId ?? null,
           })),
         },
       });
@@ -1615,10 +1803,66 @@ export class AuthControllerClass {
       });
 
       const profile = await this.userProfileRepository.getByUserId(actor.id);
+
+      /*
+       * A NEW TOKEN PAIR, because the caller just invalidated their own.
+       *
+       * ⚠️ THIS IS THE "Unauthorized" BUG. A JWT here carries only
+       * `{ loginMethod, loginCriteria }` — there is no user id in it — and
+       * every authenticated request resolves the account with
+       * `getUserByLoginMethod(payload.loginMethod, payload.loginCriteria)`
+       * (auth.repository.ts). So for somebody who signs in BY PHONE, the
+       * instant this endpoint writes the new number their old token points at
+       * a phone number nobody holds: `authenticateJWT` reads `!user` and
+       * answers 401 `Unauthorized`.
+       *
+       * The write had already succeeded, so the person saw a bare
+       * "Unauthorized" under a code that was correct, and their session was
+       * dead from that moment. Reported from the PR app on 11 Sep 2026.
+       *
+       * Re-issuing here fixes it at the source and costs one signature. Only
+       * for a phone-keyed token: an email-keyed one still resolves fine, and
+       * silently re-binding it would make a session that was never at risk
+       * depend on a number that can change again.
+       *
+       * ⚠️ The same trap is waiting for CHANGE EMAIL. Every agency and outlet
+       * operator signs in by email, so an email-change endpoint must re-issue
+       * exactly like this — or the user id goes in the token and everything
+       * resolves by it, which is the deeper fix and invalidates every live
+       * token on deploy.
+       */
+      let tokens: { accessToken: string; refreshToken: string } | null = null;
+      try {
+        const bearer = req.header('Authorization')?.split(' ')[1];
+        const wasPhoneKeyed =
+          bearer &&
+          this.jwtController.verifyToken(bearer).loginMethod === 'phone';
+        if (wasPhoneKeyed) {
+          const tokenPayload = {
+            loginMethod: 'phone' as const,
+            loginCriteria: storedPhone,
+          };
+          tokens = {
+            accessToken: this.jwtController.generateAccessToken(tokenPayload),
+            refreshToken: this.jwtController.generateRefreshToken(tokenPayload),
+          };
+        }
+      } catch {
+        /*
+         * Not fatal, and deliberately not a 500: the number IS changed by this
+         * point. Failing here would report an error for work that succeeded —
+         * the exact shape of the bug being fixed. The caller signs in again
+         * with the new number instead.
+         */
+        logger.warn(
+          `[AuthController.changePhoneWithOtp] could not re-issue tokens for ${actor.id}`,
+        );
+      }
+
       return res.status(200).json({
         success: true,
         message: 'Phone number updated',
-        data: withUserProfile(updated, profile),
+        data: { ...withUserProfile(updated, profile), ...(tokens ?? {}) },
       });
     } catch (error) {
       logger.error('[AuthController.changePhoneWithOtp] Error:', error);

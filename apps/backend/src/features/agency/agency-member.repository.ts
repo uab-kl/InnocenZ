@@ -1,6 +1,8 @@
-import { and, count, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, count, eq, ilike, inArray, ne, or } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { logger } from '@/util/logger';
+import type { MembershipStatus } from '@/util/membership-status';
 import {
   ensureAccountCodeFromMembership,
   nextOrgMemberCode,
@@ -29,6 +31,23 @@ export type AgencyMemberEnriched = AgencyUserType & {
   username: string;
   email: string | null;
   phoneNum: string | null;
+  /**
+   * The applicant's own photo, for the review screen.
+   *
+   * The member sign-up asks for one on the promise that it "helps the
+   * organisation recognise you when they review your request" — a promise the
+   * review screen could not keep, because this list never selected the
+   * column. An owner admitting a stranger to their finances is the reader who
+   * most needs a face beside the name.
+   */
+  profileImage: string | null;
+  /**
+   * WHO LAST SWITCHED THIS MEMBERSHIP OFF, by name — joined from
+   * `updated_by`, never stored here. Null when the actor was `'system'` or
+   * their account no longer exists; the screen renders its own fallback
+   * rather than being handed an invented name. See `util/actor-name.ts`.
+   */
+  updatedByName: string | null;
 };
 
 /** `agencyStatus` is the organisation's status (`pending_review` / `active` / …),
@@ -43,6 +62,9 @@ export type AgencyMembershipWithAgency = {
   agencyName: string;
   agencyCode: string;
   agencyStatus: string;
+  /** The organisation's logo, so the login chooser can show a BRAND
+      rather than the same generic glyph on every card. */
+  logoImage: string | null;
   /** Derived from RBAC, not a column on agency_user. */
   subRole: AgencyUserSubRole;
   status: string;
@@ -97,19 +119,45 @@ export class AgencyMemberRepositoryClass {
   ): Promise<AgencyUserType> {
     try {
       const dbClient = tx ?? db;
+      /*
+       * ⚠️ A REAL ID ONLY FOR SOMEBODY WHO IS ACTUALLY JOINING (0161).
+       *
+       * This used to mint unconditionally, and `register-member` inserts at
+       * `pending` — so merely ASKING to join took the organisation's next
+       * number, permanently: ids are never reused, so declining the request
+       * burned it. Now a pending row falls through to the column DEFAULT and
+       * takes an `INNPND` placeholder, and `updateMember` mints the real id
+       * at the moment of approval.
+       *
+       * `tx` is passed on purpose: sign-up creates the agency and this row in ONE
+       * transaction, and a lookup outside it cannot see the agency.
+       *
+       * A caller-supplied id still wins (the backfill, a transfer), and
+       * `nextOrgMemberCode` still throws rather than returning nothing, which
+       * aborts the membership instead of weakening it.
+       */
+      const minted =
+        data.memberCode ??
+        (data.status === 'active'
+          ? await nextOrgMemberCode('agency', data.agencyId, tx)
+          : undefined);
       const withCode = {
         ...data,
+        // Omitted, not null — omitting is what lets the DEFAULT fire.
+        ...(minted ? { memberCode: minted } : {}),
         /*
-         * `tx` is passed on purpose: sign-up creates the agency and this row in
-         * ONE transaction, and a lookup outside it cannot see the agency.
+         * ⚠️ A ROW BORN ACTIVE IS ALREADY A MEMBERSHIP (0163).
          *
-         * Not a ternary any more: the column is NOT NULL (0159), so this has to
-         * resolve to a string on BOTH branches — a caller-supplied id or a
-         * freshly minted one. `nextOrgMemberCode` throws rather than returning
-         * nothing, which aborts the membership instead of weakening it.
+         * Organisation sign-up and invite-accept both insert straight at
+         * `active`, so there is no later activation to stamp this. Without it
+         * the owner of an agency would carry no first-activation date, and
+         * removing them would read as a DECLINED APPLICANT — somebody who was
+         * never on the team they founded.
+         *
+         * `activateOrgMembership` covers every row that is switched on LATER;
+         * this covers the ones that never had a "later".
          */
-        memberCode:
-          data.memberCode ?? (await nextOrgMemberCode('agency', data.agencyId, tx)),
+        ...(data.status === 'active' ? { firstActivatedAt: new Date() } : {}),
       };
       const [member] = await dbClient
         .insert(AgencyUserTable)
@@ -219,16 +267,20 @@ export class AgencyMemberRepositoryClass {
           status: AgencyUserTable.status,
           subRole: AgencyUserTable.subRole,
           memberCode: AgencyUserTable.memberCode,
+          firstActivatedAt: AgencyUserTable.firstActivatedAt,
           createdAt: AgencyUserTable.createdAt,
           updatedAt: AgencyUserTable.updatedAt,
           createdBy: AgencyUserTable.createdBy,
           updatedBy: AgencyUserTable.updatedBy,
+          updatedByName: actorNameColumn,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
+          profileImage: UserTable.profileImage,
         })
         .from(AgencyUserTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyUserTable.userId))
+        .leftJoin(ActorUser, actorJoinOn(AgencyUserTable.updatedBy))
         .where(and(...conditions))
         .orderBy(AgencyUserTable.createdAt);
 
@@ -268,6 +320,21 @@ export class AgencyMemberRepositoryClass {
   async listAllEnriched(options: {
     search?: string;
     status?: string;
+    /**
+     * Show declined requests too — OFF unless asked (0162).
+     *
+     * Two admin screens read this one endpoint and want opposite things. The
+     * MEMBERS table lists an organisation's people, and a turned-down request
+     * is not one of them — owner: "why the decline member can show and search
+     * by the atlas agency?". The LEGACY MEMBER table is the record of what
+     * happened to everyone, and a decline is exactly the kind of thing it
+     * exists to show — owner: "will show which user is status decline by who
+     * which orgs".
+     *
+     * An explicit opt-in rather than a default, so the safe answer is the one
+     * a caller gets by saying nothing.
+     */
+    includeRejected?: boolean;
     /** Narrow to ONE agency — the deep link from that agency's Team tab. */
     agencyId?: string;
     page: number;
@@ -280,6 +347,25 @@ export class AgencyMemberRepositoryClass {
       }
       if (options.status) {
         conditions.push(eq(AgencyUserTable.status, options.status));
+      } else if (!options.includeRejected) {
+        /*
+         * ⚠️ A DECLINED APPLICANT IS NOT A MEMBER, ON THIS SCREEN EITHER (0162).
+         *
+         * Owner, 11 Sep 2026, finding one in the admin console: "why the decline
+         * member can show and search by the atlas agency?"
+         *
+         * With no status asked for this list had no status condition at all, so a
+         * turned-down request sat among the organisation's members — under a
+         * MEMBER ID column, where the only thing it could show was the `INNPND`
+         * placeholder that exists precisely BECAUSE no id was ever issued.
+         * Searching the organisation's name returned them too.
+         *
+         * Excluded by DEFAULT rather than always: an admin who explicitly picks
+         * "rejected" in the status filter is asking to see them, and answering
+         * that with an empty table would be its own lie. The default is what had
+         * to change, not the admin's reach.
+         */
+        conditions.push(ne(AgencyUserTable.status, 'rejected'));
       }
       if (options.search?.trim()) {
         const term = `%${options.search.trim()}%`;
@@ -312,13 +398,16 @@ export class AgencyMemberRepositoryClass {
           status: AgencyUserTable.status,
           subRole: AgencyUserTable.subRole,
           memberCode: AgencyUserTable.memberCode,
+          firstActivatedAt: AgencyUserTable.firstActivatedAt,
           createdAt: AgencyUserTable.createdAt,
           updatedAt: AgencyUserTable.updatedAt,
           createdBy: AgencyUserTable.createdBy,
           updatedBy: AgencyUserTable.updatedBy,
+          updatedByName: actorNameColumn,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
+          profileImage: UserTable.profileImage,
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
           agencyStatus: AgencyTable.status,
@@ -326,6 +415,10 @@ export class AgencyMemberRepositoryClass {
         .from(AgencyUserTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyUserTable.userId))
         .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyUserTable.agencyId))
+        // LEFT, so a membership ended by `'system'` or by an account since
+        // deleted still appears — an archive that hides its oldest rows is
+        // not an archive. See `util/actor-name.ts`.
+        .leftJoin(ActorUser, actorJoinOn(AgencyUserTable.updatedBy))
         .where(where)
         // Organisation first, then the person: the screen is read by agency.
         // `id` last so the order is TOTAL — two members created in the same
@@ -399,9 +492,21 @@ export class AgencyMemberRepositoryClass {
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
           agencyStatus: AgencyTable.status,
+          /*
+           * THE ORGANISATION'S OWN LOGO, for the login chooser (owner, 11 Sep
+           * 2026: "need show UI to let user know that which agency/outlet orgs
+           * logo, what roles when choose that orgs").
+           *
+           * Somebody who works in three places is picking between BRANDS, not
+           * reading a list of names — and the chooser drew the same generic
+           * building glyph on every card, so the one thing that makes the
+           * choice instant was the one thing missing.
+           */
+          logoImage: AgencyTable.logoImage,
           status: AgencyUserTable.status,
           subRole: AgencyUserTable.subRole,
           memberCode: AgencyUserTable.memberCode,
+          firstActivatedAt: AgencyUserTable.firstActivatedAt,
         })
         .from(AgencyUserTable)
         .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyUserTable.agencyId))
@@ -425,12 +530,48 @@ export class AgencyMemberRepositoryClass {
     }
   }
 
-  async remove(id: string, tx?: DbTransaction): Promise<boolean> {
+  /**
+   * WHO REMOVED THEM is written here, not left to be inferred.
+   *
+   * `actor` is REQUIRED and sits BEFORE the optional `tx` on purpose: the
+   * audit quartet was already on this table and the removal simply never
+   * wrote its half, so the archive screen could say a membership ended but
+   * never who ended it. Making the parameter optional would have let the one
+   * call site keep compiling while still writing nothing — the same shape as
+   * the optional `logo` that shipped a feature which never rendered. A
+   * required parameter makes the compiler name every caller.
+   *
+   * `updated_by` holds a user id, or the literal `'system'` from
+   * `getActor` when there is no authenticated caller — never a name. The
+   * name is read back through a join, so a person who is later renamed is
+   * still named correctly on every row they ever touched.
+   */
+  /**
+   * Take somebody off the roster — a DECLINE or a DEACTIVATION (0162).
+   *
+   * ⚠️ `nextStatus` is REQUIRED, and deliberately not defaulted. This used to
+   * hard-code `'inactive'`, and the two events reach it through the SAME HTTP
+   * call — the Decline button and the Team screen's Remove button both fire
+   * `DELETE /:id/members/:memberId` — so one word was made to mean both
+   * "turned down, never a member" and "was a member, removed". A declined
+   * applicant then showed up on the organisation's roster.
+   *
+   * This function sees only an id and an actor, so it cannot decide; the
+   * CONTROLLER can, because it has already loaded the row. `removalStatusFor`
+   * is that decision, and a required parameter is what stops the next caller
+   * silently inheriting the old conflation.
+   */
+  async remove(
+    id: string,
+    actor: string,
+    nextStatus: MembershipStatus,
+    tx?: DbTransaction,
+  ): Promise<boolean> {
     try {
       const dbClient = tx ?? db;
       await dbClient
         .update(AgencyUserTable)
-        .set({ status: 'inactive', updatedAt: new Date() })
+        .set({ status: nextStatus, updatedAt: new Date(), updatedBy: actor })
         .where(eq(AgencyUserTable.id, id));
       return true;
     } catch (error) {

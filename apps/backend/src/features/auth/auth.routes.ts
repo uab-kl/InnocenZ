@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authController, agencyRepository, otpController, orgMemberInviteController, subscriptionRepository } from '@/composition-root.js';
+import { authController, agencyRepository, otpController, orgMemberInviteController, outletRepository, subscriptionRepository } from '@/composition-root.js';
 import { uploadRegisterProfileImage } from '@/middlewares/upload-profile-image';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js';
@@ -25,8 +25,44 @@ router.get(
 );
 router.post(
   '/org-member-invite/accept',
+  /*
+   * Still `optional`, even though `accept` now REQUIRES a session and 401s
+   * without one. The difference matters for the message: a hard guard here
+   * would answer a bare "Unauthorized" to somebody arriving from the emailed
+   * link, while the handler can say what to actually do — sign in first,
+   * because invitations only go to accounts that already exist.
+   */
   optionalAuthenticateJWT,
   orgMemberInviteController.accept.bind(orgMemberInviteController),
+);
+
+/**
+ * ASK TO JOIN ANOTHER ORGANISATION — the third way onto a team.
+ *
+ * ⚠️ `authenticateJWT`, NOT `optional`. Accept is optional-auth so it can
+ * explain itself to somebody arriving cold from an email; this endpoint has no
+ * such reader — it is only ever reached from inside the app by somebody who is
+ * already signed in, and WHO is asking is the one thing it must not take from
+ * the body. A hard guard is the honest shape here.
+ *
+ * It grants nothing: the row is written `pending`, which every scope resolver
+ * and role guard reads as no access at all. Only an owner approving it, through
+ * `updateMember`, turns it into access.
+ */
+router.post(
+  '/org-join-request',
+  authenticateJWT,
+  orgMemberInviteController.requestJoin.bind(orgMemberInviteController),
+);
+
+/**
+ * The invitations waiting for the signed-in person — the profile-settings
+ * panel. `/mine`: the email comes from the session, never the request.
+ */
+router.get(
+  '/org-member-invite/mine',
+  authenticateJWT,
+  orgMemberInviteController.listMine.bind(orgMemberInviteController),
 );
 
 /**
@@ -209,5 +245,50 @@ router.post('/register', optionalAuthenticateJWT, (req, res, next) => {
     next();
   });
 }, authController.registerUser.bind(authController));
+
+/**
+ * Active VENUES for the member sign-up picker — the twin of `/agencies` above,
+ * and public for the same stated reason: somebody choosing which venue to ask
+ * to join has no account yet. Deliberately narrower than the agency list —
+ * id and name only, no logo, no address, no contacts.
+ */
+router.get('/outlets', async (_req, res) => {
+  try {
+    const rows = await outletRepository.listActiveNames(200);
+    return res.status(200).json({ success: true, message: 'OK', data: rows });
+  } catch {
+    return res
+      .status(500)
+      .json({ success: false, message: 'Could not load venues', data: [] });
+  }
+});
+
+/**
+ * PUBLIC team-member sign-up. Creates a person, and optionally a PENDING
+ * request to join one organisation — never a role. See
+ * `OrgMemberInviteController.registerMember` for why that makes a public
+ * endpoint safe.
+ */
+router.post(
+  '/register-member',
+  /*
+   * MULTIPART, like `/register` above — the form carries a profile photo, and
+   * a team member's face is the one thing that lets an owner recognise who
+   * they are admitting to their organisation. Multer puts the file on
+   * `req.file` and every other field on `req.body` as a STRING, which is why
+   * the handler re-parses `join`.
+   */
+  (req, res, next) => {
+    uploadRegisterProfileImage.single('profileImage')(req, res, (err) => {
+      if (err) {
+        return res
+          .status(400)
+          .json({ success: false, message: err.message, data: null });
+      }
+      next();
+    });
+  },
+  orgMemberInviteController.registerMember.bind(orgMemberInviteController),
+);
 
 export default router;

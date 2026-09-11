@@ -307,7 +307,17 @@ function LoginPage() {
 					 * out of a portal they could open yesterday. With no id to send, both
 					 * sides fall back exactly as they did before.
 					 */
-					const only = profile.organisations.find((o) => o.kind === home);
+					/*
+					 * ⚠️ `enterable` is load-bearing here. Since the profile began
+					 * carrying deactivated memberships, a bare `find` by kind takes
+					 * the FIRST row of that kind in server order — which can be an
+					 * organisation this person was deactivated from. That would name
+					 * it as the acting organisation on the very first request, and
+					 * the scope resolver would then refuse everything they tried.
+					 */
+					const only = profile.organisations.find(
+						(o) => o.kind === home && o.enterable,
+					);
 					await enterOrganisation(
 						{
 							id: profile.id,

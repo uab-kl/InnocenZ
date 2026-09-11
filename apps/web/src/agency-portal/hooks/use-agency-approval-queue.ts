@@ -1,6 +1,8 @@
 import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
 import { useAgencyPendingPrs } from "@agency-portal/hooks/use-agency-pending-prs";
 import { useCutlostRequests } from "@agency-portal/hooks/use-cutlost-requests";
+import { useOrgMembersQuery } from "@agency-portal/hooks/use-org-members";
+import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import { toPendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import type { PendingAgencyLink, PendingPR } from "@agency-portal/lib/store";
@@ -34,6 +36,14 @@ export interface AgencyApprovalQueue {
 	leaveHistoryIsLoading: boolean;
 	/** Venues asking to link to this agency (`agency_outlet`, 0123). */
 	outletLinkRequests: AgencyOutletLink[];
+	/**
+	 * People asking to join this agency's TEAM — the "New member" tab.
+	 *
+	 * A count, not the rows: the panel behind that tab reads the same query key
+	 * and does its own filtering, so handing the list up here would be a second
+	 * copy of it to keep honest.
+	 */
+	pendingMembers: number;
 	/** Everything the Approvals page's tabs add up to. */
 	total: number;
 	isLoading: boolean;
@@ -83,6 +93,23 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 				(l) => l.status === "pending" && l.agencyId === activeAgencyId,
 			),
 		[pendingAgencyLinks, activeAgencyId],
+	);
+
+	/*
+	 * ⚠️ THE SAME KEY the Approvals page reads, and the same one the Team screen
+	 * writes through — so the rail badge, the "New member" tab count and the
+	 * panel itself cannot disagree, and it costs no extra request.
+	 *
+	 * It was missing entirely. This total drives the Approvals badge AND the
+	 * Today tile, and neither carried a member term, so somebody could sit in
+	 * the queue while the rail said nothing was waiting — exactly the drift the
+	 * comment below describes for venues, happening a second time.
+	 */
+	const memberOrgId = useMemo(() => getAgencyIdentity()?.agencyId ?? null, []);
+	const memberRows = useOrgMembersQuery("agency", memberOrgId);
+	const pendingMembers = useMemo(
+		() => (memberRows.data ?? []).filter((m) => m.status !== "active").length,
+		[memberRows.data],
 	);
 
 	const liveCutlost = useCutlostRequests({ status: "pending" });
@@ -138,6 +165,7 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 		// History is the record, not work-to-do — deliberately NOT in `total`,
 		// which drives the "needs your attention" count.
 		outletLinkRequests: outletLinks.links,
+		pendingMembers,
 		// A venue waiting to be let in IS work awaiting this agency, so it belongs
 		// in the same total the Today tile reads. Leaving it out is why that tile
 		// said "Nothing awaiting approval" while the Approvals page had a venue
@@ -147,7 +175,8 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 			linkRequests.length +
 			cutlostRequests.length +
 			leaveRequests.length +
-			outletLinks.links.length,
+			outletLinks.links.length +
+			pendingMembers,
 		isLoading: liveCutlost.isLoading || leaveQuery.isLoading,
 		leaveIsLoading: leaveQuery.isLoading,
 		leaveHistoryIsLoading: leaveHistoryQuery.isLoading,

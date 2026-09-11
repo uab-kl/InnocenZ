@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { agencyStatusValues, agencyUserSubRoleValues } from '@/features/agency/agency.model';
+import { MEMBERSHIP_STATUSES } from '@/util/membership-status';
 
 export const CreateAgencySchema = z.object({
   /**
@@ -80,7 +81,18 @@ export const AddAgencyMemberSchema = z.object({
 
 export const UpdateAgencyMemberSchema = z.object({
   subRole: z.enum(agencyUserSubRoleValues).optional(),
-  status: z.string().optional(),
+  /*
+   * ⚠️ AN ENUM, NOT A FREE STRING (0162).
+   *
+   * The column is `varchar(50)` with no CHECK constraint, so the database
+   * accepts any word — and every access check in the codebase asks "is it
+   * `active`?", which means a typo like `"Rejected"` or `"inactve"` would be
+   * stored happily and then read as "not active" EVERYWHERE, silently
+   * denying that person while no screen could explain why. Since 0162 the
+   * four words carry real meaning apart from each other, so this is the
+   * layer that has to hold the vocabulary.
+   */
+  status: z.enum(MEMBERSHIP_STATUSES).optional(),
 });
 
 export type CreateAgencyInput = z.infer<typeof CreateAgencySchema>;

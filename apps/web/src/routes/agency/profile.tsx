@@ -441,15 +441,20 @@ function AgencyProfile() {
 	}
 
 	const isFinanceReadOnly = agencySubRole === "agency_finance";
+	/** The agency's OWN owner — see the twin in routes/outlet/settings.tsx. */
+	const isOrgOwner = agencySubRole === "agency_owner";
 	const orgStatus = getAgencyIdentity()?.agencyStatus;
 
 	return (
 		<div className="iz-screen">
 			<header>
 				<IzPageTitle>{t.agencyMisc.settings}</IzPageTitle>
-				{isFinanceReadOnly && !editing && (
+				{/* `!canEdit`, not one named lane — see routes/outlet/settings.tsx. */}
+				{!canEdit && !editing && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-						{t.profile.financeReadOnly}
+						{isFinanceReadOnly
+							? t.profile.financeReadOnly
+							: t.profile.memberReadOnly}
 					</p>
 				)}
 			</header>
@@ -486,7 +491,10 @@ function AgencyProfile() {
 					</div>
 				</div>
 				<div className="mt-3 iz-heading text-lg font-bold">{owner.orgName}</div>
-				<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
+				{/* Owner only — see the twin in routes/outlet/settings.tsx. */}
+				{isOrgOwner ? (
+					<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
+				) : null}
 				<div
 					className={`mt-1 flex items-center gap-1 iz-tiny ${
 						isOrgSuspended(orgStatus)

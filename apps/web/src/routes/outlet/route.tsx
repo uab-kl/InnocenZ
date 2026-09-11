@@ -70,11 +70,29 @@ function OutletLayout() {
 				// A refused cache is not a dead end: re-derive from the account's own
 				// memberships and write it back, so a stale lane self-heals with no
 				// re-login.
+				//
+				// ⚠️ AND THE CACHE IS RE-CHECKED EVERY LOAD, not only when it is missing.
+				//
+				// Owner, 11 Sep 2026: "the owner have change to financial head, but the
+				// person log in havent update again when refreshed the page?"
+				//
+				// This used to re-derive ONLY when there was no cache, so a lane changed
+				// by somebody else never arrived: the sidebar kept saying Ops Head after
+				// a refresh, a sign-out and back in being the only cure. The person's
+				// job title is not theirs to hold a copy of — the organisation decides
+				// it, and the server is the only place that knows.
+				//
+				// The cached value is still used for the FIRST paint so nothing waits on
+				// a request; the re-derive then corrects it in the same effect, before
+				// the gate below opens.
 				let identity = profile?.id ? getOutletIdentity(profile.id) : null;
-				if (!identity && profile?.id) {
-					identity = await resolveOutletIdentityForUser(profile.id);
+				if (profile?.id) {
+					const fresh = await resolveOutletIdentityForUser(profile.id);
 					if (cancelled) return;
-					if (identity) saveOutletIdentity(identity);
+					if (fresh) {
+						identity = fresh;
+						saveOutletIdentity(fresh);
+					}
 				}
 				if (identity) {
 					const resolved = identity;

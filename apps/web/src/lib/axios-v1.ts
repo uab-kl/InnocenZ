@@ -32,6 +32,22 @@ function createClient(onRefreshFail: () => void): AxiosInstance {
 			const org = getActiveOrg();
 			if (org && config.headers) {
 				config.headers["x-org-id"] = org.id;
+				/*
+				 * ⚠️ THE KIND TRAVELS WITH THE ID.
+				 *
+				 * An id alone cannot say whether it names an agency or a venue, so
+				 * the server had to guess by looking it up in both membership
+				 * tables — and a PIN LEFT ON A VENUE then answered for requests
+				 * made from the AGENCY console. For somebody who owns a venue and
+				 * staffs an agency, that put the venue's saved card on the agency's
+				 * subscription screen, where saving would have replaced it.
+				 *
+				 * The chooser has always stored both halves (`ActiveOrg`); only the
+				 * id was being sent. The server still verifies the id against the
+				 * caller's own active memberships — this says which table to look
+				 * in, never that the claim is true.
+				 */
+				config.headers["x-org-kind"] = org.kind;
 			}
 			return config;
 		},

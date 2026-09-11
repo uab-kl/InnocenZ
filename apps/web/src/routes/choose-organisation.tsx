@@ -1,13 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Building2, ChevronRight, Loader2, Store } from "lucide-react";
+import {
+	Ban,
+	Building2,
+	ChevronRight,
+	Loader2,
+	ShieldCheck,
+	Store,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Button } from "@/components/ui/button";
 import type { User, UserOrganisation } from "@/lib/auth";
 import { hasValidTokens } from "@/lib/auth/auth-storage";
 import {
+	countPortalChoices,
 	defaultLandingPath,
 	enterOrganisation,
+	holdsAdminConsole,
 } from "@/lib/auth/enter-organisation";
 import { kickToLogin } from "@/lib/auth/guards";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
@@ -96,16 +106,67 @@ function ChooseOrganisationBody() {
 			}
 			if (!isLive()) return;
 
+			/*
+			 * ⚠️ ROUTE ON WHAT CAN BE ENTERED, RENDER EVERYTHING.
+			 *
+			 * `profile.organisations` now carries deactivated memberships too, so
+			 * that they can be SHOWN. Counting the raw list here would decide two
+			 * things wrongly, and the first is the dangerous one:
+			 *
+			 *  * somebody whose ONLY membership is deactivated used to arrive with
+			 *    an empty list and land on the default path — with the wider list
+			 *    they arrive with exactly one, and a `length === 1` test would
+			 *    silently auto-enter the organisation they were removed from;
+			 *  * somebody with one live and one dead membership would be offered a
+			 *    "choice" between one real card and one greyed one.
+			 *
+			 * The list below stays whole — the greyed cards are the point of the
+			 * screen — but only enterable ones are counted, entered, or skipped on.
+			 */
 			const orgs = profile.organisations;
-			// ONE organisation is not a choice — go where they were always going.
-			if (orgs.length === 1) {
-				setPhase({ kind: "entering", profile, orgId: orgs[0].id });
-				await enterOrganisation(profile, orgs[0], orgs[0].kind, next ?? null);
+			const enterable = orgs.filter((o) => o.enterable);
+			/*
+			 * ⚠️ ONE ORGANISATION IS NOT A CHOICE — BUT ONE ORGANISATION PLUS THE
+			 * ADMIN CONSOLE IS.
+			 *
+			 * This counted organisations only, so an admin who is also on one team
+			 * was skipped straight into that team's portal: the owner signed in
+			 * expecting to be asked and landed in the agency, with the console
+			 * unreachable from any screen. `shouldChooseOrganisation` had already
+			 * been taught to count the console, so the login sent them HERE — and
+			 * this line quietly sent them on again. Two places counting the same
+			 * thing differently is how a screen ends up being routed to and then
+			 * refusing to render.
+			 *
+			 * `countPortalChoices` is now the one answer both use.
+			 */
+			if (enterable.length === 1 && countPortalChoices(profile) === 1) {
+				const only = enterable[0];
+				setPhase({ kind: "entering", profile, orgId: only.id });
+				await enterOrganisation(profile, only, only.kind, next ?? null);
 				return;
 			}
-			// NONE means an admin, or a membership list that could not be read.
-			// Either way the pre-existing landing rule is the honest answer.
-			if (orgs.length === 0) {
+			/*
+			 * ⚠️ NOTHING TO ENTER IS NOT THE SAME AS BELONGING NOWHERE.
+			 *
+			 * Owner, 11 Sep 2026: a person "can see the status can login or not —
+			 * deactivate or active".
+			 *
+			 * NO MEMBERSHIPS AT ALL means an admin, a PR (neither holds a membership
+			 * row) or a list that could not be read, and the landing rule is the
+			 * honest answer for all three.
+			 *
+			 * But an account that HOLDS memberships and can enter none of them was
+			 * being sent to the same place, which is how somebody deactivated at
+			 * their only organisation met a bare "no access" page and could not tell
+			 * being removed from never having been there. They have something to be
+			 * shown, so show it: the cards render greyed, each naming its own reason.
+			 *
+			 * A DECLINED request is deliberately not among them — the server drops
+			 * `rejected` from this list entirely, because somebody turned down was
+			 * never a member and has no standing to be told about.
+			 */
+			if (enterable.length === 0 && orgs.length === 0) {
 				hardNavigate(next ?? defaultLandingPath(profile));
 				return;
 			}
@@ -192,6 +253,50 @@ function ChooseOrganisationBody() {
 					</span>
 				</p>
 
+				{/*
+				 * ⚠️ THE CONSOLE IS A CHOICE, NOT A FALLBACK — and it comes FIRST.
+				 *
+				 * An admin who accepts a team invite holds TWO places to be, and
+				 * `pickHomePortal` was picking one for them: the owner signed in
+				 * expecting to be asked and landed on the dashboard, with the other
+				 * side unreachable from any screen.
+				 *
+				 * First because it is what an admin came for; the memberships are the
+				 * second job, and both are one click either way.
+				 */}
+				{holdsAdminConsole(profile) ? (
+					<section className="mt-8">
+						<h2 className="font-semibold text-muted-foreground text-xs uppercase tracking-[0.14em]">
+							{t.chooseOrg.adminConsoleGroup}
+						</h2>
+						<ul className="mt-3 flex flex-col gap-3">
+							<li>
+								<button
+									type="button"
+									onClick={() => hardNavigate("/admin/dashboard")}
+									className="flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-royal-gold/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								>
+									<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
+										<ShieldCheck
+											className="h-5 w-5 text-foreground"
+											strokeWidth={1.5}
+										/>
+									</span>
+									<span className="flex min-w-0 flex-1 flex-col">
+										<span className="truncate font-semibold text-base text-foreground">
+											{t.chooseOrg.adminConsoleName}
+										</span>
+										<span className="mt-0.5 truncate text-muted-foreground text-sm">
+											{t.chooseOrg.adminConsoleHint}
+										</span>
+									</span>
+									<ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+								</button>
+							</li>
+						</ul>
+					</section>
+				) : null}
+
 				<OrgGroup
 					heading={t.chooseOrg.agencies}
 					orgs={agencies}
@@ -246,35 +351,104 @@ function OrgGroup({
 				{heading}
 			</h2>
 			<ul className="mt-3 flex flex-col gap-3">
-				{orgs.map((org) => (
-					<li key={`${org.kind}:${org.id}`}>
-						<button
-							type="button"
-							onClick={() => onChoose(org)}
-							className="flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-royal-gold/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						>
-							<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
-								<Icon className="h-5 w-5 text-foreground" strokeWidth={1.5} />
-							</span>
-							<span className="flex min-w-0 flex-1 flex-col">
-								<span className="truncate text-base font-semibold text-foreground">
-									{org.name}
+				{orgs.map((org) => {
+					/*
+					 * WHY this card cannot be opened — the membership, or the whole
+					 * organisation. Checked in that order because the membership is the
+					 * more specific answer: when somebody has been removed AND the
+					 * organisation is switched off, "you were removed" is the one they
+					 * can actually act on.
+					 */
+					const blockedReason = org.enterable
+						? null
+						: org.membershipStatus === "pending"
+							? t.chooseOrg.membershipPending
+							: org.membershipStatus !== "active"
+								? t.chooseOrg.membershipInactive
+								: t.chooseOrg.orgInactive;
+					const logo = apiAssetUrl(org.logoImage ?? undefined);
+					return (
+						<li key={`${org.kind}:${org.id}`}>
+							<button
+								type="button"
+								disabled={!org.enterable}
+								onClick={() => onChoose(org)}
+								className={
+									org.enterable
+										? "flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-royal-gold/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										: "flex w-full cursor-not-allowed items-center gap-4 rounded-xl border border-dashed border-border bg-muted/40 px-5 py-4 text-left opacity-70"
+								}
+							>
+								{/*
+								 * THE ORGANISATION'S OWN LOGO (owner, 11 Sep 2026: "need show
+								 * UI to let user know that which agency/outlet orgs logo").
+								 *
+								 * Somebody who works in three places is picking between
+								 * BRANDS, not reading a list of names — and every card
+								 * carried the same building or shop glyph, so the one thing
+								 * that makes the choice instant was the one thing missing.
+								 *
+								 * ⚠️ Three states, in this order. A BLOCKED card keeps the
+								 * Ban mark whatever logo the organisation has: its job there
+								 * is to say "not this one", and a familiar logo argues the
+								 * opposite. Then the real logo. Then the kind glyph, for an
+								 * organisation that never uploaded one — a null logo is
+								 * normal, not an error, so it falls back rather than
+								 * rendering a broken image.
+								 */}
+								<span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
+									{!org.enterable ? (
+										<Ban
+											className="h-5 w-5 text-muted-foreground"
+											strokeWidth={1.5}
+										/>
+									) : logo ? (
+										/* `object-cover` with matched h/w: `rounded-full` alone
+										   clips a non-square logo to a circle of its own WIDTH,
+										   so a tall one spills past the border. */
+										<img
+											src={logo}
+											alt=""
+											className="h-full w-full object-cover"
+										/>
+									) : (
+										<Icon
+											className="h-5 w-5 text-foreground"
+											strokeWidth={1.5}
+										/>
+									)}
 								</span>
-								<span className="mt-0.5 truncate text-sm text-muted-foreground">
-									{portalRoleLabel(org.subRole, t)}
-									{org.memberCode ? (
-										<>
-											{" · "}
-											{t.chooseOrg.memberId}{" "}
-											<span className="font-mono">{org.memberCode}</span>
-										</>
+								<span className="flex min-w-0 flex-1 flex-col">
+									<span className="truncate text-base font-semibold text-foreground">
+										{org.name}
+									</span>
+									<span className="mt-0.5 truncate text-sm text-muted-foreground">
+										{portalRoleLabel(org.subRole, t)}
+										{org.memberCode ? (
+											<>
+												{" · "}
+												{t.chooseOrg.memberId}{" "}
+												<span className="font-mono">{org.memberCode}</span>
+											</>
+										) : null}
+									</span>
+									{blockedReason ? (
+										<span className="mt-1 truncate text-sm text-rose-600 dark:text-rose-400">
+											{blockedReason}
+										</span>
 									) : null}
 								</span>
-							</span>
-							<ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-						</button>
-					</li>
-				))}
+								{org.enterable ? (
+									<ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+								) : (
+									<span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+										{t.chooseOrg.unavailable}
+									</span>
+								)}
+							</button>
+						</li>
+					);
+				})}
 			</ul>
 		</section>
 	);
