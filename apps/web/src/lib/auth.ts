@@ -79,5 +79,13 @@ export interface User {
 		moduleKey: string;
 		moduleName: string;
 		permissionType: "read" | "create" | "update";
+		/**
+		 * WHICH console granted it. `settings`, `dashboard` and `history` are a
+		 * separate module row per portal, so the key alone cannot tell an agency
+		 * grant from an outlet one. `null` = unknown (older server, or a module
+		 * with no portal) and is treated as "applies anywhere", which is how
+		 * this behaved before the field existed.
+		 */
+		portalCode?: string | null;
 	}>;
 }

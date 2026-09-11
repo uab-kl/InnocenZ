@@ -107,6 +107,23 @@ export const OutletUserTable = MainSchema.table('outlet_user', {
     .default(
       sql`'INNPND' || lpad(nextval('"main"."pending_member_code_seq"')::text, 4, '0')`,
     ),
+  /**
+   * WHEN THIS PERSON FIRST JOINED — written once, never rewritten (0163).
+   *
+   * NULL means they have never been on the team: a request still waiting, or
+   * one that was turned down. A timestamp means an approval actually
+   * happened, whatever the row says today.
+   *
+   * ⚠️ This is what tells a DECLINED applicant from a DEACTIVATED colleague
+   * when somebody is removed. That used to be deduced from the member id —
+   * sound, but it made one rule depend on another written in five places,
+   * and a former colleague re-labelled "never a member" is the kind of
+   * mistake nobody notices until it is already on a screen.
+   *
+   * ⚠️ NOT part of the audit quartet: `updated_at` churns on every edit;
+   * this does not move after the first activation.
+   */
+  firstActivatedAt: timestamp('first_activated_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),

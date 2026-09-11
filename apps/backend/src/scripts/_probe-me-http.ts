@@ -46,7 +46,8 @@ async function main() {
   };
   const orgs = body?.data?.organisations ?? [];
   console.log(`/auth/me ${me.status} - ${body?.data?.email}`);
-  console.log(`roles: ${(body?.data?.roles ?? []).length}`);
+  console.log(`roles: ${JSON.stringify(body?.data?.roles)}`);
+  console.log(`portals: ${JSON.stringify((body?.data as any)?.portals)}`);
   console.log(`organisations returned: ${orgs.length}`);
   for (const o of orgs) {
     console.log(

@@ -1,5 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Ban, Building2, ChevronRight, Loader2, Store } from "lucide-react";
+import {
+	Ban,
+	Building2,
+	ChevronRight,
+	Loader2,
+	ShieldCheck,
+	Store,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
@@ -7,8 +14,10 @@ import { Button } from "@/components/ui/button";
 import type { User, UserOrganisation } from "@/lib/auth";
 import { hasValidTokens } from "@/lib/auth/auth-storage";
 import {
+	countPortalChoices,
 	defaultLandingPath,
 	enterOrganisation,
+	holdsAdminConsole,
 } from "@/lib/auth/enter-organisation";
 import { kickToLogin } from "@/lib/auth/guards";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
@@ -116,8 +125,22 @@ function ChooseOrganisationBody() {
 			 */
 			const orgs = profile.organisations;
 			const enterable = orgs.filter((o) => o.enterable);
-			// ONE organisation is not a choice — go where they were always going.
-			if (enterable.length === 1) {
+			/*
+			 * ⚠️ ONE ORGANISATION IS NOT A CHOICE — BUT ONE ORGANISATION PLUS THE
+			 * ADMIN CONSOLE IS.
+			 *
+			 * This counted organisations only, so an admin who is also on one team
+			 * was skipped straight into that team's portal: the owner signed in
+			 * expecting to be asked and landed in the agency, with the console
+			 * unreachable from any screen. `shouldChooseOrganisation` had already
+			 * been taught to count the console, so the login sent them HERE — and
+			 * this line quietly sent them on again. Two places counting the same
+			 * thing differently is how a screen ends up being routed to and then
+			 * refusing to render.
+			 *
+			 * `countPortalChoices` is now the one answer both use.
+			 */
+			if (enterable.length === 1 && countPortalChoices(profile) === 1) {
 				const only = enterable[0];
 				setPhase({ kind: "entering", profile, orgId: only.id });
 				await enterOrganisation(profile, only, only.kind, next ?? null);
@@ -229,6 +252,50 @@ function ChooseOrganisationBody() {
 						{profile.email || profile.username}
 					</span>
 				</p>
+
+				{/*
+				 * ⚠️ THE CONSOLE IS A CHOICE, NOT A FALLBACK — and it comes FIRST.
+				 *
+				 * An admin who accepts a team invite holds TWO places to be, and
+				 * `pickHomePortal` was picking one for them: the owner signed in
+				 * expecting to be asked and landed on the dashboard, with the other
+				 * side unreachable from any screen.
+				 *
+				 * First because it is what an admin came for; the memberships are the
+				 * second job, and both are one click either way.
+				 */}
+				{holdsAdminConsole(profile) ? (
+					<section className="mt-8">
+						<h2 className="font-semibold text-muted-foreground text-xs uppercase tracking-[0.14em]">
+							{t.chooseOrg.adminConsoleGroup}
+						</h2>
+						<ul className="mt-3 flex flex-col gap-3">
+							<li>
+								<button
+									type="button"
+									onClick={() => hardNavigate("/admin/dashboard")}
+									className="flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-royal-gold/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								>
+									<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
+										<ShieldCheck
+											className="h-5 w-5 text-foreground"
+											strokeWidth={1.5}
+										/>
+									</span>
+									<span className="flex min-w-0 flex-1 flex-col">
+										<span className="truncate font-semibold text-base text-foreground">
+											{t.chooseOrg.adminConsoleName}
+										</span>
+										<span className="mt-0.5 truncate text-muted-foreground text-sm">
+											{t.chooseOrg.adminConsoleHint}
+										</span>
+									</span>
+									<ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+								</button>
+							</li>
+						</ul>
+					</section>
+				) : null}
 
 				<OrgGroup
 					heading={t.chooseOrg.agencies}

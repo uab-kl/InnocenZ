@@ -1,9 +1,12 @@
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
+import { AGENCY_ROLE_GRANTS } from "@agency-portal/lib/rbac-grants.generated";
 import type { LucideIcon } from "lucide-react";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
 import {
 	AGENCY_FEATURE_MODULE,
+	buildRoleMatrix,
 	canModule,
+	grantsForPortal,
 } from "@/lib/auth/module-permissions";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
@@ -76,87 +79,44 @@ type Permission =
 	| "viewLiveFloor"
 	| "overrideSignedPv";
 
-type ModulePerm = { moduleKey: string; permissionType: string };
-
-const AGENCY_OWNER_PERMISSIONS: Permission[] = [
-	"viewHome",
-	"approvePrSignups",
-	"viewApprovals",
-	"assignShifts",
-	"managePr",
-	"viewSettings",
-	"editSettings",
-	"viewPv",
-	"raisePv",
-	"viewCollections",
-	"confirmReconciliation",
-	"viewHistory",
-	"viewWorkforce",
-	"viewLiveFloor",
-	"overrideSignedPv",
-];
-
-const ROLE_PERMISSIONS: Record<AgencySubRole, Permission[]> = {
-	agency_owner: AGENCY_OWNER_PERMISSIONS,
-	/**
-	 * The owner's stand-in, at the owner's level — SHARING the owner's list
-	 * rather than restating it, so the two cannot drift. On this portal that is
-	 * what carries `raisePv` and `overrideSignedPv`: paying PRs while the owner
-	 * is unavailable is the reason the role was asked for.
-	 */
-	agency_guarantor: AGENCY_OWNER_PERMISSIONS,
-	/**
-	 * VIEW ONLY. Every agency screen readable, nothing writable.
-	 *
-	 * Reads the payroll it exists to oversee (`viewPv`) and cannot raise, sign or
-	 * override a voucher — `raisePv` and `overrideSignedPv` are absent, and that
-	 * is precisely the line between this role and the Guarantor.
-	 *
-	 * `viewLiveFloor` IS granted, unlike finance. That permission is matrix-only
-	 * by design (it has no `AGENCY_FEATURE_MODULE` entry, so no module grant can
-	 * confer it), and it was taken off finance on 11 Aug 2026 because a payroll
-	 * role has no business with who is on the floor right now. A Director's
-	 * business is precisely oversight of the organisation, so it is included —
-	 * say the word if that tile should come off this role too.
-	 *
-	 * Its own login and security is not here and needs no entry: changing your
-	 * own password, email or mobile is not an agency permission.
-	 */
-	agency_director: [
-		"viewHome",
-		"viewApprovals",
-		"viewPv",
-		"viewCollections",
-		"viewHistory",
-		"viewWorkforce",
-		"viewLiveFloor",
-		"viewSettings",
-	],
-	/**
-	 * Finance keeps Roster and the PR records; it does NOT get the live floor.
-	 *
-	 * `viewLiveFloor` is absent, and that is the whole difference (owner's call, 11
-	 * Aug 2026): the PR ON DUTY tile sat on the finance home page directly under
-	 * "Read-only overview — payroll & PV only", showing who is on shift right now —
-	 * which is not a payroll question. `viewWorkforce` stays, so the Roster nav item
-	 * and `/agency/roster` are untouched.
-	 *
-	 * A wage is checked against the SEALED stamps on the voucher, never against who
-	 * happens to be on the floor at this moment, so nothing finance actually does
-	 * loses a source it needed.
-	 */
-	agency_finance: [
-		"viewHome",
-		"viewSettings",
-		"viewPv",
-		"raisePv",
-		"overrideSignedPv",
-		"viewCollections",
-		"confirmReconciliation",
-		"viewHistory",
-		"viewWorkforce",
-	],
+type ModulePerm = {
+	moduleKey: string;
+	permissionType: string;
+	/** Which console granted it — see `grantsForPortal`. */
+	portalCode?: string | null;
 };
+
+/**
+ * Gated by LANE (or by nothing on the server at all), so there is no
+ * `role_permission` row to derive it from — this list is kept in step by hand.
+ *
+ * `viewLiveFloor` is the home page's PR ON DUTY tile and the live workforce
+ * table under it, split from `viewWorkforce` on 11 Aug 2026 so the tile could
+ * come off the finance home page without also removing Roster. It is
+ * deliberately UNMAPPED: no module grant can confer it, which is what keeps it
+ * off finance no matter what `/auth/me` returns. Owner, guarantor and director
+ * hold it — a payroll role has no business with who is on the floor right now.
+ */
+const MATRIX_ONLY: Partial<Record<Permission, readonly AgencySubRole[]>> = {
+	viewLiveFloor: ["agency_owner", "agency_guarantor", "agency_director"],
+};
+
+/**
+ * DERIVED FROM THE DATABASE — owner's rule, 11 Sep 2026: "web matrix must
+ * follow what database given."
+ *
+ * Unlike the outlet twin, this portal's hand-written list happened to agree
+ * with `role_permission` in all four lanes — verified cell by cell against the
+ * live table on 11 Sep 2026. It is derived anyway: agreeing today is not a
+ * property a second copy keeps, and the outlet list agreed once too.
+ *
+ * Written by `node tools/scripts/sync-rbac-matrix.mjs`. To change what a lane
+ * may do, change `role_permission` and re-run the sync.
+ */
+const ROLE_PERMISSIONS: Record<AgencySubRole, Permission[]> = buildRoleMatrix<
+	AgencySubRole,
+	Permission
+>(AGENCY_ROLE_GRANTS, AGENCY_FEATURE_MODULE, MATRIX_ONLY);
 
 /**
  * What an agency operator is treated as when we do not KNOW what they are.
@@ -187,18 +147,24 @@ export function agencyCan(
 		ROLE_PERMISSIONS[resolveAgencySubRole(role)].includes(permission);
 	if (!modulePermissions?.length) return fallback;
 
+	/*
+	 * THIS CONSOLE'S grants only — the twin of the outlet check. Sharing a
+	 * module KEY across portals is what let one console answer the other's
+	 * question; see `grantsForPortal`.
+	 */
+	const grants = grantsForPortal(modulePermissions, "agency");
+	if (!grants.length) return fallback;
+
 	const agencyKeys = new Set(
 		Object.values(AGENCY_FEATURE_MODULE).map((m) => m.key),
 	);
-	const hasAgencyGrants = modulePermissions.some((p) =>
-		agencyKeys.has(p.moduleKey),
-	);
+	const hasAgencyGrants = grants.some((p) => agencyKeys.has(p.moduleKey));
 	// Permissions from another portal (or stale rows) must not lock this console out.
 	if (!hasAgencyGrants) return fallback;
 
 	const map = AGENCY_FEATURE_MODULE[permission];
 	if (!map) return fallback;
-	return canModule(modulePermissions, map.key, map.type);
+	return canModule(grants, map.key, map.type);
 }
 
 export type AgencyNavItem = {

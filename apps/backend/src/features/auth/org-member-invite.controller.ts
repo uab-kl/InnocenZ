@@ -1,9 +1,5 @@
 import { Request, Response } from 'express';
-import {
-  ensureAccountCodeFromMembership,
-  isPendingOrgCode,
-  issueOrgMemberCode,
-} from '@/util/member-code.js';
+import { activateOrgMembership } from '@/util/activate-membership.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
@@ -712,37 +708,24 @@ export class OrgMemberInviteControllerClass {
       });
     }
     if (existing) {
-      await this.outletMemberRepository.update(existing.id, {
-        status: 'active',
-        // Re-invited with whatever title THIS invite names, which need not be
-        // the one they held before they were removed.
-        subRole: invite.subRole,
-        updatedBy: actor,
-      });
       /*
-       * ⚠️ MINT THE ID, because this row may never have had one (0161).
-       *
-       * Reuse flips an EXISTING row to active, and that row can be a request
-       * that was pending or declined — carrying the `INNPND` placeholder the
-       * column DEFAULT issues precisely to mean "no id was ever granted".
-       * Without this, accepting an invitation made somebody a full member
-       * permanently stamped `INNPND0007`, and `user.member_code` was never
-       * mirrored either. The `else` branch is already safe on its own:
-       * `add()` mints for a status:'active' insert.
-       *
-       * Gated on the placeholder, so a FORMER member returning keeps the real
-       * id they were always known by — an id that can change is not an id.
+       * ⚠️ ONE CALL, because activating is three writes that must happen
+       * together — the status, the real id over a placeholder, and the
+       * first-activation stamp. THIS BRANCH IS WHERE THEY CAME APART: it
+       * switched a reused row on with a plain update, so somebody invited
+       * after an earlier request became a full member permanently stamped
+       * `INNPND`. `activateOrgMembership` carries the full account.
        */
-      if (isPendingOrgCode(existing.memberCode)) {
-        await issueOrgMemberCode('outlet', outletId, async (code) => {
-          await this.outletMemberRepository.update(existing.id, {
-            memberCode: code,
-            updatedBy: actor,
-          });
-          return code;
-        });
-      }
-      await ensureAccountCodeFromMembership(user.id);
+      await activateOrgMembership({
+        kind: 'outlet',
+        orgId: outletId,
+        membershipId: existing.id,
+        userId: user.id,
+        // The invite's title wins over whatever they held before.
+        subRole: invite.subRole,
+        actor,
+        current: existing,
+      });
     } else {
       await this.outletMemberRepository.add({
         outletId,
@@ -800,25 +783,24 @@ export class OrgMemberInviteControllerClass {
       });
     }
     if (existing) {
-      await this.agencyMemberRepository.update(existing.id, {
-        status: 'active',
-        // See the venue twin: the invite's title wins over the old one.
+      /*
+       * ⚠️ ONE CALL, because activating is three writes that must happen
+       * together — the status, the real id over a placeholder, and the
+       * first-activation stamp. THIS BRANCH IS WHERE THEY CAME APART: it
+       * switched a reused row on with a plain update, so somebody invited
+       * after an earlier request became a full member permanently stamped
+       * `INNPND`. `activateOrgMembership` carries the full account.
+       */
+      await activateOrgMembership({
+        kind: 'agency',
+        orgId: agencyId,
+        membershipId: existing.id,
+        userId: user.id,
+        // The invite's title wins over whatever they held before.
         subRole: invite.subRole,
-        updatedBy: actor,
+        actor,
+        current: existing,
       });
-      // See the venue twin for why: a reused row may still carry the `INNPND`
-      // placeholder, and going active without minting leaves a full member
-      // stamped with the code that means "no id was ever granted".
-      if (isPendingOrgCode(existing.memberCode)) {
-        await issueOrgMemberCode('agency', agencyId, async (code) => {
-          await this.agencyMemberRepository.update(existing.id, {
-            memberCode: code,
-            updatedBy: actor,
-          });
-          return code;
-        });
-      }
-      await ensureAccountCodeFromMembership(user.id);
     } else {
       await this.agencyMemberRepository.add({
         agencyId,

@@ -9,11 +9,7 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { removalStatusFor } from '@/util/membership-status';
-import {
-  ensureAccountCodeFromMembership,
-  isPendingOrgCode,
-  issueOrgMemberCode,
-} from '@/util/member-code';
+import { activateOrgMembership } from '@/util/activate-membership';
 import { refuseUninvitableAccount } from '@/util/invitable-account';
 import { logger } from '@/util/logger';
 import { guardMemberChange } from '@/util/member-change-guard';
@@ -1355,25 +1351,24 @@ export class OutletControllerClass {
       }
 
       /*
-       * ⚠️ THE VENUE'S ID IS EARNED HERE, NOT AT SIGN-UP (0161) — the agency
-       * twin carries the full account of why. A row from the public member
-       * sign-up holds an `INNPND` placeholder, because a request is not a
-       * membership; this is the moment it becomes one. Issued exactly once,
-       * since the test is on the PLACEHOLDER and never on a real code.
+       * ⚠️ ONE CALL — activating is three writes that must happen together: the
+       * status, the organisation's real id over an `INNPND` placeholder (0161 —
+       * a request is not a membership, so the id is EARNED here), and the
+       * first-activation stamp (0163). They were spread across four sites and
+       * one had already forgotten the id; `activateOrgMembership` carries the
+       * full account of why they are now inseparable.
+       *
+       * The status write above set the row; this settles what that MEANS.
        */
-      if (parsed.data.status === 'active' && isPendingOrgCode(memberRow.memberCode)) {
-        await issueOrgMemberCode('outlet', outletId, async (code) => {
-          await this.outletMemberRepository.update(memberId, {
-            memberCode: code,
-            updatedBy: actor,
-          });
-          return code;
-        });
-      }
-      // AFTER the id above, never before — running it first would mirror the
-      // placeholder onto the account. A no-op for anybody already holding one.
       if (parsed.data.status === 'active') {
-        await ensureAccountCodeFromMembership(target.userId);
+        await activateOrgMembership({
+          kind: 'outlet',
+          orgId: outletId,
+          membershipId: memberId,
+          userId: target.userId,
+          actor,
+          current: memberRow,
+        });
       }
 
       // Deactivating here IS removing, so it revokes the same way — see the
@@ -1479,7 +1474,10 @@ export class OutletControllerClass {
        * buttons then cannot disagree, and a caller that knows nothing about the
        * distinction still produces the right word.
        */
-      const nextStatus = removalStatusFor(target.status, target.memberCode);
+      const nextStatus = removalStatusFor(
+        target.status,
+        target.firstActivatedAt,
+      );
       const removed = await this.outletMemberRepository.remove(
         memberId,
         getActor(req),

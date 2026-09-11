@@ -53,6 +53,12 @@ interface MeResponse {
 		moduleKey?: string;
 		permissionId: string;
 		permissionType: "read" | "create" | "update";
+		/**
+		 * The console this grant belongs to. Optional: an older server, or a
+		 * module row with no portal, sends nothing and the grant then applies
+		 * wherever its key matches — exactly as before this field existed.
+		 */
+		portalCode?: string | null;
 	}[];
 }
 
@@ -80,6 +86,7 @@ export async function fetchProfile(): Promise<User> {
 			moduleKey: p.moduleKey ?? p.moduleName.toLowerCase().replace(/\s+/g, "_"),
 			moduleName: p.moduleName,
 			permissionType: p.permissionType,
+			portalCode: p.portalCode ?? null,
 		}));
 
 	return {

@@ -215,12 +215,28 @@ export class AuthRepositoryClass {
           moduleId: PermissionTable.moduleId,
           moduleName: ModuleTable.moduleName,
           moduleKey: ModuleTable.moduleKey,
+          /*
+           * The console this grant belongs to. This query is the UNION of every
+           * role the account holds and is deliberately NOT filtered by portal —
+           * one call has to answer for all of them. But `settings`, `dashboard`
+           * and `history` exist as a separate module row on EACH portal, so the
+           * key alone cannot say which console a grant came from, and the web
+           * `canModule()` matches on key + verb. Carrying the portal is what
+           * makes the union safe to hand out; filtering rows away here instead
+           * would break the callers that legitimately read across portals.
+           *
+           * LEFT join: `m_module.portal_id` is nullable, and a module with no
+           * portal must keep behaving exactly as it does today rather than
+           * dropping out of the answer.
+           */
+          portalCode: PortalTable.code,
         })
         .from(UserRoleTable)
         .innerJoin(RoleTable, eq(UserRoleTable.roleId, RoleTable.id))
         .innerJoin(RolePermissionTable, eq(UserRoleTable.roleId, RolePermissionTable.roleId))
         .innerJoin(PermissionTable, eq(RolePermissionTable.permissionId, PermissionTable.id))
         .innerJoin(ModuleTable, eq(PermissionTable.moduleId, ModuleTable.id))
+        .leftJoin(PortalTable, eq(ModuleTable.portalId, PortalTable.id))
         .where(
           and(
             eq(UserRoleTable.userId, userId),

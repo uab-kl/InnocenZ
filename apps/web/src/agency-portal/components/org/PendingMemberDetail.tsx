@@ -345,6 +345,73 @@ export function PendingMemberDetail({
 						{t.portalUi.decideHeading}
 					</h3>
 					<div className="rounded-xl border border-border p-4">
+						{/*
+						 * CHANGING AN EXISTING MEMBER'S TITLE, from the pane already showing
+						 * them (owner, 11 Sep 2026: "make switch row can be in the approval
+						 * page all section").
+						 *
+						 * ⚠️ The SAME write the Team screen's dropdown uses —
+						 * `changeMember({ subRole })` — never a second path. That endpoint is
+						 * also where the portal-role grant happens, and a second way to change
+						 * a title would be a second place to get that grant wrong; it was got
+						 * wrong once already.
+						 *
+						 * Hidden while the removal confirmation is open: two decisions about
+						 * the same person on screen at once is how the wrong one gets clicked.
+						 */}
+						{!confirming ? (
+							<div className="mb-4">
+								<label className="flex flex-col gap-1.5">
+									<span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+										{t.portalUi.changeRole}
+									</span>
+									<select
+										value={picked}
+										disabled={busy}
+										onChange={(e) =>
+											setChoice({ id: member.id, value: e.target.value })
+										}
+										style={{ colorScheme: "dark" }}
+										className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+									>
+										{APPROVABLE[kind].map((r) => (
+											<option key={r} value={r}>
+												{portalRoleLabel(r, t)}
+											</option>
+										))}
+									</select>
+								</label>
+								{picked !== member.subRole ? (
+									<button
+										type="button"
+										disabled={busy}
+										onClick={() => {
+											setError(null);
+											changeMember.mutate(
+												{ memberId: member.id, subRole: picked },
+												{
+													onError: (e) =>
+														setError({
+															id: member.id,
+															message: serverMessage(
+																e,
+																t.portalUi.roleSaveFailed,
+															),
+														}),
+												},
+											);
+										}}
+										className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-4 py-2.5 font-semibold text-background text-sm disabled:opacity-50"
+									>
+										<UserCheck className="h-4 w-4 shrink-0" />
+										{t.portalUi.saveRole}
+									</button>
+								) : null}
+								{shownError ? (
+									<p className="mt-3 text-red-500 text-sm">{shownError}</p>
+								) : null}
+							</div>
+						) : null}
 						{confirming ? (
 							<>
 								<p className="text-foreground text-sm">

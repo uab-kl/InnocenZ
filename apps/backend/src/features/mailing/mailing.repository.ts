@@ -249,7 +249,21 @@ export async function sendOrgMemberInviteMail(input: {
   const text = [
     `You have been invited to join ${input.orgName} as ${input.subRoleLabel}.`,
     '',
-    'Open this link to set up your account and join:',
+    /*
+     * ⚠️ THIS EMAIL MUST NOT PROMISE ACCOUNT SETUP.
+     *
+     * It used to read "set up your account (name, email, password)", which was
+     * true of a flow that no longer exists: accepting once CREATED the account
+     * and wrote a password onto whatever address the invite named. That was an
+     * account-takeover path — an owner could invite an admin's address and set
+     * a password on it — so accept now requires the caller to be signed in AS
+     * the invited email, and writes no credential at all.
+     *
+     * The code changed and this sentence did not, so the email was still
+     * telling people to expect a form that would never appear, and sending
+     * somebody who has no account down a path that can only refuse them.
+     */
+    'Sign in with this email address to accept — invitations only go to accounts that already exist:',
     input.acceptLink,
     '',
     'This link expires in 7 days.',

@@ -14,11 +14,7 @@ import { pickAgencyId } from '@/util/org-scope';
 import { logger } from '@/util/logger';
 import { guardMemberChange } from '@/util/member-change-guard';
 import { removalStatusFor } from '@/util/membership-status';
-import {
-  ensureAccountCodeFromMembership,
-  isPendingOrgCode,
-  issueOrgMemberCode,
-} from '@/util/member-code';
+import { activateOrgMembership } from '@/util/activate-membership';
 import {
   CreateAgencySchema,
   UpdateAgencySchema,
@@ -1649,37 +1645,24 @@ export class AgencyControllerClass {
        */
 
       /*
-       * ⚠️ THE ORGANISATION ID IS EARNED HERE, NOT AT SIGN-UP (0161).
+       * ⚠️ ONE CALL — activating is three writes that must happen together: the
+       * status, the organisation's real id over an `INNPND` placeholder (0161 —
+       * a request is not a membership, so the id is EARNED here), and the
+       * first-activation stamp (0163). They were spread across four sites and
+       * one had already forgotten the id; `activateOrgMembership` carries the
+       * full account of why they are now inseparable.
        *
-       * A row created by the public member sign-up carries an `INNPND`
-       * placeholder, because a request is not a membership. This is the moment
-       * it becomes one, so this is where the agency's real next number is
-       * issued — and it is issued exactly once, since the test is on the
-       * PLACEHOLDER and never on a code that is already real. An id that can
-       * change is not an id.
-       *
-       * `issueOrgMemberCode` rather than a bare `nextOrgMemberCode`: the number
-       * comes from a read-then-write, and two owners approving at the same
-       * instant would compute the same one. The unique index refuses the
-       * second, and this retries it — reading more carefully cannot make a
-       * read-then-write safe.
-       */
-      if (parsed.data.status === 'active' && isPendingOrgCode(memberRow.memberCode)) {
-        await issueOrgMemberCode('agency', agencyId, async (code) => {
-          await this.agencyMemberRepository.update(memberId, {
-            memberCode: code,
-            updatedBy: actor,
-          });
-          return code;
-        });
-      }
-      /*
-       * AFTER the id above, never before: this mirrors the membership id onto
-       * the account, and running it first would copy the placeholder. It is a
-       * no-op for anybody who already holds a real id.
+       * The status write above set the row; this settles what that MEANS.
        */
       if (parsed.data.status === 'active') {
-        await ensureAccountCodeFromMembership(target.userId);
+        await activateOrgMembership({
+          kind: 'agency',
+          orgId: agencyId,
+          membershipId: memberId,
+          userId: target.userId,
+          actor,
+          current: memberRow,
+        });
       }
       if (parsed.data.status != null && parsed.data.status !== 'active') {
         await this.revokeAgencyPortalRoleIfLastMembership(target.userId);
@@ -1783,7 +1766,10 @@ export class AgencyControllerClass {
        * buttons then cannot disagree, and a caller that knows nothing about the
        * distinction still produces the right word.
        */
-      const nextStatus = removalStatusFor(target.status, target.memberCode);
+      const nextStatus = removalStatusFor(
+        target.status,
+        target.firstActivatedAt,
+      );
       const removed = await this.agencyMemberRepository.remove(
         memberId,
         getActor(req),

@@ -67,3 +67,74 @@ describe("outletCan — requestCutLoss", () => {
 		expect(outletCan("outlet_director", "postJob", OUTLET_GRANTS)).toBe(true);
 	});
 });
+
+/**
+ * A GRANT BELONGS TO ONE CONSOLE.
+ *
+ * `/auth/me` returns the union of every role the account holds, across portals,
+ * and `settings` / `dashboard` / `history` exist as a separate module row on
+ * EACH portal. Matching on the key alone therefore let an AGENCY owner's
+ * `settings:update` answer an OUTLET question — so somebody who owns an agency
+ * and is merely a Finance head at a venue was shown the Edit control on that
+ * venue's Settings page. `PUT /outlet/:id` still refused the save
+ * (`outletOwnerOfParam`), so the page offered an edit it could not keep.
+ *
+ * The owner's rule, 11 Sep 2026: "other member cannot change it, only owner
+ * themself can change it."
+ */
+describe("outletCan — grants are scoped to their own portal", () => {
+	/** What that dual-role account's `/auth/me` actually returns. */
+	const AGENCY_OWNER_PLUS_OUTLET_FINANCE = [
+		// From the AGENCY Owner role — must not answer an outlet question.
+		{ moduleKey: "settings", permissionType: "update", portalCode: "agency" },
+		{ moduleKey: "settings", permissionType: "read", portalCode: "agency" },
+		{ moduleKey: "roster", permissionType: "update", portalCode: "agency" },
+		// From the OUTLET Finance role — read, never update.
+		{ moduleKey: "settings", permissionType: "read", portalCode: "outlet" },
+		{ moduleKey: "billing", permissionType: "read", portalCode: "outlet" },
+	];
+
+	it("refuses editSettings on the venue where the account is only Finance", () => {
+		expect(
+			outletCan(
+				"outlet_finance",
+				"editSettings",
+				AGENCY_OWNER_PLUS_OUTLET_FINANCE,
+			),
+		).toBe(false);
+	});
+
+	it("still admits the venue's own owner", () => {
+		expect(
+			outletCan("outlet_owner", "editSettings", [
+				{
+					moduleKey: "settings",
+					permissionType: "update",
+					portalCode: "outlet",
+				},
+				{ moduleKey: "settings", permissionType: "read", portalCode: "outlet" },
+			]),
+		).toBe(true);
+	});
+
+	it("treats a grant with no portal as applying anywhere — older servers", () => {
+		// Back-compat: before `portalCode` was sent, every grant was portal-less.
+		// Dropping those would lock people out of a console they use today.
+		expect(
+			outletCan("outlet_owner", "editSettings", [
+				{ moduleKey: "settings", permissionType: "update" },
+			]),
+		).toBe(true);
+	});
+
+	it("falls back to the lane when only ANOTHER portal's grants arrive", () => {
+		// Nothing outlet-shaped is left after filtering, so the sub-role matrix
+		// answers — an agency-only session must not be locked out of a venue it
+		// legitimately holds a lane on, nor handed the owner's powers.
+		const agencyOnly = [
+			{ moduleKey: "settings", permissionType: "update", portalCode: "agency" },
+		];
+		expect(outletCan("outlet_owner", "editSettings", agencyOnly)).toBe(true);
+		expect(outletCan("outlet_finance", "editSettings", agencyOnly)).toBe(false);
+	});
+});

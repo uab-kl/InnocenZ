@@ -19,8 +19,6 @@
  * the only thing standing between a typo and a value that reads as "not
  * active" everywhere while meaning nothing.
  */
-import { isPendingOrgCode } from '@/util/member-code';
-
 export const MEMBERSHIP_STATUSES = [
   'pending',
   'active',
@@ -47,23 +45,24 @@ export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 export function removalStatusFor(
   current: string,
   /**
-   * The row's member id. ⚠️ REQUIRED, and the reason is a trap that only
-   * appears once somebody can RE-REQUEST after being removed.
+   * When this person FIRST became a member, or null if they never did (0163).
    *
-   * `pending` used to be enough to mean "never a member". It stops being
-   * enough the moment a former colleague can ask to come back: their row is
-   * flipped to `pending`, and a second decline would then write `rejected` —
-   * the word that means NEVER a member. They would vanish from the Team
-   * roster, vanish from the Deactivated list, and be hidden from the admin
-   * console by default, while still holding a real organisation id.
+   * ⚠️ REQUIRED, and it is a stored fact rather than a deduction. `pending`
+   * alone used to mean "never a member", which stopped being true the moment a
+   * former colleague could ask to come back: their row is flipped to
+   * `pending`, and a second refusal would then write `rejected` — the word
+   * that means NEVER on the team. They would drop off the roster, drop off the
+   * Deactivated list and vanish from the admin console, while still holding the
+   * real organisation id they had worked under.
    *
-   * The id settles it, exactly as 0162's backfill did: a real code was minted
-   * on an approval that actually happened, so that person WAS on the team
-   * whatever their row says today. Only an `INNPND` placeholder means the
-   * approval never came.
+   * This briefly read the member code instead, on the reasoning that a real id
+   * is only minted on approval. True — but it made this rule depend on a rule
+   * written in five separate places, one of which had already forgotten it. A
+   * timestamp answers the question directly and cannot be undone by a change
+   * somewhere else.
    */
-  memberCode: string | null | undefined,
+  firstActivatedAt: Date | string | null | undefined,
 ): MembershipStatus {
   if (current !== 'pending') return 'inactive';
-  return isPendingOrgCode(memberCode) ? 'rejected' : 'inactive';
+  return firstActivatedAt ? 'inactive' : 'rejected';
 }

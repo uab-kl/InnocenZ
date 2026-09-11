@@ -1,8 +1,11 @@
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
+import { OUTLET_ROLE_GRANTS } from "@agency-portal/lib/rbac-grants.generated";
 import type { LucideIcon } from "lucide-react";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
 import {
+	buildRoleMatrix,
 	canModule,
+	grantsForPortal,
 	OUTLET_FEATURE_MODULE,
 } from "@/lib/auth/module-permissions";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -64,95 +67,76 @@ type Permission =
 	 *
 	 * Mirrors the backend guard on `POST /cutlost`, which admits the owner,
 	 * finance and ops lanes but not a Director. Matrix-only on purpose (no
-	 * `OUTLET_FEATURE_MODULE` entry): the server gates it by LANE rather than by a
-	 * module grant, because outlet Finance holds no `booking` permission at all
-	 * and a `booking:create` mapping here would disagree with the server.
+	 * `OUTLET_FEATURE_MODULE` entry): the server gates it by LANE, and there is
+	 * no `cutlost` module to grant — see MATRIX_ONLY below.
+	 *
+	 * ⚠️ This note used to say the lane gate existed "because outlet Finance
+	 * holds no `booking` permission at all". That was wrong, and being wrong in
+	 * a comment is how the whole matrix drifted: the database grants Finance
+	 * `booking` create, read and update, and the server admits them.
 	 *
 	 * Without this the button rendered for everyone — the component had no
 	 * permission check at all — so a Director could click it and collect a 403.
 	 */
 	| "requestCutLoss";
 
-type ModulePerm = { moduleKey: string; permissionType: string };
+type ModulePerm = {
+	moduleKey: string;
+	permissionType: string;
+	/** Which console granted it — see `grantsForPortal`. */
+	portalCode?: string | null;
+};
 
-const OUTLET_OWNER_PERMISSIONS: Permission[] = [
-	"postJob",
-	"viewBookings",
-	"viewLiveDashboard",
-	"logSales",
-	"sealShift",
-	"confirmShift",
-	"confirmDaily",
-	"viewBilling",
-	"viewSalesDashboard",
-	"ratePrs",
-	"manageShiftStaffing",
-	"viewHistory",
-	"viewWorkspace",
-	"manageWorkspace",
-	"viewSettings",
-	"editSettings",
-	"orderSpecialService",
-	"requestCutLoss",
-];
-
-const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
-	outlet_owner: OUTLET_OWNER_PERMISSIONS,
-	/**
-	 * The owner's stand-in, at the owner's level — so it SHARES the owner's list
-	 * rather than restating it. Two copies is how "same level as the owner" stops
-	 * being true the first time one of them is edited, and this role is used
-	 * precisely when the owner is not around to notice.
-	 */
-	outlet_guarantor: OUTLET_OWNER_PERMISSIONS,
-	/**
-	 * VIEW ONLY. Every screen the owner sees, no write anywhere on the venue.
-	 *
-	 * `viewSettings` without `editSettings` is what the owner asked for: a
-	 * Director reaches Settings, reads it, and edits only its own login and
-	 * security — which is not an outlet permission at all (every signed-in user
-	 * may change their own password, contact details and MFA), so it needs no
-	 * entry here.
-	 *
-	 * `orderSpecialService` is absent, and that HIDES the nav item and the route
-	 * rather than disabling them — the owner's call, since ordering is the only
-	 * thing that page does.
-	 */
-	outlet_director: [
-		"viewBookings",
-		"viewLiveDashboard",
-		"viewBilling",
-		"viewSalesDashboard",
-		"viewHistory",
-		"viewWorkspace",
-		"viewSettings",
-	],
-	outlet_finance: [
-		"viewLiveDashboard",
-		"viewHistory",
-		"confirmDaily",
-		"viewBilling",
-		"viewSalesDashboard",
-		"viewWorkspace",
-		"viewSettings",
-		"orderSpecialService",
-		"requestCutLoss",
-	],
-	outlet_ops: [
-		"postJob",
-		"viewBookings",
-		"viewLiveDashboard",
-		"logSales",
-		"sealShift",
-		"confirmShift",
-		"ratePrs",
-		"manageShiftStaffing",
-		"viewWorkspace",
-		"viewSettings",
-		"orderSpecialService",
-		"requestCutLoss",
+/**
+ * Gated by LANE on the server, so there is no `role_permission` row to derive
+ * it from — this list must mirror the server's own.
+ *
+ * `POST /cutlost` is `requireOutletSubRole('owner', 'finance', 'operations_head')`
+ * (cutlost.routes.ts), and `holdsOutletLane` folds guarantor into owner, so a
+ * Director is the only lane refused.
+ *
+ * ⚠️ The reason it is lane-gated is simply that there is NO `cutlost` module —
+ * the outlet portal has nine (booking, dashboard, sales, billing, rating,
+ * history, workspace, settings, special_service) and none of them covers this,
+ * so there is no grant to read. The older note here said it was lane-gated
+ * "because outlet Finance holds no `booking` permission at all"; that stopped
+ * being true — the database grants Finance `booking` create, read and update.
+ */
+const MATRIX_ONLY: Partial<Record<Permission, readonly OutletSubRole[]>> = {
+	requestCutLoss: [
+		"outlet_owner",
+		"outlet_guarantor",
+		"outlet_finance",
+		"outlet_ops",
 	],
 };
+
+/**
+ * DERIVED FROM THE DATABASE — owner's rule, 11 Sep 2026: "web matrix must
+ * follow what database given."
+ *
+ * ⚠️ This was a hand-written list, and it had drifted 14 cells from
+ * `role_permission`. The database decided every one of them at runtime (see
+ * `outletCan` below, where a real session's grants answer instead of this), so
+ * the list was never a policy — it was a stale description contradicting the
+ * screen. Three things it claimed:
+ *
+ *   · Finance could not Post Job. The database grants Finance `booking:create`
+ *     and `POST /shift` checks exactly that, so Finance could, and did.
+ *   · Ops Head could not see Sales or History. The database grants both.
+ *   · The Owner could `confirmDaily`. NO outlet role holds `billing:update`,
+ *     so the server refuses everyone — that button cannot work for anybody
+ *     until the grant exists.
+ *
+ * It now comes from `rbac-grants.generated.ts`, written by
+ * `node tools/scripts/sync-rbac-matrix.mjs` from the live table. To change what
+ * a lane may do, change `role_permission` and re-run the sync; editing here
+ * does nothing, and `--check` fails while the snapshot is stale.
+ */
+const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = buildRoleMatrix<
+	OutletSubRole,
+	Permission
+>(OUTLET_ROLE_GRANTS, OUTLET_FEATURE_MODULE, MATRIX_ONLY);
 
 /**
  * What an outlet operator is treated as when we do not KNOW what they are.
@@ -175,17 +159,23 @@ export function outletCan(
 	const fallback = ROLE_PERMISSIONS[r].includes(permission);
 	if (!modulePermissions?.length) return fallback;
 
+	/*
+	 * THIS CONSOLE'S grants only. `settings`, `dashboard` and `history` are a
+	 * separate module row per portal, so an agency grant used to answer an
+	 * outlet question by key alone — see `grantsForPortal`.
+	 */
+	const grants = grantsForPortal(modulePermissions, "outlet");
+	if (!grants.length) return fallback;
+
 	const outletKeys = new Set(
 		Object.values(OUTLET_FEATURE_MODULE).map((m) => m.key),
 	);
-	const hasOutletGrants = modulePermissions.some((p) =>
-		outletKeys.has(p.moduleKey),
-	);
+	const hasOutletGrants = grants.some((p) => outletKeys.has(p.moduleKey));
 	if (!hasOutletGrants) return fallback;
 
 	const map = OUTLET_FEATURE_MODULE[permission];
 	if (!map) return fallback;
-	return canModule(modulePermissions, map.key, map.type);
+	return canModule(grants, map.key, map.type);
 }
 
 export type OutletNavItem = {

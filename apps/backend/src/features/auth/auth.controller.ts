@@ -1413,6 +1413,12 @@ export class AuthControllerClass {
             moduleKey: p.moduleKey,
             permissionId: p.permissionId,
             permissionType: p.permissionType,
+            /*
+             * WHICH console the grant is for. Without it the portals cannot tell
+             * an agency `settings:update` from an outlet one — see the field's
+             * note in `schema/rbac.schema.ts`.
+             */
+            portalCode: p.portalCode ?? null,
           })),
         },
       });

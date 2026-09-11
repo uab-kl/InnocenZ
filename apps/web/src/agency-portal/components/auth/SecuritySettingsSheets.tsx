@@ -3,20 +3,25 @@ import { PasswordField } from "@agency-portal/components/auth/PasswordField";
 import { IzSheet, type SheetVariant } from "@agency-portal/components/iz/Sheet";
 import { useStore } from "@agency-portal/lib/store";
 import { verifyDemoOtp } from "@agency-portal/lib/verify-demo-otp";
+import { useQueryClient } from "@tanstack/react-query";
 import {
 	ChevronLeft,
 	ChevronRight,
 	KeyRound,
 	Mail,
 	Phone,
+	UserRound,
 	X,
 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { changeMyPassword } from "@/lib/auth/password-api";
+import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
+import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { updateMyName } from "@/services/user/user";
 
-type SecurityView = "menu" | "password" | "email" | "phone";
+type SecurityView = "menu" | "password" | "email" | "phone" | "name";
 type OtpPending = { field: "email" | "phone"; value: string } | null;
 
 function SheetHead({
@@ -102,6 +107,16 @@ export function SecuritySettingsSheets({
 }) {
 	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
+	/*
+	 * The SIGNED-IN account, read here rather than passed in. `email` and
+	 * `mobile` arrive as props because both portals already had them on screen;
+	 * the name does not, and threading a fourth prop through two pages to reach
+	 * the same `/auth/me` this component can read itself is a second place for
+	 * the two to disagree.
+	 */
+	const { data: me } = useProfile();
+	const queryClient = useQueryClient();
+	const { logout } = useAuth();
 
 	const [view, setView] = useState<SecurityView>("menu");
 	// Same `useId` pairing `PasswordField` uses, so the "New email" / "New mobile"
@@ -109,6 +124,10 @@ export function SecuritySettingsSheets({
 	// announces it with the field.
 	const newEmailId = useId();
 	const newPhoneId = useId();
+	const newNameId = useId();
+
+	const [newName, setNewName] = useState("");
+	const [savingName, setSavingName] = useState(false);
 
 	const [currentPassword, setCurrentPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
@@ -199,6 +218,64 @@ export function SecuritySettingsSheets({
 		}
 	};
 
+	/** What the portals currently call this person. */
+	const currentName = me?.displayName || me?.username || "";
+
+	/**
+	 * CHANGE YOUR OWN NAME.
+	 *
+	 * ⚠️ Deliberately NOT gated on `canEdit`, for the same reason the password
+	 * lane is not: that prop is the ORGANISATION's `editSettings` permission,
+	 * which governs the venue's record. Your own name is not the organisation's
+	 * property — a Finance or Ops member has no say over outlet settings and
+	 * must still be able to correct their own name. The server agrees: it takes
+	 * the id from the verified token and 403s any other, so nobody can rename a
+	 * colleague through here.
+	 *
+	 * No OTP, unlike email and mobile. Those two are how you SIGN IN and how the
+	 * platform reaches you, so they are proved before they change; a display
+	 * name unlocks nothing and a spelling correction should not need a code.
+	 */
+	const changeName = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (savingName) return;
+		const trimmed = newName.trim();
+		if (!me?.id) {
+			toast(t.profile.nameUpdateFailed, "warn");
+			return;
+		}
+		if (trimmed.length < 2) {
+			toast(t.profile.enterYourName, "warn");
+			return;
+		}
+		if (trimmed === currentName) {
+			backToMenu();
+			return;
+		}
+		setSavingName(true);
+		try {
+			await updateMyName(me.id, trimmed, logout);
+			/*
+			 * The name is rendered from `/auth/me` by the greeting, the sidebar
+			 * and both Team lists, so the cache is refetched rather than patched
+			 * — a hand-written cache entry is a second copy of the answer, and
+			 * the two drift the first time the server normalises anything.
+			 */
+			await queryClient.invalidateQueries({ queryKey: profileQueryKey });
+			toast(t.profile.nameUpdated, "success");
+			backToMenu();
+		} catch (error) {
+			toast(
+				error instanceof Error && error.message
+					? error.message
+					: t.profile.nameUpdateFailed,
+				"warn",
+			);
+		} finally {
+			setSavingName(false);
+		}
+	};
+
 	const requestEmailOtp = () => {
 		if (!canEdit) return;
 		const next = newEmail.trim();
@@ -272,6 +349,25 @@ export function SecuritySettingsSheets({
 				<SheetHead title={t.profile.securitySettingsTitle} onClose={closeAll} />
 				<p className="iz-tiny iz-muted mb-3">{t.profile.chooseWhatToUpdate}</p>
 				<div className="iz-security-menu">
+					{/*
+					 * FIRST, above the password. It is the only row here that is
+					 * not a credential — it is what every other person in the
+					 * organisation sees you called — and it is the one a new
+					 * member goes looking for, having just been added under
+					 * whatever the person who invited them typed.
+					 */}
+					<SecurityMenuRow
+						icon={UserRound}
+						label={t.profile.changeName}
+						meta={currentName || undefined}
+						onClick={() => {
+							// Seeded on entry, not on open: `/auth/me` may still be in
+							// flight when the sheet appears, and an input seeded from a
+							// name that had not arrived yet would silently clear it.
+							setNewName(currentName);
+							setView("name");
+						}}
+					/>
 					<SecurityMenuRow
 						icon={KeyRound}
 						label={t.profile.changePassword}
@@ -347,6 +443,45 @@ export function SecuritySettingsSheets({
 						disabled={savingPassword}
 					>
 						{savingPassword ? t.profile.savingPassword : t.profile.savePassword}
+					</button>
+				</form>
+			</IzSheet>
+
+			<IzSheet
+				open={open && view === "name"}
+				onClose={backToMenu}
+				variant={sheetVariant}
+			>
+				<SheetHead
+					title={t.profile.changeName}
+					onBack={backToMenu}
+					onClose={closeAll}
+				/>
+				<p className="iz-tiny iz-muted mb-2">{t.profile.currentName}</p>
+				<p className="iz-account-security__current mb-4">
+					{currentName || "—"}
+				</p>
+				<form onSubmit={changeName} className="iz-security-form">
+					<label className="iz-tiny iz-muted" htmlFor={newNameId}>
+						{t.profile.yourName}
+					</label>
+					<input
+						id={newNameId}
+						type="text"
+						className="iz-account-security__input mt-1"
+						placeholder={t.profile.enterYourName}
+						value={newName}
+						onChange={(e) => setNewName(e.target.value)}
+						autoComplete="name"
+						maxLength={80}
+					/>
+					<p className="iz-tiny iz-muted mt-2">{t.profile.nameShownHint}</p>
+					<button
+						type="submit"
+						className="iz-btn iz-btn-primary iz-security-form__submit"
+						disabled={savingName}
+					>
+						{savingName ? t.profile.savingName : t.profile.saveName}
 					</button>
 				</form>
 			</IzSheet>

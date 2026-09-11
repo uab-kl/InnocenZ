@@ -129,6 +129,19 @@ export class OutletMemberRepositoryClass {
         ...data,
         // Omitted, not null — omitting is what lets the DEFAULT fire.
         ...(minted ? { memberCode: minted } : {}),
+        /*
+         * ⚠️ A ROW BORN ACTIVE IS ALREADY A MEMBERSHIP (0163).
+         *
+         * Organisation sign-up and invite-accept both insert straight at
+         * `active`, so there is no later activation to stamp this. Without it
+         * the owner of an agency would carry no first-activation date, and
+         * removing them would read as a DECLINED APPLICANT — somebody who was
+         * never on the team they founded.
+         *
+         * `activateOrgMembership` covers every row that is switched on LATER;
+         * this covers the ones that never had a "later".
+         */
+        ...(data.status === 'active' ? { firstActivatedAt: new Date() } : {}),
       };
       const [member] = await dbClient
         .insert(OutletUserTable)
@@ -225,6 +238,7 @@ export class OutletMemberRepositoryClass {
           status: OutletUserTable.status,
           subRole: OutletUserTable.subRole,
           memberCode: OutletUserTable.memberCode,
+          firstActivatedAt: OutletUserTable.firstActivatedAt,
           createdAt: OutletUserTable.createdAt,
           updatedAt: OutletUserTable.updatedAt,
           createdBy: OutletUserTable.createdBy,
@@ -342,6 +356,7 @@ export class OutletMemberRepositoryClass {
           status: OutletUserTable.status,
           subRole: OutletUserTable.subRole,
           memberCode: OutletUserTable.memberCode,
+          firstActivatedAt: OutletUserTable.firstActivatedAt,
           createdAt: OutletUserTable.createdAt,
           updatedAt: OutletUserTable.updatedAt,
           createdBy: OutletUserTable.createdBy,
@@ -434,6 +449,7 @@ export class OutletMemberRepositoryClass {
           status: OutletUserTable.status,
           subRole: OutletUserTable.subRole,
           memberCode: OutletUserTable.memberCode,
+          firstActivatedAt: OutletUserTable.firstActivatedAt,
         })
         .from(OutletUserTable)
         .innerJoin(OutletTable, eq(OutletTable.id, OutletUserTable.outletId))

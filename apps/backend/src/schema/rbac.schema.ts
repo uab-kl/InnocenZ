@@ -89,4 +89,21 @@ export type RolePermissionGroupType = {
   moduleId: string;
   moduleName: string;
   moduleKey: string;
+  /**
+   * WHICH CONSOLE this grant belongs to — `agency` | `outlet` | `admin` | `pr`.
+   *
+   * Optional because `role-permission.repository.getRolePermissions` builds the
+   * same shape for the admin RBAC screens and does not join the portal.
+   *
+   * ⚠️ It exists because `moduleKey` is NOT unique across portals: `settings`,
+   * `dashboard` and `history` are each a SEPARATE module row per portal, and
+   * `getUserPermissions` returns the union of every role an account holds with
+   * no portal filter. The web `canModule()` matches on key + verb alone, so an
+   * agency Owner's `settings:update` answers "yes, you may edit" on the OUTLET
+   * settings page of a venue where that same person is only a Finance head. The
+   * server still refuses the save (`outletOwnerOfParam`), so the UI offers an
+   * edit that cannot be saved. The key alone cannot tell the two apart; this is
+   * the fact that can.
+   */
+  portalCode?: string | null;
 };

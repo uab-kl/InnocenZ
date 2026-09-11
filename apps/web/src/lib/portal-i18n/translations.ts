@@ -1863,6 +1863,9 @@ const en = {
 	profile: {
 		noAccess: "You do not have access to agency settings.",
 		financeReadOnly: "Finance view — read-only · cannot edit owner settings",
+		/** Every other non-owner lane — Director today, and anything added later. */
+		memberReadOnly:
+			"Read-only. Only the agency owner can edit owner information — you can still change your own login and security below.",
 		icAutoStamps: "IC + e-signature auto-stamps every PV (1st of 2 sigs)",
 		eSignatureOnFile: "E-signature on file ✓",
 		subRoleInviteHint:
@@ -1934,6 +1937,17 @@ const en = {
 		invite: "Invite",
 		securitySettingsTitle: "Security settings",
 		chooseWhatToUpdate: "Choose what you want to update.",
+		/* Your own name — the one row here that is not a credential. */
+		changeName: "Change name",
+		currentName: "Current name",
+		yourName: "Your name",
+		enterYourName: "Enter your name",
+		nameShownHint:
+			"This is the name your team, your approvals and your payment vouchers show.",
+		saveName: "Save name",
+		savingName: "Saving…",
+		nameUpdated: "Name updated",
+		nameUpdateFailed: "Could not update your name",
 		changePassword: "Change password",
 		changePhone: "Change phone",
 		changeEmail: "Change email",
@@ -2058,6 +2072,9 @@ const en = {
 			"Finance view — read-only. Only the outlet owner can edit owner information.",
 		opsReadOnly:
 			"Ops view — read-only. Only the outlet owner can edit owner information.",
+		/** Every other non-owner lane — Director today, and anything added later. */
+		memberReadOnly:
+			"Read-only. Only the outlet owner can edit owner information — you can still change your own login and security below.",
 		ownerInformation: "Owner information",
 		outletName: "Outlet name",
 		venueOutletName: "Venue / outlet name",
@@ -5188,6 +5205,16 @@ const en = {
 		 * cannot diverge (owner, 11 Sep 2026).
 		 */
 		deactivateMember: "Deactivate",
+		/*
+		 * Changing an existing member's title from the review pane — the same
+		 * control the Team screen carries, and the same write, so the two cannot
+		 * disagree (owner, 11 Sep 2026: "make switch row can be in the approval
+		 * page all section").
+		 */
+		changeRole: "Change their role",
+		saveRole: "Save role",
+		roleSaved: "Role updated",
+		roleSaveFailed: "Could not change this role",
 		deactivateConfirm:
 			"Remove {name} from the team? They lose access immediately, and their record stays under Deactivated.",
 		deactivateFailed: "Could not deactivate this member",
@@ -6267,6 +6294,14 @@ const en = {
 	 * shown ONLY to someone who works in two or more agencies or venues.
 	 */
 	chooseOrg: {
+		/*
+		 * The platform console, offered beside the organisations (owner,
+		 * 11 Sep 2026). An admin who is also on a team holds TWO places to be,
+		 * and picking one for them silently is what this screen exists to stop.
+		 */
+		adminConsoleGroup: "INNOCENZ",
+		adminConsoleName: "Admin console",
+		adminConsoleHint: "Platform administration — not an organisation",
 		title: "Choose your organisation",
 		/** Why they are being asked. Says what the choice actually decides, so it does not read as an extra click. */
 		body: "You work in more than one. The portal opens for the one you pick, and shows that organisation’s people, shifts and money only.",
@@ -8061,6 +8096,8 @@ const zh: PortalTranslations = {
 	profile: {
 		noAccess: "你没有查看经纪公司设置的权限。",
 		financeReadOnly: "财务视图 —— 只读 · 无法修改东主设置",
+		memberReadOnly:
+			"只读。只有经纪公司东主可以编辑东主信息 —— 你仍可在下方修改自己的登录与安全设置。",
 		icAutoStamps: "身份证 + 电子签名会自动加盖到每张薪资单（双签中的第 1 签）",
 		eSignatureOnFile: "已保存电子签名 ✓",
 		subRoleInviteHint: "子角色邀请 · 双签薪资单需要身份证 + 电子签名",
@@ -8129,6 +8166,15 @@ const zh: PortalTranslations = {
 		invite: "发送邀请",
 		securitySettingsTitle: "安全设置",
 		chooseWhatToUpdate: "请选择要修改的项目。",
+		changeName: "修改姓名",
+		currentName: "当前姓名",
+		yourName: "你的姓名",
+		enterYourName: "请输入你的姓名",
+		nameShownHint: "团队名单、审批记录和薪资单上显示的都是这个姓名。",
+		saveName: "保存姓名",
+		savingName: "保存中…",
+		nameUpdated: "姓名已更新",
+		nameUpdateFailed: "无法更新你的姓名",
 		changePassword: "修改密码",
 		changePhone: "修改手机号",
 		changeEmail: "修改邮箱",
@@ -8229,6 +8275,8 @@ const zh: PortalTranslations = {
 		loadingProfile: "正在加载你的门店资料…",
 		financeReadOnly: "财务视图 —— 只读。只有门店东主可以编辑负责人信息。",
 		opsReadOnly: "运营视图 —— 只读。只有门店东主可以编辑负责人信息。",
+		memberReadOnly:
+			"只读。只有门店东主可以编辑负责人信息 —— 你仍可在下方修改自己的登录与安全设置。",
 		ownerInformation: "负责人信息",
 		outletName: "门店名称",
 		venueOutletName: "场所 / 门店名称",
@@ -10563,6 +10611,10 @@ const zh: PortalTranslations = {
 		acceptedOn: "通过时间",
 		deactivatedOn: "停用时间",
 		deactivateMember: "停用",
+		changeRole: "更改职位",
+		saveRole: "保存职位",
+		roleSaved: "职位已更新",
+		roleSaveFailed: "无法更改该职位",
 		deactivateConfirm:
 			"确定将 {name} 移出团队？对方会立即失去访问权限，其记录会保留在「已停用」中。",
 		deactivateFailed: "无法停用该成员",
@@ -11300,6 +11352,9 @@ const zh: PortalTranslations = {
 		ratingNotePlaceholder5: "亮眼表现 —— VIP 加单、开瓶、团队配合或现场气氛…",
 	},
 	chooseOrg: {
+		adminConsoleGroup: "INNOCENZ",
+		adminConsoleName: "管理后台",
+		adminConsoleHint: "平台管理 —— 不属于任何机构",
 		title: "选择您的机构",
 		body: "您隶属于多个机构。门户将按您选择的机构打开，并仅显示该机构的人员、班次与款项。",
 		agencies: "经纪公司",

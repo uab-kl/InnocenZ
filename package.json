@@ -12,6 +12,8 @@
     "db:reset": "node tools/scripts/migrate.mjs db:reset",
     "check:type": "node tools/scripts/check-portal-typography.mjs",
     "check:type:update": "node tools/scripts/check-portal-typography.mjs --update",
+    "rbac:sync": "node tools/scripts/sync-rbac-matrix.mjs",
+    "rbac:check": "node tools/scripts/sync-rbac-matrix.mjs --check",
     "deploy": "node tools/scripts/deploy.mjs",
     "deploy:staging": "node tools/scripts/deploy.mjs staging",
     "deploy:production": "node tools/scripts/deploy.mjs production"
