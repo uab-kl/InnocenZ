@@ -314,7 +314,24 @@ describe("the drift that prompted the rule", () => {
 	it("still refuses agency Finance the owner's lanes", () => {
 		expect(agencyCan("agency_finance", "editSettings")).toBe(false);
 		expect(agencyCan("agency_finance", "approvePrSignups")).toBe(false);
-		expect(agencyCan("agency_finance", "assignShifts")).toBe(false);
 		expect(agencyCan("agency_finance", "managePr")).toBe(false);
+	});
+
+	/*
+	 * ROSTERING IS NO LONGER THE OWNER'S ALONE — owner, 12 Sep 2026: "other
+	 * agency orgs member can assign member, access calander page, the rest of
+	 * the page can view."
+	 *
+	 * This assertion used to sit in the block above and say `false`. It is
+	 * inverted rather than deleted because the grant is the POINT of that change:
+	 * `AGENCY_FINANCE` gained `['roster', RU]` and the three `/shift-assignment`
+	 * write routes moved off the `agencyOwnerOnly` LANE guard onto
+	 * `requirePermission('roster','update')`, so this cell is what decides.
+	 *
+	 * Director stays refused — view-only on both portals is deliberate.
+	 */
+	it("lets agency Finance assign shifts, but not the Director", () => {
+		expect(agencyCan("agency_finance", "assignShifts")).toBe(true);
+		expect(agencyCan("agency_director", "assignShifts")).toBe(false);
 	});
 });

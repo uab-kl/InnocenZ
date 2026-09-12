@@ -1096,8 +1096,19 @@ function OutletSubscriptionPage() {
 			 * lane with only the edit form behind `canEdit`, so a Finance head
 			 * read the saved instrument — brand, last four, expiry and holder —
 			 * in the collapsed hint without even opening it.
+			 *
+			 * ⚠️ NARROWED AGAIN 12 Sep 2026 — `canPay`, not `canEdit`.
+			 *
+			 * `canEdit` is `settings:update`, which the database grants to the owner
+			 * AND the guarantor, so the stand-in still read the instrument here. The
+			 * owner's refinement is that the guarantor sees only paid and unpaid:
+			 * "guarantor no payment made like other member just see paid and unpaid,
+			 * owner make payment fpx and the payment method continue." The server
+			 * agrees — `payment-method/mine` is `orgOwnerPaysOnly`, which refuses the
+			 * guarantor — so rendering it here was the screen promising a read the
+			 * API denies.
 			 */}
-			{canEdit && (
+			{canPay && (
 				<OutletSection
 					title={t.agencyMisc.paymentMethod}
 					iconKey="Payment method"

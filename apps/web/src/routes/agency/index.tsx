@@ -161,11 +161,18 @@ function AgencyHub() {
 	const showWorkforce = can("viewWorkforce");
 	/*
 	 * The SAME test `canAccessAgencyPath` applies to `/agency/prs` and
-	 * `/agency/outlets` — `managePr || viewWorkforce`. Repeating the route's own
-	 * rule here is what keeps the tile a plain figure for a role the destination
-	 * would bounce, instead of a link that lands on a redirect.
+	 * `/agency/outlets`. Repeating the route's own rule here is what keeps the
+	 * tile a plain figure for a role the destination would bounce, instead of a
+	 * link that lands on a refusal.
+	 *
+	 * ⚠️ `managePr` ALONE since 12 Sep 2026. This read `showWorkforce ||
+	 * can("managePr")`, and EVERY agency lane holds `workforce:read` — so the
+	 * plain-figure branch was unreachable and the tile always linked. Both
+	 * destinations hard-refuse on `managePr`, so Finance and Director followed a
+	 * live link to "Access restricted" (reproduced in a browser). The route rule
+	 * was corrected to match its pages; this now mirrors it again.
 	 */
-	const canOpenRecords = showWorkforce || can("managePr");
+	const canOpenRecords = can("managePr");
 	const { t } = usePortalLocale();
 
 	return (

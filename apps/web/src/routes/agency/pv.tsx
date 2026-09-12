@@ -2125,7 +2125,20 @@ function PvDetail({
 				</OutletSection>
 			)}
 
-			{pv.status === "DISPUTED" && rows.length > 0 && (
+			{/*
+			  * ⚠️ `can("raisePv")` — these three carried NO permission term while
+			  * every sibling write on this page does (`raisePv` at the send and
+			  * re-issue buttons, `canOverride` on the signed-PV override,
+			  * `canWaive` on cancellation fees).
+			  *
+			  * An agency DIRECTOR holds `payment_voucher:read` and reaches this page
+			  * legitimately, so they were shown "Edit line items" (description,
+			  * amount and deduction inputs plus Save), "Resend to PR" and "Resolve
+			  * dispute and reassign" — all of which write, and all of which the
+			  * server refuses. A Director oversees and does not sign; that is the
+			  * distinction the rest of this page already makes.
+			  */}
+			{can("raisePv") && pv.status === "DISPUTED" && rows.length > 0 && (
 				<OutletSection
 					title={t.payroll.editLineItems}
 					iconKey="Edit line items"
@@ -2436,7 +2449,7 @@ function PvDetail({
 				</>
 			)}
 
-			{(pv.status === "DISPUTED" || pv.status === "SENT") && (
+			{can("raisePv") && (pv.status === "DISPUTED" || pv.status === "SENT") && (
 				<button
 					type="button"
 					className="iz-btn iz-btn-soft mt-2 w-full"
@@ -2446,7 +2459,7 @@ function PvDetail({
 				</button>
 			)}
 
-			{pv.status === "DISPUTED" && (
+			{can("raisePv") && pv.status === "DISPUTED" && (
 				<button
 					type="button"
 					className="iz-btn iz-btn-primary mt-2"

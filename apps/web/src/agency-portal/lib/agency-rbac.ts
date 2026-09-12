@@ -264,11 +264,29 @@ export function canAccessAgencyPath(
 	// `viewWorkforce` alongside `managePr`: these are the PR and outlet RECORDS,
 	// and gating them on the update permission alone hid them from a role whose
 	// whole definition is reading the organisation.
+	/*
+	 * ⚠️ `managePr` ALONE — the `|| viewWorkforce` here was a promise the pages
+	 * then had to break.
+	 *
+	 * Every agency lane holds `workforce:read`, so `viewWorkforce` admitted all
+	 * four to these two routes — but `prs.tsx:395` and `outlets.tsx:137` both
+	 * hard-refuse on `!can("managePr")`. Confirmed in a browser: agency Finance
+	 * following the home tile landed on "Access restricted · Finance role cannot
+	 * manage PR roster." The route said yes, the page said no, and the tile
+	 * offered the trip.
+	 *
+	 * These are the MANAGEMENT screens; the read `workforce:read` pays for is the
+	 * Roster, which Finance and Director both keep. Aligning the route with the
+	 * pages also revives the home tile's plain-figure branch, which was
+	 * unreachable for exactly this reason.
+	 */
 	if (pathname.startsWith("/agency/prs")) {
-		return can("managePr") || can("viewWorkforce");
+		return can("managePr");
 	}
+	// The twin of `/agency/prs` above — `outlets.tsx:137` refuses on the same
+	// permission, so the route must ask for the same one.
 	if (pathname.startsWith("/agency/outlets")) {
-		return can("managePr") || can("viewWorkforce");
+		return can("managePr");
 	}
 	if (pathname.startsWith("/agency/profile")) return can("viewSettings");
 	if (pathname.startsWith("/agency/live")) return can("viewWorkforce");

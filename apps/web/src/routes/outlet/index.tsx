@@ -10,7 +10,7 @@ import {
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { useOutletToday } from "@agency-portal/hooks/use-outlet-today";
 import { nowAgencyDateTime } from "@agency-portal/lib/portal-clock";
-import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
@@ -19,8 +19,30 @@ export const Route = createFileRoute("/outlet/")({
 });
 
 function OutletHome() {
-	const outletSubRole = useStore((s) => s.outletSubRole);
-	const isFinance = outletSubRole === "outlet_finance";
+	const can = useOutletCan();
+	/*
+	 * ⚠️ WHO IS ACTUALLY VIEW-ONLY — asked of the grants, never of a lane name.
+	 *
+	 * This read `outletSubRole === "outlet_finance"` and printed "Read-only
+	 * overview" over a page whose own sidebar offered Finance Post Job. Outlet
+	 * Finance holds `booking`, `sales`, `workspace`, `rating` and
+	 * `special_service` at CRU — they run the venue's floor. The lane that IS
+	 * view-only is Director, and it was the one lane this never labelled.
+	 *
+	 * That is the same defect CLAUDE.md records the matrix having had ("it
+	 * called outlet Finance view only while Post Job sat in their sidebar"):
+	 * the matrix was fixed and this hard-coded copy was left behind. Deriving
+	 * it means it cannot go stale again — change a grant and this follows.
+	 */
+	const isViewOnly = ![
+		"postJob",
+		"logSales",
+		"sealShift",
+		"manageShiftStaffing",
+		"ratePrs",
+		"orderSpecialService",
+		"editSettings",
+	].some((p) => can(p as Parameters<typeof can>[0]));
 	const { date, time } = nowAgencyDateTime();
 	// A real session shows tonight's booked shift from the backend; demo sessions
 	// keep the demo store.
@@ -32,7 +54,7 @@ function OutletHome() {
 
 	return (
 		<OutletPage>
-			{isFinance && (
+			{isViewOnly && (
 				<p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
 					{t.outletHome.readOnlyOverview}
 				</p>

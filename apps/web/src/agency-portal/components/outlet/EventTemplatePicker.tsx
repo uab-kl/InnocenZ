@@ -18,6 +18,7 @@ import {
 import { useRef, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import {
@@ -146,6 +147,7 @@ function TemplateRow({
 	onNew: () => void;
 }) {
 	const { t } = usePortalLocale();
+	const canWriteTemplates = useOutletCan()("postJob");
 	return (
 		<section className="iz-event-picker__section">
 			<p className="iz-event-picker__kind">{label}</p>
@@ -158,6 +160,14 @@ function TemplateRow({
 						onEdit={onEdit}
 					/>
 				))}
+				{/*
+				  * ⚠️ THIS FILE HAD NO PERMISSION CHECK ANYWHERE. Creating, editing and
+				  * deleting an event template all write `/shift-template`, which the
+				  * server gates on `booking:create` — so the outlet DIRECTOR, who holds
+				  * `booking:read` alone, was shown all three and collected a 403 from
+				  * each. `postJob` is that same grant on the portal side.
+				  */}
+				{canWriteTemplates && (
 				<button
 					type="button"
 					className="iz-event-card iz-event-card--new"
@@ -168,6 +178,7 @@ function TemplateRow({
 					</span>
 					{t.postJob.newTemplate}
 				</button>
+				)}
 			</div>
 		</section>
 	);
@@ -183,6 +194,7 @@ function TemplateCard({
 	onEdit: (template: ShiftTemplate) => void;
 }) {
 	const { t } = usePortalLocale();
+	const canWriteTemplates = useOutletCan()("postJob");
 	const cover = apiAssetUrl(template.coverImage);
 	return (
 		<div className="iz-event-card">
@@ -205,14 +217,17 @@ function TemplateCard({
 				)}
 				<span className="iz-event-card__name">{template.name}</span>
 			</button>
-			<button
-				type="button"
-				className="iz-event-card__edit"
-				aria-label={fill(t.outletPanels.editNamed, { name: template.name })}
-				onClick={() => onEdit(template)}
-			>
-				<Pencil className="h-3 w-3" aria-hidden />
-			</button>
+			{/* Same grant as "+ New template" — see the note there. */}
+			{canWriteTemplates && (
+				<button
+					type="button"
+					className="iz-event-card__edit"
+					aria-label={fill(t.outletPanels.editNamed, { name: template.name })}
+					onClick={() => onEdit(template)}
+				>
+					<Pencil className="h-3 w-3" aria-hidden />
+				</button>
+			)}
 		</div>
 	);
 }
@@ -231,6 +246,7 @@ function TemplateEditorSheet({
 	onSaved: () => void;
 }) {
 	const { t } = usePortalLocale();
+	const canWriteTemplates = useOutletCan()("postJob");
 	const { logout } = useAuth();
 	const fileRef = useRef<HTMLInputElement>(null);
 	const [name, setName] = useState(template?.name ?? "");
@@ -312,7 +328,7 @@ function TemplateEditorSheet({
 							: t.postJob.normalEvent}
 					</span>
 					<div className="flex items-center gap-2">
-						{template && (
+						{template && canWriteTemplates && (
 							<button
 								type="button"
 								className="iz-chip text-[var(--iz-red)]"
