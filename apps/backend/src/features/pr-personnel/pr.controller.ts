@@ -32,7 +32,7 @@ import {
   refreshStoredComcard,
   touchesComcard,
 } from '@/util/comcard-refresh.js';
-import { pickAgencyId } from '@/util/org-scope.js';
+import { pickAgencyId, pickedOrgKind } from '@/util/org-scope.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -413,14 +413,33 @@ export class PrControllerClass {
     const isAdmin = roles.some((r) => r.roleName === 'admin');
     if (isAdmin) return { isAdmin: true, agencyId: null, outletIds: [] };
 
-    // Third copy of the `?? memberships[0]` fallback, and the one that decides
-    // which agency's PERSONNEL a caller may see and edit — IC, phone, DOB. An
-    // inactive membership resolved an agencyId here too, so a removed operator
-    // kept the roster they had just lost.
-    const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    const agencyId = pickAgencyId(req, memberships);
-    if (agencyId) {
-      return { isAdmin: false, agencyId, outletIds: [] };
+    /*
+     * ⚠️ A NAMED VENUE BEATS AN UNNAMED AGENCY — the same rule `resolveOrgScope`
+     * learned on 10 Sep, and the same one the audit writer needed on 12 Sep.
+     *
+     * `pickAgencyId` honours `x-org-id` only when it names an active AGENCY, so
+     * a venue id fell through to "the oldest active agency". For somebody who
+     * both staffs an agency and runs a venue, opening the OUTLET console's Post
+     * Job → Select PRs therefore listed their AGENCY roster: PRs the venue
+     * cannot book were offered, PRs it can book were missing, and the "Send to"
+     * narrowing was discarded because `agencyIdsIn` is only built on the outlet
+     * branch — so a PR named from an uninvited agency was dropped on create.
+     *
+     * The console already says which it is. When it says `outlet`, take the
+     * outlet branch even though an agency membership exists; without the header
+     * (an older client) the previous agency-first order stands.
+     */
+    const actingKind = pickedOrgKind(req);
+    if (actingKind !== 'outlet') {
+      // Third copy of the `?? memberships[0]` fallback, and the one that decides
+      // which agency's PERSONNEL a caller may see and edit — IC, phone, DOB. An
+      // inactive membership resolved an agencyId here too, so a removed operator
+      // kept the roster they had just lost.
+      const memberships = await this.agencyMemberRepository.listByUser(user.id);
+      const agencyId = pickAgencyId(req, memberships);
+      if (agencyId) {
+        return { isAdmin: false, agencyId, outletIds: [] };
+      }
     }
 
     // No agency link — fall back to outlet membership so an outlet can read the

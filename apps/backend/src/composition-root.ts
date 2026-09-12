@@ -116,6 +116,15 @@ export const agencyRepository = new AgencyRepositoryClass();
 export const agencyMemberRepository = new AgencyMemberRepositoryClass();
 export const outletRepository = new OutletRepositoryClass();
 export const outletMemberRepository = new OutletMemberRepositoryClass();
+
+// Declared HERE, beside the three repositories it wraps, rather than further
+// down: `outletController` needs it to scope `GET /outlet` to the caller's own
+// venues, and it is constructed earlier in this file.
+export const orgScopeDeps = {
+  authRepository,
+  agencyMemberRepository,
+  outletMemberRepository,
+};
 // Declared here rather than beside the other controllers because it needs only
 // repositories that already exist by this line — auth (83), agency-member,
 // agency-pr and outlet-member — and `resolveOrgScope` requires that exact trio.
@@ -209,6 +218,9 @@ export const outletController = new OutletControllerClass(
   memberSubscriptionRepository,
   // Approving a venue starts its billing meter and opens the first period.
   subscriptionInvoiceRepository,
+  // `GET /outlet` carried no tenant term at all — it needs the caller's own
+  // memberships to scope the list.
+  orgScopeDeps,
 );
 
 export const orgMemberInviteController = new OrgMemberInviteControllerClass(
@@ -232,12 +244,6 @@ export const platformConfigController = new PlatformConfigControllerClass(
  * Repositories for resolveOrgScope (util/org-scope.ts), the scope resolver five
  * other controllers already use. Declared after the member repositories.
  */
-export const orgScopeDeps = {
-  authRepository,
-  agencyMemberRepository,
-  outletMemberRepository,
-};
-
 export const memberSubscriptionController =
   new MemberSubscriptionControllerClass(
     memberSubscriptionRepository,

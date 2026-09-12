@@ -148,4 +148,19 @@ export type OutletFilter = {
    * caller would reasonably have read it as "this agency's venues".
    */
   linkedToAgencyId?: string;
+  /**
+   * TENANT SCOPE — the venues this caller may see at all, forced by the
+   * controller and never read from the query string.
+   *
+   * `GET /outlet` had no tenant term whatsoever: omit `linkedToAgencyId` and
+   * every ACTIVE venue on the platform came back, carrying `addressLine1`,
+   * `ssmNo`, `businessLicense` and the geo-fence pin, to any outlet or agency
+   * token — and `pageSize` is unclamped, so it was a bulk export. A role gate
+   * is not a scope check.
+   *
+   * An empty array means "no venues", which is the right answer for a caller
+   * who belongs to none. `undefined` means unscoped and is reachable only for
+   * an admin.
+   */
+  outletIds?: string[];
 };

@@ -27,6 +27,7 @@ import { createDefaultRateCard } from '@/features/outlet-workspace/default-rate-
 import { createStarterTemplates } from '@/features/shift-template/starter-templates.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import { addressQueryFromOutlet, geocodeAddress } from './geocode';
+import { type OrgScopeDeps, resolveOrgScope } from '@/util/org-scope.js';
 import { OutletFilter, OutletStatus } from './outlet.model';
 import { saveOrgLogoFromBase64 } from '@/util/org-logo';
 import { r2DeleteStoredRef } from '@/util/r2';
@@ -72,6 +73,8 @@ export class OutletControllerClass {
     // Approval starts the billing meter, and opens the first period there and
     // then rather than leaving it to the 03:00 job.
     private subscriptionInvoiceRepository: SubscriptionInvoiceRepositoryClass,
+    // `GET /outlet` had no tenant term; this resolves the caller's own org.
+    private orgScopeDeps: OrgScopeDeps,
   ) {}
 
   /**
@@ -151,6 +154,42 @@ export class OutletControllerClass {
         (r) => r.roleName === portalRoleName.ADMIN,
       );
       if (!callerIsAdmin) filter.status = 'active';
+
+      /*
+       * ⚠️ THE TENANT TERM — this list had NONE.
+       *
+       * Every filter above is built from the query string, and the repository
+       * applies its agency-visibility subquery only `if (filter.linkedToAgencyId)`.
+       * Omit that parameter and the query had no tenant condition at all, so any
+       * outlet or agency token received EVERY active venue on the platform —
+       * with `addressLine1`, `ssmNo`, `businessLicense` and the geo-fence pin —
+       * and `pageSize` is unclamped, making `?pageSize=500` a bulk export.
+       * `requireRole('admin','agency','outlet')` is a role gate, and a role gate
+       * is not a scope check.
+       *
+       * Derived from the caller's OWN memberships, so it cannot be spoofed:
+       *   agency caller → the venues that agency may staff (the same
+       *                   `linkedToAgencyId` rule the portal already asks for,
+       *                   now enforced instead of merely offered)
+       *   outlet caller → its own venues
+       * A client-supplied `linkedToAgencyId` is honoured only when it IS the
+       * caller's agency; anything else is replaced rather than trusted.
+       *
+       * Three agency screens (Roster, auto-assign, roster slots) call this with
+       * no scoping parameter and relied on getting everything — they keep
+       * working, and now receive the correct subset rather than the platform.
+       */
+      if (!callerIsAdmin) {
+        const scope = await resolveOrgScope(req, this.orgScopeDeps);
+        if (scope.agencyId) {
+          filter.linkedToAgencyId = scope.agencyId;
+        } else {
+          // Outlet caller, or a caller who belongs to nothing: an empty list
+          // narrows to no rows, which is the honest answer.
+          filter.outletIds = scope.outletIds;
+          filter.linkedToAgencyId = undefined;
+        }
+      }
 
       const { outlets, totalCount } = await this.outletRepository.listPaginated(
         { filter, page, pageSize },

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { agencyOutletController } from '@/composition-root.js';
+import { requirePermission } from '@/middlewares/require-permission.js';
 import { requireRole } from '@/middlewares/require-role.js';
 
 const router = Router();
@@ -24,6 +25,25 @@ const router = Router();
 // confusing 403 from inside the controller. Admin-side linking, if ever wanted,
 // belongs on its own explicit route that names the outlet — not on `/mine`.
 const canManageOwnLinks = requireRole('outlet');
+/*
+ * ⚠️ WHO MAY DECIDE A PARTNERSHIP — a permission, not merely a portal.
+ *
+ * Owner's rule: "other member cannot make the change for the organisation
+ * except for the owner and the guarantor". Ending or accepting a partnership is
+ * exactly such a change — with no approved link a venue cannot post any job at
+ * all, so `{"agencyIds": []}` from a VIEW-ONLY Director took the whole venue
+ * off the platform, and the audit event blamed the outlet.
+ *
+ * `requireRole('outlet')` / `requireRole('agency')` expand to "any lane on this
+ * portal" — they never read `sub_role`. The screens already gate these controls
+ * on `editSettings` (= `settings:update`, which the database grants to owner and
+ * guarantor on BOTH portals), so the server was the looser half and the API
+ * allowed what the database refuses.
+ *
+ * READS are deliberately left on the portal role: every member may SEE which
+ * agencies their venue works with, and the panel renders read-only for them.
+ */
+const canDecidePartnership = requirePermission('settings', 'update');
 
 // The choices a venue may pick from. Kept adjacent to `/mine` so the outlet
 // lane reads in the order the screen uses it: list the options, then read and
@@ -34,7 +54,12 @@ router.get(
   agencyOutletController.directory.bind(agencyOutletController),
 );
 router.get('/mine', canManageOwnLinks, agencyOutletController.listMine.bind(agencyOutletController));
-router.put('/mine', canManageOwnLinks, agencyOutletController.syncMine.bind(agencyOutletController));
+router.put(
+  '/mine',
+  canManageOwnLinks,
+  canDecidePartnership,
+  agencyOutletController.syncMine.bind(agencyOutletController),
+);
 
 // ── ADMIN LANE ───────────────────────────────────────────────────────────────
 // Reads ANY venue's links by id, so it is admin-only. Mounted before the agency
@@ -81,6 +106,7 @@ router.get(
 router.patch(
   '/links/:outletId',
   canDecideLinks,
+  canDecidePartnership,
   agencyOutletController.decide.bind(agencyOutletController),
 );
 // DELETE by verb, `ended` by effect (0127): the row survives, carrying the
@@ -88,6 +114,7 @@ router.patch(
 router.delete(
   '/links/:outletId',
   canDecideLinks,
+  canDecidePartnership,
   agencyOutletController.unlink.bind(agencyOutletController),
 );
 
