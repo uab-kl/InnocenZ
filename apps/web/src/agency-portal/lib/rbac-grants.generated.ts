@@ -178,6 +178,8 @@ export const AGENCY_ROLE_GRANTS = {
 		"payment_voucher:create",
 		"payment_voucher:read",
 		"payment_voucher:update",
+		"roster:read",
+		"roster:update",
 		"settings:read",
 		"workforce:read",
 	],

@@ -12,6 +12,7 @@ import { paramId } from '@/util/params.js';
 import {
   type OrgScopeDeps,
   pickAgencyId,
+  pickedOrgKind,
   resolveActingOrgId,
   resolveOrgScope,
 } from '@/util/org-scope.js';
@@ -60,10 +61,21 @@ async function isAdmin(userId: string): Promise<boolean> {
  * old org-blind behaviour, which is the bug — the compiler is doing the
  * work of finding those call sites.
  */
-async function holdsAgencyLane(
+/**
+ * Does this person hold one of `allowed` at this organisation?
+ *
+ * `foldGuarantor` (default TRUE) is the stand-in rule: a guarantor passes
+ * wherever an owner passes. Pass FALSE only where the owner's rule is that the
+ * stand-in does NOT stand in — today that is paying and payment methods:
+ * "guarantor no payment made like other member just see paid and unpaid"
+ * (owner, 12 Sep 2026). Everywhere else the fold must stay on, because a
+ * missed call site would refuse the stand-in at the one moment the role
+ * exists for.
+ */async function holdsAgencyLane(
   userId: string,
   agencyId: string,
   allowed: readonly AgencySubRole[],
+  foldGuarantor = true,
 ): Promise<boolean> {
   const roles = await authRepository.getRolesForUserIds([userId]);
   const hasAgencyPortal =
@@ -106,7 +118,7 @@ async function holdsAgencyLane(
    * 'owner', …)` call site instead would fail closed on the one that got
    * missed, refusing the stand-in at the only moment the role exists for.
    */
-  return lane === 'guarantor' && allowed.includes('owner');
+  return foldGuarantor && lane === 'guarantor' && allowed.includes('owner');
 }
 
 /** The venue twin — see `holdsAgencyLane` for why `outletId` is required. */
@@ -114,6 +126,7 @@ async function holdsOutletLane(
   userId: string,
   outletId: string,
   allowed: readonly OutletSubRole[],
+  foldGuarantor = true,
 ): Promise<boolean> {
   const roles = await authRepository.getRolesForUserIds([userId]);
   const hasOutletPortal =
@@ -143,7 +156,7 @@ async function holdsOutletLane(
    * only moment this role exists for. A guarantor IS an owner for access
    * purposes; keeping the lane distinct is for labelling and audit, not power.
    */
-  return lane === 'guarantor' && allowed.includes('owner');
+  return foldGuarantor && lane === 'guarantor' && allowed.includes('owner');
 }
 
 function guard(
@@ -503,13 +516,23 @@ export function requireOrgMembershipByParam(
 }
 
 /**
- * THE PERSON WHO PAYS — owner or guarantor, on WHICHEVER portal they are acting
+ * THE PERSON WHO PAYS — the OWNER ALONE, on whichever portal they are acting
  * for, scoped to the organisation being paid for.
  *
- * Owner, 11 Sep 2026: "the subcription is follow from the organisation owner,
- * only the owner can make payment fpx and the set and update the payment
- * method … other member cannot make the change for the organisation except for
- * the owner and the guarantor."
+ * Owner, 11 Sep 2026: "only the owner can make payment fpx and the set and
+ * update the payment method", REFINED 12 Sep 2026: "owner priority to get
+ * charge, guarantor no payment made like other member just see paid and
+ * unpaid, owner make payment fpx and the payment method continue."
+ *
+ * ⚠️ THE GUARANTOR IS EXCLUDED HERE AND ONLY HERE. Everywhere else the
+ * stand-in passes wherever the owner passes — they change the org address,
+ * approve members, edit settings. Money is the exception the owner drew by
+ * hand: the guarantor sees which invoices are paid and unpaid, like any other
+ * member, and cannot spend or change how the organisation pays.
+ *
+ * Because only the owner may SAVE a method, the organisation's single stored
+ * method is by definition the owner's — so "owner priority to get charge" is
+ * satisfied by this gate alone, with no per-person payment_method column.
  *
  * ⚠️ `POST /subscription-payment/checkout` carried `requireRole('agency',
  * 'outlet')` — every lane on both portals. An outlet Finance head, Ops Head or
@@ -524,9 +547,10 @@ export function requireOrgMembershipByParam(
  * it would answer for whichever row it happened to find. This route serves both
  * portals, so it has to ask per portal.
  *
- * The lane list is `['owner']` because `holdsAgencyLane` / `holdsOutletLane`
- * already fold guarantor into owner — the stand-in passes wherever the owner
- * passes, which is exactly the owner's rule.
+ * The lane list is `['owner']` AND every call passes `foldGuarantor: false`.
+ * The lane list alone is not enough: `holdsAgencyLane` / `holdsOutletLane`
+ * fold guarantor into owner by default, so `['owner']` on its own admits the
+ * stand-in — which is right everywhere except money.
  *
  * Admin is deliberately NOT admitted, matching the route's own note: an admin
  * marks money as received, it does not pay on a venue's behalf.
@@ -560,8 +584,43 @@ export const orgOwnerPaysOnly = async (
    */
   const scope = await resolveOrgScope(req, orgScopeDeps);
 
+  /*
+   * ⚠️ AN ADMIN WHO IS ALSO THE OWNER pays for their OWN organisation.
+   *
+   * `resolveOrgScope` short-circuits on admin and returns no organisation at
+   * all, so both branches below missed and this fell to the terminal 400 asking
+   * for `x-org-id` — a header the portals already send, which reads as a broken
+   * client rather than a rule, and left the owner unable to pay at all.
+   *
+   * The route's rule is that an admin does not pay on a VENUE'S BEHALF. It was
+   * never that somebody who happens to hold admin may not pay for the
+   * organisation they themselves signed up and own — and the owner enabled
+   * exactly that account shape on 11 Sep 2026 ("make admin can be the org team
+   * member").
+   *
+   * So the lane is checked exactly as it is for everyone else: `holdsXLane`
+   * against the organisation being acted for. An admin with no owner lane there
+   * still gets the 403 below — admin-ness opens nothing on its own.
+   */
+  if (scope.isAdmin) {
+    const kind = pickedOrgKind(req);
+    for (const org of (kind ? [kind] : ['agency', 'outlet']) as Array<
+      'agency' | 'outlet'
+    >) {
+      const orgId = await resolveActingOrgId(req, orgScopeDeps, org);
+      if (!orgId) continue;
+      const holds =
+        org === 'agency'
+          ? await holdsAgencyLane(user.id, orgId, ['owner'], false)
+          : await holdsOutletLane(user.id, orgId, ['owner'], false);
+      if (holds) return next();
+    }
+    return refuse(res);
+  }
+
   if (scope.agencyId) {
-    if (await holdsAgencyLane(user.id, scope.agencyId, ['owner'])) return next();
+    if (await holdsAgencyLane(user.id, scope.agencyId, ['owner'], false))
+      return next();
     return refuse(res);
   }
 
@@ -571,7 +630,7 @@ export const orgOwnerPaysOnly = async (
    */
   if (scope.outletIds.length > 0) {
     for (const outletId of scope.outletIds) {
-      if (!(await holdsOutletLane(user.id, outletId, ['owner']))) {
+      if (!(await holdsOutletLane(user.id, outletId, ['owner'], false))) {
         return refuse(res);
       }
     }
@@ -593,6 +652,16 @@ function refuse(res: Response) {
   });
 }
 
+/**
+ * @deprecated NO CALL SITES as of 12 Sep 2026 — kept only so a teammate's
+ * branch does not break on the missing export.
+ *
+ * ⚠️ Do not reach for this. It hard-codes a LANE where the portal gates the
+ * same buttons on a PERMISSION, and that split is what let the web matrix
+ * promise something the server refused: rostering showed `assignShifts` while
+ * these routes asked for the owner lane. Gate on `requirePermission(module,
+ * verb)` so `role_permission` stays the single answer — the standing rule.
+ */
 export const agencyOwnerOnly = requireAgencySubRole('owner');
 export const agencyOwnerOfParam = requireAgencySubRoleScoped('id', 'owner');
 export const outletOwnerOfParam = requireOutletSubRoleScoped('id', 'owner');

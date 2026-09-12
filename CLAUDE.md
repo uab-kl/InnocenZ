@@ -93,7 +93,11 @@ described 106 gaps against 141.
 5. Migrations: run `pnpm migrate:deploy` from the repo ROOT (NEVER `pnpm migrate`), then
    restart the backend (tsx watch serves stale routes). The workbook's **Database** tab is the
    live ERD/FK proof — 45 tables and 68 declared foreign keys, re-derived from the models on
-   11 Aug 2026. ONE weak edge is left: `rating.pr_id` is varchar (needs uuid + FK).
+   11 Aug 2026. `rating.pr_id` is varchar with no FK — ⚠️ DELIBERATE, not a gap to close.
+   The model comment (`rating.model.ts:6-9`) records why: an outlet's PR list is not
+   backend-enumerable from an outlet token, so the id may be a real PR uuid OR the frontend's
+   own identifier. Converting it to a uuid FK would break outlet ratings. This line used to
+   call it "ONE weak edge left … (needs uuid + FK)"; confirm with the team before migrating it.
    `user_role` now carries both of its FKs. There is no `pr` table — it was dropped; a PR is a
    `user` row and the membership (with its tier) lives on `agency_pr`.
 
@@ -122,14 +126,17 @@ pnpm rbac:check    # exit 1 while that snapshot disagrees with the live table
   `pnpm migrate:deploy`, then `pnpm rbac:sync`.** Editing the web matrix does nothing — the next
   sync overwrites it and `rbac-matrix.test.ts` fails.
 - ⚠️ **`seed-rbac.ts` is what WRITES `role_permission`**, and it runs on every
-  `migrate:deploy`. A migration that INSERTs grants is the wrong tool: 0164 tried it, was
-  ledgered, and never applied (the standing `migrate:deploy` trap), and it would only have been
-  a second quieter source of the same rows.
+  `migrate:deploy`. A migration that INSERTs grants is the wrong tool: the billing-grant
+  migration tried it, was ledgered, never applied (the standing `migrate:deploy` trap), and was
+  deleted — it would only have been a second quieter source of the same rows. ⚠️ That file was
+  numbered 0164, and **0164 is now `0164_audit_log_portal.sql`, an unrelated migration that DID
+  apply** — do not read the number as evidence about the audit-log column.
 - ⚠️ **The seeder only ADDS — it "ensures" and never removes.** That is how outlet Finance came
-  to hold 19 grants while the seeder listed 7 (fixed 11 Sep 2026, the file now matches). Nothing
-  checks seeder-vs-database yet: `rbac:check` only proves web == database. When you change a
-  role, diff the deploy log's "N permissions ensured" against the live rows, and remember that
-  **removing** a grant needs the row deleted by hand.
+  to hold 19 grants while the seeder listed 7 (fixed 11 Sep 2026, the file now matches).
+  `pnpm rbac:seed-check` now diffs the live rows against `ROLE_GRANTS` and exits 1 on drift —
+  run it beside `rbac:check`, which only proves web == database. ⚠️ **Removing** a grant still
+  needs the row deleted by hand; the seeder only ever adds, and `rbac:seed-check` is what tells
+  you one is left over.
 - ⚠️ **TWO permissions are deliberately matrix-only**, because the server gates them by LANE and
   there is no module to grant: outlet `requestCutLoss` (no `cutlost` module — `POST /cutlost`
   is `requireOutletSubRole('owner','finance','operations_head')`) and agency `viewLiveFloor`
@@ -139,9 +146,11 @@ pnpm rbac:check    # exit 1 while that snapshot disagrees with the live table
   `settings` / `dashboard` / `history` are a SEPARATE module row per portal. Every grant now
   carries `portalCode` and `grantsForPortal()` drops the other console's rows — without it an
   agency owner who is merely a Finance head at some venue was offered Edit on that venue.
-- ⚠️ **`billing:update` is held by NOBODY on the outlet portal**, so Confirm Daily
-  (`confirmDaily`) is refused for every lane including the Owner. Grant it and re-sync to turn
-  that button back on.
+- **Outlet `billing:update` (`confirmDaily`, the daily reconciliation confirm) is held by the
+  Owner and the Guarantor** — granted 11 Sep 2026, re-verified against the live
+  `role_permission` on 12 Sep. Finance, Ops Head and Director hold `billing:read` and are
+  refused. ⚠️ This line used to say it was held by nobody and to "grant it and re-sync"; that
+  was true only before 11 Sep, and acting on it now re-grants a row that already exists.
 
 ## Working rules
 

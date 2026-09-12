@@ -20,6 +20,10 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
+import {
+	canModule,
+	grantsForPortal,
+} from "@/lib/auth/module-permissions";
 import { useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -115,6 +119,32 @@ export function PendingMemberDetail({
 }) {
 	const { t, locale } = usePortalLocale();
 	const { data: me } = useProfile();
+	/*
+	 * MAY THIS PERSON DECIDE, OR ONLY LOOK?
+	 *
+	 * Owner, 12 Sep 2026: "other orgs member cannot … approve the new member".
+	 *
+	 * The server has always refused them — the member writes behind Approve and
+	 * Decline are gated by `agencyOwnerOfParam` / `outletOwnerOfParam` — but
+	 * NOTHING here asked, so the buttons rendered for everyone who could reach
+	 * the page. An agency Director holds `approvals:read`, so they opened the
+	 * queue, pressed Approve and collected a 403: the screen promising something
+	 * the database refuses, which is the one thing the matrix must never do.
+	 *
+	 * `settings:update` is the RIGHT mirror of that server gate: it is held by
+	 * exactly owner and guarantor, on BOTH portals — the same rule and the same
+	 * reasoning as the payment-method routes. `approvals:update` would match on
+	 * the agency side alone; the outlet portal has no `approvals` module, so it
+	 * could not gate the twin.
+	 *
+	 * Scoped by portal AND org: someone may own one venue and merely staff
+	 * another, and the flat union from /auth/me cannot tell those apart.
+	 */
+	const canDecide = canModule(
+		grantsForPortal(me?.modulePermissions, kind, orgId),
+		"settings",
+		"update",
+	);
 	/** Two-step, like the Team screen's bin: removal is not a single click. */
 	const [confirming, setConfirming] = useState(false);
 	const { members, changeMember, removeMember } = useOrgMembers(kind, orgId);
@@ -367,7 +397,7 @@ export function PendingMemberDetail({
 									</span>
 									<select
 										value={picked}
-										disabled={busy}
+										disabled={busy || !canDecide}
 										onChange={(e) =>
 											setChoice({ id: member.id, value: e.target.value })
 										}
@@ -384,7 +414,7 @@ export function PendingMemberDetail({
 								{picked !== member.subRole ? (
 									<button
 										type="button"
-										disabled={busy}
+										disabled={busy || !canDecide}
 										onClick={() => {
 											setError(null);
 											changeMember.mutate(
@@ -425,7 +455,7 @@ export function PendingMemberDetail({
 								<div className="mt-4 flex flex-wrap gap-2">
 									<button
 										type="button"
-										disabled={busy}
+										disabled={busy || !canDecide}
 										onClick={() => {
 											setError(null);
 											removeMember.mutate(member.id, {
@@ -447,7 +477,7 @@ export function PendingMemberDetail({
 									</button>
 									<button
 										type="button"
-										disabled={busy}
+										disabled={busy || !canDecide}
 										onClick={() => setConfirming(false)}
 										className="inline-flex flex-1 items-center justify-center rounded-lg border border-border px-4 py-2.5 text-sm disabled:opacity-50"
 									>
@@ -484,7 +514,7 @@ export function PendingMemberDetail({
 							</span>
 							<select
 								value={picked}
-								disabled={busy}
+								disabled={busy || !canDecide}
 								onChange={(e) =>
 									setChoice({ id: member.id, value: e.target.value })
 								}
@@ -508,7 +538,7 @@ export function PendingMemberDetail({
 						<div className="mt-4 flex flex-wrap gap-2">
 							<button
 								type="button"
-								disabled={busy}
+								disabled={busy || !canDecide}
 								onClick={() => {
 									setError(null);
 									changeMember.mutate(
@@ -530,7 +560,7 @@ export function PendingMemberDetail({
 							</button>
 							<button
 								type="button"
-								disabled={busy}
+								disabled={busy || !canDecide}
 								onClick={() => {
 									setError(null);
 									removeMember.mutate(member.id, {

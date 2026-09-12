@@ -250,7 +250,21 @@ async function fetchAllAgencyMemberships(
 	let hasNextPage = true;
 	while (hasNextPage) {
 		const response = await fetchAgencyTeamMembers(
-			{ status: "all", page, pageSize: FETCH_SIZE },
+			/*
+			 * ⚠️ `includeRejected` — without it this screen cannot answer the
+			 * question it exists for.
+			 *
+			 * `status: "all"` becomes `undefined` at the controller, and the
+			 * repository then drops declined rows unless asked: an explicit opt-in,
+			 * added on 11 Sep 2026 because a turned-down applicant was appearing
+			 * among an AGENCY'S OWN members ("why the decline member can show and
+			 * search by the atlas agency?"). That exclusion is right for the
+			 * agency's team list and wrong here — the owner's rule for THIS screen
+			 * is to show "which user is status decline by who which orgs". The row
+			 * renderer has handled `status === "rejected"` all along; the data
+			 * simply never arrived.
+			 */
+			{ status: "all", includeRejected: true, page, pageSize: FETCH_SIZE },
 			onRefreshFail,
 		);
 		rows.push(...response.data);
@@ -268,7 +282,8 @@ async function fetchAllOutletMemberships(
 	let hasNextPage = true;
 	while (hasNextPage) {
 		const response = await fetchOutletTeamMembers(
-			{ status: "all", page, pageSize: FETCH_SIZE },
+			// The venue twin — same reason as the agency fetcher above.
+			{ status: "all", includeRejected: true, page, pageSize: FETCH_SIZE },
 			onRefreshFail,
 		);
 		rows.push(...response.data);

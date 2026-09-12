@@ -6,8 +6,6 @@ import type {
 	AuditLogsQueryParams,
 } from "./types";
 
-const KNOWN_AUDIT_ROLES = ["admin", "pr", "outlet", "agency"];
-
 const AUDIT_LOGS_QUERY = `
   query AuditLogs(
     $filter: AuditLogFilterInput
@@ -26,6 +24,7 @@ const AUDIT_LOGS_QUERY = `
         userId
         username
         role
+        portal
         action
         entity
         entityId
@@ -64,6 +63,7 @@ interface GraphqlAuditLog {
 	userId: string | null;
 	username: string | null;
 	role: string | null;
+	portal: string | null;
 	action: string;
 	entity: string;
 	entityId: string | null;
@@ -80,6 +80,7 @@ function mapAuditLog(log: GraphqlAuditLog): AuditLog {
 		userId: log.userId,
 		username: log.username,
 		role: log.role,
+		portal: log.portal,
 		action: log.action,
 		entity: log.entity,
 		entityId: log.entityId,
@@ -91,17 +92,6 @@ function mapAuditLog(log: GraphqlAuditLog): AuditLog {
 	};
 }
 
-function filterLogsByRole(logs: AuditLog[], role?: string): AuditLog[] {
-	if (!role) return logs;
-
-	if (role === "others") {
-		return logs.filter(
-			(log) => !log.role || !KNOWN_AUDIT_ROLES.includes(log.role),
-		);
-	}
-
-	return logs.filter((log) => log.role === role);
-}
 
 export async function fetchAuditLogs(
 	params: AuditLogsQueryParams = {},
@@ -119,6 +109,20 @@ export async function fetchAuditLogs(
 			entity: params.entity,
 			entityId: params.entityId,
 			action: params.action,
+			/*
+			 * ⚠️ THE TAB, ASKED OF THE SERVER.
+			 *
+			 * This used to be applied in the browser, to the ten rows the server
+			 * had already paged — so the Admin tab could show ONE row beneath a
+			 * footer reading "1–10 of 2752, Page 1 of 276", because `query` and
+			 * `pagination` described different sets. The server filters before it
+			 * takes the page, so the count now means what it says.
+			 *
+			 * The value is the tab key (`admin` | `pr` | `outlet` | `agency`), or
+			 * the sentinel `others` for rows with no portal — everything written
+			 * before migration 0164, which had nowhere to record one.
+			 */
+			portal: params.role,
 		},
 		sort: params.sortField
 			? {
@@ -130,15 +134,10 @@ export async function fetchAuditLogs(
 		pageNumber: params.page,
 	});
 
-	const filteredQuery = filterLogsByRole(
-		data.auditLogs.query.map(mapAuditLog),
-		params.role,
-	);
-
 	return {
 		success: true,
 		message: "OK",
-		query: filteredQuery,
+		query: data.auditLogs.query.map(mapAuditLog),
 		pagination: data.auditLogs.pagination,
 	};
 }

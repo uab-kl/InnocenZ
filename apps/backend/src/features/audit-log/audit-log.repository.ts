@@ -1,4 +1,17 @@
-import { and, asc, desc, eq, gte, lte, ne, sql, SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  isNull,
+  lte,
+  ne,
+  notInArray,
+  or,
+  sql,
+  SQL,
+} from 'drizzle-orm';
 import { db } from '@/db/index';
 import { UserTable } from '@/features/user/user.model';
 import { GraphQLContext } from '@/graphql/context';
@@ -7,6 +20,12 @@ import { PaginatedResponse, paginateQuery, PaginationParams, PgQueryType } from 
 import { logger } from '@/util/logger';
 import { AuditLogTable } from './audit-log.model';
 
+/**
+ * The portals the Audit Log gives a tab of their own. Anything else — and
+ * anything null — belongs to "Others".
+ */
+const KNOWN_AUDIT_PORTALS = ['admin', 'pr', 'outlet', 'agency'];
+
 export type AuditLogFilter = {
   dateFrom?: string;
   dateTo?: string;
@@ -14,6 +33,12 @@ export type AuditLogFilter = {
   entity?: string;
   entityId?: string;
   action?: string;
+  /**
+   * The admin Audit Log's tab. `others` is a SENTINEL, not a stored value: it
+   * means "no portal, or one the tabs do not name", and must include the NULL
+   * rows — `notInArray` alone drops exactly the rows that tab exists for.
+   */
+  portal?: string;
 };
 
 export type AuditLogSort = {
@@ -24,6 +49,8 @@ export type AuditLogSort = {
 export type CreateAuditLogInput = {
   userId?: string | null;
   role?: string | null;
+  /** Which surface — see the column's note in audit-log.model.ts. */
+  portal?: string | null;
   action: string;
   entity: string;
   entityId?: string | null;
@@ -39,6 +66,7 @@ export type AuditLogListItem = {
   userId: string | null;
   username: string | null;
   role: string | null;
+  portal: string | null;
   action: string;
   entity: string;
   entityId: string | null;
@@ -80,6 +108,33 @@ export class AuditLogRepositoryClass {
       if (filter.action) {
         whereCondition.push(eq(AuditLogTable.action, filter.action));
       }
+      /**
+       * THE TAB — filtered HERE, not after the page has been cut.
+       *
+       * ⚠️ This used to run in the browser, on the ten rows the server had
+       * already paged. So the Admin tab could show ONE row under a footer
+       * reading "1–10 of 2752, Page 1 of 276": `query` and `pagination`
+       * described different sets. Filtering before the page is taken is what
+       * makes the count mean something.
+       *
+       * `others` is a SENTINEL, never a stored value — it means "no portal, or
+       * one the tabs do not name". The NULL branch is load-bearing: every row
+       * written before 0164 has a null portal, and `notInArray` alone drops
+       * exactly the rows this tab exists to gather.
+       */
+      if (filter.portal) {
+        if (filter.portal === 'others') {
+          const unclassified = or(
+            isNull(AuditLogTable.portal),
+            notInArray(AuditLogTable.portal, KNOWN_AUDIT_PORTALS),
+          );
+          // `or()` is typed `SQL | undefined`; never push a bare undefined into
+          // the condition list — `and(...)` would silently widen the query.
+          if (unclassified) whereCondition.push(unclassified);
+        } else {
+          whereCondition.push(eq(AuditLogTable.portal, filter.portal));
+        }
+      }
 
       if (context && !context.isAdmin) {
         whereCondition.push(ne(AuditLogTable.role, 'admin'));
@@ -115,6 +170,7 @@ export class AuditLogRepositoryClass {
           auditLogId: AuditLogTable.auditLogId,
           userId: AuditLogTable.userId,
           role: AuditLogTable.role,
+          portal: AuditLogTable.portal,
           action: AuditLogTable.action,
           entity: AuditLogTable.entity,
           entityId: AuditLogTable.entityId,
@@ -187,6 +243,7 @@ export class AuditLogRepositoryClass {
       .values({
         userId: input.userId ?? undefined,
         role: input.role ?? undefined,
+        portal: input.portal ?? undefined,
         action: input.action,
         entity: input.entity,
         entityId: input.entityId ?? undefined,

@@ -24,7 +24,7 @@ import { logger } from '@/util/logger';
 import { db } from '@/db/index';
 import { paramId } from '@/util/params';
 import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
-import { type OrgScopeDeps, resolveActingOrgId } from '@/util/org-scope';
+import { type OrgScopeDeps, pickedOrgKind, resolveActingOrgId } from '@/util/org-scope';
 
 const orgScopeDeps: OrgScopeDeps = {
   authRepository,
@@ -108,6 +108,20 @@ function getGraphqlUserAgent(context: GraphQLContext): string {
   return context.req.headers['user-agent'] || 'unknown';
 }
 
+/**
+ * WHICH SURFACE a GraphQL mutation came from — the Audit Log's tab.
+ *
+ * Paired with `getGraphqlAuditRole` below, which answers the actor's CAPACITY.
+ * Both are stored, because neither implies the other: `Owner` exists on the
+ * agency and the outlet portal alike.
+ */
+export function getGraphqlAuditPortal(context: GraphQLContext): string | null {
+  if (context.userRoles.length === 0) return null;
+  const adminRole = context.userRoles.find((role) => role.roleName === 'admin');
+  if (adminRole) return adminRole.portalCode ?? 'admin';
+  return context.userRoles[0]?.portalCode ?? null;
+}
+
 export function getGraphqlAuditRole(context: GraphQLContext): string | null {
   if (context.userRoles.length === 0) {
     return null;
@@ -171,6 +185,7 @@ export function withAudit<TParent, TArgs, TResult>(
                 {
                   userId: context.user?.id ?? null,
                   role: getGraphqlAuditRole(context),
+                  portal: getGraphqlAuditPortal(context),
                   action,
                   entity,
                   entityId: id,
@@ -192,6 +207,7 @@ export function withAudit<TParent, TArgs, TResult>(
             {
               userId: context.user?.id ?? null,
               role: getGraphqlAuditRole(context),
+              portal: getGraphqlAuditPortal(context),
               action,
               entity,
               entityId,
@@ -215,6 +231,7 @@ export function withAudit<TParent, TArgs, TResult>(
             {
               userId: context.user?.id ?? null,
               role: getGraphqlAuditRole(context),
+              portal: getGraphqlAuditPortal(context),
               action: `${action}_FAILED`,
               entity,
               entityId,
@@ -309,19 +326,40 @@ export function registerAllAuditOldDataFetchers(): void {
 async function getUserRoleNameById(
   userId: string,
   req?: Request,
-): Promise<string | null> {
+): Promise<{ role: string | null; portal: string | null }> {
   const roles = await userRoleRepository.getUserRoles(userId);
   if (roles.length === 0) {
-    return null;
+    return { role: null, portal: null };
   }
 
   // Admin is a platform capacity, not an organisational one — tested first,
   // exactly as before, and the audit resolvers filter on this string.
   const adminRole = roles.find((role) => role.roleName === 'admin');
-  if (adminRole) return adminRole.roleName;
+  if (adminRole) return { role: adminRole.roleName, portal: 'admin' };
 
   if (req) {
-    for (const org of ['agency', 'outlet'] as const) {
+    /*
+     * ⚠️ ASK WHICH CONSOLE FIRST — probing agency-then-outlet stamps the wrong
+     * portal on a real and ordinary case.
+     *
+     * Somebody who staffs ONE agency and also works at a venue makes a write
+     * from the OUTLET console. On the agency pass `resolveActingOrgId` cannot
+     * match the venue id, falls back to their single active agency, and
+     * answers — so the loop returned `{ role: 'Finance', portal: 'agency' }`
+     * and never reached the outlet pass. The row then claims an agency job
+     * title for a venue action: not the honest NULL of a pre-0164 row, but a
+     * confidently wrong one, which is the mis-attribution 0164 exists to stop.
+     *
+     * `x-org-kind` already travels with every request and says which table to
+     * look in. `resolveOrgScope` was given exactly this treatment on 10 Sep
+     * and `orgOwnerPaysOnly` runs this same `kind ? [kind] : [...]` narrowing
+     * — this is that pattern, not a new idea. Without the header (an older
+     * client) the previous order stands, which is the best guess available.
+     */
+    const kind = pickedOrgKind(req);
+    for (const org of (kind ? [kind] : ['agency', 'outlet']) as Array<
+      'agency' | 'outlet'
+    >) {
       const memberships =
         org === 'agency'
           ? await agencyMemberRepository.listByUser(userId)
@@ -334,49 +372,70 @@ async function getUserRoleNameById(
           m.status === 'active' &&
           ('agencyId' in m ? m.agencyId : m.outletId) === orgId,
       );
-      if (here) return portalRoleNameForSubRole(org, here.subRole);
+      /*
+       * BOTH facts. The lane says what this person WAS; `org` says WHERE they
+       * acted, and it was being thrown away on this very line — which is why
+       * every `Owner` row landed in the Audit Log's "Others" tab. It cannot be
+       * recovered later: Owner, Finance, Director and Guarantor each exist on
+       * both portals, so the name alone never identifies one.
+       */
+      if (here) {
+        return { role: portalRoleNameForSubRole(org, here.subRole), portal: org };
+      }
     }
   }
 
-  return roles[0]?.roleName ?? null;
+  const fallback = roles[0]?.roleName ?? null;
+  return {
+    role: fallback,
+    // A legacy role row whose NAME is a portal code is the one case a name does
+    // identify a surface; anything else stays unclassified rather than guessed.
+    portal:
+      fallback === 'pr' || fallback === 'agency' || fallback === 'outlet'
+        ? fallback
+        : null,
+  };
 }
 
 export async function resolveAuditActor(
   req: Request,
   roleOverride?: string | null,
-): Promise<{ userId: string | null; role: string | null }> {
+): Promise<{ userId: string | null; role: string | null; portal: string | null }> {
   if (req.user?.id) {
+    /*
+     * The portal is resolved even when the ROLE is overridden: an override says
+     * what to call the actor, never which surface they acted on, and the Audit
+     * Log's tabs group by the surface.
+     */
+    const resolved = await getUserRoleNameById(req.user.id, req);
     return {
       userId: req.user.id,
-      role:
-        roleOverride !== undefined
-          ? roleOverride
-          : await getUserRoleNameById(req.user.id, req),
+      role: roleOverride !== undefined ? roleOverride : resolved.role,
+      portal: resolved.portal,
     };
   }
 
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader?.split(' ')[1];
   if (!token) {
-    return { userId: null, role: null };
+    return { userId: null, role: null, portal: null };
   }
 
   try {
     const user = await authRepository.getUserDataByToken(token);
     if (!user || user.status.toLowerCase() !== 'active') {
-      return { userId: null, role: null };
+      return { userId: null, role: null, portal: null };
     }
 
     req.user = user;
+    const resolved = await getUserRoleNameById(user.id, req);
     return {
       userId: user.id,
-      role:
-        roleOverride !== undefined
-          ? roleOverride
-          : await getUserRoleNameById(user.id, req),
+      role: roleOverride !== undefined ? roleOverride : resolved.role,
+      portal: resolved.portal,
     };
   } catch {
-    return { userId: null, role: null };
+    return { userId: null, role: null, portal: null };
   }
 }
 
@@ -458,6 +517,7 @@ async function writeAuditLog(
     ...input,
     userId: input.userId ?? actor.userId,
     role: input.role ?? actor.role,
+    portal: actor.portal,
     ipAddress: getRestIpAddress(req),
     userAgent: getRestUserAgent(req),
   });

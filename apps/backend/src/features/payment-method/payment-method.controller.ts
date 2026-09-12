@@ -7,7 +7,12 @@ import {
   fpxBanks,
   toPublicPaymentMethod,
 } from './payment-method.model.js';
-import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
+import {
+  type OrgScopeDeps,
+  pickedOrgKind,
+  resolveActingOrgId,
+  resolveOrgScope,
+} from '@/util/org-scope.js';
 import { Error } from '@/error/index.js';
 import { getActor } from '@/util/actor.js';
 import { paramId } from '@/util/params.js';
@@ -29,6 +34,41 @@ export class PaymentMethodControllerClass {
    */
   private async ownerFor(req: Request, outletId?: string): Promise<PaymentMethodOwner | null> {
     const scope = await resolveOrgScope(req, this.orgScopeDeps);
+    /*
+     * ⚠️ AN ADMIN CAN ALSO BE AN ORGANISATION'S OWNER — owner's call, 11 Sep
+     * 2026 ("make admin can be the org team member"). `resolveOrgScope` answers
+     * `{isAdmin:true, agencyId:null, outletIds:[]}` and DISCARDS memberships, so
+     * every branch below missed and this returned null: the card read back as
+     * "no payment method saved" on an organisation that has one, and saving it
+     * answered 403. A silent wrong answer on a billing screen, for the exact
+     * account the reversal was written to support.
+     *
+     * Resolved the same way every other org read is — the verified `x-org-id`
+     * with its kind — rather than by widening `isAdmin`, which ~39 call sites
+     * read as "see everything" and would start narrowing.
+     */
+    if (scope.isAdmin) {
+      const kind = pickedOrgKind(req);
+      if (kind === 'outlet' || (!kind && outletId)) {
+        const asOutlet = await resolveActingOrgId(
+          req,
+          this.orgScopeDeps,
+          'outlet',
+          outletId,
+        );
+        if (asOutlet) return { outletId: asOutlet };
+      }
+      if (kind === 'agency' || !kind) {
+        const asAgency = await resolveActingOrgId(
+          req,
+          this.orgScopeDeps,
+          'agency',
+        );
+        if (asAgency) return { agencyId: asAgency };
+      }
+      // A pure admin, acting on nobody's behalf — unchanged.
+      return null;
+    }
     /*
      * ⚠️ A NAMED VENUE FIRST — the agency check used to come before this, so
      * `outletId` was read only by callers with no agency membership at all.

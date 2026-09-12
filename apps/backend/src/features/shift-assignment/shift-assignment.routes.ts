@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { shiftAssignmentController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
-import { agencyOwnerOnly, agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
+import { agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
 import { requirePermission } from '@/middlewares/require-permission.js';
 import { redactIdentityDocsForOutlet } from '@/middlewares/redact-identity-docs.js';
 
@@ -67,14 +67,31 @@ router.post('/:id/leave/approve', canWrite, requirePermission('approvals', 'upda
 router.post('/:id/leave/reject', canWrite, requirePermission('approvals', 'update'), shiftAssignmentController.rejectLeave.bind(shiftAssignmentController));
 // Deciding overtime IS raising money onto a payment voucher, so it takes the
 // same sub-role as the rest of the PV attestation surface — agencyCan('raisePv')
-// = owner + finance — rather than `agencyOwnerOnly`, which would shut finance
-// out of a payroll decision. Admin passes the sub-role guard by design.
+// = owner + finance — rather than an owner-only gate, which would shut finance
+// out of a payroll decision. Admin holds the permission by design.
 router.patch('/:id/overtime', canWrite, agencyOwnerOrFinance, shiftAssignmentController.decideOvertime.bind(shiftAssignmentController));
-// Rostering is agencyCan('assignShifts'), which Agency Finance does not hold —
-// so the org-level `canWrite` is not enough on its own. Admin passes the
-// sub-role guard by design.
-router.post('/', canWrite, agencyOwnerOnly, shiftAssignmentController.create.bind(shiftAssignmentController));
-router.put('/:id', canWrite, agencyOwnerOnly, shiftAssignmentController.update.bind(shiftAssignmentController));
-router.delete('/:id', canWrite, agencyOwnerOnly, shiftAssignmentController.remove.bind(shiftAssignmentController));
+/*
+ * ROSTERING ASKS THE DATABASE, NOT A HARD-CODED LANE LIST.
+ *
+ * Owner, 12 Sep 2026: "other agency orgs member can assign member, access
+ * calander page, the rest of the page can view".
+ *
+ * These three were `agencyOwnerOnly` — a LANE guard naming 'owner' — while the
+ * portal gates the same buttons on `assignShifts` = `roster:update`. Two
+ * sources for one answer, and granting Finance the permission would have moved
+ * only the screen: the button would appear and the server would still refuse.
+ * The standing rule is that `role_permission` decides, so that is what they ask
+ * now. Owner and Guarantor are unaffected (both hold `roster` RCU), admin holds
+ * it too, and Director keeps READ only — so Director stays view-only.
+ *
+ * Assign, change and un-assign are ONE job and share one permission
+ * deliberately: splitting them would let Finance roster somebody and then be
+ * refused when correcting the mistake, and would put the matrix back in
+ * disagreement with the server on two routes out of three.
+ */
+const canRoster = requirePermission('roster', 'update');
+router.post('/', canWrite, canRoster, shiftAssignmentController.create.bind(shiftAssignmentController));
+router.put('/:id', canWrite, canRoster, shiftAssignmentController.update.bind(shiftAssignmentController));
+router.delete('/:id', canWrite, canRoster, shiftAssignmentController.remove.bind(shiftAssignmentController));
 
 export default router;
