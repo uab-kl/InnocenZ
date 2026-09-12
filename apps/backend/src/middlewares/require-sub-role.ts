@@ -6,6 +6,7 @@ import {
   outletMemberRepository,
 } from '@/composition-root.js';
 import { Error } from '@/error/index.js';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
 import { requirePermission } from '@/middlewares/require-permission.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import { paramId } from '@/util/params.js';
@@ -260,6 +261,94 @@ export function requireOutletSubRoleScoped(
   return guard('outlet', allowed, { scopeParam: param });
 }
 
+/**
+ * THE SAME SHAPE AS `requireOutletSubRoleIfMember`, BUT THE DATABASE DECIDES.
+ *
+ * The lane version hard-codes `('owner','operations_head')` on routes the
+ * PORTAL gates on a module grant, and outlet Finance holds those grants:
+ * `workspace` CRU and `sales` CRU. So Finance was shown Workspace's editable
+ * rate card and its Save button, pressed Save, and got a warn toast while
+ * nothing persisted — the venue believing its pay rates had changed. Same for
+ * logging sales and event templates.
+ *
+ * ⚠️ THE SHORT-CIRCUIT IS PRESERVED EXACTLY, and it is the point of the guard:
+ * AGENCY callers share these routes and hold NO venue membership at all, so
+ * `no active venue membership ANYWHERE` must still pass. Narrowing that to the
+ * named venue 403s every agency caller — a regression commit 4c7151c already
+ * had to revert once. Only the final test changes, from a lane list to
+ * `roleHasPermission`, which is what makes `role_permission` the authority
+ * here as everywhere else.
+ */
+export function requireOutletPermissionIfMember(
+  moduleKey: string,
+  permissionType: 'create' | 'read' | 'update',
+) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+    }
+
+    try {
+      if (await isAdmin(user.id)) return next();
+
+      // The agency escape hatch — see the note above.
+      const memberships = await outletMemberRepository.listByUser(user.id);
+      const active = memberships.filter((m) => m.status === 'active');
+      if (active.length === 0) return next();
+
+      const namedOutlet = req.params.outletId
+        ? paramId(req.params.outletId)
+        : undefined;
+      const outletId = await resolveActingOrgId(
+        req,
+        orgScopeDeps,
+        'outlet',
+        namedOutlet,
+      );
+      if (!outletId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Which venue? Send x-org-id, or name it in the request.',
+          data: null,
+        });
+      }
+
+      const here = active.find((m) => m.outletId === outletId);
+      if (!here) {
+        return res.status(403).json({
+          success: false,
+          message: Error.FORBIDDEN ?? 'Forbidden',
+          data: null,
+        });
+      }
+
+      const roleName = portalRoleNameForSubRole('outlet', here.subRole);
+      const ok = await authRepository.roleHasPermission(
+        roleName,
+        'outlet',
+        moduleKey,
+        permissionType,
+      );
+      if (!ok) {
+        return res.status(403).json({
+          success: false,
+          message: `Forbidden — requires ${moduleKey}:${permissionType}`,
+          data: null,
+        });
+      }
+      return next();
+    } catch {
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  };
+}
 export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;

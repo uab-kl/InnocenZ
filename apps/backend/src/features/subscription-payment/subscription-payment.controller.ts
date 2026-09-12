@@ -3,7 +3,12 @@ import { Error } from '@/error/index.js';
 import { logger } from '@/util/logger.js';
 import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
-import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
+import {
+  type OrgScopeDeps,
+  pickedOrgKind,
+  resolveActingOrgId,
+  resolveOrgScope,
+} from '@/util/org-scope.js';
 import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import type { PaymentMethodRepositoryClass } from '@/features/payment-method/payment-method.repository.js';
 import { toPublicPaymentMethod } from '@/features/payment-method/payment-method.model.js';
@@ -177,13 +182,47 @@ export class SubscriptionPaymentControllerClass {
       }
 
       const scope = await resolveOrgScope(req, this.orgScopeDeps);
+
+      /*
+       * ⚠️ AN ADMIN WHO OWNS AN ORGANISATION PAYS FOR THEIR OWN.
+       *
+       * `resolveOrgScope` short-circuits on admin and returns `agencyId: null,
+       * outletIds: []`, so `owns` below was false for every invoice and this
+       * answered 404 — "your own invoices do not exist". `orgOwnerPaysOnly`
+       * already admits such an account (it checks the owner LANE at the acting
+       * org), so the guard passed and the handler then refused: the earlier fix
+       * had landed on one half only.
+       *
+       * ⚠️ NOT `scope.isAdmin ||`. That would let ANY admin start an FPX
+       * checkout against ANY organisation's invoices — admin-ness must open
+       * nothing on its own. Instead the ACTING org is resolved the same way the
+       * guard resolves it, from the verified `x-org-id` + `x-org-kind`, and the
+       * invoice is matched against that one organisation.
+       */
+      let adminAgencyId: string | null = null;
+      let adminOutletIds: string[] = [];
+      if (scope.isAdmin) {
+        const kind = pickedOrgKind(req);
+        for (const org of (kind ? [kind] : ['agency', 'outlet']) as Array<
+          'agency' | 'outlet'
+        >) {
+          const orgId = await resolveActingOrgId(req, this.orgScopeDeps, org);
+          if (!orgId) continue;
+          if (org === 'agency') adminAgencyId = orgId;
+          else adminOutletIds = [orgId];
+          break;
+        }
+      }
+      const ownAgencyId = scope.isAdmin ? adminAgencyId : scope.agencyId;
+      const ownOutletIds = scope.isAdmin ? adminOutletIds : scope.outletIds;
+
       const invoices = [];
       for (const id of invoiceIds) {
         const invoice = await this.invoiceRepository.getById(id);
         const owns =
           invoice &&
-          ((invoice.subscriberType === 'agency' && invoice.subscriberId === scope.agencyId) ||
-            (invoice.subscriberType === 'outlet' && scope.outletIds.includes(invoice.subscriberId)));
+          ((invoice.subscriberType === 'agency' && invoice.subscriberId === ownAgencyId) ||
+            (invoice.subscriberType === 'outlet' && ownOutletIds.includes(invoice.subscriberId)));
         // Someone else's invoice is a 404, never a 403 — do not confirm it exists.
         if (!owns) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
         if (invoice.status === 'paid') {

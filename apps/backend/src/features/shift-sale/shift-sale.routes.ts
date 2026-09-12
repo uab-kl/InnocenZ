@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { shiftSaleController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
-import { outletOwnerOrOpsIfMember } from '@/middlewares/require-sub-role.js';
+import { requireOutletPermissionIfMember } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -17,6 +17,6 @@ router.get('/', canRead, shiftSaleController.list.bind(shiftSaleController));
 // Logging sales is outletCan('logSales'), which Outlet Finance does not hold.
 // Agencies share this route and hold no outlet membership, so the sub-role check
 // refines outlet members only rather than excluding them.
-router.post('/', canWrite, outletOwnerOrOpsIfMember, shiftSaleController.create.bind(shiftSaleController));
+router.post('/', canWrite, requireOutletPermissionIfMember('sales', 'create'), shiftSaleController.create.bind(shiftSaleController));
 
 export default router;
