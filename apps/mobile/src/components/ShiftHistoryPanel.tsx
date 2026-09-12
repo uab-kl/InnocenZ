@@ -591,6 +591,27 @@ function ShiftCard({ shift }: { shift: DemoHistoryShift }) {
             <Metric icon={Wine} label={t.shiftStatus.drinks} value={shift.drinks} />
             <Metric icon={Sparkles} label={t.shiftStatus.tips} value={shift.tips} />
             <Metric icon={Briefcase} label={t.history.metricOthers} value={shift.others} />
+            {/*
+              ⚠️ SHOWN ONLY WHEN THERE IS ONE, and shown in red.
+
+              A late-cancel fee is already inside `payout`. Until now it also
+              sat inside `others`, so the card's Others silently came out
+              smaller and the total was lower than the visible parts explained
+              — which a PR reads as the app being wrong about their pay rather
+              than as a charge they can go and look up.
+
+              Red is the owner's colour for a deduction (23 Aug 2026), and the
+              magnitude is printed behind a minus so the sign is read rather
+              than inferred from a colour alone.
+            */}
+            {shift.deductions != null && shift.deductions !== 0 && (
+              <Metric
+                icon={Briefcase}
+                label={t.payment.statusDeducted}
+                value={Math.abs(shift.deductions)}
+                negative
+              />
+            )}
           </View>
         </>
       )}
@@ -603,18 +624,25 @@ function Metric({
   icon: Icon,
   label,
   value,
+  negative = false,
 }: {
   icon: typeof Wallet;
   label: string;
   value: number;
+  /** Money taken OFF — printed red with a leading minus. */
+  negative?: boolean;
 }) {
   return (
     <View style={styles.metric}>
       <View style={styles.metricLabelRow}>
-        <Icon size={11} color={C.muted2} />
-        <Text style={styles.metricLabel}>{label}</Text>
+        <Icon size={11} color={negative ? C.red : C.muted2} />
+        <Text style={[styles.metricLabel, negative && { color: C.red }]}>
+          {label}
+        </Text>
       </View>
-      <Text style={styles.metricVal}>{value > 0 ? formatRM(value) : '—'}</Text>
+      <Text style={[styles.metricVal, negative && { color: C.red }]}>
+        {value > 0 ? `${negative ? '−' : ''}${formatRM(value)}` : '—'}
+      </Text>
     </View>
   );
 }

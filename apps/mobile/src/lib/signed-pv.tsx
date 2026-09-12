@@ -146,7 +146,19 @@ function buildSignedWeek(input: {
     (s, d) => s + (d.drinks ?? 0) + (d.tips ?? 0) + (d.others ?? 0),
     0,
   );
-  const shifts = input.grid.filter((d) => d.status !== 'empty').length;
+  /*
+   * ⚠️ DAYS THAT EARNED, not days that exist.
+   *
+   * `status !== 'empty'` counts a day whose only content is a charged fine —
+   * and since that day now resolves to 'deducted' rather than 'empty', it
+   * counted one for a shift the PR did not work. A late-cancel fee exists
+   * BECAUSE they did not attend.
+   */
+  const shifts = input.grid.filter(
+    (d) =>
+      d.status !== 'empty' &&
+      d.wages + (d.drinks ?? 0) + (d.tips ?? 0) + (d.others ?? 0) > 0,
+  ).length;
   const stamp = fmtSignedStamp();
   /** Always seal net from the week grid so History matches Payment Last week. */
   const net = weekPayGridTotal(input.grid) || input.net;
@@ -155,7 +167,9 @@ function buildSignedWeek(input: {
     ref: input.pv.ref,
     weekLabel: input.pv.weekLabel,
     outlet: input.pv.outlet,
-    shifts: Math.max(1, shifts),
+    // Not `Math.max(1, …)`: a week that is only a cancellation fee has zero
+    // shifts, and saying "1" invents one the voucher does not pay for.
+    shifts,
     issued: stamp.split(' · ')[0] ?? stamp,
     status: 'signed',
     // This builder exists BECAUSE the PR just signed it, so there is nothing

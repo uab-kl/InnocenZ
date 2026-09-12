@@ -238,7 +238,25 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
     // the week label and the venue are identical on both rows.
     agencyName: v.agencyName ?? null,
     outlet: outletLabel(v),
-    shifts: countShifts(v.lines) || Math.max(1, new Set(lines.map((l) => l.date)).size),
+    /*
+     * ⚠️ ZERO IS A REAL ANSWER, and this could not say it.
+     *
+     * `countShifts` already does the right thing — unique days carrying
+     * POSITIVE money — but the fallback behind it ran whenever that was 0 and
+     * was itself floored at 1. A week whose only line is a late-cancel fee
+     * therefore reported "1 shift" for a shift that was, by definition, not
+     * worked: the PR is being charged precisely because they did not attend.
+     *
+     * The fallback still covers the case it was written for — lines that carry
+     * money but no resolvable `lineDate`, so `countShifts` cannot key them —
+     * but it only applies when there ARE credit lines to count. With none, the
+     * answer is 0.
+     */
+    shifts:
+      countShifts(v.lines) ||
+      (lines.some((l) => !l.debit)
+        ? new Set(lines.filter((l) => !l.debit).map((l) => l.date)).size
+        : 0),
     issued: issuedLabel(v),
     status,
     /*

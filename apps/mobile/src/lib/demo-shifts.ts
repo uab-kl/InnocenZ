@@ -631,6 +631,14 @@ export type DemoHistoryShift = {
   drinks: number;
   tips: number;
   others: number;
+  /**
+   * A fine charged against this day — NEGATIVE, absent when there is none.
+   *
+   * It is already inside `payout`; this is what lets the card SAY so. Without
+   * it the money simply came out lower than the parts shown add up to, which is
+   * the kind of gap a PR reads as the app being wrong about their pay.
+   */
+  deductions?: number;
   status: 'sealed' | 'signed' | 'cancelled' | 'current';
   weekId: string;
 };
@@ -884,7 +892,18 @@ export function weekPayRecordToHistoryShift(
   t: AppTranslations,
 ): DemoHistoryShift {
   const [y, m, d] = isoToYmd(rec.dateIso);
-  const payout = roundRm(rec.wages + rec.drinks + rec.tips + rec.others);
+  /*
+   * ⚠️ `deductions` IS PART OF THE PAYOUT. It is held negative, so it adds.
+   *
+   * Before the split it reached here inside `others` and was counted by
+   * accident; moving it to its own field to stop it silently shrinking that
+   * bucket would have made this total too HIGH — the card would have promised
+   * a PR money the voucher does not pay. Named here so the sum states what it
+   * includes.
+   */
+  const payout = roundRm(
+    rec.wages + rec.drinks + rec.tips + rec.others + (rec.deductions ?? 0),
+  );
   return {
     // The agency belongs in the KEY: two of them can own the same calendar
     // day, and without it React sees one row and drops the second silently.
@@ -898,6 +917,8 @@ export function weekPayRecordToHistoryShift(
     drinks: rec.drinks,
     tips: rec.tips,
     others: rec.others,
+    // Carried so the card can show the fine rather than just be smaller.
+    deductions: rec.deductions,
     status: 'current',
     weekId: currentWeekIdFor(rec.agencyId),
   };
@@ -1025,6 +1046,21 @@ export type WeekPayRecord = {
   drinks: number;
   tips: number;
   others: number;
+  /**
+   * Money taken OFF this day — a late-cancel fee, a sealed penalty. NEGATIVE,
+   * and on its own field rather than folded into `others`, for the same reason
+   * `WeeklyDayPay.deductions` is: netting a fine against earnings produces a
+   * figure that states neither of them.
+   *
+   * ⚠️ A fine used to fall through `weekRecordsFromLines`'s kind chain into
+   * `others`, so the card's Others quietly shrank with nothing saying why —
+   * and a day holding ONLY a fee still created a record, which became a
+   * History card for a shift that was never worked.
+   *
+   * Absent when the day carries no fine. `undefined`, not 0, so a card can tell
+   * "no deduction" from "a deduction that nets to nothing".
+   */
+  deductions?: number;
   /**
    * WHOSE MONEY THIS IS — the agency that owes the day, or null when nothing
    * can attribute it.
