@@ -1,6 +1,6 @@
 # Memory Index
 
-All 166 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
+All 167 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
 are kept identical in BOTH directions — see [Sync memory mirrors](sync-memory-mirrors.md).
 Dated session history is NOT here: it lives in `TEST_SCRIPT.md` §8/§10. Rules live in `CLAUDE.md`.
 The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stops + schema), not a log.
@@ -203,3 +203,7 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 ### Newly added - file these into a section above
 
 - [Innocenz role grant rule](innocenz-role-grant-rule.md) — "Standing rule (owner, 10 Sep 2026) — a portal role is created in exactly three places; nothing auto-grants on login"
+
+### Newly added - file these into a section above
+
+- [Never probe a gate with a write](never-probe-a-gate-with-a-write.md) — "A permission must be probed with a READ, or a call that CANNOT succeed — an 'invalid-looking' body is not an invalid one. Cost two venues' rate cards on 12 Sep 2026, and a venue rename in August."
