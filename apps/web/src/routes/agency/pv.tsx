@@ -92,6 +92,12 @@ import {
 	formatPvSignStamp,
 } from "@agency-portal/lib/pv-template";
 import { useStore } from "@agency-portal/lib/store";
+import {
+	canEditDisputedLines,
+	canResendToPr,
+	canResolveDispute,
+	canSendToPr,
+} from "@agency-portal/lib/pv-money-actions";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -2138,7 +2144,7 @@ function PvDetail({
 			  * server refuses. A Director oversees and does not sign; that is the
 			  * distinction the rest of this page already makes.
 			  */}
-			{can("raisePv") && pv.status === "DISPUTED" && rows.length > 0 && (
+			{canEditDisputedLines(can, pv.status) && rows.length > 0 && (
 				<OutletSection
 					title={t.payroll.editLineItems}
 					iconKey="Edit line items"
@@ -2289,7 +2295,7 @@ function PvDetail({
 
 			{/* The day review gates this: the backend refuses a send while any day is
 			    held or undecided, so the button says why instead of 409-ing. */}
-			{pv.status === "PENDING_REVIEW" && can("raisePv") && (
+			{canSendToPr(can, pv.status) && (
 				<>
 					{/*
 					 * The agency's own signature, ahead of the send — the rail's
@@ -2449,7 +2455,7 @@ function PvDetail({
 				</>
 			)}
 
-			{can("raisePv") && (pv.status === "DISPUTED" || pv.status === "SENT") && (
+			{canResendToPr(can, pv.status) && (
 				<button
 					type="button"
 					className="iz-btn iz-btn-soft mt-2 w-full"
@@ -2459,7 +2465,7 @@ function PvDetail({
 				</button>
 			)}
 
-			{can("raisePv") && pv.status === "DISPUTED" && (
+			{canResolveDispute(can, pv.status) && (
 				<button
 					type="button"
 					className="iz-btn iz-btn-primary mt-2"
