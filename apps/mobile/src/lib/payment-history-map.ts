@@ -178,18 +178,37 @@ export function localizePayLineType(type: string, t: AppTranslations): string {
   return type;
 }
 
+/**
+ * ⚠️ NEGATIVE LINES ARE MONEY TOO — dropping them OVERSTATES the payout.
+ *
+ * This filtered `l.commission > 0`, so every `deduction` line (a late-cancel fee
+ * or a sealed weekly penalty, written negative by the backend's
+ * `penalty-line.ts`) vanished. That would merely have hidden the fine, except
+ * `normalizeHistPayWeek` then RECOMPUTES the net from this list and — because
+ * the gap exceeds its 0.02 tolerance — overwrites the server's correct figure.
+ *
+ * So a week of 500 wages + 100 drinks − 250 fee, which the server nets at
+ * RM 350.00, was shown to the PR as **RM 600.00** with no mention of the fine,
+ * and those inflated nets fed the "Net paid" headline totals as well.
+ *
+ * `debit` is what makes the row render red with a leading − (PaymentHistoryPanel
+ * already handles it); nothing had ever written it, so that branch was dead.
+ * `amount` carries the ABSOLUTE value because the renderer supplies the sign.
+ */
 function toHistPayLines(lines: PrReceiptLine[]): HistPayLine[] {
   return lines
-    .filter((l) => l.lineDate && l.commission > 0)
+    .filter((l) => l.lineDate && l.commission !== 0)
     .map((l) => {
       const iso = asIsoDate(l.lineDate)!;
       const [y, m, d] = isoToYmd(iso);
+      const isDebit = l.commission < 0;
       return {
         date: `${String(d).padStart(2, '0')} ${MONTH_SHORT[m - 1]}`,
         day: DAY_NAMES[new Date(Date.UTC(y, m - 1, d)).getUTCDay()],
         type: lineTypeLabel(l.kind),
         outlet: l.outlet ?? 'Outlet',
-        amount: l.commission,
+        amount: Math.abs(l.commission),
+        ...(isDebit ? { debit: true } : {}),
       };
     });
 }
@@ -296,7 +315,17 @@ export function historyVoucherToShifts(
   >();
   for (const l of v.lines) {
     const dateIso = asIsoDate(l.lineDate);
-    if (!dateIso || l.commission <= 0) continue;
+    /*
+     * ⚠️ `=== 0`, NOT `<= 0` — the twin of the filter in `toHistPayLines`.
+     *
+     * Skipping negatives dropped late-cancel fees and sealed penalties out of
+     * the per-day payouts, so History → Shifts disagreed with the voucher by the
+     * amount of every fine. The `others` accumulator below already adds a SIGNED
+     * value, so letting a deduction through reduces that day's total by itself —
+     * nothing else here needs to change. A zero line is still skipped: it is not
+     * money, and it would add a venue to `outlets` for no reason.
+     */
+    if (!dateIso || l.commission === 0) continue;
     const outlet = l.outlet?.trim() || 'Outlet';
     const rec =
       byDate.get(dateIso) ??

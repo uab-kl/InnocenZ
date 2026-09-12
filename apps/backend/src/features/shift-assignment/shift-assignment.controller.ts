@@ -261,37 +261,95 @@ export class ShiftAssignmentControllerClass {
         return res.status(200).json({ success: true, message: 'OK', data: [] });
       }
 
-      // Resolve the PR's rate card once per outlet, then fold it onto each row so
-      // the mobile app can compute wage/commission/OT/target against real rates
-      // instead of hardcoded percentages. Tier still comes from the ops bridge
-      // until /mine reads agency_pr.tier directly.
-      const tier = pr?.tier ?? 'tier_1';
-      const commissionOnly = tier === 'commission_only';
-      const tierLabel = PR_TIER_TO_OUTLET_LABEL[tier] ?? null;
-      // Outlet workspace default (per outlet) + per-shift override (per shift);
-      // the override wins field-by-field in mergeRate. The drink menu is resolved
-      // per outlet too, so the PR self-log lists this outlet's real drinks.
-      const [rateByOutlet, overrideByShift, menuByOutlet] = await Promise.all([
-        this.shiftAssignmentRepository.resolveTierRatesForOutlets({
-          outletIds: assignments.map((a) => a.outletId),
-          tierLabel,
-          commissionOnly,
-        }),
-        this.shiftAssignmentRepository.resolveShiftTierOverrides({
-          shiftIds: assignments.map((a) => a.shiftId),
-          tierLabel,
-          commissionOnly,
-        }),
-        this.shiftAssignmentRepository.resolveDrinkMenusForOutlets(
-          assignments.map((a) => a.outletId),
+      /*
+       * ⚠️ TIER IS PER MEMBERSHIP, SO IT IS PER ASSIGNMENT — NOT ONE VALUE FOR
+       * THE WHOLE LIST.
+       *
+       * This resolved a SINGLE `pr?.tier` from `getByUserId(userId)` with no
+       * agency, which that repository documents as "the OLDEST agency_pr row",
+       * and folded it onto every row. A PR on four rosters has four tiers, so
+       * every shift sold by the other three was priced at the oldest agency's
+       * card — and the tier LABEL selects the rate row, so a wrong tier is a
+       * wrong hourly wage, drink %, happy-hour %, tip % and OT threshold.
+       *
+       * `listForUser` already carries `agencyId` on each row, so the right
+       * membership is knowable. Tiers are resolved once per AGENCY, then the
+       * rate cards once per distinct TIER (the resolvers take one tier label at
+       * a time), and each row is priced with its own.
+       *
+       * `checkOutMine` and `cancelMine` were already scoped this way — this is
+       * the read catching up with the two writes, not a new rule.
+       */
+      const agencyIds = [
+        ...new Set(
+          assignments
+            .map((a) => (a as { agencyId?: string | null }).agencyId)
+            .filter((id): id is string => Boolean(id)),
         ),
-      ]);
-      const data = assignments.map((a) => ({
-        ...a,
-        tier,
-        rate: mergeRate(rateByOutlet.get(a.outletId), overrideByShift.get(a.shiftId)),
-        drinkMenu: menuByOutlet.get(a.outletId) ?? [],
-      }));
+      ];
+      const tierByAgency = new Map<string, string>();
+      await Promise.all(
+        agencyIds.map(async (agencyId) => {
+          const scoped = await this.prRepository.getByUserId(userId, agencyId);
+          if (scoped?.tier) tierByAgency.set(agencyId, scoped.tier);
+        }),
+      );
+      // A row with no agency (legacy data) keeps the previous answer rather than
+      // being dropped or guessed at.
+      const fallbackTier = pr?.tier ?? 'tier_1';
+      const tierFor = (a: (typeof assignments)[number]): string => {
+        const agencyId = (a as { agencyId?: string | null }).agencyId;
+        return (agencyId ? tierByAgency.get(agencyId) : undefined) ?? fallbackTier;
+      };
+
+      // Outlet workspace default (per outlet) + per-shift override (per shift);
+      // the override wins field-by-field in mergeRate.
+      const distinctTiers = [...new Set(assignments.map(tierFor))];
+      // Built as tuples so the Map's type is INFERRED from the repository's own
+      // return types — an explicit annotation here needs `typeof this.x`, which
+      // is not legal in a type position inside a method.
+      const cardsByTier = new Map(
+        await Promise.all(
+          distinctTiers.map(async (t) => {
+            const rows = assignments.filter((a) => tierFor(a) === t);
+            const commissionOnly = t === 'commission_only';
+            const tierLabel = PR_TIER_TO_OUTLET_LABEL[t] ?? null;
+            const [rateByOutlet, overrideByShift] = await Promise.all([
+              this.shiftAssignmentRepository.resolveTierRatesForOutlets({
+                outletIds: rows.map((a) => a.outletId),
+                tierLabel,
+                commissionOnly,
+              }),
+              this.shiftAssignmentRepository.resolveShiftTierOverrides({
+                shiftIds: rows.map((a) => a.shiftId),
+                tierLabel,
+                commissionOnly,
+              }),
+            ]);
+            return [t, { rateByOutlet, overrideByShift }] as const;
+          }),
+        ),
+      );
+      // The drink menu is a property of the VENUE, not of the tier, so it is
+      // resolved once for every outlet in the list.
+      const menuByOutlet =
+        await this.shiftAssignmentRepository.resolveDrinkMenusForOutlets(
+          assignments.map((a) => a.outletId),
+        );
+
+      const data = assignments.map((a) => {
+        const rowTier = tierFor(a);
+        const cards = cardsByTier.get(rowTier);
+        return {
+          ...a,
+          tier: rowTier,
+          rate: mergeRate(
+            cards?.rateByOutlet.get(a.outletId),
+            cards?.overrideByShift.get(a.shiftId),
+          ),
+          drinkMenu: menuByOutlet.get(a.outletId) ?? [],
+        };
+      });
       res.status(200).json({ success: true, message: 'OK', data });
     } catch (error) {
       logger.error('[ShiftAssignmentController.listMine] Error:', error);
