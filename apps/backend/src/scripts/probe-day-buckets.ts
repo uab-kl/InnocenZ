@@ -1,3 +1,8 @@
+// ⚠️ SCHEMA NOTE (12 Sep 2026): `main.pr` was DROPPED (0095) and
+// `main.agency_member` renamed (0033). A PR is a `user` row; the membership
+// and its tier live on `agency_pr`, and ops columns named `pr_id` equal
+// `user_id` after the remap. These queries were left pointing at the old
+// relations and threw on their first statement.
 /**
  * READ-ONLY. Every voucher line a PR has on one day, with the bucket the PR app
  * files it under, so a Payment-page column total can be checked against the rows
@@ -49,12 +54,12 @@ async function main() {
            l.ref, l.receipt_id, l.outlet, l.created_at,
            jsonb_array_length(coalesce(l.proof_photos, '[]'::jsonb)) as line_photos,
            r.receipt_no, r.order_no, r.status as receipt_status, r.source as receipt_source,
-           r.shift_assignment_id, v.voucher_no, p.name as pr_name
+           r.shift_assignment_id, v.voucher_no, p.username as pr_name
       from main.payment_voucher_line l
       join main.payment_voucher v on v.id = l.voucher_id
       left join main.payment_voucher_receipt r on r.id = l.receipt_id
-      left join main.pr p on p.id = v.pr_id
-     where p.name ilike ${`%${PR_NAME}%`}
+      left join main."user" p on p.id = v.pr_id
+     where p.username ilike ${`%${PR_NAME}%`}
        and l.line_date = ${DAY}
      order by l.created_at
   `);
@@ -93,8 +98,8 @@ async function main() {
            (select coalesce(sum(l.amount), 0) from main.payment_voucher_line l where l.receipt_id = r.id) as total
       from main.payment_voucher_receipt r
       join main.payment_voucher v on v.id = r.voucher_id
-      left join main.pr p on p.id = v.pr_id
-     where p.name ilike ${`%${PR_NAME}%`}
+      left join main."user" p on p.id = v.pr_id
+     where p.username ilike ${`%${PR_NAME}%`}
        and exists (select 1 from main.payment_voucher_line l
                     where l.receipt_id = r.id and l.line_date = ${DAY})
      order by r.created_at

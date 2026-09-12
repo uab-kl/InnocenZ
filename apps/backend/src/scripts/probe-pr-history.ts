@@ -1,3 +1,8 @@
+// ⚠️ SCHEMA NOTE (12 Sep 2026): `main.pr` was DROPPED (0095) and
+// `main.agency_member` renamed (0033). A PR is a `user` row; the membership
+// and its tier live on `agency_pr`, and ops columns named `pr_id` equal
+// `user_id` after the remap. These queries were left pointing at the old
+// relations and threw on their first statement.
 /**
  * READ-ONLY. What `GET /payment-voucher/mine/history` now returns for each PR,
  * beside what the old signed/paid-only filter returned — the difference is what
@@ -53,9 +58,9 @@ async function main() {
   console.log('Current week start (excluded from history):', weekStart);
 
   const prs = await db.execute(sql`
-    select p.id, p.name from main.pr p
+    select p.id, p.username from main."user" p
      where exists (select 1 from main.payment_voucher v where v.pr_id = p.id)
-     order by p.name
+     order by p.username
   `);
 
   for (const row of prs.rows as { id: string; name: string }[]) {

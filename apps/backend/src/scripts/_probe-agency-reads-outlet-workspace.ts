@@ -1,3 +1,8 @@
+// ⚠️ SCHEMA NOTE (12 Sep 2026): `main.pr` was DROPPED (0095) and
+// `main.agency_member` renamed (0033). A PR is a `user` row; the membership
+// and its tier live on `agency_pr`, and ops columns named `pr_id` equal
+// `user_id` after the remap. These queries were left pointing at the old
+// relations and threw on their first statement.
 /**
  * READ-ONLY. Answers "does the row the agency portal now reads actually hold the
  * rates the outlet saved, and which agency account can read it?"
@@ -46,7 +51,7 @@ async function main() {
 
   const owners = await db.execute(sql`
     select a.name as agency_name, u.email, m.sub_role, m.status
-    from main.agency_member m
+    from main.agency_user m
     join main.agency a on a.id = m.agency_id
     join main."user" u on u.id = m.user_id
     where m.sub_role <> 'pr'

@@ -1,3 +1,8 @@
+// ⚠️ SCHEMA NOTE (12 Sep 2026): `main.pr` was DROPPED (0095) and
+// `main.agency_member` renamed (0033). A PR is a `user` row; the membership
+// and its tier live on `agency_pr`, and ops columns named `pr_id` equal
+// `user_id` after the remap. These queries were left pointing at the old
+// relations and threw on their first statement.
 /**
  * READ-ONLY. Closes the one link `payment-voucher-audit.ts` deliberately does
  * not check, and which §9 P1 still lists open as "Verify Payment Voucher <-> PR
@@ -51,7 +56,7 @@ async function main() {
       sa.pay_rule           AS pay_rule,
       sa.worked_minutes     AS worked_minutes,
       sa.scheduled_minutes  AS scheduled_minutes,
-      COALESCE(NULLIF(TRIM(u.username), ''), NULLIF(TRIM(up.full_name), ''), 'PR') AS pr_name,
+      COALESCE(NULLIF(TRIM(u.username), ''), NULLIF(TRIM(u(select username from main."user" where id = p.user_id) as full_name), ''), 'PR') AS pr_name,
       ap.tier               AS pr_tier,
       o.name                AS outlet_name,
       -- Same precedence the app resolves in: the per-shift override wins over
