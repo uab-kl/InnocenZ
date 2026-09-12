@@ -251,6 +251,9 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
      * but a signature has already landed on it.
      */
     canSign: v.status === 'sent' && !v.prSignedAt,
+    // The voucher's OWN flag, kept beside `canSign` for the same reason: the
+    // 'pending' badge cannot carry it. See the field's note on HistPayWeek.
+    isDisputed: v.status === 'disputed',
     statusMeta: statusMeta(v),
     net: Math.round(net * 100) / 100,
     // Carried so the normaliser can agree with the server rather than

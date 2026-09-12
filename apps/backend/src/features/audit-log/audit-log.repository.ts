@@ -110,8 +110,22 @@ export class AuditLogRepositoryClass {
          *
          * ⚠️ Both bounds are UTC, because `new Date('YYYY-MM-DD')` parses as UTC.
          * `dateFrom` has always been read that way, so the two ends stay
-         * consistent; a venue-local calendar day is a separate question and
-         * would have to move both.
+         * consistent.
+         *
+         * ⚠️ AND THAT IS WHY THE ADMIN SCREEN NO LONGER SENDS A BARE DATE.
+         *
+         * This note used to call a reader-local calendar day "a separate
+         * question" — it was the same question, and the screen was getting the
+         * wrong answer. `<input type="date">` means the day on the READER'S
+         * calendar, so in Malaysia (UTC+8) a UTC day is eight hours out at both
+         * ends: "13 Sep" dropped everything before 08:00 local and added the
+         * reader's 14th-of-the-month morning instead.
+         *
+         * Fixed 13 Sep 2026 in the browser, which is the only party that knows
+         * the reader's zone: `audit-log-table-view.tsx` now resolves the picked
+         * day to local-midnight instants and sends those. This branch stays for
+         * API callers who pass a bare date — for them a UTC day is the only
+         * defensible reading, since there is no reader to ask.
          */
         const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(filter.dateTo);
         if (dateOnly) {

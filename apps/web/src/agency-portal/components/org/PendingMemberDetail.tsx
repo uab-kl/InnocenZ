@@ -145,8 +145,20 @@ export function PendingMemberDetail({
 		"settings",
 		"update",
 	);
-	/** Two-step, like the Team screen's bin: removal is not a single click. */
-	const [confirming, setConfirming] = useState(false);
+	/*
+	 * Two-step, like the Team screen's bin: removal is not a single click.
+	 *
+	 * ⚠️ HOLDS THE MEMBER ID, not a boolean — the same rule `choice` and `error`
+	 * below already follow, and this was the one piece of state that did not.
+	 *
+	 * This pane is the DETAIL half of a master/detail: picking someone else in
+	 * the list re-renders this same component with a new `member` prop and keeps
+	 * every `useState` it holds. So arming the confirmation for one person and
+	 * then clicking another in the list left the red "Deactivate member" button
+	 * standing — re-labelled with the NEW person's name, one click from removing
+	 * somebody nobody had decided to remove.
+	 */
+	const [confirmingId, setConfirmingId] = useState<string | null>(null);
 	const { members, changeMember, removeMember } = useOrgMembers(kind, orgId);
 	const member: OrgMember | undefined = members.find((m) => m.id === memberId);
 
@@ -201,6 +213,8 @@ export function PendingMemberDetail({
 	// Belongs to THIS person, or it does not count — see the note above.
 	const picked = choice?.id === member.id ? choice.value : member.subRole;
 	const shownError = error?.id === member.id ? error.message : "";
+	// Armed for THIS person, or armed for nobody — see the note on the state.
+	const confirming = confirmingId === member.id;
 	const busy = changeMember.isPending || removeMember.isPending;
 	const photo = apiAssetUrl(member.profileImage ?? undefined);
 	const applied = whenApplied(member.createdAt, locale);
@@ -475,10 +489,15 @@ export function PendingMemberDetail({
 										<UserX className="h-4 w-4 shrink-0" />
 										{t.portalUi.deactivateMember}
 									</button>
+									{/* ⚠️ `busy` ONLY. Cancel used to carry `|| !canDecide` too,
+									    so a lane that could not deactivate could not dismiss the
+									    panel either — both buttons greyed, no way out but a
+									    reload. Backing out is not a write; nobody needs
+									    permission to change their mind. */}
 									<button
 										type="button"
-										disabled={busy || !canDecide}
-										onClick={() => setConfirming(false)}
+										disabled={busy}
+										onClick={() => setConfirmingId(null)}
 										className="inline-flex flex-1 items-center justify-center rounded-lg border border-border px-4 py-2.5 text-sm disabled:opacity-50"
 									>
 										{t.portalUi.cancel}
@@ -486,14 +505,22 @@ export function PendingMemberDetail({
 								</div>
 							</>
 						) : (
-							<button
-								type="button"
-								onClick={() => setConfirming(true)}
-								className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/40 px-4 py-2.5 text-red-400 text-sm hover:bg-red-500/10"
-							>
-								<UserX className="h-4 w-4 shrink-0" />
-								{t.portalUi.deactivateMember}
-							</button>
+							/* ⚠️ `canDecide` — this one opener had no gate at all, while the
+							   five buttons around it did. So a Director was shown a red
+							   "Deactivate member", and pressing it armed a confirmation whose
+							   own button was dead. Offering a destructive act to somebody the
+							   server refuses is worse than not offering it: it reads as the
+							   product being broken rather than as a rule. */
+							canDecide && (
+								<button
+									type="button"
+									onClick={() => setConfirmingId(member.id)}
+									className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/40 px-4 py-2.5 text-red-400 text-sm hover:bg-red-500/10"
+								>
+									<UserX className="h-4 w-4 shrink-0" />
+									{t.portalUi.deactivateMember}
+								</button>
+							)
 						)}
 					</div>
 				</section>

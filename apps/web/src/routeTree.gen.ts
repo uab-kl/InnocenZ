@@ -24,6 +24,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SignupMemberRouteImport } from './routes/signup-member'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAuditLogRouteRouteImport } from './routes/admin/audit-log/route'
 import { Route as AdminBusinessRouteRouteImport } from './routes/admin/business/route'
 import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
@@ -155,6 +156,11 @@ const SignupMemberRoute = SignupMemberRouteImport.update({
   id: '/signup-member',
   path: '/signup-member',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminAuditLogRouteRoute = AdminAuditLogRouteRouteImport.update({
   id: '/audit-log',
@@ -495,6 +501,7 @@ export interface FileRoutesByFullPath {
   '/outlet/special-service': typeof OutletSpecialServiceRoute
   '/outlet/subscription': typeof OutletSubscriptionRoute
   '/outlet/workspace': typeof OutletWorkspaceRoute
+  '/admin/': typeof AdminIndexRoute
   '/agency/': typeof AgencyIndexRoute
   '/outlet/': typeof OutletIndexRoute
   '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
@@ -523,7 +530,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRouteRouteWithChildren
   '/choose-organisation': typeof ChooseOrganisationRoute
   '/delete-account': typeof DeleteAccountRoute
   '/forgot-password': typeof ForgotPasswordRoute
@@ -565,6 +571,7 @@ export interface FileRoutesByTo {
   '/outlet/special-service': typeof OutletSpecialServiceRoute
   '/outlet/subscription': typeof OutletSubscriptionRoute
   '/outlet/workspace': typeof OutletWorkspaceRoute
+  '/admin': typeof AdminIndexRoute
   '/agency': typeof AgencyIndexRoute
   '/outlet': typeof OutletIndexRoute
   '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
@@ -639,6 +646,7 @@ export interface FileRoutesById {
   '/outlet/special-service': typeof OutletSpecialServiceRoute
   '/outlet/subscription': typeof OutletSubscriptionRoute
   '/outlet/workspace': typeof OutletWorkspaceRoute
+  '/admin/': typeof AdminIndexRoute
   '/agency/': typeof AgencyIndexRoute
   '/outlet/': typeof OutletIndexRoute
   '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
@@ -714,6 +722,7 @@ export interface FileRouteTypes {
     | '/outlet/special-service'
     | '/outlet/subscription'
     | '/outlet/workspace'
+    | '/admin/'
     | '/agency/'
     | '/outlet/'
     | '/admin/audit-log/$role'
@@ -742,7 +751,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/choose-organisation'
     | '/delete-account'
     | '/forgot-password'
@@ -784,6 +792,7 @@ export interface FileRouteTypes {
     | '/outlet/special-service'
     | '/outlet/subscription'
     | '/outlet/workspace'
+    | '/admin'
     | '/agency'
     | '/outlet'
     | '/admin/audit-log/$role'
@@ -857,6 +866,7 @@ export interface FileRouteTypes {
     | '/outlet/special-service'
     | '/outlet/subscription'
     | '/outlet/workspace'
+    | '/admin/'
     | '/agency/'
     | '/outlet/'
     | '/admin/audit-log/$role'
@@ -1009,6 +1019,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/signup-member'
       preLoaderRoute: typeof SignupMemberRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
     '/admin/audit-log': {
       id: '/admin/audit-log'
@@ -1491,6 +1508,7 @@ interface AdminRouteRouteChildren {
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminProfileRoute: typeof AdminProfileRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminIndexRoute: typeof AdminIndexRoute
   AdminServiceOtherRoute: typeof AdminServiceOtherRoute
   AdminServicePaymentVoucherRoute: typeof AdminServicePaymentVoucherRoute
   AdminServicePlanChangesRoute: typeof AdminServicePlanChangesRoute
@@ -1506,6 +1524,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminDashboardRoute: AdminDashboardRoute,
   AdminProfileRoute: AdminProfileRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  AdminIndexRoute: AdminIndexRoute,
   AdminServiceOtherRoute: AdminServiceOtherRoute,
   AdminServicePaymentVoucherRoute: AdminServicePaymentVoucherRoute,
   AdminServicePlanChangesRoute: AdminServicePlanChangesRoute,

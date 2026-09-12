@@ -591,6 +591,18 @@ export type DemoPv = {
    */
   headerDeduction?: number;
   status: 'awaiting_pr' | 'signed' | 'paid';
+  /**
+   * Disputed, as its own fact — `status` above cannot say it.
+   *
+   * Those three values are what every comparison on the PV screen reads, and a
+   * disputed voucher is none of them: it collapsed into `awaiting_pr`, so the
+   * header pill painted it amber "Pending your review" while the same voucher
+   * read as disputed on Payment and in History. Red is the owner's colour for
+   * disputed (23 Aug 2026); amber means waiting.
+   *
+   * Optional because the demo rows below carry no dispute state.
+   */
+  isDisputed?: boolean;
   statusLabel: string;
 };
 
