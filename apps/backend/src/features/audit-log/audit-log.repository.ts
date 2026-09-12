@@ -5,6 +5,7 @@ import {
   eq,
   gte,
   isNull,
+  lt,
   lte,
   ne,
   notInArray,
@@ -94,7 +95,32 @@ export class AuditLogRepositoryClass {
         whereCondition.push(gte(AuditLogTable.createdAt, new Date(filter.dateFrom)));
       }
       if (filter.dateTo) {
-        whereCondition.push(lte(AuditLogTable.createdAt, new Date(filter.dateTo)));
+        /*
+         * ⚠️ A BARE DATE NAMES A WHOLE DAY, NOT ITS FIRST INSTANT.
+         *
+         * The filter comes from `<input type="date">`, so it is always
+         * `YYYY-MM-DD`. `new Date('2026-09-12')` is MIDNIGHT, and `lte` against
+         * midnight excluded every row actually written on the 12th — so setting
+         * From and To to the same day, which is the obvious way to ask for one
+         * day, reliably returned NOTHING.
+         *
+         * A date-only value is therefore taken as the whole day: strictly less
+         * than the following midnight. A value that carries a time is honoured
+         * exactly as sent, so an API caller asking for an instant still gets one.
+         *
+         * ⚠️ Both bounds are UTC, because `new Date('YYYY-MM-DD')` parses as UTC.
+         * `dateFrom` has always been read that way, so the two ends stay
+         * consistent; a venue-local calendar day is a separate question and
+         * would have to move both.
+         */
+        const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(filter.dateTo);
+        if (dateOnly) {
+          const next = new Date(filter.dateTo);
+          next.setUTCDate(next.getUTCDate() + 1);
+          whereCondition.push(lt(AuditLogTable.createdAt, next));
+        } else {
+          whereCondition.push(lte(AuditLogTable.createdAt, new Date(filter.dateTo)));
+        }
       }
       if (filter.userId) {
         whereCondition.push(eq(AuditLogTable.userId, filter.userId));

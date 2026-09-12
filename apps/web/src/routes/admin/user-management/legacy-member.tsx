@@ -918,7 +918,18 @@ function LegacyMemberPage() {
 	 */
 	const openDetail = (row: LegacyRow) => {
 		if (row.role === "agency" || row.role === "outlet" || row.role === "pr") {
-			openDetail(row);
+			/*
+			 * ⚠️ `setSelected`, NOT `openDetail`. This called ITSELF — unconditional,
+			 * same argument — so clicking any agency, outlet or PR row recursed until
+			 * the stack blew and React unmounted the page. The three detail sheets
+			 * below were unreachable by any route: every one of the three call sites
+			 * (the row button, the name link and the card) goes through here.
+			 *
+			 * `selected` is what the sheets read, and `row.id` is the ORG/PR id the
+			 * list queries key on (`mapAgencyRow` sets `id: agency.id`), which is what
+			 * `selectedAgencyFromList` and its twins look up.
+			 */
+			setSelected({ role: row.role, id: row.id });
 		}
 	};
 
@@ -1292,6 +1303,18 @@ function LegacyMemberPage() {
 																			? "/admin/user-management/agency-team"
 																			: "/admin/user-management/outlet-team"
 																	}
+																	/*
+																	 * ⚠️ CARRY THE ORGANISATION. Both targets declare
+																	 * `validateSearch` for an `org` param and open on
+																	 * that team; without it the admin landed on an
+																	 * unfiltered page and had to find by hand the very
+																	 * organisation this row already knew — which is
+																	 * the whole reason the button exists.
+																	 *
+																	 * `row.orgId` is guaranteed here: the enclosing
+																	 * guard is `row.role === "member" && row.orgId`.
+																	 */
+																	search={{ org: row.orgId }}
 																>
 																	<Users className="mr-1.5 h-3.5 w-3.5" />
 																	{t.adminUsers.openTeam}
