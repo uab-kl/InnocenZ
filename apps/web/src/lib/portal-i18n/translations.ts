@@ -322,7 +322,11 @@ const en = {
 		viewOnlyHint:
 			"View only — your role can read shift postings but not create them",
 		readOnlyNotice:
-			"Read-only. You can see how shifts are posted at this venue, but only an Owner, Guarantor or Ops Head can post one.",
+			// ⚠️ FINANCE POSTS JOBS TOO. `booking:create` is held by Owner,
+			// Guarantor, Ops Head AND Finance — only the Director is read-only here,
+			// and this sentence is the one they read. Naming three of the four told
+			// them to ask the wrong people.
+			"Read-only. You can see how shifts are posted at this venue, but only an Owner, Guarantor, Ops Head or Finance can post one.",
 		agencyAddOns: "agency add-ons",
 		prShift: "PR Shift",
 		services: "Services",
@@ -6917,7 +6921,7 @@ const zh: PortalTranslations = {
 		buildHint: "设置班次内容，准备好后即可发布",
 		viewOnlyHint: "仅可查看 — 您的角色可以查看班次发布，但不能创建。",
 		readOnlyNotice:
-			"仅可查看。您可以看到本门店如何发布班次，但只有东主、担保人或运营主管才能发布。",
+			"仅可查看。您可以看到本门店如何发布班次，但只有东主、担保人、运营主管或财务才能发布。",
 		agencyAddOns: "经纪公司增值服务",
 		prShift: "PR 班次",
 		services: "增值服务",
