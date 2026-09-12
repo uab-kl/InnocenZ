@@ -46,7 +46,22 @@ export function OutletSwapRequests({
   >;
 }) {
   const { pending, actionError, travelWarning, busyId, respond } = swaps;
-  if (pending.length === 0) return null;
+  /*
+   * ⚠️ NOT `pending.length === 0` — that threw the answer away at the moment it
+   * arrived.
+   *
+   * `respond()` stores the server's travel warning and then refreshes, which
+   * re-filters `pending` to `status === 'pending_pr'`. The swap just accepted is
+   * now `approved`, so with the usual single outstanding request `pending`
+   * emptied, this returned null, and the warning below — the one whose comment
+   * promises it "survives the list refresh" — was destroyed along with the list.
+   * The PR saw the "Nothing to do" empty state and never learned they had been
+   * sent somewhere they may not have time to reach.
+   *
+   * The component now renders whenever it has ANYTHING to say: outstanding
+   * requests, a failure, or the outcome of the last answer.
+   */
+  if (pending.length === 0 && !actionError && !travelWarning) return null;
 
   return (
     <View style={styles.wrap}>
