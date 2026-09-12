@@ -2007,6 +2007,16 @@ export type PrHistoryVoucher = {
   weekStart: string | null;
   weekEnd: string | null;
   net: string;
+  /**
+   * The voucher HEADER deduction, as a decimal string ("200.00").
+   *
+   * ⚠️ NOT the same as a deduction LINE. A late-cancel fee arrives as a
+   * negative line; an agency settling a dispute types into the Deductions box
+   * and it lands here, with no line at all. The phone used to receive only
+   * `lines`, so it recomputed the net without this and showed the PR the
+   * PRE-deduction amount — including on the document they sign.
+   */
+  deduction?: string | null;
   wages: string;
   status: string;
   outlet: string | null;

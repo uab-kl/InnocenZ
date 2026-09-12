@@ -56,6 +56,12 @@ export type HistPayWeek = {
   canSign: boolean;
   statusMeta: string;
   net: number;
+  /**
+   * The voucher HEADER deduction, kept so `normalizeHistPayWeek` can recompute
+   * a net that MATCHES the server instead of overwriting it with the gross.
+   * Absent on demo rows, which have no header.
+   */
+  headerDeduction?: number;
   wages: number;
   commission: number;
   earlyWithdrawal?: number;

@@ -581,6 +581,15 @@ export type DemoPv = {
   outlet: string;
   weekLabel: string;
   net: number;
+  /**
+   * The voucher HEADER deduction, when the week carries one.
+   *
+   * ⚠️ The PV screen used to prefer a total summed from LINE buckets, which
+   * cannot see this — so a PR signed for the pre-deduction amount. When this is
+   * set, `net` (the server's figure, deduction already applied) is what the
+   * document shows. Absent on demo rows, which have no header.
+   */
+  headerDeduction?: number;
   status: 'awaiting_pr' | 'signed' | 'paid';
   statusLabel: string;
 };

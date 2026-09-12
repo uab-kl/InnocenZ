@@ -215,7 +215,18 @@ export function normalizeHistPayWeek(w: HistPayWeek): HistPayWeek {
     if (t.includes('wage')) wages += line.amount;
     else commission += line.amount;
   }
-  const net = Math.round((wages + commission - debits) * 100) / 100;
+  /*
+   * ⚠️ THE HEADER DEDUCTION COUNTS TOO.
+   *
+   * This recompute exists to repair rows whose stored totals drifted, but it
+   * derived debits from `line.debit` ALONE — and a dispute settlement lives on
+   * the voucher header with no line at all. So it produced the GROSS, found it
+   * differed from the server net by more than the tolerance below, and
+   * overwrote the correct figure with the wrong one.
+   */
+  const net =
+    Math.round((wages + commission - debits - (w.headerDeduction ?? 0)) * 100) /
+    100;
   wages = Math.round(wages * 100) / 100;
   commission = Math.round(commission * 100) / 100;
   // Migrate labels signed under the old copy (stored PVs keep their strings).

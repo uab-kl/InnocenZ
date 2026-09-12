@@ -2396,6 +2396,21 @@ export class PaymentVoucherControllerClass {
           weekStart: v.weekStart,
           weekEnd: v.weekEnd,
           net: v.net,
+          /*
+           * ⚠️ THE HEADER DEDUCTION, WHICH THE PHONE COULD NOT SEE.
+           *
+           * A fine reaches a voucher two different ways: a late-cancel fee is
+           * written as a LINE (`component='deduction'`, negative), but an agency
+           * settling a dispute types into the Deductions box and that lands on
+           * the voucher HEADER — no line at all. The phone only ever received
+           * `lines`, so it recomputed the net without the header figure and
+           * showed the PR the PRE-DEDUCTION amount, including on the voucher
+           * document they sign. They signed for RM 600 and were paid RM 400.
+           *
+           * `net` was always correct here; sending `deduction` too lets the
+           * phone both TRUST that net and show the PR what was taken off.
+           */
+          deduction: v.deduction,
           wages: sumWages(v.lines),
           status: v.status,
           outlet: v.outlet,

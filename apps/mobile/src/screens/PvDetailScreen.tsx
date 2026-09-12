@@ -340,6 +340,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         outlet: hist.outlet,
         weekLabel: hist.weekLabel,
         net: hist.net,
+        // Carried so the document below shows the server's net rather than a
+        // total summed from line buckets, which cannot see a header deduction.
+        headerDeduction: hist.headerDeduction,
         // Three states, not two. A History voucher used to be signed or paid by
         // definition; since History began carrying every CLOSED week it can also
         // be one the PR has not signed, and calling that 'signed' is what removed
@@ -371,8 +374,23 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
     [weekForGrid],
   );
   const gridTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
-  /** Net always matches Payment → Last week total. */
-  const netDisplay = !hist && gridTotal > 0 ? gridTotal : pv.net;
+  /*
+   * THE FIGURE ON THE DOCUMENT THE PR SIGNS.
+   *
+   * ⚠️ `gridTotal` sums LINE buckets only, so it cannot see a deduction that
+   * lives on the voucher HEADER — the shape an agency creates by settling a
+   * dispute in the Deductions box. Preferring it meant a PR was shown, and
+   * signed for, the PRE-deduction amount: signed RM 600, paid RM 400, with the
+   * RM 200 named nowhere on the phone.
+   *
+   * `pv.net` is the server's own figure and already has the header deduction
+   * applied, so it wins whenever the week carries one. The grid total is kept
+   * for the case it was added for — a live week with no server net yet, where
+   * it must still match Payment → Last week.
+   */
+  const headerDeduction = pv.headerDeduction ?? 0;
+  const netDisplay =
+    headerDeduction > 0 ? pv.net : !hist && gridTotal > 0 ? gridTotal : pv.net;
   const displayWeekLabel = pv.weekLabel;
   /**
    * Has this voucher actually been signed?

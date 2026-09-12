@@ -105,6 +105,32 @@ function linesFromGrid(grid: WeeklyDayPay[], outlet: string): HistPayLine[] {
         amount: d.others!,
       });
     }
+    /*
+     * ⚠️ THE FINE HAS TO BE WRITTEN INTO THE SNAPSHOT TOO.
+     *
+     * Every emit above gates on `> 0`, and there was no branch for the grid's
+     * `deductions` at all — so a signed week was stored with NO `debit` line.
+     * `buildSignedWeek` sealed the right total, but `normalizeHistPayWeek` then
+     * derived debits from `line.debit`, got zero, recomputed net as
+     * wages + commission and overwrote the seal. A PR signed a voucher reading
+     * RM 338.00 and History immediately showed that same week at RM 588.00, the
+     * red −RM 250.00 row missing entirely — and on web that wrong figure
+     * persisted in localStorage indefinitely.
+     *
+     * Stored as a positive `amount` with `debit: true`, the shape the renderer
+     * and the normaliser both already expect. `deductions` is held NEGATIVE on
+     * the grid, so its magnitude is what goes in.
+     */
+    if ((d.deductions ?? 0) < 0) {
+      lines.push({
+        date,
+        day: d.day,
+        type: 'Others',
+        outlet,
+        amount: Math.abs(d.deductions!),
+        debit: true,
+      });
+    }
   }
   return lines;
 }

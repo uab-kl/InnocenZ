@@ -253,6 +253,9 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
     canSign: v.status === 'sent' && !v.prSignedAt,
     statusMeta: statusMeta(v),
     net: Math.round(net * 100) / 100,
+    // Carried so the normaliser can agree with the server rather than
+    // recomputing a gross and overwriting it.
+    headerDeduction: Math.abs(Number(v.deduction ?? 0)) || undefined,
     wages: Math.round(wages * 100) / 100,
     commission: Math.max(0, commission),
     bankRef: v.bankRef ?? undefined,
