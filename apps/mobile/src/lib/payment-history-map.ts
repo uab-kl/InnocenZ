@@ -325,7 +325,7 @@ export function historyVoucherToShifts(
      * nothing else here needs to change. A zero line is still skipped: it is not
      * money, and it would add a venue to `outlets` for no reason.
      */
-    if (!dateIso || l.commission === 0) continue;
+    if (!dateIso || l.commission <= 0) continue;
     const outlet = l.outlet?.trim() || 'Outlet';
     const rec =
       byDate.get(dateIso) ??
@@ -338,6 +338,36 @@ export function historyVoucherToShifts(
     else if (l.kind === 'tips') rec.tips += l.commission;
     else rec.others += l.commission;
     byDate.set(dateIso, rec);
+  }
+
+  /*
+   * SECOND PASS — a fine REDUCES a day that exists; it never creates one.
+   *
+   * ⚠️ A correction to my own first attempt. Letting negatives through the loop
+   * above (`!== 0`) did make a fine reduce a worked day — but a late-cancel fee
+   * carries the CANCELLED SHIFT'S date, a day the PR by definition did not
+   * work, and a weekly penalty carries the week start. Those opened a `byDate`
+   * entry of their own, so History → Shifts drew a card for a day never worked:
+   * badged `sealed`/`signed`, venue reading the literal "Outlet" (penalty lines
+   * carry no outlet), every metric tile blank because `Metric` renders a value
+   * only above zero, and "Total payout: RM -250.00". That date was also dotted
+   * as a work day in the calendar and "Outlet" joined the venue filter.
+   *
+   * It also split the two counts: `countShifts` still tests `commission <= 0`,
+   * so Payment said 3 shifts while Shifts listed 4. Opening days on positives
+   * ONLY makes the first pass and `countShifts` the same question again — which
+   * is why that function needs no change.
+   *
+   * The Payment view is unaffected and still shows the fine: `toHistPayLines`
+   * lists every non-zero line, which is where a deduction belongs.
+   */
+  for (const l of v.lines) {
+    if (l.commission >= 0) continue;
+    const dateIso = asIsoDate(l.lineDate);
+    if (!dateIso) continue;
+    const rec = byDate.get(dateIso);
+    if (!rec) continue;
+    rec.others += l.commission;
   }
 
   // 'sealed' is a statement about the SHIFT — check-out fixed its money — and is

@@ -116,6 +116,26 @@ export class OutletRepositoryClass {
       if (filter?.outletIds) {
         conditions.push(inArray(OutletTable.id, filter.outletIds));
       }
+      /*
+       * EVERY venue this agency has ever been linked to — see the field's note
+       * on the filter type. No status test and no date bound, deliberately: the
+       * question is "what is this venue called", not "may I staff it".
+       *
+       * Same subquery shape as `linkedToAgencyId` below and for the same reason
+       * — a join would yield one outlet row per link and inflate `totalCount`.
+       */
+      if (filter?.everLinkedToAgencyId) {
+        const agencyId = filter.everLinkedToAgencyId;
+        conditions.push(
+          inArray(
+            OutletTable.id,
+            db
+              .select({ outletId: AgencyOutletTable.outletId })
+              .from(AgencyOutletTable)
+              .where(eq(AgencyOutletTable.agencyId, agencyId)),
+          ),
+        );
+      }
       // THE AGENCY PORTAL'S VISIBILITY RULE (0123, widened by 0127). A subquery
       // rather than a join, so a venue linked to several agencies still yields
       // exactly ONE outlet row — a join here would duplicate it once per link

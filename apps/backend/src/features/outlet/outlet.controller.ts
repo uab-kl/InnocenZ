@@ -182,7 +182,27 @@ export class OutletControllerClass {
       if (!callerIsAdmin) {
         const scope = await resolveOrgScope(req, this.orgScopeDeps);
         if (scope.agencyId) {
-          filter.linkedToAgencyId = scope.agencyId;
+          /*
+           * ⚠️ TWO DIFFERENT QUESTIONS, and forcing the narrow one broke a screen.
+           *
+           * A caller that ASKS for `linkedToAgencyId` wants "which venues may I
+           * staff" — honoured, but only for their OWN agency, never an id they
+           * supplied for somebody else's.
+           *
+           * A caller that asks for nothing is the id→name map the Roster,
+           * auto-assign and roster-slots screens fetch. Forcing the narrow
+           * filter on them dropped every venue whose partnership had ended and
+           * whose last shift had passed, so the week grid printed a raw UUID
+           * where the venue name belongs. `everLinkedToAgencyId` widens across
+           * TIME, not across tenants — still only this agency's own partners.
+           */
+          filter.linkedToAgencyId =
+            filter.linkedToAgencyId === scope.agencyId
+              ? scope.agencyId
+              : undefined;
+          if (!filter.linkedToAgencyId) {
+            filter.everLinkedToAgencyId = scope.agencyId;
+          }
         } else {
           // Outlet caller, or a caller who belongs to nothing: an empty list
           // narrows to no rows, which is the honest answer.

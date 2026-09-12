@@ -163,4 +163,21 @@ export type OutletFilter = {
    * an admin.
    */
   outletIds?: string[];
+  /**
+   * EVERY venue this agency has ever been linked to — any `approve_status`, and
+   * with no date bound.
+   *
+   * Distinct from `linkedToAgencyId`, which deliberately narrows to partnerships
+   * that are approved OR ended-but-still-carrying-future-work. That is the right
+   * answer for "which venues may I staff", and the wrong one for "what is this
+   * venue called": the agency portal's Roster, auto-assign and roster-slots all
+   * fetch this list purely as an id→name map, so once a partnership ended and
+   * its last shift passed, the week grid printed a raw 36-character UUID where
+   * "Velvet 23" belongs — in the one view an operator uses to reconstruct past
+   * work.
+   *
+   * Still strictly the caller's OWN partners, so it leaks nothing: it widens
+   * across time, not across tenants.
+   */
+  everLinkedToAgencyId?: string;
 };
