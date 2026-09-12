@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { subscriptionPaymentController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
-import { orgOwnerPaysOnly } from '@/middlewares/require-sub-role.js';
+import {
+  attachOrgOwnerPayer,
+  orgOwnerPaysOnly,
+} from '@/middlewares/require-sub-role.js';
 
 /**
  * TWO ROUTERS, AND THE SPLIT IS THE WHOLE POINT.
@@ -43,9 +46,15 @@ const router = Router();
  * "These invoices belong to your organisation" is a different question from
  * "you may spend its money", and only the first was being asked.
  *
- * `orgOwnerPaysOnly` asks the second: owner or guarantor (the stand-in folds
- * into owner) of the organisation actually being acted for — owner's rule,
- * 11 Sep 2026.
+ * `orgOwnerPaysOnly` asks the second: the OWNER of the organisation actually
+ * being acted for — owner's rule, 11 Sep 2026.
+ *
+ * ⚠️ This note used to read "owner or guarantor (the stand-in folds into
+ * owner)". That was true of the guard when it was written and is not true now:
+ * the owner narrowed it on 12 Sep — "guarantor no payment made like other
+ * member just see paid and unpaid" — and `orgOwnerPaysOnly` passes
+ * `foldGuarantor: false` for exactly that. Money is the one place the stand-in
+ * does not stand in.
  */
 router.post(
   '/checkout',
@@ -66,10 +75,20 @@ router.get(
  * payment go through" is asking about itself — and the controller resolves
  * ownership from the invoice against the session, so no org id is accepted
  * from the caller.
+ *
+ * ⚠️ `attachOrgOwnerPayer` REFUSES NOBODY — it records whether this caller is
+ * the org's owner so the handler can withhold ONE field.
+ *
+ * Every member may read this; only the owner may see the instrument. The
+ * handler used to ship `methods` — brand, last four, expiry, holder — to
+ * whoever asked, reaching past the five `orgOwnerPaysOnly` guards on
+ * `/payment-method` into the same repository. Owner, 12 Sep 2026: everyone
+ * else "just see paid and unpaid".
  */
 router.get(
   '/invoice/:invoiceId',
   requireRole('admin', 'agency', 'outlet'),
+  attachOrgOwnerPayer,
   subscriptionPaymentController.listForInvoice.bind(subscriptionPaymentController),
 );
 

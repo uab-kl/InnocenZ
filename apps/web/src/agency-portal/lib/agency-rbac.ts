@@ -240,27 +240,38 @@ export function getAgencyDefaultRoute(
 	return items[0]?.to ?? "/agency/pv";
 }
 
-export function canAccessAgencyPath(
-	role: AgencySubRole | null | undefined,
-	pathname: string,
-	orgStatus?: string | null,
-	modulePermissions?: ModulePerm[] | null,
-	/** The organisation being worked in, so another org's lane cannot answer. */
-	activeOrgId?: string | null,
-): boolean {
-	if (isOrgProfileOnly(orgStatus)) {
-		return pathname.startsWith("/agency/profile");
-	}
-	const r = resolveAgencySubRole(role);
-	const can = (p: Permission) =>
-		agencyCan(r, p, modulePermissions, activeOrgId);
-	if (pathname === "/agency" || pathname === "/agency/") return can("viewHome");
-	if (pathname.startsWith("/agency/roster")) return can("viewWorkforce");
-	if (pathname.startsWith("/agency/pv")) return can("viewPv");
-	if (pathname.startsWith("/agency/special-service")) return can("viewPv");
-	if (pathname.startsWith("/agency/history")) return can("viewHistory");
-	if (pathname.startsWith("/agency/subscription")) return can("viewSettings");
-	if (pathname.startsWith("/agency/pending")) return can("viewApprovals");
+/**
+ * WHICH PERMISSION A PATH COSTS — the one copy of that map.
+ *
+ * ⚠️ Split out of `canAccessAgencyPath` on 13 Sep 2026 because a guard only a
+ * ROUTE can ask is a guard every LINK gets to disagree with, and four of them
+ * did. `/agency/prs` was tightened to `managePr` alone (see the note below), and
+ * the four places that offer a trip there were left behind it:
+ *
+ *   · `RosterShiftTable`'s PR-name link — every name on the roster,
+ *   · the roster header's "Manage PR" button, gated on `assignShifts`,
+ *   · `LiveWorkforceTable`'s clickable row,
+ *   · the `pr_rating_low` notification's destination.
+ *
+ * Roster and Live both cost `viewWorkforce`, which ALL FOUR lanes hold, so
+ * Finance and Director read those screens legitimately — and every PR name on
+ * them was a link that bounced them straight back to the agency home, losing
+ * the screen they were reading with nothing said. `hrefFor` already returns
+ * `undefined` "when there is nowhere sensible to go"; these four had no way to
+ * ask.
+ *
+ * Returning the PERMISSION rather than a yes/no is what lets a link ask the
+ * same question the route will ask, with its own `can` — `useAgencyCan` in a
+ * component, the assembled one here. `null` means the path is unguarded.
+ */
+export function agencyPathPermission(pathname: string): Permission | null {
+	if (pathname === "/agency" || pathname === "/agency/") return "viewHome";
+	if (pathname.startsWith("/agency/roster")) return "viewWorkforce";
+	if (pathname.startsWith("/agency/pv")) return "viewPv";
+	if (pathname.startsWith("/agency/special-service")) return "viewPv";
+	if (pathname.startsWith("/agency/history")) return "viewHistory";
+	if (pathname.startsWith("/agency/subscription")) return "viewSettings";
+	if (pathname.startsWith("/agency/pending")) return "viewApprovals";
 	// `viewWorkforce` alongside `managePr`: these are the PR and outlet RECORDS,
 	// and gating them on the update permission alone hid them from a role whose
 	// whole definition is reading the organisation.
@@ -281,16 +292,33 @@ export function canAccessAgencyPath(
 	 * unreachable for exactly this reason.
 	 */
 	if (pathname.startsWith("/agency/prs")) {
-		return can("managePr");
+		return "managePr";
 	}
 	// The twin of `/agency/prs` above — `outlets.tsx:137` refuses on the same
 	// permission, so the route must ask for the same one.
 	if (pathname.startsWith("/agency/outlets")) {
-		return can("managePr");
+		return "managePr";
 	}
-	if (pathname.startsWith("/agency/profile")) return can("viewSettings");
-	if (pathname.startsWith("/agency/live")) return can("viewWorkforce");
-	return true;
+	if (pathname.startsWith("/agency/profile")) return "viewSettings";
+	if (pathname.startsWith("/agency/live")) return "viewWorkforce";
+	return null;
+}
+
+export function canAccessAgencyPath(
+	role: AgencySubRole | null | undefined,
+	pathname: string,
+	orgStatus?: string | null,
+	modulePermissions?: ModulePerm[] | null,
+	/** The organisation being worked in, so another org's lane cannot answer. */
+	activeOrgId?: string | null,
+): boolean {
+	if (isOrgProfileOnly(orgStatus)) {
+		return pathname.startsWith("/agency/profile");
+	}
+	const r = resolveAgencySubRole(role);
+	const needed = agencyPathPermission(pathname);
+	if (!needed) return true;
+	return agencyCan(r, needed, modulePermissions, activeOrgId);
 }
 
 export type AgencyHomeTile = {

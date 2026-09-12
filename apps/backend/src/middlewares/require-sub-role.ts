@@ -644,17 +644,34 @@ export function requireOrgMembershipByParam(
  * Admin is deliberately NOT admitted, matching the route's own note: an admin
  * marks money as received, it does not pay on a venue's behalf.
  */
-export const orgOwnerPaysOnly = async (
+/**
+ * The three answers `orgOwnerPaysOnly` can reach. `no-org` is not a refusal —
+ * it means the request never said which organisation it was acting for.
+ */
+export type OrgOwnerPayerVerdict = 'owner' | 'refused' | 'no-org';
+
+/**
+ * THE SAME QUESTION `orgOwnerPaysOnly` ASKS, answerable from inside a handler.
+ *
+ * ⚠️ Extracted 13 Sep 2026 because a gate only a ROUTE can ask is a gate a
+ * RESPONSE BODY gets to contradict. `GET /subscription-payment/invoice/:id` is
+ * deliberately open to every member — "did our payment go through" is a fair
+ * question for anyone in the org — but its handler also read the org's saved
+ * payment methods straight out of `paymentMethodRepository` and shipped them,
+ * so brand, last four, expiry, holder name and billing details reached exactly
+ * the people the five `/payment-method` routes spend five guards keeping them
+ * from. The owner's rule (12 Sep 2026) is that everyone else "just see paid and
+ * unpaid".
+ *
+ * Returning a verdict rather than a boolean keeps the middleware's three
+ * distinct replies — 403 "only the owner can pay" and 400 "which
+ * organisation?" say different things and must not collapse into one.
+ */
+export async function resolveOrgOwnerPayer(
   req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+): Promise<OrgOwnerPayerVerdict> {
   const user = req.user;
-  if (!user) {
-    return res
-      .status(401)
-      .json({ success: false, message: Error.UNAUTHORIZED, data: null });
-  }
+  if (!user) return 'refused';
 
   /*
    * ⚠️ THE SAME RESOLUTION THE CONTROLLER USES — `resolveOrgScope`, not a
@@ -702,15 +719,15 @@ export const orgOwnerPaysOnly = async (
         org === 'agency'
           ? await holdsAgencyLane(user.id, orgId, ['owner'], false)
           : await holdsOutletLane(user.id, orgId, ['owner'], false);
-      if (holds) return next();
+      if (holds) return 'owner';
     }
-    return refuse(res);
+    return 'refused';
   }
 
   if (scope.agencyId) {
-    if (await holdsAgencyLane(user.id, scope.agencyId, ['owner'], false))
-      return next();
-    return refuse(res);
+    return (await holdsAgencyLane(user.id, scope.agencyId, ['owner'], false))
+      ? 'owner'
+      : 'refused';
   }
 
   /*
@@ -720,17 +737,62 @@ export const orgOwnerPaysOnly = async (
   if (scope.outletIds.length > 0) {
     for (const outletId of scope.outletIds) {
       if (!(await holdsOutletLane(user.id, outletId, ['owner'], false))) {
-        return refuse(res);
+        return 'refused';
       }
     }
-    return next();
+    return 'owner';
   }
 
-  return res.status(400).json({
-    success: false,
-    message: 'Which organisation? Send x-org-id, or name it in the request.',
-    data: null,
-  });
+  return 'no-org';
+}
+
+/**
+ * The same verdict, RECORDED rather than enforced — for a route that everyone
+ * may call but whose response carries something only the payer may see.
+ *
+ * ⚠️ Deliberately a middleware and not an import the handler makes for itself:
+ * this module reads its repositories from `composition-root.js`, which
+ * constructs the controllers, so a controller importing it closes a cycle. And
+ * because `orgScopeDeps` is captured at module-evaluation time, that cycle
+ * would not throw — it would bind `undefined` and every lane check would answer
+ * wrongly and silently. A route file already imports both, so this is the one
+ * place the question can be asked safely.
+ *
+ * Never refuses. The handler decides what to withhold.
+ */
+export const attachOrgOwnerPayer = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  res.locals.orgOwnerPayer = req.user
+    ? await resolveOrgOwnerPayer(req)
+    : 'refused';
+  next();
+};
+
+export const orgOwnerPaysOnly = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (!req.user) {
+    return res
+      .status(401)
+      .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+  }
+  switch (await resolveOrgOwnerPayer(req)) {
+    case 'owner':
+      return next();
+    case 'refused':
+      return refuse(res);
+    default:
+      return res.status(400).json({
+        success: false,
+        message: 'Which organisation? Send x-org-id, or name it in the request.',
+        data: null,
+      });
+  }
 };
 
 function refuse(res: Response) {

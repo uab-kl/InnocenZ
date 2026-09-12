@@ -21,6 +21,7 @@ import {
 	rosterSlotAgencyName,
 } from "@agency-portal/lib/agency-demo";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import { agencyPathPermission } from "@agency-portal/lib/agency-rbac";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import {
 	findOutletShiftForRosterSlot,
@@ -42,6 +43,7 @@ import {
 	type PrSwapRequest,
 } from "@agency-portal/lib/pr-features";
 import { formatRosterShiftTime } from "@agency-portal/lib/pr-session";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftRight, Pencil } from "lucide-react";
@@ -217,6 +219,25 @@ function RosterPrNameLink({
 	className?: string;
 }) {
 	const { t } = usePortalLocale();
+	/*
+	 * ⚠️ ONLY A LANE THAT WILL BE LET IN GETS A LINK.
+	 *
+	 * The Roster costs `viewWorkforce`, which all four agency lanes hold, but
+	 * `/agency/prs` costs `managePr` — Finance and Director do not hold it. Every
+	 * PR name on this table was a link regardless, so tapping one sent them back
+	 * to the agency home and took the roster they were reading with it, saying
+	 * nothing. A name with no destination is still the name: render the text.
+	 *
+	 * Asked through `agencyPathPermission` rather than a literal `"managePr"`, so
+	 * this cannot drift from the route guard the way it just did.
+	 */
+	const needed = agencyPathPermission("/agency/prs");
+	const can = useAgencyCan();
+	if (needed && !can(needed)) {
+		return (
+			<span className={cn("iz-portal-table-name", className)}>{label}</span>
+		);
+	}
 	return (
 		<Link
 			to="/agency/prs"
