@@ -60,6 +60,15 @@ function mapPrUser(user: BackendUser, agencies: PrAgencyRef[] = []): PrUser {
 		updatedAt: user.updatedAt,
 		createdBy: user.createdBy,
 		updatedBy: user.updatedBy,
+		/*
+		 * ⚠️ The NAME, not just the id. `updated_by` holds a uuid, and the admin
+		 * sheet's "Deactivated by" column falls back to "Unknown" without this —
+		 * which is what it showed for every deactivated PR. The API has sent it
+		 * all along (user.repository.ts selects `updatedByName` via a LEFT JOIN);
+		 * this mapper simply never copied it, the same way it once dropped the ID
+		 * scans and the bank pair a few lines above.
+		 */
+		updatedByName: user.updatedByName ?? null,
 	};
 }
 

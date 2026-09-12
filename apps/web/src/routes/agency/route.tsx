@@ -20,6 +20,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PortalGateLoading } from "@/components/layout/portal-gate-loading";
+import { getActiveOrg } from "@/lib/active-org";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { ensurePortal, guardPortalClient } from "@/lib/auth/guards";
 import { useProfile } from "@/lib/auth/use-profile";
@@ -125,16 +126,32 @@ function AgencyLayout() {
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	const agencySubRole = useStore((s) => s.agencySubRole);
+	/*
+	 * ⚠️ THE SAME ORGANISATION THE REST OF THE SHELL USES.
+	 *
+	 * `PortalShell`'s extra nav items resolve through `use*CanFor`, which narrows
+	 * grants to the active organisation — while these two did not, so the sidebar
+	 * applied two different rules at once: the extras showed this venue's lane and
+	 * the base items showed the union of every lane the account holds.
+	 */
+	const activeOrgId = getActiveOrg()?.id ?? null;
 	const navItems = getAgencyNavItems(
 		agencySubRole,
 		orgStatus,
 		modulePermissions,
+		activeOrgId,
 	);
 
 	useEffect(() => {
 		if (!mounted) return;
 		if (
-			canAccessAgencyPath(agencySubRole, pathname, orgStatus, modulePermissions)
+			canAccessAgencyPath(
+				agencySubRole,
+				pathname,
+				orgStatus,
+				modulePermissions,
+				activeOrgId,
+			)
 		) {
 			return;
 		}
@@ -152,6 +169,15 @@ function AgencyLayout() {
 		agencySubRole,
 		orgStatus,
 		modulePermissions,
+		/*
+		 * ⚠️ NOT just a lint fix. The guard above READS `activeOrgId`, so
+		 * leaving it out meant switching organisation did not re-run it:
+		 * somebody who may see this page at org A and may not at org B stayed
+		 * on it after switching, until some unrelated dependency happened to
+		 * change. The permissions are per-organisation — the effect that
+		 * enforces them has to watch which one is active.
+		 */
+		activeOrgId,
 		navigate,
 	]);
 

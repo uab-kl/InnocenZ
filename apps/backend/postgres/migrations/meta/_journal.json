@@ -1149,6 +1149,13 @@
       "when": 1792796000000,
       "tag": "0163_membership_first_activated_at",
       "breakpoints": true
+    },
+    {
+      "idx": 164,
+      "version": "7",
+      "when": 1792797000000,
+      "tag": "0164_audit_log_portal",
+      "breakpoints": true
     }
   ]
 }

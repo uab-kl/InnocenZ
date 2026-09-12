@@ -158,14 +158,39 @@ function AgencyHub() {
 		: OUTLET_NAMES.length;
 	const isFinance = agencySubRole === "agency_finance";
 	const can = useAgencyCan();
-	const showWorkforce = can("viewWorkforce");
+	/*
+	 * ⚠️ THE PERMISSION, NOT THE LANE — and the lane test was out of date.
+	 *
+	 * "PRs needed today" and the auto-assign panel are both about ASSIGNING: the
+	 * tile counts open slots and links to the roster, the panel proposes pairs
+	 * and confirms them. Both were hidden behind a hardcoded `!isFinance`,
+	 * written when Finance was read-only on the roster.
+	 *
+	 * Finance has held `roster:update` (`assignShifts`) since 12 Sep 2026 —
+	 * owner's rule, "other agency orgs member can assign member" — and the
+	 * banner three screens down was already corrected to say so: "you can review
+	 * and sign vouchers, and assign PRs on the roster". The page promised the
+	 * work and then hid the two surfaces that start it.
+	 *
+	 * Asking `assignShifts` also keeps the Director out, which `!isFinance`
+	 * never did: they hold `viewWorkforce` and were shown an auto-assign panel
+	 * whose confirm the server refuses.
+	 */
+	const canAssignShifts = can("assignShifts");
 	/*
 	 * The SAME test `canAccessAgencyPath` applies to `/agency/prs` and
-	 * `/agency/outlets` — `managePr || viewWorkforce`. Repeating the route's own
-	 * rule here is what keeps the tile a plain figure for a role the destination
-	 * would bounce, instead of a link that lands on a redirect.
+	 * `/agency/outlets`. Repeating the route's own rule here is what keeps the
+	 * tile a plain figure for a role the destination would bounce, instead of a
+	 * link that lands on a refusal.
+	 *
+	 * ⚠️ `managePr` ALONE since 12 Sep 2026. This read `showWorkforce ||
+	 * can("managePr")`, and EVERY agency lane holds `workforce:read` — so the
+	 * plain-figure branch was unreachable and the tile always linked. Both
+	 * destinations hard-refuse on `managePr`, so Finance and Director followed a
+	 * live link to "Access restricted" (reproduced in a browser). The route rule
+	 * was corrected to match its pages; this now mirrors it again.
 	 */
-	const canOpenRecords = showWorkforce || can("managePr");
+	const canOpenRecords = can("managePr");
 	const { t } = usePortalLocale();
 
 	return (
@@ -193,7 +218,7 @@ function AgencyHub() {
 				{/* Rendered only for roles that can actually staff a shift, so the
 				    hook inside it — and its roster queries — never mount for
 				    finance, who holds no `viewLiveFloor` and would 403 on some. */}
-				{showWorkforce && !isFinance && <PrNeededKpi />}
+				{canAssignShifts && <PrNeededKpi />}
 				<Link
 					to="/agency/pv"
 					search={{ status: "TO_PAY" }}
@@ -245,7 +270,7 @@ function AgencyHub() {
 					<AgencyHomeHubTabs agencySubRole={agencySubRole} />
 				</div>
 
-				{showWorkforce && !isFinance && (
+				{canAssignShifts && (
 					<aside className="iz-portal-home-aside iz-portal-desktop-only">
 						<AiSuggestionsPanel />
 					</aside>

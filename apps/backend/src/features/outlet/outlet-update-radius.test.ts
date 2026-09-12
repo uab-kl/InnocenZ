@@ -61,6 +61,9 @@ function controllerWith(repo: OutletRepositoryClass) {
     unused,
     unused,
     unused,
+    // orgScopeDeps — `GET /outlet` scopes its list with this. Unused on the
+    // PATCH path under test, like every other dependency here.
+    unused,
   );
 }
 

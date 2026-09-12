@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { userController } from '@/composition-root.js';
-import { requireRole } from '@/middlewares/require-role.js';
+import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
 import { uploadProfileImage } from '@/middlewares/upload-profile-image';
 import { uploadPortfolioImage } from '@/middlewares/upload-portfolio-image';
 import { uploadComcardImage } from '@/middlewares/upload-comcard-image';
@@ -25,12 +25,35 @@ const router: ReturnType<typeof Router> = Router();
 // has no screen that lists other people, and on a PR token this route returned
 // every account in the system until 30 Jul 2026.
 //
-// Outlet is NOT excluded even though it looks like it should be — the venue
-// Today and History screens resolve PR display names through this list
-// (use-outlet-today / use-outlet-history via services/pr/prs.ts), so gating to
-// admin+agency alone would blank the names on two live outlet screens.
-// Narrowing what a venue may read here is a shape-level job, not a gate.
-const canListUsers = requireRole('admin', 'agency', 'outlet');
+/*
+ * ⚠️ ADMIN ONLY — and the comment that used to sit here was STALE, which is how
+ * this stayed open.
+ *
+ * It said outlet had to keep the list because "the venue Today and History
+ * screens resolve PR display names through it (use-outlet-today /
+ * use-outlet-history via services/pr/prs.ts)". Those two hooks now call
+ * `fetchPrPersonnel` → `GET /pr`, which IS org-scoped. The justification had
+ * outlived the code, and a role gate with no tenant term was left behind it.
+ *
+ * What it cost: `requireRole` admits any lane whose portalCode matches, and
+ * nothing downstream narrows by organisation — `UserController.list` builds its
+ * filter from the query string alone and `getUsersPaginated` joins no org
+ * table, with `pageSize` unclamped. `redactIdentityDocsForOutlet` treats AGENCY
+ * as privileged, so a single `GET /user?pageSize=500` from ANY agency lane —
+ * a view-only Director included — returned every account on the platform
+ * carrying IC number, date of birth, home address, both ID-photo keys, bank
+ * name, bank account number and the stored signature ink. That last one defeats
+ * `GET /user/me/signature`, which is deliberately self-only with no admin
+ * override because a signature is forgeable.
+ *
+ * CALLERS VERIFIED FIRST, the way the 30 Jul note on this file demands: every
+ * consumer of the list and of `GET /:id` is an ADMIN screen — `fetchPrUsers`,
+ * `fetchAdmins`, `fetchDisabledAccounts` and `fetchUserById` (OrgMemberPage,
+ * rendered only from routes/admin). The PR app's `/user/:id` call is a PATCH on
+ * its own record, and `canReadUser` below exempts self anyway, so nothing that
+ * legitimately asks is refused.
+ */
+const canListUsers = requireAdmin;
 
 // ...and that shape-level job, decided 30 Jul 2026: an outlet keeps the list but
 // loses the identity documents on every row of it. See redact-identity-docs.ts.

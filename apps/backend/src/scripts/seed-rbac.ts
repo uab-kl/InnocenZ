@@ -105,6 +105,26 @@ const AGENCY_FINANCE: MatrixEntry[] = [
   ['history', READ],
   ['settings', READ],
   ['collections', RU],
+  /*
+   * RU — owner's call, 12 Sep 2026: "other agency orgs member can assign
+   * member, access calander page, the rest of the page can view".
+   *
+   * The Roster page was already reachable: the nav gates it on
+   * `workforce:read`, which Finance holds. This adds the ASSIGN, not the page.
+   *
+   * ⚠️ THE GRANT ALONE DOES NOTHING. `POST/PUT /shift-assignment` were gated
+   * by the LANE guard `agencyOwnerOnly`, not by this permission — so granting
+   * it here and stopping would have put the button on screen and left the
+   * server refusing it, the exact "the web matrix must not lie to user"
+   * failure the standing rule forbids. Those two routes now ask
+   * `requirePermission('roster', 'update')`, which is what makes this row the
+   * thing that decides.
+   *
+   * NOT create: adding a shift is a booking write on the outlet side, and
+   * Finance has no business creating demand. Director stays READ — view-only
+   * on both portals is deliberate, and the owner named only Finance.
+   */
+  ['roster', RU],
 ];
 
 /**

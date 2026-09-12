@@ -7,6 +7,7 @@
  * the same lines in give the same buckets out.
  */
 import type { PrCurrentWeek, PrReceiptLine } from './api';
+import { gridBucket } from './week-pay-grid';
 import type { WeekPayRecord } from './demo-shifts';
 
 /** The agency a line belongs to, as the card needs to name it. */
@@ -54,7 +55,32 @@ export function weekRecordsFromLines(
     string,
     WeekPayRecord & { outlets: Set<string>; wagesOutlet: string | null }
   >();
+  /*
+   * ⚠️ TWO PASSES, AND ONLY THE FIRST MAY OPEN A DAY.
+   *
+   * A late-cancel fee is a LINE like any other — `component: 'deduction'`, a
+   * negative amount, dated to the shift that was not worked. One pass over
+   * every line therefore did two wrong things at once:
+   *
+   *   · a day holding NOTHING BUT a fee still created a record, and
+   *     `mergeHistoryShiftsWithWeekPay` turns every record into a History
+   *     card — so a PR who cancelled and was charged saw a card for a shift
+   *     they never worked, reading RM 0.00 at a venue they never attended;
+   *   · on a day they DID work, the fee fell through the kind chain into
+   *     `rec.others += l.commission` with a negative amount, so "Others"
+   *     quietly shrank. A number smaller than it should be, with nothing on
+   *     screen saying why, is worse than one that is plainly wrong.
+   *
+   * The same shape `historyVoucherToShifts` already uses next door, for the
+   * same reason: a fine is a fact ABOUT a day, never evidence that one
+   * happened.
+   *
+   * `gridBucket` is the authority on what a deduction is — `component`, never
+   * a negative amount, which would promote a coincidence of today's data into
+   * a rule.
+   */
   for (const l of lines) {
+    if (gridBucket(l) === 'deductions') continue;
     const dateIso = l.lineDate?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
     if (!dateIso) continue;
     const agency = agencyOf(l.voucherId);
@@ -76,6 +102,7 @@ export function weekRecordsFromLines(
         others: 0,
         agencyId: agency?.id ?? null,
         agencyName: agency?.name ?? null,
+        deductions: 0,
         outlets: new Set<string>(),
         wagesOutlet: null,
       };
@@ -87,6 +114,27 @@ export function weekRecordsFromLines(
     else if (l.kind === 'tips') rec.tips += l.commission;
     else if (l.kind === 'others') rec.others += l.commission;
     byBucket.set(key, rec);
+  }
+  /*
+   * SECOND PASS — reduce a day that already exists, never create one.
+   *
+   * A fine on a day the PR DID work belongs on that day's card: the money they
+   * are owed for it really is lower. What it may not do is conjure the card.
+   * So this only touches buckets the first pass opened; a fee on a day with no
+   * earnings has no card to land on, which is correct — the penalties panel is
+   * where a charge with no shift behind it is stated.
+   */
+  for (const l of lines) {
+    if (gridBucket(l) !== 'deductions') continue;
+    const dateIso = l.lineDate?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+    if (!dateIso) continue;
+    const agency = agencyOf(l.voucherId);
+    const rec = byBucket.get((agency?.id ?? 'na') + '|' + dateIso);
+    if (!rec) continue;
+    // Held NEGATIVE, matching `WeeklyDayPay.deductions` on the pay grid: the
+    // card renders the sign, and summing the magnitude here would make a fine
+    // ADD to the week.
+    rec.deductions = (rec.deductions ?? 0) + l.commission;
   }
   return [...byBucket.values()].map((rec) => {
     const names = [...rec.outlets];
@@ -104,6 +152,8 @@ export function weekRecordsFromLines(
       drinks: rec.drinks,
       tips: rec.tips,
       others: rec.others,
+      // Negative, or absent when the day carries no fine — see the second pass.
+      deductions: rec.deductions || undefined,
       // Carried onto the record so the card it becomes knows whose week it is.
       agencyId: rec.agencyId,
       agencyName: rec.agencyName,

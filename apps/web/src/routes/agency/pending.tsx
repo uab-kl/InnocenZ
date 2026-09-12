@@ -929,10 +929,13 @@ function DocumentPreviewStack({
 
 function SignupDetailPanel({
 	signup,
+	canDecide,
 	onApprove,
 	onReject,
 }: {
 	signup: PendingPR;
+	/** `approvals:update`. False for the Director, who reads the queue only. */
+	canDecide: boolean;
 	onApprove: () => void;
 	onReject: (reason: string) => void;
 }) {
@@ -1007,8 +1010,10 @@ function SignupDetailPanel({
 					</div>
 				</div>
 				{/* History is the record — it gets no buttons. Re-deciding a decided
-				    request happens through a fresh request, not by editing history. */}
-				{!decided && (
+				    request happens through a fresh request, not by editing history.
+				    `canDecide` is the second reason there is nothing to press: a
+				    view-only lane reads the request in full and answers none. */}
+				{!decided && canDecide && (
 					<div className="iz-approvals-detail-actions">
 						<button
 							type="button"
@@ -1141,10 +1146,13 @@ function SignupDetailPanel({
 
 function CutlostDetailPanel({
 	req,
+	canDecide,
 	onApprove,
 	onReject,
 }: {
 	req: PendingCutlostRequest;
+	/** `approvals:update`. False for the Director, who reads the queue only. */
+	canDecide: boolean;
 	onApprove: () => void;
 	onReject: (reason: string) => void;
 }) {
@@ -1173,22 +1181,27 @@ function CutlostDetailPanel({
 						</p>
 					</div>
 				</div>
-				<div className="iz-approvals-detail-actions">
-					<button
-						type="button"
-						className="iz-btn iz-btn-primary !py-2 !text-xs"
-						onClick={onApprove}
-					>
-						{t.common.approve}
-					</button>
-					<button
-						type="button"
-						className="iz-btn iz-btn-soft !py-2 !text-xs"
-						onClick={() => setRejectOpen(true)}
-					>
-						{t.common.decline}
-					</button>
-				</div>
+				{/* Approving RELEASES people and seals a pro-rated wage, so this pair
+				    is the sharpest write on the page — a view-only lane sees the
+				    request in full and gets neither button. */}
+				{canDecide && (
+					<div className="iz-approvals-detail-actions">
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary !py-2 !text-xs"
+							onClick={onApprove}
+						>
+							{t.common.approve}
+						</button>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !py-2 !text-xs"
+							onClick={() => setRejectOpen(true)}
+						>
+							{t.common.decline}
+						</button>
+					</div>
+				)}
 			</div>
 
 			<div className="iz-approvals-cutlost-summary">
@@ -1261,10 +1274,13 @@ function CutlostDetailPanel({
 
 function LinkRequestDetailPanel({
 	link,
+	canDecide,
 	onApprove,
 	onReject,
 }: {
 	link: PendingAgencyLink;
+	/** `approvals:update`. False for the Director, who reads the queue only. */
+	canDecide: boolean;
 	onApprove: () => void;
 	onReject: () => void;
 }) {
@@ -1293,22 +1309,26 @@ function LinkRequestDetailPanel({
 						</IzPill>
 					</div>
 				</div>
-				<div className="iz-approvals-detail-actions">
-					<button
-						type="button"
-						className="iz-btn iz-btn-primary !py-2 !text-xs"
-						onClick={onApprove}
-					>
-						{t.agencyPending.approveLink}
-					</button>
-					<button
-						type="button"
-						className="iz-btn iz-btn-soft !py-2 !text-xs"
-						onClick={onReject}
-					>
-						{t.common.reject}
-					</button>
-				</div>
+				{/* Taking a venue on is an organisation decision, not an oversight
+				    one — the Director reads the request and answers none of it. */}
+				{canDecide && (
+					<div className="iz-approvals-detail-actions">
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary !py-2 !text-xs"
+							onClick={onApprove}
+						>
+							{t.agencyPending.approveLink}
+						</button>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !py-2 !text-xs"
+							onClick={onReject}
+						>
+							{t.common.reject}
+						</button>
+					</div>
+				)}
 			</div>
 
 			<div className="iz-approvals-info-grid">
@@ -1341,12 +1361,15 @@ function LeaveDetailPanel({
 	req,
 	outletName,
 	busy,
+	canDecide,
 	onApprove,
 	onReject,
 }: {
 	req: ShiftAssignment;
 	outletName: string;
 	busy: boolean;
+	/** `approvals:update`. False for the Director, who reads the queue only. */
+	canDecide: boolean;
 	onApprove: () => void;
 	onReject: () => void;
 }) {
@@ -1410,24 +1433,29 @@ function LeaveDetailPanel({
 						</IzPill>
 					</div>
 				) : (
-					<div className="iz-approvals-detail-actions">
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary !py-2 !text-xs"
-							disabled={busy}
-							onClick={onApprove}
-						>
-							{t.agencyPending.approveExcuseShift}
-						</button>
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft !py-2 !text-xs"
-							disabled={busy}
-							onClick={onReject}
-						>
-							{t.common.reject}
-						</button>
-					</div>
+					/* Still pending — but only a lane that may answer gets the pair.
+					   An approved MC writes a day-block across every agency, so this
+					   is a real write and not a note. */
+					canDecide && (
+						<div className="iz-approvals-detail-actions">
+							<button
+								type="button"
+								className="iz-btn iz-btn-primary !py-2 !text-xs"
+								disabled={busy}
+								onClick={onApprove}
+							>
+								{t.agencyPending.approveExcuseShift}
+							</button>
+							<button
+								type="button"
+								className="iz-btn iz-btn-soft !py-2 !text-xs"
+								disabled={busy}
+								onClick={onReject}
+							>
+								{t.common.reject}
+							</button>
+						</div>
+					)
 				)}
 			</div>
 
@@ -1822,20 +1850,34 @@ function AgencyPending() {
 		leaveHistory.find((r) => r.id === selectedLeaveId) ??
 		null;
 
-	if (!canApprovePrSignups) {
-		return (
-			<div className="iz-screen iz-approvals-page">
-				<IzCard className="text-center">
+	/*
+	 * ⚠️ A VIEW-ONLY LANE KEEPS THE SCREEN. It used to lose all of it.
+	 *
+	 * This early-returned on `approvePrSignups` (`approvals:update`) and showed
+	 * one card. The Director holds `approvals:read` and nothing else, so the
+	 * route admits them — `canAccessAgencyPath` asks `viewApprovals` — and then
+	 * the page took away sign-ups, outlet-linking, members, MC/leaves, cutlost
+	 * and cancellations in one go. `viewApprovals` was SPLIT OUT of
+	 * `approvePrSignups` on 17 Aug 2026 for exactly this reason, and the page
+	 * never used it.
+	 *
+	 * The copy is the tell: "You can view sign-up requests, but only an owner or
+	 * guarantor can approve them" — printed on a screen that showed no sign-up
+	 * requests at all. It is now true.
+	 *
+	 * So: the queue renders for everyone the route lets in, and the DECISIONS
+	 * are what `canApprovePrSignups` gates — each panel drops its approve/reject
+	 * pair rather than offering a button the server answers 403 to.
+	 */
+	return (
+		<div className="iz-screen iz-approvals-page">
+			{!canApprovePrSignups && (
+				<IzCard className="mb-3 text-center">
 					<p className="iz-sm iz-muted">
 						{t.agencyPending.financeCannotApprove}
 					</p>
 				</IzCard>
-			</div>
-		);
-	}
-
-	return (
-		<div className="iz-screen iz-approvals-page">
+			)}
 			<div className="iz-approvals-layout">
 				<aside className="iz-approvals-sidebar">
 					<header className="iz-approvals-sidebar-head">
@@ -1945,7 +1987,9 @@ function AgencyPending() {
 						null}
 					</div>
 
-					{tab === "signups" && (
+					{/* Inviting a PR is itself an approvals write, so it goes with the
+					    decision buttons rather than with the queue. */}
+					{tab === "signups" && canApprovePrSignups && (
 						<button
 							type="button"
 							className="iz-approvals-add-btn"
@@ -2376,6 +2420,7 @@ function AgencyPending() {
 						selectedSignup ? (
 							<SignupDetailPanel
 								signup={selectedSignup}
+								canDecide={canApprovePrSignups}
 								onApprove={() =>
 									backend.backed
 										? backend.approve(selectedSignup.id, {
@@ -2399,6 +2444,7 @@ function AgencyPending() {
 						) : selectedLink ? (
 							<LinkRequestDetailPanel
 								link={selectedLink}
+								canDecide={canApprovePrSignups}
 								onApprove={() => approveAgencyLink(selectedLink.id)}
 								onReject={() => rejectAgencyLink(selectedLink.id)}
 							/>
@@ -2417,6 +2463,7 @@ function AgencyPending() {
 								req={selectedLeave}
 								outletName={leaveOutletName(selectedLeave)}
 								busy={leaveBusy}
+								canDecide={canApprovePrSignups}
 								onApprove={() =>
 									rosterMut.approveLeave.mutate(selectedLeave.id)
 								}
@@ -2432,6 +2479,7 @@ function AgencyPending() {
 					) : selectedCutlost ? (
 						<CutlostDetailPanel
 							req={selectedCutlost}
+							canDecide={canApprovePrSignups}
 							// Approving is what RELEASES people — it seals a pro-rated wage
 							// on every named PR — so on a real session it must reach the
 							// server. The store actions stay for the demo logins.

@@ -178,18 +178,37 @@ export function localizePayLineType(type: string, t: AppTranslations): string {
   return type;
 }
 
+/**
+ * ⚠️ NEGATIVE LINES ARE MONEY TOO — dropping them OVERSTATES the payout.
+ *
+ * This filtered `l.commission > 0`, so every `deduction` line (a late-cancel fee
+ * or a sealed weekly penalty, written negative by the backend's
+ * `penalty-line.ts`) vanished. That would merely have hidden the fine, except
+ * `normalizeHistPayWeek` then RECOMPUTES the net from this list and — because
+ * the gap exceeds its 0.02 tolerance — overwrites the server's correct figure.
+ *
+ * So a week of 500 wages + 100 drinks − 250 fee, which the server nets at
+ * RM 350.00, was shown to the PR as **RM 600.00** with no mention of the fine,
+ * and those inflated nets fed the "Net paid" headline totals as well.
+ *
+ * `debit` is what makes the row render red with a leading − (PaymentHistoryPanel
+ * already handles it); nothing had ever written it, so that branch was dead.
+ * `amount` carries the ABSOLUTE value because the renderer supplies the sign.
+ */
 function toHistPayLines(lines: PrReceiptLine[]): HistPayLine[] {
   return lines
-    .filter((l) => l.lineDate && l.commission > 0)
+    .filter((l) => l.lineDate && l.commission !== 0)
     .map((l) => {
       const iso = asIsoDate(l.lineDate)!;
       const [y, m, d] = isoToYmd(iso);
+      const isDebit = l.commission < 0;
       return {
         date: `${String(d).padStart(2, '0')} ${MONTH_SHORT[m - 1]}`,
         day: DAY_NAMES[new Date(Date.UTC(y, m - 1, d)).getUTCDay()],
         type: lineTypeLabel(l.kind),
         outlet: l.outlet ?? 'Outlet',
-        amount: l.commission,
+        amount: Math.abs(l.commission),
+        ...(isDebit ? { debit: true } : {}),
       };
     });
 }
@@ -219,7 +238,25 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
     // the week label and the venue are identical on both rows.
     agencyName: v.agencyName ?? null,
     outlet: outletLabel(v),
-    shifts: countShifts(v.lines) || Math.max(1, new Set(lines.map((l) => l.date)).size),
+    /*
+     * ⚠️ ZERO IS A REAL ANSWER, and this could not say it.
+     *
+     * `countShifts` already does the right thing — unique days carrying
+     * POSITIVE money — but the fallback behind it ran whenever that was 0 and
+     * was itself floored at 1. A week whose only line is a late-cancel fee
+     * therefore reported "1 shift" for a shift that was, by definition, not
+     * worked: the PR is being charged precisely because they did not attend.
+     *
+     * The fallback still covers the case it was written for — lines that carry
+     * money but no resolvable `lineDate`, so `countShifts` cannot key them —
+     * but it only applies when there ARE credit lines to count. With none, the
+     * answer is 0.
+     */
+    shifts:
+      countShifts(v.lines) ||
+      (lines.some((l) => !l.debit)
+        ? new Set(lines.filter((l) => !l.debit).map((l) => l.date)).size
+        : 0),
     issued: issuedLabel(v),
     status,
     /*
@@ -232,8 +269,14 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
      * but a signature has already landed on it.
      */
     canSign: v.status === 'sent' && !v.prSignedAt,
+    // The voucher's OWN flag, kept beside `canSign` for the same reason: the
+    // 'pending' badge cannot carry it. See the field's note on HistPayWeek.
+    isDisputed: v.status === 'disputed',
     statusMeta: statusMeta(v),
     net: Math.round(net * 100) / 100,
+    // Carried so the normaliser can agree with the server rather than
+    // recomputing a gross and overwriting it.
+    headerDeduction: Math.abs(Number(v.deduction ?? 0)) || undefined,
     wages: Math.round(wages * 100) / 100,
     commission: Math.max(0, commission),
     bankRef: v.bankRef ?? undefined,
@@ -296,6 +339,16 @@ export function historyVoucherToShifts(
   >();
   for (const l of v.lines) {
     const dateIso = asIsoDate(l.lineDate);
+    /*
+     * ⚠️ `=== 0`, NOT `<= 0` — the twin of the filter in `toHistPayLines`.
+     *
+     * Skipping negatives dropped late-cancel fees and sealed penalties out of
+     * the per-day payouts, so History → Shifts disagreed with the voucher by the
+     * amount of every fine. The `others` accumulator below already adds a SIGNED
+     * value, so letting a deduction through reduces that day's total by itself —
+     * nothing else here needs to change. A zero line is still skipped: it is not
+     * money, and it would add a venue to `outlets` for no reason.
+     */
     if (!dateIso || l.commission <= 0) continue;
     const outlet = l.outlet?.trim() || 'Outlet';
     const rec =
@@ -309,6 +362,36 @@ export function historyVoucherToShifts(
     else if (l.kind === 'tips') rec.tips += l.commission;
     else rec.others += l.commission;
     byDate.set(dateIso, rec);
+  }
+
+  /*
+   * SECOND PASS — a fine REDUCES a day that exists; it never creates one.
+   *
+   * ⚠️ A correction to my own first attempt. Letting negatives through the loop
+   * above (`!== 0`) did make a fine reduce a worked day — but a late-cancel fee
+   * carries the CANCELLED SHIFT'S date, a day the PR by definition did not
+   * work, and a weekly penalty carries the week start. Those opened a `byDate`
+   * entry of their own, so History → Shifts drew a card for a day never worked:
+   * badged `sealed`/`signed`, venue reading the literal "Outlet" (penalty lines
+   * carry no outlet), every metric tile blank because `Metric` renders a value
+   * only above zero, and "Total payout: RM -250.00". That date was also dotted
+   * as a work day in the calendar and "Outlet" joined the venue filter.
+   *
+   * It also split the two counts: `countShifts` still tests `commission <= 0`,
+   * so Payment said 3 shifts while Shifts listed 4. Opening days on positives
+   * ONLY makes the first pass and `countShifts` the same question again — which
+   * is why that function needs no change.
+   *
+   * The Payment view is unaffected and still shows the fine: `toHistPayLines`
+   * lists every non-zero line, which is where a deduction belongs.
+   */
+  for (const l of v.lines) {
+    if (l.commission >= 0) continue;
+    const dateIso = asIsoDate(l.lineDate);
+    if (!dateIso) continue;
+    const rec = byDate.get(dateIso);
+    if (!rec) continue;
+    rec.others += l.commission;
   }
 
   // 'sealed' is a statement about the SHIFT — check-out fixed its money — and is

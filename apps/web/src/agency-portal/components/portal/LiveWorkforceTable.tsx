@@ -23,6 +23,7 @@ import {
 	rosterSlotsForAgency,
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
+import { agencyPathPermission } from "@agency-portal/lib/agency-rbac";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import {
 	type OutletPrLiveSales,
@@ -37,6 +38,7 @@ import { formatPrDisplayName } from "@agency-portal/lib/pr-demo";
 import { formatRosterShiftTime } from "@agency-portal/lib/pr-session";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -127,10 +129,29 @@ function WorkforceRow({
 	const st = LIVE_STATUS_LABEL[entry.status];
 	const previewSlot = slot ?? { prId: prId ?? entry.id, prName: entry.prName };
 	const label = agencyLabel ?? (slot ? rosterSlotAgencyName(slot) : undefined);
+	/*
+	 * ⚠️ The row is clickable only for a lane `/agency/prs` will admit.
+	 *
+	 * The agency home and Live floor both cost `viewWorkforce`, which all four
+	 * lanes hold; the PR records cost `managePr`, which Finance and Director do
+	 * not. A whole clickable row is a bigger trap than a link — it IS the row you
+	 * are reading — and it sent them back to the agency home saying nothing.
+	 *
+	 * `prId` itself is NOT gated: it also resolves the comcard `profile` beside
+	 * the name, which every lane may see. Only the destination is withheld, and
+	 * `PortalClickableTableRow` already renders a plain `<tr>` without one.
+	 */
+	const needed = agencyPathPermission("/agency/prs");
+	const can = useAgencyCan();
+	const canOpenPrRecord = prId ? !needed || can(needed) : false;
 
 	return (
 		<PortalClickableTableRow
-			target={prId ? { to: "/agency/prs", search: { pr: prId } } : undefined}
+			target={
+				canOpenPrRecord && prId
+					? { to: "/agency/prs", search: { pr: prId } }
+					: undefined
+			}
 		>
 			<td>
 				<div className="iz-portal-table-pr">

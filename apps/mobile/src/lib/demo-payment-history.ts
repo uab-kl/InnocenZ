@@ -54,8 +54,29 @@ export type HistPayWeek = {
    * A boolean cannot be broken by rewording a sentence.
    */
   canSign: boolean;
+  /**
+   * Is this voucher DISPUTED? The second fact `status` cannot answer.
+   *
+   * Same reasoning as `canSign` directly above, and found the same way: the
+   * 'pending' badge folds `pending_review`, `sent` AND `disputed` together, so
+   * the PV screen's header pill had no way to tell a disputed voucher from one
+   * merely waiting, and painted it amber "Pending your review" — while this
+   * row's own `statusMeta` read "Disputed — waiting on your agency" and the
+   * Payment screen said disputed too.
+   *
+   * Amber means WAITING and red means DISPUTED (owner, 23 Aug 2026), so this is
+   * a colour rule, not a wording one. Like `canSign`, a boolean rather than a
+   * re-read of `statusMeta`: a sentence can be reworded, a flag cannot.
+   */
+  isDisputed?: boolean;
   statusMeta: string;
   net: number;
+  /**
+   * The voucher HEADER deduction, kept so `normalizeHistPayWeek` can recompute
+   * a net that MATCHES the server instead of overwriting it with the gross.
+   * Absent on demo rows, which have no header.
+   */
+  headerDeduction?: number;
   wages: number;
   commission: number;
   earlyWithdrawal?: number;

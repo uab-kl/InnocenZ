@@ -17,7 +17,6 @@ import { auditLogPlugin } from '@/graphql/audit.plugin';
 import { applyDirectives } from '@/graphql/directives';
 import v1Router from '@/router/v1.js';
 import { requestLoggerMiddleware } from './middlewares/request-logger';
-import { platformAuditMiddleware } from './middlewares/platform-audit';
 import { env } from './env';
 import { logger } from './util/logger';
 import { scheduler } from './scheduler/scheduler';
@@ -202,8 +201,22 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true, limit: '12mb' }));
-app.use(platformAuditMiddleware);
-
+/*
+ * ⚠️ platformAuditMiddleware is NOT mounted here. It lives on the v1 router
+ * (`router/v1.ts`), which is the only place it belongs.
+ *
+ * Mounted app-wide it ran a SECOND time for every `/api/v1` request, so each
+ * mutation wrote TWO identical audit rows — the Audit Log double-counted every
+ * action, and the duplicate carried the same id, actor and payload, so nothing
+ * on screen said which of the pair was real.
+ *
+ * It also caught `POST /graphql`, which it can only read as a REST write:
+ * every GraphQL call, read-only queries included, was logged as
+ * `action=CREATE entity='unknown'`. GraphQL has its own auditing in
+ * `auditLogPlugin`, which checks `operation === 'mutation'` and records the
+ * real field name — so removing this mount loses no coverage and drops two
+ * classes of false row.
+ */
 app.use('/api/v1', v1Router);
 
 // Prefer a platform-injected PORT (container/cloud); otherwise the shared

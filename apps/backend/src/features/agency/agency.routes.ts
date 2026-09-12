@@ -40,9 +40,30 @@ router.get(
   agencyController.listTeamMembers.bind(agencyController),
 );
 
+/*
+ * ⚠️ A ROLE GATE IS NOT A SCOPE CHECK — this read carried nothing else.
+ *
+ * `requireRole('admin','agency','outlet')` expands to "any lane on either
+ * portal", and `getById` never reads `req.user`, so ANY signed-in agency or
+ * outlet account could fetch ANY agency by id and receive every column:
+ * `ssm_no`, `business_license`, `registration_no_old`, the owner's
+ * `contact_name` / `contact_email` / `contact_phone` and the full company
+ * address. A rival agency's registration and its owner's mobile number are
+ * commercial information, not a directory entry.
+ *
+ * CALLERS VERIFIED FIRST (the `GET /user` lesson): the only consumers are
+ * `use-agency-profile` and `use-pv-issuer` — both reading the caller's OWN
+ * agency — plus two ADMIN screens. Nothing on the outlet portal calls it, so
+ * scoping to membership refuses nobody who legitimately asks. A venue that
+ * needs the agencies it may work with already has `/agency-outlet/directory`.
+ *
+ * `requireOrgMembershipByParam` admits an admin outright and otherwise demands
+ * an ACTIVE membership of the agency named in the path.
+ */
 router.get(
   '/:id',
   requireRole('admin', 'agency', 'outlet'),
+  requireOrgMembershipByParam('agency', 'id'),
   agencyController.getById.bind(agencyController),
 );
 router.post(
@@ -145,7 +166,15 @@ router.put(
 router.get(
   '/:id/uncharged',
   requireRole('admin', 'agency'),
-  requireAgencySubRoleScoped('id', 'owner', 'finance'),
+  // `director` alongside owner and finance — READ ONLY, and only here.
+  //
+  // Payroll & PV is gated on `viewPv` (`payment_voucher:read`), which the
+  // Director holds, so they open the page — and then this panel's two reads,
+  // gated by LANE rather than by permission, 403'd and left a permanent red
+  // "could not load uncharged fees" card on a screen they are meant to see.
+  // A Director oversees; reading what has not been billed is exactly that.
+  // Every WRITE below stays owner/finance: sealing a debt is not oversight.
+  requireAgencySubRoleScoped('id', 'owner', 'finance', 'director'),
   agencyPenaltyRuleController.listUncharged.bind(agencyPenaltyRuleController),
 );
 // Accepting a week's breaches as owed, and marking them collected.
@@ -172,7 +201,15 @@ const canRecordCharges = [
 router.get(
   '/:id/penalty-proposals',
   requireRole('admin', 'agency'),
-  requireAgencySubRoleScoped('id', 'owner', 'finance'),
+  // `director` alongside owner and finance — READ ONLY, and only here.
+  //
+  // Payroll & PV is gated on `viewPv` (`payment_voucher:read`), which the
+  // Director holds, so they open the page — and then this panel's two reads,
+  // gated by LANE rather than by permission, 403'd and left a permanent red
+  // "could not load uncharged fees" card on a screen they are meant to see.
+  // A Director oversees; reading what has not been billed is exactly that.
+  // Every WRITE below stays owner/finance: sealing a debt is not oversight.
+  requireAgencySubRoleScoped('id', 'owner', 'finance', 'director'),
   agencyPenaltyRuleController.listProposals.bind(agencyPenaltyRuleController),
 );
 router.post(

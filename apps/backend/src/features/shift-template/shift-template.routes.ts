@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { shiftTemplateController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
-import { outletOwnerOrOpsIfMember } from '@/middlewares/require-sub-role.js';
+import { requireOutletPermissionIfMember } from '@/middlewares/require-sub-role.js';
 
 // Event templates — the outlet's own gallery, so outlet (+ admin) only.
 // Agencies never author a venue's events; they receive the posted shift.
@@ -17,19 +17,19 @@ router.get(
 router.post(
   '/',
   requireRole('admin', 'outlet'),
-  outletOwnerOrOpsIfMember,
+  requireOutletPermissionIfMember('booking', 'create'),
   shiftTemplateController.create.bind(shiftTemplateController),
 );
 router.put(
   '/:id',
   requireRole('admin', 'outlet'),
-  outletOwnerOrOpsIfMember,
+  requireOutletPermissionIfMember('booking', 'create'),
   shiftTemplateController.update.bind(shiftTemplateController),
 );
 router.delete(
   '/:id',
   requireRole('admin', 'outlet'),
-  outletOwnerOrOpsIfMember,
+  requireOutletPermissionIfMember('booking', 'create'),
   shiftTemplateController.remove.bind(shiftTemplateController),
 );
 

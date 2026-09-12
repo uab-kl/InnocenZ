@@ -250,7 +250,21 @@ async function fetchAllAgencyMemberships(
 	let hasNextPage = true;
 	while (hasNextPage) {
 		const response = await fetchAgencyTeamMembers(
-			{ status: "all", page, pageSize: FETCH_SIZE },
+			/*
+			 * ⚠️ `includeRejected` — without it this screen cannot answer the
+			 * question it exists for.
+			 *
+			 * `status: "all"` becomes `undefined` at the controller, and the
+			 * repository then drops declined rows unless asked: an explicit opt-in,
+			 * added on 11 Sep 2026 because a turned-down applicant was appearing
+			 * among an AGENCY'S OWN members ("why the decline member can show and
+			 * search by the atlas agency?"). That exclusion is right for the
+			 * agency's team list and wrong here — the owner's rule for THIS screen
+			 * is to show "which user is status decline by who which orgs". The row
+			 * renderer has handled `status === "rejected"` all along; the data
+			 * simply never arrived.
+			 */
+			{ status: "all", includeRejected: true, page, pageSize: FETCH_SIZE },
 			onRefreshFail,
 		);
 		rows.push(...response.data);
@@ -268,7 +282,8 @@ async function fetchAllOutletMemberships(
 	let hasNextPage = true;
 	while (hasNextPage) {
 		const response = await fetchOutletTeamMembers(
-			{ status: "all", page, pageSize: FETCH_SIZE },
+			// The venue twin — same reason as the agency fetcher above.
+			{ status: "all", includeRejected: true, page, pageSize: FETCH_SIZE },
 			onRefreshFail,
 		);
 		rows.push(...response.data);
@@ -903,7 +918,18 @@ function LegacyMemberPage() {
 	 */
 	const openDetail = (row: LegacyRow) => {
 		if (row.role === "agency" || row.role === "outlet" || row.role === "pr") {
-			openDetail(row);
+			/*
+			 * ⚠️ `setSelected`, NOT `openDetail`. This called ITSELF — unconditional,
+			 * same argument — so clicking any agency, outlet or PR row recursed until
+			 * the stack blew and React unmounted the page. The three detail sheets
+			 * below were unreachable by any route: every one of the three call sites
+			 * (the row button, the name link and the card) goes through here.
+			 *
+			 * `selected` is what the sheets read, and `row.id` is the ORG/PR id the
+			 * list queries key on (`mapAgencyRow` sets `id: agency.id`), which is what
+			 * `selectedAgencyFromList` and its twins look up.
+			 */
+			setSelected({ role: row.role, id: row.id });
 		}
 	};
 
@@ -1277,6 +1303,18 @@ function LegacyMemberPage() {
 																			? "/admin/user-management/agency-team"
 																			: "/admin/user-management/outlet-team"
 																	}
+																	/*
+																	 * ⚠️ CARRY THE ORGANISATION. Both targets declare
+																	 * `validateSearch` for an `org` param and open on
+																	 * that team; without it the admin landed on an
+																	 * unfiltered page and had to find by hand the very
+																	 * organisation this row already knew — which is
+																	 * the whole reason the button exists.
+																	 *
+																	 * `row.orgId` is guaranteed here: the enclosing
+																	 * guard is `row.role === "member" && row.orgId`.
+																	 */
+																	search={{ org: row.orgId }}
 																>
 																	<Users className="mr-1.5 h-3.5 w-3.5" />
 																	{t.adminUsers.openTeam}

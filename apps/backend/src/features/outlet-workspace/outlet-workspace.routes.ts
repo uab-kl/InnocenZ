@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { outletWorkspaceController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
 import {
-  outletOwnerOrOpsIfMember,
+  requireOutletPermissionIfMember,
   requireOutletScopeByParam,
 } from '@/middlewares/require-sub-role.js';
 
@@ -31,7 +31,7 @@ const router = Router();
 //
 // `requireOutletScopeByParam` is the one that was missing. Everything above
 // established that agencies and outlet owner/ops may touch a rate card; nothing
-// established that it had to be THEIR rate card. `outletOwnerOrOpsIfMember`
+// established that it had to be THEIR rate card. `requireOutletPermissionIfMember('workspace', 'update')`
 // asks "owner or ops anywhere", so the owner of one venue could rewrite a
 // rival's pay rates and drink prices, and an agency — which has no outlet
 // membership at all, and so hits that guard's `next()` short-circuit — could
@@ -51,7 +51,7 @@ router.put(
   '/:outletId',
   requireRole('admin', 'agency', 'outlet'),
   requireOutletScopeByParam('outletId'),
-  outletOwnerOrOpsIfMember,
+  requireOutletPermissionIfMember('workspace', 'update'),
   outletWorkspaceController.upsert.bind(outletWorkspaceController),
 );
 

@@ -1,4 +1,8 @@
-import { describe, expect, test } from 'vitest';
+// No runner import: apps/mobile runs JEST (jest-expo preset), which provides
+// describe/expect/test as globals. This file imported them from VITEST, and
+// `require`ing vitest from a CommonJS context throws at collection — so the
+// suite reported "1 failed, 0 tests" and all 7 cases below, which guard the
+// two-simultaneous-open-check-ins regression, had never run once.
 import { pickActive } from './pick-active-shift';
 import type { ShiftAssignmentRecord } from './api';
 

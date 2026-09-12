@@ -141,7 +141,15 @@ export function SecurityScreen() {
        * that was correct — the change appearing to fail when it did not.
        */
       if (updated.accessToken) adoptToken(updated.accessToken);
-      await refreshMe();
+      /*
+       * ⚠️ PASS THE NEW TOKEN EXPLICITLY. `adoptToken` sets React state, which
+       * is not visible until the next render — so a bare `refreshMe()` would
+       * still send the OLD token, the one now pointing at a phone number
+       * nobody holds, and collect the very 401 this whole change removes.
+       * `refreshMe` takes an override for exactly this reason; its own comment
+       * says so, about the same trap after signIn.
+       */
+      await refreshMe(updated.accessToken);
       setMsg(t.security.phoneUpdated);
       setSheet('menu');
       setPhoneNumber('');

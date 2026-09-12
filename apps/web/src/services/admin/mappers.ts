@@ -65,6 +65,15 @@ export interface BackendUser {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	/**
+	 * WHO last changed this account, as a NAME.
+	 *
+	 * Resolved server-side by a LEFT JOIN from `updated_by` to the actor's user
+	 * row (`user.repository.ts`), so the admin sheet can print a person rather
+	 * than a uuid. Optional because a row written by a script has no actor to
+	 * name — the column then stays null and the sheet says so.
+	 */
+	updatedByName?: string | null;
 }
 
 export function mapAdminUser(user: BackendUser): AdminUser {

@@ -6,6 +6,12 @@ import type { DbTransaction } from '@/types/db-transaction';
 export interface UserRoleContext {
   roleName: string;
   status: string;
+  /**
+   * WHICH SURFACE this role belongs to. Carried so the audit log can record it:
+   * `Owner`, `Finance`, `Director` and `Guarantor` each exist on BOTH portals,
+   * so the name alone can never say where somebody acted.
+   */
+  portalCode: string | null;
 }
 
 export interface GraphQLContext {
@@ -44,10 +50,17 @@ export async function createContext({ req }: { req: Request }): Promise<GraphQLC
     context.user = user;
     req.user = user;
 
-    const roles = await userRoleRepository.getUserRoles(user.id);
+    /*
+     * `getRolesForUserIds`, not `getUserRoles` — it returns the PORTAL CODE and
+     * it filters out deactivated roles, which the other does not. The audit log
+     * needs the first; the deactivated-role rule below has always needed the
+     * second.
+     */
+    const roles = await authRepository.getRolesForUserIds([user.id]);
     context.userRoles = roles.map((role) => ({
       roleName: role.roleName,
-      status: role.status,
+      status: 'active',
+      portalCode: role.portalCode ?? null,
     }));
     /**
      * AN ADMIN ROLE THAT IS SWITCHED OFF IS NOT AN ADMIN.

@@ -5,6 +5,15 @@ export interface AuditLog {
 	userId: string | null;
 	username: string | null;
 	role: string | null;
+	/**
+	 * WHICH SURFACE the action came from — what the tabs group by.
+	 *
+	 * Null on every row written before migration 0164, which had nowhere to
+	 * record it; those land under "Others" and cannot be classified after the
+	 * fact, because `Owner`, `Finance`, `Director` and `Guarantor` each exist on
+	 * both portals.
+	 */
+	portal: string | null;
 	action: string;
 	entity: string;
 	entityId: string | null;

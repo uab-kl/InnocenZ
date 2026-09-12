@@ -18,6 +18,7 @@ import {
 	type AccountTarget,
 	useAccountActions,
 } from "@/hooks/use-account-actions";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import {
@@ -50,6 +51,9 @@ const toTarget = (admin: AdminUser): AccountTarget => ({
 
 function AdminUsersPage() {
 	const { t } = usePortalLocale();
+	// WHO is signed in — so the table can mark your own row instead of offering
+	// you actions the server will refuse.
+	const { user: currentUser } = useCurrentUser();
 	const type = getUserTypeByKey("admin")!;
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
@@ -138,12 +142,18 @@ function AdminUsersPage() {
 				onPageChange={setCurrentPage}
 				onRetry={() => refetch()}
 				onCreateClick={() => setCreateOpen(true)}
-				// The web auth context tracks only whether someone is signed in, not
-				// WHO — so a row cannot be recognised as your own here. The action is
-				// therefore offered on every row, and the server's refusal ("You
-				// cannot change your own account status — ask another admin") is what
-				// explains it. Pass a real id the moment the context carries one.
-				currentUserId={null}
+				/*
+				 * ⚠️ THE COMMENT THAT USED TO SIT HERE WAS STALE, and the `null` it
+				 * justified made this screen offer Disable and Remove Admin on the
+				 * signed-in admin's OWN row — two buttons the server always refuses
+				 * ("You cannot change your own account status — ask another admin").
+				 *
+				 * The context does carry WHO: `/auth/me` returns `id`, `use-profile`
+				 * maps it, and `useCurrentUser()` exposes it — `admin/dashboard.tsx`
+				 * already calls it in this same portal. With a real id the table's
+				 * self-row branch renders "This is you" instead of dead actions.
+				 */
+				currentUserId={currentUser?.id ?? null}
 				busyUserId={accountActions.busyUserId}
 				onSetStatus={(admin, next) =>
 					accountActions.askSetStatus(toTarget(admin), next)

@@ -67,6 +67,30 @@ import {
 
 const PAGE_SIZE = 10;
 
+/**
+ * `YYYY-MM-DD` from `<input type="date">` → the first instant of that day IN
+ * THE READER'S ZONE, as ISO.
+ *
+ * `new Date(y, m - 1, d)` is local by construction; `new Date('YYYY-MM-DD')`
+ * would be UTC, which is the whole bug. Returns `undefined` for anything that
+ * is not a real date so the caller can fall back to sending the raw value
+ * rather than a silent `Invalid Date`.
+ */
+function localDayStartIso(day: string): string | undefined {
+	const [y, m, d] = day.split("-").map(Number);
+	if (!y || !m || !d) return undefined;
+	const at = new Date(y, m - 1, d, 0, 0, 0, 0);
+	return Number.isNaN(at.getTime()) ? undefined : at.toISOString();
+}
+
+/** The twin of `localDayStartIso` — the LAST instant of the reader's day. */
+function localDayEndIso(day: string): string | undefined {
+	const [y, m, d] = day.split("-").map(Number);
+	if (!y || !m || !d) return undefined;
+	const at = new Date(y, m - 1, d, 23, 59, 59, 999);
+	return Number.isNaN(at.getTime()) ? undefined : at.toISOString();
+}
+
 interface AuditLogTableViewProps {
 	role: AuditLogRoleKey;
 }
@@ -98,8 +122,26 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 			role,
 		};
 
-		if (dateFrom) params.dateFrom = dateFrom;
-		if (dateTo) params.dateTo = dateTo;
+		/*
+		 * ⚠️ THE READER'S DAY, SENT AS INSTANTS — not the bare `YYYY-MM-DD`.
+		 *
+		 * `new Date('2026-09-13')` parses as UTC midnight, so the server read a
+		 * UTC day while this input means the day on the READER'S calendar. In
+		 * Malaysia (UTC+8) that is eight hours out at both ends: picking "13 Sep"
+		 * missed everything logged between 00:00 and 08:00 local, and instead
+		 * showed the last eight hours of the 13th UTC — which is the morning of
+		 * the 14th to the person reading it. An audit log that quietly answers
+		 * about a different day than the one asked for is worse than one that
+		 * refuses, because nothing on screen says so.
+		 *
+		 * The browser is the only party that knows this reader's zone, so it
+		 * resolves the boundaries here: `new Date(y, m-1, d, …)` is LOCAL by
+		 * construction. The server's contract already covers this — a value
+		 * carrying a time is honoured exactly as sent, and only a bare date is
+		 * widened to a UTC day.
+		 */
+		if (dateFrom) params.dateFrom = localDayStartIso(dateFrom) ?? dateFrom;
+		if (dateTo) params.dateTo = localDayEndIso(dateTo) ?? dateTo;
 		if (selectedAction !== "all") params.action = selectedAction;
 		if (selectedEntity !== "all") params.entity = selectedEntity;
 

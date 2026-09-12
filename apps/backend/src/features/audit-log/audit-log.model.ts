@@ -8,6 +8,16 @@ export const AuditLogTable = MainSchema.table(
     auditLogId: bigint('audit_log_id', { mode: 'number' }).notNull().primaryKey().generatedAlwaysAsIdentity(),
     userId: uuid('user_id').references(() => UserTable.id),
     role: text('role'),
+    /**
+     * WHICH SURFACE the action came from — `admin` | `agency` | `outlet` | `pr`.
+     *
+     * ⚠️ Not derivable from `role`. That column holds the actor's CAPACITY, and
+     * `Owner`, `Finance`, `Director` and `Guarantor` are each seeded on BOTH
+     * portals — so a name-only join is 1:N and would either duplicate a row onto
+     * two tabs or pick one by coin-flip. The portal is known at write time; 0164
+     * gave it somewhere to go. Null on every row written before that.
+     */
+    portal: text('portal'),
     action: text('action').notNull(),
     entity: text('entity').notNull(),
     entityId: text('entity_id'),
@@ -26,6 +36,7 @@ export const AuditLogTable = MainSchema.table(
     index('audit_entity_idx').on(table.entity, table.entityId),
     index('audit_created_idx').on(table.createdAt),
     index('audit_role_idx').on(table.role),
+    index('audit_portal_idx').on(table.portal),
   ],
 );
 

@@ -35,7 +35,7 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { countBillingWindows } from "@agency-portal/lib/subscription-due";
 import { periodLabel } from "@agency-portal/lib/subscription-record";
-import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
+import { useAgencyCan, useAgencyIsOwner} from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { format, parseISO } from "date-fns";
 import {
@@ -93,7 +93,17 @@ function AgencySubscription() {
 	const saveAgencyOwner = useStore((s) => s.saveAgencyOwner);
 	const toast = useStore((s) => s.toast);
 	const can = useAgencyCan();
+	const isOrgOwner = useAgencyIsOwner();
 	const canEdit = can("editSettings");
+	/*
+	 * SPENDING IS NARROWER THAN EDITING. `canEdit` is `settings:update`,
+	 * held by the owner AND the guarantor — right for the plan and the org’s
+	 * details, wrong for money: "guarantor no payment made like other member
+	 * just see paid and unpaid" (owner, 12 Sep 2026). This mirrors the
+	 * server’s `orgOwnerPaysOnly`, which asks for the owner lane with the
+	 * guarantor fold switched OFF.
+	 */
+	const canPay = canEdit && isOrgOwner;
 
 	const payrollWeekStartIso = getPreviousWeekSundayIso();
 	const payrollWeek = demoPayrollWeekBoundsForWeeksAgo(0);
@@ -747,7 +757,7 @@ function AgencySubscription() {
 						 * the guarantor alone, and the server now admits exactly those
 						 * two to `POST /subscription-payment/checkout`.
 						 */
-						canPay={canEdit}
+						canPay={canPay}
 					/>
 				</>
 			)}
@@ -927,8 +937,19 @@ function AgencySubscription() {
 			 * It used to render for every lane with only the edit form behind
 			 * `canEdit`, so a Finance member read the saved instrument — brand,
 			 * last four, expiry and holder — in the collapsed hint.
+			 *
+			 * ⚠️ NARROWED AGAIN 12 Sep 2026 — `canPay`, not `canEdit`.
+			 *
+			 * `canEdit` is `settings:update`, which the database grants to the owner
+			 * AND the guarantor, so the stand-in still read the instrument here. The
+			 * owner's refinement is that the guarantor sees only paid and unpaid:
+			 * "guarantor no payment made like other member just see paid and unpaid,
+			 * owner make payment fpx and the payment method continue." The server
+			 * agrees — `payment-method/mine` is `orgOwnerPaysOnly`, which refuses the
+			 * guarantor — so rendering it here was the screen promising a read the
+			 * API denies.
 			 */}
-			{canEdit && (
+			{canPay && (
 				<OutletSection
 					title={t.agencyMisc.paymentMethod}
 					iconKey="Payment method"
@@ -972,7 +993,7 @@ function AgencySubscription() {
 						card={sub.backed ? sub.card : null}
 						backed={sub.backed}
 						demoLast4={CARD_LAST4}
-						canEdit={canEdit}
+						canEdit={canPay}
 						isLoading={sub.backed && sub.isCardLoading}
 						isSaving={sub.isSavingCard}
 						billedLabel={fill(t.subscription.billedWeeklyFromUsage, {

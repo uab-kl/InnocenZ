@@ -20,6 +20,10 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
+import {
+	canModule,
+	grantsForPortal,
+} from "@/lib/auth/module-permissions";
 import { useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -115,8 +119,46 @@ export function PendingMemberDetail({
 }) {
 	const { t, locale } = usePortalLocale();
 	const { data: me } = useProfile();
-	/** Two-step, like the Team screen's bin: removal is not a single click. */
-	const [confirming, setConfirming] = useState(false);
+	/*
+	 * MAY THIS PERSON DECIDE, OR ONLY LOOK?
+	 *
+	 * Owner, 12 Sep 2026: "other orgs member cannot … approve the new member".
+	 *
+	 * The server has always refused them — the member writes behind Approve and
+	 * Decline are gated by `agencyOwnerOfParam` / `outletOwnerOfParam` — but
+	 * NOTHING here asked, so the buttons rendered for everyone who could reach
+	 * the page. An agency Director holds `approvals:read`, so they opened the
+	 * queue, pressed Approve and collected a 403: the screen promising something
+	 * the database refuses, which is the one thing the matrix must never do.
+	 *
+	 * `settings:update` is the RIGHT mirror of that server gate: it is held by
+	 * exactly owner and guarantor, on BOTH portals — the same rule and the same
+	 * reasoning as the payment-method routes. `approvals:update` would match on
+	 * the agency side alone; the outlet portal has no `approvals` module, so it
+	 * could not gate the twin.
+	 *
+	 * Scoped by portal AND org: someone may own one venue and merely staff
+	 * another, and the flat union from /auth/me cannot tell those apart.
+	 */
+	const canDecide = canModule(
+		grantsForPortal(me?.modulePermissions, kind, orgId),
+		"settings",
+		"update",
+	);
+	/*
+	 * Two-step, like the Team screen's bin: removal is not a single click.
+	 *
+	 * ⚠️ HOLDS THE MEMBER ID, not a boolean — the same rule `choice` and `error`
+	 * below already follow, and this was the one piece of state that did not.
+	 *
+	 * This pane is the DETAIL half of a master/detail: picking someone else in
+	 * the list re-renders this same component with a new `member` prop and keeps
+	 * every `useState` it holds. So arming the confirmation for one person and
+	 * then clicking another in the list left the red "Deactivate member" button
+	 * standing — re-labelled with the NEW person's name, one click from removing
+	 * somebody nobody had decided to remove.
+	 */
+	const [confirmingId, setConfirmingId] = useState<string | null>(null);
 	const { members, changeMember, removeMember } = useOrgMembers(kind, orgId);
 	const member: OrgMember | undefined = members.find((m) => m.id === memberId);
 
@@ -171,6 +213,8 @@ export function PendingMemberDetail({
 	// Belongs to THIS person, or it does not count — see the note above.
 	const picked = choice?.id === member.id ? choice.value : member.subRole;
 	const shownError = error?.id === member.id ? error.message : "";
+	// Armed for THIS person, or armed for nobody — see the note on the state.
+	const confirming = confirmingId === member.id;
 	const busy = changeMember.isPending || removeMember.isPending;
 	const photo = apiAssetUrl(member.profileImage ?? undefined);
 	const applied = whenApplied(member.createdAt, locale);
@@ -367,7 +411,7 @@ export function PendingMemberDetail({
 									</span>
 									<select
 										value={picked}
-										disabled={busy}
+										disabled={busy || !canDecide}
 										onChange={(e) =>
 											setChoice({ id: member.id, value: e.target.value })
 										}
@@ -384,7 +428,7 @@ export function PendingMemberDetail({
 								{picked !== member.subRole ? (
 									<button
 										type="button"
-										disabled={busy}
+										disabled={busy || !canDecide}
 										onClick={() => {
 											setError(null);
 											changeMember.mutate(
@@ -425,7 +469,7 @@ export function PendingMemberDetail({
 								<div className="mt-4 flex flex-wrap gap-2">
 									<button
 										type="button"
-										disabled={busy}
+										disabled={busy || !canDecide}
 										onClick={() => {
 											setError(null);
 											removeMember.mutate(member.id, {
@@ -445,10 +489,15 @@ export function PendingMemberDetail({
 										<UserX className="h-4 w-4 shrink-0" />
 										{t.portalUi.deactivateMember}
 									</button>
+									{/* ⚠️ `busy` ONLY. Cancel used to carry `|| !canDecide` too,
+									    so a lane that could not deactivate could not dismiss the
+									    panel either — both buttons greyed, no way out but a
+									    reload. Backing out is not a write; nobody needs
+									    permission to change their mind. */}
 									<button
 										type="button"
 										disabled={busy}
-										onClick={() => setConfirming(false)}
+										onClick={() => setConfirmingId(null)}
 										className="inline-flex flex-1 items-center justify-center rounded-lg border border-border px-4 py-2.5 text-sm disabled:opacity-50"
 									>
 										{t.portalUi.cancel}
@@ -456,14 +505,22 @@ export function PendingMemberDetail({
 								</div>
 							</>
 						) : (
-							<button
-								type="button"
-								onClick={() => setConfirming(true)}
-								className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/40 px-4 py-2.5 text-red-400 text-sm hover:bg-red-500/10"
-							>
-								<UserX className="h-4 w-4 shrink-0" />
-								{t.portalUi.deactivateMember}
-							</button>
+							/* ⚠️ `canDecide` — this one opener had no gate at all, while the
+							   five buttons around it did. So a Director was shown a red
+							   "Deactivate member", and pressing it armed a confirmation whose
+							   own button was dead. Offering a destructive act to somebody the
+							   server refuses is worse than not offering it: it reads as the
+							   product being broken rather than as a rule. */
+							canDecide && (
+								<button
+									type="button"
+									onClick={() => setConfirmingId(member.id)}
+									className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/40 px-4 py-2.5 text-red-400 text-sm hover:bg-red-500/10"
+								>
+									<UserX className="h-4 w-4 shrink-0" />
+									{t.portalUi.deactivateMember}
+								</button>
+							)
 						)}
 					</div>
 				</section>
@@ -484,7 +541,7 @@ export function PendingMemberDetail({
 							</span>
 							<select
 								value={picked}
-								disabled={busy}
+								disabled={busy || !canDecide}
 								onChange={(e) =>
 									setChoice({ id: member.id, value: e.target.value })
 								}
@@ -508,7 +565,7 @@ export function PendingMemberDetail({
 						<div className="mt-4 flex flex-wrap gap-2">
 							<button
 								type="button"
-								disabled={busy}
+								disabled={busy || !canDecide}
 								onClick={() => {
 									setError(null);
 									changeMember.mutate(
@@ -530,7 +587,7 @@ export function PendingMemberDetail({
 							</button>
 							<button
 								type="button"
-								disabled={busy}
+								disabled={busy || !canDecide}
 								onClick={() => {
 									setError(null);
 									removeMember.mutate(member.id, {

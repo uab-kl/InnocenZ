@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { requirePermission } from '@/middlewares/require-permission.js';
 import { paymentMethodController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
+import { orgOwnerPaysOnly } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -22,13 +22,22 @@ const router = Router();
  * somebody the screen deliberately hides them from. A UI-only rule is not a
  * rule.
  *
- * Same guard as `PUT /mine` below, deliberately: owner and guarantor are the
- * two lanes the database grants `settings:update`, on both portals.
+ * ⚠️ THE OWNER ALONE — not the guarantor, who passes every OTHER owner gate.
+ *
+ * Owner, 12 Sep 2026: "guarantor no payment made like other member just see
+ * paid and unpaid, owner make payment fpx and the payment method continue."
+ * So the stand-in reads which invoices are settled, like any member, and never
+ * sees or replaces the instrument the organisation pays with.
+ *
+ * This was `requirePermission('settings','update')`, which is owner AND
+ * guarantor on both portals — right for the org's address, wrong for its
+ * money. `orgOwnerPaysOnly` asks per portal and passes `foldGuarantor: false`,
+ * so it is the one gate that draws the line the owner drew.
  */
 router.get(
   '/mine',
   requireRole('outlet', 'agency', 'admin'),
-  requirePermission('settings', 'update'),
+  orgOwnerPaysOnly,
   paymentMethodController.getMine.bind(paymentMethodController),
 );
 /**
@@ -50,7 +59,7 @@ router.get(
 router.get(
   '/mine/all',
   requireRole('outlet', 'agency', 'admin'),
-  requirePermission('settings', 'update'),
+  orgOwnerPaysOnly,
   paymentMethodController.listMine.bind(paymentMethodController),
 );
 router.put(
@@ -60,7 +69,7 @@ router.put(
   // member of either portal, so a view-only Director could replace it. The
   // module is seeded on BOTH portals and userHasPermission resolves each
   // caller against their own, so one guard covers agency and outlet correctly.
-  requirePermission('settings', 'update'),
+  orgOwnerPaysOnly,
   paymentMethodController.upsertMine.bind(paymentMethodController),
 );
 // Choosing which instrument is charged, and retiring one, are the same class of
@@ -68,13 +77,13 @@ router.put(
 router.put(
   '/mine/:id/default',
   requireRole('outlet', 'agency', 'admin'),
-  requirePermission('settings', 'update'),
+  orgOwnerPaysOnly,
   paymentMethodController.setDefaultMine.bind(paymentMethodController),
 );
 router.delete(
   '/mine/:id',
   requireRole('outlet', 'agency', 'admin'),
-  requirePermission('settings', 'update'),
+  orgOwnerPaysOnly,
   paymentMethodController.removeMine.bind(paymentMethodController),
 );
 

@@ -1,4 +1,18 @@
-import { and, asc, desc, eq, gte, lte, ne, sql, SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  isNull,
+  lt,
+  lte,
+  ne,
+  notInArray,
+  or,
+  sql,
+  SQL,
+} from 'drizzle-orm';
 import { db } from '@/db/index';
 import { UserTable } from '@/features/user/user.model';
 import { GraphQLContext } from '@/graphql/context';
@@ -7,6 +21,12 @@ import { PaginatedResponse, paginateQuery, PaginationParams, PgQueryType } from 
 import { logger } from '@/util/logger';
 import { AuditLogTable } from './audit-log.model';
 
+/**
+ * The portals the Audit Log gives a tab of their own. Anything else — and
+ * anything null — belongs to "Others".
+ */
+const KNOWN_AUDIT_PORTALS = ['admin', 'pr', 'outlet', 'agency'];
+
 export type AuditLogFilter = {
   dateFrom?: string;
   dateTo?: string;
@@ -14,6 +34,12 @@ export type AuditLogFilter = {
   entity?: string;
   entityId?: string;
   action?: string;
+  /**
+   * The admin Audit Log's tab. `others` is a SENTINEL, not a stored value: it
+   * means "no portal, or one the tabs do not name", and must include the NULL
+   * rows — `notInArray` alone drops exactly the rows that tab exists for.
+   */
+  portal?: string;
 };
 
 export type AuditLogSort = {
@@ -24,6 +50,8 @@ export type AuditLogSort = {
 export type CreateAuditLogInput = {
   userId?: string | null;
   role?: string | null;
+  /** Which surface — see the column's note in audit-log.model.ts. */
+  portal?: string | null;
   action: string;
   entity: string;
   entityId?: string | null;
@@ -39,6 +67,7 @@ export type AuditLogListItem = {
   userId: string | null;
   username: string | null;
   role: string | null;
+  portal: string | null;
   action: string;
   entity: string;
   entityId: string | null;
@@ -66,7 +95,46 @@ export class AuditLogRepositoryClass {
         whereCondition.push(gte(AuditLogTable.createdAt, new Date(filter.dateFrom)));
       }
       if (filter.dateTo) {
-        whereCondition.push(lte(AuditLogTable.createdAt, new Date(filter.dateTo)));
+        /*
+         * ⚠️ A BARE DATE NAMES A WHOLE DAY, NOT ITS FIRST INSTANT.
+         *
+         * The filter comes from `<input type="date">`, so it is always
+         * `YYYY-MM-DD`. `new Date('2026-09-12')` is MIDNIGHT, and `lte` against
+         * midnight excluded every row actually written on the 12th — so setting
+         * From and To to the same day, which is the obvious way to ask for one
+         * day, reliably returned NOTHING.
+         *
+         * A date-only value is therefore taken as the whole day: strictly less
+         * than the following midnight. A value that carries a time is honoured
+         * exactly as sent, so an API caller asking for an instant still gets one.
+         *
+         * ⚠️ Both bounds are UTC, because `new Date('YYYY-MM-DD')` parses as UTC.
+         * `dateFrom` has always been read that way, so the two ends stay
+         * consistent.
+         *
+         * ⚠️ AND THAT IS WHY THE ADMIN SCREEN NO LONGER SENDS A BARE DATE.
+         *
+         * This note used to call a reader-local calendar day "a separate
+         * question" — it was the same question, and the screen was getting the
+         * wrong answer. `<input type="date">` means the day on the READER'S
+         * calendar, so in Malaysia (UTC+8) a UTC day is eight hours out at both
+         * ends: "13 Sep" dropped everything before 08:00 local and added the
+         * reader's 14th-of-the-month morning instead.
+         *
+         * Fixed 13 Sep 2026 in the browser, which is the only party that knows
+         * the reader's zone: `audit-log-table-view.tsx` now resolves the picked
+         * day to local-midnight instants and sends those. This branch stays for
+         * API callers who pass a bare date — for them a UTC day is the only
+         * defensible reading, since there is no reader to ask.
+         */
+        const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(filter.dateTo);
+        if (dateOnly) {
+          const next = new Date(filter.dateTo);
+          next.setUTCDate(next.getUTCDate() + 1);
+          whereCondition.push(lt(AuditLogTable.createdAt, next));
+        } else {
+          whereCondition.push(lte(AuditLogTable.createdAt, new Date(filter.dateTo)));
+        }
       }
       if (filter.userId) {
         whereCondition.push(eq(AuditLogTable.userId, filter.userId));
@@ -79,6 +147,33 @@ export class AuditLogRepositoryClass {
       }
       if (filter.action) {
         whereCondition.push(eq(AuditLogTable.action, filter.action));
+      }
+      /**
+       * THE TAB — filtered HERE, not after the page has been cut.
+       *
+       * ⚠️ This used to run in the browser, on the ten rows the server had
+       * already paged. So the Admin tab could show ONE row under a footer
+       * reading "1–10 of 2752, Page 1 of 276": `query` and `pagination`
+       * described different sets. Filtering before the page is taken is what
+       * makes the count mean something.
+       *
+       * `others` is a SENTINEL, never a stored value — it means "no portal, or
+       * one the tabs do not name". The NULL branch is load-bearing: every row
+       * written before 0164 has a null portal, and `notInArray` alone drops
+       * exactly the rows this tab exists to gather.
+       */
+      if (filter.portal) {
+        if (filter.portal === 'others') {
+          const unclassified = or(
+            isNull(AuditLogTable.portal),
+            notInArray(AuditLogTable.portal, KNOWN_AUDIT_PORTALS),
+          );
+          // `or()` is typed `SQL | undefined`; never push a bare undefined into
+          // the condition list — `and(...)` would silently widen the query.
+          if (unclassified) whereCondition.push(unclassified);
+        } else {
+          whereCondition.push(eq(AuditLogTable.portal, filter.portal));
+        }
       }
 
       if (context && !context.isAdmin) {
@@ -115,6 +210,7 @@ export class AuditLogRepositoryClass {
           auditLogId: AuditLogTable.auditLogId,
           userId: AuditLogTable.userId,
           role: AuditLogTable.role,
+          portal: AuditLogTable.portal,
           action: AuditLogTable.action,
           entity: AuditLogTable.entity,
           entityId: AuditLogTable.entityId,
@@ -187,6 +283,7 @@ export class AuditLogRepositoryClass {
       .values({
         userId: input.userId ?? undefined,
         role: input.role ?? undefined,
+        portal: input.portal ?? undefined,
         action: input.action,
         entity: input.entity,
         entityId: input.entityId ?? undefined,

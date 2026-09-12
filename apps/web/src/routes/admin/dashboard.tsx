@@ -27,7 +27,6 @@ import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
 	type AdminRequest,
 	fetchAdminRequests,
-	fetchPendingCount,
 } from "@/services/admin-request";
 import { type Agency, fetchAgencies } from "@/services/agency";
 import { type AuditLog, fetchAuditLogs } from "@/services/audit-log";
@@ -271,9 +270,31 @@ function DashboardComponent() {
 		staleTime: 30_000,
 	});
 
+	/*
+	 * ⚠️ COUNTED WITH THE DESTINATION'S OWN FILTER.
+	 *
+	 * This read `GET /admin-request/pending-count`, which counts EVERY pending
+	 * admin_request of every type — while the tile's `href`,
+	 * `/admin/service/requests`, lists `negotiated: "only"`: the POS add-on and
+	 * the Custom tier, joining or leaving. Ordinary plan changes live on
+	 * `/admin/service/plan-changes`. So the tile said "Plan requests 5", the
+	 * admin clicked, and counted two rows. A figure that disagrees with the page
+	 * it links to teaches people to stop trusting the figure.
+	 *
+	 * Fixed by asking the same question rather than by subtracting: the endpoint
+	 * takes `type`/`excludeType` and has no `negotiated` term, and "negotiated"
+	 * is not a type — a move INTO Custom is filed as an ordinary `plan_change`,
+	 * which is exactly why the list cannot select on type either. `pageSize: 1`
+	 * because only `pagination.totalCount` is wanted here; the rows are the
+	 * destination's job.
+	 */
 	const pendingRequestsCountQuery = useQuery({
-		queryKey: ["dashboard", "pending-requests-count"],
-		queryFn: () => fetchPendingCount(logout),
+		queryKey: ["dashboard", "pending-requests-count", "negotiated"],
+		queryFn: () =>
+			fetchAdminRequests(
+				{ status: "pending", negotiated: "only", page: 1, pageSize: 1 },
+				logout,
+			),
 		staleTime: 30_000,
 	});
 
@@ -372,7 +393,8 @@ function DashboardComponent() {
 
 	const agencyCount = pendingAgenciesQuery.data?.pagination.totalCount ?? 0;
 	const outletCount = pendingOutletsQuery.data?.pagination.totalCount ?? 0;
-	const requestCount = pendingRequestsCountQuery.data?.pending ?? 0;
+	const requestCount =
+		pendingRequestsCountQuery.data?.pagination.totalCount ?? 0;
 	const jobCount = pendingJobsQuery.data?.pagination.totalCount ?? 0;
 	const activeAgencyCount =
 		activeAgenciesQuery.data?.pagination.totalCount ?? 0;

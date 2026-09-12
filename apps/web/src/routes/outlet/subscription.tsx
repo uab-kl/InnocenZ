@@ -35,7 +35,7 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { countBillingWindows } from "@agency-portal/lib/subscription-due";
 import { periodLabel } from "@agency-portal/lib/subscription-record";
-import { useOutletCan } from "@agency-portal/lib/use-portal-can";
+import { useOutletCan, useOutletIsOwner} from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -360,7 +360,17 @@ function OutletSubscriptionPage() {
 	);
 	const toast = useStore((s) => s.toast);
 	const can = useOutletCan();
+	const isOrgOwner = useOutletIsOwner();
 	const canEdit = can("editSettings");
+	/*
+	 * SPENDING IS NARROWER THAN EDITING. `canEdit` is `settings:update`,
+	 * held by the owner AND the guarantor — right for the plan and the org’s
+	 * details, wrong for money: "guarantor no payment made like other member
+	 * just see paid and unpaid" (owner, 12 Sep 2026). This mirrors the
+	 * server’s `orgOwnerPaysOnly`, which asks for the owner lane with the
+	 * guarantor fold switched OFF.
+	 */
+	const canPay = canEdit && isOrgOwner;
 	// Real login → backend billing ledger + real POS-quote create (see the hook).
 	const backend = useOutletSubscription();
 
@@ -904,6 +914,8 @@ function OutletSubscriptionPage() {
 					<PosIntegrationAddonCard
 						key={addon.id}
 						addon={addon}
+						// `canEdit`, not `canPay`: asking for a POS quote is an ORG change,
+						// which the guarantor may make. Only spending is owner-only.
 						canEdit={canEdit}
 						// Real sessions can withdraw too now: PATCH
 						// /admin-request/mine/:id/withdraw exists, so the button no longer
@@ -943,7 +955,7 @@ function OutletSubscriptionPage() {
 						 * to the owner and the guarantor alone — the same two the server
 						 * now admits to `POST /subscription-payment/checkout`.
 						 */
-						canPay={canEdit}
+						canPay={canPay}
 					/>
 				</>
 			)}
@@ -1084,8 +1096,19 @@ function OutletSubscriptionPage() {
 			 * lane with only the edit form behind `canEdit`, so a Finance head
 			 * read the saved instrument — brand, last four, expiry and holder —
 			 * in the collapsed hint without even opening it.
+			 *
+			 * ⚠️ NARROWED AGAIN 12 Sep 2026 — `canPay`, not `canEdit`.
+			 *
+			 * `canEdit` is `settings:update`, which the database grants to the owner
+			 * AND the guarantor, so the stand-in still read the instrument here. The
+			 * owner's refinement is that the guarantor sees only paid and unpaid:
+			 * "guarantor no payment made like other member just see paid and unpaid,
+			 * owner make payment fpx and the payment method continue." The server
+			 * agrees — `payment-method/mine` is `orgOwnerPaysOnly`, which refuses the
+			 * guarantor — so rendering it here was the screen promising a read the
+			 * API denies.
 			 */}
-			{canEdit && (
+			{canPay && (
 				<OutletSection
 					title={t.agencyMisc.paymentMethod}
 					iconKey="Payment method"
@@ -1125,7 +1148,7 @@ function OutletSubscriptionPage() {
 						card={backend.backed ? backend.card : null}
 						backed={backend.backed}
 						demoLast4={paymentCardLast4}
-						canEdit={canEdit}
+						canEdit={canPay}
 						isLoading={backend.backed && backend.isCardLoading}
 						isSaving={backend.isSavingCard}
 						billedLabel={

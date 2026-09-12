@@ -8,6 +8,7 @@ function transformAuditLog(auditLog: {
   userId: string | null;
   username: string | null;
   role: string | null;
+  portal: string | null;
   action: string;
   entity: string;
   entityId: string | null;
@@ -22,6 +23,13 @@ function transformAuditLog(auditLog: {
     userId: auditLog.userId,
     username: auditLog.username,
     role: auditLog.role,
+    /*
+     * ⚠️ THIS OBJECT IS REBUILT FIELD BY FIELD, so a column added to the
+     * table and to the select still arrives as null unless it is named
+     * HERE. The tab filter worked without it — filtering happens in SQL —
+     * which is why the omission showed up only as a blank column.
+     */
+    portal: auditLog.portal,
     action: auditLog.action,
     entity: auditLog.entity,
     entityId: auditLog.entityId,

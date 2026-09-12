@@ -4,6 +4,8 @@ export const typeDefs = `#graphql
     userId: ID
     username: String
     role: String
+    """Which surface the action came from — see audit-log.model.ts."""
+    portal: String
     action: String!
     entity: String!
     entityId: ID
@@ -26,6 +28,12 @@ export const typeDefs = `#graphql
     entity: String
     entityId: ID
     action: String
+    """
+    The admin Audit Log's tab: admin | pr | outlet | agency, or the sentinel
+    "others" for rows with no portal (everything written before 0164).
+    Filtered server-side so the row count and the page agree.
+    """
+    portal: String
   }
 
   enum AuditLogSortField {

@@ -148,4 +148,36 @@ export type OutletFilter = {
    * caller would reasonably have read it as "this agency's venues".
    */
   linkedToAgencyId?: string;
+  /**
+   * TENANT SCOPE — the venues this caller may see at all, forced by the
+   * controller and never read from the query string.
+   *
+   * `GET /outlet` had no tenant term whatsoever: omit `linkedToAgencyId` and
+   * every ACTIVE venue on the platform came back, carrying `addressLine1`,
+   * `ssmNo`, `businessLicense` and the geo-fence pin, to any outlet or agency
+   * token — and `pageSize` is unclamped, so it was a bulk export. A role gate
+   * is not a scope check.
+   *
+   * An empty array means "no venues", which is the right answer for a caller
+   * who belongs to none. `undefined` means unscoped and is reachable only for
+   * an admin.
+   */
+  outletIds?: string[];
+  /**
+   * EVERY venue this agency has ever been linked to — any `approve_status`, and
+   * with no date bound.
+   *
+   * Distinct from `linkedToAgencyId`, which deliberately narrows to partnerships
+   * that are approved OR ended-but-still-carrying-future-work. That is the right
+   * answer for "which venues may I staff", and the wrong one for "what is this
+   * venue called": the agency portal's Roster, auto-assign and roster-slots all
+   * fetch this list purely as an id→name map, so once a partnership ended and
+   * its last shift passed, the week grid printed a raw 36-character UUID where
+   * "Velvet 23" belongs — in the one view an operator uses to reconstruct past
+   * work.
+   *
+   * Still strictly the caller's OWN partners, so it leaks nothing: it widens
+   * across time, not across tenants.
+   */
+  everLinkedToAgencyId?: string;
 };

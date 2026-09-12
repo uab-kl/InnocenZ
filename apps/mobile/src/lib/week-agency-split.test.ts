@@ -129,3 +129,66 @@ describe('agencyResolver - what it refuses to guess', () => {
     expect(records[0].wages).toBe(500);
   });
 });
+
+/**
+ * A late-cancel fee is a LINE, dated to the shift that was NOT worked. It must
+ * never be mistaken for evidence that a shift happened, and it must never
+ * vanish into another bucket.
+ *
+ * Both halves are money a PR reads and acts on: a card for a shift they never
+ * worked, or a number quietly smaller than the parts beside it explain.
+ */
+describe('weekRecordsFromLines - a late-cancel fee', () => {
+  const resolve = agencyResolver(VOUCHERS);
+
+  it('does not open a day of its own', () => {
+    // A fee and nothing else, on a day with no earnings at all.
+    const records = weekRecordsFromLines(
+      [
+        line({
+          kind: 'others',
+          component: 'deduction',
+          commission: -120,
+          lineDate: '2026-09-09',
+        }),
+      ],
+      resolve,
+    );
+
+    // No card: the PR did not work that night, which is WHY they were charged.
+    expect(records).toHaveLength(0);
+  });
+
+  it('reduces a day that was worked, on its own field rather than inside others', () => {
+    const records = weekRecordsFromLines(
+      [
+        line({ kind: 'wages', commission: 300 }),
+        line({ kind: 'others', commission: 40 }),
+        line({ kind: 'others', component: 'deduction', commission: -120 }),
+      ],
+      resolve,
+    );
+
+    expect(records).toHaveLength(1);
+    // `others` is untouched — the fine used to be summed into it, so this read
+    // -80 and the card said so without ever naming the charge.
+    expect(records[0].others).toBe(40);
+    // Held NEGATIVE, matching the pay grid: the renderer prints the sign.
+    expect(records[0].deductions).toBe(-120);
+    // And the money still nets out where it did before the split.
+    expect(
+      records[0].wages + records[0].others + (records[0].deductions ?? 0),
+    ).toBe(220);
+  });
+
+  it('leaves a clean day with no deduction field at all', () => {
+    const records = weekRecordsFromLines(
+      [line({ kind: 'wages', commission: 300 })],
+      resolve,
+    );
+
+    // `undefined`, not 0 — "no charge" and "a charge netting to nothing" are
+    // different answers, and the card branches on which it got.
+    expect(records[0].deductions).toBeUndefined();
+  });
+});

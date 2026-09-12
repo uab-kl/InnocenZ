@@ -340,6 +340,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         outlet: hist.outlet,
         weekLabel: hist.weekLabel,
         net: hist.net,
+        // Carried so the document below shows the server's net rather than a
+        // total summed from line buckets, which cannot see a header deduction.
+        headerDeduction: hist.headerDeduction,
         // Three states, not two. A History voucher used to be signed or paid by
         // definition; since History began carrying every CLOSED week it can also
         // be one the PR has not signed, and calling that 'signed' is what removed
@@ -350,6 +353,25 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             : hist.status === 'signed'
               ? ('signed' as const)
               : ('awaiting_pr' as const),
+        /*
+         * ⚠️ CARRIED SEPARATELY, because `status` above COLLAPSES it.
+         *
+         * Anything that is not paid or signed becomes `awaiting_pr` there — so
+         * a DISPUTED voucher arrived at the pill indistinguishable from one
+         * merely waiting to be signed, and the header read amber "Pending your
+         * review" while this same voucher's own `statusMeta` said "Disputed —
+         * waiting on your agency", and Payment → Last week said disputed too.
+         * Three surfaces, one voucher, two answers.
+         *
+         * Widening `status` was the wrong repair: several comparisons below
+         * read it as exactly those three values.
+         *
+         * ⚠️ Read off `hist.isDisputed`, NOT `hist.status`. `HistPayStatus` is
+         * `'paid' | 'signed' | 'pending'` — it has no 'disputed' member at all,
+         * so comparing against one is a TS2367 that always answers false. The
+         * flag is set in `payment-history-map` from the voucher's real status.
+         */
+        isDisputed: hist.isDisputed === true,
         statusLabel: hist.statusMeta,
       }
     : {
@@ -363,6 +385,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         // This voucher's own net, not the week's sum across agencies.
         net: Number(liveVoucher?.net ?? lastWeek?.net) || 0,
         status: 'awaiting_pr',
+        // The twin of the history branch above — the voucher's own flag, which
+        // `status: 'awaiting_pr'` cannot express.
+        isDisputed: (liveVoucher?.status ?? lastWeek?.status) === 'disputed',
         // A RENDERED label — `status` above is the field anything compares.
         statusLabel: t.pv.awaitingSignature,
       };
@@ -371,8 +396,23 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
     [weekForGrid],
   );
   const gridTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
-  /** Net always matches Payment → Last week total. */
-  const netDisplay = !hist && gridTotal > 0 ? gridTotal : pv.net;
+  /*
+   * THE FIGURE ON THE DOCUMENT THE PR SIGNS.
+   *
+   * ⚠️ `gridTotal` sums LINE buckets only, so it cannot see a deduction that
+   * lives on the voucher HEADER — the shape an agency creates by settling a
+   * dispute in the Deductions box. Preferring it meant a PR was shown, and
+   * signed for, the PRE-deduction amount: signed RM 600, paid RM 400, with the
+   * RM 200 named nowhere on the phone.
+   *
+   * `pv.net` is the server's own figure and already has the header deduction
+   * applied, so it wins whenever the week carries one. The grid total is kept
+   * for the case it was added for — a live week with no server net yet, where
+   * it must still match Payment → Last week.
+   */
+  const headerDeduction = pv.headerDeduction ?? 0;
+  const netDisplay =
+    headerDeduction > 0 ? pv.net : !hist && gridTotal > 0 ? gridTotal : pv.net;
   const displayWeekLabel = pv.weekLabel;
   /**
    * Has this voucher actually been signed?
@@ -563,6 +603,21 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   };
 
   const anyDisputed = disputedKeys.size > 0;
+  /*
+   * ⚠️ TWO WAYS A VOUCHER IS DISPUTED, and the header only knew one.
+   *
+   * `anyDisputed` counts OPEN DAY CLAIMS — the red cells on the grid. But the
+   * voucher itself carries `status = 'disputed'`, and that is what the agency's
+   * Payroll list, `payment-history-map` and Payment → Last week all key on. A
+   * voucher disputed at the header with no open day row — the agency raised it,
+   * or the claim was lodged against the document rather than a cell — showed
+   * amber "Pending your review" here.
+   *
+   * Red is the owner's colour for disputed (23 Aug 2026). Amber means WAITING,
+   * and a disputed voucher is not merely waiting.
+   */
+  const headerDisputed = pv.isDisputed === true;
+  const showDisputed = anyDisputed || headerDisputed;
 
   /*
    * The tap hint is ONE sentence in the dictionary, with `{red}` marking where
@@ -600,7 +655,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         <View style={styles.statusRow}>
           <Pill
             variant={
-              anyDisputed
+              showDisputed
                 ? 'red'
                 : isSealed
                   ? pv.status === 'paid'
@@ -609,7 +664,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                   : 'amber'
             }
           >
-            {anyDisputed
+            {showDisputed
               ? t.pv.disputeOpen
               : isSealed
                 ? pv.statusLabel

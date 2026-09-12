@@ -46,6 +46,32 @@ function useActiveOrgId(): string | null {
 	return getActiveOrg()?.id ?? null;
 }
 
+/**
+ * MAY THIS PERSON SPEND THE ORGANISATION'S MONEY? The OWNER alone.
+ *
+ * Owner, 12 Sep 2026: "owner priority to get charge, guarantor no payment made
+ * like other member just see paid and unpaid, owner make payment fpx and the
+ * payment method continue."
+ *
+ * ⚠️ NOT a module permission, and deliberately not derived from one. Paying is
+ * the ONE place the guarantor does not stand in for the owner — everywhere
+ * else they do, and `settings:update` (which the Subscription page's `canEdit`
+ * uses) is held by both. A permission cannot express "owner but not the
+ * stand-in", so this mirrors the server's LANE check instead:
+ * `orgOwnerPaysOnly` asks `holdsXLane(['owner'], foldGuarantor: false)`.
+ *
+ * Like the two `MATRIX_ONLY` entries, this is kept in step with the server by
+ * hand — a wrong answer here is a Pay button that collects a 403, or a
+ * guarantor shown a card they may not change.
+ */
+export function useAgencyIsOwner(): boolean {
+	return useStore((s) => s.agencySubRole) === "agency_owner";
+}
+
+/** The venue twin of `useAgencyIsOwner` — see it for why this is a lane, not a grant. */
+export function useOutletIsOwner(): boolean {
+	return useStore((s) => s.outletSubRole) === "outlet_owner";
+}
 /** `can("managePr")` for the signed-in agency operator. */
 export function useAgencyCan(): (permission: AgencyPermission) => boolean {
 	const subRole = useStore((s) => s.agencySubRole);

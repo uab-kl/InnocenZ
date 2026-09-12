@@ -1,10 +1,31 @@
 import { Router } from 'express';
 import { specialServiceController } from '@/composition-root.js';
 import { requireAdmin } from '@/middlewares/require-role.js';
+import { requireOutletPermissionIfMember } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
-router.get('/summary', specialServiceController.statusSummary.bind(specialServiceController));
+/*
+ * ⚠️ PLATFORM-WIDE COUNTS ARE AN ADMIN FACT — this was the ONE route on this
+ * router with no guard of any kind.
+ *
+ * `statusSummary` takes `(_req, res)` and ignores the caller entirely, so
+ * `statusCounts()` runs an unfiltered `group by status` over every
+ * `special_service` row on the platform. The router sits below
+ * `authenticateJWT` with no guard at its mount, so any signed-in token reached
+ * it — including a PR's, who is on this router legitimately for
+ * `/special-service/mine`. A venue could read how much business every other
+ * venue is putting through, and a PR could read all of it.
+ *
+ * `requireAdmin`, matching `/admin/pending` and all five PATCH routes below: a
+ * caller who wants THEIR OWN counts already has `GET /special-service`, which
+ * `scopedFilter` narrows to their organisation.
+ */
+router.get(
+  '/summary',
+  requireAdmin,
+  specialServiceController.statusSummary.bind(specialServiceController),
+);
 router.get(
   '/admin/pending',
   requireAdmin,
@@ -17,7 +38,31 @@ router.get('/:id', specialServiceController.getById.bind(specialServiceControlle
 // post special services — but the controller now pins `initiatedBy` to what the
 // caller actually is, since that field decides whether a posting needs admin
 // review.
-router.post('/', specialServiceController.create.bind(specialServiceController));
+/*
+ * ⚠️ `requireOutletPermissionIfMember`, NOT `requirePermission`.
+ *
+ * The outlet portal gates its Special Service button on `orderSpecialService`
+ * = `special_service:create`, which the venue Owner, Guarantor, Finance and Ops
+ * Head hold and the DIRECTOR does not — but this route asked nothing, so the
+ * one lane the screen hides it from could still post one by calling the API.
+ *
+ * A blanket `requirePermission('special_service','create')` would be the wrong
+ * tool and would BREAK this route: `AGENCY_ROLE_GRANTS` has no
+ * `special_service` module at all, and a PR has no org grants, so it would
+ * refuse two of the three callers this endpoint exists for. This variant holds
+ * outlet members to the venue's rule and lets everyone else through — the same
+ * escape hatch the agency lanes rely on elsewhere.
+ *
+ * ⚠️ The feature is DORMANT today (6 rows, all `open`, newest 22 July 2026) and
+ * the owner asked whether it is used at all. Gated anyway: a reachable endpoint
+ * should not be ungated, and a dormant one is the easiest kind to forget when
+ * it wakes up.
+ */
+router.post(
+  '/',
+  requireOutletPermissionIfMember('special_service', 'create'),
+  specialServiceController.create.bind(specialServiceController),
+);
 // Assigning a vendor and moving an order's status are admin acts, matching the
 // admin-only PATCH routes below. Both carried no gate and neither controller
 // method checks ownership — they update by id alone, so any signed-in account

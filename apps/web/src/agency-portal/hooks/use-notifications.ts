@@ -1,8 +1,10 @@
+import { agencyPathPermission } from "@agency-portal/lib/agency-rbac";
 import type {
 	OpsNotification,
 	OpsNotificationKind,
 	OpsPortal,
 } from "@agency-portal/lib/ops-notifications";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -15,6 +17,13 @@ import {
 } from "@/services/notification";
 
 const NOTIFICATION_KEY = ["notifications"] as const;
+
+/**
+ * Derived rather than imported: `agency-rbac.ts` keeps `Permission` private, and
+ * the portal's other consumers (`pv-money-actions.ts`) read it off `agencyCan`
+ * the same way. Taken from the hook so it stays the type the caller must pass.
+ */
+type AgencyPermission = Parameters<ReturnType<typeof useAgencyCan>>[0];
 
 /** Which bell is asking. Only decides where a tap navigates to. */
 export type NotificationAudience = OpsPortal | "admin" | "pr";
@@ -94,12 +103,6 @@ function hrefFor(
 			// vouchers: the subject is the price, not any one PR's wages.
 			case "subscription_tier_weekly":
 				return "/agency/subscription";
-			// The statement is about what this agency is billed, and Subscription
-			// is the only screen that shows the tier and the rate card together.
-			// Payroll would be the wrong landing even though the count comes from
-			// vouchers: the subject is the price, not any one PR's wages.
-			case "subscription_tier_weekly":
-				return "/agency/subscription";
 			default:
 				return undefined;
 		}
@@ -110,6 +113,31 @@ function hrefFor(
 			: undefined;
 	}
 	return undefined;
+}
+
+/**
+ * ⚠️ A DESTINATION THE READER WILL BE LET INTO, or none at all.
+ *
+ * `hrefFor` above answers from the notification's SUBJECT; it has no idea who
+ * is holding the phone. `pr_rating_low` lands on `/agency/prs`, which costs
+ * `managePr` — Finance and Director hold neither, and both are notified. So the
+ * row offered a trip the route guard refused: it bounced them to the agency
+ * default route, and because the bell marks a row read on tap, the notification
+ * was spent on a journey that never arrived.
+ *
+ * Asked through `agencyPathPermission` — the same map `canAccessAgencyPath`
+ * reads — so this covers every agency destination, not just the one that was
+ * found, and cannot drift from the guard. `undefined` is already this hook's
+ * documented "nowhere sensible to go" answer: the bell then just marks it read,
+ * which is right. The row was seen; it simply has no door.
+ */
+function gateAgencyHref(
+	href: string | undefined,
+	can: (permission: AgencyPermission) => boolean,
+): string | undefined {
+	if (!href) return undefined;
+	const needed = agencyPathPermission(href);
+	return !needed || can(needed) ? href : undefined;
 }
 
 /** "3:04 pm" for today, "12 Jul" otherwise — matches the demo rows' brevity. */
@@ -153,6 +181,9 @@ export function useNotifications(
 	const { isAuthenticated, logout } = useAuth();
 	const queryClient = useQueryClient();
 	const backed = isAuthenticated;
+	// Hooks cannot be conditional, so this is resolved for every audience and
+	// only consulted for the agency bell — see `gateAgencyHref`.
+	const agencyCan = useAgencyCan();
 
 	const listQuery = useQuery({
 		queryKey: [...NOTIFICATION_KEY, "list"],
@@ -191,9 +222,12 @@ export function useNotifications(
 			body: record.body ?? "",
 			at: displayTime(record.createdAt),
 			read: record.readAt !== null,
-			href: hrefFor(record, audience),
+			href:
+				audience === "agency"
+					? gateAgencyHref(hrefFor(record, audience), agencyCan)
+					: hrefFor(record, audience),
 		}));
-	}, [listQuery.data, audience]);
+	}, [listQuery.data, audience, agencyCan]);
 
 	const markRead = useCallback(
 		(id: string) => {

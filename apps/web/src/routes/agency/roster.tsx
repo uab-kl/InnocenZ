@@ -35,6 +35,7 @@ import {
 	listAvailableShiftsForEarlyReleaseReassign,
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import { agencyPathPermission } from "@agency-portal/lib/agency-rbac";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
@@ -165,7 +166,21 @@ function AgencyRoster() {
 	const [editId, setEditId] = useState<string | null>(null);
 	const [approveSwapId, setApproveSwapId] = useState<string | null>(null);
 	const [replacementPick, setReplacementPick] = useState("");
-	const canAssign = useAgencyCan()("assignShifts");
+	const can = useAgencyCan();
+	const canAssign = can("assignShifts");
+	/*
+	 * ⚠️ NOT `canAssign` — the header's "Manage PR" button leaves this page.
+	 *
+	 * `assignShifts` is `roster:update`, which FINANCE holds; `/agency/prs` costs
+	 * `managePr` (`workforce:update`), which Finance does NOT. So the one lane
+	 * this button was added for was the one it bounced: Finance clicked it and
+	 * landed back on the agency home with the roster gone.
+	 *
+	 * A control that navigates asks about the DESTINATION, not about what the
+	 * current page lets you do.
+	 */
+	const managePrPermission = agencyPathPermission("/agency/prs");
+	const canOpenManagePr = !managePrPermission || can(managePrPermission);
 
 	// The by-id write actions hit the backend in BOTH views.
 	//
@@ -569,7 +584,7 @@ function AgencyRoster() {
 						})}
 					</span>
 				)}
-				{canAssign && (
+				{canOpenManagePr && (
 					<Link to="/agency/prs" className="iz-roster-pr-link">
 						<Users className="h-3.5 w-3.5" />
 						{t.nav.managePr}

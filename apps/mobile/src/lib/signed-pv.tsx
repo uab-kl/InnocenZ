@@ -105,6 +105,32 @@ function linesFromGrid(grid: WeeklyDayPay[], outlet: string): HistPayLine[] {
         amount: d.others!,
       });
     }
+    /*
+     * ⚠️ THE FINE HAS TO BE WRITTEN INTO THE SNAPSHOT TOO.
+     *
+     * Every emit above gates on `> 0`, and there was no branch for the grid's
+     * `deductions` at all — so a signed week was stored with NO `debit` line.
+     * `buildSignedWeek` sealed the right total, but `normalizeHistPayWeek` then
+     * derived debits from `line.debit`, got zero, recomputed net as
+     * wages + commission and overwrote the seal. A PR signed a voucher reading
+     * RM 338.00 and History immediately showed that same week at RM 588.00, the
+     * red −RM 250.00 row missing entirely — and on web that wrong figure
+     * persisted in localStorage indefinitely.
+     *
+     * Stored as a positive `amount` with `debit: true`, the shape the renderer
+     * and the normaliser both already expect. `deductions` is held NEGATIVE on
+     * the grid, so its magnitude is what goes in.
+     */
+    if ((d.deductions ?? 0) < 0) {
+      lines.push({
+        date,
+        day: d.day,
+        type: 'Others',
+        outlet,
+        amount: Math.abs(d.deductions!),
+        debit: true,
+      });
+    }
   }
   return lines;
 }
@@ -120,7 +146,19 @@ function buildSignedWeek(input: {
     (s, d) => s + (d.drinks ?? 0) + (d.tips ?? 0) + (d.others ?? 0),
     0,
   );
-  const shifts = input.grid.filter((d) => d.status !== 'empty').length;
+  /*
+   * ⚠️ DAYS THAT EARNED, not days that exist.
+   *
+   * `status !== 'empty'` counts a day whose only content is a charged fine —
+   * and since that day now resolves to 'deducted' rather than 'empty', it
+   * counted one for a shift the PR did not work. A late-cancel fee exists
+   * BECAUSE they did not attend.
+   */
+  const shifts = input.grid.filter(
+    (d) =>
+      d.status !== 'empty' &&
+      d.wages + (d.drinks ?? 0) + (d.tips ?? 0) + (d.others ?? 0) > 0,
+  ).length;
   const stamp = fmtSignedStamp();
   /** Always seal net from the week grid so History matches Payment Last week. */
   const net = weekPayGridTotal(input.grid) || input.net;
@@ -129,7 +167,9 @@ function buildSignedWeek(input: {
     ref: input.pv.ref,
     weekLabel: input.pv.weekLabel,
     outlet: input.pv.outlet,
-    shifts: Math.max(1, shifts),
+    // Not `Math.max(1, …)`: a week that is only a cancellation fee has zero
+    // shifts, and saying "1" invents one the voucher does not pay for.
+    shifts,
     issued: stamp.split(' · ')[0] ?? stamp,
     status: 'signed',
     // This builder exists BECAUSE the PR just signed it, so there is nothing

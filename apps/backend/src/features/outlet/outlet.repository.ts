@@ -104,6 +104,38 @@ export class OutletRepositoryClass {
       if (filter?.id) conditions.push(eq(OutletTable.id, filter.id));
       if (filter?.status) conditions.push(eq(OutletTable.status, filter.status));
       if (filter?.name) conditions.push(ilike(OutletTable.name, `%${filter.name}%`));
+      /*
+       * THE TENANT TERM. Set by the controller from the caller's own
+       * memberships, never read from the query string.
+       *
+       * An EMPTY array must still narrow: `inArray(col, [])` matches no row,
+       * which is the correct answer for somebody who belongs to no venue.
+       * Skipping the clause when the array is empty would hand them the whole
+       * platform — exactly the hole this closes.
+       */
+      if (filter?.outletIds) {
+        conditions.push(inArray(OutletTable.id, filter.outletIds));
+      }
+      /*
+       * EVERY venue this agency has ever been linked to — see the field's note
+       * on the filter type. No status test and no date bound, deliberately: the
+       * question is "what is this venue called", not "may I staff it".
+       *
+       * Same subquery shape as `linkedToAgencyId` below and for the same reason
+       * — a join would yield one outlet row per link and inflate `totalCount`.
+       */
+      if (filter?.everLinkedToAgencyId) {
+        const agencyId = filter.everLinkedToAgencyId;
+        conditions.push(
+          inArray(
+            OutletTable.id,
+            db
+              .select({ outletId: AgencyOutletTable.outletId })
+              .from(AgencyOutletTable)
+              .where(eq(AgencyOutletTable.agencyId, agencyId)),
+          ),
+        );
+      }
       // THE AGENCY PORTAL'S VISIBILITY RULE (0123, widened by 0127). A subquery
       // rather than a join, so a venue linked to several agencies still yields
       // exactly ONE outlet row — a join here would duplicate it once per link

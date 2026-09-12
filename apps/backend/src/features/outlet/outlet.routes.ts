@@ -42,9 +42,26 @@ router.get(
   outletController.listTeamMembers.bind(outletController),
 );
 
+/*
+ * ⚠️ SCOPED — the LIST was given a tenant term on 12 Sep and this single read
+ * was left behind it, which is the more direct leak of the two: it needs no
+ * paging and no guessing, just an id.
+ *
+ * `canReadOutlet` is `requireRole('admin','agency','outlet')`, and `getById`
+ * never reads `req.user`, so ANY agency or outlet account could fetch ANY venue
+ * and receive every column — `ssmNo`, `businessLicense`, the owner's contact
+ * name, email and phone, the full address, and the geo-fence pin that decides
+ * where that venue's staff may clock in.
+ *
+ * CALLERS VERIFIED FIRST: `use-outlet-geo-fence` and `use-outlet-profile` both
+ * read the venue the operator is signed in to, and the third consumer is an
+ * admin screen. No agency screen calls it — an agency that needs a venue's NAME
+ * has `GET /outlet`, which now returns every venue it has ever been linked to.
+ */
 router.get(
   '/:id',
   canReadOutlet,
+  requireOrgMembershipByParam('outlet', 'id'),
   outletController.getById.bind(outletController),
 );
 router.get(

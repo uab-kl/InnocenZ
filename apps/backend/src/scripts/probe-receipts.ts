@@ -1,3 +1,8 @@
+// ⚠️ SCHEMA NOTE (12 Sep 2026): `main.pr` was DROPPED (0095) and
+// `main.agency_member` renamed (0033). A PR is a `user` row; the membership
+// and its tier live on `agency_pr`, and ops columns named `pr_id` equal
+// `user_id` after the remap. These queries were left pointing at the old
+// relations and threw on their first statement.
 /**
  * READ-ONLY. Prints what actually lives in `payment_voucher_receipt` and what
  * the agency Receipts tab would fetch for it, so a "0 receipts" screen can be
@@ -24,12 +29,12 @@ async function main() {
            r.created_at, r.note,
            jsonb_array_length(coalesce(r.proof_photos, '[]'::jsonb)) as photos,
            v.id as voucher_id, v.voucher_no, v.status as voucher_status,
-           v.week_start, v.week_end, v.agency_id, p.name as pr_name,
+           v.week_start, v.week_end, v.agency_id, p.username as pr_name,
            (select count(*) from main.payment_voucher_line l where l.receipt_id = r.id) as lines,
            (select coalesce(sum(l.amount), 0) from main.payment_voucher_line l where l.receipt_id = r.id) as total
       from main.payment_voucher_receipt r
       join main.payment_voucher v on v.id = r.voucher_id
-      left join main.pr p on p.id = v.pr_id
+      left join main."user" p on p.id = v.pr_id
      order by r.created_at desc
      limit 50
   `);
@@ -67,10 +72,10 @@ async function main() {
   // than none — it is read precisely when someone is trying to establish facts.
   const vouchers = await db.execute(sql`
     select v.voucher_no, v.status, v.week_start, v.week_end, v.net,
-           v.pr_signed_at, v.paid_at, p.name as pr_name,
+           v.pr_signed_at, v.paid_at, p.username as pr_name,
            (select count(*) from main.payment_voucher_line l where l.voucher_id = v.id) as lines
       from main.payment_voucher v
-      left join main.pr p on p.id = v.pr_id
+      left join main."user" p on p.id = v.pr_id
      order by v.week_start desc
   `);
   console.log('\nVOUCHERS:');

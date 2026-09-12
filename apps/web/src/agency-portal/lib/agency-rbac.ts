@@ -240,6 +240,70 @@ export function getAgencyDefaultRoute(
 	return items[0]?.to ?? "/agency/pv";
 }
 
+/**
+ * WHICH PERMISSION A PATH COSTS — the one copy of that map.
+ *
+ * ⚠️ Split out of `canAccessAgencyPath` on 13 Sep 2026 because a guard only a
+ * ROUTE can ask is a guard every LINK gets to disagree with, and four of them
+ * did. `/agency/prs` was tightened to `managePr` alone (see the note below), and
+ * the four places that offer a trip there were left behind it:
+ *
+ *   · `RosterShiftTable`'s PR-name link — every name on the roster,
+ *   · the roster header's "Manage PR" button, gated on `assignShifts`,
+ *   · `LiveWorkforceTable`'s clickable row,
+ *   · the `pr_rating_low` notification's destination.
+ *
+ * Roster and Live both cost `viewWorkforce`, which ALL FOUR lanes hold, so
+ * Finance and Director read those screens legitimately — and every PR name on
+ * them was a link that bounced them straight back to the agency home, losing
+ * the screen they were reading with nothing said. `hrefFor` already returns
+ * `undefined` "when there is nowhere sensible to go"; these four had no way to
+ * ask.
+ *
+ * Returning the PERMISSION rather than a yes/no is what lets a link ask the
+ * same question the route will ask, with its own `can` — `useAgencyCan` in a
+ * component, the assembled one here. `null` means the path is unguarded.
+ */
+export function agencyPathPermission(pathname: string): Permission | null {
+	if (pathname === "/agency" || pathname === "/agency/") return "viewHome";
+	if (pathname.startsWith("/agency/roster")) return "viewWorkforce";
+	if (pathname.startsWith("/agency/pv")) return "viewPv";
+	if (pathname.startsWith("/agency/special-service")) return "viewPv";
+	if (pathname.startsWith("/agency/history")) return "viewHistory";
+	if (pathname.startsWith("/agency/subscription")) return "viewSettings";
+	if (pathname.startsWith("/agency/pending")) return "viewApprovals";
+	// `viewWorkforce` alongside `managePr`: these are the PR and outlet RECORDS,
+	// and gating them on the update permission alone hid them from a role whose
+	// whole definition is reading the organisation.
+	/*
+	 * ⚠️ `managePr` ALONE — the `|| viewWorkforce` here was a promise the pages
+	 * then had to break.
+	 *
+	 * Every agency lane holds `workforce:read`, so `viewWorkforce` admitted all
+	 * four to these two routes — but `prs.tsx:395` and `outlets.tsx:137` both
+	 * hard-refuse on `!can("managePr")`. Confirmed in a browser: agency Finance
+	 * following the home tile landed on "Access restricted · Finance role cannot
+	 * manage PR roster." The route said yes, the page said no, and the tile
+	 * offered the trip.
+	 *
+	 * These are the MANAGEMENT screens; the read `workforce:read` pays for is the
+	 * Roster, which Finance and Director both keep. Aligning the route with the
+	 * pages also revives the home tile's plain-figure branch, which was
+	 * unreachable for exactly this reason.
+	 */
+	if (pathname.startsWith("/agency/prs")) {
+		return "managePr";
+	}
+	// The twin of `/agency/prs` above — `outlets.tsx:137` refuses on the same
+	// permission, so the route must ask for the same one.
+	if (pathname.startsWith("/agency/outlets")) {
+		return "managePr";
+	}
+	if (pathname.startsWith("/agency/profile")) return "viewSettings";
+	if (pathname.startsWith("/agency/live")) return "viewWorkforce";
+	return null;
+}
+
 export function canAccessAgencyPath(
 	role: AgencySubRole | null | undefined,
 	pathname: string,
@@ -252,27 +316,9 @@ export function canAccessAgencyPath(
 		return pathname.startsWith("/agency/profile");
 	}
 	const r = resolveAgencySubRole(role);
-	const can = (p: Permission) =>
-		agencyCan(r, p, modulePermissions, activeOrgId);
-	if (pathname === "/agency" || pathname === "/agency/") return can("viewHome");
-	if (pathname.startsWith("/agency/roster")) return can("viewWorkforce");
-	if (pathname.startsWith("/agency/pv")) return can("viewPv");
-	if (pathname.startsWith("/agency/special-service")) return can("viewPv");
-	if (pathname.startsWith("/agency/history")) return can("viewHistory");
-	if (pathname.startsWith("/agency/subscription")) return can("viewSettings");
-	if (pathname.startsWith("/agency/pending")) return can("viewApprovals");
-	// `viewWorkforce` alongside `managePr`: these are the PR and outlet RECORDS,
-	// and gating them on the update permission alone hid them from a role whose
-	// whole definition is reading the organisation.
-	if (pathname.startsWith("/agency/prs")) {
-		return can("managePr") || can("viewWorkforce");
-	}
-	if (pathname.startsWith("/agency/outlets")) {
-		return can("managePr") || can("viewWorkforce");
-	}
-	if (pathname.startsWith("/agency/profile")) return can("viewSettings");
-	if (pathname.startsWith("/agency/live")) return can("viewWorkforce");
-	return true;
+	const needed = agencyPathPermission(pathname);
+	if (!needed) return true;
+	return agencyCan(r, needed, modulePermissions, activeOrgId);
 }
 
 export type AgencyHomeTile = {

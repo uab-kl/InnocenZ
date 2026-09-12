@@ -286,8 +286,13 @@ const en = {
 		/** Pluralised in English only ("2 PVs"); Chinese uses a measure word and
 		    needs no plural form. */
 		pvs: "PVs",
+		// ⚠️ Roster is NO LONGER read-only for Finance (owner, 12 Sep 2026: "other
+		// agency orgs member can assign member"). `AGENCY_FINANCE` gained
+		// `['roster', RU]`, so the assign grid, the edit/no-show/remove sheet,
+		// backfill and PR-swap approvals are all live for them and the server
+		// admits the writes. History genuinely is read-only.
 		financeScopeBanner:
-			"Payroll & PV — you can review and sign vouchers. Roster and history are read-only.",
+			"Payroll & PV — you can review and sign vouchers, and assign PRs on the roster. History is read-only.",
 	},
 	outletHome: {
 		liveShiftHint: "Live shift · tap card to expand details and actions",
@@ -317,7 +322,11 @@ const en = {
 		viewOnlyHint:
 			"View only — your role can read shift postings but not create them",
 		readOnlyNotice:
-			"Read-only. You can see how shifts are posted at this venue, but only an Owner, Guarantor or Ops Head can post one.",
+			// ⚠️ FINANCE POSTS JOBS TOO. `booking:create` is held by Owner,
+			// Guarantor, Ops Head AND Finance — only the Director is read-only here,
+			// and this sentence is the one they read. Naming three of the four told
+			// them to ask the wrong people.
+			"Read-only. You can see how shifts are posted at this venue, but only an Owner, Guarantor, Ops Head or Finance can post one.",
 		agencyAddOns: "agency add-ons",
 		prShift: "PR Shift",
 		services: "Services",
@@ -2387,7 +2396,13 @@ const en = {
 	/** Outlet → Workspace. Rates for new shifts: tiers, drinks, services, happy hour. */
 	workspace: {
 		ratesForNewShifts: "Rates for new shifts · {outlet}",
-		readOnlyFinance: "Read-only (Finance)",
+		// ⚠️ NOT Finance. This renders in Workspace's `!canEdit` branch, and
+		// `manageWorkspace` = `workspace:update` is held by owner, guarantor,
+		// finance AND ops — the only outlet lane that ever sees this notice is the
+		// DIRECTOR, who holds `workspace:read` alone. Naming Finance told the one
+		// lane that can edit the page that it could not, and told the lane that
+		// genuinely cannot that the restriction belonged to somebody else.
+		readOnlyFinance: "Read-only (Director)",
 		saveWorkspace: "Save workspace",
 		ratesByPrTier: "Rates by PR tier",
 		drinksPrice: "Drinks Price",
@@ -3995,7 +4010,20 @@ const en = {
 		mcDocumentFrom: "MC document from {name}",
 		leaveDecisionNote:
 			"Approving excuses the PR with no penalty and leaves the shift short — it goes to the roster's backfill worklist. Rejecting puts the PR back on the shift.",
-		financeCannotApprove: "Finance role cannot approve PR sign-ups.",
+		/*
+		 * ⚠️ NOT Finance — and deliberately names no role at all now.
+		 *
+		 * This renders when `approvePrSignups` (= `approvals:update`) is missing.
+		 * Finance holds NO `approvals` grant, so the nav item is filtered out and
+		 * they never reach this page; the only lane that does is the DIRECTOR,
+		 * who holds `approvals:read`. The message named the one role that cannot
+		 * see it and mislabelled the one that can.
+		 *
+		 * Role-neutral so it stays true if the grants move again — the sentence
+		 * describes what the reader may do, which is the thing they need.
+		 */
+		financeCannotApprove:
+			"You can view sign-up requests, but only an owner or guarantor can approve them.",
 		loadingLeaveRequests: "Loading MC / leave requests…",
 		noCutlostRequests: "No cutlost requests",
 		selectLeaveToReview: "Select an MC / leave request to review",
@@ -6869,7 +6897,7 @@ const zh: PortalTranslations = {
 		payBy: "付款截止",
 		pvs: "张付款单",
 		financeScopeBanner:
-			"薪资与付款单 — 您可以审核并签署付款单。排班与历史记录为只读。",
+			"薪资与付款单 — 您可以审核并签署付款单，并在排班中指派公关。历史记录为只读。",
 	},
 	outletHome: {
 		liveShiftHint: "进行中的班次 · 点击卡片展开详情与操作",
@@ -6893,7 +6921,7 @@ const zh: PortalTranslations = {
 		buildHint: "设置班次内容，准备好后即可发布",
 		viewOnlyHint: "仅可查看 — 您的角色可以查看班次发布，但不能创建。",
 		readOnlyNotice:
-			"仅可查看。您可以看到本门店如何发布班次，但只有东主、担保人或运营主管才能发布。",
+			"仅可查看。您可以看到本门店如何发布班次，但只有东主、担保人、运营主管或财务才能发布。",
 		agencyAddOns: "经纪公司增值服务",
 		prShift: "PR 班次",
 		services: "增值服务",
@@ -8556,7 +8584,7 @@ const zh: PortalTranslations = {
 	},
 	workspace: {
 		ratesForNewShifts: "新班次的费率 · {outlet}",
-		readOnlyFinance: "只读（财务）",
+		readOnlyFinance: "只读（董事）",
 		saveWorkspace: "保存工作区",
 		ratesByPrTier: "按 PR 等级的费率",
 		drinksPrice: "酒水价格",
@@ -9846,7 +9874,7 @@ const zh: PortalTranslations = {
 		mcDocumentFrom: "{name} 提交的病假证明",
 		leaveDecisionNote:
 			"批准后 PR 不受处罚，该班次空出一个名额，会进入排班的补位清单。驳回则让 PR 回到该班次。",
-		financeCannotApprove: "财务角色无法审批 PR 注册申请。",
+		financeCannotApprove: "您可以查看注册申请，但仅限拥有者或担保人审批。",
 		loadingLeaveRequests: "正在加载病假 / 请假申请…",
 		noCutlostRequests: "暂无缺班损失申请",
 		selectLeaveToReview: "请选择要审核的病假 / 请假申请",
