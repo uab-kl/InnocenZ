@@ -286,6 +286,13 @@ export class MemberSubscriptionControllerClass {
       if (parsed.data.currency !== undefined) payload.currency = parsed.data.currency;
       if (parsed.data.status !== undefined) payload.status = parsed.data.status;
       if (parsed.data.endedAt !== undefined) payload.endedAt = parsed.data.endedAt;
+      /*
+       * The billing anchor. See the schema for what moving it does and does not
+       * touch — in short, it re-dates the periods this lane has NOT yet opened
+       * and leaves every invoice already raised alone.
+       */
+      if (parsed.data.billingStartsAt !== undefined)
+        payload.billingStartsAt = parsed.data.billingStartsAt;
 
       /**
        * An edit can close a lane just as thoroughly as `cancel` does — by

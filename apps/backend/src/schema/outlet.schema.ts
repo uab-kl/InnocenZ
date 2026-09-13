@@ -157,10 +157,29 @@ export const RegisterOrgMemberSchema = z
     message: 'Passwords do not match',
     path: ['confirmPassword'],
   })
-  .refine((d) => !d.join || !['owner', 'guarantor'].includes(d.join.subRole), {
-    message: 'Choose Finance, Director or Ops Head — Owner is set by the organisation',
-    path: ['join', 'subRole'],
-  });
+  /*
+   * ⚠️ `.toLowerCase()` — WITHOUT it this refusal was case-SENSITIVE, and this
+   * is a PUBLIC endpoint.
+   *
+   * `'owner'` was rejected and `'Owner'` sailed through, so a stranger signing
+   * up could ask for the owner lane on somebody else's organisation. It only
+   * ever creates a PENDING request that an existing owner must approve, so it
+   * was never an instant grant — but `portalRoleNameForSubRole` lowercases
+   * before it matches, so the stored string really did resolve to Owner
+   * downstream. A gate that a capital letter walks past is not a gate.
+   *
+   * `RequestOrgJoinSchema`, a few lines below, has always lowercased. The two
+   * are the same rule about the same field; they now read the same way.
+   */
+  .refine(
+    (d) =>
+      !d.join || !['owner', 'guarantor'].includes(d.join.subRole.toLowerCase()),
+    {
+      message:
+        'Choose Finance, Director or Ops Head — Owner is set by the organisation',
+      path: ['join', 'subRole'],
+    },
+  );
 
 /**
  * AN EXISTING ACCOUNT ASKING TO JOIN ANOTHER ORGANISATION (owner, 11 Sep 2026:

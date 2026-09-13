@@ -127,6 +127,20 @@ function OutletWorkspacePage() {
 	const canEdit = useOutletCan()("manageWorkspace");
 	// Real login → backend workspace (rates persist via PUT); demo store otherwise.
 	const backend = useOutletWorkspace();
+	/*
+	 * ⚠️ A FAILED LOAD IS NOT AN EMPTY PRICE LIST.
+	 *
+	 * `source` falls back to the demo store when the backend has no workspace —
+	 * and a real session blanks that store on purpose, so a GET that threw used
+	 * to render as a venue with no rates and no drinks, with Save live beside
+	 * it. Saving then PUT that emptiness, and the handler full-draft-saves: two
+	 * venues lost their whole rate card and all seven tier rows exactly this
+	 * way once already.
+	 *
+	 * So the page refuses to pretend. It says the load failed and withholds
+	 * Save until a real answer arrives.
+	 */
+	const loadFailed = backend.backed && backend.isError;
 	const source =
 		backend.backed && backend.workspace ? backend.workspace : outletWorkspace;
 	const [draft, setDraft] = useState(source);
@@ -293,6 +307,23 @@ function OutletWorkspacePage() {
 					{t.workspace.readOnlyFinance}
 				</p>
 			)}
+			{/*
+			  ⚠️ SAID OUT LOUD, because the alternative is a venue with no prices.
+
+			  Everything below renders from `draft`, and on a failed load that is
+			  the blanked demo store — a rate card and drink menu that look simply
+			  unset. Without this line the operator has no way to tell that from
+			  the truth, and the obvious next move is to re-enter the prices and
+			  press Save, which overwrites the real ones with whatever is on
+			  screen. Reusing the save-failure sentence rather than adding a key:
+			  it already says the workspace could not be reached, which is exactly
+			  what happened.
+			*/}
+			{loadFailed && (
+				<p className="iz-tiny rounded-lg border border-[rgba(240,138,138,.35)] bg-[rgba(240,138,138,.08)] px-2.5 py-1.5 text-[var(--iz-red)]">
+					{t.workspace.couldNotSaveWorkspace}
+				</p>
+			)}
 
 			<OutletSection
 				title={t.workspace.ratesByPrTier}
@@ -432,7 +463,12 @@ function OutletWorkspacePage() {
 				</IzCard>
 			</OutletSection>
 
-			{canEdit && (
+			{/*
+			  ⚠️ `!loadFailed` — Save is withheld when the rates on screen are not
+			  known to be the venue's. Pressing it would PUT the blank fallback,
+			  and the handler full-draft-saves.
+			*/}
+			{canEdit && !loadFailed && (
 				<button
 					type="button"
 					className="iz-btn iz-btn-primary mt-5"
@@ -447,12 +483,22 @@ function OutletWorkspacePage() {
 						if (backend.backed) {
 							backend
 								.save(toSave)
-								.then(() => toast(t.workspace.workspaceSaved, "success"))
+								.then(() => {
+									toast(t.workspace.workspaceSaved, "success");
+									// ⚠️ ONLY on success. This used to run synchronously
+									// below, outside the promise, so a FAILED save also
+									// marked the draft clean — and the next time `source`
+									// changed, the effect above overwrote the operator's
+									// unsaved rates with the server's old ones. They were
+									// told the save failed and then quietly lost the work
+									// they were about to retry.
+									draftDirtyRef.current = false;
+								})
 								.catch(() => toast(t.workspace.couldNotSaveWorkspace, "warn"));
 						} else {
 							saveOutletWorkspace(toSave);
+							draftDirtyRef.current = false;
 						}
-						draftDirtyRef.current = false;
 					}}
 				>
 					{t.workspace.saveWorkspace}

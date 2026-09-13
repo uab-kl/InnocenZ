@@ -354,6 +354,116 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### OPEN — the fourth full audit (13 Sep 2026), what is still unfixed
+
+🟢 **ALL ELEVEN ITEMS ARE NOW CLEARED** — changelog rows `2026-09-13 (iv)` and
+`2026-09-13 (v)`. The list below is kept because the reasoning in it is still the record of
+WHY each one mattered; do not re-open an item from it without re-deriving the claim from the
+code first (`audit-entries-are-leads`).
+
+**Two things were deliberately NOT changed, and both are decisions rather than omissions:**
+
+1. **Outlet "Log sales" stays demo-only.** `OutletShiftSalesPanel` reads the demo store and
+   returns `null` before rendering anything, so on a real session it is INVISIBLE rather
+   than broken — no empty box, no dead button. `POST /shift-sale` and the web's
+   `logShiftSale` both exist and have no consumer, but the backend records sales **per PR**
+   while that panel counts units **per drink**: a different data model and a different
+   screen. Wiring it is a feature build and a product decision. **Owner's call needed:**
+   should a venue log floor sales per PR (which is what the reports and the reconciliation
+   banner already read), or per drink?
+
+2. **A PR's phone still declares its own receipt `source`,** and `source !== 'manual'` is
+   what skips agency review (`status: ... ? 'pending' : 'verified'`). That gate is the
+   owner's own rule from 23 Aug — *"if the shift is all scanned no need wait agency approve
+   direct make the status verified"* — so tightening who may claim `'scan'` is a product
+   decision, not a bug fix. The new commission ceiling applies whatever source is claimed,
+   so the money is bounded either way.
+
+**One finding was PARTLY REFUTED rather than fixed** (see `2026-09-13 (v)`): 11 live
+commission lines sit above today's rate-card ceiling, which reads as tampering until the rows
+are opened. They are drinks at 12% and tips at 17% against a card that now says 10% and 15%
+— Tier III's rates, written while the PR was Tier III. The card is mutable and tier is
+per-membership and mutable too, so those lines were honest when written. **The guard is
+write-time only and must never be applied retrospectively.**
+
+
+15 finders over every page, module, lane and organisation, against the RUNNING app and the
+LIVE database. 77 raw findings, **63 confirmed** by a 3-lens adversarial panel (each judged on
+correctness / reachability / already-fixed, kept only on a 2-of-3 majority), 18 refuted.
+
+**Already fixed** (see the changelog row): the geocode leak, `GET /agency`, `POST /agency`,
+`/user/:id/profile-image-source`, the outlet-workspace agency lane, the Owner sub-role
+fallthrough, the case-sensitive `register-member` refusal, the fake "Cancel shift" on the
+phone, the RBAC role editor deleting cross-portal grants, `updateRolePermission` reporting 200
+over a stripped role, six silent roster/MC-leave writes, the outlet Confirm-staffing empty
+catch, the workspace blank-on-failed-load, and the subscription PR-limit counter.
+
+**STILL OPEN, grouped by shape:**
+
+1. **States that read as "nothing here" when the fetch FAILED** — agency Payroll & PV
+   (`pv.tsx:376`, the hook exposes no `isError`), outlet Today (`use-outlet-today.ts:159`),
+   the phone "No PV for last week yet" (`PaymentScreen.tsx:714`), the unpaid-subscription
+   banner AND its sidebar badge (`use-unpaid-billing.ts:72`), agency home KPI tiles reading
+   0 PRs / 0 outlets / RM 0.00 (`index.tsx:156`). Nobody can tell an empty night from a broken
+   request, and the unpaid-debt one hides money that is owed.
+2. **Demo data inside a REAL session** (explicit owner rule) — agency home prints demo voucher
+   money and demo outlet names when the agency query comes back empty (`index.tsx:119`); the
+   outlet Reports custom-range picker offers demo Velvet 23 nights and disables the venue own
+   (`outlet-report-dates.ts:18`).
+3. **Controls offered to lanes the server refuses** — the agency Director is given
+   Outlet-Linking Approve / Decline / End-partnership (`OutletLinkingPanel.tsx:655,673`), and
+   that whole flow is silent on every outcome (`use-agency-outlet-links.ts:112`); the Director
+   is admitted to `/agency/pending` but `GET /agency/:id/prs` 403s them, so the PR sign-up queue
+   behind the nav item they are handed is permanently empty (`agency.routes.ts:133-136`);
+   outlet Approvals renders dead disabled Approve/Decline with no explanation
+   (`PendingMemberDetail.tsx:313`).
+4. **Remaining silent writes** — admin dispute resolve uses `onSettled` only
+   (`admin/service/payment-voucher.tsx:696`), RBAC Modules deactivate
+   (`admin/rbac/module.tsx:102`), agency PR profile Save/Suspend/Detach are fire-and-forget
+   (`prs.tsx:1138`), cut-loss approve/reject seals PR wages through `void decide(...)`
+   (`pending.tsx:2487`), payout runs Cancel/Mark-submitted/Settle/Export
+   (`PayoutRunsPanel.tsx:282`).
+5. **Money** — the agency PV breakdown hides a cancellation fee but still subtracts it from the
+   Subtotal, so the rows on screen do not add up (`pv.tsx:1776`, and the same on
+   `AgencyPaidPvDetail.tsx:50`); a PR phone decides the commission the voucher pays and the
+   server stores the number it is handed (`payment-voucher.controller.ts:2805`);
+   `PUT /outlet-workspace/:outletId` full-draft-saves, so a body missing `tierRates`/`drinkMenu`
+   deletes the venue price list (`outlet-workspace.schema.ts:27`); the rate card accepts
+   negative wages, commissions and drink prices (`outlet-workspace.schema.ts:4`).
+6. **PR app** — a PR who forgot to check out is locked out of the whole app
+   (`CheckInScreen.tsx:327`); Check-In claims overtime was "not sent to the agency" when the
+   server files it at check-out (`:828`); it treats the agency cancellation-FEE deduction as
+   one of the PR own receipts and blocks check-out demanding a photo for it (`:299`); Scan
+   loses receipts logged before midnight on a night shift (`ScanScreen.tsx:398`); a locally
+   stored signed snapshot outranks the API row forever (`PaymentHistoryPanel.tsx:129`).
+7. **Raw enums on screen** — `tier_1` under every PR name on the roster week grid, in BOTH
+   locales (`RosterBackendTimetable.tsx:1206`); outlet status on the venue-approval pane
+   (`OutletLinkingPanel.tsx:521`); collection-invoice status on Subscription
+   (`subscription.tsx:910`).
+8. **Auth / session** — any signed-in user can self-delete, and an org ONLY owner strands the
+   organisation (`user.controller.ts:288`); admin account-disable has no last-owner guard
+   (`:234`); there is no token-refresh endpoint, so the access-token TTL is the whole session
+   (`auth.routes.ts:21`); changing or resetting a password does not invalidate existing sessions
+   and there is no server-side sign-out (`auth.controller.ts:1683`); no rate limiter on either
+   public register endpoint.
+9. **Reachability / dead ends** — `/agency/special-service` is a live, permission-gated page with
+   no sidebar entry and no link from any real session; Log Sales is wired only to the demo store,
+   so a real outlet session renders nothing (`OutletLogSales.tsx:29`); `/agency/dashboard` and
+   `/outlet/dashboard` are orphan redirects whose comments cite a login path that no longer
+   exists.
+10. **Needless refusals** — agency Subscription fires the owner-only `GET /payment-method/mine`
+    for every lane; agency Settings fires the owner-only `GET /agency/:id/invite-roles` for every
+    lane that can open the page. Both 403 harmlessly, and both teach the console to expect errors.
+11. **Portal identity** — the rail and greeting label an UNRESOLVED lane "Owner" while the same
+    shell builds that session navigation at Director, so the two contradict each other on screen
+    (`PortalShell.tsx:491`).
+
+WARNING: **`admin_mfa` and `platform_standards` are OUT OF SCOPE.** Each carries only 2 of the 4
+audit columns, which `_probe-db-integrity` reports — but they are teammate tables in the shared
+database with no model or migration in this repo, and the owner confirmed on 20 Jul 2026 to
+leave them alone.
+
+
 ### ▶ ✅ ALL CLEARED 12 Sep 2026 — the sweep's 10 open bugs, fixed
 
 All confirmed by an independent verifier told to refute them, and ALL NOW FIXED (changelog
@@ -563,6 +673,33 @@ the obvious API. Separately, `pr.controller.ts` writes `'left'` and then immedia
 protected row into a deletable one. **Raise with the owner before touching any of it.**
 
 
+### ▶ ✅ NOT REPRODUCIBLE 13 Sep 2026 — re-tested, now that a dual-org account exists
+
+The note below parked this as *"unverifiable by construction — no account on this database holds
+two memberships"*. **That is no longer true**, so it was re-tested rather than left on trust:
+
+* **2+ agencies:** still nobody. The agency-side routes remain unexercisable, exactly as parked.
+* **2+ OUTLETS:** `jinkgan48@gmail.com` has been active at UAB Emhub AND JK House since
+  11 Sep — the first such account.
+* **2+ agencies as a PR:** several (one at four agencies), on `agency_pr`, a different table.
+
+Tested read-only as that account, against a shift and an assignment at EACH venue, with and
+without `x-org-id`:
+
+| route | UAB Emhub | JK House |
+|---|---|---|
+| `GET /shift/:id` | 200 / 200 | 200 / 200 |
+| `GET /shift-assignment/:id` | 200 / 200 | 200 / 200 |
+| `GET /pr/:id` | 200 / 200 | 200 / 200 |
+
+No 404, header or no header. The oldest-membership fallback does not lock this person out of
+their second venue. `_probe-dual-outlet-reads.ts` and `_probe-dual-outlet-assignments.ts` re-run it.
+
+⚠️ **Still genuinely untested:** the three `payment-voucher` routes in the list, which are
+AGENCY-scoped — no account holds two agencies, so that half stays parked on the same reasoning.
+
+**The original 10 Sep entry, kept for its reasoning:**
+
 ### ▶ OPEN — six resource-id routes still answer as ONE agency for a dual-agency operator (10 Sep 2026)
 
 **Not a leak, and not the security half** — that closed in slice 4c. Every one of these compares
@@ -598,7 +735,33 @@ tests** over any of this middleware — `apps/backend/src/middlewares` has no te
 Every claim about it is code-read plus live probe.
 
 
-### ▶ OPEN — `DEFAULT_OUTLET_WORKSPACE` is demo data standing in for a real default (10 Sep 2026)
+### ▶ ✅ FIXED 13 Sep 2026 — an unpriced tier reads as blank now
+
+Database first: all 8 venues have an `outlet_workspace` with 7 tier rates, so nothing renders
+this fallback TODAY — it is a latent trap for a venue whose seeding fails, which is exactly
+the shape that goes unreported.
+
+`workspaceSettingsFromBackend` no longer starts a tier from the Velvet fixture. The stakes
+were higher than display: `workspace.tsx` seeds its draft from this output and PUTs the whole
+draft, so the next save on any unrelated field would write RM 40/50/55/65/80 into the venue's
+real `outlet_tier_rate` — the table every PR wage and commission is priced from. The DRINK
+MENU half of this file was fixed for that same reason; the tiers were the same bug one field
+over, on the more expensive column.
+
+⚠️ **`BLANK_OUTLET_WORKSPACE` IS NOT BLANK, and the first attempt shipped on that
+assumption.** It is built by `normalizeTierRates`, which ends in `ensureAscendingTierWages`
+and `ensureDistinctTierCommissions`, so from an all-zero base it still SYNTHESISES a ladder —
+Tier I came back at RM 40 with Tier II on 1%. The test caught it; the fallback is now a local
+`UNPRICED_TIER` of real zeros. Those two helpers are right for a workspace being EDITED and
+wrong for one that does not exist yet. The shared constant is untouched, since `demo-seed.ts`
+wants the ladder.
+
+5 tests, including one asserting "Velvet 23" appears nowhere in the mapped output, and one
+that a REAL tier row still maps through unchanged.
+
+**The original 10 Sep entry:**
+
+### ▶ (was) OPEN — `DEFAULT_OUTLET_WORKSPACE` is demo data standing in for a real default (10 Sep 2026)
 
 Every venue now has a real `outlet_workspace` row, so `apps/web`’s
 `DEFAULT_OUTLET_WORKSPACE` no longer renders for any of them — but it is still
@@ -618,7 +781,45 @@ rather than a plausible set of numbers. The seeding in
 this is the client half.
 
 
-### ▶ OPEN — `audit_logs.old_data` is NULL for outlet UPDATEs, so the table cannot say what changed (10 Sep 2026)
+### ▶ ✅ FIXED 13 Sep 2026 — and it was never an outlet problem; it was the whole table
+
+**One line, and it silenced every entity.** The old-data fetchers read
+`req.params.id`, but they run inside `platformAuditMiddleware`, which is mounted
+`v1Router.use(...)` — BEFORE any route is matched. Express fills `req.params` when a route
+matches, so at that moment it is `{}`. Every fetcher got `undefined` and returned null.
+
+Measured live before the fix: **0 rows with `old_data` on EVERY entity**, not just outlet —
+`User` 266 updates / 0, `agency` 263 / 0, `outlet` 257 / 0, `payment-voucher` 286 / 0. `User`
+has had a registered fetcher all along and never once produced a row.
+
+⚠️ **The asymmetry that hid it for months:** `resolveEntityIdFromRequest`, which fills
+`audit_logs.entity_id`, reads the SAME `req.params` and works — because it runs in
+`res.on('finish')`, long after routing. One request, two readers of one field, opposite
+answers, and only one of them wrong. Nothing about the entity_id column ever looked broken.
+
+`resolveEntityIdFromPath` now takes the id off the URL, mirroring `resolveEntityFromPath`
+including its `rbac` special case, so an entity and its id always come from the same segment
+of the same path. It refuses a non-id segment (`/user/me/locale` must not look up a user
+called "me") and accepts a trailing sub-resource (`/payment-voucher/:id/export-ticket` still
+audits the voucher). `outlet` and `agency` fetchers added — registered LOWER-CASE, because
+`ENTITY_MAP` renames only the six RBAC paths and a capitalised key would register a fetcher
+nothing ever looks up, failing silently in exactly the old way.
+
+**8 unit tests on the resolver, and the chain proved end-to-end read-only** with a fake
+request whose `params` is empty — the real middleware state: outlet, agency and User each
+return their row, and a collection write correctly stays null. Deliberately NOT proved by
+sending a PUT: an "idempotent" outlet update is precisely the write this project's rule is
+about, since a schema default can turn a same-value save into a real change.
+
+⚠️ **Still true, and the deeper half of the original note:** the row records what the
+resource IS, not what the caller ASKED FOR. `logRestMutation` receives `requestBody` and
+uses it only on FAILURE; on success it is discarded. With `old_data` populated a diff now
+answers "which field moved", which is most of what was wanted — but "did the caller send
+this, or did the code?" still needs the request captured, and that wants its own column.
+
+**The original 10 Sep entry:**
+
+### ▶ (was) OPEN — `audit_logs.old_data` is NULL for outlet UPDATEs, so the table cannot say what changed (10 Sep 2026)
 
 Found while chasing the geofence-radius reset. `main.audit_logs` has an
 `old_data` column and it is populated for other entities, but every outlet
@@ -642,7 +843,31 @@ invisible to it, which is why the four RBAC/subscription ones were promoted to
 named exports. Keep it that way.
 
 
-### ▶ OPEN — `main` carries committed conflict markers, and CRLF endings (9 Sep 2026)
+### ▶ ✅ CLOSED 13 Sep 2026 — two halves were already stale; the third is now a check
+
+Re-verified rather than acted on from the note:
+
+1. **Conflict markers on `main`: GONE.** `git show main:TEST_SCRIPT.md` finds 0. Fixed by the
+   merge the note predicted.
+2. **`outlet.controller.ts` mixed endings: GONE.** It is uniformly CRLF (1564 of 1564), so it
+   aligns and merges normally.
+3. **The whole-repo normalisation the note proposed was NOT done, on purpose.** 1905 of 2113
+   tracked files are CRLF in the blob. `* text=auto eol=lf` plus a renormalise would rewrite
+   90% of the tree in ONE commit and make the next merge from the teammate's branch conflict
+   in nearly every file — the exact failure it is meant to prevent, amplified. Nothing in
+   tracked source has ever failed because of consistent CRLF; the two real CRLF incidents
+   were a `.sh` shebang (already pinned in `.gitattributes`) and the server's own untracked
+   `.env`.
+
+**What shipped instead** — `pnpm check:endings`, which fails only on MIXED endings, the state
+that actually makes a file conflict whole. It found 2 offenders on its first run, **both
+created by this session's own edit scripts** (a Python append and a bash heredoc writing LF
+into CRLF files), plus a stray doubled CR this session had put into TEST_SCRIPT.md. All
+normalised to their dominant ending — minimal diff, no tree-wide rewrite.
+
+**The original 9 Sep entry:**
+
+### ▶ (was) OPEN — `main` carries committed conflict markers, and CRLF endings (9 Sep 2026)
 
 Two hygiene faults found while merging `main` into `SL`. Neither is ours, both
 outlive the merge:
@@ -669,7 +894,15 @@ balance against BOTH merge parents before committing. No typecheck, test or
 lint in this repo parses CSS, so a resolution that splits a rule passes every
 gate and still returns 500 on every route.
 
-### ▶ OPEN — branch `SL` does not typecheck at HEAD: a commit landed AHEAD of its dictionary key (9 Sep 2026)
+### ▶ ✅ CLOSED 13 Sep 2026 — stale; the key is referenced nowhere on SL any more
+
+`t.shell.greetingNamed` appears in NEITHER `translations.ts` nor `PortalShell.tsx` on
+`origin/SL` today, so the commit that referenced it has been superseded and the mismatch is
+gone. Verified by reading the branch, not by changing it — `SL` is the teammate's.
+
+**The original 9 Sep entry:**
+
+### ▶ (was) OPEN — branch `SL` does not typecheck at HEAD: a commit landed AHEAD of its dictionary key (9 Sep 2026)
 
 `5b308998` ("greet the signed-in person by name") commits
 `PortalShell.tsx`, which reads **`t.shell.greetingNamed`** — and that key is
@@ -692,7 +925,24 @@ not cut a branch or a build from `5b308998`.
 under its own message. Check `git status` before committing anything on this
 branch — see the 7 Sep "TWO AGENTS SHARED THIS WORKING TREE" entry below.
 
-### ▶ OPEN — new venues start with PLACEHOLDER event covers (created 9 Sep 2026 by the templates work)
+### ▶ ⛔ BLOCKED ON ASSETS — re-confirmed 13 Sep 2026, cannot be closed from this machine
+
+The 8 default cover images are genuinely unavailable here:
+
+* `seed-shift-templates.ts` reads `SEED_COVERS_DIR ?? 'C:/Users/jinkg/Pictures'` — and
+  **`jinkg` is the OTHER device**. This machine is `ganji`; that folder does not exist on it.
+  Precisely the cross-device path trap `CLAUDE.md` warns about.
+* The repo commits ONE cover image, `apps/web/public/img/cover.jpg` — a generic one, not the
+  8 event covers.
+
+So the sources exist only as R2 objects and on the other machine's disk, exactly as the note
+said. **Needs the owner to supply the 8 files** (or authorise pulling them out of R2); the
+code half — `createStarterTemplates` uploading one object per template per outlet, never a
+shared key — is straightforward once they exist.
+
+**The original 9 Sep entry:**
+
+### ▶ (was) OPEN — new venues start with PLACEHOLDER event covers (created 9 Sep 2026 by the templates work)
 
 Creating an outlet now creates its 12 starter event cards
 (`features/shift-template/starter-templates.ts`, on both the sign-up and admin
@@ -752,6 +1002,20 @@ source at its previous framing.
 ⚠️ Do NOT "fix" any future variant of this by feeding the stored CROPPED image
 back into the sheet. That is the lossy path the original gate existed to prevent,
 and it remains wrong.
+
+### ▶ ◑ HALF DONE 13 Sep 2026 — the API can correct an anchor; no screen shows it yet
+
+`PUT /member-subscription/:id` now accepts `billingStartsAt` (admin-only, like the whole router),
+so an anchor can be corrected without SQL. Nullable on purpose — "enrolled, not yet billable" is a
+real state, and the invoice job already reports every live org missing an anchor each morning.
+5 schema tests; proved at the PARSE, not by firing an endpoint that re-dates real invoicing.
+
+**⚠️ THE UI HALF NEEDS A DECISION FIRST, and it is the owner's:** moving an anchor re-dates only
+the periods not yet opened and leaves invoices already raised alone. Should a correction ALSO void
+and re-raise the OPEN period? The conservative half is what shipped. `services/member-subscription`
+has no update function at all yet, so the admin screen is a real build, not a field to surface.
+
+**The original 9 Sep entry:**
 
 ### ▶ OPEN — no way to correct a billing anchor by hand (opened 9 Sep 2026)
 
@@ -1343,6 +1607,35 @@ now fixed in the probe: `ic` does not match `icNo`; `lat`/`lng`/`leaveProof` w
 vocabulary at all; and it scanned only the first 2 array elements, so a penalty on row 25 of 35 was
 invisible. What actually found the leaks was enumerating FIELD NAMES rather than pattern-matching
 them. **Do not trust a privacy sweep that has never been shown to catch a known-present field.**
+
+### ▶ ❌ REFUTED 13 Sep 2026 — Havoc is a SERVICE, and the tips bucket is right
+
+**Do not "fix" this. Re-tagging Havoc as a drink would CUT a PR's commission on it.**
+
+The claim below is that Havoc is a drink *"on the outlet's drinks list"*. It is not. JK House's
+own catalogue tags it `service`:
+
+| category | items |
+|---|---|
+| drink (7) | Cosmo, Dom Perignon, Don Julio, Herradura, Ladies drink, Lemon Drop, Test |
+| service (3) | Booking commission, **Havoc**, Testes |
+| tip (1) | Tips |
+
+Every Havoc voucher line across six-plus receipts is `component = 'tip_commission'`, consistently
+— the venue classified it, and the system agrees with the venue. `receiptKindForItem` puts every
+service entitlement on the tips side DELIBERATELY, because a service is commissioned at the tip
+rate; that rule was itself the fix for the real bug here (Havoc used to fall into `others` and
+render as **OT**, which was wrong and is long closed).
+
+⚠️ **What "fixing" it would cost.** At JK House `tip_pct` sits 5 points ABOVE `drink_pct` at
+every tier (Tier I 15% vs 10%, Tier III 17% vs 12%), and in happy hour the drink rate is a third
+of it (5%). On a RM 1,000 item that is **RM 50-100 per unit taken off a PR's pay** — on a premise
+that is false.
+
+If the owner decides Havoc really should be a drink, that is a CATALOGUE edit the venue makes in
+Workspace, not a code change.
+
+**The original 3 Sep entry, kept for its reasoning:**
 
 ### ▶ A DRINK IS SITTING IN THE TIPS BUCKET — surfaced by the new Payroll strip (3 Sep 2026)
 
@@ -3579,6 +3872,9 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+| 2026-09-13 (v) | **THE FOURTH AUDIT'S BACKLOG, CLOSED — clusters 4 (remainder) through 11.** Owner: *"yes continue fix all the remaining"*. **THE PHONE DECIDED WHAT ITS OWN VOUCHER LINE WAS WORTH.** `payment_voucher_line.amount` was written straight from the request body (`amount: parsed.data.commission.toFixed(2)`), bounded only by zod's `nonnegative()`, while the rate card it should come from sits on the server and was never consulted — on both write paths. Commission now has a ceiling off the SAME merged card the wage resolver uses (a new `resolveCommissionPcts` beside `resolveTierWages`, not a second copy), deliberately the most generous reading (`max(drinkPct, happyHourDrinkPct)`) because a stored row cannot say whether a sale fell inside the window. Wages now come from `shift_assignment.pay_amount`, the figure the server itself sealed — the same column `collection_invoice.amount` is summed from, so a client-supplied wage was the venue billed one number while the PR was paid another. WARNING: **a probe changed the design.** `_probe-wage-authority-noop` showed 9 sealed rows (0 would change) and **8 LEGACY rows** with no `pay_rule`, where `pay_amount` is still the assign-time forecast that `shift-assignment.controller.ts` records can be a hand-entered override (live rows carry 40.00 and 55.00 against cards of 500 and 700). Trusting those would have UNDERPAID the PR — nearly half the rows. The authority is gated on `pay_rule`, exactly as the phone gates it, so the two agree by construction. WARNING: **a finding partly REFUTED.** 11 of 63 live commission lines are above today's ceiling, worst by RM 60 — which reads as tampering until opened. Drinks at 12%, tips at 17%, against a card now reading 10% and 15%: Tier III's rates, written while the PR was Tier III. The card is mutable and tier is per-membership. **Write-time only; never retrospective.** **A RATE CARD COULD BE ERASED BY OMISSION.** Every field of `UpsertOutletWorkspaceSchema` carried a `.default()` and the upsert DELETES both child tables before re-inserting — so a PUT that simply left `tierRates` out deleted the venue's whole card, inserted nothing, and answered 200 *"Workspace saved"*. `use-outlet-workspace.ts` already carried the note: **two venues lost all seven tier rows this way once already.** Absent now keeps, `[]` clears, an array replaces. Every number was also unbounded — a drink commission of -50% or 5000%, a daily wage of -500 — on the columns `resolveCommissionPcts` prices a PR's earnings from. Proved by **unit test on the parse, not by firing the gate**: this is the exact table the never-probe-a-write-gate-with-a-write rule was written about. **THE PV BREAKDOWN HID A DEDUCTION IT STILL SUBTRACTED.** `component='deduction'` was filed into "Other" and that row rendered only `if (other > 0)`. Live voucher PV-000001: four rows summing to RM 488.00 above a subtotal of RM 468.00, with nothing accounting for the RM 20.00 cancellation fee between them. Its own bucket now, red, last, and both cards call ONE builder — they each carried a byte-identical copy, filter included. **A PR COULD BE LOCKED OUT OF THEIR OWN PHONE.** Check-out was disabled outright on a shift with nothing logged: the wage is sealed AT check-out so the shift paid nothing, the server refuses a second check-in while one is open so every later shift was blocked too, and nothing on the phone could clear it. Now a warning that can be acknowledged. A CANCELLATION FEE was also arriving in the PR's own receipt list ('deduction' collapses into the 'others' kind), where it counted as a missing-photo row — **blocking check-out with a message telling them to re-scan a fine they were charged.** SCAN lost every pre-midnight receipt (`lineDate !== todayKey` on a shift that crosses midnight); the rule had been learned once in CheckInScreen and applied once, and now lives tested in `pick-active-shift.ts`. HISTORY froze at the moment of signing — the local snapshot outranked the API for any voucher in both, and since local-only weeks are already filtered out as phantoms, overriding the API was the only thing it ever did. **AUTH: four holes, and one the audit had not seen.** Every organisation in the database has exactly ONE active owner (13 of 13), and nothing stopped an admin disabling them or the owner deleting themselves — leaving nobody who can approve a member or pay a bill, and no endpoint to repair it. Password changes did not end the sessions they were changed to end (migration 0165, nullable so it signs nobody out — verified: 81 users, 0 cutoffs). The public sign-up endpoints were the last unauthenticated writers with no rate limiter, and `/register/check` is an existence oracle. WARNING: **the refresh token was a second ACCESS token** — the audit listed only "no refresh endpoint". Both generators signed the identical payload and `verifyToken` checks signature, algorithm and expiry and nothing else. **Proved live before any change: `GET /auth/me` answered 200 for a refresh token.** The web keeps it in `localStorage`, so the short access-token life bought nothing: 7 days of full API access to whoever read that key, for a credential nothing could ever spend. Tokens now carry a `type`; `POST /auth/refresh` is the one door it opens. WARNING: **two decisions keep this a fix rather than an outage** — an UNTYPED token is treated as access, and an UNDATABLE token (no `iat`) is let through. Every token issued before today is both. `isTokenBeforeCutoff` was extracted precisely so those could be tested (5 tests, incl. that a token minted in the SAME SECOND survives — `iat` is seconds). Verified live 7/7. **THE HEADER SAID "OWNER" WHILE THE NAV WAS BUILT AT DIRECTOR.** Five sites defaulted an unresolved lane to owner while every permission check defaulted the same null to least privilege — the portal identity, a role printed beside a signature on a VOUCHER, and the post-sign-in landing route. Same defect as the server-side `portalRoleNameForSubRole` fallback already corrected, in the web's copy. Non-owner lanes were also firing `payment-method/mine` on every Subscription visit while `orgOwnerPaysOnly` refuses them — verified live: owner 200, finance/director/guarantor 403. `/agency/special-service` was off by ACCIDENT (no nav item, full working screen behind the URL) and is now a declared phase, beside its outlet twin. Three database enums were being printed at people: `tier_1` on the roster grid, `outlet.status` with its underscores regexed out, `collection_invoice.status`. **Baselines:** backend tsc 0 / 17 files / 184 tests · web tsc 0 / 29 files / 326 tests · mobile tsc 0 / jest 27 · rbac:check, rbac:seed-check, check:type, check:drift all clean. **Section 9 records the two things deliberately left for the owner to direct.** |
+| 2026-09-13 (iv) | **THE FOURTH AUDIT'S BACKLOG, FIRST FOUR CLUSTERS CLEARED.** Owner: *"yes continue fix all the remaining"*. **A FAILED REQUEST NO LONGER READS AS A SETTLED ANSWER.** Four hooks gained the `isError` React Query already tracked and they were discarding - `use-agency-pvs`, `use-agency-prs`, `use-outlet-today`, `use-unpaid-billing` (`use-agency-outlets` had always exposed it). WARNING: the unpaid-billing one was the worst in the product. Both its consumers hide themselves at zero - the banner renders nothing, the sidebar badge disappears - and on failure the total IS zero, so the one surface telling an organisation it owes money vanished exactly when we could not confirm that it does not. Every other case here under-informs; that one actively misinformed. Agency Payroll & PV said "no vouchers match" over a failed fetch on the screen that decides who gets paid, and offered a clear-filters button that cannot fix a request. Outlet Today rendered a broken night as a quiet one - and if the shifts loaded while the assignments did not, it showed a shift with NOBODY on it, which reads as staff failing to turn up, so its `isError` is ANY of its three queries. The PR phone told a worker "No PV for last week yet - this week's PV is issued next Sunday", a calm statement that their pay is not due, when the request had simply failed (`lastWeek === null` already meant "no voucher", so the failure needed its own flag). Agency home KPI tiles read 0 PRs / 0 outlets / RM 0.00 in the same type a real zero uses; they now print an em dash. **DEMO FIXTURES COULD REACH A REAL AGENCY HOME.** `LIVE_SEED_PR_PVS` and `OUTLET_NAMES` are module CONSTANTS, so `buildBlankPortalReset()` - which blanks the STORE - never touched them, and the fallback was gated on `backed` (an outlet identity resolving) rather than on the session being real. Now gated on `getPortalSessionKind()`. **OUTLET LINKING HAD NO PERMISSION CHECK OF ANY KIND** while the server gates it on `settings:update` - and the route's own comment claimed "the screens already gate these controls on editSettings", describing a gate that did not exist. A Director was shown Approve, Decline and End partnership, and every one collected a 403 the panel said nothing about. That whole flow was also silent on every outcome; ending a partnership is the sharpest of the three, since the venue finds out by discovering it can no longer post. WARNING: five NEW strings rather than reusing `linkApproved` - that key already exists and means "Working with you", a STATUS label on a row. Printing it as a confirmation sentence is the same class of bug as rendering a dictionary key. **THE AGENCY DIRECTOR'S APPROVALS QUEUE COULD NEVER HOLD A ROW.** They hold `approvals:read`, so they get the nav item, the route, the page and the badge - and the sign-up queue behind all of it is fed by `GET /agency/:id/prs`, which 403'd them. `director` added to that route's READ lanes, the same correction already made twice in the same file for `/:id/uncharged` and `/:id/penalty-proposals`. Writes stay owner-only. WARNING: that route returns IC document keys, so this is a privacy decision, not a convenience one - defensible because reviewing a sign-up IS looking at who is asking to join, and it stays SCOPED to the agency in `:id`. Verified live: 200 for all four agency lanes against their own agency. **ADMIN DISPUTE RESOLVE ran its side effects through `onSettled`**, which fires on both outcomes - so a FAILED resolve still cleared the resolution note just typed and refetched, leaving the dispute where it was. On a PR money dispute that note IS the record of why it was accepted or rejected; it now survives a failure. **The shared confirm dialog had nowhere to show a refusal at all**, so every destructive act it guards (deactivate a module, delete a role, disable an account) sat open and idle on failure, reading as "press it again". WARNING: **A FINDING CORRECTED, NOT ACCEPTED.** The audit claimed RBAC module deactivate "reports neither success nor failure". Success WAS reported and create/update already surfaced their errors through `formError`; only the deactivate FAILURE was silent, and only because the dialog could not hold one. **Baselines:** backend tsc 0, web tsc 0, mobile tsc 0, web 28 files/317 tests, mobile jest 21/21, check:type clean. Commits `fcd10f28`, `2837495b`, `05f8f35a`. **Section 9 says what is still open.** |
+| 2026-09-13 (iii) | **A FOURTH FULL AUDIT, RUN AGAINST THE LIVE APP AND DATABASE - 63 confirmed findings, and the first half of them fixed.** Owner: *"check for the database first ... the function and module all works well in all pages? ... all other members, other account and role including, any related organisation (outlet, pr agency, pr and admin) (web and application)"*, and *"real UI and real database"*. **DATABASE FIRST, as asked:** `rbac:check` + `rbac:seed-check` agree in BOTH directions; `check-schema-drift` reports 0 problems over 57 models; a new `_probe-db-integrity` finds **0 orphans across 16 FK checks**, every voucher reconciling to its net, no signed/paid voucher missing its ink, no unknown lane, and every active organisation holding an active owner. WARNING: three of its checks first printed "Failed query" because I used the TS property names - the real columns are `payment_voucher_line.voucher_id`/`.amount` and `payment_voucher.pr_signature`. A broken instrument would have read as a clean bill. **EVERY LANE, AGAINST THE RUNNING SERVER:** `_probe-all-roles-read-sweep` over 11 accounts (4 agency lanes, 5 outlet lanes, admin, PR) returned **0x 5xx** - no module is broken for any role. The only non-2xx is `403 /payment-method/mine` for every non-owner lane on both portals, which is the owner rule working. **CROSS-TENANT LEAK, SIBLING OF A FIX:** `GET /outlet/:id` was scoped on 12 Sep and `/outlet/:id/geocode` four lines below it was not. Live, as an outlet Director at UAB Emhub asking about Velvet 23: `/outlet/<velvet>` -> 403, `/outlet/<velvet>/geocode` -> **200 carrying the full street address and ROOFTOP lat/lng** - the geo-fence centre the 50 m check-in rule is measured from. Then walked EVERY remaining `:id` route on both org routers rather than stopping at the one that was found. **`GET /agency`** enumerated all five agencies with their SSM numbers to any agency lane (its comment defended the OUTLET portal and never asked about agency-vs-agency); **`POST /agency`** admitted every lane although `create` writes the first membership row, so it grants ownership; **`GET /user/:id/profile-image-source` had NO guard at all** - any account could download any other person un-cropped original. All three are now admin/self, each verified both ways live. **RBAC, the authority this whole product reads:** the role editor posted only the portal it was displaying into an endpoint that REPLACES the whole permission set - `_probe-role-crossportal` shows the live `admin` role holding **12 cross-portal grants** the next Save would have deleted. And `updateRolePermission` DELETEs before it inserts, unwrapped, with a catch returning `[]`, so a failed insert left the role with NOTHING while the API answered **200 "Role permissions synced"**. Now one transaction, errors propagating, and the unseen grants carried through. **An unrecognised `sub_role` resolved to OWNER** - its own comment admitted "an unmatched lane is granted everything" - while `holdsAgencyLane` exact-matched it as nobody: two guards reading one membership row and answering opposite ways. Now view-only, safe because the integrity probe finds no unknown lane live. The public `register-member` refusal was **case-SENSITIVE**: `owner` rejected, `Owner` accepted, and the resolver lowercases before it matches. **THE PHONE WAS LYING ABOUT CANCELLATIONS.** "Cancel shift" showed the cancellation FEE BANDS, demanded a reason, and wrote NOTHING - the PR took a no-show while the agency and the venue still had them booked. `POST /shift-assignment/mine/:id/cancel` existed all along and `AgencySchedulePanel` was already calling it; the comment calling it "a later slice" was stale. **The outlet Workspace could WIPE a venue price list:** a failed GET rendered as an empty rate card with Save live, and that Save full-draft-saves - the same mechanism that destroyed two rate cards before, this time behind a real operator button. Its dirty flag was also cleared after a FAILED save, silently reverting unsaved edits. **Silent writes given their voices back:** six roster mutations including MC/leave had no `onError` at all, and the two leave services were DISCARDING `response.data.message` - the server own sentence - so the caller had nothing to show but a portal-invented string; outlet Confirm-staffing was `.catch(() => {})`. **Every venue PR-limit usage read 0**, because `outletName` came from the demo `shifts` slice that real sessions blank, so it always fell through to the demo venue while the counters input was the real backend list. WARNING: **THREE INSTRUMENT ERRORS CAUGHT IN MYSELF, none published:** (a) the sub-role probe sent `fullName` where the field is `name`, so every body failed on the MISSING NAME and all six refusals read "refused OK" without the lane rule ever being reached; (b) the cross-portal probe looked for a `main.permission` table (really `m_permission`/`m_module`, with `portal_id` on the MODULE) and printed "SKIP", which reads like a clean result; (c) an anonymous greeting and a stuck "Loading..." line I nearly reported were my own removed refresh token - `/auth/me` returns the name correctly. Also: the web suite reported "15 errors" with a third of its files missing purely because 14 audit agents were starving its workers (run it with `--maxWorkers=2` while agents are live), and an apparent test regression turned out to be a scratch `__probe_claim.test.ts` an audit agent had left in the repo asserting `toBe("FORCE_PRINT")`. **Baselines:** backend tsc 0, web tsc 0, mobile tsc 0 (`-p tsconfig.app.json`), web 28 files/317 tests, mobile jest 21/21, `rbac:check` + `rbac:seed-check` + `check:type` clean. Commits `feaf6ff0`, `dfb061ef`, `9d871710`, `46a9b6e8`, `911b7864`. **Section 9 carries the 30-odd findings still open.** |
 | 2026-09-13 (ii) | **THE 17 REMAINING FINDINGS ARE CLOSED, and most were one shape: a screen deciding something the rule already answers.** Owner: *"yes fix all the remaining but there no special service in this innocenz right"*. **FOUR unguarded links into `/agency/prs`** — the roster PR-name link, the roster header button (gated on `assignShifts`, which FINANCE holds while `managePr` is owner-only, so the one lane it was added for was the one it bounced), the live-workforce clickable ROW, and the `pr_rating_low` notification (which the bell also marks READ on tap, spending it on a trip that never arrived). Roster and Live cost `viewWorkforce`, which all four lanes hold, so Finance and Director were reading them legitimately and were thrown back to the agency home with nothing said. The path→permission map is now `agencyPathPermission`, split out of `canAccessAgencyPath` so a link asks the same question the guard will. Browser-proved BOTH ways: Owner sees "Manage PR", Finance sees zero `/agency/prs` links on the same page. **APPROVALS early-returned on `approvals:update`**, so the Director lost sign-ups, outlet-linking, members, MC/leaves, cutlost and cancellations in one card — while that card read *"You can view sign-up requests, but only an owner or guarantor can approve them"*. `viewApprovals` was split out for exactly this on 17 Aug and the page never used it. Now the queue renders and the DECISIONS are gated; verified as a real Director: every tab present, zero approve/reject buttons, role picker disabled. **The member pane carried a comment saying "BOTH bits of state carry the id they belong to" — and a third that did not**: `confirming` was a bare boolean on the DETAIL half of a master/detail, so arming removal for one person and clicking another left the red button standing under the NEW person's name. Its opener was also the one button of six with no permission check, while Cancel had one it should never have had — so a Director was offered a destructive act and then trapped with both buttons dead. **`GET /subscription-payment/invoice/:id` shipped the org's saved payment methods to every member**, reaching past the five `orgOwnerPaysOnly` guards on `/payment-method` into the same repository. Owner, 12 Sep: everyone else *"just see paid and unpaid"*. ⚠️ `scope.isAdmin` kept — the admin plan-payment sheet is the ONLY reader of `methods`, so without it the fix would have blanked the one legitimate reader and left the leak's audience untouched. ⚠️ The predicate reaches the handler through a middleware, NOT an import: `require-sub-role` reads its repositories from `composition-root`, which constructs that controller, and it captures `orgScopeDeps` at evaluation time — the cycle would have bound `undefined` and answered every lane check wrongly in SILENCE. **The audit log answered about a UTC day while `<input type="date">` means the READER'S day** — in UTC+8, "13 Sep" dropped everything before 08:00 local and added the reader's 14th instead. The browser is the only party that knows its zone, so it now sends local-midnight instants. The repository note calling this "a separate question" was wrong and is corrected. **`/admin` had no index**, so the bare path matched the layout and drew the shell around an empty page — not a 404, since `notFoundComponent` never fires. Both other portals already had one. **`POST /special-service` asked nothing**, so the outlet Director the screen hides the button from could still post; gated with `requireOutletPermissionIfMember`, NOT `requirePermission`, because agencies have no `special_service` module and PRs have no grants — a blanket gate would have refused two of the three callers. (Feature is dormant: 6 rows, all `open`, newest 22 July.) **Finance was hidden from "PRs needed today" and auto-assign by `!isFinance`**, written when Finance was read-only on the roster — they have held `roster:update` since 12 Sep and the banner beside it already said so. Now `can("assignShifts")`, which also keeps the DIRECTOR out, as `!isFinance` never did. Verified both ways in the browser. **The admin "Plan requests" KPI counted every pending admin_request while its destination lists `negotiated: "only"`** — database says 2 pending (1 POS quote + 1 plan change), the page lists 1, and the tile now reads 1. **On the phone a late-cancel fee invented a shift**: `weekRecordsFromLines` made one pass, so a fee-only day created a History card for a shift never worked, and on a worked day the fee fell into `others` and shrank it silently. Two passes now — only the first may open a day. ⚠️ Moving it out of `others` would have made the card total too HIGH (it was counted by accident), so the payout sum names it and the card shows a red −RM row. `shifts` could never be zero at either builder; a week that is only a fee has zero shifts. **A DISPUTED voucher's header read amber "Pending your review"** while its own statusMeta said disputed and Payment said disputed — `HistPayStatus` folds pending_review/sent/disputed into one badge, so it is carried as its own flag, the shape `canSign` already uses next door. ⚠️ tsc caught a wrong first attempt: `hist.status === 'disputed'` is TS2367 on a union with no such member — permanently false, and the fix would have shipped inert. **Evidence**: `_probe-owner-pays-only` (18 calls, 9 org lanes, both portals — owner alone admitted, guarantor refused); `_probe-invoice-methods-leak` (all four agency lanes still 200 with all 10 billing periods, ⚠️ and it CANNOT prove the positive half — the database holds one payment_method row and its status is `removed`); 3 new mobile tests run against the OLD code to check they can fail (2 of 3 failed, `others` reading −80). Browser: Owner/Finance/Director/admin sessions, zero failed requests on Approvals and the agency home. Baselines: backend tsc 0, web tsc 0 (718 files), mobile tsc 0 (`-p tsconfig.app.json`), web 28 files/317 tests, mobile jest 21/21 (+3), rbac:check + rbac:seed-check + check:type clean. Commits `38138c38`, `72ea9a1d`, `b41e2722`. |
 | 2026-09-13 | **A FRESH AUDIT OF THE WHOLE TREE FOUND 21 MORE — the four HIGHs fixed, and two of them were a PR signing for money they were not paid.** Owner, third full sweep: *"the function and module all works well in all pages? … all other members, other account and role … (web and application)"*. 37 agents, 21 confirmed, 10 refuted. **🔴 `GET /user` RETURNED EVERY ACCOUNT ON THE PLATFORM to any agency or outlet lane** — a view-only Director included — each row carrying IC number, date of birth, home address, both ID-photo keys, bank name, bank account number and the stored **signature ink**. That last defeats `GET /user/me/signature`, which is deliberately self-only with no admin override *because a signature is forgeable*. The gate was `requireRole('admin','agency','outlet')` with no tenant term anywhere downstream, and `redactIdentityDocsForOutlet` treats AGENCY as privileged. **The comment defending it was STALE**: it said outlet needed the list for PR display names, but `use-outlet-today`/`use-outlet-history` now call `fetchPrPersonnel` → `GET /pr`, which is org-scoped. Callers verified one by one — every consumer of the list AND of `/:id` is an ADMIN screen, and the PR app's `/user/:id` call is a PATCH on its own record — so it is now `requireAdmin`, with `canReadUser` keeping its self-exemption. **🔴 `GET /outlet/:id` had no tenant term** although the LIST was given one the day before — the more direct leak of the two, needing no paging, just an id: any agency or rival venue could read a venue's SSM, business licence, owner contact and the **geo-fence pin that decides where its staff may clock in**. Now `requireOrgMembershipByParam('outlet','id')`. **🔴 THE PHONE COULD NOT SEE A HEADER DEDUCTION, AND SHOWED THE PR THE GROSS ON THE DOCUMENT THEY SIGN.** A fine reaches a voucher two ways: a late-cancel fee is a negative LINE, but an agency settling a dispute types into the Deductions box and it lands on the voucher HEADER with no line at all. The PR DTO carried `lines` and `net` but never `deduction`, and two places then discarded the correct `net`: `normalizeHistPayWeek` recomputed it from lines and overwrote it, and `PvDetailScreen` preferred a total summed from line buckets. **The PR signed for RM 600 and was paid RM 400, with the RM 200 named nowhere on the phone.** Fixed at the source (the DTO now sends `deduction`) and at both consumers. **🔴 SIGNING A WEEK CONTAINING A FINE ERASED THE FINE.** `linesFromGrid` gates every emit on `> 0` and had no branch for the grid's `deductions`, so a signed snapshot stored NO `debit` line; `buildSignedWeek` sealed the right total and `normalizeHistPayWeek` immediately overwrote it. A PR signed RM 338.00 and History showed RM 588.00 with the red −RM 250.00 row gone — persisted in localStorage indefinitely on web. | backend (user routes, outlet routes, payment-voucher DTO) + mobile (api types, demo types, history mapper, history-pay-sync, PvDetailScreen, signed-pv) | ✅ backend tsc **0**, mobile tsc **0**, mobile **18/18**. New `_probe-user-outlet-leaks.ts` **7/7**: agency and outlet both refused the account list, admin still lists, a member still reads their OWN record, an outlet is refused a RIVAL venue but reads its own, admin reads any. Role sweep still **0 × 5xx** across 11 accounts. PR app re-checked in the browser: **RM 468.00 net · 1 shift**, zero console errors. ⚠️ **17 findings remain open** (2 more HIGH-adjacent MEDIUMs among them), several of which are regressions from my own 12 Sep work: the `/agency/prs` tightening left three links into it that now bounce Finance and Director; the Approvals copy promises the Director a queue the page refuses to render; the audit-log date filter spans a UTC day while the input and timestamps are browser-local. |
 | 2026-09-12 (xxxviii) | **THE LAST UNPROVEN GATE IS NOW PINNED BY A TEST — and the test was proved to CATCH the bug, not merely to pass.** Owner: *"help me to test it work originally?"* against the one thing no amount of clicking could show: `Edit line items` / `Resend to PR` / `Resolve dispute` need BOTH `raisePv` AND a `DISPUTED` voucher, and no voucher in the database is disputed. **I did NOT manufacture a dispute to see them.** A dispute is a real claim by a PR that their money is wrong, and a probe I believed was safe had already cost two venues their rate cards today. **Nor did I render `PvDetail`** in the style of `OvertimeQueuePanel.test.tsx`: that component mounts ~20 children with their own data hooks, so the test would mostly assert its own mocks — and it still could not exercise `DISPUTED` on this data. **What shipped instead:** the four decisions are extracted into named predicates in `pv-money-actions.ts` — each keeping BOTH terms together, because a permission alone would re-open a settled voucher and a status alone was the bug — and `pv.tsx` now calls them instead of repeating the conditions inline. `pv-money-actions.test.ts` drives them with the **REAL `agencyCan` and the REAL generated grants** (nothing mocked), across every lane × every status, so if `rbac-grants.generated.ts` is re-synced the test moves with the database rather than agreeing with a stale copy of it. **The step that makes it worth having:** the regression was deliberately reintroduced — the `can("raisePv")` term deleted, the status kept — and the suite went RED with exactly the right two failures (`expected true to be false`, and `expected [true,true,true] to deeply equal [false,false,false]`), then green again on restore. A test that has never been seen to fail is not yet evidence. | web (new `pv-money-actions.ts` + its test, `routes/agency/pv.tsx` wiring) | ✅ web tsc **0**, biome clean, **full web suite 28 files / 317 tests passing** (up 4). Browser re-checked after the refactor: agency Director still sees none of the three controls, the uncharged-fees panel still loads, zero console errors. ⚠️ This pins the RULE and the predicates the JSX calls. It does not prove the JSX still calls them — that is one visible line per control, and a reviewer can see it; rendering the component to prove it is the mocked-cascade this deliberately avoided. |

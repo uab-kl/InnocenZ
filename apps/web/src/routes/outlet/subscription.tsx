@@ -28,6 +28,7 @@ import {
 	type OutletSubscriptionPlanId,
 	outletNamedPrCountForDate,
 } from "@agency-portal/lib/outlet-demo";
+import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
 	outletMatches,
 	tonightShiftOutletName,
@@ -392,7 +393,27 @@ function OutletSubscriptionPage() {
 		? (backend.pendingPlanLabel ?? planChangeRequestedLocal)
 		: null;
 
-	const outletName = tonightShiftOutletName(shifts);
+	/*
+	 * ⚠️ THE SIGNED-IN VENUE, not a name read out of the demo store.
+	 *
+	 * `tonightShiftOutletName(shifts)` reads the DEMO `shifts` slice, and
+	 * `explicitBlankSlices()` sets that to `[]` on every real session — so it
+	 * always fell through to `DEFAULT_OUTLET_CANONICAL`, which is the demo venue
+	 * "Velvet 23".
+	 *
+	 * That name is what the PR-limit counters below match against
+	 * (`outletNamedPrCountForDate` / `maxDailyOutletNamedPrCount`), and their
+	 * input `capShifts` IS the real backend list on a real session. So every
+	 * venue's own shifts were counted against another venue's name and the usage
+	 * figure read 0 — a venue on a capped plan could never see what it had used.
+	 * The name is not printed anywhere here, which is why it went unseen.
+	 *
+	 * `use-outlet-post-job` stamps those same backend shifts with
+	 * `identity.outletName`, so taking the name from the same place is what makes
+	 * the two sides comparable. The demo fallback stays for demo sessions.
+	 */
+	const outletName =
+		getOutletIdentity()?.outletName?.trim() || tonightShiftOutletName(shifts);
 	/**
 	 * Which plan this venue is on. A real session reads its ACTIVE
 	 * `member_subscription` row — the same ledger the admin History page reads —

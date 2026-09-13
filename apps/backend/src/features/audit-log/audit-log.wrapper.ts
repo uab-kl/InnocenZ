@@ -10,9 +10,11 @@ import {
 export { redactSensitive };
 import {
   agencyMemberRepository,
+  agencyRepository,
   auditLogRepository,
   authRepository,
   outletMemberRepository,
+  outletRepository,
   moduleRepository,
   permissionRepository,
   rolePermissionRepository,
@@ -262,27 +264,75 @@ export function createEntityAudit(entity: string) {
   };
 }
 
+/**
+ * 🔴 THE RESOURCE ID, READ OFF THE PATH — because `req.params` IS EMPTY HERE.
+ *
+ * Every old-data fetcher below runs inside `platformAuditMiddleware`, and that
+ * is mounted with `v1Router.use(...)` — BEFORE any route is matched. Express
+ * fills `req.params` when a route matches, so at that moment it is `{}`.
+ *
+ * Each fetcher read `req.params.id`, got `undefined`, and returned null. That is
+ * why `audit_logs.old_data` was NULL for 100% of UPDATE rows on EVERY entity —
+ * `User` included, which has had a fetcher all along (266 updates, 0 with old
+ * data). The backlog recorded this as an outlet problem; it was the whole table.
+ *
+ * The asymmetry that hid it: `resolveEntityIdFromRequest`, which fills
+ * `audit_logs.entity_id`, reads the same `req.params` and WORKS — because it
+ * runs in `res.on('finish')`, long after routing. One request, two readers of
+ * the same field, opposite answers, and only one of them wrong.
+ *
+ * Mirrors `resolveEntityFromPath` exactly, including its `rbac` special case, so
+ * the entity and its id are always taken from the same segment of the same path.
+ */
+export function resolveEntityIdFromPath(path: string): string | null {
+  const segments = path.split('/').filter(Boolean);
+  const v1Index = segments.indexOf('v1');
+  if (v1Index < 0) return null;
+
+  const candidate =
+    segments[v1Index + 1] === 'rbac' && segments[v1Index + 2]
+      ? segments[v1Index + 3]
+      : segments[v1Index + 2];
+  if (!candidate) return null;
+
+  // A uuid or a numeric id — never a sub-resource word like `status` or `mine`,
+  // which would otherwise be fetched as though it were a primary key.
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate);
+  const isNumeric = /^\d+$/.test(candidate);
+  return isUuid || isNumeric ? candidate : null;
+}
+
+/** `req.params` first, so a fetcher called AFTER routing keeps working. */
+function auditResourceId(req: Request): string | null {
+  // A wildcard route can type a param as an ARRAY, and `paramId` on one is a
+  // silent wrong answer rather than a refusal.
+  const fromParams = req.params?.id;
+  if (typeof fromParams === 'string' && fromParams) return fromParams;
+  return resolveEntityIdFromPath(req.originalUrl.split('?')[0]);
+}
+
 export function registerAllAuditOldDataFetchers(): void {
   registerAuditOldDataFetcher('Role', async (req) => {
-    const id = req.params.id;
+    const id = auditResourceId(req);
     if (!id) return null;
     return roleRepository.getRoleById(paramId(id));
   });
 
   registerAuditOldDataFetcher('Module', async (req) => {
-    const id = req.params.id;
+    const id = auditResourceId(req);
     if (!id) return null;
     return moduleRepository.getModuleById(paramId(id));
   });
 
   registerAuditOldDataFetcher('Permission', async (req) => {
-    const id = req.params.id;
+    const id = auditResourceId(req);
     if (!id) return null;
     return permissionRepository.getPermissionById(paramId(id));
   });
 
   registerAuditOldDataFetcher('User', async (req) => {
-    const id = req.params.id;
+    const id = auditResourceId(req);
     if (!id) return null;
     return userRepository.getUserById(paramId(id));
   });
@@ -297,10 +347,42 @@ export function registerAllAuditOldDataFetchers(): void {
     };
   });
 
+  /*
+   * THE ORGANISATION ENTITIES — the ones the backlog actually named.
+   *
+   * `resolveEntityFromPath` returns these LOWER-CASE, straight off the URL
+   * segment, because `ENTITY_MAP` only renames the six RBAC paths. The registry
+   * key must match what that function returns, so `'outlet'` and not `'Outlet'`
+   * — a capitalised key here registers a fetcher nothing will ever look up, and
+   * it fails exactly the way the old bug did: silently, as a null.
+   *
+   * `redactSensitive` runs over whatever these return before it is stored, so an
+   * outlet's own row cannot carry anything through that the audit reader is not
+   * already allowed to see.
+   */
+  registerAuditOldDataFetcher('outlet', async (req) => {
+    const id = auditResourceId(req);
+    if (!id) return null;
+    return outletRepository.getById(paramId(id));
+  });
+
+  registerAuditOldDataFetcher('agency', async (req) => {
+    const id = auditResourceId(req);
+    if (!id) return null;
+    return agencyRepository.getById(paramId(id));
+  });
+
   registerAuditOldDataFetcher('RolePermission', async (req) => {
-    const roleId = req.params.roleId ?? req.query.roleId;
+    // `req.query` IS populated before routing (express parses it off the URL);
+    // only `req.params` is not. The path fallback covers `/rbac/role/:roleId/...`.
+    // `?roleId=a&roleId=b` arrives as an ARRAY, and `paramId` on an array is a
+    // silent wrong answer rather than a refusal — so only a single string counts.
+    const fromQuery = typeof req.query.roleId === 'string' ? req.query.roleId : null;
+    const fromParams =
+      typeof req.params?.roleId === 'string' ? req.params.roleId : null;
+    const roleId = fromParams ?? fromQuery ?? auditResourceId(req);
     if (!roleId) return null;
-    return rolePermissionRepository.getRolePermissions(paramId(roleId as string));
+    return rolePermissionRepository.getRolePermissions(paramId(roleId));
   });
 }
 

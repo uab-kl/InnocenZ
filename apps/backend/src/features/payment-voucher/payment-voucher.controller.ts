@@ -137,6 +137,9 @@ import {
   ShiftAssignmentRepositoryClass,
 } from '@/features/shift-assignment/shift-assignment.repository';
 import { NON_STAFFING_STATUSES } from '@/features/shift-assignment/shift-assignment.model';
+// The rate card a logged commission is checked against — the SAME merged
+// card `resolveTierWages` prices a day's wage from, so the two cannot drift.
+import { resolveCommissionPcts } from '@/features/shift-assignment/resolve-tier-wages';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -286,6 +289,18 @@ function r2PublicBase(): string | null {
 // the reused payment_voucher_line stores them packed into `ref`. `amount` holds
 // the commission (or wages) that actually feeds the voucher net.
 const REF_SEP = '|';
+
+/**
+ * What a venue that has NOT filled in its rate card pays, in percent.
+ *
+ * ⚠️ These must equal `FALLBACK_DRINK_PCT` / `FALLBACK_TIP_PCT` in
+ * `apps/mobile/src/lib/pr-rate.ts`. That is what the phone applies when
+ * `/shift-assignment/mine` serves no rate, so a server ceiling below them would
+ * refuse every honest log at an unconfigured venue. There is no shared package
+ * between the two apps to hold one copy; changing one means changing both.
+ */
+const FALLBACK_DRINK_PCT = 15;
+const FALLBACK_TIP_PCT = 10;
 function encodeRef(
   kind: PrReceiptKind,
   source: PrReceiptSource,
@@ -868,6 +883,130 @@ export class PaymentVoucherControllerClass {
     if (approved.length === 1) return approved[0];
 
     return null;
+  }
+
+  /**
+   * The assignment a logged line is PRICED from — the shift whose rate card
+   * decides what a drink or a tip on it is worth, and whose sealed `pay_amount`
+   * is what a wage on it really is.
+   *
+   * Deliberately the same two-step `resolveMoneyAgencyId` uses, and for the same
+   * reason: a named assignment is evidence, and a date plus a single staffing
+   * assignment that day is evidence too. It stops short where that one does —
+   * a PR who worked two agencies in one day is genuinely ambiguous, so no
+   * assignment is returned rather than an arbitrary one.
+   *
+   * Null is NOT a failure. It means the line cannot be priced from a shift, and
+   * every caller must then leave the client's figure alone rather than treat an
+   * unknown ceiling as a ceiling of zero.
+   */
+  private async resolvePricingAssignment(
+    pr: PrType,
+    opts: { assignmentRef?: string | null; lineDate?: string | null; agencyId: string },
+  ): Promise<{
+    id: string;
+    shiftId: string;
+    outletId: string;
+    agencyId: string;
+    payAmount: string;
+    payRule: string | null;
+  } | null> {
+    const prKey = pr.userId ?? pr.id;
+    let held: Awaited<ReturnType<ShiftAssignmentRepositoryClass['listForPr']>>;
+    try {
+      held = await this.shiftAssignmentRepository.listForPr(prKey);
+    } catch (error) {
+      // A pricing lookup must never be the reason a PR cannot log their money.
+      logger.error('[PaymentVoucherController.resolvePricingAssignment] Error:', error);
+      return null;
+    }
+    const owned = held.filter((a) => a.agencyId === opts.agencyId);
+
+    const ref = opts.assignmentRef?.trim();
+    if (ref && /^[0-9a-f-]{36}$/i.test(ref)) {
+      const named = owned.find((a) => a.id === ref);
+      if (named) return named;
+    }
+
+    if (opts.lineDate) {
+      const thatDay = owned.filter(
+        (a) =>
+          a.shiftDate === opts.lineDate &&
+          !NON_STAFFING_STATUSES.includes(
+            a.status as (typeof NON_STAFFING_STATUSES)[number],
+          ),
+      );
+      if (thatDay.length === 1) return thatDay[0]!;
+    }
+    return null;
+  }
+
+  /**
+   * 🔴 THE COMMISSION A LINE MAY CARRY, AND WHY THIS GUARD EXISTS.
+   *
+   * `payment_voucher_line.amount` was written straight from the request body:
+   * `amount: parsed.data.commission.toFixed(2)`, with the schema bounding it only
+   * by `nonnegative()`. The rate card the money is supposed to come from lives on
+   * the server — `shift_pay_tier` over `outlet_tier_rate` — and was never
+   * consulted. The device being paid decided how much it was owed.
+   *
+   * The ceiling is deliberately the MOST GENEROUS reading of the card: the
+   * greater of the normal and happy-hour drink percentage, because a stored row
+   * cannot say whether the sale fell inside the window. An honest log can never
+   * exceed it — the phone derives the very same figure from the very same card,
+   * served to it by `/shift-assignment/mine` and merged by the same
+   * `mergeRate` — so this refuses only what no reading of the card could justify.
+   *
+   * ⚠️ IT IS A WRITE-TIME CHECK AND MUST NOT BE APPLIED RETROSPECTIVELY. The
+   * card is mutable and a PR's tier is per-membership and mutable too. Eleven
+   * live lines already sit above today's ceiling for exactly that reason — drinks
+   * at 12% and tips at 17% against a card that now reads 10% and 15%, which are
+   * Tier III's rates written while the PR was Tier III. They were honest when
+   * they were written. Recomputing history here would rewrite real people's pay.
+   *
+   * ⚠️ The fallback percentages mirror `FALLBACK_DRINK_PCT` /
+   * `FALLBACK_TIP_PCT` in `apps/mobile/src/lib/pr-rate.ts`. They are what the
+   * phone uses when a venue has not filled its rate card in, so the server must
+   * allow the same or every log at such a venue is refused. Change one, change
+   * both.
+   */
+  private async commissionCeilingRm(params: {
+    pr: PrType;
+    assignment: { shiftId: string; outletId: string; agencyId: string } | null;
+    kind: PrReceiptKind;
+    sales: number;
+  }): Promise<number | null> {
+    const { pr, assignment, kind, sales } = params;
+    // Wages and 'others' (overtime, unclassified) are not a percentage of a
+    // sale — wages have their own authority below, and overtime is money only
+    // once the agency approves it.
+    if (kind !== 'drinks' && kind !== 'tips') return null;
+    if (!assignment) return null;
+    if (!Number.isFinite(sales) || sales <= 0) return null;
+
+    const scopedPr = await this.prRepository.getByUserId(
+      pr.userId ?? pr.id,
+      assignment.agencyId,
+    );
+    const tier = scopedPr?.tier ?? pr.tier;
+    if (!tier) return null;
+
+    const pcts = await resolveCommissionPcts(
+      this.shiftAssignmentRepository,
+      { tier },
+      assignment.shiftId,
+      assignment.outletId,
+    );
+    const drinkPct = pcts
+      ? Math.max(pcts.drinkPct, pcts.happyHourDrinkPct ?? pcts.drinkPct)
+      : FALLBACK_DRINK_PCT;
+    const tipPct = pcts ? pcts.tipPct : FALLBACK_TIP_PCT;
+    const pct = kind === 'tips' ? tipPct : drinkPct;
+    if (!Number.isFinite(pct) || pct <= 0) return null;
+
+    // A cent of headroom: the phone rounds to 2dp, so an exact comparison would
+    // refuse a correct log on a half-cent.
+    return Math.round(sales * (pct / 100) * 100) / 100 + 0.01;
   }
 
   /** Mine ownership: prefer voucher.user_id (0087), fall back to legacy pr.id. */
@@ -2554,12 +2693,71 @@ export class PaymentVoucherControllerClass {
           })
         : (parsed.data.proofPhotos ?? null);
 
+      /*
+       * WHAT THIS LINE IS WORTH IS THE SERVER'S ANSWER, NOT THE PHONE'S.
+       *
+       * `amount` used to be `parsed.data.commission.toFixed(2)` and nothing
+       * else — the figure arrived in the request body and was written. See
+       * `commissionCeilingRm` for the full note; in short, the rate card and the
+       * sealed wage both live here, and neither was consulted.
+       */
+      const pricing = await this.resolvePricingAssignment(pr, {
+        assignmentRef: parsed.data.assignmentId ?? parsed.data.dedupeRef,
+        lineDate,
+        agencyId: moneyAgencyId,
+      });
+
+      const ceiling = await this.commissionCeilingRm({
+        pr,
+        assignment: pricing,
+        kind: parsed.data.kind,
+        sales: parsed.data.sales,
+      });
+      if (ceiling !== null && parsed.data.commission > ceiling) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'That commission is more than this venue’s rate card pays for that sale — reopen the shift from Today so the app can price it again.',
+          data: null,
+        });
+      }
+
+      /*
+       * WAGES: the server already computed this at check-out and stored it on
+       * `shift_assignment.pay_amount`. The phone only echoes it back, so the
+       * stored figure is the authority and the echo is discarded.
+       *
+       * This is the line that MUST agree with itself in two places: the same
+       * column is what `collection_invoice.amount` is summed from, i.e. what the
+       * VENUE is billed. A client-supplied wage means the venue billed one
+       * number while the PR is paid another. All 17 live wage lines already
+       * match, so this changes nothing that exists — it removes the way they
+       * could stop matching.
+       *
+       * ⚠️ GATED ON `payRule`, NOT ON THE AMOUNT BEING NON-ZERO, and the
+       * distinction is not cosmetic. `payRule` is written only when check-out
+       * SEALED the figure; without it `pay_amount` is still the ASSIGN-TIME
+       * forecast, which `shift-assignment.controller.ts` records can be a
+       * hand-entered number overriding the card — live rows carry 40.00 and
+       * 55.00 against Tier I/III cards of 500 and 700. Trusting those would
+       * UNDERPAY the PR. The phone makes exactly this distinction
+       * (`sealed.payRule != null ? sealed.payAmount : …`), so gating the same
+       * way means the two agree by construction and nothing changes for a legacy
+       * row — it keeps its old, better answer.
+       */
+      const sealedWage =
+        parsed.data.kind === 'wages' &&
+        pricing?.payRule != null &&
+        Number(pricing.payAmount) > 0
+          ? Number(pricing.payAmount)
+          : null;
+
       const line = await this.paymentVoucherRepository.addLine(draft.id, {
         lineDate,
         outlet: parsed.data.outlet,
         description: parsed.data.item,
         quantity: parsed.data.quantity ?? 1,
-        amount: parsed.data.commission.toFixed(2),
+        amount: (sealedWage ?? parsed.data.commission).toFixed(2),
         ref: encodeRef(
           parsed.data.kind,
           parsed.data.source,
@@ -2766,6 +2964,38 @@ export class PaymentVoucherControllerClass {
             source: proofSourceForReceipt(parsed.data.source),
           })
         : (parsed.data.proofPhotos ?? null);
+
+      /*
+       * Every item on the paper, against the same rate card — see
+       * `commissionCeilingRm`. A receipt carries its shift on `assignmentId`,
+       * which is the FK the row is stored under, so the pricing shift is named
+       * rather than inferred in the common case.
+       *
+       * The WHOLE receipt is refused when any one item is over, and the message
+       * names the item: a receipt is one piece of paper, and writing the honest
+       * half of it would leave the PR holding a slip that does not match what
+       * was recorded.
+       */
+      const receiptPricing = await this.resolvePricingAssignment(pr, {
+        assignmentRef: parsed.data.assignmentId,
+        lineDate,
+        agencyId: moneyAgencyId,
+      });
+      for (const item of parsed.data.items) {
+        const ceiling = await this.commissionCeilingRm({
+          pr,
+          assignment: receiptPricing,
+          kind: item.kind,
+          sales: item.sales,
+        });
+        if (ceiling !== null && item.commission > ceiling) {
+          return res.status(400).json({
+            success: false,
+            message: `“${item.item}” is priced above this venue’s rate card for that sale — reopen the shift from Today so the app can price the receipt again.`,
+            data: null,
+          });
+        }
+      }
 
       // The RECEIPT row records the paper's printed date/time verbatim
       // (receipt_date / receipt_time). The PAY LINES bucket on the day they

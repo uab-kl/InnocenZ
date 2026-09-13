@@ -14,11 +14,11 @@ import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotific
 import { PortalNavAlerts } from "@agency-portal/components/portal/PortalNavAlerts";
 
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
-import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
+import { agencySubRoleLabel } from "@agency-portal/lib/agency-rbac";
 import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
-import { OUTLET_SUB_ROLE_LABELS } from "@agency-portal/lib/outlet-rbac";
+import { outletSubRoleLabel } from "@agency-portal/lib/outlet-rbac";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
 import {
@@ -486,10 +486,18 @@ export function PortalShell({
 	// the organisation logo kept on outletOwner/agencyOwner.avatarPhoto.
 	const personalPhoto = apiAssetUrl(me?.profileImage) ?? null;
 
+	/*
+	 * ⚠️ RESOLVED, not defaulted to owner. This read
+	 * `AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"]`, so while the
+	 * lane was unresolved the header said "Owner" — above a sidebar
+	 * `useAgencyCanFor(agencySubRole)` had just built at LEAST privilege from the
+	 * same null. The person was told they were the owner and shown a Director's
+	 * console.
+	 */
 	const subLabel =
 		portal === "agency"
-			? AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t)
-			: OUTLET_SUB_ROLE_LABELS[outletSubRole ?? "outlet_owner"](t);
+			? agencySubRoleLabel(agencySubRole, t)
+			: outletSubRoleLabel(outletSubRole, t);
 
 	/*
 	 * Hoisted out of the header's props: the SIDEBAR prints this identity too

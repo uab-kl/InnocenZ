@@ -3,7 +3,7 @@
 // `require`ing vitest from a CommonJS context throws at collection — so the
 // suite reported "1 failed, 0 tests" and all 7 cases below, which guard the
 // two-simultaneous-open-check-ins regression, had never run once.
-import { pickActive } from './pick-active-shift';
+import { pickActive, shiftDayKeys } from './pick-active-shift';
 import type { ShiftAssignmentRecord } from './api';
 
 /**
@@ -97,5 +97,55 @@ describe('pickActive · the ordinary single open check-in is unchanged', () => {
       checkInAt: `${todayIso}T01:00:00.000Z`,
     });
     expect(pickActive([future, velvet], NONE)?.id).toBe('a-velvet');
+  });
+});
+
+describe('shiftDayKeys', () => {
+  it('spans both days of a shift that crossed midnight', () => {
+    // Checked in 22:30, still on duty at 01:10 the next morning.
+    const keys = shiftDayKeys('2026-09-12T22:30:00+08:00', null, '2026-09-13');
+    expect(keys).toEqual(['2026-09-12', '2026-09-13']);
+  });
+
+  it('stops at the check-out day, not the day after', () => {
+    // A closed shift must not swallow the next night's receipts.
+    const keys = shiftDayKeys(
+      '2026-09-12T22:30:00+08:00',
+      '2026-09-13T03:00:00+08:00',
+      '2026-09-14',
+    );
+    expect(keys).toEqual(['2026-09-12', '2026-09-13']);
+  });
+
+  it('is just today when there is no check-in stamp', () => {
+    expect(shiftDayKeys(null, null, '2026-09-13')).toEqual(['2026-09-13']);
+  });
+
+  it('is one day for a shift that did not cross midnight', () => {
+    const keys = shiftDayKeys(
+      '2026-09-13T19:00:00+08:00',
+      '2026-09-13T23:00:00+08:00',
+      '2026-09-13',
+    );
+    expect(keys).toEqual(['2026-09-13']);
+  });
+
+  it('caps the span so an impossible stamp cannot spin the loop', () => {
+    // A check-out a year later is not a real shift; it must not enumerate 365 days.
+    const keys = shiftDayKeys(
+      '2026-01-01T20:00:00+08:00',
+      '2027-01-01T02:00:00+08:00',
+      '2027-01-01',
+    );
+    expect(keys).toHaveLength(4);
+  });
+
+  it('ignores a check-out that precedes the check-in', () => {
+    const keys = shiftDayKeys(
+      '2026-09-13T20:00:00+08:00',
+      '2026-09-01T02:00:00+08:00',
+      '2026-09-13',
+    );
+    expect(keys).toEqual(['2026-09-13']);
   });
 });

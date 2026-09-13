@@ -1,3 +1,4 @@
+import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -102,6 +103,27 @@ export interface UseOutletSalesReport {
 	isLoading: boolean;
 	/** True once the backend has at least one sales row for this outlet. */
 	hasData: boolean;
+	/**
+	 * THIS VENUE'S own past nights, ascending — the days the custom-range picker
+	 * may offer.
+	 *
+	 * ⚠️ It exists because the picker had no real-session source at all. It was
+	 * fed by `reportableDateIsosForOutlet(outletName, …)`, and `outletName` comes
+	 * from `tonightShiftOutletName(shifts)`, which falls back to
+	 * `DEFAULT_OUTLET_CANONICAL` when the DEMO shift list is empty — which is
+	 * precisely what a real session has, because `buildBlankPortalReset()` empties
+	 * it. `DEFAULT_OUTLET_CANONICAL` and `VELVET_OUTLET_NAME` are the same string,
+	 * "Velvet 23", so every real venue matched the demo branch: the picker offered
+	 * Velvet's nights and filtered the venue's own history by a name that is not
+	 * theirs, leaving none of their own. The demo dates were then handed to the
+	 * BACKEND as the custom range, so the report came back empty for reasons the
+	 * screen never stated.
+	 *
+	 * Same rule as `totalsFor` and `buildReport`: a day counts when it has floor
+	 * sales OR PR cost. Kept here rather than recomputed by the caller so the
+	 * three cannot drift.
+	 */
+	reportableDateIsos: string[];
 	buildReport: (range: SalesReportRange) => WeeklyReport | null;
 	buildFloorBreakdown: (range: SalesReportRange) => FloorBreakdown;
 	buildTopPrs: (range: SalesReportRange) => TopPrRow[];
@@ -244,6 +266,26 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 	const costByPrDay: ShiftCostPrDayTotals[] =
 		reportQuery.data?.costByPrDay ?? [];
 
+	/**
+	 * Capped at today: a night that has not happened has nothing to report on,
+	 * and the demo path has always capped the same way.
+	 */
+	const reportableDateIsos = useMemo(() => {
+		const todayIso = getLiveTodayIso();
+		const isos = new Set<string>();
+		// Keyed on the QUERY DATA, not on `byDaySales`/`costByPrDay`: those are
+		// `data?.x ?? []`, so they are a fresh array on every render while the
+		// query is empty, and this array would then be a new identity each time.
+		// A component effect depends on it downstream.
+		for (const d of reportQuery.data?.byDay ?? []) {
+			if (d.soldOn && d.soldOn <= todayIso) isos.add(d.soldOn);
+		}
+		for (const c of reportQuery.data?.costByPrDay ?? []) {
+			if (c.soldOn && c.soldOn <= todayIso) isos.add(c.soldOn);
+		}
+		return [...isos].sort();
+	}, [reportQuery.data]);
+
 	const buildTopPrs = useMemo(
 		() =>
 			(range: SalesReportRange): TopPrRow[] => {
@@ -372,6 +414,7 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 		backed,
 		isLoading: reportQuery.isLoading,
 		hasData: byDaySales.length > 0,
+		reportableDateIsos,
 		buildReport,
 		buildFloorBreakdown,
 		buildTopPrs,

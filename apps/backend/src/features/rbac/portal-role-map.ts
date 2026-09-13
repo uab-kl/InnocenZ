@@ -29,7 +29,26 @@ export function portalRoleNameForSubRole(
   if (org === 'outlet' && (n.includes('ops') || n.includes('operation'))) {
     return portalRoleName.OPS_HEAD;
   }
-  return portalRoleName.OWNER;
+  /*
+   * ⚠️ LEAST PRIVILEGE. This used to return OWNER, and the note above admitted
+   * what that meant: "an unmatched lane is granted everything".
+   *
+   * It also disagreed with the guard standing beside it. `holdsAgencyLane` /
+   * `holdsOutletLane` compare `sub_role` EXACTLY, so an unrecognised lane is
+   * nobody to them — while this resolved it to Owner and handed it every
+   * permission the owner holds. Two guards reading the same membership row and
+   * answering opposite ways is the shape that keeps producing leaks here.
+   *
+   * Director is view-only, so an unknown lane now reads and writes nothing.
+   * Safe to flip because every real lane is matched explicitly above, and
+   * `_probe-db-integrity` checks the live table for lanes outside the known set
+   * (agency: owner/guarantor/finance/director; outlet: those plus
+   * operations_head) — it reports none, so this demotes no existing member.
+   *
+   * ⚠️ Do NOT "fix" a future missing lane by restoring the Owner fallback. Add
+   * the lane to the matches above, and to that probe's list.
+   */
+  return portalRoleName.DIRECTOR;
 }
 
 /**
@@ -70,7 +89,18 @@ export function inferMembershipSubRole(
   if (org === 'outlet' && (n.includes('ops') || n.includes('operation'))) {
     return 'operations_head';
   }
-  return org === 'agency' ? 'finance' : 'operations_head';
+  /*
+   * ⚠️ LEAST PRIVILEGE here too — and this one mattered more, as the note above
+   * says: the old fallbacks were WRITE lanes on both portals (`finance` for an
+   * agency, `operations_head` for a venue). An unrecognised role name became
+   * somebody who could raise a payment voucher, or post jobs at a venue.
+   *
+   * `director` is the view-only lane on both, so an unknown role name now
+   * grants nothing. `laneFromRoleHints` below is unaffected: it passes an
+   * explicit `portalRoleName.OWNER` when it finds no hint, and 'Owner' is
+   * matched above — that default is a separate, deliberate decision.
+   */
+  return 'director';
 }
 
 type RoleHint = { portalCode: string | null; roleName: string };

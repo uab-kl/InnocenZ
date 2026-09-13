@@ -1,13 +1,16 @@
+import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
 	managedPrFromBackend,
 	payClassToBackend,
 	tierFromLabel,
 } from "@agency-portal/lib/pr-personnel-map";
+import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	fetchPrPersonnel,
 	removePrPersonnel,
@@ -54,6 +57,8 @@ type ProfilePatch = Partial<
 export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 	const { enabled = true } = params;
 	const { logout } = useAuth();
+	const { t } = usePortalLocale();
+	const { toast } = useStore();
 	const queryClient = useQueryClient();
 	const invalidate = () =>
 		queryClient.invalidateQueries({ queryKey: ["roster", "prs"] });
@@ -75,6 +80,30 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 		() => (prsQuery.data?.data ?? []).map(managedPrFromBackend),
 		[prsQuery.data],
 	);
+
+	/*
+	 * ⚠️ ALL THREE WRITES ON A PR'S PROFILE USED TO BE FIRE-AND-FORGET.
+	 *
+	 * `updateMut` and `removeMut` carried `onSuccess: invalidate` and no
+	 * `onError`, and the screen closed itself the moment either was called:
+	 * Save set `editing` to false, Suspend closed its sheet, and Detach closed
+	 * its sheet AND navigated back to the PR list.
+	 *
+	 * That last one is the reason this matters more here than elsewhere. A
+	 * REFUSED detach looks more convincing than a silent one: the operator is
+	 * returned to the list exactly as they are when the PR really has been let
+	 * go. And a refused SAVE is worse than nothing on screen — the editor closes
+	 * and re-renders the STORED values, so the fields visibly snap back to what
+	 * they were, which reads as the server having rejected the typing rather
+	 * than as a request that never landed.
+	 *
+	 * `PUT /pr/:id` and `DELETE /pr/:id` both sit behind
+	 * `requirePermission('workforce','update')` and both resolve the PR through
+	 * `resolvePrForCaller`, which answers 403/404 IN WORDS when the PR belongs to
+	 * another agency. That sentence is the whole value of the refusal.
+	 */
+	const failed = (fallback: string) => (error: unknown) =>
+		toast(serverMessage(error, fallback), "warn");
 
 	const updateMut = useMutation({
 		mutationFn: (vars: { id: string; input: UpdatePrPersonnelInput }) =>
@@ -131,17 +160,40 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 			if (tier) input.tier = tier;
 		}
 
-		updateMut.mutate({ id: prId, input });
+		// Per-call outcomes rather than one pair on the mutation, because the
+		// three acts share `updateMut` but not their sentences: "Profile saved"
+		// over a suspension would be worse than silence.
+		updateMut.mutate(
+			{ id: prId, input },
+			{
+				onSuccess: () => toast(t.managePr.profileSaved, "success"),
+				onError: failed(t.managePr.couldNotSaveProfile),
+			},
+		);
 	};
 
 	const suspend = (prId: string) =>
-		updateMut.mutate({ id: prId, input: { status: "suspended" } });
+		updateMut.mutate(
+			{ id: prId, input: { status: "suspended" } },
+			{
+				onSuccess: () => toast(t.managePr.prSuspended, "success"),
+				onError: failed(t.managePr.couldNotSuspend),
+			},
+		);
 
-	const detach = (prId: string) => removeMut.mutate(prId);
+	const detach = (prId: string) =>
+		removeMut.mutate(prId, {
+			onSuccess: () => toast(t.managePr.prDetached, "success"),
+			onError: failed(t.managePr.couldNotDetach),
+		});
 
 	return {
 		prs,
 		isLoading: prsQuery.isLoading,
+		// A failed roster fetch and an agency with no PRs both come out as `[]`,
+		// and the home tile then reads "0 PRs" in the same confident type it uses
+		// for a real zero. See the note on `use-agency-pvs`.
+		isError: prsQuery.isError,
 		saveProfile,
 		suspend,
 		detach,

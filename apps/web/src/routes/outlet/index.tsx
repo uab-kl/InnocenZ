@@ -82,6 +82,30 @@ function OutletHome() {
 			    that ends the account. Hidden entirely at zero. */}
 			<UnpaidBillingBanner portal="outlet" />
 
+			{/*
+			  ⚠️ SAID OUT LOUD, because an empty board is this screen's normal state.
+
+			  Shifts, assignments and PRs all come back `[]` when their requests
+			  fail, and everything below renders that as a quiet night — so a venue
+			  with a full floor could be shown nothing at all, on the one screen
+			  they use to run the evening. And worse than nothing: if the shifts
+			  loaded but the assignments did not, the board shows a shift with
+			  NOBODY on it, which reads as staff failing to turn up.
+
+			  Amber, not red: nothing is known to be wrong with the night itself,
+			  only with our ability to describe it.
+			*/}
+			{backend.isError && (
+				<div className="mb-3 rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3">
+					<p className="text-sm font-semibold text-amber-300">
+						{t.today.couldNotLoadTonight}
+					</p>
+					<p className="iz-tiny iz-muted mt-1">
+						{t.today.couldNotLoadTonightHint}
+					</p>
+				</div>
+			)}
+
 			{/* A venue with no APPROVED agency cannot post a shift, and Today is the
 			    screen it lands on. Without this it sees an empty board with no
 			    explanation and no idea the next step is in Settings. Split in two

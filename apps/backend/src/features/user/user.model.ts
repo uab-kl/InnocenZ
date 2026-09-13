@@ -53,6 +53,24 @@ export const UserTable = MainSchema.table('user', {
     failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
     blockedReason: varchar('blocked_reason'),
+    /**
+     * SESSIONS ISSUED BEFORE THIS MOMENT ARE DEAD (migration 0165).
+     *
+     * The access token is a stateless JWT — no session table, no token id, no
+     * revocation list — so before this column a password change left every
+     * token already issued working for its full lifetime. Somebody resetting a
+     * password because a device was stolen was told it had worked while the
+     * thief stayed signed in.
+     *
+     * `authenticate-jwt` refuses a token whose `iat` is STRICTLY earlier than
+     * this. NULL means no constraint, which is what every existing account
+     * carries, so the column is inert until a password actually changes.
+     *
+     * ⚠️ Stamped in `updateUserPassword`, which all three password paths
+     * already funnel through — not at each call site, so a fourth path cannot
+     * forget it.
+     */
+    sessionsValidFrom: timestamp('sessions_valid_from', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

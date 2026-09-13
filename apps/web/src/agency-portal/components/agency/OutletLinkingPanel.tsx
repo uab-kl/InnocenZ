@@ -1,6 +1,8 @@
 import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
+import { outletStatusLabel } from "@agency-portal/lib/status-labels";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -450,6 +452,20 @@ export function OutletLinkingDetail({
 }) {
 	const { t } = usePortalLocale();
 	const queue = useAgencyOutletLinks(filter);
+	/*
+	 * ⚠️ MAY THIS LANE DECIDE A PARTNERSHIP AT ALL?
+	 *
+	 * The server gates `PATCH` and `DELETE /agency-outlet/links/:outletId` on
+	 * `requirePermission('settings','update')` — owner and guarantor only — and
+	 * its comment there claims "the screens already gate these controls on
+	 * `editSettings`". This panel contained no permission check of ANY kind, so
+	 * that comment described a gate that did not exist: a Director was shown
+	 * Approve, Decline and End partnership, and every one of them collected a
+	 * 403 the panel then said nothing about.
+	 *
+	 * `editSettings` is the exact mirror of the server's `settings:update`.
+	 */
+	const canDecideLink = useAgencyCan()("editSettings");
 	const [rejecting, setRejecting] = useState(false);
 	/**
 	 * Ending is behind its own confirm step, like declining — and for a stronger
@@ -518,7 +534,7 @@ export function OutletLinkingDetail({
 						    review does not put it to work. */}
 						{link.outletStatus !== "active" && (
 							<IzPill variant="amber" className="mt-1">
-								{link.outletStatus.replace(/_/g, " ")}
+								{outletStatusLabel(link.outletStatus, t)}
 							</IzPill>
 						)}
 					</div>
@@ -606,7 +622,10 @@ export function OutletLinkingDetail({
 			    something to read before every approval. */}
 			<LinkHistory outletId={link.outletId} />
 
+			{/* A lane that cannot decide sees the request in full and answers none
+			    of it — the same shape the Approvals queue beside this one uses. */}
 			{link.approveStatus === "pending" &&
+				canDecideLink &&
 				(rejecting ? (
 					<div className="flex flex-col gap-2">
 						<textarea
@@ -670,7 +689,9 @@ export function OutletLinkingDetail({
 			    since that would read as the main thing to do on a page where the
 			    main thing is usually nothing. A labelled section is findable by
 			    someone looking for it and ignorable by someone who is not. */}
-			{link.approveStatus === "approved" && (
+			{/* Ending a partnership is the same `settings:update` write as deciding
+			    one, so it hides on the same permission. */}
+			{link.approveStatus === "approved" && canDecideLink && (
 				<div className="mt-1 rounded-xl border border-rose-400/25 bg-rose-400/[0.04] px-4 py-3">
 					<div className="iz-approvals-info-title !mb-1.5 text-rose-300/80">
 						{t.approvals.endSectionTitle}

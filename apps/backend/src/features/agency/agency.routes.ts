@@ -13,13 +13,29 @@ import {
 
 const router = Router();
 
-// Directory listing is admin + agency only — outlet must not enumerate agencies
-// (admin dashboard pending_review used to succeed for any signed-in JWT).
-router.get(
-  '/',
-  requireRole('admin', 'agency'),
-  agencyController.list.bind(agencyController),
-);
+/*
+ * ⚠️ ADMIN ONLY. The note that used to sit here said "admin + agency only —
+ * outlet must not enumerate agencies", which asked the wrong question: it
+ * worried about the OUTLET portal and never about one agency reading another.
+ *
+ * `requireRole('admin','agency')` has no tenant term and `list` never consults
+ * `req.user`, so any agency lane — a view-only Director included — could
+ * enumerate every agency on the platform. Proved live as Atlas's Finance head:
+ * five rows came back, four of them rivals, each carrying `ssmNo` — the company
+ * registration number. This is the same shape as the `GET /user` leak: a role
+ * gate standing in for a scope check, behind a comment that had outlived it.
+ *
+ * CALLERS VERIFIED FIRST, the way this file's own history demands. Every
+ * `fetchAgencies` call site is an ADMIN screen — routes/admin/dashboard,
+ * business/history, rbac/pending, user-management/agency — plus
+ * `use-sidebar-badges`, which only the admin sidebar and routes/admin/rbac
+ * render. The agency portal never lists agencies, and the phone calls no
+ * `/agency` route at all.
+ *
+ * An agency that needs its OWN record still has `GET /agency/:id`, which is
+ * membership-scoped, and `/agency/memberships` below.
+ */
+router.get('/', requireAdmin, agencyController.list.bind(agencyController));
 router.get(
   '/memberships',
   requireRole('admin', 'agency'),
@@ -66,11 +82,21 @@ router.get(
   requireOrgMembershipByParam('agency', 'id'),
   agencyController.getById.bind(agencyController),
 );
-router.post(
-  '/',
-  requireRole('admin', 'agency'),
-  agencyController.create.bind(agencyController),
-);
+/*
+ * ⚠️ ADMIN ONLY — the twin of `POST /outlet`, and for the same reason.
+ *
+ * `requireRole('admin','agency')` admits EVERY agency lane, so a view-only
+ * Director could create an agency record — and `create` also writes the first
+ * membership row, so it is an ownership-granting write, not a directory entry.
+ * Nothing about being staff at one agency should let you conjure another.
+ *
+ * CALLERS VERIFIED FIRST: `services/agency/agency.ts` exports no create at all,
+ * and nothing in `apps/web/src` POSTs to `/agency` — every existing row came
+ * from a seed script or an admin, exactly as on the outlet side. If agency
+ * self-signup ever ships it goes through the public `/auth/register` path,
+ * which is a different route with its own rules, not this one.
+ */
+router.post('/', requireAdmin, agencyController.create.bind(agencyController));
 // Editing the agency record is agencyCan('editSettings') — owner only. This
 // carried no role gate at all before, so any signed-in account could rewrite an
 // agency's own details.
@@ -130,10 +156,32 @@ router.patch(
 //
 // Read-scoping this route is what makes it safe to return the IC document keys
 // it now selects — those must never sit behind an open endpoint.
+/*
+ * ⚠️ `director` ALONGSIDE owner and finance — READ ONLY, and only here.
+ *
+ * The Director holds `approvals:read`, so they are given the Approvals sidebar
+ * item, admitted by the route guard, and shown the page — and then the PR
+ * sign-up queue behind it is fed by THIS endpoint, which 403'd them. The queue
+ * was therefore permanently empty for the one lane whose entire job is to look
+ * at it: a nav item, a page and a badge, all leading to a list that could never
+ * have rows.
+ *
+ * This is the same correction already made twice below, for the same reason and
+ * in the same words: `/:id/uncharged` and `/:id/penalty-proposals` both added
+ * `director` for READ because "a Director oversees; reading what has not been
+ * billed is exactly that". Every WRITE on a sign-up stays owner-only.
+ *
+ * ⚠️ This route returns IC document keys, and widening it is a privacy decision,
+ * not a convenience one. It is defensible precisely because reviewing a sign-up
+ * IS looking at who is asking to join — that is what the Approvals screen is
+ * for, and the Director is an org member the owner has given oversight to. It
+ * stays SCOPED to the agency in `:id`, so this widens the lane and never the
+ * organisation.
+ */
 router.get(
   '/:id/prs',
   requireRole('admin', 'agency'),
-  requireAgencySubRoleScoped('id', 'owner', 'finance'),
+  requireAgencySubRoleScoped('id', 'owner', 'finance', 'director'),
   agencyController.listAgencyPrs.bind(agencyController),
 );
 // Attendance & discipline policy (0113 moved it off the outlet workspace).

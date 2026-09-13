@@ -9,6 +9,7 @@ import {
 	nextRenewalFrom,
 	nextRenewalFromInvoices,
 } from "@agency-portal/lib/subscription-record";
+import { useAgencyIsOwner } from "@agency-portal/lib/use-portal-can";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -127,6 +128,12 @@ export function useAgencySubscription() {
 	const identity = useMemo(() => getAgencyIdentity(), []);
 	const backed = identity !== null;
 	const agencyId = identity?.agencyId ?? null;
+	/*
+	 * WHO MAY EVEN ASK ABOUT THE PAYMENT METHOD. `payment-method/mine` is
+	 * `orgOwnerPaysOnly` on the server — the owner LANE with the guarantor fold
+	 * switched off — so Finance, Director and Guarantor are all refused.
+	 */
+	const isOrgOwner = useAgencyIsOwner();
 
 	const plansQuery = useQuery({
 		queryKey: ["agency", "subscription", "plans", "agency"],
@@ -220,7 +227,21 @@ export function useAgencySubscription() {
 	const cardQuery = useQuery({
 		queryKey: ["payment-method", "mine", agencyId ?? "none"],
 		queryFn: () => fetchMyPaymentMethod(logout),
-		enabled: backed,
+		/*
+		 * ⚠️ `backed && isOrgOwner`, not `backed`.
+		 *
+		 * This fired for EVERY lane while the server refuses all but the owner, so
+		 * opening Subscription as Finance, Director or Guarantor sent a request
+		 * that could only ever 403 — a refusal nobody asked for, logged on every
+		 * visit, on a screen the section it feeds is already hidden from. The
+		 * screen's own `canPay` has been the right rule all along; the query
+		 * simply never read it.
+		 *
+		 * The same lane the server checks, by the same means the rest of the
+		 * portal uses — see `useAgencyIsOwner` for why paying is a LANE and not a
+		 * module grant.
+		 */
+		enabled: backed && isOrgOwner,
 		staleTime: 60_000,
 	});
 

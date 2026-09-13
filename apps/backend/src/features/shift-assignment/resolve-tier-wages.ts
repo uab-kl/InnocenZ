@@ -69,6 +69,56 @@ export async function resolveTierWages(
 }
 
 /**
+ * The COMMISSION percentages this PR's tier earns on this shift — off the same
+ * merged card `resolveTierWages` takes the day rate from.
+ *
+ * 🔴 Shared, not duplicated, for the reason the wage resolver is: a second copy
+ * is a second answer to "what does this shift pay". It exists because the
+ * commission on a voucher line was never checked against the card at all —
+ * `payment_voucher_line.amount` is written straight from the number the PR's
+ * phone sends (`CreatePrReceiptLineSchema.commission`, bounded only by
+ * `nonnegative()`), so the device being paid decided how much it was owed.
+ *
+ * Null when neither the per-shift override nor the outlet workspace prices this
+ * tier. That is a real state — a venue that has not filled its rate card in —
+ * and a caller must read it as "no ceiling known", never as zero.
+ */
+export async function resolveCommissionPcts(
+  repository: ShiftAssignmentRepositoryClass,
+  pr: { tier: string },
+  shiftId: string,
+  outletId: string,
+): Promise<{
+  drinkPct: number;
+  happyHourDrinkPct: number | null;
+  tipPct: number;
+} | null> {
+  const commissionOnly = pr.tier === 'commission_only';
+  const tierLabel = PR_TIER_TO_OUTLET_LABEL[pr.tier] ?? null;
+  if (!commissionOnly && !tierLabel) return null;
+
+  const [rateByOutlet, overrideByShift] = await Promise.all([
+    repository.resolveTierRatesForOutlets({ outletIds: [outletId], tierLabel, commissionOnly }),
+    repository.resolveShiftTierOverrides({ shiftIds: [shiftId], tierLabel, commissionOnly }),
+  ]);
+  const rate = mergeRate(rateByOutlet.get(outletId), overrideByShift.get(shiftId));
+  if (!rate) return null;
+
+  // A non-numeric percentage is a broken price rather than an absent one, and it
+  // buys exactly as little — the same treatment `outcomeFromRate` gives a broken
+  // wage.
+  const num = (value: string | null | undefined): number | null => {
+    const n = value == null || value === '' ? NaN : Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  return {
+    drinkPct: num(rate.drinkPct) ?? 0,
+    happyHourDrinkPct: num(rate.happyHourDrinkPct),
+    tipPct: num(rate.tipPct) ?? 0,
+  };
+}
+
+/**
  * Why there is no wage — the distinction `resolveTierWages`'s `null` cannot make.
  *
  * `commission_only` is a PR who is CORRECTLY unpaid a day rate: they earn on

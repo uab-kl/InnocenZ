@@ -26,13 +26,19 @@ import {
 } from '../lib/demo-shifts';
 import { shiftDurationLabel, useShiftSession } from '../lib/shift-session';
 import { localDateKey, useActiveShift } from '../lib/active-shift';
+import { shiftDayKeys as shiftDayKeysFor } from '../lib/pick-active-shift';
 import { overtimeHours, overtimePay } from '../lib/pr-rate';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { usePrNav } from '../lib/pr-nav';
 import { useLocale, formatMessage } from '../i18n';
-import { assetUrl, checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
+import {
+  assetUrl,
+  cancelMyShiftAssignment,
+  checkInShiftAssignment,
+  checkOutShiftAssignment,
+} from '../lib/api';
 import { getAttendanceFix } from '../lib/device-location';
 import { Avatar, EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
@@ -209,7 +215,14 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       Pressables, so they never fight the card's own tap-to-expand. */
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  // The acknowledgement that replaced the dead end — see `nothingLogged`.
+  const [emptyShiftOpen, setEmptyShiftOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  // The cancel is a real server write now — so it can be in flight, and it can
+  // be refused. Both have to be visible, or the PR taps again on a shift the
+  // server already took.
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // If the backend already has an open check-in (e.g. after reload), mirror that
@@ -264,29 +277,12 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    *
    * Capped at four days so a stamp that cannot be true cannot spin the loop.
    */
-  const shiftDayKeys = useMemo(() => {
-    const start = active?.checkInAt ? new Date(active.checkInAt) : null;
-    if (!start || Number.isNaN(start.getTime())) return [todayKey];
-    const raw = active?.checkOutAt ? new Date(active.checkOutAt) : new Date();
-    const end =
-      !Number.isNaN(raw.getTime()) && raw.getTime() >= start.getTime()
-        ? raw
-        : start;
-    const last = localDateKey(end);
-    const keys: string[] = [];
-    const cursor = new Date(
-      start.getFullYear(),
-      start.getMonth(),
-      start.getDate(),
-    );
-    for (let i = 0; i < 4; i++) {
-      const key = localDateKey(cursor);
-      keys.push(key);
-      if (key === last) break;
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    return keys;
-  }, [active?.checkInAt, active?.checkOutAt, todayKey]);
+  // The shared rule — this used to be an inline copy, and ScanScreen had no
+  // copy at all.
+  const shiftDayKeys = useMemo(
+    () => shiftDayKeysFor(active?.checkInAt, active?.checkOutAt, todayKey),
+    [active?.checkInAt, active?.checkOutAt, todayKey],
+  );
   const shiftStartedAt = active?.checkInAt ? new Date(active.checkInAt).getTime() : null;
   const todayReceipts = receiptLines.filter((l) => {
     if (!shiftDayKeys.includes(l.lineDate ?? '')) return false;
@@ -318,11 +314,13 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   );
 
   /**
-   * Why check-out is refused, or null when it is allowed. Photos first.
+   * Why check-out is REFUSED, or null when it is allowed.
    *
-   * Two spelled-out sentences rather than an "s"/"has|have" fragment glued into
-   * one template: Chinese has no plural form to append, so the singular and
-   * plural wordings are separate keys picked by the count.
+   * Only the missing-photo case, and only because the PR can actually clear it:
+   * re-scan the row or remove it. Two spelled-out sentences rather than an
+   * "s"/"has|have" fragment glued into one template — Chinese has no plural
+   * form to append, so the singular and plural wordings are separate keys picked
+   * by the count.
    */
   const checkOutBlock: string | null =
     linesMissingPhoto > 0
@@ -332,9 +330,31 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             : t.checkin.missingPhotoMany,
           { n: linesMissingPhoto },
         )
-      : loggedActions.length === 0
-        ? t.checkin.nothingLogged
-        : null;
+      : null;
+
+  /**
+   * 🔴 AN EMPTY SHIFT IS A WARNING NOW, NOT A LOCKED DOOR.
+   *
+   * "Nothing logged" used to sit in `checkOutBlock` and disable the button
+   * outright, with no override anywhere on the screen. A quiet night is a real
+   * night — and so is a PR whose role sold nothing — and for them the
+   * consequences compounded:
+   *
+   *   • they could not check out, so the server never SEALED the wage
+   *     (`pay_amount` / `pay_rule` are written at check-out) and the shift paid
+   *     them nothing at all;
+   *   • the backend refuses a second check-in while one is open
+   *     (`open_check_in_elsewhere`), so the stuck shift locked them out of every
+   *     FUTURE shift too;
+   *   • nothing on the phone could clear it. Not a support case they can
+   *     raise — a dead end.
+   *
+   * The reason behind the rule is sound and is kept: commission that is not
+   * logged before the week closes cannot be claimed afterwards. That is a thing
+   * to WARN someone about, not a reason to trap them. The sheet says it plainly
+   * and makes them confirm.
+   */
+  const nothingLogged = checkOutBlock === null && loggedActions.length === 0;
 
   /**
    * What this shift pays THIS PR, in RM — the one figure every wage number on
@@ -525,13 +545,48 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }, 60);
   };
 
-  const confirmCancel = () => {
-    if (!cancelReason.trim() || !active) return;
-    // Client-only for now — a PR-cancel endpoint is a later slice. Hides the row
-    // from the active pick until reload.
-    dismiss(active.id);
-    setCancelOpen(false);
-    setCancelReason('');
+  /*
+   * ⚠️ THIS USED TO CANCEL NOTHING — and the comment saying so was STALE.
+   *
+   * It read "a PR-cancel endpoint is a later slice" and only called `dismiss`,
+   * which hides the row locally until the next reload. Meanwhile this sheet
+   * titles itself "Cancel shift?", prints the cancellation FEE BANDS, and makes
+   * the reason mandatory. So a PR read the rules, accepted a possible charge,
+   * typed a reason, confirmed — and the shift vanished from their phone while
+   * the agency roster and the venue still had them booked. They were then marked
+   * a NO-SHOW, and the reason they gave was thrown away.
+   *
+   * `POST /shift-assignment/mine/:id/cancel` has existed for a while: "a signed-
+   * in PR cancels its OWN upcoming assignment (reason required) — the agency
+   * sees the cancelled row". `AgencySchedulePanel` has been calling it correctly
+   * all along, so the app carried two cancel paths, one real and one theatre.
+   * This is now the same call, with the same shape of error handling.
+   *
+   * The local `dismiss` stays, but only AFTER the server agrees — it is what
+   * takes the row out of the active pick without waiting for the refetch.
+   */
+  const confirmCancel = async () => {
+    const reason = cancelReason.trim();
+    if (!reason || !active || cancelBusy) return;
+    if (!token) {
+      setCancelError(t.schedule.notSignedIn);
+      return;
+    }
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      await cancelMyShiftAssignment(token, active.id, reason);
+      dismiss(active.id);
+      setCancelOpen(false);
+      setCancelReason('');
+      void refresh();
+    } catch (e) {
+      // The server's own sentence — it is the half that says WHY, and a shift
+      // already checked in or completed is refused here on purpose.
+      setCancelError(e instanceof Error ? e.message : t.schedule.cancelFailed);
+    } finally {
+      setCancelBusy(false);
+    }
   };
 
   const outletName = active?.outletName ?? t.common.outlet;
@@ -785,11 +840,23 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   disabled={checkOutBlock !== null}
                   onPress={() => {
                     if (checkOutBlock !== null) return;
+                    // The warning is shown BEFORE the hold rather than after it:
+                    // holding a button for six seconds and then being told why it
+                    // will not work is the same dead end in slower motion.
+                    if (nothingLogged) {
+                      setEmptyShiftOpen(true);
+                      return;
+                    }
                     startHold(true);
                   }}
                 />
                 {checkOutBlock !== null && (
                   <Text style={[styles.gpsNote, { color: C.red }]}>{checkOutBlock}</Text>
+                )}
+                {nothingLogged && (
+                  <Text style={[styles.gpsNote, { color: C.amber }]}>
+                    {t.checkin.nothingLogged}
+                  </Text>
                 )}
               </>
             )}
@@ -847,6 +914,54 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         )
       )}
 
+      {/*
+        * Checking out of a shift with nothing logged. It warns, in the words the
+        * old block used, and then lets the PR through — because the alternative
+        * was a shift they could never close, a wage never sealed, and every
+        * later check-in refused behind it.
+        */}
+      <Modal
+        visible={emptyShiftOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEmptyShiftOpen(false)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setEmptyShiftOpen(false)}
+        >
+          <Pressable
+            style={[styles.sheet, { paddingBottom: 18 + insets.bottom }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.sheetTitle}>{t.checkin.emptyShiftTitle}</Text>
+            <Text style={styles.sheetMeta}>
+              {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd, t) : '—'} · {shiftTime}
+            </Text>
+            <Text style={[styles.sheetHint, { color: C.amber }]}>
+              {t.checkin.emptyShiftWarning}
+            </Text>
+            <Pressable
+              style={styles.dangerBtn}
+              onPress={() => {
+                setEmptyShiftOpen(false);
+                startHold(true);
+              }}
+            >
+              <Text style={styles.dangerBtnText}>
+                {t.checkin.emptyShiftConfirm}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.sheetCancel}
+              onPress={() => setEmptyShiftOpen(false)}
+            >
+              <Text style={styles.sheetCancelText}>{t.checkin.back}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal
         visible={cancelOpen}
         transparent
@@ -888,10 +1003,30 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               placeholder={t.checkin.reasonPlaceholder}
               placeholderTextColor={C.muted2}
             />
-            <Pressable style={styles.dangerBtn} onPress={confirmCancel}>
+            {/* The server's refusal, said out loud. A shift already checked in
+                or completed is refused on purpose, and without this the sheet
+                simply sat there looking broken. */}
+            {cancelError && (
+              <Text style={[styles.sheetHint, { color: C.red }]}>{cancelError}</Text>
+            )}
+            <Pressable
+              style={[styles.dangerBtn, cancelBusy && { opacity: 0.5 }]}
+              disabled={cancelBusy}
+              onPress={() => {
+                void confirmCancel();
+              }}
+            >
               <Text style={styles.dangerBtnText}>{t.checkin.cancelShift}</Text>
             </Pressable>
-            <Pressable style={styles.sheetCancel} onPress={() => setCancelOpen(false)}>
+            <Pressable
+              style={styles.sheetCancel}
+              onPress={() => {
+                setCancelOpen(false);
+                // Backing out clears the refusal — it belonged to the attempt,
+                // not to the shift.
+                setCancelError(null);
+              }}
+            >
               <Text style={styles.sheetCancelText}>{t.checkin.back}</Text>
             </Pressable>
           </Pressable>

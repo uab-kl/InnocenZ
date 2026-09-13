@@ -20,6 +20,39 @@
 - DON'T USE for: basic generator syntax (`nx g @nx/react:app`), standard commands, things you already know
 - The `nx-generate` skill handles generator discovery internally - don't call nx_docs just to look up generator syntax
 
+# THE FIX RULES — run these on EVERY change (owner, 13 Sep 2026)
+
+**Stated by the owner as a standing instruction, for every device, every session, and
+everyone who touches this repo** — *"everytime in different device or different session when
+other people touch this innocenz repo folder project, do anything or function, or fixing,
+remember the below"*. They are first in this file because they come first in the work.
+
+1. **Remember the rules in this InnocenZ.** Everything below in this file — the database
+   rules, RBAC from the database, the status colours, no demo data on a real session, the
+   typography ladder. A fix that breaks a rule is not a fix.
+2. **Check the DATABASE first.** Before believing any claim about behaviour, look at the
+   rows. Most "bugs" here are settled by one read-only query, and several have turned out to
+   be the data rather than the code (see the Havoc and rate-card entries in `TEST_SCRIPT.md`
+   §9).
+3. **Does it work with the UI *and* the database?** A green typecheck is not the product
+   working. Verify the screen and the stored row together.
+4. **Do the functions and modules work on ALL pages — can the user SEE it and USE it?**
+   Walk the pages the change touches, not just the one that was edited.
+5. **After fixing, say what is LEFT.** Which errors, failures or bugs are solved, what still
+   stands, and what else was found. An unreported remainder is a bug nobody is looking for.
+6. **Check EVERY member, account and role — and every organisation.** Outlet, PR agency, PR
+   and admin, on the WEB and in the APPLICATION. A fix verified as the owner only is verified
+   for one of eleven lanes; `_probe-mint-session.ts` mints a read-only session for each.
+7. **Then CONTINUE — and keep remembering these rules while you do.** One fix is not the job;
+   the backlog in `TEST_SCRIPT.md` §9 is. Carry on to the next item and apply 1-6 again to it,
+   rather than stopping at the first thing that goes green.
+
+⚠️ Two rules that override any instinct to "just try it":
+* **NEVER probe a write gate with a write.** A previous session destroyed two venues' entire
+  rate cards that way. Read the code, read the rows, unit-test the parse.
+* **A zero result is evidence about the INSTRUMENT, not about the codebase.** No grep hits, a
+  SKIP, a clean run — prove the tool would have found something before reporting nothing.
+
 # InnocenZ project memory (works on ANY device with this repo)
 
 Full session memory is committed at **`docs/claude-memory/*.md`** — 26 memories plus

@@ -201,6 +201,14 @@ function ModulePage() {
 					}
 				}}
 				isPending={deactivateMutation.isPending}
+				/* Deactivating a module withdraws a permission from every role that
+				   holds it, so a refusal here matters — and the dialog had nowhere to
+				   show one. Create and update already surface theirs through
+				   `formError`; this was the write left silent. */
+				error={toMutationError(
+					deactivateMutation.error,
+					t.rbac.moduleDeactivateFailed,
+				)}
 			/>
 		</PageShell>
 	);

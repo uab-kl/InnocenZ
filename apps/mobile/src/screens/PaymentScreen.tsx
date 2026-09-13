@@ -698,6 +698,10 @@ export function PaymentScreen({
   // Last week's voucher comes from the same backend as this week — real data,
   // no demo grid. Fetched once on mount (it rarely changes mid-session).
   const [lastWeek, setLastWeek] = useState<PrCurrentWeek | null>(null);
+  // Did the last-week fetch FAIL? `lastWeek === null` already means "no
+  // voucher issued yet", so the failure needs its own flag or the PR is told
+  // their pay simply is not due. See the catch below.
+  const [lastWeekFailed, setLastWeekFailed] = useState(false);
   // Same caption, last week: the owner asked for the counts where the money
   // is being read, and after Sunday 00:00 that is the Last week card.
   const lastReviewCaption = useMemo(
@@ -709,10 +713,25 @@ export function PaymentScreen({
     let alive = true;
     void fetchMyLastWeek(token)
       .then((w) => {
-        if (alive) setLastWeek(w);
+        if (alive) {
+          setLastWeek(w);
+          setLastWeekFailed(false);
+        }
       })
       .catch(() => {
-        if (alive) setLastWeek(null);
+        /*
+         * ⚠️ `null` ALREADY MEANS "no voucher yet", so it cannot also mean
+         * "the request failed".
+         *
+         * Collapsing the two told a PR "No PV for last week yet — this week's
+         * PV is issued next Sunday", which is a calm statement that their pay
+         * is simply not due. If the request actually failed, that sentence
+         * sends them away from money that may well be waiting for them.
+         */
+        if (alive) {
+          setLastWeek(null);
+          setLastWeekFailed(true);
+        }
       });
     return () => {
       alive = false;
@@ -2079,7 +2098,9 @@ export function PaymentScreen({
                 </>
               ) : (
                 <Text style={styles.emptyWeekHint}>
-                  {t.payment.noLastWeekPv}
+                  {lastWeekFailed
+                    ? t.payment.couldNotLoadLastWeek
+                    : t.payment.noLastWeekPv}
                 </Text>
               )}
 

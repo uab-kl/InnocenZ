@@ -46,7 +46,7 @@ import {
 	resolvePvPrLabel,
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
-import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
+import { agencySubRoleLabel } from "@agency-portal/lib/agency-rbac";
 import {
 	countPvsNeedingAction,
 	countReceiptsNeedingAction,
@@ -83,21 +83,22 @@ import {
 	disputeDaysRemaining,
 	PV_WORKFLOW_STEPS,
 	type PvEarningsBreakdown,
+	pvBreakdownRows,
 	pvWorkflowStepIndex,
 	summarizePv,
 } from "@agency-portal/lib/pv-breakdown";
-import { downloadPvBreakdownCsv } from "@agency-portal/lib/pv-pdf";
-import {
-	buildAgencyPayee,
-	formatPvSignStamp,
-} from "@agency-portal/lib/pv-template";
-import { useStore } from "@agency-portal/lib/store";
 import {
 	canEditDisputedLines,
 	canResendToPr,
 	canResolveDispute,
 	canSendToPr,
 } from "@agency-portal/lib/pv-money-actions";
+import { downloadPvBreakdownCsv } from "@agency-portal/lib/pv-pdf";
+import {
+	buildAgencyPayee,
+	formatPvSignStamp,
+} from "@agency-portal/lib/pv-template";
+import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -373,7 +374,7 @@ function AgencyPV() {
 	);
 	// Vouchers come from the backend (already agency-scoped server-side); the
 	// Receipts sub-tab stays on the demo store — no backend for receipt scans.
-	const { pvs: prPaymentVouchers } = useAgencyPvs();
+	const { pvs: prPaymentVouchers, isError: pvsFailed } = useAgencyPvs();
 	const [detailId, setDetailId] = useState<string | null>(null);
 	const [payrollWeekTab, setPayrollWeekTab] =
 		useState<PayrollWeekTab>("last_week");
@@ -1110,8 +1111,9 @@ function AgencyPV() {
 					{t.payroll.title}
 				</IzPageTitle>
 				<p className="iz-tiny iz-muted2 mt-1">
-					{AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t)} ·{" "}
-					{t.payroll.signingChainHint}
+					{/* The lane, resolved — this is printed beside a signature on a
+					    money document, so an unresolved session must not read "Owner". */}
+					{agencySubRoleLabel(agencySubRole, t)} · {t.payroll.signingChainHint}
 				</p>
 			</header>
 
@@ -1440,20 +1442,37 @@ function AgencyPV() {
 						   whole list, and half a row of centred text with a hole beside it
 						   reads as a layout fault rather than as an answer. */
 						<IzCard className="text-center">
+							{/*
+							  ⚠️ A FAILED FETCH IS NOT AN EMPTY PAYROLL WEEK.
+
+							  `pvs` is `[]` in both cases, so this card used to tell an
+							  agency — in its settled, sentence-ending voice — that nobody
+							  is owed anything, when in fact we could not find out. On the
+							  one screen that decides who gets paid, that is the most
+							  expensive thing it can say wrongly.
+
+							  The filter-clearing button below is suppressed in that state
+							  too: clearing filters cannot fix a request that failed, and
+							  offering it sends the reader down the wrong path.
+							*/}
 							<p className="iz-sm iz-muted">
-								{payrollWeekTab === "last_last_week"
-									? t.payroll.noSignedVouchersThisWeek
-									: t.payroll.noVouchersMatch}
+								{pvsFailed
+									? t.payroll.couldNotLoadVouchers
+									: payrollWeekTab === "last_last_week"
+										? t.payroll.noSignedVouchersThisWeek
+										: t.payroll.noVouchersMatch}
 							</p>
-							{payrollWeekTab !== "last_last_week" && hasActiveFilters && (
-								<button
-									type="button"
-									className="iz-chip mt-2"
-									onClick={clearFilters}
-								>
-									{t.payroll.clearFilters}
-								</button>
-							)}
+							{!pvsFailed &&
+								payrollWeekTab !== "last_last_week" &&
+								hasActiveFilters && (
+									<button
+										type="button"
+										className="iz-chip mt-2"
+										onClick={clearFilters}
+									>
+										{t.payroll.clearFilters}
+									</button>
+								)}
 						</IzCard>
 					) : (
 						/* Two columns from `xl`, like the Receipts, Disputes and Overtime
@@ -1757,24 +1776,9 @@ function PvWorkflowRail({ status }: { status: PrPvStatus }) {
 
 function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
 	const { t } = usePortalLocale();
-	// `key` is the bucket, not the label. Keying a row on its own translated text
-	// remounts every row the moment the locale changes.
-	const rows = [
-		{ key: "wages", label: t.money.dailyWages, value: breakdown.wages },
-		{
-			key: "drinks",
-			label: t.payroll.drinkCommissions,
-			value: breakdown.drinks,
-		},
-		{ key: "tips", label: t.payroll.tipCommissions, value: breakdown.tips },
-		{
-			key: "overtime",
-			label: t.payroll.overtimeCheckOut,
-			value: breakdown.overtime,
-		},
-	].filter((r) => r.value > 0);
-	if (breakdown.other > 0)
-		rows.push({ key: "other", label: t.payroll.other, value: breakdown.other });
+	// One shared builder — this list used to be a byte-identical copy of the one
+	// in `AgencyPaidPvDetail`, deduction-hiding `> 0` filter and all.
+	const rows = pvBreakdownRows(breakdown, t);
 	return (
 		<IzCard flat className="mb-2.5">
 			{/* `uppercase` carries the heading's shouty look, which used to be baked
@@ -1785,7 +1789,10 @@ function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
 			{rows.map((r) => (
 				<div key={r.key} className="iz-v-sum">
 					<span className="iz-muted">{r.label}</span>
-					<b>{formatRM(r.value)}</b>
+					{/* Red on a deduction — the owner's colour code. */}
+					<b className={r.tone === "red" ? "text-[var(--iz-red)]" : undefined}>
+						{formatRM(r.value)}
+					</b>
 				</div>
 			))}
 			<div className="iz-v-sum tot">
@@ -2132,18 +2139,18 @@ function PvDetail({
 			)}
 
 			{/*
-			  * ⚠️ `can("raisePv")` — these three carried NO permission term while
-			  * every sibling write on this page does (`raisePv` at the send and
-			  * re-issue buttons, `canOverride` on the signed-PV override,
-			  * `canWaive` on cancellation fees).
-			  *
-			  * An agency DIRECTOR holds `payment_voucher:read` and reaches this page
-			  * legitimately, so they were shown "Edit line items" (description,
-			  * amount and deduction inputs plus Save), "Resend to PR" and "Resolve
-			  * dispute and reassign" — all of which write, and all of which the
-			  * server refuses. A Director oversees and does not sign; that is the
-			  * distinction the rest of this page already makes.
-			  */}
+			 * ⚠️ `can("raisePv")` — these three carried NO permission term while
+			 * every sibling write on this page does (`raisePv` at the send and
+			 * re-issue buttons, `canOverride` on the signed-PV override,
+			 * `canWaive` on cancellation fees).
+			 *
+			 * An agency DIRECTOR holds `payment_voucher:read` and reaches this page
+			 * legitimately, so they were shown "Edit line items" (description,
+			 * amount and deduction inputs plus Save), "Resend to PR" and "Resolve
+			 * dispute and reassign" — all of which write, and all of which the
+			 * server refuses. A Director oversees and does not sign; that is the
+			 * distinction the rest of this page already makes.
+			 */}
 			{canEditDisputedLines(can, pv.status) && rows.length > 0 && (
 				<OutletSection
 					title={t.payroll.editLineItems}

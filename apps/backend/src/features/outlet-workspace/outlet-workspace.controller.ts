@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { OutletWorkspaceRepositoryClass } from './outlet-workspace.repository.js';
+import {
+  OutletWorkspaceRepositoryClass,
+  WorkspaceParent,
+} from './outlet-workspace.repository.js';
 import { UpsertOutletWorkspaceSchema } from '@/schema/outlet-workspace.schema.js';
 import { Error } from '@/error/index.js';
 import { getActor } from '@/util/actor.js';
@@ -44,19 +47,28 @@ export class OutletWorkspaceControllerClass {
       const actor = getActor(req);
       const d = parsed.data;
 
-      const parent = {
-        basePayPerHour: num(d.basePayPerHour),
-        drinkPct: num(d.drinkPct),
-        tipPct: num(d.tipPct),
-        otAfterHours: num(d.otAfterHours),
-        perDrinkRm: num(d.perDrinkRm),
-        happyHourStart: d.happyHourStart,
-        happyHourEnd: d.happyHourEnd,
-        happyHourDrinkDiscountPct: d.happyHourDrinkDiscountPct,
-      };
+      /*
+       * Only what the caller ACTUALLY SENT. Every field used to carry a zod
+       * `.default()`, so an omitted `drinkPct` arrived as 0 and was written as
+       * 0 — a silent erase wearing the shape of a save. Undefined keys are
+       * dropped so the repository can leave the stored value alone.
+       */
+      const parent: WorkspaceParent = {};
+      if (d.basePayPerHour !== undefined) parent.basePayPerHour = num(d.basePayPerHour);
+      if (d.drinkPct !== undefined) parent.drinkPct = num(d.drinkPct);
+      if (d.tipPct !== undefined) parent.tipPct = num(d.tipPct);
+      if (d.otAfterHours !== undefined) parent.otAfterHours = num(d.otAfterHours);
+      if (d.perDrinkRm !== undefined) parent.perDrinkRm = num(d.perDrinkRm);
+      if (d.happyHourStart !== undefined) parent.happyHourStart = d.happyHourStart;
+      if (d.happyHourEnd !== undefined) parent.happyHourEnd = d.happyHourEnd;
+      if (d.happyHourDrinkDiscountPct !== undefined)
+        parent.happyHourDrinkDiscountPct = d.happyHourDrinkDiscountPct;
 
       const children = {
-        tierRates: d.tierRates.map((t) => ({
+        // `undefined` travels all the way to the repository, which skips the
+        // delete entirely. An explicit `[]` still clears — that is a caller
+        // saying so, not a caller forgetting.
+        tierRates: d.tierRates?.map((t) => ({
           kind: t.kind,
           tier: t.tier ?? null,
           wagePerHour: numOrNull(t.wagePerHour),
@@ -67,7 +79,7 @@ export class OutletWorkspaceControllerClass {
           targetSalesRm: numOrNull(t.targetSalesRm),
           sortOrder: t.sortOrder,
         })),
-        drinkMenu: d.drinkMenu.map((m) => ({
+        drinkMenu: d.drinkMenu?.map((m) => ({
           slug: m.slug,
           name: m.name,
           priceRm: num(m.priceRm),

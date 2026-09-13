@@ -1156,6 +1156,13 @@
       "when": 1792797000000,
       "tag": "0164_audit_log_portal",
       "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1792798000000,
+      "tag": "0165_user_sessions_valid_from",
+      "breakpoints": true
     }
   ]
 }

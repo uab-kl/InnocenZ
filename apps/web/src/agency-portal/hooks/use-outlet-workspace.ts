@@ -69,6 +69,22 @@ export function useOutletWorkspace() {
 		backed,
 		workspace,
 		isLoading: backed && query.isLoading,
+		/*
+		 * ⚠️ THE PAGE MUST BE ABLE TO TELL "no prices yet" FROM "the load failed".
+		 *
+		 * This hook returned only `workspace` and `isLoading`, and `workspace` is
+		 * `null` in BOTH cases — a venue that has never set a price, and a GET
+		 * that threw. `workspace.tsx` then falls back to the demo store, which a
+		 * real session deliberately blanks, so a failed load rendered as an EMPTY
+		 * rate card and drink menu with the Save button live.
+		 *
+		 * Pressing Save there PUTs that empty draft, and the handler treats every
+		 * field as optional and full-draft-saves — which is precisely how two
+		 * venues lost their entire rate cards and all seven tier rows once
+		 * already. The 404 branch above is the only "empty" that is real; every
+		 * other failure has to reach the screen.
+		 */
+		isError: backed && query.isError,
 		isSaving: saveMut.isPending,
 		save: (ws: OutletWorkspaceSettings) => saveMut.mutateAsync(ws),
 	};

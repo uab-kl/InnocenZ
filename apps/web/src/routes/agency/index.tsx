@@ -14,6 +14,7 @@ import {
 } from "@agency-portal/lib/agency-payroll";
 import { LIVE_SEED_PR_PVS } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
+import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
@@ -115,12 +116,33 @@ function AgencyHub() {
 	const backendPvs = useAgencyPvs();
 	const backed = backendOutlets.backed;
 
-	const prsForCalc = backed ? backendPrs.prs : (agencyPRs ?? []);
+	/*
+	 * ⚠️ NO DEMO FIXTURES ON A REAL SESSION — and `backed` was the wrong test.
+	 *
+	 * `backed` is `backendOutlets.backed`, i.e. "an outlet identity resolved".
+	 * Until it does — and it never does for an agency whose venue list is still
+	 * in flight — these fell through to `LIVE_SEED_PR_PVS` and `OUTLET_NAMES`,
+	 * so a REAL agency home printed demo voucher money and demo venue names
+	 * (Velvet 23, Onyx KL). That is the owner's explicit rule, broken.
+	 *
+	 * `buildBlankPortalReset()` cannot help here: it blanks the STORE, and these
+	 * two are module CONSTANTS imported directly, so nothing it does reaches
+	 * them. The session kind is the authority on whether demo data is allowed at
+	 * all, so ask it.
+	 */
+	const isRealSession = getPortalSessionKind() === "real";
+	const prsForCalc = backed
+		? backendPrs.prs
+		: isRealSession
+			? []
+			: (agencyPRs ?? []);
 	const pvsForCalc = backed
 		? backendPvs.pvs
-		: prPaymentVouchers?.length
-			? prPaymentVouchers
-			: LIVE_SEED_PR_PVS;
+		: isRealSession
+			? []
+			: prPaymentVouchers?.length
+				? prPaymentVouchers
+				: LIVE_SEED_PR_PVS;
 	const prToPayTotal = useMemo(
 		() => agencyPrToPayTotal(pvsForCalc, prsForCalc),
 		[pvsForCalc, prsForCalc],
@@ -153,9 +175,29 @@ function AgencyHub() {
 	 * list it describes if it ever comes back.
 	 */
 	const totalPrs = prsForCalc.filter((p) => !p.detached).length;
+	// Same rule as the two lists above: a real session counts its own venues or
+	// nothing, never the demo registry.
 	const totalOutlets = backed
 		? backendOutlets.outlets.length
-		: OUTLET_NAMES.length;
+		: isRealSession
+			? 0
+			: OUTLET_NAMES.length;
+
+	/*
+	 * ⚠️ A FIGURE WE COULD NOT FETCH IS NOT A ZERO.
+	 *
+	 * Every one of these tiles reads a list that comes back `[]` on failure, so
+	 * a broken request rendered as "0 PRs", "0 outlets" and "RM 0.00 pending
+	 * payout" — in the same confident type a real zero uses. An agency glancing
+	 * at this screen would read "nobody is owed anything" and move on.
+	 *
+	 * An em dash is the honest answer: we do not know. Deliberately not a
+	 * spinner — these tiles have already settled, and a spinner that never
+	 * resolves is its own lie.
+	 */
+	const prsUnknown = backed && backendPrs.isError;
+	const outletsUnknown = backed && backendOutlets.isError;
+	const payoutUnknown = backed && (backendPvs.isError || backendPrs.isError);
 	const isFinance = agencySubRole === "agency_finance";
 	const can = useAgencyCan();
 	/*
@@ -207,12 +249,12 @@ function AgencyHub() {
 			<div className="iz-portal-kpi-grid iz-portal-desktop-only">
 				<KpiTile
 					label={t.agencyHome.totalPr}
-					value={totalPrs}
+					value={prsUnknown ? "—" : totalPrs}
 					to={canOpenRecords ? "/agency/prs" : undefined}
 				/>
 				<KpiTile
 					label={t.agencyHome.totalOutlets}
-					value={totalOutlets}
+					value={outletsUnknown ? "—" : totalOutlets}
 					to={canOpenRecords ? "/agency/outlets" : undefined}
 				/>
 				{/* Rendered only for roles that can actually staff a shift, so the
@@ -225,7 +267,11 @@ function AgencyHub() {
 					className="iz-portal-kpi iz-portal-kpi-payout no-underline"
 				>
 					<div className="l">{t.agencyHome.pendingPayout}</div>
-					<div className="n">{formatRM(prToPayTotal)}</div>
+					{/* An em dash, never RM 0.00, when the voucher or roster fetch
+					    failed — see the note beside `payoutUnknown`. */}
+					<div className="n">
+						{payoutUnknown ? "—" : formatRM(prToPayTotal)}
+					</div>
 					{payoutDeadline && prToPayTotal > 0 && (
 						<p
 							className={`iz-tiny mt-1 leading-snug ${

@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { serverMessage } from "@agency-portal/hooks/use-org-members";
+import { useStore } from "@agency-portal/lib/store";
 import { kickToLogin } from "@/lib/auth/guards";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	type AgencyOutletApproveStatus,
 	type AgencyOutletLink,
@@ -77,6 +80,10 @@ export function useAgencyOutletLinks(
 	filter: AgencyOutletApproveStatus,
 ): AgencyOutletLinkQueue {
 	const queryClient = useQueryClient();
+	// The portal-wide toaster and dictionary — these three writes decide who this
+	// agency does business with, and reported nothing at all before.
+	const { t } = usePortalLocale();
+	const toast = useStore((st) => st.toast);
 
 	const listQuery = useQuery({
 		queryKey: ["agency-outlet", "links", filter],
@@ -121,13 +128,27 @@ export function useAgencyOutletLinks(
 				kickToLogin,
 				input.rejectReason,
 			),
-		onSuccess: () => {
+		onSuccess: (_data, input) => {
 			queryClient.invalidateQueries({ queryKey: ["agency-outlet", "links"] });
 			// Approving adds the venue to this agency's outlet list, which is derived
 			// from these rows — without this it would not appear until a reload and
 			// would read as "the approval didn't take".
 			queryClient.invalidateQueries({ queryKey: ["agency", "outlets"] });
+			/*
+			 * ⚠️ SAID OUT LOUD. Taking a venue on, or turning one away, is a
+			 * decision about who this agency does business with — and it used to
+			 * report nothing at all. The row left the filtered list, which is the
+			 * same thing that happens when somebody ELSE decides it.
+			 */
+			toast(
+				input.approveStatus === "approved"
+					? t.approvals.decisionApproved
+					: t.approvals.decisionDeclined,
+				"success",
+			);
 		},
+		onError: (error) =>
+			toast(serverMessage(error, t.approvals.couldNotDecideLink), "warn"),
 	});
 
 	const endMutation = useMutation({
@@ -140,7 +161,13 @@ export function useAgencyOutletLinks(
 			// way the list changes, and a stale one would show a former partner as a
 			// current one.
 			queryClient.invalidateQueries({ queryKey: ["agency", "outlets"] });
+			// Ending closes a working relationship the venue never asked about — it
+			// finds out by discovering it can no longer post. The agency that did it
+			// should at least be told it landed.
+			toast(t.approvals.partnershipEnded, "success");
 		},
+		onError: (error) =>
+			toast(serverMessage(error, t.approvals.couldNotEndPartnership), "warn"),
 	});
 
 	const links = useMemo(() => {

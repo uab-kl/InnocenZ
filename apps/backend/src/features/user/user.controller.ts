@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { UserRepositoryClass } from './user.repository';
+import { refuseIfLastOrgOwner } from './sole-owner-guard.js';
 import { UserProfileRepositoryClass } from './user-profile/user-profile.repository';
 import { UserFilter, UserSortField, UserStatus, userStatusValues } from './user.model';
 import { Error } from '@/error/index';
@@ -253,6 +254,29 @@ export class UserControllerClass {
         });
       }
 
+      /*
+       * 🔴 AND THE SAME LOCKOUT ONE LEVEL DOWN, WHICH THIS MISSED.
+       *
+       * The guard above stops an admin stranding the PLATFORM. Nothing stopped
+       * them stranding an ORGANISATION: only an owner may approve a member,
+       * replace the payment method or pay, so switching off an agency's or a
+       * venue's last owner leaves nobody who can admit a replacement and nobody
+       * who can settle the bill — with no endpoint that organisation can reach
+       * to repair it.
+       *
+       * Every organisation in the database had exactly one active owner when
+       * this was added (13 of 13), so it was not a corner case; it was the
+       * normal shape of the data.
+       *
+       * Only on the way OFF. Re-enabling is the repair.
+       */
+      if (status !== 'active') {
+        const refusal = await refuseIfLastOrgOwner(id, false);
+        if (refusal) {
+          return res.status(409).json({ success: false, message: refusal, data: null });
+        }
+      }
+
       // NOTE the argument order: this repository takes (patch, id), not (id, patch).
       const updated = await this.userRepository.updateUser(
         { status: status as UserStatus, updatedBy: getActor(req) },
@@ -316,6 +340,22 @@ export class UserControllerClass {
           message: 'Account is already deleted or inactive',
           data: null,
         });
+      }
+
+      /*
+       * The same rule, from the other direction — and this path had no org check
+       * of any kind. A sole owner could delete themselves and strand their own
+       * agency or venue: no member can be approved, no bill can be paid, and the
+       * account that could fix it has just had its password replaced with a
+       * random one and its email nulled.
+       *
+       * Refused BEFORE anything is written. Everything below this line is
+       * irreversible — R2 media deleted, PII scrubbed, credentials destroyed —
+       * so the refusal has to come first, not as a rollback.
+       */
+      const ownerRefusal = await refuseIfLastOrgOwner(id, true);
+      if (ownerRefusal) {
+        return res.status(409).json({ success: false, message: ownerRefusal, data: null });
       }
       if (!user.passwordHash || !(await comparePassword(password, user.passwordHash))) {
         return res.status(401).json({

@@ -32,10 +32,14 @@ import {
 	demoPayrollWeekBoundsForWeeksAgo,
 	demoPvIssueIsoForWeeksAgo,
 } from "@agency-portal/lib/pr-demo";
+import { collectionInvoiceStatusLabel } from "@agency-portal/lib/status-labels";
 import { useStore } from "@agency-portal/lib/store";
 import { countBillingWindows } from "@agency-portal/lib/subscription-due";
 import { periodLabel } from "@agency-portal/lib/subscription-record";
-import { useAgencyCan, useAgencyIsOwner} from "@agency-portal/lib/use-portal-can";
+import {
+	useAgencyCan,
+	useAgencyIsOwner,
+} from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { format, parseISO } from "date-fns";
 import {
@@ -907,7 +911,9 @@ function AgencySubscription() {
 															{aging.label(t)}
 														</IzPill>
 													) : (
-														<IzPill variant="ink">{inv.status}</IzPill>
+														<IzPill variant="ink">
+															{collectionInvoiceStatusLabel(inv.status, t)}
+														</IzPill>
 													)}
 												</div>
 												{inv.status === "issued" && canManageCollections && (

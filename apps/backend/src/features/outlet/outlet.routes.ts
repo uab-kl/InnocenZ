@@ -64,9 +64,32 @@ router.get(
   requireOrgMembershipByParam('outlet', 'id'),
   outletController.getById.bind(outletController),
 );
+/*
+ * ⚠️ THE SIBLING THE SCOPE FIX WALKED PAST — confirmed live 13 Sep 2026.
+ *
+ * `GET /:id` directly above was given `requireOrgMembershipByParam` and this
+ * one, four lines below it, was left on `canReadOutlet` alone. Proved against
+ * the running server with an outlet Director at UAB Emhub asking for Velvet 23:
+ *
+ *     GET /outlet/<velvet>            -> 403   (correctly refused)
+ *     GET /outlet/<velvet>/geocode    -> 200   (the whole address + coordinates)
+ *
+ * and the body carried that venue's full street address as `query` plus
+ * ROOFTOP-precision lat/lng. That is the geo-fence centre: the point the 50 m
+ * check-in rule is measured from, and a rival's exact front door.
+ *
+ * The handler is called `geocodeOwnAddress` — the name already said whose
+ * address it is for. Nothing legitimate asks for another venue's: both callers
+ * (`use-outlet-geo-fence`, `use-outlet-profile`) geocode the venue the operator
+ * is signed in to.
+ *
+ * The lesson this repeats — a fix named after one symptom hides its siblings.
+ * When a guard goes onto one route, walk EVERY route sharing that `:id`.
+ */
 router.get(
   '/:id/geocode',
   canReadOutlet,
+  requireOrgMembershipByParam('outlet', 'id'),
   outletController.geocodeOwnAddress.bind(outletController),
 );
 // Admin-only: creating a venue is an onboarding act, and `create` stamps

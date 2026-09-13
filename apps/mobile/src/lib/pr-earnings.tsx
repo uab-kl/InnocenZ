@@ -141,10 +141,35 @@ export function PrEarningsProvider({
   );
 
   const lines = current?.lines ?? [];
+  /*
+   * WHAT THE PR THEMSELVES LOGGED — and nothing the agency or the server wrote.
+   *
+   * ⚠️ This filtered on `kind` alone, and 'deduction' and 'ot' both collapse
+   * into the PR-facing 'others' kind, so a CANCELLATION FEE arrived here as one
+   * of the PR's own receipts. Check-In spends this list on three things, and the
+   * fee broke all three:
+   *
+   *   • it appeared in "receipts logged tonight", as though the PR had scanned
+   *     the fine they were charged;
+   *   • `linesMissingPhoto` counted it — an agency-written line has no proof
+   *     photo and the PR cannot give it one — so check-out was BLOCKED with a
+   *     message telling them to re-scan a receipt that was never theirs;
+   *   • `loggedActions` counted it, so a night whose only entry was a penalty
+   *     satisfied "you logged something".
+   *
+   * `component` is the field that can tell overtime and a fine from a receipt.
+   * The negative-amount test is the backstop for a legacy row the server could
+   * not classify (`component` absent or null): money the PR logs is never
+   * negative, and money taken off them always is.
+   */
   const receiptLines = useMemo(
     () =>
       lines.filter(
-        (l) => l.kind === 'drinks' || l.kind === 'tips' || l.kind === 'others',
+        (l) =>
+          (l.kind === 'drinks' || l.kind === 'tips' || l.kind === 'others') &&
+          l.component !== 'deduction' &&
+          l.component !== 'ot' &&
+          l.commission >= 0,
       ),
     [lines],
   );

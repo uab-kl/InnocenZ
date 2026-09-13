@@ -7,6 +7,7 @@ import {
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, ReceiptText } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
+import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -703,7 +705,18 @@ function VoucherDisputes({
 				{ outcome: input.outcome, resolutionNote: note.trim() || undefined },
 				onRefreshFail,
 			),
-		onSettled: () => {
+		/*
+		 * ⚠️ `onSuccess`, NOT `onSettled` — and the difference is the admin's note.
+		 *
+		 * `onSettled` runs on BOTH outcomes, so a failed resolve still cleared the
+		 * resolution note that had just been typed and refetched the list, leaving
+		 * the dispute exactly where it was. Nothing said it had failed, and the
+		 * reasoning was gone. This is a PR's money dispute: the note is the record
+		 * of WHY it was accepted or rejected.
+		 *
+		 * On failure the note is now kept, so a retry starts where they left off.
+		 */
+		onSuccess: (_data, input) => {
 			setNote("");
 			queryClient.invalidateQueries({
 				queryKey: ["payment-voucher", "disputes", "all"],
@@ -714,7 +727,19 @@ function VoucherDisputes({
 				queryKey: ["payment-voucher", voucherId],
 			});
 			queryClient.invalidateQueries({ queryKey: ["payment-vouchers"] });
+			toast.success(
+				input.outcome === "accepted"
+					? t.adminService.disputeAccepted
+					: t.adminService.disputeRejected,
+			);
 		},
+		onError: (error) =>
+			toast.error(
+				// `toMutationError` returns null only for a falsy error, which cannot
+				// happen in onError — the `??` is for the type, not for the case.
+				toMutationError(error, t.adminService.couldNotResolveDispute)?.message ??
+					t.adminService.couldNotResolveDispute,
+			),
 	});
 
 	if (disputesQuery.isLoading) {
