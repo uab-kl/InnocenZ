@@ -3153,6 +3153,9 @@ const en = {
 		moduleUpdated: "Module updated successfully",
 		moduleDeactivated: "Module deactivated successfully",
 		moduleUpdateFailed: "Failed to update module",
+		// The fallback when the server sends no sentence of its own. Deactivating a
+		// module withdraws a permission from every role holding it.
+		moduleDeactivateFailed: "Failed to deactivate module",
 		moduleCreateFailed: "Failed to create module",
 		deactivateModule: "Deactivate module",
 		deactivateConfirm: 'Are you sure you want to deactivate "{name}"?',
@@ -3739,6 +3742,12 @@ const en = {
 		planUpdateFailed: "Failed to update plan",
 	},
 	adminService: {
+		// Outcomes for resolving a PR money dispute. It used to run its side
+		// effects through onSettled, so a FAILED resolve still cleared the
+		// resolution note that had just been typed, and said nothing.
+		disputeAccepted: "Dispute accepted",
+		disputeRejected: "Dispute rejected",
+		couldNotResolveDispute: "Could not resolve this dispute — try again",
 		/** Shared: the Role column / field on Jobs and Plan Payment. */
 		role: "Role",
 		/** Rendered role label for a stored `agency` initiator / subscriber. "PR" and "Outlet" come from `table`. */
@@ -9283,6 +9292,7 @@ const zh: PortalTranslations = {
 		moduleUpdated: "模块更新成功",
 		moduleDeactivated: "模块已停用",
 		moduleUpdateFailed: "模块更新失败",
+		moduleDeactivateFailed: "模块停用失败",
 		moduleCreateFailed: "模块创建失败",
 		deactivateModule: "停用模块",
 		deactivateConfirm: "确定要停用“{name}”吗？",
@@ -9708,6 +9718,9 @@ const zh: PortalTranslations = {
 		planUpdateFailed: "更新套餐失败",
 	},
 	adminService: {
+		disputeAccepted: "已接受争议",
+		disputeRejected: "已驳回争议",
+		couldNotResolveDispute: "无法处理该争议 — 请重试",
 		role: "角色",
 		agency: "经纪公司",
 		colAmount: "金额",
