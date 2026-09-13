@@ -109,6 +109,8 @@ export function RoleSheet({
 	const matrixIdsRef = useRef({
 		selectedIds: new Set<string>(),
 		portalPermissionIds: new Set<string>(),
+		/** Grants on OTHER portals' modules — carried, never rendered. */
+		outsidePortalIds: [] as string[],
 	});
 
 	const isManage = mode === "manage";
@@ -130,12 +132,19 @@ export function RoleSheet({
 				portalId: value.portalId || portalId || null,
 			};
 			if (isManage) {
-				const { selectedIds: ids, portalPermissionIds: allowed } =
-					matrixIdsRef.current;
-				onSaveManage(
-					payload,
-					[...ids].filter((id) => allowed.has(id)),
-				);
+				const {
+					selectedIds: ids,
+					portalPermissionIds: allowed,
+					outsidePortalIds: keep,
+				} = matrixIdsRef.current;
+				onSaveManage(payload, [
+					// What the operator actually ticked, on the portal they can see…
+					...[...ids].filter((id) => allowed.has(id)),
+					// …plus the grants this sheet never showed them. See the note
+					// beside `outsidePortalIds`: the endpoint replaces the whole set,
+					// so anything omitted here is deleted.
+					...keep,
+				]);
 				return;
 			}
 			onCreate(payload);
@@ -293,7 +302,33 @@ export function RoleSheet({
 		onOpenChange(nextOpen);
 	};
 
-	matrixIdsRef.current = { selectedIds, portalPermissionIds };
+	/*
+	 * ⚠️ THE GRANTS THIS SHEET IS NOT SHOWING MUST SURVIVE THE SAVE.
+	 *
+	 * The matrix renders one portal at a time, and the effect above deliberately
+	 * narrows the role's grants to that portal for display ("so we don't flash
+	 * cross-portal grants"). But the save posts that narrowed set into
+	 * `updateRolePermission`, which REPLACES the role's whole permission set —
+	 * so every grant belonging to another portal's module was deleted by a save
+	 * that never displayed it.
+	 *
+	 * Not theoretical: `_probe-role-crossportal` reports the live `admin` role
+	 * holding 12 cross-portal grants right now, all of which the next press of
+	 * Save would have removed. RBAC is the authority for the whole product, and
+	 * this screen is the one place it is edited by hand.
+	 *
+	 * So the ids outside the shown portal are carried through untouched. They
+	 * are not rendered, not selectable, and not the operator's business on this
+	 * screen — they simply must not be collateral.
+	 */
+	const outsidePortalIds = useMemo(() => {
+		const granted = rolePermissionsQuery.data?.data ?? [];
+		return granted
+			.map((item) => item.permissionId)
+			.filter((id) => !portalPermissionIds.has(id));
+	}, [rolePermissionsQuery.data, portalPermissionIds]);
+
+	matrixIdsRef.current = { selectedIds, portalPermissionIds, outsidePortalIds };
 
 	return (
 		<Sheet open={open} onOpenChange={handleOpenChange}>

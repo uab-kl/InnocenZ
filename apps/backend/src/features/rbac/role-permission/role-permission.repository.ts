@@ -72,6 +72,26 @@ export class RolePermissionRepositoryClass {
     }
   }
 
+  /**
+   * Replace a role's whole permission set.
+   *
+   * ⚠️ THIS DELETES FIRST, so its failure mode is not "nothing happened" — it
+   * is "the role now has NOTHING". Two things used to make that silent:
+   *
+   *   · the delete and the insert ran unwrapped, so an insert that threw left
+   *     the delete committed; and
+   *   · the catch returned `[]`, which the controller could not tell from a
+   *     legitimately empty set — so it answered 200 "Role permissions synced"
+   *     over a role that had just been stripped of every grant.
+   *
+   * `role_permission` is the RBAC authority for this entire product (owner,
+   * 11 Sep 2026: "the rbac must ensure what can do what cannot do, ofcourse
+   * must from the database"). A write to it that fails quietly and reports
+   * success is the worst shape available.
+   *
+   * Now both statements run in ONE transaction and errors PROPAGATE; the
+   * controller's own catch turns that into the 500 it always should have been.
+   */
   async updateRolePermission(
     roleId: string,
     permissionIds: string[],
@@ -79,10 +99,9 @@ export class RolePermissionRepositoryClass {
     updatedBy: string,
     tx?: DbTransaction
   ): Promise<RolePermissionType[]> {
-    try {
-      const dbClient = tx || db;
-      logger.info('[RolePermissionRepository.updateRolePermission] Updating role permissions...');
+    logger.info('[RolePermissionRepository.updateRolePermission] Updating role permissions...');
 
+    const run = async (dbClient: typeof db | DbTransaction) => {
       // Delete existing permissions
       await dbClient
         .delete(RolePermissionTable)
@@ -105,11 +124,11 @@ export class RolePermissionRepositoryClass {
       }
 
       return [];
+    };
 
-    } catch (error) {
-      logger.error('[RolePermissionRepository.updateRolePermission] Error:', error);
-      return [];
-    }
+    // An outer transaction wins — a caller that already opened one is
+    // sequencing this against other writes and must keep that atomicity.
+    return tx ? run(tx) : db.transaction((t) => run(t as DbTransaction));
   }
 
   
