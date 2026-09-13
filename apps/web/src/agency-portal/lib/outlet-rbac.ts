@@ -154,6 +154,19 @@ const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = buildRoleMatrix<
  */
 export const OUTLET_LEAST_PRIVILEGE: OutletSubRole = "outlet_director";
 
+/**
+ * The venue lane's name, resolved the way its permissions are — the twin of
+ * `agencySubRoleLabel`, and added for the same reason: the portal header
+ * defaulted an unresolved lane to OWNER while every permission check defaulted
+ * it to least privilege.
+ */
+export function outletSubRoleLabel(
+	role: OutletSubRole | null | undefined,
+	t: PortalTranslations,
+): string {
+	return OUTLET_SUB_ROLE_LABELS[role ?? OUTLET_LEAST_PRIVILEGE](t);
+}
+
 export function outletCan(
 	role: OutletSubRole | null | undefined,
 	permission: Permission,

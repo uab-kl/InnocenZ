@@ -1045,6 +1045,9 @@ const en = {
 	},
 	/** Agency → History, Settings/Profile, Subscription, Special service. */
 	agencyMisc: {
+		/** /agency/special-service while AGENCY_SERVICES_ENABLED is off. Says nothing about the reader's role — the feature, not the lane, is what is missing. */
+		specialServiceComingLater:
+			"Pricing venue service orders is coming in a later release. Nothing needs changing on your account.",
 		// A VENUE'S OWN STATE, in words. `outlet.status` was printed raw with its
 		// underscores swapped for spaces — "pending review" in lower case, in
 		// English, on a screen the operator may be reading in Chinese. A machine
@@ -7615,6 +7618,8 @@ const zh: PortalTranslations = {
 		noShowDone: "缺勤 ✓",
 	},
 	agencyMisc: {
+		specialServiceComingLater:
+			"为场地的服务订单定价将在后续版本推出。您的账号无需作任何更改。",
 		outletStatusPendingReview: "待平台审核",
 		outletStatusActive: "正常",
 		outletStatusInactive: "已停用",

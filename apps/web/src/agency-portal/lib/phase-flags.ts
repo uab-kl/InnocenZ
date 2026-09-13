@@ -20,3 +20,17 @@
  * only the outlet's way in is closed.
  */
 export const OUTLET_SERVICES_ENABLED = false;
+
+/**
+ * The AGENCY half of the same feature — `/agency/special-service`, where an
+ * agency reads and prices the service orders venues raise.
+ *
+ * ⚠️ It was already off, but off by ACCIDENT: no nav item points at it, so the
+ * only way in is to type the URL. An unreachable route is not the same as a
+ * deferred one — the first is a page nobody maintains and nobody can find, the
+ * second says what it is. It is the same phase as `OUTLET_SERVICES_ENABLED`:
+ * there is nothing for an agency to price while venues cannot order.
+ *
+ * Flip BOTH to restore the flow; either alone is half a conversation.
+ */
+export const AGENCY_SERVICES_ENABLED = false;

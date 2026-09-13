@@ -17,7 +17,7 @@ import {
 	useAgencySpecialServices,
 } from "@agency-portal/hooks/use-agency-special-services";
 import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
-import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
+import { agencySubRoleLabel } from "@agency-portal/lib/agency-rbac";
 import { agencyPostedSpecialServices } from "@agency-portal/lib/special-service-actions";
 import {
 	agencyJobPostingInzLabel,
@@ -175,7 +175,7 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 		const pr = prOptions[0];
 		if (!pr) return;
 
-		const raisedBy = AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t);
+		const raisedBy = agencySubRoleLabel(agencySubRole, t);
 
 		for (const job of queuedJobs) {
 			const parsed = parseJobPostingDraft(job);

@@ -139,6 +139,25 @@ function resolveAgencySubRole(
 	return AGENCY_LEAST_PRIVILEGE;
 }
 
+/**
+ * 🔴 THE LANE'S NAME, RESOLVED THE SAME WAY ITS PERMISSIONS ARE.
+ *
+ * Five screens wrote `AGENCY_SUB_ROLE_LABELS[subRole ?? "agency_owner"]` —
+ * defaulting an unresolved lane to OWNER while `resolveAgencySubRole` defaults
+ * the same null to DIRECTOR. So the portal header read "Atlas PR (Owner)" over
+ * a sidebar built at least privilege, a payment voucher printed "Owner" beside
+ * a signature, and sign-in sent the session to the owner's landing page.
+ *
+ * One resolver for both halves. A person is never told they hold a lane the
+ * screen is not giving them — and the safe direction is the quiet one.
+ */
+export function agencySubRoleLabel(
+	role: AgencySubRole | null | undefined,
+	t: PortalTranslations,
+): string {
+	return AGENCY_SUB_ROLE_LABELS[resolveAgencySubRole(role)](t);
+}
+
 /** Prefer module C/R/U from /auth/me when present; else fall back to sub-role matrix. */
 export function agencyCan(
 	role: AgencySubRole | null | undefined,

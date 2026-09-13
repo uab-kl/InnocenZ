@@ -46,7 +46,7 @@ import {
 	resolvePvPrLabel,
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
-import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
+import { agencySubRoleLabel } from "@agency-portal/lib/agency-rbac";
 import {
 	countPvsNeedingAction,
 	countReceiptsNeedingAction,
@@ -1111,8 +1111,9 @@ function AgencyPV() {
 					{t.payroll.title}
 				</IzPageTitle>
 				<p className="iz-tiny iz-muted2 mt-1">
-					{AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t)} ·{" "}
-					{t.payroll.signingChainHint}
+					{/* The lane, resolved — this is printed beside a signature on a
+					    money document, so an unresolved session must not read "Owner". */}
+					{agencySubRoleLabel(agencySubRole, t)} · {t.payroll.signingChainHint}
 				</p>
 			</header>
 

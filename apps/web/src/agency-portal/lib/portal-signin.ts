@@ -1,11 +1,13 @@
 import { DEFAULT_AGENCY_OWNER } from "@agency-portal/lib/agency-demo";
 import {
+	AGENCY_LEAST_PRIVILEGE,
 	type AgencySubRole,
 	getAgencyDefaultRoute,
 } from "@agency-portal/lib/agency-rbac";
 import { DEFAULT_OUTLET_OWNER } from "@agency-portal/lib/outlet-demo";
 import {
 	getOutletDefaultRoute,
+	OUTLET_LEAST_PRIVILEGE,
 	type OutletSubRole,
 } from "@agency-portal/lib/outlet-rbac";
 import type { PrSubRole } from "@agency-portal/lib/pr-demo";
@@ -51,10 +53,10 @@ export function portalHomePath(
 	item?: PortalSubRoleItem,
 ): string {
 	if (portal === "outlet") {
-		return getOutletDefaultRoute(item?.outletSubRole ?? "outlet_owner");
+		return getOutletDefaultRoute(item?.outletSubRole ?? OUTLET_LEAST_PRIVILEGE);
 	}
 	if (portal === "agency") {
-		return getAgencyDefaultRoute(item?.agencySubRole ?? "agency_owner");
+		return getAgencyDefaultRoute(item?.agencySubRole ?? AGENCY_LEAST_PRIVILEGE);
 	}
 	return "/host";
 }
