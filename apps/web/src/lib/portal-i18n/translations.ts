@@ -1097,6 +1097,17 @@ const en = {
 	},
 	/** Agency → Manage PR. PR records, grading, penalties and history. */
 	managePr: {
+		// OUTCOMES for the three writes on a PR's profile. All three were
+		// fire-and-forget: Save closed the editor, Suspend closed its sheet, and
+		// Detach closed AND navigated back to the list — so a refused detach looked
+		// more successful than a silent one, because the screen behaved exactly as
+		// it does when the PR really has been let go.
+		profileSaved: "Profile saved.",
+		prSuspended: "PR suspended.",
+		prDetached: "PR removed from your roster.",
+		couldNotSaveProfile: "Could not save this profile — try again",
+		couldNotSuspend: "Could not suspend this PR — try again",
+		couldNotDetach: "Could not remove this PR from your roster — try again",
 		title: "Manage PR",
 		accessRestricted: "Access restricted",
 		tapToMultiSelect: "Tap PR cards to multi-select",
@@ -1203,6 +1214,19 @@ const en = {
 	},
 	/** Agency → Roster. Shifts, assignments, swaps and availability. */
 	roster: {
+		// OUTCOMES for the roster writes. These eight sentences were English string
+		// literals sitting in `use-roster-mutations.ts` — the right behaviour on the
+		// wrong side of the dictionary, so a zh operator read the refusal in a
+		// language they had not chosen. The server's own sentence still wins where
+		// it sends one; these are the fallbacks.
+		leaveApproved: "Leave approved.",
+		leaveRejected: "Leave rejected.",
+		couldNotFlagNoShow: "Could not flag this PR as a no-show.",
+		couldNotUnassign: "Could not remove this assignment.",
+		couldNotApproveLeave: "Could not approve this leave request.",
+		couldNotRejectLeave: "Could not reject this leave request.",
+		couldNotAssign: "Could not assign this PR.",
+		couldNotAddPr: "Could not add this PR.",
 		pickWeek: "Pick week",
 		weekHint: "Tap any day — selects that full week (Mon–Sun).",
 		dateTodayLive: "Date: Today (live view)",
@@ -1549,7 +1573,8 @@ const en = {
 		// Shown when the unpaid-invoice request FAILS. Without it the banner and
 		// the sidebar badge both hide themselves at zero, so a failed check looks
 		// exactly like a settled account and the debt disappears from the screen.
-		couldNotCheckBilling: "Could not check your billing — this may not be up to date",
+		couldNotCheckBilling:
+			"Could not check your billing — this may not be up to date",
 		/* Aging buckets on an issued collection invoice — rendered by
 		   COLLECTION_AGING_PILL on BOTH the agency and outlet screens. */
 		agingCurrent: "Current",
@@ -3990,6 +4015,24 @@ const en = {
 		paidCount: "{n} paid",
 	},
 	agencyPending: {
+		// CUT-LOSS OUTCOMES. Approve and Reject were `void liveCutlost.decide(...)`
+		// over a `mutateAsync`, so a refusal became an unhandled promise rejection
+		// and the queue did not refetch — indistinguishable from the click not
+		// registering, on a decision that SEALS a pro-rated wage on every named PR.
+		// The server's own sentence still wins; these are the fallbacks.
+		cutlostApproved: "Cut-loss approved.",
+		cutlostRejected: "Cut-loss rejected.",
+		couldNotDecideCutlost: "Could not record that decision — try again",
+		couldNotRaiseCutlost: "Could not send this cut-loss request — try again",
+		cutlostRaised: "Cut-loss request sent to the agency.",
+		/**
+		 * The half-applied case, and why it needs a sentence of its own: the API
+		 * REPORTS a stale assignment rather than throwing, precisely so one bad row
+		 * cannot leave an approved plan half-applied — but nothing rendered that
+		 * report, so the plan was half-applied silently anyway.
+		 */
+		cutlostPartlyApplied:
+			"{n} of the named PRs could not be released — their shift row was already closed. Check the roster.",
 		/**
 		 * Prefix before the applicant's IC name, beside their floor nickname.
 		 *
@@ -4074,6 +4117,25 @@ const en = {
 	 * which are flow 1 (an org pays InnocenZ).
 	 */
 	payouts: {
+		// OUTCOMES. Cancel, Mark-submitted, Settle and Export used to say nothing
+		// at all — not on success, not on refusal. The server's OWN sentence is
+		// what gets shown, because these endpoints answer with COUNTS ("Run
+		// cancelled — 12 voucher(s) released", "Settled 57 line(s); 57 voucher(s)
+		// marked paid") and that number is the fact the agency needs: a settle
+		// that matched 3 lines of 59 reads exactly like a complete one once the
+		// sentence is dropped. These are the fallbacks for when it sends none.
+		runCancelled: "Run cancelled.",
+		runSubmitted: "Run marked as submitted to the bank.",
+		settlementRecorded: "Settlement recorded.",
+		responseImported: "Bank response imported.",
+		/** The export is a blob download, so there is no server sentence to show. */
+		fileDownloaded:
+			"Bank file downloaded — this run is now marked as sent to the bank.",
+		couldNotCancelRun: "Could not cancel this run — try again",
+		couldNotMarkSubmitted: "Could not mark this run as submitted — try again",
+		couldNotSettle: "Could not record that settlement — try again",
+		couldNotDownloadFile: "Could not download the bank file — try again",
+		couldNotReadFile: "Could not read that file.",
 		chooseWeek: "Pay a week",
 		loading: "Loading…",
 		noneSigned:
@@ -7580,6 +7642,12 @@ const zh: PortalTranslations = {
 		ic: "身份证",
 	},
 	managePr: {
+		profileSaved: "资料已保存。",
+		prSuspended: "已停用此 PR。",
+		prDetached: "已将此 PR 移出您的名单。",
+		couldNotSaveProfile: "无法保存此资料 — 请重试",
+		couldNotSuspend: "无法停用此 PR — 请重试",
+		couldNotDetach: "无法将此 PR 移出名单 — 请重试",
 		title: "PR 管理",
 		accessRestricted: "无访问权限",
 		tapToMultiSelect: "点击 PR 卡片可多选",
@@ -7684,6 +7752,14 @@ const zh: PortalTranslations = {
 		tapOutletCardsToMultiSelect: "点击门店卡片可多选",
 	},
 	roster: {
+		leaveApproved: "已批准请假。",
+		leaveRejected: "已驳回请假。",
+		couldNotFlagNoShow: "无法将此 PR 标记为旷工。",
+		couldNotUnassign: "无法移除此排班。",
+		couldNotApproveLeave: "无法批准此请假申请。",
+		couldNotRejectLeave: "无法驳回此请假申请。",
+		couldNotAssign: "无法排班此 PR。",
+		couldNotAddPr: "无法添加此 PR。",
 		pickWeek: "选择周次",
 		weekHint: "点击任意日期 — 将选中该整周（周一至周日）。",
 		dateTodayLive: "日期：今天（实时视图）",
@@ -8854,7 +8930,8 @@ const zh: PortalTranslations = {
 		payrollSent: "薪资已发送 · 班次已封存",
 		logSales: "录入销售",
 		couldNotLoadTonight: "无法加载今晚的安排",
-		couldNotLoadTonightHint: "班次或人员加载失败 — 下方内容可能不完整。请刷新重试。",
+		couldNotLoadTonightHint:
+			"班次或人员加载失败 — 下方内容可能不完整。请刷新重试。",
 		confirmStaffing: "确认人员配置",
 		confirmStaffingHint: "锁定 PR 并将此班次标记为进行中",
 		staffingConfirmed: "人员配置已确认 — 代理商可以看到",
@@ -9900,6 +9977,13 @@ const zh: PortalTranslations = {
 		paidCount: "{n} 个已付",
 	},
 	agencyPending: {
+		cutlostApproved: "减损申请已批准。",
+		cutlostRejected: "减损申请已驳回。",
+		couldNotDecideCutlost: "无法记录此决定 — 请重试",
+		couldNotRaiseCutlost: "无法发送此减损申请 — 请重试",
+		cutlostRaised: "减损申请已发送给经纪公司。",
+		cutlostPartlyApplied:
+			"其中 {n} 位 PR 未能释放 — 其排班记录已关闭。请查看排班表。",
 		legal: "证件姓名",
 		icNumber: "身份证号",
 		ownerInvite: "东主邀请",
@@ -9940,6 +10024,16 @@ const zh: PortalTranslations = {
 	 * which are flow 1 (an org pays InnocenZ).
 	 */
 	payouts: {
+		runCancelled: "批次已取消。",
+		runSubmitted: "批次已标记为已提交银行。",
+		settlementRecorded: "已记录结算。",
+		responseImported: "已汇入银行回覆。",
+		fileDownloaded: "银行档案已下载 — 此批次现已标记为已送银行。",
+		couldNotCancelRun: "无法取消此批次 — 请重试",
+		couldNotMarkSubmitted: "无法标记为已提交 — 请重试",
+		couldNotSettle: "无法记录此结算 — 请重试",
+		couldNotDownloadFile: "无法下载银行档案 — 请重试",
+		couldNotReadFile: "无法读取该档案。",
 		chooseWeek: "支付某一周",
 		loading: "载入中…",
 		noneSigned: "本周暂无已签收的付款单 — PR 需先签收才能收款。",

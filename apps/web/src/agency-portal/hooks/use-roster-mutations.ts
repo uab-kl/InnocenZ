@@ -2,6 +2,7 @@ import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	type CreatePrPersonnelInput,
 	createPrPersonnel,
@@ -30,6 +31,7 @@ import {
  */
 export function useRosterMutations() {
 	const { logout } = useAuth();
+	const { t } = usePortalLocale();
 	// Toast lives on the demo store, which is also the portal-wide toaster on a
 	// real session — the same one every other agency screen writes to.
 	const { toast } = useStore();
@@ -68,13 +70,13 @@ export function useRosterMutations() {
 		mutationFn: (id: string) =>
 			updateShiftAssignment(id, { status: "no_show" }, logout),
 		onSuccess: invalidate,
-		onError: failed("Could not flag this PR as a no-show."),
+		onError: failed(t.roster.couldNotFlagNoShow),
 	});
 
 	const unassign = useMutation({
 		mutationFn: (id: string) => removeShiftAssignment(id, logout),
 		onSuccess: invalidate,
-		onError: failed("Could not remove this assignment."),
+		onError: failed(t.roster.couldNotUnassign),
 	});
 
 	// PR MC/leave decisions (leave_pending rows): approve excuses the shift with
@@ -85,18 +87,18 @@ export function useRosterMutations() {
 		// confirmed out loud rather than left to the list quietly changing.
 		onSuccess: (result) => {
 			invalidate();
-			toast(result.message || "Leave approved.", "success");
+			toast(result.message || t.roster.leaveApproved, "success");
 		},
-		onError: failed("Could not approve this leave request."),
+		onError: failed(t.roster.couldNotApproveLeave),
 	});
 
 	const rejectLeave = useMutation({
 		mutationFn: (id: string) => rejectLeaveRequest(id, logout),
 		onSuccess: (result) => {
 			invalidate();
-			toast(result.message || "Leave rejected.", "success");
+			toast(result.message || t.roster.leaveRejected, "success");
 		},
-		onError: failed("Could not reject this leave request."),
+		onError: failed(t.roster.couldNotRejectLeave),
 	});
 
 	const assign = useMutation({
@@ -117,7 +119,7 @@ export function useRosterMutations() {
 		// Double-booking, an outlet cap, a travel clash — the server refuses with
 		// the reason, and an assign that silently did nothing looked identical to
 		// one that worked until the grid failed to change.
-		onError: failed("Could not assign this PR."),
+		onError: failed(t.roster.couldNotAssign),
 	});
 
 	// Agencies do not create shifts — only outlets post jobs (see shift.routes.ts
@@ -126,7 +128,7 @@ export function useRosterMutations() {
 		mutationFn: (input: CreatePrPersonnelInput) =>
 			createPrPersonnel(input, logout),
 		onSuccess: invalidate,
-		onError: failed("Could not add this PR."),
+		onError: failed(t.roster.couldNotAddPr),
 	});
 
 	return {

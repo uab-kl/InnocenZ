@@ -114,6 +114,20 @@ export interface PayoutSettlementInput {
 
 type Envelope<T> = { success: boolean; message: string; data: T };
 
+/**
+ * A write, plus the server’s own sentence about it.
+ *
+ * ⚠️ These endpoints answer with COUNTS — "Run cancelled — 12 voucher(s)
+ * released", "Settled 57 line(s); 57 voucher(s) marked paid" — and these
+ * services used to return `response.data.data` alone, throwing that half away.
+ * The number is the fact the agency needs: a settle that matched 3 lines of 59
+ * looks identical to a complete one once the sentence is dropped.
+ */
+export interface PayoutWriteResult {
+	batch: PayoutBatch;
+	message: string;
+}
+
 export async function fetchPayoutCandidates(
 	weekStart: string,
 	weekEnd: string,
@@ -174,36 +188,41 @@ export async function createPayoutBatch(
 export async function cancelPayoutBatch(
 	id: string,
 	onRefreshFail: () => void,
-): Promise<PayoutBatch> {
+): Promise<PayoutWriteResult> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<Envelope<PayoutBatch>>(
 		`/payout-batch/${id}/cancel`,
 	);
-	return response.data.data;
+	// "Run cancelled — N voucher(s) released" — N is the whole point: those
+	// vouchers are payable again, and nothing else on screen says so.
+	return { batch: response.data.data, message: response.data.message };
 }
 
 export async function markPayoutBatchSubmitted(
 	id: string,
 	onRefreshFail: () => void,
-): Promise<PayoutBatch> {
+): Promise<PayoutWriteResult> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<Envelope<PayoutBatch>>(
 		`/payout-batch/${id}/submitted`,
 	);
-	return response.data.data;
+	return { batch: response.data.data, message: response.data.message };
 }
 
 export async function settlePayoutBatch(
 	id: string,
 	settlements: PayoutSettlementInput[],
 	onRefreshFail: () => void,
-): Promise<PayoutBatch> {
+): Promise<PayoutWriteResult> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<Envelope<PayoutBatch>>(
 		`/payout-batch/${id}/settle`,
 		{ settlements },
 	);
-	return response.data.data;
+	// "Settled N line(s); M voucher(s) marked paid". N and M are not the same
+	// number and the difference matters — a line can settle without completing
+	// its voucher.
+	return { batch: response.data.data, message: response.data.message };
 }
 
 /**
@@ -218,13 +237,15 @@ export async function importPayoutResponse(
 	id: string,
 	csv: string,
 	onRefreshFail: () => void,
-): Promise<PayoutBatch> {
+): Promise<PayoutWriteResult> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<Envelope<PayoutBatch>>(
 		`/payout-batch/${id}/import-response`,
 		{ csv },
 	);
-	return response.data.data;
+	// "Imported N line(s); M voucher(s) marked paid" — the refusal half was
+	// already surfaced; this is the half that was not.
+	return { batch: response.data.data, message: response.data.message };
 }
 
 /**

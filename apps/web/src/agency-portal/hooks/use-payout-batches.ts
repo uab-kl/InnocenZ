@@ -1,5 +1,8 @@
+import { serverMessage } from "@agency-portal/hooks/use-org-members";
+import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	cancelPayoutBatch,
 	createPayoutBatch,
@@ -36,7 +39,31 @@ export function usePayoutBatches(params: {
 }) {
 	const { weekStart, weekEnd, enabled = true } = params;
 	const { logout } = useAuth();
+	const { t } = usePortalLocale();
+	// The portal-wide toaster — the same one the roster mutations write to.
+	const { toast } = useStore();
 	const queryClient = useQueryClient();
+
+	/*
+	 * ⚠️ FOUR OF THESE WRITES USED TO SAY NOTHING AT ALL.
+	 *
+	 * Cancel, Mark-as-submitted, Settle and Export each carried
+	 * `onSuccess: invalidate` and no `onError`, so the list refetched and looked
+	 * unchanged — which is precisely what a SUCCESSFUL no-op looks like. On this
+	 * screen the second click is not harmless: cancelling a run twice is noise,
+	 * but pressing Export again RE-SENDS a bank file, and pressing Settle again
+	 * re-reports lines to a run that may already be closed.
+	 *
+	 * The SERVER's sentence, not a generic one — these endpoints answer with the
+	 * counts (vouchers released, lines settled, vouchers marked paid) that are
+	 * the only on-screen evidence of how much of the write actually landed.
+	 */
+	const failed = (fallback: string) => (error: unknown) =>
+		toast(serverMessage(error, fallback), "warn");
+	const succeeded = (fallback: string) => (result: { message: string }) => {
+		invalidate();
+		toast(result.message || fallback, "success");
+	};
 
 	const invalidate = () => {
 		queryClient.invalidateQueries({ queryKey: BATCHES_KEY });
@@ -74,24 +101,33 @@ export function usePayoutBatches(params: {
 
 	const cancel = useMutation({
 		mutationFn: (id: string) => cancelPayoutBatch(id, logout),
-		onSuccess: invalidate,
+		onSuccess: succeeded(t.payouts.runCancelled),
+		onError: failed(t.payouts.couldNotCancelRun),
 	});
 
 	const markSubmitted = useMutation({
 		mutationFn: (id: string) => markPayoutBatchSubmitted(id, logout),
-		onSuccess: invalidate,
+		onSuccess: succeeded(t.payouts.runSubmitted),
+		onError: failed(t.payouts.couldNotMarkSubmitted),
 	});
 
+	/*
+	 * The only one that already spoke on failure — the sheet renders the 409's
+	 * list of unmatched lines inline, which is more useful than a toast and is
+	 * kept. What it never did was confirm a SUCCESSFUL import, and "Imported 3
+	 * line(s)" over a 59-line file is exactly the case a human must catch.
+	 */
 	const importResponse = useMutation({
 		mutationFn: (input: { id: string; csv: string }) =>
 			importPayoutResponse(input.id, input.csv, logout),
-		onSuccess: invalidate,
+		onSuccess: succeeded(t.payouts.responseImported),
 	});
 
 	const settle = useMutation({
 		mutationFn: (input: { id: string; settlements: PayoutSettlementInput[] }) =>
 			settlePayoutBatch(input.id, input.settlements, logout),
-		onSuccess: invalidate,
+		onSuccess: succeeded(t.payouts.settlementRecorded),
+		onError: failed(t.payouts.couldNotSettle),
 	});
 
 	/**
@@ -102,7 +138,14 @@ export function usePayoutBatches(params: {
 	const exportCsv = useMutation({
 		mutationFn: (batch: Pick<PayoutBatch, "id" | "runNo" | "weekStart">) =>
 			downloadPayoutCsv(batch, logout),
-		onSuccess: invalidate,
+		// A blob, so there is no server sentence to echo — but this is the write
+		// where silence is most expensive, because the button stays pressable and
+		// pressing it again hands the bank a second copy of the same run.
+		onSuccess: () => {
+			invalidate();
+			toast(t.payouts.fileDownloaded, "success");
+		},
+		onError: failed(t.payouts.couldNotDownloadFile),
 	});
 
 	return {

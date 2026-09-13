@@ -110,11 +110,17 @@ export async function decideCutlostRequest(
 ): Promise<{
 	request: CutlostRequestWithContext;
 	released: CutlostReleaseOutcome[];
+	/**
+	 * The server's own sentence. Carried because its REFUSALS are the valuable
+	 * ones — "This request was already approved", "This request was decided by
+	 * someone else a moment ago" — and the caller had no way to show either.
+	 */
+	message: string;
 }> {
 	const client = getClient(onAuthFail);
 	const { data } = await client.post(`/cutlost/${id}/decision`, {
 		decision,
 		...(reason ? { reason } : {}),
 	});
-	return data?.data;
+	return { ...data?.data, message: data?.message ?? "" };
 }

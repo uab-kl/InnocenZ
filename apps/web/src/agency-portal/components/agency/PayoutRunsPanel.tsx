@@ -300,7 +300,7 @@ export function PayoutRunsPanel({ canPay }: { canPay: boolean }) {
 										const res = (
 											err as { response?: { data?: { message?: string } } }
 										)?.response?.data;
-										setImportError(res?.message ?? "Could not read that file.");
+										setImportError(res?.message ?? t.payouts.couldNotReadFile);
 									},
 								},
 							);
