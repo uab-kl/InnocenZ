@@ -1045,6 +1045,14 @@ const en = {
 	},
 	/** Agency → History, Settings/Profile, Subscription, Special service. */
 	agencyMisc: {
+		// A VENUE'S OWN STATE, in words. `outlet.status` was printed raw with its
+		// underscores swapped for spaces — "pending review" in lower case, in
+		// English, on a screen the operator may be reading in Chinese. A machine
+		// value with a regex run over it is not a translation.
+		outletStatusPendingReview: "Pending platform review",
+		outletStatusActive: "Active",
+		outletStatusInactive: "Inactive",
+		outletStatusSuspended: "Suspended",
 		history: "History",
 		byPr: "By PR",
 		jobPosting: "Job posting",
@@ -1570,6 +1578,13 @@ const en = {
 	 * `cap*` / `desc*` are the display-only copy beside each plan name.
 	 */
 	subscription: {
+		// A COLLECTION INVOICE'S STATE, in words. `inv.status` reached the pill raw,
+		// so a venue's invoice read "issued" or "void" — the database's vocabulary,
+		// untranslated, beside pills that were properly worded.
+		invoiceStatusDraft: "Draft",
+		invoiceStatusIssued: "Issued",
+		invoiceStatusSettled: "Settled",
+		invoiceStatusVoid: "Cancelled",
 		// Shown when the unpaid-invoice request FAILS. Without it the banner and
 		// the sidebar badge both hide themselves at zero, so a failed check looks
 		// exactly like a settled account and the debt disappears from the screen.
@@ -7600,6 +7615,10 @@ const zh: PortalTranslations = {
 		noShowDone: "缺勤 ✓",
 	},
 	agencyMisc: {
+		outletStatusPendingReview: "待平台审核",
+		outletStatusActive: "正常",
+		outletStatusInactive: "已停用",
+		outletStatusSuspended: "已暂停",
 		history: "历史记录",
 		byPr: "按 PR 查看",
 		jobPosting: "职位发布",
@@ -8037,6 +8056,10 @@ const zh: PortalTranslations = {
 		servant: "服务员",
 	},
 	subscription: {
+		invoiceStatusDraft: "草稿",
+		invoiceStatusIssued: "已开具",
+		invoiceStatusSettled: "已结清",
+		invoiceStatusVoid: "已作废",
 		couldNotCheckBilling: "无法查询账单 — 显示的内容可能不是最新的",
 		agingCurrent: "未到期",
 		dueOn: "到期日 {date}",

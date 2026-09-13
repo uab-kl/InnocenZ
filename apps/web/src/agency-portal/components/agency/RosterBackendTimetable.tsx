@@ -1203,7 +1203,13 @@ export function RosterBackendTimetable({
 														<span className="name">{displayName}</span>
 														{pr.tier && (
 															<span className="meta">
-																<span className="rating">{pr.tier}</span>
+																{/* `tierLabel`, not the raw column: this printed
+																    "tier_1" on the grid an agency plans its week
+																    from, while the same value reads "Tier I"
+																    everywhere else in the portal. */}
+																<span className="rating">
+																	{tierLabel(pr.tier)}
+																</span>
 															</span>
 														)}
 													</div>

@@ -1,6 +1,8 @@
 import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
+import { outletStatusLabel } from "@agency-portal/lib/status-labels";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -16,7 +18,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { kickToLogin } from "@/lib/auth/guards";
-import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -533,7 +534,7 @@ export function OutletLinkingDetail({
 						    review does not put it to work. */}
 						{link.outletStatus !== "active" && (
 							<IzPill variant="amber" className="mt-1">
-								{link.outletStatus.replace(/_/g, " ")}
+								{outletStatusLabel(link.outletStatus, t)}
 							</IzPill>
 						)}
 					</div>
