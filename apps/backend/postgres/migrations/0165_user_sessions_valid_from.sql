@@ -1,0 +1,35 @@
+-- Changing a password must end the sessions that password opened.
+--
+-- WHAT WAS WRONG. The access token is a stateless JWT: signed payload, an
+-- expiry, and nothing else. There is no session table, no token id and no
+-- revocation list, so a token stayed valid for its full lifetime no matter what
+-- happened to the account afterwards. Every password path — the emailed reset
+-- link, the PR app's WhatsApp-OTP reset, and the signed-in change — wrote a new
+-- hash and returned 200 while every token already issued kept working.
+--
+-- That is the wrong answer to the situation those endpoints exist for. Somebody
+-- resetting a password because a device was stolen, or because they believe an
+-- account was taken over, is trying to END the other session. They were told it
+-- had worked.
+--
+-- WHAT THIS ADDS. One nullable timestamp per account. A token whose `iat`
+-- predates it is refused. Stamping it is therefore "sign every device out", and
+-- `updateUserPassword` — the one function all three paths already share — is
+-- where the stamp goes, so a fourth path cannot forget it.
+--
+-- ⚠️ NULLABLE WITH NO DEFAULT, and that is the safety property. NULL means "no
+-- constraint", so this migration changes nothing for anybody: every existing
+-- session keeps working, and the column only starts refusing tokens once a
+-- password actually changes. A `DEFAULT now()` here would have signed out every
+-- account on the platform the moment it ran.
+--
+-- ⚠️ NOT an audit column, and not part of the audit quartet. `updated_at` says
+-- when the ROW last changed and churns on every edit; this says when sessions
+-- were last cut, and must move only when they really were.
+--
+-- ⚠️ `iat` has SECOND precision. A token minted in the same second as the
+-- password change could compare equal, so the check refuses only tokens issued
+-- STRICTLY BEFORE the stamp — and login mints its token after the write, so a
+-- person changing their own password is not thrown out by their own new token.
+ALTER TABLE "main"."user"
+  ADD COLUMN IF NOT EXISTS "sessions_valid_from" timestamp with time zone;

@@ -40,6 +40,41 @@ export class AuthRepositoryClass {
     }
   }
 
+  /**
+   * The same read, plus WHEN THIS TOKEN WAS ISSUED.
+   *
+   * `getUserDataByToken` throws the payload away, so a caller has no way to ask
+   * whether the token predates a password change — which is the only question
+   * `user.sessions_valid_from` exists to answer. Kept as a sibling rather than a
+   * change of shape: four other callers (audit trail, graphql context, the
+   * optional guard, the audit-log wrapper) want the user alone.
+   *
+   * `issuedAt` is null for a token minted before `iat` was recorded, and a null
+   * must be read as "cannot tell" — never as "old".
+   */
+  async getSessionByToken(
+    token: string,
+  ): Promise<{ user: UserType; issuedAt: Date | null; isRefresh: boolean } | null> {
+    try {
+      const payload = this.jwtController.verifyToken(token);
+      const user = await this.userRepository.getUserByLoginMethod(
+        payload.loginMethod,
+        payload.loginCriteria,
+      );
+      if (!user) return null;
+      return {
+        user,
+        issuedAt: typeof payload.iat === 'number' ? new Date(payload.iat * 1000) : null,
+        // A refresh token opens `/auth/refresh` and nothing else. Untyped means
+        // access — see the note on `TokenPayload.type`.
+        isRefresh: payload.type === 'refresh',
+      };
+    } catch (error) {
+      logger.error('[AuthRepository.getSessionByToken] Error:', error);
+      return null;
+    }
+  }
+
   async getRolesForUserIds(
     userIds: string[],
   ): Promise<Array<{ userId: string; roleId: string; roleName: string; portalId: string | null; portalCode: string | null }>> {
@@ -535,10 +570,23 @@ export class AuthRepositoryClass {
       .where(eq(ResetPasswordTokenTable.token, token));
   }
 
+  /**
+   * The one write every password path shares — the emailed reset link, the PR
+   * app's WhatsApp-OTP reset, and the signed-in change.
+   *
+   * 🔴 IT ALSO ENDS THE SESSIONS THAT PASSWORD OPENED. `sessions_valid_from`
+   * is stamped here rather than at the three call sites, because the whole
+   * point of a change like this is that the next path added cannot forget it.
+   * `authenticate-jwt` refuses any token issued before the stamp.
+   *
+   * The person changing their own password is not thrown out: the check refuses
+   * tokens issued STRICTLY earlier than this moment, and their own client
+   * re-authenticates afterwards.
+   */
   async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
     await db
       .update(UserTable)
-      .set({ passwordHash, updatedAt: new Date() })
+      .set({ passwordHash, sessionsValidFrom: new Date(), updatedAt: new Date() })
       .where(eq(UserTable.id, userId));
   }
 }

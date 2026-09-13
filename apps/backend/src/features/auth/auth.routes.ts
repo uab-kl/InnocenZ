@@ -12,12 +12,22 @@ import {
   otpSendPerPhoneLimiter,
   otpVerifyLimiter,
   otpVerifyPerPhoneLimiter,
+  registerCheckLimiter,
+  registerLimiter,
   resetPasswordLimiter,
 } from '@/middlewares/rate-limit.js';
 
 const router = Router();
 
 router.post('/login', loginLimiter, authController.login.bind(authController));
+
+/*
+ * The endpoint the refresh token was minted for and never had. Rate-limited
+ * like login: it is an unauthenticated POST that issues a credential, which is
+ * the same shape, and `loginLimiter` is deliberately generous enough for a
+ * venue's staff behind one NAT address.
+ */
+router.post('/refresh', loginLimiter, authController.refresh.bind(authController));
 
 router.get(
   '/org-member-invite',
@@ -235,9 +245,16 @@ router.post('/mfa/confirm', authenticateJWT, authController.confirmMfa.bind(auth
  */
 router.post(
   '/register/check',
+  // An existence oracle with no account and, until now, no limit.
+  registerCheckLimiter,
   authController.checkRegisterAvailability.bind(authController),
 );
-router.post('/register', optionalAuthenticateJWT, (req, res, next) => {
+/*
+ * The limiter runs BEFORE multer, so a throttled caller never gets their
+ * profile photo parsed and written. Putting it after the upload would hand the
+ * expensive half away for free.
+ */
+router.post('/register', registerLimiter, optionalAuthenticateJWT, (req, res, next) => {
   uploadRegisterProfileImage.single('profileImage')(req, res, (err) => {
     if (err) {
       return res.status(400).json({ success: false, message: err.message, data: null });
@@ -271,6 +288,10 @@ router.get('/outlets', async (_req, res) => {
  */
 router.post(
   '/register-member',
+  // Before multer, for the same reason as `/register`. This one also writes a
+  // PENDING JOIN REQUEST against a named organisation, which lands in that
+  // owner's approvals queue — so an unlimited version floods a real person.
+  registerLimiter,
   /*
    * MULTIPART, like `/register` above — the form carries a profile photo, and
    * a team member's face is the one thing that lets an owner recognise who

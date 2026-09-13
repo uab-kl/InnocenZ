@@ -266,3 +266,54 @@ export const otpVerifyPerPhoneLimiter = rateLimit({
   },
   message: 'Too many attempts for this number. Please try again later.',
 });
+
+
+/**
+ * ACCOUNT CREATION. `/auth/register` and `/auth/register-member` were the last
+ * public, unauthenticated, WRITING endpoints with no limiter at all, while
+ * login, forgot-password, reset-password and both OTP halves each carried one
+ * or two. A script could mint accounts — and, on `/register-member`, pending
+ * join requests against a named organisation — as fast as the database would
+ * take them, and the owner sees every one of those in their approvals queue.
+ *
+ * Keyed per host AND per email, for the shape the other rules already use: many
+ * addresses from one host is bulk creation, one address from many hosts is
+ * someone being spammed into a stranger's queue.
+ *
+ * ⚠️ Both endpoints are MULTIPART (a profile photo), and multer runs AFTER
+ * this. `req.body` is therefore still empty here, so the email key resolves to
+ * null and only the IP rule bites. That is deliberate rather than an oversight:
+ * moving the limiter after multer would mean the file is fully parsed and
+ * written to disk BEFORE the request is throttled, which hands an attacker the
+ * expensive half for free. The per-email key stays declared because
+ * `/register/check` below is JSON and does use it, and because a future
+ * non-multipart register path would get it for nothing.
+ */
+export const registerLimiter = rateLimit({
+  name: 'register',
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  keys: (req) => {
+    const email = normalizedBodyField(req, 'email');
+    return [`ip:${clientIp(req)}`, email ? `email:${email}` : null];
+  },
+  message: 'Too many sign-up attempts. Please try again later.',
+});
+
+/**
+ * The availability check — an EXISTENCE ORACLE, and the reason it needs its own
+ * rule. It answers "is this email/phone already registered?" with no account and
+ * no limit, so it enumerates the platform's users at whatever rate a script can
+ * ask.
+ *
+ * Far more generous than `register` because the sign-up form calls it as the
+ * person types: a tight rule here breaks an honest wizard. Its job is to make
+ * bulk enumeration slow, not to make one person's form feel broken.
+ */
+export const registerCheckLimiter = rateLimit({
+  name: 'register-check',
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  keys: (req) => [`ip:${clientIp(req)}`],
+  message: 'Too many checks. Please wait a few minutes and try again.',
+});

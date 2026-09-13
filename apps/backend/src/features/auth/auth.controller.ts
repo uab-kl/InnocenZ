@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { AuthRepositoryClass } from './auth.repository.js';
 import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { Error } from '@/error/index.js';
+import { isTokenBeforeCutoff } from './session-cutoff.js';
 import { hashPassword, comparePassword } from '@/util/password.js';
 import { logger } from '@/util/logger.js';
 import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
@@ -1242,6 +1243,98 @@ export class AuthControllerClass {
         message: Error.INTERNAL_SERVER_ERROR,
         data: null,
       });
+    }
+  }
+
+  /**
+   * TRADE A REFRESH TOKEN FOR A FRESH ACCESS TOKEN.
+   *
+   * 🔴 This endpoint never existed, and its absence was not a missing
+   * convenience — it is what made the refresh token dangerous. Login minted one,
+   * both clients STORED one, and nothing could ever spend it, so the only thing
+   * it did was sit in `localStorage` being silently accepted as an access token
+   * (both generators signed the same payload; `verifyToken` cannot tell them
+   * apart). The type claim now refuses it everywhere else; this is the one door
+   * it opens.
+   *
+   * Every gate login applies is re-applied here, because a refresh is a new
+   * session and the seven days since the last one are exactly when an account
+   * gets disabled, an organisation gets suspended, or a password gets changed:
+   *
+   *   • the token must BE a refresh token — an access token cannot extend itself;
+   *   • the account must still exist and still be active;
+   *   • the token must post-date the account's `sessions_valid_from`, so a
+   *     password change kills the refresh token along with the access ones.
+   *
+   * It returns only an ACCESS token. Re-issuing the refresh token on every use
+   * would make a stolen one renewable forever, which is the failure this whole
+   * change is about.
+   */
+  async refresh(req: Request, res: Response) {
+    try {
+      const token =
+        typeof req.body?.refreshToken === 'string'
+          ? req.body.refreshToken.trim()
+          : '';
+      if (!token) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'refreshToken is required', data: null });
+      }
+
+      let payload: ReturnType<JwtControllerClass['verifyToken']>;
+      try {
+        payload = this.jwtController.verifyToken(token);
+      } catch {
+        // Expired or forged — one answer for both, so this cannot be used to
+        // tell a real expired token from a fabricated one.
+        return res
+          .status(401)
+          .json({ success: false, message: 'Please sign in again.', data: null });
+      }
+
+      if (payload.type !== 'refresh') {
+        return res
+          .status(401)
+          .json({ success: false, message: 'Please sign in again.', data: null });
+      }
+
+      const user = await this.userRepository.getUserByLoginMethod(
+        payload.loginMethod,
+        payload.loginCriteria,
+      );
+      if (!user || user.status !== 'active') {
+        return res
+          .status(401)
+          .json({ success: false, message: 'Please sign in again.', data: null });
+      }
+
+      const issuedAt =
+        typeof payload.iat === 'number' ? new Date(payload.iat * 1000) : null;
+      if (isTokenBeforeCutoff(issuedAt, user.sessionsValidFrom)) {
+        return res
+          .status(401)
+          .json({ success: false, message: 'Please sign in again.', data: null });
+      }
+
+      const accessToken = this.jwtController.generateAccessToken({
+        loginMethod: payload.loginMethod,
+        loginCriteria: payload.loginCriteria,
+      });
+      const decoded = this.jwtController.verifyToken(accessToken);
+      return res.status(200).json({
+        success: true,
+        message: 'Session refreshed',
+        data: {
+          accessToken,
+          expiredAt: decoded.exp ? decoded.exp * 1000 : null,
+        },
+      });
+    } catch (error) {
+      logger.error('[AuthController.refresh] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
 
