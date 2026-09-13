@@ -673,6 +673,33 @@ the obvious API. Separately, `pr.controller.ts` writes `'left'` and then immedia
 protected row into a deletable one. **Raise with the owner before touching any of it.**
 
 
+### ▶ ✅ NOT REPRODUCIBLE 13 Sep 2026 — re-tested, now that a dual-org account exists
+
+The note below parked this as *"unverifiable by construction — no account on this database holds
+two memberships"*. **That is no longer true**, so it was re-tested rather than left on trust:
+
+* **2+ agencies:** still nobody. The agency-side routes remain unexercisable, exactly as parked.
+* **2+ OUTLETS:** `jinkgan48@gmail.com` has been active at UAB Emhub AND JK House since
+  11 Sep — the first such account.
+* **2+ agencies as a PR:** several (one at four agencies), on `agency_pr`, a different table.
+
+Tested read-only as that account, against a shift and an assignment at EACH venue, with and
+without `x-org-id`:
+
+| route | UAB Emhub | JK House |
+|---|---|---|
+| `GET /shift/:id` | 200 / 200 | 200 / 200 |
+| `GET /shift-assignment/:id` | 200 / 200 | 200 / 200 |
+| `GET /pr/:id` | 200 / 200 | 200 / 200 |
+
+No 404, header or no header. The oldest-membership fallback does not lock this person out of
+their second venue. `_probe-dual-outlet-reads.ts` and `_probe-dual-outlet-assignments.ts` re-run it.
+
+⚠️ **Still genuinely untested:** the three `payment-voucher` routes in the list, which are
+AGENCY-scoped — no account holds two agencies, so that half stays parked on the same reasoning.
+
+**The original 10 Sep entry, kept for its reasoning:**
+
 ### ▶ OPEN — six resource-id routes still answer as ONE agency for a dual-agency operator (10 Sep 2026)
 
 **Not a leak, and not the security half** — that closed in slice 4c. Every one of these compares
@@ -862,6 +889,20 @@ source at its previous framing.
 ⚠️ Do NOT "fix" any future variant of this by feeding the stored CROPPED image
 back into the sheet. That is the lossy path the original gate existed to prevent,
 and it remains wrong.
+
+### ▶ ◑ HALF DONE 13 Sep 2026 — the API can correct an anchor; no screen shows it yet
+
+`PUT /member-subscription/:id` now accepts `billingStartsAt` (admin-only, like the whole router),
+so an anchor can be corrected without SQL. Nullable on purpose — "enrolled, not yet billable" is a
+real state, and the invoice job already reports every live org missing an anchor each morning.
+5 schema tests; proved at the PARSE, not by firing an endpoint that re-dates real invoicing.
+
+**⚠️ THE UI HALF NEEDS A DECISION FIRST, and it is the owner's:** moving an anchor re-dates only
+the periods not yet opened and leaves invoices already raised alone. Should a correction ALSO void
+and re-raise the OPEN period? The conservative half is what shipped. `services/member-subscription`
+has no update function at all yet, so the admin screen is a real build, not a field to surface.
+
+**The original 9 Sep entry:**
 
 ### ▶ OPEN — no way to correct a billing anchor by hand (opened 9 Sep 2026)
 
@@ -1453,6 +1494,35 @@ now fixed in the probe: `ic` does not match `icNo`; `lat`/`lng`/`leaveProof` w
 vocabulary at all; and it scanned only the first 2 array elements, so a penalty on row 25 of 35 was
 invisible. What actually found the leaks was enumerating FIELD NAMES rather than pattern-matching
 them. **Do not trust a privacy sweep that has never been shown to catch a known-present field.**
+
+### ▶ ❌ REFUTED 13 Sep 2026 — Havoc is a SERVICE, and the tips bucket is right
+
+**Do not "fix" this. Re-tagging Havoc as a drink would CUT a PR's commission on it.**
+
+The claim below is that Havoc is a drink *"on the outlet's drinks list"*. It is not. JK House's
+own catalogue tags it `service`:
+
+| category | items |
+|---|---|
+| drink (7) | Cosmo, Dom Perignon, Don Julio, Herradura, Ladies drink, Lemon Drop, Test |
+| service (3) | Booking commission, **Havoc**, Testes |
+| tip (1) | Tips |
+
+Every Havoc voucher line across six-plus receipts is `component = 'tip_commission'`, consistently
+— the venue classified it, and the system agrees with the venue. `receiptKindForItem` puts every
+service entitlement on the tips side DELIBERATELY, because a service is commissioned at the tip
+rate; that rule was itself the fix for the real bug here (Havoc used to fall into `others` and
+render as **OT**, which was wrong and is long closed).
+
+⚠️ **What "fixing" it would cost.** At JK House `tip_pct` sits 5 points ABOVE `drink_pct` at
+every tier (Tier I 15% vs 10%, Tier III 17% vs 12%), and in happy hour the drink rate is a third
+of it (5%). On a RM 1,000 item that is **RM 50-100 per unit taken off a PR's pay** — on a premise
+that is false.
+
+If the owner decides Havoc really should be a drink, that is a CATALOGUE edit the venue makes in
+Workspace, not a code change.
+
+**The original 3 Sep entry, kept for its reasoning:**
 
 ### ▶ A DRINK IS SITTING IN THE TIPS BUCKET — surfaced by the new Payroll strip (3 Sep 2026)
 
