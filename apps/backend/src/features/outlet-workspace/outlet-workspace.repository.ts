@@ -15,14 +15,31 @@ import {
 // Child rows for an upsert, minus workspaceId/outletId (both set by the repo
 // inside the transaction from the parent outlet).
 export type WorkspaceChildren = {
-  tierRates: Omit<OutletTierRateInsertType, 'id' | 'workspaceId' | 'outletId'>[];
-  drinkMenu: Omit<OutletDrinkMenuInsertType, 'id' | 'workspaceId' | 'outletId'>[];
+  /**
+   * ⚠️ `undefined` means the caller did not send this list, and it MUST be
+   * left exactly as it is. Only an explicit array replaces — an empty one
+   * clears, a populated one swaps.
+   *
+   * The distinction is the whole point: the upsert below DELETES before it
+   * inserts, so treating "absent" as "empty" erased a venue's rate card and
+   * answered 200. Two venues lost all seven tier rows that way.
+   */
+  tierRates?: Omit<OutletTierRateInsertType, 'id' | 'workspaceId' | 'outletId'>[];
+  drinkMenu?: Omit<OutletDrinkMenuInsertType, 'id' | 'workspaceId' | 'outletId'>[];
 };
 
 // Parent scalar columns only — outletId, actor and timestamps are set by the repo.
-export type WorkspaceParent = Omit<
-  OutletWorkspaceInsertType,
-  'id' | 'outletId' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'
+//
+// ⚠️ PARTIAL, for the same reason the child lists are optional: a key that is
+// absent must keep its stored value. Every one of these columns is
+// `.notNull().default(...)`, so omitting them on the INSERT branch is safe — the
+// database supplies the same zeros the old `.default()` in the zod schema used
+// to, but only for a workspace that is genuinely new.
+export type WorkspaceParent = Partial<
+  Omit<
+    OutletWorkspaceInsertType,
+    'id' | 'outletId' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'
+  >
 >;
 
 export class OutletWorkspaceRepositoryClass {
@@ -85,12 +102,17 @@ export class OutletWorkspaceRepositoryClass {
             .update(OutletWorkspaceTable)
             .set({ ...parent, updatedBy: actor, updatedAt: new Date() })
             .where(eq(OutletWorkspaceTable.id, id));
-          await tx
-            .delete(OutletTierRateTable)
-            .where(eq(OutletTierRateTable.workspaceId, id));
-          await tx
-            .delete(OutletDrinkMenuTable)
-            .where(eq(OutletDrinkMenuTable.workspaceId, id));
+          // Each list is dropped ONLY when a replacement for it was sent.
+          if (children.tierRates !== undefined) {
+            await tx
+              .delete(OutletTierRateTable)
+              .where(eq(OutletTierRateTable.workspaceId, id));
+          }
+          if (children.drinkMenu !== undefined) {
+            await tx
+              .delete(OutletDrinkMenuTable)
+              .where(eq(OutletDrinkMenuTable.workspaceId, id));
+          }
         } else {
           const [row] = await tx
             .insert(OutletWorkspaceTable)
@@ -99,14 +121,14 @@ export class OutletWorkspaceRepositoryClass {
           id = row!.id;
         }
 
-        if (children.tierRates.length > 0) {
+        if (children.tierRates && children.tierRates.length > 0) {
           await tx
             .insert(OutletTierRateTable)
             .values(
               children.tierRates.map((r) => ({ ...r, workspaceId: id, outletId })),
             );
         }
-        if (children.drinkMenu.length > 0) {
+        if (children.drinkMenu && children.drinkMenu.length > 0) {
           await tx
             .insert(OutletDrinkMenuTable)
             .values(
