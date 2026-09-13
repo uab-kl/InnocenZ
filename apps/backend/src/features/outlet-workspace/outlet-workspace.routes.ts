@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { outletWorkspaceController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
 import {
+  requireAgencyLaneIfNotOutletMember,
   requireOutletPermissionIfMember,
   requireOutletScopeByParam,
 } from '@/middlewares/require-sub-role.js';
@@ -47,11 +48,32 @@ router.get(
   requireOutletScopeByParam('outletId'),
   outletWorkspaceController.getByOutletId.bind(outletWorkspaceController),
 );
+/*
+ * ⚠️ THREE QUESTIONS, because the first two left one unasked.
+ *
+ * `requireOutletScopeByParam` proves the caller has business at THIS venue, and
+ * `requireOutletPermissionIfMember` demands `workspace:update` of a venue
+ * member. But that second guard PASSES any caller with no venue membership at
+ * all — which is every agency, by design, since that short-circuit is the only
+ * way an agency reaches this route (narrowing it is the regression 4c7151c had
+ * to revert).
+ *
+ * So an agency's right to be here was established and its LANE never was: a
+ * view-only Director at a linked agency could rewrite the venue's whole pay
+ * rate card and drink price list — the numbers every PR's wage is computed
+ * from. No screen offers it; it is reachable through the API.
+ *
+ * The third guard asks the missing question, and only of agency callers: the
+ * owner lane, which is who the flow was built for (`audit_logs`: an agency
+ * OWNER configuring rates 22 times on 2026-07-26). Venue members fall straight
+ * through it to the guard above, which is theirs.
+ */
 router.put(
   '/:outletId',
   requireRole('admin', 'agency', 'outlet'),
   requireOutletScopeByParam('outletId'),
   requireOutletPermissionIfMember('workspace', 'update'),
+  requireAgencyLaneIfNotOutletMember('owner'),
   outletWorkspaceController.upsert.bind(outletWorkspaceController),
 );
 

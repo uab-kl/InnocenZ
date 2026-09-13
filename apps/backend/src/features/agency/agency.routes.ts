@@ -13,13 +13,29 @@ import {
 
 const router = Router();
 
-// Directory listing is admin + agency only — outlet must not enumerate agencies
-// (admin dashboard pending_review used to succeed for any signed-in JWT).
-router.get(
-  '/',
-  requireRole('admin', 'agency'),
-  agencyController.list.bind(agencyController),
-);
+/*
+ * ⚠️ ADMIN ONLY. The note that used to sit here said "admin + agency only —
+ * outlet must not enumerate agencies", which asked the wrong question: it
+ * worried about the OUTLET portal and never about one agency reading another.
+ *
+ * `requireRole('admin','agency')` has no tenant term and `list` never consults
+ * `req.user`, so any agency lane — a view-only Director included — could
+ * enumerate every agency on the platform. Proved live as Atlas's Finance head:
+ * five rows came back, four of them rivals, each carrying `ssmNo` — the company
+ * registration number. This is the same shape as the `GET /user` leak: a role
+ * gate standing in for a scope check, behind a comment that had outlived it.
+ *
+ * CALLERS VERIFIED FIRST, the way this file's own history demands. Every
+ * `fetchAgencies` call site is an ADMIN screen — routes/admin/dashboard,
+ * business/history, rbac/pending, user-management/agency — plus
+ * `use-sidebar-badges`, which only the admin sidebar and routes/admin/rbac
+ * render. The agency portal never lists agencies, and the phone calls no
+ * `/agency` route at all.
+ *
+ * An agency that needs its OWN record still has `GET /agency/:id`, which is
+ * membership-scoped, and `/agency/memberships` below.
+ */
+router.get('/', requireAdmin, agencyController.list.bind(agencyController));
 router.get(
   '/memberships',
   requireRole('admin', 'agency'),
@@ -66,11 +82,21 @@ router.get(
   requireOrgMembershipByParam('agency', 'id'),
   agencyController.getById.bind(agencyController),
 );
-router.post(
-  '/',
-  requireRole('admin', 'agency'),
-  agencyController.create.bind(agencyController),
-);
+/*
+ * ⚠️ ADMIN ONLY — the twin of `POST /outlet`, and for the same reason.
+ *
+ * `requireRole('admin','agency')` admits EVERY agency lane, so a view-only
+ * Director could create an agency record — and `create` also writes the first
+ * membership row, so it is an ownership-granting write, not a directory entry.
+ * Nothing about being staff at one agency should let you conjure another.
+ *
+ * CALLERS VERIFIED FIRST: `services/agency/agency.ts` exports no create at all,
+ * and nothing in `apps/web/src` POSTs to `/agency` — every existing row came
+ * from a seed script or an admin, exactly as on the outlet side. If agency
+ * self-signup ever ships it goes through the public `/auth/register` path,
+ * which is a different route with its own rules, not this one.
+ */
+router.post('/', requireAdmin, agencyController.create.bind(agencyController));
 // Editing the agency record is agencyCan('editSettings') — owner only. This
 // carried no role gate at all before, so any signed-in account could rewrite an
 // agency's own details.

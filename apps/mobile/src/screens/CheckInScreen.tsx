@@ -32,7 +32,12 @@ import { useSession } from '../lib/session';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { usePrNav } from '../lib/pr-nav';
 import { useLocale, formatMessage } from '../i18n';
-import { assetUrl, checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
+import {
+  assetUrl,
+  cancelMyShiftAssignment,
+  checkInShiftAssignment,
+  checkOutShiftAssignment,
+} from '../lib/api';
 import { getAttendanceFix } from '../lib/device-location';
 import { Avatar, EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
@@ -210,6 +215,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  // The cancel is a real server write now — so it can be in flight, and it can
+  // be refused. Both have to be visible, or the PR taps again on a shift the
+  // server already took.
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // If the backend already has an open check-in (e.g. after reload), mirror that
@@ -525,13 +535,48 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }, 60);
   };
 
-  const confirmCancel = () => {
-    if (!cancelReason.trim() || !active) return;
-    // Client-only for now — a PR-cancel endpoint is a later slice. Hides the row
-    // from the active pick until reload.
-    dismiss(active.id);
-    setCancelOpen(false);
-    setCancelReason('');
+  /*
+   * ⚠️ THIS USED TO CANCEL NOTHING — and the comment saying so was STALE.
+   *
+   * It read "a PR-cancel endpoint is a later slice" and only called `dismiss`,
+   * which hides the row locally until the next reload. Meanwhile this sheet
+   * titles itself "Cancel shift?", prints the cancellation FEE BANDS, and makes
+   * the reason mandatory. So a PR read the rules, accepted a possible charge,
+   * typed a reason, confirmed — and the shift vanished from their phone while
+   * the agency roster and the venue still had them booked. They were then marked
+   * a NO-SHOW, and the reason they gave was thrown away.
+   *
+   * `POST /shift-assignment/mine/:id/cancel` has existed for a while: "a signed-
+   * in PR cancels its OWN upcoming assignment (reason required) — the agency
+   * sees the cancelled row". `AgencySchedulePanel` has been calling it correctly
+   * all along, so the app carried two cancel paths, one real and one theatre.
+   * This is now the same call, with the same shape of error handling.
+   *
+   * The local `dismiss` stays, but only AFTER the server agrees — it is what
+   * takes the row out of the active pick without waiting for the refetch.
+   */
+  const confirmCancel = async () => {
+    const reason = cancelReason.trim();
+    if (!reason || !active || cancelBusy) return;
+    if (!token) {
+      setCancelError(t.schedule.notSignedIn);
+      return;
+    }
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      await cancelMyShiftAssignment(token, active.id, reason);
+      dismiss(active.id);
+      setCancelOpen(false);
+      setCancelReason('');
+      void refresh();
+    } catch (e) {
+      // The server's own sentence — it is the half that says WHY, and a shift
+      // already checked in or completed is refused here on purpose.
+      setCancelError(e instanceof Error ? e.message : t.schedule.cancelFailed);
+    } finally {
+      setCancelBusy(false);
+    }
   };
 
   const outletName = active?.outletName ?? t.common.outlet;
@@ -888,10 +933,30 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               placeholder={t.checkin.reasonPlaceholder}
               placeholderTextColor={C.muted2}
             />
-            <Pressable style={styles.dangerBtn} onPress={confirmCancel}>
+            {/* The server's refusal, said out loud. A shift already checked in
+                or completed is refused on purpose, and without this the sheet
+                simply sat there looking broken. */}
+            {cancelError && (
+              <Text style={[styles.sheetHint, { color: C.red }]}>{cancelError}</Text>
+            )}
+            <Pressable
+              style={[styles.dangerBtn, cancelBusy && { opacity: 0.5 }]}
+              disabled={cancelBusy}
+              onPress={() => {
+                void confirmCancel();
+              }}
+            >
               <Text style={styles.dangerBtnText}>{t.checkin.cancelShift}</Text>
             </Pressable>
-            <Pressable style={styles.sheetCancel} onPress={() => setCancelOpen(false)}>
+            <Pressable
+              style={styles.sheetCancel}
+              onPress={() => {
+                setCancelOpen(false);
+                // Backing out clears the refusal — it belonged to the attempt,
+                // not to the shift.
+                setCancelError(null);
+              }}
+            >
               <Text style={styles.sheetCancelText}>{t.checkin.back}</Text>
             </Pressable>
           </Pressable>

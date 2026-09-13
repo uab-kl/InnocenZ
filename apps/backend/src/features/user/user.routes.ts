@@ -55,6 +55,17 @@ const router: ReturnType<typeof Router> = Router();
  */
 const canListUsers = requireAdmin;
 
+// Reading your OWN record stays open to every role — this is the call mobile's
+// profile screen makes for the signed-in PR. Reading someone else's is the same
+// staff action as listing: until 30 Jul 2026 any account could fetch any other
+// account's identity documents just by knowing its id.
+//
+// ⚠️ Declared HERE rather than beside `GET /:id`, because
+// `/:id/profile-image-source` further down needs it too and a `const` is not
+// hoisted.
+const canReadUser = (req: Request, res: Response, next: NextFunction) =>
+  req.user?.id === req.params.id ? next() : canListUsers(req, res, next);
+
 // ...and that shape-level job, decided 30 Jul 2026: an outlet keeps the list but
 // loses the identity documents on every row of it. See redact-identity-docs.ts.
 router.get('', canListUsers, redactIdentityDocsForOutlet, userController.list.bind(userController));
@@ -73,11 +84,23 @@ router.patch('/:id/status', requireRole('admin'), userController.setStatus.bind(
 // Self soft-delete (Play / App Store). POST avoids DELETE+body flakiness on mobile.
 router.post('/:id/delete', userController.deleteOwnAccount.bind(userController));
 router.patch('/:id', userController.updateProfile.bind(userController));
-// The un-cropped original behind the avatar, so "Adjust crop" survives a
-// reload. Same access as the avatar it belongs to — it reveals the picture the
-// person uploaded of themselves and nothing else.
+/*
+ * The un-cropped original behind the avatar, so "Adjust crop" survives a reload.
+ *
+ * ⚠️ THIS HAD NO GUARD AT ALL. The note said "same access as the avatar it
+ * belongs to" and then asked for none — so any signed-in account, a PR
+ * included, could fetch any other person's full-resolution original just by
+ * knowing their user id. An avatar is cropped for a reason; the source is
+ * whatever they actually uploaded, including whatever the crop cut off.
+ *
+ * `canReadUser` is the right gate and was sitting unused two routes away: self,
+ * else admin. The only caller is `fetchMyProfileImageSource` — the name says
+ * it — which always passes the signed-in user's own id, so nothing legitimate
+ * is refused.
+ */
 router.get(
   '/:id/profile-image-source',
+  canReadUser,
   userController.getProfileImageSource.bind(userController),
 );
 router.post('/:id/profile-image', (req, res, next) => {
@@ -114,12 +137,8 @@ router.post('/:id/id-photo/:side', (req, res, next) => {
     next();
   });
 }, userController.uploadIdDoc.bind(userController));
-// Reading your OWN record stays open to every role — this is the call mobile's
-// profile screen makes for the signed-in PR. Reading someone else's is the same
-// staff action as listing: until 30 Jul 2026 any account could fetch any other
-// account's identity documents just by knowing its id.
-const canReadUser = (req: Request, res: Response, next: NextFunction) =>
-  req.user?.id === req.params.id ? next() : canListUsers(req, res, next);
+// `canReadUser` is declared near the top of this file, beside `canListUsers` —
+// `/:id/profile-image-source` above needs it and a `const` is not hoisted.
 
 // Own record is exempt from the redaction as well as from the gate — an outlet
 // manager opening their OWN profile must still see their own IC. Skipping the

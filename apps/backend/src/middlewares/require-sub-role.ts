@@ -451,6 +451,73 @@ export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
  * Compose this with a lane guard, do not replace one: this says WHICH venue,
  * the lane guard says WHO within it.
  */
+/**
+ * THE OTHER HALF OF `requireOutletPermissionIfMember` — what an AGENCY caller
+ * must hold on routes that let agencies act on a venue's behalf.
+ *
+ * ⚠️ Those routes pass an agency through unconditionally, and that is
+ * deliberate: an agency holds no venue membership, so the venue guard's
+ * short-circuit is the only way it reaches the handler at all (narrowing it is
+ * the regression 4c7151c had to revert). But "you are an agency linked to this
+ * venue" was the ONLY question asked. Nothing asked WHICH agency lane — so a
+ * view-only Director could rewrite a linked venue's entire pay rate card and
+ * drink price list, which is what every PR's wage is computed from.
+ *
+ * The owner's rule is that other org members are view-only, and the flow this
+ * exists for is an agency ONBOARDING a venue — `audit_logs` shows an agency
+ * OWNER doing exactly that 22 times on 2026-07-26. So the owner lane keeps the
+ * flow and the other three lose a write they were never meant to have.
+ *
+ * Guarantor folds into owner here (the default): this is configuration, not
+ * money leaving the organisation, and the stand-in stands in everywhere except
+ * payment.
+ *
+ * A caller who IS a venue member is passed straight through — they are the
+ * other guard's business, not this one's.
+ */
+export function requireAgencyLaneIfNotOutletMember(
+  ...allowed: AgencySubRole[]
+) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return res
+        .status(401)
+        .json({ success: false, message: Error.UNAUTHORIZED, data: null });
+    }
+    try {
+      if (await isAdmin(user.id)) return next();
+
+      // A venue operator: `requireOutletPermissionIfMember` owns that case.
+      const outletMemberships = await outletMemberRepository.listByUser(user.id);
+      if (outletMemberships.some((m) => m.status === 'active')) return next();
+
+      const agencyId = await resolveActingOrgId(req, orgScopeDeps, 'agency');
+      if (!agencyId) {
+        return res.status(403).json({
+          success: false,
+          message: Error.FORBIDDEN ?? 'Forbidden',
+          data: null,
+        });
+      }
+      if (await holdsAgencyLane(user.id, agencyId, allowed)) return next();
+      return res.status(403).json({
+        success: false,
+        message: 'Only the agency owner can change a venue rate card.',
+        data: null,
+      });
+      // Bare catch, matching every other guard in this file — `logger` is not
+      // imported here on purpose, so the middlewares stay free of it.
+    } catch {
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  };
+}
+
 export function requireOutletScopeByParam(param: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
