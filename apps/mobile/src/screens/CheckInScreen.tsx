@@ -26,6 +26,7 @@ import {
 } from '../lib/demo-shifts';
 import { shiftDurationLabel, useShiftSession } from '../lib/shift-session';
 import { localDateKey, useActiveShift } from '../lib/active-shift';
+import { shiftDayKeys as shiftDayKeysFor } from '../lib/pick-active-shift';
 import { overtimeHours, overtimePay } from '../lib/pr-rate';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
@@ -214,6 +215,8 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       Pressables, so they never fight the card's own tap-to-expand. */
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  // The acknowledgement that replaced the dead end — see `nothingLogged`.
+  const [emptyShiftOpen, setEmptyShiftOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   // The cancel is a real server write now — so it can be in flight, and it can
   // be refused. Both have to be visible, or the PR taps again on a shift the
@@ -274,29 +277,12 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    *
    * Capped at four days so a stamp that cannot be true cannot spin the loop.
    */
-  const shiftDayKeys = useMemo(() => {
-    const start = active?.checkInAt ? new Date(active.checkInAt) : null;
-    if (!start || Number.isNaN(start.getTime())) return [todayKey];
-    const raw = active?.checkOutAt ? new Date(active.checkOutAt) : new Date();
-    const end =
-      !Number.isNaN(raw.getTime()) && raw.getTime() >= start.getTime()
-        ? raw
-        : start;
-    const last = localDateKey(end);
-    const keys: string[] = [];
-    const cursor = new Date(
-      start.getFullYear(),
-      start.getMonth(),
-      start.getDate(),
-    );
-    for (let i = 0; i < 4; i++) {
-      const key = localDateKey(cursor);
-      keys.push(key);
-      if (key === last) break;
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    return keys;
-  }, [active?.checkInAt, active?.checkOutAt, todayKey]);
+  // The shared rule — this used to be an inline copy, and ScanScreen had no
+  // copy at all.
+  const shiftDayKeys = useMemo(
+    () => shiftDayKeysFor(active?.checkInAt, active?.checkOutAt, todayKey),
+    [active?.checkInAt, active?.checkOutAt, todayKey],
+  );
   const shiftStartedAt = active?.checkInAt ? new Date(active.checkInAt).getTime() : null;
   const todayReceipts = receiptLines.filter((l) => {
     if (!shiftDayKeys.includes(l.lineDate ?? '')) return false;
@@ -328,11 +314,13 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   );
 
   /**
-   * Why check-out is refused, or null when it is allowed. Photos first.
+   * Why check-out is REFUSED, or null when it is allowed.
    *
-   * Two spelled-out sentences rather than an "s"/"has|have" fragment glued into
-   * one template: Chinese has no plural form to append, so the singular and
-   * plural wordings are separate keys picked by the count.
+   * Only the missing-photo case, and only because the PR can actually clear it:
+   * re-scan the row or remove it. Two spelled-out sentences rather than an
+   * "s"/"has|have" fragment glued into one template — Chinese has no plural
+   * form to append, so the singular and plural wordings are separate keys picked
+   * by the count.
    */
   const checkOutBlock: string | null =
     linesMissingPhoto > 0
@@ -342,9 +330,31 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             : t.checkin.missingPhotoMany,
           { n: linesMissingPhoto },
         )
-      : loggedActions.length === 0
-        ? t.checkin.nothingLogged
-        : null;
+      : null;
+
+  /**
+   * 🔴 AN EMPTY SHIFT IS A WARNING NOW, NOT A LOCKED DOOR.
+   *
+   * "Nothing logged" used to sit in `checkOutBlock` and disable the button
+   * outright, with no override anywhere on the screen. A quiet night is a real
+   * night — and so is a PR whose role sold nothing — and for them the
+   * consequences compounded:
+   *
+   *   • they could not check out, so the server never SEALED the wage
+   *     (`pay_amount` / `pay_rule` are written at check-out) and the shift paid
+   *     them nothing at all;
+   *   • the backend refuses a second check-in while one is open
+   *     (`open_check_in_elsewhere`), so the stuck shift locked them out of every
+   *     FUTURE shift too;
+   *   • nothing on the phone could clear it. Not a support case they can
+   *     raise — a dead end.
+   *
+   * The reason behind the rule is sound and is kept: commission that is not
+   * logged before the week closes cannot be claimed afterwards. That is a thing
+   * to WARN someone about, not a reason to trap them. The sheet says it plainly
+   * and makes them confirm.
+   */
+  const nothingLogged = checkOutBlock === null && loggedActions.length === 0;
 
   /**
    * What this shift pays THIS PR, in RM — the one figure every wage number on
@@ -830,11 +840,23 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   disabled={checkOutBlock !== null}
                   onPress={() => {
                     if (checkOutBlock !== null) return;
+                    // The warning is shown BEFORE the hold rather than after it:
+                    // holding a button for six seconds and then being told why it
+                    // will not work is the same dead end in slower motion.
+                    if (nothingLogged) {
+                      setEmptyShiftOpen(true);
+                      return;
+                    }
                     startHold(true);
                   }}
                 />
                 {checkOutBlock !== null && (
                   <Text style={[styles.gpsNote, { color: C.red }]}>{checkOutBlock}</Text>
+                )}
+                {nothingLogged && (
+                  <Text style={[styles.gpsNote, { color: C.amber }]}>
+                    {t.checkin.nothingLogged}
+                  </Text>
                 )}
               </>
             )}
@@ -891,6 +913,54 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           </>
         )
       )}
+
+      {/*
+        * Checking out of a shift with nothing logged. It warns, in the words the
+        * old block used, and then lets the PR through — because the alternative
+        * was a shift they could never close, a wage never sealed, and every
+        * later check-in refused behind it.
+        */}
+      <Modal
+        visible={emptyShiftOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEmptyShiftOpen(false)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setEmptyShiftOpen(false)}
+        >
+          <Pressable
+            style={[styles.sheet, { paddingBottom: 18 + insets.bottom }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.sheetTitle}>{t.checkin.emptyShiftTitle}</Text>
+            <Text style={styles.sheetMeta}>
+              {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd, t) : '—'} · {shiftTime}
+            </Text>
+            <Text style={[styles.sheetHint, { color: C.amber }]}>
+              {t.checkin.emptyShiftWarning}
+            </Text>
+            <Pressable
+              style={styles.dangerBtn}
+              onPress={() => {
+                setEmptyShiftOpen(false);
+                startHold(true);
+              }}
+            >
+              <Text style={styles.dangerBtnText}>
+                {t.checkin.emptyShiftConfirm}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.sheetCancel}
+              onPress={() => setEmptyShiftOpen(false)}
+            >
+              <Text style={styles.sheetCancelText}>{t.checkin.back}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={cancelOpen}

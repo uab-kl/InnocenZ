@@ -364,8 +364,21 @@ export type AppTranslations = {
     missingPhotoOne: string;
     /** PLURAL of the check-out refusal. See missingPhotoOne. */
     missingPhotoMany: string;
-    /** Check-out refusal when the shift is completely empty. */
+    /**
+     * WARNING when the shift is completely empty — no longer a refusal.
+     *
+     * It used to disable check-out outright with no override, which left a PR
+     * who genuinely sold nothing unable to close the shift, unable to be paid
+     * for it (the wage is sealed at check-out) and unable to check in to any
+     * later shift, since the server refuses a second open check-in.
+     */
     nothingLogged: string;
+    /** Title of the sheet that confirms checking out of an empty shift. */
+    emptyShiftTitle: string;
+    /** What is lost by checking out with nothing logged — shown in that sheet. */
+    emptyShiftWarning: string;
+    /** Confirm button in that sheet. */
+    emptyShiftConfirm: string;
     /** Error banner after the "Refresh GPS" link is tapped and permission is still refused. */
     locPermissionOff: string;
     /** Error banner when the "Refresh GPS" one-shot read throws. */
@@ -1819,6 +1832,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       missingPhotoOne: '{n} logged action has no picture — tap the red camera on that row to scan again, or remove the row, before you can check out.',
       missingPhotoMany: '{n} logged actions have no picture — tap the red camera on that row to scan again, or remove the row, before you can check out.',
       nothingLogged: 'Nothing logged yet. Scan a receipt or self-log at least one drink or tip — with its picture — before you check out. Once the shift closes, that commission cannot be claimed.',
+      emptyShiftTitle: 'Check out with nothing logged?',
+      emptyShiftWarning:
+        'You have not logged a single drink or tip for this shift. Checking out closes it, and commission for tonight cannot be added afterwards. Only do this if there really was nothing to log.',
+      emptyShiftConfirm: 'Yes, check out anyway',
       locPermissionOff: 'Location permission is off — allow it to check in.',
       gpsReadFailed: 'Could not read GPS — check location permission and try again.',
       locationDenied: 'InnocenZ needs location access to check you in at the venue. Turn it on in Settings > InnocenZ > Location, then try again.',
@@ -2913,6 +2930,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       missingPhotoOne: '有 {n} 条记录缺少照片 — 请点按该行的红色相机重新拍摄，或删除该行，然后才能签退。',
       missingPhotoMany: '有 {n} 条记录缺少照片 — 请点按该行的红色相机重新拍摄，或删除该行，然后才能签退。',
       nothingLogged: '尚未记录任何项目。请在签退前扫描收据，或自行记录至少一笔酒水或小费 — 并附上照片。班次一旦结束，该笔佣金将无法再申报。',
+      emptyShiftTitle: '未记录任何项目就签退？',
+      emptyShiftWarning:
+        '本班次您尚未记录任何酒水或小费。签退即代表班次结束，之后无法再补登今晚的佣金。确实无项可记录时才请继续。',
+      emptyShiftConfirm: '确认，仍然签退',
       locPermissionOff: '定位权限已关闭 — 请允许后再签到。',
       gpsReadFailed: '无法读取定位 — 请检查定位权限后重试。',
       locationDenied: 'InnocenZ 需要定位权限才能在门店为你签到。请在 设置 > InnocenZ > 位置 中开启，然后重试。',
@@ -4005,6 +4026,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       missingPhotoOne: '有 {n} 筆紀錄缺少照片 — 請點按該列的紅色相機重新拍攝，或刪除該列，然後才能簽退。',
       missingPhotoMany: '有 {n} 筆紀錄缺少照片 — 請點按該列的紅色相機重新拍攝，或刪除該列，然後才能簽退。',
       nothingLogged: '尚未記錄任何項目。請在簽退前掃描收據，或自行記錄至少一筆酒水或小費 — 並附上照片。班次一旦結束，該筆佣金將無法再申報。',
+      emptyShiftTitle: '未記錄任何項目就簽退？',
+      emptyShiftWarning:
+        '本班次您尚未記錄任何酒水或小費。簽退即代表班次結束，之後無法再補登今晚的佣金。確實無項可記錄時才請繼續。',
+      emptyShiftConfirm: '確認，仍然簽退',
       locPermissionOff: '定位權限已關閉 — 請允許後再簽到。',
       gpsReadFailed: '無法讀取定位 — 請檢查定位權限後重試。',
       locationDenied: 'InnocenZ 需要定位權限才能在門店為你簽到。請在 設定 > InnocenZ > 位置 中開啟，然後重試。',

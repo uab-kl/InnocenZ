@@ -26,6 +26,55 @@ export function localDateKey(d: Date): string {
 }
 
 /**
+ * THE CALENDAR DAYS ONE SHIFT'S MONEY CAN LAND ON.
+ *
+ * A night shift crosses midnight, and the server dates a line by WHEN IT WAS
+ * LOGGED, so a single shift genuinely writes into two dates. Any screen that
+ * filters "this shift's lines" by one day loses half of them the moment the
+ * clock rolls over.
+ *
+ * 🔴 Lives here, tested and React-free, because this rule was learned TWICE and
+ * applied ONCE. CheckInScreen worked it out; ScanScreen kept
+ * `l.lineDate !== todayKey` and so emptied its own receipt gallery at midnight,
+ * mid-shift, while CheckInScreen could still refuse the check-out over a
+ * pre-midnight row the PR could no longer see to fix.
+ *
+ *   on duty  → check-in day … today
+ *   closed   → check-in day … check-out day, and NOT the day after, so a fresh
+ *              shift's receipts cannot leak into last night's summary
+ *   no stamp → today, exactly as before
+ *
+ * Capped at four days so a stamp that cannot be true cannot spin the loop.
+ */
+export function shiftDayKeys(
+  checkInAt: string | null | undefined,
+  checkOutAt: string | null | undefined,
+  todayKey: string = localDateKey(new Date()),
+): string[] {
+  const start = checkInAt ? new Date(checkInAt) : null;
+  if (!start || Number.isNaN(start.getTime())) return [todayKey];
+  const raw = checkOutAt ? new Date(checkOutAt) : new Date();
+  const end =
+    !Number.isNaN(raw.getTime()) && raw.getTime() >= start.getTime()
+      ? raw
+      : start;
+  const last = localDateKey(end);
+  const keys: string[] = [];
+  const cursor = new Date(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate(),
+  );
+  for (let i = 0; i < 4; i++) {
+    const key = localDateKey(cursor);
+    keys.push(key);
+    if (key === last) break;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
+}
+
+/**
  * A check-out is still "fresh" while its calendar day is today or it happened
  * under 12 h ago — a 23:50 night-shift check-out must not fall off Today /
  * Check-In minutes later at midnight. Same rule as ShiftsScreen's Today cards.

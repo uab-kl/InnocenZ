@@ -28,6 +28,7 @@ import { font } from '../theme/fonts';
 import { formatRM, todayYmd, ymdToIso } from '../lib/demo-shifts';
 import { fmtAttendanceStamp } from '../lib/shift-session';
 import { useActiveShift } from '../lib/active-shift';
+import { shiftDayKeys as shiftDayKeysFor } from '../lib/pick-active-shift';
 import {
   commissionFor as rateCommission,
   drinkMenuFromAssignment,
@@ -129,6 +130,7 @@ export function ScanScreen({
   const outlet = active?.outletName ?? 'Outlet';
   const rate = active?.rate ?? null;
   const checkedInAt = active?.checkInAt ?? null;
+  const checkedOutAt = active?.checkOutAt ?? null;
   const dateYmd = useMemo<[number, number, number]>(() => {
     if (active?.shiftDate) {
       const [y, m, d] = active.shiftDate.split('-').map((n) => Number(n));
@@ -397,13 +399,24 @@ export function ScanScreen({
    */
   const todayReceiptLines = useMemo(() => {
     const startedAt = checkedInAt ? new Date(checkedInAt).getTime() : null;
+    /*
+     * ⚠️ EVERY DAY THE SHIFT TOUCHES, not just today's date.
+     *
+     * This read `l.lineDate !== todayKey`, and the server dates a line by when
+     * it was LOGGED — so on a night shift every receipt taken before midnight
+     * left this gallery the instant the clock rolled over. The PR watched their
+     * own evidence disappear halfway through the night, and CheckInScreen
+     * (which already spanned both days) could still refuse the check-out over a
+     * row missing its photo that this screen would no longer show them.
+     */
+    const days = shiftDayKeysFor(checkedInAt, checkedOutAt, todayKey);
     return receiptLines.filter((l) => {
-      if (l.lineDate !== todayKey) return false;
+      if (!days.includes(l.lineDate ?? '')) return false;
       if (startedAt === null) return true;
       const loggedAt = new Date(l.at).getTime();
       return Number.isNaN(loggedAt) ? true : loggedAt >= startedAt;
     });
-  }, [receiptLines, todayKey, checkedInAt]);
+  }, [receiptLines, todayKey, checkedInAt, checkedOutAt]);
 
   /**
    * What tonight's header may truthfully claim.

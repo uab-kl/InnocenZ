@@ -125,17 +125,37 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
     () => lastOpenedPvId,
   );
 
-  // Only keep local signed weeks that match a real API voucher (no demo phantoms).
+  /**
+   * 🔴 THE SERVER'S VOUCHER WINS. The local snapshot only covers the gap.
+   *
+   * This used to put `signedWeeks` FIRST and drop the API row for any voucher
+   * that appeared in both — and since a local week with no API match is already
+   * filtered out as a demo phantom, overriding the API was the only thing the
+   * snapshot ever did. So the moment a PR signed, their History card froze at
+   * the figures captured at signing: a later correction, a deduction, a resolved
+   * dispute, the bank reference, even the change to Paid never reached that
+   * card. The phone and the voucher disagreed permanently, and the phone is
+   * where the PR checks whether they were paid.
+   *
+   * What the snapshot is genuinely FOR is the seconds after Confirm signature,
+   * before the server's copy reflects it — so it is used only while the API
+   * still calls that week `pending`. Once the API agrees the week is signed (or
+   * paid), the API is the answer.
+   *
+   * ⚠️ `signed-pv.tsx` is web-only: `webStorage()` returns null unless
+   * `Platform.OS === 'web'`, so on a real phone `signedWeeks` is always empty
+   * and none of this applies. It applies to the web target the app is demoed and
+   * tested on, which is where the frozen card was visible.
+   */
   const allWeeks = useMemo(() => {
-    const apiIds = new Set(apiWeeks.map((w) => w.id));
-    const localOnly = signedWeeks
-      .filter((w) => apiIds.has(w.id))
-      .map(normalizeHistPayWeek);
-    const mergedIds = new Set(localOnly.map((w) => w.id));
-    return [
-      ...localOnly,
-      ...apiWeeks.filter((w) => !mergedIds.has(w.id)).map(normalizeHistPayWeek),
-    ];
+    const localById = new Map(
+      signedWeeks.map((w) => [w.id, normalizeHistPayWeek(w)]),
+    );
+    return apiWeeks.map((w) => {
+      const api = normalizeHistPayWeek(w);
+      const local = localById.get(api.id);
+      return local && api.status === 'pending' ? local : api;
+    });
   }, [apiWeeks, signedWeeks]);
 
   useEffect(() => {
