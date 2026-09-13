@@ -32,6 +32,15 @@ export interface UnpaidBillingState {
 	 */
 	overdue: OverdueSummary;
 	isLoading: boolean;
+	/**
+	 * Did the check FAIL?
+	 *
+	 * Both consumers hide themselves at zero — the banner renders nothing, the
+	 * sidebar badge disappears — and on failure `total` IS zero. So the one
+	 * surface telling an organisation it owes money vanished exactly when we
+	 * could not confirm that it doesn't, and the debt looked paid.
+	 */
+	isError: boolean;
 }
 
 /**
@@ -104,6 +113,19 @@ export function useUnpaidBilling(
 			 */
 			overdue: overdueSummary(invoices, "weekly", new Date()),
 			isLoading: query.isLoading,
+			/*
+			 * ⚠️ A FAILED FETCH MUST NOT LOOK LIKE A SETTLED ACCOUNT.
+			 *
+			 * On failure `invoices` is `[]`, so `total` is 0 — and both consumers
+			 * hide themselves at zero: the banner renders nothing and the sidebar
+			 * badge disappears. So the one surface telling an organisation it owes
+			 * money quietly vanished whenever the request failed, and the debt
+			 * looked paid.
+			 *
+			 * Of every empty-state-on-failure in this portal, this is the one that
+			 * actively misinforms rather than merely under-informs.
+			 */
+			isError: backed && query.isError,
 		};
-	}, [backed, query.data, query.isLoading]);
+	}, [backed, query.data, query.isLoading, query.isError]);
 }

@@ -565,6 +565,11 @@ const en = {
 	 * while the query string they set stayed English.
 	 */
 	payroll: {
+		// Shown INSTEAD of the empty state when the voucher request failed. The
+		// two are indistinguishable from the data alone, and "no vouchers" on a
+		// payroll screen is a statement about who gets paid.
+		couldNotLoadVouchers:
+			"Could not load vouchers — this list may be incomplete. Refresh to try again.",
 		/** The Drinks/Tips + day strip under both Payroll sub-tabs. */
 		showMoney: "Show",
 		allDays: "All days",
@@ -1541,6 +1546,10 @@ const en = {
 	 * `cap*` / `desc*` are the display-only copy beside each plan name.
 	 */
 	subscription: {
+		// Shown when the unpaid-invoice request FAILS. Without it the banner and
+		// the sidebar badge both hide themselves at zero, so a failed check looks
+		// exactly like a settled account and the debt disappears from the screen.
+		couldNotCheckBilling: "Could not check your billing — this may not be up to date",
 		/* Aging buckets on an issued collection invoice — rendered by
 		   COLLECTION_AGING_PILL on BOTH the agency and outlet screens. */
 		agingCurrent: "Current",
@@ -2664,6 +2673,11 @@ const en = {
 		salesLocked: "Sales locked after seal.",
 		payrollSent: "Payroll sent · shift sealed",
 		logSales: "Log sales",
+		// Shown when tonight could not be LOADED — distinct from a genuinely
+		// quiet night, which every other empty state on this screen already says.
+		couldNotLoadTonight: "Could not load tonight",
+		couldNotLoadTonightHint:
+			"Shifts, staff or both failed to load — what you see below may be incomplete. Refresh to try again.",
 		confirmStaffing: "Confirm staffing",
 		confirmStaffingHint: "Lock in PRs and mark this shift live",
 		// Both halves of the confirm. The server refuses a shift that is sealed,
@@ -7143,6 +7157,7 @@ const zh: PortalTranslations = {
 		changeEvent: "更换活动",
 	},
 	payroll: {
+		couldNotLoadVouchers: "无法加载工资单 — 此列表可能不完整。请刷新重试。",
 		showMoney: "显示",
 		allDays: "全部日期",
 		nothingLoggedThatDay: "当天没有记录",
@@ -7928,6 +7943,7 @@ const zh: PortalTranslations = {
 		servant: "服务员",
 	},
 	subscription: {
+		couldNotCheckBilling: "无法查询账单 — 显示的内容可能不是最新的",
 		agingCurrent: "未到期",
 		dueOn: "到期日 {date}",
 		overdueByDays: "逾期 {n} 天",
@@ -8819,6 +8835,8 @@ const zh: PortalTranslations = {
 		salesLocked: "封存后销售数据即被锁定。",
 		payrollSent: "薪资已发送 · 班次已封存",
 		logSales: "录入销售",
+		couldNotLoadTonight: "无法加载今晚的安排",
+		couldNotLoadTonightHint: "班次或人员加载失败 — 下方内容可能不完整。请刷新重试。",
 		confirmStaffing: "确认人员配置",
 		confirmStaffingHint: "锁定 PR 并将此班次标记为进行中",
 		staffingConfirmed: "人员配置已确认 — 代理商可以看到",

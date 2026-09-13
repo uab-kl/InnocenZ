@@ -54,8 +54,31 @@ export function UnpaidBillingBanner({
 	const { t } = usePortalLocale();
 	const billing = useUnpaidBilling(portal);
 
-	if (!billing.backed || billing.isLoading || billing.periods === 0)
-		return null;
+	if (!billing.backed || billing.isLoading) return null;
+
+	/*
+	 * ⚠️ A FAILED CHECK IS NOT A SETTLED ACCOUNT — and this banner hiding itself
+	 * is exactly what "you owe nothing" looks like.
+	 *
+	 * On failure the invoice list is `[]`, so `periods` is 0 and the old
+	 * condition returned null. The one surface that tells an organisation it
+	 * owes money vanished precisely when we could not confirm that it doesn't.
+	 * Every other empty-state-on-failure in this portal under-informs; this one
+	 * actively misinformed.
+	 *
+	 * Said plainly instead, and deliberately NOT in the alarm tone the overdue
+	 * state uses: we do not know that anything is late, only that we could not
+	 * look.
+	 */
+	if (billing.isError) {
+		return (
+			<p className="iz-tiny iz-muted mb-3 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
+				{t.subscription.couldNotCheckBilling}
+			</p>
+		);
+	}
+
+	if (billing.periods === 0) return null;
 
 	const late = billing.overdue;
 	const isOverdue = late.count > 0;

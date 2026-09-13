@@ -32,6 +32,14 @@ export interface OutletTodayData {
 	/** PR records for those ids — the panels drop any id they cannot resolve. */
 	prs: AgencyManagedPR[];
 	isLoading: boolean;
+	/**
+	 * Did any of the three requests FAIL?
+	 *
+	 * All three lists come back `[]` on failure, which the Today page renders as
+	 * its settled "no live shift tonight" empty state — so a venue with a full
+	 * floor could be told the night was empty, on the screen they use to run it.
+	 */
+	isError: boolean;
 }
 
 /**
@@ -166,5 +174,19 @@ export function useOutletToday(
 			(shiftsQuery.isLoading ||
 				assignmentsQuery.isLoading ||
 				prsQuery.isLoading),
+		/*
+		 * ⚠️ "No live shift tonight" must not be what a FAILED request looks like.
+		 *
+		 * All three lists come back `[]` on failure, and the Today page renders
+		 * that as its settled empty state — so a venue with a full floor could be
+		 * told the night was empty, on the one screen they use to run it.
+		 *
+		 * ANY of the three, not all: if the shifts loaded but the assignments did
+		 * not, the page shows a shift with nobody on it, which is worse than
+		 * showing nothing at all. One failure makes the whole view untrusted.
+		 */
+		isError:
+			backed &&
+			(shiftsQuery.isError || assignmentsQuery.isError || prsQuery.isError),
 	};
 }

@@ -373,7 +373,7 @@ function AgencyPV() {
 	);
 	// Vouchers come from the backend (already agency-scoped server-side); the
 	// Receipts sub-tab stays on the demo store — no backend for receipt scans.
-	const { pvs: prPaymentVouchers } = useAgencyPvs();
+	const { pvs: prPaymentVouchers, isError: pvsFailed } = useAgencyPvs();
 	const [detailId, setDetailId] = useState<string | null>(null);
 	const [payrollWeekTab, setPayrollWeekTab] =
 		useState<PayrollWeekTab>("last_week");
@@ -1440,12 +1440,29 @@ function AgencyPV() {
 						   whole list, and half a row of centred text with a hole beside it
 						   reads as a layout fault rather than as an answer. */
 						<IzCard className="text-center">
+							{/*
+							  ⚠️ A FAILED FETCH IS NOT AN EMPTY PAYROLL WEEK.
+
+							  `pvs` is `[]` in both cases, so this card used to tell an
+							  agency — in its settled, sentence-ending voice — that nobody
+							  is owed anything, when in fact we could not find out. On the
+							  one screen that decides who gets paid, that is the most
+							  expensive thing it can say wrongly.
+
+							  The filter-clearing button below is suppressed in that state
+							  too: clearing filters cannot fix a request that failed, and
+							  offering it sends the reader down the wrong path.
+							*/}
 							<p className="iz-sm iz-muted">
-								{payrollWeekTab === "last_last_week"
-									? t.payroll.noSignedVouchersThisWeek
-									: t.payroll.noVouchersMatch}
+								{pvsFailed
+									? t.payroll.couldNotLoadVouchers
+									: payrollWeekTab === "last_last_week"
+										? t.payroll.noSignedVouchersThisWeek
+										: t.payroll.noVouchersMatch}
 							</p>
-							{payrollWeekTab !== "last_last_week" && hasActiveFilters && (
+							{!pvsFailed &&
+								payrollWeekTab !== "last_last_week" &&
+								hasActiveFilters && (
 								<button
 									type="button"
 									className="iz-chip mt-2"

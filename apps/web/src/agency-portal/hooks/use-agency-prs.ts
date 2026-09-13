@@ -142,6 +142,10 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 	return {
 		prs,
 		isLoading: prsQuery.isLoading,
+		// A failed roster fetch and an agency with no PRs both come out as `[]`,
+		// and the home tile then reads "0 PRs" in the same confident type it uses
+		// for a real zero. See the note on `use-agency-pvs`.
+		isError: prsQuery.isError,
 		saveProfile,
 		suspend,
 		detach,

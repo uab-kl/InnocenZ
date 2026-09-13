@@ -187,6 +187,18 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 	return {
 		pvs,
 		isLoading: pvQuery.isLoading,
+		/*
+		 * ⚠️ A FAILED FETCH IS NOT AN EMPTY PAYROLL WEEK.
+		 *
+		 * `pvs` is `[]` in both cases, and Payroll & PV renders that as its
+		 * "no vouchers" empty state — so an agency whose request failed was told,
+		 * in a settled voice, that nobody is owed anything this week. That is the
+		 * most expensive thing this screen can say wrongly.
+		 *
+		 * Exposed so the page can tell the two apart. `use-agency-outlets` has
+		 * always done this; the rest of the portal is catching up to it.
+		 */
+		isError: pvQuery.isError,
 		// Finance raises → PR e-signs; both "send" and "re-send" move to SENT.
 		sendToPr: (id: string) => patch(id, { status: "sent" }),
 		resend: (id: string) => patch(id, { status: "sent" }),

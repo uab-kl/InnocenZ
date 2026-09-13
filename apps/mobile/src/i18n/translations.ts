@@ -431,6 +431,8 @@ export type AppTranslations = {
     /** {day} is drawn in bold at render time. Keep the placeholder. */
     pvOnDay: string;
     totalLower: string;
+    /** Shown when last week could not be LOADED - distinct from no voucher. */
+    couldNotLoadLastWeek: string;
     noLastWeekPv: string;
     checkOutToSeal: string;
     reviewSign: string;
@@ -1864,6 +1866,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pvIssuedSunday: 'PV issued every Sunday · Total',
       pvOnDay: 'PV on {day}',
       totalLower: 'total',
+      couldNotLoadLastWeek:
+        'Could not load last week — check your connection and pull to refresh.',
       noLastWeekPv: 'No PV for last week yet — this week’s PV is issued next Sunday.',
       checkOutToSeal: 'Check out from Attendance to seal today’s wages and commissions here for this week’s PV.',
       reviewSign: 'Review & sign · {amount}',
@@ -2955,6 +2959,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pvIssuedSunday: '结算单每周日发放 · 合计',
       pvOnDay: '结算单 {day} 发放',
       totalLower: '合计',
+      couldNotLoadLastWeek: '无法加载上周数据 — 请检查网络后下拉刷新。',
       noLastWeekPv: '上周暂无结算单 — 本周结算单将于下周日发放。',
       checkOutToSeal: '请在出勤页签退，将今日薪资与佣金封存到本周结算单。',
       reviewSign: '审阅并签名 · {amount}',
@@ -4046,6 +4051,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pvIssuedSunday: '結算單每週日發放 · 合計',
       pvOnDay: '結算單 {day} 發放',
       totalLower: '合計',
+      couldNotLoadLastWeek: '無法載入上週資料 — 請檢查網路後下拉刷新。',
       noLastWeekPv: '上週暫無結算單 — 本週結算單將於下週日發放。',
       checkOutToSeal: '請在出勤頁簽退，將今日薪資與佣金封存到本週結算單。',
       reviewSign: '審閱並簽名 · {amount}',
