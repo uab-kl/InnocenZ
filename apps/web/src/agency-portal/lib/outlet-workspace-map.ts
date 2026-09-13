@@ -6,14 +6,35 @@ import {
 	repairTierRatesDailyWageSemantics,
 	resolveStandardShiftHours,
 } from "@agency-portal/lib/agency-demo";
-import {
-	DEFAULT_OUTLET_WORKSPACE,
-	type OutletWorkspaceSettings,
-} from "@agency-portal/lib/outlet-demo";
+import type { OutletWorkspaceSettings } from "@agency-portal/lib/outlet-demo";
 import type {
 	OutletWorkspaceRecord,
 	SaveOutletWorkspaceInput,
 } from "@/services/outlet-workspace";
+
+/**
+ * A tier the backend has NO row for — genuinely empty.
+ *
+ * ⚠️ Not `BLANK_OUTLET_WORKSPACE.tierRates`, despite the name. That constant is
+ * built by `normalizeTierRates`, which ends in `ensureAscendingTierWages` and
+ * `ensureDistinctTierCommissions` — so even from an all-zero base it SYNTHESISES
+ * a ladder, and "blank" comes back as Tier I = RM 40 with Tier II on 1%
+ * commission. Invented numbers, just quieter ones than the Velvet fixture.
+ * Caught by `outlet-workspace-map.test.ts`, which failed on exactly that.
+ *
+ * Those two helpers are right for a workspace being EDITED — a venue's tiers
+ * should ascend and differ — and wrong for one that does not exist yet, which
+ * has to read as nothing at all.
+ */
+const UNPRICED_TIER: OutletTierRateSettings = {
+	wagePerHour: 0,
+	drinkPct: 0,
+	happyHourDrinkPct: undefined,
+	tipPct: 0,
+	tablePct: 0,
+	otAfterHours: 6,
+	targetSalesRm: undefined,
+};
 
 const num = (v: string | null | undefined, fallback = 0): number =>
 	v == null || v === "" ? fallback : Number(v);
@@ -22,10 +43,28 @@ const optNum = (v: string | null | undefined): number | undefined =>
 
 /**
  * Map the normalized backend workspace aggregate into the rich demo
- * `OutletWorkspaceSettings` the Workspace screen consumes. Starts from
- * `DEFAULT_OUTLET_WORKSPACE` so any part the backend has no row for keeps a
- * sensible default. `outletName` is carried from the session (the backend
- * workspace row has no name).
+ * `OutletWorkspaceSettings` the Workspace screen consumes. `outletName` is
+ * carried from the session (the backend workspace row has no name).
+ *
+ * 🔴 A TIER THE BACKEND HAS NO ROW FOR RENDERS BLANK, NOT "Velvet 23".
+ *
+ * This started from `DEFAULT_OUTLET_WORKSPACE` — a demo fixture carrying
+ * RM 40/50/55/65/80 and 0% on every commission column — so an unpriced tier
+ * showed a plausible rate card instead of missing data. A fallback that is
+ * indistinguishable from a configured value is worse than an empty state:
+ * nobody reports it, because nothing looks wrong.
+ *
+ * ⚠️ And it does not merely DISPLAY. `workspace.tsx` seeds its draft from this
+ * output and PUTs the whole draft, so the next save on any unrelated field
+ * writes those numbers into the venue's real `outlet_tier_rate` — the table
+ * `resolveTierWages` and `resolveCommissionPcts` price every PR's wage and
+ * commission from. The drink-menu half of this file was fixed for exactly that
+ * reason; the tier rates are the same bug one field over, on the more expensive
+ * column.
+ *
+ * `BLANK_OUTLET_WORKSPACE` is the empty state the no-demo-data rule already
+ * provides: zeros, which read as "not configured yet" and are what the venue
+ * must then fill in.
  */
 export function workspaceSettingsFromBackend(
 	record: OutletWorkspaceRecord,
@@ -33,7 +72,7 @@ export function workspaceSettingsFromBackend(
 ): OutletWorkspaceSettings {
 	const tierRates = {} as Record<OutletPrTier, OutletTierRateSettings>;
 	for (const tier of OUTLET_PR_TIERS) {
-		tierRates[tier] = { ...DEFAULT_OUTLET_WORKSPACE.tierRates[tier] };
+		tierRates[tier] = { ...UNPRICED_TIER };
 	}
 	for (const row of record.tierRates) {
 		if (row.kind !== "tier" || !row.tier) continue;
@@ -60,7 +99,13 @@ export function workspaceSettingsFromBackend(
 				tipPct: num(coRow.tipPct),
 				targetSalesRm: optNum(coRow.targetSalesRm),
 			}
-		: { ...DEFAULT_OUTLET_WORKSPACE.commissionOnlyRates };
+		: // Blank for the same reason as the tiers above.
+			{
+				drinkPct: 0,
+				happyHourDrinkPct: undefined,
+				tipPct: 0,
+				targetSalesRm: undefined,
+			};
 
 	// An empty saved menu is a FACT, not a missing value. This mapper only runs
 	// on real backed sessions, and the empty state is reachable on a venue's
