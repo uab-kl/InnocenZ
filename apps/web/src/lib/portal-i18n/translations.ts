@@ -2666,6 +2666,11 @@ const en = {
 		logSales: "Log sales",
 		confirmStaffing: "Confirm staffing",
 		confirmStaffingHint: "Lock in PRs and mark this shift live",
+		// Both halves of the confirm. The server refuses a shift that is sealed,
+		// withdrawn or not fully staffed, and its sentence replaces this one —
+		// this is only the fallback when it sends none.
+		staffingConfirmed: "Staffing confirmed — the agency can see it",
+		couldNotConfirmStaffing: "Could not confirm staffing — try again",
 		sealShift: "Seal shift",
 		sealShiftHint: "Finalize sales and send payroll to agencies",
 		noPrsTonight: "No PRs assigned for tonight yet.",
@@ -8816,6 +8821,8 @@ const zh: PortalTranslations = {
 		logSales: "录入销售",
 		confirmStaffing: "确认人员配置",
 		confirmStaffingHint: "锁定 PR 并将此班次标记为进行中",
+		staffingConfirmed: "人员配置已确认 — 代理商可以看到",
+		couldNotConfirmStaffing: "无法确认人员配置 — 请重试",
 		sealShift: "封存班次",
 		sealShiftHint: "结算销售并把薪资发送给经纪公司",
 		noPrsTonight: "今晚还没有安排 PR。",

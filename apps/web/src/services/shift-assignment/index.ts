@@ -324,17 +324,32 @@ export async function fetchWagePreview(
  * with no penalty (status leave_pending -> leave_approved). 400 unless the row
  * is currently leave_pending; agency callers are scoped server-side.
  */
+/**
+ * A leave decision, with the sentence the SERVER used to describe it.
+ *
+ * The record alone was not enough: the agency has to be told what happened in
+ * the server's words, and these endpoints answer with the reason when they
+ * refuse and with the outcome when they do not.
+ */
+export interface LeaveDecisionResult {
+	assignment: ShiftAssignment;
+	message: string;
+}
+
 export async function approveLeaveRequest(
 	id: string,
 	onRefreshFail: () => void,
-): Promise<ShiftAssignment> {
+): Promise<LeaveDecisionResult> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<{
 		success: boolean;
 		message: string;
 		data: ShiftAssignment;
 	}>(`/shift-assignment/${id}/leave/approve`);
-	return response.data.data;
+	// ⚠️ `message` is CARRIED, not dropped. The owner's rule is that a decision
+	// shows the SERVER's own sentence; returning `data` alone left the caller
+	// nothing to show but a string we invented here.
+	return { assignment: response.data.data, message: response.data.message };
 }
 
 /**
@@ -345,14 +360,17 @@ export async function approveLeaveRequest(
 export async function rejectLeaveRequest(
 	id: string,
 	onRefreshFail: () => void,
-): Promise<ShiftAssignment> {
+): Promise<LeaveDecisionResult> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<{
 		success: boolean;
 		message: string;
 		data: ShiftAssignment;
 	}>(`/shift-assignment/${id}/leave/reject`);
-	return response.data.data;
+	// ⚠️ `message` is CARRIED, not dropped. The owner's rule is that a decision
+	// shows the SERVER's own sentence; returning `data` alone left the caller
+	// nothing to show but a string we invented here.
+	return { assignment: response.data.data, message: response.data.message };
 }
 
 /** The Mon–Sun payroll week a claim's shift falls in, computed server-side. */

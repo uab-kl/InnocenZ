@@ -13,6 +13,7 @@ import {
 	OutletTargetActualCard,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
+import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import { useOutletShiftActions } from "@agency-portal/hooks/use-outlet-shift-actions";
 import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import type {
@@ -184,6 +185,9 @@ export function OutletShiftDetailPanel({
 		confirmShift: confirmShiftDemo,
 		/* sealShift, */ shiftApplicants,
 		respondToApplicant,
+		// The portal-wide toaster — the same one every other outlet screen writes
+		// to. Needed here because confirming staffing now reports its outcome.
+		toast,
 	} = useStore();
 	// On a real outlet session the confirm persists to the backend; a demo
 	// session keeps the local store. `backed` decides which path runs.
@@ -194,7 +198,23 @@ export function OutletShiftDetailPanel({
 	} = useOutletShiftActions();
 	const confirmShift = (shiftId: string) => {
 		if (backed) {
-			confirmShiftBackend(shiftId).catch(() => {});
+			/*
+			 * ⚠️ This was `.catch(() => {})` — the server's refusal, thrown away.
+			 *
+			 * Confirming staffing is what tells the agency the venue is happy with
+			 * who is coming; the server refuses it for a shift that is already
+			 * sealed, withdrawn or not fully staffed, and says which. An empty
+			 * catch made every one of those look exactly like success, so the
+			 * venue believed the night was settled when nothing had been written.
+			 *
+			 * The owner's rule: show the server's own sentence, both ways —
+			 * silence reads as failure and invites a second, harmful click.
+			 */
+			confirmShiftBackend(shiftId)
+				.then(() => toast(t.today.staffingConfirmed, "success"))
+				.catch((e) =>
+					toast(serverMessage(e, t.today.couldNotConfirmStaffing), "warn"),
+				);
 		} else {
 			confirmShiftDemo(shiftId);
 		}

@@ -1,3 +1,4 @@
+import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
@@ -37,6 +38,23 @@ export function useRosterMutations() {
 		queryClient.invalidateQueries({ queryKey: ["roster"] });
 	};
 
+	/*
+	 * ⚠️ EVERY MUTATION IN THIS HOOK USED TO FAIL SILENTLY.
+	 *
+	 * Six writes — no-show, unassign, approve leave, reject leave, assign, add PR
+	 * — and not one `onError`. The roster simply refetched and looked unchanged,
+	 * which is exactly what a SUCCESSFUL no-op looks like. The owner's standing
+	 * rule: a decision must show the server's own sentence, because silence
+	 * reads as failure and invites a second, harmful click — and here the second
+	 * click lands on a PR's shift, or on their MC.
+	 *
+	 * The SERVER's message, not a generic one: these endpoints answer with WHY
+	 * (a decided leave cannot be re-decided, a shift has already started), and
+	 * that sentence is the whole value of the refusal.
+	 */
+	const failed = (fallback: string) => (error: unknown) =>
+		toast(serverMessage(error, fallback), "warn");
+
 	// No `cancel` mutation. It existed for one caller — the roster edit sheet's
 	// "Cancel shift" button — and that button was two wrong things at once: an
 	// agency does not cancel a venue's shift (posting and withdrawing a shift are
@@ -50,23 +68,35 @@ export function useRosterMutations() {
 		mutationFn: (id: string) =>
 			updateShiftAssignment(id, { status: "no_show" }, logout),
 		onSuccess: invalidate,
+		onError: failed("Could not flag this PR as a no-show."),
 	});
 
 	const unassign = useMutation({
 		mutationFn: (id: string) => removeShiftAssignment(id, logout),
 		onSuccess: invalidate,
+		onError: failed("Could not remove this assignment."),
 	});
 
 	// PR MC/leave decisions (leave_pending rows): approve excuses the shift with
 	// no penalty; reject puts the PR back on it.
 	const approveLeave = useMutation({
 		mutationFn: (id: string) => approveLeaveRequest(id, logout),
-		onSuccess: invalidate,
+		// An approved MC writes a day-block across EVERY agency, so this one is
+		// confirmed out loud rather than left to the list quietly changing.
+		onSuccess: (result) => {
+			invalidate();
+			toast(result.message || "Leave approved.", "success");
+		},
+		onError: failed("Could not approve this leave request."),
 	});
 
 	const rejectLeave = useMutation({
 		mutationFn: (id: string) => rejectLeaveRequest(id, logout),
-		onSuccess: invalidate,
+		onSuccess: (result) => {
+			invalidate();
+			toast(result.message || "Leave rejected.", "success");
+		},
+		onError: failed("Could not reject this leave request."),
 	});
 
 	const assign = useMutation({
@@ -84,6 +114,10 @@ export function useRosterMutations() {
 			// teaches that silence means the trip is fine.
 			if (created.travelWarning) toast(created.travelWarning, "warn");
 		},
+		// Double-booking, an outlet cap, a travel clash — the server refuses with
+		// the reason, and an assign that silently did nothing looked identical to
+		// one that worked until the grid failed to change.
+		onError: failed("Could not assign this PR."),
 	});
 
 	// Agencies do not create shifts — only outlets post jobs (see shift.routes.ts
@@ -92,6 +126,7 @@ export function useRosterMutations() {
 		mutationFn: (input: CreatePrPersonnelInput) =>
 			createPrPersonnel(input, logout),
 		onSuccess: invalidate,
+		onError: failed("Could not add this PR."),
 	});
 
 	return {
