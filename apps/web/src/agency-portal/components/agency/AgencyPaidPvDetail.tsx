@@ -13,10 +13,7 @@ import {
 	type PrReceiptScan,
 	pvStatusPillVariant,
 } from "@agency-portal/lib/pr-demo";
-import {
-	type PvEarningsBreakdown,
-	summarizePv,
-} from "@agency-portal/lib/pv-breakdown";
+import { pvBreakdownRows, summarizePv } from "@agency-portal/lib/pv-breakdown";
 import {
 	downloadPvBreakdownCsv,
 	downloadPvBreakdownPdf,
@@ -25,32 +22,6 @@ import { buildAgencyPayee } from "@agency-portal/lib/pv-template";
 import { useStore } from "@agency-portal/lib/store";
 import { FileText, Receipt, Sheet } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import type { PortalTranslations } from "@/lib/portal-i18n/translations";
-
-function pvBreakdownDisplayRows(
-	breakdown: PvEarningsBreakdown,
-	t: PortalTranslations,
-) {
-	// Keyed on the BUCKET, not on the label: a row keyed by its translated text
-	// remounts every row the moment the locale is switched.
-	const rows = [
-		{ key: "wages", label: t.money.dailyWages, value: breakdown.wages },
-		{
-			key: "drinks",
-			label: t.payroll.drinkCommissions,
-			value: breakdown.drinks,
-		},
-		{ key: "tips", label: t.payroll.tipCommissions, value: breakdown.tips },
-		{
-			key: "overtime",
-			label: t.payroll.overtimeCheckOut,
-			value: breakdown.overtime,
-		},
-	].filter((r) => r.value > 0);
-	if (breakdown.other > 0)
-		rows.push({ key: "other", label: t.payroll.other, value: breakdown.other });
-	return rows;
-}
 
 export function AgencyPaidPvDetail({
 	pv,
@@ -71,7 +42,8 @@ export function AgencyPaidPvDetail({
 	const payeeBank = useVoucherPayeeBank(pv.id);
 	const payee = buildAgencyPayee(pv, agencyPRs, payeeBank.data);
 	const breakdown = summarizePv(pv);
-	const breakdownRows = pvBreakdownDisplayRows(breakdown, t);
+	// The shared builder — this file used to hold its own copy of it.
+	const breakdownRows = pvBreakdownRows(breakdown, t);
 
 	return (
 		<div className="iz-screen">
@@ -90,7 +62,12 @@ export function AgencyPaidPvDetail({
 				{breakdownRows.map((r) => (
 					<div key={r.key} className="iz-v-sum">
 						<span className="iz-muted">{r.label}</span>
-						<b>{formatRM(r.value)}</b>
+						{/* Red on a deduction — the owner's colour code. */}
+						<b
+							className={r.tone === "red" ? "text-[var(--iz-red)]" : undefined}
+						>
+							{formatRM(r.value)}
+						</b>
 					</div>
 				))}
 				<div className="iz-v-sum tot">
