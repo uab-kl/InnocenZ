@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { kickToLogin } from "@/lib/auth/guards";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -450,6 +451,20 @@ export function OutletLinkingDetail({
 }) {
 	const { t } = usePortalLocale();
 	const queue = useAgencyOutletLinks(filter);
+	/*
+	 * ⚠️ MAY THIS LANE DECIDE A PARTNERSHIP AT ALL?
+	 *
+	 * The server gates `PATCH` and `DELETE /agency-outlet/links/:outletId` on
+	 * `requirePermission('settings','update')` — owner and guarantor only — and
+	 * its comment there claims "the screens already gate these controls on
+	 * `editSettings`". This panel contained no permission check of ANY kind, so
+	 * that comment described a gate that did not exist: a Director was shown
+	 * Approve, Decline and End partnership, and every one of them collected a
+	 * 403 the panel then said nothing about.
+	 *
+	 * `editSettings` is the exact mirror of the server's `settings:update`.
+	 */
+	const canDecideLink = useAgencyCan()("editSettings");
 	const [rejecting, setRejecting] = useState(false);
 	/**
 	 * Ending is behind its own confirm step, like declining — and for a stronger
@@ -606,7 +621,10 @@ export function OutletLinkingDetail({
 			    something to read before every approval. */}
 			<LinkHistory outletId={link.outletId} />
 
+			{/* A lane that cannot decide sees the request in full and answers none
+			    of it — the same shape the Approvals queue beside this one uses. */}
 			{link.approveStatus === "pending" &&
+				canDecideLink &&
 				(rejecting ? (
 					<div className="flex flex-col gap-2">
 						<textarea
@@ -670,7 +688,9 @@ export function OutletLinkingDetail({
 			    since that would read as the main thing to do on a page where the
 			    main thing is usually nothing. A labelled section is findable by
 			    someone looking for it and ignorable by someone who is not. */}
-			{link.approveStatus === "approved" && (
+			{/* Ending a partnership is the same `settings:update` write as deciding
+			    one, so it hides on the same permission. */}
+			{link.approveStatus === "approved" && canDecideLink && (
 				<div className="mt-1 rounded-xl border border-rose-400/25 bg-rose-400/[0.04] px-4 py-3">
 					<div className="iz-approvals-info-title !mb-1.5 text-rose-300/80">
 						{t.approvals.endSectionTitle}

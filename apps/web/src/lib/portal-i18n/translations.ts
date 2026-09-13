@@ -3358,6 +3358,15 @@ const en = {
 		detailPartnershipTitle: "This partnership",
 		partnerSince: "Partner since",
 		endedOn: "Ended on",
+		// Outcomes for the three partnership writes. Deliberately NOT reusing
+		// `linkApproved` ("Working with you") - that is a STATUS label on a row,
+		// and printing it as a confirmation sentence is the same class of bug as
+		// rendering a dictionary key.
+		decisionApproved: "Venue approved — you are now working together",
+		decisionDeclined: "Request declined",
+		couldNotDecideLink: "Could not record that decision — try again",
+		partnershipEnded: "Partnership ended",
+		couldNotEndPartnership: "Could not end the partnership — try again",
 		endSectionTitle: "End this partnership",
 		endPartnership: "End partnership",
 		endPartnershipWarning:
@@ -9439,6 +9448,11 @@ const zh: PortalTranslations = {
 		detailPartnershipTitle: "合作关系",
 		partnerSince: "合作始于",
 		endedOn: "结束于",
+		decisionApproved: "场地已通过 — 双方已建立合作",
+		decisionDeclined: "已拒绝该申请",
+		couldNotDecideLink: "无法保存该决定 — 请重试",
+		partnershipEnded: "合作已结束",
+		couldNotEndPartnership: "无法结束合作 — 请重试",
 		endSectionTitle: "结束这段合作",
 		endPartnership: "结束合作",
 		endPartnershipWarning:
