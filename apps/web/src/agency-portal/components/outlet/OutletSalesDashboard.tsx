@@ -387,9 +387,39 @@ export function OutletSalesDashboard() {
 
 	const todayIso = getLiveTodayIso();
 
+	/**
+	 * ⚠️ THE CUSTOM-RANGE PICKER USED TO OFFER ANOTHER VENUE'S NIGHTS.
+	 *
+	 * `reportableDateIsosForOutlet` is a DEMO-store reader, and it was the only
+	 * source here. It takes `outletName`, which on this screen is
+	 * `tonightShiftOutletName(shifts)` — and that falls back to
+	 * `DEFAULT_OUTLET_CANONICAL` whenever the demo shift list is empty, which is
+	 * exactly what a real outlet session has, because `buildBlankPortalReset()`
+	 * empties it. `DEFAULT_OUTLET_CANONICAL` and `VELVET_OUTLET_NAME` are the
+	 * same string, "Velvet 23".
+	 *
+	 * So on every real outlet session the picker took the demo branch: it listed
+	 * Velvet 23's demo nights, and filtered the venue's own shift history by a
+	 * name that was not theirs, which left nothing. The venue could not select
+	 * one of its own nights, and the demo dates were then passed on to the
+	 * BACKEND as `backendSalesRange`, so the report came back empty without the
+	 * screen ever saying why. It is the owner's no-demo-data rule and a broken
+	 * feature at the same time.
+	 *
+	 * On a real session the days come from the venue's own sales/cost rows.
+	 */
 	const reportableDateIsos = useMemo(
-		() => reportableDateIsosForOutlet(outletName, shiftHistory, todayIso),
-		[outletName, shiftHistory, todayIso],
+		() =>
+			backed
+				? salesReport.reportableDateIsos
+				: reportableDateIsosForOutlet(outletName, shiftHistory, todayIso),
+		[
+			backed,
+			salesReport.reportableDateIsos,
+			outletName,
+			shiftHistory,
+			todayIso,
+		],
 	);
 
 	const customDateIsos = useMemo(
