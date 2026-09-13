@@ -735,7 +735,33 @@ tests** over any of this middleware — `apps/backend/src/middlewares` has no te
 Every claim about it is code-read plus live probe.
 
 
-### ▶ OPEN — `DEFAULT_OUTLET_WORKSPACE` is demo data standing in for a real default (10 Sep 2026)
+### ▶ ✅ FIXED 13 Sep 2026 — an unpriced tier reads as blank now
+
+Database first: all 8 venues have an `outlet_workspace` with 7 tier rates, so nothing renders
+this fallback TODAY — it is a latent trap for a venue whose seeding fails, which is exactly
+the shape that goes unreported.
+
+`workspaceSettingsFromBackend` no longer starts a tier from the Velvet fixture. The stakes
+were higher than display: `workspace.tsx` seeds its draft from this output and PUTs the whole
+draft, so the next save on any unrelated field would write RM 40/50/55/65/80 into the venue's
+real `outlet_tier_rate` — the table every PR wage and commission is priced from. The DRINK
+MENU half of this file was fixed for that same reason; the tiers were the same bug one field
+over, on the more expensive column.
+
+⚠️ **`BLANK_OUTLET_WORKSPACE` IS NOT BLANK, and the first attempt shipped on that
+assumption.** It is built by `normalizeTierRates`, which ends in `ensureAscendingTierWages`
+and `ensureDistinctTierCommissions`, so from an all-zero base it still SYNTHESISES a ladder —
+Tier I came back at RM 40 with Tier II on 1%. The test caught it; the fallback is now a local
+`UNPRICED_TIER` of real zeros. Those two helpers are right for a workspace being EDITED and
+wrong for one that does not exist yet. The shared constant is untouched, since `demo-seed.ts`
+wants the ladder.
+
+5 tests, including one asserting "Velvet 23" appears nowhere in the mapped output, and one
+that a REAL tier row still maps through unchanged.
+
+**The original 10 Sep entry:**
+
+### ▶ (was) OPEN — `DEFAULT_OUTLET_WORKSPACE` is demo data standing in for a real default (10 Sep 2026)
 
 Every venue now has a real `outlet_workspace` row, so `apps/web`’s
 `DEFAULT_OUTLET_WORKSPACE` no longer renders for any of them — but it is still
@@ -899,7 +925,24 @@ not cut a branch or a build from `5b308998`.
 under its own message. Check `git status` before committing anything on this
 branch — see the 7 Sep "TWO AGENTS SHARED THIS WORKING TREE" entry below.
 
-### ▶ OPEN — new venues start with PLACEHOLDER event covers (created 9 Sep 2026 by the templates work)
+### ▶ ⛔ BLOCKED ON ASSETS — re-confirmed 13 Sep 2026, cannot be closed from this machine
+
+The 8 default cover images are genuinely unavailable here:
+
+* `seed-shift-templates.ts` reads `SEED_COVERS_DIR ?? 'C:/Users/jinkg/Pictures'` — and
+  **`jinkg` is the OTHER device**. This machine is `ganji`; that folder does not exist on it.
+  Precisely the cross-device path trap `CLAUDE.md` warns about.
+* The repo commits ONE cover image, `apps/web/public/img/cover.jpg` — a generic one, not the
+  8 event covers.
+
+So the sources exist only as R2 objects and on the other machine's disk, exactly as the note
+said. **Needs the owner to supply the 8 files** (or authorise pulling them out of R2); the
+code half — `createStarterTemplates` uploading one object per template per outlet, never a
+shared key — is straightforward once they exist.
+
+**The original 9 Sep entry:**
+
+### ▶ (was) OPEN — new venues start with PLACEHOLDER event covers (created 9 Sep 2026 by the templates work)
 
 Creating an outlet now creates its 12 starter event cards
 (`features/shift-template/starter-templates.ts`, on both the sign-up and admin
