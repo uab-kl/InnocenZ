@@ -266,7 +266,7 @@ function OrgMemberInvitePage() {
 					<Link
 						to="/login"
 						search={done.email ? { email: done.email } : {}}
-						className="mt-4 inline-flex rounded-lg bg-foreground px-4 py-2 text-sm font-semibold text-background"
+						className="iz-btn-solid mt-4 inline-flex rounded-lg bg-foreground px-4 py-2 text-sm font-semibold text-background"
 					>
 						{t.invitePages.goToSignIn}
 					</Link>
@@ -342,10 +342,18 @@ function OrgMemberInvitePage() {
 													email: preview.email ?? "",
 												})}
 									</p>
+									{/*
+									 * `iz-btn-solid` is not decoration — it opts the anchor OUT
+									 * of the un-layered `main a` link paint in styles.css, which
+									 * outranks `@layer utilities` and was rendering this label
+									 * #c5adf0 on its own #e8e0f5 pill — 1.55:1, against 13.74:1
+									 * once the utility is allowed to win. Drop the class and the
+									 * button goes straight back to being unreadable.
+									 */}
 									<Link
 										to="/login"
 										search={preview.email ? { email: preview.email } : {}}
-										className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-3 text-sm font-semibold text-background"
+										className="iz-btn-solid inline-flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-3 text-sm font-semibold text-background"
 									>
 										{t.invitePages.signInToAccept}
 									</Link>

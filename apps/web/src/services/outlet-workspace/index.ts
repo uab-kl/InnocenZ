@@ -17,7 +17,16 @@ export interface WorkspaceTierRateRow {
 	sortOrder: number;
 }
 
-export type DrinkMenuCategory = "drink" | "service";
+/**
+ * What a menu row is STORED as — three values, not the two the portal draws.
+ *
+ * `tip` is a money bucket: `shift-sale-from-receipts` files a `tip` line under
+ * `tip_rm` and a `service` line under `service_sales_rm`. It renders inside
+ * Service Entitlement (see `outletDrinkCategory`, which folds everything that
+ * is not a drink into that list), but it must survive the round-trip as `tip` —
+ * flattening it on the way back moved a venue's tips into service sales.
+ */
+export type DrinkMenuCategory = "drink" | "service" | "tip";
 
 export interface WorkspaceDrinkMenuRow {
 	id: string;

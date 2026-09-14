@@ -7,6 +7,7 @@ import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { useOrgMembersQuery } from "@agency-portal/hooks/use-org-members";
 import { useOutletToday } from "@agency-portal/hooks/use-outlet-today";
 import { useUnpaidBilling } from "@agency-portal/hooks/use-unpaid-billing";
+import { isMemberWaiting } from "@agency-portal/lib/member-queue-state";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
 	countPvsNeedingAction,
@@ -98,8 +99,20 @@ function OutletNavAlerts({ children }: { children: ReactNode }) {
 	// The same key Settings reads, so badge and panel are one answer.
 	const outletId = useMemo(() => getOutletIdentity()?.outletId ?? null, []);
 	const memberRows = useOrgMembersQuery("outlet", outletId);
+	/*
+	 * ⚠️ WAITING, not "not active" — the venue's twin of the agency bug.
+	 *
+	 * `rejected` and `inactive` are decisions already taken, so counting them
+	 * puts a number on the rail for work nobody can do. Found while fixing the
+	 * agency side, where Atlas showed 2 over a queue reading "Waiting (0) ·
+	 * Declined (1) · Deactivated (1)"; this copy carried the same predicate.
+	 *
+	 * ⚠️ Invisible here TODAY — all 13 outlet memberships are active, so it reads
+	 * 0 either way. Which is precisely why it had to be fixed alongside the
+	 * agency one, rather than left for the day a venue declines somebody.
+	 */
 	const pendingMembers = useMemo(
-		() => (memberRows.data ?? []).filter((m) => m.status !== "active").length,
+		() => (memberRows.data ?? []).filter(isMemberWaiting).length,
 		[memberRows.data],
 	);
 

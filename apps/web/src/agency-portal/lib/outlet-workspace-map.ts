@@ -124,10 +124,14 @@ export function workspaceSettingsFromBackend(
 						id: d.slug,
 						name: d.name,
 						priceRm: num(d.priceRm),
-						category:
-							d.category === "drink"
-								? ("drink" as const)
-								: ("service" as const),
+						// ⚠️ Carried VERBATIM, all three values. This used to collapse to
+						// `drink ? drink : service`, and because the screen seeds its
+						// draft from here and PUTs the whole draft back, the next save on
+						// any unrelated field rewrote a venue's `tip` row as a `service` —
+						// moving every tip that venue logged afterwards out of `tip_rm`
+						// and into `service_sales_rm`. Which of the two LISTS a row draws
+						// in is `outletDrinkCategory`'s job, not the wire format's.
+						category: d.category,
 					}))
 			: [];
 
@@ -197,8 +201,10 @@ export function saveInputFromWorkspaceSettings(
 			slug: d.id,
 			name: d.name,
 			priceRm: d.priceRm,
-			category:
-				d.category === "drink" ? ("drink" as const) : ("service" as const),
+			// Verbatim, for the reason spelled out on the read side above. Only a
+			// row that carries no category at all is decided here, and 'service' is
+			// what an untagged row has always meant.
+			category: d.category ?? ("service" as const),
 			sortOrder: i,
 		})),
 	};

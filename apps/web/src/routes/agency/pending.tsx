@@ -25,6 +25,7 @@ import { useOrgMembersQuery } from "@agency-portal/hooks/use-org-members";
 import { usePrPhotoById } from "@agency-portal/hooks/use-pr-photo";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import { isMemberWaiting } from "@agency-portal/lib/member-queue-state";
 
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import {
@@ -1720,10 +1721,23 @@ function AgencyPending() {
 	const memberOrgId = useMemo(() => getAgencyIdentity()?.agencyId ?? null, []);
 	const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 	const pendingMembersQuery = useOrgMembersQuery("agency", memberOrgId);
+	/*
+	 * ⚠️ The tab counts WAITING, not "not active".
+	 *
+	 * This read `m.status !== "active"`, reasoning that "anything that is not
+	 * active is somebody not yet working here". That is false for two of the four
+	 * statuses: `rejected` is somebody already turned down, and `inactive` is
+	 * somebody who worked here and was switched off. Both are decisions ALREADY
+	 * TAKEN, so the tab read "New member (2)" directly above its own queue
+	 * reading "Waiting (0) · Declined (1) · Deactivated (1)".
+	 *
+	 * The free-varchar worry behind the old comment is real, but it is answered
+	 * at the WRITE boundary (zod `MEMBERSHIP_STATUSES`, 0162) and by
+	 * `memberQueueState` sending anything unrecognised to `deactivated` — not by
+	 * counting unknown words as work somebody has to do.
+	 */
 	const pendingMemberCount = (pendingMembersQuery.data ?? []).filter(
-		// Not `=== "pending"`: the column is a free varchar, and anything that is
-		// not active is somebody not yet working here.
-		(m) => m.status !== "active",
+		isMemberWaiting,
 	).length;
 
 	const groupCounts = useMemo(

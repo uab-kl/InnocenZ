@@ -20,10 +20,7 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
-import {
-	canModule,
-	grantsForPortal,
-} from "@/lib/auth/module-permissions";
+import { canModule, grantsForPortal } from "@/lib/auth/module-permissions";
 import { useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -212,6 +209,23 @@ export function PendingMemberDetail({
 	const decidedOn = whenApplied(member.updatedAt, locale);
 	// Belongs to THIS person, or it does not count — see the note above.
 	const picked = choice?.id === member.id ? choice.value : member.subRole;
+	/*
+	 * The lane the REACTIVATE picker opens on.
+	 *
+	 * ⚠️ It cannot simply be `picked`. That falls back to `member.subRole` — the
+	 * lane they held when they were switched off — and `APPROVABLE` withholds
+	 * `owner` and `guarantor`, so a deactivated OWNER would hand the select a
+	 * value none of its options carry. A browser then displays the first option
+	 * while the state still says `owner`, and the button would post a lane the
+	 * screen never showed. Falling back to the first approvable title keeps what
+	 * is submitted identical to what is displayed.
+	 *
+	 * Today no such row exists — every owner-level membership in the database is
+	 * active — which is exactly why this would have gone unnoticed.
+	 */
+	const restoreLane = APPROVABLE[kind].includes(picked)
+		? picked
+		: APPROVABLE[kind][0];
 	const shownError = error?.id === member.id ? error.message : "";
 	// Armed for THIS person, or armed for nobody — see the note on the state.
 	const confirming = confirmingId === member.id;
@@ -383,6 +397,99 @@ export function PendingMemberDetail({
 			 * last owner outright, but a button that always fails is a worse answer
 			 * than no button — the Team screen hides its bin for the same reason.
 			 */}
+			{/*
+			 * BRINGING BACK SOMEBODY WHO WAS ON THE TEAM (owner, 14 Sep 2026:
+			 * "there should be an option for the Agency/Outlet to reactivate the
+			 * members account", then "deactivated only, not declined").
+			 *
+			 * Until now this pane named who deactivated them and when and offered no
+			 * way back — only the ADMIN portal could restore a membership, even
+			 * though the server has always allowed the org's own owner:
+			 * `canWriteMembers` is `[requireRole('admin','agency'), agencyOwnerOfParam]`.
+			 * It was a UI gap, not a permissions one.
+			 *
+			 * ⚠️ DEACTIVATED ONLY. A declined applicant was NEVER a member, so
+			 * letting them in is an approval rather than a restoration — a different
+			 * decision, and deliberately not offered here.
+			 *
+			 * ⚠️ A TITLE MUST BE NAMED. Deactivating REVOKES the portal role and the
+			 * old lane goes with it, so the server refuses (409) a reactivation
+			 * carrying no `subRole`. Hence a picker, not a bare button.
+			 *
+			 * ⚠️ `APPROVABLE` withholds Owner and Guarantor, exactly as Approve does,
+			 * and the server refuses them on the invite and sign-up paths too: the
+			 * top lane is handed over from the Team screen by somebody who already
+			 * holds it. (An ADMIN may set those as a failsafe — the opposite end of
+			 * the same rule — but an org readmitting through a queue may not.)
+			 *
+			 * ⚠️ The SAME write as Approve — `changeMember({ status:'active',
+			 * subRole })` — never a second path. That endpoint is where the
+			 * portal-role grant happens, and a second way in would be a second place
+			 * to get it wrong; it was got wrong once already.
+			 */}
+			{isDeactivated && !isSelf ? (
+				<section>
+					<h3 className="mb-1 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+						{t.portalUi.reactivateHeading}
+					</h3>
+					<div className="rounded-xl border border-border p-4">
+						<p className="mb-3 text-muted-foreground text-sm">
+							{t.portalUi.reactivateHint}
+						</p>
+						<label className="flex flex-col gap-1.5">
+							<span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+								{t.portalUi.roleToGrant}
+							</span>
+							<select
+								value={restoreLane}
+								disabled={busy || !canDecide}
+								onChange={(e) =>
+									setChoice({ id: member.id, value: e.target.value })
+								}
+								/* A native popup is painted by the OS: on a light-themed
+								   Windows it opens white with near-white options. */
+								style={{ colorScheme: "dark" }}
+								className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+							>
+								{APPROVABLE[kind].map((r) => (
+									<option key={r} value={r}>
+										{portalRoleLabel(r, t)}
+									</option>
+								))}
+							</select>
+						</label>
+						<button
+							type="button"
+							disabled={busy || !canDecide}
+							onClick={() => {
+								setError(null);
+								changeMember.mutate(
+									{
+										memberId: member.id,
+										status: "active",
+										subRole: restoreLane,
+									},
+									{
+										onError: (e) =>
+											setError({
+												id: member.id,
+												message: serverMessage(e, t.portalUi.reactivateFailed),
+											}),
+									},
+								);
+							}}
+							className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-4 py-2.5 font-semibold text-background text-sm disabled:opacity-50"
+						>
+							<UserCheck className="h-4 w-4 shrink-0" />
+							{t.portalUi.reactivateButton}
+						</button>
+						{shownError ? (
+							<p className="mt-3 text-red-500 text-sm">{shownError}</p>
+						) : null}
+					</div>
+				</section>
+			) : null}
+
 			{state === "active" && !isSelf ? (
 				<section>
 					<h3 className="mb-1 font-semibold text-muted-foreground text-xs uppercase tracking-wide">

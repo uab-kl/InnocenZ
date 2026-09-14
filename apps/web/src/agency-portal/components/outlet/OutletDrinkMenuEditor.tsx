@@ -2,8 +2,11 @@ import type {
 	OutletDrinkCategory,
 	OutletDrinkPrice,
 } from "@agency-portal/lib/outlet-demo";
-import { defaultOutletMenuItemName } from "@agency-portal/lib/outlet-demo";
-import { ArrowLeftRight, Plus, Trash2 } from "lucide-react";
+import {
+	defaultOutletMenuItemName,
+	isOutletTipsRow,
+} from "@agency-portal/lib/outlet-demo";
+import { ArrowLeftRight, Lock, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -118,6 +121,17 @@ export function OutletDrinkMenuEditor({
 				// What this row is CALLED, for the controls that must name it out loud
 				// even while the field itself is still showing its placeholder.
 				const drinkName = drink.name.trim() || placeholderName;
+				/*
+				 * The tips row is the venue's to PRICE, never to remove.
+				 *
+				 * It is seeded at outlet creation because nobody thinks to type it,
+				 * and the API puts it back if a save arrives without it — so a Delete
+				 * here would look like it worked and be undone on the next load. Its
+				 * name is fixed for the same reason: renaming it is deleting it by
+				 * another route, and every receipt already says "Tips". The price is
+				 * the whole point and stays editable.
+				 */
+				const locked = isOutletTipsRow(drink);
 				return (
 					<div key={drink.id} className="flex items-end gap-2">
 						<div className="min-w-0 flex-1">
@@ -128,11 +142,16 @@ export function OutletDrinkMenuEditor({
 								type="text"
 								value={drink.name}
 								placeholder={placeholderName}
-								readOnly={readOnly}
+								readOnly={readOnly || locked}
+								title={locked ? t.workspace.tipsRowLocked : undefined}
 								onChange={(e) =>
 									updateDrink(drink.id, { name: e.target.value })
 								}
-								className="w-full rounded-xl border border-[var(--iz-line2)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-sm font-semibold outline-none"
+								className={`w-full rounded-xl border border-[var(--iz-line2)] px-2.5 py-1.5 text-sm font-semibold outline-none ${
+									locked
+										? "bg-[rgba(255,255,255,0.01)] text-[var(--iz-muted)]"
+										: "bg-[rgba(255,255,255,0.03)]"
+								}`}
 							/>
 						</div>
 						<div className="w-24 shrink-0">
@@ -150,7 +169,12 @@ export function OutletDrinkMenuEditor({
 								/>
 							</div>
 						</div>
-						{!readOnly && onMoveItem && (
+						{/* Empty slot, not a missing one: dropping the control would slide
+						    the locked row's price box out of line with every other row. */}
+						{!readOnly && onMoveItem && locked && (
+							<div className="h-[38px] w-[38px] shrink-0" aria-hidden="true" />
+						)}
+						{!readOnly && onMoveItem && !locked && (
 							<button
 								type="button"
 								onClick={() => onMoveItem(drink.id)}
@@ -168,16 +192,38 @@ export function OutletDrinkMenuEditor({
 								<ArrowLeftRight className="h-3.5 w-3.5" />
 							</button>
 						)}
-						{!readOnly && drinks.length > 1 && (
-							<button
-								type="button"
-								onClick={() => removeDrink(drink.id)}
-								className="iz-chip flex h-[38px] w-[38px] shrink-0 items-center justify-center !p-0 text-[var(--iz-red)]"
-								aria-label={fill(t.workspace.removeNamed, { name: drinkName })}
-							>
-								<Trash2 className="h-3.5 w-3.5" />
-							</button>
-						)}
+						{/*
+						 * Every row a venue added is deletable — INCLUDING THE LAST ONE.
+						 * This used to be `drinks.length > 1`, which meant a venue that
+						 * had pared a list down to one wrong item could not remove it:
+						 * they could only rename it, and there was no way to get to the
+						 * empty list the section's own "Add drinks below" state describes.
+						 * The one row that must survive is Tips, and that is now said
+						 * exactly — by name, not by counting what is left.
+						 */}
+						{!readOnly &&
+							(locked ? (
+								<button
+									type="button"
+									disabled
+									title={t.workspace.tipsRowLocked}
+									aria-label={t.workspace.tipsRowLocked}
+									className="iz-chip flex h-[38px] w-[38px] shrink-0 cursor-not-allowed items-center justify-center !p-0 text-[var(--iz-muted)] opacity-60"
+								>
+									<Lock className="h-3.5 w-3.5" />
+								</button>
+							) : (
+								<button
+									type="button"
+									onClick={() => removeDrink(drink.id)}
+									className="iz-chip flex h-[38px] w-[38px] shrink-0 items-center justify-center !p-0 text-[var(--iz-red)]"
+									aria-label={fill(t.workspace.removeNamed, {
+										name: drinkName,
+									})}
+								>
+									<Trash2 className="h-3.5 w-3.5" />
+								</button>
+							))}
 					</div>
 				);
 			})}

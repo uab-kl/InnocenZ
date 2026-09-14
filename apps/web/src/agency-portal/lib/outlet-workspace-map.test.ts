@@ -1,6 +1,13 @@
+import {
+	isOutletTipsRow,
+	outletDrinkCategory,
+} from "@agency-portal/lib/outlet-demo";
 import { describe, expect, it } from "vitest";
 import type { OutletWorkspaceRecord } from "@/services/outlet-workspace";
-import { workspaceSettingsFromBackend } from "./outlet-workspace-map";
+import {
+	saveInputFromWorkspaceSettings,
+	workspaceSettingsFromBackend,
+} from "./outlet-workspace-map";
 
 /**
  * The no-demo-data-on-a-real-session rule, on the most expensive column there
@@ -74,5 +81,61 @@ describe("workspaceSettingsFromBackend — no rows means BLANK, not Velvet 23", 
 		const ws = workspaceSettingsFromBackend(withTier, "JK House");
 		expect(ws.tierRates["Tier I"].drinkPct).toBe(10);
 		expect(ws.tierRates["Tier I"].tipPct).toBe(15);
+	});
+});
+
+/**
+ * JK House's tips row is stored as `category: 'tip'` — a third value the two
+ * price LISTS do not name. The mapper used to flatten it to `service` on the
+ * way in, and `workspace.tsx` PUTs its whole draft back, so a save on any
+ * unrelated field rewrote the row and every tip logged after it was counted as
+ * service sales instead of a tip (`shift-sale-from-receipts` buckets on exactly
+ * this column). It has to survive both directions untouched.
+ */
+describe("workspaceSettingsFromBackend — the tip category survives the round-trip", () => {
+	const withTips = {
+		...emptyRecord,
+		drinkMenu: [
+			{
+				slug: "cosmo",
+				name: "Cosmo",
+				priceRm: "150.00",
+				category: "drink",
+				sortOrder: 0,
+			},
+			{
+				slug: "service-1785132698158",
+				name: "Tips",
+				priceRm: "50.00",
+				category: "tip",
+				sortOrder: 1,
+			},
+		],
+	} as unknown as OutletWorkspaceRecord;
+
+	it("reads a tip row as 'tip', not as 'service'", () => {
+		const ws = workspaceSettingsFromBackend(withTips, "JK House");
+		const tips = ws.drinkMenu.find((d) => d.name === "Tips");
+		expect(tips?.category).toBe("tip");
+	});
+
+	it("shows that row in the SERVICE list all the same", () => {
+		const ws = workspaceSettingsFromBackend(withTips, "JK House");
+		const tips = ws.drinkMenu.find((d) => d.name === "Tips");
+		expect(tips && outletDrinkCategory(tips)).toBe("service");
+	});
+
+	it("sends 'tip' back unchanged when the venue saves", () => {
+		const ws = workspaceSettingsFromBackend(withTips, "JK House");
+		const saved = saveInputFromWorkspaceSettings(ws);
+		const tips = saved.drinkMenu?.find((d) => d.name === "Tips");
+		expect(tips?.category).toBe("tip");
+	});
+
+	it("locks the tips row and nothing else", () => {
+		const ws = workspaceSettingsFromBackend(withTips, "JK House");
+		expect(ws.drinkMenu.filter(isOutletTipsRow).map((d) => d.name)).toEqual([
+			"Tips",
+		]);
 	});
 });

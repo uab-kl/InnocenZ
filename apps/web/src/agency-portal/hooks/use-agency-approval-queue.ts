@@ -3,6 +3,7 @@ import { useAgencyPendingPrs } from "@agency-portal/hooks/use-agency-pending-prs
 import { useCutlostRequests } from "@agency-portal/hooks/use-cutlost-requests";
 import { useOrgMembersQuery } from "@agency-portal/hooks/use-org-members";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import { isMemberWaiting } from "@agency-portal/lib/member-queue-state";
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import { toPendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import type { PendingAgencyLink, PendingPR } from "@agency-portal/lib/store";
@@ -107,8 +108,25 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 	 */
 	const memberOrgId = useMemo(() => getAgencyIdentity()?.agencyId ?? null, []);
 	const memberRows = useOrgMembersQuery("agency", memberOrgId);
+	/*
+	 * ⚠️ `waiting`, NOT `!== "active"` — a badge counts WORK, not history.
+	 *
+	 * The four statuses are `pending | active | rejected | inactive`, so "not
+	 * active" swept in `rejected` (already declined) and `inactive` (someone who
+	 * worked here and was switched off). Both are decisions ALREADY TAKEN, and
+	 * neither is something the owner can act on: Atlas showed a rail badge of 2
+	 * and a "New member (2)" tab over a queue reading "Waiting (0) · Declined (1)
+	 * · Deactivated (1)" — the 2 WAS the declined row plus the deactivated one.
+	 *
+	 * `isMemberWaiting` is reused rather than re-spelling `=== "pending"` here,
+	 * because the queue list already owns that vocabulary and a count must agree
+	 * with the list it labels. That panel had this exact bug once before — a
+	 * declined applicant matching `!== "active"` sat in its Waiting list — and it
+	 * was fixed THERE while these counts kept the old predicate. One authority,
+	 * so a third spelling cannot drift away from it again.
+	 */
 	const pendingMembers = useMemo(
-		() => (memberRows.data ?? []).filter((m) => m.status !== "active").length,
+		() => (memberRows.data ?? []).filter(isMemberWaiting).length,
 		[memberRows.data],
 	);
 

@@ -3,10 +3,12 @@ import { db } from '@/db/index.js';
 import type { DbTransaction } from '@/types/db-transaction';
 import { logger } from '@/util/logger.js';
 import {
+  OutletDrinkMenuTable,
   type OutletTierRateInsertType,
   OutletTierRateTable,
   OutletWorkspaceTable,
 } from './outlet-workspace.model.js';
+import { newTipsMenuRow } from './tips-menu-row.js';
 
 /**
  * The rate card a venue starts life on.
@@ -146,6 +148,18 @@ export async function createDefaultRateCard(params: {
     .insert(OutletTierRateTable)
     .values(tierRows)
     .returning({ id: OutletTierRateTable.id });
+
+  // The one price row a venue starts with. The two price LISTS stay empty —
+  // every drink and every service is the venue's own — but tips are a line
+  // nobody thinks to add, and an outlet that never adds it has no price for a
+  // PR's tip to be logged against. Unpriced, so it still reads as theirs to set.
+  await client.insert(OutletDrinkMenuTable).values({
+    ...newTipsMenuRow(0),
+    workspaceId: workspace.id,
+    outletId,
+    createdBy: actor,
+    updatedBy: actor,
+  });
 
   logger.info('[defaultRateCard] Seeded', { outletId, tiers: written.length });
   return written.length;
