@@ -33,6 +33,7 @@ import {
 	shouldChooseOrganisation,
 } from "@/lib/auth/enter-organisation";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
+import { portalOfPath } from "@/lib/auth/portal-of-path";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
 import { hardNavigate } from "@/lib/hard-navigate";
@@ -261,13 +262,15 @@ function LoginPage() {
 				 * link now arrives at the admin page they asked for, instead of being
 				 * dropped on a portal home that looks like the wrong role.
 				 */
-				const portalOfNext = requestedNext?.startsWith("/admin")
-					? "admin"
-					: requestedNext?.startsWith("/agency")
-						? "agency"
-						: requestedNext?.startsWith("/outlet")
-							? "outlet"
-							: null;
+				/*
+				 * ⚠️ ONE definition of "which portal does this path belong to",
+				 * shared with the chooser. This was an inline prefix chain here
+				 * and nothing at all in `enterOrganisation`, so a link this test
+				 * allowed through was then replayed into whichever organisation
+				 * the person picked — an `/admin` link into an agency session,
+				 * which that agency could never satisfy. See `portal-of-path.ts`.
+				 */
+				const portalOfNext = portalOfPath(requestedNext);
 				const nextAllowed =
 					requestedNext && portalOfNext !== null && home === portalOfNext
 						? requestedNext

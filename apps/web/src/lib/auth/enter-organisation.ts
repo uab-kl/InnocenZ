@@ -20,6 +20,7 @@
 import { setActiveOrg } from "@/lib/active-org";
 import type { User, UserOrganisation } from "@/lib/auth";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
+import { nextForPortal } from "@/lib/auth/portal-of-path";
 import { hardNavigate } from "@/lib/hard-navigate";
 
 /** The identity fields the portal session starters need. */
@@ -53,6 +54,19 @@ export async function enterOrganisation(
 		"@/components/organization/org-status"
 	);
 
+	/*
+	 * ⚠️ THE DEEP LINK ONLY SURVIVES INTO THE PORTAL IT BELONGS TO.
+	 *
+	 * `next` arrives here having been tested against the ACCOUNT's home portal
+	 * by `login.tsx` — a wider question than the one that matters now, which is
+	 * whether it belongs to the organisation the person just picked. Replaying
+	 * it unconditionally sent somebody who opened an `/admin` link and then
+	 * chose their AGENCY straight to an admin URL on an agency session: the
+	 * guard refused, they bounced back to the chooser, and that agency stayed
+	 * unenterable for as long as the link sat in the query string.
+	 *
+	 * Anything foreign falls back to the portal's own landing page.
+	 */
 	if (portal === "agency") {
 		await startAgencyRealSession(user);
 		const { getAgencyIdentity } = await import(
@@ -65,7 +79,7 @@ export async function enterOrganisation(
 		hardNavigate(
 			isOrgProfileOnly(identity?.agencyStatus)
 				? AGENCY_PENDING_PROFILE_PATH
-				: (next ?? "/agency"),
+				: (nextForPortal(next, "agency") ?? "/agency"),
 		);
 		return;
 	}
@@ -81,7 +95,7 @@ export async function enterOrganisation(
 	hardNavigate(
 		isOrgProfileOnly(identity?.outletStatus)
 			? OUTLET_PENDING_PROFILE_PATH
-			: (next ?? "/outlet"),
+			: (nextForPortal(next, "outlet") ?? "/outlet"),
 	);
 }
 
