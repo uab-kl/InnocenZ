@@ -2164,7 +2164,25 @@ body::after {
   mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
 }
 
-main a,
+/*
+ * TEXT links inside <main> take the lavender link colour. A link shaped as a
+ * SOLID BUTTON keeps its own label colour and opts out with `.iz-btn-solid`.
+ *
+ * This rule is UN-LAYERED, and un-layered normal declarations outrank
+ * everything in a cascade layer — so it beat Tailwind's `@layer utilities`
+ * no matter how specific the utility was. A button-shaped `Link` carrying
+ * `bg-foreground text-background` therefore painted its label `--gold-light`
+ * (#c5adf0 in dark) on its own #e8e0f5 pill — measured 1.55:1 in the browser,
+ * against 13.74:1 for the #1a1726 the component actually asked for.
+ * The `<button>` beside it renders correctly, because `main a` never matched
+ * it — which is why only the LINKS looked broken. Reported case: the
+ * "Sign in to accept" button on /invite/org-member.
+ *
+ * Opting the button OUT is deliberate, rather than out-specifying it here or
+ * reaching for `!important` in the component: the anchor goes on expressing
+ * its own colour in Tailwind, so any future utility on it simply works.
+ */
+main a:not(.iz-btn-solid),
 .prose a,
 p a {
   color: var(--gold-light);
@@ -2173,7 +2191,9 @@ p a {
   text-underline-offset: 2px;
 }
 
-main a:hover,
+/* Excluded here too — a hover that repainted the label `--gold` would put the
+   button straight back to 1.84:1 on the same pill. */
+main a:not(.iz-btn-solid):hover,
 .prose a:hover,
 p a:hover {
   color: var(--gold);
