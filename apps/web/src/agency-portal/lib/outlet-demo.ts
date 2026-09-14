@@ -445,17 +445,52 @@ export const SEED_OUTLET_RATINGS: OutletSubmittedRating[] =
 /** Which of the two workspace price lists an item belongs to. */
 export type OutletDrinkCategory = "drink" | "service";
 
+/**
+ * What a row is STORED as. Three values, one more than the portal draws:
+ * `tip` shows inside Service Entitlement but keeps a tip in the tip bucket
+ * rather than in service sales (`shift-sale-from-receipts` reads this
+ * category). Carried through the save path verbatim — see
+ * `saveInputFromWorkspaceSettings`.
+ */
+export type OutletMenuCategory = OutletDrinkCategory | "tip";
+
 export interface OutletDrinkPrice {
 	id: string;
 	name: string;
 	priceRm: number;
 	/** Omitted rows are treated as 'service' (the list's original meaning). */
-	category?: OutletDrinkCategory;
+	category?: OutletMenuCategory;
 }
 
 /** Category for a menu row, defaulting legacy/undefined rows to 'service'. */
 export function outletDrinkCategory(d: OutletDrinkPrice): OutletDrinkCategory {
 	return d.category === "drink" ? "drink" : "service";
+}
+
+/**
+ * The venue's TIPS row — the one line of the menu it may price but not remove.
+ *
+ * Every venue is created with it (`tips-menu-row.ts` server-side) because tips
+ * are a line nobody thinks to add: of the eight live venues, exactly one had
+ * worked out that "Tips" is a row you type under Service Entitlement, and the
+ * other seven could take tips all night with no price to log them against. The
+ * editor hides Delete and Move on this row, and the API puts it back if a save
+ * arrives without it.
+ *
+ * 🔴 IDENTITY ONLY — NEVER THE NAME. The server also matches on the name, and it
+ * is right to (it is deciding whether a venue already has a tips row, once, over
+ * stored data). Here the answer drives a `readOnly` input on EVERY KEYSTROKE, so
+ * a name test locks the row the instant the live text passes through "Tips" —
+ * which it does while someone is typing "Tipsy" or "Tips & extras" into a row
+ * they just added. A readOnly input refuses backspace too, so that row could be
+ * neither finished nor deleted without discarding the whole draft.
+ *
+ * The id and the category are both stored facts that no in-progress edit can
+ * change: `slug='tips'` for the seeded row, `category='tip'` for the venues that
+ * added one themselves before the seed existed.
+ */
+export function isOutletTipsRow(d: OutletDrinkPrice): boolean {
+	return d.id === "tips" || d.category === "tip";
 }
 
 /**
@@ -481,11 +516,13 @@ export function withOutletMenuNamesResolved(
 }
 
 export const DEFAULT_OUTLET_DRINK_MENU: OutletDrinkPrice[] = [
+	// `tip`, not `service`: it renders in the same list, but it is the bucket a
+	// logged tip is counted in. Mirrors what the server now seeds.
 	{
 		id: "tips",
 		name: "Tips",
 		priceRm: DEFAULT_PER_TIP_RM,
-		category: "service",
+		category: "tip",
 	},
 	{
 		id: "booking-com",

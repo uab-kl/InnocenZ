@@ -2479,6 +2479,10 @@ const en = {
 		moveNamed: "Move {name}",
 		moveNamedTo: "{hint}: {name}",
 		removeNamed: "Remove {name}",
+		// Shown on the Tips row's lock and on its fixed name field. It has to say
+		// what the venue CAN do, or the lock reads as a fault.
+		tipsRowLocked:
+			"Tips is always on this list — set its price; it cannot be removed",
 		decrease: "Decrease",
 		increase: "Increase",
 		optional: "Optional",
@@ -8773,6 +8777,7 @@ const zh: PortalTranslations = {
 		moveNamed: "移动 {name}",
 		moveNamedTo: "{hint}：{name}",
 		removeNamed: "移除 {name}",
+		tipsRowLocked: "小费固定在此列表中 —— 只可设定价格，无法移除",
 		decrease: "减少",
 		increase: "增加",
 		optional: "可选",

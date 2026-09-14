@@ -11,6 +11,7 @@ import {
   OutletWorkspaceInsertType,
   OutletWorkspaceTable,
 } from './outlet-workspace.model.js';
+import { findStoredTipsRow, withTipsMenuRow } from './tips-menu-row.js';
 
 // Child rows for an upsert, minus workspaceId/outletId (both set by the repo
 // inside the transaction from the parent outlet).
@@ -95,6 +96,18 @@ export class OutletWorkspaceRepositoryClass {
           .where(eq(OutletWorkspaceTable.outletId, outletId))
           .limit(1);
 
+        // Read the tips row BEFORE the delete below removes it, so a save that
+        // dropped it can be given it back at the price the venue had set. See
+        // `withTipsMenuRow` — the row is the venue's to price, not to delete.
+        const storedTips =
+          existing && children.drinkMenu !== undefined
+            ? await findStoredTipsRow(tx, existing.id)
+            : null;
+        const drinkMenu =
+          children.drinkMenu === undefined
+            ? undefined
+            : withTipsMenuRow(children.drinkMenu, storedTips);
+
         let id: string;
         if (existing) {
           id = existing.id;
@@ -108,7 +121,7 @@ export class OutletWorkspaceRepositoryClass {
               .delete(OutletTierRateTable)
               .where(eq(OutletTierRateTable.workspaceId, id));
           }
-          if (children.drinkMenu !== undefined) {
+          if (drinkMenu !== undefined) {
             await tx
               .delete(OutletDrinkMenuTable)
               .where(eq(OutletDrinkMenuTable.workspaceId, id));
@@ -128,12 +141,10 @@ export class OutletWorkspaceRepositoryClass {
               children.tierRates.map((r) => ({ ...r, workspaceId: id, outletId })),
             );
         }
-        if (children.drinkMenu && children.drinkMenu.length > 0) {
+        if (drinkMenu && drinkMenu.length > 0) {
           await tx
             .insert(OutletDrinkMenuTable)
-            .values(
-              children.drinkMenu.map((r) => ({ ...r, workspaceId: id, outletId })),
-            );
+            .values(drinkMenu.map((r) => ({ ...r, workspaceId: id, outletId })));
         }
       });
 
