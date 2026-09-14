@@ -166,6 +166,53 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 		updateMut.mutate({ id, input });
 
 	/**
+	 * One status change applied to MANY vouchers — the engine behind the payroll
+	 * screen's bulk "Mark as paid" and "Send to PR".
+	 *
+	 * ⚠️ Deliberately NOT `updateMut`. That mutation toasts every refusal, which
+	 * is right for one button and wrong for twelve: a dozen warnings stacking up
+	 * says less than one sentence naming what went through and what did not. So
+	 * this calls the service directly, collects a result per voucher, and hands
+	 * the summary back for the caller to report ONCE.
+	 *
+	 * ⚠️ SEQUENTIAL, not `Promise.all`. These are money writes passing real
+	 * server gates — an unsigned voucher, an undecided overtime claim, a receipt
+	 * still pending — and firing twelve PATCHes at one agency in parallel is the
+	 * shape that leaves a half-applied run nobody can reconstruct. One at a time
+	 * is slower and always explainable.
+	 *
+	 * ⚠️ A failure is NOT a stop. The rest still run: refusals here are per
+	 * voucher (this one has an open dispute), not per batch, and abandoning the
+	 * remaining ten because the third was refused would be its own surprise.
+	 *
+	 * Invalidates ONCE at the end rather than per voucher, so the list does not
+	 * re-fetch twelve times while the run is in flight.
+	 */
+	const bulkPatch = async (
+		ids: string[],
+		input: UpdatePaymentVoucherInput,
+	): Promise<{ id: string; ok: boolean; message?: string }[]> => {
+		const results: { id: string; ok: boolean; message?: string }[] = [];
+		for (const id of ids) {
+			try {
+				await updatePaymentVoucher(id, input, logout);
+				results.push({ id, ok: true });
+			} catch (error) {
+				const failure = toMutationError(error, t.agencyPv.voucherUpdateRefused);
+				results.push({
+					id,
+					ok: false,
+					// The server's own sentence, never a generic one — it names the
+					// receipt or the claim blocking this particular voucher.
+					message: failure?.message ?? t.agencyPv.voucherUpdateRefused,
+				});
+			}
+		}
+		invalidate();
+		return results;
+	};
+
+	/**
 	 * The agency's signature. Its own mutation rather than a `patch`, because it
 	 * hits its own endpoint — `PUT /:id` rewrites every line, and an attestation
 	 * must never be a side effect of an edit. Invalidates the list AND the shared
@@ -231,6 +278,15 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 		 */
 		markPaid: (id: string, bankRef?: string) =>
 			patch(id, { status: "paid", ...(bankRef ? { bankRef } : {}) }),
+		/**
+		 * The same two steps, over a selection. Each voucher takes the identical
+		 * request its single-button twin above sends, so every server gate that
+		 * guards one guards all of them — a bulk run cannot reach a state a
+		 * one-at-a-time operator could not.
+		 */
+		bulkMarkPaid: (ids: string[], bankRef?: string) =>
+			bulkPatch(ids, { status: "paid", ...(bankRef ? { bankRef } : {}) }),
+		bulkSendToPr: (ids: string[]) => bulkPatch(ids, { status: "sent" }),
 	};
 }
 

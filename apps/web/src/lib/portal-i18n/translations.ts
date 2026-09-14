@@ -581,6 +581,26 @@ const en = {
 		title: "Payroll & PV",
 		paymentVouchers: "Payment Vouchers",
 		pendingPayout: "Pending Payout",
+		// What the pending-payout CARD above the voucher list is made of. That card
+		// is the twin of the header tile and follows the PR filter, so it has to
+		// say whose money it is counting and over how many vouchers — otherwise the
+		// two figures differ with nothing on screen explaining why.
+		pendingPayoutCount: "{n} to pay",
+		// Bulk selection on the voucher list. `bulkPartial` carries the SERVER'S
+		// own refusal for the first voucher it turned down — a bare count of
+		// failures tells the operator nothing they can act on.
+		bulkSelectedCount: "{n} of {total} selected",
+		bulkSelectAll: "Select all",
+		bulkClear: "Clear",
+		bulkMarkPaid: "Mark as paid",
+		bulkConfirmPaid: "Confirm — mark {n} as paid",
+		bulkSendToPr: "Send to PR",
+		bulkWorking: "Working…",
+		bulkPaidDone: "{n} marked as paid",
+		bulkSentDone: "{n} sent to PR",
+		bulkPartial: "{done} done · {refused} refused — {reason}",
+		bulkSelectForPay: "Select {ref} to mark as paid",
+		bulkSelectForSend: "Select {ref} to send to PR",
 		pvList: "PV list",
 		perItemCalc: "Per-item calc",
 		thisWeek: "This Week",
@@ -734,7 +754,9 @@ const en = {
 		notSignedYet: "not signed yet",
 		useToRecordTransfer: "to record each bank transfer",
 		paidInHistory: "paid in History",
-		use: "use",
+		// Capital U: it opens the sentence on the card. It read "use To pay to
+		// record each bank transfer" — a lowercase start under a bold title.
+		use: "Use",
 		contactAdminPricing: "contact admin for custom pricing",
 		prProof: "PR proof",
 		toldThePr: "Told the PR:",
@@ -1378,6 +1400,9 @@ const en = {
 		recordCountOne: "{n} record",
 		recordCountMany: "{n} records",
 		recordsAndTotal: "{records} · {total} total",
+		// Caption under the archive's headline figure. Past tense on purpose —
+		// this money has already left the agency, which is why the card is green.
+		totalPaid: "Total paid",
 		noPaidVouchersMatch: "No paid vouchers match this filter",
 		summaryLine: "{count} {label} · {range} · {total} paid out",
 		datePaid: "Date paid",
@@ -4197,9 +4222,17 @@ const en = {
 		itemCancelled: "Cancelled",
 	},
 	agencyPv: {
-		/** Singular/plural spelled out — the code used to splice in "s"/"is"/"are". */
-		overdueUnsignedHint:
-			"Overdue — a PR cannot sign a voucher that was never sent. Review each day, then send it to their Payment screen to e-sign.",
+		/**
+		 * Split into title / what is wrong / what to do, to match the notice
+		 * standing beside it. Still THREE WHOLE STRINGS, never a template the code
+		 * splices "s"/"is"/"are" into — Chinese has no plural and no verb
+		 * agreement, so a sentence stitched out of English inflections cannot be
+		 * translated at all.
+		 */
+		overdueTitle: "Overdue",
+		overdueUnsignedHint: "A PR cannot sign a voucher that was never sent.",
+		overdueUnsignedAction:
+			"Review each day, then send it to their Payment screen to e-sign.",
 		/** The week a BACKEND voucher itself covers, printed beside the tab's own week. */
 		weekWorked: "Week worked",
 		/** Chip on the most recently issued voucher in the list. */
@@ -7290,6 +7323,19 @@ const zh: PortalTranslations = {
 		title: "薪资与付款单",
 		paymentVouchers: "付款单",
 		pendingPayout: "待付款",
+		pendingPayoutCount: "{n} 笔待付",
+		bulkSelectedCount: "已选 {n} / {total}",
+		bulkSelectAll: "全选",
+		bulkClear: "清除",
+		bulkMarkPaid: "标记为已付款",
+		bulkConfirmPaid: "确认 —— 将 {n} 笔标记为已付款",
+		bulkSendToPr: "发送给 PR",
+		bulkWorking: "处理中…",
+		bulkPaidDone: "已将 {n} 笔标记为已付款",
+		bulkSentDone: "已将 {n} 笔发送给 PR",
+		bulkPartial: "成功 {done} 笔 · 被拒 {refused} 笔 —— {reason}",
+		bulkSelectForPay: "选择 {ref} 标记为已付款",
+		bulkSelectForSend: "选择 {ref} 发送给 PR",
 		pvList: "付款单列表",
 		perItemCalc: "按项计算",
 		thisWeek: "本周",
@@ -7930,6 +7976,7 @@ const zh: PortalTranslations = {
 		recordCountOne: "{n} 条记录",
 		recordCountMany: "{n} 条记录",
 		recordsAndTotal: "{records} · 合计 {total}",
+		totalPaid: "已付总额",
 		noPaidVouchersMatch: "没有符合筛选条件的已付薪资单",
 		summaryLine: "{count} {label} · {range} · 已支付 {total}",
 		datePaid: "付款日期",
@@ -10126,8 +10173,10 @@ const zh: PortalTranslations = {
 		itemCancelled: "已取消",
 	},
 	agencyPv: {
-		overdueUnsignedHint:
-			"已逾期 — PR 无法签署从未发送的付款单。请逐日审核后发送，付款单会出现在其「收款」页面供签署。",
+		overdueTitle: "已逾期",
+		overdueUnsignedHint: "PR 无法签署从未发送的付款单。",
+		overdueUnsignedAction:
+			"请逐日审核后发送，付款单会出现在其「收款」页面供签署。",
 		weekWorked: "工作周",
 		latest: "最新",
 		prIdLabel: "PR 编号",

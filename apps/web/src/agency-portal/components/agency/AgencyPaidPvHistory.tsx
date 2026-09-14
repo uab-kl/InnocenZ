@@ -1,4 +1,5 @@
 import { AgencyPaidPvDetail } from "@agency-portal/components/agency/AgencyPaidPvDetail";
+import { PvCardSummary } from "@agency-portal/components/iz/PvCardSummary";
 import {
 	HistDateRangePickerField,
 	HistSelectField,
@@ -12,19 +13,18 @@ import {
 	getAgencyManagedReceiptScans,
 	receiptsForPv,
 	resolvePvPrId,
-	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import {
 	fmtDateLabelFromIso,
 	getPvNetTotal,
-	getPvSalesTotal,
 	type PrPaymentVoucher,
 	type PrReceiptScan,
 	parsePvIssuedMs,
 	pvStatusPillVariant,
 } from "@agency-portal/lib/pr-demo";
 import { format } from "date-fns";
+import { Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -168,17 +168,56 @@ export function AgencyPaidPvHistory({
 			<OutletSection
 				title={t.history.paidPvSectionTitle}
 				iconKey="Paid payment vouchers"
-				hint={fill(t.history.recordsAndTotal, {
-					records: fill(
-						filtered.length === 1
-							? t.history.recordCountOne
-							: t.history.recordCountMany,
-						{ n: filtered.length },
-					),
-					total: formatRM(totalPaid),
-				})}
+				/* No hint: the count and the money both live in the card below, and a
+				   heading that repeats either of them is one more thing to read. */
 				className="!mt-4"
 			>
+				{/*
+				 * What this archive comes to, in the SETTLED colour.
+				 *
+				 * It was a muted clause in the section's hint line — same size and
+				 * weight as the record count beside it — so the one figure the page
+				 * exists to report read as a footnote. Green because the money has
+				 * already moved: the owner's status code reserves green for settled,
+				 * and every DATE PAID stamp below this card already uses it.
+				 *
+				 * Shaped like the Pending Payout card on Payroll on purpose — the two
+				 * are the same question at opposite ends of the rail (what is still
+				 * owed / what has been paid) and should not need learning twice.
+				 */}
+				{filtered.length > 0 && (
+					<IzCard
+						flat
+						className="!mb-2.5 !border-[rgba(52,211,153,.3)] !bg-[image:linear-gradient(180deg,rgba(52,211,153,.07),transparent)]"
+					>
+						<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+							<Wallet className="h-4 w-4 shrink-0 text-[var(--iz-green)]" />
+							{/* The COUNT, not the section's own title — repeating the heading
+							    directly under itself says nothing twice. */}
+							<p className="iz-sm font-bold">
+								{fill(
+									filtered.length === 1
+										? t.history.recordCountOne
+										: t.history.recordCountMany,
+									{ n: filtered.length },
+								)}
+							</p>
+							<div className="ml-auto text-right">
+								{/* ⚠️ `--iz-green`, NOT `--iz-green-l`. The latter does not exist
+								    — `getPropertyValue` returns "" — so `color: var(--iz-green-l)`
+								    resolves to nothing and the text quietly inherits. The DATE
+								    PAID stamp below had been asking for that dead variable since
+								    it was written, which is why it was never actually green
+								    either; both point at the real one now. */}
+								<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-green)]">
+									{formatRM(totalPaid)}
+								</div>
+								<p className="iz-tiny iz-muted2">{t.history.totalPaid}</p>
+							</div>
+						</div>
+					</IzCard>
+				)}
+
 				{filtered.length === 0 ? (
 					<IzCard className="text-center">
 						<p className="iz-sm iz-muted">{t.history.noPaidVouchersMatch}</p>
@@ -192,26 +231,7 @@ export function AgencyPaidPvHistory({
 								className="iz-card iz-between w-full cursor-pointer text-left"
 								onClick={() => setDetailId(pv.id)}
 							>
-								<div className="min-w-0">
-									<div className="iz-heading text-base font-bold">{pv.id}</div>
-									<p className="iz-tiny iz-muted mt-0.5">
-										{resolvePvPrName(pv, agencyPRs)} · {pv.outlet}
-									</p>
-									{pv.prIc && (
-										<p className="iz-tiny iz-muted2">
-											{t.agencyPending.icNumber} {pv.prIc}
-										</p>
-									)}
-									<p className="iz-tiny iz-muted2 mt-0.5">
-										{t.history.cycleLabel}: {pv.cycle}
-									</p>
-									<p className="iz-tiny iz-muted2">
-										{t.history.issued} {pv.issued}
-									</p>
-									<p className="iz-tiny text-[var(--iz-gold-l)] mt-0.5">
-										{t.history.sales} {formatRM(getPvSalesTotal(pv))}
-									</p>
-								</div>
+								<PvCardSummary pv={pv} agencyPRs={agencyPRs} />
 								<div className="shrink-0 text-right">
 									<IzPill variant={pvStatusPillVariant(pv.status)}>
 										{t.history.paid}
@@ -224,7 +244,7 @@ export function AgencyPaidPvHistory({
 									</p>
 									{pv.paidAt && (
 										<div className="mt-2.5 rounded-lg border border-[rgba(52,211,153,.28)] bg-[rgba(52,211,153,.1)] px-2.5 py-1.5 text-right">
-											<p className="iz-tiny font-semibold uppercase tracking-wide text-[var(--iz-green-l)]">
+											<p className="iz-tiny font-semibold uppercase tracking-wide text-[var(--iz-green)]">
 												{t.history.datePaid}
 											</p>
 											<p className="iz-heading mt-0.5 text-sm font-bold leading-tight text-[var(--iz-txt)]">

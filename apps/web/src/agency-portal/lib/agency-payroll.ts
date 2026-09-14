@@ -1,5 +1,3 @@
-import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
-import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
 import type {
 	AgencyCollectionInvoice,
 	AgencyManagedPR,
@@ -30,6 +28,8 @@ import {
 	type ShiftHistoryRow,
 	sortShiftHistoryDesc,
 } from "@agency-portal/lib/shift-history-utils";
+import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
+import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const PV_COMMISSION_SCAN_PREFIX = "rc-pv-";
@@ -64,6 +64,11 @@ function agencyPrReceiptProfile(pr: AgencyManagedPR): PrProfile {
 
 function prNameMatchesAgency(scanName: string, pr: AgencyManagedPR): boolean {
 	const sn = scanName.trim().toLowerCase();
+	// ⚠️ A BLANK NAME MATCHED EVERY PR ON THE ROSTER — `"vicky".startsWith("")`
+	// is true, so `full.startsWith(sn)` below said yes to all of them. A voucher
+	// or receipt that arrived with no name would be attributed to whoever came
+	// first in the list. Nothing to match on is not a match.
+	if (!sn) return false;
 	const full = pr.name.trim().toLowerCase();
 	const first = full.split(/\s+/)[0] ?? "";
 	return sn === full || sn === first || full.startsWith(sn);
@@ -219,12 +224,44 @@ export function formatPayeeLabel(
 	return `(${nick}) ${legal}`;
 }
 
+/**
+ * Is this voucher one of the agency's own?
+ *
+ * 🔴 A PAID VOUCHER WENT MISSING FROM HISTORY BECAUSE OF THIS. Atlas had two
+ * paid PVs; Payroll said "2 paid in History" and History listed one. Both are
+ * Atlas's in the database and both PRs are on Atlas's roster by `user_id` — the
+ * voucher that vanished was Vicky's.
+ *
+ * Both tests failed on COPIES that had drifted from the roster:
+ *   - IC: the voucher carries `950312-14-8821`, the roster row `960312-14-8820`.
+ *   - Name: the voucher carries the LEGAL name ("Victoria Tan Mei Lin") while
+ *     `AgencyManagedPR.name` is the display name the floor uses ("Vicky").
+ *
+ * The legal name was on the roster the whole time, in `icName` — the field this
+ * test never read (`pr-personnel-map.ts` fills it from the backend's `name`).
+ * So it now tries the legal name too.
+ *
+ * ⚠️ Widened HERE and not in `prNameMatchesAgency`, which `resolvePvPrName`
+ * also uses: matching there would make a voucher resolve to the roster's
+ * DISPLAY name, and `(Vicky) Victoria Tan Mei Lin` on the payment document
+ * would collapse to `Vicky`. Membership is a different question from naming.
+ *
+ * ⚠️ And this is a plaster over duplicated data. `payment_voucher.pr_name` and
+ * `pr_ic` are copies of the user's own columns, which is what the database rule
+ * forbids; the drift above is the bill for it. The real fix is for the voucher
+ * to carry the user id and for this to match on that.
+ */
 export function pvBelongsToAgencyPr(
 	pv: Pick<PrPaymentVoucher, "prName" | "prIc">,
 	agencyPRs: AgencyManagedPR[] = [],
 ): boolean {
 	if (pv.prIc && agencyPRs.some((p) => p.ic === pv.prIc)) return true;
-	return agencyPRs.some((p) => prNameMatchesAgency(pv.prName, p));
+	const name = pv.prName.trim().toLowerCase();
+	return agencyPRs.some(
+		(p) =>
+			prNameMatchesAgency(pv.prName, p) ||
+			(Boolean(p.icName?.trim()) && p.icName.trim().toLowerCase() === name),
+	);
 }
 
 export function getAgencyManagedPvs(
