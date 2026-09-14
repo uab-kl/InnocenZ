@@ -32,7 +32,7 @@ import {
   refreshStoredComcard,
   touchesComcard,
 } from '@/util/comcard-refresh.js';
-import { pickAgencyId, pickedOrgKind } from '@/util/org-scope.js';
+import { pickAgencyId, pickedOrgId, pickedOrgKind } from '@/util/org-scope.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -403,15 +403,89 @@ export class PrControllerClass {
   }
 
   /**
-   * Resolves the caller's data scope. Admins see everything; every other caller
-   * is confined to the org they belong to (resolved from the DB, never trusted
-   * from the request body). Agency membership wins when a user holds both.
+   * The organisation an ADMIN is currently acting for, or null to fall back to
+   * the unscoped admin view.
+   *
+   * Null is returned whenever the answer is not certain — no acting header, a
+   * header naming an organisation this admin is not an active member of, or a
+   * lookup that yields nothing. The caller treats null as "keep the admin
+   * view", so an unresolvable header can never produce an empty roster.
+   *
+   * The membership is read from the database through `pickAgencyId`, the same
+   * helper the agency lane below uses, rather than trusted from the header: the
+   * header says WHICH organisation, the database says whether this person may
+   * read it. One fact, one place — `org-scope.ts`'s own note records that this
+   * resolver was hand-copied into several controllers and every copy carried
+   * the same bug.
+   */
+  private async resolveActingOrgScope(
+    req: Request,
+    userId: string,
+  ): Promise<Scope | null> {
+    const actingKind = pickedOrgKind(req);
+    if (actingKind === null) return null;
+
+    if (actingKind === 'agency') {
+      const memberships = await this.agencyMemberRepository.listByUser(userId);
+      const agencyId = pickAgencyId(req, memberships);
+      return agencyId ? { isAdmin: false, agencyId, outletIds: [] } : null;
+    }
+
+    const pickedId = pickedOrgId(req);
+    if (!pickedId) return null;
+    const outletMemberships =
+      await this.outletMemberRepository.listByUser(userId);
+    const holdsIt = outletMemberships.some(
+      (m) => m.outletId === pickedId && m.status === 'active',
+    );
+    return holdsIt
+      ? { isAdmin: false, agencyId: null, outletIds: [pickedId] }
+      : null;
+  }
+
+  /**
+   * Resolves the caller's data scope. An admin sees everything UNLESS the
+   * console names an organisation they are an active member of, in which case
+   * they read as that organisation (see `resolveActingOrgScope`). Every other
+   * caller is confined to the org they belong to (resolved from the DB, never
+   * trusted from the request body). Agency membership wins when a user holds
+   * both.
    */
   private async resolveScope(req: Request): Promise<Scope> {
     const user = req.user!;
     const roles = await this.authRepository.getRolesForUserIds([user.id]);
     const isAdmin = roles.some((r) => r.roleName === 'admin');
-    if (isAdmin) return { isAdmin: true, agencyId: null, outletIds: [] };
+    /*
+     * ⚠️ AN ADMIN ACTING FOR AN ORGANISATION IS THAT ORGANISATION'S READER.
+     *
+     * This used to return the blanket admin view unconditionally, BEFORE the
+     * acting-org header below was ever consulted — so the whole `x-org-id` /
+     * `x-org-kind` machinery underneath was unreachable for anybody holding the
+     * admin role. Somebody who is an admin AND Finance at one agency picked
+     * that agency in the chooser and got the admin answer: every agency's PRs,
+     * and one row PER MEMBERSHIP rather than per person, because
+     * `dedupeByPerson` is deliberately off for admins (their PR screen must keep
+     * a person's several memberships individually visible).
+     *
+     * On screen, 14 Sep 2026: Atlas Agency's roster listed one PR three times —
+     * she holds three memberships — and listed a PR belonging to Delta and Why
+     * We Met and not to Atlas at all. The chooser's own copy states the rule it
+     * was breaking: "the portal opens for the one you pick, and shows that
+     * organisation's people, shifts and money only".
+     *
+     * The narrowing is deliberately conservative: it applies ONLY when the
+     * console names an acting organisation AND this admin genuinely holds an
+     * active membership there, resolved from the database by the same
+     * `pickAgencyId` every other lane uses. An admin with no acting header — the
+     * admin console itself — still gets the unscoped view, so no admin screen
+     * loses anything. Anything unresolved falls through to that same view rather
+     * than to an empty one: a narrowing that cannot confirm its target must not
+     * invent a refusal.
+     */
+    if (isAdmin) {
+      const actingScope = await this.resolveActingOrgScope(req, user.id);
+      return actingScope ?? { isAdmin: true, agencyId: null, outletIds: [] };
+    }
 
     /*
      * ⚠️ A NAMED VENUE BEATS AN UNNAMED AGENCY — the same rule `resolveOrgScope`
