@@ -5340,6 +5340,18 @@ const en = {
 		 */
 		membersDeactivated: "Deactivated",
 		deactivatedRole: "Deactivated",
+		/* Bringing back somebody who WAS on the team. Deliberately not offered to
+		   a declined applicant (owner, 14 Sep 2026: "deactivated only, not
+		   declined") — they were never a member, so re-admitting them is an
+		   approval rather than a restoration. */
+		reactivateHeading: "Bring them back",
+		/* Says WHY a title has to be picked: deactivating revoked their portal
+		   role and the old lane went with it, so the server refuses a
+		   reactivation that does not name one. */
+		reactivateHint:
+			"Their portal role was revoked when they were switched off, so choose the title they are coming back as.",
+		reactivateButton: "Reactivate member",
+		reactivateFailed: "Could not reactivate this member",
 		deactivatedBy: "Deactivated by",
 		declinedRole: "Declined",
 		declinedBy: "Declined by",
@@ -10854,6 +10866,11 @@ const zh: PortalTranslations = {
 		membersRejected: "已拒绝",
 		membersDeactivated: "已停用",
 		deactivatedRole: "已停用",
+		reactivateHeading: "恢复其成员身份",
+		reactivateHint:
+			"停用时其门户角色已被撤销，原有职位也随之失效，请选择其恢复后的职位。",
+		reactivateButton: "恢复成员",
+		reactivateFailed: "无法恢复该成员",
 		deactivatedBy: "停用人",
 		declinedRole: "已拒绝",
 		declinedBy: "拒绝人",
