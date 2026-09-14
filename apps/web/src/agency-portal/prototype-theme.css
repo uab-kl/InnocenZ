@@ -14880,24 +14880,43 @@ button.iz-pr-offer-row:hover {
  * three read as three similar pills and the reader had to compare rather than
  * see. It is now a filled lavender chip with a visible lift.
  */
+/*
+ * ⚠️ OPAQUE, because the dark label depends on it (owner, 14 Sep 2026:
+ * "the colours are too similar and hard to see").
+ *
+ * The 11 Sep pass above set out to make the selected chip read as filled, but
+ * did it with ALPHA: `rgba(212, 196, 245, 0.42)` over a `rgba(0,0,0,0.28)` tray
+ * on a near-black panel composites to about #635c76 at the top stop and
+ * #484257 at the bottom. Measured against the `#17122a` label in the browser:
+ * **2.87:1 top, 1.90:1 bottom** — so the lower half of the pill was very
+ * nearly invisible, and the SELECTED chip was the hardest of the three to read,
+ * the exact opposite of the intent recorded above it. A translucent fill over
+ * an unknown dark backdrop cannot be reasoned about; an opaque stop can, so the
+ * gradient now uses solid colours: **12.79:1 top, 9.89:1 bottom**.
+ */
 .iz-approvals-group.on {
-	background: linear-gradient(
-		180deg,
-		rgba(212, 196, 245, 0.42),
-		rgba(212, 196, 245, 0.28)
-	);
+	background: linear-gradient(180deg, #ded3f9, #c9b6f0);
 	color: #17122a;
 	box-shadow:
-		inset 0 0 0 1px rgba(212, 196, 245, 0.85),
-		0 2px 10px rgba(212, 196, 245, 0.22);
+		inset 0 0 0 1px rgba(245, 240, 255, 0.9),
+		0 2px 10px rgba(212, 196, 245, 0.28);
 }
-/* The unselected two step back, so the contrast is carried by BOTH sides. */
+/*
+ * The unselected two step back — but by COLOUR, not by fading.
+ *
+ * ⚠️ These were NOT the broken half: measured, `--iz-muted` at 0.72 opacity
+ * over this tray gives 4.96:1, which already passes AA for body text. The
+ * opacity is dropped anyway because it was doing the same job twice — the
+ * filled chip now wins on ground and weight, so dimming its neighbours only
+ * cost legibility (8.59:1 at full opacity) without adding separation.
+ */
 .iz-approvals-group:not(.on) {
-	opacity: 0.72;
+	opacity: 1;
+	color: var(--iz-muted);
 }
 .iz-approvals-group:not(.on):hover {
-	opacity: 1;
-	background: rgba(232, 224, 245, 0.06);
+	background: rgba(232, 224, 245, 0.1);
+	color: var(--iz-txt);
 }
 .iz-approvals-group.on .iz-approvals-group__count {
 	background: #17122a;

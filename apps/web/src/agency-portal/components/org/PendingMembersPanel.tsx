@@ -3,6 +3,7 @@ import {
 	serverMessage,
 	useOrgMembers,
 } from "@agency-portal/hooks/use-org-members";
+import { memberQueueState } from "@agency-portal/lib/member-queue-state";
 import { Clock, Loader2, UserCheck, UserX } from "lucide-react";
 import { useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
@@ -46,18 +47,20 @@ const APPROVABLE: Record<OrgKind, readonly string[]> = {
  * accuse somebody of being turned down when we simply do not know — whereas
  * "no longer active" is true of every non-active row.
  */
-export type MemberQueueState =
-	| "waiting"
-	| "active"
-	| "declined"
-	| "deactivated";
-
-export function memberQueueState(m: { status: string }): MemberQueueState {
-	if (m.status === "active") return "active";
-	if (m.status === "pending") return "waiting";
-	if (m.status === "rejected") return "declined";
-	return "deactivated";
-}
+/*
+ * Moved to `@agency-portal/lib/member-queue-state` — a leaf — because the COUNTS
+ * that have to agree with this list live in a hook and a route, and neither can
+ * import a component without pulling React state, icons and the locale context
+ * into its graph (this portal has been felled by a latent import cycle once).
+ *
+ * Re-exported from here so every existing import of this path keeps working;
+ * `PendingMemberDetail` reads `memberQueueState` from it.
+ */
+export {
+	isMemberWaiting,
+	type MemberQueueState,
+	memberQueueState,
+} from "@agency-portal/lib/member-queue-state";
 
 /**
  * WHO made the decision, said honestly.
