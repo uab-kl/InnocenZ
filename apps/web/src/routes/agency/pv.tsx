@@ -7,6 +7,7 @@ import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueue
 import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQueuePanel";
 import { PayrollVerifyPanel } from "@agency-portal/components/agency/PayrollVerifyPanel";
 import { UnchargedFeesPanel } from "@agency-portal/components/agency/UnchargedFeesPanel";
+import { PvCardSummary } from "@agency-portal/components/iz/PvCardSummary";
 import { PvSummaryView } from "@agency-portal/components/iz/PvSummaryView";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { SignatureInkMark } from "@agency-portal/components/iz/SignatureInkMark";
@@ -63,20 +64,17 @@ import {
 	FINANCE_HEAD_LABEL,
 	getLatestPvIssuedMs,
 	getPvNetTotal,
-	getPvSalesTotal,
 	PAYROLL_CYCLE,
 	type PrPaymentVoucher,
 	type PrPvRow,
 	type PrPvStatus,
 	type PrReceiptScan,
-	parsePvIssuedMs,
 	pvStatusPillVariant,
 	receiptEntryLoggedLabel,
 	receiptEntryMethod,
 	receiptEntryMethodLabel,
 	receiptStatusLabel,
 	reconcilePvTotals,
-	resolvePvPayByDue,
 	sortPvsBySales,
 } from "@agency-portal/lib/pr-demo";
 import {
@@ -112,12 +110,12 @@ import {
 	Send,
 	Sheet,
 	Shield,
+	Wallet,
 } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { dayMonthLabel } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { createVoucherExportTicket } from "@/services/payment-voucher";
@@ -282,12 +280,23 @@ const PV_STATUS_FILTERS: {
 	value: PvStatusFilter;
 	label: (t: PortalTranslations) => string;
 }[] = [
+	/*
+	 * Ordered to follow the VOUCHER'S OWN JOURNEY, not the enum: everything,
+	 * then what is still being reviewed, then what went wrong, then what is
+	 * ready for money to move (owner, 14 Sep 2026).
+	 *
+	 * Each week shows a subset (see `statusFiltersForWeek`) and the subset keeps
+	 * this order, so the payment week reads All · Pending reviews · Disputed ·
+	 * To pay, and the newer weeks All · Pending Agency Review · Sent · Disputed.
+	 * `PENDING_ANY` sits with the two chips it stands in for rather than at the
+	 * end, which is where it was and why "To pay" came before it.
+	 */
 	{ value: "all", label: (t) => t.common.all },
+	{ value: "PENDING_ANY", label: (t) => t.payroll.statusPendingAny },
 	{ value: "PENDING_REVIEW", label: (t) => t.payroll.statusPendingReview },
 	{ value: "SENT", label: (t) => t.payroll.statusSent },
 	{ value: "DISPUTED", label: (t) => t.payroll.statusDisputed },
 	{ value: "TO_PAY", label: (t) => t.payroll.statusSigned },
-	{ value: "PENDING_ANY", label: (t) => t.payroll.statusPendingAny },
 ];
 
 function statusFiltersForWeek(tab: PayrollWeekTab) {
@@ -321,28 +330,11 @@ function statusFiltersForWeek(tab: PayrollWeekTab) {
  * last and with no default: module scope cannot call a hook, and a default
  * would pin the label to one language just as firmly as the old tag did.
  */
-function shortIsoDay(iso: string, t: PortalTranslations): string {
-	const d = new Date(`${iso}T00:00:00`);
-	if (Number.isNaN(d.getTime())) return iso;
-	return dayMonthLabel(d, t);
-}
-
-/**
- * The week a BACKEND voucher itself covers, or null for a demo one (whose
- * `cycle` string already is a date range).
- *
- * Still needed after the weeks were aligned to Sun–Sat (3 Aug 2026): the
- * backend's `cycle` column holds a CADENCE ("Weekly"), not a range, so without
- * this the row shows no dates at all and the only week on screen is the tab's.
+/*
+ * `shortIsoDay` and `pvOwnWeekLabel` moved to `PvCardSummary.tsx` with the card
+ * body they were written for — History needs the same week line, and a second
+ * copy of a date formatter is how the two cards drifted in the first place.
  */
-function pvOwnWeekLabel(
-	pv: PrPaymentVoucher,
-	t: PortalTranslations,
-): string | null {
-	if (!pv.weekStartIso || !pv.weekEndIso) return null;
-	const year = pv.weekEndIso.slice(0, 4);
-	return `${shortIsoDay(pv.weekStartIso, t)} – ${shortIsoDay(pv.weekEndIso, t)} ${year}`;
-}
 
 /**
  * The statuses a voucher for the CURRENT, still-running week can legitimately
@@ -362,6 +354,7 @@ function AgencyPV() {
 		receipt: receiptFromSearch,
 	} = Route.useSearch();
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
+	const toast = useStore((s) => s.toast);
 	const prReceiptScans = useStore((s) => s.prReceiptScans ?? []);
 	const allAgencyPRs = useStore((s) => s.agencyPRs);
 	const agencySubRole = useStore((s) => s.agencySubRole);
@@ -374,7 +367,12 @@ function AgencyPV() {
 	);
 	// Vouchers come from the backend (already agency-scoped server-side); the
 	// Receipts sub-tab stays on the demo store — no backend for receipt scans.
-	const { pvs: prPaymentVouchers, isError: pvsFailed } = useAgencyPvs();
+	const {
+		pvs: prPaymentVouchers,
+		isError: pvsFailed,
+		bulkMarkPaid,
+		bulkSendToPr,
+	} = useAgencyPvs();
 	const [detailId, setDetailId] = useState<string | null>(null);
 	const [payrollWeekTab, setPayrollWeekTab] =
 		useState<PayrollWeekTab>("last_week");
@@ -870,15 +868,21 @@ function AgencyPV() {
 		activeWeekWork.disputes > 0 ||
 		pvSubTab === "disputes";
 
+	/**
+	 * The WEEK's figures, none of which follow the PR filter — they describe the
+	 * tab. `pendingPayout` here is the week's whole outstanding total and stays
+	 * in the header tile deliberately (owner, 14 Sep 2026); the filtered twin is
+	 * `filteredPendingPayout` below, which answers the same question about the
+	 * PR the agency has picked.
+	 */
 	const activeWeekStats = useMemo(() => {
 		const signed = weekTabPvs.filter((p) => p.status === "SIGNED");
 		const prCount = new Set(
 			weekTabPvs.map((p) => resolvePvPrName(p, agencyPRs)),
 		).size;
-		const pvCount = weekTabPvs.length;
 		return {
 			prCount,
-			pvCount,
+			pvCount: weekTabPvs.length,
 			pendingPayout:
 				Math.round(signed.reduce((sum, p) => sum + getPvNetTotal(p), 0) * 100) /
 				100,
@@ -963,6 +967,66 @@ function AgencyPV() {
 		return rows.filter((p) => p.status === statusFilter);
 	}, [weekTabPvs, statusFilter, prFilter]);
 
+	/**
+	 * What is still owed on the vouchers being LOOKED AT — the header tile's
+	 * figure, narrowed to the PR the agency picked.
+	 *
+	 * ⚠️ It follows the PR filter and deliberately NOT the status chips. Pending
+	 * payout already has a status rule inside it (only a SIGNED voucher is owed
+	 * and unpaid), so letting "Pending reviews" narrow it too would print
+	 * RM 0.00 and read as "nothing is owed" when the money is simply not in the
+	 * chip you are standing on. The chips choose which CARDS to show; this is
+	 * what the selected PR is owed for the week either way.
+	 */
+	const filteredPendingPayout = useMemo(() => {
+		const rows = prFilter
+			? weekTabPvs.filter((p) => p.prId === prFilter)
+			: weekTabPvs;
+		const owed = rows.filter((p) => p.status === "SIGNED");
+		const total = owed.reduce((sum, p) => sum + getPvNetTotal(p), 0);
+		// The COUNT travels with the total so the card can say what the figure is
+		// made of. It counts the signed vouchers, not the cards on screen — those
+		// differ whenever a status chip is on, and a total explained by the wrong
+		// number of vouchers is worse than one left unexplained.
+		return { total: Math.round(total * 100) / 100, count: owed.length };
+	}, [weekTabPvs, prFilter]);
+
+	/**
+	 * BULK SELECTION — which action, if any, this chip is offering.
+	 *
+	 * Driven by the STATUS CHIP rather than by whatever happens to be ticked, so
+	 * the offer is predictable and a selection can never mix two actions: "To
+	 * pay" hands out Mark as paid, the pending-review chips hand out Send to PR,
+	 * every other view hands out nothing. Both are money-raising acts, so both
+	 * sit behind `raisePv` — the same permission their single-voucher twins use.
+	 */
+	const bulkMode: "pay" | "send" | null = !can("raisePv")
+		? null
+		: statusFilter === "TO_PAY"
+			? "pay"
+			: statusFilter === "PENDING_ANY" || statusFilter === "PENDING_REVIEW"
+				? "send"
+				: null;
+
+	/**
+	 * ⚠️ Eligibility is a FLOOR, not a promise.
+	 *
+	 * Paying needs the PR's counter-signature (SIGNED); sending needs the
+	 * agency's own (`financeHeadSignedAt`) on a voucher still awaiting review —
+	 * which is exactly "the Pending Reviews one that have been signed by
+	 * agency". What this CANNOT see is the per-voucher send gate (undecided
+	 * overtime, a receipt still pending): that lives in `useAgencyPvDayReview`,
+	 * one hook per voucher, and hooks cannot be called over a list. The server
+	 * enforces it regardless and answers 409 with a sentence — so a bulk run
+	 * reports what it was refused rather than pretending everything went.
+	 */
+	const isBulkEligible = (pv: PrPaymentVoucher) =>
+		bulkMode === "pay"
+			? pv.status === "SIGNED"
+			: bulkMode === "send"
+				? pv.status === "PENDING_REVIEW" && Boolean(pv.financeHeadSignedAt)
+				: false;
+
 	// The status chips apply on every tab now, including the payment week. They
 	// were bypassed there because that tab held only SIGNED vouchers and a filter
 	// over one status is pointless — now that it shows unsigned ones too, "To pay"
@@ -971,6 +1035,76 @@ function AgencyPV() {
 		() => sortPvsBySales(statusFilteredPvs, "default"),
 		[statusFilteredPvs],
 	);
+
+	// Not memoised: `isBulkEligible` is rebuilt every render (it closes over
+	// `bulkMode`), so a dependency list naming it would recompute regardless —
+	// a memo that never hits, over a filter of at most a few dozen rows.
+	const bulkEligible = filteredVouchers.filter(isBulkEligible);
+
+	const [selectedPvIds, setSelectedPvIds] = useState<string[]>([]);
+	const [bulkBusy, setBulkBusy] = useState(false);
+	const [bulkArmed, setBulkArmed] = useState(false);
+
+	/*
+	 * A tick can only ever mean a voucher STILL on screen and still eligible.
+	 * Switching week, PR or chip changes both, and a selection surviving that
+	 * would pay vouchers the operator can no longer see.
+	 */
+	const selectedIds = selectedPvIds.filter((id) =>
+		bulkEligible.some((p) => p.id === id),
+	);
+
+	/*
+	 * DERIVED, not reset by an effect. Changing week, PR or chip empties
+	 * `selectedIds` above on the next render all by itself, so an effect
+	 * clearing state on those changes would only be a slower way to reach the
+	 * same place — and a confirm that outlived its selection is the one thing
+	 * that must not happen here.
+	 */
+	const bulkConfirmArmed = bulkArmed && selectedIds.length > 0;
+
+	/**
+	 * Runs the selection through the same endpoint the single-voucher buttons
+	 * use, then says what actually happened — ONE sentence, carrying the
+	 * server's own words for the first refusal. "12 selected" followed by
+	 * silence is how an operator comes to believe money moved when it did not.
+	 */
+	const runBulkAction = async () => {
+		if (!bulkMode || selectedIds.length === 0 || bulkBusy) return;
+		setBulkBusy(true);
+		try {
+			const results =
+				bulkMode === "pay"
+					? await bulkMarkPaid(selectedIds)
+					: await bulkSendToPr(selectedIds);
+			const done = results.filter((r) => r.ok).length;
+			const refused = results.filter((r) => !r.ok);
+			setSelectedPvIds([]);
+			setBulkArmed(false);
+			if (refused.length === 0) {
+				toast(
+					fill(
+						bulkMode === "pay"
+							? t.payroll.bulkPaidDone
+							: t.payroll.bulkSentDone,
+						{ n: done },
+					),
+					"success",
+				);
+			} else {
+				toast(
+					fill(t.payroll.bulkPartial, {
+						done,
+						refused: refused.length,
+						reason: refused[0]?.message ?? "",
+					}),
+					"warn",
+				);
+			}
+		} finally {
+			setBulkBusy(false);
+		}
+	};
 
 	/**
 	 * Payment-week vouchers nobody has signed — overdue by the screen's own rule.
@@ -1182,6 +1316,15 @@ function AgencyPV() {
 				)}
 			</p>
 
+			{/* All three tiles describe the WEEK, and none of them follows the PR
+			    filter — that is the point of them. The Payment Vouchers section
+			    below carries a SECOND pending-payout figure that does follow it
+			    (owner, 14 Sep 2026: keep this one, add that one), so the two agree
+			    on "All PRs" and differ once a PR is picked. That difference is the
+			    feature: this is what the week owes, that is what the selected PR is
+			    owed. Whichever changes, they must keep being computed from the same
+			    rule — SIGNED and unpaid — or they would disagree for a reason
+			    nobody could see. */}
 			<div className="iz-grid3 mt-3">
 				<div className="iz-stat-tile">
 					<div className="n text-[var(--iz-gold-l)]">
@@ -1318,16 +1461,50 @@ function AgencyPV() {
 					iconKey="Payment Vouchers"
 					hint={activeWeekBounds.cycle}
 				>
+					{/*
+					 * The payment week's two notices, SIDE BY SIDE — the same 2-up grid
+					 * the voucher cards below use.
+					 *
+					 * ⚠️ NOT `items-start`, unlike that grid. There it is deliberate: a
+					 * voucher with an extra line must not stretch the one beside it,
+					 * because each card is a separate record you read on its own. These
+					 * two are one row of notices about the same week, and one being three
+					 * lines while its neighbour is two just looked broken. Stretching is
+					 * the default, so this is the absence of a class, not the presence of
+					 * one — worth the note so nobody "fixes" it back by symmetry with the
+					 * grid below.
+					 *
+					 * The overdue note only appears when something is actually unsigned,
+					 * so the second column is conditional. Without that, a week with
+					 * nothing overdue would leave a half-width card beside a hole.
+					 */}
 					{payrollWeekTab === "last_last_week" && (
-						<IzCard
-							flat
-							className="!mb-2.5 border-[rgba(232,194,122,.3)] bg-[linear-gradient(180deg,rgba(232,194,122,.05),transparent)]"
+						<div
+							className={`mb-2.5 grid gap-2.5 ${
+								unsignedPaymentWeekPvs.length > 0 ? "xl:grid-cols-2" : ""
+							}`}
 						>
-							<div>
+							{/* ⚠️ The `!` on the colour utilities is load-bearing.
+							    `.iz-card` is un-layered (prototype-theme.css is imported
+							    plainly) while Tailwind's utilities sit in `@layer utilities`,
+							    and un-layered NORMAL declarations beat layered ones whatever
+							    the specificity — so the plain `border-[…]`/`bg-[…]` these two
+							    cards carried were discarded in silence, and both rendered
+							    with the default grey frame nobody asked for. `!important`
+							    reverses layer order, which is what makes the tint land.
+							    Verified with getComputedStyle, before and after. */}
+							<IzCard
+								flat
+								className="!mb-0 !border-[rgba(232,194,122,.3)] !bg-[linear-gradient(180deg,rgba(232,194,122,.05),transparent)]"
+							>
+								{/* Both notices in this row share ONE shape — bold title, then a
+								    body line, then a quieter footnote. They sit side by side and
+								    are read together, so a title on one and a bare paragraph on
+								    the other made the pair look unfinished. */}
 								<p className="iz-sm font-bold">
 									{t.payroll.signedPvsManualPayment}
 								</p>
-								<p className="iz-tiny iz-muted2 mt-0.5">
+								<p className="iz-tiny iz-muted2 mt-1">
 									{t.payroll.use} <b>{t.payroll.toPay}</b>{" "}
 									{t.payroll.useToRecordTransfer} ·{" "}
 									<Link
@@ -1338,23 +1515,20 @@ function AgencyPV() {
 										{paid} {t.payroll.paidInHistory}
 									</Link>
 								</p>
-							</div>
-							<p className="iz-tiny iz-muted2 mt-2">
-								{t.payroll.duplicatePaymentBlocked}
-							</p>
-						</IzCard>
-					)}
-					{payrollWeekTab === "last_last_week" &&
-						unsignedPaymentWeekPvs.length > 0 && (
-							<IzCard
-								flat
-								className="!mb-2.5 border-[rgba(244,183,64,.4)] bg-[rgba(244,183,64,.08)]"
-							>
-								{/* Two whole sentences rather than an "s"/"is"/"are" the code
+								<p className="iz-tiny iz-muted2 mt-1">
+									{t.payroll.duplicatePaymentBlocked}
+								</p>
+							</IzCard>
+							{unsignedPaymentWeekPvs.length > 0 && (
+								<IzCard
+									flat
+									className="!mb-0 !border-[rgba(244,183,64,.4)] !bg-[rgba(244,183,64,.08)]"
+								>
+									{/* Two whole sentences rather than an "s"/"is"/"are" the code
 								    splices in: Chinese has no plural and no verb agreement, so a
 								    template stitched out of English inflections cannot be
 								    translated at all — only the English can be repaired. */}
-								{/* The whole reason this card exists: by the payment week a voucher
+									{/* The whole reason this card exists: by the payment week a voucher
 								    should already be signed, so one that is not has fallen out of
 								    the flow — and before this tab showed it, nothing anywhere in
 								    the product would ever have mentioned it again.
@@ -1363,10 +1537,20 @@ function AgencyPV() {
 								    reviews chip one row below carries the same number, and a card
 								    whose headline is a figure printed twice reads as two problems
 								    rather than one. */}
-								<p className="iz-sm text-[var(--iz-amber)]">
-									{t.agencyPv.overdueUnsignedHint}
-								</p>
-								{/* The LIST used to live here — PR, amount, status, one row
+									{/* Same three parts as the card beside it. The amber stays on
+									    the TITLE — the frame and background already carry the
+									    alert, and a whole paragraph in amber shouts where its
+									    neighbour speaks. */}
+									<p className="iz-sm font-bold text-[var(--iz-amber)]">
+										{t.agencyPv.overdueTitle}
+									</p>
+									<p className="iz-tiny iz-muted2 mt-1">
+										{t.agencyPv.overdueUnsignedHint}
+									</p>
+									<p className="iz-tiny iz-muted2 mt-1">
+										{t.agencyPv.overdueUnsignedAction}
+									</p>
+									{/* The LIST used to live here — PR, amount, status, one row
 								    each. Removed once the payment week gained its "Pending
 								    reviews" chip (owner, 8 Sep 2026): that chip selects exactly
 								    this set, and the voucher cards it reveals carry the same
@@ -1378,8 +1562,10 @@ function AgencyPV() {
 								    "overdue", and it cannot say that a PR is unable to sign
 								    something that was never sent — which is the whole reason a
 								    voucher sits here. */}
-							</IzCard>
-						)}
+								</IzCard>
+							)}
+						</div>
+					)}
 					{/* Rendered on EVERY week — `visibleStatusFilters` decides WHICH chips
 					    each week offers, so the payment week gets All / Disputed / To pay /
 					    Pending reviews and the newer weeks keep their granular ones. */}
@@ -1437,6 +1623,153 @@ function AgencyPV() {
 						</div>
 					</IzCard>
 
+					{/*
+					 * Directly above the cards, NOT in the section heading, and built as
+					 * a CARD rather than a bare row.
+					 *
+					 * It started in the heading, which renders above the manual-payment
+					 * card, the overdue banner AND the whole filter block — so by the
+					 * time the vouchers were on screen the figure had scrolled away
+					 * ("where is the one at the bottom here?"). Moved down, it was a
+					 * label pinned to one edge and a number to the other with a metre of
+					 * gap between them, which reads as debris rather than a total.
+					 *
+					 * So it borrows the shape the vouchers below it already use — scope
+					 * and count on the left, money and its caption right-aligned — and
+					 * the card frame of the manual-payment note above it. A total that
+					 * looks like the things it totals needs no explaining.
+					 */}
+					{/* ⚠️ The `!` prefixes are load-bearing, not shouting. `.iz-card`
+					    paints its own border and background, and a plain
+					    `border-[…]`/`bg-[…]` utility loses to it — which is why the
+					    "Signed PVs" note above carries the same two classes and renders
+					    with the default grey frame that its author did not intend.
+					    Measured with getComputedStyle, not assumed. */}
+					<IzCard
+						flat
+						className="iz-between !mb-2.5 !mt-2.5 !border-[rgba(232,194,122,.32)] !bg-[linear-gradient(180deg,rgba(232,194,122,.07),transparent)]"
+					>
+						<div className="flex min-w-0 items-center gap-2">
+							<Wallet className="h-4 w-4 shrink-0 text-[var(--iz-gold-l)]" />
+							<div className="min-w-0">
+								<p className="iz-sm font-bold">{t.payroll.pendingPayout}</p>
+								<p className="iz-tiny iz-muted2 mt-0.5">
+									{prFilter
+										? (prOptions.find(([id]) => id === prFilter)?.[1] ??
+											t.receipts.allPrs)
+										: t.receipts.allPrs}{" "}
+									·{" "}
+									{fill(t.payroll.pendingPayoutCount, {
+										n: filteredPendingPayout.count,
+									})}
+								</p>
+							</div>
+						</div>
+						<div className="shrink-0 text-right">
+							<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-gold-l)]">
+								{formatRM(filteredPendingPayout.total)}
+							</div>
+							<p className="iz-tiny iz-muted2 mt-0.5">{t.payroll.netPayable}</p>
+						</div>
+					</IzCard>
+
+					{/*
+					 * THE BULK BAR — only where a bulk action exists, and only once
+					 * something is actually eligible. An empty selection still shows it,
+					 * because the bar is also what tells the reader the ticks are there
+					 * and what they will do.
+					 *
+					 * ⚠️ Mark as paid ARMS before it fires. It records money leaving the
+					 * agency across many vouchers at once, the server stamps `paid_at`
+					 * the first time and will not re-date it, and there is no undo on
+					 * this screen — so the button asks twice. Send to PR does not: it is
+					 * reversible by sending again, and a confirm on a routine step is
+					 * how people learn to click through confirms.
+					 */}
+					{bulkMode && bulkEligible.length > 0 && (
+						<IzCard flat className="!mb-2.5 !border-[rgba(232,194,122,.32)]">
+							{/*
+							 * A TOOLBAR, so it is built out of chips — not `.iz-btn`.
+							 *
+							 * `.iz-btn` is `width: 100%` with 14px padding and an 18px face:
+							 * the full-width CTA that closes a panel. Dropped into a row
+							 * beside a label it took the whole width and printed itself over
+							 * the count, which no `shrink-0` can undo — the width is the
+							 * button's own rule, not the flexbox's. `.iz-chip` is the
+							 * vocabulary this portal already uses for an action sitting in a
+							 * row, at 14px, on the ladder.
+							 *
+							 * One wrapping flex line rather than `iz-between`: at narrow
+							 * widths the action drops to its own line and stays right-aligned
+							 * on `ml-auto`, instead of squeezing the label into two.
+							 */}
+							<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+								<p className="iz-sm font-bold">
+									{fill(t.payroll.bulkSelectedCount, {
+										n: selectedIds.length,
+										total: bulkEligible.length,
+									})}
+								</p>
+								<button
+									type="button"
+									className="iz-chip"
+									disabled={bulkBusy}
+									onClick={() => {
+										setBulkArmed(false);
+										setSelectedPvIds(
+											selectedIds.length === bulkEligible.length
+												? []
+												: bulkEligible.map((p) => p.id),
+										);
+									}}
+								>
+									{selectedIds.length === bulkEligible.length
+										? t.payroll.bulkClear
+										: t.payroll.bulkSelectAll}
+								</button>
+								{/*
+								 * Champagne = ACT, the owner's colour rule. Same gradient and
+								 * ink as `.iz-btn-primary`, at chip size.
+								 *
+								 * ⚠️ `bg-[image:…]`, not `bg-[…]`. `--iz-grad-accent` holds a
+								 * `linear-gradient()`, and the plain form compiles to
+								 * `background-color`, where a gradient is an invalid value and
+								 * is dropped without a word — leaving this button on the chip's
+								 * default glass with `#241a08` ink on top of it, i.e. near-black
+								 * text on a near-black pill. The `image:` hint puts it in
+								 * `background-image`, which is the slot a gradient belongs in.
+								 */}
+								<button
+									type="button"
+									className="iz-chip ml-auto !border-[rgba(201,155,78,.45)] !bg-[image:var(--iz-grad-accent)] font-bold !text-[#241a08] disabled:opacity-40"
+									disabled={selectedIds.length === 0 || bulkBusy}
+									onClick={() => {
+										if (bulkMode === "pay" && !bulkConfirmArmed) {
+											setBulkArmed(true);
+											return;
+										}
+										void runBulkAction();
+									}}
+								>
+									{bulkMode === "pay" ? (
+										<Wallet className="h-3.5 w-3.5 shrink-0" />
+									) : (
+										<Send className="h-3.5 w-3.5 shrink-0" />
+									)}
+									{bulkBusy
+										? t.payroll.bulkWorking
+										: bulkMode === "pay"
+											? bulkConfirmArmed
+												? fill(t.payroll.bulkConfirmPaid, {
+														n: selectedIds.length,
+													})
+												: t.payroll.bulkMarkPaid
+											: t.payroll.bulkSendToPr}
+								</button>
+							</div>
+						</IzCard>
+					)}
+
 					{filteredVouchers.length === 0 ? (
 						/* The empty state stays FULL WIDTH — it is a sentence about the
 						   whole list, and half a row of centred text with a hole beside it
@@ -1482,72 +1815,64 @@ function AgencyPV() {
 						   width costs no words; the id gets `break-words` because a UUID is
 						   one unbreakable token that would otherwise run past the card. */
 						<div className="grid items-start gap-2.5 xl:grid-cols-2">
-							{filteredVouchers.map((pv) => (
-								<button
-									key={pv.id}
-									type="button"
-									className="iz-card iz-between w-full cursor-pointer text-left"
-									onClick={() => setDetailId(pv.id)}
-								>
-									<div className="min-w-0">
-										{pv.voucherNo?.trim() ? (
-											<div className="iz-heading break-words text-base font-bold">
-												{pv.voucherNo.trim()}
-											</div>
-										) : null}
-										<p
-											className={
-												pv.voucherNo?.trim()
-													? "iz-tiny iz-muted mt-0.5"
-													: "iz-heading break-words text-base font-bold"
-											}
+							{filteredVouchers.map((pv) => {
+								const selectable = isBulkEligible(pv);
+								const ticked = selectedIds.includes(pv.id);
+								return (
+									/* The tick sits BESIDE the card, never inside it. The card is
+								   one big <button> that opens the voucher, and a checkbox
+								   nested in a button is invalid markup whose clicks fight each
+								   other — the reader would tick a row and land in its detail. */
+									<div key={pv.id} className="flex items-stretch gap-2">
+										{bulkMode && (
+											<label className="flex shrink-0 cursor-pointer items-start pt-4">
+												<input
+													type="checkbox"
+													className="h-4 w-4 cursor-pointer accent-[var(--iz-gold-l)] disabled:cursor-not-allowed disabled:opacity-30"
+													checked={ticked}
+													disabled={!selectable || bulkBusy}
+													aria-label={fill(
+														bulkMode === "pay"
+															? t.payroll.bulkSelectForPay
+															: t.payroll.bulkSelectForSend,
+														{ ref: pv.voucherNo?.trim() || pv.id },
+													)}
+													onChange={(e) => {
+														setBulkArmed(false);
+														setSelectedPvIds((prev) =>
+															e.target.checked
+																? [...prev, pv.id]
+																: prev.filter((id) => id !== pv.id),
+														);
+													}}
+												/>
+											</label>
+										)}
+										<button
+											type="button"
+											className="iz-card iz-between w-full cursor-pointer text-left"
+											onClick={() => setDetailId(pv.id)}
 										>
-											{resolvePvPrLabel(pv, agencyPRs)} · {pv.outlet}
-										</p>
-										{pv.prIc && (
-											<p className="iz-tiny iz-muted2">
-												{t.outletSettings.ic} {pv.prIc}
-											</p>
-										)}
-										<p className="iz-tiny iz-muted2 mt-0.5">
-											{t.history.cycleLabel}: {pv.cycle}
-										</p>
-										{/* A backend voucher's own week runs Mon–Sun while these tabs
-										    are Sun–Sat, so the tab heading is one day out from the
-										    week this voucher actually covers. Print the voucher's
-										    range rather than letting the heading speak for it. */}
-										{pvOwnWeekLabel(pv, t) && (
-											<p className="iz-tiny iz-muted2">
-												{t.agencyPv.weekWorked}: {pvOwnWeekLabel(pv, t)}
-											</p>
-										)}
-										<p className="iz-tiny iz-muted2">
-											{t.history.issued} {pv.issued} · {t.agencyHome.payBy}{" "}
-											{resolvePvPayByDue(pv)}
-											{parsePvIssuedMs(pv.issued) >= latestIssuedMs &&
-												latestIssuedMs > 0 && (
-													<span className="ml-1 text-[var(--iz-violet)]">
-														· {t.agencyPv.latest}
-													</span>
-												)}
-										</p>
-										<p className="iz-tiny text-[var(--iz-gold-l)] mt-0.5">
-											{t.history.sales} {formatRM(getPvSalesTotal(pv))}
-										</p>
+											<PvCardSummary
+												pv={pv}
+												agencyPRs={agencyPRs}
+												latestIssuedMs={latestIssuedMs}
+											/>
+											<div className="shrink-0 text-right">
+												<IzPill variant={statusPill(pv.status)}>
+													{agencyPvStatusLabel(pv.status, t)}
+												</IzPill>
+												<div className="iz-ledger iz-heading mt-1.5 text-base font-bold">
+													{formatRM(getPvNetTotal(pv))}
+												</div>
+												<p className="iz-tiny iz-muted2 mt-0.5">
+													{t.payroll.netPayable}
+												</p>
+											</div>
+										</button>
 									</div>
-									<div className="shrink-0 text-right">
-										<IzPill variant={statusPill(pv.status)}>
-											{agencyPvStatusLabel(pv.status, t)}
-										</IzPill>
-										<div className="iz-ledger iz-heading mt-1.5 text-base font-bold">
-											{formatRM(getPvNetTotal(pv))}
-										</div>
-										<p className="iz-tiny iz-muted2 mt-0.5">
-											{t.payroll.netPayable}
-										</p>
-									</div>
-								</button>
-							))}
+								);
+							})}
 						</div>
 					)}
 				</OutletSection>
