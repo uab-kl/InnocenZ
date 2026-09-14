@@ -67,6 +67,7 @@ import {
 	AGENCY_TEAM_GROUPS,
 	type OrgKind,
 	OUTLET_TEAM_GROUPS,
+	OWNER_LEVEL_SUB_ROLES,
 } from "./org-team-groups";
 
 const PAGE_SIZE = 10;
@@ -604,19 +605,43 @@ export function OrgMembersListPage({
 						</DialogDescription>
 					</DialogHeader>
 
+					{/*
+					 * Owner and Guarantor stay on this list DELIBERATELY (owner's
+					 * decision, 14 Sep 2026): an outlet or agency can ask an admin to
+					 * set one, and the admin is the only lane that can recover an
+					 * organisation whose own owner-level member is gone.
+					 *
+					 * What they did not carry was any sign of what they grant.
+					 * `guarantor` in particular reads like a junior lane while the
+					 * model defines it at owner level, "including paying PRs" — so
+					 * both are tagged, and choosing one says so in a sentence. The
+					 * write itself is unchanged and already audited: every mutating
+					 * REST call goes through `platformAuditMiddleware` (v1.ts), which
+					 * records the actor, the portal and old/new data.
+					 */}
 					{pending?.next === "active" && (
-						<Select value={restoreLane} onValueChange={setRestoreLane}>
-							<SelectTrigger aria-label={t.adminOrg.memberSubRole}>
-								<SelectValue placeholder={t.adminOrg.memberSubRole} />
-							</SelectTrigger>
-							<SelectContent>
-								{groups.map((group) => (
-									<SelectItem key={group.subRole} value={group.subRole}>
-										{group.title(t)}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+						<div className="space-y-2">
+							<Select value={restoreLane} onValueChange={setRestoreLane}>
+								<SelectTrigger aria-label={t.adminOrg.memberSubRole}>
+									<SelectValue placeholder={t.adminOrg.memberSubRole} />
+								</SelectTrigger>
+								<SelectContent>
+									{groups.map((group) => (
+										<SelectItem key={group.subRole} value={group.subRole}>
+											{group.title(t)}
+											{OWNER_LEVEL_SUB_ROLES.has(group.subRole)
+												? ` · ${t.adminOrg.memberOwnerLevelTag}`
+												: ""}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+							{OWNER_LEVEL_SUB_ROLES.has(restoreLane) && (
+								<p className="text-sm text-amber-600 dark:text-amber-400">
+									{t.adminOrg.memberOwnerLevelWarning}
+								</p>
+							)}
+						</div>
 					)}
 
 					<DialogFooter>

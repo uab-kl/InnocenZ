@@ -6235,6 +6235,15 @@ const en = {
 		memberActivateTitle: "Switch this membership back on",
 		memberActivateBody:
 			"Their old lane went with the role that was revoked, so choose the one they are coming back as.",
+		/* Marks Owner and Guarantor in the restore list. Guarantor reads like a
+		   junior lane and is not one — the model calls it "stands in for the
+		   owner, at owner level — including paying PRs". */
+		memberOwnerLevelTag: "owner-level",
+		/* Shown only once an owner-level lane is chosen. An admin MAY grant these
+		   (owner's decision, 14 Sep 2026) as a failsafe when the organisation has
+		   asked them to; the sentence is there so it is never a casual pick. */
+		memberOwnerLevelWarning:
+			"Owner and Guarantor both carry full authority over this organisation — a Guarantor stands in for the owner, including paying PRs. Grant one only if the organisation has asked you to. The change is recorded against your account.",
 		/* The org sheet's Team tab is a doorway to the full list, not a second copy of it. */
 		teamTabDoorwayHint:
 			"Everyone on this team, with search, filters and their full records, lives on the Team members page.",
@@ -11442,6 +11451,9 @@ const zh: PortalTranslations = {
 		memberActivateTitle: "重新启用此成员身份",
 		memberActivateBody:
 			"原有职能已随被撤销的角色一并失效，请选择其恢复后的职能。",
+		memberOwnerLevelTag: "所有者级别",
+		memberOwnerLevelWarning:
+			"所有者与担保人均拥有本机构的全部权限——担保人可代行所有者职权，包括向 PR 付款。仅在该机构主动要求时才可授予。此项变更会记录在您的账户名下。",
 		teamTabDoorwayHint:
 			"该团队的全部成员，连同搜索、筛选与完整档案，都在“团队成员”页面中。",
 		teamTabOpenList: "打开此团队",

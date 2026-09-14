@@ -46,6 +46,27 @@ export interface OrgTeamGroup {
 	description: (t: PortalTranslations) => string;
 }
 
+/**
+ * The two lanes that carry OWNER-LEVEL authority over an organisation.
+ *
+ * `guarantor` belongs here beside `owner`, and that is not obvious from the
+ * word: `agency.model.ts` defines it as "stands in for the owner, at owner
+ * level — including paying PRs". It is a peer of the owner, not a senior
+ * director, so a screen that lists it as an ordinary lane understates what
+ * picking it hands over.
+ *
+ * ⚠️ A LABELLING aid, never a permission check. The server decides who may
+ * assign what (`canWriteMembers` + `guardMemberChange`), and by the owner's
+ * decision of 14 Sep 2026 an admin may still assign BOTH — deliberately, as a
+ * failsafe for an outlet or agency that has asked them to. Marking them keeps
+ * that a considered act rather than a casual pick from a menu. It must not grow
+ * into a second, quieter copy of the access rule: RBAC comes from the database.
+ */
+export const OWNER_LEVEL_SUB_ROLES: ReadonlySet<string> = new Set([
+	"owner",
+	"guarantor",
+]);
+
 /*
  * Titles come from `profile.role*` for BOTH organisations — the one list the
  * portal already uses, so a lane cannot be called "Finance Head" on one sheet
