@@ -20,6 +20,7 @@ import {
 	holdsAdminConsole,
 } from "@/lib/auth/enter-organisation";
 import { kickToLogin } from "@/lib/auth/guards";
+import { nextForPortal, portalOfPath } from "@/lib/auth/portal-of-path";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
 import { hardNavigate } from "@/lib/hard-navigate";
@@ -167,13 +168,49 @@ function ChooseOrganisationBody() {
 			 * never a member and has no standing to be told about.
 			 */
 			if (enterable.length === 0 && orgs.length === 0) {
-				hardNavigate(next ?? defaultLandingPath(profile));
+				/*
+				 * The deep link is honoured only where it leads somewhere this
+				 * landing actually opens — same rule as `enterOrganisation`, and
+				 * for the same reason: a `next` into a portal this account is not
+				 * entering is a refusal it cannot escape.
+				 */
+				const landing = defaultLandingPath(profile);
+				const home = portalOfPath(landing);
+				hardNavigate((home && nextForPortal(next, home)) || landing);
 				return;
 			}
 			setPhase({ kind: "ready", profile });
 		},
 		[next],
 	);
+
+	/**
+	 * TAKE THE DESTINATION OUT OF THE ADDRESS BAR, and leave the choice alone.
+	 *
+	 * Owner, 14 Sep 2026: *"clear is clear the url back for user to enter the
+	 * orgs they want"*. The `next` that carried them here stayed in the query
+	 * string for as long as this screen was open, so the URL read
+	 * `/choose-organisation?next=/admin/...` — a destination already decided,
+	 * printed over a page whose whole job is to let them decide. Reloading or
+	 * coming back re-armed it, and it looked like the screen was stuck.
+	 *
+	 * This is COSMETIC AND DELIBERATELY SO: `replaceState` rewrites what is
+	 * displayed without touching the router's own search state, so the deep
+	 * link is still honoured for the portal it belongs to — see
+	 * `nextForPortal`. Nothing is signed out and nothing stored is cleared;
+	 * the only thing removed is the instruction sitting in the URL.
+	 */
+	useEffect(() => {
+		if (typeof window === "undefined" || !window.location.search) return;
+		const url = new URL(window.location.href);
+		if (!url.searchParams.has("next")) return;
+		url.searchParams.delete("next");
+		window.history.replaceState(
+			window.history.state,
+			"",
+			`${url.pathname}${url.search}${url.hash}`,
+		);
+	}, []);
 
 	useEffect(() => {
 		let live = true;
@@ -273,7 +310,22 @@ function ChooseOrganisationBody() {
 							<li>
 								<button
 									type="button"
-									onClick={() => hardNavigate("/admin/dashboard")}
+									onClick={() =>
+										/*
+										 * ⚠️ THE CONSOLE HONOURS THE DEEP LINK TOO.
+										 *
+										 * This was hardcoded to the dashboard, so the ONE
+										 * pick an `/admin` link is valid for was the one
+										 * that discarded it: somebody who opened
+										 * `/admin/user-management/legacy-member` signed
+										 * in, chose the console, and landed on the
+										 * dashboard with no trace of where they had been
+										 * heading.
+										 */
+										hardNavigate(
+											nextForPortal(next, "admin") ?? "/admin/dashboard",
+										)
+									}
 									className="flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-royal-gold/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 								>
 									<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-muted">
