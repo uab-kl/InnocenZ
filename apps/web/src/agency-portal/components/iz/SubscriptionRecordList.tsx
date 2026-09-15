@@ -270,6 +270,11 @@ export function PaymentHistoryList({
 												})}
 									</button>
 								</div>
+								{/* Says what the next page offers, so "FPX or e-wallet" is
+								    not a riddle: the payer picks the bank or wallet there. */}
+								<p className="iz-tiny iz-muted2 mt-2">
+									{t.subscription.payWaysNote}
+								</p>
 								{payMessage && (
 									<p className="iz-tiny mt-2 text-amber-300">{payMessage}</p>
 								)}

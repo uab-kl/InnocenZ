@@ -74,7 +74,55 @@ export interface PaymentGateway {
    * invoices' attempt rows, which is how one webhook later settles them all.
    */
   createCheckout(input: CheckoutInput): Promise<CheckoutResult>;
+
+  /**
+   * CHARGE A SAVED CARD OR LINKED E-WALLET for one bill, with nobody present —
+   * the automatic road (owner, 15 Sep 2026).
+   *
+   * Optional, because a provider can be connected for manual checkout before
+   * its recurring product is enabled; the auto-charge job skips a gateway that
+   * does not implement it. For Fiuu this is the Recurring API (record type `T`
+   * for a card token, `G` for Touch 'n Go).
+   *
+   * SEND `orderId` AS THE PROVIDER'S ORDER ID. The job has already written it on
+   * the claim row, so `parseWebhook` MUST return that same string as
+   * `gatewayPaymentId` for an automatic charge — and can name the invoice with
+   * `invoiceIdFromAutoChargeOrderId(orderId)`, no database needed. The provider's
+   * own transaction id goes in `reference`.
+   *
+   * The result is often NOT final: Fiuu answers token charges asynchronously, so
+   * `pending` is normal and the outcome arrives through `parseWebhook`. Return
+   * `failed` only for a refusal the provider gives immediately (invalid token,
+   * insufficient balance). THROW when the provider could not be reached or timed
+   * out — the job keeps the charge PENDING, because money may have moved.
+   *
+   * As with checkout, the amount is the invoice's own figure — never computed
+   * here.
+   */
+  chargeSavedMethod?(input: ChargeInput): Promise<ChargeResult>;
 }
+
+export type ChargeInput = {
+  /** Our order id for this charge (`AC` + invoice uuid hex) — echoed back by the webhook. */
+  orderId: string;
+  invoice: { id: string; invoiceNo: string; amount: string; currency: string };
+  method: {
+    type: PaymentMethodType;
+    /** `payment_method.gateway_token` — the credential the provider charges. */
+    token: string;
+    /** Which wallet, for an e-wallet (e.g. `TNG`). */
+    walletProvider: string | null;
+  };
+  payer: { name: string; email: string | null };
+};
+
+export type ChargeResult = {
+  outcome: 'pending' | 'succeeded' | 'failed';
+  /** The provider's reason for a failure, e.g. "Insufficient balance". */
+  failureReason?: string | null;
+  /** The provider's own transaction id (Fiuu `tranID`). */
+  reference?: string | null;
+};
 
 export type CheckoutInput = {
   /** Our own reference for the session — echoed back by the webhook. */

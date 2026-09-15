@@ -1010,7 +1010,9 @@ function AgencySubscription() {
 							const result = await sub.saveCard(input);
 							toast(
 								result.ok
-									? t.subscription.cardSaved
+									? input.type === "ewallet"
+										? t.subscription.walletSaved
+										: t.subscription.cardSaved
 									: (result.reason ?? t.subscription.couldNotSaveCard),
 								result.ok ? "success" : "warn",
 							);
@@ -1035,9 +1037,14 @@ function AgencySubscription() {
 						<Calendar className="h-3.5 w-3.5" />
 						{sub.backed
 							? realRenewalLabel
-								? fill(t.subscription.nextWeeklyCharge, {
-										date: realRenewalLabel,
-									})
+								? // A charge date only when something will be charged; with
+									// nothing saved it is the date the next bill opens.
+									fill(
+										sub.card && willAutoCharge(sub.card)
+											? t.subscription.nextWeeklyCharge
+											: t.subscription.nextBillOpens,
+										{ date: realRenewalLabel },
+									)
 								: t.subscription.nothingToCharge
 							: fill(t.subscription.nextWeeklyCharge, { date: renewalDate })}
 					</div>

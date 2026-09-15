@@ -57,11 +57,35 @@ function controllerFields(parsed: ReturnType<typeof UpsertPaymentMethodSchema.pa
     expYear: isCard ? (parsed.expYear ?? null) : null,
     holderName: parsed.holderName ?? null,
     billingEmail: parsed.billingEmail ?? null,
-    mandateStatus: type === 'fpx_mandate' ? ('pending' as const) : null,
-    mandateReference: type === 'fpx_mandate' ? (parsed.mandateReference ?? null) : null,
-    bankCode: type === 'fpx_mandate' ? (parsed.bankCode ?? null) : null,
-    bankName: type === 'fpx_mandate' ? (fpxBankByCode(parsed.bankCode)?.name ?? null) : null,
-    autoPay: type === 'card' || type === 'fpx_mandate' ? (parsed.autoPay ?? true) : false,
+    mandateStatus: null,
+    mandateReference: null,
+    bankCode: null,
+    bankName: null,
+    walletProvider: type === 'ewallet' ? (parsed.walletProvider ?? null) : null,
+    autoPay: parsed.autoPay ?? true,
+  };
+}
+
+/**
+ * A mandate as one saved before 15 Sep 2026 looks — written straight through the
+ * repository, because the save schema no longer admits the rail. The CHECKs and
+ * `isChargeable` still have to hold for such a row.
+ */
+function legacyMandateFields() {
+  return {
+    type: 'fpx_mandate' as const,
+    brand: 'Card',
+    last4: null,
+    expMonth: null,
+    expYear: null,
+    holderName: 'Probe Venue Sdn Bhd',
+    billingEmail: 'probe@example.test',
+    mandateStatus: 'pending' as const,
+    mandateReference: null,
+    bankCode: 'MB2U0227',
+    bankName: fpxBankByCode('MB2U0227')?.name ?? null,
+    walletProvider: null,
+    autoPay: true,
   };
 }
 
@@ -83,47 +107,72 @@ async function main() {
 
   // ── 1 · the edge ──────────────────────────────────────────────────────────
   console.log('1. Schema — what the browser is allowed to send');
-  const noBank = UpsertPaymentMethodSchema.safeParse({ type: 'fpx_mandate' });
-  check('mandate with no bank is refused', !noBank.success);
-  const badBank = UpsertPaymentMethodSchema.safeParse({ type: 'fpx_mandate', bankCode: 'NOTABANK' });
-  check('mandate at an off-roster bank is refused', !badBank.success);
-  const liar = UpsertPaymentMethodSchema.safeParse({
-    type: 'fpx_mandate',
-    bankCode: 'MB2U0227',
+  const mandateSave = UpsertPaymentMethodSchema.safeParse({ type: 'fpx_mandate', bankCode: 'MB2U0227' });
+  check('bank direct debit can no longer be SAVED (15 Sep 2026)', !mandateSave.success);
+  const grab = UpsertPaymentMethodSchema.safeParse({ type: 'ewallet', walletProvider: 'GRABPAY' });
+  check('a wallet the gateway cannot debit is refused', !grab.success);
+  const noWallet = UpsertPaymentMethodSchema.safeParse({ type: 'ewallet' });
+  check('a wallet save that names no wallet is refused', !noWallet.success);
+  const tng = UpsertPaymentMethodSchema.safeParse({
+    type: 'ewallet',
+    walletProvider: 'TNG',
     mandateStatus: 'active',
+    bankCode: 'MB2U0227',
   });
-  check('schema parses a client-claimed active mandate', liar.success);
+  check("Touch 'n Go eWallet is accepted", tng.success);
 
   // ── 2 · the controller ────────────────────────────────────────────────────
   console.log('\n2. Controller — what it does with it');
-  const fields = controllerFields(
+  const walletFields = controllerFields(
     UpsertPaymentMethodSchema.parse({
-      type: 'fpx_mandate',
-      bankCode: 'MB2U0227',
-      mandateStatus: 'active', // the lie from above
-      holderName: 'Probe Venue Sdn Bhd',
+      type: 'ewallet',
+      walletProvider: 'TNG',
+      mandateStatus: 'active', // ignored: no save writes a mandate
+      bankCode: 'MB2U0227', // ignored: no save writes a bank
       billingEmail: 'probe@example.test',
     }),
   );
+  check('the wallet is recorded as TNG', walletFields.walletProvider === 'TNG', walletFields.walletProvider);
+  check('a saved wallet means auto-debit', walletFields.autoPay === true);
   check(
-    'a client-claimed ACTIVE mandate is forced to pending',
-    fields.mandateStatus === 'pending',
-    fields.mandateStatus,
+    'no mandate or bank leaks onto a wallet',
+    walletFields.mandateStatus === null && walletFields.bankCode === null,
   );
-  check('bank name is resolved server-side, not trusted', fields.bankName === 'Maybank2u', fields.bankName);
-  check('no card fields leak onto a mandate', fields.last4 === null && fields.expMonth === null);
+  check('no card fields leak onto a wallet', walletFields.last4 === null && walletFields.expMonth === null);
 
   // ── 3 · the write ─────────────────────────────────────────────────────────
   console.log('\n3. Repository + database — does it land');
+  const wallet = await repo.create({
+    outletId: outlet.id,
+    ...walletFields,
+    isDefault: false,
+    status: 'active',
+    createdBy: ACTOR,
+    updatedBy: ACTOR,
+  });
+  check('wallet row is written (payment_method_wallet_provider accepts it)', Boolean(wallet));
+  if (wallet) {
+    created.push(wallet.id);
+    check('wallet_provider stored', wallet.walletProvider === 'TNG', wallet.walletProvider);
+    check('a TNG wallet with no gateway token is NOT chargeable', isChargeable(wallet) === false);
+    check(
+      'a TNG wallet WITH a gateway token is chargeable',
+      isChargeable({ ...wallet, gatewayToken: 'probe-token' }) === true,
+    );
+    check(
+      'a GrabPay wallet is never chargeable, token or not',
+      isChargeable({ ...wallet, walletProvider: 'GRABPAY', gatewayToken: 'probe-token' }) === false,
+    );
+  }
   const mandate = await repo.create({
     outletId: outlet.id,
-    ...fields,
+    ...legacyMandateFields(),
     isDefault: true,
     status: 'active',
     createdBy: ACTOR,
     updatedBy: ACTOR,
   });
-  check('mandate row is written', Boolean(mandate));
+  check('a pre-15-Sep mandate row is still written', Boolean(mandate));
   if (!mandate) throw new Error('mandate insert returned null — cannot continue');
   created.push(mandate.id);
   check('bank_code stored', mandate.bankCode === 'MB2U0227', mandate.bankCode);

@@ -1756,7 +1756,7 @@ const en = {
 		 * rather than nagging for a card.
 		 */
 		noMethodPaysByFpx:
-			"{billed} · no auto-debit — pay each period by FPX from Payment history",
+			"{billed} · no auto-debit — pay each period by FPX or e-wallet from Payment history",
 		autoPayEnabled: "{billed} · auto-pay enabled",
 		visaNextCharge: "Visa ···· {last4} · next charge {date}",
 
@@ -1770,7 +1770,7 @@ const en = {
 		methodFpx: "Bank direct debit",
 		methodTransfer: "Bank transfer",
 		methodCardNote:
-			"Visa, Mastercard and others. Charged automatically once a payment gateway is connected. A declined charge leaves that period to pay by FPX.",
+			"A Visa or Mastercard, debit or credit, from any bank. Each period is charged automatically. A declined charge leaves that period to pay by FPX or e-wallet.",
 		methodFpxNote:
 			"Authorise once at your bank and each period is taken automatically. A bounced debit leaves that period to pay by FPX.",
 		methodTransferNote:
@@ -1792,7 +1792,27 @@ const en = {
 		 * promise neither this app nor Touch 'n Go can keep.
 		 */
 		methodEwalletNote:
-			"Touch 'n Go, GrabPay, ShopeePay or Boost. You approve each payment in your wallet app — nothing is automatic.",
+			"Link your e-wallet once and each period is taken automatically. A failed charge leaves that period to pay by FPX or e-wallet.",
+		/** Card tab on the AUTOMATIC picker — the payer's own card decides debit or credit. */
+		methodCardAuto: "Debit / credit card",
+		/** Footer when nothing will be charged: a date for the bill, not a charge. */
+		nextBillOpens: "Next bill opens {date} — pay it from Payment history",
+		/**
+		 * AUTOMATIC PAYMENT — what the payer actually does, one line per tab
+		 * (owner, 15 Sep 2026). Nothing is typed into InnocenZ.
+		 */
+		setupAutoPay: "Set up automatic payment",
+		autoCardHow:
+			"Enter your card on the payment gateway's secure page and confirm with your bank's OTP. Your first bill is paid and every next bill is charged to that card.",
+		autoWalletHow:
+			"Approve automatic payments in your Touch 'n Go eWallet app. Every next bill is charged to that wallet.",
+		addCardSecure: "Add card",
+		linkWallet: "Link Touch 'n Go eWallet",
+		autoNotConnected:
+			"Opens once the payment gateway is connected. Until then, pay each bill by FPX or e-wallet from Payment history.",
+		needMobile:
+			"Add your mobile number to your profile first — the payment page needs a real one.",
+		walletSaved: "Touch 'n Go eWallet saved for automatic payment",
 		yourWallet: "Your e-wallet",
 		chooseWalletPlaceholder: "Choose your e-wallet…",
 		chooseWallet: "Choose the e-wallet you will pay from.",
@@ -1807,13 +1827,14 @@ const en = {
 		savedFpx: "Bank direct debit",
 		/** Optional-ness, said before the picker; and the way back to "none". */
 		methodOptional:
-			"Optional. Save a card or direct debit and each period is taken automatically. With nothing saved — or after a failed debit — pay by FPX from Payment history.",
+			"Optional. Save a card or Touch 'n Go eWallet and each period is taken automatically. With nothing saved — or after a failed charge — pay by FPX or e-wallet from Payment history.",
 		removePaymentMethod: "Remove payment method",
 		removeMethodNote:
-			"Removing it turns auto-debit off — you will pay each period by FPX from Payment history instead.",
+			"Removing it turns auto-debit off — you will pay each period by FPX or e-wallet from Payment history instead.",
 		confirmRemoveMethod: "Yes, remove it",
 		removingMethod: "Removing…",
-		methodRemoved: "Payment method removed — you now pay each period by FPX",
+		methodRemoved:
+			"Payment method removed — you now pay each period by FPX or e-wallet",
 		couldNotRemoveMethod: "Could not remove the payment method — try again",
 
 		/**
@@ -1825,9 +1846,12 @@ const en = {
 		 */
 		methodFpxLink: "FPX (online banking)",
 		/** Tick-to-pay on the payer's history, and the receipt behind a paid period. */
-		selectToPay: "Tick the periods to pay by FPX",
-		paySelected: "Pay {amount} by FPX",
+		selectToPay: "Tick the periods to pay by FPX or e-wallet",
+		paySelected: "Pay {amount} by FPX or e-wallet",
 		paySelectedCount: "{n} selected",
+		/** Under the pay bar: what the next page offers. */
+		payWaysNote:
+			"On the next page, choose online banking (FPX) from a personal or company account, or an e-wallet — Touch 'n Go, GrabPay, ShopeePay or Boost.",
 		payOpening: "Opening payment…",
 		payNotConnected:
 			"Online payment is not connected yet — InnocenZ will mark this period paid once your transfer arrives.",
@@ -8245,7 +8269,7 @@ const zh: PortalTranslations = {
 		saveCard: "保存银行卡",
 		cardExpires: "{billed} · 有效期至 {mm}/{yy}",
 		noMethodPaysByFpx:
-			"{billed} · 未开启自动扣款 —— 请在付款记录中以 FPX 支付每个账期",
+			"{billed} · 未开启自动扣款 —— 请在付款记录中以 FPX 或电子钱包支付每个账期",
 		autoPayEnabled: "{billed} · 已开启自动扣款",
 		visaNextCharge: "Visa ···· {last4} · 下次扣费 {date}",
 
@@ -8254,7 +8278,7 @@ const zh: PortalTranslations = {
 		methodFpx: "银行直接扣账",
 		methodTransfer: "银行转账",
 		methodCardNote:
-			"Visa、Mastercard 等。接入支付网关后自动扣款。扣款被拒时，该账期需以 FPX 支付。",
+			"任何银行的 Visa 或 Mastercard 借记卡、信用卡。每个账期自动扣款。扣款被拒时，该账期需以 FPX 或电子钱包支付。",
 		methodFpxNote:
 			"在银行一次性授权后，每个账期自动扣款。扣款失败时，该账期需以 FPX 支付。",
 		methodTransferNote:
@@ -8264,7 +8288,20 @@ const zh: PortalTranslations = {
 		periodsCount: "{n} 个周期",
 		methodEwallet: "电子钱包",
 		methodEwalletNote:
-			"Touch 'n Go、GrabPay、ShopeePay 或 Boost。每笔付款需在钱包应用中确认，不会自动扣款。",
+			"电子钱包一次绑定后，每个账期自动扣款。扣款失败时，该账期需以 FPX 或电子钱包支付。",
+		methodCardAuto: "借记卡 / 信用卡",
+		nextBillOpens: "下期账单 {date} 开出 —— 请在付款记录中付款",
+		setupAutoPay: "设置自动扣款",
+		autoCardHow:
+			"在支付网关的安全页面输入银行卡，并以银行 OTP 确认。首期账单即完成付款，之后每期账单自动从该卡扣款。",
+		autoWalletHow:
+			"在 Touch 'n Go 电子钱包应用中批准自动付款。之后每期账单自动从该钱包扣款。",
+		addCardSecure: "添加银行卡",
+		linkWallet: "绑定 Touch 'n Go 电子钱包",
+		autoNotConnected:
+			"支付网关接入后即可使用。在此之前，请在付款记录中以 FPX 或电子钱包支付每期账单。",
+		needMobile: "请先在个人资料中填写手机号码 —— 付款页面需要真实号码。",
+		walletSaved: "Touch 'n Go 电子钱包已保存，用于自动扣款",
 		yourWallet: "您的电子钱包",
 		chooseWalletPlaceholder: "请选择电子钱包…",
 		chooseWallet: "请选择您将用于付款的电子钱包。",
@@ -8277,19 +8314,21 @@ const zh: PortalTranslations = {
 		savedTransfer: "银行转账",
 		savedFpx: "银行直接扣账",
 		methodOptional:
-			"选填。保存银行卡或直接扣账后，每个账期自动扣款。未保存或扣款失败时，请在付款记录中以 FPX 支付。",
+			"选填。保存银行卡或 Touch 'n Go 电子钱包后，每个账期自动扣款。未保存或扣款失败时，请在付款记录中以 FPX 或电子钱包支付。",
 		removePaymentMethod: "移除付款方式",
 		removeMethodNote:
-			"移除后将关闭自动扣款 —— 之后每个账期需在付款记录中以 FPX 支付。",
+			"移除后将关闭自动扣款 —— 之后每个账期需在付款记录中以 FPX 或电子钱包支付。",
 		confirmRemoveMethod: "是，移除",
 		removingMethod: "正在移除…",
-		methodRemoved: "付款方式已移除 —— 之后每个账期以 FPX 支付",
+		methodRemoved: "付款方式已移除 —— 之后每个账期以 FPX 或电子钱包支付",
 		couldNotRemoveMethod: "无法移除付款方式 —— 请重试",
 
 		methodFpxLink: "FPX（网上银行）",
-		selectToPay: "勾选要以 FPX 付款的账期",
-		paySelected: "以 FPX 付款 {amount}",
+		selectToPay: "勾选要以 FPX 或电子钱包付款的账期",
+		paySelected: "以 FPX 或电子钱包付款 {amount}",
 		paySelectedCount: "已选 {n} 项",
+		payWaysNote:
+			"在下一页选择个人或公司账户的网上银行（FPX），或电子钱包 —— Touch 'n Go、GrabPay、ShopeePay 或 Boost。",
 		payOpening: "正在打开付款页面…",
 		payNotConnected:
 			"在线付款尚未接入 — 收到您的转账后，InnocenZ 会将此账期标记为已付款。",

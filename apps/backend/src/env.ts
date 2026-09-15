@@ -90,6 +90,14 @@ export const env = createEnv({
      * use, deliberately — see payout-provider.ts. Register and sandbox-test an
      * adapter before setting these anywhere.
      */
+    /**
+     * AUTOMATIC SUBSCRIPTION CHARGES (auto-charge.job.ts). UNSET = off.
+     *
+     * Every backend process starts every job, and developers' backends share the
+     * innocenz-test database — so charging a saved card must be switched on in
+     * exactly ONE process (production's), never by merely registering a gateway.
+     */
+    AUTO_CHARGE_ENABLED: z.enum(['true', 'false']).optional(),
     PAYOUT_PROVIDER: z.string().min(1).optional(),
     PAYOUT_API_KEY: z.string().min(1).optional(),
     PAYOUT_API_SECRET: z.string().min(1).optional(),

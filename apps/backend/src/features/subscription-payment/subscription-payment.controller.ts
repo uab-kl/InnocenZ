@@ -15,6 +15,7 @@ import { toPublicPaymentMethod } from '@/features/payment-method/payment-method.
 import { env } from '@/env.js';
 import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { getGateway, listGateways } from './payment-gateway.js';
+import { AUTO_CHARGE_ACTOR, autoChargeInFlight, notifyAutoChargeFailed } from './auto-charge.js';
 
 /**
  * Base URL clients join with stored R2 object keys to build image URLs. Null
@@ -274,6 +275,16 @@ export class SubscriptionPaymentControllerClass {
             data: null,
           });
         }
+        // The card or wallet is already being charged for this bill; paying it by
+        // hand now is how an org pays twice. A claim stranded past two days no
+        // longer blocks, so a dead job can never lock the owner out.
+        if (autoChargeInFlight(await this.repository.listFor(invoice.id), new Date())) {
+          return res.status(409).json({
+            success: false,
+            message: `${invoice.invoiceNo} is being charged to your saved card or e-wallet — check back in a few minutes`,
+            data: null,
+          });
+        }
         invoices.push(invoice);
       }
       const currency = invoices[0].currency;
@@ -458,6 +469,39 @@ export class SubscriptionPaymentControllerClass {
           actor: `gateway:${gateway.name}`,
         });
         if (!result.ok && result.reason === 'error') break;
+
+        /**
+         * AN AUTOMATIC CHARGE THE GATEWAY DECLINED LATER — tell the owner.
+         *
+         * Fiuu answers a token charge asynchronously, so "insufficient balance"
+         * usually arrives here rather than to the job. Only a row the job claimed
+         * (`AUTO_CHARGE_ACTOR`) counts: a manual pay-now that failed happened with
+         * the payer on the page and needs no notice. `alreadyRecorded` guards the
+         * gateway's retries, so one decline is one notice.
+         */
+        if (
+          result.ok &&
+          !result.alreadyRecorded &&
+          event.outcome === 'failed' &&
+          result.payment.createdBy === AUTO_CHARGE_ACTOR
+        ) {
+          const failed = await this.invoiceRepository.getById(invoiceId);
+          if (failed) {
+            await notifyAutoChargeFailed({
+              subscriberType: failed.subscriberType,
+              subscriberId: failed.subscriberId,
+              subscriberName: failed.subscriberName,
+              invoiceId: failed.id,
+              invoiceNo: failed.invoiceNo,
+              amount: failed.amount,
+              currency: failed.currency,
+              periodStart: failed.periodStart,
+              periodEnd: failed.periodEnd,
+              methodType: result.payment.methodType,
+              reason: event.failureReason ?? null,
+            });
+          }
+        }
       }
 
       if (!result.ok) {

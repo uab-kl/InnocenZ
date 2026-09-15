@@ -41,7 +41,13 @@ export type AttemptInput = {
 };
 
 export type AttemptResult =
-  | { ok: true; payment: SubscriptionPayment; alreadyRecorded: boolean }
+  | {
+      ok: true;
+      payment: SubscriptionPayment;
+      alreadyRecorded: boolean;
+      /** Money arrived for a bill something else had already paid — a refund is owed. */
+      paidTwice?: boolean;
+    }
   | { ok: false; reason: 'invoice_not_found' | 'error' };
 
 /** Just enough of an organisation to head a panel with: who they are, and their mark. */
@@ -301,6 +307,31 @@ export class SubscriptionPaymentRepositoryClass {
             if (terminal || prior.status === outcome) {
               return { row: prior, alreadyRecorded: true };
             }
+            /*
+             * PAID TWICE. This payment was still pending when something else —
+             * a manual FPX checkout, an automatic charge, an admin's Mark paid —
+             * settled the bill. Moving the row to `succeeded` would break the
+             * one-settlement-per-bill index, the transaction would throw, the
+             * webhook would answer 500, and the gateway would retry it forever
+             * while the org's money sat unrecorded. Record the fact on the row
+             * instead, answer the gateway, and say it loudly: a refund is owed.
+             */
+            if (settles && invoice.status === 'paid') {
+              const [flagged] = await tx
+                .update(SubscriptionPaymentTable)
+                .set({
+                  reference: input.reference ?? prior.reference,
+                  failureReason: `PAID TWICE — money taken but ${invoice.invoiceNo} was already paid; refund due`,
+                  updatedAt: new Date(),
+                  updatedBy: input.actor,
+                })
+                .where(eq(SubscriptionPaymentTable.id, prior.id))
+                .returning();
+              logger.error(
+                `[SubscriptionPaymentRepository.recordAttempt] PAID TWICE: ${input.gateway} ${input.gatewayPaymentId} succeeded on ${invoice.invoiceNo}, which was already paid — refund due`,
+              );
+              return { row: flagged ?? prior, alreadyRecorded: true, paidTwice: true };
+            }
             const [moved] = await tx
               .update(SubscriptionPaymentTable)
               .set({
@@ -342,7 +373,18 @@ export class SubscriptionPaymentRepositoryClass {
           // A paid invoice with nothing behind it predates this table; let the
           // write through so the period finally gains the record of how it was
           // paid. Nothing is double-counted, because there is nothing to double.
-          if (prior) return { row: prior, alreadyRecorded: true };
+          if (prior) {
+            // A DIFFERENT gateway payment succeeding on a paid bill is money
+            // taken twice, not a retry — it cannot be a second settled row, but
+            // it must not pass in silence either.
+            const paidTwice = Boolean(input.gatewayPaymentId && input.gatewayPaymentId !== prior.gatewayPaymentId);
+            if (paidTwice) {
+              logger.error(
+                `[SubscriptionPaymentRepository.recordAttempt] PAID TWICE: ${input.gateway} ${input.gatewayPaymentId} succeeded on ${invoice.invoiceNo}, already settled by ${prior.id} — refund due`,
+              );
+            }
+            return { row: prior, alreadyRecorded: true, paidTwice };
+          }
         }
 
         const [row] = await tx
@@ -377,7 +419,12 @@ export class SubscriptionPaymentRepositoryClass {
       });
 
       if (!settled) return { ok: false, reason: 'invoice_not_found' };
-      return { ok: true, payment: settled.row, alreadyRecorded: settled.alreadyRecorded };
+      return {
+        ok: true,
+        payment: settled.row,
+        alreadyRecorded: settled.alreadyRecorded,
+        paidTwice: 'paidTwice' in settled ? settled.paidTwice : false,
+      };
     } catch (error) {
       logger.error('[SubscriptionPaymentRepository.recordAttempt] Error:', error);
       return { ok: false, reason: 'error' };

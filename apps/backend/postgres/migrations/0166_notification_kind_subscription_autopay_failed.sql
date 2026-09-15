@@ -1,0 +1,24 @@
+-- An automatic subscription charge failed (owner, 15 Sep 2026: "once make
+-- payment with the payment method will auto charge next time untill if
+-- insufficient balance need notify").
+--
+-- The auto-charge job charges each newly opened bill once to the org's saved
+-- card or linked e-wallet. When that charge is declined — insufficient balance,
+-- an expired card, a revoked wallet link — the bill stays unpaid and the org
+-- must pay it by hand from Payment history. Nothing would tell them: the bill
+-- was already announced by `subscription_invoice_opened`, and an org that saved
+-- a card reasonably assumes it is covered. This is that telling.
+--
+-- Deliberately its own kind rather than reuse:
+--   * `subscription_invoice_opened` (0137) says a charge now EXISTS. This says an
+--     attempt to COLLECT it failed and what to do instead — a different fact,
+--     raised at a different moment, and one the reader must act on.
+--
+-- Addressed to owner + finance, one per failed invoice (a failed charge is rare
+-- and each one is a specific amount the org must now pay by hand). Carries
+-- `{ invoiceId, invoiceNo, amount, currency, periodStart, periodEnd, methodType,
+-- reason }`; the org's Subscription page is the destination.
+--
+-- Additive and idempotent; ALTER TYPE ... ADD VALUE cannot be rolled back inside
+-- a transaction, so a re-run must be a no-op.
+ALTER TYPE "main"."notification_kind" ADD VALUE IF NOT EXISTS 'subscription_autopay_failed';
