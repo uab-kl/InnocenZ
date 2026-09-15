@@ -46,6 +46,8 @@ const KIND_MAP: Record<NotificationKind, OpsNotificationKind> = {
 	leave_requested: "leave_requested",
 	leave_decided: "leave_decided",
 	subscription_tier_weekly: "subscription_tier_weekly",
+	// Same "Subscription" chip: the row's title carries "Automatic payment failed".
+	subscription_autopay_failed: "subscription_tier_weekly",
 };
 
 /**
@@ -102,12 +104,18 @@ function hrefFor(
 			// Payroll would be the wrong landing even though the count comes from
 			// vouchers: the subject is the price, not any one PR's wages.
 			case "subscription_tier_weekly":
+			// The body says "pay it by FPX or e-wallet from Subscription, Payment
+			// history" — the unpaid bill is there.
+			case "subscription_autopay_failed":
 				return "/agency/subscription";
 			default:
 				return undefined;
 		}
 	}
 	if (audience === "outlet") {
+		// Owner and Finance are the only recipients, and both hold settings:read,
+		// which is what `/outlet/subscription` asks for — so this door opens.
+		if (record.kind === "subscription_autopay_failed") return "/outlet/subscription";
 		return record.kind === "shift_assigned" || record.kind === "shift_cancelled"
 			? "/outlet"
 			: undefined;

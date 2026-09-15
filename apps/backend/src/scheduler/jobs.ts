@@ -4,6 +4,7 @@ import { SUBSCRIPTION_INVOICE_JOB } from './subscription-invoice.job.js';
 import { AGENCY_TIER_JOB } from './agency-tier.job.js';
 import { NO_SHOW_SWEEP_JOB } from './no-show-sweep.job.js';
 import { PENALTY_SEAL_JOB } from './penalty-seal.job.js';
+import { AUTO_CHARGE_JOB } from './auto-charge.job.js';
 
 /**
  * Every background job in the system, in one list.
@@ -30,4 +31,9 @@ export function registerJobs(): void {
   // night: it counts COMPLETED shifts, and an overnight shift is not one until
   // its check-out lands. Records breaches as owed; billing stays a human press.
   scheduler.register(PENALTY_SEAL_JOB);
+  // Daily 04:00, after the 03:00 invoice job and Sunday's 03:30 tier job:
+  // charges each newly opened bill to a saved card or linked e-wallet, and
+  // tells owner + finance when a charge fails. Does nothing until a gateway
+  // that implements `chargeSavedMethod` is registered.
+  scheduler.register(AUTO_CHARGE_JOB);
 }

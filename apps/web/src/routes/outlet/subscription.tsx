@@ -36,7 +36,10 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { countBillingWindows } from "@agency-portal/lib/subscription-due";
 import { periodLabel } from "@agency-portal/lib/subscription-record";
-import { useOutletCan, useOutletIsOwner} from "@agency-portal/lib/use-portal-can";
+import {
+	useOutletCan,
+	useOutletIsOwner,
+} from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -1183,7 +1186,9 @@ function OutletSubscriptionPage() {
 							const result = await backend.saveCard(input);
 							toast(
 								result.ok
-									? t.outletSubscription.cardSaved
+									? input.type === "ewallet"
+										? t.subscription.walletSaved
+										: t.outletSubscription.cardSaved
 									: (result.reason ?? t.outletSubscription.couldNotSaveCard),
 								result.ok ? "success" : "warn",
 							);

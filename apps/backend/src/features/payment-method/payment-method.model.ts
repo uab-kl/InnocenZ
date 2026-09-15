@@ -111,18 +111,34 @@ export const paymentMethodTypeValues = [
 ] as const;
 export type PaymentMethodType = (typeof paymentMethodTypeValues)[number];
 
-/** Rails a scheduled charge could ever run on unattended. */
-export const autoChargeableTypes: readonly PaymentMethodType[] = ['card', 'fpx_mandate'];
+/**
+ * Rails a scheduled charge could ever run on unattended.
+ *
+ * `ewallet` is here since 15 Sep 2026, but only for the wallets in
+ * `autoDebitWalletProviders` — `isChargeable` checks the provider too. The
+ * chosen gateway (Fiuu) charges a linked Touch 'n Go wallet through the same
+ * Recurring API it charges a saved card with (RecordType `G - TNG` beside
+ * `T - Token`). `fpx_mandate` stays so a mandate saved before 15 Sep keeps
+ * describing its state truthfully; it can no longer be saved.
+ */
+export const autoChargeableTypes: readonly PaymentMethodType[] = ['card', 'ewallet', 'fpx_mandate'];
 
 /**
- * Rails a subscriber may SAVE (owner, 2 Sep 2026): a saved method is optional
- * and means auto-debit, so only the two auto-chargeable rails can be saved.
+ * Rails a subscriber may SAVE.
+ *
+ * Owner, 15 Sep 2026: "manual fpx and e wallet, auto debit with save card and
+ * the e wallet". A saved method is still optional and still means auto-debit
+ * (the 2 Sep rule); what changed is WHICH rails auto-debit — a saved card, or a
+ * linked Touch 'n Go eWallet — and Bank direct debit left the picker. Manual
+ * pay-now (FPX or any e-wallet, chosen on the gateway's own page) needs nothing
+ * saved.
+ *
  * The others stay in `paymentMethodTypeValues` because rows on them exist
  * (retired by 0148, still describable) and because `fpx` is how every manual
  * pay-now is recorded on the attempt ledger — a rail on an attempt, not an
  * instrument. The save schema is the door; this is the list it checks.
  */
-export const savablePaymentMethodTypes = ['card', 'fpx_mandate'] as const;
+export const savablePaymentMethodTypes = ['card', 'ewallet'] as const;
 
 /**
  * A direct debit mandate's life. `pending` is the state that matters: the row
@@ -194,11 +210,11 @@ export function fpxBankByCode(code: string | null | undefined) {
  * same reason `fpxBanks` is: two copies of a roster is how a client comes to
  * offer a provider that the save then rejects.
  *
- * ⚠️ EVERY ONE OF THESE IS A PUSH RAIL. The payer approves each payment inside
- * their own wallet app, so none can be debited unattended — which is why
- * `autoChargeableTypes` below excludes `ewallet`, and why the controller forces
- * `autoPay` false on it. Saving one records an INTENTION to pay, exactly like a
- * bank transfer, and never a standing authority to take money.
+ * ⚠️ PAID BY HAND, all four — on a manual pay-now the payer picks the wallet on
+ * the gateway's page and approves the payment in its own app. Only the wallets
+ * in `autoDebitWalletProviders` below can ALSO be saved as an auto-debit
+ * instrument, and only because the gateway charges them after the payer links
+ * the wallet once; the rest are never debited unattended.
  */
 export const ewalletProviders = [
   { code: 'TNG', name: "Touch 'n Go eWallet" },
@@ -208,6 +224,17 @@ export const ewalletProviders = [
 ] as const;
 
 export type EwalletProviderCode = (typeof ewalletProviders)[number]['code'];
+
+/**
+ * The wallets that may be SAVED for auto-debit (owner, 15 Sep 2026).
+ *
+ * Touch 'n Go only: it is the one wallet the chosen gateway lists for
+ * merchant-initiated recurring charges (Fiuu Recurring API v7.1.4, RecordType
+ * `G - TNG`). GrabPay, ShopeePay and Boost remain pay-by-hand wallets on the
+ * gateway's page. ⚠️ How the payer LINKS the wallet is not in Fiuu's public
+ * spec — confirm the linking flow with Fiuu before building the redirect.
+ */
+export const autoDebitWalletProviders: readonly EwalletProviderCode[] = ['TNG'];
 
 /** The wallet behind a code, or null when the roster no longer carries it. */
 export function ewalletProviderByCode(code: string | null | undefined) {
@@ -225,11 +252,20 @@ export function ewalletProviderByCode(code: string | null | undefined) {
  * row today — the app records, it does not charge.
  */
 export function isChargeable(
-  method: Pick<PaymentMethod, 'type' | 'status' | 'mandateStatus' | 'gatewayToken'>,
+  method: Pick<PaymentMethod, 'type' | 'status' | 'mandateStatus' | 'gatewayToken'> & {
+    walletProvider?: string | null;
+  },
 ): boolean {
   if (method.status !== 'active') return false;
   if (!autoChargeableTypes.includes(method.type)) return false;
   if (method.type === 'fpx_mandate' && method.mandateStatus !== 'active') return false;
+  // A wallet the gateway cannot pull from is never chargeable, token or not.
+  if (
+    method.type === 'ewallet' &&
+    !autoDebitWalletProviders.includes(method.walletProvider as EwalletProviderCode)
+  ) {
+    return false;
+  }
   return Boolean(method.gatewayToken);
 }
 

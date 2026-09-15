@@ -2,8 +2,8 @@ import { Request, Response } from 'express';
 import { PaymentMethodRepositoryClass, PaymentMethodOwner } from './payment-method.repository.js';
 import { UpsertPaymentMethodSchema } from '@/schema/payment-method.schema.js';
 import {
+  autoDebitWalletProviders,
   ewalletProviders,
-  fpxBankByCode,
   fpxBanks,
   toPublicPaymentMethod,
 } from './payment-method.model.js';
@@ -129,7 +129,16 @@ export class PaymentMethodControllerClass {
    * how the browser comes to offer a provider the save would then reject.
    */
   async wallets(_req: Request, res: Response) {
-    res.status(200).json({ success: true, message: 'OK', data: ewalletProviders });
+    // `autoDebit` says which wallets may be SAVED for automatic payment; the
+    // rest are offered as pay-by-hand, so the picker reads both from one list.
+    res.status(200).json({
+      success: true,
+      message: 'OK',
+      data: ewalletProviders.map((wallet) => ({
+        ...wallet,
+        autoDebit: autoDebitWalletProviders.includes(wallet.code),
+      })),
+    });
   }
 
   /** Every instrument the caller holds, default first. */
@@ -191,33 +200,27 @@ export class PaymentMethodControllerClass {
         holderName: parsed.data.holderName ?? null,
         billingEmail: parsed.data.billingEmail ?? null,
         /**
-         * A MANDATE STARTS PENDING AND THE CALLER CANNOT SAY OTHERWISE.
+         * NO MANDATE OR BANK IS WRITTEN BY A SAVE ANY MORE.
          *
-         * Only the payer's bank can approve a direct debit. Honouring an
-         * 'active' sent from a browser would mark an unapproved mandate ready
-         * to charge, which is the one mistake on this screen that moves money
-         * nobody authorised.
+         * Bank direct debit left the picker on 15 Sep 2026 (the savable rails
+         * are card and Touch 'n Go eWallet), so the schema refuses
+         * `fpx_mandate` and these columns stay null on every new row. A mandate
+         * saved before then keeps its own values: an update only ever matches a
+         * row on the SAME rail, below.
          */
-        mandateStatus: type === 'fpx_mandate' ? ('pending' as const) : null,
-        mandateReference: type === 'fpx_mandate' ? (parsed.data.mandateReference ?? null) : null,
+        mandateStatus: null,
+        mandateReference: null,
+        bankCode: null,
+        bankName: null,
         /**
-         * The bank to redirect the payer to. Its NAME is resolved from the
-         * shared roster rather than taken from the body — a client-supplied
-         * label could print "Maybank2u" beside a code pointing somewhere else.
-         * There is no account number here, and there must never be one.
+         * The wallet linked for auto-debit — Touch 'n Go, the one the schema
+         * admits. The payer LINKS it on the gateway's side; like a card, this
+         * row is recorded now and becomes chargeable only when the gateway
+         * returns a token into `gateway_token`.
          */
-        bankCode: type === 'fpx_mandate' ? (parsed.data.bankCode ?? null) : null,
-        bankName:
-          type === 'fpx_mandate' ? (fpxBankByCode(parsed.data.bankCode)?.name ?? null) : null,
-        // The e-wallet rail cannot be saved any more (0148 retired the rows;
-        // the schema refuses the type), so nothing is ever written here.
-        walletProvider: null,
-        // Meaningless on a rail that cannot be charged unattended — a bank
-        // transfer that claims auto-pay is a promise the app cannot keep, and an
-        // e-wallet is a PUSH rail: the payer approves each payment inside their
-        // own app, so nothing here can ever debit them without that tap.
-        autoPay:
-          type === 'card' || type === 'fpx_mandate' ? (parsed.data.autoPay ?? true) : false,
+        walletProvider: type === 'ewallet' ? (parsed.data.walletProvider ?? null) : null,
+        // Both savable rails auto-debit: that is what saving one means.
+        autoPay: parsed.data.autoPay ?? true,
       };
 
       // Matched on the RAIL, not merely on "the active row": that is what lets
@@ -241,6 +244,10 @@ export class PaymentMethodControllerClass {
        * existing row holds, and re-asks only when the venue has genuinely picked
        * a DIFFERENT bank — which is a new authorisation and must start pending.
        */
+      // Since 15 Sep 2026 `existing` can only be a card or Touch 'n Go row (it
+      // is matched on the savable rail), so the guard below never fires on a
+      // new save; it stays because it is what protects a mandate saved before
+      // then, should a mandate rail ever be offered again.
       const rebank = existing?.type === 'fpx_mandate' && fields.bankCode !== existing.bankCode;
       const updateFields =
         existing?.type === 'fpx_mandate' && !rebank
@@ -267,6 +274,24 @@ export class PaymentMethodControllerClass {
       if (!record) {
         return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
       }
+
+      /**
+       * WHAT THE OWNER JUST SAVED IS WHAT GETS CHARGED (15 Sep 2026).
+       *
+       * The Subscription page shows ONE method — the default — with no way to
+       * list or switch the others. So saving an e-wallet beside a saved card
+       * used to create a hidden, non-default row: the screen kept showing the
+       * card, the save looked like it had failed, and pressing Remove then
+       * silently promoted the hidden wallet. With Card and E-wallet as two tabs
+       * on that one screen, a save is a switch, and the saved row takes the
+       * default. The other row stays saved (not removed) and can be chosen
+       * again through the same save.
+       */
+      if (!record.isDefault) {
+        const promoted = await this.repository.setDefault(owner, record.id, actor);
+        if (promoted) record.isDefault = true;
+      }
+
       res.status(200).json({
         success: true,
         message: 'Payment method saved',

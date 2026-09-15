@@ -19,7 +19,9 @@ export type NotificationKind =
 	| "leave_requested"
 	| "leave_decided"
 	/** Agency-addressed weekly billing statement: PVs issued, and the resulting tier (0136). */
-	| "subscription_tier_weekly";
+	| "subscription_tier_weekly"
+	/** A saved card / Touch 'n Go charge for a bill was declined — pay it by hand (0166). */
+	| "subscription_autopay_failed";
 
 export interface NotificationRecord {
 	id: string;

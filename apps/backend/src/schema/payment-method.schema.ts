@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import {
+  autoDebitWalletProviders,
   cardBrandValues,
-  fpxBankByCode,
+  type EwalletProviderCode,
   mandateStatusValues,
   savablePaymentMethodTypes,
 } from '@/features/payment-method/payment-method.model.js';
@@ -27,10 +28,11 @@ import {
 export const UpsertPaymentMethodSchema = z
   .object({
     /**
-     * Only the two rails that auto-debit may be SAVED (owner, 2 Sep 2026). A
-     * wallet or one-off FPX row cannot pull money, so saving one would promise
-     * a renewal that never happens; the picker no longer offers them and this
-     * is what stops an older client, or a hand-made request, saving one anyway.
+     * Only the rails that auto-debit may be SAVED: a card, or a Touch 'n Go
+     * eWallet (owner, 15 Sep 2026 — was card / bank direct debit since 2 Sep).
+     * One-off FPX and the other wallets are paid by hand on the gateway's page,
+     * so saving one would promise a renewal that never happens; this is what
+     * stops an older client, or a hand-made request, saving one anyway.
      */
     type: z.enum(savablePaymentMethodTypes).default('card'),
     brand: z.enum(cardBrandValues).default('Card'),
@@ -60,10 +62,9 @@ export const UpsertPaymentMethodSchema = z
      */
     bankCode: z.string().trim().min(1).max(50).optional().nullable(),
     /**
-     * Accepted and IGNORED: the e-wallet rail cannot be saved any more (see
-     * `type`), and the controller writes null. Kept in the shape so a client
-     * still sending it gets a 200 on its card, not a 400 on a field it no
-     * longer needs.
+     * WHICH WALLET is linked for auto-debit — required for `ewallet`, and only
+     * a wallet the gateway can charge unattended (`autoDebitWalletProviders`,
+     * Touch 'n Go today). Ignored on a card.
      */
     walletProvider: z.string().trim().max(50).optional().nullable(),
     autoPay: z.boolean().optional(),
@@ -75,21 +76,15 @@ export const UpsertPaymentMethodSchema = z
     outletId: z.uuid().optional(),
   })
   .superRefine((value, ctx) => {
-    // Mirrors the `payment_method_mandate_bank` CHECK: a direct debit with no
-    // bank is a redirect with nowhere to send the payer. Validated against the
-    // shared roster so a code cannot be selectable in the UI and rejected here.
-    if (value.type === 'fpx_mandate') {
-      if (!value.bankCode) {
+    // Mirrors the `payment_method_wallet_provider` CHECK (a wallet row names its
+    // wallet), narrowed to the wallets the gateway can debit unattended — a
+    // saved GrabPay would read as auto-pay and never be charged.
+    if (value.type === 'ewallet') {
+      if (!autoDebitWalletProviders.includes(value.walletProvider as EwalletProviderCode)) {
         ctx.addIssue({
           code: 'custom',
-          path: ['bankCode'],
-          message: 'Choose the bank you will authorise the direct debit at',
-        });
-      } else if (!fpxBankByCode(value.bankCode)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['bankCode'],
-          message: 'That bank is not on the FPX roster',
+          path: ['walletProvider'],
+          message: "Only Touch 'n Go eWallet can be saved for automatic payment",
         });
       }
       return;

@@ -134,6 +134,20 @@ export const notificationKindValues = [
    * destination, so a reader must route it there.
    */
   'subscription_invoice_opened',
+  /**
+   * An AUTOMATIC charge of a bill to the org's saved card or linked e-wallet
+   * failed (migration 0166) — insufficient balance, an expired card, a revoked
+   * link. The bill stays unpaid and must be paid by hand.
+   *
+   * Owner + finance, ONE PER FAILED INVOICE: unlike a night's opened bills, a
+   * failed charge is a specific amount the org now has to act on, and it is
+   * rare. Never raised for a bill that is retried and succeeds, because the job
+   * does not retry — the next bill is charged afresh.
+   *
+   * Carries `{ invoiceId, invoiceNo, amount, currency, periodStart, periodEnd,
+   * methodType, reason }`. The org's Subscription page is the destination.
+   */
+  'subscription_autopay_failed',
 ] as const;
 export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKindEnum = MainSchema.enum('notification_kind', notificationKindValues);

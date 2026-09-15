@@ -1,62 +1,53 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
 import { useQuery } from "@tanstack/react-query";
-import { CreditCard } from "lucide-react";
+import { CreditCard, Wallet } from "lucide-react";
 import { useState } from "react";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import {
-	cardBrandFromNumber,
 	describePaymentMethod,
 	fetchEwalletProviders,
-	fetchFpxBanks,
-	isPlausibleCardNumber,
 	type PaymentMethod,
-	type PaymentMethodType,
 	type SavePaymentMethodInput,
 	willAutoCharge,
 } from "@/services/payment-method";
 
 /**
- * The dropdown list is painted by the OS, not by the page, so each option has to
- * carry its own colours — inheriting from the select is exactly what does NOT
- * happen on Windows Chrome. A literal hex rather than a CSS variable for the
- * same reason: the popup is outside the page's cascade in some engines.
- */
-const OPTION_STYLE = { background: "#17121f", color: "#ece7f5" } as const;
-
-/**
- * HOW an outlet or agency pays its subscription — real, saved and editable. One
- * component for both portals: they show the same record from the same side, and
- * a second copy is how one of them keeps a demo card.
+ * HOW an outlet or agency pays its subscription AUTOMATICALLY. One component for
+ * both portals: they show the same record from the same side.
  *
- * THE SECTION IS OPTIONAL, and saving something here means AUTO-DEBIT (owner's
- * rule, 2 Sep 2026). Two rails: Card, and Bank direct debit — the FPX mandate
- * the payer authorises once at their bank, after which every period is taken
- * without a tap. With nothing saved, or when a debit bounces on an empty
- * account, the period simply stays unpaid and the org pays it by one-off FPX
- * from tick-to-pay on Payment history. So "no method" is a normal state, not a
- * gap to nag about, and the header says what happens in that state.
+ * THE SECTION IS OPTIONAL (owner, 2 Sep 2026). With nothing set up — or when a
+ * charge fails — the period stays unpaid and the org pays it by FPX or e-wallet
+ * from tick-to-pay on Payment history, so "no method" is a normal state.
  *
- * The one-off FPX link rail and the e-wallet rail were withdrawn from the
- * picker the same day. Their types, columns and describers STAY: rows saved on
- * them exist and must keep reading as what they are, here and on the admin
- * panel. A venue on one of them opens the form onto the nearest offered rail
- * (FPX → direct debit, wallet → card) and re-saves, or removes it.
+ * WHAT THE PAYER ACTUALLY DOES (owner, 15 Sep 2026: "what does the user action
+ * to make can really auto charge money"). Two tabs, one button, nothing typed:
  *
- * The card fields appear ONLY for the card rail — an expiry box beside a bank
- * picker is how a form teaches people to ignore it.
+ *   • Debit / credit card — the payer is sent to the gateway's (Fiuu's) secure
+ *     page, enters the card THERE and confirms with the bank's OTP (3-D
+ *     Secure). The first bill is paid and the gateway returns a token; every
+ *     later bill is charged to that token. Fiuu Recurring API v7.1.4, record
+ *     type `T`.
+ *   • E-wallet — the payer approves automatic payments in the Touch 'n Go app.
+ *     Touch 'n Go is the only wallet Fiuu lists for merchant-initiated charges
+ *     (record type `G`); its linking flow is not in Fiuu's public docs yet.
+ *     GrabPay, ShopeePay and Boost cannot be charged automatically, so they are
+ *     offered only on Payment history's pay bar, never here.
  *
- * ⚠️ THE FULL NUMBER NEVER LEAVES THIS COMPONENT. The brand and the last four
- * are derived here and only those are sent; the number itself is dropped when
- * the form closes. Nothing else is possible without a payment gateway, and
- * pretending otherwise — storing a PAN to look complete — is how an app ends up
- * holding card data it has no right to. When a gateway is finally wired, the
- * number must move into ITS hosted field rather than this input: a PAN touching
- * our own DOM is the difference between PCI-DSS SAQ-A and SAQ-A-EP.
+ * NOTHING IS TYPED HERE: no card number, expiry, bank account number, DuitNow
+ * ID or wallet phone number. The card lives in the gateway's hosted field (PCI
+ * SAQ-A), and the only contact details the gateway needs — a REAL name, email
+ * and mobile (Fiuu v13.93: saved cards break on dummy bill_name/bill_email/
+ * bill_mobile) — come from the owner's own account, not a second copy here.
  *
- * So a method can be RECORDED but not CHARGED, and the note under the form says
- * exactly that rather than implying auto-pay is live.
+ * ⚠️ UNTIL A GATEWAY IS REGISTERED THE BUTTON STAYS OFF and says so. It used to
+ * be a form that "saved" a card's brand and last four, which could never be
+ * charged and made the section look done when it was not.
+ *
+ * Rows saved on retired rails (bank direct debit, one-off FPX, a card recorded
+ * by the old form) still read as what they are and can be removed.
  */
 export function PaymentMethodCard({
 	card,
@@ -64,10 +55,8 @@ export function PaymentMethodCard({
 	demoLast4,
 	canEdit,
 	isLoading,
-	isSaving,
 	isRemoving = false,
 	billedLabel,
-	onSave,
 	onRemove,
 }: {
 	card: PaymentMethod | null;
@@ -75,43 +64,33 @@ export function PaymentMethodCard({
 	demoLast4: string;
 	canEdit: boolean;
 	isLoading: boolean;
-	isSaving: boolean;
+	/** Accepted for the callers' shape; the form no longer saves by itself. */
+	isSaving?: boolean;
 	isRemoving?: boolean;
 	billedLabel: string;
-	onSave: (input: Omit<SavePaymentMethodInput, "outletId">) => Promise<boolean>;
 	/**
-	 * Retire the saved instrument — auto-debit off, FPX by hand from then on.
+	 * Kept for the gateway's return path, which will record the token-backed
+	 * instrument; the buttons here do not call it while no gateway is connected.
+	 */
+	onSave?: (
+		input: Omit<SavePaymentMethodInput, "outletId">,
+	) => Promise<boolean>;
+	/**
+	 * Retire the saved instrument — auto-debit off, pay by hand from then on.
 	 * Optional so a caller with no delete path simply shows no Remove button.
 	 */
 	onRemove?: () => Promise<boolean>;
 }) {
 	const { t } = usePortalLocale();
 	const { logout } = useAuth();
+	const { user } = useCurrentUser();
 	const [editing, setEditing] = useState(false);
 	const [confirmingRemove, setConfirmingRemove] = useState(false);
-	const [type, setType] = useState<PaymentMethodType>("card");
-	const [number, setNumber] = useState("");
-	const [holder, setHolder] = useState("");
-	const [expiry, setExpiry] = useState("");
-	const [email, setEmail] = useState("");
-	const [bankCode, setBankCode] = useState("");
-	const [error, setError] = useState<string | null>(null);
+	const [tab, setTab] = useState<"card" | "ewallet">("card");
 
 	/**
-	 * The bank roster, fetched only once the payer actually picks that rail —
-	 * a list of 18 banks is not worth loading for someone saving a card.
-	 */
-	const { data: banks = [] } = useQuery({
-		queryKey: ["fpx-banks"],
-		queryFn: () => fetchFpxBanks(logout),
-		enabled: editing && type === "fpx_mandate",
-		staleTime: 60 * 60 * 1000,
-	});
-
-	/**
-	 * The wallet roster — ONLY for a wallet that is already saved, because the
-	 * collapsed header prints its name and "E-wallet · TNG" is the code, not
-	 * the name the venue chose. Nothing offers the rail any more.
+	 * ONLY to print a saved wallet's name in the header ("E-wallet · TNG" is the
+	 * code, not the name the venue chose).
 	 */
 	const { data: wallets = [] } = useQuery({
 		queryKey: ["ewallet-providers"],
@@ -124,127 +103,35 @@ export function PaymentMethodCard({
 	);
 
 	/**
-	 * The two rails a subscriber may CHOOSE, both of which auto-debit.
-	 *
-	 * ⚠️ `manual_transfer` (28 Aug 2026), then `ewallet` and one-off `fpx`
-	 * (2 Sep 2026) were removed from this picker on the owner's call. THE TYPES
-	 * STAY, and removing them would break live things:
-	 *   • `subscription-payment.controller` stamps `fpx` on every manual pay-now
-	 *     and falls back to `manual_transfer` when a gateway names no rail;
-	 *   • rows saved on the withdrawn rails exist and the header, the admin
-	 *     panel and the receipts must keep describing them truthfully.
-	 * So those rails are no longer OFFERED; they are still how a payment that
-	 * happened is described.
-	 *
-	 * DuitNow also stays out: the enum carries it, nothing renders it, and a rail
-	 * with no roster behind it would be a picker that saves nothing useful.
+	 * No payment gateway is registered yet, so neither button can open a real
+	 * card page or wallet link. One flag, so the day the gateway lands this is
+	 * the line that changes.
 	 */
-	const methodChoices: {
-		value: PaymentMethodType;
+	const gatewayConnected = false;
+	// The gateway page needs a real mobile number; say so before the payer
+	// presses, rather than after the page refuses.
+	const missingMobile = !user?.contactNo?.trim();
+
+	const tabs: {
+		value: "card" | "ewallet";
 		label: string;
-		note: string;
+		how: string;
+		action: string;
 	}[] = [
 		{
 			value: "card",
-			label: t.subscription.methodCard,
-			note: t.subscription.methodCardNote,
+			label: t.subscription.methodCardAuto,
+			how: t.subscription.autoCardHow,
+			action: t.subscription.addCardSecure,
 		},
 		{
-			value: "fpx_mandate",
-			label: t.subscription.methodFpx,
-			note: t.subscription.methodFpxNote,
+			value: "ewallet",
+			label: t.subscription.methodEwallet,
+			how: t.subscription.autoWalletHow,
+			action: t.subscription.linkWallet,
 		},
 	];
-
-	const openForm = () => {
-		// Prefilled from the saved instrument EXCEPT the card number, which we do
-		// not have — re-typing it is the only way to change the last four, and a
-		// masked placeholder that looked editable would be a lie.
-		setNumber("");
-		// A row on a withdrawn rail opens onto the nearest offered one rather than
-		// onto a choice the picker cannot show pressed.
-		const offered = methodChoices.some((choice) => choice.value === card?.type);
-		setType(
-			card && offered
-				? card.type
-				: card?.type === "fpx"
-					? "fpx_mandate"
-					: "card",
-		);
-		setBankCode(card?.bankCode ?? "");
-		setHolder(card?.holderName ?? "");
-		setExpiry(
-			card?.expMonth && card?.expYear
-				? `${String(card.expMonth).padStart(2, "0")}/${String(card.expYear).slice(-2)}`
-				: "",
-		);
-		setEmail(card?.billingEmail ?? "");
-		setError(null);
-		setConfirmingRemove(false);
-		setEditing(true);
-	};
-
-	const submit = async () => {
-		const common = {
-			holderName: holder.trim() || null,
-			billingEmail: email.trim() || null,
-		};
-
-		// A direct debit needs the BANK — never an account number. The payer is
-		// redirected to that bank to authorise, and the bank creates the mandate.
-		if (type === "fpx_mandate") {
-			if (!bankCode) {
-				setError(t.subscription.chooseBank);
-				return;
-			}
-			setError(null);
-			const savedMandate = await onSave({ type, bankCode, ...common });
-			if (savedMandate) {
-				setNumber("");
-				setEditing(false);
-			}
-			return;
-		}
-
-		const digits = number.replace(/\D/g, "");
-		if (!isPlausibleCardNumber(digits)) {
-			setError(t.subscription.cardNumberInvalid);
-			return;
-		}
-		const match = expiry.match(/^(\d{1,2})\s*\/\s*(\d{2}|\d{4})$/);
-		if (!match) {
-			setError(t.subscription.expiryFormat);
-			return;
-		}
-		const month = Number(match[1]);
-		const year =
-			match[2].length === 2 ? 2000 + Number(match[2]) : Number(match[2]);
-		if (month < 1 || month > 12) {
-			setError(t.subscription.expiryMonthRange);
-			return;
-		}
-		const now = new Date();
-		if (
-			year < now.getFullYear() ||
-			(year === now.getFullYear() && month < now.getMonth() + 1)
-		) {
-			setError(t.subscription.cardExpired);
-			return;
-		}
-		setError(null);
-		const saved = await onSave({
-			type: "card",
-			brand: cardBrandFromNumber(digits),
-			last4: digits.slice(-4),
-			expMonth: month,
-			expYear: year,
-			...common,
-		});
-		if (saved) {
-			setNumber("");
-			setEditing(false);
-		}
-	};
+	const current = tabs.find((item) => item.value === tab) ?? tabs[0];
 
 	const remove = async () => {
 		if (!onRemove) return;
@@ -271,30 +158,23 @@ export function PaymentMethodCard({
 		: `Visa ···· ${demoLast4}`;
 
 	/**
-	 * The line under the summary says what will HAPPEN at renewal. A card with
-	 * an expiry prints it; a chargeable instrument prints the billing line; a
-	 * mandate the bank has not approved keeps the billing line and gets the
-	 * amber sentence below; and anything that cannot auto-debit — nothing saved,
-	 * or a row on a withdrawn rail — says plainly that the org pays by FPX.
+	 * The line under the summary says what will HAPPEN at renewal: the billing
+	 * line when something can be charged, otherwise that the org pays by hand.
 	 */
 	const subline = !backed
 		? fill(t.subscription.autoPayEnabled, { billed: billedLabel })
-		: !card
-			? fill(t.subscription.noMethodPaysByFpx, { billed: billedLabel })
-			: card.type === "card" && card.expMonth && card.expYear
-				? `${fill(t.subscription.cardExpires, {
-						billed: billedLabel,
-						mm: String(card.expMonth).padStart(2, "0"),
-						yy: String(card.expYear).slice(-2),
-					})}${card.holderName ? ` · ${card.holderName}` : ""}`
-				: willAutoCharge(card) || card.type === "fpx_mandate"
-					? billedLabel
-					: fill(t.subscription.noMethodPaysByFpx, { billed: billedLabel });
+		: card && willAutoCharge(card)
+			? billedLabel
+			: fill(t.subscription.noMethodPaysByFpx, { billed: billedLabel });
 
 	return (
 		<IzCard flat>
 			<div className="flex items-center gap-2">
-				<CreditCard className="h-4 w-4 text-[var(--iz-muted)]" />
+				{card?.type === "ewallet" ? (
+					<Wallet className="h-4 w-4 text-[var(--iz-muted)]" />
+				) : (
+					<CreditCard className="h-4 w-4 text-[var(--iz-muted)]" />
+				)}
 				<div className="min-w-0">
 					<p className="iz-sm font-semibold">
 						{isLoading ? t.subscription.loadingCard : summary}
@@ -303,13 +183,8 @@ export function PaymentMethodCard({
 				</div>
 			</div>
 
-			{/* A mandate the bank has not approved is an ACTIVE, saved, default
-			    instrument that must not be debited — the one place where "saved" and
-			    "chargeable" come apart, so it gets said out loud rather than reading
-			    as ready. Tested through the shared willAutoCharge rather than
-			    against "pending": a CANCELLED or FAILED mandate is not pending and
-			    is just as undebitable, and this branch used to let both render as
-			    ready. */}
+			{/* A mandate the bank has not approved is saved but must not be
+			    debited — said out loud rather than reading as ready. */}
 			{backed && card?.type === "fpx_mandate" && !willAutoCharge(card) && (
 				<p
 					className="iz-tiny mt-2"
@@ -323,187 +198,54 @@ export function PaymentMethodCard({
 				<button
 					type="button"
 					className="iz-btn iz-btn-soft mt-3 w-full"
-					onClick={openForm}
+					onClick={() => {
+						setTab(card?.type === "ewallet" ? "ewallet" : "card");
+						setConfirmingRemove(false);
+						setEditing(true);
+					}}
 				>
 					{backed && card
 						? t.subscription.editPaymentMethod
-						: t.subscription.addPaymentMethod}
+						: t.subscription.setupAutoPay}
 				</button>
 			)}
 
 			{canEdit && editing && (
-				<div className="mt-3 space-y-2 border-t border-[var(--iz-line)] pt-3">
-					{/* Said before the picker, not after: a person deciding whether to
-					    fill this in needs to know it is optional and what saving does. */}
-					<p className="iz-tiny iz-muted2">{t.subscription.methodOptional}</p>
-
-					<fieldset className="iz-field">
-						<legend className="iz-tiny iz-muted mb-1">
-							{t.subscription.payHow}
-						</legend>
-						{/* Full-size soft buttons, and the CHOSEN one carries the payroll
-						    tabs' pressed colour (owner, 2 Sep 2026: "redesign the button
-						    style to previous" / "this colour remain"). A choice, not an
-						    action: it lifts lavender, never gold — gold is Save and Pay. */}
-						<div className="flex flex-wrap gap-2">
-							{methodChoices.map((choice) => (
-								<button
-									key={choice.value}
-									type="button"
-									aria-pressed={type === choice.value}
-									className={`iz-btn iz-btn-soft flex-1${
-										type === choice.value ? " iz-btn-on" : ""
-									}`}
-									onClick={() => {
-										setType(choice.value);
-										setError(null);
-									}}
-								>
-									{choice.label}
-								</button>
-							))}
-						</div>
-						<p className="iz-tiny iz-muted2 mt-1">
-							{methodChoices.find((choice) => choice.value === type)?.note}
-						</p>
-					</fieldset>
-
-					{/* Only a card rail asks for card details. Showing an expiry box
-					    beside a bank picker is how a form teaches people to ignore it. */}
-					{type === "card" && (
-						<>
-							<div className="iz-field">
-								<label htmlFor="pm-number">{t.subscription.cardNumber}</label>
-								<input
-									id="pm-number"
-									inputMode="numeric"
-									autoComplete="cc-number"
-									placeholder="4242 4242 4242 4242"
-									value={number}
-									onChange={(e) => setNumber(e.target.value)}
-								/>
-							</div>
-							<div className="grid grid-cols-2 gap-2">
-								<div className="iz-field">
-									<label htmlFor="pm-exp">{t.subscription.expiry}</label>
-									<input
-										id="pm-exp"
-										inputMode="numeric"
-										autoComplete="cc-exp"
-										placeholder="09/28"
-										value={expiry}
-										onChange={(e) => setExpiry(e.target.value)}
-									/>
-								</div>
-								<div className="iz-field">
-									<label htmlFor="pm-holder">{t.subscription.nameOnCard}</label>
-									<input
-										id="pm-holder"
-										autoComplete="cc-name"
-										placeholder={t.subscription.asPrinted}
-										value={holder}
-										onChange={(e) => setHolder(e.target.value)}
-									/>
-								</div>
-							</div>
-						</>
-					)}
-
-					{/*
-					 * WHICH BANK — and nothing else. No account number is asked for
-					 * here or anywhere: the payer authorises at their own bank, which
-					 * is the only party that needs the number, and the gateway returns
-					 * a mandate token. A field for it would be data we cannot use.
-					 */}
-					{type === "fpx_mandate" && (
-						<div className="iz-field">
-							<label htmlFor="pm-bank">{t.subscription.yourBank}</label>
-							{/*
-							 * Styled INLINE, matching `.iz-field input` exactly, because
-							 * `.iz-field` only ever styled `input`/`textarea` — an unstyled
-							 * native select renders a white box with near-invisible text on
-							 * this dark portal. The theme sheet is a binary file with NUL
-							 * bytes (see CLAUDE.md), so adding a rule there for one control
-							 * is the riskier edit.
-							 *
-							 * The OPTIONS carry their own dark background too: on Windows
-							 * Chrome the popup list is painted by the OS and does NOT
-							 * inherit the select's colours, which is exactly what made the
-							 * list unreadable.
-							 */}
-							<select
-								id="pm-bank"
-								value={bankCode}
-								onChange={(e) => {
-									setBankCode(e.target.value);
-									setError(null);
-								}}
-								style={{
-									width: "100%",
-									background: "rgba(255,255,255,0.03)",
-									border: "1px solid var(--iz-line2)",
-									borderRadius: "13px",
-									padding: "13px",
-									color: "var(--iz-txt)",
-									fontSize: "16px",
-									fontFamily: '"Manrope", sans-serif',
-								}}
+				<div className="mt-3 space-y-3 border-t border-[var(--iz-line)] pt-3">
+					{/* A choice, not an action: the pressed tab lifts lavender, never
+					    gold — gold is the one button that does something. */}
+					<div className="flex gap-2">
+						{tabs.map((item) => (
+							<button
+								key={item.value}
+								type="button"
+								aria-pressed={tab === item.value}
+								className={`iz-btn iz-btn-soft flex-1${
+									tab === item.value ? " iz-btn-on" : ""
+								}`}
+								onClick={() => setTab(item.value)}
 							>
-								<option value="" style={OPTION_STYLE}>
-									{t.subscription.chooseBankPlaceholder}
-								</option>
-								{banks.map((bank) => (
-									<option
-										key={bank.code}
-										value={bank.code}
-										style={OPTION_STYLE}
-									>
-										{bank.name}
-									</option>
-								))}
-							</select>
-							<p className="iz-tiny iz-muted2 mt-1">
-								{t.subscription.bankRedirectNote}
-							</p>
-						</div>
-					)}
-
-					<div className="iz-field">
-						<label htmlFor="pm-email">
-							{t.subscription.billingEmailOptional}
-						</label>
-						<input
-							id="pm-email"
-							type="email"
-							placeholder="accounts@venue.com"
-							value={email}
-							onChange={(e) => setEmail(e.target.value)}
-						/>
+								{item.label}
+							</button>
+						))}
 					</div>
 
-					{error && (
+					<p className="iz-tiny iz-muted2">{current.how}</p>
+
+					{missingMobile && (
 						<p
 							className="iz-tiny"
-							style={{ color: "var(--iz-red-l, #ff8080)" }}
+							style={{ color: "var(--iz-amber-l, #ffc46b)" }}
 						>
-							{error}
+							{t.subscription.needMobile}
 						</p>
 					)}
-					{/*
-					 * ONE NOTE PER RAIL. The PAN warning belongs only where a PAN is
-					 * typed; the mandate note says the bank redirect is not live yet.
-					 */}
-					<p className="iz-tiny iz-muted2">
-						{type === "card"
-							? `${t.subscription.cardPrivacyNote} ${t.izUi.cardNotChargedYet}`
-							: t.subscription.mandateNotLiveYet}
-					</p>
 
 					<div className="flex gap-2">
 						<button
 							type="button"
 							className="iz-btn iz-btn-soft flex-1"
-							disabled={isSaving || isRemoving}
+							disabled={isRemoving}
 							onClick={() => {
 								setConfirmingRemove(false);
 								setEditing(false);
@@ -514,27 +256,28 @@ export function PaymentMethodCard({
 						<button
 							type="button"
 							className="iz-btn iz-btn-gold flex-1"
-							disabled={isSaving || isRemoving}
-							onClick={submit}
+							disabled={!gatewayConnected || missingMobile || isRemoving}
 						>
-							{isSaving
-								? t.subscription.savingCard
-								: t.subscription.savePaymentMethod}
+							{current.action}
 						</button>
 					</div>
+					{!gatewayConnected && (
+						<p className="iz-tiny iz-muted2">
+							{t.subscription.autoNotConnected}
+						</p>
+					)}
 
 					{/*
-					 * REMOVE is the way back to "no method" — auto-debit off, FPX by
+					 * REMOVE is the way back to "no method" — auto-debit off, pay by
 					 * hand. Two presses on purpose: the first shows what removing does
 					 * and the second does it, and the result shown is the server's own
-					 * sentence, never a local guess (silence reads as failure and
-					 * invites a second, harmful click).
+					 * sentence, never a local guess.
 					 */}
 					{backed && card && onRemove && !confirmingRemove && (
 						<button
 							type="button"
 							className="iz-btn iz-btn-soft w-full"
-							disabled={isSaving || isRemoving}
+							disabled={isRemoving}
 							onClick={() => setConfirmingRemove(true)}
 						>
 							{t.subscription.removePaymentMethod}

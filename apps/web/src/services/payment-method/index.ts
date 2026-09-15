@@ -84,9 +84,8 @@ export interface SavePaymentMethodInput {
 	/** PayNet code of the bank to redirect to. Required for `fpx_mandate`. */
 	bankCode?: string | null;
 	/**
-	 * Ignored by the server since 2 Sep 2026: the e-wallet rail can no longer
-	 * be SAVED (only card and bank direct debit auto-debit, and a saved method
-	 * means auto-debit). Kept so the shape still matches older rows read back.
+	 * Required for `ewallet`: the wallet to link for automatic payment. Since
+	 * 15 Sep 2026 only a wallet the server marks `autoDebit` is accepted.
 	 */
 	walletProvider?: string | null;
 	autoPay?: boolean;
@@ -170,6 +169,12 @@ export async function fetchFpxBanks(
 export interface EwalletProvider {
 	code: string;
 	name: string;
+	/**
+	 * Whether this wallet may be SAVED for automatic payment (Touch 'n Go
+	 * today). The others are offered as pay-by-hand from Payment history.
+	 * Decided by the server, so the picker and the save cannot disagree.
+	 */
+	autoDebit?: boolean;
 }
 
 /**
@@ -255,6 +260,9 @@ export function describePaymentMethod(
  */
 export function willAutoCharge(method: PaymentMethod): boolean {
 	if (method.type === "card") return true;
+	// A wallet saved since 15 Sep 2026 is a linked Touch 'n Go — the server sets
+	// `autoPay` only on a wallet it can debit; older wallet rows carry false.
+	if (method.type === "ewallet") return method.autoPay;
 	if (method.type === "fpx_mandate") return method.mandateStatus === "active";
 	return false;
 }
