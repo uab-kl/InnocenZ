@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Camera, Loader2, Settings, User as UserIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AdminLoginSecurityCard } from "@/components/admin/AdminLoginSecurityCard";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -255,6 +256,19 @@ function ProfilePage() {
 					)}
 				</CardContent>
 			</Card>
+
+			{/*
+			 * The admin's OWN password, phone and email — the same code flows the
+			 * agency and outlet Security sheet runs (codes by WhatsApp, SMS and
+			 * email). Only once `/auth/me` has answered: a form seeded from a
+			 * profile still in flight would compare against an empty "current".
+			 */}
+			{user ? (
+				<AdminLoginSecurityCard
+					email={user.email ?? ""}
+					phone={user.contactNo ?? ""}
+				/>
+			) : null}
 		</PageShell>
 	);
 }

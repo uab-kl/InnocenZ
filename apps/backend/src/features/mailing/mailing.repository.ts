@@ -13,6 +13,8 @@ import {
   sendEmail as brevoSendEmail,
 } from '@/features/brevo/brevo.repository.js';
 import type {
+  AccountChangeNoticeEmailVariables,
+  AccountCodeEmailVariables,
   MailingEmail,
   OrgApprovedNotificationVariables,
   OrgMemberInviteEmailVariables,
@@ -215,6 +217,103 @@ export async function sendPasswordResetEmail(input: {
   return brevoSendEmail({
     to: input.recipientEmail,
     subject,
+    text,
+    html,
+  });
+}
+
+/**
+ * A ONE-TIME CODE by email — forgot password, or a contact change (a code to
+ * the current email to prove ownership, or to the new one to prove it works).
+ *
+ * Returns `null` when SMTP is not configured; the caller (the account-code
+ * delivery orchestrator) decides whether that is a dev log or a skipped
+ * channel. It throws on a transport failure, which the orchestrator reports as
+ * `failed` for this channel only.
+ */
+export async function sendAccountCodeEmail(input: {
+  recipientEmail: string;
+  name?: string | null;
+  code: string;
+  purposeLabel: string;
+  validMinutes: number;
+}): Promise<SendEmailResult | null> {
+  if (!emailConfigured()) {
+    logger.warn('[mailing] Email not configured — skipped account code email', {
+      purposeLabel: input.purposeLabel,
+    });
+    return null;
+  }
+
+  const validityLabel = `${input.validMinutes} minute${input.validMinutes === 1 ? '' : 's'}`;
+  const name = input.name?.trim() || 'there';
+  const variables: AccountCodeEmailVariables = {
+    ...brandDefaults(input.recipientEmail),
+    name,
+    code: input.code,
+    purposeLabel: input.purposeLabel,
+    validityLabel,
+  };
+  const html = renderTemplate('account_code.html', variables);
+  const text = [
+    `Hello ${name},`,
+    '',
+    `Your InnocenZ verification code for ${input.purposeLabel} is: ${input.code}`,
+    '',
+    `This code is valid for ${validityLabel}. Never share it with anyone.`,
+    'If you did not ask for this code, ignore this email. Nothing changes on your account without it.',
+  ].join('\n');
+
+  return brevoSendEmail({
+    to: input.recipientEmail,
+    subject: '[InnocenZ] Your verification code',
+    text,
+    html,
+  });
+}
+
+/**
+ * "Your password / email / phone was changed" — sent AFTER the change, to the
+ * contact that can still reach the real owner (the OLD email for an email
+ * change). Best-effort by contract: the caller never fails a request on it.
+ */
+export async function sendAccountChangeNoticeEmail(input: {
+  recipientEmail: string;
+  name?: string | null;
+  subject: string;
+  heading: string;
+  message: string;
+  changedAt?: Date;
+}): Promise<SendEmailResult | null> {
+  if (!emailConfigured()) {
+    logger.warn('[mailing] Email not configured — skipped account change notice', {
+      subject: input.subject,
+    });
+    return null;
+  }
+
+  const name = input.name?.trim() || 'there';
+  const changedAt = (input.changedAt ?? new Date()).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+  const variables: AccountChangeNoticeEmailVariables = {
+    ...brandDefaults(input.recipientEmail),
+    name,
+    heading: input.heading,
+    message: input.message,
+    changedAt,
+  };
+  const html = renderTemplate('account_change_notice.html', variables);
+  const text = [
+    `Hello ${name},`,
+    '',
+    input.message,
+    `Changed at: ${changedAt}`,
+    '',
+    'If this was you, there is nothing more to do. If it was NOT you, contact InnocenZ support immediately.',
+  ].join('\n');
+
+  return brevoSendEmail({
+    to: input.recipientEmail,
+    subject: input.subject,
     text,
     html,
   });

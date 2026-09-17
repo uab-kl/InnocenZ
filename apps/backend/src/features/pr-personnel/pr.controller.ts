@@ -33,9 +33,36 @@ import {
   touchesComcard,
 } from '@/util/comcard-refresh.js';
 import { pickAgencyId, pickedOrgId, pickedOrgKind } from '@/util/org-scope.js';
+import {
+  SIGN_IN_CONTACT_MESSAGES,
+  agencyMayCorrectStub,
+  isActivatedAccount,
+  normaliseSignInEmail,
+  sameSignInPhone,
+  signInContactChanges,
+  signInPhoneLookupForms,
+  storedSignInPhone,
+  type SignInContactPatch,
+} from './sign-in-contact.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
+
+/**
+ * `user.created_by` is varchar: a person's uuid, or a seed / system label.
+ * Only a uuid can be looked up as an agency member — handing a label to the
+ * uuid column is a cast error, not an empty result.
+ */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The account fields the sign-in contact decision reads. */
+type SignInContactAccount = {
+  id: string;
+  email: string | null;
+  phoneNum: string | null;
+  passwordHash: string | null;
+  createdBy: string;
+};
 
 /** Map agency_pr (+ user/user_profile) into the personnel list shape the web already uses. */
 function rosterRowFromMembership(
@@ -791,6 +818,126 @@ export class PrControllerClass {
     return { pr, agencyId: pr.agencyId };
   }
 
+  /**
+   * What an agency or admin write may do to an account's SIGN-IN email and
+   * phone — decided before any write, so a refusal leaves nothing half-saved.
+   *
+   *  - unchanged (any case / any phone formatting) -> nothing to write;
+   *  - changed on an ACTIVATED account (it has a password) -> 403: only the
+   *    person may, through `POST /auth/contact-change/*`, which sends a code to
+   *    their current contacts first;
+   *  - changed on a never-activated stub -> allowed for an admin, and for the
+   *    agency that CREATED the stub while no other agency rosters it
+   *    (`agencyMayCorrectStub`); any other agency -> 403. Without that, agency
+   *    B could re-point a stub agency A invited at an email B controls and
+   *    take the account over through Forgot password;
+   *  - an allowed change another account already holds -> 409. That 409 used
+   *    to be a unique-violation 500 after the membership had already been
+   *    written.
+   *
+   * `requested` follows `signInContactChanges`: undefined = not asked for,
+   * null / '' = clear it. `caller.agencyId` is the agency acting — the
+   * membership being written.
+   */
+  private async planSignInContactWrite(
+    account: SignInContactAccount,
+    requested: { phone?: string | null; email?: string | null },
+    caller: { isAdmin: boolean; agencyId: string | null },
+  ): Promise<
+    | { ok: true; patch: SignInContactPatch }
+    | { ok: false; status: 403 | 409; message: string }
+  > {
+    const patch = signInContactChanges(account, requested);
+    if (Object.keys(patch).length === 0) return { ok: true, patch };
+    if (isActivatedAccount(account)) {
+      return { ok: false, status: 403, message: SIGN_IN_CONTACT_MESSAGES.notYours };
+    }
+    if (!caller.isAdmin) {
+      const creatorAgencyIds = UUID_SHAPE.test(account.createdBy)
+        ? (await this.agencyMemberRepository.listByUser(account.createdBy)).map(
+            (membership) => membership.agencyId,
+          )
+        : [];
+      const rosterAgencyIds = await this.prRepository.listMembershipAgencyIds(
+        account.id,
+      );
+      if (
+        !agencyMayCorrectStub({
+          agencyId: caller.agencyId,
+          creatorAgencyIds,
+          rosterAgencyIds,
+        })
+      ) {
+        return { ok: false, status: 403, message: SIGN_IN_CONTACT_MESSAGES.notYours };
+      }
+    }
+    if (patch.email) {
+      const holder = await this.userRepository.getUserByLoginMethod(
+        'email',
+        patch.email,
+      );
+      if (holder && holder.id !== account.id) {
+        return { ok: false, status: 409, message: SIGN_IN_CONTACT_MESSAGES.emailTaken };
+      }
+    }
+    if (patch.phoneNum) {
+      const holder = await this.findAccountByPhone(patch.phoneNum);
+      if (holder && holder.id !== account.id) {
+        return { ok: false, status: 409, message: SIGN_IN_CONTACT_MESSAGES.phoneTaken };
+      }
+    }
+    return { ok: true, patch };
+  }
+
+  /**
+   * The account a typed phone belongs to, or null.
+   *
+   * `getUserByLoginMethod('phone')` alone misses a number on file with a `00`
+   * prefix once the typed value has been normalised to `+digits` (see
+   * `signInPhoneLookupForms`), and `POST /pr` then created a duplicate account
+   * for that line. The stored form is asked first, exactly as before; the
+   * fallback spellings count only when the account they find is the same line
+   * by the one normaliser, so the lookup's own `0` <-> `60` swap applied to a
+   * `00…` spelling cannot hand back a different number.
+   */
+  private async findAccountByPhone(typed: string) {
+    const [primary, ...fallbacks] = signInPhoneLookupForms(typed);
+    if (!primary) return null;
+    const found = await this.userRepository.getUserByLoginMethod('phone', primary);
+    if (found) return found;
+    for (const form of fallbacks) {
+      const candidate = await this.userRepository.getUserByLoginMethod('phone', form);
+      if (candidate && sameSignInPhone(candidate.phoneNum, typed)) return candidate;
+    }
+    return null;
+  }
+
+  /**
+   * Makes an allowed stub correction, FIRST, and answers with the refusal to
+   * send when it did not land (`null` = written). See
+   * `PrRepository.writeStubSignInContact` for why each outcome can still
+   * happen after `planSignInContactWrite` said yes.
+   */
+  private async applyStubSignInContact(
+    userId: string,
+    patch: SignInContactPatch,
+    actor: string,
+  ): Promise<{ status: 403 | 409; message: string } | null> {
+    if (Object.keys(patch).length === 0) return null;
+    const outcome = await this.prRepository.writeStubSignInContact(userId, patch, actor);
+    if (outcome === 'updated') return null;
+    if (outcome === 'activated') {
+      return { status: 403, message: SIGN_IN_CONTACT_MESSAGES.notYours };
+    }
+    return {
+      status: 409,
+      message:
+        outcome === 'email_taken'
+          ? SIGN_IN_CONTACT_MESSAGES.emailTaken
+          : SIGN_IN_CONTACT_MESSAGES.phoneTaken,
+    };
+  }
+
   async getById(req: Request, res: Response) {
     try {
       const resolved = await this.resolvePrForCaller(
@@ -829,6 +976,20 @@ export class PrControllerClass {
       }
 
       const scope = await this.resolveScope(req);
+      /*
+       * A raw `userId` attaches whatever account it names — no phone or email
+       * has to match — and everything below then writes that person's legal
+       * name and IC. Only an admin may name an account that way; an agency adds
+       * a PR by the phone or email the PR actually gave them. The web portal
+       * never sends one.
+       */
+      if (parsed.data.userId && !scope.isAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only an admin can add an existing account by its id',
+          data: null,
+        });
+      }
       let agencyId: string;
       if (scope.isAdmin) {
         if (!parsed.data.agencyId) {
@@ -851,17 +1012,22 @@ export class PrControllerClass {
       }
 
       const actor = getActor(req);
-      const phone = parsed.data.phone?.trim() || null;
-      const email = parsed.data.email?.trim() || null;
+      // Stored shapes: phone '+digits' when it normalises, email lowercase — the
+      // sign-in lookups compare that way, and a second spelling of one address
+      // is a second account waiting to happen.
+      const phone = storedSignInPhone(parsed.data.phone);
+      const email = normaliseSignInEmail(parsed.data.email) || null;
 
       // Owner invite: stub user + assign `pr` role + agency_pr (approved).
       // Person facts live on user / user_profile — there is no `pr` table.
       let userId = parsed.data.userId;
       let createdStub = false;
       if (!userId && phone) {
-        const existingPhone = await this.userRepository.getUserByLoginMethod(
-          'phone',
-          phone,
+        // The value AS TYPED, so every spelling of the line is tried — a lookup
+        // by the normalised `phone` alone missed numbers on file as `00…` and
+        // created a second account for them.
+        const existingPhone = await this.findAccountByPhone(
+          parsed.data.phone ?? phone,
         );
         if (existingPhone) userId = existingPhone.id;
       }
@@ -872,6 +1038,55 @@ export class PrControllerClass {
         );
         if (existingEmail) userId = existingEmail.id;
       }
+
+      /*
+       * ⚠️ AN EXISTING ACCOUNT KEEPS ITS SIGN-IN CONTACT.
+       *
+       * This path used to hand `phone` and `email` — `null` for whichever the
+       * agency left blank — to `ensureOpsBridge`, which wrote both onto the
+       * matched account. Adding a signed-up PR by her phone wiped her email;
+       * typing a different email re-pointed where her password-reset codes go.
+       *
+       * Now, and BEFORE anything is written: a field left blank is not a
+       * change; a value equal to the one on file is not a change; a real change
+       * to an account the person has activated (it has a password) is refused
+       * with 403; a never-activated stub may still be corrected — by an admin,
+       * or by the agency that created it while no other agency rosters it.
+       *
+       * An allowed correction is written HERE, before the profile, the link
+       * and the bridge, as one conditional statement: a refusal it meets (the
+       * account activated a moment ago, the value just taken) still leaves
+       * nothing half-saved. The bridge below is handed no email or phone.
+       */
+      if (userId) {
+        const account = await this.userRepository.getUserById(userId);
+        if (!account) {
+          return res
+            .status(404)
+            .json({ success: false, message: Error.NOT_FOUND, data: null });
+        }
+        // Blank is "not supplied" on create, so only typed values are compared.
+        const plan = await this.planSignInContactWrite(
+          account,
+          {
+            ...(phone ? { phone } : {}),
+            ...(email ? { email } : {}),
+          },
+          { isAdmin: scope.isAdmin, agencyId },
+        );
+        if (!plan.ok) {
+          return res
+            .status(plan.status)
+            .json({ success: false, message: plan.message, data: null });
+        }
+        const refused = await this.applyStubSignInContact(userId, plan.patch, actor);
+        if (refused) {
+          return res
+            .status(refused.status)
+            .json({ success: false, message: refused.message, data: null });
+        }
+      }
+
       if (!userId) {
         const user = await this.userRepository.createUser({
           username: inviteUsername(parsed.data.nickname || parsed.data.name),
@@ -932,8 +1147,8 @@ export class PrControllerClass {
         tier: parsed.data.tier,
         name: parsed.data.name,
         nickname: parsed.data.nickname ?? null,
-        phone,
-        email,
+        // No `phone` / `email`: an existing account's allowed correction was
+        // written above, and a stub created above already stored both.
         icNo: parsed.data.icNo ?? null,
       });
       const withProfile = await this.prRepository.getById(pr.id);
@@ -974,10 +1189,62 @@ export class PrControllerClass {
       if (!resolved) return;
       const existing = resolved.pr;
 
+      /*
+       * ⚠️ THE SIGN-IN EMAIL AND PHONE, decided before ANY write below.
+       *
+       * The Manage PR editor sends the whole form back, so an unchanged value
+       * (any case, any phone formatting) is the normal case and writes nothing.
+       * A real change is refused with 403 once the PR has activated the account
+       * (it has a password): those two values are where their sign-in and reset
+       * codes go, and an agency could otherwise re-point them. A
+       * never-activated stub the agency typed in may still be corrected.
+       *
+       * Refused here rather than beside the user write because that write is
+       * the SECOND of several — the profile write above it would already have
+       * landed. For the same reason an allowed stub correction is WRITTEN here,
+       * first, as one conditional statement whose refusal (activated a moment
+       * ago, value just taken) is still a clean 403 / 409 — never the 200
+       * "Profile saved" it used to be when `userRepository.updateUser` swallowed
+       * the failure.
+       */
       const scope = await this.resolveScope(req);
+      const actor = getActor(req);
+      if (parsed.data.phone !== undefined || parsed.data.email !== undefined) {
+        const account = await this.userRepository.getUserById(existing.userId);
+        if (!account) {
+          return res
+            .status(404)
+            .json({ success: false, message: Error.NOT_FOUND, data: null });
+        }
+        const plan = await this.planSignInContactWrite(
+          account,
+          {
+            phone: parsed.data.phone,
+            email: parsed.data.email,
+          },
+          // The membership being edited — the caller's own agency, or the one
+          // an admin named.
+          { isAdmin: scope.isAdmin, agencyId: resolved.agencyId },
+        );
+        if (!plan.ok) {
+          return res
+            .status(plan.status)
+            .json({ success: false, message: plan.message, data: null });
+        }
+        const refused = await this.applyStubSignInContact(
+          existing.userId,
+          plan.patch,
+          actor,
+        );
+        if (refused) {
+          return res
+            .status(refused.status)
+            .json({ success: false, message: refused.message, data: null });
+        }
+      }
+
       const data = { ...parsed.data };
       if (!scope.isAdmin) delete data.agencyId;
-      const actor = getActor(req);
 
       // Editor fields live in three tables. Peel non-identity / non-membership
       // keys off before `prRepository.update` — those columns are not on the
@@ -987,7 +1254,18 @@ export class PrControllerClass {
       // any that arrives.
       const { race, languages, comcardHeightCm, comcardWeightKg, ...rest } =
         data;
-      const { place, yearsExp, kpiTier, payClass, ...prColumns } = rest;
+      // `phone` / `email` are peeled off too: the stub correction above is the
+      // only thing allowed to write them, and `prRepository.update` would
+      // otherwise re-apply the raw values a second time.
+      const {
+        place,
+        yearsExp,
+        kpiTier,
+        payClass,
+        phone: _phone,
+        email: _email,
+        ...prColumns
+      } = rest;
       const profilePatch = pickDefined({
         race,
         languages,
@@ -1005,26 +1283,23 @@ export class PrControllerClass {
             updatedBy: actor,
           });
         }
-        if (
-          data.phone !== undefined ||
-          data.email !== undefined ||
-          data.nickname !== undefined
-        ) {
-          await this.userRepository.updateUser(
+        if (data.nickname !== undefined) {
+          // `updateUser` swallows a database error and answers null. Carrying on
+          // reported "Profile saved" for a nickname that was never written.
+          const saved = await this.userRepository.updateUser(
             {
-              ...(data.phone !== undefined
-                ? { phoneNum: data.phone || null }
-                : {}),
-              ...(data.email !== undefined
-                ? { email: data.email || null }
-                : {}),
-              ...(data.nickname !== undefined
-                ? { username: data.nickname || existing.name }
-                : {}),
+              username: data.nickname || existing.name,
               updatedBy: actor,
             },
             existing.userId,
           );
+          if (!saved) {
+            return res.status(500).json({
+              success: false,
+              message: Error.INTERNAL_SERVER_ERROR,
+              data: null,
+            });
+          }
         }
         if (
           data.tier !== undefined ||

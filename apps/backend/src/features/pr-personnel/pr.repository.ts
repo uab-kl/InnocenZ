@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, ilike, inArray, ne, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, ilike, inArray, isNull, ne, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -10,6 +10,8 @@ import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
 // Leaf: age follows the PR's IC, derived once here so both read paths agree.
 import { derivedAge } from './ic-dob';
+import { isActivatedAccount, signInContactChanges, type SignInContactPatch } from './sign-in-contact';
+import { isUniqueViolation } from '@/features/account-code/account-code.repository';
 import {
   AgencyPrTable,
   type AgencyPrApproveStatus,
@@ -79,6 +81,106 @@ function toRoster(membership: AgencyPrType | null): PrRoster | null {
   };
   const hasValue = Object.values(row).some((value) => value !== null && value !== undefined);
   return hasValue ? row : null;
+}
+
+/**
+ * The sign-in email / phone write a PR bridge may actually make — the LAST
+ * gate, beneath the controllers' 403.
+ *
+ * Both writers below used to set whatever they were handed, and `POST /pr`
+ * handed them `null` for a field the agency left blank. Matching an EXISTING
+ * account by phone therefore wiped its email (and matching by email wiped its
+ * phone), and any agency could re-point a signed-up PR's sign-in contact at an
+ * address of its choosing — where the next password-reset code would go.
+ *
+ * Rules, same as `PUT /pr/:id` states them in words:
+ *  - an unchanged value (any case / any phone formatting) writes nothing;
+ *  - an account with a password (the person has activated it) is never
+ *    changed from here — the change is dropped and logged without the values;
+ *  - a never-activated roster stub may still be corrected.
+ *
+ * The controllers refuse the ACTIVATED case with a 403 before calling in, so
+ * the drop here only ever fires for a caller that skipped that check.
+ *
+ * ⚠️ WHICH agency may correct a stub is NOT decided here — this layer has no
+ * caller. `PrController.planSignInContactWrite` decides it (the creating agency
+ * only, while no other agency rosters the stub) and then writes through
+ * `writeStubSignInContact`, handing this bridge no email or phone at all. The
+ * bridge's other callers pass the account's own values (agency approval) or
+ * none (the assign lane), which this reads as unchanged.
+ */
+async function guardedSignInContactPatch(
+  dbClient: DbTransaction | typeof db,
+  userId: string,
+  requested: { phone?: string | null; email?: string | null },
+  caller: string,
+): Promise<SignInContactPatch> {
+  if (requested.phone === undefined && requested.email === undefined) return {};
+  const [account] = await dbClient
+    .select({
+      email: UserTable.email,
+      phoneNum: UserTable.phoneNum,
+      passwordHash: UserTable.passwordHash,
+    })
+    .from(UserTable)
+    .where(eq(UserTable.id, userId))
+    .limit(1);
+  if (!account) return {};
+  const patch = signInContactChanges(account, requested);
+  if (Object.keys(patch).length > 0 && isActivatedAccount(account)) {
+    logger.warn(
+      `[PrRepository.${caller}] kept the sign-in ${Object.keys(patch).join(' + ')} of activated account ${userId} — only the account owner may change it`,
+    );
+    return {};
+  }
+  return patch;
+}
+
+/**
+ * Writes a sign-in email / phone patch ONLY IF the account still has no
+ * password, and says whether it landed.
+ *
+ * ⚠️ The decision above (and the controllers' 403) reads `password_hash` and
+ * the write happens a statement later. A PR who set a password in between —
+ * finishing sign-up on the phone while the agency saved the editor — would
+ * otherwise have her contact re-pointed after she had activated the account.
+ * `password_hash IS NULL` in the WHERE makes the check and the write one
+ * statement: 0 rows means "activated (or gone) since it was read".
+ *
+ * Throws what the database throws, a unique violation included.
+ */
+async function writeUnactivatedSignInContact(
+  dbClient: DbTransaction | typeof db,
+  userId: string,
+  patch: SignInContactPatch,
+  actor: string,
+): Promise<boolean> {
+  const rows = await dbClient
+    .update(UserTable)
+    .set({
+      ...patch,
+      updatedAt: new Date(),
+      updatedBy: actor,
+    })
+    .where(and(eq(UserTable.id, userId), isNull(UserTable.passwordHash)))
+    .returning({ id: UserTable.id });
+  return rows.length > 0;
+}
+
+/** Which sign-in value a unique violation on `user` was about, when it says. */
+function takenSignInField(
+  error: unknown,
+  patch: SignInContactPatch,
+): 'email_taken' | 'phone_taken' {
+  const constraint = String(
+    (error as { constraint?: unknown } | null)?.constraint ??
+      (error as { cause?: { constraint?: unknown } } | null)?.cause?.constraint ??
+      '',
+  );
+  // `user_email_unique` / `user_phone_num_unique` (0000 migration).
+  if (constraint.includes('email')) return 'email_taken';
+  if (constraint.includes('phone')) return 'phone_taken';
+  return patch.email === undefined ? 'phone_taken' : 'email_taken';
 }
 
 /** True when this account holds the `pr` role (user_role ⋈ role). */
@@ -495,16 +597,19 @@ export class PrRepositoryClass {
           })
           .where(eq(UserProfileTable.userId, input.userId));
       }
-      if (input.phone !== undefined || input.email !== undefined) {
-        await db
-          .update(UserTable)
-          .set({
-            ...(input.phone !== undefined ? { phoneNum: input.phone } : {}),
-            ...(input.email !== undefined ? { email: input.email } : {}),
-            updatedAt: new Date(),
-            updatedBy: input.actor,
-          })
-          .where(eq(UserTable.id, input.userId));
+      const contactPatch = await guardedSignInContactPatch(
+        db,
+        input.userId,
+        { phone: input.phone, email: input.email },
+        'ensureOpsBridge',
+      );
+      if (
+        Object.keys(contactPatch).length > 0 &&
+        !(await writeUnactivatedSignInContact(db, input.userId, contactPatch, input.actor))
+      ) {
+        logger.warn(
+          `[PrRepository.ensureOpsBridge] kept the sign-in ${Object.keys(contactPatch).join(' + ')} of account ${input.userId} — it was activated before the write`,
+        );
       }
 
       const pr = await this.getByUserId(input.userId);
@@ -514,6 +619,42 @@ export class PrRepositoryClass {
       return pr;
     } catch (error) {
       logger.error('[PrRepository.ensureOpsBridge] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The agency's correction of a never-activated stub's sign-in email / phone,
+   * as ONE conditional statement — the write `POST /pr` and `PUT /pr/:id` make
+   * after `planSignInContactWrite` has allowed it, and before anything else.
+   *
+   *  - `updated`: written;
+   *  - `activated`: 0 rows — the account got a password (or disappeared) after
+   *    the controller read it, so the change is refused like any other change
+   *    to an activated account;
+   *  - `email_taken` / `phone_taken`: the unique index refused it — another
+   *    account took the value after the controller's own 409 check, or that
+   *    check could not see the holder (`getUserByLoginMethod` answers null for
+   *    an ambiguous match and on a read error).
+   *
+   * It used to go through `userRepository.updateUser`, which swallows every
+   * error and returns null, and the controller ignored the null — so `PUT
+   * /pr/:id` answered 200 "Profile saved" for a contact write that never
+   * happened. Any other database error is thrown for the controller's 500.
+   */
+  async writeStubSignInContact(
+    userId: string,
+    patch: SignInContactPatch,
+    actor: string,
+  ): Promise<'updated' | 'activated' | 'email_taken' | 'phone_taken'> {
+    if (Object.keys(patch).length === 0) return 'updated';
+    try {
+      return (await writeUnactivatedSignInContact(db, userId, patch, actor))
+        ? 'updated'
+        : 'activated';
+    } catch (error) {
+      if (isUniqueViolation(error)) return takenSignInField(error, patch);
+      logger.error('[PrRepository.writeStubSignInContact] Error:', error);
       throw error;
     }
   }
@@ -593,16 +734,19 @@ export class PrRepositoryClass {
           .where(eq(UserProfileTable.userId, id));
       }
 
-      if (data.phone !== undefined || data.email !== undefined) {
-        await dbClient
-          .update(UserTable)
-          .set({
-            ...(data.phone !== undefined ? { phoneNum: data.phone } : {}),
-            ...(data.email !== undefined ? { email: data.email } : {}),
-            updatedAt: new Date(),
-            updatedBy: actor,
-          })
-          .where(eq(UserTable.id, id));
+      const contactPatch = await guardedSignInContactPatch(
+        dbClient,
+        id,
+        { phone: data.phone, email: data.email },
+        'update',
+      );
+      if (
+        Object.keys(contactPatch).length > 0 &&
+        !(await writeUnactivatedSignInContact(dbClient, id, contactPatch, actor))
+      ) {
+        logger.warn(
+          `[PrRepository.update] kept the sign-in ${Object.keys(contactPatch).join(' + ')} of account ${id} — it was activated before the write`,
+        );
       }
 
       // Empty result below => row not found (a genuine null); a real DB error

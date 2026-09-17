@@ -19,6 +19,8 @@ import { AgencyUserTable } from '@/features/agency/agency.model.js';
 import { OutletUserTable } from '@/features/outlet/outlet.model.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import { SYSTEM_ACTOR } from '@/util/actor.js';
+import { floorToSecond } from './session-cutoff.js';
+import { redactQueryError, safeErrorFields } from './query-error-redaction.js';
 export class AuthRepositoryClass {
   constructor(
     private jwtController: JwtControllerClass,
@@ -192,7 +194,9 @@ export class AuthRepositoryClass {
       logger.info('[AuthRepository.createUserWithRole] User created with role:', newUser.email);
       return newUser;
     } catch (error) {
-      logger.error('[AuthRepository.createUserWithRole] Error:', error);
+      // `userData.passwordHash` is a bound value of the insert; createUser has
+      // already scrubbed it, and this line never prints the object regardless.
+      logger.error('[AuthRepository.createUserWithRole] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -550,7 +554,9 @@ export class AuthRepositoryClass {
       });
       logger.info('[AuthRepository.createResetPasswordToken] Reset password token created successfully');
     } catch (error) {
-      logger.error('[AuthRepository.createResetPasswordToken] Error:', error);
+      // The raw reset token is a bound value — a live sign-in link if printed.
+      redactQueryError(error);
+      logger.error('[AuthRepository.createResetPasswordToken] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -582,11 +588,48 @@ export class AuthRepositoryClass {
    * The person changing their own password is not thrown out: the check refuses
    * tokens issued STRICTLY earlier than this moment, and their own client
    * re-authenticates afterwards.
+   *
+   * ⚠️ The stamp is FLOORED TO THE WHOLE SECOND (`floorToSecond`), because
+   * `iat` has no milliseconds: an unfloored cutoff made the token re-issued by
+   * this very change look older than the change it came from.
+   *
+   * Options:
+   *  • `updatedBy`    — who wrote it; the audit columns travel together.
+   *  • `clearLockout` — a password RESET proves control of the account by a
+   *    code or a link, so a lock earned by guessing the OLD password must not
+   *    keep the owner out of the new one.
+   *  • `tx` / `cutoff` — so a reset can spend its code and write the password in
+   *    one transaction, and tell its caller the exact cutoff it stamped.
+   *
+   * Returns the cutoff written.
    */
-  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
-    await db
-      .update(UserTable)
-      .set({ passwordHash, sessionsValidFrom: new Date(), updatedAt: new Date() })
-      .where(eq(UserTable.id, userId));
+  async updateUserPassword(
+    userId: string,
+    passwordHash: string,
+    options: {
+      updatedBy?: string;
+      clearLockout?: boolean;
+      tx?: DbTransaction;
+      cutoff?: Date;
+    } = {},
+  ): Promise<Date> {
+    const cutoff = floorToSecond(options.cutoff ?? new Date());
+    try {
+      await (options.tx ?? db)
+        .update(UserTable)
+        .set({
+          passwordHash,
+          sessionsValidFrom: cutoff,
+          updatedAt: new Date(),
+          ...(options.updatedBy ? { updatedBy: options.updatedBy } : {}),
+          ...(options.clearLockout ? { failedLoginAttempts: 0, lockedUntil: null } : {}),
+        })
+        .where(eq(UserTable.id, userId));
+    } catch (error) {
+      // The new hash is a bound value of this statement. Scrubbed before the
+      // rethrow, so no caller's catch block can print it (query-error-redaction.ts).
+      throw redactQueryError(error);
+    }
+    return cutoff;
   }
 }

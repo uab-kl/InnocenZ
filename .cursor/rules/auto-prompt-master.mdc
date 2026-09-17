@@ -1,0 +1,24 @@
+---
+description: Auto-run prompt-master whenever a prompt is needed — no /prompt-master required
+alwaysApply: true
+---
+
+# Auto Prompt Master
+
+You forget to type `/prompt-master`. Do not wait for it.
+
+## When this fires (ALWAYS)
+
+If the user asks to **write, fix, improve, craft, adapt, or generate a prompt** for any AI tool (Cursor, Claude, ChatGPT, Midjourney, Claude Code, Copilot, etc.), or pastes a rough idea and wants a ready-to-paste prompt:
+
+1. **Read and follow** `C:\Users\jinkg\.claude\skills\prompt-master\SKILL.md` immediately.
+2. Confirm the target tool if unclear (max 3 clarifying questions).
+3. Output only: one copyable prompt block + the short 🎯/💡 line.
+
+## When this does NOT fire
+
+Normal coding, debugging, refactors, commits, and repo work — do those directly. Do **not** interrupt with prompt-master unless the user is asking for a prompt.
+
+## Shortcut phrases that count as invoke
+
+Treat these as `/prompt-master` even without the slash: "write me a prompt", "prompt for …", "fix this prompt", "adapt this for …", "make a Cursor/Claude/Midjourney prompt".

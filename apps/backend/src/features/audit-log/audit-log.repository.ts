@@ -322,7 +322,18 @@ const SENSITIVE_KEYS = new Set([
   // A successful OTP verify returns a verificationId that the password reset
   // accepts as sole proof — a bearer credential until it is consumed.
   'verificationId',
+  // A one-time code in a request body — /auth/otp/verify, the forgot-password
+  // complete, every contact-change step. Paired with the request id beside it,
+  // an audit row holding the code is a replayable proof until the row expires.
+  // ⚠️ This also blanks any other field literally named `code` in an audited
+  // body (e.g. a portal's `code`); a redacted label is the cheaper mistake.
+  'code',
 ]);
+
+/** The set itself, read-only — exported so its contents can be asserted. */
+export function isSensitiveAuditKey(key: string): boolean {
+  return SENSITIVE_KEYS.has(key);
+}
 
 /**
  * Strip credential-bearing fields before anything is persisted to audit_logs.

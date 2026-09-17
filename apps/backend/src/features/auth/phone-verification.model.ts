@@ -19,12 +19,43 @@ export const phoneVerificationStatusValues = [
 ] as const;
 export type PhoneVerificationStatus = (typeof phoneVerificationStatusValues)[number];
 
+/**
+ * Every purpose a row may carry.
+ *
+ * The last three belong to the account-code flows (features/account-code) and
+ * are NEVER accepted by the public `/auth/otp/send` and `/auth/otp/verify` —
+ * those take `publicOtpPurposeValues` below. Those rows are keyed on the
+ * ACCOUNT (`created_by` = its user id, the code hash bound to that id), not on
+ * a phone number a stranger can type, so letting the public endpoints touch
+ * them would hand a per-phone lookup to a per-account secret.
+ *
+ *  • `reset_password`           — logged-out reset, code to every contact on file
+ *  • `contact_change_identity`  — signed-in email/phone change, step 1: a code to
+ *                                 the CURRENT contacts proves it is the owner
+ *  • `contact_change_new`       — step 2: a code to the NEW contact proves it works
+ *
+ * `change_phone` stays for the rows already stored; nothing issues it any more.
+ */
 export const phoneVerificationPurposeValues = [
   'signup',
   'forgot_password',
   'change_phone',
+  'reset_password',
+  'contact_change_identity',
+  'contact_change_new',
 ] as const;
 export type PhoneVerificationPurpose = (typeof phoneVerificationPurposeValues)[number];
+
+/**
+ * What the PUBLIC `/auth/otp/send` and `/auth/otp/verify` accept.
+ *
+ * `change_phone` was removed from here: changing a phone now needs a code to
+ * the current contacts first (POST /auth/contact-change/start), and the old
+ * one-step change answered with a code sent only to the NEW number — which
+ * proves the new number works, not that the caller owns the account.
+ */
+export const publicOtpPurposeValues = ['signup', 'forgot_password'] as const;
+export type PublicOtpPurpose = (typeof publicOtpPurposeValues)[number];
 
 export const PhoneVerificationTable = MainSchema.table('phone_verification', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),

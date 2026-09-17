@@ -1141,6 +1141,14 @@ const en = {
 		couldNotSaveProfile: "Could not save this profile — try again",
 		couldNotSuspend: "Could not suspend this PR — try again",
 		couldNotDetach: "Could not remove this PR from your roster — try again",
+		/**
+		 * Under the editable Mobile and Email. They are the PR's SIGN-IN contacts:
+		 * once the PR has set a password the server refuses any change made here
+		 * (403 "Only the PR can change their sign-in email or phone"), and only
+		 * the PR can change them, with codes, from their own app.
+		 */
+		signInContactHint:
+			"Mobile and email are how this PR signs in. Once the PR has set a password, only they can change these, from their own app.",
 		title: "Manage PR",
 		accessRestricted: "Access restricted",
 		tapToMultiSelect: "Tap PR cards to multi-select",
@@ -1984,7 +1992,7 @@ const en = {
 		subRoleInviteHint:
 			"Sub-role invite · requires IC + e-signature for dual-sign PV",
 		passwordOtpHint:
-			"Update password anytime. Email and mobile changes require OTP verification.",
+			"Update your password anytime. Email and mobile changes are confirmed with codes sent by WhatsApp, SMS and email.",
 		securitySettings: "Security settings",
 		chooseImageFile: "Please choose an image file",
 		imageUnder5Mb: "Image must be under 5 MB",
@@ -2091,33 +2099,29 @@ const en = {
 		mobileMustDiffer: "New mobile must be different from your current number",
 		sendOtpAndUpdate: "Send OTP & update",
 		readOnlyForRole: "Read-only for your role.",
-		otpSentTo: "OTP sent to {target}",
-		otpResentTo: "OTP resent to {target}",
 		/*
-		 * No longer "try 123456 for demo". On a real session the code now comes
-		 * from WhatsApp, and telling somebody to type 123456 at a server that
-		 * will refuse it five times and then expire the code is worse than
-		 * saying nothing.
+		 * `otpSentTo`, `otpResentTo`, `invalidOtp`, `otpSendFailed`,
+		 * `mobileUpdated` and `mobileUpdateFailed` were removed on 17 Sep 2026:
+		 * their only readers were the one-code phone change, replaced by the
+		 * two-code flow whose copy lives in `authCodes`.
 		 */
-		invalidOtp: "That code is not right — check WhatsApp or send a new one",
 		/** DEMO sessions send no message — 123456 is the code. */
 		invalidOtpDemo: "Invalid OTP — try 123456 for demo",
 		otpDemoNoMessage: "Demo mode — no message is sent. Enter 123456.",
-		otpSendFailed: "Could not send the code — try again in a moment",
-		/** Shown BEFORE sending, so a missing country code is caught by eye. */
-		otpWillSendTo: "Code goes to {target} on WhatsApp",
-		/** Shown while the box is empty — both formats are accepted. */
-		/** No email-OTP endpoint exists yet — see TEST_SCRIPT §9. */
-		emailChangeUnavailable:
-			"Changing your email is not available yet — contact InnocenZ to update it.",
+		/**
+		 * Shown BEFORE sending, so a missing country code is caught by eye. The
+		 * NEW number only gets the second code — the first goes to the contacts
+		 * already on the account (authCodes.phoneStepsHint says so).
+		 */
+		otpWillSendTo:
+			"The new number {target} gets its own code by WhatsApp and SMS",
 		mobileTooShort:
 			"That looks too short for a mobile number — check the digits.",
 		mobileTooLong:
 			"That looks too long for a mobile number — check the digits.",
+		/** Shown while the box is empty — both formats are accepted. */
 		phoneFormatHint:
 			"Type it however you write it — 0123456789 or +60 12-345 6789 both work.",
-		mobileUpdated: "Mobile number updated",
-		mobileUpdateFailed: "Could not update your mobile number",
 		verifyNewEmail: "Verify new email",
 		verifyNewMobile: "Verify new mobile",
 		enterSixDigitCode: "Enter the 6-digit code sent to",
@@ -3689,6 +3693,15 @@ const en = {
 		/** MAX_BYTES is an inclusive 5 MB — deliberately not profile.imageUnder5Mb ("under 5 MB"), which states the bound wrongly. */
 		imageMax5Mb: "Image must be 5 MB or smaller",
 		profileSaved: "Profile saved",
+		/** Card title over the admin's own password / phone / email. */
+		loginSecurity: "Login & security",
+		loginSecurityHint:
+			"Your own sign-in details. Email and phone changes are confirmed with codes sent by WhatsApp, SMS and email.",
+		phone: "Phone",
+		/** Shown in place of an email or phone the account does not have. */
+		notSet: "Not set",
+		/** Button beside each sign-in detail. */
+		change: "Change",
 	},
 	adminUsers: {
 		/** Last-resort name in the PR account confirm when a row carries no legal name, display name or email. */
@@ -6441,12 +6454,7 @@ const en = {
 		commissionShort: "Comm.",
 	},
 	webLib: {
-		/** Forgot-password result when the server returns no message of its own. */
-		passwordResetLinkSent:
-			"If that email is registered, a reset link is on its way.",
-		/** Fallback when POST /auth/forgot-password fails without a server message. */
-		passwordResetLinkFailed: "Could not send the reset link",
-		/** Fallback when POST /auth/reset-password fails without a server message. */
+		/** Fallback when a password reset (code or old link) fails without a server message. */
 		passwordResetFailed: "Could not reset password",
 		/** Fallback when PATCH /user/:id rejects a display-name change silently. */
 		displayNameUpdateFailed: "Failed to update display name",
@@ -6772,28 +6780,36 @@ const en = {
 		forgotHeadingAccent: "password?",
 		/** Sub-line under the /forgot-password h1. */
 		forgotSubheading:
-			"Enter the email on your account and we'll send you a reset link.",
+			"Enter the email on your account and we'll send a code by WhatsApp, SMS and email.",
 		/** aria-label on the /forgot-password <form>. Announced, never displayed. */
 		forgotFormLabel: "Forgot password form",
 		/** The /forgot-password submit button at rest. */
-		sendResetLink: "Send reset link",
+		sendCode: "Send code",
 		/** The /forgot-password submit button while the request is in flight. */
 		sending: "Sending…",
-		/** Last-resort banner when the throw carried no message at all — password-api normally supplies one via apiErrorCopy(). */
-		resetLinkSendFailed: "Could not send the reset link. Please try again.",
-		/** First line of the /forgot-password success h1; checkInboxAccent finishes it. */
-		checkInboxHeading: "Check your",
-		/** Gradient second line of the /forgot-password success h1 — one sentence with checkInboxHeading. */
-		checkInboxAccent: "inbox",
-		/** Sub-line after the request is accepted. Says IF on purpose — the endpoint answers identically whether or not the address exists, and this copy must not leak that. */
-		checkInboxSubheading:
-			"If that email is registered, a reset link is on its way.",
-		/** Whole sentence with the address as a hole. forgot-password.tsx splits it at {email} so the address keeps its gold highlight — a prefix/suffix pair would force English word order. */
-		resetLinkSentTo: "We sent a password reset link to {email}.",
-		/** Fine print under the /forgot-password confirmation. */
-		resetLinkExpiryHint:
-			"The link expires in 1 hour. If it does not arrive, check your spam folder — or make sure that address has an InnocenZ account.",
-		/** Ghost button that returns the /forgot-password confirmation to the form. */
+		/** First line of the /forgot-password code-step h1; codeStepAccent finishes it. */
+		codeStepHeading: "Enter your",
+		/** Gradient second line of the code-step h1 — one sentence with codeStepHeading. */
+		codeStepAccent: "code",
+		/** Sub-line on the code step. Says IF on purpose — the endpoint answers identically whether or not the account exists, and this copy must not leak that. */
+		codeStepSubheading:
+			"If that account exists, we sent a code by WhatsApp, SMS and email.",
+		/** Whole sentence with the address as a hole — split at {email} so the typed address keeps its gold highlight. It only repeats what the person typed, so it reveals nothing. */
+		codeRequestedFor: "Code requested for {email}.",
+		/** Fine print on the code step. {minutes} comes from the server's expiresInSec. */
+		codeExpiryHint:
+			"The code works for {minutes} minutes. Nothing arrived? Check your spam folder, or make sure this is the email on your account.",
+		/** Label over the 6-digit code input. */
+		codeLabel: "6-digit code",
+		/** aria-label on the code-step <form>. Announced, never displayed. */
+		codeFormLabel: "Reset password with code form",
+		/** Code-step submit button at rest. The in-flight label reuses common.saving. */
+		updatePassword: "Update password",
+		/** Code-step resend button once the cooldown is over; the countdown reuses portalUi.resendOtpIn. */
+		resendCode: "Resend code",
+		/** Body copy on the success state after a code reset. */
+		codeUsedUp: "That code has been used and will not work again.",
+		/** Ghost button that returns the /forgot-password code step to the email form. */
 		useDifferentEmail: "Use a different email",
 		/** Lead-in before the back-to-sign-in link at the foot of /forgot-password. */
 		rememberedIt: "Remembered it?",
@@ -6821,9 +6837,9 @@ const en = {
 		linkIncompleteSubheading: "The reset link is missing its token.",
 		/** Body copy for the tokenless /reset-password state. */
 		linkIncompleteHint:
-			"Open the link straight from the email, or request a new one.",
-		/** Button back to /forgot-password from the tokenless state. */
-		requestNewLink: "Request a new link",
+			"Open the link straight from the email, or reset with a code instead.",
+		/** Button back to /forgot-password (now the code flow) from the tokenless state. */
+		requestNewLink: "Reset with a code",
 		/** First line of the /reset-password success h1; passwordUpdatedAccent finishes it (密码 + 已更新). */
 		passwordUpdatedHeading: "Password",
 		/** Gradient second line — one sentence with passwordUpdatedHeading. */
@@ -6834,6 +6850,131 @@ const en = {
 		resetLinkUsedUp: "The reset link has been used up and will not work again.",
 		/** Button to /login from the /reset-password success state. Distinct from backToSignIn, which is a "return" after an aborted attempt. */
 		goToSignIn: "Go to sign in",
+	},
+	/**
+	 * The code flows — forgot password, change password, change phone and change
+	 * email (owner, 17 Sep 2026: codes by WhatsApp, SMS and email). Shared by the
+	 * agency, outlet and admin portals and the public forgot-password page.
+	 *
+	 * The `server*` keys are the DISPLAY side of sentences the backend sends.
+	 * The English value must stay word-for-word the server's sentence — the map
+	 * in lib/auth/auth-server-copy.ts is keyed on it, and its test fails if the
+	 * two drift.
+	 */
+	authCodes: {
+		/** Channel names inside "Code sent by {channels} to {target}". */
+		channelWhatsapp: "WhatsApp",
+		channelSms: "SMS",
+		channelEmail: "email",
+		/** Joins two channel names: "WhatsApp and SMS". */
+		channelJoin: " and ",
+		/** {segments} is one or more deliverySegment joined by deliverySegmentJoin. */
+		deliveryLead: "Code sent {segments}.",
+		/** {target} is ALREADY masked by the server (+60 ••••• 6789). */
+		deliverySegment: "by {channels} to {target}",
+		deliverySegmentJoin: " and ",
+		/** Non-production OTP_DELIVERY_LOG_ONLY: nothing was delivered. */
+		deliveryLogged:
+			"Dev mode — the code was written to the server log, not delivered.",
+		deliveryFailed: "Could not send by {channels}.",
+		deliveryNone:
+			"No channel confirmed the code was sent — wait a moment, then use Resend.",
+		codeSendFailed: "Could not send the code — try again in a moment",
+		codeCheckFailed: "Could not check that code — try again",
+		codeRequired: "Enter the 6-digit code",
+		codeResent: "A new code is on its way",
+		continueLabel: "Continue",
+		verifying: "Checking…",
+		passwordMaxLength: "New password must be at most {max} characters",
+		identityTitle: "Confirm it's you",
+		identityHint:
+			"Step 1 of 2 — enter the code we sent to your current contacts.",
+		newEmailTitle: "Verify your new email",
+		newPhoneTitle: "Verify your new number",
+		newEmailHint: "Step 2 of 2 — enter the code we sent to the new email.",
+		newPhoneHint: "Step 2 of 2 — enter the code we sent to the new number.",
+		emailStepsHint:
+			"We first send a code to your current phone and email to confirm it's you, then a second code to the new email.",
+		phoneStepsHint:
+			"We first send a code to your current phone and email to confirm it's you, then a second code to the new number by WhatsApp and SMS.",
+		/** {n} = pendingInvitesToCurrentEmail from the server. */
+		pendingInvitesWarning:
+			"{n} pending invitation(s) went to your current email. They stay tied to that address — accept them before you change it, or ask for new ones.",
+		emailUpdateFailed: "Could not update your email",
+		phoneUpdateFailed: "Could not update your phone number",
+
+		serverCouldNotSend: "Could not send the code — try again later",
+		serverInvalidCode: "Invalid code",
+		/** {n} is read out of the server's own sentence. */
+		serverWaitSeconds: "Wait {n}s before requesting another code",
+		serverForgotNeutral:
+			"If that account exists, we sent a code by WhatsApp, SMS and email.",
+		serverCodeExpired: "This code has expired — request a new one",
+		serverPasswordResetDone:
+			"Password updated — sign in with your new password",
+		serverUseForgotPassword: "Use Forgot password on the sign-in page",
+		serverAlreadyYourEmail: "That is already your email",
+		serverAlreadyYourPhone: "That is already your phone number",
+		serverEmailTaken: "That email is already used by another account",
+		serverPhoneTaken: "That phone number is already used by another account",
+		serverNoContactChannel:
+			"Your account has no phone or email we can send a code to",
+		serverCodeSent: "Code sent",
+		serverChangeExpired: "This change has expired — start again",
+		serverCodeAlreadyUsed: "This code was already used",
+		serverEmailUpdated: "Email updated",
+		serverPhoneUpdated: "Phone number updated",
+		serverPhoneChangeNeedsUpdate:
+			"Changing your phone now needs a code to your current contacts — please update the app",
+		serverNewPasswordMustDiffer: "New password must be different",
+		serverCurrentPasswordWrong: "Current password is incorrect",
+		serverPasswordUpdated: "Password updated",
+		serverChangeEmailInSecurity: "Change your email from Security settings",
+		serverChangePhoneInSecurity: "Change your phone from Security settings",
+		serverOnlyPrChangesSignIn:
+			"Only the PR can change their sign-in email or phone",
+		/**
+		 * Not named in the contract, but sent on these routes by the backend as
+		 * built (account-code/shared.ts TOO_MANY_ATTEMPTS and the limiters mounted
+		 * on them, read 17 Sep 2026). English stays word-for-word.
+		 */
+		serverTooManyAttempts: "Too many attempts — request a new code",
+		limiterResetRequests:
+			"Too many password reset requests. Please try again later.",
+		limiterAttemptsWait:
+			"Too many attempts. Please wait a few minutes and try again.",
+		limiterCodesRequested:
+			"Too many verification codes requested. Please try again later.",
+		limiterAttempts: "Too many attempts. Please try again later.",
+		limiterPasswordChange:
+			"Too many password change attempts. Please try again later.",
+		/**
+		 * Also sent on these routes (contact-change 500s, password-change for an
+		 * account with no password, the handlers' catch-all, and the zod messages
+		 * in account-code/schemas.ts). English stays word-for-word.
+		 */
+		serverCouldNotStartChange: "Could not start the change",
+		serverCouldNotSendCode: "Could not send the code",
+		serverCannotChangePasswordHere: "This account cannot change password here",
+		serverInternalError: "Internal Server Error",
+		serverValidationFailed: "Validation failed",
+		serverEnterEmailOrPhone: "Enter your email or your phone number",
+		serverEnterValidEmail: "Enter a valid email address",
+		serverEnterValidPhone: "Enter a valid phone number",
+		serverEnterSixDigitCode: "Enter the 6-digit code",
+		serverEnterNewContact: "Enter the new email or phone number",
+		serverCurrentPasswordRequired: "Current password is required",
+		/** {min} / {max} are read out of the server's own sentence. */
+		serverPasswordMinLength: "Password must be at least {min} characters long",
+		serverPasswordMaxLength: "Password must be at most {max} characters long",
+		/**
+		 * The forgot-password page's ONE answer to a wrong, expired or used-up
+		 * code. Deliberately the same sentence for all three: telling them apart
+		 * told a stranger whether an address has an account. NOT a server
+		 * sentence, so it is free to read naturally.
+		 */
+		forgotCodeRejected:
+			"That code didn't work — it may be wrong or expired. Check it, or request a new code.",
 	},
 	dates: {
 		/** Rendered short weekday. The English TOKEN it resolves stays English wherever it is stored or parsed — see date-label.ts. */
@@ -7767,6 +7908,8 @@ const zh: PortalTranslations = {
 		couldNotSaveProfile: "无法保存此资料 — 请重试",
 		couldNotSuspend: "无法停用此 PR — 请重试",
 		couldNotDetach: "无法将此 PR 移出名单 — 请重试",
+		signInContactHint:
+			"手机号和邮箱是此 PR 的登录方式。PR 设置密码后，只有其本人可以在自己的应用中修改。",
 		title: "PR 管理",
 		accessRestricted: "无访问权限",
 		tapToMultiSelect: "点击 PR 卡片可多选",
@@ -8414,7 +8557,8 @@ const zh: PortalTranslations = {
 		icAutoStamps: "身份证 + 电子签名会自动加盖到每张薪资单（双签中的第 1 签）",
 		eSignatureOnFile: "已保存电子签名 ✓",
 		subRoleInviteHint: "子角色邀请 · 双签薪资单需要身份证 + 电子签名",
-		passwordOtpHint: "密码可随时修改。更改邮箱和手机号需要短信验证码验证。",
+		passwordOtpHint:
+			"密码可随时修改。更改邮箱或手机号需通过 WhatsApp、短信和邮件发送的验证码确认。",
 		securitySettings: "安全设置",
 		chooseImageFile: "请选择图片文件",
 		imageUnder5Mb: "图片大小须小于 5 MB",
@@ -8433,7 +8577,7 @@ const zh: PortalTranslations = {
 		suspendedProfileOnly: "已停用 · 仅可查看资料",
 		verifiedUsageBased: "已验证 · {price} · 按用量每周计费",
 		pendingAdminApproval: "等待管理员审批",
-		pendingOtpActivation: "等待短信验证码激活",
+		pendingOtpActivation: "等待验证码激活",
 
 		addressLine1: "地址第一行",
 		addressLine1Hint: "街道地址、楼宇、单位",
@@ -8517,19 +8661,12 @@ const zh: PortalTranslations = {
 		mobileMustDiffer: "新手机号必须与当前号码不同",
 		sendOtpAndUpdate: "发送验证码并更新",
 		readOnlyForRole: "你的角色为只读。",
-		otpSentTo: "验证码已发送至 {target}",
-		otpResentTo: "验证码已重新发送至 {target}",
-		invalidOtp: "验证码不正确 —— 请查看 WhatsApp 或重新发送",
 		invalidOtpDemo: "验证码不正确 —— 演示环境请输入 123456",
-		otpDemoNoMessage: "演示模式 —— 不会发送短信，请输入 123456。",
-		otpSendFailed: "无法发送验证码 —— 请稍后再试",
-		otpWillSendTo: "验证码将通过 WhatsApp 发送至 {target}",
-		emailChangeUnavailable: "暂时无法自行修改邮箱 —— 请联系 InnocenZ 更新。",
+		otpDemoNoMessage: "演示模式 —— 不会发送任何消息，请输入 123456。",
+		otpWillSendTo: "新号码 {target} 将通过 WhatsApp 和短信收到自己的验证码",
 		mobileTooShort: "这个号码位数太少 —— 请检查数字。",
 		mobileTooLong: "这个号码位数太多 —— 请检查数字。",
 		phoneFormatHint: "怎么写都可以 —— 0123456789 或 +60 12-345 6789 都能识别。",
-		mobileUpdated: "手机号已更新",
-		mobileUpdateFailed: "无法更新你的手机号",
 		verifyNewEmail: "验证新邮箱",
 		verifyNewMobile: "验证新手机号",
 		enterSixDigitCode: "请输入发送至以下号码的 6 位验证码",
@@ -9847,6 +9984,12 @@ const zh: PortalTranslations = {
 		onlyJpgPngWebp: "仅支持 JPG、PNG 和 WebP 格式的图片",
 		imageMax5Mb: "图片大小不得超过 5 MB",
 		profileSaved: "个人资料已保存",
+		loginSecurity: "登录与安全",
+		loginSecurityHint:
+			"您本人的登录信息。修改邮箱和手机号需通过 WhatsApp、短信和邮件发送的验证码确认。",
+		phone: "手机号",
+		notSet: "未设置",
+		change: "修改",
 	},
 	adminUsers: {
 		thisAccount: "此账户",
@@ -11659,8 +11802,6 @@ const zh: PortalTranslations = {
 		commissionShort: "抽成",
 	},
 	webLib: {
-		passwordResetLinkSent: "如果该邮箱已注册，重置链接稍后送达。",
-		passwordResetLinkFailed: "无法发送重置链接",
 		passwordResetFailed: "无法重置密码",
 		displayNameUpdateFailed: "显示名称更新失败",
 		notSignedIn: "尚未登录",
@@ -11831,17 +11972,22 @@ const zh: PortalTranslations = {
 		errorWrongPassword: "密码错误",
 		forgotHeading: "忘记您的",
 		forgotHeadingAccent: "密码？",
-		forgotSubheading: "请输入您账户绑定的邮箱，我们会向您发送重置链接。",
+		forgotSubheading:
+			"请输入您账户绑定的邮箱，我们会通过 WhatsApp、短信和邮件向您发送验证码。",
 		forgotFormLabel: "忘记密码表单",
-		sendResetLink: "发送重置链接",
+		sendCode: "发送验证码",
 		sending: "发送中…",
-		resetLinkSendFailed: "无法发送重置链接，请重试。",
-		checkInboxHeading: "请查收您的",
-		checkInboxAccent: "邮箱",
-		checkInboxSubheading: "如果该邮箱已注册，重置链接即将送达。",
-		resetLinkSentTo: "我们已向 {email} 发送密码重置链接。",
-		resetLinkExpiryHint:
-			"链接 1 小时后失效。如果没有收到，请查看垃圾邮件文件夹，或确认该邮箱已注册 InnocenZ 账户。",
+		codeStepHeading: "输入您的",
+		codeStepAccent: "验证码",
+		codeStepSubheading: "如果该账户存在，我们已通过 WhatsApp、短信和邮件发送验证码。",
+		codeRequestedFor: "已为 {email} 申请验证码。",
+		codeExpiryHint:
+			"验证码 {minutes} 分钟内有效。没有收到？请查看垃圾邮件文件夹，或确认这是您账户绑定的邮箱。",
+		codeLabel: "6 位验证码",
+		codeFormLabel: "验证码重置密码表单",
+		updatePassword: "更新密码",
+		resendCode: "重新发送验证码",
+		codeUsedUp: "该验证码已使用，无法再次使用。",
 		useDifferentEmail: "换一个邮箱",
 		rememberedIt: "想起密码了？",
 		resetHeading: "设置新",
@@ -11855,13 +12001,92 @@ const zh: PortalTranslations = {
 		linkIncompleteHeading: "该链接",
 		linkIncompleteAccent: "不完整",
 		linkIncompleteSubheading: "该重置链接缺少令牌。",
-		linkIncompleteHint: "请直接从邮件中打开链接，或重新申请一个。",
-		requestNewLink: "重新申请链接",
+		linkIncompleteHint: "请直接从邮件中打开链接，或改用验证码重置。",
+		requestNewLink: "使用验证码重置",
 		passwordUpdatedHeading: "密码",
 		passwordUpdatedAccent: "已更新",
 		passwordUpdatedSubheading: "现在可以使用新密码登录了。",
 		resetLinkUsedUp: "该重置链接已被使用，无法再次使用。",
 		goToSignIn: "前往登录",
+	},
+	authCodes: {
+		channelWhatsapp: "WhatsApp",
+		channelSms: "短信",
+		channelEmail: "邮件",
+		channelJoin: "和",
+		deliveryLead: "验证码已{segments}。",
+		deliverySegment: "通过{channels}发送至 {target}",
+		deliverySegmentJoin: "，并",
+		deliveryLogged: "开发模式 —— 验证码只写入了服务器日志，并未实际发送。",
+		deliveryFailed: "无法通过{channels}发送。",
+		deliveryNone: "没有任何渠道确认已发送验证码 —— 请稍候，再点击重新发送。",
+		codeSendFailed: "无法发送验证码 —— 请稍后再试",
+		codeCheckFailed: "无法核对该验证码 —— 请重试",
+		codeRequired: "请输入 6 位验证码",
+		codeResent: "新的验证码已发送",
+		continueLabel: "继续",
+		verifying: "核对中…",
+		passwordMaxLength: "新密码不能超过 {max} 个字符",
+		identityTitle: "确认是您本人",
+		identityHint: "第 1 步（共 2 步）—— 请输入发送到您当前联系方式的验证码。",
+		newEmailTitle: "验证新邮箱",
+		newPhoneTitle: "验证新手机号",
+		newEmailHint: "第 2 步（共 2 步）—— 请输入发送到新邮箱的验证码。",
+		newPhoneHint: "第 2 步（共 2 步）—— 请输入发送到新号码的验证码。",
+		emailStepsHint:
+			"我们会先向您当前的手机和邮箱发送验证码以确认是您本人，再向新邮箱发送第二个验证码。",
+		phoneStepsHint:
+			"我们会先向您当前的手机和邮箱发送验证码以确认是您本人，再通过 WhatsApp 和短信向新号码发送第二个验证码。",
+		pendingInvitesWarning:
+			"有 {n} 个待处理的邀请发送到了您当前的邮箱。这些邀请仍绑定该地址 —— 请在修改前先接受，或请对方重新邀请。",
+		emailUpdateFailed: "无法更新您的邮箱",
+		phoneUpdateFailed: "无法更新您的手机号",
+
+		serverCouldNotSend: "无法发送验证码 —— 请稍后再试",
+		serverInvalidCode: "验证码不正确",
+		serverWaitSeconds: "请等待 {n} 秒后再重新获取验证码",
+		serverForgotNeutral: "如果该账户存在，我们已通过 WhatsApp、短信和邮件发送验证码。",
+		serverCodeExpired: "验证码已过期 —— 请重新获取",
+		serverPasswordResetDone: "密码已更新 —— 请使用新密码登录",
+		serverUseForgotPassword: "请在登录页面使用「忘记密码」",
+		serverAlreadyYourEmail: "这已经是您的邮箱",
+		serverAlreadyYourPhone: "这已经是您的手机号",
+		serverEmailTaken: "该邮箱已被其他账户使用",
+		serverPhoneTaken: "该手机号已被其他账户使用",
+		serverNoContactChannel: "您的账户没有可接收验证码的手机号或邮箱",
+		serverCodeSent: "验证码已发送",
+		serverChangeExpired: "本次修改已过期 —— 请重新开始",
+		serverCodeAlreadyUsed: "该验证码已被使用",
+		serverEmailUpdated: "邮箱已更新",
+		serverPhoneUpdated: "手机号已更新",
+		serverPhoneChangeNeedsUpdate:
+			"修改手机号现在需要向您当前的联系方式发送验证码 —— 请更新应用",
+		serverNewPasswordMustDiffer: "新密码必须与当前密码不同",
+		serverCurrentPasswordWrong: "当前密码不正确",
+		serverPasswordUpdated: "密码已更新",
+		serverChangeEmailInSecurity: "请在安全设置中修改邮箱",
+		serverChangePhoneInSecurity: "请在安全设置中修改手机号",
+		serverOnlyPrChangesSignIn: "只有 PR 本人可以修改其登录邮箱或手机号",
+		serverTooManyAttempts: "尝试次数过多 —— 请重新获取验证码",
+		limiterResetRequests: "密码重置请求过多，请稍后再试。",
+		limiterAttemptsWait: "尝试次数过多，请等待几分钟后再试。",
+		limiterCodesRequested: "请求验证码的次数过多，请稍后再试。",
+		limiterAttempts: "尝试次数过多，请稍后再试。",
+		limiterPasswordChange: "修改密码的尝试次数过多，请稍后再试。",
+		serverCouldNotStartChange: "无法开始本次修改 —— 请稍后再试",
+		serverCouldNotSendCode: "无法发送验证码",
+		serverCannotChangePasswordHere: "此账户无法在这里修改密码",
+		serverInternalError: "服务器出错 —— 请稍后再试",
+		serverValidationFailed: "提交的内容有误 —— 请检查后重试",
+		serverEnterEmailOrPhone: "请输入您的邮箱或手机号",
+		serverEnterValidEmail: "请输入有效的邮箱地址",
+		serverEnterValidPhone: "请输入有效的手机号",
+		serverEnterSixDigitCode: "请输入 6 位验证码",
+		serverEnterNewContact: "请输入新的邮箱或手机号",
+		serverCurrentPasswordRequired: "请输入当前密码",
+		serverPasswordMinLength: "密码至少需要 {min} 个字符",
+		serverPasswordMaxLength: "密码不能超过 {max} 个字符",
+		forgotCodeRejected: "验证码无效 —— 可能输入有误或已过期。请检查，或重新获取验证码。",
 	},
 	dates: {
 		weekdaySun: "周日",

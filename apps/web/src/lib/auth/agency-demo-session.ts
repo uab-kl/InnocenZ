@@ -6,7 +6,7 @@ import {
 	resolveAgencyIdentityForUser,
 	resolveOutletIdentityForUser,
 } from "@agency-portal/lib/resolve-session-identity";
-import { saveAuthTokens } from "@/lib/auth/auth-storage";
+import { getAccessToken, saveAuthTokens } from "@/lib/auth/auth-storage";
 import { readTabScoped, writeTabScoped } from "@/lib/auth/tab-scoped-storage";
 
 /**
@@ -48,6 +48,9 @@ export function getPortalSessionKind(): PortalSessionKind | null {
 	return readTabScoped(SESSION_KIND_KEY) as PortalSessionKind | null;
 }
 
+/** The signature segment of the unsigned demo token below. */
+const DEMO_JWT_SIGNATURE = "demo";
+
 /**
  * Build a placeholder access token whose payload mirrors the backend shape
  * (`loginMethod` / `loginCriteria`) so anything that decodes it keeps working.
@@ -59,7 +62,25 @@ function makeDemoJwt(email: string): string {
 	const payload = btoa(
 		JSON.stringify({ loginMethod: "email", loginCriteria: email }),
 	);
-	return `${header}.${payload}.demo`;
+	return `${header}.${payload}.${DEMO_JWT_SIGNATURE}`;
+}
+
+/**
+ * MAY THIS TAB SKIP THE SERVER FOR AN ACCOUNT ACTION? Only when there is no
+ * account behind it.
+ *
+ * ⚠️ Deliberately NOT `getPortalSessionKind() !== "real"`. That reading counts
+ * an UNSET marker as demo — right for choosing which DATA to paint (see
+ * PortalShell), wrong for a security action: a real token whose tab has no
+ * marker was shown "Password updated" while nothing was sent. So an unset
+ * marker is decided by the token itself — only the unsigned demo token minted
+ * above is a demo. Anything else goes to the server, which has the last word.
+ */
+export function isDemoPortalSession(): boolean {
+	const kind = getPortalSessionKind();
+	if (kind === "demo") return true;
+	if (kind === "real") return false;
+	return getAccessToken()?.split(".")[2] === DEMO_JWT_SIGNATURE;
 }
 
 export function isAgencyDemoLogin(email: string, password: string): boolean {

@@ -36,17 +36,13 @@ const ResetPasswordWithOtpSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters long'),
 });
 
-/** Signed-in password change — current password, no OTP. */
-const ChangePasswordSchema = z.object({
-  currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(6, 'Password must be at least 6 characters long'),
-});
-
-/** Signed-in phone change — OTP on the NEW number (purpose=change_phone). */
-const ChangePhoneWithOtpSchema = z.object({
-  phoneNum: z.string().min(8, 'Phone number is required'),
-  verificationId: z.string().uuid('Phone verification is required'),
-});
+/*
+ * The signed-in password-change and one-step phone-change schemas lived here.
+ * Both flows moved: password change → features/account-code/schemas.ts
+ * (`ChangePasswordBodySchema`, 6-72 characters, must differ), and phone change
+ * → the two-code contact change in the same folder. The old one-step
+ * POST /auth/phone/change now answers 400 and parses nothing.
+ */
 
 /** Comcard size integers — coerce so JSON numbers or digit strings both work. */
 const comcardCm = z.coerce.number().int().min(40).max(250);
@@ -267,8 +263,6 @@ export {
     ForgotPasswordSchema,
     ResetPasswordSchema,
     ResetPasswordWithOtpSchema,
-    ChangePasswordSchema,
-    ChangePhoneWithOtpSchema,
     RegisterSchema,
     FirstTimeLoginSchema,
 };

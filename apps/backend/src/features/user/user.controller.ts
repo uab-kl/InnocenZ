@@ -48,6 +48,11 @@ import { saveUserIdDocFile, deleteUserIdDocFile, withUserProfile, withUserProfil
 import { logger } from '@/util/logger';
 import { r2Configured } from '@/util/r2';
 import { SaveMySignatureSchema } from '@/schema/user-profile.schema';
+import {
+  SIGN_IN_CONTACT_MESSAGES,
+  sameSignInEmail,
+  sameSignInPhone,
+} from '@/features/pr-personnel/sign-in-contact';
 
 const SORT_FIELDS: UserSortField[] = ['CREATED_AT', 'UPDATED_AT', 'USERNAME', 'EMAIL', 'STATUS'];
 
@@ -465,6 +470,49 @@ export class UserControllerClass {
         });
       }
 
+      const existingUser = await this.userRepository.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      /*
+       * ⚠️ THE SIGN-IN EMAIL AND PHONE ARE NOT PROFILE FIELDS, and this route
+       * used to write the email straight onto `user.email` — no code to the old
+       * address, none to the new one. Whoever held a signed-in session could
+       * point every reset code and security notice at themselves.
+       *
+       * Refused HERE, before anything below writes: this handler writes in
+       * several steps (user, then profile, then bank details), so a refusal
+       * placed after the first of them would still leave a half-saved record.
+       *
+       * An UNCHANGED value (any case, surrounding space) is ignored, not
+       * refused — the phone's profile form sends the whole record back on
+       * every save, and that must keep working.
+       */
+      const requestedEmail = contactField(req.body, 'email');
+      if (requestedEmail !== undefined && !sameSignInEmail(requestedEmail, existingUser.email)) {
+        return res.status(400).json({
+          success: false,
+          message: SIGN_IN_CONTACT_MESSAGES.selfEmail,
+          data: null,
+        });
+      }
+      // This route never accepted a phone, so a client sending one was silently
+      // ignored with a 200 — which reads as saved. Say where it is changed instead.
+      for (const key of ['phoneNum', 'phone']) {
+        const requestedPhone = contactField(req.body, key);
+        if (
+          requestedPhone !== undefined &&
+          !sameSignInPhone(requestedPhone, existingUser.phoneNum)
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: SIGN_IN_CONTACT_MESSAGES.selfPhone,
+            data: null,
+          });
+        }
+      }
+
       const username =
         typeof req.body?.username === 'string' ? req.body.username.trim() : '';
       if (!username || username.length < 2 || username.length > 100) {
@@ -477,8 +525,6 @@ export class UserControllerClass {
 
       const fullName =
         typeof req.body?.fullName === 'string' ? req.body.fullName.trim() : undefined;
-      const email =
-        typeof req.body?.email === 'string' ? req.body.email.trim() : undefined;
 
       if (fullName !== undefined && (fullName.length < 1 || fullName.length > 255)) {
         return res.status(400).json({
@@ -487,24 +533,13 @@ export class UserControllerClass {
           data: null,
         });
       }
-      if (email !== undefined && email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Enter a valid email address',
-          data: null,
-        });
-      }
-
-      const existingUser = await this.userRepository.getUserById(id);
-      if (!existingUser) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      }
 
       const actor = getActor(req);
+      // No `email` / `phoneNum` in this write, ever: an unchanged value has
+      // nothing to write, and a changed one was refused above.
       const updatedUser = await this.userRepository.updateUser(
         {
           username,
-          ...(email !== undefined ? { email: email || null } : {}),
           updatedBy: actor,
         },
         id,
@@ -1106,6 +1141,18 @@ export class UserControllerClass {
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
+}
+
+/**
+ * A sign-in contact the body ASKED about: the string as sent, `null` for an
+ * explicit null (a request to clear it), `undefined` when absent. Any other
+ * type is treated as absent — the old handler ignored non-strings too.
+ */
+function contactField(body: unknown, key: string): string | null | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  if (!Object.prototype.hasOwnProperty.call(body, key)) return undefined;
+  const value = (body as Record<string, unknown>)[key];
+  return value === null || typeof value === 'string' ? value : undefined;
 }
 
 function parseOptionalInt(value: unknown): number | null | undefined {

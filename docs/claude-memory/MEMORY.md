@@ -1,6 +1,6 @@
 # Memory Index
 
-All 170 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
+All 171 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
 are kept identical in BOTH directions — see [Sync memory mirrors](sync-memory-mirrors.md).
 Dated session history is NOT here: it lives in `TEST_SCRIPT.md` §8/§10. Rules live in `CLAUDE.md`.
 The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stops + schema), not a log.
@@ -216,3 +216,7 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 ### Newly added - file these into a section above
 
 - [Innocenz the fix rules](innocenz-the-fix-rules.md) — "Owner's standing checklist for EVERY change on InnocenZ, on every device and every session — database first, UI+DB together, all pages, say what is left, all 11 lanes, then continue."
+
+### Newly added - file these into a section above
+
+- [Tips row is seeded and locked](tips-row-is-seeded-and-locked.md) — Every outlet is created with a Tips row on Service Entitlement that it may price but not delete — and its category is 'tip', a money bucket, never 'service'

@@ -811,18 +811,20 @@ function OutletSettingsPage() {
 				email={currentUser?.email ?? owner.email}
 				mobile={currentUser?.contactNo ?? owner.mobile}
 				/*
-				 * NOT `canEdit` — that is `settings:update` on the ORGANISATION, and
+				 * No `canEdit` — that is `settings:update` on the ORGANISATION, and
 				 * this sheet is the signed-in person's own account: change password,
-				 * change email by OTP, change mobile by OTP. Nothing in it touches
-				 * the venue.
+				 * change email and change mobile by codes sent by WhatsApp, SMS and
+				 * email. Nothing in it touches the venue.
 				 *
 				 * Gating it on the org permission locked every read-only outlet role
 				 * out of its own password. That is the entire editable surface a
 				 * Director is meant to have (owner's rule, 17 Aug 2026), so the role
 				 * would have had none — and Finance was already quietly in the same
-				 * position.
+				 * position. The sheet no longer takes the prop at all.
+				 *
+				 * The two callbacks below only run on a DEMO session; a real change
+				 * is refetched from `/auth/me`.
 				 */
-				canEdit
 				onUpdateEmail={(email) => {
 					if (!profile.backed) saveOutletOwner({ email });
 				}}

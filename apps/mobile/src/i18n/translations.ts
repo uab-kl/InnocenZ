@@ -30,6 +30,13 @@ export type AppTranslations = {
     newBadge: string;
     /** accessibilityLabel for the InnocenZ logo image. The brand name itself stays English. */
     brandLogo: string;
+    /** Shown when a backdrop tap / hardware back would throw away a half-finished code flow (forgot password, contact change). */
+    discardTitle: string;
+    discardBody: string;
+    /** Stays in the flow. Worded differently from `continue` so the two buttons never read the same. */
+    keepGoing: string;
+    /** Leaves the flow and discards what was entered. */
+    leave: string;
   };
   nav: {
     today: string;
@@ -72,6 +79,7 @@ export type AppTranslations = {
     sendCode: string;
     sending: string;
     otpTitle: string;
+    /** `{m}` = minutes the code stays valid (from the server's expiresInSec). */
     otpHint: string;
     verify: string;
     verifying: string;
@@ -84,9 +92,10 @@ export type AppTranslations = {
     doneTitle: string;
     doneBody: string;
     backToSignIn: string;
-    /** Deliberately non-committal — never confirms whether the number exists. */
+    /** Deliberately non-committal — never confirms whether the account exists. Mirrors the server's own neutral sentence. */
     codeSentInfo: string;
-    invalidCode: string;
+    /** Hint on the new-password step. Must NOT repeat the phone hint — the number is already behind the PR. */
+    passwordHint: string;
     resetFailed: string;
   };
   topbar: {
@@ -166,7 +175,15 @@ export type AppTranslations = {
     nicknameLength: string;
     icNameRequired: string;
     languageRequired: string;
+    /** Also used by Security → Change email before the code is requested. */
     emailInvalid: string;
+    /** Under the read-only email in the profile editor — the sign-in email is changed only through the verified flow. */
+    emailChangeHint: string;
+    /** Opening Security settings while the profile editor is open — the edits are not saved and would be lost. */
+    leaveEditTitle: string;
+    leaveEditBody: string;
+    /** Stays in the profile editor. The other button reuses common.leave. */
+    keepEditing: string;
     profileSaved: string;
     saveFailed: string;
     comcardUpdated: string;
@@ -217,6 +234,7 @@ export type AppTranslations = {
     title: string;
     changePassword: string;
     changePhone: string;
+    changeEmail: string;
     deleteAccount: string;
     deleteAccountTitle: string;
     deleteAccountHint: string;
@@ -228,30 +246,71 @@ export type AppTranslations = {
     confirmPassword: string;
     passwordUpdated: string;
     passwordMin: string;
+    /** The server caps a password at 72 characters (bcrypt's input limit). */
+    passwordMax: string;
     passwordMismatch: string;
     phoneUpdated: string;
+    emailUpdated: string;
     sendOtp: string;
     verifyOtp: string;
     eyebrow: string;
     intro: string;
     /** `{phone}` = the account's stored phone number. Appended after security.intro. */
     currentPhone: string;
+    /** `{email}` = the account's stored email. Appended after currentPhone. */
+    currentEmail: string;
     changePhoneHint: string;
+    changeEmailHint: string;
     newMobileNumber: string;
-    sendWhatsappCode: string;
-    /** `{phone}` = dial code + local digits of the NEW number. */
-    codeSentTo: string;
-    /** Title of the change-phone OTP sheet. */
-    otpTitle: string;
-    otpHint: string;
-    /** Field label above the 6-digit OTP input. */
+    newEmail: string;
+    /** Step 2 title — the code sent to the CURRENT phone + email. */
+    identityTitle: string;
+    /** Step 3 title — the code sent to the NEW number. */
+    newPhoneCodeTitle: string;
+    /** Step 3 title — the code sent to the NEW email. */
+    newEmailCodeTitle: string;
+    /** `{m}` = minutes the code stays valid. */
+    codeValidFor: string;
+    /** `{n}` = org invitations still addressed to the current email. Accepting one needs the account email to MATCH the invite, so they cannot be accepted after the change. */
+    pendingInvites: string;
+    /** Back to step 1 after the change expired. */
+    startAgain: string;
+    /** Field label above the 6-digit code input. */
     otpLabel: string;
     verifyAndSave: string;
+    /**
+     * Where a code went, built from the server's masked `sentTo`. EN reads
+     * "Code sent by WhatsApp and SMS to +60 ••••• 6789 and by email to o••••@x.my".
+     * Channel names are separate keys so Chinese can reorder the sentence.
+     */
+    channelWhatsapp: string;
+    channelSms: string;
+    channelEmail: string;
+    /** Between channel names that share a destination ("WhatsApp and SMS"). */
+    channelJoin: string;
+    /** One destination: `{channels}` = joined channel names, `{to}` = masked destination, never translated. */
+    sentVia: string;
+    /** Between destinations. */
+    sentPartJoin: string;
+    /** `{parts}` = every sentVia joined by sentPartJoin. */
+    sentSummary: string;
+    /** Every attempt was written to the server log instead of delivered (development). */
+    sentLoggedOnly: string;
+    /** No channel delivered or logged. */
+    sentNowhere: string;
     updatePasswordFailed: string;
-    /** Shared by SecurityScreen change-phone and ForgotPasswordModal. */
+    /** Shared by SecurityScreen contact change and ForgotPasswordModal. */
     sendCodeFailed: string;
     updatePhoneFailed: string;
+    updateEmailFailed: string;
     deleteAccountFailed: string;
+    /**
+     * A password / phone / email change was SAVED but no fresh session came
+     * back. The old session is refused from the moment of the change, so the
+     * PR is signed out and signs in again.
+     */
+    signInAgainBody: string;
+    signInAgain: string;
   };
   shifts: {
     pageEyebrow: string;
@@ -1477,6 +1536,47 @@ export type AppTranslations = {
     networkError: string;
     /** Thrown by lib/session.tsx when a profile/upload action runs with no token — Profile renders it. */
     notSignedIn: string;
+    /*
+     * The server's own sentences for the verification-code flows (forgot
+     * password, change phone / email, change password). The backend speaks
+     * English only; `localizeApiError` matches each one and renders these.
+     */
+    /** 400 — a wrong code. Never 401. */
+    invalidCode: string;
+    /** 400 — forgot-password code is expired or already used. */
+    codeExpired: string;
+    /** 400 — the contact-change request timed out. */
+    changeExpired: string;
+    /** 409 — the confirm raced a second tap / another device. */
+    codeAlreadyUsed: string;
+    /** 503 — no channel delivered in production. */
+    codeSendFailed: string;
+    /** 429 resend cooldown — `{s}` = seconds left. */
+    codeCooldown: string;
+    sameEmail: string;
+    samePhone: string;
+    emailTaken: string;
+    phoneTaken: string;
+    /** 422 — nowhere to send the identity code. */
+    noContactChannel: string;
+    currentPasswordIncorrect: string;
+    passwordMustDiffer: string;
+    /** PATCH /user/:id refusing an email change outside Security settings. */
+    changeEmailInSecurity: string;
+    changePhoneInSecurity: string;
+    /** The retired one-code /auth/phone/change. */
+    phoneChangeNeedsUpdate: string;
+    /** 403 from the legacy /auth/password/reset-otp for a non-PR account. */
+    useForgotPassword: string;
+    /** Any rate-limiter refusal ("Too many … try again later."). */
+    tooManyRequests: string;
+    /** 429 — the CODE took too many wrong guesses and was expired: a new code is needed (a limiter's 429 only asks to wait). */
+    tooManyCodeAttempts: string;
+    /** 400 — the server's own validation sentences on the code endpoints. */
+    invalidPhoneNumber: string;
+    enterSixDigitCode: string;
+    invalidEmailAddress: string;
+    currentPasswordRequired: string;
   };
   notif: {
     /** Bell-sheet title for a `shift_assigned` row. The row's own English title stays on the wire and in the database — this is only the rendered label. zh and zh-Hant are identical: no character differs between the scripts. */
@@ -1556,6 +1656,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tapToExpand: 'Tap to expand',
       newBadge: 'New',
       brandLogo: 'InnocenZ logo',
+      discardTitle: 'Leave without finishing?',
+      discardBody: 'What you entered will be lost, and you will need a new code to start again.',
+      keepGoing: 'Keep going',
+      leave: 'Leave',
     },
     nav: {
       today: 'Today',
@@ -1589,11 +1693,12 @@ export const translations: Record<AppLocale, AppTranslations> = {
     },
     forgot: {
       title: 'Reset password',
-      phoneHint: 'We’ll send a WhatsApp code to your account phone.',
+      phoneHint:
+        'Enter your account’s mobile number. We’ll send a code by WhatsApp, SMS and email to the contacts on the account.',
       sendCode: 'Send code',
       sending: 'Sending…',
       otpTitle: 'Enter code',
-      otpHint: 'Check WhatsApp for the 6-digit code.',
+      otpHint: 'Enter the 6-digit code. It is valid for {m} minutes.',
       verify: 'Verify',
       verifying: 'Verifying…',
       resend: 'Resend code',
@@ -1605,8 +1710,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       doneTitle: 'Password updated',
       doneBody: 'You can sign in with your new password.',
       backToSignIn: 'Back to sign in',
-      codeSentInfo: 'If that number is registered, a WhatsApp code was sent.',
-      invalidCode: 'Invalid code',
+      codeSentInfo: 'If that account exists, we sent a code by WhatsApp, SMS and email.',
+      passwordHint: 'Choose a new password for your account — at least 6 characters.',
       resetFailed: 'Could not reset password',
     },
     topbar: {
@@ -1678,6 +1783,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       icNameRequired: 'Enter your legal IC name',
       languageRequired: 'Select at least one language',
       emailInvalid: 'Enter a valid email address',
+      emailChangeHint: 'Change in Security settings',
+      leaveEditTitle: 'Leave without saving?',
+      leaveEditBody: 'Your unsaved profile changes will be lost.',
+      keepEditing: 'Keep editing',
       profileSaved: 'Profile saved',
       saveFailed: 'Could not save profile',
       comcardUpdated: 'Comcard updated',
@@ -1718,6 +1827,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       title: 'Security',
       changePassword: 'Change password',
       changePhone: 'Change phone',
+      changeEmail: 'Change email',
       deleteAccount: 'Delete account',
       deleteAccountTitle: 'Delete account?',
       deleteAccountHint:
@@ -1730,25 +1840,48 @@ export const translations: Record<AppLocale, AppTranslations> = {
       confirmPassword: 'Confirm password',
       passwordUpdated: 'Password updated',
       passwordMin: 'Password must be at least 6 characters',
+      passwordMax: 'Password must be at most 72 characters',
       passwordMismatch: 'Passwords do not match',
       phoneUpdated: 'Phone updated',
+      emailUpdated: 'Email updated',
       sendOtp: 'Send code',
       verifyOtp: 'Verify code',
       eyebrow: 'ACCOUNT',
-      intro: 'Change password with your current one, or change phone via WhatsApp OTP.',
+      intro:
+        'Change your password with your current one. Changing your phone or email needs a code sent to your current contacts first.',
       currentPhone: 'Current: {phone}',
-      changePhoneHint: 'Enter the new number. We will send a WhatsApp code to verify it.',
+      currentEmail: 'Email: {email}',
+      changePhoneHint:
+        'Enter the new number. We first send a code to your current phone and email to confirm it’s you, then a code to the new number.',
+      changeEmailHint:
+        'Enter the new email. We first send a code to your current phone and email to confirm it’s you, then a code to the new email.',
       newMobileNumber: 'New mobile number',
-      sendWhatsappCode: 'Send WhatsApp code',
-      codeSentTo: 'Code sent on WhatsApp to {phone}',
-      otpTitle: 'Verify OTP',
-      otpHint: 'Enter the 6-digit code sent on WhatsApp to {phone}',
-      otpLabel: 'OTP',
+      newEmail: 'New email',
+      identityTitle: 'Confirm it’s you',
+      newPhoneCodeTitle: 'Verify your new number',
+      newEmailCodeTitle: 'Verify your new email',
+      codeValidFor: 'The code is valid for {m} minutes.',
+      pendingInvites:
+        '{n} pending invitation(s) were sent to your current email. You can’t accept them after the change — accept them first, or ask for a new invite to the new email.',
+      startAgain: 'Start again',
+      otpLabel: 'Code',
       verifyAndSave: 'Verify & save',
+      channelWhatsapp: 'WhatsApp',
+      channelSms: 'SMS',
+      channelEmail: 'email',
+      channelJoin: ' and ',
+      sentVia: 'by {channels} to {to}',
+      sentPartJoin: ' and ',
+      sentSummary: 'Code sent {parts}',
+      sentLoggedOnly: 'Test mode: the code was written to the server log, not delivered.',
+      sentNowhere: 'The code could not be delivered. Try Resend in a moment.',
       updatePasswordFailed: 'Could not update password',
       sendCodeFailed: 'Could not send code',
       updatePhoneFailed: 'Could not update phone',
+      updateEmailFailed: 'Could not update email',
       deleteAccountFailed: 'Could not delete account',
+      signInAgainBody: 'For your security, please sign in again.',
+      signInAgain: 'Sign in again',
     },
     shifts: {
       pageEyebrow: 'AGENCY SHIFTS',
@@ -2601,6 +2734,30 @@ export const translations: Record<AppLocale, AppTranslations> = {
       uploadUnreachable: 'Upload failed — could not finish talking to {base} ({detail}). Check Wi‑Fi / that the backend is running.',
       networkError: 'network error',
       notSignedIn: 'Not signed in',
+      invalidCode: 'Invalid code',
+      codeExpired: 'This code has expired — request a new one',
+      changeExpired: 'This change has expired — start again',
+      codeAlreadyUsed: 'This code was already used',
+      codeSendFailed: 'Could not send the code — try again later',
+      codeCooldown: 'Wait {s}s before requesting another code',
+      sameEmail: 'That is already your email',
+      samePhone: 'That is already your phone number',
+      emailTaken: 'That email is already used by another account',
+      phoneTaken: 'That phone number is already used by another account',
+      noContactChannel: 'Your account has no phone or email we can send a code to',
+      currentPasswordIncorrect: 'Current password is incorrect',
+      passwordMustDiffer: 'New password must be different',
+      changeEmailInSecurity: 'Change your email from Security settings',
+      changePhoneInSecurity: 'Change your phone from Security settings',
+      phoneChangeNeedsUpdate:
+        'Changing your phone now needs a code to your current contacts — please update the app',
+      useForgotPassword: 'Use Forgot password on the sign-in page',
+      tooManyRequests: 'Too many attempts. Please wait and try again later.',
+      tooManyCodeAttempts: 'Too many attempts — request a new code',
+      invalidPhoneNumber: 'Enter a valid phone number',
+      enterSixDigitCode: 'Enter the 6-digit code',
+      invalidEmailAddress: 'Enter a valid email address',
+      currentPasswordRequired: 'Current password is required',
     },
     notif: {
       shiftAssignedTitle: 'You have a new shift',
@@ -2656,6 +2813,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tapToExpand: '点击展开',
       newBadge: '新',
       brandLogo: 'InnocenZ 标志',
+      discardTitle: '确定不完成就离开？',
+      discardBody: '已输入的内容将丢失，重新开始时需要新的验证码。',
+      keepGoing: '继续填写',
+      leave: '离开',
     },
     nav: {
       today: '今日',
@@ -2689,11 +2850,11 @@ export const translations: Record<AppLocale, AppTranslations> = {
     },
     forgot: {
       title: '重置密码',
-      phoneHint: '我们将通过 WhatsApp 向你的账号手机号发送验证码。',
+      phoneHint: '请输入账号的手机号码。我们会通过 WhatsApp、短信和电子邮件向账号上的联系方式发送验证码。',
       sendCode: '发送验证码',
       sending: '发送中…',
       otpTitle: '输入验证码',
-      otpHint: '请查看 WhatsApp 中的 6 位验证码。',
+      otpHint: '请输入 6 位验证码，{m} 分钟内有效。',
       verify: '验证',
       verifying: '验证中…',
       resend: '重新发送',
@@ -2705,8 +2866,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       doneTitle: '密码已更新',
       doneBody: '你可以使用新密码登录。',
       backToSignIn: '返回登录',
-      codeSentInfo: '如果该号码已注册，验证码已通过 WhatsApp 发送。',
-      invalidCode: '验证码无效',
+      codeSentInfo: '如果该账号存在，我们已通过 WhatsApp、短信和电子邮件发送验证码。',
+      passwordHint: '为你的账号设置新密码，至少 6 位。',
       resetFailed: '无法重置密码',
     },
     topbar: {
@@ -2776,6 +2937,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       icNameRequired: '请输入身份证姓名',
       languageRequired: '请至少选择一种语言',
       emailInvalid: '请输入有效的电子邮箱',
+      emailChangeHint: '请在安全设置中更改',
+      leaveEditTitle: '不保存就离开？',
+      leaveEditBody: '未保存的资料修改将会丢失。',
+      keepEditing: '继续编辑',
       profileSaved: '资料已保存',
       saveFailed: '无法保存资料',
       comcardUpdated: '名片卡已更新',
@@ -2816,6 +2981,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       title: '安全',
       changePassword: '修改密码',
       changePhone: '更换手机号',
+      changeEmail: '更换电子邮箱',
       deleteAccount: '删除账号',
       deleteAccountTitle: '删除账号？',
       deleteAccountHint:
@@ -2828,25 +2994,47 @@ export const translations: Record<AppLocale, AppTranslations> = {
       confirmPassword: '确认密码',
       passwordUpdated: '密码已更新',
       passwordMin: '密码至少 6 位',
+      passwordMax: '密码最多 72 位',
       passwordMismatch: '两次输入的密码不一致',
       phoneUpdated: '手机号已更新',
+      emailUpdated: '电子邮箱已更新',
       sendOtp: '发送验证码',
       verifyOtp: '验证验证码',
       eyebrow: '账号',
-      intro: '使用当前密码修改密码，或通过 WhatsApp 验证码更换手机号。',
+      intro: '使用当前密码修改密码。更换手机号或电子邮箱时，需先向你当前的联系方式发送验证码。',
       currentPhone: '当前：{phone}',
-      changePhoneHint: '请输入新手机号。我们将通过 WhatsApp 发送验证码进行验证。',
+      currentEmail: '邮箱：{email}',
+      changePhoneHint:
+        '请输入新手机号。我们会先向你当前的手机号和电子邮箱发送验证码确认是你本人，再向新号码发送验证码。',
+      changeEmailHint:
+        '请输入新电子邮箱。我们会先向你当前的手机号和电子邮箱发送验证码确认是你本人，再向新邮箱发送验证码。',
       newMobileNumber: '新手机号码',
-      sendWhatsappCode: '发送 WhatsApp 验证码',
-      codeSentTo: '验证码已通过 WhatsApp 发送至 {phone}',
-      otpTitle: '验证码验证',
-      otpHint: '请输入通过 WhatsApp 发送至 {phone} 的 6 位验证码',
+      newEmail: '新电子邮箱',
+      identityTitle: '确认是你本人',
+      newPhoneCodeTitle: '验证新手机号',
+      newEmailCodeTitle: '验证新电子邮箱',
+      codeValidFor: '验证码 {m} 分钟内有效。',
+      pendingInvites:
+        '有 {n} 个待处理的邀请发送到了你当前的电子邮箱。更换后将无法接受这些邀请 — 请先接受，或请对方向新邮箱重新发送邀请。',
+      startAgain: '重新开始',
       otpLabel: '验证码',
       verifyAndSave: '验证并保存',
+      channelWhatsapp: 'WhatsApp',
+      channelSms: '短信',
+      channelEmail: '电子邮件',
+      channelJoin: ' 和 ',
+      sentVia: '通过 {channels} 发送至 {to}',
+      sentPartJoin: '，并',
+      sentSummary: '验证码已{parts}',
+      sentLoggedOnly: '测试模式：验证码已写入服务器日志，并未实际发送。',
+      sentNowhere: '验证码未能送达。请稍后点击重新发送。',
       updatePasswordFailed: '无法更新密码',
       sendCodeFailed: '无法发送验证码',
       updatePhoneFailed: '无法更新手机号',
+      updateEmailFailed: '无法更新电子邮箱',
       deleteAccountFailed: '无法删除账号',
+      signInAgainBody: '为了账号安全，请重新登录。',
+      signInAgain: '重新登录',
     },
     shifts: {
       pageEyebrow: '经纪排班',
@@ -3697,6 +3885,29 @@ export const translations: Record<AppLocale, AppTranslations> = {
       uploadUnreachable: '上传失败 — 无法与 {base} 完成通信（{detail}）。请检查 Wi-Fi，并确认服务器已启动。',
       networkError: '网络错误',
       notSignedIn: '尚未登录',
+      invalidCode: '验证码无效',
+      codeExpired: '验证码已过期 — 请重新获取',
+      changeExpired: '本次更改已过期 — 请重新开始',
+      codeAlreadyUsed: '该验证码已被使用',
+      codeSendFailed: '无法发送验证码 — 请稍后再试',
+      codeCooldown: '请等待 {s} 秒后再获取验证码',
+      sameEmail: '这已经是你的电子邮箱',
+      samePhone: '这已经是你的手机号',
+      emailTaken: '该电子邮箱已被其他账号使用',
+      phoneTaken: '该手机号已被其他账号使用',
+      noContactChannel: '你的账号没有可接收验证码的手机号或电子邮箱',
+      currentPasswordIncorrect: '当前密码不正确',
+      passwordMustDiffer: '新密码不能与当前密码相同',
+      changeEmailInSecurity: '请在安全设置中更换电子邮箱',
+      changePhoneInSecurity: '请在安全设置中更换手机号',
+      phoneChangeNeedsUpdate: '更换手机号现在需要向你当前的联系方式发送验证码 — 请更新应用',
+      useForgotPassword: '请在登录页面使用“忘记密码”',
+      tooManyRequests: '尝试次数过多，请稍后再试。',
+      tooManyCodeAttempts: '尝试次数过多 — 请重新获取验证码',
+      invalidPhoneNumber: '请输入有效的手机号',
+      enterSixDigitCode: '请输入 6 位数验证码',
+      invalidEmailAddress: '请输入有效的电子邮箱',
+      currentPasswordRequired: '请输入当前密码',
     },
     notif: {
       shiftAssignedTitle: '你有新的班次',
@@ -3752,6 +3963,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tapToExpand: '點擊展開',
       newBadge: '新',
       brandLogo: 'InnocenZ 標誌',
+      discardTitle: '確定不完成就離開？',
+      discardBody: '已輸入的內容將遺失，重新開始時需要新的驗證碼。',
+      keepGoing: '繼續填寫',
+      leave: '離開',
     },
     nav: {
       today: '今日',
@@ -3785,11 +4000,11 @@ export const translations: Record<AppLocale, AppTranslations> = {
     },
     forgot: {
       title: '重設密碼',
-      phoneHint: '我們將透過 WhatsApp 向你的帳號手機號傳送驗證碼。',
+      phoneHint: '請輸入帳號的手機號碼。我們會透過 WhatsApp、簡訊和電子郵件向帳號上的聯絡方式傳送驗證碼。',
       sendCode: '傳送驗證碼',
       sending: '傳送中…',
       otpTitle: '輸入驗證碼',
-      otpHint: '請查看 WhatsApp 中的 6 位驗證碼。',
+      otpHint: '請輸入 6 位驗證碼，{m} 分鐘內有效。',
       verify: '驗證',
       verifying: '驗證中…',
       resend: '重新傳送',
@@ -3801,8 +4016,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       doneTitle: '密碼已更新',
       doneBody: '你可以使用新密碼登入。',
       backToSignIn: '返回登入',
-      codeSentInfo: '如果該號碼已註冊，驗證碼已透過 WhatsApp 傳送。',
-      invalidCode: '驗證碼無效',
+      codeSentInfo: '如果該帳號存在，我們已透過 WhatsApp、簡訊和電子郵件傳送驗證碼。',
+      passwordHint: '為你的帳號設定新密碼，至少 6 位。',
       resetFailed: '無法重設密碼',
     },
     topbar: {
@@ -3872,6 +4087,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       icNameRequired: '請輸入身分證姓名',
       languageRequired: '請至少選擇一種語言',
       emailInvalid: '請輸入有效的電子郵箱',
+      emailChangeHint: '請在安全設定中更改',
+      leaveEditTitle: '不儲存就離開？',
+      leaveEditBody: '未儲存的資料修改將會遺失。',
+      keepEditing: '繼續編輯',
       profileSaved: '資料已儲存',
       saveFailed: '無法儲存資料',
       comcardUpdated: '名片卡已更新',
@@ -3912,6 +4131,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       title: '安全',
       changePassword: '修改密碼',
       changePhone: '更換手機號',
+      changeEmail: '更換電子郵箱',
       deleteAccount: '刪除帳號',
       deleteAccountTitle: '刪除帳號？',
       deleteAccountHint:
@@ -3924,25 +4144,47 @@ export const translations: Record<AppLocale, AppTranslations> = {
       confirmPassword: '確認密碼',
       passwordUpdated: '密碼已更新',
       passwordMin: '密碼至少 6 位',
+      passwordMax: '密碼最多 72 位',
       passwordMismatch: '兩次輸入的密碼不一致',
       phoneUpdated: '手機號已更新',
+      emailUpdated: '電子郵箱已更新',
       sendOtp: '傳送驗證碼',
       verifyOtp: '驗證驗證碼',
       eyebrow: '帳號',
-      intro: '使用目前密碼修改密碼，或透過 WhatsApp 驗證碼更換手機號。',
+      intro: '使用目前密碼修改密碼。更換手機號或電子郵箱時，需先向你目前的聯絡方式傳送驗證碼。',
       currentPhone: '目前：{phone}',
-      changePhoneHint: '請輸入新手機號。我們將透過 WhatsApp 傳送驗證碼進行驗證。',
+      currentEmail: '郵箱：{email}',
+      changePhoneHint:
+        '請輸入新手機號。我們會先向你目前的手機號和電子郵箱傳送驗證碼確認是你本人，再向新號碼傳送驗證碼。',
+      changeEmailHint:
+        '請輸入新電子郵箱。我們會先向你目前的手機號和電子郵箱傳送驗證碼確認是你本人，再向新郵箱傳送驗證碼。',
       newMobileNumber: '新手機號碼',
-      sendWhatsappCode: '傳送 WhatsApp 驗證碼',
-      codeSentTo: '驗證碼已透過 WhatsApp 傳送至 {phone}',
-      otpTitle: '驗證碼驗證',
-      otpHint: '請輸入透過 WhatsApp 傳送至 {phone} 的 6 位驗證碼',
+      newEmail: '新電子郵箱',
+      identityTitle: '確認是你本人',
+      newPhoneCodeTitle: '驗證新手機號',
+      newEmailCodeTitle: '驗證新電子郵箱',
+      codeValidFor: '驗證碼 {m} 分鐘內有效。',
+      pendingInvites:
+        '有 {n} 個待處理的邀請傳送到了你目前的電子郵箱。更換後將無法接受這些邀請 — 請先接受，或請對方向新郵箱重新傳送邀請。',
+      startAgain: '重新開始',
       otpLabel: '驗證碼',
       verifyAndSave: '驗證並儲存',
+      channelWhatsapp: 'WhatsApp',
+      channelSms: '簡訊',
+      channelEmail: '電子郵件',
+      channelJoin: ' 和 ',
+      sentVia: '透過 {channels} 傳送至 {to}',
+      sentPartJoin: '，並',
+      sentSummary: '驗證碼已{parts}',
+      sentLoggedOnly: '測試模式：驗證碼已寫入伺服器日誌，並未實際傳送。',
+      sentNowhere: '驗證碼未能送達。請稍後點擊重新傳送。',
       updatePasswordFailed: '無法更新密碼',
       sendCodeFailed: '無法傳送驗證碼',
       updatePhoneFailed: '無法更新手機號',
+      updateEmailFailed: '無法更新電子郵箱',
       deleteAccountFailed: '無法刪除帳號',
+      signInAgainBody: '為了帳號安全，請重新登入。',
+      signInAgain: '重新登入',
     },
     shifts: {
       pageEyebrow: '經紀排班',
@@ -4793,6 +5035,29 @@ export const translations: Record<AppLocale, AppTranslations> = {
       uploadUnreachable: '上傳失敗 — 無法與 {base} 完成通訊（{detail}）。請檢查 Wi-Fi，並確認伺服器已啟動。',
       networkError: '網路錯誤',
       notSignedIn: '尚未登入',
+      invalidCode: '驗證碼無效',
+      codeExpired: '驗證碼已過期 — 請重新取得',
+      changeExpired: '本次變更已過期 — 請重新開始',
+      codeAlreadyUsed: '此驗證碼已被使用',
+      codeSendFailed: '無法傳送驗證碼 — 請稍後再試',
+      codeCooldown: '請等待 {s} 秒後再取得驗證碼',
+      sameEmail: '這已經是你的電子郵箱',
+      samePhone: '這已經是你的手機號',
+      emailTaken: '此電子郵箱已被其他帳號使用',
+      phoneTaken: '此手機號已被其他帳號使用',
+      noContactChannel: '你的帳號沒有可接收驗證碼的手機號或電子郵箱',
+      currentPasswordIncorrect: '目前密碼不正確',
+      passwordMustDiffer: '新密碼不能與目前密碼相同',
+      changeEmailInSecurity: '請在安全設定中更換電子郵箱',
+      changePhoneInSecurity: '請在安全設定中更換手機號',
+      phoneChangeNeedsUpdate: '更換手機號現在需要向你目前的聯絡方式傳送驗證碼 — 請更新應用程式',
+      useForgotPassword: '請在登入頁面使用「忘記密碼」',
+      tooManyRequests: '嘗試次數過多，請稍後再試。',
+      tooManyCodeAttempts: '嘗試次數過多 — 請重新取得驗證碼',
+      invalidPhoneNumber: '請輸入有效的手機號',
+      enterSixDigitCode: '請輸入 6 位數驗證碼',
+      invalidEmailAddress: '請輸入有效的電子郵箱',
+      currentPasswordRequired: '請輸入目前密碼',
     },
     notif: {
       shiftAssignedTitle: '你有新的班次',

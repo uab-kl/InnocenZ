@@ -8,6 +8,7 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { localiseAuthMessage } from "@/lib/auth/auth-server-copy";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -101,9 +102,15 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 	 * `requirePermission('workforce','update')` and both resolve the PR through
 	 * `resolvePrForCaller`, which answers 403/404 IN WORDS when the PR belongs to
 	 * another agency. That sentence is the whole value of the refusal.
+	 *
+	 * Through the auth localiser: `PUT /pr/:id` answers a change to an activated
+	 * PR's sign-in email or phone with "Only the PR can change their sign-in
+	 * email or phone" (and 409s with "That email is already used by another
+	 * account"), and those sentences have translations. A sentence the map does
+	 * not know is shown exactly as the server wrote it, as before.
 	 */
 	const failed = (fallback: string) => (error: unknown) =>
-		toast(serverMessage(error, fallback), "warn");
+		toast(localiseAuthMessage(serverMessage(error, fallback), t), "warn");
 
 	const updateMut = useMutation({
 		mutationFn: (vars: { id: string; input: UpdatePrPersonnelInput }) =>

@@ -19,6 +19,7 @@ import {
 } from '@/schema/outlet.schema.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
+import { safeErrorFields } from './query-error-redaction.js';
 import { hashPassword } from '@/util/password.js';
 import { saveProfileImageFile } from '@/util/profile-image.js';
 import { normalizeInviteEmail, hashOrgMemberInviteToken } from '@/util/org-member-invite.js';
@@ -378,7 +379,7 @@ export class OrgMemberInviteControllerClass {
         },
       });
     } catch (error) {
-      logger.error('[OrgMemberInviteController.registerMember] Error:', error);
+      logger.error('[OrgMemberInviteController.registerMember] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,

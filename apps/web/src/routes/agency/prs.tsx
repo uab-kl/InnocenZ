@@ -1106,11 +1106,25 @@ function AgencyPrDetail({
 		const age = measure(draft.age, 18, 60);
 		const height = measure(draft.height, 140, 220);
 		const weight = measure(draft.weight, 35, 120);
+		/*
+		 * MOBILE AND EMAIL ONLY WHEN THEY WERE EDITED.
+		 *
+		 * They are the PR's SIGN-IN contacts. Once the PR has set a password,
+		 * `PUT /pr/:id` refuses any change to them with 403 — decided before any
+		 * write, so the WHOLE save is refused, race and tier and languages
+		 * included. Sending both on every save made an edit to either one sink
+		 * every unrelated field with it. Compared against the draft this editor
+		 * was opened with, so an untouched field is simply not sent; a real
+		 * edit is still sent and the server has the last word on it.
+		 */
+		const opened = buildAgencyPrDraft(detail);
+		const mobile = draft.mobile.trim();
+		const email = draft.email.trim();
 		const payload: Parameters<typeof onSaveProfile>[1] = {
 			name,
 			icName,
-			mobile: draft.mobile.trim(),
-			email: draft.email.trim(),
+			...(mobile !== opened.mobile.trim() ? { mobile } : {}),
+			...(email !== opened.email.trim() ? { email } : {}),
 			...(age !== undefined ? { age } : {}),
 			...(height !== undefined ? { height } : {}),
 			...(weight !== undefined ? { weight } : {}),
@@ -1446,6 +1460,15 @@ function AgencyPrDetail({
 										}
 									/>
 								</div>
+								{/*
+								 * The editor cannot tell whether this PR has set a password
+								 * (the roster read carries no such flag), so the fields stay
+								 * editable for the stubs an agency may still correct — and
+								 * this says, before Save, why a change can be refused.
+								 */}
+								<p className="iz-tiny iz-muted">
+									{t.managePr.signInContactHint}
+								</p>
 							</div>
 						) : (
 							<div className="iz-kv-list">

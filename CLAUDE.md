@@ -204,9 +204,10 @@ pnpm rbac:check    # exit 1 while that snapshot disagrees with the live table
   `-p tsconfig.json` compiles **zero files** and always reports clean. That is where the old
   "`apps/mobile` is 0-error" claim came from, and it hid a real crash: `Check` used in
   PaymentScreen without being imported, which blanked the screen on opening the dispute sheet
-  (5 Aug 2026). The REAL baseline is ~11 errors — DOM globals (`document`, `FileList`, `Blob`)
-  in `PhoneSheet.tsx`, `proof-photo.ts` and `PaymentScreen.tsx`, plus one `demo-shifts.ts:317`
-  narrowing error. Judge only files you touched, against that.
+  (5 Aug 2026). The baseline was ~11 errors (DOM globals in `PhoneSheet.tsx`, `proof-photo.ts`,
+  `PaymentScreen.tsx`, and `demo-shifts.ts:317`); **re-measured 17 Sep 2026 it is 0** — treat any
+  `tsconfig.app.json` error as yours. Test files are not covered by it (`tsconfig.spec.json` needs
+  `tsc -b`).
 - `apps/web`: biome (tabs, double quotes); new routes need `npx tsr generate`.
 - PR-scoped backend endpoints use the `/mine` pattern (derive `pr.id` server-side via
   `prRepository.getByUserId`, placed BEFORE `/:id` and OUTSIDE role guards).

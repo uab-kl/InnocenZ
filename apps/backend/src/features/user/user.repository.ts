@@ -4,6 +4,7 @@ import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { UserTable, UserType, UserInsertType, UserFilter } from './user.model';
 import { DbTransaction } from '@/types/db-transaction';
 import { logger } from '@/util/logger';
+import { redactQueryError, safeErrorFields } from '@/features/auth/query-error-redaction';
 import { buildPeriodDateWhere } from '@/util/filter-date-format';
 import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository';
 
@@ -47,7 +48,10 @@ export class UserRepositoryClass {
     tx?: DbTransaction,
   ): Promise<UserType> {
     try {
-      logger.info('[UserRepository.createUser] Creating user:', user);
+      // No values: the insert carries `passwordHash`. See updateUser.
+      logger.info('[UserRepository.createUser] Creating user', {
+        fields: Object.keys(user),
+      });
       const dbClient = tx || db;
       const [newUser] = await dbClient
         .insert(UserTable)
@@ -58,10 +62,14 @@ export class UserRepositoryClass {
         })
         .returning();
       await this.userProfileRepository.createEmpty(newUser.id, user.createdBy, tx);
-      logger.info('[UserRepository.createUser] User successfully created:', newUser);
+      logger.info('[UserRepository.createUser] User created', { id: newUser.id });
       return newUser;
     } catch (error) {
-      logger.error('[UserRepository.createUser] Error:', error);
+      // The failed INSERT carries `passwordHash` among its bound values, and
+      // drizzle prints those in the message, `params` and stack. Scrubbed in
+      // place BEFORE the rethrow, so no caller further up can log them either.
+      redactQueryError(error);
+      logger.error('[UserRepository.createUser] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -109,17 +117,27 @@ export class UserRepositoryClass {
     tx?: DbTransaction,
   ): Promise<UserType | null> {
     try {
-      logger.info('[UserRepository.updateUser] Updating user:', user);
+      // Field NAMES only, never values or the returned row: a patch can carry
+      // `passwordHash`, and the row always does. Both used to be printed whole
+      // on every update, which put password hashes into the application log.
+      logger.info('[UserRepository.updateUser] Updating user', {
+        id,
+        fields: Object.keys(user),
+      });
       const dbClient = tx ?? db;
       const [updatedUser] = await dbClient
         .update(UserTable)
         .set({ ...user, updatedAt: new Date() })
         .where(eq(UserTable.id, id))
         .returning();
-      logger.info('[UserRepository.updateUser] User successfully updated:', updatedUser);
+      logger.info('[UserRepository.updateUser] User updated', {
+        id,
+        found: Boolean(updatedUser),
+      });
       return updatedUser ?? null;
     } catch (error) {
-      logger.error('[UserRepository.updateUser] Error:', error);
+      // A patch can carry `passwordHash`; see createUser.
+      logger.error('[UserRepository.updateUser] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -250,7 +268,29 @@ export class UserRepositoryClass {
       let users: UserType[] = [];
 
       if (method === 'email') {
-        users = await db.select().from(UserTable).where(eq(UserTable.email, value)).limit(1);
+        // CASE- AND SPACE-INSENSITIVE, because a person does not remember how
+        // they capitalised an address. The exact match refused `Owner@x.com`
+        // for an account stored as `owner@x.com` — at sign-in, at forgot
+        // password, and (worst) at the "is this email free?" checks, which
+        // then let a second account be created for the same mailbox.
+        //
+        // Every email writer stores lowercase now, but rows written before
+        // that are matched on the normalised form too. Two rows that normalise
+        // to one address are REFUSED rather than one being picked — the same
+        // rule the phone branch below applies.
+        const needle = (value ?? '').trim().toLowerCase();
+        if (!needle) return null;
+        users = await db
+          .select()
+          .from(UserTable)
+          .where(sql`lower(btrim(${UserTable.email})) = ${needle}`)
+          .limit(2);
+        if (users.length > 1) {
+          logger.error(
+            '[UserRepository.getUserByLoginMethod] Refusing: that email matches more than one account',
+          );
+          return null;
+        }
       } else if (method === 'phone') {
         // Compare DIGITS, not the string as typed.
         //

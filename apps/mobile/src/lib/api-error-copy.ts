@@ -48,6 +48,113 @@ const NOT_SIGNED_IN = 'Not signed in';
 /** api.ts's own fallback when the thrown cause carries no message of its own. */
 const NETWORK_ERROR = 'network error';
 
+/*
+ * ── Verification-code flows ──────────────────────────────────────────────
+ *
+ * The exception to "server text is shown verbatim": these are FIXED sentences
+ * from the forgot-password / contact-change / change-password contract, not
+ * data-bearing refusals, so each one has a translation. Anything else the
+ * server says still falls through untouched.
+ */
+type ErrorKey = keyof AppTranslations['errors'];
+
+const CODE_FLOW_SENTENCES: ReadonlyArray<readonly [string, ErrorKey]> = [
+  ['Invalid code', 'invalidCode'],
+  ['This code has expired — request a new one', 'codeExpired'],
+  ['This change has expired — start again', 'changeExpired'],
+  ['This code was already used', 'codeAlreadyUsed'],
+  ['Could not send the code — try again later', 'codeSendFailed'],
+  ['That is already your email', 'sameEmail'],
+  ['That is already your phone number', 'samePhone'],
+  ['That email is already used by another account', 'emailTaken'],
+  ['That phone number is already used by another account', 'phoneTaken'],
+  ['Your account has no phone or email we can send a code to', 'noContactChannel'],
+  ['Current password is incorrect', 'currentPasswordIncorrect'],
+  ['New password must be different', 'passwordMustDiffer'],
+  ['Change your email from Security settings', 'changeEmailInSecurity'],
+  ['Change your phone from Security settings', 'changePhoneInSecurity'],
+  [
+    'Changing your phone now needs a code to your current contacts — please update the app',
+    'phoneChangeNeedsUpdate',
+  ],
+  ['Use Forgot password on the sign-in page', 'useForgotPassword'],
+  /*
+   * The CODE's own attempt cap (429). Not a rate limiter: the code is dead and
+   * only a new one helps, so it has its own sentence rather than "wait".
+   */
+  ['Too many attempts — request a new code', 'tooManyCodeAttempts'],
+  // The endpoints' fixed validation sentences (backend account-code/schemas.ts).
+  ['Enter a valid phone number', 'invalidPhoneNumber'],
+  ['Enter the 6-digit code', 'enterSixDigitCode'],
+  ['Enter a valid email address', 'invalidEmailAddress'],
+  ['Current password is required', 'currentPasswordRequired'],
+];
+
+/**
+ * The refusals that are about the CODE itself — wrong, expired, already spent,
+ * or out of guesses — as opposed to a rate limiter or a send failure, which
+ * leave a still-valid code standing. A screen clears the typed code (and sends
+ * the PR back to the code step) only for these; for anything else the code she
+ * typed is still good and retyping it would be busywork.
+ */
+const CODE_REJECTIONS: ReadonlySet<ErrorKey> = new Set<ErrorKey>([
+  'invalidCode',
+  'codeExpired',
+  'changeExpired',
+  'codeAlreadyUsed',
+  'tooManyCodeAttempts',
+]);
+
+/** `Wait 42s before requesting another code` — the 429 resend cooldown. */
+const CODE_COOLDOWN = /^Wait (\d+)\s*s(?:ec(?:ond)?s?)? before requesting another code$/i;
+
+/**
+ * Every rate limiter's refusal: "Too many verification codes requested. Please
+ * try again later.", "Too many attempts. Please wait a few minutes and try
+ * again." Deliberately NOT the sign-in lockout ("… Try again in 5 minutes."),
+ * whose minute count `localizeLoginError` keeps.
+ */
+const TOO_MANY = /^Too many\b[\s\S]*\b(?:try again later|and try again)$/i;
+
+/**
+ * Compare on a canonical form so a retyped dash or a trailing full stop cannot
+ * silently stop a sentence matching: any spaced hyphen / en dash / em dash reads
+ * as ' — ', whitespace collapses, the final '.' goes, and case is ignored.
+ */
+function canonical(sentence: string): string {
+  return sentence
+    .trim()
+    .replace(/\s+[-–—]\s+/g, ' — ')
+    .replace(/\s+/g, ' ')
+    .replace(/\.$/, '')
+    .toLowerCase();
+}
+
+const CODE_FLOW_BY_CANONICAL = new Map(
+  CODE_FLOW_SENTENCES.map(([sentence, key]) => [canonical(sentence), key] as const),
+);
+
+/**
+ * Which contract sentence a thrown message is, if any. Exported so a screen can
+ * decide WHERE to show it (a wrong code sends the forgot-password flow back to
+ * the code step) without comparing English strings itself.
+ */
+export function matchCodeFlowError(message: string): ErrorKey | null {
+  const key = canonical(message);
+  const exact = CODE_FLOW_BY_CANONICAL.get(key);
+  if (exact) return exact;
+  const stripped = message.trim().replace(/\.$/, '');
+  if (CODE_COOLDOWN.test(stripped)) return 'codeCooldown';
+  if (TOO_MANY.test(stripped)) return 'tooManyRequests';
+  return null;
+}
+
+/** True when a thrown message says the typed CODE is no good (see CODE_REJECTIONS). */
+export function isCodeRejection(message: string): boolean {
+  const key = matchCodeFlowError(message);
+  return key !== null && CODE_REJECTIONS.has(key);
+}
+
 /**
  * Localise one thrown API message. `errors` is passed in (never defaulted) so
  * the caller's live locale decides — a default would pin one language forever.
@@ -60,6 +167,13 @@ export function localizeApiError(
 
   if (trimmed === NOT_SIGNED_IN) return errors.notSignedIn;
   if (PHOTO_TOO_LARGE.test(trimmed)) return errors.photoTooLarge;
+
+  const codeFlow = matchCodeFlowError(trimmed);
+  if (codeFlow === 'codeCooldown') {
+    const seconds = CODE_COOLDOWN.exec(trimmed.replace(/\.$/, ''));
+    return formatMessage(errors.codeCooldown, { s: seconds?.[1] ?? '60' });
+  }
+  if (codeFlow) return errors[codeFlow];
 
   const unreachable = UNREACHABLE.exec(trimmed);
   if (unreachable) {

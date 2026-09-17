@@ -24,13 +24,25 @@ export type WhatsAppSendResult =
   | { ok: true; messageId: string }
   | { ok: false; error: string };
 
-/** Human label for template {{2}} — matches app purpose. */
+/**
+ * Human label for template {{2}} — matches app purpose.
+ *
+ * The contact-change purposes default to a neutral label; their callers pass a
+ * sharper one ("Change email" / "Change phone") through `sendWhatsAppOtp`'s
+ * `purposeLabel`, because the row's purpose alone does not say WHICH contact
+ * is being changed.
+ */
 export function otpPurposeLabel(purpose: PhoneVerificationPurpose): string {
   switch (purpose) {
     case 'forgot_password':
+    case 'reset_password':
       return 'Password reset';
     case 'change_phone':
       return 'Change phone';
+    case 'contact_change_identity':
+      return 'Confirm account change';
+    case 'contact_change_new':
+      return 'Verify new contact';
     case 'signup':
     default:
       return 'Register';
@@ -52,10 +64,21 @@ export function whatsappSendConfigured(): boolean {
 export function resolveOtpTemplateName(
   purpose: PhoneVerificationPurpose = 'signup',
 ): string | undefined {
+  const forgot = process.env.META_WHATSAPP_OTP_TEMPLATE_FORGOT_PASSWORD?.trim();
+  const changePhone = process.env.META_WHATSAPP_OTP_TEMPLATE_CHANGE_PHONE?.trim();
+  const contactChange =
+    process.env.META_WHATSAPP_OTP_TEMPLATE_CONTACT_CHANGE?.trim() || changePhone;
   const byPurpose: Record<PhoneVerificationPurpose, string | undefined> = {
     signup: process.env.META_WHATSAPP_OTP_TEMPLATE_SIGNUP?.trim(),
-    forgot_password: process.env.META_WHATSAPP_OTP_TEMPLATE_FORGOT_PASSWORD?.trim(),
-    change_phone: process.env.META_WHATSAPP_OTP_TEMPLATE_CHANGE_PHONE?.trim(),
+    forgot_password: forgot,
+    change_phone: changePhone,
+    // The account-code purposes reuse the nearest existing template when no
+    // dedicated one is approved, and all of them fall back to the one shared
+    // template below — a new purpose must never need a Meta approval to work.
+    reset_password:
+      process.env.META_WHATSAPP_OTP_TEMPLATE_RESET_PASSWORD?.trim() || forgot,
+    contact_change_identity: contactChange,
+    contact_change_new: contactChange,
   };
   return byPurpose[purpose] || process.env.META_WHATSAPP_OTP_TEMPLATE?.trim() || undefined;
 }
@@ -75,6 +98,8 @@ export async function sendWhatsAppOtp(
   phoneDigits: string,
   code: string,
   purpose: PhoneVerificationPurpose = 'signup',
+  /** Overrides the template's {{2}}; defaults to `otpPurposeLabel(purpose)`. */
+  purposeLabel?: string,
 ): Promise<WhatsAppSendResult> {
   const token = process.env.META_WHATSAPP_TOKEN?.trim();
   const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID?.trim();
@@ -89,7 +114,7 @@ export async function sendWhatsAppOtp(
 
   // Always 6 digits for the app + Meta variable {{1}}.
   const otp = code.replace(/\D/g, '').padStart(6, '0').slice(-6);
-  const purposeText = otpPurposeLabel(purpose);
+  const purposeText = purposeLabel?.trim() || otpPurposeLabel(purpose);
 
   const template = resolveOtpTemplateName(purpose);
   const lang = templateLanguage();
