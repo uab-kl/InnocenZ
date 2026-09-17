@@ -33,6 +33,11 @@ import {
 } from "@/lib/auth/password-api";
 import { phoneNumberProblem, toWhatsAppNumber } from "@/lib/auth/phone-api";
 import {
+	type ChangedCredential,
+	markSignInAgain,
+	signInAgain,
+} from "@/lib/auth/sign-in-again";
+import {
 	contactChangeProblemText,
 	useContactChange,
 } from "@/lib/auth/use-contact-change";
@@ -64,6 +69,23 @@ export function AdminLoginSecurityCard({
 }) {
 	const { t } = usePortalLocale();
 	const [mode, setMode] = useState<Mode>(null);
+	/**
+	 * A change that SAVED but returned no tokens — this tab's session is over.
+	 * Same rule as the agency/outlet sheet: say so, and leave through sign-in.
+	 */
+	const [signInAfter, setSignInAfter] = useState<ChangedCredential | null>(
+		null,
+	);
+	const requireSignInAgain = (changed: ChangedCredential) => {
+		// Written first, so a background 401 still reaches a login page that
+		// knows why.
+		markSignInAgain(changed);
+		setMode(null);
+		setSignInAfter(changed);
+	};
+	const leaveToSignIn = () => {
+		if (signInAfter) signInAgain(signInAfter);
+	};
 
 	return (
 		<Card className="border-(--lavender-soft)/40 bg-card">
@@ -100,6 +122,7 @@ export function AdminLoginSecurityCard({
 			<PasswordDialog
 				open={mode === "password"}
 				onClose={() => setMode(null)}
+				onSignInAgain={requireSignInAgain}
 			/>
 			{/* Keyed by lane so switching lanes never carries one lane's ids or
 			    typed value into the other. */}
@@ -109,8 +132,33 @@ export function AdminLoginSecurityCard({
 					kind={mode}
 					current={mode === "email" ? email : phone}
 					onClose={() => setMode(null)}
+					onSignInAgain={requireSignInAgain}
 				/>
 			) : null}
+
+			<Dialog
+				open={signInAfter !== null}
+				onOpenChange={(value) => (value ? null : leaveToSignIn())}
+			>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>{t.authCodes.signInAgainTitle}</DialogTitle>
+						<DialogDescription>
+							{signInAfter === "password"
+								? t.authCodes.changedPassword
+								: signInAfter === "email"
+									? t.authCodes.changedEmail
+									: t.authCodes.changedPhone}{" "}
+							{t.authCodes.signInAgainBody}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button type="button" onClick={leaveToSignIn}>
+							{t.authCodes.signInAgainAction}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</Card>
 	);
 }
@@ -165,9 +213,12 @@ function InlineError({ text }: { text: string | null }) {
 function PasswordDialog({
 	open,
 	onClose,
+	onSignInAgain,
 }: {
 	open: boolean;
 	onClose: () => void;
+	/** The password changed but no tokens came back. */
+	onSignInAgain: (changed: ChangedCredential) => void;
 }) {
 	const { t } = usePortalLocale();
 	const currentId = useId();
@@ -207,12 +258,19 @@ function PasswordDialog({
 
 		setSaving(true);
 		try {
-			await changeMyPassword({ currentPassword: current, newPassword: next });
-			toast.success(t.profile.passwordUpdated);
+			const changed = await changeMyPassword({
+				currentPassword: current,
+				newPassword: next,
+			});
 			setSaving(false);
 			setCurrent("");
 			setNext("");
 			setConfirm("");
+			if (!changed.tokensStored) {
+				onSignInAgain("password");
+				return;
+			}
+			toast.success(t.profile.passwordUpdated);
 			onClose();
 		} catch (err) {
 			// A wrong current password is a 400 — the dialog stays open.
@@ -293,10 +351,13 @@ function ContactDialog({
 	kind,
 	current,
 	onClose,
+	onSignInAgain,
 }: {
 	kind: ContactKind;
 	current: string;
 	onClose: () => void;
+	/** The contact changed but no tokens came back. */
+	onSignInAgain: (changed: ChangedCredential) => void;
 }) {
 	const { t } = usePortalLocale();
 	const valueId = useId();
@@ -346,7 +407,13 @@ function ContactDialog({
 	const submitCode = async (e: React.FormEvent) => {
 		e.preventDefault();
 		const confirmed = await contact.submitCode();
-		if (!confirmed) return; // moved on to code #2, or refused — stays open
+		// Moved on to code #2, back to the field, or refused — stays open.
+		if (!confirmed) return;
+		if (!confirmed.tokensStored) {
+			contact.reset();
+			onSignInAgain(kind);
+			return;
+		}
 		toast.success(localiseAuthMessage(confirmed.message, t));
 		close();
 	};
@@ -494,7 +561,12 @@ function ContactDialog({
 									? fill(t.portalUi.resendOtpIn, { seconds: contact.resendIn })
 									: t.portalUi.resendOtp}
 							</Button>
-							<Button type="submit" disabled={contact.busy}>
+							{/* No code #2 yet (it failed to go out after code #1 was
+							    accepted): nothing to verify — Resend is the way on. */}
+							<Button
+								type="submit"
+								disabled={contact.busy || !contact.canVerify}
+							>
 								{contact.busy && (
 									<Loader2 className="mr-1 h-4 w-4 animate-spin" />
 								)}

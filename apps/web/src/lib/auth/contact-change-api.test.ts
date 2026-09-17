@@ -45,6 +45,7 @@ import {
 	startContactChange,
 	verifyContactChangeIdentity,
 } from "./contact-change-api";
+import { readForgotIdentifier } from "./forgot-identifier";
 import {
 	changeMyPassword,
 	completeForgotPassword,
@@ -155,6 +156,7 @@ describe("contact change — tokens", () => {
 			message: "Email updated",
 			email: "new@atlas-agency.my",
 			phoneNum: "+60123456789",
+			tokensStored: true,
 		});
 		expect(getAccessToken()).toBe(access);
 		expect(getRefreshToken()).toBe("new-refresh");
@@ -176,15 +178,67 @@ describe("contact change — tokens", () => {
 			},
 		});
 
-		await changeMyPassword({
+		const changed = await changeMyPassword({
 			currentPassword: "old-pw",
 			newPassword: "new-pw",
 		});
 
+		expect(changed).toEqual({ tokensStored: true });
 		expect(seen[0].url).toBe("/auth/password/change");
 		expect(getAccessToken()).toBe("pw-access");
 		expect(getRefreshToken()).toBe("pw-refresh");
 		expect(kickToLogin).not.toHaveBeenCalled();
+	});
+
+	/*
+	 * SAVED, BUT NO TOKENS. The server writes first and re-issues second, and a
+	 * failed re-issue answers 200 with null tokens rather than an error. The
+	 * screens must learn that from the call — it is the only signal that the
+	 * token in this tab is already dead.
+	 */
+	it("confirm with null tokens says so, and leaves the old pair untouched", async () => {
+		replies.push({
+			status: 200,
+			body: {
+				success: true,
+				message: "Phone number updated",
+				data: {
+					accessToken: null,
+					refreshToken: null,
+					email: null,
+					phoneNum: "+60123456789",
+				},
+			},
+		});
+
+		const result = await confirmContactChange({
+			requestId: "11111111-1111-4111-8111-111111111111",
+			newRequestId: "22222222-2222-4222-8222-222222222222",
+			kind: "phone",
+			value: "0123456789",
+			code: "123456",
+		});
+
+		expect(result.tokensStored).toBe(false);
+		expect(result.message).toBe("Phone number updated");
+		expect(getAccessToken()).toBe("old-access");
+		expect(kickToLogin).not.toHaveBeenCalled();
+	});
+
+	it("change password with null tokens reports tokensStored: false", async () => {
+		replies.push({
+			status: 200,
+			body: {
+				success: true,
+				message: "Password updated",
+				data: { accessToken: null, refreshToken: null },
+			},
+		});
+
+		await expect(
+			changeMyPassword({ currentPassword: "old-pw", newPassword: "new-pw" }),
+		).resolves.toEqual({ tokensStored: false });
+		expect(getAccessToken()).toBe("old-access");
 	});
 });
 
@@ -373,7 +427,10 @@ describe("forgot password — signed out", () => {
 			},
 		});
 
-		const started = await startForgotPassword("  Owner@Atlas-Agency.my ");
+		const started = await startForgotPassword({
+			kind: "email",
+			value: "  Owner@Atlas-Agency.my ",
+		});
 
 		expect(started).toEqual({
 			requestId: "fp1",
@@ -383,6 +440,28 @@ describe("forgot password — signed out", () => {
 		expect(seen[0].url).toBe("/auth/password/forgot/start");
 		expect(seen[0].authorization).toBeUndefined();
 		expect(seen[0].body).toEqual({ email: "owner@atlas-agency.my" });
+	});
+
+	it("start by PHONE sends { phoneNum } only — never an email key beside it", async () => {
+		replies.push({
+			status: 200,
+			body: {
+				success: true,
+				message:
+					"If that account exists, we sent a code by WhatsApp, SMS and email.",
+				data: { requestId: "fp2", expiresInSec: 600, resendAfterSec: 60 },
+			},
+		});
+
+		// The server's schema refuses a body carrying BOTH keys ("Enter your
+		// email or your phone number"), so the other key must be absent, not "".
+		const reading = readForgotIdentifier("012-345 6789");
+		if (!reading.ok) throw new Error("expected a phone reading");
+		await startForgotPassword(reading.identifier);
+
+		expect(seen[0].url).toBe("/auth/password/forgot/start");
+		expect(seen[0].authorization).toBeUndefined();
+		expect(seen[0].body).toEqual({ phoneNum: "+60123456789" });
 	});
 
 	it("complete with a wrong code throws, and never touches the kick", async () => {

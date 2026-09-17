@@ -23,7 +23,13 @@ export function OtpVerifySheet({
 	verifyLabel,
 	variant = "dialog",
 	error = null,
+	verifyDisabled = false,
 }: {
+	/**
+	 * No code exists to verify yet — step 3 after the second code failed to go
+	 * out. Verify is disabled so Resend is the only way forward.
+	 */
+	verifyDisabled?: boolean;
 	open: boolean;
 	onClose: () => void;
 	title: string;
@@ -80,7 +86,7 @@ export function OtpVerifySheet({
 				type="button"
 				className="iz-btn iz-btn-primary mt-4 w-full"
 				onClick={onVerify}
-				disabled={busy}
+				disabled={busy || verifyDisabled}
 				aria-busy={busy || undefined}
 			>
 				{/* Read in the BODY, not as a default parameter: a default is

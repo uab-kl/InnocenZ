@@ -96,6 +96,15 @@ export interface PrPersonnel {
 	roster?: PrPersonnelRoster | null;
 	/** Present on the LIST path, for agency and admin callers only. */
 	stats?: PrPersonnelStats;
+	/**
+	 * Whether the PR has SET A PASSWORD on their account (list and single read,
+	 * agency and admin callers). Once they have, their sign-in email and phone
+	 * are theirs to change — `PUT /pr/:id` refuses an agency's change with 403.
+	 * Never the hash itself. Absent for an outlet caller (redacted) and on an
+	 * older backend: treat absent as NOT set, i.e. editable, and let the server
+	 * have the last word.
+	 */
+	hasPassword?: boolean;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;

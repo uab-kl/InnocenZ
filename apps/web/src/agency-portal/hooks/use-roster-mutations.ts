@@ -1,4 +1,5 @@
 import { serverMessage } from "@agency-portal/hooks/use-org-members";
+import { prWriteRefusalText } from "@agency-portal/lib/pr-write-refusal";
 import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { localiseAuthMessage } from "@/lib/auth/auth-server-copy";
@@ -131,11 +132,16 @@ export function useRosterMutations() {
 
 	// Agencies do not create shifts — only outlets post jobs (see shift.routes.ts
 	// `canCreate`). The roster's create-shift mutation was removed accordingly.
+	// `POST /pr` refusals go through the PR-write reader, which also knows the
+	// route's own sentences ("Only an admin can add an existing account by its
+	// id") and never shows axios's "Request failed with status code …".
+	// RosterAddPrDialog closes on success only.
 	const addPr = useMutation({
 		mutationFn: (input: CreatePrPersonnelInput) =>
 			createPrPersonnel(input, logout),
 		onSuccess: invalidate,
-		onError: failed(t.roster.couldNotAddPr),
+		onError: (error: unknown) =>
+			toast(prWriteRefusalText(error, t, t.roster.couldNotAddPr), "warn"),
 	});
 
 	return {

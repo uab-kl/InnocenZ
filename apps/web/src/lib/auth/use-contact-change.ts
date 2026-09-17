@@ -7,9 +7,12 @@
  *                     │  resend = start again   │  resend = resend-new
  *
  * Rendering is the caller's job; this owns the requests, the ids, the receipt
- * of where each code went, the Resend countdown and the last refusal. A refusal
- * never moves the stage — a wrong code keeps the sheet where it is so the
- * person can retype (the server allows five tries per code).
+ * of where each code went, the Resend countdown and the last refusal. A wrong
+ * code keeps the sheet where it is so the person can retype (the server allows
+ * five tries per code). Two refusals DO move it, as in the PR app (see
+ * `contact-change-outcome.ts`): code #2 failing to go out after code #1 was
+ * accepted moves on to step 3 with Resend ready, and a contact taken meanwhile
+ * goes back to the field.
  */
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -28,6 +31,11 @@ import {
 	startContactChange,
 	verifyContactChangeIdentity,
 } from "@/lib/auth/contact-change-api";
+import {
+	confirmStepOutcome,
+	identityStepOutcome,
+	keepsLineOnStepThree,
+} from "@/lib/auth/contact-change-outcome";
 import { profileQueryKey } from "@/lib/auth/use-profile";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
@@ -105,9 +113,16 @@ export function useContactChange() {
 		setProblem((p) => (p?.kind === "codeRequired" ? null : p));
 	}, []);
 
-	/** Run one request with the busy guard; a refusal is kept, never thrown. */
+	/**
+	 * Run one request with the busy guard; a refusal is kept, never thrown.
+	 * `onRefusal` runs after the refusal is recorded, for a step whose refusal
+	 * must also MOVE the flow (see `contact-change-outcome.ts`).
+	 */
 	const run = useCallback(
-		async <T>(request: () => Promise<T>): Promise<T | null> => {
+		async <T>(
+			request: () => Promise<T>,
+			onRefusal?: (error: AuthFlowError) => void,
+		): Promise<T | null> => {
 			if (busyRef.current) return null;
 			busyRef.current = true;
 			setBusy(true);
@@ -118,6 +133,7 @@ export function useContactChange() {
 				const error = toAuthFlowError(caught, "");
 				setProblem({ kind: "server", error });
 				if (error.retryAfterSec) setResendIn(error.retryAfterSec);
+				onRefusal?.(error);
 				return null;
 			} finally {
 				busyRef.current = false;
@@ -150,12 +166,26 @@ export function useContactChange() {
 	);
 
 	/**
+	 * A refusal that means the new contact belongs to somebody else: no code can
+	 * fix that, so back to the field — the refusal stays and renders under it,
+	 * and the value the person typed is still in the box (the caller owns it).
+	 */
+	const backToField = useCallback(() => {
+		setFlow((f) => ({ ...IDLE, kind: f.kind }));
+		setCodeState("");
+	}, []);
+
+	/**
 	 * Spend the code for the current stage. Resolves with the confirmed change
-	 * when the whole flow is finished, or null — still on a code stage — when it
-	 * moved from #1 to #2 or was refused.
+	 * when the whole flow is finished, or null — still on a code stage, or back
+	 * at the field — when it moved from #1 to #2 or was refused.
 	 *
 	 * On confirm the api call has ALREADY stored the re-issued tokens, so the
 	 * profile refetch below goes out on the new token rather than a retired one.
+	 * When the answer carried NO tokens (`tokensStored: false`) nothing is
+	 * refetched: the token in hand was retired by the change itself, so every
+	 * refetch would collect a 401 and bounce the person to sign-in with no
+	 * explanation. The caller shows "saved — sign in again" instead.
 	 */
 	const submitCode =
 		useCallback(async (): Promise<ContactChangeConfirmed | null> => {
@@ -168,8 +198,31 @@ export function useContactChange() {
 			if (!requestId) return null;
 
 			if (flow.stage === "identity") {
-				const sent = await run(() =>
-					verifyContactChangeIdentity({ requestId, kind, value, code }),
+				const sent = await run(
+					() => verifyContactChangeIdentity({ requestId, kind, value, code }),
+					(error) => {
+						const outcome = identityStepOutcome(error);
+						if (outcome === "taken") {
+							backToField();
+							return;
+						}
+						if (outcome === "identitySpent") {
+							/*
+							 * Code #1 is spent (or may be): move ON to step 3 with no
+							 * code #2 yet, Resend available at once. Resend there is
+							 * `resend-new`, which needs no new identity code.
+							 */
+							setFlow((f) => ({
+								...f,
+								stage: "new",
+								newRequestId: null,
+								sentTo: [],
+							}));
+							setCodeState("");
+							setResendIn(0);
+							if (!keepsLineOnStepThree(error)) setProblem(null);
+						}
+					},
 				);
 				if (!sent) return null;
 				setFlow((f) => ({
@@ -183,14 +236,20 @@ export function useContactChange() {
 				return null;
 			}
 
+			// No code #2 went out yet (see above) — Resend is the way forward.
 			if (!newRequestId) return null;
-			const confirmed = await run(() =>
-				confirmContactChange({ requestId, newRequestId, kind, value, code }),
+			const confirmed = await run(
+				() =>
+					confirmContactChange({ requestId, newRequestId, kind, value, code }),
+				(error) => {
+					if (confirmStepOutcome(error) === "taken") backToField();
+				},
 			);
 			if (!confirmed) return null;
 			setFlow((f) => ({ ...f, stage: "done" }));
 			setCodeState("");
 			setResendIn(0);
+			if (!confirmed.tokensStored) return confirmed;
 			// Refetch, never patch the cache — see SIGNED_IN_ACCOUNT_QUERY_KEYS.
 			await Promise.all(
 				SIGNED_IN_ACCOUNT_QUERY_KEYS.map((queryKey) =>
@@ -198,7 +257,7 @@ export function useContactChange() {
 				),
 			);
 			return confirmed;
-		}, [code, flow, queryClient, run]);
+		}, [backToField, code, flow, queryClient, run]);
 
 	/**
 	 * Resend for the current stage. Code #1 is resent by STARTING AGAIN (the
@@ -266,6 +325,13 @@ export function useContactChange() {
 		clearProblem,
 		/** True while a code sheet should be on screen. */
 		codeOpen: flow.stage === "identity" || flow.stage === "new",
+		/**
+		 * False on step 3 while no code #2 exists — the send failed after code #1
+		 * was accepted. Verify is disabled then; Resend is the way forward.
+		 */
+		canVerify:
+			flow.stage === "identity" ||
+			(flow.stage === "new" && flow.newRequestId !== null),
 	};
 }
 

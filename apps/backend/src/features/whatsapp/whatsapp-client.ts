@@ -1,4 +1,5 @@
 import { logger } from '@/util/logger.js';
+import { maskContactText, safeErrorFields } from '@/features/auth/query-error-redaction.js';
 import type { PhoneVerificationPurpose } from '@/features/auth/phone-verification.model.js';
 
 /**
@@ -175,7 +176,8 @@ export async function sendWhatsAppOtp(
       const message = json.error?.message ?? `WhatsApp API HTTP ${res.status}`;
       logger.warn('[whatsapp] send failed', {
         status: res.status,
-        message,
+        // Graph API refusals can quote the recipient number.
+        message: maskContactText(message),
         phoneNumberId,
         purpose,
         purposeText,
@@ -188,7 +190,7 @@ export async function sendWhatsAppOtp(
     const messageId = json.messages?.[0]?.id ?? '';
     return { ok: true, messageId };
   } catch (error) {
-    logger.error('[whatsapp] send error', error);
+    logger.error('[whatsapp] send error', safeErrorFields(error));
     return { ok: false, error: 'Could not reach WhatsApp Cloud API' };
   }
 }

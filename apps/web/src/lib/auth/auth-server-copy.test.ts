@@ -122,9 +122,12 @@ describe("localiseAuthMessage", () => {
 	});
 
 	it("forgot/complete: a wrong, an expired and a used-up code are ONE refusal", () => {
-		// An address with no account gets a random requestId that "has expired";
-		// a real account's wrong code is "Invalid code". The page must not show
-		// them apart, or it tells a stranger which addresses have accounts.
+		// The backend's stand-in ids now answer an unknown address exactly like
+		// a real code (decoy-requests.ts), so these no longer say whether an
+		// account exists. The page still shows them as one: the remedy is the
+		// same, and one sentence cannot leak if the stand-ins ever drift (they
+		// live in memory — a restart turns an unknown id's "invalid" into
+		// "expired" while a real row still says "invalid").
 		for (const sentence of [
 			"Invalid code",
 			"Invalid code.",

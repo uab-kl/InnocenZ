@@ -40,7 +40,12 @@ import {
   type CodeDelivery,
   type ContactKind,
 } from '../lib/api';
-import { isCodeRejection, localizeApiError, matchCodeFlowError } from '../lib/api-error-copy';
+import {
+  isCodeRejection,
+  isSessionRefusal,
+  localizeApiError,
+  matchCodeFlowError,
+} from '../lib/api-error-copy';
 import {
   codeReachedSomewhere,
   describeCodeDelivery,
@@ -72,11 +77,20 @@ type Sheet =
   /** Step 3 — the code sent to the NEW contact. */
   | 'newCode'
   | 'delete'
-  /** A change was SAVED but no fresh session came back — sign in again. */
+  /**
+   * Sign in again: a change was SAVED but no fresh session came back, or the
+   * server refused the session itself (401 Unauthorized) and nothing was saved.
+   */
   | 'signInAgain';
 
 /** What was just changed, when the PR has to sign in again afterwards. */
 type ChangedCredential = 'password' | ContactKind;
+
+/**
+ * Why the PR has to sign in again: a credential that WAS changed, or
+ * `sessionEnded` — the token was refused before anything was written.
+ */
+type SignInReason = ChangedCredential | 'sessionEnded';
 
 const DIAL_PICKER_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
   value: c.countryCode,
@@ -105,7 +119,7 @@ export function SecurityScreen() {
    * Set when a change committed but the answer carried no token. A flag, not a
    * sentence, so the line follows a locale switch.
    */
-  const [signInAfter, setSignInAfter] = useState<ChangedCredential | null>(null);
+  const [signInAfter, setSignInAfter] = useState<SignInReason | null>(null);
 
   const [curPw, setCurPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -147,6 +161,17 @@ export function SecurityScreen() {
   const describeError = (e: unknown, fallback: string) =>
     e instanceof ApiError ? localizeApiError(e.message, t.errors) : fallback;
 
+  /**
+   * The server refused the SESSION, not the request — an expired token, or the
+   * cutoff a password / phone / email change on another device stamps. Every
+   * later call here would be refused the same way, and this app has no global
+   * sign-out on a 401, so printing "Unauthorized" would leave her retrying a
+   * screen that can never work. Status AND sentence: a mistyped password on
+   * delete is also a 401, and must stay an error line she can fix.
+   */
+  const sessionRefused = (e: unknown) =>
+    e instanceof ApiError && isSessionRefusal(e.status, e.message);
+
   /** A 429 cooldown carries how long to wait — start the resend countdown from it. */
   const noteCooldown = (e: unknown) => {
     const wait = retryAfterSeconds(e);
@@ -168,20 +193,30 @@ export function SecurityScreen() {
    * app has no global sign-out on a 401 — keeping it would leave every later
    * screen failing quietly. Say it worked, then sign out on her next tap.
    */
-  const requireSignInAgain = (changed: ChangedCredential) => {
+  const requireSignInAgain = (reason: SignInReason) => {
     setConfirmDiscard(false);
     setError(null);
     setMsg(null);
-    setSignInAfter(changed);
+    if (reason === 'sessionEnded') {
+      // Nothing was saved; drop what she typed rather than leave it behind the sheet.
+      setCurPw('');
+      setNewPw('');
+      setConfirmPw('');
+      setDeletePw('');
+      resetContactFlow();
+    }
+    setSignInAfter(reason);
     setSheet('signInAgain');
   };
 
-  const changedLine = (changed: ChangedCredential) =>
-    changed === 'password'
-      ? t.security.passwordUpdated
-      : changed === 'email'
-        ? t.security.emailUpdated
-        : t.security.phoneUpdated;
+  const changedLine = (reason: SignInReason) =>
+    reason === 'sessionEnded'
+      ? t.security.sessionEnded
+      : reason === 'password'
+        ? t.security.passwordUpdated
+        : reason === 'email'
+          ? t.security.emailUpdated
+          : t.security.phoneUpdated;
 
   const resetContactFlow = () => {
     setPendingValue('');
@@ -244,8 +279,12 @@ export function SecurityScreen() {
     try {
       issued = await changePassword(token, curPw, newPw);
     } catch (e) {
-      setError(describeError(e, t.security.updatePasswordFailed));
       setBusy(false);
+      if (sessionRefused(e)) {
+        requireSignInAgain('sessionEnded');
+        return;
+      }
+      setError(describeError(e, t.security.updatePasswordFailed));
       return;
     }
     /*
@@ -289,6 +328,10 @@ export function SecurityScreen() {
       setCode('');
       setSheet('identity');
     } catch (e) {
+      if (sessionRefused(e)) {
+        requireSignInAgain('sessionEnded');
+        return;
+      }
       noteCooldown(e);
       setError(describeError(e, t.security.sendCodeFailed));
     } finally {
@@ -331,6 +374,11 @@ export function SecurityScreen() {
       setCode('');
       setSheet('newCode');
     } catch (e) {
+      // Refused before the controller ran: the identity code was never checked.
+      if (sessionRefused(e)) {
+        requireSignInAgain('sessionEnded');
+        return;
+      }
       const status = e instanceof ApiError ? e.status : 0;
       const message = e instanceof ApiError ? e.message : '';
       const refusal = message ? matchCodeFlowError(message) : null;
@@ -396,6 +444,10 @@ export function SecurityScreen() {
       setResendIn(res.resendAfterSec ?? 60);
       setCode('');
     } catch (e) {
+      if (sessionRefused(e)) {
+        requireSignInAgain('sessionEnded');
+        return;
+      }
       noteCooldown(e);
       setError(describeError(e, t.security.sendCodeFailed));
     } finally {
@@ -419,6 +471,12 @@ export function SecurityScreen() {
         code,
       });
     } catch (e) {
+      // 401 is answered before the write: nothing changed, the session did.
+      if (sessionRefused(e)) {
+        setBusy(false);
+        requireSignInAgain('sessionEnded');
+        return;
+      }
       const message = e instanceof ApiError ? e.message : '';
       const refusal = message ? matchCodeFlowError(message) : null;
       const failed = describeError(
@@ -484,6 +542,12 @@ export function SecurityScreen() {
       setDeletePw('');
       await signOut();
     } catch (e) {
+      // Only the session refusal. A wrong password here is ALSO a 401
+      // ("Incorrect password") and stays an error line she can correct.
+      if (sessionRefused(e)) {
+        requireSignInAgain('sessionEnded');
+        return;
+      }
       setError(describeError(e, t.security.deleteAccountFailed));
     } finally {
       setBusy(false);
@@ -847,7 +911,10 @@ export function SecurityScreen() {
             {!confirmDiscard && sheet === 'signInAgain' && signInAfter && (
               <>
                 <Text style={styles.sheetTitle}>{t.security.signInAgain}</Text>
-                <Text style={styles.sentTo}>{changedLine(signInAfter)}</Text>
+                {/* Green only for a change that WAS saved; amber when nothing was. */}
+                <Text style={signInAfter === 'sessionEnded' ? styles.warning : styles.sentTo}>
+                  {changedLine(signInAfter)}
+                </Text>
                 <Text style={styles.sheetHint}>{t.security.signInAgainBody}</Text>
                 <Pressable
                   style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}

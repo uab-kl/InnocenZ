@@ -9,6 +9,7 @@ import {
 import { sendSms, type SmsSendResult } from '@/features/sms/sms.js';
 import { smsCodeText } from '@/features/sms/sms-text.js';
 import { emailConfigured, sendAccountCodeEmail } from '@/features/mailing/mailing.repository.js';
+import { maskContactText, safeErrorFields } from '@/features/auth/query-error-redaction.js';
 import { maskEmail, maskPhone } from './masks.js';
 import { toWhatsAppDigits } from './phone.js';
 
@@ -130,10 +131,13 @@ function devLogCode(
   input: DeliverCodeInput,
   why: string,
 ): void {
-  // Non-production only — callers guarantee it.
+  // Non-production only — callers guarantee it. The CODE is the point of this
+  // line; the destination is not, so it is masked like everywhere else — the
+  // country code and last four digits (or first letter and domain) are enough
+  // to tell two developers' test accounts apart.
   logger.warn(`[account-code] ${why} — code logged for local dev only`, {
     channel,
-    to,
+    to: channel === 'email' ? maskEmail(to) : maskPhone(to),
     purpose: input.purpose,
     code: input.code,
   });
@@ -179,13 +183,14 @@ export async function deliverCode(
           }
           logger.warn('[account-code] WhatsApp send failed', {
             purpose: input.purpose,
-            error: sent.error,
+            // A provider's refusal can quote the number it refused.
+            error: maskContactText(sent.error),
           });
           return { channel, to, status: 'failed' };
         } catch (error) {
           logger.error('[account-code] WhatsApp send error', {
             purpose: input.purpose,
-            error: error instanceof Error ? error.message : String(error),
+            ...safeErrorFields(error),
           });
           return { channel, to, status: 'failed' };
         }
@@ -209,7 +214,7 @@ export async function deliverCode(
         } catch (error) {
           logger.error('[account-code] SMS send error', {
             purpose: input.purpose,
-            error: error instanceof Error ? error.message : String(error),
+            ...safeErrorFields(error),
           });
           return { channel, to, status: 'failed' };
         }
@@ -250,7 +255,8 @@ export async function deliverCode(
         } catch (error) {
           logger.warn('[account-code] Email send failed', {
             purpose: input.purpose,
-            error: error instanceof Error ? error.message : String(error),
+            // SMTP refusals quote the recipient address.
+            ...safeErrorFields(error),
           });
           return { channel, to, status: 'failed' };
         }

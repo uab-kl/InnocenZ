@@ -7,7 +7,7 @@ import {
 	KeyRound,
 	Loader2,
 	Lock,
-	Mail,
+	UserRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AuthCardShell } from "@/components/landing/AuthCardShell";
@@ -24,6 +24,11 @@ import {
 	isForgotCodeRefusal,
 	localiseAuthMessage,
 } from "@/lib/auth/auth-server-copy";
+import {
+	type ForgotIdentifier,
+	type ForgotIdentifierProblem,
+	readForgotIdentifier,
+} from "@/lib/auth/forgot-identifier";
 import {
 	completeForgotPassword,
 	PASSWORD_MAX_LENGTH,
@@ -60,14 +65,13 @@ export const Route = createFileRoute("/forgot-password")({
 	}),
 });
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_RE = /^\d{6}$/;
 
 /**
- * An address SHAPE, not a sentence — deliberately NOT in the dictionary. It
- * reads identically in either language.
+ * Two SHAPES, not a sentence — deliberately NOT in the dictionary. They read
+ * identically in either language, and show that both kinds are accepted.
  */
-const EMAIL_PLACEHOLDER = "you@example.com";
+const IDENTIFIER_PLACEHOLDER = "you@example.com / 0123456789";
 
 /**
  * Held as a CAUSE, not a sentence, so the banner re-renders in whatever
@@ -78,7 +82,7 @@ const EMAIL_PLACEHOLDER = "you@example.com";
  * and anything else (a limiter's own wording) is shown as the server wrote it.
  */
 type ForgotError =
-	| { kind: "invalidEmail" }
+	| { kind: "identifier"; problem: ForgotIdentifierProblem }
 	| { kind: "codeRequired" }
 	| { kind: "minLength" }
 	| { kind: "maxLength" }
@@ -89,8 +93,17 @@ type ForgotError =
 
 function forgotErrorText(error: ForgotError, t: PortalTranslations): string {
 	switch (error.kind) {
-		case "invalidEmail":
-			return t.authPages.emailInvalid;
+		case "identifier":
+			switch (error.problem) {
+				case "invalidEmail":
+					return t.authPages.emailInvalid;
+				case "phoneTooShort":
+					return t.profile.mobileTooShort;
+				case "phoneTooLong":
+					return t.profile.mobileTooLong;
+				default:
+					return t.authPages.identifierInvalid;
+			}
 		case "codeRequired":
 			return t.authCodes.codeRequired;
 		case "minLength":
@@ -110,13 +123,21 @@ function forgotErrorText(error: ForgotError, t: PortalTranslations): string {
  * WHERE THE PAGE IS.
  *
  * `code` says nothing about whether an account exists. The server answers the
- * start request identically either way — for an unknown address it hands back
- * a random `requestId` that no code will ever match — so the copy on that step
- * must say IF, and nothing on this page may branch on the answer.
+ * start request identically either way — for an unknown email or phone it
+ * hands back a stand-in `requestId` that no code will ever match — so the copy
+ * on that step must say IF, and nothing on this page may branch on the answer.
+ *
+ * `identifier` is what start was asked with, kept so Resend asks with exactly
+ * the same thing (the server's cooldown counts per typed identifier).
  */
 type Step =
-	| { kind: "email" }
-	| { kind: "code"; email: string; requestId: string; expiresInSec: number }
+	| { kind: "identify" }
+	| {
+			kind: "code";
+			identifier: ForgotIdentifier;
+			requestId: string;
+			expiresInSec: number;
+	  }
 	| { kind: "done"; message: string };
 
 /**
@@ -224,9 +245,11 @@ function NewPasswordInput({
 
 function ForgotPasswordBody() {
 	const { t } = usePortalLocale();
+	// Login carries the typed EMAIL here as `?email=`; the one field takes it as
+	// the starting value and accepts a phone number just as well.
 	const { email: prefillEmail } = Route.useSearch();
-	const [email, setEmail] = useState(prefillEmail ?? "");
-	const [step, setStep] = useState<Step>({ kind: "email" });
+	const [typed, setTyped] = useState(prefillEmail ?? "");
+	const [step, setStep] = useState<Step>({ kind: "identify" });
 	const [error, setError] = useState<ForgotError | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [code, setCode] = useState("");
@@ -257,14 +280,16 @@ function ForgotPasswordBody() {
 		});
 	};
 
-	const requestCode = async (value: string): Promise<boolean> => {
+	const requestCode = async (
+		identifier: ForgotIdentifier,
+	): Promise<boolean> => {
 		setBusy(true);
 		setError(null);
 		try {
-			const started = await startForgotPassword(value);
+			const started = await startForgotPassword(identifier);
 			setStep({
 				kind: "code",
-				email: value,
+				identifier,
 				requestId: started.requestId,
 				expiresInSec: started.expiresInSec,
 			});
@@ -279,22 +304,23 @@ function ForgotPasswordBody() {
 		}
 	};
 
-	const submitEmail = async (e: React.FormEvent) => {
+	const submitIdentifier = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (busy) return;
-		const value = email.trim();
-		if (!EMAIL_RE.test(value)) {
-			setError({ kind: "invalidEmail" });
+		// An `@` is an email, digits are a phone — see forgot-identifier.ts.
+		const reading = readForgotIdentifier(typed);
+		if (!reading.ok) {
+			setError({ kind: "identifier", problem: reading.problem });
 			return;
 		}
 		setResent(false);
-		await requestCode(value);
+		await requestCode(reading.identifier);
 	};
 
 	const resend = async () => {
 		if (busy || resendIn > 0 || step.kind !== "code") return;
 		setResent(false);
-		if (await requestCode(step.email)) setResent(true);
+		if (await requestCode(step.identifier)) setResent(true);
 	};
 
 	const submitCode = async (e: React.FormEvent) => {
@@ -333,11 +359,13 @@ function ForgotPasswordBody() {
 			// server allows five tries before the code dies.
 			fail(err);
 			/*
-			 * ⚠️ ONE SENTENCE for a wrong, an expired and a used-up code. The
-			 * server answers an address with no account with a random requestId
-			 * that "has expired", and a real account's wrong code with "Invalid
-			 * code" — shown apart, this page told anyone which addresses have
-			 * accounts. See `isForgotCodeRefusal`.
+			 * ONE SENTENCE for a wrong, an expired and a used-up code. The server
+			 * no longer gives an unknown email or phone away here — its stand-in
+			 * requestId answers "Invalid code", "Too many attempts" and "has
+			 * expired" exactly as a real account's code does (decoy-requests.ts).
+			 * One sentence is kept anyway: the remedy is the same, and it cannot
+			 * start leaking if the in-memory stand-ins ever drift from the rows.
+			 * See `isForgotCodeRefusal`.
 			 */
 			if (err instanceof Error && isForgotCodeRefusal(err.message)) {
 				setError({ kind: "codeRejected" });
@@ -393,8 +421,10 @@ function ForgotPasswordBody() {
 	if (step.kind === "code") {
 		/**
 		 * One WHOLE sentence in the dictionary, split at its `{email}` hole so the
-		 * address keeps its gold highlight. It only repeats what the person typed,
-		 * so it tells them nothing about whether that address has an account.
+		 * email or phone keeps its gold highlight. It only repeats what the person
+		 * typed (the phone in the normalised form the request carried, so a wrong
+		 * country code is visible), so it says nothing about whether that email or
+		 * number has an account.
 		 */
 		const [beforeEmail, afterEmail] =
 			t.authPages.codeRequestedFor.split("{email}");
@@ -409,7 +439,9 @@ function ForgotPasswordBody() {
 			>
 				<p className="login-support mb-6 text-center text-foreground/85">
 					{beforeEmail}
-					<span className="font-semibold text-gold-bright">{step.email}</span>
+					<span className="font-semibold text-gold-bright">
+						{step.identifier.value}
+					</span>
 					{afterEmail}
 				</p>
 				<form onSubmit={submitCode} aria-label={t.authPages.codeFormLabel}>
@@ -504,13 +536,13 @@ function ForgotPasswordBody() {
 						className="login-support text-muted-foreground hover:text-gold"
 						disabled={busy}
 						onClick={() => {
-							setStep({ kind: "email" });
+							setStep({ kind: "identify" });
 							setError(null);
 							setResent(false);
 							setCode("");
 						}}
 					>
-						{t.authPages.useDifferentEmail}
+						{t.authPages.useDifferentIdentifier}
 					</Button>
 				</div>
 			</AuthCardShell>
@@ -524,28 +556,43 @@ function ForgotPasswordBody() {
 			subheading={t.authPages.forgotSubheading}
 			footer={footer}
 		>
-			<form onSubmit={submitEmail} aria-label={t.authPages.forgotFormLabel}>
+			<form
+				onSubmit={submitIdentifier}
+				aria-label={t.authPages.forgotFormLabel}
+			>
 				<Field>
-					<FieldLabel htmlFor="forgot-email" className="login-field-label">
-						{t.authPages.emailLabel}
+					<FieldLabel htmlFor="forgot-identifier" className="login-field-label">
+						{t.authPages.identifierLabel}
 					</FieldLabel>
 					<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 						<InputGroupAddon align="inline-start">
-							<Mail
+							<UserRound
 								className="size-5 text-royal-gold"
 								strokeWidth={1.75}
 								aria-hidden
 							/>
 						</InputGroupAddon>
+						{/*
+						 * `type="text"`, not "email": the browser's own email check
+						 * would refuse a phone number before this page ever saw it.
+						 * `username` is the autofill hint that covers both.
+						 */}
 						<InputGroupInput
-							id="forgot-email"
-							name="email"
-							type="email"
-							placeholder={EMAIL_PLACEHOLDER}
-							value={email}
-							onChange={(e) => setEmail(e.target.value)}
+							id="forgot-identifier"
+							name="identifier"
+							type="text"
+							placeholder={IDENTIFIER_PLACEHOLDER}
+							value={typed}
+							onChange={(e) => {
+								setTyped(e.target.value);
+								if (error?.kind === "identifier") setError(null);
+							}}
 							disabled={busy}
-							autoComplete="email"
+							autoComplete="username"
+							autoCapitalize="none"
+							autoCorrect="off"
+							spellCheck={false}
+							aria-invalid={error?.kind === "identifier" ? true : undefined}
 							className="login-input"
 						/>
 					</InputGroup>

@@ -1,12 +1,14 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
 import { ageFromDob } from "@agency-portal/lib/pr-personnel-map";
+import { prWriteRefusalText } from "@agency-portal/lib/pr-write-refusal";
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import type { PendingPR } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	type AgencyPr,
 	fetchAgencyPrs,
@@ -111,6 +113,7 @@ function asCard(
  */
 export function useAgencyPendingPrs() {
 	const { logout } = useAuth();
+	const { t } = usePortalLocale();
 	const queryClient = useQueryClient();
 	const identity = useMemo(() => getAgencyIdentity(), []);
 	const backed = identity !== null;
@@ -261,12 +264,40 @@ export function useAgencyPendingPrs() {
 						),
 				},
 			),
-		invite: (input: AgencyPrInvite) =>
-			createMut.mutate({
-				name: input.name,
-				icNo: input.ic || undefined,
-				phone: input.mobile || undefined,
-				email: input.email || undefined,
-			}),
+		/**
+		 * Owner-initiated "Add PR" (`POST /pr`).
+		 *
+		 * ⚠️ This used to be fire-and-forget: no `onError`, and the sheet closed
+		 * and cleared the form the moment it was called. So a refusal — a phone
+		 * already on another account (409), a change to an activated PR's
+		 * sign-in contact (403 "Only the PR can change their sign-in email or
+		 * phone") — looked exactly like a PR that had been added, and the typing
+		 * was gone. The page must close the sheet in `onSuccess` ONLY; `onError`
+		 * carries the server's reason, translated, and the form stays as typed.
+		 */
+		invite: (
+			input: AgencyPrInvite,
+			opts?: {
+				onSuccess?: (message: string) => void;
+				onError?: (message: string) => void;
+			},
+		) =>
+			createMut.mutate(
+				{
+					name: input.name.trim(),
+					icNo: input.ic?.trim() || undefined,
+					phone: input.mobile?.trim() || undefined,
+					email: input.email?.trim() || undefined,
+				},
+				{
+					onSuccess: () => opts?.onSuccess?.(t.agencyPending.prInvited),
+					onError: (error) =>
+						opts?.onError?.(
+							prWriteRefusalText(error, t, t.agencyPending.couldNotInvitePr),
+						),
+				},
+			),
+		/** An invite is in flight — the Send button must not fire a second one. */
+		inviting: createMut.isPending,
 	};
 }

@@ -1,14 +1,13 @@
-import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
 	managedPrFromBackend,
 	payClassToBackend,
 	tierFromLabel,
 } from "@agency-portal/lib/pr-personnel-map";
+import { prWriteRefusalText } from "@agency-portal/lib/pr-write-refusal";
 import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { localiseAuthMessage } from "@/lib/auth/auth-server-copy";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -103,14 +102,22 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 	 * `resolvePrForCaller`, which answers 403/404 IN WORDS when the PR belongs to
 	 * another agency. That sentence is the whole value of the refusal.
 	 *
-	 * Through the auth localiser: `PUT /pr/:id` answers a change to an activated
-	 * PR's sign-in email or phone with "Only the PR can change their sign-in
-	 * email or phone" (and 409s with "That email is already used by another
-	 * account"), and those sentences have translations. A sentence the map does
-	 * not know is shown exactly as the server wrote it, as before.
+	 * Through `prWriteRefusalText`: `PUT /pr/:id` answers a change to an
+	 * activated PR's sign-in email or phone with "Only the PR can change their
+	 * sign-in email or phone" (and 409s with "That email is already used by
+	 * another account"), and those sentences have translations. A sentence no
+	 * map knows is shown exactly as the server wrote it; a refusal with no
+	 * sentence at all reads the fallback, never axios's "Request failed with
+	 * status code 403".
+	 *
+	 * ⚠️ The toast alone was not enough: the screen still closed the editor the
+	 * moment Save was pressed, so a refused save snapped the fields back to the
+	 * stored values under a warning. Each act now takes `onDone`, run on
+	 * SUCCESS only — the page closes its editor or sheet there, and a refusal
+	 * leaves it open with what was typed.
 	 */
 	const failed = (fallback: string) => (error: unknown) =>
-		toast(localiseAuthMessage(serverMessage(error, fallback), t), "warn");
+		toast(prWriteRefusalText(error, t, fallback), "warn");
 
 	const updateMut = useMutation({
 		mutationFn: (vars: { id: string; input: UpdatePrPersonnelInput }) =>
@@ -135,7 +142,11 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 	 * The demo edit calls the floor/display name `name` and the legal name
 	 * `icName`; the backend stores those as `nickname` and `name` respectively.
 	 */
-	const saveProfile = (prId: string, patch: ProfilePatch) => {
+	const saveProfile = (
+		prId: string,
+		patch: ProfilePatch,
+		onDone?: () => void,
+	) => {
 		const input: UpdatePrPersonnelInput = {};
 		if (patch.name !== undefined) input.nickname = patch.name;
 		if (patch.icName !== undefined) input.name = patch.icName;
@@ -173,24 +184,33 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 		updateMut.mutate(
 			{ id: prId, input },
 			{
-				onSuccess: () => toast(t.managePr.profileSaved, "success"),
+				onSuccess: () => {
+					toast(t.managePr.profileSaved, "success");
+					onDone?.();
+				},
 				onError: failed(t.managePr.couldNotSaveProfile),
 			},
 		);
 	};
 
-	const suspend = (prId: string) =>
+	const suspend = (prId: string, onDone?: () => void) =>
 		updateMut.mutate(
 			{ id: prId, input: { status: "suspended" } },
 			{
-				onSuccess: () => toast(t.managePr.prSuspended, "success"),
+				onSuccess: () => {
+					toast(t.managePr.prSuspended, "success");
+					onDone?.();
+				},
 				onError: failed(t.managePr.couldNotSuspend),
 			},
 		);
 
-	const detach = (prId: string) =>
+	const detach = (prId: string, onDone?: () => void) =>
 		removeMut.mutate(prId, {
-			onSuccess: () => toast(t.managePr.prDetached, "success"),
+			onSuccess: () => {
+				toast(t.managePr.prDetached, "success");
+				onDone?.();
+			},
 			onError: failed(t.managePr.couldNotDetach),
 		});
 
@@ -204,5 +224,7 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 		saveProfile,
 		suspend,
 		detach,
+		/** A save or suspension is in flight — Save must not fire a second one. */
+		saving: updateMut.isPending,
 	};
 }

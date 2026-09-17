@@ -71,7 +71,7 @@ export class PasswordChangeControllerClass {
       } catch (error) {
         logger.warn('[PasswordChange] could not re-issue tokens', {
           userId: user.id,
-          error: error instanceof Error ? error.message : String(error),
+          ...safeErrorFields(error),
         });
       }
 

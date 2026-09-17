@@ -16,7 +16,7 @@ import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.rep
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository';
 import { notify } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
-import { paramId } from '@/util/params';
+import { paramId, uuidParam } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { redactPrRowForOutlet, redactPrRowsForOutlet } from '@/util/outlet-redaction';
@@ -633,11 +633,16 @@ export class PrControllerClass {
           prIds: pageRows.map((pr) => pr.id),
           agencyId: scope.agencyId,
         });
+        const withPassword = await this.prRepository.listUserIdsWithPassword(
+          pageRows.map((pr) => pr.userId),
+        );
         return res.status(200).json({
           success: true,
           message: 'OK',
           data: pageRows.map((pr) => ({
             ...pr,
+            // See `withSignInOwnership`: read-only sign-in contact in the editor.
+            hasPassword: withPassword.has(pr.userId),
             stats: stats.get(pr.id) ?? EMPTY_PR_STATS,
           })),
           pagination: {
@@ -708,6 +713,11 @@ export class PrControllerClass {
             prIds: prs.map((pr) => pr.id),
             agencyId: filter.agencyId ?? null,
           });
+      // Same rule as `stats`: an outlet caller is never asked about, and never
+      // told, whether a PR has activated their account.
+      const withPassword = isOutletCaller
+        ? null
+        : await this.prRepository.listUserIdsWithPassword(prs.map((pr) => pr.userId));
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -719,6 +729,7 @@ export class PrControllerClass {
         data: stats
           ? prs.map((pr) => ({
               ...pr,
+              hasPassword: withPassword?.has(pr.userId) ?? false,
               stats: stats.get(pr.id) ?? EMPTY_PR_STATS,
             }))
           : req.redactIdentityDocs
@@ -770,6 +781,15 @@ export class PrControllerClass {
       return null;
     };
 
+    /*
+     * A malformed id matches no row, so it is a 404 — answered BEFORE any query.
+     * Handed to Postgres it raised 22P02 with the id quoted in the message; that
+     * was a 500, and the repository catch masked the message, so a 15,000-char
+     * id in the URL cost the event loop half a second per request (review,
+     * 17 Sep 2026). Every lane (getById, update, remove, penalties) resolves
+     * through here, and so does an admin's named agencyId.
+     */
+    if (!uuidParam(id)) return notFound();
     const scope = await this.resolveScope(req);
     if (!scope.isAdmin) {
       if (!scope.agencyId) return notFound();
@@ -787,6 +807,7 @@ export class PrControllerClass {
         : undefined) ??
       (typeof req.query.agencyId === 'string' ? req.query.agencyId : undefined);
     if (named) {
+      if (!uuidParam(named)) return notFound();
       const pr = await this.prRepository.getById(id, named);
       if (!pr) return notFound();
       return { pr, agencyId: named };
@@ -938,6 +959,21 @@ export class PrControllerClass {
     };
   }
 
+  /**
+   * The PR row plus `hasPassword` — whether the person has activated the
+   * account, which is what decides who owns its sign-in email and phone
+   * (`planSignInContactWrite`: activated → only the PR may change them).
+   *
+   * Agency and admin only. A boolean, never the hash: the hash is tested in
+   * SQL and not selected (`listUserIdsWithPassword`).
+   */
+  private async withSignInOwnership<T extends { userId: string }>(
+    pr: T,
+  ): Promise<T & { hasPassword: boolean }> {
+    const withPassword = await this.prRepository.listUserIdsWithPassword([pr.userId]);
+    return { ...pr, hasPassword: withPassword.has(pr.userId) };
+  }
+
   async getById(req: Request, res: Response) {
     try {
       const resolved = await this.resolvePrForCaller(
@@ -949,10 +985,20 @@ export class PrControllerClass {
         },
       );
       if (!resolved) return;
+      if (req.redactIdentityDocs) {
+        // An outlet caller normally stops at the 404 above (it has no agency
+        // scope). One that gets here still gets the venue's view — identity
+        // documents blanked, and no account state added.
+        return res.status(200).json({
+          success: true,
+          message: 'OK',
+          data: redactPrRowForOutlet(resolved.pr),
+        });
+      }
       res.status(200).json({
         success: true,
         message: 'OK',
-        data: req.redactIdentityDocs ? redactPrRowForOutlet(resolved.pr) : resolved.pr,
+        data: await this.withSignInOwnership(resolved.pr),
       });
     } catch (error) {
       logger.error('[PrController.getById] Error:', error);

@@ -1149,6 +1149,19 @@ const en = {
 		 */
 		signInContactHint:
 			"Mobile and email are how this PR signs in. Once the PR has set a password, only they can change these, from their own app.",
+		/** Under the LOCKED Mobile and Email — GET /pr said `hasPassword: true`. */
+		signInContactLockedHint:
+			"This PR has set a password, so only they can change their mobile and email — from their own app.",
+		/**
+		 * Display side of POST /pr and PUT /pr/:id refusals the auth map does not
+		 * carry (agency-portal/lib/pr-write-refusal.ts). The server's English is
+		 * the map key there, never these values.
+		 */
+		onlyAdminAddsById: "Only an admin can add an existing account by its ID",
+		noAgencyForAccount: "Your account is not linked to an agency",
+		noLinkedAccount:
+			"This PR has no linked account yet, so profile details cannot be saved",
+		nameRequired: "Enter the PR's name",
 		title: "Manage PR",
 		accessRestricted: "Access restricted",
 		tapToMultiSelect: "Tap PR cards to multi-select",
@@ -2069,6 +2082,16 @@ const en = {
 		savingName: "Saving…",
 		nameUpdated: "Name updated",
 		nameUpdateFailed: "Could not update your name",
+		/**
+		 * Display side of the name lane's refusals (PATCH /user/:id,
+		 * lib/auth/name-change-copy.ts). The server's 403 says only
+		 * "Unauthorized", which would read like a signed-out session.
+		 */
+		nameUpdateNotYours: "You can only change your own name",
+		/** {min} / {max} are read out of the server's own sentence. */
+		nameLengthRange: "Your name must be between {min} and {max} characters",
+		legalNameLengthRange:
+			"Your full name must be between {min} and {max} characters",
 		changePassword: "Change password",
 		changePhone: "Change phone",
 		changeEmail: "Change email",
@@ -4194,6 +4217,12 @@ const en = {
 		selectCutlostToReview: "Select a cutlost request to review",
 		inviteHint: "Enter IC + contact → invite sent to complete profile",
 		sendInvite: "Send invite",
+		/** The invite button while POST /pr is in flight. */
+		sendingInvite: "Sending…",
+		/** POST /pr accepted — the sheet closes on this, and only on this. */
+		prInvited: "PR added to your roster.",
+		/** POST /pr refused with no sentence of its own. */
+		couldNotInvitePr: "Could not add this PR — try again",
 	},
 	/**
 	 * Flow 2 — the agency's payout runs (agency pays PR). Not to be confused with
@@ -6780,7 +6809,16 @@ const en = {
 		forgotHeadingAccent: "password?",
 		/** Sub-line under the /forgot-password h1. */
 		forgotSubheading:
-			"Enter the email on your account and we'll send a code by WhatsApp, SMS and email.",
+			"Enter the email or phone number on your account and we'll send a code by WhatsApp, SMS and email.",
+		/**
+		 * Label over the ONE /forgot-password field. An `@` makes it an email,
+		 * digits make it a phone (lib/auth/forgot-identifier.ts) — the server
+		 * takes either (owner, 17 Sep 2026).
+		 */
+		identifierLabel: "Email or phone number",
+		/** Nothing typed, or letters with no `@` — neither an email nor a number. */
+		identifierInvalid:
+			"Enter the email address or phone number on your account",
 		/** aria-label on the /forgot-password <form>. Announced, never displayed. */
 		forgotFormLabel: "Forgot password form",
 		/** The /forgot-password submit button at rest. */
@@ -6794,11 +6832,11 @@ const en = {
 		/** Sub-line on the code step. Says IF on purpose — the endpoint answers identically whether or not the account exists, and this copy must not leak that. */
 		codeStepSubheading:
 			"If that account exists, we sent a code by WhatsApp, SMS and email.",
-		/** Whole sentence with the address as a hole — split at {email} so the typed address keeps its gold highlight. It only repeats what the person typed, so it reveals nothing. */
+		/** Whole sentence with the typed email OR phone as the {email} hole — split there so it keeps its gold highlight. It only repeats what the person typed, so it reveals nothing. */
 		codeRequestedFor: "Code requested for {email}.",
-		/** Fine print on the code step. {minutes} comes from the server's expiresInSec. */
+		/** Fine print on the code step. {minutes} comes from the server's expiresInSec. The code goes to EVERY contact on the account, whichever one was typed. */
 		codeExpiryHint:
-			"The code works for {minutes} minutes. Nothing arrived? Check your spam folder, or make sure this is the email on your account.",
+			"The code works for {minutes} minutes. Nothing arrived? Check WhatsApp, your messages and your email's spam folder, and make sure this is the email or phone number on your account.",
 		/** Label over the 6-digit code input. */
 		codeLabel: "6-digit code",
 		/** aria-label on the code-step <form>. Announced, never displayed. */
@@ -6809,8 +6847,8 @@ const en = {
 		resendCode: "Resend code",
 		/** Body copy on the success state after a code reset. */
 		codeUsedUp: "That code has been used and will not work again.",
-		/** Ghost button that returns the /forgot-password code step to the email form. */
-		useDifferentEmail: "Use a different email",
+		/** Ghost button that returns the /forgot-password code step to the email-or-phone field. */
+		useDifferentIdentifier: "Use a different email or number",
 		/** Lead-in before the back-to-sign-in link at the foot of /forgot-password. */
 		rememberedIt: "Remembered it?",
 		/** First line of the /reset-password h1; resetHeadingAccent finishes it (设置新 + 密码). */
@@ -6886,6 +6924,19 @@ const en = {
 		continueLabel: "Continue",
 		verifying: "Checking…",
 		passwordMaxLength: "New password must be at most {max} characters",
+		/**
+		 * The change SAVED but the answer carried no new tokens, so this tab's
+		 * session is already over (lib/auth/sign-in-again.ts). Shown on the
+		 * Security sheet, and again on /login if a background request's 401
+		 * gets there first.
+		 */
+		signInAgainTitle: "Your change is saved — sign in again",
+		signInAgainBody:
+			"For your security this session has ended. Sign in again to carry on.",
+		signInAgainAction: "Sign in again",
+		changedPassword: "Your password was changed.",
+		changedEmail: "Your email was changed.",
+		changedPhone: "Your phone number was changed.",
 		identityTitle: "Confirm it's you",
 		identityHint:
 			"Step 1 of 2 — enter the code we sent to your current contacts.",
@@ -7910,6 +7961,12 @@ const zh: PortalTranslations = {
 		couldNotDetach: "无法将此 PR 移出名单 — 请重试",
 		signInContactHint:
 			"手机号和邮箱是此 PR 的登录方式。PR 设置密码后，只有其本人可以在自己的应用中修改。",
+		signInContactLockedHint:
+			"此 PR 已设置密码，只有其本人可以在自己的应用中修改手机号和邮箱。",
+		onlyAdminAddsById: "只有管理员可以通过账户 ID 添加现有账户",
+		noAgencyForAccount: "您的账户尚未关联任何经纪公司",
+		noLinkedAccount: "此 PR 尚未关联账户，因此无法保存资料",
+		nameRequired: "请输入 PR 的姓名",
 		title: "PR 管理",
 		accessRestricted: "无访问权限",
 		tapToMultiSelect: "点击 PR 卡片可多选",
@@ -8632,6 +8689,9 @@ const zh: PortalTranslations = {
 		savingName: "保存中…",
 		nameUpdated: "姓名已更新",
 		nameUpdateFailed: "无法更新你的姓名",
+		nameUpdateNotYours: "你只能修改自己的姓名",
+		nameLengthRange: "姓名长度需在 {min} 到 {max} 个字符之间",
+		legalNameLengthRange: "全名长度需在 {min} 到 {max} 个字符之间",
 		changePassword: "修改密码",
 		changePhone: "修改手机号",
 		changeEmail: "修改邮箱",
@@ -10300,6 +10360,9 @@ const zh: PortalTranslations = {
 		selectCutlostToReview: "请选择要审核的缺班损失申请",
 		inviteHint: "填写身份证号 + 联系方式 → 系统会发送邀请，由对方补全资料",
 		sendInvite: "发送邀请",
+		sendingInvite: "发送中…",
+		prInvited: "已将 PR 加入您的名单。",
+		couldNotInvitePr: "无法添加此 PR —— 请重试",
 	},
 	/**
 	 * Flow 2 — the agency's payout runs (agency pays PR). Not to be confused with
@@ -11973,22 +12036,25 @@ const zh: PortalTranslations = {
 		forgotHeading: "忘记您的",
 		forgotHeadingAccent: "密码？",
 		forgotSubheading:
-			"请输入您账户绑定的邮箱，我们会通过 WhatsApp、短信和邮件向您发送验证码。",
+			"请输入您账户绑定的邮箱或手机号，我们会通过 WhatsApp、短信和邮件向您发送验证码。",
+		identifierLabel: "邮箱或手机号",
+		identifierInvalid: "请输入您账户绑定的邮箱地址或手机号",
 		forgotFormLabel: "忘记密码表单",
 		sendCode: "发送验证码",
 		sending: "发送中…",
 		codeStepHeading: "输入您的",
 		codeStepAccent: "验证码",
-		codeStepSubheading: "如果该账户存在，我们已通过 WhatsApp、短信和邮件发送验证码。",
+		codeStepSubheading:
+			"如果该账户存在，我们已通过 WhatsApp、短信和邮件发送验证码。",
 		codeRequestedFor: "已为 {email} 申请验证码。",
 		codeExpiryHint:
-			"验证码 {minutes} 分钟内有效。没有收到？请查看垃圾邮件文件夹，或确认这是您账户绑定的邮箱。",
+			"验证码 {minutes} 分钟内有效。没有收到？请查看 WhatsApp、短信以及邮件的垃圾邮件文件夹，并确认这是您账户绑定的邮箱或手机号。",
 		codeLabel: "6 位验证码",
 		codeFormLabel: "验证码重置密码表单",
 		updatePassword: "更新密码",
 		resendCode: "重新发送验证码",
 		codeUsedUp: "该验证码已使用，无法再次使用。",
-		useDifferentEmail: "换一个邮箱",
+		useDifferentIdentifier: "换一个邮箱或手机号",
 		rememberedIt: "想起密码了？",
 		resetHeading: "设置新",
 		resetHeadingAccent: "密码",
@@ -12027,6 +12093,12 @@ const zh: PortalTranslations = {
 		continueLabel: "继续",
 		verifying: "核对中…",
 		passwordMaxLength: "新密码不能超过 {max} 个字符",
+		signInAgainTitle: "修改已保存 —— 请重新登录",
+		signInAgainBody: "为了您的账户安全，本次登录已结束。请重新登录后继续。",
+		signInAgainAction: "重新登录",
+		changedPassword: "您的密码已修改。",
+		changedEmail: "您的邮箱已修改。",
+		changedPhone: "您的手机号已修改。",
 		identityTitle: "确认是您本人",
 		identityHint: "第 1 步（共 2 步）—— 请输入发送到您当前联系方式的验证码。",
 		newEmailTitle: "验证新邮箱",
@@ -12045,7 +12117,8 @@ const zh: PortalTranslations = {
 		serverCouldNotSend: "无法发送验证码 —— 请稍后再试",
 		serverInvalidCode: "验证码不正确",
 		serverWaitSeconds: "请等待 {n} 秒后再重新获取验证码",
-		serverForgotNeutral: "如果该账户存在，我们已通过 WhatsApp、短信和邮件发送验证码。",
+		serverForgotNeutral:
+			"如果该账户存在，我们已通过 WhatsApp、短信和邮件发送验证码。",
 		serverCodeExpired: "验证码已过期 —— 请重新获取",
 		serverPasswordResetDone: "密码已更新 —— 请使用新密码登录",
 		serverUseForgotPassword: "请在登录页面使用「忘记密码」",
@@ -12086,7 +12159,8 @@ const zh: PortalTranslations = {
 		serverCurrentPasswordRequired: "请输入当前密码",
 		serverPasswordMinLength: "密码至少需要 {min} 个字符",
 		serverPasswordMaxLength: "密码不能超过 {max} 个字符",
-		forgotCodeRejected: "验证码无效 —— 可能输入有误或已过期。请检查，或重新获取验证码。",
+		forgotCodeRejected:
+			"验证码无效 —— 可能输入有误或已过期。请检查，或重新获取验证码。",
 	},
 	dates: {
 		weekdaySun: "周日",

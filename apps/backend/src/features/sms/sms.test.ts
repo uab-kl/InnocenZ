@@ -97,4 +97,40 @@ describe('sendSms with a provider', () => {
   it('refuses a destination that is not a phone number', async () => {
     expect((await sendSms({ to: '123', text: TEXT })).status).toBe('failed');
   });
+
+  it('a refusal or throw that quotes the number is logged masked, never raw', async () => {
+    const quoted = (): string => {
+      const all = [...logger.info.mock.calls, ...logger.warn.mock.calls, ...logger.error.mock.calls];
+      return JSON.stringify(all);
+    };
+    registerSmsProvider({
+      name: 'acme',
+      send: async () => ({ ok: false as const, error: 'Destination +60123456789 is barred' }),
+    });
+    env.SMS_PROVIDER = 'acme';
+    await sendSms({ to: '60123456789', text: TEXT });
+
+    clearSmsProviders();
+    registerSmsProvider({
+      name: 'acme',
+      send: async () => {
+        throw new Error('Invalid destination 012-345 6789');
+      },
+    });
+    await sendSms({ to: '60123456789', text: TEXT });
+
+    // The instrument: both lines were written, and they name the tail.
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(quoted()).toContain('6789');
+    expect(quoted()).not.toContain('60123456789');
+    expect(quoted()).not.toContain('012-345 6789');
+  });
+
+  it('the dev-only log keeps the text but masks the number', async () => {
+    await sendSms({ to: '+60123456789', text: TEXT, purpose: 'reset_password' });
+    const all = JSON.stringify(logger.warn.mock.calls);
+    expect(loggedText()).toBe(true);
+    expect(all).not.toContain('60123456789');
+  });
 });

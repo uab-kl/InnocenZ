@@ -2,6 +2,7 @@ import { logger } from '@/util/logger.js';
 import { sendAccountChangeNoticeEmail } from '@/features/mailing/mailing.repository.js';
 import { sendSms } from '@/features/sms/sms.js';
 import { SMS_PHONE_CHANGED_NOTICE_TEXT } from '@/features/sms/sms-text.js';
+import { safeErrorFields } from '@/features/auth/query-error-redaction.js';
 import { deliveryLogOnly } from './delivery.js';
 import { maskEmail, maskPhone } from './masks.js';
 import { toWhatsAppDigits } from './phone.js';
@@ -38,9 +39,8 @@ async function safely(label: string, work: () => Promise<unknown>): Promise<void
   try {
     await work();
   } catch (error) {
-    logger.warn(`[account-code] ${label} notice failed`, {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    // SMTP and SMS refusals quote the recipient; masked, never raw.
+    logger.warn(`[account-code] ${label} notice failed`, safeErrorFields(error));
   }
 }
 
@@ -120,13 +120,9 @@ export const accountNotices: AccountNotices = {
 export function fireNotice(work: () => Promise<void>): void {
   try {
     void work().catch((error: unknown) => {
-      logger.warn('[account-code] notice rejected', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.warn('[account-code] notice rejected', safeErrorFields(error));
     });
   } catch (error) {
-    logger.warn('[account-code] notice threw', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    logger.warn('[account-code] notice threw', safeErrorFields(error));
   }
 }

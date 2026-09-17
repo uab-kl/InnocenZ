@@ -37,6 +37,26 @@ export function phoneLoginCandidates(value: string): string[] {
   return [...forms];
 }
 
+/**
+ * The WHERE a sign-in value matches on — ONE definition for the login lookup
+ * and the "is it taken" check, so the two can never disagree about whether
+ * `0123456789` and `+60123456789` are the same line. `null` when the value
+ * cannot match anything (blank email, too few digits).
+ *
+ * Email: trimmed and lowercased on both sides. Phone: digits only on the stored
+ * side, against every form `phoneLoginCandidates` accepts.
+ */
+function loginValueMatch(method: 'email' | 'phone', value: string): SQL | null {
+  if (method === 'email') {
+    const needle = (value ?? '').trim().toLowerCase();
+    return needle ? sql`lower(btrim(${UserTable.email})) = ${needle}` : null;
+  }
+  const candidates = phoneLoginCandidates(value);
+  return candidates.length > 0
+    ? inArray(sql`regexp_replace(${UserTable.phoneNum}, '\\D', '', 'g')`, candidates)
+    : null;
+}
+
 export class UserRepositoryClass {
   constructor(
     private userRoleRepository: UserRoleRepositoryClass,
@@ -106,7 +126,7 @@ export class UserRepositoryClass {
         });
       return row ?? null;
     } catch (error) {
-      logger.error('[UserRepository.recordFailedLoginAttempt] Error:', error);
+      logger.error('[UserRepository.recordFailedLoginAttempt] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -228,7 +248,7 @@ export class UserRepositoryClass {
 
       return { users, totalCount };
     } catch (error) {
-      logger.error('[UserRepository.getUsersPaginated] Error:', error);
+      logger.error('[UserRepository.getUsersPaginated] Error:', safeErrorFields(error));
       return { users: [], totalCount: 0 };
     }
   }
@@ -243,7 +263,7 @@ export class UserRepositoryClass {
 
       return users.length > 0 ? users[0] : null;
     } catch (error) {
-      logger.error('[UserRepository.getUserById] Error:', error);
+      logger.error('[UserRepository.getUserById] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -257,7 +277,7 @@ export class UserRepositoryClass {
         .where(inArray(UserTable.id, ids));
       return users;
     } catch (error) {
-      logger.error('[UserRepository.getUsersByIds] Error:', error);
+      logger.error('[UserRepository.getUsersByIds] Error:', safeErrorFields(error));
       return [];
     }
   }
@@ -278,12 +298,12 @@ export class UserRepositoryClass {
         // that are matched on the normalised form too. Two rows that normalise
         // to one address are REFUSED rather than one being picked — the same
         // rule the phone branch below applies.
-        const needle = (value ?? '').trim().toLowerCase();
-        if (!needle) return null;
+        const match = loginValueMatch('email', value);
+        if (!match) return null;
         users = await db
           .select()
           .from(UserTable)
-          .where(sql`lower(btrim(${UserTable.email})) = ${needle}`)
+          .where(match)
           .limit(2);
         if (users.length > 1) {
           logger.error(
@@ -302,12 +322,12 @@ export class UserRepositoryClass {
         // Fetches TWO rows and refuses on ambiguity rather than taking the
         // first: this is a login, and quietly choosing one of two accounts that
         // both match is the wrong way to resolve a duplicate.
-        const candidates = phoneLoginCandidates(value);
-        if (candidates.length === 0) return null;
+        const match = loginValueMatch('phone', value);
+        if (!match) return null;
         users = await db
           .select()
           .from(UserTable)
-          .where(inArray(sql`regexp_replace(${UserTable.phoneNum}, '\\D', '', 'g')`, candidates))
+          .where(match)
           .limit(2);
         if (users.length > 1) {
           logger.error(
@@ -325,8 +345,32 @@ export class UserRepositoryClass {
       );
       return users.length > 0 ? users[0] : null;
     } catch (error) {
-      logger.error('[UserRepository.getUserByLoginMethod] Error:', error);
+      // The bound values ARE the email or the phone candidates being looked up.
+      logger.error('[UserRepository.getUserByLoginMethod] Error:', safeErrorFields(error));
       return null;
+    }
+  }
+
+  /**
+   * Does ANY account already sign in with this email / phone?
+   *
+   * For a writer that is about to CREATE an account, `getUserByLoginMethod` is
+   * the wrong question twice over: it answers `null` when two accounts match
+   * (so an already-duplicated number looked free, and a third account was
+   * created for it), and `null` when the read fails (so an outage looked free
+   * too). This matches on the same `loginValueMatch`, counts ANY match as
+   * taken, and throws on a read error rather than answering "free". Selects
+   * the id only — never the row, which carries `password_hash`.
+   */
+  async isLoginValueTaken(method: 'email' | 'phone', value: string): Promise<boolean> {
+    const match = loginValueMatch(method, value);
+    if (!match) return false;
+    try {
+      const rows = await db.select({ id: UserTable.id }).from(UserTable).where(match).limit(1);
+      return rows.length > 0;
+    } catch (error) {
+      logger.error('[UserRepository.isLoginValueTaken] Error:', safeErrorFields(error));
+      throw error;
     }
   }
 }

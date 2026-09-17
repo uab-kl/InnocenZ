@@ -1,5 +1,6 @@
 import { env } from '@/env.js';
 import { logger } from '@/util/logger.js';
+import { maskContactText, safeErrorFields } from '@/features/auth/query-error-redaction.js';
 
 /**
  * THE SMS SEAM.
@@ -84,7 +85,8 @@ export async function sendSms(input: {
     }
     // Local development only: the text may carry a code, which is the point.
     logger.warn('[sms] No SMS provider — SMS logged for local dev only', {
-      to,
+      // The text is the point of this dev-only line; the number is not.
+      to: maskContactText(to),
       purpose: input.purpose,
       text: input.text,
     });
@@ -108,14 +110,15 @@ export async function sendSms(input: {
     logger.warn('[sms] send failed', {
       provider: provider.name,
       purpose: input.purpose,
-      error: result.error,
+      // A provider's refusal can quote the number it refused.
+      error: maskContactText(result.error),
     });
     return { status: 'failed', error: result.error };
   } catch (error) {
     logger.error('[sms] send error', {
       provider: provider.name,
       purpose: input.purpose,
-      error: error instanceof Error ? error.message : String(error),
+      ...safeErrorFields(error),
     });
     return { status: 'failed', error: 'Could not reach the SMS provider' };
   }

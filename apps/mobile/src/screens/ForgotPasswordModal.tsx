@@ -1,17 +1,22 @@
 /**
  * Forgot password (signed out).
  *
- *   phone → POST /auth/password/forgot/start {phoneNum}
- *         → the server sends ONE code by WhatsApp + SMS to the phone on file
- *           and by email to the email on file
+ *   identify → a Phone (default, with the dial-code picker) / Email switch
+ *            → POST /auth/password/forgot/start {phoneNum} or {email}
+ *            → the server sends ONE code by WhatsApp + SMS to the phone on file
+ *              and by email to the email on file — whichever one was typed
  *   code  → entered here, checked only at the end (there is no verify call)
  *   new password → POST /auth/password/forgot/complete {requestId, code, password}
  *   done
  *
- * ⚠️ The start answer is NEUTRAL on purpose: the same sentence and a request id
- * whether or not the number belongs to an account, so this sheet can never be
- * used to find out who is registered. An unknown number simply ends in "This
- * code has expired — request a new one" at the last step.
+ * ⚠️ BOTH calls are NEUTRAL on purpose, so this sheet can never be used to find
+ * out who is registered. `start` answers the same sentence and a request id
+ * whether or not the phone / email belongs to an account. For an unknown one
+ * the id is a stand-in the server remembers: at the last step it answers
+ * "Invalid code", counts guesses to the same attempt cap ("Too many attempts —
+ * request a new code") and expires on the same clock — exactly what a real
+ * account's wrong code answers. (It used to end in "This code has expired",
+ * which gave the unknown account away; backend forgot-password.controller.ts.)
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -32,18 +37,22 @@ import {
   retryAfterSeconds,
 } from '../lib/code-delivery';
 import {
-  loadPhoneCountryCode,
-  localPhoneDigits,
-  phoneLoginIdentifier,
-  savePhoneCountryCode,
-} from '../lib/phone-prefs';
+  DEFAULT_FORGOT_IDENTIFIER_KIND,
+  type ForgotIdentifierInput,
+  type ForgotIdentifierKind,
+  forgotStartBody,
+  hasForgotIdentifier,
+} from '../lib/forgot-identifier';
+import { loadPhoneCountryCode, savePhoneCountryCode } from '../lib/phone-prefs';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { formatMessage, useLocale } from '../i18n';
 import { COUNTRY_BY_CODE, COUNTRY_DIAL_OPTIONS } from './sign-up/constants';
 import { Picker } from './sign-up/fields';
 import { normalizeOtpInput } from './sign-up/step-6';
 
-type Step = 'phone' | 'code' | 'password' | 'done';
+type Step = 'identify' | 'code' | 'password' | 'done';
+
+const IDENTIFIER_KINDS: readonly ForgotIdentifierKind[] = ['phone', 'email'];
 
 type Props = {
   visible: boolean;
@@ -72,11 +81,15 @@ export function ForgotPasswordModal({
 }: Props) {
   const { t } = useLocale();
   const keyboardInset = useKeyboardInset();
-  const [step, setStep] = useState<Step>('phone');
+  const [step, setStep] = useState<Step>('identify');
+  const [identifierKind, setIdentifierKind] = useState<ForgotIdentifierKind>(
+    DEFAULT_FORGOT_IDENTIFIER_KIND,
+  );
   const [phoneCountryCode, setPhoneCountryCode] = useState(
     () => initialCountryCode || loadPhoneCountryCode(),
   );
   const [phoneNumber, setPhoneNumber] = useState(initialLocalNumber ?? '');
+  const [email, setEmail] = useState('');
   const [requestId, setRequestId] = useState<string | null>(null);
   const [expiresInSec, setExpiresInSec] = useState(600);
   const [code, setCode] = useState('');
@@ -89,18 +102,26 @@ export function ForgotPasswordModal({
   /** A backdrop tap / hardware back mid-flow asks first instead of discarding. */
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
-  const localDigits = useMemo(() => localPhoneDigits(phoneNumber), [phoneNumber]);
+  const identifier = useMemo<ForgotIdentifierInput>(
+    () =>
+      identifierKind === 'phone'
+        ? { kind: 'phone', countryCode: phoneCountryCode, localNumber: phoneNumber }
+        : { kind: 'email', email },
+    [identifierKind, phoneCountryCode, phoneNumber, email],
+  );
+  const canSend = hasForgotIdentifier(identifier);
   const country = COUNTRY_BY_CODE[phoneCountryCode];
-  const fullPhone = phoneLoginIdentifier(phoneCountryCode, phoneNumber);
   const closedDialLabel = country
     ? `${country.flag ? `${country.flag} ` : ''}${country.dialCode}`
     : null;
 
   useEffect(() => {
     if (!visible) return;
-    setStep('phone');
+    setStep('identify');
+    setIdentifierKind(DEFAULT_FORGOT_IDENTIFIER_KIND);
     setPhoneCountryCode(initialCountryCode || loadPhoneCountryCode());
     setPhoneNumber(initialLocalNumber ?? '');
+    setEmail('');
     setRequestId(null);
     setExpiresInSec(600);
     setCode('');
@@ -124,7 +145,7 @@ export function ForgotPasswordModal({
 
   /**
    * Progress worth protecting: a code has been requested and not yet used.
-   * The phone step has nothing to lose, and "done" has nothing left to do.
+   * The identify step has nothing to lose, and "done" has nothing left to do.
    */
   const hasProgress = step === 'code' || step === 'password';
 
@@ -137,14 +158,27 @@ export function ForgotPasswordModal({
     onClose();
   };
 
+  const chooseKind = (next: ForgotIdentifierKind) => {
+    if (busy || next === identifierKind) return;
+    setIdentifierKind(next);
+    // An error about the other field ("Enter a valid email address") would
+    // read as being about this one.
+    setError(null);
+  };
+
   const sendCode = async () => {
-    if (!localDigits || busy) return;
+    if (busy) return;
+    const start = forgotStartBody(identifier);
+    if (!start.ok) {
+      if (start.reason === 'invalidEmail') setError(t.errors.invalidEmailAddress);
+      return;
+    }
     setBusy(true);
     setError(null);
     setInfo(null);
     try {
-      savePhoneCountryCode(phoneCountryCode);
-      const res = await startForgotPassword({ phoneNum: `+${fullPhone.replace(/^\+/, '')}` });
+      if (identifier.kind === 'phone') savePhoneCountryCode(identifier.countryCode);
+      const res = await startForgotPassword(start.body);
       setRequestId(res.requestId);
       setExpiresInSec(res.expiresInSec ?? 600);
       setResendIn(res.resendAfterSec ?? 60);
@@ -239,40 +273,87 @@ export function ForgotPasswordModal({
             </>
           ) : null}
 
-          {!confirmDiscard && step === 'phone' && (
+          {!confirmDiscard && step === 'identify' && (
             <>
               <Text style={styles.title}>{t.forgot.title}</Text>
-              <Text style={styles.hint}>{t.forgot.phoneHint}</Text>
-              <Text style={styles.label}>{t.login.mobileNumber}</Text>
-              <View style={styles.phoneRow}>
-                <Picker
-                  value={phoneCountryCode}
-                  options={DIAL_PICKER_OPTIONS}
-                  onSelect={(next) => {
-                    setPhoneCountryCode(next);
-                    savePhoneCountryCode(next);
-                  }}
-                  width={118}
-                  placeholder={t.login.dialCode}
-                  displayValue={closedDialLabel}
-                  title={t.login.dialTitle}
-                  searchable
-                />
-                <TextInput
-                  style={[styles.input, styles.phoneInput]}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  placeholder="123456789"
-                  placeholderTextColor={C.muted2}
-                  keyboardType="phone-pad"
-                  autoCapitalize="none"
-                />
+              {/* A choice, so segmented tabs — not a gold "act" button. */}
+              <View style={styles.kindTabs} accessibilityRole="tablist">
+                {IDENTIFIER_KINDS.map((kind) => {
+                  const on = identifierKind === kind;
+                  return (
+                    <Pressable
+                      key={kind}
+                      style={[styles.kindTab, on && styles.kindTabOn]}
+                      onPress={() => chooseKind(kind)}
+                      disabled={busy}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: on, disabled: busy }}
+                    >
+                      <Text style={[styles.kindTabText, on && styles.kindTabTextOn]}>
+                        {kind === 'phone' ? t.forgot.byPhone : t.forgot.byEmail}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
+              <Text style={styles.hint}>
+                {identifierKind === 'phone' ? t.forgot.phoneHint : t.forgot.emailHint}
+              </Text>
+              {identifierKind === 'phone' ? (
+                <>
+                  <Text style={styles.label}>{t.login.mobileNumber}</Text>
+                  <View style={styles.phoneRow}>
+                    <Picker
+                      value={phoneCountryCode}
+                      options={DIAL_PICKER_OPTIONS}
+                      onSelect={(next) => {
+                        setPhoneCountryCode(next);
+                        savePhoneCountryCode(next);
+                      }}
+                      width={118}
+                      placeholder={t.login.dialCode}
+                      displayValue={closedDialLabel}
+                      title={t.login.dialTitle}
+                      searchable
+                    />
+                    <TextInput
+                      style={[styles.input, styles.phoneInput]}
+                      value={phoneNumber}
+                      onChangeText={setPhoneNumber}
+                      placeholder="123456789"
+                      placeholderTextColor={C.muted2}
+                      keyboardType="phone-pad"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.label}>{t.forgot.emailLabel}</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={email}
+                    onChangeText={(text) => {
+                      setEmail(text);
+                      if (error) setError(null);
+                    }}
+                    onSubmitEditing={() => void sendCode()}
+                    placeholder="you@example.com"
+                    placeholderTextColor={C.muted2}
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={254}
+                  />
+                </>
+              )}
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <Pressable
                 style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
                 onPress={() => void sendCode()}
-                disabled={busy || !localDigits}
+                disabled={busy || !canSend}
               >
                 <Text style={styles.primaryText}>
                   {busy ? t.forgot.sending : t.forgot.sendCode}
@@ -327,7 +408,7 @@ export function ForgotPasswordModal({
                 style={styles.cancel}
                 onPress={() => {
                   setError(null);
-                  setStep('phone');
+                  setStep('identify');
                 }}
               >
                 <Text style={styles.cancelText}>{t.common.back}</Text>
@@ -443,6 +524,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     marginTop: 8,
   },
+  /*
+   * The same shape as the Payment / History week tabs — a choice between two
+   * options reads as one mechanism across the app: lavender when chosen, never
+   * gold (gold = act).
+   */
+  kindTabs: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  kindTab: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  kindTabOn: {
+    borderColor: 'rgba(183,156,232,0.45)',
+    backgroundColor: 'rgba(183,156,232,0.1)',
+  },
+  kindTabText: { ...font(700), fontSize: 14, color: C.muted },
+  kindTabTextOn: { color: C.txt },
   phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
   phoneInput: { flex: 1 },
   input: {

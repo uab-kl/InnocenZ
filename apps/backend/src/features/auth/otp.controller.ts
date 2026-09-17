@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { logger } from '@/util/logger.js';
 import { safeErrorFields } from './query-error-redaction.js';
+import { maskPhone } from '@/features/account-code/masks.js';
 import { SYSTEM_ACTOR } from '@/util/actor';
 import {
   codesMatch,
@@ -151,7 +152,10 @@ export class OtpControllerClass {
           });
         }
         logger.warn('[OtpController.send] WhatsApp not configured — OTP logged for local dev only', {
-          phoneNum,
+          // The CODE is the point of this dev-only line; the number is not. Masked
+          // the same way as the account-code and SMS dev lines (`delivery.ts`,
+          // `sms.ts`): country code and last four tell test accounts apart.
+          phoneNum: maskPhone(phoneNum),
           purpose,
           code,
         });

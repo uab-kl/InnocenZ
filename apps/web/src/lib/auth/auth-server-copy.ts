@@ -134,18 +134,25 @@ const LENGTH_PATTERNS: ReadonlyArray<{
 ];
 
 /**
- * THE REFUSALS OF `POST /auth/password/forgot/complete` THAT MUST READ ALIKE.
+ * THE REFUSALS OF `POST /auth/password/forgot/complete`, SHOWN AS ONE SENTENCE.
  *
- * The start step answers identically for an address with no account (a random
- * `requestId`) and a real one. The complete step did not: an unknown address's
- * id answers "This code has expired", a real account's wrong code answers
- * "Invalid code", and five wrong codes answer "Too many attempts". Shown as
- * three different sentences, the page itself told a stranger which addresses
- * have accounts. So the forgot page shows ONE sentence for all three.
+ * History: `start` always answered neutrally, but `complete` used to give an
+ * unknown address away — its random `requestId` answered "This code has
+ * expired" where a real account's wrong code answered "Invalid code". This page
+ * therefore showed one sentence for all of them.
  *
- * ⚠️ This closes the page, not the endpoint — the three answers still differ
- * over HTTP until the backend answers them with one refusal. The page says the
- * same thing either way, so it is already right when that lands.
+ * The backend now closes that itself (account-code/decoy-requests.ts, read
+ * 17 Sep 2026): the id handed out for an unknown email or phone is kept as a
+ * STAND-IN that answers exactly like a real pending code — "Invalid code" for
+ * each guess, "Too many attempts" at the cap, "This code has expired" after
+ * the same TTL or once a newer start supersedes it. So the three sentences no
+ * longer say whether an account exists; they say what happened to THIS code.
+ *
+ * The page still shows them as one, deliberately: every one of them has the
+ * same remedy (check the code, or request a new one), and one sentence cannot
+ * start leaking again if the stand-ins ever drift from the real rows — they
+ * are in memory, so a server restart answers "expired" for an id a live row
+ * would still call "invalid".
  */
 const FORGOT_CODE_REFUSALS: ReadonlySet<string> = new Set([
 	"Invalid code",
@@ -167,6 +174,15 @@ function canonical(message: string): string {
 		.trim()
 		.replace(/\s+[-–]{1,2}\s+/g, " — ")
 		.replace(/\.$/, "");
+}
+
+/**
+ * Is `message` this server sentence? Compared in the same canonical form the
+ * localiser uses, so a retyped dash or a trailing full stop still matches.
+ * For branching on a refusal (taken, already used) — never for display.
+ */
+export function isServerSentence(message: string, sentence: string): boolean {
+	return Boolean(message) && canonical(message) === canonical(sentence);
 }
 
 /** The reader's version of a server sentence; unknown sentences unchanged. */

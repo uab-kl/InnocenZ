@@ -184,9 +184,8 @@ export class ContactChangeControllerClass {
         try {
           pendingInvitesToCurrentEmail = await this.deps.countPendingInvites(currentEmail);
         } catch (error) {
-          logger.warn('[ContactChange.start] could not count pending invites', {
-            error: error instanceof Error ? error.message : String(error),
-          });
+          // The lookup's bound value IS the current email.
+          logger.warn('[ContactChange.start] could not count pending invites', safeErrorFields(error));
         }
       }
 
@@ -365,7 +364,7 @@ export class ContactChangeControllerClass {
       } catch (error) {
         logger.warn('[ContactChange.confirm] could not re-issue tokens', {
           userId: actor.id,
-          error: error instanceof Error ? error.message : String(error),
+          ...safeErrorFields(error),
         });
       }
 

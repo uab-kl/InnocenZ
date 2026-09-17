@@ -3,7 +3,8 @@
  *
  * Four lanes, two clients:
  *  - `changeMyPassword`        — signed in, needs the bearer token.
- *  - `startForgotPassword`     — signed OUT: one code by WhatsApp, SMS and email.
+ *  - `startForgotPassword`     — signed OUT, by email OR phone number: one code
+ *                                by WhatsApp, SMS and email.
  *  - `completeForgotPassword`  — signed OUT: the code + the new password.
  *  - `resetPasswordWithToken`  — signed OUT, the OLD emailed-link flow. Kept so
  *    links already sitting in inboxes still work (`/reset-password`).
@@ -24,6 +25,10 @@ import {
 	storeReissuedTokens,
 	toAuthFlowError,
 } from "@/lib/auth/auth-flow-client";
+import {
+	type ForgotIdentifier,
+	forgotStartBody,
+} from "@/lib/auth/forgot-identifier";
 import { kickToLogin } from "@/lib/auth/guards";
 import { getClient, getPublicClient } from "@/lib/axios-v1";
 
@@ -51,11 +56,21 @@ function serverMessage(error: unknown, fallback: string): Error {
  * `sessions_valid_from`, which retires every earlier token — this tab's
  * included. Without the new pair the very next request is a 401 and the person
  * is signed out of the account whose password they just changed.
+ *
+ * ⚠️ `tokensStored: false` means the password DID change but the answer carried
+ * no token pair — the server writes first and re-issues second, and a failed
+ * re-issue must not turn a saved change into an error. The token this tab holds
+ * is already retired, so the caller must say "saved — sign in again" and send
+ * the person to sign-in, instead of carrying on into an unexplained 401.
  */
+export interface PasswordChanged {
+	tokensStored: boolean;
+}
+
 export async function changeMyPassword(input: {
 	currentPassword: string;
 	newPassword: string;
-}): Promise<void> {
+}): Promise<PasswordChanged> {
 	// Same sentence the sheet already shows when nothing at all comes back, so a
 	// server that answers `success: false` with no message reads identically to
 	// one that answers nothing.
@@ -71,7 +86,7 @@ export async function changeMyPassword(input: {
 		if (!response.data.success) {
 			throw new AuthFlowError(response.data.message || failed);
 		}
-		storeReissuedTokens(response.data.data);
+		return { tokensStored: storeReissuedTokens(response.data.data) };
 	} catch (error) {
 		throw toAuthFlowError(error, failed);
 	}
@@ -89,19 +104,23 @@ export interface ForgotPasswordStarted {
 }
 
 /**
- * Ask for a reset CODE. Always answers the same way for a well-formed email —
- * the server is neutral on purpose, so this can never be used to discover which
- * emails have accounts. A cooldown (429) still throws, with `retryAfterSec`.
+ * Ask for a reset CODE, by the email OR the phone number the person remembers.
+ * Always answers the same way for a well-formed identifier — the server is
+ * neutral on purpose, so this can never be used to discover which emails or
+ * numbers have accounts. A cooldown (429) still throws, with `retryAfterSec`.
+ *
+ * Read what was typed with `readForgotIdentifier` first: it decides email vs
+ * phone and normalises the phone the way every other web lane does.
  */
 export async function startForgotPassword(
-	email: string,
+	identifier: ForgotIdentifier,
 ): Promise<ForgotPasswordStarted> {
 	const failed = apiErrorCopy().authCodes.codeSendFailed;
 	const client = getPublicClient();
 	try {
 		const response = await client.post<
 			ApiEnvelope<Partial<ForgotPasswordStarted> | null>
-		>("/auth/password/forgot/start", { email: email.trim().toLowerCase() });
+		>("/auth/password/forgot/start", forgotStartBody(identifier));
 		const data = response.data.data;
 		if (!response.data.success || !data?.requestId) {
 			throw new AuthFlowError(response.data.message || failed);

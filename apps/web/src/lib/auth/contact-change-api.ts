@@ -65,6 +65,12 @@ export interface ContactChangeConfirmed {
 	message: string;
 	email: string | null;
 	phoneNum: string | null;
+	/**
+	 * False when the change was WRITTEN but the answer carried no token pair.
+	 * The token this tab holds was retired by the change itself, so the caller
+	 * must send the person to sign in again rather than refetch anything.
+	 */
+	tokensStored: boolean;
 }
 
 /**
@@ -221,8 +227,9 @@ export async function confirmContactChange(input: {
 		if (!response.data.success) {
 			throw new AuthFlowError(response.data.message || failed);
 		}
-		storeReissuedTokens(data);
+		const tokensStored = storeReissuedTokens(data);
 		return {
+			tokensStored,
 			message:
 				response.data.message ||
 				(input.kind === "email"

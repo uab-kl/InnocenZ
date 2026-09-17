@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, ilike, inArray, isNull, ne, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, ilike, inArray, isNotNull, isNull, ne, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -12,6 +12,7 @@ import { RoleTable } from '@/features/rbac/role/role.model';
 import { derivedAge } from './ic-dob';
 import { isActivatedAccount, signInContactChanges, type SignInContactPatch } from './sign-in-contact';
 import { isUniqueViolation } from '@/features/account-code/account-code.repository';
+import { safeErrorFields } from '@/features/auth/query-error-redaction';
 import {
   AgencyPrTable,
   type AgencyPrApproveStatus,
@@ -436,7 +437,7 @@ async function loadPrimaryMembership(
   } catch (error) {
     logger.warn(
       '[PrRepository.buildSyntheticPr] agency_pr membership skipped (identity-only PR):',
-      error,
+      safeErrorFields(error),
     );
     return null;
   }
@@ -521,7 +522,7 @@ export class PrRepositoryClass {
         .orderBy(asc(AgencyPrTable.createdAt), asc(AgencyPrTable.id));
       return [...new Set(rows.map((r) => r.agencyId))];
     } catch (error) {
-      logger.error('[PrRepository.listApprovedAgencyIds] Error:', error);
+      logger.error('[PrRepository.listApprovedAgencyIds] Error:', safeErrorFields(error));
       // Empty, never a partial list: the caller reads `length === 1` as
       // "unambiguous", and a truncated read would make an ambiguous case look
       // certain — which is the exact failure this whole resolver exists to stop.
@@ -538,7 +539,7 @@ export class PrRepositoryClass {
       // Pass the agency that is acting whenever one is known.
       return await buildSyntheticPr(userId, agencyId);
     } catch (error) {
-      logger.error('[PrRepository.getByUserId] Error:', error);
+      logger.error('[PrRepository.getByUserId] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -618,7 +619,7 @@ export class PrRepositoryClass {
       }
       return pr;
     } catch (error) {
-      logger.error('[PrRepository.ensureOpsBridge] Error:', error);
+      logger.error('[PrRepository.ensureOpsBridge] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -654,7 +655,10 @@ export class PrRepositoryClass {
         : 'activated';
     } catch (error) {
       if (isUniqueViolation(error)) return takenSignInField(error, patch);
-      logger.error('[PrRepository.writeStubSignInContact] Error:', error);
+      // The bound values ARE the email / phone being written. `safeErrorFields`
+      // scrubs them from the error in place too, so the controller's own log of
+      // the rethrown error prints none of them either.
+      logger.error('[PrRepository.writeStubSignInContact] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -675,7 +679,7 @@ export class PrRepositoryClass {
         .where(eq(AgencyPrTable.agencyId, agencyId));
       return rows.map((row) => row.userId);
     } catch (error) {
-      logger.error('[PrRepository.listIdsByAgency] Error:', error);
+      logger.error('[PrRepository.listIdsByAgency] Error:', safeErrorFields(error));
       return [];
     }
   }
@@ -753,7 +757,7 @@ export class PrRepositoryClass {
       // from any of the writes above re-throws through the catch.
       return await this.getByUserId(id);
     } catch (error) {
-      logger.error('[PrRepository.update] Error:', error);
+      logger.error('[PrRepository.update] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -770,7 +774,7 @@ export class PrRepositoryClass {
     try {
       return await buildSyntheticPr(id, agencyId);
     } catch (error) {
-      logger.error('[PrRepository.getById] Error:', error);
+      logger.error('[PrRepository.getById] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -791,7 +795,37 @@ export class PrRepositoryClass {
         .orderBy(asc(AgencyPrTable.createdAt), asc(AgencyPrTable.id));
       return rows.map((r) => r.agencyId);
     } catch (error) {
-      logger.error('[PrRepository.listMembershipAgencyIds] Error:', error);
+      logger.error('[PrRepository.listMembershipAgencyIds] Error:', safeErrorFields(error));
+      throw error;
+    }
+  }
+
+  /**
+   * Which of these accounts have SET A PASSWORD — the `hasPassword` flag on
+   * `GET /pr`.
+   *
+   * The agency editor needs to know before the save, not after: a PR who has
+   * activated her account owns her sign-in email and phone, and `PUT /pr/:id`
+   * refuses a change to either with 403 (`planSignInContactWrite`). Showing
+   * those fields as editable only to refuse them is a form that lies.
+   *
+   * Answers with ids only. The hash is tested in SQL (`IS NOT NULL`) and never
+   * selected, so it cannot reach a response or a log from here.
+   *
+   * Throws on a read error: `false` would tell the editor an activated account
+   * is still editable, and `true` would lock a stub the agency may correct.
+   */
+  async listUserIdsWithPassword(userIds: string[]): Promise<Set<string>> {
+    const ids = [...new Set(userIds.filter(Boolean))];
+    if (ids.length === 0) return new Set();
+    try {
+      const rows = await db
+        .select({ id: UserTable.id })
+        .from(UserTable)
+        .where(and(inArray(UserTable.id, ids), isNotNull(UserTable.passwordHash)));
+      return new Set(rows.map((row) => row.id));
+    } catch (error) {
+      logger.error('[PrRepository.listUserIdsWithPassword] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -993,7 +1027,7 @@ export class PrRepositoryClass {
       );
       return { prs, totalCount };
     } catch (error) {
-      logger.error('[PrRepository.listPaginated] Error:', error);
+      logger.error('[PrRepository.listPaginated] Error:', safeErrorFields(error));
       throw error;
     }
   }

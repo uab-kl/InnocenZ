@@ -20,12 +20,18 @@ import {
 	localiseAuthError,
 	localiseAuthMessage,
 } from "@/lib/auth/auth-server-copy";
+import { nameChangeErrorText } from "@/lib/auth/name-change-copy";
 import {
 	changeMyPassword,
 	PASSWORD_MAX_LENGTH,
 	PASSWORD_MIN_LENGTH,
 } from "@/lib/auth/password-api";
 import { phoneNumberProblem, toWhatsAppNumber } from "@/lib/auth/phone-api";
+import {
+	type ChangedCredential,
+	markSignInAgain,
+	signInAgain,
+} from "@/lib/auth/sign-in-again";
 import {
 	contactChangeProblemText,
 	SIGNED_IN_ACCOUNT_QUERY_KEYS,
@@ -156,6 +162,18 @@ export function SecuritySettingsSheets({
 	const resetContact = contact.reset;
 
 	const [view, setView] = useState<SecurityView>("menu");
+	/**
+	 * Set when a change SAVED but its answer carried no new tokens. This tab's
+	 * token was retired by the change itself, so every other sheet closes and
+	 * the only way on is Sign in again — parity with the PR app's
+	 * `requireSignInAgain`. Deliberately not tied to `open`: the parent closing
+	 * the sheet must not leave the person on a page whose next request 401s.
+	 */
+	const [signInAfter, setSignInAfter] = useState<ChangedCredential | null>(
+		null,
+	);
+	/** Sheets other than "sign in again" are shown only while the session lives. */
+	const live = open && signInAfter === null;
 	// Same `useId` pairing `PasswordField` uses, so the "New email" / "New mobile"
 	// captions are real labels: clicking one focuses its input and a screen reader
 	// announces it with the field.
@@ -227,6 +245,22 @@ export function SecuritySettingsSheets({
 	};
 
 	/**
+	 * Saved, but no tokens came back. Written to the login page's notice FIRST,
+	 * so a background request that collects the 401 before the person taps
+	 * still lands on a sign-in page that says why.
+	 */
+	const requireSignInAgain = (changed: ChangedCredential) => {
+		markSignInAgain(changed);
+		backToMenu();
+		setSignInAfter(changed);
+	};
+
+	/** Clears the dead tokens and goes to /login, which shows the same notice. */
+	const leaveToSignIn = () => {
+		if (signInAfter) signInAgain(signInAfter);
+	};
+
+	/**
 	 * Shared by BOTH portals, so this one call site is the whole web
 	 * change-password feature for agency and outlet.
 	 *
@@ -279,7 +313,15 @@ export function SecuritySettingsSheets({
 		}
 		setSavingPassword(true);
 		try {
-			await changeMyPassword({ currentPassword, newPassword });
+			const changed = await changeMyPassword({ currentPassword, newPassword });
+			if (!changed.tokensStored) {
+				// Changed — but the token in this tab is already dead.
+				setCurrentPassword("");
+				setNewPassword("");
+				setConfirmPassword("");
+				requireSignInAgain("password");
+				return;
+			}
 			finish();
 		} catch (error) {
 			// "Current password is incorrect" is a 400, never a 401 — the sheet
@@ -340,12 +382,9 @@ export function SecuritySettingsSheets({
 			toast(t.profile.nameUpdated, "success");
 			backToMenu();
 		} catch (error) {
-			toast(
-				error instanceof Error && error.message
-					? error.message
-					: t.profile.nameUpdateFailed,
-				"warn",
-			);
+			// The server's reason in the reader's language — this used to show
+			// axios's own "Request failed with status code 400", in English.
+			toast(nameChangeErrorText(error, t), "warn");
 		} finally {
 			setSavingName(false);
 		}
@@ -432,11 +471,17 @@ export function SecuritySettingsSheets({
 	};
 
 	const verifyReal = async () => {
+		const kind = contact.kind;
 		const confirmed = await contact.submitCode();
-		if (!confirmed) return; // moved to code #2, or refused — sheet stays
-		toast(localiseAuthMessage(confirmed.message, t), "success");
-		if (contact.kind === "email") setNewEmail("");
+		if (!confirmed) return; // moved to code #2, back to the field, or refused
+		if (kind === "email") setNewEmail("");
 		else setNewPhone("");
+		if (!confirmed.tokensStored) {
+			// Written — and the change retired this tab's token.
+			requireSignInAgain(kind);
+			return;
+		}
+		toast(localiseAuthMessage(confirmed.message, t), "success");
 		backToMenu();
 	};
 
@@ -493,7 +538,7 @@ export function SecuritySettingsSheets({
 	return (
 		<>
 			<IzSheet
-				open={open && view === "menu"}
+				open={live && view === "menu"}
 				onClose={closeAll}
 				variant={sheetVariant}
 			>
@@ -540,7 +585,7 @@ export function SecuritySettingsSheets({
 			</IzSheet>
 
 			<IzSheet
-				open={open && view === "password"}
+				open={live && view === "password"}
 				onClose={backToMenu}
 				variant={sheetVariant}
 			>
@@ -588,7 +633,7 @@ export function SecuritySettingsSheets({
 			</IzSheet>
 
 			<IzSheet
-				open={open && view === "name"}
+				open={live && view === "name"}
 				onClose={backToMenu}
 				variant={sheetVariant}
 			>
@@ -627,7 +672,7 @@ export function SecuritySettingsSheets({
 			</IzSheet>
 
 			<IzSheet
-				open={open && view === "email"}
+				open={live && view === "email"}
 				onClose={backToMenu}
 				variant={sheetVariant}
 			>
@@ -671,7 +716,7 @@ export function SecuritySettingsSheets({
 			</IzSheet>
 
 			<IzSheet
-				open={open && view === "phone"}
+				open={live && view === "phone"}
 				onClose={backToMenu}
 				variant={sheetVariant}
 			>
@@ -763,7 +808,7 @@ export function SecuritySettingsSheets({
 				/>
 			) : (
 				<OtpVerifySheet
-					open={open && contact.codeOpen}
+					open={live && contact.codeOpen}
 					variant={sheetVariant}
 					onClose={resetContact}
 					title={realTitle}
@@ -774,6 +819,9 @@ export function SecuritySettingsSheets({
 					onResend={resendReal}
 					resendIn={contact.resendIn}
 					busy={contact.busy}
+					// Step 3 with no code #2 yet (it failed to go out after code #1
+					// was accepted): nothing to verify — Resend is the way on.
+					verifyDisabled={!contact.canVerify}
 					error={
 						contact.problem
 							? contactChangeProblemText(
@@ -792,6 +840,38 @@ export function SecuritySettingsSheets({
 					}
 				/>
 			)}
+
+			{/*
+			 * SAVED — SIGN IN AGAIN. Every way out of this sheet leaves through
+			 * sign-in: there is no session left to go back to.
+			 */}
+			<IzSheet
+				open={signInAfter !== null}
+				onClose={leaveToSignIn}
+				variant={sheetVariant}
+			>
+				<SheetHead
+					title={t.authCodes.signInAgainTitle}
+					onClose={leaveToSignIn}
+				/>
+				{signInAfter ? (
+					<p className="iz-account-security__current mb-2">
+						{signInAfter === "password"
+							? t.authCodes.changedPassword
+							: signInAfter === "email"
+								? t.authCodes.changedEmail
+								: t.authCodes.changedPhone}
+					</p>
+				) : null}
+				<p className="iz-tiny iz-muted mb-4">{t.authCodes.signInAgainBody}</p>
+				<button
+					type="button"
+					className="iz-btn iz-btn-primary w-full"
+					onClick={leaveToSignIn}
+				>
+					{t.authCodes.signInAgainAction}
+				</button>
+			</IzSheet>
 		</>
 	);
 }

@@ -18,7 +18,7 @@
  * the underlying network detail are filled back in at render time, never baked
  * into the translated sentence.
  */
-import { formatMessage, type AppTranslations } from '../i18n';
+import { formatMessage, localizeLoginError, type AppTranslations } from '../i18n';
 
 /** `Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?` */
 const UNREACHABLE =
@@ -88,7 +88,45 @@ const CODE_FLOW_SENTENCES: ReadonlyArray<readonly [string, ErrorKey]> = [
   ['Enter the 6-digit code', 'enterSixDigitCode'],
   ['Enter a valid email address', 'invalidEmailAddress'],
   ['Current password is required', 'currentPasswordRequired'],
+  ['Enter your email or your phone number', 'enterEmailOrPhone'],
+  ['Enter the new email or phone number', 'enterNewContact'],
+  /*
+   * Also sent on these same routes, and shown in English on a 中文 screen until
+   * 17 Sep 2026 (read from the backend as built): the two 500s in
+   * contact-change.controller.ts, the password-less account in
+   * password-change.controller.ts, the zod fallback every handler carries, and
+   * `ApiError.INTERNAL_SERVER_ERROR`, the catch-all each one ends with.
+   *
+   * ⚠️ 'Could not send the code' (500, the second code row) is NOT
+   * 'Could not send the code — try again later' (503, delivery). The lookup is
+   * exact on the canonical form, so neither can swallow the other.
+   */
+  ['Could not start the change', 'couldNotStartChange'],
+  ['Could not send the code', 'couldNotSendCode'],
+  ['This account cannot change password here', 'cannotChangePasswordHere'],
+  ['Validation failed', 'validationFailed'],
+  ['Internal Server Error', 'internalServerError'],
+  /*
+   * `ApiError.UNAUTHORIZED`. Two statuses carry it, and both mean "this
+   * session cannot do that — sign in again" in this app:
+   *   • 401 — authenticate-jwt and every account-code controller, for a token
+   *     that is missing, expired or behind a credential-change cutoff;
+   *   • 403 — the self-only /user/:id handlers when the token's account is not
+   *     the id the screen sent, i.e. a session that belongs to someone else.
+   * A 401 is better handled than shown: see `isSessionRefusal`.
+   */
+  ['Unauthorized', 'unauthorized'],
 ];
+
+/**
+ * The schema's password bounds carry the number the server enforces
+ * (`PASSWORD_MIN` / `PASSWORD_MAX` in account-code/schemas.ts, and the 6 in
+ * auth.schema.ts). The number is READ out of the sentence, never assumed, so a
+ * changed bound still reads correctly. " long" is optional because
+ * outlet.schema.ts words the same rule without it.
+ */
+const PASSWORD_MIN_LENGTH = /^Password must be at least (\d+) characters(?: long)?$/i;
+const PASSWORD_MAX_LENGTH = /^Password must be at most (\d+) characters(?: long)?$/i;
 
 /**
  * The refusals that are about the CODE itself — wrong, expired, already spent,
@@ -146,6 +184,9 @@ export function matchCodeFlowError(message: string): ErrorKey | null {
   const stripped = message.trim().replace(/\.$/, '');
   if (CODE_COOLDOWN.test(stripped)) return 'codeCooldown';
   if (TOO_MANY.test(stripped)) return 'tooManyRequests';
+  const spaced = stripped.replace(/\s+/g, ' ');
+  if (PASSWORD_MIN_LENGTH.test(spaced)) return 'passwordMinLength';
+  if (PASSWORD_MAX_LENGTH.test(spaced)) return 'passwordMaxLength';
   return null;
 }
 
@@ -153,6 +194,22 @@ export function matchCodeFlowError(message: string): ErrorKey | null {
 export function isCodeRejection(message: string): boolean {
   const key = matchCodeFlowError(message);
   return key !== null && CODE_REJECTIONS.has(key);
+}
+
+/**
+ * True when the SESSION was refused — the token is gone, expired, or stamped
+ * out by a credential change on another device — rather than the request.
+ *
+ * ⚠️ Status AND sentence, never the status alone. `POST /user/:id/delete`
+ * answers a mistyped password with 401 "Incorrect password": a screen that
+ * signed out on every 401 would throw a PR to the login page over a typo. Only
+ * the server's bare `Unauthorized` (and this client's own "Not signed in") say
+ * the session itself is the problem. The app has no global sign-out on a 401,
+ * so a screen that gets this should send the PR to sign in, not print it.
+ */
+export function isSessionRefusal(status: number, message: string): boolean {
+  if (status !== 401) return false;
+  return message.trim() === NOT_SIGNED_IN || matchCodeFlowError(message) === 'unauthorized';
 }
 
 /**
@@ -172,6 +229,12 @@ export function localizeApiError(
   if (codeFlow === 'codeCooldown') {
     const seconds = CODE_COOLDOWN.exec(trimmed.replace(/\.$/, ''));
     return formatMessage(errors.codeCooldown, { s: seconds?.[1] ?? '60' });
+  }
+  if (codeFlow === 'passwordMinLength' || codeFlow === 'passwordMaxLength') {
+    const pattern = codeFlow === 'passwordMinLength' ? PASSWORD_MIN_LENGTH : PASSWORD_MAX_LENGTH;
+    const bound = pattern.exec(trimmed.replace(/\.$/, '').replace(/\s+/g, ' '));
+    // matchCodeFlowError only answers these keys when the pattern matched.
+    return bound ? formatMessage(errors[codeFlow], { n: bound[1] }) : trimmed;
   }
   if (codeFlow) return errors[codeFlow];
 
@@ -212,4 +275,33 @@ export function localizeApiError(
   }
 
   return trimmed;
+}
+
+/**
+ * Localise a SIGN-IN failure. The sign-in screen must use this, not
+ * `localizeLoginError` alone.
+ *
+ * `localizeLoginError` knows the four sentences that only /auth/login sends
+ * (not registered, inactive, wrong password, the minute-counted lockout). But
+ * `session.signIn` re-throws every status other than 400/401, so the screen also
+ * receives the shared ones: the login limiter's 429 "Too many sign-in attempts.
+ * Please wait a few minutes and try again.", the catch-all 500 "Internal Server
+ * Error", an unreachable backend, a password-length 400. Those shipped English
+ * to a 中文 sign-in screen until 17 Sep 2026.
+ *
+ * Sign-in wording wins: the lockout keeps its minute count, and the limiter
+ * pattern cannot swallow it.
+ *
+ * Lives here, not in i18n/translations.ts: this module already imports the i18n
+ * barrel, so calling back into it from translations.ts would be an import cycle.
+ */
+export function localizeSignInError(
+  message: string,
+  t: Pick<AppTranslations, 'login' | 'errors'>,
+): string {
+  const trimmed = message.trim();
+  const signInCopy = localizeLoginError(trimmed, t.login);
+  // Changed = a sign-in sentence (or the empty-message fallback) was recognised.
+  if (signInCopy !== trimmed) return signInCopy;
+  return localizeApiError(trimmed, t.errors);
 }

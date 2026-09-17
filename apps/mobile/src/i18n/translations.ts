@@ -76,6 +76,13 @@ export type AppTranslations = {
   forgot: {
     title: string;
     phoneHint: string;
+    /** Segmented switch on the first step — find the account by its phone (the default) or by its email. Both reach the same account and the code goes to every contact on it. */
+    byPhone: string;
+    byEmail: string;
+    /** First-step hint on the Email tab. As neutral as phoneHint: never says whether the address has an account. */
+    emailHint: string;
+    /** Field label on the Email tab (the Phone tab reuses login.mobileNumber). */
+    emailLabel: string;
     sendCode: string;
     sending: string;
     otpTitle: string;
@@ -311,6 +318,12 @@ export type AppTranslations = {
      */
     signInAgainBody: string;
     signInAgain: string;
+    /**
+     * The server refused the SESSION (401 Unauthorized) before anything was
+     * written — expired, or cut off by a credential change on another device.
+     * Shown on the same sign-in-again sheet, in place of the "updated" line.
+     */
+    sessionEnded: string;
   };
   shifts: {
     pageEyebrow: string;
@@ -1577,6 +1590,31 @@ export type AppTranslations = {
     enterSixDigitCode: string;
     invalidEmailAddress: string;
     currentPasswordRequired: string;
+    /** 400 — forgot/start with neither (or both) of email / phone. */
+    enterEmailOrPhone: string;
+    /** 400 — contact-change/start with an empty value. */
+    enterNewContact: string;
+    /** 500 — contact-change/start could not write its code row. */
+    couldNotStartChange: string;
+    /** 500 — contact-change could not write the SECOND code row. Distinct from codeSendFailed (the 503 "— try again later"). */
+    couldNotSendCode: string;
+    /** 400 — password change on an account with no password of its own. */
+    cannotChangePasswordHere: string;
+    /** 400 — the zod fallback when a refusal carried no issue message. */
+    validationFailed: string;
+    /** 500 — every handler's catch-all (`ApiError.INTERNAL_SERVER_ERROR`). */
+    internalServerError: string;
+    /**
+     * `ApiError.UNAUTHORIZED` — 401 for a refused session, 403 from a self-only
+     * /user/:id handler whose token is another account's. English stays the
+     * server's own word; Chinese says what fixes it (sign in again). Security
+     * settings signs the PR out on the 401 instead of printing this.
+     */
+    unauthorized: string;
+    /** 400 — the server's password lower bound; `{n}` is read out of the sentence, never assumed. */
+    passwordMinLength: string;
+    /** 400 — the server's password upper bound (bcrypt's 72); `{n}` read out of the sentence. */
+    passwordMaxLength: string;
   };
   notif: {
     /** Bell-sheet title for a `shift_assigned` row. The row's own English title stays on the wire and in the database — this is only the rendered label. zh and zh-Hant are identical: no character differs between the scripts. */
@@ -1695,6 +1733,11 @@ export const translations: Record<AppLocale, AppTranslations> = {
       title: 'Reset password',
       phoneHint:
         'Enter your account’s mobile number. We’ll send a code by WhatsApp, SMS and email to the contacts on the account.',
+      byPhone: 'Phone',
+      byEmail: 'Email',
+      emailHint:
+        'Enter your account’s email address. We’ll send a code by WhatsApp, SMS and email to the contacts on the account.',
+      emailLabel: 'Email',
       sendCode: 'Send code',
       sending: 'Sending…',
       otpTitle: 'Enter code',
@@ -1882,6 +1925,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       deleteAccountFailed: 'Could not delete account',
       signInAgainBody: 'For your security, please sign in again.',
       signInAgain: 'Sign in again',
+      sessionEnded: 'Your sign-in has expired, so nothing was changed.',
     },
     shifts: {
       pageEyebrow: 'AGENCY SHIFTS',
@@ -2758,6 +2802,16 @@ export const translations: Record<AppLocale, AppTranslations> = {
       enterSixDigitCode: 'Enter the 6-digit code',
       invalidEmailAddress: 'Enter a valid email address',
       currentPasswordRequired: 'Current password is required',
+      enterEmailOrPhone: 'Enter your email or your phone number',
+      enterNewContact: 'Enter the new email or phone number',
+      couldNotStartChange: 'Could not start the change',
+      couldNotSendCode: 'Could not send the code',
+      cannotChangePasswordHere: 'This account cannot change password here',
+      validationFailed: 'Validation failed',
+      internalServerError: 'Internal Server Error',
+      unauthorized: 'Unauthorized',
+      passwordMinLength: 'Password must be at least {n} characters long',
+      passwordMaxLength: 'Password must be at most {n} characters long',
     },
     notif: {
       shiftAssignedTitle: 'You have a new shift',
@@ -2851,6 +2905,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
     forgot: {
       title: '重置密码',
       phoneHint: '请输入账号的手机号码。我们会通过 WhatsApp、短信和电子邮件向账号上的联系方式发送验证码。',
+      byPhone: '手机号',
+      byEmail: '电子邮箱',
+      emailHint: '请输入账号的电子邮箱。我们会通过 WhatsApp、短信和电子邮件向账号上的联系方式发送验证码。',
+      emailLabel: '电子邮箱',
       sendCode: '发送验证码',
       sending: '发送中…',
       otpTitle: '输入验证码',
@@ -3035,6 +3093,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       deleteAccountFailed: '无法删除账号',
       signInAgainBody: '为了账号安全，请重新登录。',
       signInAgain: '重新登录',
+      sessionEnded: '登录已失效，本次没有做任何更改。',
     },
     shifts: {
       pageEyebrow: '经纪排班',
@@ -3908,6 +3967,16 @@ export const translations: Record<AppLocale, AppTranslations> = {
       enterSixDigitCode: '请输入 6 位数验证码',
       invalidEmailAddress: '请输入有效的电子邮箱',
       currentPasswordRequired: '请输入当前密码',
+      enterEmailOrPhone: '请输入你的电子邮箱或手机号',
+      enterNewContact: '请输入新的电子邮箱或手机号',
+      couldNotStartChange: '无法开始本次更改 — 请稍后再试',
+      couldNotSendCode: '无法发送验证码',
+      cannotChangePasswordHere: '此账号无法在这里修改密码',
+      validationFailed: '提交的内容有误 — 请检查后重试',
+      internalServerError: '服务器出错 — 请稍后再试',
+      unauthorized: '未获授权 — 请重新登录',
+      passwordMinLength: '密码至少 {n} 位',
+      passwordMaxLength: '密码最多 {n} 位',
     },
     notif: {
       shiftAssignedTitle: '你有新的班次',
@@ -4001,6 +4070,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
     forgot: {
       title: '重設密碼',
       phoneHint: '請輸入帳號的手機號碼。我們會透過 WhatsApp、簡訊和電子郵件向帳號上的聯絡方式傳送驗證碼。',
+      byPhone: '手機號',
+      byEmail: '電子郵箱',
+      emailHint: '請輸入帳號的電子郵箱。我們會透過 WhatsApp、簡訊和電子郵件向帳號上的聯絡方式傳送驗證碼。',
+      emailLabel: '電子郵箱',
       sendCode: '傳送驗證碼',
       sending: '傳送中…',
       otpTitle: '輸入驗證碼',
@@ -4185,6 +4258,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       deleteAccountFailed: '無法刪除帳號',
       signInAgainBody: '為了帳號安全，請重新登入。',
       signInAgain: '重新登入',
+      sessionEnded: '登入已失效，本次沒有做任何更改。',
     },
     shifts: {
       pageEyebrow: '經紀排班',
@@ -5058,6 +5132,16 @@ export const translations: Record<AppLocale, AppTranslations> = {
       enterSixDigitCode: '請輸入 6 位數驗證碼',
       invalidEmailAddress: '請輸入有效的電子郵箱',
       currentPasswordRequired: '請輸入目前密碼',
+      enterEmailOrPhone: '請輸入你的電子郵箱或手機號',
+      enterNewContact: '請輸入新的電子郵箱或手機號',
+      couldNotStartChange: '無法開始本次變更 — 請稍後再試',
+      couldNotSendCode: '無法傳送驗證碼',
+      cannotChangePasswordHere: '此帳號無法在這裡修改密碼',
+      validationFailed: '提交的內容有誤 — 請檢查後重試',
+      internalServerError: '伺服器出錯 — 請稍後再試',
+      unauthorized: '未獲授權 — 請重新登入',
+      passwordMinLength: '密碼至少 {n} 位',
+      passwordMaxLength: '密碼最多 {n} 位',
     },
     notif: {
       shiftAssignedTitle: '你有新的班次',
@@ -5105,6 +5189,11 @@ export function formatMessage(
 /**
  * Map English login API messages to the active locale.
  * Backend auth errors are English-only; the phone shows them raw unless we translate here.
+ *
+ * ⚠️ Only the sentences /auth/login alone sends. A screen must call
+ * `localizeSignInError` (lib/api-error-copy.ts), which falls back to the shared
+ * mapping for the limiter 429, the 500 catch-all and the client's own messages —
+ * calling this one bare shipped those in English to a 中文 sign-in screen.
  */
 export function localizeLoginError(
   message: string,

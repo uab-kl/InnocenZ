@@ -78,7 +78,7 @@ export class PhoneVerificationRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[PhoneVerificationRepository.findActivePending] Error:', error);
+      logger.error('[PhoneVerificationRepository.findActivePending] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -92,7 +92,7 @@ export class PhoneVerificationRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[PhoneVerificationRepository.getById] Error:', error);
+      logger.error('[PhoneVerificationRepository.getById] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -138,7 +138,7 @@ export class PhoneVerificationRepositoryClass {
         .returning();
       return row ?? null;
     } catch (error) {
-      logger.error('[PhoneVerificationRepository.countFailedAttempt] Error:', error);
+      logger.error('[PhoneVerificationRepository.countFailedAttempt] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -200,7 +200,7 @@ export class PhoneVerificationRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[PhoneVerificationRepository.findNewestByCreator] Error:', error);
+      logger.error('[PhoneVerificationRepository.findNewestByCreator] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -249,7 +249,7 @@ export class PhoneVerificationRepositoryClass {
           ),
         );
     } catch (error) {
-      logger.error('[PhoneVerificationRepository.expirePendingForPhone] Error:', error);
+      logger.error('[PhoneVerificationRepository.expirePendingForPhone] Error:', safeErrorFields(error));
     }
   }
 }

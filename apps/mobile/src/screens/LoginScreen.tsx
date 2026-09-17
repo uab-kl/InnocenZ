@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { ApiError } from '../lib/api';
+import { localizeSignInError } from '../lib/api-error-copy';
 import { useKeyboardHeight } from '../lib/keyboard';
 import {
   loadPhoneCountryCode,
@@ -27,7 +28,7 @@ import {
   savePhoneCountryCode,
 } from '../lib/phone-prefs';
 import { useSession } from '../lib/session';
-import { localizeLoginError, useLocale } from '../i18n';
+import { useLocale } from '../i18n';
 import { IzButton } from '../components/ui';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { Eye, EyeOff, Lock, LogIn } from '../components/icons';
@@ -124,9 +125,11 @@ function LoginScreenInner({
       savePhoneCountryCode(phoneCountryCode);
       await signIn(phoneLoginIdentifier(phoneCountryCode, phoneNumber), password);
     } catch (e) {
+      // localizeSignInError, not localizeLoginError: signIn re-throws the
+      // limiter's 429 and the 500 catch-all too, and those need the shared map.
       setError(
         e instanceof ApiError
-          ? localizeLoginError(e.message, t.login)
+          ? localizeSignInError(e.message, t)
           : t.login.signInFailed,
       );
     } finally {

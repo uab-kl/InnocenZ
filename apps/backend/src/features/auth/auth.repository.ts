@@ -21,6 +21,7 @@ import { portalRoleName } from '@/types/rbac-constant.js';
 import { SYSTEM_ACTOR } from '@/util/actor.js';
 import { floorToSecond } from './session-cutoff.js';
 import { redactQueryError, safeErrorFields } from './query-error-redaction.js';
+import { maskEmail } from '@/features/account-code/masks.js';
 export class AuthRepositoryClass {
   constructor(
     private jwtController: JwtControllerClass,
@@ -172,7 +173,7 @@ export class AuthRepositoryClass {
   ): Promise<UserType> {
     try {
       logger.info('[AuthRepository.createUserWithRole] Creating user with role...', {
-        email: userData.email,
+        email: maskEmail(userData.email),
         roleId,
       });
       const newUser = await db.transaction(async (tx) => {
@@ -191,7 +192,7 @@ export class AuthRepositoryClass {
       // AFTER the transaction: the id depends on the role that was just granted,
       // and a PR or admin without one is an account nobody can quote.
       await ensurePersonCode(newUser.id);
-      logger.info('[AuthRepository.createUserWithRole] User created with role:', newUser.email);
+      logger.info('[AuthRepository.createUserWithRole] User created with role:', maskEmail(newUser.email));
       return newUser;
     } catch (error) {
       // `userData.passwordHash` is a bound value of the insert; createUser has
