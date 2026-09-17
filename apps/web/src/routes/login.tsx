@@ -4,13 +4,14 @@ import axios from "axios";
 import {
 	AlertCircle,
 	ArrowLeft,
+	CheckCircle2,
 	Eye,
 	EyeOff,
 	Loader2,
 	Lock,
 	Mail,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { BrandLogo } from "@/components/landing/BrandLogo";
 import { LoginAmbience } from "@/components/landing/LoginDecor";
@@ -34,6 +35,11 @@ import {
 } from "@/lib/auth/enter-organisation";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { portalOfPath } from "@/lib/auth/portal-of-path";
+import {
+	type ChangedCredential,
+	clearSignInAgainNotice,
+	peekSignInAgainNotice,
+} from "@/lib/auth/sign-in-again";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
 import { hardNavigate } from "@/lib/hard-navigate";
@@ -177,12 +183,47 @@ function RouteComponent() {
 	);
 }
 
+/** The sentence for "why am I signing in again" — see lib/auth/sign-in-again.ts. */
+function signedOutAfterChangeText(
+	changed: ChangedCredential,
+	t: PortalTranslations,
+): string {
+	const what =
+		changed === "password"
+			? t.authCodes.changedPassword
+			: changed === "email"
+				? t.authCodes.changedEmail
+				: t.authCodes.changedPhone;
+	return `${what} ${t.authCodes.signInAgainBody}`;
+}
+
 function LoginPage() {
 	const { t } = usePortalLocale();
 	const { login } = useAuthActions();
 	const { email: prefillEmail, next: requestedNext } = Route.useSearch();
 	const [error, setError] = useState<LoginError | null>(null);
 	const [showPassword, setShowPassword] = useState(false);
+	/*
+	 * A password / email / phone change that SAVED but returned no new tokens
+	 * ends this tab's session. Whether the person tapped "Sign in again" or a
+	 * background request's 401 got here first, the page says why — instead of
+	 * an unexplained sign-out moments after a change that worked.
+	 *
+	 * Read in an EFFECT, not in the state initialiser: the server render has no
+	 * sessionStorage, and a first client render that differed from it would be
+	 * a hydration mismatch. Cleared once read, so a reload is silent; only a
+	 * value that exists is taken, so StrictMode's second effect run (which
+	 * finds it already cleared) cannot wipe the notice.
+	 */
+	const [changedNotice, setChangedNotice] = useState<ChangedCredential | null>(
+		null,
+	);
+	useEffect(() => {
+		const changed = peekSignInAgainNotice();
+		if (!changed) return;
+		setChangedNotice(changed);
+		clearSignInAgainNotice();
+	}, []);
 
 	// Built inside the component so the validation messages come from the
 	// dictionary. A module-scope schema cannot read `t` at all, and the two
@@ -473,6 +514,18 @@ function LoginPage() {
 						</div>
 
 						<div className="login-glass-card rounded-2xl border border-royal-gold/25 bg-card/80 p-7 shadow-glow-gold-lg backdrop-blur-md sm:p-9">
+							{changedNotice ? (
+								<output className="mb-5 flex items-start gap-3 rounded-xl border border-royal-gold/30 bg-royal-gold/10 px-4 py-3.5 text-xl text-foreground">
+									<CheckCircle2
+										className="mt-0.5 h-4 w-4 shrink-0 text-royal-gold"
+										aria-hidden
+									/>
+									<span>
+										<b className="block">{t.authCodes.signInAgainTitle}</b>
+										{signedOutAfterChangeText(changedNotice, t)}
+									</span>
+								</output>
+							) : null}
 							<form
 								id="login-form"
 								aria-label={t.authPages.loginFormLabel}

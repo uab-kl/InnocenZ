@@ -1621,6 +1621,8 @@ function AgencyPending() {
 		mobile: "",
 		email: "",
 	});
+	/** The server's translated refusal of the last invite, kept on the sheet. */
+	const [inviteError, setInviteError] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (tabFromSearch) setTab(tabFromSearch);
@@ -2007,7 +2009,10 @@ function AgencyPending() {
 						<button
 							type="button"
 							className="iz-approvals-add-btn"
-							onClick={() => setAddOpen(true)}
+							onClick={() => {
+								setInviteError(null);
+								setAddOpen(true);
+							}}
 						>
 							<UserPlus className="h-3.5 w-3.5" />
 							{t.approvals.addPr}
@@ -2560,24 +2565,59 @@ function AgencyPending() {
 							<input
 								className="iz-field-input !text-sm"
 								value={invite[field]}
-								onChange={(e) =>
-									setInvite((v) => ({ ...v, [field]: e.target.value }))
-								}
+								onChange={(e) => {
+									setInvite((v) => ({ ...v, [field]: e.target.value }));
+									// The refusal was about what they just changed.
+									setInviteError(null);
+								}}
 							/>
 						</div>
 					))}
+					{/*
+					 * The server's refusal, ON the sheet beside the fields it is about
+					 * (a phone already on another account, an activated PR's sign-in
+					 * contact). A toast is gone in three seconds; the person has to
+					 * change what they typed before anything else can happen.
+					 */}
+					{inviteError ? (
+						<p role="alert" className="iz-tiny mb-2 text-[var(--iz-red)]">
+							{inviteError}
+						</p>
+					) : null}
 					<button
 						type="button"
 						className="iz-btn iz-btn-primary mt-2 w-full"
-						disabled={!invite.name || !invite.ic}
+						disabled={!invite.name || !invite.ic || backend.inviting}
+						aria-busy={backend.inviting || undefined}
 						onClick={() => {
-							if (backend.backed) backend.invite(invite);
-							else invitePendingPR(invite);
-							setAddOpen(false);
-							setInvite({ name: "", ic: "", mobile: "", email: "" });
+							const finish = () => {
+								setAddOpen(false);
+								setInvite({ name: "", ic: "", mobile: "", email: "" });
+								setInviteError(null);
+							};
+							if (!backend.backed) {
+								invitePendingPR(invite);
+								finish();
+								return;
+							}
+							setInviteError(null);
+							// Closed on SUCCESS only — a refused invite keeps the sheet
+							// open with what was typed and the reason under it.
+							backend.invite(invite, {
+								onSuccess: (message) => {
+									toast(message, "success");
+									finish();
+								},
+								onError: (message) => {
+									setInviteError(message);
+									toast(message, "warn");
+								},
+							});
 						}}
 					>
-						{t.agencyPending.sendInvite}
+						{backend.inviting
+							? t.agencyPending.sendingInvite
+							: t.agencyPending.sendInvite}
 					</button>
 				</IzSheet>
 			)}

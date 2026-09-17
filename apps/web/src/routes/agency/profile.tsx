@@ -700,12 +700,15 @@ function AgencyProfile() {
 				email={currentUser?.email ?? owner.email}
 				mobile={currentUser?.contactNo ?? owner.mobile}
 				/*
-				 * NOT `canEdit` — that is `settings:update` on the ORGANISATION, and
+				 * No `canEdit` — that is `settings:update` on the ORGANISATION, and
 				 * this sheet is purely personal. Gating it on the org permission
 				 * locked every read-only agency role out of its own password, which
-				 * for a Director is the only thing it may change at all.
+				 * for a Director is the only thing it may change at all. The sheet
+				 * no longer takes the prop, so it cannot be re-gated by accident.
+				 *
+				 * The two callbacks below only run on a DEMO session; a real change
+				 * goes through the two-code flow and is refetched from `/auth/me`.
 				 */
-				canEdit
 				onUpdateEmail={(email) => {
 					if (!profile.backed) saveAgencyOwner({ email });
 				}}

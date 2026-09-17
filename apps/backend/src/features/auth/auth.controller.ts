@@ -4,17 +4,17 @@ import { AuthRepositoryClass } from './auth.repository.js';
 import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { Error } from '@/error/index.js';
 import { isTokenBeforeCutoff } from './session-cutoff.js';
+import { safeErrorFields } from './query-error-redaction.js';
 import { hashPassword, comparePassword } from '@/util/password.js';
 import { logger } from '@/util/logger.js';
 import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
+import { portalRoleName } from '@/types/rbac-constant.js';
 import {
   LoginSchema,
   RegisterSchema,
   ForgotPasswordSchema,
   ResetPasswordSchema,
   ResetPasswordWithOtpSchema,
-  ChangePasswordSchema,
-  ChangePhoneWithOtpSchema,
 } from '@/schema/auth.schema.js';
 import { UserRepositoryClass as UserRepository } from '@/features/user/user.repository.js';
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository.js';
@@ -897,7 +897,10 @@ export class AuthControllerClass {
 
       let user = await this.authRepository.createUserWithRole(
         {
-          email: parsedBody.email ?? null,
+          // Stored LOWERCASE and trimmed — every email writer does, so the
+          // unique index and the case-insensitive sign-in agree about which
+          // addresses are "the same".
+          email: parsedBody.email ? parsedBody.email.trim().toLowerCase() : null,
           phoneNum: parsedBody.phoneNum,
           username: parsedBody.username,
           passwordHash,
@@ -1165,7 +1168,7 @@ export class AuthControllerClass {
         });
       }
 
-      logger.error('[AuthController.register] Error:', error);
+      logger.error('[AuthController.register] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -1237,7 +1240,7 @@ export class AuthControllerClass {
 
       return res.status(200).json(neutral);
     } catch (error) {
-      logger.error('[AuthController.forgotPassword] Error:', error);
+      logger.error('[AuthController.forgotPassword] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -1696,7 +1699,12 @@ export class AuthControllerClass {
       }
 
       const passwordHash = await hashPassword(password);
-      await this.authRepository.updateUserPassword(resetToken.userId, passwordHash);
+      // A reset proves control of the mailbox, so a lock earned by guessing
+      // the OLD password must not keep the owner out of the new one.
+      await this.authRepository.updateUserPassword(resetToken.userId, passwordHash, {
+        updatedBy: resetToken.userId,
+        clearLockout: true,
+      });
       await this.authRepository.deletePasswordResetToken(token);
 
       logger.info('[AuthController.resetPassword] Password reset for userId:', resetToken.userId);
@@ -1706,7 +1714,7 @@ export class AuthControllerClass {
         data: null,
       });
     } catch (error) {
-      logger.error('[AuthController.resetPassword] Error:', error);
+      logger.error('[AuthController.resetPassword] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -1749,8 +1757,39 @@ export class AuthControllerClass {
         });
       }
 
+      /*
+       * PR-ONLY. This legacy path proves control of ONE phone number and
+       * nothing else; everybody else is sent to POST /auth/password/forgot/start.
+       * Checked AFTER the verified receipt, so this cannot be used to learn an
+       * account's roles without first holding its phone.
+       *
+       * ⚠️ This is NOT protection against a SIM swap, and must not be read as
+       * one. forgot/start sends ONE code to WhatsApp, SMS and email together,
+       * and forgot/complete accepts that code from whichever channel it was
+       * read on — so whoever holds the owner's SIM receives it by SMS or
+       * WhatsApp and can finish the reset without the mailbox. A code-based
+       * reset is only as strong as the WEAKEST contact on file. What the
+       * restriction buys is one reset flow for organisation roles (a
+       * lockout-clearing, session-cutting, notified one), not a second factor.
+       * Requiring codes from two channels for non-PR accounts would be the
+       * SIM-swap defence; that is an owner's product decision, not built.
+       */
+      const roles = await this.authRepository.getRolesForUserIds([user.id]);
+      const onlyPr =
+        roles.length > 0 && roles.every((role) => role.roleName === portalRoleName.PR);
+      if (!onlyPr) {
+        return res.status(403).json({
+          success: false,
+          message: 'Use Forgot password on the sign-in page',
+          data: null,
+        });
+      }
+
       const passwordHash = await hashPassword(parsed.data.password);
-      await this.authRepository.updateUserPassword(user.id, passwordHash);
+      await this.authRepository.updateUserPassword(user.id, passwordHash, {
+        updatedBy: user.id,
+        clearLockout: true,
+      });
       await this.phoneVerificationRepository.update(proof.id, {
         status: 'consumed',
         updatedBy: user.id,
@@ -1763,7 +1802,7 @@ export class AuthControllerClass {
         data: null,
       });
     } catch (error) {
-      logger.error('[AuthController.resetPasswordWithOtp] Error:', error);
+      logger.error('[AuthController.resetPasswordWithOtp] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -1772,198 +1811,33 @@ export class AuthControllerClass {
     }
   }
 
-  /** Signed-in change password (current password proof — no OTP). */
-  async changePassword(req: Request, res: Response) {
-    try {
-      const actor = req.user;
-      if (!actor) {
-        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
-      }
-
-      const parsed = ChangePasswordSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({
-          success: false,
-          message: parsed.error.issues[0]?.message ?? 'Validation failed',
-          data: null,
-        });
-      }
-
-      const user = await this.userRepository.getUserById(actor.id);
-      if (!user?.passwordHash) {
-        return res.status(400).json({
-          success: false,
-          message: 'This account cannot change password here',
-          data: null,
-        });
-      }
-
-      const ok = await comparePassword(parsed.data.currentPassword, user.passwordHash);
-      if (!ok) {
-        // 400, NOT 401. The caller IS authenticated — their token is fine, the
-        // typed password is wrong. A 401 here is indistinguishable from an
-        // expired session to the web client, whose axios interceptor signs the
-        // user out on any 401: one typo would boot them to /login.
-        return res.status(400).json({
-          success: false,
-          message: 'Current password is incorrect',
-          data: null,
-        });
-      }
-
-      const passwordHash = await hashPassword(parsed.data.newPassword);
-      await this.authRepository.updateUserPassword(user.id, passwordHash);
-
-      return res.status(200).json({
-        success: true,
-        message: 'Password updated',
-        data: null,
-      });
-    } catch (error) {
-      logger.error('[AuthController.changePassword] Error:', error);
-      return res.status(500).json({
-        success: false,
-        message: Error.INTERNAL_SERVER_ERROR,
-        data: null,
-      });
-    }
-  }
+  /*
+   * SIGNED-IN PASSWORD CHANGE MOVED to features/account-code/
+   * password-change.controller.ts (route: POST /auth/password/change). It now
+   * re-issues the caller's token pair, cuts the other sessions at a
+   * second-floored cutoff, caps the password at bcrypt's 72 bytes and sends a
+   * best-effort notice — and its tests construct it with fakes, which this
+   * 14-dependency controller cannot offer.
+   */
 
   /**
-   * Signed-in change phone. OTP must have been verified on the NEW number
-   * (purpose=change_phone). Updates user.phone_num — source of truth for login.
+   * RETIRED: the one-step phone change.
+   *
+   * It accepted a code verified on the NEW number (purpose=change_phone) and
+   * wrote it. That proves the new number works; it does not prove the person
+   * holding the session owns the account — anybody with an unlocked phone and
+   * the app open could move the account to a number they control, and from
+   * there reset the password. Changing a phone now takes a code to the CURRENT
+   * contacts first: POST /auth/contact-change/start → verify-identity → confirm.
+   *
+   * Kept as a route, answering 400 with an instruction, so an app build still
+   * on someone's phone shows a sentence instead of a 404 or a silent failure.
    */
-  async changePhoneWithOtp(req: Request, res: Response) {
-    try {
-      const actor = req.user;
-      if (!actor) {
-        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
-      }
-
-      const parsed = ChangePhoneWithOtpSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({
-          success: false,
-          message: parsed.error.issues[0]?.message ?? 'Validation failed',
-          data: null,
-        });
-      }
-
-      const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
-      const proof = await this.phoneVerificationRepository.getById(parsed.data.verificationId);
-      if (!isVerifiedOtpUsable(proof, phoneNum, 'change_phone')) {
-        return res.status(400).json({
-          success: false,
-          message: 'Phone verification is missing or expired — verify again',
-          data: null,
-        });
-      }
-
-      const currentDigits = normalizePhoneDigits(actor.phoneNum ?? '');
-      if (currentDigits === phoneNum) {
-        return res.status(400).json({
-          success: false,
-          message: 'That is already your phone number',
-          data: null,
-        });
-      }
-
-      const taken = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
-      if (taken && taken.id !== actor.id) {
-        return res.status(409).json({
-          success: false,
-          message: 'That phone number is already in use',
-          data: null,
-        });
-      }
-
-      const storedPhone = `+${phoneNum}`;
-      const updated = await this.userRepository.updateUser(
-        { phoneNum: storedPhone, updatedBy: actor.id },
-        actor.id,
-      );
-      if (!updated) {
-        return res.status(500).json({
-          success: false,
-          message: 'Could not update phone number',
-          data: null,
-        });
-      }
-
-      await this.phoneVerificationRepository.update(proof.id, {
-        status: 'consumed',
-        updatedBy: actor.id,
-      });
-
-      const profile = await this.userProfileRepository.getByUserId(actor.id);
-
-      /*
-       * A NEW TOKEN PAIR, because the caller just invalidated their own.
-       *
-       * ⚠️ THIS IS THE "Unauthorized" BUG. A JWT here carries only
-       * `{ loginMethod, loginCriteria }` — there is no user id in it — and
-       * every authenticated request resolves the account with
-       * `getUserByLoginMethod(payload.loginMethod, payload.loginCriteria)`
-       * (auth.repository.ts). So for somebody who signs in BY PHONE, the
-       * instant this endpoint writes the new number their old token points at
-       * a phone number nobody holds: `authenticateJWT` reads `!user` and
-       * answers 401 `Unauthorized`.
-       *
-       * The write had already succeeded, so the person saw a bare
-       * "Unauthorized" under a code that was correct, and their session was
-       * dead from that moment. Reported from the PR app on 11 Sep 2026.
-       *
-       * Re-issuing here fixes it at the source and costs one signature. Only
-       * for a phone-keyed token: an email-keyed one still resolves fine, and
-       * silently re-binding it would make a session that was never at risk
-       * depend on a number that can change again.
-       *
-       * ⚠️ The same trap is waiting for CHANGE EMAIL. Every agency and outlet
-       * operator signs in by email, so an email-change endpoint must re-issue
-       * exactly like this — or the user id goes in the token and everything
-       * resolves by it, which is the deeper fix and invalidates every live
-       * token on deploy.
-       */
-      let tokens: { accessToken: string; refreshToken: string } | null = null;
-      try {
-        const bearer = req.header('Authorization')?.split(' ')[1];
-        const wasPhoneKeyed =
-          bearer &&
-          this.jwtController.verifyToken(bearer).loginMethod === 'phone';
-        if (wasPhoneKeyed) {
-          const tokenPayload = {
-            loginMethod: 'phone' as const,
-            loginCriteria: storedPhone,
-          };
-          tokens = {
-            accessToken: this.jwtController.generateAccessToken(tokenPayload),
-            refreshToken: this.jwtController.generateRefreshToken(tokenPayload),
-          };
-        }
-      } catch {
-        /*
-         * Not fatal, and deliberately not a 500: the number IS changed by this
-         * point. Failing here would report an error for work that succeeded —
-         * the exact shape of the bug being fixed. The caller signs in again
-         * with the new number instead.
-         */
-        logger.warn(
-          `[AuthController.changePhoneWithOtp] could not re-issue tokens for ${actor.id}`,
-        );
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Phone number updated',
-        data: { ...withUserProfile(updated, profile), ...(tokens ?? {}) },
-      });
-    } catch (error) {
-      logger.error('[AuthController.changePhoneWithOtp] Error:', error);
-      return res.status(500).json({
-        success: false,
-        message: Error.INTERNAL_SERVER_ERROR,
-        data: null,
-      });
-    }
+  async changePhoneWithOtp(_req: Request, res: Response) {
+    return res.status(400).json({
+      success: false,
+      message: 'Changing your phone now needs a code to your current contacts — please update the app',
+      data: null,
+    });
   }
 }

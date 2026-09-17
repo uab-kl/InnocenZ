@@ -45,6 +45,11 @@ const PR_ROW_IDENTITY_FIELDS = [
   'addressLine2',
   'bankName',
   'bankAccountNo',
+  // Not an identity document but ACCOUNT STATE: whether the PR has set a
+  // password, i.e. owns her sign-in contact. `GET /pr` only adds it for agency
+  // and admin callers; listed here so a later change that puts it on every row
+  // still cannot hand it to a venue.
+  'hasPassword',
 ] as const;
 
 /**

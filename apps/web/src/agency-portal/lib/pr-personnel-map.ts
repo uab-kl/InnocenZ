@@ -141,5 +141,7 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		suspended: pr.status === "suspended" || pr.status === "inactive",
 		detached: false,
 		agencyId: pr.agencyId,
+		// Only `true` locks the editor's Mobile / Email; absent stays editable.
+		hasPassword: pr.hasPassword === true,
 	};
 }

@@ -45,6 +45,29 @@ describe("toWhatsAppNumber", () => {
 		expect(toWhatsAppNumber("+44 7911 123456")).toBe("447911123456");
 	});
 
+	it("reads a 00 prefix as the international prefix, like the server does", () => {
+		// `toWhatsAppDigits` strips `00` first. The web used to strip only the
+		// zeros and prepend 60, giving `6060123456789` for the same typing.
+		expect(toWhatsAppNumber("0060123456789")).toBe("60123456789");
+		expect(toWhatsAppNumber("0060 0123456789")).toBe("60123456789");
+		expect(toWhatsAppNumber("0065 8123 4567")).toBe("6581234567");
+		// A + or 00 followed by a zero is the local form, not a country code.
+		expect(toWhatsAppNumber("+0123456789")).toBe("60123456789");
+		expect(toWhatsAppNumber("000123456789")).toBe("60123456789");
+	});
+
+	it("is idempotent over its own output, which is how a phone is stored", () => {
+		for (const typed of [
+			"0123456789",
+			"+65 8123 4567",
+			"0060123456789",
+			"+60 0123456789",
+		]) {
+			const once = toWhatsAppNumber(typed);
+			expect(toWhatsAppNumber(`+${once}`)).toBe(once);
+		}
+	});
+
 	it("returns empty for nothing, rather than a bare dial code", () => {
 		// `"60"` would be a number the server accepts and WhatsApp cannot reach.
 		expect(toWhatsAppNumber("")).toBe("");
@@ -67,5 +90,19 @@ describe("phoneNumberProblem", () => {
 		expect(phoneNumberProblem("", copy)).toBe("EMPTY");
 		expect(phoneNumberProblem("123", copy)).toBe("SHORT");
 		expect(phoneNumberProblem("0123456789012345", copy)).toBe("LONG");
+	});
+
+	it("gives a foreign number the server's 8-15 digits, not the Malaysian 11-12", () => {
+		// "+65 8123 4567" is 10 digits and a real handset; it used to be refused
+		// as too short before the server — which accepts it — was ever asked.
+		expect(phoneNumberProblem("+65 8123 4567", copy)).toBeNull();
+		expect(phoneNumberProblem("+44 7911 123456", copy)).toBeNull();
+		expect(phoneNumberProblem("0065 8123 4567", copy)).toBeNull();
+		expect(phoneNumberProblem("+1 234 5678", copy)).toBeNull(); // 8 digits
+		expect(phoneNumberProblem("+1 234 567", copy)).toBe("SHORT"); // 7
+		expect(phoneNumberProblem("+1 234 567 890 1234", copy)).toBeNull(); // 14
+		expect(phoneNumberProblem("+1 234 567 890 123456", copy)).toBe("LONG"); // 16
+		// Malaysia keeps its own bound.
+		expect(phoneNumberProblem("+60 12 3456 78901", copy)).toBe("LONG"); // 13
 	});
 });

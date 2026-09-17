@@ -16,6 +16,19 @@ import {
   registerLimiter,
   resetPasswordLimiter,
 } from '@/middlewares/rate-limit.js';
+import {
+  contactChangeController,
+  forgotPasswordController,
+  passwordChangeController,
+} from '@/features/account-code/index.js';
+import {
+  contactChangeCheckUserLimiter,
+  contactChangeSendUserLimiter,
+  forgotCompleteIpLimiter,
+  forgotStartIdentifierLimiter,
+  forgotStartIpLimiter,
+  passwordChangeUserLimiter,
+} from '@/features/account-code/limiters.js';
 
 const router = Router();
 
@@ -168,8 +181,10 @@ router.get('/signup-packages', async (req, res) => {
 });
 
 /**
- * WhatsApp OTP send/verify. purpose=signup|forgot_password are public;
- * purpose=change_phone requires a JWT (optionalAuthenticateJWT + controller check).
+ * WhatsApp OTP send/verify — purpose=signup|forgot_password only. `change_phone`
+ * is no longer accepted (see /contact-change/*), and the account-code purposes
+ * never were. optionalAuthenticateJWT stays so a signed-in caller is still
+ * attributed as the row's actor.
  */
 router.post(
   '/otp/send',
@@ -204,12 +219,69 @@ router.post(
   resetPasswordLimiter,
   authController.resetPassword.bind(authController),
 );
-/** PR mobile: reset password with WhatsApp OTP receipt (purpose=forgot_password). */
+/**
+ * LEGACY PR-app reset with a WhatsApp OTP receipt (purpose=forgot_password).
+ * Restricted to accounts whose ONLY role is PR — everyone else is told to use
+ * the code flow below, which sends to every contact on file.
+ */
 router.post(
   '/password/reset-otp',
   resetPasswordLimiter,
   authController.resetPasswordWithOtp.bind(authController),
 );
+
+/**
+ * FORGOT PASSWORD BY CODE — logged out, every role, web and app. One code by
+ * WhatsApp + SMS to the phone on file and by email to the email on file. The
+ * limiters run BEFORE the lookup, so throttling cannot leak what the neutral
+ * answer hides. See features/account-code/forgot-password.controller.ts.
+ */
+router.post(
+  '/password/forgot/start',
+  forgotStartIpLimiter,
+  forgotStartIdentifierLimiter,
+  forgotPasswordController.start.bind(forgotPasswordController),
+);
+router.post(
+  '/password/forgot/complete',
+  forgotCompleteIpLimiter,
+  forgotPasswordController.complete.bind(forgotPasswordController),
+);
+
+/**
+ * CHANGE SIGN-IN EMAIL / PHONE — signed in, every role. authenticateJWT FIRST,
+ * so the per-user limiters key on the verified account; the shared per-IP OTP
+ * limiters stack on top. See features/account-code/contact-change.controller.ts.
+ */
+router.post(
+  '/contact-change/start',
+  authenticateJWT,
+  contactChangeSendUserLimiter,
+  otpSendLimiter,
+  contactChangeController.start.bind(contactChangeController),
+);
+router.post(
+  '/contact-change/verify-identity',
+  authenticateJWT,
+  contactChangeCheckUserLimiter,
+  otpVerifyLimiter,
+  contactChangeController.verifyIdentity.bind(contactChangeController),
+);
+router.post(
+  '/contact-change/resend-new',
+  authenticateJWT,
+  contactChangeSendUserLimiter,
+  otpSendLimiter,
+  contactChangeController.resendNew.bind(contactChangeController),
+);
+router.post(
+  '/contact-change/confirm',
+  authenticateJWT,
+  contactChangeCheckUserLimiter,
+  otpVerifyLimiter,
+  contactChangeController.confirm.bind(contactChangeController),
+);
+
 router.get('/me', authenticateJWT, authController.me.bind(authController));
 /**
  * Remember the caller's UI language, so the pick survives sign-out and follows
@@ -221,11 +293,21 @@ router.patch(
   authenticateJWT,
   authController.updateLocale.bind(authController),
 );
+/**
+ * Signed-in password change. Re-issues the caller's token pair and cuts every
+ * other session. Limited per user, after the guard.
+ */
 router.post(
   '/password/change',
   authenticateJWT,
-  authController.changePassword.bind(authController),
+  passwordChangeUserLimiter,
+  passwordChangeController.change.bind(passwordChangeController),
 );
+/**
+ * RETIRED one-step phone change. It now answers 400 telling an old app build
+ * to update — changing a phone needs a code to the current contacts first
+ * (/contact-change/*).
+ */
 router.post(
   '/phone/change',
   authenticateJWT,

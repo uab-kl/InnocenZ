@@ -75,6 +75,26 @@ export interface SignupTranslations {
 		showPassword: string;
 		hidePassword: string;
 		yourDetails: string;
+		/**
+		 * This form's OWN minimum. `validation.passwordMin` belongs to the
+		 * organisation form and says 8, while `RegisterOrgMemberSchema` (and the
+		 * check on this page) enforce 6 — so reusing it told a person typing
+		 * seven characters they were one short, then let them through.
+		 */
+		passwordMin: string;
+		nameRequired: string;
+		/*
+		 * The refusals `POST /auth/register-member` sends, each keyed in
+		 * `member-signup-refusal.ts` on the server's exact English sentence.
+		 */
+		errorEmailTaken: string;
+		errorPhoneTaken: string;
+		errorOrgUnavailable: string;
+		errorOrgUnreadable: string;
+		errorOwnerLane: string;
+		errorTooManyAttempts: string;
+		errorPhotoType: string;
+		errorPhotoTooLarge: string;
 	};
 	accountTypes: {
 		outlet: { title: string; description: string };
@@ -321,6 +341,19 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			showPassword: "Show password",
 			hidePassword: "Hide password",
 			yourDetails: "Your details",
+			passwordMin: "Password must be at least 6 characters",
+			nameRequired: "Enter your full name",
+			errorEmailTaken: "That email already has an account — sign in instead.",
+			errorPhoneTaken: "That phone number is already used by another account",
+			errorOrgUnavailable: "That organisation is not available to join.",
+			errorOrgUnreadable:
+				"Could not read the organisation you chose — choose it again.",
+			errorOwnerLane:
+				"Choose Finance, Director or Ops Head — Owner is set by the organisation",
+			errorTooManyAttempts:
+				"Too many sign-up attempts. Please try again later.",
+			errorPhotoType: "Only JPG, PNG and WebP photos are allowed",
+			errorPhotoTooLarge: "That photo is too large — choose one under 5 MB",
 		},
 		accountTypes: {
 			outlet: {
@@ -623,6 +656,16 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			showPassword: "显示密码",
 			hidePassword: "隐藏密码",
 			yourDetails: "您的资料",
+			passwordMin: "密码至少需要 6 个字符",
+			nameRequired: "请输入您的姓名",
+			errorEmailTaken: "该邮箱已有账号 —— 请直接登录。",
+			errorPhoneTaken: "该手机号已被其他账号使用",
+			errorOrgUnavailable: "该机构目前无法加入。",
+			errorOrgUnreadable: "无法读取您选择的机构 —— 请重新选择。",
+			errorOwnerLane: "请选择财务、董事或运营主管 —— 所有者由机构指定",
+			errorTooManyAttempts: "注册尝试次数过多，请稍后再试。",
+			errorPhotoType: "仅支持 JPG、PNG 和 WebP 格式的照片",
+			errorPhotoTooLarge: "照片过大 —— 请选择 5 MB 以内的照片",
 		},
 		accountTypes: {
 			outlet: {

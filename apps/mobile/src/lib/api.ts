@@ -355,7 +355,13 @@ export type OtpSendResult = { expiresInSec: number; resendAfterSec: number };
 /** Receipt proving this number passed — handed back to register / reset / change-phone. */
 export type OtpVerifyResult = { verificationId: string };
 
-export type OtpPurpose = 'signup' | 'forgot_password' | 'change_phone';
+/**
+ * Public `/auth/otp/send|verify` purposes. `change_phone` is gone from the
+ * server's public schema: a phone change now needs a code to the CURRENT
+ * contacts first (`startContactChange` below), and `/auth/phone/change` answers
+ * 400 to the old one-code flow.
+ */
+export type OtpPurpose = 'signup' | 'forgot_password';
 
 export function sendPrOtp(
   phoneNum: string,
@@ -382,48 +388,198 @@ export function verifyPrOtp(
   });
 }
 
-/** Forgot password — consume WhatsApp OTP receipt (purpose=forgot_password). */
-export function resetPasswordWithOtp(
-  phoneNum: string,
-  verificationId: string,
-  password: string,
-): Promise<null> {
-  return request<null>('/auth/password/reset-otp', {
+/* ------------------------------------------------------------------ *
+ * One code, several channels
+ *
+ * The forgot-password and contact-change calls send the SAME code to more than
+ * one place at once — WhatsApp + SMS to a phone, email to an address — and the
+ * server reports each attempt with the destination already MASKED
+ * ('+60 ••••• 6789', 'o••••@atlas-agency.my'). The app never sees, and never
+ * needs, the full contact to tell the PR where to look.
+ *
+ * ⚠️ A WRONG CODE IS HTTP 400 'Invalid code', never 401, on every one of these.
+ * Only a real session problem answers 401.
+ * ------------------------------------------------------------------ */
+
+export type CodeChannel = 'whatsapp' | 'sms' | 'email';
+
+/**
+ * `logged` = the server wrote the message to its log instead of delivering it
+ * (development with OTP_DELIVERY_LOG_ONLY, or no SMS provider configured).
+ */
+export type CodeDeliveryStatus = 'sent' | 'logged' | 'skipped' | 'failed';
+
+export type CodeDelivery = {
+  channel: CodeChannel;
+  /** Masked by the server — never a full phone number or address. */
+  to: string;
+  status: CodeDeliveryStatus;
+};
+
+export type ForgotPasswordStartResult = {
+  /**
+   * Opaque. For an unknown or inactive account the server hands back a random
+   * uuid, so the answer is identical either way and a phone number cannot be
+   * probed for an account.
+   */
+  requestId: string;
+  expiresInSec: number;
+  resendAfterSec: number;
+};
+
+/**
+ * Logged-out password reset, step 1. ALWAYS 200 for a well-formed identifier —
+ * the neutral answer is the point. Exactly one of `phoneNum` / `email`.
+ */
+export function startForgotPassword(
+  identifier: { phoneNum: string } | { email: string },
+): Promise<ForgotPasswordStartResult> {
+  return request<ForgotPasswordStartResult>('/auth/password/forgot/start', {
     method: 'POST',
-    body: JSON.stringify({ phoneNum, verificationId, password }),
+    body: JSON.stringify(identifier),
   });
 }
 
-/** Signed-in password change (current password — no OTP). */
+/**
+ * Step 2: the code and the new password travel together — there is no separate
+ * "verify" call, so a wrong code is only discovered here (400 'Invalid code').
+ * On success the server also clears any sign-in lockout.
+ */
+export function completeForgotPassword(
+  requestId: string,
+  code: string,
+  password: string,
+): Promise<null> {
+  return request<null>('/auth/password/forgot/complete', {
+    method: 'POST',
+    body: JSON.stringify({ requestId, code, password }),
+  });
+}
+
+/**
+ * Re-issued after a credential change; every token older than the change is refused.
+ *
+ * ⚠️ Either may be NULL even on a 200: the server commits the change first and
+ * answers `accessToken: tokens?.accessToken ?? null` when re-issuing fails. The
+ * old token is already refused by then, so a null here means "changed — sign in
+ * again", never "keep using the token you have".
+ */
+export type TokenPair = { accessToken: string | null; refreshToken: string | null };
+
+/**
+ * Signed-in password change (current password — no OTP).
+ *
+ * ⚠️ The response carries a FRESH token pair and the caller must store it
+ * before making any other request: the server stamps a session cutoff at the
+ * moment of the change, so the token that made this call is refused from now on.
+ * Typed as possibly null only so an older backend that still answers
+ * `data: null` does not crash the screen.
+ */
 export function changePassword(
   accessToken: string,
   currentPassword: string,
   newPassword: string,
-): Promise<null> {
-  return request<null>('/auth/password/change', {
+): Promise<TokenPair | null> {
+  return request<TokenPair | null>('/auth/password/change', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ currentPassword, newPassword }),
   });
 }
 
+export type ContactKind = 'email' | 'phone';
+
+export type ContactChangeStartResult = {
+  requestId: string;
+  /** Where the identity code went — the CURRENT phone and email on file. */
+  sentTo: CodeDelivery[];
+  expiresInSec: number;
+  resendAfterSec: number;
+  /**
+   * Organisation invitations still addressed to the current email (kind
+   * `email` only, else 0). Accepting one requires the account email to match
+   * the invite, so they cannot be accepted after the change.
+   */
+  pendingInvitesToCurrentEmail: number;
+};
+
+export type ContactChangeNewCodeResult = {
+  newRequestId: string;
+  /** Where the second code went — the NEW email, or the new phone by WhatsApp + SMS. */
+  sentTo: CodeDelivery[];
+  expiresInSec: number;
+  resendAfterSec: number;
+};
+
+export type ContactChangeConfirmResult = TokenPair & {
+  email: string | null;
+  phoneNum: string | null;
+};
+
 /**
- * Signed-in phone change — OTP on the new number (purpose=change_phone).
- *
- * ⚠️ The response carries a FRESH token pair, and the caller must store it.
- * A JWT here identifies the account by its login credential, not by id, so the
- * moment the number changes the old token resolves to nobody and every request
- * after it answers 401 `Unauthorized` — for a change that already succeeded.
+ * Change email / phone, step 1 of 3: prove it is you. One code goes to the
+ * contacts ALREADY on the account (WhatsApp + SMS to the phone, email to the
+ * address). `value` is the new email or the new phone ('+' + digits).
  */
-export function changePhoneWithOtp(
+export function startContactChange(
   accessToken: string,
-  phoneNum: string,
-  verificationId: string,
-): Promise<Me & { accessToken?: string; refreshToken?: string }> {
-  return request<Me & { accessToken?: string; refreshToken?: string }>('/auth/phone/change', {
+  kind: ContactKind,
+  value: string,
+): Promise<ContactChangeStartResult> {
+  return request<ContactChangeStartResult>('/auth/contact-change/start', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ phoneNum, verificationId }),
+    body: JSON.stringify({ kind, value }),
+  });
+}
+
+/** Step 2 of 3: check the identity code; the server then sends a second code to the NEW contact. */
+export function verifyContactChangeIdentity(
+  accessToken: string,
+  input: { requestId: string; kind: ContactKind; value: string; code: string },
+): Promise<ContactChangeNewCodeResult> {
+  return request<ContactChangeNewCodeResult>('/auth/contact-change/verify-identity', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+/** Resend the second code (to the new contact) without re-proving identity. */
+export function resendContactChangeNewCode(
+  accessToken: string,
+  input: { requestId: string; kind: ContactKind; value: string },
+): Promise<ContactChangeNewCodeResult> {
+  return request<ContactChangeNewCodeResult>('/auth/contact-change/resend-new', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Step 3 of 3: the new contact's code. Writes the change.
+ *
+ * ⚠️ The response carries a FRESH token pair, and the caller must store it
+ * before anything else touches the API. A JWT here identifies the account by
+ * its login credential, and the server also stamps a session cutoff — so the
+ * token that made this call is dead the moment the change commits, and the
+ * next request made with it answers 401 for a change that SUCCEEDED.
+ */
+export function confirmContactChange(
+  accessToken: string,
+  input: {
+    requestId: string;
+    newRequestId: string;
+    kind: ContactKind;
+    value: string;
+    code: string;
+  },
+): Promise<ContactChangeConfirmResult> {
+  return request<ContactChangeConfirmResult>('/auth/contact-change/confirm', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
   });
 }
 
@@ -649,7 +805,13 @@ export type ProfileUpdate = {
   username: string;
   /** Legal full name — persisted to user_profile.full_name (what admin reads). */
   fullName?: string;
-  email?: string;
+  /*
+   * No `email` (or phone) here, deliberately. The sign-in email is changed only
+   * through the verified contact-change flow in Security settings; PATCH
+   * /user/:id refuses a different email with 400 'Change your email from
+   * Security settings'. Leaving the field out of the type means no screen can
+   * send one by accident.
+   */
   /** One-time identity fill when register left id_no empty. */
   idType?: string;
   idNo?: string;

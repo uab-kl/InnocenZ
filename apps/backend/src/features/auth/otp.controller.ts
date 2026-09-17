@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { logger } from '@/util/logger.js';
+import { safeErrorFields } from './query-error-redaction.js';
+import { maskPhone } from '@/features/account-code/masks.js';
 import { SYSTEM_ACTOR } from '@/util/actor';
 import {
   codesMatch,
@@ -10,23 +12,35 @@ import {
   PhoneVerificationRepositoryClass,
 } from './phone-verification.repository.js';
 import {
-  phoneVerificationPurposeValues,
-  type PhoneVerificationPurpose,
+  publicOtpPurposeValues,
+  type PublicOtpPurpose,
 } from './phone-verification.model.js';
 import { sendWhatsAppOtp, whatsappSendConfigured } from '@/features/whatsapp/whatsapp-client.js';
 import { UserRepositoryClass } from '@/features/user/user.repository.js';
 
-const SendSchema = z.object({
+/**
+ * The PUBLIC purposes only — `publicOtpPurposeValues`, NOT every purpose a row
+ * can carry. The account-code purposes (reset_password, contact_change_*) are
+ * keyed on an account and bound to it; accepting them here would let anybody
+ * who types a phone number mint or spend one. `change_phone` was dropped: a
+ * phone change now needs a code to the CURRENT contacts first.
+ *
+ * Exported so that split is asserted by a test rather than trusted.
+ */
+export const OtpSendSchema = z.object({
   phoneNum: z.string().min(8, 'Phone number is required'),
   channel: z.enum(['whatsapp']).optional().default('whatsapp'),
-  purpose: z.enum(phoneVerificationPurposeValues).optional().default('signup'),
+  purpose: z.enum(publicOtpPurposeValues).optional().default('signup'),
 });
 
-const VerifySchema = z.object({
+export const OtpVerifySchema = z.object({
   phoneNum: z.string().min(8, 'Phone number is required'),
   code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code'),
-  purpose: z.enum(phoneVerificationPurposeValues).optional().default('signup'),
+  purpose: z.enum(publicOtpPurposeValues).optional().default('signup'),
 });
+
+const SendSchema = OtpSendSchema;
+const VerifySchema = OtpVerifySchema;
 
 const EXPIRES_IN_SEC = 5 * 60;
 const RESEND_AFTER_SEC = 60;
@@ -50,7 +64,7 @@ export class OtpControllerClass {
       }
 
       const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
-      const purpose: PhoneVerificationPurpose = parsed.data.purpose;
+      const purpose: PublicOtpPurpose = parsed.data.purpose;
       if (phoneNum.length < 8) {
         return res.status(400).json({
           success: false,
@@ -68,33 +82,6 @@ export class OtpControllerClass {
             success: true,
             message: 'If that number is registered, a code was sent on WhatsApp.',
             data: { expiresInSec: EXPIRES_IN_SEC, resendAfterSec: RESEND_AFTER_SEC },
-          });
-        }
-      }
-
-      if (purpose === 'change_phone') {
-        const actor = req.user;
-        if (!actor) {
-          return res.status(401).json({
-            success: false,
-            message: 'Sign in required to change phone number',
-            data: null,
-          });
-        }
-        const currentDigits = normalizePhoneDigits(actor.phoneNum ?? '');
-        if (currentDigits && currentDigits === phoneNum) {
-          return res.status(400).json({
-            success: false,
-            message: 'That is already your phone number',
-            data: null,
-          });
-        }
-        const taken = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
-        if (taken && taken.id !== actor.id) {
-          return res.status(409).json({
-            success: false,
-            message: 'That phone number is already in use',
-            data: null,
           });
         }
       }
@@ -165,7 +152,10 @@ export class OtpControllerClass {
           });
         }
         logger.warn('[OtpController.send] WhatsApp not configured — OTP logged for local dev only', {
-          phoneNum,
+          // The CODE is the point of this dev-only line; the number is not. Masked
+          // the same way as the account-code and SMS dev lines (`delivery.ts`,
+          // `sms.ts`): country code and last four tell test accounts apart.
+          phoneNum: maskPhone(phoneNum),
           purpose,
           code,
         });
@@ -196,7 +186,7 @@ export class OtpControllerClass {
         data: { expiresInSec: EXPIRES_IN_SEC, resendAfterSec: RESEND_AFTER_SEC },
       });
     } catch (error) {
-      logger.error('[OtpController.send] Error:', error);
+      logger.error('[OtpController.send] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: 'Could not send OTP',
@@ -217,7 +207,7 @@ export class OtpControllerClass {
       }
 
       const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
-      const purpose: PhoneVerificationPurpose = parsed.data.purpose;
+      const purpose: PublicOtpPurpose = parsed.data.purpose;
       const row = await this.phoneVerificationRepository.findActivePending(phoneNum, purpose);
       if (!row) {
         return res.status(400).json({
@@ -261,7 +251,10 @@ export class OtpControllerClass {
             data: null,
           });
         }
-        return res.status(401).json({
+        // 400, NOT 401. The web client signs a person out on ANY 401, so a
+        // mistyped digit used to end the session of anybody signed in while
+        // verifying. A wrong code is a bad request, not a bad credential.
+        return res.status(400).json({
           success: false,
           message: 'Invalid code',
           data: null,
@@ -288,7 +281,7 @@ export class OtpControllerClass {
         data: { verificationId: verified.id },
       });
     } catch (error) {
-      logger.error('[OtpController.verify] Error:', error);
+      logger.error('[OtpController.verify] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: 'Could not verify OTP',

@@ -28,6 +28,17 @@ export const CreatePrSchema = z.object({
  * so the screen reported a save that never happened.
  */
 export const UpdatePrSchema = CreatePrSchema.partial().extend({
+  /**
+   * `''` is accepted here, unlike on create. The Manage PR editor sends the
+   * whole form back, email included, so a PR with no email on file arrives as
+   * `email: ''` — which `.email()` refused with 400, failing every edit to that
+   * PR. The controller compares it with what is on file: blank against blank is
+   * unchanged and writes nothing; blank against a real address is a change,
+   * which an activated account refuses (only the PR may change it).
+   */
+  email: z
+    .union([z.literal(''), z.string().email('Invalid email').max(255, 'Email is too long')])
+    .optional(),
   status: z.enum(prStatusValues).optional(),
   /**
    * Why a sign-up was declined — sent alongside `status: 'inactive'`. The

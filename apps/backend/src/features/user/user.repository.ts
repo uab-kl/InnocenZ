@@ -4,6 +4,7 @@ import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { UserTable, UserType, UserInsertType, UserFilter } from './user.model';
 import { DbTransaction } from '@/types/db-transaction';
 import { logger } from '@/util/logger';
+import { redactQueryError, safeErrorFields } from '@/features/auth/query-error-redaction';
 import { buildPeriodDateWhere } from '@/util/filter-date-format';
 import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository';
 
@@ -36,6 +37,26 @@ export function phoneLoginCandidates(value: string): string[] {
   return [...forms];
 }
 
+/**
+ * The WHERE a sign-in value matches on — ONE definition for the login lookup
+ * and the "is it taken" check, so the two can never disagree about whether
+ * `0123456789` and `+60123456789` are the same line. `null` when the value
+ * cannot match anything (blank email, too few digits).
+ *
+ * Email: trimmed and lowercased on both sides. Phone: digits only on the stored
+ * side, against every form `phoneLoginCandidates` accepts.
+ */
+function loginValueMatch(method: 'email' | 'phone', value: string): SQL | null {
+  if (method === 'email') {
+    const needle = (value ?? '').trim().toLowerCase();
+    return needle ? sql`lower(btrim(${UserTable.email})) = ${needle}` : null;
+  }
+  const candidates = phoneLoginCandidates(value);
+  return candidates.length > 0
+    ? inArray(sql`regexp_replace(${UserTable.phoneNum}, '\\D', '', 'g')`, candidates)
+    : null;
+}
+
 export class UserRepositoryClass {
   constructor(
     private userRoleRepository: UserRoleRepositoryClass,
@@ -47,7 +68,10 @@ export class UserRepositoryClass {
     tx?: DbTransaction,
   ): Promise<UserType> {
     try {
-      logger.info('[UserRepository.createUser] Creating user:', user);
+      // No values: the insert carries `passwordHash`. See updateUser.
+      logger.info('[UserRepository.createUser] Creating user', {
+        fields: Object.keys(user),
+      });
       const dbClient = tx || db;
       const [newUser] = await dbClient
         .insert(UserTable)
@@ -58,10 +82,14 @@ export class UserRepositoryClass {
         })
         .returning();
       await this.userProfileRepository.createEmpty(newUser.id, user.createdBy, tx);
-      logger.info('[UserRepository.createUser] User successfully created:', newUser);
+      logger.info('[UserRepository.createUser] User created', { id: newUser.id });
       return newUser;
     } catch (error) {
-      logger.error('[UserRepository.createUser] Error:', error);
+      // The failed INSERT carries `passwordHash` among its bound values, and
+      // drizzle prints those in the message, `params` and stack. Scrubbed in
+      // place BEFORE the rethrow, so no caller further up can log them either.
+      redactQueryError(error);
+      logger.error('[UserRepository.createUser] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -98,7 +126,7 @@ export class UserRepositoryClass {
         });
       return row ?? null;
     } catch (error) {
-      logger.error('[UserRepository.recordFailedLoginAttempt] Error:', error);
+      logger.error('[UserRepository.recordFailedLoginAttempt] Error:', safeErrorFields(error));
       throw error;
     }
   }
@@ -109,17 +137,27 @@ export class UserRepositoryClass {
     tx?: DbTransaction,
   ): Promise<UserType | null> {
     try {
-      logger.info('[UserRepository.updateUser] Updating user:', user);
+      // Field NAMES only, never values or the returned row: a patch can carry
+      // `passwordHash`, and the row always does. Both used to be printed whole
+      // on every update, which put password hashes into the application log.
+      logger.info('[UserRepository.updateUser] Updating user', {
+        id,
+        fields: Object.keys(user),
+      });
       const dbClient = tx ?? db;
       const [updatedUser] = await dbClient
         .update(UserTable)
         .set({ ...user, updatedAt: new Date() })
         .where(eq(UserTable.id, id))
         .returning();
-      logger.info('[UserRepository.updateUser] User successfully updated:', updatedUser);
+      logger.info('[UserRepository.updateUser] User updated', {
+        id,
+        found: Boolean(updatedUser),
+      });
       return updatedUser ?? null;
     } catch (error) {
-      logger.error('[UserRepository.updateUser] Error:', error);
+      // A patch can carry `passwordHash`; see createUser.
+      logger.error('[UserRepository.updateUser] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -210,7 +248,7 @@ export class UserRepositoryClass {
 
       return { users, totalCount };
     } catch (error) {
-      logger.error('[UserRepository.getUsersPaginated] Error:', error);
+      logger.error('[UserRepository.getUsersPaginated] Error:', safeErrorFields(error));
       return { users: [], totalCount: 0 };
     }
   }
@@ -225,7 +263,7 @@ export class UserRepositoryClass {
 
       return users.length > 0 ? users[0] : null;
     } catch (error) {
-      logger.error('[UserRepository.getUserById] Error:', error);
+      logger.error('[UserRepository.getUserById] Error:', safeErrorFields(error));
       return null;
     }
   }
@@ -239,7 +277,7 @@ export class UserRepositoryClass {
         .where(inArray(UserTable.id, ids));
       return users;
     } catch (error) {
-      logger.error('[UserRepository.getUsersByIds] Error:', error);
+      logger.error('[UserRepository.getUsersByIds] Error:', safeErrorFields(error));
       return [];
     }
   }
@@ -250,7 +288,29 @@ export class UserRepositoryClass {
       let users: UserType[] = [];
 
       if (method === 'email') {
-        users = await db.select().from(UserTable).where(eq(UserTable.email, value)).limit(1);
+        // CASE- AND SPACE-INSENSITIVE, because a person does not remember how
+        // they capitalised an address. The exact match refused `Owner@x.com`
+        // for an account stored as `owner@x.com` — at sign-in, at forgot
+        // password, and (worst) at the "is this email free?" checks, which
+        // then let a second account be created for the same mailbox.
+        //
+        // Every email writer stores lowercase now, but rows written before
+        // that are matched on the normalised form too. Two rows that normalise
+        // to one address are REFUSED rather than one being picked — the same
+        // rule the phone branch below applies.
+        const match = loginValueMatch('email', value);
+        if (!match) return null;
+        users = await db
+          .select()
+          .from(UserTable)
+          .where(match)
+          .limit(2);
+        if (users.length > 1) {
+          logger.error(
+            '[UserRepository.getUserByLoginMethod] Refusing: that email matches more than one account',
+          );
+          return null;
+        }
       } else if (method === 'phone') {
         // Compare DIGITS, not the string as typed.
         //
@@ -262,12 +322,12 @@ export class UserRepositoryClass {
         // Fetches TWO rows and refuses on ambiguity rather than taking the
         // first: this is a login, and quietly choosing one of two accounts that
         // both match is the wrong way to resolve a duplicate.
-        const candidates = phoneLoginCandidates(value);
-        if (candidates.length === 0) return null;
+        const match = loginValueMatch('phone', value);
+        if (!match) return null;
         users = await db
           .select()
           .from(UserTable)
-          .where(inArray(sql`regexp_replace(${UserTable.phoneNum}, '\\D', '', 'g')`, candidates))
+          .where(match)
           .limit(2);
         if (users.length > 1) {
           logger.error(
@@ -285,8 +345,32 @@ export class UserRepositoryClass {
       );
       return users.length > 0 ? users[0] : null;
     } catch (error) {
-      logger.error('[UserRepository.getUserByLoginMethod] Error:', error);
+      // The bound values ARE the email or the phone candidates being looked up.
+      logger.error('[UserRepository.getUserByLoginMethod] Error:', safeErrorFields(error));
       return null;
+    }
+  }
+
+  /**
+   * Does ANY account already sign in with this email / phone?
+   *
+   * For a writer that is about to CREATE an account, `getUserByLoginMethod` is
+   * the wrong question twice over: it answers `null` when two accounts match
+   * (so an already-duplicated number looked free, and a third account was
+   * created for it), and `null` when the read fails (so an outage looked free
+   * too). This matches on the same `loginValueMatch`, counts ANY match as
+   * taken, and throws on a read error rather than answering "free". Selects
+   * the id only — never the row, which carries `password_hash`.
+   */
+  async isLoginValueTaken(method: 'email' | 'phone', value: string): Promise<boolean> {
+    const match = loginValueMatch(method, value);
+    if (!match) return false;
+    try {
+      const rows = await db.select({ id: UserTable.id }).from(UserTable).where(match).limit(1);
+      return rows.length > 0;
+    } catch (error) {
+      logger.error('[UserRepository.isLoginValueTaken] Error:', safeErrorFields(error));
+      throw error;
     }
   }
 }

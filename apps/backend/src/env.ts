@@ -110,6 +110,23 @@ export const env = createEnv({
     BREVO_SMTP_USER: z.string().min(1).optional(),
     BREVO_SMTP_KEY: z.string().min(1).optional(),
     BREVO_SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+    /**
+     * SMS sender for account codes (features/sms). UNSET = no SMS provider:
+     * outside production the SMS text is logged, in production the SMS is
+     * skipped with a warning and the code still goes by WhatsApp and email.
+     *
+     * ⚠️ Naming a provider with no registered adapter does NOT fall back to
+     * logging — that SMS reports `failed`, so a typo is visible, never silent.
+     */
+    SMS_PROVIDER: z.string().min(1).optional(),
+    /**
+     * `true` = every account-code channel (WhatsApp, SMS, email) LOGS the code
+     * instead of sending it. Honoured ONLY when NODE_ENV !== 'production' — a
+     * production process ignores it, so it can never switch real delivery off.
+     * Exists because developers share the innocenz-test database and real
+     * accounts: testing a code flow should not message a real person.
+     */
+    OTP_DELIVERY_LOG_ONLY: z.enum(['true', 'false']).optional(),
   },
   runtimeEnv: {
     ...process.env,

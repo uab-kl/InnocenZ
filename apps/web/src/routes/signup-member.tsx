@@ -17,6 +17,10 @@ import { LoginAmbience } from "@/components/landing/LoginDecor";
 import { env } from "@/env";
 import { getPublicClient } from "@/lib/axios-v1";
 import { LandingLocaleProvider, useLandingLocale } from "@/lib/landing-i18n";
+import {
+	MemberSignupRefusal,
+	memberSignupErrorText,
+} from "@/lib/landing-i18n/member-signup-refusal";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/signup-member")({
@@ -158,13 +162,19 @@ function MemberSignupPage() {
 				`${env.VITE_API_URL}/v1/auth/register-member`,
 				{ method: "POST", body: form },
 			);
-			const body = (await response.json()) as {
+			/*
+			 * `.catch(() => null)`: a body that is not JSON (a proxy's HTML 413
+			 * for an oversized photo) used to throw a SyntaxError whose English,
+			 * browser-worded message was printed under the button.
+			 */
+			const body = (await response.json().catch(() => null)) as {
 				success: boolean;
 				message: string;
 				data: { requestedOrgName: string | null } | null;
-			};
-			if (!response.ok || !body.success) {
-				throw new Error(body.message);
+			} | null;
+			if (!response.ok || !body?.success) {
+				// Localised at render — see `member-signup-refusal.ts`.
+				throw new MemberSignupRefusal(body?.message ?? "", response.status);
 			}
 			return body.data;
 		},
@@ -184,7 +194,14 @@ function MemberSignupPage() {
 	function onSubmit(e: React.FormEvent) {
 		e.preventDefault();
 		setFormError("");
-		if (!name.trim()) return;
+		/*
+		 * `required` stops an EMPTY name, but not one made of spaces — that used
+		 * to return here silently, so the button did nothing and said nothing.
+		 */
+		if (!name.trim()) {
+			setFormError(copy.nameRequired);
+			return;
+		}
 		/*
 		 * The email is checked HERE as well as by `type="email"`, because the
 		 * browser's own check is bypassed by autofill on some engines and says
@@ -201,7 +218,9 @@ function MemberSignupPage() {
 			return;
 		}
 		if (password.length < 6) {
-			setFormError(t.signup.validation.passwordMin);
+			// This form's own "6" — `validation.passwordMin` is the organisation
+			// form's and says 8.
+			setFormError(copy.passwordMin);
 			return;
 		}
 		if (password !== confirmPassword) {
@@ -432,7 +451,7 @@ function MemberSignupPage() {
 
 				{(formError || submitMutation.isError) && (
 					<p className="text-sm text-destructive">
-						{formError || (submitMutation.error as Error).message}
+						{formError || memberSignupErrorText(submitMutation.error, t.signup)}
 					</p>
 				)}
 

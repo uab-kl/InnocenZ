@@ -210,6 +210,7 @@ function AgencyManagePRs() {
 		saveProfile: updateAgencyPrProfile,
 		suspend: suspendAgencyPr,
 		detach: detachAgencyPr,
+		saving: savingAgencyPr,
 	} = useAgencyPrs();
 	const shiftHistory = useStore((s) => s.shiftHistory);
 	// Real ratings an outlet left on this agency's PRs. Written to the `rating`
@@ -418,6 +419,7 @@ function AgencyManagePRs() {
 				onSuspend={suspendAgencyPr}
 				onDetach={detachAgencyPr}
 				onRequestDetach={requestAgencyPrDetach}
+				saving={savingAgencyPr}
 			/>
 		);
 	}
@@ -960,6 +962,7 @@ function AgencyPrDetail({
 	onSuspend,
 	onDetach,
 	onRequestDetach,
+	saving,
 }: {
 	detail: AgencyManagedPR;
 	shiftHistory: ReturnType<typeof useStore.getState>["shiftHistory"];
@@ -988,10 +991,14 @@ function AgencyPrDetail({
 				| "payClass"
 			>
 		>,
+		/** Run on SUCCESS only — a refused save keeps the editor open. */
+		onDone?: () => void,
 	) => void;
-	onSuspend: (prId: string) => void;
-	onDetach: (prId: string) => void;
+	onSuspend: (prId: string, onDone?: () => void) => void;
+	onDetach: (prId: string, onDone?: () => void) => void;
 	onRequestDetach: (prId: string) => void;
+	/** A save or suspension is in flight. */
+	saving: boolean;
 }) {
 	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
@@ -1016,6 +1023,17 @@ function AgencyPrDetail({
 		conflicts: number;
 	} | null>(null);
 	const fieldId = useId();
+	/*
+	 * MOBILE AND EMAIL ARE THE PR'S TO CHANGE ONCE THEY HAVE A PASSWORD.
+	 *
+	 * `PUT /pr/:id` refuses a change to an activated account's sign-in email or
+	 * phone (403 "Only the PR can change their sign-in email or phone"); the PR
+	 * changes them from their own app, with a code to each contact. `hasPassword`
+	 * comes from the same read (GET /pr), so the editor can say so BEFORE Save
+	 * instead of after a refusal. Missing (an older backend, or a PR with no
+	 * linked account) reads as editable — the server still has the last word.
+	 */
+	const contactLocked = detail.hasPassword === true;
 
 	// Real worked shifts. Demo sessions have no backend identity, so they keep
 	// reading the demo store — which is the only place their history exists.
@@ -1087,7 +1105,9 @@ function AgencyPrDetail({
 			toast(t.managePr.enterLegalIcName, "warn");
 			return;
 		}
-		if (!draft.mobile.trim()) {
+		// Not asked of a PR whose contact is LOCKED: the box is read-only there,
+		// so demanding a number the agency cannot type would block every save.
+		if (!contactLocked && !draft.mobile.trim()) {
 			toast(t.managePr.enterMobile, "warn");
 			return;
 		}
@@ -1106,11 +1126,32 @@ function AgencyPrDetail({
 		const age = measure(draft.age, 18, 60);
 		const height = measure(draft.height, 140, 220);
 		const weight = measure(draft.weight, 35, 120);
+		/*
+		 * MOBILE AND EMAIL ONLY WHEN THEY WERE EDITED.
+		 *
+		 * They are the PR's SIGN-IN contacts. Once the PR has set a password,
+		 * `PUT /pr/:id` refuses any change to them with 403 — decided before any
+		 * write, so the WHOLE save is refused, race and tier and languages
+		 * included. Sending both on every save made an edit to either one sink
+		 * every unrelated field with it. Compared against the draft this editor
+		 * was opened with, so an untouched field is simply not sent; a real
+		 * edit is still sent and the server has the last word on it.
+		 */
+		const opened = buildAgencyPrDraft(detail);
+		const mobile = draft.mobile.trim();
+		const email = draft.email.trim();
+		// A locked contact is never sent, edited or not — the fields are
+		// read-only, and this is the second gate behind them.
+		const contactEdits = contactLocked
+			? {}
+			: {
+					...(mobile !== opened.mobile.trim() ? { mobile } : {}),
+					...(email !== opened.email.trim() ? { email } : {}),
+				};
 		const payload: Parameters<typeof onSaveProfile>[1] = {
 			name,
 			icName,
-			mobile: draft.mobile.trim(),
-			email: draft.email.trim(),
+			...contactEdits,
 			...(age !== undefined ? { age } : {}),
 			...(height !== undefined ? { height } : {}),
 			...(weight !== undefined ? { weight } : {}),
@@ -1135,31 +1176,34 @@ function AgencyPrDetail({
 			});
 			return;
 		}
-		onSaveProfile(detail.id, payload);
-		setEditing(false);
+		// The editor closes when the server ACCEPTS the save. Closing on the
+		// click re-rendered the stored values under a refusal toast, so a refused
+		// edit looked like the server had quietly undone the typing.
+		onSaveProfile(detail.id, payload, () => setEditing(false));
 	};
 
 	const commitPayClassChange = () => {
 		if (!payClassConfirm) return;
-		onSaveProfile(detail.id, payClassConfirm.payload);
+		onSaveProfile(detail.id, payClassConfirm.payload, () => setEditing(false));
 		setPayClassConfirm(null);
-		setEditing(false);
 	};
 
 	const display = editing ? draft : buildAgencyPrDraft(detail);
 	const avatarLetter = display.name.trim()[0]?.toUpperCase() ?? "?";
 	const profilePhoto = resolveAgencyPrPhoto(detail);
 
+	// Both sheets close on SUCCESS only. A refused detach used to close its
+	// sheet AND return to the list — exactly what a real detach looks like.
 	const confirmSuspend = () => {
-		onSuspend(detail.id);
-		setSuspendOpen(false);
+		onSuspend(detail.id, () => setSuspendOpen(false));
 	};
 
 	const confirmDetach = () => {
 		if (tiedUnderOneYear) return;
-		onDetach(detail.id);
-		setDetachOpen(false);
-		onBack();
+		onDetach(detail.id, () => {
+			setDetachOpen(false);
+			onBack();
+		});
 	};
 
 	const requestAdminDetach = () => {
@@ -1426,26 +1470,57 @@ function AgencyPrDetail({
 								<div className="iz-field !mb-0">
 									<label htmlFor={`${fieldId}-mobile`}>
 										{t.managePr.mobile}
+										{contactLocked ? (
+											<Lock
+												className="ml-1 inline h-3 w-3 align-[-1px] opacity-70"
+												aria-hidden
+											/>
+										) : null}
 									</label>
 									<input
 										id={`${fieldId}-mobile`}
-										value={draft.mobile}
+										value={contactLocked ? detail.mobile : draft.mobile}
+										readOnly={contactLocked}
+										disabled={contactLocked}
+										aria-describedby={`${fieldId}-contact-hint`}
 										onChange={(e) =>
 											setDraft((p) => ({ ...p, mobile: e.target.value }))
 										}
 									/>
 								</div>
 								<div className="iz-field !mb-0">
-									<label htmlFor={`${fieldId}-email`}>{t.managePr.email}</label>
+									<label htmlFor={`${fieldId}-email`}>
+										{t.managePr.email}
+										{contactLocked ? (
+											<Lock
+												className="ml-1 inline h-3 w-3 align-[-1px] opacity-70"
+												aria-hidden
+											/>
+										) : null}
+									</label>
 									<input
 										id={`${fieldId}-email`}
 										type="email"
-										value={draft.email}
+										value={contactLocked ? detail.email : draft.email}
+										readOnly={contactLocked}
+										disabled={contactLocked}
+										aria-describedby={`${fieldId}-contact-hint`}
 										onChange={(e) =>
 											setDraft((p) => ({ ...p, email: e.target.value }))
 										}
 									/>
 								</div>
+								{/*
+								 * WHY, before Save. A PR with a password: locked, and only
+								 * they can change these (from their app, with codes). A PR
+								 * without one (a stub the agency created): editable, with the
+								 * general rule so a later refusal is not a surprise.
+								 */}
+								<p className="iz-tiny iz-muted" id={`${fieldId}-contact-hint`}>
+									{contactLocked
+										? t.managePr.signInContactLockedHint
+										: t.managePr.signInContactHint}
+								</p>
 							</div>
 						) : (
 							<div className="iz-kv-list">
@@ -1798,8 +1873,10 @@ function AgencyPrDetail({
 							type="button"
 							className="iz-btn iz-btn-primary"
 							onClick={saveEdit}
+							disabled={saving}
+							aria-busy={saving || undefined}
 						>
-							{t.agencyPrs.saveProfile}
+							{saving ? t.common.saving : t.agencyPrs.saveProfile}
 						</button>
 						<button
 							type="button"
@@ -1839,6 +1916,8 @@ function AgencyPrDetail({
 						type="button"
 						className="iz-btn iz-btn-primary"
 						onClick={confirmSuspend}
+						disabled={saving}
+						aria-busy={saving || undefined}
 					>
 						{t.agencyPrs.confirmSuspend}
 					</button>

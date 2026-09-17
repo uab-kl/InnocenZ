@@ -1,57 +1,16 @@
 /**
- * CHANGING YOUR OWN MOBILE NUMBER — the web half of a flow that already worked.
+ * THE PHONE NUMBER AS WHATSAPP AND SMS CAN REACH IT — the web's one normaliser.
  *
- * Owner, 11 Sep 2026: "fix this 2 please" — the first being that changing a
- * phone number on the web reached nothing.
+ * This file used to also hold the web phone-change calls (`/auth/otp/send` with
+ * `purpose: "change_phone"`, `/auth/otp/verify`, `/auth/phone/change`). Those
+ * proved only that the person held the NEW handset, so an unlocked session was
+ * enough to move an account onto somebody else's phone. The server now refuses
+ * that route, and changing a phone or an email is the two-code flow in
+ * `contact-change-api.ts` (owner, 17 Sep 2026).
  *
- * ⚠️ WHAT WAS THERE BEFORE. The Security settings sheet asked for an OTP with
- * no request at all, showed "OTP sent to +60…" as a label rather than a
- * receipt, and accepted `verifyDemoOtp` — `code === "123456" ||
- * code.length === 6`, so any six characters passed, `"abcdef"` included. It
- * then called a handler guarded by `if (!profile.backed)`, which is FALSE on a
- * real login: the number changed nowhere, not even on screen.
- *
- * None of the backend was missing. `POST /auth/otp/send`, `/auth/otp/verify`
- * and `/auth/phone/change` exist, are rate-limited, and are what the PR mobile
- * app has always used. Only the web never called them. So this file is wiring,
- * not new machinery — and deliberately the SAME three calls in the same order
- * as `apps/mobile/src/lib/api.ts`, because a second way to change a phone
- * number is a second way to get it wrong.
- *
- * The proof chain, which is why this is three calls and not one:
- *   1. `send`   — the server puts a real code on WhatsApp and stores its hash.
- *   2. `verify` — the code is checked (5 attempts, then the row expires) and a
- *      `verificationId` is minted. That id IS the proof.
- *   3. `change` — spends the id. The server takes WHOSE number to change from
- *      the bearer token, never from the body, so this cannot rewrite anyone
- *      else's, and it refuses a number already on another account with a 409.
- *
- * `purpose: "change_phone"` is required, and is why `send` must carry the
- * token: the other two purposes (signup, forgot_password) are public, this one
- * is not.
+ * What stays is the part every lane still needs: turning what a person TYPES
+ * into the number a code can actually be delivered to.
  */
-import axios from "axios";
-import { apiErrorCopy } from "@/lib/auth/api-error-copy";
-import { saveAccessToken, saveRefreshToken } from "@/lib/auth/auth-storage";
-import { kickToLogin } from "@/lib/auth/guards";
-import { getClient } from "@/lib/axios-v1";
-
-interface ApiResponse<T> {
-	success: boolean;
-	message: string;
-	data: T;
-}
-
-/** Server message when there is one — these are written to be shown as-is. */
-function serverMessage(error: unknown, fallback: string): Error {
-	if (axios.isAxiosError(error)) {
-		const message = (error.response?.data as { message?: string } | undefined)
-			?.message;
-		if (message) return new Error(message);
-	}
-	if (error instanceof Error && error.message) return error;
-	return new Error(fallback);
-}
 
 /**
  * THE NUMBER WHATSAPP CAN ACTUALLY REACH.
@@ -83,7 +42,19 @@ function serverMessage(error: unknown, fallback: string): Error {
  */
 export function toWhatsAppNumber(raw: string, dialCode = "60"): string {
 	const typed = (raw ?? "").trim();
-	const digits = typed.replace(/\D/g, "");
+	let digits = typed.replace(/\D/g, "");
+	/*
+	 * `00` IS THE INTERNATIONAL PREFIX, the same thing a `+` says — the server's
+	 * normaliser (`toWhatsAppDigits`) strips it before anything else. Without
+	 * this, "0060123456789" lost only its zeros to the local rule below and
+	 * became `6060123456789`: a number the web showed and sent, and one the
+	 * server would never have produced from the same typing.
+	 */
+	let international = typed.startsWith("+");
+	if (digits.startsWith("00")) {
+		digits = digits.slice(2);
+		international = true;
+	}
 	if (!digits) return "";
 
 	/*
@@ -104,8 +75,11 @@ export function toWhatsAppNumber(raw: string, dialCode = "60"): string {
 	 * honour it. Without this, "+65 8123 4567" became `606581234567`: our dial
 	 * code prepended to a number that already had one, with no way to enter a
 	 * foreign handset at all.
+	 *
+	 * A `+` or `00` followed by a ZERO is not a country code, though ("+0123…"):
+	 * that falls through to the local rule, exactly as the server reads it.
 	 */
-	if (typed.startsWith("+")) return digits;
+	if (international && !digits.startsWith("0")) return digits;
 
 	// Plain local form — "0123456789" — where the zero stands in for the code.
 	return dialCode + digits.replace(/^0+/, "");
@@ -129,129 +103,28 @@ export function toWhatsAppNumber(raw: string, dialCode = "60"): string {
  * ones exist, and a landline or a typo does not. Guessing at valid prefixes
  * would reject real numbers the day a new one is issued, which is worse than
  * letting the server have the last word — and the server still does.
+ *
+ * ⚠️ The 11-12 rule is MALAYSIAN, and is applied only to a number that resolves
+ * to `60`. It used to be applied to every number, so a real foreign handset —
+ * "+65 8123 4567" is 10 digits — was refused as "too short" before the server,
+ * which accepts 8-15 digits, was ever asked. Anything else gets the server's
+ * own 8-15 bound: no stricter here than the rule it is standing in front of.
  */
+const MALAYSIA_DIAL_CODE = "60";
+const MALAYSIA_LENGTH = { min: 11, max: 12 } as const;
+/** `toWhatsAppDigits` on the server: 8-15 digits once normalised. */
+const ANY_COUNTRY_LENGTH = { min: 8, max: 15 } as const;
+
 export function phoneNumberProblem(
 	raw: string,
 	copy: { empty: string; tooShort: string; tooLong: string },
 ): string | null {
-	const full = toWhatsAppNumber(raw);
+	const full = toWhatsAppNumber(raw, MALAYSIA_DIAL_CODE);
 	if (!full) return copy.empty;
-	if (full.length < 11) return copy.tooShort;
-	if (full.length > 12) return copy.tooLong;
+	const bound = full.startsWith(MALAYSIA_DIAL_CODE)
+		? MALAYSIA_LENGTH
+		: ANY_COUNTRY_LENGTH;
+	if (full.length < bound.min) return copy.tooShort;
+	if (full.length > bound.max) return copy.tooLong;
 	return null;
-}
-
-export type OtpSendResult = {
-	/** Seconds until the code stops working. */
-	expiresInSec: number;
-	/** Seconds before "Resend" should be offered again. */
-	resendAfterSec: number;
-};
-
-/**
- * Put a real code on the NEW number over WhatsApp.
- *
- * Sent to the number being claimed, not the one on file — proving the person
- * holds the handset they are moving to is the entire point. Rate-limited per
- * caller AND per phone number on the server, so a failure here can legitimately
- * be "too many requests"; those messages are written to be shown as-is.
- */
-export async function sendPhoneChangeOtp(
-	phoneNum: string,
-): Promise<OtpSendResult> {
-	const failed = apiErrorCopy().profile.otpSendFailed;
-	const client = getClient(kickToLogin);
-	try {
-		const response = await client.post<ApiResponse<OtpSendResult>>(
-			"/auth/otp/send",
-			{
-				phoneNum: toWhatsAppNumber(phoneNum),
-				channel: "whatsapp",
-				purpose: "change_phone",
-			},
-		);
-		if (!response.data.success) {
-			throw new Error(response.data.message || failed);
-		}
-		return response.data.data ?? { expiresInSec: 300, resendAfterSec: 60 };
-	} catch (error) {
-		throw serverMessage(error, failed);
-	}
-}
-
-/**
- * Check the code and collect the receipt.
- *
- * The returned `verificationId` is the ONLY proof `changeMyPhone` accepts, and
- * it is single-use — the server marks it consumed. Five wrong guesses expire
- * the row and the person must request a new code.
- */
-export async function verifyPhoneChangeOtp(
-	phoneNum: string,
-	code: string,
-): Promise<string> {
-	const failed = apiErrorCopy().profile.invalidOtp;
-	const client = getClient(kickToLogin);
-	try {
-		const response = await client.post<ApiResponse<{ verificationId: string }>>(
-			"/auth/otp/verify",
-			{
-				phoneNum: toWhatsAppNumber(phoneNum),
-				code: code.trim(),
-				purpose: "change_phone",
-			},
-		);
-		const verificationId = response.data.data?.verificationId;
-		if (!response.data.success || !verificationId) {
-			throw new Error(response.data.message || failed);
-		}
-		return verificationId;
-	} catch (error) {
-		throw serverMessage(error, failed);
-	}
-}
-
-/**
- * Spend the receipt and write the number.
- *
- * Takes no user id: the server reads the account off the verified token, so
- * this is self-only by construction rather than by a check a caller could
- * forget. A number already in use answers 409 with a sentence worth showing.
- */
-export async function changeMyPhone(
-	phoneNum: string,
-	verificationId: string,
-): Promise<void> {
-	const failed = apiErrorCopy().profile.mobileUpdateFailed;
-	const client = getClient(kickToLogin);
-	try {
-		const response = await client.post<
-			ApiResponse<{ accessToken?: string; refreshToken?: string } | null>
-		>("/auth/phone/change", {
-			phoneNum: toWhatsAppNumber(phoneNum),
-			verificationId,
-		});
-		if (!response.data.success) {
-			throw new Error(response.data.message || failed);
-		}
-		/*
-		 * ⚠️ STORE THE NEW TOKENS, OR THIS SIGNS THE PERSON OUT.
-		 *
-		 * A JWT here carries only `{loginMethod, loginCriteria}` — no user id —
-		 * and every request resolves the account by looking that criteria up. So
-		 * the moment the number changes, a PHONE-keyed token points at a number
-		 * nobody holds and the very next call answers 401 `Unauthorized`. That is
-		 * the exact bug the PR app hit; the server now re-issues a pair bound to
-		 * the new number, and it only helps if the client actually keeps them.
-		 *
-		 * Absent for an EMAIL-keyed session, which the server deliberately leaves
-		 * alone because its token still resolves — hence the optional read rather
-		 * than a required one.
-		 */
-		const issued = response.data.data;
-		if (issued?.accessToken) saveAccessToken(issued.accessToken);
-		if (issued?.refreshToken) saveRefreshToken(issued.refreshToken);
-	} catch (error) {
-		throw serverMessage(error, failed);
-	}
 }

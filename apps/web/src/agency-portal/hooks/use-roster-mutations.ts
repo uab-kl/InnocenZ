@@ -1,6 +1,8 @@
 import { serverMessage } from "@agency-portal/hooks/use-org-members";
+import { prWriteRefusalText } from "@agency-portal/lib/pr-write-refusal";
 import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { localiseAuthMessage } from "@/lib/auth/auth-server-copy";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
@@ -53,9 +55,15 @@ export function useRosterMutations() {
 	 * The SERVER's message, not a generic one: these endpoints answer with WHY
 	 * (a decided leave cannot be re-decided, a shift has already started), and
 	 * that sentence is the whole value of the refusal.
+	 *
+	 * Through the auth localiser because Add PR is `POST /pr`, which refuses a
+	 * sign-in email or phone belonging to an account the PR has activated
+	 * ("Only the PR can change their sign-in email or phone", or the 409 "That
+	 * email is already used by another account") — sentences with translations.
+	 * Anything the map does not know is shown as the server wrote it.
 	 */
 	const failed = (fallback: string) => (error: unknown) =>
-		toast(serverMessage(error, fallback), "warn");
+		toast(localiseAuthMessage(serverMessage(error, fallback), t), "warn");
 
 	// No `cancel` mutation. It existed for one caller — the roster edit sheet's
 	// "Cancel shift" button — and that button was two wrong things at once: an
@@ -124,11 +132,16 @@ export function useRosterMutations() {
 
 	// Agencies do not create shifts — only outlets post jobs (see shift.routes.ts
 	// `canCreate`). The roster's create-shift mutation was removed accordingly.
+	// `POST /pr` refusals go through the PR-write reader, which also knows the
+	// route's own sentences ("Only an admin can add an existing account by its
+	// id") and never shows axios's "Request failed with status code …".
+	// RosterAddPrDialog closes on success only.
 	const addPr = useMutation({
 		mutationFn: (input: CreatePrPersonnelInput) =>
 			createPrPersonnel(input, logout),
 		onSuccess: invalidate,
-		onError: failed(t.roster.couldNotAddPr),
+		onError: (error: unknown) =>
+			toast(prWriteRefusalText(error, t, t.roster.couldNotAddPr), "warn"),
 	});
 
 	return {

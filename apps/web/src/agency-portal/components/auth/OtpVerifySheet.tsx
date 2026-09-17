@@ -22,7 +22,14 @@ export function OtpVerifySheet({
 	busy = false,
 	verifyLabel,
 	variant = "dialog",
+	error = null,
+	verifyDisabled = false,
 }: {
+	/**
+	 * No code exists to verify yet — step 3 after the second code failed to go
+	 * out. Verify is disabled so Resend is the only way forward.
+	 */
+	verifyDisabled?: boolean;
 	open: boolean;
 	onClose: () => void;
 	title: string;
@@ -44,6 +51,13 @@ export function OtpVerifySheet({
 	busy?: boolean;
 	verifyLabel?: string;
 	variant?: SheetVariant;
+	/**
+	 * The last refusal ("Invalid code", "This code has expired — request a new
+	 * one"), shown UNDER the code rather than in a toast: the sheet stays open
+	 * after a wrong code so it can be retyped, and the reason has to still be
+	 * there when the person looks back at the field.
+	 */
+	error?: string | null;
 }) {
 	const { t } = usePortalLocale();
 
@@ -57,14 +71,23 @@ export function OtpVerifySheet({
 					onOtpChange(e.target.value.replace(/\D/g, "").slice(0, 6))
 				}
 				inputMode="numeric"
+				autoComplete="one-time-code"
 				placeholder="123456"
 				className="iz-pv-dispute-input !min-h-0 py-3 text-center iz-nums text-lg tracking-[0.35em]"
 				aria-label={t.portalUi.oneTimePassword}
+				aria-invalid={error ? true : undefined}
 			/>
+			{error ? (
+				<p role="alert" className="iz-tiny mt-2 text-[var(--iz-red)]">
+					{error}
+				</p>
+			) : null}
 			<button
 				type="button"
 				className="iz-btn iz-btn-primary mt-4 w-full"
 				onClick={onVerify}
+				disabled={busy || verifyDisabled}
+				aria-busy={busy || undefined}
 			>
 				{/* Read in the BODY, not as a default parameter: a default is
 				    evaluated before any hook has run, so it cannot see `t`. */}

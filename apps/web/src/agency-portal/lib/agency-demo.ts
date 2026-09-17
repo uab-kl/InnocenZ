@@ -1173,6 +1173,11 @@ export interface AgencyManagedPR {
 	kpiTier?: string;
 	suspended?: boolean;
 	detached?: boolean;
+	/**
+	 * The PR has set a password, so their sign-in mobile and email are theirs to
+	 * change (GET /pr `hasPassword`). Undefined on demo rows = editable.
+	 */
+	hasPassword?: boolean;
 	tiedSince?: string;
 	/** Employment arrangement — "commissionOnly" earns no basic wage. Defaults to basic. */
 	payClass?: PrPayClass;

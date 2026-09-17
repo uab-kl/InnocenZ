@@ -55,6 +55,22 @@ export type PasswordResetEmailVariables = MailBrandVariables & {
   expiryLabel: string;
 };
 
+/** `account_code.html` — one-time code for a password reset or contact change. */
+export type AccountCodeEmailVariables = MailBrandVariables & {
+  name: string;
+  code: string;
+  purposeLabel: string;
+  validityLabel: string;
+};
+
+/** `account_change_notice.html` — "your password / email / phone was changed". */
+export type AccountChangeNoticeEmailVariables = MailBrandVariables & {
+  name: string;
+  heading: string;
+  message: string;
+  changedAt: string;
+};
+
 export type OrgMemberInviteEmailVariables = MailBrandVariables & {
   orgName: string;
   orgKindLabel: string;

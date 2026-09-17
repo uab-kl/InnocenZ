@@ -1,5 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { isTokenBeforeCutoff } from './session-cutoff';
+import { floorToSecond, isTokenBeforeCutoff } from './session-cutoff';
+
+describe('isTokenBeforeCutoff — whole seconds', () => {
+  it('accepts a token from the SAME second even when the cutoff carries milliseconds', () => {
+    // The re-issued token of a password change: minted at .900 after a cutoff
+    // stamped at .700 of the same second. `iat` has no milliseconds, so the
+    // token reads 10:00:00.000 — which used to be refused as older than .700.
+    const cutoff = new Date('2026-09-13T10:00:00.700Z');
+    const iatSeconds = Math.floor(new Date('2026-09-13T10:00:00.900Z').getTime() / 1000);
+    expect(isTokenBeforeCutoff(new Date(iatSeconds * 1000), cutoff)).toBe(false);
+  });
+
+  it('refuses a token from the PREVIOUS second', () => {
+    const cutoff = new Date('2026-09-13T10:00:00.000Z');
+    expect(isTokenBeforeCutoff(new Date('2026-09-13T09:59:59.999Z'), cutoff)).toBe(true);
+  });
+
+  it('refuses the previous second against an unfloored cutoff too', () => {
+    const cutoff = new Date('2026-09-13T10:00:00.050Z');
+    expect(isTokenBeforeCutoff(new Date('2026-09-13T09:59:59.000Z'), cutoff)).toBe(true);
+  });
+});
+
+describe('floorToSecond', () => {
+  it('drops the milliseconds and nothing else', () => {
+    expect(floorToSecond(new Date('2026-09-13T10:00:00.999Z')).toISOString()).toBe(
+      '2026-09-13T10:00:00.000Z',
+    );
+    expect(floorToSecond(new Date('2026-09-13T10:00:01.000Z')).toISOString()).toBe(
+      '2026-09-13T10:00:01.000Z',
+    );
+  });
+});
 
 describe('isTokenBeforeCutoff', () => {
   const cutoff = new Date('2026-09-13T10:00:00.000Z');

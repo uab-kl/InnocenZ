@@ -19,9 +19,45 @@ import {
 } from '@/schema/outlet.schema.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
+import { safeErrorFields } from './query-error-redaction.js';
 import { hashPassword } from '@/util/password.js';
 import { saveProfileImageFile } from '@/util/profile-image.js';
 import { normalizeInviteEmail, hashOrgMemberInviteToken } from '@/util/org-member-invite.js';
+import { isUniqueViolation } from '@/features/account-code/account-code.repository.js';
+
+/**
+ * The existing sentence, kept word for word because a client may match on it.
+ *
+ * The web member sign-up (`apps/web/src/routes/signup-member.tsx`) translates
+ * it through `apps/web/src/lib/landing-i18n/member-signup-refusal.ts`, which
+ * matches this exact sentence. Mobile `api-error-copy` does not carry it (no
+ * PR-app screen calls register-member). Change it only together with that map.
+ */
+export const REGISTER_MEMBER_EMAIL_TAKEN = 'That email already has an account — sign in instead.';
+/**
+ * Same sentence the contact-change and PR-editor refusals use, so it is in the
+ * web `auth-server-copy` map and mobile `api-error-copy`. The web member sign-up
+ * translates it through `landing-i18n/member-signup-refusal.ts`.
+ */
+export const REGISTER_MEMBER_PHONE_TAKEN = 'That phone number is already used by another account';
+
+/**
+ * Which sign-in value a unique violation on `user` was about, or null for any
+ * other error. `user_email_unique` / `user_phone_num_unique` — the constraint
+ * names verified against the live table; drizzle 0.45 keeps the pg error in
+ * `.cause`.
+ */
+function takenSignInValue(error: unknown): 'email' | 'phone' | null {
+  if (!isUniqueViolation(error)) return null;
+  const constraint = String(
+    (error as { constraint?: unknown } | null)?.constraint ??
+      (error as { cause?: { constraint?: unknown } } | null)?.cause?.constraint ??
+      '',
+  );
+  if (constraint.includes('phone')) return 'phone';
+  if (constraint.includes('email')) return 'email';
+  return null;
+}
 
 /**
  * Public accept for outlet/agency team invites.
@@ -202,7 +238,7 @@ export class OrgMemberInviteControllerClass {
         agencyId: invite.agencyId!,
       });
     } catch (error) {
-      logger.error('[OrgMemberInviteController.accept] Error:', error);
+      logger.error('[OrgMemberInviteController.accept] Error:', safeErrorFields(error));
       res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -276,16 +312,35 @@ export class OrgMemberInviteControllerClass {
       const input = parsed.data;
       const email = normalizeInviteEmail(input.email);
 
-      // The email must be free. Reusing one would either hijack an existing
-      // account or create a second login for the same person.
-      const emailTaken = await this.userRepository.getUserByLoginMethod(
-        'email',
-        email,
-      );
-      if (emailTaken) {
+      /*
+       * The email AND the phone must be free — both are sign-in values, and
+       * reusing either would hijack an existing account's login or create a
+       * second one for the same person.
+       *
+       * `isLoginValueTaken`, not `getUserByLoginMethod`: the login lookup
+       * answers null when TWO accounts already match (and when the read fails),
+       * so a number already on file twice looked free. The phone is compared the
+       * way sign-in compares it — digits, `0…` and `60…` as one line — so
+       * `012-345 6789` is refused against `+60123456789`.
+       *
+       * The phone check used not to exist at all: a taken number reached the
+       * INSERT, and `user_phone_num_unique` turned it into a 500 (or, spelled
+       * differently from the stored copy, into a second account for the line).
+       */
+      if (await this.userRepository.isLoginValueTaken('email', email)) {
         return res.status(409).json({
           success: false,
-          message: 'That email already has an account — sign in instead.',
+          message: REGISTER_MEMBER_EMAIL_TAKEN,
+          data: null,
+        });
+      }
+      if (
+        input.phoneNum &&
+        (await this.userRepository.isLoginValueTaken('phone', input.phoneNum))
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: REGISTER_MEMBER_PHONE_TAKEN,
           data: null,
         });
       }
@@ -313,15 +368,34 @@ export class OrgMemberInviteControllerClass {
       }
 
       const passwordHash = await hashPassword(input.password);
-      const user = await this.userRepository.createUser({
-        email,
-        phoneNum: input.phoneNum ?? null,
-        username: input.name.slice(0, 100),
-        passwordHash,
-        status: 'active',
-        createdBy: 'member-signup',
-        updatedBy: 'member-signup',
-      });
+      let user: UserType;
+      try {
+        user = await this.userRepository.createUser({
+          email,
+          phoneNum: input.phoneNum ?? null,
+          username: input.name.slice(0, 100),
+          passwordHash,
+          status: 'active',
+          createdBy: 'member-signup',
+          updatedBy: 'member-signup',
+        });
+      } catch (error) {
+        /*
+         * The checks above read a statement earlier; two sign-ups racing for
+         * one address both pass them, and the unique index refuses the second.
+         * That is still a duplicate, so it is still a 409 — never a 500.
+         */
+        const taken = takenSignInValue(error);
+        if (taken) {
+          return res.status(409).json({
+            success: false,
+            message:
+              taken === 'phone' ? REGISTER_MEMBER_PHONE_TAKEN : REGISTER_MEMBER_EMAIL_TAKEN,
+            data: null,
+          });
+        }
+        throw error;
+      }
       await this.userProfileRepository.update(user.id, {
         fullName: input.name,
         updatedBy: 'member-signup',
@@ -378,7 +452,7 @@ export class OrgMemberInviteControllerClass {
         },
       });
     } catch (error) {
-      logger.error('[OrgMemberInviteController.registerMember] Error:', error);
+      logger.error('[OrgMemberInviteController.registerMember] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -548,7 +622,7 @@ export class OrgMemberInviteControllerClass {
         data: { kind, orgId, orgName: org.name, subRole },
       });
     } catch (error) {
-      logger.error('[OrgMemberInviteController.requestJoin] Error:', error);
+      logger.error('[OrgMemberInviteController.requestJoin] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -596,7 +670,7 @@ export class OrgMemberInviteControllerClass {
 
       return res.status(200).json({ success: true, message: 'OK', data });
     } catch (error) {
-      logger.error('[OrgMemberInviteController.listMine] Error:', error);
+      logger.error('[OrgMemberInviteController.listMine] Error:', safeErrorFields(error));
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -654,7 +728,7 @@ export class OrgMemberInviteControllerClass {
         },
       });
     } catch (error) {
-      logger.error('[OrgMemberInviteController.preview] Error:', error);
+      logger.error('[OrgMemberInviteController.preview] Error:', safeErrorFields(error));
       res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,

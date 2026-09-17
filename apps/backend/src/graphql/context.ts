@@ -1,5 +1,6 @@
 import { Request } from 'express';
 import { authRepository, userRoleRepository } from '@/composition-root';
+import { resolveApiSessionUser } from '@/features/auth/session-guard';
 import type { UserType } from '@/features/user/user.model';
 import type { DbTransaction } from '@/types/db-transaction';
 
@@ -42,7 +43,13 @@ export async function createContext({ req }: { req: Request }): Promise<GraphQLC
   }
 
   try {
-    const user = await authRepository.getUserDataByToken(token);
+    /*
+     * The SAME session rules as REST's authenticateJWT — refresh token refused,
+     * `sessions_valid_from` cutoff, suspended organisation. This used to be
+     * `getUserDataByToken`, which checks the signature only, so a session a
+     * password change had ended, or a refresh token, still worked here.
+     */
+    const user = await resolveApiSessionUser(token, { sessions: authRepository });
     if (!user) {
       return context;
     }

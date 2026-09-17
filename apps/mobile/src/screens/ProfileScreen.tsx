@@ -54,8 +54,12 @@ import { usePrNav } from '../lib/pr-nav';
 type Draft = {
   displayName: string;
   icName: string;
-  /** Login email — editable here, saved to the user account. */
-  email: string;
+  /*
+   * No email here. The sign-in email is read-only on this screen and changed
+   * only through Security settings, which verifies both the current contacts
+   * and the new address. The server refuses a different email on PATCH
+   * /user/:id ('Change your email from Security settings').
+   */
   height: number;
   weight: number;
   bust: number;
@@ -122,6 +126,16 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    * connecting them. This is the one place the answer means anything.
    */
   const [leaveError, setLeaveError] = useState<string | null>(null);
+  /**
+   * Security settings asked for while the profile editor is OPEN, awaiting a
+   * confirm. Opening it replaces this screen, and the draft lives only in this
+   * component's state — so going straight there would throw away every unsaved
+   * edit with no warning. Inline two-tap for the same reason as `leaveTarget`
+   * (Alert's buttons are a no-op on react-native-web). The value says WHERE it
+   * was asked, so the question renders beside the thing she tapped: 'hint' =
+   * under the read-only email, 'button' = the Security settings row.
+   */
+  const [securityAsk, setSecurityAsk] = useState<'hint' | 'button' | null>(null);
   /** Portfolio gallery accordion — closed by default; count + chevron still show. */
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   /** Real agencies from the backend — the checkbox list the PR picks from. */
@@ -315,7 +329,6 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setDraft({
       displayName: me?.username ?? '',
       icName: me?.profile.fullName ?? '',
-      email: me?.email ?? '',
       height: me?.profile.comcardHeightCm ?? 0,
       weight: me?.profile.comcardWeightKg ?? 0,
       bust: me?.profile.comcardBustCm ?? 0,
@@ -336,6 +349,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     });
     setError(null);
     setAgencyMenuOpen(false);
+    setSecurityAsk(null);
     setEditing(true);
   };
 
@@ -344,6 +358,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setError(null);
     setAgencyMenuOpen(false);
     setLeaveTarget(null);
+    setSecurityAsk(null);
+  };
+
+  /** Outside the editor there is nothing to lose; inside it, ask first. */
+  const requestOpenSecurity = (from: 'hint' | 'button') => {
+    if (editing) {
+      setSecurityAsk(from);
+      return;
+    }
+    openSecurity();
+  };
+
+  const leaveEditForSecurity = () => {
+    cancelEdit();
+    openSecurity();
   };
 
   /**
@@ -400,11 +429,6 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       setError(t.profile.languageRequired);
       return;
     }
-    const emailValue = draft.email.trim();
-    if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
-      setError(t.profile.emailInvalid);
-      return;
-    }
     setSaving(true);
     setError(null);
     try {
@@ -413,7 +437,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         username: name,
         // Legal IC name → user_profile.full_name (the column admin/agency read).
         fullName: draft.icName.trim(),
-        email: emailValue,
+        // No email: it is changed only from Security settings (verified flow).
         portfolioPhotos: portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS),
         // A blank field means "not set" — never write 0 over a real measurement.
         comcardHeightCm: draft.height || null,
@@ -832,15 +856,22 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   placeholderTextColor={C.muted2}
                 />
                 <Text style={[styles.fieldLabel, { marginTop: 8 }]}>{t.signup.email}</Text>
-                <TextInput
-                  value={draft.email}
-                  onChangeText={(v) => setDraft((d) => ({ ...d, email: v }))}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  placeholder="you@example.com"
-                  style={styles.input}
-                  placeholderTextColor={C.muted2}
-                />
+                {/*
+                 * Read-only: a sign-in email is changed only through Security
+                 * settings, where both the current contacts and the new address
+                 * are verified by code. The hint opens that screen.
+                 */}
+                <Text style={styles.contact}>{email}</Text>
+                <Pressable onPress={() => requestOpenSecurity('hint')} hitSlop={6}>
+                  <Text style={styles.emailHint}>{t.profile.emailChangeHint}</Text>
+                </Pressable>
+                {securityAsk === 'hint' && (
+                  <LeaveEditConfirm
+                    t={t}
+                    onKeep={() => setSecurityAsk(null)}
+                    onLeave={leaveEditForSecurity}
+                  />
+                )}
               </>
             ) : (
               <>
@@ -1441,10 +1472,17 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         <LanguageSwitcher compact />
       </View>
 
-      <Pressable style={styles.securityBtn} onPress={openSecurity}>
+      <Pressable style={styles.securityBtn} onPress={() => requestOpenSecurity('button')}>
         <Lock size={14} color={C.txt} />
         <Text style={styles.securityText}>{t.profile.securitySettings}</Text>
       </Pressable>
+      {editing && securityAsk === 'button' && (
+        <LeaveEditConfirm
+          t={t}
+          onKeep={() => setSecurityAsk(null)}
+          onLeave={leaveEditForSecurity}
+        />
+      )}
 
       <Pressable style={styles.signOutBtn} onPress={signOut}>
         <Text style={styles.signOutText}>{t.profile.signOut}</Text>
@@ -1453,11 +1491,42 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   );
 }
 
+/**
+ * "Leave without saving?" — shown beside whichever Security settings entry the
+ * PR tapped while the profile editor was open. Keep editing is the gold act;
+ * Leave discards the draft and opens Security settings.
+ */
+function LeaveEditConfirm({
+  t,
+  onKeep,
+  onLeave,
+}: {
+  t: AppTranslations;
+  onKeep: () => void;
+  onLeave: () => void;
+}) {
+  return (
+    <View style={styles.leaveEditConfirm}>
+      <Text style={styles.leaveEditTitle}>{t.profile.leaveEditTitle}</Text>
+      <Text style={styles.leaveEditBody}>{t.profile.leaveEditBody}</Text>
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+        <IzButton label={t.profile.keepEditing} small fullWidth={false} onPress={onKeep} />
+        <IzButton
+          label={t.common.leave}
+          variant="soft"
+          small
+          fullWidth={false}
+          onPress={onLeave}
+        />
+      </View>
+    </View>
+  );
+}
+
 function emptyDraft(): Draft {
   return {
     displayName: '',
     icName: '',
-    email: '',
     height: 0,
     weight: 0,
     bust: 0,
@@ -1626,6 +1695,19 @@ const styles = StyleSheet.create({
   },
   icName: { marginTop: 2, ...font(), fontSize: 14, color: C.prMuted },
   contact: { marginTop: 2, ...font(), fontSize: 12, color: C.prMuted2 },
+  /** Tappable "Change in Security settings" under the read-only email. */
+  emailHint: { marginTop: 2, ...font(600), fontSize: 12, color: C.goldL },
+  /** Amber = waiting on the PR's answer, per the app's status colours. */
+  leaveEditConfirm: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: C.amberBg,
+  },
+  leaveEditTitle: { ...font(700), fontSize: 13, color: C.amber },
+  leaveEditBody: { marginTop: 2, ...font(), fontSize: 12, color: C.prMuted, lineHeight: 17 },
   fieldLabel: {
     ...font(700),
     fontSize: 9,
