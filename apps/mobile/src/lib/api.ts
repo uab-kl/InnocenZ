@@ -357,9 +357,11 @@ export type OtpVerifyResult = { verificationId: string };
 
 /**
  * Public `/auth/otp/send|verify` purposes. `change_phone` is gone from the
- * server's public schema: a phone change now needs a code to the CURRENT
- * contacts first (`startContactChange` below), and `/auth/phone/change` answers
- * 400 to the old one-code flow.
+ * server's public schema: a phone change now needs the account's CURRENT
+ * PASSWORD plus a code to the NEW number (`startContactChange` below).
+ * `/auth/phone/change` is DELETED, not retired-with-a-message (owner,
+ * 21 Sep 2026: no error page) — an old build calling it gets a 404 from the
+ * router, not a sentence this client can translate.
  */
 export type OtpPurpose = 'signup' | 'forgot_password';
 
@@ -491,24 +493,17 @@ export type ContactKind = 'email' | 'phone';
 
 export type ContactChangeStartResult = {
   requestId: string;
-  /** Where the identity code went — the CURRENT phone and email on file. */
+  /** Where the code went — the NEW address, or the NEW phone by WhatsApp + SMS. */
   sentTo: CodeDelivery[];
   expiresInSec: number;
   resendAfterSec: number;
   /**
    * Organisation invitations still addressed to the current email (kind
    * `email` only, else 0). Accepting one requires the account email to match
-   * the invite, so they cannot be accepted after the change.
+   * the invite, so they cannot be accepted after the change. Always 0 on a
+   * resend — the warning is stated once, when the change starts.
    */
   pendingInvitesToCurrentEmail: number;
-};
-
-export type ContactChangeNewCodeResult = {
-  newRequestId: string;
-  /** Where the second code went — the NEW email, or the new phone by WhatsApp + SMS. */
-  sentTo: CodeDelivery[];
-  expiresInSec: number;
-  resendAfterSec: number;
 };
 
 export type ContactChangeConfirmResult = TokenPair & {
@@ -517,40 +512,44 @@ export type ContactChangeConfirmResult = TokenPair & {
 };
 
 /**
- * Change email / phone, step 1 of 3: prove it is you. One code goes to the
- * contacts ALREADY on the account (WhatsApp + SMS to the phone, email to the
- * address). `value` is the new email or the new phone ('+' + digits).
+ * Change email / phone, step 1 of 2: the CURRENT PASSWORD, and one code to the
+ * NEW contact. `value` is the new email or the new phone ('+' + digits).
+ *
+ * ⚠️ NOTHING GOES TO THE OLD PHONE OR OLD EMAIL — owner's decision, 21 Sep
+ * 2026. Not a code, and no "your email was changed" notice afterwards either.
+ * The password is what proves the person holding this signed-in phone owns the
+ * account; the code proves the new contact was typed correctly and can receive,
+ * without which a typo locks her out of her own account.
+ *
+ * A wrong password is 400 'Current password is incorrect', never 401 — see
+ * `isSessionRefusal`, which must not treat it as a dead session.
  */
 export function startContactChange(
   accessToken: string,
   kind: ContactKind,
   value: string,
+  currentPassword: string,
 ): Promise<ContactChangeStartResult> {
   return request<ContactChangeStartResult>('/auth/contact-change/start', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ kind, value }),
+    body: JSON.stringify({ kind, value, currentPassword }),
   });
 }
 
-/** Step 2 of 3: check the identity code; the server then sends a second code to the NEW contact. */
-export function verifyContactChangeIdentity(
-  accessToken: string,
-  input: { requestId: string; kind: ContactKind; value: string; code: string },
-): Promise<ContactChangeNewCodeResult> {
-  return request<ContactChangeNewCodeResult>('/auth/contact-change/verify-identity', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify(input),
-  });
-}
-
-/** Resend the second code (to the new contact) without re-proving identity. */
+/**
+ * Another code to the same new contact. NO password: the `requestId` is itself
+ * the proof, handed out only to a caller who passed the password a moment ago.
+ *
+ * ⚠️ IT ANSWERS A NEW `requestId` — the old row is retired by the send, so the
+ * caller must REPLACE the one it holds or confirm will refuse with
+ * 'This code has expired — request a new one'.
+ */
 export function resendContactChangeNewCode(
   accessToken: string,
   input: { requestId: string; kind: ContactKind; value: string },
-): Promise<ContactChangeNewCodeResult> {
-  return request<ContactChangeNewCodeResult>('/auth/contact-change/resend-new', {
+): Promise<ContactChangeStartResult> {
+  return request<ContactChangeStartResult>('/auth/contact-change/resend', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(input),
@@ -558,7 +557,7 @@ export function resendContactChangeNewCode(
 }
 
 /**
- * Step 3 of 3: the new contact's code. Writes the change.
+ * Step 2 of 2: the new contact's code. Writes the change.
  *
  * ⚠️ The response carries a FRESH token pair, and the caller must store it
  * before anything else touches the API. A JWT here identifies the account by
@@ -570,7 +569,6 @@ export function confirmContactChange(
   accessToken: string,
   input: {
     requestId: string;
-    newRequestId: string;
     kind: ContactKind;
     value: string;
     code: string;

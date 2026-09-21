@@ -4,9 +4,10 @@
  * This file used to also hold the web phone-change calls (`/auth/otp/send` with
  * `purpose: "change_phone"`, `/auth/otp/verify`, `/auth/phone/change`). Those
  * proved only that the person held the NEW handset, so an unlocked session was
- * enough to move an account onto somebody else's phone. The server now refuses
- * that route, and changing a phone or an email is the two-code flow in
- * `contact-change-api.ts` (owner, 17 Sep 2026).
+ * enough to move an account onto somebody else's phone. `/auth/phone/change` is
+ * GONE from the backend as of 21 Sep 2026 — deleted, not left refusing — and
+ * changing a phone or an email is the ONE-code flow in `contact-change-api.ts`
+ * (current password + a single code to the NEW contact).
  *
  * What stays is the part every lane still needs: turning what a person TYPES
  * into the number a code can actually be delivered to.

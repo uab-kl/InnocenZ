@@ -47,13 +47,21 @@ export const AUTH_SERVER_SENTENCES: Record<string, Label> = {
 	"Your account has no phone or email we can send a code to": (t) =>
 		t.authCodes.serverNoContactChannel,
 	"Code sent": (t) => t.authCodes.serverCodeSent,
-	"This change has expired — start again": (t) =>
-		t.authCodes.serverChangeExpired,
 	"This code was already used": (t) => t.authCodes.serverCodeAlreadyUsed,
 	"Email updated": (t) => t.authCodes.serverEmailUpdated,
 	"Phone number updated": (t) => t.authCodes.serverPhoneUpdated,
-	"Changing your phone now needs a code to your current contacts — please update the app":
-		(t) => t.authCodes.serverPhoneChangeNeedsUpdate,
+	/*
+	 * NOTHING is mapped here for a retired step. The two-code flow's
+	 * `/contact-change/verify-identity` and `/resend-new`, and the older
+	 * `/auth/phone/change`, were DELETED outright on 21 Sep 2026 rather than
+	 * left answering "…please update the app" — a call to one now gets the
+	 * router's own 404, not a sentence. Both wordings that used to live here
+	 * (the current-password one and the "…needs a code to your current
+	 * contacts…" it replaced) are sent by no route in apps/backend/src.
+	 */
+	/** The account signs in by a code or an invite and has no password yet. */
+	"Set a password before you change your sign-in email or phone": (t) =>
+		t.authCodes.serverSetPasswordFirst,
 	"New password must be different": (t) =>
 		t.authCodes.serverNewPasswordMustDiffer,
 	"Current password is incorrect": (t) =>
@@ -93,8 +101,10 @@ export const AUTH_SERVER_SENTENCES: Record<string, Label> = {
 	 * and the zod messages in account-code/schemas.ts (the first issue's
 	 * message is what a 400 carries). The two password-length messages carry a
 	 * number and live in LENGTH_PATTERNS below.
+	 *
+	 * "Could not start the change" was here until 21 Sep 2026 and is gone: it
+	 * was the verifyIdentity handler's 500, and it died with that handler.
 	 */
-	"Could not start the change": (t) => t.authCodes.serverCouldNotStartChange,
 	"Could not send the code": (t) => t.authCodes.serverCouldNotSendCode,
 	"This account cannot change password here": (t) =>
 		t.authCodes.serverCannotChangePasswordHere,

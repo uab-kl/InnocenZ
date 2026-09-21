@@ -14,9 +14,10 @@ import { isSensitiveAuditKey, redactSensitive } from './audit-log.repository';
  */
 describe('audit redaction of account codes', () => {
   it('redacts code, and the password fields of every code flow', () => {
+    // ⚠️ `newRequestId` was dropped on 21 Sep 2026 with the identity step — no
+    // contact-change body carries a second id any more.
     const body = {
       requestId: '3f1a2b4c-5d6e-4f70-8a91-b2c3d4e5f607',
-      newRequestId: '9a1a2b4c-5d6e-4f70-8a91-b2c3d4e5f607',
       kind: 'email',
       value: 'new@x.my',
       code: '123456',
@@ -26,7 +27,6 @@ describe('audit redaction of account codes', () => {
     };
     expect(redactSensitive(body)).toEqual({
       requestId: body.requestId,
-      newRequestId: body.newRequestId,
       kind: 'email',
       value: 'new@x.my',
       code: '[REDACTED]',

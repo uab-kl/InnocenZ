@@ -154,9 +154,9 @@ export function SecuritySettingsSheets({
 	const queryClient = useQueryClient();
 	const { logout } = useAuth();
 	/**
-	 * The two-code phone / email change (owner, 17 Sep 2026): code #1 by
-	 * WhatsApp + SMS + email to the CURRENT contacts, code #2 to the NEW one.
-	 * See `contact-change-api.ts` for why it takes two.
+	 * The phone / email change (owner, 21 Sep 2026): the CURRENT PASSWORD, then
+	 * ONE code to the NEW contact. Nothing — no code, no notice — is ever sent
+	 * to the email or number already on the account. See `contact-change-api.ts`.
 	 */
 	const contact = useContactChange();
 	const resetContact = contact.reset;
@@ -215,6 +215,14 @@ export function SecuritySettingsSheets({
 
 	const [newEmail, setNewEmail] = useState("");
 	const [newPhone, setNewPhone] = useState("");
+	/**
+	 * THE CURRENT PASSWORD, which replaced the code to the old contacts (owner,
+	 * 21 Sep 2026). Held only until `start` has been sent and cleared with every
+	 * other field on the way out — `contact.start` takes it as an argument and
+	 * the hook deliberately never keeps it.
+	 */
+	const [contactPassword, setContactPassword] = useState("");
+	const [showContactPassword, setShowContactPassword] = useState(false);
 	const [demoOtp, setDemoOtp] = useState("");
 	const [demoOtpOpen, setDemoOtpOpen] = useState(false);
 	const [demoPending, setDemoPending] = useState<DemoOtpPending>(null);
@@ -225,6 +233,8 @@ export function SecuritySettingsSheets({
 			setDemoOtpOpen(false);
 			setDemoPending(null);
 			setDemoOtp("");
+			setContactPassword("");
+			setShowContactPassword(false);
 			resetContact();
 		}
 	}, [open, resetContact]);
@@ -236,6 +246,9 @@ export function SecuritySettingsSheets({
 		setDemoOtp("");
 		setPhoneError(null);
 		setEmailError(null);
+		// Never left behind a closed sheet.
+		setContactPassword("");
+		setShowContactPassword(false);
 		resetContact();
 	};
 
@@ -412,13 +425,22 @@ export function SecuritySettingsSheets({
 			setEmailError(t.profile.emailMustDiffer);
 			return;
 		}
+		/*
+		 * ⚠️ THE DEMO CHECK COMES FIRST, and the password guard after it. A demo
+		 * session has no account and no password behind it, so asking for one
+		 * would make the prototype's own email change impossible to finish.
+		 */
 		if (isDemoSession) {
 			openDemoOtp("email", next);
 			return;
 		}
-		// Refusals (already yours, used by another account, cooldown) land in
-		// `contact.problem` and render under the field below.
-		await contact.start("email", next);
+		if (!contactPassword.trim()) {
+			setEmailError(t.profile.enterCurrentPassword);
+			return;
+		}
+		// Refusals (wrong password, already yours, used by another account,
+		// cooldown) land in `contact.problem` and render under the fields below.
+		await contact.start("email", next, contactPassword);
 	};
 
 	const requestPhoneCode = async () => {
@@ -446,11 +468,16 @@ export function SecuritySettingsSheets({
 			setPhoneError(t.profile.mobileMustDiffer);
 			return;
 		}
+		// Demo first, password guard second — see requestEmailCode.
 		if (isDemoSession) {
 			openDemoOtp("phone", next);
 			return;
 		}
-		await contact.start("phone", next);
+		if (!contactPassword.trim()) {
+			setPhoneError(t.profile.enterCurrentPassword);
+			return;
+		}
+		await contact.start("phone", next, contactPassword);
 	};
 
 	const verifyDemo = () => {
@@ -473,7 +500,7 @@ export function SecuritySettingsSheets({
 	const verifyReal = async () => {
 		const kind = contact.kind;
 		const confirmed = await contact.submitCode();
-		if (!confirmed) return; // moved to code #2, back to the field, or refused
+		if (!confirmed) return; // refused, or sent back to the field
 		if (kind === "email") setNewEmail("");
 		else setNewPhone("");
 		if (!confirmed.tokensStored) {
@@ -497,17 +524,13 @@ export function SecuritySettingsSheets({
 
 	const delivery = describeCodeDelivery(contact.sentTo, t);
 	const realTitle =
-		contact.stage === "identity"
-			? t.authCodes.identityTitle
-			: contact.kind === "email"
-				? t.authCodes.newEmailTitle
-				: t.authCodes.newPhoneTitle;
+		contact.kind === "email"
+			? t.authCodes.newEmailTitle
+			: t.authCodes.newPhoneTitle;
 	const realHint =
-		contact.stage === "identity"
-			? t.authCodes.identityHint
-			: contact.kind === "email"
-				? t.authCodes.newEmailHint
-				: t.authCodes.newPhoneHint;
+		contact.kind === "email"
+			? t.authCodes.newEmailHint
+			: t.authCodes.newPhoneHint;
 	const realDescription = (
 		<>
 			<span className="block">{realHint}</span>
@@ -523,9 +546,14 @@ export function SecuritySettingsSheets({
 			{delivery.logged ? (
 				<span className="mt-1.5 block">{delivery.logged}</span>
 			) : null}
-			{contact.stage === "identity" &&
-			contact.kind === "email" &&
-			contact.pendingInvitesToCurrentEmail > 0 ? (
+			{/*
+			 * ⚠️ THE PENDING-INVITES WARNING, shown while the code is being read
+			 * — the last moment BEFORE the change is written, and the first at
+			 * which the count exists (only `start` answers it). It used to be
+			 * gated on the identity step, which no longer exists; left that way
+			 * it would have rendered nowhere at all.
+			 */}
+			{contact.kind === "email" && contact.pendingInvitesToCurrentEmail > 0 ? (
 				<span className="mt-1.5 block text-[var(--iz-amber)]">
 					{fill(t.authCodes.pendingInvitesWarning, {
 						n: contact.pendingInvitesToCurrentEmail,
@@ -700,6 +728,25 @@ export function SecuritySettingsSheets({
 					}}
 					autoComplete="email"
 				/>
+				{/*
+				 * The CURRENT PASSWORD — what proves it is you now that nothing
+				 * is sent to the address already on the account.
+				 */}
+				<div className="mt-3">
+					<PasswordField
+						label={t.profile.currentPassword}
+						placeholder={t.profile.enterCurrentPassword}
+						value={contactPassword}
+						onChange={(value) => {
+							setContactPassword(value);
+							setEmailError(null);
+							contact.clearProblem();
+						}}
+						show={showContactPassword}
+						onToggleShow={() => setShowContactPassword((v) => !v)}
+						autoComplete="current-password"
+					/>
+				</div>
 				{emailError || paneProblem ? (
 					<p role="alert" className="iz-tiny mt-1.5 text-[var(--iz-red)]">
 						{emailError ?? paneProblem}
@@ -761,6 +808,22 @@ export function SecuritySettingsSheets({
 				) : (
 					<p className="iz-tiny iz-muted mt-1.5">{t.profile.phoneFormatHint}</p>
 				)}
+				{/* The CURRENT PASSWORD — see the email pane. */}
+				<div className="mt-3">
+					<PasswordField
+						label={t.profile.currentPassword}
+						placeholder={t.profile.enterCurrentPassword}
+						value={contactPassword}
+						onChange={(value) => {
+							setContactPassword(value);
+							setPhoneError(null);
+							contact.clearProblem();
+						}}
+						show={showContactPassword}
+						onToggleShow={() => setShowContactPassword((v) => !v)}
+						autoComplete="current-password"
+					/>
+				</div>
 				{phoneError || paneProblem ? (
 					<p role="alert" className="iz-tiny mt-1.5 text-[var(--iz-red)]">
 						{phoneError ?? paneProblem}
@@ -819,9 +882,6 @@ export function SecuritySettingsSheets({
 					onResend={resendReal}
 					resendIn={contact.resendIn}
 					busy={contact.busy}
-					// Step 3 with no code #2 yet (it failed to go out after code #1
-					// was accepted): nothing to verify — Resend is the way on.
-					verifyDisabled={!contact.canVerify}
 					error={
 						contact.problem
 							? contactChangeProblemText(
@@ -832,11 +892,7 @@ export function SecuritySettingsSheets({
 							: null
 					}
 					verifyLabel={
-						contact.busy
-							? t.authCodes.verifying
-							: contact.stage === "identity"
-								? t.authCodes.continueLabel
-								: t.profile.verifyAndSave
+						contact.busy ? t.authCodes.verifying : t.profile.verifyAndSave
 					}
 				/>
 			)}

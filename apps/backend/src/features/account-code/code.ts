@@ -41,30 +41,3 @@ export function boundCodeMatches(
   if (expected.length !== stored.length) return false;
   return crypto.timingSafeEqual(expected, stored);
 }
-
-/**
- * The marker an identity row's hash is REWRITTEN to once its code is verified.
- *
- * Why: the identity code is spent at verification, but two later steps
- * (resend-new, confirm) still need to know WHICH change it approved. The row
- * has no column for the new value — and must not get one without a migration —
- * so its `code_hash` becomes a hash of (marker, user, kind, value). A request
- * naming a different value then fails the comparison, so an identity check
- * passed for one address can never be spent on another.
- *
- * Not a digit string, so it can never equal a real code.
- */
-export const IDENTITY_VERIFIED_MARKER = 'identity-verified';
-
-export function identityProofHash(userId: string, kind: string, value: string): string {
-  return hashBoundCode(IDENTITY_VERIFIED_MARKER, userId, kind, value);
-}
-
-export function identityProofMatches(
-  codeHash: string,
-  userId: string,
-  kind: string,
-  value: string,
-): boolean {
-  return boundCodeMatches(codeHash, IDENTITY_VERIFIED_MARKER, userId, kind, value);
-}

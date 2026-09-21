@@ -43,7 +43,6 @@ import {
 	confirmContactChange,
 	resendContactChangeNewCode,
 	startContactChange,
-	verifyContactChangeIdentity,
 } from "./contact-change-api";
 import { readForgotIdentifier } from "./forgot-identifier";
 import {
@@ -146,7 +145,6 @@ describe("contact change — tokens", () => {
 
 		const result = await confirmContactChange({
 			requestId: "11111111-1111-4111-8111-111111111111",
-			newRequestId: "22222222-2222-4222-8222-222222222222",
 			kind: "email",
 			value: "  New@Atlas-Agency.MY ",
 			code: "123456",
@@ -213,7 +211,6 @@ describe("contact change — tokens", () => {
 
 		const result = await confirmContactChange({
 			requestId: "11111111-1111-4111-8111-111111111111",
-			newRequestId: "22222222-2222-4222-8222-222222222222",
 			kind: "phone",
 			value: "0123456789",
 			code: "123456",
@@ -249,7 +246,7 @@ describe("contact change — a refusal does not sign out", () => {
 			body: { success: false, message: "Invalid code", data: null },
 		});
 
-		const error = await verifyContactChangeIdentity({
+		const error = await confirmContactChange({
 			requestId: "11111111-1111-4111-8111-111111111111",
 			kind: "phone",
 			value: "0123456789",
@@ -292,9 +289,46 @@ describe("contact change — a refusal does not sign out", () => {
 		});
 
 		await expect(
-			startContactChange({ kind: "email", value: "a@b.co" }),
+			startContactChange({
+				kind: "email",
+				value: "a@b.co",
+				currentPassword: "pw",
+			}),
 		).rejects.toBeInstanceOf(AuthFlowError);
 		expect(kickToLogin).toHaveBeenCalledTimes(1);
+	});
+
+	/*
+	 * A WRONG CURRENT PASSWORD IS 400, NEVER 401 (contract, 21 Sep 2026). The
+	 * password now stands where the code to the old contacts used to, so this
+	 * is the refusal a person is most likely to collect — and a 401 here would
+	 * throw them out of the session they are trying to secure.
+	 */
+	it("a wrong current password on start (400) does not sign out", async () => {
+		replies.push({
+			status: 400,
+			body: {
+				success: false,
+				message: "Current password is incorrect",
+				data: null,
+			},
+		});
+
+		await expect(
+			startContactChange({
+				kind: "email",
+				value: "new@atlas-agency.my",
+				currentPassword: "nope",
+			}),
+		).rejects.toMatchObject({
+			name: "AuthFlowError",
+			status: 400,
+			message: "Current password is incorrect",
+		});
+		expect(seen[0].url).toBe("/auth/contact-change/start");
+		expect(kickToLogin).not.toHaveBeenCalled();
+		expect(getAccessToken()).toBe("old-access");
+		expect(getRefreshToken()).toBe("old-refresh");
 	});
 
 	it("a cooldown (429) carries retryAfterSec for the Resend countdown", async () => {
@@ -308,93 +342,70 @@ describe("contact change — a refusal does not sign out", () => {
 		});
 
 		await expect(
-			startContactChange({ kind: "phone", value: "0123456789" }),
+			startContactChange({
+				kind: "phone",
+				value: "0123456789",
+				currentPassword: "pw",
+			}),
 		).rejects.toMatchObject({ status: 429, retryAfterSec: 42 });
 		expect(kickToLogin).not.toHaveBeenCalled();
 	});
 });
 
 describe("contact change — one spelling of the value on every call", () => {
-	it("sends the phone normalised identically to start, verify, resend and confirm", async () => {
-		const sentTo = [
-			{ channel: "whatsapp", to: "+60 ••••• 6789", status: "sent" },
-		];
-		replies.push(
-			{
-				status: 200,
-				body: {
-					success: true,
-					message: "Code sent",
-					data: {
-						requestId: "r1",
-						sentTo,
-						expiresInSec: 300,
-						resendAfterSec: 60,
-						pendingInvitesToCurrentEmail: 0,
-					},
+	const sentTo = [
+		{ channel: "whatsapp", to: "+60 ••••• 6789", status: "sent" },
+	];
+
+	const codeSent = (requestId: string) => ({
+		status: 200,
+		body: {
+			success: true,
+			message: "Code sent",
+			data: {
+				requestId,
+				sentTo,
+				expiresInSec: 600,
+				resendAfterSec: 60,
+				pendingInvitesToCurrentEmail: 0,
+			},
+		},
+	});
+
+	it("sends the phone normalised identically to start, resend and confirm", async () => {
+		replies.push(codeSent("r1"), codeSent("r2"), {
+			status: 200,
+			body: {
+				success: true,
+				message: "Phone number updated",
+				data: {
+					accessToken: "a",
+					refreshToken: "r",
+					email: null,
+					phoneNum: "+60123456789",
 				},
 			},
-			{
-				status: 200,
-				body: {
-					success: true,
-					message: "Code sent",
-					data: {
-						newRequestId: "n1",
-						sentTo,
-						expiresInSec: 600,
-						resendAfterSec: 60,
-					},
-				},
-			},
-			{
-				status: 200,
-				body: {
-					success: true,
-					message: "Code sent",
-					data: {
-						newRequestId: "n2",
-						sentTo,
-						expiresInSec: 600,
-						resendAfterSec: 60,
-					},
-				},
-			},
-			{
-				status: 200,
-				body: {
-					success: true,
-					message: "Phone number updated",
-					data: {
-						accessToken: "a",
-						refreshToken: "r",
-						email: null,
-						phoneNum: "+60123456789",
-					},
-				},
-			},
-		);
+		});
 
 		const started = await startContactChange({
 			kind: "phone",
 			value: "012-345 6789",
+			currentPassword: "s3cret",
 		});
 		expect(started.requestId).toBe("r1");
 		expect(started.sentTo).toEqual(sentTo);
-		await verifyContactChangeIdentity({
+
+		// ⚠️ Resend answers its OWN requestId — the caller must carry that one
+		// forward, not the id it started with.
+		const resent = await resendContactChangeNewCode({
 			requestId: "r1",
 			kind: "phone",
 			value: "+60 0123456789",
-			code: "123456",
 		});
-		await resendContactChangeNewCode({
-			requestId: "r1",
-			kind: "phone",
-			value: "60123456789",
-		});
+		expect(resent.requestId).toBe("r2");
+
 		await confirmContactChange({
-			requestId: "r1",
-			newRequestId: "n2",
+			requestId: resent.requestId,
 			kind: "phone",
 			value: "0123456789",
 			code: "654321",
@@ -402,16 +413,65 @@ describe("contact change — one spelling of the value on every call", () => {
 
 		expect(seen.map((s) => s.url)).toEqual([
 			"/auth/contact-change/start",
-			"/auth/contact-change/verify-identity",
-			"/auth/contact-change/resend-new",
+			"/auth/contact-change/resend",
 			"/auth/contact-change/confirm",
 		]);
 		expect(seen.map((s) => s.body.value)).toEqual([
 			"+60123456789",
 			"+60123456789",
 			"+60123456789",
-			"+60123456789",
 		]);
+		expect(seen[2].body.requestId).toBe("r2");
+	});
+
+	/*
+	 * THE PASSWORD IS ON START AND NOWHERE ELSE (owner, 21 Sep 2026). Sending it
+	 * again on resend or confirm would mean this client holding it in memory
+	 * behind the code sheet for the whole flow — the server's schema refuses it
+	 * there for exactly that reason.
+	 */
+	it("start carries currentPassword; resend and confirm never do", async () => {
+		replies.push(codeSent("r1"), codeSent("r2"), {
+			status: 200,
+			body: {
+				success: true,
+				message: "Email updated",
+				data: {
+					accessToken: "a",
+					refreshToken: "r",
+					email: "new@atlas-agency.my",
+					phoneNum: null,
+				},
+			},
+		});
+
+		await startContactChange({
+			kind: "email",
+			value: "New@Atlas-Agency.MY",
+			currentPassword: "s3cret",
+		});
+		await resendContactChangeNewCode({
+			requestId: "r1",
+			kind: "email",
+			value: "new@atlas-agency.my",
+		});
+		await confirmContactChange({
+			requestId: "r2",
+			kind: "email",
+			value: "new@atlas-agency.my",
+			code: "123456",
+		});
+
+		expect(seen[0].body).toEqual({
+			kind: "email",
+			value: "new@atlas-agency.my",
+			currentPassword: "s3cret",
+		});
+		expect(seen[1].body).not.toHaveProperty("currentPassword");
+		expect(seen[2].body).not.toHaveProperty("currentPassword");
+		// And nothing carries the retired second id.
+		for (const call of seen)
+			expect(call.body).not.toHaveProperty("newRequestId");
 	});
 });
 

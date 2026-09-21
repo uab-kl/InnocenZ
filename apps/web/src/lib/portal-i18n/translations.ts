@@ -2005,7 +2005,7 @@ const en = {
 		subRoleInviteHint:
 			"Sub-role invite · requires IC + e-signature for dual-sign PV",
 		passwordOtpHint:
-			"Update your password anytime. Email and mobile changes are confirmed with codes sent by WhatsApp, SMS and email.",
+			"Update your password anytime. Email and mobile changes need your current password, then a code sent to the new email or number.",
 		securitySettings: "Security settings",
 		chooseImageFile: "Please choose an image file",
 		imageUnder5Mb: "Image must be under 5 MB",
@@ -2133,11 +2133,11 @@ const en = {
 		otpDemoNoMessage: "Demo mode — no message is sent. Enter 123456.",
 		/**
 		 * Shown BEFORE sending, so a missing country code is caught by eye. The
-		 * NEW number only gets the second code — the first goes to the contacts
-		 * already on the account (authCodes.phoneStepsHint says so).
+		 * NEW number is the ONLY place a code goes — nothing reaches the number
+		 * already on the account (owner, 21 Sep 2026).
 		 */
 		otpWillSendTo:
-			"The new number {target} gets its own code by WhatsApp and SMS",
+			"The code goes to the new number {target} by WhatsApp and SMS",
 		mobileTooShort:
 			"That looks too short for a mobile number — check the digits.",
 		mobileTooLong:
@@ -3719,7 +3719,7 @@ const en = {
 		/** Card title over the admin's own password / phone / email. */
 		loginSecurity: "Login & security",
 		loginSecurityHint:
-			"Your own sign-in details. Email and phone changes are confirmed with codes sent by WhatsApp, SMS and email.",
+			"Your own sign-in details. Email and phone changes need your current password, then a code sent to the new email or number.",
 		phone: "Phone",
 		/** Shown in place of an email or phone the account does not have. */
 		notSet: "Not set",
@@ -6921,7 +6921,6 @@ const en = {
 		codeCheckFailed: "Could not check that code — try again",
 		codeRequired: "Enter the 6-digit code",
 		codeResent: "A new code is on its way",
-		continueLabel: "Continue",
 		verifying: "Checking…",
 		passwordMaxLength: "New password must be at most {max} characters",
 		/**
@@ -6937,17 +6936,20 @@ const en = {
 		changedPassword: "Your password was changed.",
 		changedEmail: "Your email was changed.",
 		changedPhone: "Your phone number was changed.",
-		identityTitle: "Confirm it's you",
-		identityHint:
-			"Step 1 of 2 — enter the code we sent to your current contacts.",
 		newEmailTitle: "Verify your new email",
 		newPhoneTitle: "Verify your new number",
-		newEmailHint: "Step 2 of 2 — enter the code we sent to the new email.",
-		newPhoneHint: "Step 2 of 2 — enter the code we sent to the new number.",
+		newEmailHint: "Enter the code we sent to the new email address.",
+		newPhoneHint: "Enter the code we sent to the new number.",
+		/*
+		 * Owner, 21 Sep 2026: the code goes to the NEW contact and nowhere else
+		 * — nothing is sent to the email or number already on the account, and
+		 * no notice is sent there afterwards either. The current password is
+		 * what proves it is you.
+		 */
 		emailStepsHint:
-			"We first send a code to your current phone and email to confirm it's you, then a second code to the new email.",
+			"Enter your current password, then the code we send to the new email address. Nothing is sent to your current email.",
 		phoneStepsHint:
-			"We first send a code to your current phone and email to confirm it's you, then a second code to the new number by WhatsApp and SMS.",
+			"Enter your current password, then the code we send to the new number by WhatsApp and SMS. Nothing is sent to your current number.",
 		/** {n} = pendingInvitesToCurrentEmail from the server. */
 		pendingInvitesWarning:
 			"{n} pending invitation(s) went to your current email. They stay tied to that address — accept them before you change it, or ask for new ones.",
@@ -6971,12 +6973,11 @@ const en = {
 		serverNoContactChannel:
 			"Your account has no phone or email we can send a code to",
 		serverCodeSent: "Code sent",
-		serverChangeExpired: "This change has expired — start again",
 		serverCodeAlreadyUsed: "This code was already used",
 		serverEmailUpdated: "Email updated",
 		serverPhoneUpdated: "Phone number updated",
-		serverPhoneChangeNeedsUpdate:
-			"Changing your phone now needs a code to your current contacts — please update the app",
+		serverSetPasswordFirst:
+			"Set a password before you change your sign-in email or phone",
 		serverNewPasswordMustDiffer: "New password must be different",
 		serverCurrentPasswordWrong: "Current password is incorrect",
 		serverPasswordUpdated: "Password updated",
@@ -7004,7 +7005,6 @@ const en = {
 		 * account with no password, the handlers' catch-all, and the zod messages
 		 * in account-code/schemas.ts). English stays word-for-word.
 		 */
-		serverCouldNotStartChange: "Could not start the change",
 		serverCouldNotSendCode: "Could not send the code",
 		serverCannotChangePasswordHere: "This account cannot change password here",
 		serverInternalError: "Internal Server Error",
@@ -8615,7 +8615,7 @@ const zh: PortalTranslations = {
 		eSignatureOnFile: "已保存电子签名 ✓",
 		subRoleInviteHint: "子角色邀请 · 双签薪资单需要身份证 + 电子签名",
 		passwordOtpHint:
-			"密码可随时修改。更改邮箱或手机号需通过 WhatsApp、短信和邮件发送的验证码确认。",
+			"密码可随时修改。更改邮箱或手机号需先输入当前密码，再输入发送到新邮箱或新号码的验证码。",
 		securitySettings: "安全设置",
 		chooseImageFile: "请选择图片文件",
 		imageUnder5Mb: "图片大小须小于 5 MB",
@@ -8723,7 +8723,7 @@ const zh: PortalTranslations = {
 		readOnlyForRole: "你的角色为只读。",
 		invalidOtpDemo: "验证码不正确 —— 演示环境请输入 123456",
 		otpDemoNoMessage: "演示模式 —— 不会发送任何消息，请输入 123456。",
-		otpWillSendTo: "新号码 {target} 将通过 WhatsApp 和短信收到自己的验证码",
+		otpWillSendTo: "验证码将通过 WhatsApp 和短信发送到新号码 {target}",
 		mobileTooShort: "这个号码位数太少 —— 请检查数字。",
 		mobileTooLong: "这个号码位数太多 —— 请检查数字。",
 		phoneFormatHint: "怎么写都可以 —— 0123456789 或 +60 12-345 6789 都能识别。",
@@ -10046,7 +10046,7 @@ const zh: PortalTranslations = {
 		profileSaved: "个人资料已保存",
 		loginSecurity: "登录与安全",
 		loginSecurityHint:
-			"您本人的登录信息。修改邮箱和手机号需通过 WhatsApp、短信和邮件发送的验证码确认。",
+			"您本人的登录信息。修改邮箱和手机号需先输入当前密码，再输入发送到新邮箱或新号码的验证码。",
 		phone: "手机号",
 		notSet: "未设置",
 		change: "修改",
@@ -12090,7 +12090,6 @@ const zh: PortalTranslations = {
 		codeCheckFailed: "无法核对该验证码 —— 请重试",
 		codeRequired: "请输入 6 位验证码",
 		codeResent: "新的验证码已发送",
-		continueLabel: "继续",
 		verifying: "核对中…",
 		passwordMaxLength: "新密码不能超过 {max} 个字符",
 		signInAgainTitle: "修改已保存 —— 请重新登录",
@@ -12099,16 +12098,14 @@ const zh: PortalTranslations = {
 		changedPassword: "您的密码已修改。",
 		changedEmail: "您的邮箱已修改。",
 		changedPhone: "您的手机号已修改。",
-		identityTitle: "确认是您本人",
-		identityHint: "第 1 步（共 2 步）—— 请输入发送到您当前联系方式的验证码。",
 		newEmailTitle: "验证新邮箱",
 		newPhoneTitle: "验证新手机号",
-		newEmailHint: "第 2 步（共 2 步）—— 请输入发送到新邮箱的验证码。",
-		newPhoneHint: "第 2 步（共 2 步）—— 请输入发送到新号码的验证码。",
+		newEmailHint: "请输入发送到新邮箱的验证码。",
+		newPhoneHint: "请输入发送到新号码的验证码。",
 		emailStepsHint:
-			"我们会先向您当前的手机和邮箱发送验证码以确认是您本人，再向新邮箱发送第二个验证码。",
+			"请先输入当前密码，再输入我们发送到新邮箱的验证码。我们不会向您当前的邮箱发送任何内容。",
 		phoneStepsHint:
-			"我们会先向您当前的手机和邮箱发送验证码以确认是您本人，再通过 WhatsApp 和短信向新号码发送第二个验证码。",
+			"请先输入当前密码，再输入我们通过 WhatsApp 和短信发送到新号码的验证码。我们不会向您当前的号码发送任何内容。",
 		pendingInvitesWarning:
 			"有 {n} 个待处理的邀请发送到了您当前的邮箱。这些邀请仍绑定该地址 —— 请在修改前先接受，或请对方重新邀请。",
 		emailUpdateFailed: "无法更新您的邮箱",
@@ -12128,12 +12125,10 @@ const zh: PortalTranslations = {
 		serverPhoneTaken: "该手机号已被其他账户使用",
 		serverNoContactChannel: "您的账户没有可接收验证码的手机号或邮箱",
 		serverCodeSent: "验证码已发送",
-		serverChangeExpired: "本次修改已过期 —— 请重新开始",
 		serverCodeAlreadyUsed: "该验证码已被使用",
 		serverEmailUpdated: "邮箱已更新",
 		serverPhoneUpdated: "手机号已更新",
-		serverPhoneChangeNeedsUpdate:
-			"修改手机号现在需要向您当前的联系方式发送验证码 —— 请更新应用",
+		serverSetPasswordFirst: "修改登录邮箱或手机号前，请先设置密码",
 		serverNewPasswordMustDiffer: "新密码必须与当前密码不同",
 		serverCurrentPasswordWrong: "当前密码不正确",
 		serverPasswordUpdated: "密码已更新",
@@ -12146,7 +12141,6 @@ const zh: PortalTranslations = {
 		limiterCodesRequested: "请求验证码的次数过多，请稍后再试。",
 		limiterAttempts: "尝试次数过多，请稍后再试。",
 		limiterPasswordChange: "修改密码的尝试次数过多，请稍后再试。",
-		serverCouldNotStartChange: "无法开始本次修改 —— 请稍后再试",
 		serverCouldNotSendCode: "无法发送验证码",
 		serverCannotChangePasswordHere: "此账户无法在这里修改密码",
 		serverInternalError: "服务器出错 —— 请稍后再试",

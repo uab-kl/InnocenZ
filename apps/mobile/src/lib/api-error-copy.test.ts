@@ -24,7 +24,6 @@ const ZH_HANT = translations['zh-Hant'].errors;
 const CONTRACT: ReadonlyArray<readonly [string, keyof typeof EN]> = [
   ['Invalid code', 'invalidCode'],
   ['This code has expired — request a new one', 'codeExpired'],
-  ['This change has expired — start again', 'changeExpired'],
   ['This code was already used', 'codeAlreadyUsed'],
   ['Could not send the code — try again later', 'codeSendFailed'],
   ['That is already your email', 'sameEmail'],
@@ -36,10 +35,7 @@ const CONTRACT: ReadonlyArray<readonly [string, keyof typeof EN]> = [
   ['New password must be different', 'passwordMustDiffer'],
   ['Change your email from Security settings', 'changeEmailInSecurity'],
   ['Change your phone from Security settings', 'changePhoneInSecurity'],
-  [
-    'Changing your phone now needs a code to your current contacts — please update the app',
-    'phoneChangeNeedsUpdate',
-  ],
+  ['Set a password before you change your sign-in email or phone', 'setPasswordFirst'],
   ['Use Forgot password on the sign-in page', 'useForgotPassword'],
   // 429 from the code's own attempt cap (backend account-code/shared.ts TOO_MANY_ATTEMPTS).
   ['Too many attempts — request a new code', 'tooManyCodeAttempts'],
@@ -76,7 +72,11 @@ describe('matchCodeFlowError', () => {
 
   test('tolerates a retyped dash, a trailing full stop, spacing and case', () => {
     expect(matchCodeFlowError('This code has expired - request a new one.')).toBe('codeExpired');
-    expect(matchCodeFlowError('  this change has expired – start again ')).toBe('changeExpired');
+    // Leading/trailing space + an EN dash + lower case, on a sentence the
+    // backend still sends (account-code/delivery.ts CODE_DELIVERY_FAILED_MESSAGE).
+    expect(matchCodeFlowError('  could not send the code – try again later ')).toBe(
+      'codeSendFailed',
+    );
     expect(matchCodeFlowError('Invalid  code.')).toBe('invalidCode');
   });
 
@@ -123,7 +123,6 @@ describe('isCodeRejection', () => {
   test.each([
     'Invalid code',
     'This code has expired — request a new one',
-    'This change has expired — start again',
     'This code was already used',
     'Too many attempts — request a new code',
   ])('%p is about the code — clear it', (message) => {

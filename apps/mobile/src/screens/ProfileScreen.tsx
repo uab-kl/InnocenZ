@@ -56,9 +56,9 @@ type Draft = {
   icName: string;
   /*
    * No email here. The sign-in email is read-only on this screen and changed
-   * only through Security settings, which verifies both the current contacts
-   * and the new address. The server refuses a different email on PATCH
-   * /user/:id ('Change your email from Security settings').
+   * only through Security settings, which asks for the current password and
+   * verifies the new address with a code. The server refuses a different email
+   * on PATCH /user/:id ('Change your email from Security settings').
    */
   height: number;
   weight: number;

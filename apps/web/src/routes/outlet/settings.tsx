@@ -804,7 +804,7 @@ function OutletSettingsPage() {
 				 * that is the organisation's owner record, which is the same for
 				 * everyone at the venue. A Director opening Login & security was
 				 * shown the OWNER's email as the one it was about to change.
-				 * Harmless only by luck: the OTP flow acts on the session's own
+				 * Harmless only by luck: the code flow acts on the session's own
 				 * account, so the screen named one address and would have changed
 				 * another.
 				 */
@@ -813,8 +813,8 @@ function OutletSettingsPage() {
 				/*
 				 * No `canEdit` — that is `settings:update` on the ORGANISATION, and
 				 * this sheet is the signed-in person's own account: change password,
-				 * change email and change mobile by codes sent by WhatsApp, SMS and
-				 * email. Nothing in it touches the venue.
+				 * and change email or mobile with the current password plus one code
+				 * to the NEW address or number. Nothing in it touches the venue.
 				 *
 				 * Gating it on the org permission locked every read-only outlet role
 				 * out of its own password. That is the entire editable surface a

@@ -1,19 +1,24 @@
 /**
  * Security settings — change password (current password), change phone and
- * change email (both verified twice), delete account.
+ * change email, delete account.
  *
- * Changing a phone or an email is three calls, and it is three on purpose:
+ * Changing a phone or an email is TWO calls (owner's decision, 21 Sep 2026):
  *
- *   1. start            → a code to the CURRENT phone (WhatsApp + SMS) and
- *                         CURRENT email: proves the person holding this signed-in
- *                         phone is the account's owner, not someone who picked
- *                         it up unlocked.
- *   2. verify-identity  → checks that code; the server sends a SECOND code to
- *                         the NEW contact.
- *   3. confirm          → checks the second code (proves the new contact is
- *                         really hers) and writes the change.
+ *   1. start    { kind, value, currentPassword } → one code to the NEW contact
+ *               (WhatsApp + SMS to a new number, email to a new address).
+ *      resend                                    → another code to the same new
+ *               contact, and a NEW `requestId` that replaces the one we hold.
+ *   2. confirm  { kind, value, requestId, code } → writes the change.
  *
- * Every step shows where its code went, using the server's masked `sentTo`.
+ * ⚠️ NOTHING IS EVER SENT TO THE OLD PHONE OR OLD EMAIL — not a code, and not a
+ * "your email was changed" notice afterwards. The identity code that used to go
+ * to the contacts already on file is GONE; the CURRENT PASSWORD took its place.
+ * That is why the first sheet asks for the password beside the new value: the
+ * password says the person holding this unlocked phone owns the account, and the
+ * code to the new contact says she typed it correctly and can receive on it —
+ * without which a typo would lock her out of her own account.
+ *
+ * Both steps show where the code went, using the server's masked `sentTo`.
  *
  * ⚠️ Changing the password, the phone or the email re-issues the session token
  * and stamps a cutoff that refuses every older token. The new token is stored
@@ -36,7 +41,6 @@ import {
   deleteOwnAccount,
   resendContactChangeNewCode,
   startContactChange,
-  verifyContactChangeIdentity,
   type CodeDelivery,
   type ContactKind,
 } from '../lib/api';
@@ -70,11 +74,9 @@ type Sheet =
   | null
   | 'menu'
   | 'password'
-  /** Step 1 — type the new phone / email. */
+  /** Step 1 — the new phone / email, and the current password. */
   | 'contact'
-  /** Step 2 — the code sent to the CURRENT contacts. */
-  | 'identity'
-  /** Step 3 — the code sent to the NEW contact. */
+  /** Step 2 — the code sent to the NEW contact. */
   | 'newCode'
   | 'delete'
   /**
@@ -131,16 +133,31 @@ export function SecurityScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [emailInput, setEmailInput] = useState('');
   /**
-   * The normalised new value, frozen when step 1 succeeds. All three calls must
-   * send the SAME value (the server binds the codes to it), so steps 2 and 3
-   * never re-read the text boxes.
+   * The current password, typed on the CONTACT sheet — its own state, never
+   * `curPw`, which belongs to the password sheet and is cleared on a different
+   * schedule. Sharing one box would leave a password behind one sheet after the
+   * other cleared it, and clear it under the PR mid-flow.
+   *
+   * ⚠️ Deliberately NOT cleared by `resetContactFlow`: that also runs when a
+   * taken address sends her back to step 1 to pick another value, and making
+   * her retype the password for the server's own refusal is busywork.
+   */
+  const [contactPw, setContactPw] = useState('');
+  /**
+   * The normalised new value, frozen when step 1 succeeds. Both calls must send
+   * the SAME value (the server binds the code to it), so step 2 never re-reads
+   * the text boxes.
    */
   const [pendingValue, setPendingValue] = useState('');
+  /**
+   * The open code row. ⚠️ A RESEND ANSWERS A NEW ONE and this must be replaced
+   * with it — the server retires the previous row as it sends, so confirming
+   * with the old id collects "This code has expired".
+   */
   const [requestId, setRequestId] = useState<string | null>(null);
-  const [newRequestId, setNewRequestId] = useState<string | null>(null);
-  const [identitySentTo, setIdentitySentTo] = useState<CodeDelivery[]>([]);
-  const [newSentTo, setNewSentTo] = useState<CodeDelivery[]>([]);
-  const [expiresInSec, setExpiresInSec] = useState(300);
+  /** Where the code went — the NEW contact, masked by the server. */
+  const [sentTo, setSentTo] = useState<CodeDelivery[]>([]);
+  const [expiresInSec, setExpiresInSec] = useState(600);
   const [pendingInvites, setPendingInvites] = useState(0);
   const [code, setCode] = useState('');
   const [resendIn, setResendIn] = useState(0);
@@ -203,6 +220,9 @@ export function SecurityScreen() {
       setNewPw('');
       setConfirmPw('');
       setDeletePw('');
+      // The contact sheet's password goes too — resetContactFlow keeps it on
+      // purpose (see contactPw), but a dead session is not a recoverable step.
+      setContactPw('');
       resetContactFlow();
     }
     setSignInAfter(reason);
@@ -218,19 +238,23 @@ export function SecurityScreen() {
           ? t.security.emailUpdated
           : t.security.phoneUpdated;
 
+  /**
+   * ⚠️ Leaves `contactPw` alone. This also runs when the server refuses the new
+   * value (taken since she started) and sends her back to step 1 to pick
+   * another — her password is still right, and clearing it there is busywork.
+   * The places that must drop it clear it themselves.
+   */
   const resetContactFlow = () => {
     setPendingValue('');
     setRequestId(null);
-    setNewRequestId(null);
-    setIdentitySentTo([]);
-    setNewSentTo([]);
+    setSentTo([]);
     setPendingInvites(0);
     setCode('');
     setResendIn(0);
   };
 
   /** A code is outstanding — closing the sheet would throw it away. */
-  const codeOutstanding = sheet === 'identity' || sheet === 'newCode';
+  const codeOutstanding = sheet === 'newCode';
 
   const requestCloseSheet = () => {
     if (signInAfter) {
@@ -250,6 +274,9 @@ export function SecurityScreen() {
     setContactKind(kind);
     setPhoneNumber('');
     setEmailInput('');
+    // A fresh change starts with an empty password box, never one left over
+    // from the change before it.
+    setContactPw('');
     setError(null);
     setMsg(null);
     setSheet('contact');
@@ -310,24 +337,34 @@ export function SecurityScreen() {
     void refreshMe(accessToken).catch(() => undefined);
   };
 
-  /** Step 1 (and its resend): a code to the CURRENT phone + email. */
-  const requestIdentityCode = async (kind: ContactKind, value: string) => {
-    if (!token || busy || !value) return;
+  /**
+   * Step 1: the current password, and one code to the NEW contact.
+   *
+   * A refusal keeps her on the contact sheet — every one of them is about
+   * something in front of her (the password, the value, a cooldown), and the
+   * value she typed is still in the box to correct.
+   */
+  const requestNewContactCode = async (kind: ContactKind, value: string) => {
+    if (!token || busy || !value || !contactPw) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await startContactChange(token, kind, value);
+      const res = await startContactChange(token, kind, value, contactPw);
       setPendingValue(value);
       setRequestId(res.requestId);
-      setNewRequestId(null);
-      setIdentitySentTo(res.sentTo ?? []);
-      setNewSentTo([]);
-      setExpiresInSec(res.expiresInSec ?? 300);
+      setSentTo(res.sentTo ?? []);
+      setExpiresInSec(res.expiresInSec ?? 600);
       setResendIn(res.resendAfterSec ?? 60);
       setPendingInvites(kind === 'email' ? res.pendingInvitesToCurrentEmail ?? 0 : 0);
       setCode('');
-      setSheet('identity');
+      setSheet('newCode');
     } catch (e) {
+      /*
+       * ⚠️ A WRONG PASSWORD IS 400, NOT 401 — the server says so deliberately,
+       * and `isSessionRefusal` checks the sentence as well as the status, so
+       * 'Current password is incorrect' falls through to the error line below
+       * instead of signing her out over a typo.
+       */
       if (sessionRefused(e)) {
         requireSignInAgain('sessionEnded');
         return;
@@ -340,10 +377,11 @@ export function SecurityScreen() {
   };
 
   const startChange = () => {
+    if (!contactPw) return;
     if (contactKind === 'phone') {
       if (!localDigits) return;
       savePhoneCountryCode(phoneCountryCode);
-      void requestIdentityCode('phone', `+${fullPhone.replace(/^\+/, '')}`);
+      void requestNewContactCode('phone', `+${fullPhone.replace(/^\+/, '')}`);
       return;
     }
     const value = normalizeEmailInput(emailInput);
@@ -352,82 +390,18 @@ export function SecurityScreen() {
       setError(t.profile.emailInvalid);
       return;
     }
-    void requestIdentityCode('email', value);
+    void requestNewContactCode('email', value);
   };
 
-  /** Step 2: check the identity code; the server then codes the NEW contact. */
-  const verifyIdentity = async () => {
-    if (!token || !requestId || !isCompleteCode(code) || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await verifyContactChangeIdentity(token, {
-        requestId,
-        kind: contactKind,
-        value: pendingValue,
-        code,
-      });
-      setNewRequestId(res.newRequestId);
-      setNewSentTo(res.sentTo ?? []);
-      setExpiresInSec(res.expiresInSec ?? 600);
-      setResendIn(res.resendAfterSec ?? 60);
-      setCode('');
-      setSheet('newCode');
-    } catch (e) {
-      // Refused before the controller ran: the identity code was never checked.
-      if (sessionRefused(e)) {
-        requireSignInAgain('sessionEnded');
-        return;
-      }
-      const status = e instanceof ApiError ? e.status : 0;
-      const message = e instanceof ApiError ? e.message : '';
-      const refusal = message ? matchCodeFlowError(message) : null;
-
-      if (refusal === 'emailTaken' || refusal === 'phoneTaken') {
-        // Taken while she was reading the code. No code can fix that: back to
-        // step 1, where the value she typed is still in the box to change.
-        resetContactFlow();
-        setError(describeError(e, t.security.sendCodeFailed));
-        setSheet('contact');
-        return;
-      }
-
-      if (status >= 500 || refusal === 'codeAlreadyUsed') {
-        /*
-         * The identity code was — or may have been — ACCEPTED: the server marks
-         * it verified BEFORE it sends the second code, so a send that fails
-         * afterwards (503, 500) or a second tap that lost the race (409) leaves
-         * it spent. Typing it again can only answer "This change has expired".
-         * Step 3's Resend calls resend-new, which needs no new identity code; if
-         * the identity step was in fact never proven, resend-new says the change
-         * expired and Start again is right there.
-         */
-        setNewRequestId(null);
-        setNewSentTo([]);
-        setCode('');
-        setResendIn(0);
-        setExpiresInSec(600);
-        setSheet('newCode');
-        // The empty `sentTo` already reads "could not be delivered — try Resend";
-        // only an unexplained server error is worth a second line.
-        setError(
-          status >= 500 && refusal !== 'codeSendFailed'
-            ? describeError(e, t.security.sendCodeFailed)
-            : null,
-        );
-        return;
-      }
-
-      noteCooldown(e);
-      // A limiter's 429 leaves the code valid — keep what she typed.
-      if (isCodeRejection(message)) setCode('');
-      setError(describeError(e, t.security.sendCodeFailed));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /** Step 3's resend — the identity step stays proven for 15 minutes. */
+  /**
+   * Another code to the same new contact. No password — the `requestId` is the
+   * proof, and asking again would mean holding her password behind the code
+   * sheet for the whole flow.
+   *
+   * ⚠️ THE ANSWER CARRIES A NEW `requestId` AND IT REPLACES THE OLD ONE. The
+   * server retires the previous row as it sends the next code, so confirming
+   * with the id we arrived holding would be refused as expired.
+   */
   const resendNewCode = async () => {
     if (!token || !requestId || busy) return;
     setBusy(true);
@@ -438,14 +412,24 @@ export function SecurityScreen() {
         kind: contactKind,
         value: pendingValue,
       });
-      setNewRequestId(res.newRequestId);
-      setNewSentTo(res.sentTo ?? []);
+      setRequestId(res.requestId);
+      setSentTo(res.sentTo ?? []);
       setExpiresInSec(res.expiresInSec ?? 600);
       setResendIn(res.resendAfterSec ?? 60);
       setCode('');
     } catch (e) {
       if (sessionRefused(e)) {
         requireSignInAgain('sessionEnded');
+        return;
+      }
+      const message = e instanceof ApiError ? e.message : '';
+      const refusal = message ? matchCodeFlowError(message) : null;
+      if (refusal === 'emailTaken' || refusal === 'phoneTaken') {
+        // Taken while she waited. No code can fix that: back to step 1, with her
+        // password still typed, to choose another value.
+        resetContactFlow();
+        setError(describeError(e, t.security.sendCodeFailed));
+        setSheet('contact');
         return;
       }
       noteCooldown(e);
@@ -455,9 +439,9 @@ export function SecurityScreen() {
     }
   };
 
-  /** Step 3: the new contact's code — writes the change. */
+  /** Step 2: the new contact's code — writes the change. */
   const confirmChange = async () => {
-    if (!token || !requestId || !newRequestId || !isCompleteCode(code) || busy) return;
+    if (!token || !requestId || !isCompleteCode(code) || busy) return;
     const kind = contactKind;
     setBusy(true);
     setError(null);
@@ -465,7 +449,6 @@ export function SecurityScreen() {
     try {
       result = await confirmContactChange(token, {
         requestId,
-        newRequestId,
         kind,
         value: pendingValue,
         code,
@@ -484,7 +467,7 @@ export function SecurityScreen() {
         kind === 'email' ? t.security.updateEmailFailed : t.security.updatePhoneFailed,
       );
       if (refusal === 'emailTaken' || refusal === 'phoneTaken') {
-        // Taken since step 2 — back to step 1 to choose another.
+        // Taken since step 1 — back there to choose another (password kept).
         resetContactFlow();
         setError(failed);
         setSheet('contact');
@@ -511,6 +494,8 @@ export function SecurityScreen() {
     resetContactFlow();
     setPhoneNumber('');
     setEmailInput('');
+    // The change is written — the password has nothing left to prove here.
+    setContactPw('');
     setBusy(false);
     if (!accessToken) {
       // Changed, but no token to carry on with — the old one is already dead.
@@ -644,6 +629,8 @@ export function SecurityScreen() {
                   onPress={() => {
                     setConfirmDiscard(false);
                     resetContactFlow();
+                    // Leaving the flow entirely — the password goes with it.
+                    setContactPw('');
                     setError(null);
                     setSheet(null);
                   }}
@@ -779,12 +766,26 @@ export function SecurityScreen() {
                     />
                   </>
                 )}
+                {/*
+                 * The proof that replaced the code to the old contact. Its own
+                 * state, and the same Field the password sheet uses — one look
+                 * and one cap (bcrypt's 72 bytes) for the same thing.
+                 */}
+                <Field
+                  label={t.security.currentPassword}
+                  value={contactPw}
+                  onChange={setContactPw}
+                  secure
+                  maxLength={PASSWORD_MAX}
+                />
                 {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
                   style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
                   onPress={startChange}
                   disabled={
-                    busy || (contactKind === 'phone' ? !localDigits : !emailInput.trim())
+                    busy ||
+                    !contactPw ||
+                    (contactKind === 'phone' ? !localDigits : !emailInput.trim())
                   }
                 >
                   <Text style={styles.primaryText}>
@@ -804,14 +805,25 @@ export function SecurityScreen() {
               </>
             )}
 
-            {!confirmDiscard && sheet === 'identity' && (
+            {!confirmDiscard && sheet === 'newCode' && (
               <>
-                <Text style={styles.sheetTitle}>{t.security.identityTitle}</Text>
-                <Text style={codeReachedSomewhere(identitySentTo) ? styles.sentTo : styles.notSent}>
-                  {describeCodeDelivery(identitySentTo, t.security)}
+                <Text style={styles.sheetTitle}>
+                  {contactKind === 'email'
+                    ? t.security.newEmailCodeTitle
+                    : t.security.newPhoneCodeTitle}
+                </Text>
+                <Text style={codeReachedSomewhere(sentTo) ? styles.sentTo : styles.notSent}>
+                  {describeCodeDelivery(sentTo, t.security)}
                 </Text>
                 <Text style={styles.sheetHint}>{codeValidLine}</Text>
-                {pendingInvites > 0 ? (
+                {/*
+                 * ⚠️ THE INVITATION WARNING LIVES HERE NOW. It used to render on
+                 * the identity sheet, which is gone — left there it would simply
+                 * never be seen, and a PR would lose invitations she was never
+                 * told about. Email only: `pendingInvites` is zeroed for a phone
+                 * change, but the guard says so at the render site too.
+                 */}
+                {contactKind === 'email' && pendingInvites > 0 ? (
                   <Text style={styles.warning}>
                     {formatMessage(t.security.pendingInvites, { n: pendingInvites })}
                   </Text>
@@ -826,62 +838,8 @@ export function SecurityScreen() {
                 {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
                   style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
-                  onPress={() => void verifyIdentity()}
-                  disabled={busy || !isCompleteCode(code)}
-                >
-                  <Text style={styles.primaryText}>
-                    {busy ? t.forgot.verifying : t.forgot.verify}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={styles.sheetCancel}
-                  onPress={() =>
-                    resendIn === 0 && void requestIdentityCode(contactKind, pendingValue)
-                  }
-                  disabled={resendIn > 0 || busy}
-                >
-                  <Text style={styles.sheetCancelText}>{resendLabel}</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.sheetCancel}
-                  onPress={() => {
-                    resetContactFlow();
-                    setError(null);
-                    setSheet('contact');
-                  }}
-                  disabled={busy}
-                >
-                  <Text style={styles.sheetCancelText}>{t.security.startAgain}</Text>
-                </Pressable>
-              </>
-            )}
-
-            {!confirmDiscard && sheet === 'newCode' && (
-              <>
-                <Text style={styles.sheetTitle}>
-                  {contactKind === 'email'
-                    ? t.security.newEmailCodeTitle
-                    : t.security.newPhoneCodeTitle}
-                </Text>
-                <Text style={codeReachedSomewhere(newSentTo) ? styles.sentTo : styles.notSent}>
-                  {describeCodeDelivery(newSentTo, t.security)}
-                </Text>
-                {/* No second code exists yet, so there is no validity to state. */}
-                {newRequestId ? <Text style={styles.sheetHint}>{codeValidLine}</Text> : null}
-                <Field
-                  label={t.security.otpLabel}
-                  value={code}
-                  onChange={(v) => setCode(normalizeOtpInput(v))}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                />
-                {error ? <Text style={styles.sheetError}>{error}</Text> : null}
-                <Pressable
-                  style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
                   onPress={() => void confirmChange()}
-                  // No newRequestId = the second code never went out (see
-                  // verifyIdentity): Resend below is the way forward.
-                  disabled={busy || !newRequestId || !isCompleteCode(code)}
+                  disabled={busy || !requestId || !isCompleteCode(code)}
                 >
                   <Text style={styles.primaryText}>
                     {busy ? t.forgot.saving : t.security.verifyAndSave}

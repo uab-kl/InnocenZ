@@ -120,13 +120,24 @@ export const env = createEnv({
      */
     SMS_PROVIDER: z.string().min(1).optional(),
     /**
-     * `true` = every account-code channel (WhatsApp, SMS, email) LOGS the code
-     * instead of sending it. Honoured ONLY when NODE_ENV !== 'production' — a
-     * production process ignores it, so it can never switch real delivery off.
+     * WHICH CHANNELS LOG THE CODE INSTEAD OF SENDING IT. Per channel since
+     * 21 Sep 2026 — it used to be all or nothing.
+     *
+     *   unset / `false`  nothing held back; every configured channel sends
+     *   `true`           WhatsApp, SMS and email all log instead
+     *   `sms`            only SMS logs — WhatsApp and email really send
+     *   `sms,email`      a comma list, in any order
+     *
+     * Honoured ONLY when NODE_ENV !== 'production' — a production process
+     * ignores it, so it can never switch real delivery off for a customer.
      * Exists because developers share the innocenz-test database and real
      * accounts: testing a code flow should not message a real person.
+     *
+     * ⚠️ Not an enum, because the value is a LIST. An unrecognised word is
+     * ignored by `logOnlyChannels()` rather than read as "hold everything" — a
+     * typo here must never silently stop codes from reaching people.
      */
-    OTP_DELIVERY_LOG_ONLY: z.enum(['true', 'false']).optional(),
+    OTP_DELIVERY_LOG_ONLY: z.string().optional(),
   },
   runtimeEnv: {
     ...process.env,

@@ -12,8 +12,12 @@
 export const SMS_CODE_TEXT =
   'RM0.00 InnocenZ: your code is {code}. Valid {minutes} minutes. Never share it.';
 
-export const SMS_PHONE_CHANGED_NOTICE_TEXT =
-  'RM0.00 InnocenZ: the phone number on your account was changed. If this was not you, contact InnocenZ support now.';
+/*
+ * ⚠️ SMS_PHONE_CHANGED_NOTICE_TEXT was DELETED on 21 Sep 2026. It was the SMS
+ * telling the OLD number that the account's phone had moved, and the owner
+ * removed every message to the old contact along with the identity code, so it
+ * lost its only caller. Bring it back only with the notice it belongs to.
+ */
 
 export function smsCodeText(code: string, minutes: number): string {
   return SMS_CODE_TEXT.replace('{code}', code).replace('{minutes}', String(minutes));

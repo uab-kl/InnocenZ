@@ -94,8 +94,9 @@ type SessionState = {
    * criteria up. Change the phone number and a phone-keyed token points at a
    * number nobody holds: the next call answers 401 `Unauthorized`, which is
    * exactly what the Security screen was showing after a change that had in
-   * fact SUCCEEDED. `/auth/phone/change` now returns a fresh pair; this is how
-   * it gets kept.
+   * fact SUCCEEDED. `/auth/contact-change/confirm` returns a fresh pair
+   * (`reissueTokens` in contact-change.controller.ts); this is how it gets
+   * kept. It replaced `/auth/phone/change`, deleted 21 Sep 2026.
    */
   adoptToken: (accessToken: string) => void;
   updateProfile: (patch: ProfileUpdate) => Promise<Me>;

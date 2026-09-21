@@ -1,33 +1,44 @@
 /**
- * CHANGING YOUR OWN SIGN-IN EMAIL OR PHONE — two codes, four calls.
+ * CHANGING YOUR OWN SIGN-IN EMAIL OR PHONE — one code, three calls.
  *
- * Owner, 17 Sep 2026: "send the otp via whatapps, email and the sms" for change
- * phone and change email, with the email change "verified by the phone on file
- * and the new email". Every role (outlet, agency, PR, admin), web and app.
+ * Owner, 21 Sep 2026: "only send to new contact (Change new phone / email,
+ * step 2 (new contact)) … this no need send whatapps otp, sms otp and the
+ * email otp to the old email or phone". Every role (outlet, agency, PR,
+ * admin), web and app.
  *
- * ⚠️ WHY TWO CODES. The old web phone change proved only that the person held
- * the NEW handset — so anyone who sat down at an unlocked session could move
- * the account's number to their own phone and then reset the password with it.
- * The email lane had no proof at all and was switched off. Now:
+ * ⚠️ NOTHING EVER REACHES THE OLD PHONE OR OLD EMAIL — not a code, and not a
+ * notice afterwards either. The build that ran until 21 Sep 2026 sent code #1
+ * to the contacts already on file; that step is retired and its two routes
+ * (`verify-identity`, `resend-new`) were DELETED outright — owner, 21 Sep 2026:
+ * "no error page no show this 'retired, answers 400 please update the app'".
+ * They answer the router's own 404 now, not a sentence, so there is nothing
+ * here to translate for a client still calling them.
  *
- *   1. `start`           — code #1 to the CURRENT contacts (WhatsApp + SMS to
- *                          the phone on file, email to the email on file).
- *                          Proves the person still holds the account's own
- *                          channels.
- *   2. `verify-identity` — spends code #1, then sends code #2 to the NEW
- *                          contact (email → the new address; phone → WhatsApp
- *                          + SMS to the new number). Proves they hold that too.
- *   3. `resend-new`      — a fresh code #2, while #1 is still fresh (15 min).
- *   4. `confirm`         — spends code #2 and writes the change in one
- *                          transaction. Answers with a RE-ISSUED token pair.
+ * THE TWO PROOFS ARE NOW:
+ *
+ *   1. `start`   { kind, value, currentPassword } — the CURRENT PASSWORD says
+ *                the person at this session is the account's owner and not
+ *                somebody who sat down at an unlocked screen. The server then
+ *                sends ONE code to the NEW contact (new email → that address;
+ *                new phone → WhatsApp + SMS to that number), which says they
+ *                typed it correctly and can receive on it — without that, a
+ *                typo locks them out of their own account.
+ *      `resend`  { kind, value, requestId } — another code to the same new
+ *                contact, and deliberately NO password: the `requestId` is
+ *                itself the proof, and asking again would mean this client
+ *                holding the password in memory behind the code sheet for the
+ *                whole flow. ⚠️ It answers a NEW `requestId` — the caller must
+ *                replace the one it holds, or confirm spends a dead row.
+ *   2. `confirm` { kind, value, requestId, code } — spends the code and writes
+ *                the change in one transaction. Answers a RE-ISSUED token pair.
  *
  * The server reads WHOSE account from the bearer token, never from the body, so
  * this can only ever change the signed-in person's own contact.
  *
  * ⚠️ `value` is normalised here on EVERY call, identically. The server binds the
- * value into each code's hash, so "0123456789" at step 1 and "+60123456789" at
- * step 2 would be two different requests and the second would answer
- * "Invalid code" for a code that was right.
+ * value into the code's hash, so "0123456789" at start and "+60123456789" at
+ * confirm would be two different requests and the second would answer "Invalid
+ * code" for a code that was right.
  */
 import { apiErrorCopy } from "@/lib/auth/api-error-copy";
 import {
@@ -49,15 +60,12 @@ export interface ContactChangeStarted {
 	sentTo: CodeDelivery[];
 	expiresInSec: number;
 	resendAfterSec: number;
-	/** Open organisation invites addressed to the CURRENT email (email lane). */
+	/**
+	 * Open organisation invites addressed to the CURRENT email (email lane).
+	 * ⚠️ `resend` always answers 0 — only `start` counts them — so a caller
+	 * holding a count from `start` must not overwrite it with a resend's.
+	 */
 	pendingInvitesToCurrentEmail: number;
-}
-
-export interface ContactChangeNewCodeSent {
-	newRequestId: string;
-	sentTo: CodeDelivery[];
-	expiresInSec: number;
-	resendAfterSec: number;
 }
 
 export interface ContactChangeConfirmed {
@@ -93,10 +101,43 @@ function numberOr(value: unknown, fallback: number): number {
 		: fallback;
 }
 
-/** Step 1 — a code to the account's CURRENT phone and email. */
+/**
+ * `start` and `resend` answer the same shape — a code is on its way to the new
+ * contact and here is the row it belongs to. Read once, so the two can never
+ * disagree about which field carries the id.
+ */
+function readStarted(
+	response: ApiEnvelope<Partial<ContactChangeStarted> | null>,
+	failed: string,
+): ContactChangeStarted {
+	const data = response.data;
+	if (!response.success || !data?.requestId) {
+		throw new AuthFlowError(response.message || failed);
+	}
+	return {
+		requestId: data.requestId,
+		sentTo: readDeliveries(data.sentTo),
+		expiresInSec: numberOr(data.expiresInSec, 600),
+		resendAfterSec: numberOr(data.resendAfterSec, 60),
+		pendingInvitesToCurrentEmail: numberOr(
+			data.pendingInvitesToCurrentEmail,
+			0,
+		),
+	};
+}
+
+/**
+ * Step 1 — prove it is you with the CURRENT PASSWORD; a code goes to the NEW
+ * contact and nowhere else.
+ *
+ * ⚠️ A wrong password is HTTP 400 ("Current password is incorrect"), never 401:
+ * this client signs a person out on any 401, so one typo used to throw them to
+ * the login page.
+ */
 export async function startContactChange(input: {
 	kind: ContactKind;
 	value: string;
+	currentPassword: string;
 }): Promise<ContactChangeStarted> {
 	const failed = apiErrorCopy().authCodes.codeSendFailed;
 	const client = getClient(kickToLogin);
@@ -106,90 +147,45 @@ export async function startContactChange(input: {
 		>("/auth/contact-change/start", {
 			kind: input.kind,
 			value: normaliseContactValue(input.kind, input.value),
+			currentPassword: input.currentPassword,
 		});
-		const data = response.data.data;
-		if (!response.data.success || !data?.requestId) {
-			throw new AuthFlowError(response.data.message || failed);
-		}
-		return {
-			requestId: data.requestId,
-			sentTo: readDeliveries(data.sentTo),
-			expiresInSec: numberOr(data.expiresInSec, 300),
-			resendAfterSec: numberOr(data.resendAfterSec, 60),
-			pendingInvitesToCurrentEmail: numberOr(
-				data.pendingInvitesToCurrentEmail,
-				0,
-			),
-		};
-	} catch (error) {
-		throw toAuthFlowError(error, failed);
-	}
-}
-
-function readNewCodeSent(
-	response: ApiEnvelope<Partial<ContactChangeNewCodeSent> | null>,
-	failed: string,
-): ContactChangeNewCodeSent {
-	const data = response.data;
-	if (!response.success || !data?.newRequestId) {
-		throw new AuthFlowError(response.message || failed);
-	}
-	return {
-		newRequestId: data.newRequestId,
-		sentTo: readDeliveries(data.sentTo),
-		expiresInSec: numberOr(data.expiresInSec, 600),
-		resendAfterSec: numberOr(data.resendAfterSec, 60),
-	};
-}
-
-/** Step 2 — spend code #1; the server sends code #2 to the NEW contact. */
-export async function verifyContactChangeIdentity(input: {
-	requestId: string;
-	kind: ContactKind;
-	value: string;
-	code: string;
-}): Promise<ContactChangeNewCodeSent> {
-	const failed = apiErrorCopy().authCodes.codeCheckFailed;
-	const client = getClient(kickToLogin);
-	try {
-		const response = await client.post<
-			ApiEnvelope<Partial<ContactChangeNewCodeSent> | null>
-		>("/auth/contact-change/verify-identity", {
-			requestId: input.requestId,
-			kind: input.kind,
-			value: normaliseContactValue(input.kind, input.value),
-			code: input.code.trim(),
-		});
-		return readNewCodeSent(response.data, failed);
-	} catch (error) {
-		throw toAuthFlowError(error, failed);
-	}
-}
-
-/** A fresh code #2 — only while code #1 was verified in the last 15 minutes. */
-export async function resendContactChangeNewCode(input: {
-	requestId: string;
-	kind: ContactKind;
-	value: string;
-}): Promise<ContactChangeNewCodeSent> {
-	const failed = apiErrorCopy().authCodes.codeSendFailed;
-	const client = getClient(kickToLogin);
-	try {
-		const response = await client.post<
-			ApiEnvelope<Partial<ContactChangeNewCodeSent> | null>
-		>("/auth/contact-change/resend-new", {
-			requestId: input.requestId,
-			kind: input.kind,
-			value: normaliseContactValue(input.kind, input.value),
-		});
-		return readNewCodeSent(response.data, failed);
+		return readStarted(response.data, failed);
 	} catch (error) {
 		throw toAuthFlowError(error, failed);
 	}
 }
 
 /**
- * Step 3 — spend code #2 and write the change.
+ * Another code to the SAME new contact — no password.
+ *
+ * ⚠️ The answer carries a NEW `requestId`, because the server issues a fresh
+ * row and expires the old one. Keeping the previous id would confirm against a
+ * row that no longer exists ("This code has expired — request a new one") with
+ * a code the person just read off their phone.
+ */
+export async function resendContactChangeNewCode(input: {
+	requestId: string;
+	kind: ContactKind;
+	value: string;
+}): Promise<ContactChangeStarted> {
+	const failed = apiErrorCopy().authCodes.codeSendFailed;
+	const client = getClient(kickToLogin);
+	try {
+		const response = await client.post<
+			ApiEnvelope<Partial<ContactChangeStarted> | null>
+		>("/auth/contact-change/resend", {
+			requestId: input.requestId,
+			kind: input.kind,
+			value: normaliseContactValue(input.kind, input.value),
+		});
+		return readStarted(response.data, failed);
+	} catch (error) {
+		throw toAuthFlowError(error, failed);
+	}
+}
+
+/**
+ * Step 2 — spend the code and write the change.
  *
  * ⚠️ The re-issued tokens are stored HERE, inside the call, before it resolves.
  * The write stamped `sessions_valid_from`, so the token this tab sent a moment
@@ -199,7 +195,6 @@ export async function resendContactChangeNewCode(input: {
  */
 export async function confirmContactChange(input: {
 	requestId: string;
-	newRequestId: string;
 	kind: ContactKind;
 	value: string;
 	code: string;
@@ -218,7 +213,6 @@ export async function confirmContactChange(input: {
 			} | null>
 		>("/auth/contact-change/confirm", {
 			requestId: input.requestId,
-			newRequestId: input.newRequestId,
 			kind: input.kind,
 			value: normaliseContactValue(input.kind, input.value),
 			code: input.code.trim(),

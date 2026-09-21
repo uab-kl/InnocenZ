@@ -12,6 +12,7 @@ import type {
   PhoneVerificationStatus,
 } from '@/features/auth/phone-verification.model.js';
 import type { UserType } from '@/features/user/user.model.js';
+import type { ContactChangeDeps } from './contact-change.controller.js';
 import type { CodeRowStore, NewCodeRow } from './shared.js';
 
 export const NOW = Date.parse('2026-09-17T10:00:00.400Z');
@@ -167,11 +168,63 @@ export function fakeDeliver(ok = true) {
   });
 }
 
+/**
+ * ⚠️ ONE NOTICE. `emailChanged` / `phoneChanged` were removed on 21 Sep 2026
+ * with the identity code — nothing reaches the old phone or the old email any
+ * more, neither a code before the change nor a word after it. Keeping dead fakes
+ * here would let a test "prove" a notice that production can no longer send.
+ */
 export function fakeNotices() {
   return {
     passwordChanged: vi.fn(async () => {}),
-    emailChanged: vi.fn(async () => {}),
-    phoneChanged: vi.fn(async () => {}),
+  };
+}
+
+/**
+ * How many times ANY notice fired — the instrument for "nothing reached the old
+ * contact". Counted across every key, so a notice added back later is seen by
+ * the same assertion instead of slipping past a name-by-name check.
+ */
+export function firedNotices(notices: ReturnType<typeof fakeNotices>): number {
+  return Object.values(notices).reduce((total, fn) => total + fn.mock.calls.length, 0);
+}
+
+/**
+ * The `comparePassword` a contact change now proves itself with. Default TRUE,
+ * so a test that is not about the password says nothing about it; a test that is
+ * builds it with `false`, or calls `.mockResolvedValueOnce(false)`.
+ */
+export function fakeComparePassword(ok = true) {
+  return vi.fn(async (_password: string, _hash: string) => ok);
+}
+
+/**
+ * Every dependency of ContactChangeControllerClass, faked — override the ones a
+ * test drives. Shared so that a new dependency (comparePassword was the last
+ * one) is added in ONE place rather than in each suite that builds a controller.
+ */
+export function fakeContactChangeDeps(
+  overrides: Partial<ContactChangeDeps> = {},
+): ContactChangeDeps {
+  return {
+    users: {
+      getUserByLoginMethod: vi.fn(async () => null),
+      getUserById: vi.fn(async () => null),
+    },
+    codes: fakeCodeStore(),
+    accounts: {
+      completePasswordReset: vi.fn(),
+      isContactTaken: vi.fn(async () => false),
+      applyContactChange: vi.fn(),
+    } as never,
+    deliver: fakeDeliver(true),
+    notices: fakeNotices(),
+    hashPassword: async (password: string) => `hash:${password}`,
+    comparePassword: fakeComparePassword(),
+    now: () => NOW,
+    jwt: {} as never,
+    countPendingInvites: vi.fn(async () => 0),
+    ...overrides,
   };
 }
 

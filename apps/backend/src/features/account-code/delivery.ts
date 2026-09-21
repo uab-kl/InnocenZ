@@ -32,9 +32,10 @@ import { toWhatsAppDigits } from './phone.js';
  * reached nobody must not look like a code on its way. Outside production a
  * `logged` channel is enough, because the log is how a developer reads it.
  *
- * `OTP_DELIVERY_LOG_ONLY=true` makes EVERY channel log instead of send — but
- * only when NODE_ENV !== 'production'. A production process ignores it, so it
- * can never turn real delivery off.
+ * `OTP_DELIVERY_LOG_ONLY` holds channels BACK, one at a time: `sms` logs the
+ * SMS while WhatsApp and email really send, `true` holds all three, unset holds
+ * none. Honoured only when NODE_ENV !== 'production', so a production process
+ * ignores it and real delivery can never be switched off for a customer.
  *
  * ⚠️ The code itself is written to the log ONLY on a non-production `logged`
  * path. Every production log line here carries the channel and purpose, never
@@ -101,9 +102,46 @@ export function isProduction(): boolean {
   return env.NODE_ENV === 'production';
 }
 
-/** OTP_DELIVERY_LOG_ONLY, honoured only outside production. */
-export function deliveryLogOnly(): boolean {
-  return env.OTP_DELIVERY_LOG_ONLY === 'true' && !isProduction();
+const ALL_CHANNELS: readonly DeliveryChannel[] = ['whatsapp', 'sms', 'email'];
+
+function isChannel(value: string): value is DeliveryChannel {
+  return (ALL_CHANNELS as readonly string[]).includes(value);
+}
+
+/**
+ * WHICH CHANNELS ARE HELD BACK — `OTP_DELIVERY_LOG_ONLY`, now per channel.
+ *
+ *   unset / false    nothing is held back; every configured channel really sends
+ *   true             every channel is logged instead (what it used to mean)
+ *   sms              only SMS is logged; WhatsApp and email really send
+ *   sms,email        a comma list, in any order
+ *
+ * Per channel since 21 Sep 2026, because all-or-nothing forced a choice nobody
+ * wanted: either no real code at all, or a real SMS through a provider that
+ * does not exist yet. An unrecognised word is IGNORED rather than read as
+ * "hold everything" — a typo in this setting must never silently stop codes
+ * from reaching people.
+ *
+ * ⚠️ Ignored entirely in production, so it can never turn real delivery off for
+ * a live customer.
+ */
+export function logOnlyChannels(): ReadonlySet<DeliveryChannel> {
+  if (isProduction()) return new Set();
+  const raw = env.OTP_DELIVERY_LOG_ONLY?.trim().toLowerCase();
+  if (!raw || raw === 'false') return new Set();
+  if (raw === 'true') return new Set(ALL_CHANNELS);
+  return new Set(
+    raw
+      .split(',')
+      .map((part) => part.trim())
+      .filter(isChannel),
+  );
+}
+
+/** With a channel: is THAT one held back. Without: is anything held back at all. */
+export function deliveryLogOnly(channel?: DeliveryChannel): boolean {
+  const held = logOnlyChannels();
+  return channel ? held.has(channel) : held.size > 0;
 }
 
 /**
@@ -148,7 +186,7 @@ export async function deliverCode(
   senders: CodeSenders = defaultCodeSenders,
 ): Promise<DeliverCodeResult> {
   const production = isProduction();
-  const logOnly = deliveryLogOnly();
+  const heldBack = logOnlyChannels();
   const digits = toWhatsAppDigits(input.phone);
   const email = input.email?.trim().toLowerCase() || null;
   let waMessageId: string | null = null;
@@ -161,7 +199,7 @@ export async function deliverCode(
     tasks.push(
       (async (): Promise<ChannelDelivery> => {
         const channel = 'whatsapp' as const;
-        if (logOnly) {
+        if (heldBack.has(channel)) {
           devLogCode(channel, digits, input, 'OTP_DELIVERY_LOG_ONLY');
           return { channel, to, status: 'logged' };
         }
@@ -200,7 +238,7 @@ export async function deliverCode(
     tasks.push(
       (async (): Promise<ChannelDelivery> => {
         const channel = 'sms' as const;
-        if (logOnly) {
+        if (heldBack.has(channel)) {
           devLogCode(channel, digits, input, 'OTP_DELIVERY_LOG_ONLY');
           return { channel, to, status: 'logged' };
         }
@@ -227,7 +265,7 @@ export async function deliverCode(
     tasks.push(
       (async (): Promise<ChannelDelivery> => {
         const channel = 'email' as const;
-        if (logOnly) {
+        if (heldBack.has(channel)) {
           devLogCode(channel, email, input, 'OTP_DELIVERY_LOG_ONLY');
           return { channel, to, status: 'logged' };
         }

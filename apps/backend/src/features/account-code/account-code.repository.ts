@@ -118,16 +118,22 @@ export class AccountCodeRepositoryClass {
   }
 
   /**
-   * The contact change itself: spend the new-contact row AND the identity row,
-   * re-check the value is still free, write it, and cut the older sessions.
+   * The contact change itself: spend the new-contact row, re-check the value is
+   * still free, write it, and cut the older sessions. ONE row since the
+   * identity step was retired (owner, 21 Sep 2026).
    *
    * The re-check inside the transaction narrows the window between "free at
-   * start" and "written"; the unique index on `user.email` / `user.phone_num`
-   * closes it — a 23505 from either statement is reported as `taken`.
+   * start" and "written", and a 23505 is reported as `taken`.
+   *
+   * ⚠️ The unique index is only a PARTIAL backstop, and this comment used to
+   * claim it "closes" that window. `user_email_unique` / `user_phone_num_unique`
+   * are plain btrees over the RAW columns, while `isContactTaken` compares
+   * `lower(btrim(email))` and digits-only phones — so two values differing only
+   * in case, or in phone formatting, never collide in the index. The in-
+   * transaction re-check is what carries this, not the index.
    */
   async applyContactChange(input: {
-    identityRowId: string;
-    newRowId: string;
+    rowId: string;
     userId: string;
     kind: ContactKind;
     /** Already normalised: lowercase email, or '+digits'. */
@@ -137,12 +143,12 @@ export class AccountCodeRepositoryClass {
     try {
       const user = await db.transaction(async (tx) => {
         const now = new Date();
-        const newSpent = await tx
+        const spent = await tx
           .update(PhoneVerificationTable)
           .set({ status: 'consumed', updatedAt: now, updatedBy: input.userId })
           .where(
             and(
-              eq(PhoneVerificationTable.id, input.newRowId),
+              eq(PhoneVerificationTable.id, input.rowId),
               eq(PhoneVerificationTable.purpose, 'contact_change_new'),
               eq(PhoneVerificationTable.createdBy, input.userId),
               eq(PhoneVerificationTable.status, 'pending'),
@@ -150,21 +156,9 @@ export class AccountCodeRepositoryClass {
             ),
           )
           .returning({ id: PhoneVerificationTable.id });
-        if (newSpent.length === 0) throw new Outcome('already_used');
-
-        const identitySpent = await tx
-          .update(PhoneVerificationTable)
-          .set({ status: 'consumed', updatedAt: now, updatedBy: input.userId })
-          .where(
-            and(
-              eq(PhoneVerificationTable.id, input.identityRowId),
-              eq(PhoneVerificationTable.purpose, 'contact_change_identity'),
-              eq(PhoneVerificationTable.createdBy, input.userId),
-              eq(PhoneVerificationTable.status, 'verified'),
-            ),
-          )
-          .returning({ id: PhoneVerificationTable.id });
-        if (identitySpent.length === 0) throw new Outcome('already_used');
+        // Conditional on `pending`, so two taps racing on one code leave only
+        // one winner and the loser reads `already_used`.
+        if (spent.length === 0) throw new Outcome('already_used');
 
         if (await this.isContactTaken(input.kind, input.value, input.userId, tx)) {
           throw new Outcome('taken');
