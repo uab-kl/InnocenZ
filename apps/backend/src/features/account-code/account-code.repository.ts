@@ -47,17 +47,72 @@ export class AccountCodeRepositoryClass {
     passwordHash: string;
     cutoff: Date;
   }): Promise<'ok' | 'already_used'> {
+    return this.spendCodeAndWritePassword(input, {
+      purpose: 'reset_password',
+      scopeToCreator: false,
+      // The person could not sign in — that is why they are here. A reset that
+      // left the lockout standing would hand back a password they still cannot
+      // use.
+      clearLockout: true,
+    });
+  }
+
+  /**
+   * SIGNED-IN password change, completed: spend the row and write the password
+   * in one transaction, ending every session opened before this second.
+   *
+   * Two differences from the reset above, both deliberate:
+   *
+   *  • The row must have been created BY this account (`created_by`). A reset
+   *    row is addressed by an id handed out to whoever proved a contact; a
+   *    password-change row belongs to a session, so the account is part of the
+   *    condition as well as of the bound hash.
+   *  • The lockout is NOT cleared. Nothing here says the failed sign-ins were
+   *    this person — they arrived with a live session — so a lockout earned at
+   *    the login door keeps running. `proveIdentity` already refuses to issue a
+   *    code at all while one is in force.
+   */
+  async completePasswordChange(input: {
+    requestId: string;
+    userId: string;
+    passwordHash: string;
+    cutoff: Date;
+  }): Promise<'ok' | 'already_used'> {
+    return this.spendCodeAndWritePassword(input, {
+      purpose: 'password_change',
+      scopeToCreator: true,
+      clearLockout: false,
+    });
+  }
+
+  /**
+   * The body both password writes share: spend the code CONDITIONALLY on
+   * `pending` and unexpired, then write — so neither can happen without the
+   * other, and two taps racing on one code leave exactly one winner.
+   */
+  private async spendCodeAndWritePassword(
+    input: { requestId: string; userId: string; passwordHash: string; cutoff: Date },
+    options: {
+      purpose: 'reset_password' | 'password_change';
+      scopeToCreator: boolean;
+      clearLockout: boolean;
+    },
+  ): Promise<'ok' | 'already_used'> {
     try {
       await db.transaction(async (tx) => {
+        const now = new Date();
         const spent = await tx
           .update(PhoneVerificationTable)
-          .set({ status: 'consumed', updatedAt: new Date(), updatedBy: input.userId })
+          .set({ status: 'consumed', updatedAt: now, updatedBy: input.userId })
           .where(
             and(
               eq(PhoneVerificationTable.id, input.requestId),
-              eq(PhoneVerificationTable.purpose, 'reset_password'),
+              eq(PhoneVerificationTable.purpose, options.purpose),
+              ...(options.scopeToCreator
+                ? [eq(PhoneVerificationTable.createdBy, input.userId)]
+                : []),
               eq(PhoneVerificationTable.status, 'pending'),
-              gt(PhoneVerificationTable.expiresAt, new Date()),
+              gt(PhoneVerificationTable.expiresAt, now),
             ),
           )
           .returning({ id: PhoneVerificationTable.id });
@@ -66,7 +121,7 @@ export class AccountCodeRepositoryClass {
         await this.authRepository.updateUserPassword(input.userId, input.passwordHash, {
           tx,
           updatedBy: input.userId,
-          clearLockout: true,
+          clearLockout: options.clearLockout,
           cutoff: input.cutoff,
         });
       });

@@ -24,6 +24,7 @@ import {
   NO_PASSWORD,
   WRONG_PASSWORD,
 } from './contact-change.controller';
+import { RESEND_WINDOW_MS } from './shared';
 import {
   NOW,
   deliveredCode,
@@ -247,6 +248,12 @@ describe('POST /auth/contact-change/start — the current password is the first 
 
     expect(res.statusCode).toBe(429);
     expect(res.body.message).toBe('Too many failed attempts. Try again in 5 minutes.');
+    /*
+     * The COUNTDOWN, in seconds — the web reads `data.retryAfterSec` first and
+     * the Retry-After header second, and until 21 Sep 2026 this refusal
+     * carried NEITHER, so the lockout sheet could only say "try again later".
+     */
+    expect(res.body.data.retryAfterSec).toBe(300);
     expect(ctx.comparePassword).not.toHaveBeenCalled();
     nothingIssued(ctx);
   });
@@ -333,8 +340,8 @@ describe('POST /auth/contact-change/start — the password is checked BEFORE the
   });
 });
 
-describe('POST /auth/contact-change/start — the code goes to the NEW contact ONLY', () => {
-  it('email: delivered to the new address, with the old email and old phone nowhere in the send', async () => {
+describe('POST /auth/contact-change/start — the code goes to the new contact AND the channels on file', () => {
+  it('email: to the NEW address and the phone on file — never the OLD address', async () => {
     const ctx = setup();
     const res = await ctx.call('start', { kind: 'email', value: 'New@Example.MY', currentPassword: PASSWORD });
 
@@ -343,13 +350,19 @@ describe('POST /auth/contact-change/start — the code goes to the NEW contact O
     expect(ctx.comparePassword).toHaveBeenCalledWith(PASSWORD, 'hash:old-password');
     expect(ctx.deliver).toHaveBeenCalledTimes(1);
     expect(ctx.deliver).toHaveBeenCalledWith(
-      expect.objectContaining({ phone: null, email: 'new@example.my', purpose: 'contact_change_new' }),
+      // The phone on file is unchanged by an email change, so it still carries the code.
+      expect.objectContaining({ phone: '+60123456789', email: 'new@example.my', purpose: 'contact_change_new' }),
     );
 
-    // ⚠️ The whole point of the 21 Sep decision, asserted as absence.
+    /*
+     * ⚠️ THE 21 SEP RULE, ASSERTED AS ABSENCE: the OLD EMAIL — the value being
+     * replaced — appears nowhere in the send. The phone on file DOES appear, and
+     * must: an email change does not touch the number, so it is a channel the
+     * owner still reads, not an "old" contact.
+     */
     const sent = JSON.stringify(ctx.deliver.mock.calls[0][0]);
     expect(sent).not.toContain(OLD_EMAIL);
-    expect(sent).not.toContain('60123456789');
+    expect(sent).toContain("+60123456789");
 
     expect(res.body.data).toMatchObject({
       requestId: expect.any(String),
@@ -357,13 +370,14 @@ describe('POST /auth/contact-change/start — the code goes to the NEW contact O
       resendAfterSec: 60,
       pendingInvitesToCurrentEmail: 2,
     });
-    expect(res.body.data.sentTo.map((d: { channel: string }) => d.channel)).toEqual(['email']);
+    expect(res.body.data.sentTo.map((d: { channel: string }) => d.channel)).toEqual(['whatsapp', 'sms', 'email']);
 
     const row = ctx.codes.rows.get(res.body.data.requestId)!;
     expect(row).toMatchObject({
       purpose: 'contact_change_new',
       status: 'pending',
-      channel: 'email',
+      // Both kinds now plan all three channels — the new contact plus what is on file.
+      channel: 'whatsapp,sms,email',
       createdBy: 'user-1',
       updatedBy: 'user-1',
       // Anchored to the ACCOUNT's phone, not to the value being changed to.
@@ -373,22 +387,23 @@ describe('POST /auth/contact-change/start — the code goes to the NEW contact O
     expect(row.expiresAt.getTime()).toBe(NOW + NEW_CONTACT_CODE_TTL_SEC * 1000);
   });
 
-  it('phone: WhatsApp + SMS to the new number only, and no invite count is even asked for', async () => {
+  it('phone: to the NEW number and the email on file — never the OLD number', async () => {
     const ctx = setup();
     const res = await ctx.call('start', { kind: 'phone', value: '0198765432', currentPassword: PASSWORD });
 
     expect(res.statusCode).toBe(200);
     expect(ctx.deliver).toHaveBeenCalledWith(
-      expect.objectContaining({ phone: '+60198765432', email: null, purpose: 'contact_change_new' }),
+      expect.objectContaining({ phone: '+60198765432', email: OLD_EMAIL, purpose: 'contact_change_new' }),
     );
+    // The mirror image: the OLD NUMBER is absent, the email on file is present.
     const sent = JSON.stringify(ctx.deliver.mock.calls[0][0]);
-    expect(sent).not.toContain(OLD_EMAIL);
-    expect(sent).not.toContain('60123456789');
+    expect(sent).not.toContain("60123456789");
+    expect(sent).toContain(OLD_EMAIL);
 
-    expect(res.body.data.sentTo.map((d: { channel: string }) => d.channel)).toEqual(['whatsapp', 'sms']);
+    expect(res.body.data.sentTo.map((d: { channel: string }) => d.channel)).toEqual(['whatsapp', 'sms', 'email']);
     expect(res.body.data.pendingInvitesToCurrentEmail).toBe(0);
     expect(ctx.countPendingInvites).not.toHaveBeenCalled();
-    expect(ctx.codes.rows.get(res.body.data.requestId)!.channel).toBe('whatsapp,sms');
+    expect(ctx.codes.rows.get(res.body.data.requestId)!.channel).toBe('whatsapp,sms,email');
   });
 
   it('429 with retryAfterSec inside the 60 s cooldown', async () => {
@@ -435,7 +450,9 @@ describe('POST /auth/contact-change/resend', () => {
       pendingInvitesToCurrentEmail: 0,
     });
     expect(ctx.deliver).toHaveBeenCalledTimes(2);
-    expect(ctx.deliver).toHaveBeenLastCalledWith(expect.objectContaining({ phone: null, email: 'new@x.my' }));
+    expect(ctx.deliver).toHaveBeenLastCalledWith(
+      expect.objectContaining({ phone: '+60123456789', email: 'new@x.my' }),
+    );
 
     // The second code is bound the same way, so it confirms on the NEW row.
     expect(ctx.codes.rows.get(fresh)!.codeHash).toBe(
@@ -453,15 +470,54 @@ describe('POST /auth/contact-change/resend', () => {
     expect(ctx.deliver).toHaveBeenCalledTimes(1);
   });
 
-  it('an EXPIRED row is CODE_EXPIRED', async () => {
+  /**
+   * ⚠️ REVERSED 21 Sep 2026 (owner: "is temporary otp will resend after
+   * expired"). This case used to assert 400 for a lapsed row. Expiring is the
+   * NORMAL end of a code, not a fault, and refusing it meant somebody who put
+   * the phone down for a quarter of an hour had to type their password again
+   * just to be sent another code.
+   */
+  it('an EXPIRED row still earns a FRESH code — lapsing is not a fault', async () => {
     const ctx = setup();
     const { requestId } = await startChange(ctx, 'email', 'new@x.my');
     ctx.advance(NEW_CONTACT_CODE_TTL_SEC * 1000 + 1_000);
 
     const res = await ctx.call('resend', { kind: 'email', value: 'new@x.my', requestId });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.message).toBe(CODE_EXPIRED);
-    expect(res.body.message).toBe('This code has expired — request a new one');
+    expect(res.statusCode).toBe(200);
+    expect(ctx.deliver).toHaveBeenCalledTimes(2);
+    // A NEW row, so the caller must adopt the id it answers with.
+    expect(res.body.data.requestId).not.toBe(requestId);
+  });
+
+  it('but a SPENT row, and one older than the resend window, are both CODE_EXPIRED', async () => {
+    // Spent: the change already happened, so a resend would mint a code for a
+    // finished request.
+    const spent = setup();
+    const first = await startChange(spent, 'email', 'new@x.my');
+    spent.codes.rows.get(first.requestId)!.status = 'consumed';
+    spent.advance(61_000);
+    const afterSpend = await spent.call('resend', {
+      kind: 'email',
+      value: 'new@x.my',
+      requestId: first.requestId,
+    });
+    expect(afterSpend.statusCode).toBe(400);
+    expect(afterSpend.body.message).toBe(CODE_EXPIRED);
+    expect(spent.deliver).toHaveBeenCalledTimes(1);
+
+    // Too old: otherwise whoever still holds a `requestId` could ask for codes
+    // for ever, long after the 60-second cooldown stopped braking anything.
+    const stale = setup();
+    const old = await startChange(stale, 'email', 'new@x.my');
+    stale.advance(RESEND_WINDOW_MS + 1_000);
+    const afterWindow = await stale.call('resend', {
+      kind: 'email',
+      value: 'new@x.my',
+      requestId: old.requestId,
+    });
+    expect(afterWindow.statusCode).toBe(400);
+    expect(afterWindow.body.message).toBe('This code has expired — request a new one');
+    expect(stale.deliver).toHaveBeenCalledTimes(1);
   });
 
   it('a FOREIGN row — created by another account — is CODE_EXPIRED, and sends nothing', async () => {

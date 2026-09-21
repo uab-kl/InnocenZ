@@ -119,12 +119,31 @@ export const ContactChangeResendSchema = z.object({ ...contactTarget, requestId 
 
 export const ContactChangeConfirmSchema = z.object({ ...contactTarget, requestId, code });
 
-export const ChangePasswordBodySchema = z
-  .object({
-    currentPassword,
-    newPassword: password,
-  })
-  .refine((body) => body.currentPassword !== body.newPassword, {
-    message: 'New password must be different',
-    path: ['newPassword'],
-  });
+/**
+ * THE SIGNED-IN PASSWORD CHANGE — two steps with a code (owner, 21 Sep 2026,
+ * asked directly what it should become: "Current password + a code").
+ *
+ *   start   { currentPassword }                  → a code to the phone AND the
+ *                                                  email already on file
+ *   resend  { requestId }                        → the same, sent again
+ *   confirm { requestId, code, newPassword }     → written, tokens re-issued
+ *
+ * ⚠️ `currentPassword` is on START ONLY, exactly as the contact change has it:
+ * the `requestId` is handed out only to a caller who just passed the password,
+ * and asking again would mean the client holding the password in memory behind
+ * the code sheet for the whole flow.
+ *
+ * ⚠️ There is therefore NO "new must differ from current" refine left — confirm
+ * never sees the current password, so the two plaintexts cannot be compared.
+ * The rule did not go away: `confirm` compares the NEW password against the
+ * STORED HASH with `comparePassword` and answers the same sentence.
+ */
+export const PasswordChangeStartSchema = z.object({ currentPassword });
+
+export const PasswordChangeResendSchema = z.object({ requestId });
+
+export const PasswordChangeConfirmSchema = z.object({
+  requestId,
+  code,
+  newPassword: password,
+});

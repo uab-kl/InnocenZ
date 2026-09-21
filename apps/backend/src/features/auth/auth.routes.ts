@@ -9,6 +9,7 @@ import {
   forgotPasswordPerEmailLimiter,
   loginLimiter,
   otpSendLimiter,
+  otpSendPerEmailLimiter,
   otpSendPerPhoneLimiter,
   otpVerifyLimiter,
   otpVerifyPerPhoneLimiter,
@@ -28,6 +29,8 @@ import {
   forgotCompleteIpLimiter,
   forgotStartIdentifierLimiter,
   forgotStartIpLimiter,
+  passwordChangeCheckUserLimiter,
+  passwordChangeSendUserLimiter,
   passwordChangeUserLimiter,
 } from '@/features/account-code/limiters.js';
 
@@ -182,15 +185,22 @@ router.get('/signup-packages', async (req, res) => {
 });
 
 /**
- * WhatsApp OTP send/verify — purpose=signup|forgot_password only. `change_phone`
- * is no longer accepted (see /contact-change/*), and the account-code purposes
- * never were. optionalAuthenticateJWT stays so a signed-in caller is still
- * attributed as the row's actor.
+ * OTP send/verify — purpose=signup|forgot_password only. `change_phone` is no
+ * longer accepted (see /contact-change/*), and the account-code purposes never
+ * were. optionalAuthenticateJWT stays so a signed-in caller is still attributed
+ * as the row's actor.
+ *
+ * ⚠️ Since 21 Sep 2026 `send` takes an OPTIONAL `email` and puts the SAME code
+ * on WhatsApp, SMS and that address. `otpSendPerEmailLimiter` is stacked for
+ * it: this endpoint is public and unauthenticated, so the recipient is the one
+ * dimension an attacker cannot rotate, and it is the one that must be bounded.
+ * The per-IP and per-phone budgets do not bound a victim's inbox.
  */
 router.post(
   '/otp/send',
   otpSendLimiter,
   otpSendPerPhoneLimiter,
+  otpSendPerEmailLimiter,
   optionalAuthenticateJWT,
   otpController.send.bind(otpController),
 );
@@ -296,14 +306,39 @@ router.patch(
   authController.updateLocale.bind(authController),
 );
 /**
- * Signed-in password change. Re-issues the caller's token pair and cuts every
- * other session. Limited per user, after the guard.
+ * SIGNED-IN PASSWORD CHANGE — two steps and a code (owner, 21 Sep 2026:
+ * "Current password + a code"). `start` takes the current password and sends
+ * ONE code to the phone AND the email on file; `confirm` writes the new
+ * password, cuts every other session and re-issues the caller's token pair.
+ * authenticateJWT FIRST, so the per-user limiters key on the verified account;
+ * the shared per-IP OTP limiters stack on top.
+ *
+ * ⚠️ The one-step `POST /auth/password/change` is GONE, not retired behind a
+ * message (owner: "no error page no show this"). Both clients ship in this same
+ * change and neither calls it, so there is nothing left to tell.
  */
 router.post(
-  '/password/change',
+  '/password/change/start',
   authenticateJWT,
+  // The PASSWORD budget, not the send budget — see limiters.ts for why a wrong
+  // password must not spend the owner's codes.
   passwordChangeUserLimiter,
-  passwordChangeController.change.bind(passwordChangeController),
+  otpSendLimiter,
+  passwordChangeController.start.bind(passwordChangeController),
+);
+router.post(
+  '/password/change/resend',
+  authenticateJWT,
+  passwordChangeSendUserLimiter,
+  otpSendLimiter,
+  passwordChangeController.resend.bind(passwordChangeController),
+);
+router.post(
+  '/password/change/confirm',
+  authenticateJWT,
+  passwordChangeCheckUserLimiter,
+  otpVerifyLimiter,
+  passwordChangeController.confirm.bind(passwordChangeController),
 );
 
 // TOTP enrolment. Both require a signed-in caller and act only on THEIR OWN

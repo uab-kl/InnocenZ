@@ -22,12 +22,10 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import {
 	describeCodeDelivery,
-	localiseAuthError,
 	localiseAuthMessage,
 } from "@/lib/auth/auth-server-copy";
 import type { ContactKind } from "@/lib/auth/contact-change-api";
 import {
-	changeMyPassword,
 	PASSWORD_MAX_LENGTH,
 	PASSWORD_MIN_LENGTH,
 } from "@/lib/auth/password-api";
@@ -41,6 +39,10 @@ import {
 	contactChangeProblemText,
 	useContactChange,
 } from "@/lib/auth/use-contact-change";
+import {
+	passwordChangeProblemText,
+	usePasswordChange,
+} from "@/lib/auth/use-password-change";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
@@ -119,11 +121,15 @@ export function AdminLoginSecurityCard({
 				</ul>
 			</CardContent>
 
-			<PasswordDialog
-				open={mode === "password"}
-				onClose={() => setMode(null)}
-				onSignInAgain={requireSignInAgain}
-			/>
+			{/* Mounted only while open, so a dialog reopened after a refusal
+			    starts clean rather than resuming an abandoned code step with a
+			    password typed a while ago still in memory. */}
+			{mode === "password" ? (
+				<PasswordDialog
+					onClose={() => setMode(null)}
+					onSignInAgain={requireSignInAgain}
+				/>
+			) : null}
 			{/* Keyed by lane so switching lanes never carries one lane's ids or
 			    typed value into the other. */}
 			{mode === "phone" || mode === "email" ? (
@@ -207,15 +213,24 @@ function InlineError({ text }: { text: string | null }) {
 }
 
 /**
- * Change password. `changeMyPassword` stores the RE-ISSUED token pair before it
- * resolves — the change retires every earlier token, this tab's included.
+ * CHANGE PASSWORD — two steps (owner, 21 Sep 2026, asked what it should
+ * become: "Current password + a code"). Step 1 takes the current password and
+ * the new one and asks the server for ONE code, which goes to the phone on file
+ * by WhatsApp and SMS and to the email on file. Step 2 spends the code and
+ * writes the password.
+ *
+ * The new password is held HERE between the two steps — never in the code
+ * request, never in a URL — and `confirmPasswordChange` stores the RE-ISSUED
+ * token pair before it resolves, because the change retires every earlier
+ * token, this tab's included.
+ *
+ * Mounted only while open by the card above, so a dialog reopened after a
+ * refusal starts clean rather than resuming somebody's abandoned code step.
  */
 function PasswordDialog({
-	open,
 	onClose,
 	onSignInAgain,
 }: {
-	open: boolean;
 	onClose: () => void;
 	/** The password changed but no tokens came back. */
 	onSignInAgain: (changed: ChangedCredential) => void;
@@ -224,24 +239,39 @@ function PasswordDialog({
 	const currentId = useId();
 	const newId = useId();
 	const confirmId = useId();
+	const codeId = useId();
+	const password = usePasswordChange();
 	const [current, setCurrent] = useState("");
 	const [next, setNext] = useState("");
 	const [confirm, setConfirm] = useState("");
-	const [error, setError] = useState<string | null>(null);
-	const [saving, setSaving] = useState(false);
+	const [localError, setLocalError] = useState<string | null>(null);
 
-	const close = () => {
-		if (saving) return;
+	const clearTyped = () => {
 		setCurrent("");
 		setNext("");
 		setConfirm("");
-		setError(null);
+	};
+
+	const close = () => {
+		if (password.busy) return;
+		// The new password does not outlive the dialog.
+		clearTyped();
+		setLocalError(null);
+		password.reset();
 		onClose();
 	};
 
-	const submit = async (e: React.FormEvent) => {
+	/**
+	 * Step 1. Everything about the new password is checked HERE, before a code
+	 * is sent — both passwords are in hand on this step and never will be again.
+	 * Confirm carries no current password, so the server can only compare the
+	 * new one against the stored hash and answers "New password must be
+	 * different" late; catching it here costs no code and no wait.
+	 */
+	const sendCode = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (saving) return;
+		if (password.busy) return;
+		password.clearProblem();
 		let problem: string | null = null;
 		if (!current) problem = t.profile.enterCurrentPassword;
 		else if (!next) problem = t.profile.enterANewPassword;
@@ -253,89 +283,171 @@ function PasswordDialog({
 			});
 		else if (next !== confirm) problem = t.profile.passwordsDoNotMatch;
 		else if (next === current) problem = t.profile.passwordMustDiffer;
-		setError(problem);
+		setLocalError(problem);
 		if (problem) return;
 
-		setSaving(true);
-		try {
-			const changed = await changeMyPassword({
-				currentPassword: current,
-				newPassword: next,
-			});
-			setSaving(false);
-			setCurrent("");
-			setNext("");
-			setConfirm("");
-			if (!changed.tokensStored) {
-				onSignInAgain("password");
-				return;
-			}
-			toast.success(t.profile.passwordUpdated);
-			onClose();
-		} catch (err) {
-			// A wrong current password is a 400 — the dialog stays open.
-			setError(localiseAuthError(err, t, t.profile.passwordUpdateFailed));
-			setSaving(false);
-		}
+		// A wrong current password is a 400 and a lockout a 429 — never a 401,
+		// which this client would answer by signing the person out. Both land in
+		// `password.problem` and render under the fields.
+		await password.start(current);
 	};
 
+	/** Step 2 — spend the code and write the password held since step 1. */
+	const submitCode = async (e: React.FormEvent) => {
+		e.preventDefault();
+		const confirmed = await password.submitCode(next);
+		// Refused — the code step stays open so the code can be retyped.
+		if (!confirmed) return;
+		clearTyped();
+		if (!confirmed.tokensStored) {
+			onSignInAgain("password");
+			return;
+		}
+		toast.success(localiseAuthMessage(confirmed.message, t));
+		password.reset();
+		onClose();
+	};
+
+	const resend = async () => {
+		if (await password.resend()) toast.info(t.authCodes.codeResent);
+	};
+
+	const problemText = password.problem
+		? passwordChangeProblemText(
+				password.problem,
+				t,
+				password.codeOpen
+					? t.authCodes.codeCheckFailed
+					: t.authCodes.codeSendFailed,
+			)
+		: null;
+	const delivery = describeCodeDelivery(password.sentTo, t);
+
 	return (
-		<Dialog open={open} onOpenChange={(value) => (value ? null : close())}>
+		<Dialog open onOpenChange={(value) => (value ? null : close())}>
 			<DialogContent>
-				<form onSubmit={submit} className="grid gap-4">
-					<DialogHeader>
-						<DialogTitle>{t.profile.changePassword}</DialogTitle>
-						<DialogDescription>{t.profile.passwordOtpHint}</DialogDescription>
-					</DialogHeader>
-					<div className="grid gap-2">
-						<Label htmlFor={currentId}>{t.profile.currentPassword}</Label>
-						<PasswordInput
-							id={currentId}
-							value={current}
-							onChange={(e) => setCurrent(e.target.value)}
-							placeholder={t.profile.enterCurrentPassword}
-							autoComplete="current-password"
-							disabled={saving}
-						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor={newId}>{t.profile.newPassword}</Label>
-						<PasswordInput
-							id={newId}
-							value={next}
-							onChange={(e) => setNext(e.target.value)}
-							placeholder={t.profile.enterNewPassword}
-							autoComplete="new-password"
-							disabled={saving}
-						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor={confirmId}>{t.profile.confirmNewPassword}</Label>
-						<PasswordInput
-							id={confirmId}
-							value={confirm}
-							onChange={(e) => setConfirm(e.target.value)}
-							placeholder={t.profile.confirmYourNewPassword}
-							autoComplete="new-password"
-							disabled={saving}
-						/>
-					</div>
-					<InlineError text={error} />
-					<DialogFooter>
-						<Button
-							type="button"
-							variant="outline"
-							onClick={close}
-							disabled={saving}
-						>
-							{t.common.cancel}
-						</Button>
-						<Button type="submit" disabled={saving}>
-							{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-							{saving ? t.profile.savingPassword : t.profile.savePassword}
-						</Button>
-					</DialogFooter>
-				</form>
+				<DialogHeader>
+					<DialogTitle>
+						{password.codeOpen
+							? t.authCodes.passwordCodeTitle
+							: t.profile.changePassword}
+					</DialogTitle>
+					<DialogDescription>
+						{password.codeOpen
+							? t.authCodes.passwordCodeHint
+							: t.authCodes.passwordStepsHint}
+					</DialogDescription>
+				</DialogHeader>
+
+				{!password.codeOpen ? (
+					<form onSubmit={sendCode} className="grid gap-4">
+						<div className="grid gap-2">
+							<Label htmlFor={currentId}>{t.profile.currentPassword}</Label>
+							<PasswordInput
+								id={currentId}
+								value={current}
+								onChange={(e) => {
+									setCurrent(e.target.value);
+									setLocalError(null);
+									password.clearProblem();
+								}}
+								placeholder={t.profile.enterCurrentPassword}
+								autoComplete="current-password"
+								disabled={password.busy}
+							/>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor={newId}>{t.profile.newPassword}</Label>
+							<PasswordInput
+								id={newId}
+								value={next}
+								onChange={(e) => {
+									setNext(e.target.value);
+									setLocalError(null);
+									password.clearProblem();
+								}}
+								placeholder={t.profile.enterNewPassword}
+								autoComplete="new-password"
+								disabled={password.busy}
+							/>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor={confirmId}>{t.profile.confirmNewPassword}</Label>
+							<PasswordInput
+								id={confirmId}
+								value={confirm}
+								onChange={(e) => {
+									setConfirm(e.target.value);
+									setLocalError(null);
+									password.clearProblem();
+								}}
+								placeholder={t.profile.confirmYourNewPassword}
+								autoComplete="new-password"
+								disabled={password.busy}
+							/>
+						</div>
+						<InlineError text={localError ?? problemText} />
+						<DialogFooter>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={close}
+								disabled={password.busy}
+							>
+								{t.common.cancel}
+							</Button>
+							<Button type="submit" disabled={password.busy}>
+								{password.busy && (
+									<Loader2 className="mr-1 h-4 w-4 animate-spin" />
+								)}
+								{t.profile.sendOtpAndUpdate}
+							</Button>
+						</DialogFooter>
+					</form>
+				) : (
+					<form onSubmit={submitCode} className="grid gap-4">
+						<div className="grid gap-1 text-sm text-muted-foreground">
+							{delivery.sent ? (
+								<p className="font-medium text-foreground">{delivery.sent}</p>
+							) : null}
+							{delivery.none ? <p>{delivery.none}</p> : null}
+							{delivery.failed ? <p>{delivery.failed}</p> : null}
+							{delivery.logged ? <p>{delivery.logged}</p> : null}
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor={codeId}>{t.portalUi.oneTimePassword}</Label>
+							<Input
+								id={codeId}
+								inputMode="numeric"
+								autoComplete="one-time-code"
+								placeholder="123456"
+								value={password.code}
+								onChange={(e) => password.setCode(e.target.value)}
+								className="text-center tabular-nums tracking-[0.35em]"
+								aria-invalid={problemText ? true : undefined}
+							/>
+						</div>
+						<InlineError text={problemText} />
+						<DialogFooter className="sm:justify-between">
+							<Button
+								type="button"
+								variant="ghost"
+								onClick={resend}
+								disabled={password.busy || password.resendIn > 0}
+							>
+								{password.resendIn > 0
+									? fill(t.portalUi.resendOtpIn, { seconds: password.resendIn })
+									: t.portalUi.resendOtp}
+							</Button>
+							<Button type="submit" disabled={password.busy}>
+								{password.busy && (
+									<Loader2 className="mr-1 h-4 w-4 animate-spin" />
+								)}
+								{password.busy ? t.authCodes.verifying : t.profile.savePassword}
+							</Button>
+						</DialogFooter>
+					</form>
+				)}
 			</DialogContent>
 		</Dialog>
 	);

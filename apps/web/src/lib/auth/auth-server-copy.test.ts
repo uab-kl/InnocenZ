@@ -75,13 +75,32 @@ const BACKEND_OBSERVED_SENTENCES = [
 	"Enter the 6-digit code",
 	"Enter the new email or phone number",
 	"Current password is required",
+	/*
+	 * ⚠️ password-change.controller.ts `NOWHERE_TO_SEND` — the 422 of
+	 * `POST /auth/password/change/start`, read from the backend on 21 Sep 2026.
+	 * It is NOT the older "Your account has no phone or email we can send a code
+	 * to" above: that wording is sent by nothing in apps/backend/src (grepped
+	 * with a control that found this one), and the contract note describing the
+	 * 422 quoted it. The server's own words win.
+	 */
+	"Add a phone number or an email to your account before changing your password",
 ];
 
-/** Sentences with a number in them — matched by pattern, not by the map. */
+/**
+ * Sentences with a number in them — matched by pattern, not by the map.
+ *
+ * ⚠️ The login lockout is answered by BOTH routes that take a current password
+ * (`contact-change/start` and `password/change/start`, via `proveIdentity`) and
+ * had no reading in either language until 21 Sep 2026. English writes a
+ * singular and a plural form, so both are listed: one regex reading a number
+ * cannot be trusted to cover a wording it was never shown.
+ */
 const PATTERNED_SENTENCES = [
 	"Wait 42s before requesting another code",
 	"Password must be at least 6 characters long",
 	"Password must be at most 72 characters long",
+	"Too many failed attempts. Try again in 5 minutes.",
+	"Too many failed attempts. Try again in 1 minute.",
 ];
 
 const ALL_SENTENCES = [...CONTRACT_SENTENCES, ...BACKEND_OBSERVED_SENTENCES];

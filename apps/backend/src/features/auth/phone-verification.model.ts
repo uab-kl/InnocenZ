@@ -34,6 +34,14 @@ export type PhoneVerificationStatus = (typeof phoneVerificationStatusValues)[num
  *                                 contact, the ONLY message that flow sends.
  *                                 What proves it is the owner is the CURRENT
  *                                 PASSWORD (contact-change.controller.ts).
+ *  • `password_change`          — signed-in password change, step 2 of 2. The
+ *                                 CURRENT PASSWORD buys the code; the code is
+ *                                 sent to the phone AND the email already on
+ *                                 file (password-change.controller.ts).
+ *
+ * ⚠️ `password_change` is a VALUE IN THIS ARRAY ONLY — the column is
+ * `varchar(32)` (15 characters here), so it needs NO MIGRATION. There is no
+ * enum type in the database to alter.
  *
  * `change_phone` and `contact_change_identity` stay for the rows already
  * stored; nothing issues either any more. `contact_change_identity` was step 1
@@ -47,6 +55,7 @@ export const phoneVerificationPurposeValues = [
   'reset_password',
   'contact_change_identity',
   'contact_change_new',
+  'password_change',
 ] as const;
 export type PhoneVerificationPurpose = (typeof phoneVerificationPurposeValues)[number];
 
@@ -58,6 +67,11 @@ export type PhoneVerificationPurpose = (typeof phoneVerificationPurposeValues)[n
  * it sends anything. The old one-step change proved only that the new number
  * works, not that the caller owns the account — and it was reachable with no
  * proof at all beyond a session.
+ *
+ * ⚠️ `password_change` must NEVER be added here. Its rows are keyed on the
+ * ACCOUNT and their hash is bound to the account id; a public per-phone
+ * endpoint that could mint or spend one would be a password change for anybody
+ * who can type a number.
  */
 export const publicOtpPurposeValues = ['signup', 'forgot_password'] as const;
 export type PublicOtpPurpose = (typeof publicOtpPurposeValues)[number];

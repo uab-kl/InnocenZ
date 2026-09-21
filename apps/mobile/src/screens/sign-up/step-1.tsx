@@ -117,10 +117,19 @@ export function Step1Persona({
 					</View>
 				</View>
 			</Field>
-			<Field label={s.email}>
+			{/*
+			 * The email carries an error now: the sign-up code also goes to it,
+			 * so `/auth/otp/send` can refuse it as already having an account.
+			 * Without the `error` prop that refusal would be a toast about a
+			 * field with nothing marked on it.
+			 */}
+			<Field label={s.email} error={fieldErrors.email}>
 				<Input
 					value={draft.email}
-					onChangeText={(text) => patch({ email: text })}
+					onChangeText={(text) => {
+						clearFieldError('email');
+						patch({ email: text });
+					}}
 					placeholder={s.emailPlaceholder}
 					keyboardType="email-address"
 					autoCapitalize="none"

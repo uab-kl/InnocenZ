@@ -13,6 +13,7 @@ import type {
 } from '@/features/auth/phone-verification.model.js';
 import type { UserType } from '@/features/user/user.model.js';
 import type { ContactChangeDeps } from './contact-change.controller.js';
+import type { PasswordChangeDeps } from './password-change.controller.js';
 import type { CodeRowStore, NewCodeRow } from './shared.js';
 
 export const NOW = Date.parse('2026-09-17T10:00:00.400Z');
@@ -224,6 +225,30 @@ export function fakeContactChangeDeps(
     now: () => NOW,
     jwt: {} as never,
     countPendingInvites: vi.fn(async () => 0),
+    ...overrides,
+  };
+}
+
+/**
+ * Every dependency of PasswordChangeControllerClass, faked. `accounts` carries
+ * ONLY `completePasswordChange` — the controller writes the password through
+ * the transaction that spends the code, never through `updateUserPassword`
+ * directly, so a fake that offered the latter would let a test prove a write
+ * path production does not use.
+ */
+export function fakePasswordChangeDeps(
+  overrides: Partial<PasswordChangeDeps> = {},
+): PasswordChangeDeps {
+  return {
+    users: { getUserById: vi.fn(async () => null) },
+    codes: fakeCodeStore(),
+    accounts: { completePasswordChange: vi.fn(async () => 'ok' as const) },
+    deliver: fakeDeliver(true),
+    notices: fakeNotices(),
+    hashPassword: async (password: string) => `hash:${password}`,
+    comparePassword: fakeComparePassword(),
+    now: () => NOW,
+    jwt: {} as never,
     ...overrides,
   };
 }

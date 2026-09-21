@@ -365,17 +365,43 @@ export type OtpVerifyResult = { verificationId: string };
  */
 export type OtpPurpose = 'signup' | 'forgot_password';
 
+/**
+ * One code to a phone by WhatsApp — and, when `opts.email` is given, the SAME
+ * code to that address as well (owner, 21 Sep 2026: "must be the same otp").
+ * It is one code in one `phone_verification` row, read in two places; never two
+ * codes, and `verifyPrOtp` still verifies it against the PHONE.
+ *
+ * ⚠️ PASS ONLY THE ADDRESS THE PERSON IS TYPING INTO THIS FORM, and only once
+ * it parses. `/auth/otp/send` is PUBLIC and unauthenticated: every address put
+ * in this body is one the server will mail on an anonymous caller's say-so. A
+ * stored address, one read from another screen, or an unvalidated string must
+ * never be handed to it. The sign-up wizard passes the email collected on step
+ * 1, gated on `isPlausibleEmail` — which also keeps a typo from turning a
+ * would-be 400 into a sign-up nobody can finish.
+ *
+ * ⚠️ The third argument CHANGED SHAPE on 21 Sep 2026 — it was a bare
+ * `accessToken`. Nothing in this app passed one; tsc names any caller that
+ * still does rather than silently reading a token as an options bag.
+ */
 export function sendPrOtp(
   phoneNum: string,
   purpose: OtpPurpose = 'signup',
-  accessToken?: string | null,
+  opts: { accessToken?: string | null; email?: string | null } = {},
 ): Promise<OtpSendResult> {
   const headers: Record<string, string> = {};
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  if (opts.accessToken) headers.Authorization = `Bearer ${opts.accessToken}`;
+  const email = opts.email?.trim();
   return request<OtpSendResult>('/auth/otp/send', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ phoneNum, channel: 'whatsapp', purpose }),
+    // The key is LEFT OUT when there is no email — an empty string is a value
+    // the server's schema has to refuse, which would block the whole send.
+    body: JSON.stringify({
+      phoneNum,
+      channel: 'whatsapp',
+      purpose,
+      ...(email ? { email } : {}),
+    }),
   });
 }
 
@@ -393,8 +419,9 @@ export function verifyPrOtp(
 /* ------------------------------------------------------------------ *
  * One code, several channels
  *
- * The forgot-password and contact-change calls send the SAME code to more than
- * one place at once — WhatsApp + SMS to a phone, email to an address — and the
+ * The forgot-password, contact-change and password-change calls send the SAME
+ * code to every channel at once — WhatsApp + SMS to a phone, email to an
+ * address (owner, 21 Sep 2026: "must be the same otp") — and the
  * server reports each attempt with the destination already MASKED
  * ('+60 ••••• 6789', 'o••••@atlas-agency.my'). The app never sees, and never
  * needs, the full contact to tell the PR where to look.
@@ -468,24 +495,102 @@ export function completeForgotPassword(
  */
 export type TokenPair = { accessToken: string | null; refreshToken: string | null };
 
-/**
- * Signed-in password change (current password — no OTP).
+export type PasswordChangeStartResult = {
+  requestId: string;
+  /** Where the code went — the phone and the email ALREADY ON FILE, masked. */
+  sentTo: CodeDelivery[];
+  expiresInSec: number;
+  resendAfterSec: number;
+};
+
+/* ------------------------------------------------------------------ *
+ * SIGNED-IN PASSWORD CHANGE — two steps, one code
  *
- * ⚠️ The response carries a FRESH token pair and the caller must store it
- * before making any other request: the server stamps a session cutoff at the
- * moment of the change, so the token that made this call is refused from now on.
- * Typed as possibly null only so an older backend that still answers
- * `data: null` does not crash the screen.
+ * Owner's decision, 21 Sep 2026: the current password ALONE no longer changes a
+ * password. It is "current password + a code", and the code goes to every
+ * channel the account can read — WhatsApp + SMS to the phone on file, email to
+ * the address on file — all carrying THE SAME code.
+ *
+ *   1. start    { currentPassword } → one code to the contacts on file
+ *      resend   { requestId }       → the same code sent again (no password:
+ *                                     the requestId is itself the proof)
+ *   2. confirm  { requestId, code, newPassword } → written
+ *
+ * ⚠️ THE ONE-STEP `POST /auth/password/change` IS DELETED, not retired behind a
+ * "please update the app" sentence (owner: "no error page no show this"). An
+ * old build calling it collects a 404 from the router, which is why this
+ * client's tests pin the PATHS as well as the bodies.
+ *
+ * ⚠️ A wrong password and a wrong code are BOTH 400 here, never 401 — the web
+ * client signs a person out on any 401, and this app treats a bare 401 as a
+ * dead session (`isSessionRefusal`). Only a real session problem answers 401.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Step 1: prove it is you, and send the code.
+ *
+ * Refusals worth knowing at the call site, all of them about something the PR
+ * can see or fix — none of them a dead session:
+ *   • 400 'Current password is incorrect' / 'Current password is required'
+ *   • 400 'This account cannot change password here' (no password hash at all)
+ *   • 422 'Your account has no phone or email we can send a code to'
+ *   • 429 'Too many failed attempts. Try again in N minutes.' (the LOGIN
+ *     lockout, honoured here so this door is not softer than the front one)
  */
-export function changePassword(
+export function startPasswordChange(
   accessToken: string,
   currentPassword: string,
-  newPassword: string,
-): Promise<TokenPair | null> {
-  return request<TokenPair | null>('/auth/password/change', {
+): Promise<PasswordChangeStartResult> {
+  return request<PasswordChangeStartResult>('/auth/password/change/start', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ currentPassword, newPassword }),
+    body: JSON.stringify({ currentPassword }),
+  });
+}
+
+/**
+ * Another code to the same contacts. NO password — the `requestId` is the
+ * proof, handed out only to a caller who passed the password a moment ago,
+ * exactly as `resendContactChangeNewCode` works.
+ *
+ * ⚠️ IT ANSWERS A NEW `requestId` — the previous code row is retired as this
+ * one is sent, so the caller must REPLACE the id it holds or confirm will
+ * refuse with 'This code has expired — request a new one'.
+ */
+export function resendPasswordChangeCode(
+  accessToken: string,
+  input: { requestId: string },
+): Promise<PasswordChangeStartResult> {
+  return request<PasswordChangeStartResult>('/auth/password/change/resend', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Step 2: the code and the NEW password together — this call writes it.
+ *
+ * ⚠️ THE RESPONSE CARRIES A FRESH TOKEN PAIR AND THE CALLER MUST STORE IT
+ * BEFORE ANY OTHER REQUEST. The write stamps a session cutoff, so the token
+ * that made this call is refused from that moment: sending it again prints an
+ * error under a change that SUCCEEDED. Either field may be null even on a 200 —
+ * the server commits first and answers `?? null` when re-issuing fails, so a
+ * null means "changed — sign in again", never "keep the token you have".
+ *
+ * ⚠️ 'New password must be different' can arrive HERE, not at step 1: confirm
+ * carries no current password, so the server compares the new one against the
+ * STORED HASH. The screen catches the same case locally at step 1; this is the
+ * backstop, and it is about a field on the first sheet, not about the code.
+ */
+export function confirmPasswordChange(
+  accessToken: string,
+  input: { requestId: string; code: string; newPassword: string },
+): Promise<TokenPair> {
+  return request<TokenPair>('/auth/password/change/confirm', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
   });
 }
 
@@ -493,7 +598,12 @@ export type ContactKind = 'email' | 'phone';
 
 export type ContactChangeStartResult = {
   requestId: string;
-  /** Where the code went — the NEW address, or the NEW phone by WhatsApp + SMS. */
+  /**
+   * Where the code went, masked: the NEW contact, AND whatever is already on
+   * the account (a new email is written to while WhatsApp + SMS still reach the
+   * phone on file; a new number is messaged while the email on file arrives).
+   * ⚠️ Never the OLD value of the thing being changed.
+   */
   sentTo: CodeDelivery[];
   expiresInSec: number;
   resendAfterSec: number;
@@ -512,11 +622,14 @@ export type ContactChangeConfirmResult = TokenPair & {
 };
 
 /**
- * Change email / phone, step 1 of 2: the CURRENT PASSWORD, and one code to the
- * NEW contact. `value` is the new email or the new phone ('+' + digits).
+ * Change email / phone, step 1 of 2: the CURRENT PASSWORD, and ONE code to the
+ * NEW contact and to the channel already on file (owner, 21 Sep 2026: "must be
+ * the same otp"). `value` is the new email or the new phone ('+' + digits).
  *
  * ⚠️ NOTHING GOES TO THE OLD PHONE OR OLD EMAIL — owner's decision, 21 Sep
  * 2026. Not a code, and no "your email was changed" notice afterwards either.
+ * "Old" means the value being REPLACED: a new email still copies the code to
+ * the phone on file, because that phone is not what is changing.
  * The password is what proves the person holding this signed-in phone owns the
  * account; the code proves the new contact was typed correctly and can receive,
  * without which a typo locks her out of her own account.
@@ -538,7 +651,7 @@ export function startContactChange(
 }
 
 /**
- * Another code to the same new contact. NO password: the `requestId` is itself
+ * Another code to the same destinations. NO password: the `requestId` is itself
  * the proof, handed out only to a caller who passed the password a moment ago.
  *
  * ⚠️ IT ANSWERS A NEW `requestId` — the old row is retired by the send, so the

@@ -22,6 +22,7 @@ import {
 	type PublicAgency,
 	type RegisterCheckConflict,
 } from '../../lib/api';
+import { isPlausibleEmail, normalizeEmailInput } from '../../lib/code-delivery';
 import { resolveUploadFile } from '../../lib/photo-file';
 import { useSession } from '../../lib/session';
 import { formatMessage, useLocale } from '../../i18n';
@@ -122,13 +123,35 @@ function SignUpScreenInner({
 		return () => clearInterval(timer);
 	}, [resendIn]);
 
+	/*
+	 * A message that must SURVIVE A STEP CHANGE — a refusal sending her back to
+	 * step 1, or the "code sent" line on the way forward to step 6.
+	 *
+	 * ⚠️ A message set BESIDE `setStep` never reaches the screen. Both updates
+	 * land in one batch, and the effect keyed on [step] runs after that batch
+	 * and clears exactly the fields the handler just filled — proven with a
+	 * render probe, not assumed. That is why the 409 "already has an account"
+	 * left the PR on step 1 with nothing said, and why "Code sent on WhatsApp
+	 * to …" only ever appeared on a RESEND (the one send that does not change
+	 * the step). A ref survives the wipe, because the effect itself reads it.
+	 */
+	const pendingAfterStep = useRef<
+		| { kind: 'refusal'; field: keyof FieldErrors; msg: string }
+		| { kind: 'notice'; msg: string }
+		| null
+	>(null);
+
 	useEffect(() => {
 		scroller.current?.scrollTo({ y: 0, animated: false });
-		setError(null);
-		setNotice(null);
-		setFieldErrors({});
+		const carried = pendingAfterStep.current;
+		pendingAfterStep.current = null;
+		const refusal = carried?.kind === 'refusal' ? carried : null;
+		setError(refusal ? refusal.msg : null);
+		setFieldErrors(refusal ? { [refusal.field]: refusal.msg } : {});
+		setNotice(carried?.kind === 'notice' ? carried.msg : null);
 		setToast(null);
-	}, [step]);
+		if (refusal) showToast(refusal.msg);
+	}, [step, showToast]);
 
 	useEffect(() => {
 		if (step !== 3 || agencyFetched.current) return;
@@ -228,21 +251,72 @@ function SignUpScreenInner({
 			setError(null);
 			setNotice(null);
 			try {
-				const res = await sendPrOtp(phoneNum);
+				/*
+				 * THE SAME CODE BY EMAIL TOO (owner, 21 Sep 2026: "must be the
+				 * same otp"). The email is collected on step 1, so it is already
+				 * in the draft by the time the phone is verified on step 6.
+				 *
+				 * ⚠️ ONLY WHEN IT PARSES. The field is OPTIONAL and nothing
+				 * validates its shape (see validateStep — it judges the ID, the
+				 * measurements and the phone, and never the email), so a typo
+				 * would reach a PUBLIC endpoint's schema and 400 the send —
+				 * blocking sign-up over a field the PR was told she could skip.
+				 * A malformed address is simply not passed: she still gets the
+				 * code on WhatsApp.
+				 */
+				const typedEmail = normalizeEmailInput(draft.email);
+				const codeEmail = isPlausibleEmail(typedEmail) ? typedEmail : null;
+				const res = await sendPrOtp(phoneNum, 'signup', { email: codeEmail });
 				setResendIn(res.resendAfterSec || RESEND_SECONDS);
 				setOtp('');
+				const sent = resending
+					? t.signup.toastCodeResent
+					: codeEmail
+						? formatMessage(t.signup.toastCodeSentWithEmail, {
+								phone: fullPhone,
+								email: codeEmail,
+							})
+						: formatMessage(t.signup.toastCodeSent, { phone: fullPhone });
+				/*
+				 * A RESEND does not change the step, so its effect never runs
+				 * and the line is set directly. The FIRST send moves 5 → 6 and
+				 * must travel through the ref, or it is wiped unread — which is
+				 * exactly where "check your email too" would have been lost.
+				 */
+				if (resending) {
+					setNotice(sent);
+				} else {
+					pendingAfterStep.current = { kind: 'notice', msg: sent };
+				}
 				setStep(6);
-				setNotice(
-					resending
-						? t.signup.toastCodeResent
-						: formatMessage(t.signup.toastCodeSent, { phone: fullPhone }),
-				);
 			} catch (e) {
 				if (e instanceof ApiError && e.status === 409) {
+					/*
+					 * ⚠️ 409 NO LONGER MEANS "phone taken" ON ITS OWN. Since the
+					 * email travels with the code, `/auth/otp/send` refuses a
+					 * TAKEN EMAIL with the same status — and a sign-up code must
+					 * never land in an existing account's inbox. Both send her
+					 * back to step 1, but they point at DIFFERENT boxes, and
+					 * telling her to change her phone number because of her
+					 * email is how a PR gets stuck on a field that was fine.
+					 */
+					const emailTaken = /email/i.test(e.message);
+					const msg = emailTaken
+						? t.signup.toastEmailTaken
+						: t.signup.toastPhoneTaken;
+					/*
+					 * Through the ref, never beside setStep — see
+					 * pendingAfterStep. Safe because this handler is only ever
+					 * reached from step 5 (Continue) or step 6 (Resend): the
+					 * step ALWAYS changes here, so the effect always runs and
+					 * always consumes it.
+					 */
+					pendingAfterStep.current = {
+						kind: 'refusal',
+						field: emailTaken ? 'email' : 'phone',
+						msg,
+					};
 					setStep(1);
-					const msg = t.signup.toastPhoneTaken;
-					setError(msg);
-					showToast(msg);
 				} else {
 					const msg = describe(e, t.signup.toastSendCodeFailed);
 					setError(msg);

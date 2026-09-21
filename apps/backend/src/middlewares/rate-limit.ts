@@ -240,6 +240,31 @@ export const otpSendPerPhoneLimiter = rateLimit({
 });
 
 /**
+ * ONE BUDGET PER EMAIL ADDRESS on the PUBLIC `/auth/otp/send`.
+ *
+ * ⚠️ Added 21 Sep 2026 with the email channel on sign-up verification. That
+ * body field is an address a STRANGER can type into an unauthenticated
+ * endpoint, which is the classic shape of a mail relay: without this, the two
+ * limiters already there bound an attacker's IP and their PHONE, and neither
+ * bounds how much mail one victim's inbox receives — rotating either dimension
+ * rotates the budget while the recipient stays the same.
+ *
+ * 3/hour per address, matching `forgotPasswordPerEmailLimiter`, which guards
+ * the other public endpoint that mails an address from a request body. The key
+ * is the RECIPIENT, so no amount of IP or phone rotation widens it.
+ */
+export const otpSendPerEmailLimiter = rateLimit({
+  name: 'otp-send-email',
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  keys: (req) => {
+    const email = normalizedBodyField(req, 'email');
+    return [email ? `email:${email}` : null];
+  },
+  message: 'Too many verification codes requested for that email. Please try again later.',
+});
+
+/**
  * WhatsApp OTP verify. /otp/verify carried NO limiter while /otp/send stacked
  * two — and verify is the more dangerous half: a verified row's id is the sole
  * proof POST /auth/password/reset-otp accepts, so guessing the 6-digit code IS

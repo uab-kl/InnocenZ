@@ -19,11 +19,16 @@ import {
   RESEND_AFTER_SEC,
   TOO_MANY_ATTEMPTS,
   type TokenIssuer,
+  WRONG_PASSWORD,
+  accountReadFailed,
   cooldownRemaining,
   phoneAnchor,
+  proveIdentity,
   recordWrongCode,
+  resendable,
   reissueTokens,
   send,
+  sendRefusal,
   tooSoon,
 } from './shared.js';
 
@@ -31,8 +36,14 @@ export const NEW_CONTACT_CODE_TTL_SEC = 600;
 
 export const CODE_EXPIRED = 'This code has expired — request a new one';
 export const CODE_ALREADY_USED = 'This code was already used';
-export const WRONG_PASSWORD = 'Current password is incorrect';
 export const NO_PASSWORD = 'Set a password before you change your sign-in email or phone';
+
+/**
+ * Re-exported, not redefined — `proveIdentity` in shared.ts owns the sentence
+ * now that the password change asks for the same proof. A second `const` here
+ * is a second thing to keep in step with the clients' translations.
+ */
+export { WRONG_PASSWORD };
 
 /**
  * Rows this flow retires when a change starts. `contact_change_identity` is
@@ -41,14 +52,6 @@ export const NO_PASSWORD = 'Set a password before you change your sign-in email 
  * can never be spent afterwards.
  */
 const CONTACT_PURPOSES = ['contact_change_identity', 'contact_change_new'] as const;
-
-/**
- * The account re-read came back empty although authenticateJWT resolved this
- * very account moments ago — `getUserById` returns null when its query FAILS.
- * That is a server fault, so 500 — never 401, which the web client answers by
- * signing the person out, and never after a correct code has been spent.
- */
-const ACCOUNT_READ_FAILED = ApiError.INTERNAL_SERVER_ERROR;
 
 const SAME_VALUE: Record<ContactKind, string> = {
   email: 'That is already your email',
@@ -78,8 +81,9 @@ export type ContactChangeDeps = AccountCodeDeps & {
 /**
  * CHANGE THE SIGN-IN EMAIL OR PHONE — signed in, every role, web and app.
  *
- *   1. start    { kind, value, currentPassword } → a code to the NEW contact
- *      resend   { kind, value, requestId }       → another code to the NEW contact
+ *   1. start    { kind, value, currentPassword } → a code to the new contact AND
+ *                                               to the channels already on file
+ *      resend   { kind, value, requestId }       → the same, sent again
  *   2. confirm  { kind, value, requestId, code } → written
  *
  * ⚠️ NOTHING IS EVER SENT TO THE OLD PHONE OR OLD EMAIL — owner's decision,
@@ -88,11 +92,16 @@ export type ContactChangeDeps = AccountCodeDeps & {
  * two-code build that ran until today put code #1 on the contacts already on
  * file; that step and its `contact_change_identity` rows are retired.
  *
- * THE TWO PROOFS ARE NOW: the CURRENT PASSWORD, which says the person holding
- * this session is the owner and not somebody who sat down at an unlocked
- * screen; and the CODE TO THE NEW CONTACT, which says they typed it correctly
- * and can receive on it — without that, a typo locks them out of their own
- * account.
+ * WHAT PROVES IT IS YOU is the CURRENT PASSWORD — the person holding this
+ * session is the owner, and not somebody who sat down at an unlocked screen.
+ *
+ * The CODE then goes to every channel the person can read: the new contact,
+ * AND whatever is already on the account (owner, 21 Sep 2026 — "must be the
+ * same otp"). ⚠️ That is a deliberate step down from the build of earlier the
+ * same day, where the code went to the new contact ALONE and so proved it
+ * worked. It no longer does: a typo in the new address is now accepted, and the
+ * sign-in contact ends up somewhere the owner cannot read. Recoverable —
+ * forgot-password still reaches the other channel — but it needs a hand.
  *
  * ⚠️ WHAT THAT COSTS, written down so it is never rediscovered as a surprise:
  * a leaked password alone now moves the sign-in identity, where before it also
@@ -135,7 +144,7 @@ export class ContactChangeControllerClass {
        * them from free into earned.
        */
       const refusal = await this.proveIdentity(user, parsed.data.currentPassword);
-      if (refusal) return send(res, refusal.status, refusal.message);
+      if (refusal) return sendRefusal(res, refusal);
 
       if (this.isCurrentValue(user, kind, value)) return send(res, 400, SAME_VALUE[kind]);
       if (await this.deps.accounts.isContactTaken(kind, value, user.id)) {
@@ -198,15 +207,24 @@ export class ContactChangeControllerClass {
       const now = this.deps.now();
 
       const open = await this.deps.codes.getById(requestId);
-      if (
-        !open ||
-        open.purpose !== 'contact_change_new' ||
-        open.createdBy !== actor.id ||
-        open.status !== 'pending' ||
-        open.expiresAt.getTime() <= now
-      ) {
+      if (!open || open.purpose !== 'contact_change_new' || open.createdBy !== actor.id) {
         return send(res, 400, CODE_EXPIRED);
       }
+      /*
+       * AN EXPIRED CODE STILL EARNS A NEW ONE — owner, 21 Sep 2026: "is
+       * temporary otp will resend after expired".
+       *
+       * Only a `pending` row used to qualify, so somebody who put the phone
+       * down for a quarter of an hour came back, tapped Resend, and was told to
+       * start again — which on this flow means typing their password a second
+       * time. Expiring is the NORMAL end of a code, not a fault, so it is now
+       * accepted and answered with a fresh one.
+       *
+       * What is still refused: a row already SPENT (the change happened), and
+       * one older than `RESEND_WINDOW_MS`, so a `requestId` cannot be recycled
+       * for ever by whoever is still holding it.
+       */
+      if (!resendable(open, now)) return send(res, 400, CODE_EXPIRED);
 
       const remaining = cooldownRemaining(open.createdAt, now);
       if (remaining > 0) return tooSoon(res, remaining);
@@ -316,50 +334,21 @@ export class ContactChangeControllerClass {
     }
   }
 
-  /**
-   * THE CURRENT PASSWORD, and the login lockout that guards it.
-   *
-   * Answers the refusal, or null when the password is right. Three deliberate
-   * choices:
-   *
-   *  • The lockout is honoured BEFORE the compare, exactly as login does it
-   *    (auth.controller.ts) — otherwise this endpoint, the one that moves the
-   *    sign-in identity, is an unlocked side door for guessing at an account
-   *    login has already locked.
-   *  • A wrong password does NOT feed that counter. Login's counter exists to
-   *    stop guessing at the door; a signed-in person mistyping their own
-   *    password in a settings sheet must not be locked out of signing in. The
-   *    brake here is `contactChangePasswordUserLimiter`, 10 an hour per account.
-   *  • A failed account READ is 500, never this 400. Copying the password
-   *    change's `!user?.passwordHash` would tell somebody their account "cannot
-   *    change password here" because a query blipped.
-   */
-  private async proveIdentity(
-    user: UserType,
-    currentPassword: string,
-  ): Promise<{ status: number; message: string } | null> {
-    const lockedUntil = user.lockedUntil?.getTime() ?? 0;
-    const now = this.deps.now();
-    if (lockedUntil > now) {
-      const minutes = Math.ceil((lockedUntil - now) / 60_000);
-      logger.warn('[ContactChange] attempt on a locked account', { userId: user.id });
-      return {
-        status: 429,
-        message: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
-      };
-    }
-    if (!user.passwordHash) return { status: 400, message: NO_PASSWORD };
-    if (!(await this.deps.comparePassword(currentPassword, user.passwordHash))) {
-      logger.warn('[ContactChange] wrong current password', { userId: user.id });
-      return { status: 400, message: WRONG_PASSWORD };
-    }
-    return null;
+  /** The shared proof — lockout, then the current password. See shared.ts. */
+  private proveIdentity(user: UserType, currentPassword: string) {
+    return proveIdentity({
+      user,
+      currentPassword,
+      comparePassword: this.deps.comparePassword,
+      now: this.deps.now(),
+      label: '[ContactChange]',
+      noPassword: NO_PASSWORD,
+    });
   }
 
-  /** See ACCOUNT_READ_FAILED. 401 stays reserved for a request with no `req.user`. */
+  /** 500, never 401 — 401 stays reserved for a request with no `req.user`. */
   private accountReadFailed(res: Response, step: string, userId: string) {
-    logger.error(`[ContactChange.${step}] could not re-read the signed-in account`, { userId });
-    return send(res, 500, ACCOUNT_READ_FAILED);
+    return accountReadFailed(res, `ContactChange.${step}`, userId);
   }
 
   private isCurrentValue(user: UserType, kind: ContactKind, value: string): boolean {
@@ -382,7 +371,30 @@ export class ContactChangeControllerClass {
     await this.deps.codes.expireOpenForCreator(user.id, ['contact_change_new'], ['pending'], user.id);
 
     const code = generateAccountCode();
-    const destinations = kind === 'email' ? { phone: null, email: value } : { phone: value, email: null };
+    /*
+     * EVERY CHANNEL THE PERSON CAN READ, with the same code (owner, 21 Sep
+     * 2026: "all ... need send whatapps otp and the email, sms message if got
+     * also need, and must be the same otp").
+     *
+     * The contact being CHANGED uses the new value; the other one uses what is
+     * already on the account. So a new email is written to, and WhatsApp + SMS
+     * still reach the phone on file; a new number is messaged, and the email on
+     * file still arrives.
+     *
+     * ⚠️ THE OLD VALUE OF THE THING BEING CHANGED IS NEVER USED — an email
+     * change sends nothing to the old address, a phone change nothing to the old
+     * number. That is the 21 Sep rule and this expression is where it is kept.
+     *
+     * ⚠️ The cost, recorded so it is a choice and not a surprise: the code no
+     * longer PROVES the new contact works, because it also arrives elsewhere. A
+     * typo is accepted, and the sign-in contact then points somewhere the owner
+     * cannot read. It stays recoverable — forgot-password still reaches the
+     * other channel — but it must be corrected by hand.
+     */
+    const destinations =
+      kind === 'email'
+        ? { phone: user.phoneNum, email: value }
+        : { phone: value, email: user.email };
     const row = await this.deps.codes.create({
       // Anchored to the ACCOUNT's own phone, not to the value being changed to:
       // confirm re-reads it and refuses a code whose account has moved since.

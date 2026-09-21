@@ -68,6 +68,16 @@ const CODE_FLOW_SENTENCES: ReadonlyArray<readonly [string, ErrorKey]> = [
   ['That email is already used by another account', 'emailTaken'],
   ['That phone number is already used by another account', 'phoneTaken'],
   ['Your account has no phone or email we can send a code to', 'noContactChannel'],
+  /*
+   * 422 — the PASSWORD change's own version of that, and a DIFFERENT sentence
+   * (password-change.controller.ts NOWHERE_TO_SEND): it tells the person what
+   * to do about it, because unlike forgot-password she is signed in and can fix
+   * it herself. Matched exactly, so neither swallows the other.
+   */
+  [
+    'Add a phone number or an email to your account before changing your password',
+    'addContactBeforePasswordChange',
+  ],
   ['Current password is incorrect', 'currentPasswordIncorrect'],
   ['New password must be different', 'passwordMustDiffer'],
   ['Change your email from Security settings', 'changeEmailInSecurity'],
@@ -150,6 +160,24 @@ const CODE_REJECTIONS: ReadonlySet<ErrorKey> = new Set<ErrorKey>([
 const CODE_COOLDOWN = /^Wait (\d+)\s*s(?:ec(?:ond)?s?)? before requesting another code$/i;
 
 /**
+ * `Too many failed attempts. Try again in 5 minutes.` — the SIGN-IN lockout.
+ *
+ * It is not only login's any more: every door that takes the current password
+ * honours it before comparing (contact-change's `proveIdentity`, and the
+ * password change's start since 21 Sep 2026), so a settings sheet can receive
+ * it. Until it was mapped here that sentence reached a 中文 Security screen in
+ * English — `localizeLoginError` knows it, and only the sign-in screen calls
+ * that.
+ *
+ * ⚠️ Matched HERE, not in `matchCodeFlowError`, and the minute count is kept.
+ * `localizeSignInError` asks `localizeLoginError` FIRST, so the sign-in screen
+ * still answers with `login.tooManyAttempts` and nothing about that path moves.
+ * The singular ("1 minute") is the backend's own wording — the `s?` is why a
+ * lockout of one minute still reads.
+ */
+const LOCKED_OUT = /^Too many failed attempts\. Try again in (\d+) minutes?\.?$/i;
+
+/**
  * Every rate limiter's refusal: "Too many verification codes requested. Please
  * try again later.", "Too many attempts. Please wait a few minutes and try
  * again." Deliberately NOT the sign-in lockout ("… Try again in 5 minutes."),
@@ -227,6 +255,11 @@ export function localizeApiError(
 
   if (trimmed === NOT_SIGNED_IN) return errors.notSignedIn;
   if (PHOTO_TOO_LARGE.test(trimmed)) return errors.photoTooLarge;
+
+  // Before the limiter patterns: 'Too many failed attempts…' is a LOCKOUT with
+  // a minute count, and must never be flattened into "wait and try again".
+  const lockedOut = LOCKED_OUT.exec(trimmed);
+  if (lockedOut) return formatMessage(errors.lockedOut, { m: lockedOut[1] });
 
   const codeFlow = matchCodeFlowError(trimmed);
   if (codeFlow === 'codeCooldown') {

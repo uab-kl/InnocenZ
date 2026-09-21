@@ -38,10 +38,14 @@ const ResetPasswordWithOtpSchema = z.object({
 
 /*
  * The signed-in password-change and one-step phone-change schemas lived here.
- * Both flows moved: password change → features/account-code/schemas.ts
- * (`ChangePasswordBodySchema`, 6-72 characters, must differ), and phone change
- * → the two-code contact change in the same folder. The old one-step
- * POST /auth/phone/change now answers 400 and parses nothing.
+ * Both flows moved to features/account-code/schemas.ts, and BOTH are now two
+ * steps with a code (owner, 21 Sep 2026):
+ *   • password change → PasswordChangeStart/Resend/ConfirmSchema. The current
+ *     password buys a code; the code plus a 6-72 character new password writes
+ *     it. "Must be different" is no longer a schema refine — confirm never sees
+ *     the current password, so the controller compares against the stored hash.
+ *   • phone/email change → ContactChangeStart/Resend/ConfirmSchema.
+ * The old one-step POST /auth/phone/change now answers 400 and parses nothing.
  */
 
 /** Comcard size integers — coerce so JSON numbers or digit strings both work. */

@@ -14,7 +14,16 @@ import { phoneVerificationPurposeValues, publicOtpPurposeValues } from './phone-
  * so these two schemas must refuse them — and `change_phone`, which now needs a
  * code to the current contacts first.
  */
-const REFUSED = ['reset_password', 'contact_change_identity', 'contact_change_new', 'change_phone'];
+const REFUSED = [
+  'reset_password',
+  'contact_change_identity',
+  'contact_change_new',
+  // A signed-in password change. Its rows are keyed on the ACCOUNT and its hash
+  // is bound to the account id, so a public per-phone endpoint able to mint or
+  // spend one would be a password change for anybody who can type a number.
+  'password_change',
+  'change_phone',
+];
 
 describe('public OTP schemas', () => {
   it.each(REFUSED)('/auth/otp/send refuses purpose=%s', (purpose) => {

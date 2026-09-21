@@ -91,10 +91,36 @@ export const contactChangeCheckUserLimiter = rateLimit({
   message: 'Too many attempts. Please try again later.',
 });
 
+/**
+ * PASSWORD CHANGE, START ONLY — the one call that carries the current password,
+ * so this budget covers a guess at that password AND the code it sends. The
+ * exact twin of `contactChangePasswordUserLimiter`, and deliberately NOT
+ * stacked with a send budget, for the same reason: the shared factory counts in
+ * MIDDLEWARE, before the handler knows whether the password was right, so a
+ * wrong password would otherwise eat the owner's sends.
+ */
 export const passwordChangeUserLimiter = rateLimit({
   name: 'password-change-user',
   windowMs: 60 * 60 * 1000,
   max: 10,
   keys: (req) => [userKey(req)],
   message: 'Too many password change attempts. Please try again later.',
+});
+
+/** Resend only — a code already paid for with the password, sent again. */
+export const passwordChangeSendUserLimiter = rateLimit({
+  name: 'password-change-send-user',
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  keys: (req) => [userKey(req)],
+  message: 'Too many verification codes requested. Please try again later.',
+});
+
+/** Confirm: every request spends a guess at a code. Shaped like the contact change's. */
+export const passwordChangeCheckUserLimiter = rateLimit({
+  name: 'password-change-check-user',
+  windowMs: 60 * 60 * 1000,
+  max: 15,
+  keys: (req) => [userKey(req)],
+  message: 'Too many attempts. Please try again later.',
 });

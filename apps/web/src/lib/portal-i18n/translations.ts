@@ -2004,8 +2004,14 @@ const en = {
 		eSignatureOnFile: "E-signature on file ✓",
 		subRoleInviteHint:
 			"Sub-role invite · requires IC + e-signature for dual-sign PV",
+		/*
+		 * Owner, 21 Sep 2026: every lane here sends a code now, the password
+		 * included — so this hint may no longer say "anytime". It used to read
+		 * "Update your password anytime", which described a one-step change
+		 * that no longer exists.
+		 */
 		passwordOtpHint:
-			"Update your password anytime. Email and mobile changes need your current password, then a code sent to the new email or number.",
+			"A password change needs your current password, then a code sent to your phone and email. Email and mobile changes need your current password, then a code sent to the new email or number.",
 		securitySettings: "Security settings",
 		chooseImageFile: "Please choose an image file",
 		imageUnder5Mb: "Image must be under 5 MB",
@@ -6950,6 +6956,17 @@ const en = {
 			"Enter your current password, then the code we send to the new email address. Nothing is sent to your current email.",
 		phoneStepsHint:
 			"Enter your current password, then the code we send to the new number by WhatsApp and SMS. Nothing is sent to your current number.",
+		/*
+		 * THE SIGNED-IN PASSWORD CHANGE — two steps (owner, 21 Sep 2026, asked
+		 * what it should become: "Current password + a code"). Unlike the email
+		 * and phone lanes the code goes to the contacts ALREADY on the account,
+		 * because neither of them is changing.
+		 */
+		passwordStepsHint:
+			"Enter your current password and choose a new one. We then send one code to your phone by WhatsApp and SMS and to your email — enter it to finish.",
+		passwordCodeTitle: "Confirm your new password",
+		passwordCodeHint:
+			"Enter the code we sent you. Your new password is saved once the code is accepted.",
 		/** {n} = pendingInvitesToCurrentEmail from the server. */
 		pendingInvitesWarning:
 			"{n} pending invitation(s) went to your current email. They stay tied to that address — accept them before you change it, or ask for new ones.",
@@ -6972,6 +6989,9 @@ const en = {
 		serverPhoneTaken: "That phone number is already used by another account",
 		serverNoContactChannel:
 			"Your account has no phone or email we can send a code to",
+		/** The 422 of `password/change/start` — nowhere to send the code. */
+		serverAddContactFirst:
+			"Add a phone number or an email to your account before changing your password",
 		serverCodeSent: "Code sent",
 		serverCodeAlreadyUsed: "This code was already used",
 		serverEmailUpdated: "Email updated",
@@ -6991,6 +7011,15 @@ const en = {
 		 * on them, read 17 Sep 2026). English stays word-for-word.
 		 */
 		serverTooManyAttempts: "Too many attempts — request a new code",
+		/**
+		 * THE LOGIN LOCKOUT, answered by the two routes that take a current
+		 * password (`contact-change/start` and `password/change/start`). {n} is
+		 * read out of the server's own sentence; English needs both forms
+		 * because the server writes both.
+		 */
+		serverLockedOutMinute: "Too many failed attempts. Try again in {n} minute.",
+		serverLockedOutMinutes:
+			"Too many failed attempts. Try again in {n} minutes.",
 		limiterResetRequests:
 			"Too many password reset requests. Please try again later.",
 		limiterAttemptsWait:
@@ -8615,7 +8644,7 @@ const zh: PortalTranslations = {
 		eSignatureOnFile: "已保存电子签名 ✓",
 		subRoleInviteHint: "子角色邀请 · 双签薪资单需要身份证 + 电子签名",
 		passwordOtpHint:
-			"密码可随时修改。更改邮箱或手机号需先输入当前密码，再输入发送到新邮箱或新号码的验证码。",
+			"修改密码需先输入当前密码，再输入发送到您手机和邮箱的验证码。更改邮箱或手机号需先输入当前密码，再输入发送到新邮箱或新号码的验证码。",
 		securitySettings: "安全设置",
 		chooseImageFile: "请选择图片文件",
 		imageUnder5Mb: "图片大小须小于 5 MB",
@@ -12106,6 +12135,11 @@ const zh: PortalTranslations = {
 			"请先输入当前密码，再输入我们发送到新邮箱的验证码。我们不会向您当前的邮箱发送任何内容。",
 		phoneStepsHint:
 			"请先输入当前密码，再输入我们通过 WhatsApp 和短信发送到新号码的验证码。我们不会向您当前的号码发送任何内容。",
+		passwordStepsHint:
+			"请输入当前密码并设置新密码。我们随后会通过 WhatsApp、短信和邮件向您发送同一个验证码 —— 输入后即可完成修改。",
+		passwordCodeTitle: "确认新密码",
+		passwordCodeHint:
+			"请输入我们发送给您的验证码。验证码通过后，新密码即生效。",
 		pendingInvitesWarning:
 			"有 {n} 个待处理的邀请发送到了您当前的邮箱。这些邀请仍绑定该地址 —— 请在修改前先接受，或请对方重新邀请。",
 		emailUpdateFailed: "无法更新您的邮箱",
@@ -12124,6 +12158,7 @@ const zh: PortalTranslations = {
 		serverEmailTaken: "该邮箱已被其他账户使用",
 		serverPhoneTaken: "该手机号已被其他账户使用",
 		serverNoContactChannel: "您的账户没有可接收验证码的手机号或邮箱",
+		serverAddContactFirst: "修改密码前，请先为账户添加手机号或邮箱",
 		serverCodeSent: "验证码已发送",
 		serverCodeAlreadyUsed: "该验证码已被使用",
 		serverEmailUpdated: "邮箱已更新",
@@ -12136,6 +12171,8 @@ const zh: PortalTranslations = {
 		serverChangePhoneInSecurity: "请在安全设置中修改手机号",
 		serverOnlyPrChangesSignIn: "只有 PR 本人可以修改其登录邮箱或手机号",
 		serverTooManyAttempts: "尝试次数过多 —— 请重新获取验证码",
+		serverLockedOutMinute: "密码错误次数过多。请在 {n} 分钟后再试。",
+		serverLockedOutMinutes: "密码错误次数过多。请在 {n} 分钟后再试。",
 		limiterResetRequests: "密码重置请求过多，请稍后再试。",
 		limiterAttemptsWait: "尝试次数过多，请等待几分钟后再试。",
 		limiterCodesRequested: "请求验证码的次数过多，请稍后再试。",
