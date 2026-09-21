@@ -108,6 +108,51 @@ describe('completePasswordReset', () => {
 });
 
 /**
+ * The SIGNED-IN password change (owner, 21 Sep 2026: "Current password + a
+ * code"). Same transaction shape as the reset above, two deliberate
+ * differences — the row must belong to this account, and the lockout is left
+ * standing because nothing here says the failed sign-ins were this person.
+ */
+describe('completePasswordChange', () => {
+  const input = {
+    requestId: 'row-1',
+    userId: 'user-1',
+    passwordHash: 'hash:new',
+    cutoff: new Date('2026-09-21T10:00:00.000Z'),
+  };
+
+  it('spends the row, then writes the password in one transaction, lockout UNTOUCHED', async () => {
+    const updateUserPassword = vi.fn(async () => input.cutoff);
+    const repo = new AccountCodeRepositoryClass({ updateUserPassword } as never);
+    fake.state.returningQueue.push([{ id: 'row-1' }]);
+
+    expect(await repo.completePasswordChange(input)).toBe('ok');
+
+    expect(fake.state.updates[0].table).toBe(PhoneVerificationTable);
+    expect(fake.state.updates[0].set).toMatchObject({ status: 'consumed', updatedBy: 'user-1' });
+    expect(updateUserPassword).toHaveBeenCalledWith('user-1', 'hash:new', {
+      tx: expect.objectContaining({ client: 'tx' }),
+      updatedBy: 'user-1',
+      // ⚠️ FALSE, unlike the logged-out reset: a live session is not evidence
+      // that the failed sign-ins at the login door were this person.
+      clearLockout: false,
+      cutoff: input.cutoff,
+    });
+    expect(fake.state.committed).toBe(true);
+  });
+
+  it('writes NO password when the row was already spent by a racing confirm', async () => {
+    const updateUserPassword = vi.fn();
+    const repo = new AccountCodeRepositoryClass({ updateUserPassword } as never);
+    fake.state.returningQueue.push([]);
+
+    expect(await repo.completePasswordChange(input)).toBe('already_used');
+    expect(updateUserPassword).not.toHaveBeenCalled();
+    expect(fake.state.committed).toBe(false);
+  });
+});
+
+/**
  * ONE code row since the identity step was retired (owner, 21 Sep 2026): the
  * row addressed by `rowId` is the new-contact code, and nothing else is spent.
  */

@@ -266,6 +266,10 @@ export type AppTranslations = {
     currentPhone: string;
     /** `{email}` = the account's stored email. Appended after currentPhone. */
     currentEmail: string;
+    /** Password step 1 — says the change needs a code as well as the current password. */
+    changePasswordHint: string;
+    /** Password step 2 title — the code sent to the contacts ALREADY on file. */
+    passwordCodeTitle: string;
     changePhoneHint: string;
     changeEmailHint: string;
     newMobileNumber: string;
@@ -1568,6 +1572,12 @@ export type AppTranslations = {
     phoneTaken: string;
     /** 422 — nowhere to send the identity code. */
     noContactChannel: string;
+    /**
+     * 422 — the PASSWORD change has nowhere to send its code. A separate
+     * sentence from `noContactChannel` on purpose: the person is signed in, so
+     * it says what to do about it rather than only what is missing.
+     */
+    addContactBeforePasswordChange: string;
     currentPasswordIncorrect: string;
     passwordMustDiffer: string;
     /** PATCH /user/:id refusing an email change outside Security settings. */
@@ -1579,6 +1589,17 @@ export type AppTranslations = {
     useForgotPassword: string;
     /** Any rate-limiter refusal ("Too many … try again later."). */
     tooManyRequests: string;
+    /**
+     * 429 — the SIGN-IN lockout, which every door that takes the current
+     * password honours too (change phone / email, change password), so the
+     * settings sheets can receive it and not only the login screen. `{m}` is
+     * read out of the server's sentence, never assumed.
+     *
+     * ⚠️ Deliberately the same wording as `login.tooManyAttempts`, not a
+     * reference to it: `localizeApiError` is handed only `errors`, and the two
+     * screens are free to word it differently later.
+     */
+    lockedOut: string;
     /** 429 — the CODE took too many wrong guesses and was expired: a new code is needed (a limiter's 429 only asks to wait). */
     tooManyCodeAttempts: string;
     /** 400 — the server's own validation sentences on the code endpoints. */
@@ -1887,13 +1908,16 @@ export const translations: Record<AppLocale, AppTranslations> = {
       verifyOtp: 'Verify code',
       eyebrow: 'ACCOUNT',
       intro:
-        'Change your password with your current one. Changing your phone or email needs your current password, and a code sent to the new one.',
+        'Every change here needs your current password and a code. The same code goes to your WhatsApp, your SMS and your email — whichever you can read.',
       currentPhone: 'Current: {phone}',
       currentEmail: 'Email: {email}',
+      changePasswordHint:
+        'Enter your current password and the new one. We then send one code to the phone and email on your account, and the new password is saved once you enter it.',
+      passwordCodeTitle: 'Confirm your new password',
       changePhoneHint:
-        'Enter the new number and your current password. We send one code to the new number — nothing goes to your old one.',
+        'Enter the new number and your current password. We send one code to the new number and to the email on your account — nothing goes to your old number.',
       changeEmailHint:
-        'Enter the new email and your current password. We send one code to the new address — nothing goes to your old one.',
+        'Enter the new email and your current password. We send one code to the new address and to the phone on your account — nothing goes to your old address.',
       newMobileNumber: 'New mobile number',
       newEmail: 'New email',
       newPhoneCodeTitle: 'Verify your new number',
@@ -2783,6 +2807,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       emailTaken: 'That email is already used by another account',
       phoneTaken: 'That phone number is already used by another account',
       noContactChannel: 'Your account has no phone or email we can send a code to',
+      addContactBeforePasswordChange:
+        'Add a phone number or an email to your account before changing your password',
       currentPasswordIncorrect: 'Current password is incorrect',
       passwordMustDiffer: 'New password must be different',
       changeEmailInSecurity: 'Change your email from Security settings',
@@ -2790,6 +2816,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       setPasswordFirst: 'Set a password before you change your sign-in email or phone',
       useForgotPassword: 'Use Forgot password on the sign-in page',
       tooManyRequests: 'Too many attempts. Please wait and try again later.',
+      lockedOut: 'Too many failed attempts. Try again in {m} minutes.',
       tooManyCodeAttempts: 'Too many attempts — request a new code',
       invalidPhoneNumber: 'Enter a valid phone number',
       enterSixDigitCode: 'Enter the 6-digit code',
@@ -3052,13 +3079,17 @@ export const translations: Record<AppLocale, AppTranslations> = {
       sendOtp: '发送验证码',
       verifyOtp: '验证验证码',
       eyebrow: '账号',
-      intro: '使用当前密码修改密码。更换手机号或电子邮箱时，需输入当前密码，我们只向新的联系方式发送验证码。',
+      intro:
+        '此处的每项更改都需要当前密码和一条验证码。同一条验证码会发送到你的 WhatsApp、短信和电子邮箱 — 你能看到哪个都可以。',
       currentPhone: '当前：{phone}',
       currentEmail: '邮箱：{email}',
+      changePasswordHint:
+        '请输入当前密码和新密码。我们会向账号上的手机和电子邮箱发送一条验证码，输入验证码后新密码即生效。',
+      passwordCodeTitle: '确认新密码',
       changePhoneHint:
-        '请输入新手机号和你的当前密码。我们只向新号码发送一条验证码 — 不会向旧号码发送任何信息。',
+        '请输入新手机号和你的当前密码。我们会向新号码和账号上的电子邮箱发送一条验证码 — 不会向旧号码发送任何信息。',
       changeEmailHint:
-        '请输入新电子邮箱和你的当前密码。我们只向新邮箱发送一条验证码 — 不会向旧邮箱发送任何信息。',
+        '请输入新电子邮箱和你的当前密码。我们会向新邮箱和账号上的手机发送一条验证码 — 不会向旧邮箱发送任何信息。',
       newMobileNumber: '新手机号码',
       newEmail: '新电子邮箱',
       newPhoneCodeTitle: '验证新手机号',
@@ -3946,6 +3977,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       emailTaken: '该电子邮箱已被其他账号使用',
       phoneTaken: '该手机号已被其他账号使用',
       noContactChannel: '你的账号没有可接收验证码的手机号或电子邮箱',
+      addContactBeforePasswordChange: '请先为账号添加手机号或电子邮箱，再修改密码',
       currentPasswordIncorrect: '当前密码不正确',
       passwordMustDiffer: '新密码不能与当前密码相同',
       changeEmailInSecurity: '请在安全设置中更换电子邮箱',
@@ -3953,6 +3985,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       setPasswordFirst: '请先设置密码，才能更换登录用的电子邮箱或手机号',
       useForgotPassword: '请在登录页面使用“忘记密码”',
       tooManyRequests: '尝试次数过多，请稍后再试。',
+      lockedOut: '尝试次数过多。请在 {m} 分钟后再试。',
       tooManyCodeAttempts: '尝试次数过多 — 请重新获取验证码',
       invalidPhoneNumber: '请输入有效的手机号',
       enterSixDigitCode: '请输入 6 位数验证码',
@@ -4215,13 +4248,17 @@ export const translations: Record<AppLocale, AppTranslations> = {
       sendOtp: '傳送驗證碼',
       verifyOtp: '驗證驗證碼',
       eyebrow: '帳號',
-      intro: '使用目前密碼修改密碼。更換手機號或電子郵箱時，需輸入目前密碼，我們只向新的聯絡方式傳送驗證碼。',
+      intro:
+        '此處的每項更改都需要目前密碼和一則驗證碼。同一則驗證碼會傳送到你的 WhatsApp、簡訊和電子郵箱 — 你能看到哪個都可以。',
       currentPhone: '目前：{phone}',
       currentEmail: '郵箱：{email}',
+      changePasswordHint:
+        '請輸入目前密碼和新密碼。我們會向帳號上的手機和電子郵箱傳送一則驗證碼，輸入驗證碼後新密碼即生效。',
+      passwordCodeTitle: '確認新密碼',
       changePhoneHint:
-        '請輸入新手機號和你的目前密碼。我們只向新號碼傳送一則驗證碼 — 不會向舊號碼傳送任何訊息。',
+        '請輸入新手機號和你的目前密碼。我們會向新號碼和帳號上的電子郵箱傳送一則驗證碼 — 不會向舊號碼傳送任何訊息。',
       changeEmailHint:
-        '請輸入新電子郵箱和你的目前密碼。我們只向新郵箱傳送一則驗證碼 — 不會向舊郵箱傳送任何訊息。',
+        '請輸入新電子郵箱和你的目前密碼。我們會向新郵箱和帳號上的手機傳送一則驗證碼 — 不會向舊郵箱傳送任何訊息。',
       newMobileNumber: '新手機號碼',
       newEmail: '新電子郵箱',
       newPhoneCodeTitle: '驗證新手機號',
@@ -5109,6 +5146,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       emailTaken: '此電子郵箱已被其他帳號使用',
       phoneTaken: '此手機號已被其他帳號使用',
       noContactChannel: '你的帳號沒有可接收驗證碼的手機號或電子郵箱',
+      addContactBeforePasswordChange: '請先為帳號新增手機號或電子郵箱，再修改密碼',
       currentPasswordIncorrect: '目前密碼不正確',
       passwordMustDiffer: '新密碼不能與目前密碼相同',
       changeEmailInSecurity: '請在安全設定中更換電子郵箱',
@@ -5116,6 +5154,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       setPasswordFirst: '請先設定密碼，才能更換登入用的電子郵箱或手機號',
       useForgotPassword: '請在登入頁面使用「忘記密碼」',
       tooManyRequests: '嘗試次數過多，請稍後再試。',
+      lockedOut: '嘗試次數過多。請在 {m} 分鐘後再試。',
       tooManyCodeAttempts: '嘗試次數過多 — 請重新取得驗證碼',
       invalidPhoneNumber: '請輸入有效的手機號',
       enterSixDigitCode: '請輸入 6 位數驗證碼',

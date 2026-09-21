@@ -557,12 +557,23 @@ export function resolveRestAction(method: string, path: string): string {
 }
 
 function resolveEntityIdFromRequest(req: Request): string | null {
+  /*
+   * ⚠️ `req.params ?? {}` — it really can be undefined here, and reading `.id`
+   * off it threw "Cannot read properties of undefined (reading 'id')" straight
+   * into "[platformAuditMiddleware] Failed to write audit log" (21 Sep 2026).
+   *
+   * This runs from `res.on('finish')`, AFTER the whole router stack has
+   * unwound — and Express restores `req.params` to what it was before the
+   * layer ran, which at app level is nothing at all. A request that never
+   * matched a route, or was refused before routing, has no params to restore.
+   *
+   * The response had already gone out by then, so the cost was never an error
+   * the caller saw: it was the audit row being dropped in silence, which is the
+   * one thing an audit log may never do quietly.
+   */
+  const params = (req.params ?? {}) as Record<string, string | undefined>;
   const paramIdValue =
-    req.params.id ??
-    req.params.roleId ??
-    req.params.userId ??
-    req.params.moduleId ??
-    req.params.permissionId;
+    params.id ?? params.roleId ?? params.userId ?? params.moduleId ?? params.permissionId;
 
   if (paramIdValue) {
     return paramId(paramIdValue);

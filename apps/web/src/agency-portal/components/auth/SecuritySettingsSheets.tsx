@@ -17,12 +17,10 @@ import { useEffect, useId, useState } from "react";
 import { isDemoPortalSession } from "@/lib/auth/agency-demo-session";
 import {
 	describeCodeDelivery,
-	localiseAuthError,
 	localiseAuthMessage,
 } from "@/lib/auth/auth-server-copy";
 import { nameChangeErrorText } from "@/lib/auth/name-change-copy";
 import {
-	changeMyPassword,
 	PASSWORD_MAX_LENGTH,
 	PASSWORD_MIN_LENGTH,
 } from "@/lib/auth/password-api";
@@ -37,6 +35,10 @@ import {
 	SIGNED_IN_ACCOUNT_QUERY_KEYS,
 	useContactChange,
 } from "@/lib/auth/use-contact-change";
+import {
+	passwordChangeProblemText,
+	usePasswordChange,
+} from "@/lib/auth/use-password-change";
 import { useProfile } from "@/lib/auth/use-profile";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -160,6 +162,14 @@ export function SecuritySettingsSheets({
 	 */
 	const contact = useContactChange();
 	const resetContact = contact.reset;
+	/**
+	 * The password change (owner, 21 Sep 2026, asked what it should become:
+	 * "Current password + a code"): the CURRENT PASSWORD, then ONE code to the
+	 * phone AND the email already on the account — nothing here is changing
+	 * those, so there is no new contact to prove. See `use-password-change.ts`.
+	 */
+	const password = usePasswordChange();
+	const resetPassword = password.reset;
 
 	const [view, setView] = useState<SecurityView>("menu");
 	/**
@@ -211,7 +221,6 @@ export function SecuritySettingsSheets({
 	const [showCurrent, setShowCurrent] = useState(false);
 	const [showNew, setShowNew] = useState(false);
 	const [showConfirm, setShowConfirm] = useState(false);
-	const [savingPassword, setSavingPassword] = useState(false);
 
 	const [newEmail, setNewEmail] = useState("");
 	const [newPhone, setNewPhone] = useState("");
@@ -236,8 +245,9 @@ export function SecuritySettingsSheets({
 			setContactPassword("");
 			setShowContactPassword(false);
 			resetContact();
+			resetPassword();
 		}
-	}, [open, resetContact]);
+	}, [open, resetContact, resetPassword]);
 
 	const backToMenu = () => {
 		setView("menu");
@@ -246,10 +256,17 @@ export function SecuritySettingsSheets({
 		setDemoOtp("");
 		setPhoneError(null);
 		setEmailError(null);
-		// Never left behind a closed sheet.
+		// Never left behind a closed sheet — the NEW password included. It is
+		// held in this component from step 1 until confirm spends it, so
+		// abandoning the code sheet has to drop it rather than leave it typed
+		// behind a menu somebody else may walk up to.
 		setContactPassword("");
 		setShowContactPassword(false);
+		setCurrentPassword("");
+		setNewPassword("");
+		setConfirmPassword("");
 		resetContact();
+		resetPassword();
 	};
 
 	const closeAll = () => {
@@ -274,16 +291,22 @@ export function SecuritySettingsSheets({
 	};
 
 	/**
-	 * Shared by BOTH portals, so this one call site is the whole web
-	 * change-password feature for agency and outlet.
+	 * STEP 1 OF THE PASSWORD CHANGE, shared by BOTH portals — so this one call
+	 * site is the whole web change-password feature for agency and outlet.
 	 *
-	 * `changeMyPassword` stores the RE-ISSUED token pair before it resolves —
-	 * the change retires every earlier token, this tab's included, so without
-	 * that the next request would sign the person out.
+	 * Everything about the new password is checked HERE, before a code is sent:
+	 * length, the confirmation field, and that it differs from the current one.
+	 * Both passwords are in hand on this step and never will be again — confirm
+	 * carries no current password, so the server has to compare the new one
+	 * against the stored hash and answers the same sentence late. Catching it
+	 * here means the common mistake costs no code and no wait.
+	 *
+	 * The new password then stays in this component until `confirmPassword`
+	 * spends it. It is never put in a URL, a query string or the code request.
 	 */
 	const changePassword = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (savingPassword) return;
+		if (password.busy) return;
 		if (!currentPassword.trim()) {
 			toast(t.profile.enterCurrentPassword, "warn");
 			return;
@@ -311,41 +334,44 @@ export function SecuritySettingsSheets({
 			toast(t.profile.passwordMustDiffer, "warn");
 			return;
 		}
-		const finish = () => {
-			toast(t.profile.passwordUpdated, "success");
-			setCurrentPassword("");
-			setNewPassword("");
-			setConfirmPassword("");
-			backToMenu();
-		};
 		// A demo token is not a real session: the server would answer 401 and
-		// the client would sign the demo out for trying.
+		// the client would sign the demo out for trying. No code, no request —
+		// and deliberately no "sent to" sentence either, which would leave
+		// somebody waiting on a handset for a message with no sender.
 		if (isDemoSession) {
-			finish();
+			toast(t.profile.passwordUpdated, "success");
+			backToMenu();
 			return;
 		}
-		setSavingPassword(true);
-		try {
-			const changed = await changeMyPassword({ currentPassword, newPassword });
-			if (!changed.tokensStored) {
-				// Changed — but the token in this tab is already dead.
-				setCurrentPassword("");
-				setNewPassword("");
-				setConfirmPassword("");
-				requireSignInAgain("password");
-				return;
-			}
-			finish();
-		} catch (error) {
-			// "Current password is incorrect" is a 400, never a 401 — the sheet
-			// stays, and the sentence is shown in the reader's language.
-			toast(
-				localiseAuthError(error, t, t.profile.passwordUpdateFailed),
-				"warn",
-			);
-		} finally {
-			setSavingPassword(false);
+		/*
+		 * A wrong current password is a 400 and a lockout a 429 — never a 401,
+		 * which this client would answer by signing the person out. Either lands
+		 * in `password.problem` and renders under the fields, where it is still
+		 * there when they look back at the box they have to correct.
+		 */
+		await password.start(currentPassword);
+	};
+
+	/**
+	 * STEP 2 — spend the code and write the password that has been held here
+	 * since step 1. The api call stores the re-issued token pair before this
+	 * resolves; the change retires every earlier token, this tab's included, so
+	 * without that the next request would sign the person out.
+	 */
+	const verifyPasswordCode = async () => {
+		const confirmed = await password.submitCode(newPassword);
+		if (!confirmed) return; // refused — the code sheet stays open
+		if (!confirmed.tokensStored) {
+			// Written — and the change retired this tab's token.
+			requireSignInAgain("password");
+			return;
 		}
+		toast(localiseAuthMessage(confirmed.message, t), "success");
+		backToMenu();
+	};
+
+	const resendPasswordCode = async () => {
+		if (await password.resend()) toast(t.authCodes.codeResent, "info");
 	};
 
 	/** What the portals currently call this person. */
@@ -522,6 +548,18 @@ export function SecuritySettingsSheets({
 			? contactChangeProblemText(contact.problem, t, t.authCodes.codeSendFailed)
 			: null;
 
+	/** The same, for the password lane's step 1. */
+	const passwordPaneProblem =
+		!password.codeOpen && password.problem
+			? passwordChangeProblemText(
+					password.problem,
+					t,
+					t.authCodes.codeSendFailed,
+				)
+			: null;
+
+	const passwordDelivery = describeCodeDelivery(password.sentTo, t);
+
 	const delivery = describeCodeDelivery(contact.sentTo, t);
 	const realTitle =
 		contact.kind === "email"
@@ -622,12 +660,22 @@ export function SecuritySettingsSheets({
 					onBack={backToMenu}
 					onClose={closeAll}
 				/>
+				{/* A real session sends a code from here — say so before the
+				    button, not after it. A demo session sends nothing. */}
+				{isDemoSession ? null : (
+					<p className="iz-tiny iz-muted mb-3">
+						{t.authCodes.passwordStepsHint}
+					</p>
+				)}
 				<form onSubmit={changePassword} className="iz-security-form">
 					<PasswordField
 						label={t.profile.currentPassword}
 						placeholder={t.profile.enterCurrentPassword}
 						value={currentPassword}
-						onChange={setCurrentPassword}
+						onChange={(value) => {
+							setCurrentPassword(value);
+							password.clearProblem();
+						}}
 						show={showCurrent}
 						onToggleShow={() => setShowCurrent((v) => !v)}
 						autoComplete="current-password"
@@ -636,7 +684,10 @@ export function SecuritySettingsSheets({
 						label={t.profile.newPassword}
 						placeholder={t.profile.enterNewPassword}
 						value={newPassword}
-						onChange={setNewPassword}
+						onChange={(value) => {
+							setNewPassword(value);
+							password.clearProblem();
+						}}
 						show={showNew}
 						onToggleShow={() => setShowNew((v) => !v)}
 						autoComplete="new-password"
@@ -645,17 +696,40 @@ export function SecuritySettingsSheets({
 						label={t.profile.confirmNewPassword}
 						placeholder={t.profile.confirmYourNewPassword}
 						value={confirmPassword}
-						onChange={setConfirmPassword}
+						onChange={(value) => {
+							setConfirmPassword(value);
+							password.clearProblem();
+						}}
 						show={showConfirm}
 						onToggleShow={() => setShowConfirm((v) => !v)}
 						autoComplete="new-password"
 					/>
+					{/*
+					 * A refusal from step 1 — a wrong current password (400), a
+					 * lockout (429), or an account with nowhere to send a code
+					 * (422) — kept ON the pane beside the field it is about,
+					 * never in a toast that is gone in three seconds.
+					 */}
+					{passwordPaneProblem ? (
+						<p role="alert" className="iz-tiny mt-1.5 text-[var(--iz-red)]">
+							{passwordPaneProblem}
+						</p>
+					) : null}
+					{/*
+					 * Step 1 SENDS A CODE — it no longer saves anything, so it
+					 * may not say "Save password". A demo session sends nothing
+					 * and finishes here, so it keeps the old label.
+					 */}
 					<button
 						type="submit"
 						className="iz-btn iz-btn-primary iz-security-form__submit"
-						disabled={savingPassword}
+						disabled={password.busy}
 					>
-						{savingPassword ? t.profile.savingPassword : t.profile.savePassword}
+						{password.busy
+							? t.common.loading
+							: isDemoSession
+								? t.profile.savePassword
+								: t.profile.sendOtpAndUpdate}
 					</button>
 				</form>
 			</IzSheet>
@@ -893,6 +967,57 @@ export function SecuritySettingsSheets({
 					}
 					verifyLabel={
 						contact.busy ? t.authCodes.verifying : t.profile.verifyAndSave
+					}
+				/>
+			)}
+
+			{/*
+			 * THE PASSWORD CODE — step 2, and a REAL session only. A demo has no
+			 * account behind it, so nothing was sent and this never opens; the
+			 * demo password change finishes on step 1 exactly as it always did.
+			 */}
+			{isDemoSession ? null : (
+				<OtpVerifySheet
+					open={live && password.codeOpen}
+					variant={sheetVariant}
+					onClose={resetPassword}
+					title={t.authCodes.passwordCodeTitle}
+					description={
+						<>
+							<span className="block">{t.authCodes.passwordCodeHint}</span>
+							{passwordDelivery.sent ? (
+								<b className="mt-1.5 block text-[var(--iz-txt)]">
+									{passwordDelivery.sent}
+								</b>
+							) : null}
+							{passwordDelivery.none ? (
+								<span className="mt-1.5 block">{passwordDelivery.none}</span>
+							) : null}
+							{passwordDelivery.failed ? (
+								<span className="mt-1.5 block">{passwordDelivery.failed}</span>
+							) : null}
+							{passwordDelivery.logged ? (
+								<span className="mt-1.5 block">{passwordDelivery.logged}</span>
+							) : null}
+						</>
+					}
+					otp={password.code}
+					onOtpChange={password.setCode}
+					onVerify={verifyPasswordCode}
+					onResend={resendPasswordCode}
+					resendIn={password.resendIn}
+					busy={password.busy}
+					error={
+						password.problem
+							? passwordChangeProblemText(
+									password.problem,
+									t,
+									t.authCodes.codeCheckFailed,
+								)
+							: null
+					}
+					verifyLabel={
+						password.busy ? t.authCodes.verifying : t.profile.savePassword
 					}
 				/>
 			)}

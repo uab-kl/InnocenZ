@@ -44,6 +44,8 @@ export function otpPurposeLabel(purpose: PhoneVerificationPurpose): string {
       return 'Confirm account change';
     case 'contact_change_new':
       return 'Verify new contact';
+    case 'password_change':
+      return 'Password change';
     case 'signup':
     default:
       return 'Register';
@@ -80,6 +82,12 @@ export function resolveOtpTemplateName(
       process.env.META_WHATSAPP_OTP_TEMPLATE_RESET_PASSWORD?.trim() || forgot,
     contact_change_identity: contactChange,
     contact_change_new: contactChange,
+    // A signed-in password change is the same "prove it is you" message as a
+    // reset, so it reuses that template until one of its own is approved.
+    password_change:
+      process.env.META_WHATSAPP_OTP_TEMPLATE_PASSWORD_CHANGE?.trim() ||
+      process.env.META_WHATSAPP_OTP_TEMPLATE_RESET_PASSWORD?.trim() ||
+      forgot,
   };
   return byPurpose[purpose] || process.env.META_WHATSAPP_OTP_TEMPLATE?.trim() || undefined;
 }

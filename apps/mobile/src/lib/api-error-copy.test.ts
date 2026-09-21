@@ -31,6 +31,13 @@ const CONTRACT: ReadonlyArray<readonly [string, keyof typeof EN]> = [
   ['That email is already used by another account', 'emailTaken'],
   ['That phone number is already used by another account', 'phoneTaken'],
   ['Your account has no phone or email we can send a code to', 'noContactChannel'],
+  // 422 from the password change's start — a DIFFERENT sentence from the one
+  // above (password-change.controller.ts NOWHERE_TO_SEND), and neither may
+  // swallow the other.
+  [
+    'Add a phone number or an email to your account before changing your password',
+    'addContactBeforePasswordChange',
+  ],
   ['Current password is incorrect', 'currentPasswordIncorrect'],
   ['New password must be different', 'passwordMustDiffer'],
   ['Change your email from Security settings', 'changeEmailInSecurity'],
@@ -233,6 +240,46 @@ describe('localizeApiError — contract sentences', () => {
   test('an unrecognised server refusal is shown verbatim', () => {
     const message = 'RCP-000007 has already been reviewed by the agency';
     expect(localizeApiError(message, ZH)).toBe(message);
+  });
+
+  /*
+   * The SIGN-IN lockout, which the Security sheets can now receive: every door
+   * that takes the current password honours it before comparing — contact
+   * change's proveIdentity, and the password change's start since 21 Sep 2026.
+   * It reached a 中文 screen in English until it was mapped, because only the
+   * sign-in screen calls `localizeLoginError`, which is where it was known.
+   */
+  describe('the sign-in lockout, on a settings screen', () => {
+    test('the instrument: the limiter pattern does NOT match it, so it was falling through', () => {
+      // If this ever answers 'tooManyRequests' the minute count is being
+      // flattened and the test below is passing for the wrong reason.
+      expect(matchCodeFlowError('Too many failed attempts. Try again in 5 minutes.')).toBeNull();
+    });
+
+    test('keeps the server’s own minutes in every language', () => {
+      const message = 'Too many failed attempts. Try again in 7 minutes.';
+      expect(localizeApiError(message, EN)).toBe(
+        'Too many failed attempts. Try again in 7 minutes.',
+      );
+      expect(localizeApiError(message, ZH)).toBe(formatMessage(ZH.lockedOut, { m: '7' }));
+      expect(localizeApiError(message, ZH)).toContain('7');
+      expect(localizeApiError(message, ZH)).not.toBe(message);
+      expect(localizeApiError(message, ZH_HANT)).toBe(
+        formatMessage(ZH_HANT.lockedOut, { m: '7' }),
+      );
+    });
+
+    test('the backend’s singular minute reads too', () => {
+      expect(localizeApiError('Too many failed attempts. Try again in 1 minute.', ZH)).toBe(
+        formatMessage(ZH.lockedOut, { m: '1' }),
+      );
+    });
+
+    test('it is never flattened into the limiter sentence', () => {
+      const message = 'Too many failed attempts. Try again in 5 minutes.';
+      expect(localizeApiError(message, ZH)).not.toBe(ZH.tooManyRequests);
+      expect(localizeApiError(message, ZH_HANT)).not.toBe(ZH_HANT.tooManyRequests);
+    });
   });
 
   test('the older client-written messages still map', () => {

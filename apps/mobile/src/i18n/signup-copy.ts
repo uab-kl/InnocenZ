@@ -262,8 +262,21 @@ export type SignupFieldCopy = {
 
   toastVerifyPhoneFailed: string;
   toastCodeSent: string;
+  /**
+   * The same code went to the email typed on step 1 as well (owner, 21 Sep
+   * 2026: "must be the same otp"). `{phone}` and `{email}` are the PR's own
+   * values, unmasked — she typed both on this device moments ago.
+   */
+  toastCodeSentWithEmail: string;
   toastCodeResent: string;
   toastPhoneTaken: string;
+  /**
+   * 409 from `/auth/otp/send` for the EMAIL, which can only happen now that the
+   * code also goes by email. A sign-up code must never land in an inbox that
+   * already has an account — and the refusal points at the email box, not at
+   * the phone one, which the old single 409 message would have done.
+   */
+  toastEmailTaken: string;
   toastSendCodeFailed: string;
   toastOtpIncomplete: string;
   /** `{list}` = the machine names of the assets that failed — never translated. */
@@ -568,8 +581,10 @@ const en: SignupFieldCopy = {
 
   toastVerifyPhoneFailed: 'Could not verify phone / ID — try again.',
   toastCodeSent: 'Code sent on WhatsApp to {phone}.',
+  toastCodeSentWithEmail: 'Code sent on WhatsApp to {phone} and by email to {email}.',
   toastCodeResent: 'A new code is on its way.',
   toastPhoneTaken: 'That number already has an account. Use another, or sign in.',
+  toastEmailTaken: 'That email already has an account. Use another, or sign in.',
   toastSendCodeFailed: 'Could not send the code — please try again.',
   toastOtpIncomplete: 'Enter all six digits.',
   toastPhotosPartial:
@@ -861,8 +876,10 @@ const zh: SignupFieldCopy = {
 
   toastVerifyPhoneFailed: '无法验证手机 / 证件 — 请重试。',
   toastCodeSent: '验证码已发送至 WhatsApp {phone}。',
+  toastCodeSentWithEmail: '验证码已发送至 WhatsApp {phone}，并发送至电子邮箱 {email}。',
   toastCodeResent: '新验证码正在发送。',
   toastPhoneTaken: '该号码已有账户。请换号，或直接登录。',
+  toastEmailTaken: '该电子邮箱已有账户。请换一个，或直接登录。',
   toastSendCodeFailed: '无法发送验证码 — 请重试。',
   toastOtpIncomplete: '请输入完整 6 位验证码。',
   toastPhotosPartial: '账户已创建，但以下照片上传失败：{list}。若身份证照片缺失，请重新注册。',
@@ -1149,8 +1166,10 @@ const zhHant: SignupFieldCopy = {
 
   toastVerifyPhoneFailed: '無法驗證手機 / 證件 — 請重試。',
   toastCodeSent: '驗證碼已傳送至 WhatsApp {phone}。',
+  toastCodeSentWithEmail: '驗證碼已傳送至 WhatsApp {phone}，並傳送至電子郵箱 {email}。',
   toastCodeResent: '新驗證碼正在傳送。',
   toastPhoneTaken: '該號碼已有帳戶。請換號，或直接登入。',
+  toastEmailTaken: '該電子郵箱已有帳戶。請換一個，或直接登入。',
   toastSendCodeFailed: '無法傳送驗證碼 — 請重試。',
   toastOtpIncomplete: '請輸入完整 6 位驗證碼。',
   toastPhotosPartial: '帳戶已建立，但以下照片上傳失敗：{list}。若身分證照片缺失，請重新註冊。',

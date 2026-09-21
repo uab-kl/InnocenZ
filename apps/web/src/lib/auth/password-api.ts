@@ -1,8 +1,11 @@
 /**
  * Password endpoints for the OUTLET, AGENCY and ADMIN web portals.
  *
- * Four lanes, two clients:
- *  - `changeMyPassword`        — signed in, needs the bearer token.
+ * Six lanes, two clients:
+ *  - `startPasswordChange`     — signed in: the CURRENT PASSWORD, and one code
+ *                                to the phone and the email already on file.
+ *  - `resendPasswordChangeCode`— signed in: another code, no password.
+ *  - `confirmPasswordChange`   — signed in: the code + the new password.
  *  - `startForgotPassword`     — signed OUT, by email OR phone number: one code
  *                                by WhatsApp, SMS and email.
  *  - `completeForgotPassword`  — signed OUT: the code + the new password.
@@ -16,12 +19,22 @@
  * Owner, 17 Sep 2026: "send the otp via whatapps, email and the sms" for forgot
  * password — the reset link by email alone left anyone whose inbox was the
  * problem with no way back in.
+ *
+ * Owner, 21 Sep 2026, on every code lane including this one: "must be the same
+ * otp" — ONE code, fanned out to WhatsApp, SMS and email, never one per
+ * channel. Asked what the signed-in change should become, the owner chose
+ * "Current password + a code", so the change is TWO STEPS now and the old
+ * one-shot `POST /auth/password/change` is gone from the backend — deleted, not
+ * left answering "please update the app". There is nothing here to translate
+ * for an older build: a call to it collects the router's own 404.
  */
 import axios from "axios";
 import { apiErrorCopy } from "@/lib/auth/api-error-copy";
 import {
 	type ApiEnvelope,
 	AuthFlowError,
+	type CodeDelivery,
+	readDeliveries,
 	storeReissuedTokens,
 	toAuthFlowError,
 } from "@/lib/auth/auth-flow-client";
@@ -48,45 +61,154 @@ function serverMessage(error: unknown, fallback: string): Error {
 }
 
 /**
- * Signed-in change password. The backend proves identity with
- * `currentPassword` and answers 400 (not 401) when it is wrong, so a typo
- * surfaces as an error in the sheet instead of ejecting the session.
- *
- * ⚠️ STORES THE RE-ISSUED TOKENS before resolving. A password change stamps
- * `sessions_valid_from`, which retires every earlier token — this tab's
- * included. Without the new pair the very next request is a 401 and the person
- * is signed out of the account whose password they just changed.
- *
+ * A code is on its way for the signed-in password change. `start` and `resend`
+ * answer the same shape, read in one place so the two can never disagree about
+ * which field carries the id.
+ */
+export interface PasswordChangeStarted {
+	requestId: string;
+	/** Per channel, destinations ALREADY masked by the server. */
+	sentTo: CodeDelivery[];
+	expiresInSec: number;
+	resendAfterSec: number;
+}
+
+/**
  * ⚠️ `tokensStored: false` means the password DID change but the answer carried
  * no token pair — the server writes first and re-issues second, and a failed
  * re-issue must not turn a saved change into an error. The token this tab holds
  * is already retired, so the caller must say "saved — sign in again" and send
  * the person to sign-in, instead of carrying on into an unexplained 401.
  */
-export interface PasswordChanged {
+export interface PasswordChangeConfirmed {
+	/** The server's sentence — "Password updated". */
+	message: string;
 	tokensStored: boolean;
 }
 
-export async function changeMyPassword(input: {
+function numberOr(value: unknown, fallback: number): number {
+	return typeof value === "number" && Number.isFinite(value) && value >= 0
+		? value
+		: fallback;
+}
+
+function readPasswordChangeStarted(
+	response: ApiEnvelope<Partial<PasswordChangeStarted> | null>,
+	failed: string,
+): PasswordChangeStarted {
+	const data = response.data;
+	if (!response.success || !data?.requestId) {
+		throw new AuthFlowError(response.message || failed);
+	}
+	return {
+		requestId: data.requestId,
+		sentTo: readDeliveries(data.sentTo),
+		expiresInSec: numberOr(data.expiresInSec, 600),
+		resendAfterSec: numberOr(data.resendAfterSec, 60),
+	};
+}
+
+/**
+ * Step 1 — prove it is you with the CURRENT PASSWORD; ONE code then goes to the
+ * phone on file (WhatsApp + SMS) AND the email on file.
+ *
+ * ⚠️ A wrong password is HTTP 400 ("Current password is incorrect"), never 401:
+ * this client signs a person out on any 401, so one typo would throw them to
+ * the login page in the middle of securing their account. The login lockout is
+ * honoured here too and answers 429 ("Too many failed attempts. Try again in N
+ * minute(s)."), which carries `retryAfterSec` for the countdown.
+ *
+ * ⚠️ 422 — "Your account has no phone or email we can send a code to" — is the
+ * one refusal no retry can fix: there is nowhere to send a code, so the sheet
+ * has to say so rather than offer Resend.
+ *
+ * ⚠️ THE NEW PASSWORD IS NOT SENT HERE. It is typed on this step and held by
+ * the caller until `confirm`, so a code sheet that is abandoned leaves nothing
+ * half-written on the server.
+ */
+export async function startPasswordChange(input: {
 	currentPassword: string;
+}): Promise<PasswordChangeStarted> {
+	const failed = apiErrorCopy().authCodes.codeSendFailed;
+	const client = getClient(kickToLogin);
+	try {
+		const response = await client.post<
+			ApiEnvelope<Partial<PasswordChangeStarted> | null>
+		>("/auth/password/change/start", {
+			currentPassword: input.currentPassword,
+		});
+		return readPasswordChangeStarted(response.data, failed);
+	} catch (error) {
+		throw toAuthFlowError(error, failed);
+	}
+}
+
+/**
+ * Another code for a change already started — and deliberately NO password: the
+ * `requestId` is itself the proof, exactly as `contact-change/resend` works.
+ * Asking again would mean this client holding the current password in memory
+ * behind the code sheet for the whole flow.
+ *
+ * ⚠️ The answer carries a NEW `requestId`, because the server issues a fresh
+ * row and expires the old one. Keeping the previous id would confirm against a
+ * row that no longer exists ("This code has expired — request a new one") with
+ * a code the person just read off their phone.
+ */
+export async function resendPasswordChangeCode(input: {
+	requestId: string;
+}): Promise<PasswordChangeStarted> {
+	const failed = apiErrorCopy().authCodes.codeSendFailed;
+	const client = getClient(kickToLogin);
+	try {
+		const response = await client.post<
+			ApiEnvelope<Partial<PasswordChangeStarted> | null>
+		>("/auth/password/change/resend", { requestId: input.requestId });
+		return readPasswordChangeStarted(response.data, failed);
+	} catch (error) {
+		throw toAuthFlowError(error, failed);
+	}
+}
+
+/**
+ * Step 2 — spend the code and write the new password.
+ *
+ * ⚠️ STORES THE RE-ISSUED TOKENS before resolving. The write stamps
+ * `sessions_valid_from`, which retires every earlier token — this tab's
+ * included. Without the new pair the very next request is a 401 and the person
+ * is signed out of the account whose password they just changed.
+ *
+ * ⚠️ "New password must be different" arrives from HERE now, not from the
+ * schema: confirm carries no `currentPassword`, so the server compares the new
+ * password against the stored hash instead of two plaintexts. The sheet still
+ * checks it on step 1 — where both are in hand — so the common case is caught
+ * before a code is ever sent.
+ */
+export async function confirmPasswordChange(input: {
+	requestId: string;
+	code: string;
 	newPassword: string;
-}): Promise<PasswordChanged> {
+}): Promise<PasswordChangeConfirmed> {
+	const copy = apiErrorCopy();
 	// Same sentence the sheet already shows when nothing at all comes back, so a
 	// server that answers `success: false` with no message reads identically to
 	// one that answers nothing.
-	const failed = apiErrorCopy().profile.passwordUpdateFailed;
+	const failed = copy.profile.passwordUpdateFailed;
 	const client = getClient(kickToLogin);
 	try {
 		const response = await client.post<
 			ApiEnvelope<{ accessToken?: string; refreshToken?: string } | null>
-		>("/auth/password/change", {
-			currentPassword: input.currentPassword,
+		>("/auth/password/change/confirm", {
+			requestId: input.requestId,
+			code: input.code.trim(),
 			newPassword: input.newPassword,
 		});
 		if (!response.data.success) {
 			throw new AuthFlowError(response.data.message || failed);
 		}
-		return { tokensStored: storeReissuedTokens(response.data.data) };
+		return {
+			tokensStored: storeReissuedTokens(response.data.data),
+			message: response.data.message || copy.authCodes.serverPasswordUpdated,
+		};
 	} catch (error) {
 		throw toAuthFlowError(error, failed);
 	}

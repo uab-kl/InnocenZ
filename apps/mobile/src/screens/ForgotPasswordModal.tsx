@@ -27,6 +27,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Eye, EyeOff } from '../components/icons';
 import { C, GRADIENTS, grad } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { ApiError, completeForgotPassword, startForgotPassword } from '../lib/api';
@@ -95,6 +96,14 @@ export function ForgotPasswordModal({
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  /*
+   * ONE EYE PER PASSWORD BOX, each with its own state (owner, 21 Sep 2026:
+   * "every password row got an eye to see what user was typed"). Separate,
+   * not shared: revealing the new password should not also reveal the
+   * confirmation, or the two stop being an independent check of each other.
+   */
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -421,27 +430,53 @@ export function ForgotPasswordModal({
               <Text style={styles.title}>{t.forgot.newPassword}</Text>
               <Text style={styles.hint}>{t.forgot.passwordHint}</Text>
               <Text style={styles.label}>{t.forgot.newPassword}</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                placeholder={t.security.passwordMin}
-                placeholderTextColor={C.muted2}
-                autoCapitalize="none"
-                maxLength={PASSWORD_MAX}
-              />
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  placeholder={t.security.passwordMin}
+                  placeholderTextColor={C.muted2}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  maxLength={PASSWORD_MAX}
+                />
+                <Pressable
+                  style={styles.eye}
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={10}
+                  accessibilityLabel={showPassword ? t.login.hidePassword : t.login.showPassword}
+                >
+                  {showPassword ? <EyeOff size={17} color={C.muted2} /> : <Eye size={17} color={C.muted2} />}
+                </Pressable>
+              </View>
               <Text style={styles.label}>{t.forgot.confirmPassword}</Text>
-              <TextInput
-                style={styles.input}
-                value={confirm}
-                onChangeText={setConfirm}
-                secureTextEntry
-                placeholder={t.forgot.confirmPassword}
-                placeholderTextColor={C.muted2}
-                autoCapitalize="none"
-                maxLength={PASSWORD_MAX}
-              />
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  value={confirm}
+                  onChangeText={setConfirm}
+                  secureTextEntry={!showConfirm}
+                  placeholder={t.forgot.confirmPassword}
+                  placeholderTextColor={C.muted2}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  maxLength={PASSWORD_MAX}
+                />
+                <Pressable
+                  style={styles.eye}
+                  onPress={() => setShowConfirm((v) => !v)}
+                  hitSlop={10}
+                  accessibilityLabel={showConfirm ? t.login.hidePassword : t.login.showPassword}
+                >
+                  {showConfirm ? <EyeOff size={17} color={C.muted2} /> : <Eye size={17} color={C.muted2} />}
+                </Pressable>
+              </View>
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <Pressable
                 style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
@@ -548,6 +583,10 @@ const styles = StyleSheet.create({
   kindTabTextOn: { color: C.txt },
   phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
   phoneInput: { flex: 1 },
+  /* The box and its eye on one line; the box takes the room the eye leaves. */
+  passwordRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  passwordInput: { flex: 1 },
+  eye: { padding: 6 },
   input: {
     ...font(600),
     fontSize: 16,

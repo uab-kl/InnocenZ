@@ -44,8 +44,18 @@ export const AUTH_SERVER_SENTENCES: Record<string, Label> = {
 		t.authCodes.serverEmailTaken,
 	"That phone number is already used by another account": (t) =>
 		t.authCodes.serverPhoneTaken,
+	/*
+	 * ⚠️ TWO WORDINGS FOR "THERE IS NOWHERE TO SEND A CODE", and only the second
+	 * is live. The first is sent by NOTHING in apps/backend/src — it was already
+	 * unsent at HEAD, so it is stale rather than newly retired, and it is left
+	 * mapped because removing a sentence is a claim about a backend another lane
+	 * is editing. The second is `NOWHERE_TO_SEND` in password-change.controller
+	 * — the 422 of `POST /auth/password/change/start`, which this client calls.
+	 */
 	"Your account has no phone or email we can send a code to": (t) =>
 		t.authCodes.serverNoContactChannel,
+	"Add a phone number or an email to your account before changing your password":
+		(t) => t.authCodes.serverAddContactFirst,
 	"Code sent": (t) => t.authCodes.serverCodeSent,
 	"This code was already used": (t) => t.authCodes.serverCodeAlreadyUsed,
 	"Email updated": (t) => t.authCodes.serverEmailUpdated,
@@ -100,7 +110,7 @@ export const AUTH_SERVER_SENTENCES: Record<string, Label> = {
 	 * `ApiError.INTERNAL_SERVER_ERROR` every one of these handlers ends with,
 	 * and the zod messages in account-code/schemas.ts (the first issue's
 	 * message is what a 400 carries). The two password-length messages carry a
-	 * number and live in LENGTH_PATTERNS below.
+	 * number and live in NUMBER_PATTERNS below, beside the login lockout.
 	 *
 	 * "Could not start the change" was here until 21 Sep 2026 and is gone: it
 	 * was the verifyIdentity handler's 500, and it died with that handler.
@@ -125,11 +135,23 @@ export const AUTH_SERVER_SENTENCES: Record<string, Label> = {
 const WAIT_RE = /^Wait (\d+)\s?s before requesting another code$/;
 
 /**
- * The schema's password bounds, which carry the number the server enforces
- * (`PASSWORD_MIN` / `PASSWORD_MAX` in account-code/schemas.ts). Read out of the
- * sentence rather than assumed, so a changed bound still reads correctly.
+ * SENTENCES THAT CARRY A NUMBER, matched by pattern rather than by the map —
+ * one key per wording, with the number read out of the server's own sentence
+ * instead of assumed, so a changed bound or a retuned lockout still reads
+ * correctly.
+ *
+ *  • the schema's password bounds (`PASSWORD_MIN` / `PASSWORD_MAX` in
+ *    account-code/schemas.ts);
+ *  • ⚠️ THE LOGIN LOCKOUT, which `proveIdentity` honours — so it is answered by
+ *    `contact-change/start` and by `password/change/start`, the two routes that
+ *    take a current password. It was missing until 21 Sep 2026 and showed
+ *    English on a 中文 session at the one moment somebody is locked out and
+ *    reading carefully. English has a singular and a plural form and the server
+ *    writes both (`minute` / `minutes`, auth.controller.ts and
+ *    contact-change.controller.ts); Chinese needs only one, so both keys carry
+ *    the same sentence there.
  */
-const LENGTH_PATTERNS: ReadonlyArray<{
+const NUMBER_PATTERNS: ReadonlyArray<{
 	re: RegExp;
 	label: (t: PortalTranslations, n: string) => string;
 }> = [
@@ -140,6 +162,16 @@ const LENGTH_PATTERNS: ReadonlyArray<{
 	{
 		re: /^Password must be at most (\d+) characters long$/,
 		label: (t, n) => fill(t.authCodes.serverPasswordMaxLength, { max: n }),
+	},
+	{
+		re: /^Too many failed attempts\. Try again in (\d+) minutes?$/,
+		label: (t, n) =>
+			fill(
+				n === "1"
+					? t.authCodes.serverLockedOutMinute
+					: t.authCodes.serverLockedOutMinutes,
+				{ n },
+			),
 	},
 ];
 
@@ -206,7 +238,7 @@ export function localiseAuthMessage(
 	if (label) return label(t);
 	const wait = WAIT_RE.exec(key);
 	if (wait) return fill(t.authCodes.serverWaitSeconds, { n: wait[1] });
-	for (const pattern of LENGTH_PATTERNS) {
+	for (const pattern of NUMBER_PATTERNS) {
 		const match = pattern.re.exec(key);
 		if (match) return pattern.label(t, match[1]);
 	}

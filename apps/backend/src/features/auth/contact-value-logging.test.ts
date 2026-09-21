@@ -482,10 +482,57 @@ describe('account-code catches', () => {
  * The third dev-only code line. `delivery.ts` and `sms.ts` masked their
  * destination; `OtpController.send` still logged the full number beside the
  * code. The code stays (it is the point of a local-dev line) — the number goes.
+ *
+ * ⚠️ REPOINTED 21 Sep 2026. `/auth/otp/send` no longer calls `sendWhatsAppOtp`
+ * and no longer writes a dev line of its own: it goes through `deliverCode`,
+ * the same fan-out every account-code flow uses, so ONE code now reaches
+ * WhatsApp, SMS and (when the body carries one) email. The masking this test
+ * exists for therefore now comes from `devLogCode` — which is exactly why the
+ * test is kept and repointed rather than deleted. It is the only case that
+ * proves the property END TO END, from the public endpoint, instead of by
+ * calling `deliverCode` directly as the case above it does.
  */
 describe('OtpController.send — WhatsApp not configured (local dev)', () => {
-  it('logs the code with the number masked', async () => {
+  it('logs the code with the number masked, through deliverCode', async () => {
+    // `deliverCode` reads the MOCKED env, not process.env; the suite's default
+    // is 'production', where nothing is ever logged for dev.
+    fake.env.NODE_ENV = 'development';
     fake.whatsapp.configured = false;
+    const phoneVerifications = {
+      findActivePending: vi.fn(async () => null),
+      expirePendingForPhone: vi.fn(async () => undefined),
+      create: vi.fn(async () => ({ id: USER_ID })),
+      update: vi.fn(async () => null),
+    };
+    const users = { getUserByLoginMethod: vi.fn(async () => null) };
+    // TWO arguments on purpose: the third is the injectable `deliver`, and
+    // leaving it out is what makes this test drive the REAL fan-out.
+    const controller = new OtpControllerClass(phoneVerifications as never, users as never);
+    const res = fakeRes();
+    await controller.send(fakeReq({ phoneNum: PHONE, purpose: 'signup' }), res);
+
+    expect(res.statusCode).toBe(200);
+    // The instrument: exactly this dev line ran, and it carries a code.
+    const devLines = fake.logger.warn.mock.calls.filter(([message]) =>
+      String(message).includes('code logged for local dev only'),
+    );
+    expect(devLines).toHaveLength(1);
+    const [, meta] = devLines[0] as [string, { to: string; code: string; channel: string }];
+    expect(meta.channel).toBe('whatsapp');
+    expect(meta.code).toMatch(/^\d{6}$/);
+    expect(meta.to).toBe('+60 ••••• 6789');
+    expect(leaks(logged())).toEqual([]);
+  });
+
+  /**
+   * THE SAME ENDPOINT, WITH AN EMAIL IN THE BODY (sign-up, 21 Sep 2026). A
+   * second destination is a second chance to print a contact in a log line, and
+   * the dev line is the one place the CODE is printed on purpose — so the
+   * address beside it has to be masked too.
+   */
+  it('masks the EMAIL of a sign-up code as well as the number', async () => {
+    fake.env.NODE_ENV = 'development';
+    fake.env.OTP_DELIVERY_LOG_ONLY = 'true';
     const phoneVerifications = {
       findActivePending: vi.fn(async () => null),
       expirePendingForPhone: vi.fn(async () => undefined),
@@ -495,18 +542,18 @@ describe('OtpController.send — WhatsApp not configured (local dev)', () => {
     const users = { getUserByLoginMethod: vi.fn(async () => null) };
     const controller = new OtpControllerClass(phoneVerifications as never, users as never);
     const res = fakeRes();
-    await controller.send(fakeReq({ phoneNum: PHONE, purpose: 'signup' }), res);
+    await controller.send(fakeReq({ phoneNum: PHONE, purpose: 'signup', email: EMAIL }), res);
 
-    expect(process.env.NODE_ENV).not.toBe('production');
     expect(res.statusCode).toBe(200);
-    // The instrument: exactly this dev line ran, and it carries a code.
     const devLines = fake.logger.warn.mock.calls.filter(([message]) =>
-      String(message).includes('OTP logged for local dev only'),
+      String(message).includes('code logged for local dev only'),
     );
-    expect(devLines).toHaveLength(1);
-    const [, meta] = devLines[0] as [string, { phoneNum: string; code: string }];
-    expect(meta.code).toMatch(/^\d{6}$/);
-    expect(meta.phoneNum).toBe('+60 ••••• 6789');
+    // WhatsApp, SMS and email — one code, three channels, the owner's rule.
+    expect(devLines.map(([, meta]) => (meta as { channel: string }).channel)).toEqual([
+      'whatsapp',
+      'sms',
+      'email',
+    ]);
     expect(leaks(logged())).toEqual([]);
   });
 });

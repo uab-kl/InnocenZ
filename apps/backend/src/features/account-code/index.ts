@@ -48,12 +48,15 @@ export const contactChangeController = new ContactChangeControllerClass({
     (await orgMemberInviteRepository.listPendingByEmail(normalizeInviteEmail(email))).length,
 });
 
+/**
+ * The signed-in password change. It takes `accounts` — not `passwords` — because
+ * the code row and the password hash are written in ONE transaction
+ * (`completePasswordChange`), exactly as the logged-out reset and the contact
+ * change do. A spent code with an unchanged password would strand the person;
+ * a changed password with a live code would let the same code be used twice.
+ */
 export const passwordChangeController = new PasswordChangeControllerClass({
-  users: userRepository,
-  passwords: authRepository,
+  ...shared,
   jwt: jwtController,
-  hashPassword,
   comparePassword,
-  notices: accountNotices,
-  now: () => Date.now(),
 });

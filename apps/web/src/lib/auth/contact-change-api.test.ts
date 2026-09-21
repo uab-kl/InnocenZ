@@ -46,9 +46,11 @@ import {
 } from "./contact-change-api";
 import { readForgotIdentifier } from "./forgot-identifier";
 import {
-	changeMyPassword,
 	completeForgotPassword,
+	confirmPasswordChange,
+	resendPasswordChangeCode,
 	startForgotPassword,
+	startPasswordChange,
 } from "./password-api";
 
 type Reply = {
@@ -166,7 +168,7 @@ describe("contact change — tokens", () => {
 		expect(kickToLogin).not.toHaveBeenCalled();
 	});
 
-	it("change password stores the re-issued pair too", async () => {
+	it("change password confirm stores the re-issued pair too", async () => {
 		replies.push({
 			status: 200,
 			body: {
@@ -176,13 +178,18 @@ describe("contact change — tokens", () => {
 			},
 		});
 
-		const changed = await changeMyPassword({
-			currentPassword: "old-pw",
+		const changed = await confirmPasswordChange({
+			requestId: "pw1",
+			code: " 123456 ",
 			newPassword: "new-pw",
 		});
 
-		expect(changed).toEqual({ tokensStored: true });
-		expect(seen[0].url).toBe("/auth/password/change");
+		expect(changed).toEqual({
+			tokensStored: true,
+			message: "Password updated",
+		});
+		expect(seen[0].url).toBe("/auth/password/change/confirm");
+		expect(seen[0].body.code).toBe("123456");
 		expect(getAccessToken()).toBe("pw-access");
 		expect(getRefreshToken()).toBe("pw-refresh");
 		expect(kickToLogin).not.toHaveBeenCalled();
@@ -233,9 +240,203 @@ describe("contact change — tokens", () => {
 		});
 
 		await expect(
-			changeMyPassword({ currentPassword: "old-pw", newPassword: "new-pw" }),
-		).resolves.toEqual({ tokensStored: false });
+			confirmPasswordChange({
+				requestId: "pw1",
+				code: "123456",
+				newPassword: "new-pw",
+			}),
+		).resolves.toEqual({ tokensStored: false, message: "Password updated" });
 		expect(getAccessToken()).toBe("old-access");
+	});
+});
+
+/*
+ * THE SIGNED-IN PASSWORD CHANGE IS TWO STEPS (owner, 21 Sep 2026: "Current
+ * password + a code"). The two things that would break it quietly:
+ *
+ *  1. the NEW PASSWORD must not ride along with the code request — it is typed
+ *     on step 1 and spent on confirm, and a `start` that carried it would leave
+ *     it half-written on the server for every abandoned code sheet;
+ *  2. `resend` answers its OWN requestId, and a caller that keeps the old one
+ *     confirms against a row the server has already expired.
+ */
+describe("password change — two steps, one code", () => {
+	const codeSent = (requestId: string) => ({
+		status: 200,
+		body: {
+			success: true,
+			message: "Code sent",
+			data: {
+				requestId,
+				sentTo: [
+					{ channel: "whatsapp", to: "+60 ••••• 6789", status: "sent" },
+					{ channel: "sms", to: "+60 ••••• 6789", status: "logged" },
+					{ channel: "email", to: "o••••@atlas-agency.my", status: "sent" },
+				],
+				expiresInSec: 600,
+				resendAfterSec: 60,
+			},
+		},
+	});
+
+	it("start sends ONLY the current password; resend sends ONLY the id", async () => {
+		replies.push(codeSent("pw1"), codeSent("pw2"));
+
+		const started = await startPasswordChange({ currentPassword: "s3cret" });
+		expect(started.requestId).toBe("pw1");
+		// One code, three channels — the receipt is the server's, not a guess.
+		expect(started.sentTo.map((d) => d.channel)).toEqual([
+			"whatsapp",
+			"sms",
+			"email",
+		]);
+		expect(started.expiresInSec).toBe(600);
+		expect(started.resendAfterSec).toBe(60);
+
+		const resent = await resendPasswordChangeCode({ requestId: "pw1" });
+		expect(resent.requestId).toBe("pw2");
+
+		expect(seen.map((s) => s.url)).toEqual([
+			"/auth/password/change/start",
+			"/auth/password/change/resend",
+		]);
+		expect(seen[0].body).toEqual({ currentPassword: "s3cret" });
+		expect(seen[0].body).not.toHaveProperty("newPassword");
+		expect(seen[1].body).toEqual({ requestId: "pw1" });
+		expect(seen[1].body).not.toHaveProperty("currentPassword");
+	});
+
+	it("confirm carries the new password and the code, never the current one", async () => {
+		replies.push({
+			status: 200,
+			body: {
+				success: true,
+				message: "Password updated",
+				data: { accessToken: "a", refreshToken: "r" },
+			},
+		});
+
+		await confirmPasswordChange({
+			requestId: "pw2",
+			code: "654321",
+			newPassword: "brand-new-pw",
+		});
+
+		expect(seen[0].body).toEqual({
+			requestId: "pw2",
+			code: "654321",
+			newPassword: "brand-new-pw",
+		});
+		expect(seen[0].body).not.toHaveProperty("currentPassword");
+	});
+
+	/*
+	 * A WRONG CURRENT PASSWORD IS 400, NEVER 401, and so is the lockout's 429 —
+	 * the whole point of the contract. A 401 here would sign the person out of
+	 * the session they are trying to secure.
+	 */
+	it("a wrong current password on start (400) does not sign out", async () => {
+		replies.push({
+			status: 400,
+			body: {
+				success: false,
+				message: "Current password is incorrect",
+				data: null,
+			},
+		});
+
+		await expect(
+			startPasswordChange({ currentPassword: "nope" }),
+		).rejects.toMatchObject({
+			name: "AuthFlowError",
+			status: 400,
+			message: "Current password is incorrect",
+		});
+		expect(kickToLogin).not.toHaveBeenCalled();
+		expect(getAccessToken()).toBe("old-access");
+		expect(getRefreshToken()).toBe("old-refresh");
+	});
+
+	it("the lockout (429) carries retryAfterSec for the countdown", async () => {
+		replies.push({
+			status: 429,
+			body: {
+				success: false,
+				message: "Too many failed attempts. Try again in 5 minutes.",
+				data: { retryAfterSec: 300 },
+			},
+		});
+
+		await expect(
+			startPasswordChange({ currentPassword: "nope" }),
+		).rejects.toMatchObject({ status: 429, retryAfterSec: 300 });
+		expect(kickToLogin).not.toHaveBeenCalled();
+	});
+
+	/** Nowhere to send a code — no retry can fix it, so it must not read as one. */
+	it("an account with no phone and no email (422) refuses with the reason", async () => {
+		replies.push({
+			status: 422,
+			body: {
+				success: false,
+				message: "Your account has no phone or email we can send a code to",
+				data: null,
+			},
+		});
+
+		await expect(
+			startPasswordChange({ currentPassword: "s3cret" }),
+		).rejects.toMatchObject({
+			status: 422,
+			message: "Your account has no phone or email we can send a code to",
+		});
+		expect(kickToLogin).not.toHaveBeenCalled();
+	});
+
+	it("a wrong code on confirm (400) does not sign out", async () => {
+		replies.push({
+			status: 400,
+			body: { success: false, message: "Invalid code", data: null },
+		});
+
+		await expect(
+			confirmPasswordChange({
+				requestId: "pw1",
+				code: "000000",
+				newPassword: "new-pw",
+			}),
+		).rejects.toMatchObject({ status: 400, message: "Invalid code" });
+		expect(kickToLogin).not.toHaveBeenCalled();
+		expect(getAccessToken()).toBe("old-access");
+	});
+
+	/*
+	 * "New password must be different" arrives from CONFIRM now — the server
+	 * compares against the stored hash because confirm has no current password
+	 * to compare with. The sheet checks it on step 1 too, but a person who
+	 * changed their mind at the code step still has to be told.
+	 */
+	it("the same-password refusal on confirm stays a 400 with its sentence", async () => {
+		replies.push({
+			status: 400,
+			body: {
+				success: false,
+				message: "New password must be different",
+				data: null,
+			},
+		});
+
+		await expect(
+			confirmPasswordChange({
+				requestId: "pw1",
+				code: "123456",
+				newPassword: "old-pw",
+			}),
+		).rejects.toMatchObject({
+			status: 400,
+			message: "New password must be different",
+		});
+		expect(kickToLogin).not.toHaveBeenCalled();
 	});
 });
 
@@ -261,26 +462,11 @@ describe("contact change — a refusal does not sign out", () => {
 		expect(getRefreshToken()).toBe("old-refresh");
 	});
 
-	it("a wrong current password (400) does not sign out either", async () => {
-		replies.push({
-			status: 400,
-			body: {
-				success: false,
-				message: "Current password is incorrect",
-				data: null,
-			},
-		});
-
-		await expect(
-			changeMyPassword({ currentPassword: "nope", newPassword: "new-pw" }),
-		).rejects.toMatchObject({
-			name: "AuthFlowError",
-			status: 400,
-			message: "Current password is incorrect",
-		});
-		expect(kickToLogin).not.toHaveBeenCalled();
-		expect(getAccessToken()).toBe("old-access");
-	});
+	/*
+	 * The password lane's own wrong-password and wrong-code refusals live in
+	 * "password change — two steps, one code" below, against the two routes
+	 * that answer them now.
+	 */
 
 	it("CONTROL: a 401 through the same client DOES kick — the instrument can see one", async () => {
 		replies.push({

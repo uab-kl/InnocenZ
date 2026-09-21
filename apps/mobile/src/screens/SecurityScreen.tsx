@@ -1,24 +1,37 @@
 /**
- * Security settings — change password (current password), change phone and
- * change email, delete account.
+ * Security settings — change password, change phone and change email, delete
+ * account.
  *
- * Changing a phone or an email is TWO calls (owner's decision, 21 Sep 2026):
+ * EVERY credential change here is TWO calls and ONE code (owner, 21 Sep 2026:
+ * "must be the same otp"), and every one of them starts with the CURRENT
+ * PASSWORD:
  *
- *   1. start    { kind, value, currentPassword } → one code to the NEW contact
- *               (WhatsApp + SMS to a new number, email to a new address).
- *      resend                                    → another code to the same new
- *               contact, and a NEW `requestId` that replaces the one we hold.
- *   2. confirm  { kind, value, requestId, code } → writes the change.
+ *   password  1. start   { currentPassword }                → one code to the
+ *                        phone AND the email already on file.
+ *                resend  { requestId }                      → sent again.
+ *             2. confirm { requestId, code, newPassword }   → writes it.
+ *
+ *   phone /   1. start   { kind, value, currentPassword }   → one code to the
+ *   email               NEW contact AND the channel already on file.
+ *                resend  { requestId, kind, value }         → sent again.
+ *             2. confirm { kind, value, requestId, code }   → writes it.
+ *
+ * ⚠️ A RESEND ANSWERS A NEW `requestId` on both flows — the previous row is
+ * retired as the next code goes out, so the id we hold must be REPLACED or the
+ * confirm collects 'This code has expired'.
  *
  * ⚠️ NOTHING IS EVER SENT TO THE OLD PHONE OR OLD EMAIL — not a code, and not a
- * "your email was changed" notice afterwards. The identity code that used to go
- * to the contacts already on file is GONE; the CURRENT PASSWORD took its place.
- * That is why the first sheet asks for the password beside the new value: the
- * password says the person holding this unlocked phone owns the account, and the
- * code to the new contact says she typed it correctly and can receive on it —
- * without which a typo would lock her out of her own account.
+ * "your email was changed" notice afterwards. "Old" means the value being
+ * REPLACED: a new email still copies the code to the phone on file, because
+ * that phone is not what is changing.
  *
- * Both steps show where the code went, using the server's masked `sentTo`.
+ * The password is what says the person holding this unlocked phone owns the
+ * account; the code says she can read a channel the account owns. Neither alone
+ * is enough, which is why the password change grew its second step today — the
+ * current password on its own used to be the whole proof.
+ *
+ * Both steps of both flows show where the code went, using the server's masked
+ * `sentTo`.
  *
  * ⚠️ Changing the password, the phone or the email re-issues the session token
  * and stamps a cutoff that refuses every older token. The new token is stored
@@ -36,11 +49,13 @@ import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ApiError,
-  changePassword,
   confirmContactChange,
+  confirmPasswordChange,
   deleteOwnAccount,
   resendContactChangeNewCode,
+  resendPasswordChangeCode,
   startContactChange,
+  startPasswordChange,
   type CodeDelivery,
   type ContactKind,
 } from '../lib/api';
@@ -65,7 +80,7 @@ import {
   phoneLoginIdentifier,
   savePhoneCountryCode,
 } from '../lib/phone-prefs';
-import { ChevronLeft, Lock, Mail, Phone, Shield, Trash2 } from '../components/icons';
+import { ChevronLeft, Eye, EyeOff, Lock, Mail, Phone, Shield, Trash2 } from '../components/icons';
 import { COUNTRY_BY_CODE, COUNTRY_DIAL_OPTIONS } from './sign-up/constants';
 import { Picker } from './sign-up/fields';
 import { normalizeOtpInput } from './sign-up/step-6';
@@ -73,7 +88,10 @@ import { normalizeOtpInput } from './sign-up/step-6';
 type Sheet =
   | null
   | 'menu'
+  /** Password step 1 — the current password, and the new one twice. */
   | 'password'
+  /** Password step 2 — the code sent to the contacts ALREADY on file. */
+  | 'passwordCode'
   /** Step 1 — the new phone / email, and the current password. */
   | 'contact'
   /** Step 2 — the code sent to the NEW contact. */
@@ -127,6 +145,26 @@ export function SecurityScreen() {
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [deletePw, setDeletePw] = useState('');
+  const [showDeletePw, setShowDeletePw] = useState(false);
+
+  /*
+   * ── The password change's own code row ──────────────────────────────────
+   *
+   * Deliberately NOT the contact flow's `requestId` / `sentTo` / `code`, even
+   * though only one sheet is ever open: the two codes are bound to different
+   * things server-side (this one to the account, the other to a kind + value),
+   * and one shared box is how a password's id ends up posted to a contact
+   * confirm — refused, and unreadable from the screen. The same reasoning that
+   * gave `contactPw` its own state instead of borrowing `curPw`.
+   *
+   * `resendIn` IS shared: it is one countdown driven by one timer, and both
+   * flows write it from their own server answer as they open.
+   */
+  const [pwRequestId, setPwRequestId] = useState<string | null>(null);
+  /** Where the password code went — the contacts ALREADY on file, masked. */
+  const [pwSentTo, setPwSentTo] = useState<CodeDelivery[]>([]);
+  const [pwExpiresInSec, setPwExpiresInSec] = useState(600);
+  const [pwCode, setPwCode] = useState('');
 
   const [contactKind, setContactKind] = useState<ContactKind>('phone');
   const [phoneCountryCode, setPhoneCountryCode] = useState(loadPhoneCountryCode);
@@ -216,14 +254,13 @@ export function SecurityScreen() {
     setMsg(null);
     if (reason === 'sessionEnded') {
       // Nothing was saved; drop what she typed rather than leave it behind the sheet.
-      setCurPw('');
-      setNewPw('');
-      setConfirmPw('');
+      clearTypedPasswords();
       setDeletePw('');
       // The contact sheet's password goes too — resetContactFlow keeps it on
       // purpose (see contactPw), but a dead session is not a recoverable step.
       setContactPw('');
       resetContactFlow();
+      resetPasswordFlow();
     }
     setSignInAfter(reason);
     setSheet('signInAgain');
@@ -253,8 +290,28 @@ export function SecurityScreen() {
     setResendIn(0);
   };
 
+  /**
+   * Drops the open password code row. Leaves the TYPED PASSWORDS alone on
+   * purpose — the places that must drop those (success, discard, a dead
+   * session) clear them themselves, and one of this function's callers is the
+   * server sending her back to step 1 to choose a different new password.
+   */
+  const resetPasswordFlow = () => {
+    setPwRequestId(null);
+    setPwSentTo([]);
+    setPwCode('');
+    setResendIn(0);
+  };
+
+  /** Everything typed into the password sheet. */
+  const clearTypedPasswords = () => {
+    setCurPw('');
+    setNewPw('');
+    setConfirmPw('');
+  };
+
   /** A code is outstanding — closing the sheet would throw it away. */
-  const codeOutstanding = sheet === 'newCode';
+  const codeOutstanding = sheet === 'newCode' || sheet === 'passwordCode';
 
   const requestCloseSheet = () => {
     if (signInAfter) {
@@ -282,36 +339,158 @@ export function SecurityScreen() {
     setSheet('contact');
   };
 
-  const savePassword = async () => {
+  /**
+   * Open the password sheet fresh. Never inherits a code row or a password from
+   * the change before it — a stale `pwRequestId` would be confirmed against a
+   * code that no longer exists.
+   */
+  const openPassword = () => {
+    resetPasswordFlow();
+    clearTypedPasswords();
+    setError(null);
+    setMsg(null);
+    setSheet('password');
+  };
+
+  /**
+   * What the PR can be told BEFORE the server is asked: the new password's
+   * shape, and that it differs from the current one. Returns the sentence, or
+   * null when there is nothing to say.
+   *
+   * ⚠️ The "must differ" check is the only place this comparison can be made
+   * cheaply. `confirm` carries no current password, so the server has to
+   * compare against the stored HASH and can only refuse at the very end, after
+   * a code has been sent and typed. Catching it here saves that whole round.
+   */
+  const newPasswordProblem = (): string | null => {
+    if (newPw.length < 6) return t.security.passwordMin;
+    if (newPw.length > PASSWORD_MAX) return t.security.passwordMax;
+    if (newPw !== confirmPw) return t.security.passwordMismatch;
+    if (newPw === curPw) return t.errors.passwordMustDiffer;
+    return null;
+  };
+
+  /**
+   * Password step 1: the current password proves it is her, and the server
+   * sends ONE code to the phone AND the email on file.
+   *
+   * The new password is validated here but NOT sent — it travels with the code
+   * on confirm. A refusal keeps her on this sheet: every one of them is about
+   * something in front of her (the current password, a lockout, a cooldown, or
+   * an account with nowhere to send a code).
+   */
+  const sendPasswordCode = async () => {
     if (!token || busy) return;
-    if (newPw.length < 6) {
-      setError(t.security.passwordMin);
+    if (!curPw) {
+      setError(t.errors.currentPasswordRequired);
       return;
     }
-    if (newPw.length > PASSWORD_MAX) {
-      setError(t.security.passwordMax);
-      return;
-    }
-    if (newPw !== confirmPw) {
-      setError(t.security.passwordMismatch);
-      return;
-    }
-    if (newPw === curPw) {
-      setError(t.errors.passwordMustDiffer);
+    const problem = newPasswordProblem();
+    if (problem) {
+      setError(problem);
       return;
     }
     setBusy(true);
     setError(null);
-    let issued: Awaited<ReturnType<typeof changePassword>>;
     try {
-      issued = await changePassword(token, curPw, newPw);
+      const res = await startPasswordChange(token, curPw);
+      setPwRequestId(res.requestId);
+      setPwSentTo(res.sentTo ?? []);
+      setPwExpiresInSec(res.expiresInSec ?? 600);
+      setResendIn(res.resendAfterSec ?? 60);
+      setPwCode('');
+      setSheet('passwordCode');
+    } catch (e) {
+      /*
+       * ⚠️ A WRONG PASSWORD IS 400, NOT 401 — deliberately, and
+       * `isSessionRefusal` checks the sentence as well as the status, so
+       * 'Current password is incorrect' falls through to the error line below
+       * instead of signing her out over a typo.
+       */
+      if (sessionRefused(e)) {
+        requireSignInAgain('sessionEnded');
+        return;
+      }
+      noteCooldown(e);
+      setError(describeError(e, t.security.sendCodeFailed));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Another code to the same contacts. No password — the `requestId` is the
+   * proof, exactly as the contact flow's resend works.
+   *
+   * ⚠️ THE ANSWER CARRIES A NEW `requestId` AND IT REPLACES THE OLD ONE.
+   */
+  const resendPasswordCode = async () => {
+    if (!token || !pwRequestId || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await resendPasswordChangeCode(token, { requestId: pwRequestId });
+      setPwRequestId(res.requestId);
+      setPwSentTo(res.sentTo ?? []);
+      setPwExpiresInSec(res.expiresInSec ?? 600);
+      setResendIn(res.resendAfterSec ?? 60);
+      setPwCode('');
+    } catch (e) {
+      if (sessionRefused(e)) {
+        requireSignInAgain('sessionEnded');
+        return;
+      }
+      noteCooldown(e);
+      setError(describeError(e, t.security.sendCodeFailed));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Password step 2: the code and the new password together — writes it. */
+  const confirmNewPassword = async () => {
+    if (!token || !pwRequestId || !isCompleteCode(pwCode) || busy) return;
+    setBusy(true);
+    setError(null);
+    let issued: Awaited<ReturnType<typeof confirmPasswordChange>>;
+    try {
+      issued = await confirmPasswordChange(token, {
+        requestId: pwRequestId,
+        code: pwCode,
+        newPassword: newPw,
+      });
     } catch (e) {
       setBusy(false);
       if (sessionRefused(e)) {
         requireSignInAgain('sessionEnded');
         return;
       }
-      setError(describeError(e, t.security.updatePasswordFailed));
+      const message = e instanceof ApiError ? e.message : '';
+      const refusal = message ? matchCodeFlowError(message) : null;
+      const failed = describeError(e, t.security.updatePasswordFailed);
+      /*
+       * A refusal about the NEW PASSWORD, not about the code — 'New password
+       * must be different' (the server compares against the stored hash,
+       * because confirm carries no current password) and the two length
+       * bounds. The field it names is on the FIRST sheet, so that is where she
+       * is sent, and the code row is dropped rather than left dangling: we
+       * cannot know from here whether the server spent it before or after this
+       * check, and offering a code that may already be used is worse than
+       * sending a fresh one.
+       */
+      if (
+        refusal === 'passwordMustDiffer' ||
+        refusal === 'passwordMinLength' ||
+        refusal === 'passwordMaxLength'
+      ) {
+        resetPasswordFlow();
+        setError(failed);
+        setSheet('password');
+        return;
+      }
+      // Only a refusal about the code clears it; a limiter's 429 leaves it valid.
+      if (isCodeRejection(message)) setPwCode('');
+      setError(failed);
       return;
     }
     /*
@@ -321,9 +500,8 @@ export function SecurityScreen() {
      */
     const accessToken = issued?.accessToken ?? null;
     if (accessToken) adoptToken(accessToken);
-    setCurPw('');
-    setNewPw('');
-    setConfirmPw('');
+    resetPasswordFlow();
+    clearTypedPasswords();
     setBusy(false);
     if (!accessToken) {
       // Changed, but no token to carry on with — the old one is already dead.
@@ -549,6 +727,11 @@ export function SecurityScreen() {
     m: minutesFromSeconds(expiresInSec),
   });
 
+  /** The password code's own TTL — its own server answer, its own line. */
+  const pwCodeValidLine = formatMessage(t.security.codeValidFor, {
+    m: minutesFromSeconds(pwExpiresInSec),
+  });
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 10 }]}>
       <Pressable style={styles.back} onPress={closeAll} hitSlop={10}>
@@ -629,8 +812,11 @@ export function SecurityScreen() {
                   onPress={() => {
                     setConfirmDiscard(false);
                     resetContactFlow();
-                    // Leaving the flow entirely — the password goes with it.
+                    resetPasswordFlow();
+                    // Leaving the flow entirely — every password typed into it
+                    // goes with it, on both flows.
                     setContactPw('');
+                    clearTypedPasswords();
                     setError(null);
                     setSheet(null);
                   }}
@@ -646,11 +832,7 @@ export function SecurityScreen() {
                 <MenuRow
                   icon={Lock}
                   label={t.security.changePassword}
-                  onPress={() => {
-                    setError(null);
-                    setMsg(null);
-                    setSheet('password');
-                  }}
+                  onPress={openPassword}
                 />
                 <MenuRow
                   icon={Phone}
@@ -671,43 +853,104 @@ export function SecurityScreen() {
             {!confirmDiscard && sheet === 'password' && (
               <>
                 <Text style={styles.sheetTitle}>{t.security.changePassword}</Text>
+                <Text style={styles.sheetHint}>{t.security.changePasswordHint}</Text>
                 <Field
                   label={t.security.currentPassword}
                   value={curPw}
                   onChange={setCurPw}
                   secure
+                  autoComplete="current-password"
                   maxLength={PASSWORD_MAX}
+                  testID="security-current-password"
                 />
                 <Field
                   label={t.security.newPassword}
                   value={newPw}
                   onChange={setNewPw}
                   secure
+                  autoComplete="new-password"
                   maxLength={PASSWORD_MAX}
+                  testID="security-new-password"
                 />
                 <Field
                   label={t.security.confirmPassword}
                   value={confirmPw}
                   onChange={setConfirmPw}
                   secure
+                  autoComplete="new-password"
                   maxLength={PASSWORD_MAX}
+                  testID="security-confirm-password"
                 />
                 {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
                   style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
-                  onPress={() => void savePassword()}
-                  disabled={busy}
+                  onPress={() => void sendPasswordCode()}
+                  disabled={busy || !curPw || !newPw || !confirmPw}
                 >
                   <Text style={styles.primaryText}>
-                    {busy ? t.common.loading : t.common.save}
+                    {busy ? t.forgot.sending : t.security.sendOtp}
                   </Text>
                 </Pressable>
                 <Pressable
                   style={styles.sheetCancel}
-                  onPress={() => setSheet('menu')}
+                  onPress={() => {
+                    setError(null);
+                    setSheet('menu');
+                  }}
                   disabled={busy}
                 >
                   <Text style={styles.sheetCancelText}>{t.common.back}</Text>
+                </Pressable>
+              </>
+            )}
+
+            {!confirmDiscard && sheet === 'passwordCode' && (
+              <>
+                <Text style={styles.sheetTitle}>{t.security.passwordCodeTitle}</Text>
+                <Text style={codeReachedSomewhere(pwSentTo) ? styles.sentTo : styles.notSent}>
+                  {describeCodeDelivery(pwSentTo, t.security)}
+                </Text>
+                <Text style={styles.sheetHint}>{pwCodeValidLine}</Text>
+                <Field
+                  label={t.security.otpLabel}
+                  value={pwCode}
+                  onChange={(v) => setPwCode(normalizeOtpInput(v))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  testID="security-password-code"
+                />
+                {error ? <Text style={styles.sheetError}>{error}</Text> : null}
+                <Pressable
+                  style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
+                  onPress={() => void confirmNewPassword()}
+                  disabled={busy || !pwRequestId || !isCompleteCode(pwCode)}
+                >
+                  <Text style={styles.primaryText}>
+                    {busy ? t.forgot.saving : t.security.verifyAndSave}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={styles.sheetCancel}
+                  onPress={() => resendIn === 0 && void resendPasswordCode()}
+                  disabled={resendIn > 0 || busy}
+                >
+                  <Text style={styles.sheetCancelText}>{resendLabel}</Text>
+                </Pressable>
+                {/*
+                 * Back to step 1 with the code row dropped — the same "start
+                 * again" the contact flow offers. The typed passwords stay: she
+                 * is correcting one of them, not abandoning the change.
+                 */}
+                <Pressable
+                  style={styles.sheetCancel}
+                  onPress={() => {
+                    resetPasswordFlow();
+                    setError(null);
+                    setSheet('password');
+                  }}
+                  disabled={busy}
+                >
+                  <Text style={styles.sheetCancelText}>{t.security.startAgain}</Text>
                 </Pressable>
               </>
             )}
@@ -747,6 +990,11 @@ export function SecurityScreen() {
                         placeholderTextColor={C.muted2}
                         keyboardType="phone-pad"
                         autoCapitalize="none"
+                        // Off for the same reason as the email box above: `tel` is
+                        // also a username token, and this sits over a password too.
+                        autoComplete="off"
+                        nativeID="innocenz-new-phone"
+                        textContentType="none"
                       />
                     </View>
                   </>
@@ -762,6 +1010,29 @@ export function SecurityScreen() {
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
+                      /*
+                       * ⚠️ `off`, AND NOT `email` — the second attempt at this bug.
+                       *
+                       * On Expo web a browser filled this box with `188716214`, the
+                       * owner's phone without its country code, and filled the
+                       * password box below it at the same time. That pair is the
+                       * tell: it is Chrome's PASSWORD MANAGER restoring a saved
+                       * login for localhost:8081, not stray form history. The PR
+                       * app's sign-in splits the number into a dial picker and
+                       * local digits, so the credential Chrome saved has
+                       * `188716214` as its username.
+                       *
+                       * Marking this box `email` made it WORSE: `email` is a
+                       * username token, so it told Chrome this was the username
+                       * field of a login form and invited the fill. `off` plus an
+                       * id of its own takes it out of the running instead.
+                       *
+                       * The app state was empty throughout — `openContact` clears
+                       * it on every open. Nothing here is ever the account's data.
+                       */
+                      autoComplete="off"
+                      nativeID="innocenz-new-email"
+                      textContentType="none"
                       maxLength={254}
                     />
                   </>
@@ -776,7 +1047,9 @@ export function SecurityScreen() {
                   value={contactPw}
                   onChange={setContactPw}
                   secure
+                  autoComplete="current-password"
                   maxLength={PASSWORD_MAX}
+                  testID="security-contact-password"
                 />
                 {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
@@ -834,6 +1107,7 @@ export function SecurityScreen() {
                   onChange={(v) => setCode(normalizeOtpInput(v))}
                   keyboardType="number-pad"
                   maxLength={6}
+                  testID="security-contact-code"
                 />
                 {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
@@ -887,16 +1161,28 @@ export function SecurityScreen() {
               <>
                 <Text style={styles.sheetTitle}>{t.security.deleteAccountTitle}</Text>
                 <Text style={styles.sheetHint}>{t.security.deleteAccountHint}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={deletePw}
-                  onChangeText={setDeletePw}
-                  placeholder={t.security.deleteAccountPassword}
-                  placeholderTextColor={C.muted2}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
+                <View style={styles.revealRow}>
+                  <TextInput
+                    style={[styles.input, styles.revealInput]}
+                    value={deletePw}
+                    onChangeText={setDeletePw}
+                    placeholder={t.security.deleteAccountPassword}
+                    placeholderTextColor={C.muted2}
+                    secureTextEntry={!showDeletePw}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="current-password"
+                    testID="security-delete-password"
+                  />
+                  <Pressable
+                    style={styles.revealEye}
+                    onPress={() => setShowDeletePw((v) => !v)}
+                    hitSlop={10}
+                    accessibilityLabel={showDeletePw ? t.login.hidePassword : t.login.showPassword}
+                  >
+                    {showDeletePw ? <EyeOff size={17} color={C.muted2} /> : <Eye size={17} color={C.muted2} />}
+                  </Pressable>
+                </View>
                 {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
                   style={[styles.dangerBtn, busy && { opacity: 0.6 }]}
@@ -950,6 +1236,8 @@ function Field({
   secure,
   keyboardType,
   maxLength,
+  testID,
+  autoComplete,
 }: {
   label: string;
   value: string;
@@ -957,20 +1245,56 @@ function Field({
   secure?: boolean;
   keyboardType?: 'default' | 'number-pad' | 'phone-pad';
   maxLength?: number;
+  /**
+   * What the browser or keychain should offer here. Without it a browser has
+   * nothing to match on and falls back to "the last thing typed in a box this
+   * shape" — which is how the Change EMAIL box came to show a phone number.
+   */
+  autoComplete?: 'current-password' | 'new-password' | 'email' | 'tel' | 'off';
+  /**
+   * These boxes carry no placeholder and a secure one has no readable value,
+   * so a test can only address them by id. Named per sheet, because WHICH box
+   * received which password is the thing worth pinning.
+   */
+  testID?: string;
 }) {
+  /*
+   * ONE EYE PER BOX, and its own state — owner, 21 Sep 2026: "every password
+   * row got an eye to see what user was typed". Each Field holds its own, so
+   * revealing the new password does not also reveal the confirmation; the two
+   * only check each other while they are read separately.
+   */
+  const [shown, setShown] = useState(false);
+  const t = useLocale().t;
   return (
     <View style={{ marginTop: 10 }}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        secureTextEntry={secure}
-        keyboardType={keyboardType}
-        maxLength={maxLength}
-        style={styles.input}
-        placeholderTextColor={C.muted2}
-        autoCapitalize="none"
-      />
+      <View style={secure ? styles.revealRow : undefined}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          secureTextEntry={secure ? !shown : false}
+          keyboardType={keyboardType}
+          maxLength={maxLength}
+          style={[styles.input, secure ? styles.revealInput : null]}
+          placeholderTextColor={C.muted2}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete={autoComplete}
+          testID={testID}
+        />
+        {secure ? (
+          <Pressable
+            style={styles.revealEye}
+            onPress={() => setShown((v) => !v)}
+            hitSlop={10}
+            accessibilityLabel={shown ? t.login.hidePassword : t.login.showPassword}
+            testID={testID ? `${testID}-reveal` : undefined}
+          >
+            {shown ? <EyeOff size={17} color={C.muted2} /> : <Eye size={17} color={C.muted2} />}
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -1061,6 +1385,10 @@ const styles = StyleSheet.create({
   },
   phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
   phoneInput: { flex: 1 },
+  /* A password box and its eye on one line; the box takes what the eye leaves. */
+  revealRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  revealInput: { flex: 1 },
+  revealEye: { padding: 6 },
   input: {
     ...font(600),
     fontSize: 16,

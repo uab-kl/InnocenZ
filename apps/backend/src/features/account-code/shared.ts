@@ -1,4 +1,6 @@
 import type { Request, Response } from 'express';
+import { logger } from '@/util/logger.js';
+import { Error as ApiError } from '@/error/index.js';
 import type { UserType } from '@/features/user/user.model.js';
 import type { PhoneVerification, NewPhoneVerification } from '@/features/auth/phone-verification.model.js';
 import type { PhoneVerificationRepositoryClass } from '@/features/auth/phone-verification.repository.js';
@@ -135,4 +137,125 @@ export function reissueTokens(
 /** Digits of the phone on file, or '' — the `phone_num` anchor of an account row. */
 export function phoneAnchor(user: Pick<UserType, 'phoneNum'>): string {
   return (user.phoneNum ?? '').replace(/\D/g, '');
+}
+
+/** ONE spelling, so every signed-in flow refuses a bad password identically. */
+export const WRONG_PASSWORD = 'Current password is incorrect';
+
+export type IdentityRefusal = {
+  status: number;
+  message: string;
+  /** Set on the LOCKOUT 429 only — seconds until the account unlocks. */
+  retryAfterSec?: number;
+};
+
+/**
+ * Answer an identity refusal. A 429 carries its wait BOTH as `Retry-After` and
+ * as `data.retryAfterSec`, exactly as `tooSoon` does for the resend cooldown —
+ * the web client reads the field first and falls back to the header, and
+ * without either the lockout sheet has no countdown to show and simply says
+ * "try again later" with no idea when.
+ */
+export function sendRefusal(res: Response, refusal: IdentityRefusal): Response {
+  if (refusal.retryAfterSec === undefined) return send(res, refusal.status, refusal.message);
+  const wait = Math.max(1, Math.ceil(refusal.retryAfterSec));
+  res.setHeader('Retry-After', String(wait));
+  return send(res, refusal.status, refusal.message, { retryAfterSec: wait });
+}
+
+/**
+ * THE CURRENT PASSWORD, and the login lockout that guards it.
+ *
+ * Answers the refusal, or null when the password is right. Shared by BOTH
+ * signed-in credential flows — the contact change and, since 21 Sep 2026, the
+ * password change — because a second copy of this ordering is a second place
+ * for it to drift. Three deliberate choices:
+ *
+ *  • The lockout is honoured BEFORE the compare, exactly as login does it
+ *    (auth.controller.ts) — otherwise these endpoints, the ones that move the
+ *    sign-in identity, are an unlocked side door for guessing at an account
+ *    login has already locked.
+ *  • A wrong password does NOT feed that counter. Login's counter exists to
+ *    stop guessing at the door; a signed-in person mistyping their own
+ *    password in a settings sheet must not be locked out of signing in. The
+ *    brake here is a per-user limiter, 10 an hour per account
+ *    (`contactChangePasswordUserLimiter`, `passwordChangeUserLimiter`).
+ *  • A failed account READ is never this 400 — the caller answers 500 for it
+ *    (see `accountReadFailed`). Telling somebody their account "cannot change
+ *    password here" because a query blipped is the bug that convention exists
+ *    to prevent.
+ *
+ * ⚠️ 400 for a wrong password, never 401: the web client signs a person out on
+ * any 401, so one typo used to throw them to the login page.
+ */
+export async function proveIdentity(input: {
+  user: UserType;
+  currentPassword: string;
+  comparePassword: (password: string, hash: string) => Promise<boolean>;
+  /** Milliseconds, from the caller's injected clock. */
+  now: number;
+  /** Log prefix, e.g. '[ContactChange]'. */
+  label: string;
+  /** What an account carrying NO password hash is told — flow-specific. */
+  noPassword: string;
+}): Promise<IdentityRefusal | null> {
+  const { user, currentPassword, comparePassword, now, label, noPassword } = input;
+  const lockedUntil = user.lockedUntil?.getTime() ?? 0;
+  if (lockedUntil > now) {
+    const minutes = Math.ceil((lockedUntil - now) / 60_000);
+    logger.warn(`${label} attempt on a locked account`, { userId: user.id });
+    return {
+      status: 429,
+      message: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+      // Seconds, not the rounded-up minutes in the sentence: the countdown must
+      // not say "1 minute" for 61 seconds and then refuse again at zero.
+      retryAfterSec: Math.ceil((lockedUntil - now) / 1000),
+    };
+  }
+  if (!user.passwordHash) return { status: 400, message: noPassword };
+  if (!(await comparePassword(currentPassword, user.passwordHash))) {
+    logger.warn(`${label} wrong current password`, { userId: user.id });
+    return { status: 400, message: WRONG_PASSWORD };
+  }
+  return null;
+}
+
+/**
+ * The account re-read came back empty although authenticateJWT resolved this
+ * very account moments ago — `getUserById` returns null when its query FAILS.
+ * That is a server fault, so 500 — never 401, which the web client answers by
+ * signing the person out, and never after a correct code has been spent.
+ */
+export function accountReadFailed(res: Response, step: string, userId: string): Response {
+  logger.error(`[${step}] could not re-read the signed-in account`, { userId });
+  return send(res, 500, ApiError.INTERNAL_SERVER_ERROR);
+}
+
+/**
+ * How long after a code was ISSUED a Resend can still stand on it, whether or
+ * not it has expired in the meantime. One hour.
+ */
+export const RESEND_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * MAY THIS ROW EARN A FRESH CODE? — owner, 21 Sep 2026: "is temporary otp will
+ * resend after expired".
+ *
+ * Both flows used to require a `pending` row that had not expired, so somebody
+ * who put the phone down for a quarter of an hour came back, tapped Resend, and
+ * was told to start the whole thing again — which on the contact change and the
+ * password change means typing their password a second time. Expiring is the
+ * NORMAL end of a code, not a fault.
+ *
+ * So `expired` now qualifies as well as `pending`. What does NOT:
+ *
+ *  • `consumed` / `verified` — the code was spent and the thing it authorised
+ *    has happened. A resend there would mint a code for a finished request.
+ *  • a row older than `RESEND_WINDOW_MS` — otherwise whoever still holds a
+ *    `requestId` could keep asking for codes for ever, and the 60-second
+ *    cooldown (which reads `created_at`) stopped braking an hour ago.
+ */
+export function resendable(row: PhoneVerification, nowMs: number): boolean {
+  const open = row.status === 'pending' || row.status === 'expired';
+  return open && nowMs - row.createdAt.getTime() <= RESEND_WINDOW_MS;
 }
