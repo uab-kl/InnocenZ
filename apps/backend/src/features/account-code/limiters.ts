@@ -54,7 +54,26 @@ export const forgotCompleteIpLimiter = rateLimit({
   message: 'Too many attempts. Please wait a few minutes and try again.',
 });
 
-/** start + resend-new share one budget: both put a message on somebody's phone. */
+/**
+ * START ONLY. It is the one call that carries the current password, so this
+ * budget covers a guess at that password AND the code it sends.
+ *
+ * ⚠️ Deliberately NOT stacked with the send limiter below. The shared factory
+ * counts in MIDDLEWARE, before the handler knows whether the password was
+ * right, so a wrong password would otherwise eat the owner's send budget — five
+ * bad guesses from a stolen session would deny the real owner a contact change
+ * for an hour. 10/h matches `passwordChangeUserLimiter`, the other door where a
+ * signed-in person types their own password.
+ */
+export const contactChangePasswordUserLimiter = rateLimit({
+  name: 'contact-change-password-user',
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  keys: (req) => [userKey(req)],
+  message: 'Too many attempts. Please try again later.',
+});
+
+/** Resend only — a code already paid for with the password, sent again. */
 export const contactChangeSendUserLimiter = rateLimit({
   name: 'contact-change-send-user',
   windowMs: 60 * 60 * 1000,
@@ -63,7 +82,7 @@ export const contactChangeSendUserLimiter = rateLimit({
   message: 'Too many verification codes requested. Please try again later.',
 });
 
-/** verify-identity + confirm share one budget: both spend a guess at a code. */
+/** Confirm: every request spends a guess at a code. */
 export const contactChangeCheckUserLimiter = rateLimit({
   name: 'contact-change-check-user',
   windowMs: 60 * 60 * 1000,

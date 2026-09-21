@@ -270,11 +270,9 @@ export type AppTranslations = {
     changeEmailHint: string;
     newMobileNumber: string;
     newEmail: string;
-    /** Step 2 title — the code sent to the CURRENT phone + email. */
-    identityTitle: string;
-    /** Step 3 title — the code sent to the NEW number. */
+    /** Step 2 title — the code sent to the NEW number. */
     newPhoneCodeTitle: string;
-    /** Step 3 title — the code sent to the NEW email. */
+    /** Step 2 title — the code sent to the NEW email. */
     newEmailCodeTitle: string;
     /** `{m}` = minutes the code stays valid. */
     codeValidFor: string;
@@ -1558,8 +1556,6 @@ export type AppTranslations = {
     invalidCode: string;
     /** 400 — forgot-password code is expired or already used. */
     codeExpired: string;
-    /** 400 — the contact-change request timed out. */
-    changeExpired: string;
     /** 409 — the confirm raced a second tap / another device. */
     codeAlreadyUsed: string;
     /** 503 — no channel delivered in production. */
@@ -1577,8 +1573,8 @@ export type AppTranslations = {
     /** PATCH /user/:id refusing an email change outside Security settings. */
     changeEmailInSecurity: string;
     changePhoneInSecurity: string;
-    /** The retired one-code /auth/phone/change. */
-    phoneChangeNeedsUpdate: string;
+    /** 400 — contact-change/start on an account that has no password to prove with. */
+    setPasswordFirst: string;
     /** 403 from the legacy /auth/password/reset-otp for a non-PR account. */
     useForgotPassword: string;
     /** Any rate-limiter refusal ("Too many … try again later."). */
@@ -1891,16 +1887,15 @@ export const translations: Record<AppLocale, AppTranslations> = {
       verifyOtp: 'Verify code',
       eyebrow: 'ACCOUNT',
       intro:
-        'Change your password with your current one. Changing your phone or email needs a code sent to your current contacts first.',
+        'Change your password with your current one. Changing your phone or email needs your current password, and a code sent to the new one.',
       currentPhone: 'Current: {phone}',
       currentEmail: 'Email: {email}',
       changePhoneHint:
-        'Enter the new number. We first send a code to your current phone and email to confirm it’s you, then a code to the new number.',
+        'Enter the new number and your current password. We send one code to the new number — nothing goes to your old one.',
       changeEmailHint:
-        'Enter the new email. We first send a code to your current phone and email to confirm it’s you, then a code to the new email.',
+        'Enter the new email and your current password. We send one code to the new address — nothing goes to your old one.',
       newMobileNumber: 'New mobile number',
       newEmail: 'New email',
-      identityTitle: 'Confirm it’s you',
       newPhoneCodeTitle: 'Verify your new number',
       newEmailCodeTitle: 'Verify your new email',
       codeValidFor: 'The code is valid for {m} minutes.',
@@ -2780,7 +2775,6 @@ export const translations: Record<AppLocale, AppTranslations> = {
       notSignedIn: 'Not signed in',
       invalidCode: 'Invalid code',
       codeExpired: 'This code has expired — request a new one',
-      changeExpired: 'This change has expired — start again',
       codeAlreadyUsed: 'This code was already used',
       codeSendFailed: 'Could not send the code — try again later',
       codeCooldown: 'Wait {s}s before requesting another code',
@@ -2793,8 +2787,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       passwordMustDiffer: 'New password must be different',
       changeEmailInSecurity: 'Change your email from Security settings',
       changePhoneInSecurity: 'Change your phone from Security settings',
-      phoneChangeNeedsUpdate:
-        'Changing your phone now needs a code to your current contacts — please update the app',
+      setPasswordFirst: 'Set a password before you change your sign-in email or phone',
       useForgotPassword: 'Use Forgot password on the sign-in page',
       tooManyRequests: 'Too many attempts. Please wait and try again later.',
       tooManyCodeAttempts: 'Too many attempts — request a new code',
@@ -3059,16 +3052,15 @@ export const translations: Record<AppLocale, AppTranslations> = {
       sendOtp: '发送验证码',
       verifyOtp: '验证验证码',
       eyebrow: '账号',
-      intro: '使用当前密码修改密码。更换手机号或电子邮箱时，需先向你当前的联系方式发送验证码。',
+      intro: '使用当前密码修改密码。更换手机号或电子邮箱时，需输入当前密码，我们只向新的联系方式发送验证码。',
       currentPhone: '当前：{phone}',
       currentEmail: '邮箱：{email}',
       changePhoneHint:
-        '请输入新手机号。我们会先向你当前的手机号和电子邮箱发送验证码确认是你本人，再向新号码发送验证码。',
+        '请输入新手机号和你的当前密码。我们只向新号码发送一条验证码 — 不会向旧号码发送任何信息。',
       changeEmailHint:
-        '请输入新电子邮箱。我们会先向你当前的手机号和电子邮箱发送验证码确认是你本人，再向新邮箱发送验证码。',
+        '请输入新电子邮箱和你的当前密码。我们只向新邮箱发送一条验证码 — 不会向旧邮箱发送任何信息。',
       newMobileNumber: '新手机号码',
       newEmail: '新电子邮箱',
-      identityTitle: '确认是你本人',
       newPhoneCodeTitle: '验证新手机号',
       newEmailCodeTitle: '验证新电子邮箱',
       codeValidFor: '验证码 {m} 分钟内有效。',
@@ -3946,7 +3938,6 @@ export const translations: Record<AppLocale, AppTranslations> = {
       notSignedIn: '尚未登录',
       invalidCode: '验证码无效',
       codeExpired: '验证码已过期 — 请重新获取',
-      changeExpired: '本次更改已过期 — 请重新开始',
       codeAlreadyUsed: '该验证码已被使用',
       codeSendFailed: '无法发送验证码 — 请稍后再试',
       codeCooldown: '请等待 {s} 秒后再获取验证码',
@@ -3959,7 +3950,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       passwordMustDiffer: '新密码不能与当前密码相同',
       changeEmailInSecurity: '请在安全设置中更换电子邮箱',
       changePhoneInSecurity: '请在安全设置中更换手机号',
-      phoneChangeNeedsUpdate: '更换手机号现在需要向你当前的联系方式发送验证码 — 请更新应用',
+      setPasswordFirst: '请先设置密码，才能更换登录用的电子邮箱或手机号',
       useForgotPassword: '请在登录页面使用“忘记密码”',
       tooManyRequests: '尝试次数过多，请稍后再试。',
       tooManyCodeAttempts: '尝试次数过多 — 请重新获取验证码',
@@ -4224,16 +4215,15 @@ export const translations: Record<AppLocale, AppTranslations> = {
       sendOtp: '傳送驗證碼',
       verifyOtp: '驗證驗證碼',
       eyebrow: '帳號',
-      intro: '使用目前密碼修改密碼。更換手機號或電子郵箱時，需先向你目前的聯絡方式傳送驗證碼。',
+      intro: '使用目前密碼修改密碼。更換手機號或電子郵箱時，需輸入目前密碼，我們只向新的聯絡方式傳送驗證碼。',
       currentPhone: '目前：{phone}',
       currentEmail: '郵箱：{email}',
       changePhoneHint:
-        '請輸入新手機號。我們會先向你目前的手機號和電子郵箱傳送驗證碼確認是你本人，再向新號碼傳送驗證碼。',
+        '請輸入新手機號和你的目前密碼。我們只向新號碼傳送一則驗證碼 — 不會向舊號碼傳送任何訊息。',
       changeEmailHint:
-        '請輸入新電子郵箱。我們會先向你目前的手機號和電子郵箱傳送驗證碼確認是你本人，再向新郵箱傳送驗證碼。',
+        '請輸入新電子郵箱和你的目前密碼。我們只向新郵箱傳送一則驗證碼 — 不會向舊郵箱傳送任何訊息。',
       newMobileNumber: '新手機號碼',
       newEmail: '新電子郵箱',
-      identityTitle: '確認是你本人',
       newPhoneCodeTitle: '驗證新手機號',
       newEmailCodeTitle: '驗證新電子郵箱',
       codeValidFor: '驗證碼 {m} 分鐘內有效。',
@@ -5111,7 +5101,6 @@ export const translations: Record<AppLocale, AppTranslations> = {
       notSignedIn: '尚未登入',
       invalidCode: '驗證碼無效',
       codeExpired: '驗證碼已過期 — 請重新取得',
-      changeExpired: '本次變更已過期 — 請重新開始',
       codeAlreadyUsed: '此驗證碼已被使用',
       codeSendFailed: '無法傳送驗證碼 — 請稍後再試',
       codeCooldown: '請等待 {s} 秒後再取得驗證碼',
@@ -5124,7 +5113,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       passwordMustDiffer: '新密碼不能與目前密碼相同',
       changeEmailInSecurity: '請在安全設定中更換電子郵箱',
       changePhoneInSecurity: '請在安全設定中更換手機號',
-      phoneChangeNeedsUpdate: '更換手機號現在需要向你目前的聯絡方式傳送驗證碼 — 請更新應用程式',
+      setPasswordFirst: '請先設定密碼，才能更換登入用的電子郵箱或手機號',
       useForgotPassword: '請在登入頁面使用「忘記密碼」',
       tooManyRequests: '嘗試次數過多，請稍後再試。',
       tooManyCodeAttempts: '嘗試次數過多 — 請重新取得驗證碼',

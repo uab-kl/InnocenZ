@@ -259,8 +259,9 @@ function ProfilePage() {
 
 			{/*
 			 * The admin's OWN password, phone and email — the same code flows the
-			 * agency and outlet Security sheet runs (codes by WhatsApp, SMS and
-			 * email). Only once `/auth/me` has answered: a form seeded from a
+			 * agency and outlet Security sheet runs (the current password, then
+			 * one code to the NEW email or number; nothing goes to the old one).
+			 * Only once `/auth/me` has answered: a form seeded from a
 			 * profile still in flight would compare against an empty "current".
 			 */}
 			{user ? (

@@ -1,15 +1,19 @@
 import { logger } from '@/util/logger.js';
 import { sendAccountChangeNoticeEmail } from '@/features/mailing/mailing.repository.js';
-import { sendSms } from '@/features/sms/sms.js';
-import { SMS_PHONE_CHANGED_NOTICE_TEXT } from '@/features/sms/sms-text.js';
 import { safeErrorFields } from '@/features/auth/query-error-redaction.js';
 import { deliveryLogOnly } from './delivery.js';
-import { maskEmail, maskPhone } from './masks.js';
-import { toWhatsAppDigits } from './phone.js';
+import { maskEmail } from './masks.js';
 
 /**
  * "YOUR ACCOUNT CHANGED" — told to the contact that still reaches the real
  * owner, AFTER the change has committed.
+ *
+ * ⚠️ ONE NOTICE IS LEFT: the password change. The email-changed and
+ * phone-changed notices were REMOVED on 21 Sep 2026 by the owner, together with
+ * the identity code — nothing at all now reaches the old phone or the old
+ * email, neither a code before the change nor a word after it. The consequence
+ * is recorded in contact-change.controller.ts: a contact change leaves the
+ * previous contact no signal, so the password and the lockout carry that alone.
  *
  * Best-effort by contract: every function here swallows its own failure and
  * logs it. A notice that cannot be delivered must never turn a change that
@@ -22,17 +26,6 @@ import { toWhatsAppDigits } from './phone.js';
 
 export type AccountNotices = {
   passwordChanged(input: { email: string | null; name?: string | null }): Promise<void>;
-  emailChanged(input: {
-    oldEmail: string | null;
-    newEmail: string;
-    name?: string | null;
-  }): Promise<void>;
-  phoneChanged(input: {
-    oldPhone: string | null;
-    email: string | null;
-    newPhone: string;
-    name?: string | null;
-  }): Promise<void>;
 };
 
 async function safely(label: string, work: () => Promise<unknown>): Promise<void> {
@@ -45,7 +38,8 @@ async function safely(label: string, work: () => Promise<unknown>): Promise<void
 }
 
 function logOnlyNotice(label: string, to: string[]): boolean {
-  if (!deliveryLogOnly()) return false;
+  // The only notice left is an email, so it follows the email channel.
+  if (!deliveryLogOnly('email')) return false;
   logger.warn(`[account-code] OTP_DELIVERY_LOG_ONLY — ${label} notice logged, not sent`, { to });
   return true;
 }
@@ -65,52 +59,6 @@ export const accountNotices: AccountNotices = {
     );
   },
 
-  async emailChanged({ oldEmail, newEmail, name }) {
-    if (!oldEmail) return;
-    if (logOnlyNotice('email changed', [maskEmail(oldEmail)])) return;
-    await safely('email changed', () =>
-      sendAccountChangeNoticeEmail({
-        recipientEmail: oldEmail,
-        name,
-        subject: 'Your InnocenZ email was changed',
-        heading: 'Email changed',
-        // Masked even here: this mailbox may be the one that was compromised.
-        message: `The sign-in email for your InnocenZ account was changed to ${maskEmail(newEmail)}. This address will no longer sign in.`,
-      }),
-    );
-  },
-
-  async phoneChanged({ oldPhone, email, newPhone, name }) {
-    const oldDigits = toWhatsAppDigits(oldPhone);
-    const to = [oldDigits ? maskPhone(oldDigits) : null, email ? maskEmail(email) : null].filter(
-      (x): x is string => Boolean(x),
-    );
-    if (to.length === 0) return;
-    if (logOnlyNotice('phone changed', to)) return;
-    await Promise.all([
-      oldDigits
-        ? safely('phone changed (sms)', async () => {
-            const result = await sendSms({
-              to: oldDigits,
-              text: SMS_PHONE_CHANGED_NOTICE_TEXT,
-              purpose: 'phone_changed_notice',
-            });
-            if (result.status === 'failed') throw new Error(result.error);
-          })
-        : Promise.resolve(),
-      email
-        ? safely('phone changed (email)', () =>
-            sendAccountChangeNoticeEmail({
-              recipientEmail: email,
-              name,
-              subject: 'Your InnocenZ phone number was changed',
-              heading: 'Phone number changed',
-              message: `The phone number on your InnocenZ account was changed to ${maskPhone(newPhone)}.`,
-            }),
-          )
-        : Promise.resolve(),
-    ]);
-  },
 };
 
 /**

@@ -30,11 +30,15 @@ export type PhoneVerificationStatus = (typeof phoneVerificationStatusValues)[num
  * them would hand a per-phone lookup to a per-account secret.
  *
  *  • `reset_password`           — logged-out reset, code to every contact on file
- *  • `contact_change_identity`  — signed-in email/phone change, step 1: a code to
- *                                 the CURRENT contacts proves it is the owner
- *  • `contact_change_new`       — step 2: a code to the NEW contact proves it works
+ *  • `contact_change_new`       — signed-in email/phone change: a code to the NEW
+ *                                 contact, the ONLY message that flow sends.
+ *                                 What proves it is the owner is the CURRENT
+ *                                 PASSWORD (contact-change.controller.ts).
  *
- * `change_phone` stays for the rows already stored; nothing issues it any more.
+ * `change_phone` and `contact_change_identity` stay for the rows already
+ * stored; nothing issues either any more. `contact_change_identity` was step 1
+ * of the two-code change — a code to the CURRENT contacts — retired by the
+ * owner on 21 Sep 2026, who asked that nothing reach the old phone or email.
  */
 export const phoneVerificationPurposeValues = [
   'signup',
@@ -49,10 +53,11 @@ export type PhoneVerificationPurpose = (typeof phoneVerificationPurposeValues)[n
 /**
  * What the PUBLIC `/auth/otp/send` and `/auth/otp/verify` accept.
  *
- * `change_phone` was removed from here: changing a phone now needs a code to
- * the current contacts first (POST /auth/contact-change/start), and the old
- * one-step change answered with a code sent only to the NEW number — which
- * proves the new number works, not that the caller owns the account.
+ * `change_phone` was removed from here: changing a phone now goes through
+ * POST /auth/contact-change/start, which asks for the current password before
+ * it sends anything. The old one-step change proved only that the new number
+ * works, not that the caller owns the account — and it was reachable with no
+ * proof at all beyond a session.
  */
 export const publicOtpPurposeValues = ['signup', 'forgot_password'] as const;
 export type PublicOtpPurpose = (typeof publicOtpPurposeValues)[number];

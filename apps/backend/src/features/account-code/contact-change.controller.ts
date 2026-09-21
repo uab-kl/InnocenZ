@@ -1,26 +1,17 @@
 import type { Request, Response } from 'express';
 import { logger } from '@/util/logger.js';
 import { Error as ApiError } from '@/error/index.js';
-import type { PhoneVerification } from '@/features/auth/phone-verification.model.js';
 import { safeErrorFields } from '@/features/auth/query-error-redaction.js';
 import { floorToSecond } from '@/features/auth/session-cutoff.js';
 import type { UserType } from '@/features/user/user.model.js';
 import type { ContactKind } from './account-code.repository.js';
-import {
-  boundCodeMatches,
-  generateAccountCode,
-  hashBoundCode,
-  identityProofHash,
-  identityProofMatches,
-} from './code.js';
+import { boundCodeMatches, generateAccountCode, hashBoundCode } from './code.js';
 import { CODE_DELIVERY_FAILED_MESSAGE, channelColumn, plannedChannels } from './delivery.js';
-import { fireNotice } from './notices.js';
 import { toWhatsAppDigits } from './phone.js';
 import {
   ContactChangeConfirmSchema,
   ContactChangeResendSchema,
   ContactChangeStartSchema,
-  ContactChangeVerifySchema,
   normaliseContactValue,
 } from './schemas.js';
 import {
@@ -36,15 +27,19 @@ import {
   tooSoon,
 } from './shared.js';
 
-export const IDENTITY_CODE_TTL_SEC = 300;
 export const NEW_CONTACT_CODE_TTL_SEC = 600;
-/** How long a verified identity may still be spent on resend-new / confirm. */
-export const IDENTITY_WINDOW_MS = 15 * 60 * 1000;
 
-export const CHANGE_EXPIRED = 'This change has expired — start again';
-export const NEW_CODE_EXPIRED = 'This code has expired — request a new one';
+export const CODE_EXPIRED = 'This code has expired — request a new one';
 export const CODE_ALREADY_USED = 'This code was already used';
+export const WRONG_PASSWORD = 'Current password is incorrect';
+export const NO_PASSWORD = 'Set a password before you change your sign-in email or phone';
 
+/**
+ * Rows this flow retires when a change starts. `contact_change_identity` is
+ * RETIRED — nothing issues it any more (see phone-verification.model.ts) — but
+ * it stays in this list so a row left pending or verified by the two-code build
+ * can never be spent afterwards.
+ */
 const CONTACT_PURPOSES = ['contact_change_identity', 'contact_change_new'] as const;
 
 /**
@@ -74,6 +69,8 @@ const LABEL: Record<ContactKind, string> = {
 
 export type ContactChangeDeps = AccountCodeDeps & {
   jwt: TokenIssuer;
+  /** The same proof `POST /auth/password/change` uses. */
+  comparePassword: (password: string, hash: string) => Promise<boolean>;
   /** Live invitations addressed to an email — they cannot follow the account to a new one. */
   countPendingInvites(email: string): Promise<number>;
 };
@@ -81,21 +78,33 @@ export type ContactChangeDeps = AccountCodeDeps & {
 /**
  * CHANGE THE SIGN-IN EMAIL OR PHONE — signed in, every role, web and app.
  *
- *   1. start            { kind, value }                 → a code to the CURRENT contacts
- *   2. verify-identity  { requestId, kind, value, code } → a code to the NEW contact
- *      resend-new       { requestId, kind, value }       → another code to the new contact
- *   3. confirm          { requestId, newRequestId, kind, value, code } → written
+ *   1. start    { kind, value, currentPassword } → a code to the NEW contact
+ *      resend   { kind, value, requestId }       → another code to the NEW contact
+ *   2. confirm  { kind, value, requestId, code } → written
  *
- * TWO PROOFS, because each answers a different question. The code to the
- * current contacts proves the person holding this session is the owner — a
- * borrowed, unlocked phone with the app open is not enough to move the account
- * to a stranger's email. The code to the new contact proves the owner typed it
- * correctly and controls it — or they would lock themselves out of their own
- * account. The old flow had only the second.
+ * ⚠️ NOTHING IS EVER SENT TO THE OLD PHONE OR OLD EMAIL — owner's decision,
+ * 21 Sep 2026: "this no need send whatapps otp, sms otp and the email otp to
+ * the old email or phone". Not a code, and not a notice afterwards either. The
+ * two-code build that ran until today put code #1 on the contacts already on
+ * file; that step and its `contact_change_identity` rows are retired.
+ *
+ * THE TWO PROOFS ARE NOW: the CURRENT PASSWORD, which says the person holding
+ * this session is the owner and not somebody who sat down at an unlocked
+ * screen; and the CODE TO THE NEW CONTACT, which says they typed it correctly
+ * and can receive on it — without that, a typo locks them out of their own
+ * account.
+ *
+ * ⚠️ WHAT THAT COSTS, written down so it is never rediscovered as a surprise:
+ * a leaked password alone now moves the sign-in identity, where before it also
+ * needed the real owner's phone. The compensating controls are the lockout
+ * check and the per-user attempt limiter (see `proveIdentity` and
+ * `contactChangePasswordUserLimiter`), the session cutoff at confirm, and the
+ * re-issued tokens.
  *
  * Every code is BOUND (see code.ts) to the user, the kind and the exact value,
- * and the new-contact code also to the identity row it followed, so no code can
- * be spent on a different change. A wrong code is always 400, never 401.
+ * so no code can be spent on a different change. A wrong code — and a wrong
+ * password — is always 400, never 401: the web client signs a person out on any
+ * 401, so one typo used to throw them to the login page.
  *
  * On confirm the account's older sessions are cut and a fresh token pair is
  * returned; the client must store it before any other request.
@@ -118,21 +127,25 @@ export class ContactChangeControllerClass {
       const user = await this.deps.users.getUserById(actor.id);
       if (!user) return this.accountReadFailed(res, 'start', actor.id);
 
+      /*
+       * THE PASSWORD IS CHECKED FIRST — before "that is already your email" and
+       * before the 409 that says an address belongs to somebody else. Those two
+       * answers are an account-enumeration oracle, and a session is all that
+       * stood in front of them once step 1 went; the password is what turns
+       * them from free into earned.
+       */
+      const refusal = await this.proveIdentity(user, parsed.data.currentPassword);
+      if (refusal) return send(res, refusal.status, refusal.message);
+
       if (this.isCurrentValue(user, kind, value)) return send(res, 400, SAME_VALUE[kind]);
       if (await this.deps.accounts.isContactTaken(kind, value, user.id)) {
         return send(res, 409, TAKEN[kind]);
       }
 
-      const currentPhone = toWhatsAppDigits(user.phoneNum);
-      const currentEmail = user.email?.trim() || null;
-      if (!currentPhone && !currentEmail) {
-        return send(res, 422, 'Your account has no phone or email we can send a code to');
-      }
-
       const now = this.deps.now();
       const previous = await this.deps.codes.findNewestByCreator(
         user.id,
-        ['contact_change_identity'],
+        ['contact_change_new'],
         ['pending'],
       );
       if (previous) {
@@ -140,46 +153,12 @@ export class ContactChangeControllerClass {
         if (remaining > 0) return tooSoon(res, remaining);
       }
 
-      // A new change retires every earlier one, pending OR already verified —
-      // an identity passed for yesterday's address must not approve today's.
+      // A new change retires every earlier one, including any identity row the
+      // two-code build left behind.
       await this.deps.codes.expireOpenForCreator(user.id, CONTACT_PURPOSES, ['pending', 'verified'], user.id);
 
-      const code = generateAccountCode();
-      const destinations = { phone: user.phoneNum, email: currentEmail };
-      const row = await this.deps.codes.create({
-        phoneNum: phoneAnchor(user),
-        codeHash: hashBoundCode(code, user.id, kind, value),
-        channel: channelColumn(plannedChannels(destinations)),
-        purpose: 'contact_change_identity',
-        status: 'pending',
-        attempts: 0,
-        expiresAt: new Date(now + IDENTITY_CODE_TTL_SEC * 1000),
-        verifiedAt: null,
-        waMessageId: null,
-        createdBy: user.id,
-        updatedBy: user.id,
-      });
-      if (!row) return send(res, 500, 'Could not start the change');
-
-      // To the CURRENT contacts — never to `value`. That is the whole point of
-      // this step.
-      const delivery = await this.deps.deliver({
-        code,
-        purpose: 'contact_change_identity',
-        purposeLabel: LABEL[kind],
-        validMinutes: IDENTITY_CODE_TTL_SEC / 60,
-        ...destinations,
-        name: user.username,
-      });
-      if (!delivery.ok) {
-        await this.deps.codes.update(row.id, { status: 'expired', updatedBy: user.id });
-        return send(res, 503, CODE_DELIVERY_FAILED_MESSAGE);
-      }
-      if (delivery.waMessageId) {
-        await this.deps.codes.update(row.id, { waMessageId: delivery.waMessageId, updatedBy: user.id });
-      }
-
       let pendingInvitesToCurrentEmail = 0;
+      const currentEmail = user.email?.trim();
       if (kind === 'email' && currentEmail) {
         try {
           pendingInvitesToCurrentEmail = await this.deps.countPendingInvites(currentEmail);
@@ -189,78 +168,23 @@ export class ContactChangeControllerClass {
         }
       }
 
-      return send(res, 200, 'Code sent', {
-        requestId: row.id,
-        sentTo: delivery.sentTo,
-        expiresInSec: IDENTITY_CODE_TTL_SEC,
-        resendAfterSec: RESEND_AFTER_SEC,
-        pendingInvitesToCurrentEmail,
-      });
+      return await this.issueCode(res, user, kind, value, now, { pendingInvitesToCurrentEmail });
     } catch (error) {
       logger.error('[ContactChange.start] Error:', safeErrorFields(error));
       return send(res, 500, ApiError.INTERNAL_SERVER_ERROR);
     }
   }
 
-  async verifyIdentity(req: Request, res: Response) {
-    try {
-      const actor = req.user;
-      if (!actor) return send(res, 401, ApiError.UNAUTHORIZED);
-
-      const parsed = ContactChangeVerifySchema.safeParse(req.body ?? {});
-      if (!parsed.success) return send(res, 400, parsed.error.issues[0]?.message ?? 'Validation failed');
-      const { kind, requestId, code } = parsed.data;
-      const normalised = normaliseContactValue(kind, parsed.data.value);
-      if (!normalised.ok) return send(res, 400, normalised.message);
-      const value = normalised.value;
-      const now = this.deps.now();
-
-      const row = await this.deps.codes.getById(requestId);
-      if (
-        !row ||
-        row.purpose !== 'contact_change_identity' ||
-        row.createdBy !== actor.id ||
-        row.status !== 'pending' ||
-        row.expiresAt.getTime() <= now
-      ) {
-        return send(res, 400, CHANGE_EXPIRED);
-      }
-
-      // A different value fails here exactly like a wrong code, and counts.
-      if (!boundCodeMatches(row.codeHash, code, actor.id, kind, value)) {
-        if (await recordWrongCode(this.deps.codes, row, actor.id)) {
-          return send(res, 429, TOO_MANY_ATTEMPTS);
-        }
-        return send(res, 400, 'Invalid code');
-      }
-
-      // Read the account BEFORE the code is spent: if this read fails, the
-      // identity row is still pending and the same correct code works on retry.
-      const user = await this.deps.users.getUserById(actor.id);
-      if (!user) return this.accountReadFailed(res, 'verifyIdentity', actor.id);
-
-      // Spent once, conditionally; the hash becomes the value-binding proof the
-      // later steps check (see `identityProofHash`).
-      const verified = await this.deps.codes.transition(row.id, 'pending', {
-        status: 'verified',
-        verifiedAt: new Date(now),
-        codeHash: identityProofHash(actor.id, kind, value),
-        updatedBy: actor.id,
-      });
-      if (!verified) return send(res, 409, CODE_ALREADY_USED);
-
-      if (await this.deps.accounts.isContactTaken(kind, value, actor.id)) {
-        return send(res, 409, TAKEN[kind]);
-      }
-
-      return await this.issueNewContactCode(res, user, verified, kind, value, now);
-    } catch (error) {
-      logger.error('[ContactChange.verifyIdentity] Error:', safeErrorFields(error));
-      return send(res, 500, ApiError.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  async resendNew(req: Request, res: Response) {
+  /**
+   * ANOTHER CODE FOR A CHANGE ALREADY STARTED — no password.
+   *
+   * The `requestId` is itself the proof: it is handed out only to a caller who
+   * passed the password a moment ago, the row lives ten minutes, and resend can
+   * do nothing `start` could not already do for that same session. Asking for
+   * the password again would mean the client keeping it in memory behind the
+   * code sheet for the whole flow, which is worse.
+   */
+  async resend(req: Request, res: Response) {
     try {
       const actor = req.user;
       if (!actor) return send(res, 401, ApiError.UNAUTHORIZED);
@@ -273,27 +197,31 @@ export class ContactChangeControllerClass {
       const value = normalised.value;
       const now = this.deps.now();
 
-      const identity = await this.deps.codes.getById(requestId);
-      if (!this.isUsableIdentity(identity, actor.id, kind, value, now)) {
-        return send(res, 400, CHANGE_EXPIRED);
+      const open = await this.deps.codes.getById(requestId);
+      if (
+        !open ||
+        open.purpose !== 'contact_change_new' ||
+        open.createdBy !== actor.id ||
+        open.status !== 'pending' ||
+        open.expiresAt.getTime() <= now
+      ) {
+        return send(res, 400, CODE_EXPIRED);
       }
 
-      const newest = await this.deps.codes.findNewestByCreator(actor.id, ['contact_change_new'], ['pending']);
-      if (newest) {
-        const remaining = cooldownRemaining(newest.createdAt, now);
-        if (remaining > 0) return tooSoon(res, remaining);
-      }
+      const remaining = cooldownRemaining(open.createdAt, now);
+      if (remaining > 0) return tooSoon(res, remaining);
 
+      const user = await this.deps.users.getUserById(actor.id);
+      if (!user) return this.accountReadFailed(res, 'resend', actor.id);
+
+      if (this.isCurrentValue(user, kind, value)) return send(res, 400, SAME_VALUE[kind]);
       if (await this.deps.accounts.isContactTaken(kind, value, actor.id)) {
         return send(res, 409, TAKEN[kind]);
       }
 
-      const user = await this.deps.users.getUserById(actor.id);
-      if (!user) return this.accountReadFailed(res, 'resendNew', actor.id);
-
-      return await this.issueNewContactCode(res, user, identity, kind, value, now);
+      return await this.issueCode(res, user, kind, value, now);
     } catch (error) {
-      logger.error('[ContactChange.resendNew] Error:', safeErrorFields(error));
+      logger.error('[ContactChange.resend] Error:', safeErrorFields(error));
       return send(res, 500, ApiError.INTERNAL_SERVER_ERROR);
     }
   }
@@ -305,48 +233,49 @@ export class ContactChangeControllerClass {
 
       const parsed = ContactChangeConfirmSchema.safeParse(req.body ?? {});
       if (!parsed.success) return send(res, 400, parsed.error.issues[0]?.message ?? 'Validation failed');
-      const { kind, requestId, newRequestId, code } = parsed.data;
+      const { kind, requestId, code } = parsed.data;
       const normalised = normaliseContactValue(kind, parsed.data.value);
       if (!normalised.ok) return send(res, 400, normalised.message);
       const value = normalised.value;
       const now = this.deps.now();
 
-      const identity = await this.deps.codes.getById(requestId);
-      if (!this.isUsableIdentity(identity, actor.id, kind, value, now)) {
-        return send(res, 400, CHANGE_EXPIRED);
-      }
-
-      const newRow = await this.deps.codes.getById(newRequestId);
+      const row = await this.deps.codes.getById(requestId);
       if (
-        !newRow ||
-        newRow.purpose !== 'contact_change_new' ||
-        newRow.createdBy !== actor.id ||
-        newRow.status !== 'pending' ||
-        newRow.expiresAt.getTime() <= now ||
-        newRow.phoneNum !== identity.phoneNum
+        !row ||
+        row.purpose !== 'contact_change_new' ||
+        row.createdBy !== actor.id ||
+        row.status !== 'pending' ||
+        row.expiresAt.getTime() <= now
       ) {
-        return send(res, 400, NEW_CODE_EXPIRED);
+        return send(res, 400, CODE_EXPIRED);
       }
 
-      if (!boundCodeMatches(newRow.codeHash, code, actor.id, kind, value, identity.id)) {
-        if (await recordWrongCode(this.deps.codes, newRow, actor.id)) {
+      if (!boundCodeMatches(row.codeHash, code, actor.id, kind, value)) {
+        if (await recordWrongCode(this.deps.codes, row, actor.id)) {
           return send(res, 429, TOO_MANY_ATTEMPTS);
         }
         return send(res, 400, 'Invalid code');
       }
 
       // Nothing is spent yet (applyContactChange below does that), so a failed
-      // read leaves both rows usable for a retry with the same code.
+      // read leaves the row usable for a retry with the same code.
       const before = await this.deps.users.getUserById(actor.id);
       if (!before) return this.accountReadFailed(res, 'confirm', actor.id);
+
+      /*
+       * The row was anchored to the account's own phone when the code went out.
+       * A disagreement means that number moved meanwhile — another device
+       * finishing a change of its own — and this code belongs to the account as
+       * it WAS.
+       */
+      if (row.phoneNum !== phoneAnchor(before)) return send(res, 400, CODE_EXPIRED);
 
       if (await this.deps.accounts.isContactTaken(kind, value, actor.id)) {
         return send(res, 409, TAKEN[kind]);
       }
 
       const result = await this.deps.accounts.applyContactChange({
-        identityRowId: identity.id,
-        newRowId: newRow.id,
+        rowId: row.id,
         userId: actor.id,
         kind,
         value,
@@ -368,20 +297,11 @@ export class ContactChangeControllerClass {
         });
       }
 
-      if (kind === 'email') {
-        fireNotice(() =>
-          this.deps.notices.emailChanged({ oldEmail: before.email, newEmail: value, name: before.username }),
-        );
-      } else {
-        fireNotice(() =>
-          this.deps.notices.phoneChanged({
-            oldPhone: before.phoneNum,
-            email: before.email,
-            newPhone: value,
-            name: before.username,
-          }),
-        );
-      }
+      /*
+       * ⚠️ NO NOTICE. The two-code build told the old email / old phone that the
+       * account had moved; the owner removed that on 21 Sep 2026 along with the
+       * identity code. Nothing reaches the old contact at all.
+       */
 
       logger.info('[ContactChange.confirm] contact changed', { userId: actor.id, kind });
       return send(res, 200, UPDATED[kind], {
@@ -394,6 +314,46 @@ export class ContactChangeControllerClass {
       logger.error('[ContactChange.confirm] Error:', safeErrorFields(error));
       return send(res, 500, ApiError.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  /**
+   * THE CURRENT PASSWORD, and the login lockout that guards it.
+   *
+   * Answers the refusal, or null when the password is right. Three deliberate
+   * choices:
+   *
+   *  • The lockout is honoured BEFORE the compare, exactly as login does it
+   *    (auth.controller.ts) — otherwise this endpoint, the one that moves the
+   *    sign-in identity, is an unlocked side door for guessing at an account
+   *    login has already locked.
+   *  • A wrong password does NOT feed that counter. Login's counter exists to
+   *    stop guessing at the door; a signed-in person mistyping their own
+   *    password in a settings sheet must not be locked out of signing in. The
+   *    brake here is `contactChangePasswordUserLimiter`, 10 an hour per account.
+   *  • A failed account READ is 500, never this 400. Copying the password
+   *    change's `!user?.passwordHash` would tell somebody their account "cannot
+   *    change password here" because a query blipped.
+   */
+  private async proveIdentity(
+    user: UserType,
+    currentPassword: string,
+  ): Promise<{ status: number; message: string } | null> {
+    const lockedUntil = user.lockedUntil?.getTime() ?? 0;
+    const now = this.deps.now();
+    if (lockedUntil > now) {
+      const minutes = Math.ceil((lockedUntil - now) / 60_000);
+      logger.warn('[ContactChange] attempt on a locked account', { userId: user.id });
+      return {
+        status: 429,
+        message: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+      };
+    }
+    if (!user.passwordHash) return { status: 400, message: NO_PASSWORD };
+    if (!(await this.deps.comparePassword(currentPassword, user.passwordHash))) {
+      logger.warn('[ContactChange] wrong current password', { userId: user.id });
+      return { status: 400, message: WRONG_PASSWORD };
+    }
+    return null;
   }
 
   /** See ACCOUNT_READ_FAILED. 401 stays reserved for a request with no `req.user`. */
@@ -410,43 +370,24 @@ export class ContactChangeControllerClass {
     return Boolean(current) && current === toWhatsAppDigits(value);
   }
 
-  /** Verified by THIS caller, for THIS kind and value, within the window. */
-  private isUsableIdentity(
-    row: PhoneVerification | null,
-    userId: string,
-    kind: ContactKind,
-    value: string,
-    now: number,
-  ): row is PhoneVerification {
-    return Boolean(
-      row &&
-        row.purpose === 'contact_change_identity' &&
-        row.createdBy === userId &&
-        row.status === 'verified' &&
-        row.verifiedAt &&
-        now - row.verifiedAt.getTime() <= IDENTITY_WINDOW_MS &&
-        identityProofMatches(row.codeHash, userId, kind, value),
-    );
-  }
-
-  /** Step 2's send, shared by verify-identity and resend-new. */
-  private async issueNewContactCode(
+  /** The one send: a code to the NEW contact, and nowhere else. */
+  private async issueCode(
     res: Response,
     user: UserType,
-    identity: PhoneVerification,
     kind: ContactKind,
     value: string,
     now: number,
+    extra: { pendingInvitesToCurrentEmail?: number } = {},
   ) {
     await this.deps.codes.expireOpenForCreator(user.id, ['contact_change_new'], ['pending'], user.id);
 
     const code = generateAccountCode();
     const destinations = kind === 'email' ? { phone: null, email: value } : { phone: value, email: null };
     const row = await this.deps.codes.create({
-      // The SAME anchor as the identity row: confirm refuses a pair that
-      // disagrees, so a phone changed mid-flow cannot mix two flows.
-      phoneNum: identity.phoneNum,
-      codeHash: hashBoundCode(code, user.id, kind, value, identity.id),
+      // Anchored to the ACCOUNT's own phone, not to the value being changed to:
+      // confirm re-reads it and refuses a code whose account has moved since.
+      phoneNum: phoneAnchor(user),
+      codeHash: hashBoundCode(code, user.id, kind, value),
       channel: channelColumn(plannedChannels(destinations)),
       purpose: 'contact_change_new',
       status: 'pending',
@@ -477,10 +418,11 @@ export class ContactChangeControllerClass {
     }
 
     return send(res, 200, 'Code sent', {
-      newRequestId: row.id,
+      requestId: row.id,
       sentTo: delivery.sentTo,
       expiresInSec: NEW_CONTACT_CODE_TTL_SEC,
       resendAfterSec: RESEND_AFTER_SEC,
+      pendingInvitesToCurrentEmail: extra.pendingInvitesToCurrentEmail ?? 0,
     });
   }
 }

@@ -141,6 +141,51 @@ describe('OTP_DELIVERY_LOG_ONLY', () => {
     expect(codeWasLogged()).toBe(true);
   });
 
+  it('holds back ONLY the channels named — sms alone lets WhatsApp and email really send', async () => {
+    env.OTP_DELIVERY_LOG_ONLY = 'sms';
+    const s = senders();
+    expect(deliveryLogOnly('sms')).toBe(true);
+    expect(deliveryLogOnly('whatsapp')).toBe(false);
+    expect(deliveryLogOnly('email')).toBe(false);
+    const result = await deliverCode(input, s);
+    expect(result.sentTo.map((d) => [d.channel, d.status])).toEqual([
+      ['whatsapp', 'sent'],
+      ['sms', 'logged'],
+      ['email', 'sent'],
+    ]);
+    expect(s.sendWhatsApp).toHaveBeenCalled();
+    expect(s.sendEmail).toHaveBeenCalled();
+    expect(s.sendSms).not.toHaveBeenCalled();
+  });
+
+  it('takes a comma list, in any order and with stray spaces', async () => {
+    env.OTP_DELIVERY_LOG_ONLY = ' email , sms ';
+    const s = senders();
+    const result = await deliverCode(input, s);
+    expect(result.sentTo.map((d) => d.status)).toEqual(['sent', 'logged', 'logged']);
+    expect(s.sendWhatsApp).toHaveBeenCalled();
+  });
+
+  /*
+   * The safe direction for a typo. Reading an unknown word as 'hold
+   * everything' would mean one misspelling silently stops every code, and the
+   * only symptom is people saying the code never came.
+   */
+  it('ignores a word that is not a channel rather than holding everything back', async () => {
+    env.OTP_DELIVERY_LOG_ONLY = 'whatsap,emial';
+    const s = senders();
+    expect(deliveryLogOnly()).toBe(false);
+    const result = await deliverCode(input, s);
+    expect(result.sentTo.map((d) => d.status)).toEqual(['sent', 'sent', 'sent']);
+  });
+
+  it("'false' and an empty value hold nothing back", async () => {
+    for (const value of ['false', '']) {
+      env.OTP_DELIVERY_LOG_ONLY = value;
+      expect(deliveryLogOnly()).toBe(false);
+      expect(deliveryLogOnly('whatsapp')).toBe(false);
+    }
+  });
   it('is IGNORED in production — real sends happen and the code is never logged', async () => {
     env.NODE_ENV = 'production';
     env.OTP_DELIVERY_LOG_ONLY = 'true';

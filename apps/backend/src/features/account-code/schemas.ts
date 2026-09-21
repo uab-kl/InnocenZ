@@ -20,6 +20,20 @@ const password = z
 const code = z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code');
 const requestId = z.string().uuid('This code has expired — request a new one');
 
+/**
+ * The proof for every signed-in credential change — the password change, and
+ * since 21 Sep 2026 starting a contact change too. ONE spelling, so both
+ * endpoints refuse a missing password with the same sentence, which the web and
+ * the app already translate.
+ */
+const currentPassword = z
+  // ⚠️ The `error` argument as well as `.min()`. Without it a body with NO
+  // `currentPassword` key at all raises zod's own `invalid_type` and answers
+  // "Invalid input: expected string, received undefined" — a sentence no client
+  // translates, shown to somebody who simply left the box empty.
+  .string({ error: 'Current password is required' })
+  .min(1, 'Current password is required');
+
 const emailValue = z
   .string()
   .trim()
@@ -87,29 +101,27 @@ export function normaliseContactValue(
     : { ok: false, message: 'Enter a valid phone number' };
 }
 
-export const ContactChangeStartSchema = z.object({
+/** The change being asked for, identically shaped on all three calls. */
+const contactTarget = {
   kind: ContactKindSchema,
   value: z.string().min(1, 'Enter the new email or phone number'),
-});
+};
 
-export const ContactChangeVerifySchema = ContactChangeStartSchema.extend({
-  requestId: z.string().uuid('This change has expired — start again'),
-  code,
-});
+/**
+ * ⚠️ `currentPassword` is on START ONLY (owner, 21 Sep 2026). Resend and
+ * confirm are reached only by a caller who already passed it and holds the
+ * `requestId` it answered with, and asking again would mean the client had to
+ * keep the password in memory behind the code sheet.
+ */
+export const ContactChangeStartSchema = z.object({ ...contactTarget, currentPassword });
 
-export const ContactChangeResendSchema = ContactChangeStartSchema.extend({
-  requestId: z.string().uuid('This change has expired — start again'),
-});
+export const ContactChangeResendSchema = z.object({ ...contactTarget, requestId });
 
-export const ContactChangeConfirmSchema = ContactChangeStartSchema.extend({
-  requestId: z.string().uuid('This change has expired — start again'),
-  newRequestId: z.string().uuid('This code has expired — request a new one'),
-  code,
-});
+export const ContactChangeConfirmSchema = z.object({ ...contactTarget, requestId, code });
 
 export const ChangePasswordBodySchema = z
   .object({
-    currentPassword: z.string().min(1, 'Current password is required'),
+    currentPassword,
     newPassword: password,
   })
   .refine((body) => body.currentPassword !== body.newPassword, {

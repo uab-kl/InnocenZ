@@ -707,7 +707,8 @@ function AgencyProfile() {
 				 * no longer takes the prop, so it cannot be re-gated by accident.
 				 *
 				 * The two callbacks below only run on a DEMO session; a real change
-				 * goes through the two-code flow and is refetched from `/auth/me`.
+				 * goes through the password + one-code flow and is refetched from
+				 * `/auth/me`.
 				 */
 				onUpdateEmail={(email) => {
 					if (!profile.backed) saveAgencyOwner({ email });

@@ -23,6 +23,7 @@ import {
 } from '@/features/account-code/index.js';
 import {
   contactChangeCheckUserLimiter,
+  contactChangePasswordUserLimiter,
   contactChangeSendUserLimiter,
   forgotCompleteIpLimiter,
   forgotStartIdentifierLimiter,
@@ -256,23 +257,18 @@ router.post(
 router.post(
   '/contact-change/start',
   authenticateJWT,
-  contactChangeSendUserLimiter,
+  // The PASSWORD budget, not the send budget — see limiters.ts for why a wrong
+  // password must not spend the owner's codes.
+  contactChangePasswordUserLimiter,
   otpSendLimiter,
   contactChangeController.start.bind(contactChangeController),
 );
 router.post(
-  '/contact-change/verify-identity',
-  authenticateJWT,
-  contactChangeCheckUserLimiter,
-  otpVerifyLimiter,
-  contactChangeController.verifyIdentity.bind(contactChangeController),
-);
-router.post(
-  '/contact-change/resend-new',
+  '/contact-change/resend',
   authenticateJWT,
   contactChangeSendUserLimiter,
   otpSendLimiter,
-  contactChangeController.resendNew.bind(contactChangeController),
+  contactChangeController.resend.bind(contactChangeController),
 );
 router.post(
   '/contact-change/confirm',
@@ -281,6 +277,12 @@ router.post(
   otpVerifyLimiter,
   contactChangeController.confirm.bind(contactChangeController),
 );
+/*
+ * The two-code change's `/verify-identity` and `/resend-new` are GONE, not
+ * retired behind a message (owner, 21 Sep 2026: "no error page no show this").
+ * Both clients ship in this same change and neither calls them, so there is
+ * nothing left to tell.
+ */
 
 router.get('/me', authenticateJWT, authController.me.bind(authController));
 /**
@@ -302,16 +304,6 @@ router.post(
   authenticateJWT,
   passwordChangeUserLimiter,
   passwordChangeController.change.bind(passwordChangeController),
-);
-/**
- * RETIRED one-step phone change. It now answers 400 telling an old app build
- * to update — changing a phone needs a code to the current contacts first
- * (/contact-change/*).
- */
-router.post(
-  '/phone/change',
-  authenticateJWT,
-  authController.changePhoneWithOtp.bind(authController),
 );
 
 // TOTP enrolment. Both require a signed-in caller and act only on THEIR OWN

@@ -30,11 +30,16 @@ const CONTRACT_SENTENCES = [
 	"That phone number is already used by another account",
 	"Your account has no phone or email we can send a code to",
 	"Code sent",
-	"This change has expired — start again",
 	"This code was already used",
 	"Email updated",
 	"Phone number updated",
-	"Changing your phone now needs a code to your current contacts — please update the app",
+	// No "…please update the app" sentence is listed: on 21 Sep 2026 the routes
+	// that answered it — /contact-change/verify-identity, /contact-change/
+	// resend-new and /auth/phone/change — were DELETED rather than left
+	// answering a message, so an old build now gets a 404 and there is no
+	// sentence to translate. Both wordings, and "This change has expired —
+	// start again", are sent by nothing (grepped across apps/backend/src).
+	"Set a password before you change your sign-in email or phone",
 	"New password must be different",
 	"Current password is incorrect",
 	"Password updated",
@@ -57,7 +62,8 @@ const BACKEND_OBSERVED_SENTENCES = [
 	"Too many password change attempts. Please try again later.",
 	// contact-change.controller.ts 500s, password-change.controller.ts 400,
 	// and the `ApiError.INTERNAL_SERVER_ERROR` catch-all of every handler.
-	"Could not start the change",
+	// "Could not start the change" was the verifyIdentity 500 and is gone with
+	// that handler — grep finds it nowhere in apps/backend/src.
 	"Could not send the code",
 	"This account cannot change password here",
 	"Internal Server Error",

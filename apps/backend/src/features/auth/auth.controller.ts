@@ -1820,24 +1820,5 @@ export class AuthControllerClass {
    * 14-dependency controller cannot offer.
    */
 
-  /**
-   * RETIRED: the one-step phone change.
-   *
-   * It accepted a code verified on the NEW number (purpose=change_phone) and
-   * wrote it. That proves the new number works; it does not prove the person
-   * holding the session owns the account — anybody with an unlocked phone and
-   * the app open could move the account to a number they control, and from
-   * there reset the password. Changing a phone now takes a code to the CURRENT
-   * contacts first: POST /auth/contact-change/start → verify-identity → confirm.
-   *
-   * Kept as a route, answering 400 with an instruction, so an app build still
-   * on someone's phone shows a sentence instead of a 404 or a silent failure.
-   */
-  async changePhoneWithOtp(_req: Request, res: Response) {
-    return res.status(400).json({
-      success: false,
-      message: 'Changing your phone now needs a code to your current contacts — please update the app',
-      data: null,
-    });
-  }
+
 }

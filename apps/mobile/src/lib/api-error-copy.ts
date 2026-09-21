@@ -61,7 +61,6 @@ type ErrorKey = keyof AppTranslations['errors'];
 const CODE_FLOW_SENTENCES: ReadonlyArray<readonly [string, ErrorKey]> = [
   ['Invalid code', 'invalidCode'],
   ['This code has expired — request a new one', 'codeExpired'],
-  ['This change has expired — start again', 'changeExpired'],
   ['This code was already used', 'codeAlreadyUsed'],
   ['Could not send the code — try again later', 'codeSendFailed'],
   ['That is already your email', 'sameEmail'],
@@ -73,10 +72,8 @@ const CODE_FLOW_SENTENCES: ReadonlyArray<readonly [string, ErrorKey]> = [
   ['New password must be different', 'passwordMustDiffer'],
   ['Change your email from Security settings', 'changeEmailInSecurity'],
   ['Change your phone from Security settings', 'changePhoneInSecurity'],
-  [
-    'Changing your phone now needs a code to your current contacts — please update the app',
-    'phoneChangeNeedsUpdate',
-  ],
+  /** 400 — contact-change/start on an account with no password hash to compare. */
+  ['Set a password before you change your sign-in email or phone', 'setPasswordFirst'],
   ['Use Forgot password on the sign-in page', 'useForgotPassword'],
   /*
    * The CODE's own attempt cap (429). Not a rate limiter: the code is dead and
@@ -134,11 +131,17 @@ const PASSWORD_MAX_LENGTH = /^Password must be at most (\d+) characters(?: long)
  * leave a still-valid code standing. A screen clears the typed code (and sends
  * the PR back to the code step) only for these; for anything else the code she
  * typed is still good and retyping it would be busywork.
+ *
+ * ⚠️ Expiry is `codeExpired` — 'This code has expired — request a new one',
+ * which contact-change, forgot-password and the request-id schema all still
+ * send. The retired request-level twin ('This change has expired — start
+ * again') was dropped on 21 Sep 2026 once no backend route sent it; clearing
+ * behaviour on the LIVE sentence is unchanged, because it never matched that
+ * twin in the first place.
  */
 const CODE_REJECTIONS: ReadonlySet<ErrorKey> = new Set<ErrorKey>([
   'invalidCode',
   'codeExpired',
-  'changeExpired',
   'codeAlreadyUsed',
   'tooManyCodeAttempts',
 ]);

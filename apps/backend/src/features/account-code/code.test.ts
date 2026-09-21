@@ -4,8 +4,6 @@ import {
   boundCodeMatches,
   generateAccountCode,
   hashBoundCode,
-  identityProofHash,
-  identityProofMatches,
 } from './code';
 
 const USER = '3f1a2b4c-5d6e-4f70-8a91-b2c3d4e5f607';
@@ -57,20 +55,6 @@ describe('boundCodeMatches', () => {
   it('refuses a malformed stored hash without throwing', () => {
     expect(boundCodeMatches('not-hex', '654321', USER)).toBe(false);
     expect(boundCodeMatches('', '654321', USER)).toBe(false);
-  });
-});
-
-describe('identity proof', () => {
-  it('binds user, kind and value without the code', () => {
-    const proof = identityProofHash(USER, 'email', 'new@x.my');
-    expect(identityProofMatches(proof, USER, 'email', 'new@x.my')).toBe(true);
-    expect(identityProofMatches(proof, USER, 'email', 'else@x.my')).toBe(false);
-    expect(identityProofMatches(proof, OTHER_USER, 'email', 'new@x.my')).toBe(false);
-  });
-
-  it('can never be matched by a real six-digit code', () => {
-    const proof = identityProofHash(USER, 'email', 'new@x.my');
-    expect(boundCodeMatches(proof, '000000', USER, 'email', 'new@x.my')).toBe(false);
   });
 });
 

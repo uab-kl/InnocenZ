@@ -40,6 +40,10 @@ export const forgotPasswordController = new ForgotPasswordControllerClass(shared
 export const contactChangeController = new ContactChangeControllerClass({
   ...shared,
   jwt: jwtController,
+  // Only THIS controller and the password change get a password comparator —
+  // the forgot-password flow has no business holding one, so it stays out of
+  // `shared`.
+  comparePassword,
   countPendingInvites: async (email: string) =>
     (await orgMemberInviteRepository.listPendingByEmail(normalizeInviteEmail(email))).length,
 });

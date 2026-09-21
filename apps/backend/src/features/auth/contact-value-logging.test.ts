@@ -73,10 +73,7 @@ import { deliverCode, type CodeSenders } from '@/features/account-code/delivery'
 import { accountNotices, fireNotice } from '@/features/account-code/notices';
 import { ContactChangeControllerClass } from '@/features/account-code/contact-change.controller';
 import {
-  NOW,
-  fakeCodeStore,
-  fakeDeliver,
-  fakeNotices,
+  fakeContactChangeDeps,
   fakeReq,
   fakeRes,
   fakeUser,
@@ -426,11 +423,18 @@ describe('account-code catches', () => {
     expect(leaks(logged())).toEqual([]);
   });
 
-  it('a notice whose SMTP send throws with the old address logs it masked', async () => {
+  /**
+   * ⚠️ Repointed 21 Sep 2026: this used to drive `accountNotices.emailChanged`.
+   * That notice — and `phoneChanged` — were removed with the identity code, so
+   * nothing reaches the old email or old phone any more. `passwordChanged` is
+   * the ONE notice left, and it is now the one that proves the catch.
+   */
+  it('a notice whose SMTP send throws with the address logs it masked', async () => {
     fake.sendAccountChangeNoticeEmail.mockRejectedValueOnce(
       new Error(`550 <${EMAIL}>: mailbox unavailable`),
     );
-    await accountNotices.emailChanged({ oldEmail: EMAIL, newEmail: 'new@atlas-agency.my' });
+    await accountNotices.passwordChanged({ email: EMAIL, name: 'Owner' });
+    expect(fake.sendAccountChangeNoticeEmail).toHaveBeenCalled();
     expect(fake.logger.warn).toHaveBeenCalled();
     expect(leaks(logged())).toEqual([]);
   });
@@ -449,24 +453,24 @@ describe('account-code catches', () => {
 
   it('contact-change start: a failed pending-invite count (bound value = the email) logs it masked', async () => {
     const user = fakeUser({ id: USER_ID, email: EMAIL, phoneNum: PHONE });
-    const controller = new ContactChangeControllerClass({
-      users: {
-        getUserByLoginMethod: vi.fn(async () => user),
-        getUserById: vi.fn(async () => user),
-      },
-      codes: fakeCodeStore(),
-      accounts: { isContactTaken: vi.fn(async () => false) } as never,
-      deliver: fakeDeliver(true),
-      notices: fakeNotices(),
-      hashPassword: async () => 'unused',
-      now: () => NOW,
-      jwt: {} as never,
-      countPendingInvites: vi.fn(async () => {
-        throw queryError();
+    const controller = new ContactChangeControllerClass(
+      fakeContactChangeDeps({
+        users: {
+          getUserByLoginMethod: vi.fn(async () => user),
+          getUserById: vi.fn(async () => user),
+        },
+        countPendingInvites: vi.fn(async () => {
+          throw queryError();
+        }),
       }),
-    });
+    );
     const res = fakeRes();
-    await controller.start(fakeReq({ kind: 'email', value: 'new@atlas-agency.my' }, user), res);
+    // The current password is the first gate since 21 Sep 2026; the faked
+    // comparator accepts it, so the invite count is still reached.
+    await controller.start(
+      fakeReq({ kind: 'email', value: 'new@atlas-agency.my', currentPassword: 'old-password' }, user),
+      res,
+    );
 
     expect(res.statusCode).toBe(200);
     expect(fake.logger.warn).toHaveBeenCalled();

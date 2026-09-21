@@ -369,9 +369,19 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 **DECIDED (owner, 17 Sep 2026) — supersedes the 27 Jul "agency/outlet verify by email, PRs by
 WhatsApp, SMS dropped" rule for these three flows:** *"send the otp via whatapps , email and the
 sms"* — **one code goes out on all three channels at once** for **forgot password, change phone
-and change email**; sign-up / login verification is unchanged. Change email is proven by the
-contacts on file **and** the new address. SMS provider: **decide later** — one `SMS_PROVIDER`
-setting; with none set, development logs the SMS text and production skips it.
+and change email**; sign-up / login verification is unchanged. SMS provider: **decide later** —
+one `SMS_PROVIDER` setting; with none set, development logs the SMS text and production skips it.
+
+**DECIDED (owner, 21 Sep 2026) — a contact change is proven by the CURRENT PASSWORD and the NEW
+address; NOTHING ever reaches the old phone or old email again.** Verbatim: *"only send to new
+contact (Change new phone / email, step 2 (new contact)). * Change phone / email, step 1 (identity)
+No — logged , this no need send whatapps otp, sms otp and the email otp to the old email or
+phone"*. Answered follow-ups: the **current password replaces the identity code**, and the *"your
+email/phone was changed"* **notice to the old contact is REMOVED TOO** — no code and no message.
+⚠️ This **supersedes the 17 Sep line that said change email is proven by the contacts on file AND
+the new address**: the contacts on file are no longer consulted at all. The three-channel rule
+above still stands for the code that goes to the NEW contact (new phone → WhatsApp + SMS) and for
+forgot password (unchanged).
 
 **Audit before the build (read-only, 4 mappers + 4 verifiers, file:line evidence):**
 - [ ] **🔴 CRITICAL — `POST /pr` overwrites an EXISTING account's sign-in email/phone** (matched by
@@ -384,6 +394,12 @@ setting; with none set, development logs the SMS text and production skips it.
 - [ ] **Change phone:** a wrong code answers **401**, which signs web users out mid-flow; only the NEW
   number is verified (stolen session can swap the phone); receipts not bound to the requester;
   never completed on the shared DB (0 verified/consumed `change_phone` rows).
+  ⚠️ **"Only the NEW number is verified (stolen session can swap the phone)" is SUPERSEDED by the
+  owner on 21 Sep 2026 — kept, not deleted, because it records WHY step 1 existed.** That finding
+  is what produced the code to the CURRENT contacts; the owner has since chosen the **current
+  password** as the answer to a stolen session instead, and step 1 is gone. Do **not** re-propose
+  an old-contact code as a fix for this line without a new owner decision — see the new open item
+  on the compensating controls below.
 - [ ] **Forgot password:** a reset does not clear `failed_login_attempts`/`locked_until`; the PR app's
   WhatsApp reset works for ANY role; email lookup is case-sensitive (1 mixed-case agency email live).
 - [ ] **Change email:** no verified flow on any app (web row refuses on real sessions; PR app writes
@@ -393,23 +409,52 @@ setting; with none set, development logs the SMS text and production skips it.
   logs full rows incl. `password_hash`; 21 of 52 PR phones not stored in `+` form; server errors
   shown in English under 中文 on web and app; zh copy says 短信 where WhatsApp is used.
 
-**Built (§10 row ii):** `/auth/password/forgot/start|complete`,
-`/auth/contact-change/start|verify-identity|resend-new|confirm` (identity code to CURRENT contacts,
-then a code to the NEW contact; re-issued tokens; other devices signed out), password change
-re-issues tokens, wrong code → 400 never 401, cutoff floored to the second, SMS sender seam
-(`SMS_PROVIDER`), `OTP_DELIVERY_LOG_ONLY` (development only), proof-free email/phone writers closed,
-case-insensitive email, password-hash redaction in logs, agency web + outlet web + admin + PR app UI
-in EN/zh. **No migration** (reuses `phone_verification`).
+**Built (§10 row ii, reshaped by the 21 Sep 2026 row):** `/auth/password/forgot/start|complete`,
+and `/auth/contact-change/start|resend|confirm` — **THREE routes, not four**, proven by the
+**current password** plus a code to the **NEW contact ONLY**:
+- `POST /auth/contact-change/start` `{ kind:'email'|'phone', value, currentPassword }` →
+  `{ requestId, sentTo, expiresInSec: 600, resendAfterSec: 60, pendingInvitesToCurrentEmail }`.
+  New email → email; new phone → WhatsApp + SMS. The login lockout is honoured here.
+- `POST /auth/contact-change/resend` `{ kind, value, requestId }` — **no password**. ⚠️ It answers
+  a **NEW `requestId`**; a client that keeps the old one collects *'Invalid code'*.
+- `POST /auth/contact-change/confirm` `{ kind, value, requestId, code }` →
+  `{ accessToken, refreshToken, email, phoneNum }` (other devices signed out).
+- `/auth/contact-change/verify-identity` and `/auth/contact-change/resend-new` are **RETIRED and
+  answer 400** *'Changing your email or phone now needs your current password — please update the
+  app'* — the same sentence the retired `POST /auth/phone/change` now answers. ⚠️ That wording
+  **REPLACES** the old *'Changing your phone now needs a code to your current contacts — please
+  update the app'*.
+
+Server sentences to test against: *'Current password is required'* 400 · *'Current password is
+incorrect'* **400, never 401** · *'Set a password before you change your sign-in email or phone'*
+400 (account with no password hash — NEW) · *'Too many failed attempts. Try again in N minute(s).'*
+429 · *'That is already your email' / 'That is already your phone number'* 400 · *'That email is
+already used by another account' / 'That phone number is already used by another account'* 409 ·
+*'This code has expired — request a new one'* 400 — **the only expiry sentence now**, *'This change
+has expired — start again'* is GONE · *'This code was already used'* 409 · *'Invalid code'* 400 ·
+*'Too many attempts…'* 429 · *'Could not send the code — try again later'* 503.
+
+Also built: password change re-issues tokens, wrong code → 400 never 401, cutoff floored to the
+second, SMS sender seam (`SMS_PROVIDER`), `OTP_DELIVERY_LOG_ONLY` (development only), proof-free
+email/phone writers closed, case-insensitive email, password-hash redaction in logs, agency web +
+outlet web + admin + PR app UI in EN/zh. **No migration** (reuses `phone_verification`).
 - [x] Typecheck backend / web / mobile all exit 0; backend 483/483, web 422/422, new mobile tests
   83/83; `pnpm check:type` and `pnpm rbac:check` pass; adversarial review per area, findings fixed.
-- [ ] **Manual test on every lane** (outlet, agency, admin web; PR app) — needs a test account with
-  the owner's own phone + email, and a backend restart with `OTP_DELIVERY_LOG_ONLY=true`. Then read
-  back the `phone_verification` and `user` rows (read-only).
+- [ ] **Manual test on every lane** (outlet, agency, admin web; PR app) — the account needs a
+  **password the tester knows** and a **NEW phone / email the tester can read**. ⚠️ The contacts
+  **already on file receive nothing** (no code, no notice), so they no longer have to be reachable
+  and there is **no code to read from the current contacts** — that step is gone. One code per
+  change, to the new address only. Backend restart with `OTP_DELIVERY_LOG_ONLY=true`, then read
+  back the `phone_verification` and `user` rows (read-only) — the surviving purpose is
+  `contact_change_new`; a fresh `contact_change_identity` row would mean the old flow is still
+  live somewhere.
 - [ ] Real WhatsApp / email delivery unproven. **SMS provider:** ESMS recommended, Bulk360 runner-up
   (SMS Codes artifact https://claude.ai/artifact/AeC7vrQhvrqCuNuTkqKck2) — get written acceptance of
   a nightlife-staffing account and template approval first.
 - [ ] Web parity: no "sign in again" sheet when a change returns no tokens; no resend of code #2
-  after it fails to send (the PR app has both).
+  after it fails to send (the PR app has both). *(Closed by row iii below. ⚠️ Since 21 Sep 2026
+  there is no "code #2" — read it as **the** new-contact code, and its resend now answers a new
+  `requestId`.)*
 - [ ] `use-agency-pending-prs.ts` invite (POST /pr) has no `onError` — the new 403/409 sign-in-contact
   refusals close the Add PR sheet silently. GET /pr has no `hasPassword` flag to lock Mobile/Email
   per PR in the agency editor.
@@ -434,6 +479,29 @@ in EN/zh. **No migration** (reuses `phone_verification`).
   development only). Owner chose the EXISTING demo accounts (Atlas Agency owner, Velvet outlet, admin,
   a PR) — Claude may not type passwords, so the owner clicks, Claude reads codes from the backend log
   in the app Terminal panel and checks the rows read-only; demo contacts/passwords to be restored after.
+
+**NEW, opened 21 Sep 2026 by the password-only decision:**
+- [ ] **A leaked password alone now MOVES the sign-in identity.** The identity code to the current
+  contacts used to be the second factor; there is none any more, so whoever knows the password can
+  point the account at their own email or phone and then "forgot password" to it. The owner accepts
+  this. **Verify the four compensating controls actually fire** — none has been exercised on a live
+  server: (1) the **login lockout** is honoured by `contact-change/start` (a locked account is
+  refused *'Too many failed attempts. Try again in N minute(s).'* 429 before any code is sent);
+  (2) the **10/h per-user password limiter** bounds guessing at `start`; (3) the **session cutoff**
+  is stamped on confirm so every other device is signed out; (4) the **token pair is re-issued** to
+  the bearer so the person who made the change keeps their own session. Test each by hand, not by
+  reading the code — and **never probe a write gate with a write** on real rows.
+- [ ] **Nothing reaches the old contact, so a takeover leaves the previous owner NO signal.** Both
+  old-contact notices were deleted with the identity step (`AccountNotices` is now only
+  `passwordChanged`), so an account whose email is moved sends no "your email was changed" message
+  anywhere. **The owner decided this knowingly on 21 Sep 2026** — it is recorded here as a known,
+  accepted exposure, not as a bug to quietly re-close. If it is ever reconsidered, the cheapest
+  answer is a notice to the OLD contact (no code, no gate), which is a smaller change than
+  restoring step 1.
+- [ ] **The manual test per role is still owed** — outlet, agency, admin on the web and the PR app,
+  every lane in `_probe-mint-session.ts`. Nothing in this reshape has been run against a live
+  server or database; the three typechecks and the unit tests are the only evidence so far, and a
+  green typecheck is not the product working (house rule 3).
 
 ### ▶ ⏸ AWAITING THE OWNER — should a SERVICE pay a different rate from a TIP? (14 Sep 2026)
 
@@ -842,26 +910,35 @@ the loop `rbac:check` left open — web == database, but nothing watching seeder
 now shut from both ends. The seeder still only ADDS: removing a grant means deleting the row by
 hand, and `rbac:seed-check` is what tells you one is left over.
 
-### ▶ ⏸ DEFERRED BY THE OWNER — change email on the web (11 Sep 2026)
+### ▶ ✅ ANSWERED — change email on the web (deferred 11 Sep 2026, answered 21 Sep 2026)
 
-**Owner, 11 Sep 2026: *"for this no do yet cannot change the email with the otp, leave it
-first"*.** Left exactly as it is — still the fake flow. Nothing below has been built; it is
-kept because the trap it describes is real and will be waiting whenever this is picked up.
+**CLOSED.** The owner deferred this on 11 Sep — *"for this no do yet cannot change the email with
+the otp, leave it first"* — and on **21 Sep 2026 chose option 1 below, almost word for word**:
+the **current password** is the proof, plus a code to the **new address**. It is built; see the
+account-security block at the top of §9 for the three-route shape and the sentences to test.
+The original entry is kept because both of its traps are still live.
 
-Phone is now wired to the real WhatsApp OTP. Email is NOT, and cannot be wired the same way:
-there is no email-OTP endpoint anywhere, and `PATCH /user/:id` accepts `email` with **no proof
-of any kind** beyond the session. Wiring it as-is would make a left-open laptop an account
-takeover — change the email, then "forgot password" to it.
+The problem it described: `PATCH /user/:id` accepts `email` with **no proof of any kind** beyond
+the session, so a left-open laptop was an account takeover — change the email, then "forgot
+password" to it. That writer is now closed (§10 row ii), and the change goes through
+`/auth/contact-change/*`.
 
-Two ways, owner to choose:
-1. **Current password as the proof** (what most products do, no new infrastructure) — a new
-   `POST /auth/email/change` taking `{ email, currentPassword }`, self-only from the token.
+The two options the owner was given, and which one they took:
+1. **Current password as the proof** (what most products do, no new infrastructure) — **CHOSEN
+   21 Sep 2026**, and implemented as `POST /auth/contact-change/start { kind, value,
+   currentPassword }`, self-only from the token, rather than the `POST /auth/email/change` sketched
+   here. It also covers phone, which this entry did not anticipate.
 2. **A real email OTP** — a verification code to the NEW address, mirroring the phone lane.
+   **Also taken**, as the second half: the code to the new contact is what `confirm` checks. What
+   was dropped is the code to the CURRENT contacts, which was never one of these two options.
 
-⚠️ EITHER WAY it must **re-issue the token pair**, exactly like `/auth/phone/change` now does:
-a JWT carries only `{loginMethod, loginCriteria}` and every agency and outlet operator signs in
-BY EMAIL, so changing it orphans their own session and the next request answers 401
-`Unauthorized` — the same bug the PR app hit on phone.
+⚠️ **CARRIED FORWARD — the trap that outlives the decision.** It must **re-issue the token pair**,
+exactly like `/auth/phone/change` used to: a JWT carries only `{loginMethod, loginCriteria}` and
+every agency and outlet operator signs in BY EMAIL, so changing it orphans their own session and
+the next request answers 401 `Unauthorized` — the same bug the PR app hit on phone.
+`/auth/contact-change/confirm` answers `{ accessToken, refreshToken, email, phoneNum }` for that
+reason; **any client that does not STORE both tokens re-creates the bug**, and that is one of the
+things the manual test per lane (§9, top block) has to prove on a real session.
 
 
 ### ▶ ✅ BUILT AND PROVEN 11 Sep 2026 — the joining flow's four web surfaces (owner directive, 10 Sep)
@@ -4214,6 +4291,7 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+| 2026-09-21 | **CONTACT CHANGE IS NOW PROVEN BY THE CURRENT PASSWORD — NOTHING EVER GOES TO THE OLD PHONE OR EMAIL AGAIN.** Owner, verbatim: *"only send to new contact (Change new phone / email, step 2 (new contact)). * Change phone / email, step 1 (identity) No — logged , this no need send whatapps otp, sms otp and the email otp to the old email or phone"*; answered follow-ups: the **current password replaces the identity code**, and the *"your email/phone was changed"* **notice to the old contact is removed too**. This **supersedes the 17 Sep two-code design** (rows ii/iii below, which stay exactly as written — they were true when written). **Four routes became three:** `POST /auth/contact-change/start` `{kind,value,currentPassword}` → `{requestId,sentTo,expiresInSec:600,resendAfterSec:60,pendingInvitesToCurrentEmail}` with the code to the **NEW contact ONLY** (new email → email, new phone → WhatsApp + SMS) and the login lockout honoured; `/resend` `{kind,value,requestId}` with **no password**, answering a **NEW `requestId` the client must adopt**; `/confirm` `{kind,value,requestId,code}` → `{accessToken,refreshToken,email,phoneNum}`. `/contact-change/verify-identity` and `/contact-change/resend-new` are **retired, answering 400** *'Changing your email or phone now needs your current password — please update the app'* — the wording that **replaces** *'Changing your phone now needs a code to your current contacts…'* on the retired `POST /auth/phone/change` too. **New sentences:** *'Current password is required'* 400, *'Current password is incorrect'* **400 never 401**, *'Set a password before you change your sign-in email or phone'* 400. *'This code has expired — request a new one'* is now the **only** expiry sentence (*'This change has expired — start again'* is gone). **Deleted server-side:** the `verifyIdentity` / `resendNew` handlers, `ContactChangeVerifySchema`, the `CHANGE_EXPIRED` / `NEW_CODE_EXPIRED` / `IDENTITY_CODE_TTL_SEC` / `IDENTITY_WINDOW_MS` exports, `applyContactChange`'s `identityRowId`, and **both** old-contact notices (`AccountNotices` is now only `passwordChanged`). `contact_change_identity` is a **retired purpose** — kept in the enum for stored rows, still refused by the public OTP schemas. **Knowingly accepted by the owner:** a leaked password alone now moves the sign-in identity and the previous contact gets no signal; the compensating controls are the login-lockout check, the 10/h per-user password limiter, the session cutoff and the token re-issue — all four still unproven on a live server (new §9 items). Closed the 11 Sep DEFERRED "change email on the web" entry as ANSWERED (its option 1 was literally this decision), carrying forward its trap: a client that does not store BOTH re-issued tokens re-creates the 401-orphaned-session bug. | **this row: documentation only** — TEST_SCRIPT §9 (DECIDED block, audit bullet annotated as superseded, Built paragraph, manual-test checkbox, 3 new open items, DEFERRED→ANSWERED) · `docs/claude-memory/otp-channel-split.md`. Backend/web/app code was changed by the workflow that produced this contract, **not** by this row. | ⚠️ **No typecheck, no test, no server and no database were run for this row — it changed only Markdown.** The route/sentence/export claims above were read back out of `apps/backend/src/features/auth/auth.routes.ts`, `features/account-code/contact-change.controller.ts`, `schemas.ts` and `notices.ts` and match; nothing was executed. `node tools/scripts/sync-claude-memory.mjs` run from the repo root, then `--check` — results in the session report. **Manual test per role still owed** (§9). No migration, no database write, not committed. |
 | 2026-09-17 (iii) | **ACCOUNT SECURITY LEFTOVERS — FIXED AND REVIEWED.** Owner: *"continue fix while fixing always remember the rules in this innocenz"*. After commit 9366b7f0, a second reviewed workflow (backend, web, PR app): **GET /pr `hasPassword`** (never the hash; outlet callers never get it) so the agency PR editor locks Mobile/Email only for PRs who set a password; **Add PR / PR edit refusals** (403 sign-in contact, 409 duplicates, non-admin userId) shown translated instead of closing the sheet; **web parity** — "your change is saved, sign in again" notice when a change returns no tokens, and resend of code #2 after it failed to send; **forgot password by email OR phone** on web and app (`{email}` or `{phoneNum}`); **`register-member` duplicate phone/email → 409** (was 500) and its refusals translated on /signup-member; **PII-safe logs** — catches log masked emails/phones, masking rewritten to run in linear time (a long malformed `/pr/:id` could stall the event loop; `/pr/:id` now 404s a non-uuid before any query), wider phone spellings masked, dev OTP log masks the phone, `createUserWithRole` success logs masked (fixed by hand); remaining English sentences translated on the PR app (sign-in 429/500, Security "sign in again" sheet on 401); stale forgot-password comments fixed. | backend pr/org-member-invite/auth logging · web security sheets, forgot password, signup-member, agency PR editor + pending PRs · PR app forgot password, login/security copy | ✅ backend tsc 0 · backend vitest 43 files 583/583 · web tsc 0 · web vitest 44 files 509/509 · web biome lint 0 errors (5 pre-existing warnings) · mobile tsc (app) 0 · touched mobile jest 134/134 · `pnpm check:type` + `pnpm rbac:check` pass · client↔server `hasPassword` and forgot/start bodies cross-checked · re-ran all 3 typechecks + 252 auth/account-code tests myself after the log fix · ⚠️ still not run in a live app — manual test per role pending (§9) · committed on jk |
 | 2026-09-17 (ii) | **ACCOUNT SECURITY — BUILT AND REVIEWED: ONE CODE BY WHATSAPP + SMS + EMAIL; CHANGE PHONE/EMAIL NEED A CODE TO THE CURRENT CONTACTS THEN THE NEW ONE; FORGOT PASSWORD BY CODE; PROOF-FREE EMAIL/PHONE WRITERS CLOSED.** Built by a 4-area workflow (backend core, backend writers, web, PR app), each adversarially reviewed and fixed, then a whole-repo check. **Backend:** new `features/account-code` (delivery orchestrator: same code to WhatsApp + SMS + email, masked `sentTo`, production 503 when nothing sent except neutral forgot/start; code hash bound to user + value; 5 attempts; 60 s cooldown), `features/sms` (`SMS_PROVIDER` seam, dev log, production skip), `OTP_DELIVERY_LOG_ONLY` (ignored in production), `/auth/password/forgot/start|complete` (neutral answers incl. decoy ids and a 500 ms floor; reset clears lockout; cutoff stamped), `/auth/contact-change/start|verify-identity|resend-new|confirm` (identity code to CURRENT phone + email, code #2 to the NEW contact, one transaction, 23505 → 409, tokens re-issued with the bearer's login method, notice to the old contact), `/auth/password/change` re-issues tokens + per-user limiter; wrong code 400 (never 401) incl. `/otp/verify`; `change_phone` removed from public `/otp/send`, old `/auth/phone/change` answers 400; `/password/reset-otp` PR-only; cutoff compares whole seconds and `optionalAuthenticateJWT` + GraphQL context apply it; email lookup case-insensitive with ambiguity refusal; audit redaction of `code`; DrizzleQueryError bound values (password hashes, reset tokens) stripped from logs; `PATCH /user/:id` refuses a changed email/phone before any write; `PUT /pr/:id` / `POST /pr` never change the sign-in contact of an account with a password, non-admin raw `userId` refused. **Web:** SecuritySettingsSheets (agency + outlet) and new AdminLoginSecurityCard (admin) — password change stores re-issued tokens, change phone/email 3-step flow with sentTo + resend, server sentences mapped EN/zh; `/forgot-password` code flow (link page kept for old emails); agency PR editor sends unchanged contacts no longer and shows the translated 403. **PR app:** ForgotPasswordModal code flow, SecurityScreen change email (new) + phone 3-step + password token adoption + 'Sign in again' sheet, Profile email read-only, errors localised EN/zh-Hans/zh-Hant. | backend auth/account-code/sms/otp/user/pr · agency + outlet + admin web · PR app | ✅ backend tsc 0 · backend vitest 40 files 483/483 · web tsc 0 · web vitest 36 files 422/422 · web biome lint clean (2 pre-existing warnings) · mobile tsc (tsconfig.app.json) 0 errors — the old ~11 baseline is now 0 · new mobile jest 83/83 (full mobile jest: 1 pre-existing date-dependent failure, active-shift.test.ts) · `pnpm check:type` no new violations · `pnpm rbac:check` matches DB · client↔server paths/bodies/sentences cross-checked · re-ran all 3 typechecks myself: exit 0 · ⚠️ **NOT run against a live server or database; no code actually delivered** — manual test per role still to do (§9) · no migration · committed on jk |
 | 2026-09-17 (i) | **ACCOUNT SECURITY — AUDITED, BUILD IN PROGRESS: ONE CODE BY WHATSAPP + SMS + EMAIL FOR FORGOT PASSWORD, CHANGE PHONE AND CHANGE EMAIL.** Owner: *"the change email for the user how to make it works via sms , and the just ask the change password and the change phone works right ?"*, *"forgot password works also ?"*, *"send the otp via whatapps , email and the sms"*; chose all three channels at once, provider decided later, change email proven by phone + new email; *"normal work flow ,manual test"* on every role, web and app. **Database first (read-only):** `phone_verification` change_phone = 2 pending, 0 verified, 0 consumed; forgot_password = 0 rows ever; `sessions_valid_from` set on 0 of 81 users; 1 mixed-case email; 21 of 52 PR phones not in `+` form; 2 audit rows hold a typed OTP code. **Verdicts:** change password PARTLY (self sign-out, no limiter); change phone PARTLY (401 on wrong code signs web users out; old phone never checked); forgot password PARTLY (lockout survives reset; WhatsApp reset any role); change email MISSING — and **CRITICAL: `POST /pr` can overwrite any existing account's sign-in email/phone**. **Build started** as a 4-area workflow (backend core, backend writers, web, PR app) with per-area adversarial review and fixes — see §9 block for the contract. Also found: the PR app's "Cannot reach the InnocenZ backend" on 17 Sep was the backend's `tsx watch` restarting on each file the build saved (port 7777 closed ~10–60 s per restart; CORS for `localhost:8081` and `/auth/login` verified fine). | backend auth/otp/user/pr · agency + outlet + admin web · PR app | ⏳ audit done (read-only) · build + review running · ⚠️ nothing verified yet · no migration · not committed |

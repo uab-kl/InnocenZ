@@ -1,18 +1,23 @@
 /**
- * THE TWO-CODE CONTACT CHANGE AS ONE STATE MACHINE — shared by the agency and
+ * THE ONE-CODE CONTACT CHANGE AS ONE STATE MACHINE — shared by the agency and
  * outlet Security sheet and the admin Login & security card, so the three
- * surfaces cannot disagree about which code goes where or when a step is done.
+ * surfaces cannot disagree about where the code goes or when a step is done.
  *
- *   idle ──start──▶ identity ──code #1──▶ new ──code #2──▶ done
- *                     │  resend = start again   │  resend = resend-new
+ *   idle ──start(kind, value, currentPassword)──▶ code ──confirm──▶ done
+ *                                                  │  resend = another code
  *
- * Rendering is the caller's job; this owns the requests, the ids, the receipt
- * of where each code went, the Resend countdown and the last refusal. A wrong
- * code keeps the sheet where it is so the person can retype (the server allows
- * five tries per code). Two refusals DO move it, as in the PR app (see
- * `contact-change-outcome.ts`): code #2 failing to go out after code #1 was
- * accepted moves on to step 3 with Resend ready, and a contact taken meanwhile
- * goes back to the field.
+ * Owner, 21 Sep 2026: the code goes to the NEW contact and NOTHING — no code,
+ * no notice — ever reaches the old phone or old email. The current password is
+ * what replaced the identity code, and it is taken as an ARGUMENT and never
+ * kept in this state: a password held in memory behind a code sheet for the
+ * whole flow is exactly what the server refused to ask for twice.
+ *
+ * Rendering is the caller's job; this owns the requests, the id, the receipt of
+ * where the code went, the Resend countdown and the last refusal. A wrong code
+ * keeps the sheet where it is so the person can retype (the server allows five
+ * tries per code). One refusal DOES move it, as in the PR app (see
+ * `contact-change-outcome.ts`): a contact taken meanwhile goes back to the
+ * field.
  */
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -29,17 +34,12 @@ import {
 	normaliseContactValue,
 	resendContactChangeNewCode,
 	startContactChange,
-	verifyContactChangeIdentity,
 } from "@/lib/auth/contact-change-api";
-import {
-	confirmStepOutcome,
-	identityStepOutcome,
-	keepsLineOnStepThree,
-} from "@/lib/auth/contact-change-outcome";
+import { confirmStepOutcome } from "@/lib/auth/contact-change-outcome";
 import { profileQueryKey } from "@/lib/auth/use-profile";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
-export type ContactChangeStage = "idle" | "identity" | "new" | "done";
+export type ContactChangeStage = "idle" | "code" | "done";
 
 export type ContactChangeProblem =
 	| { kind: "server"; error: AuthFlowError }
@@ -51,7 +51,6 @@ interface FlowState {
 	/** Normalised once at start and sent identically on every later call. */
 	value: string;
 	requestId: string | null;
-	newRequestId: string | null;
 	sentTo: CodeDelivery[];
 	pendingInvitesToCurrentEmail: number;
 }
@@ -61,7 +60,6 @@ const IDLE: FlowState = {
 	kind: "phone",
 	value: "",
 	requestId: null,
-	newRequestId: null,
 	sentTo: [],
 	pendingInvitesToCurrentEmail: 0,
 };
@@ -143,18 +141,28 @@ export function useContactChange() {
 		[],
 	);
 
-	/** Step 1. Resolves true when code #1 is on its way. */
+	/**
+	 * Step 1. Resolves true when the code is on its way to the NEW contact.
+	 *
+	 * ⚠️ `currentPassword` is an ARGUMENT and is deliberately not stored: it
+	 * falls out of scope the moment this resolves, and `resend` never needs it.
+	 */
 	const start = useCallback(
-		async (kind: ContactKind, rawValue: string): Promise<boolean> => {
+		async (
+			kind: ContactKind,
+			rawValue: string,
+			currentPassword: string,
+		): Promise<boolean> => {
 			const value = normaliseContactValue(kind, rawValue);
-			const started = await run(() => startContactChange({ kind, value }));
+			const started = await run(() =>
+				startContactChange({ kind, value, currentPassword }),
+			);
 			if (!started) return false;
 			setFlow({
-				stage: "identity",
+				stage: "code",
 				kind,
 				value,
 				requestId: started.requestId,
-				newRequestId: null,
 				sentTo: started.sentTo,
 				pendingInvitesToCurrentEmail: started.pendingInvitesToCurrentEmail,
 			});
@@ -176,71 +184,29 @@ export function useContactChange() {
 	}, []);
 
 	/**
-	 * Spend the code for the current stage. Resolves with the confirmed change
-	 * when the whole flow is finished, or null — still on a code stage, or back
-	 * at the field — when it moved from #1 to #2 or was refused.
+	 * Spend the code and write the change. Resolves with the confirmed change,
+	 * or null — still on the code step, or back at the field — when it was
+	 * refused.
 	 *
-	 * On confirm the api call has ALREADY stored the re-issued tokens, so the
-	 * profile refetch below goes out on the new token rather than a retired one.
-	 * When the answer carried NO tokens (`tokensStored: false`) nothing is
-	 * refetched: the token in hand was retired by the change itself, so every
-	 * refetch would collect a 401 and bounce the person to sign-in with no
-	 * explanation. The caller shows "saved — sign in again" instead.
+	 * The api call has ALREADY stored the re-issued tokens, so the profile
+	 * refetch below goes out on the new token rather than a retired one. When
+	 * the answer carried NO tokens (`tokensStored: false`) nothing is refetched:
+	 * the token in hand was retired by the change itself, so every refetch would
+	 * collect a 401 and bounce the person to sign-in with no explanation. The
+	 * caller shows "saved — sign in again" instead.
 	 */
 	const submitCode =
 		useCallback(async (): Promise<ContactChangeConfirmed | null> => {
-			if (flow.stage !== "identity" && flow.stage !== "new") return null;
+			if (flow.stage !== "code") return null;
 			if (!CODE_RE.test(code)) {
 				setProblem({ kind: "codeRequired" });
 				return null;
 			}
-			const { requestId, newRequestId, kind, value } = flow;
+			const { requestId, kind, value } = flow;
 			if (!requestId) return null;
 
-			if (flow.stage === "identity") {
-				const sent = await run(
-					() => verifyContactChangeIdentity({ requestId, kind, value, code }),
-					(error) => {
-						const outcome = identityStepOutcome(error);
-						if (outcome === "taken") {
-							backToField();
-							return;
-						}
-						if (outcome === "identitySpent") {
-							/*
-							 * Code #1 is spent (or may be): move ON to step 3 with no
-							 * code #2 yet, Resend available at once. Resend there is
-							 * `resend-new`, which needs no new identity code.
-							 */
-							setFlow((f) => ({
-								...f,
-								stage: "new",
-								newRequestId: null,
-								sentTo: [],
-							}));
-							setCodeState("");
-							setResendIn(0);
-							if (!keepsLineOnStepThree(error)) setProblem(null);
-						}
-					},
-				);
-				if (!sent) return null;
-				setFlow((f) => ({
-					...f,
-					stage: "new",
-					newRequestId: sent.newRequestId,
-					sentTo: sent.sentTo,
-				}));
-				setCodeState("");
-				setResendIn(sent.resendAfterSec);
-				return null;
-			}
-
-			// No code #2 went out yet (see above) — Resend is the way forward.
-			if (!newRequestId) return null;
 			const confirmed = await run(
-				() =>
-					confirmContactChange({ requestId, newRequestId, kind, value, code }),
+				() => confirmContactChange({ requestId, kind, value, code }),
 				(error) => {
 					if (confirmStepOutcome(error) === "taken") backToField();
 				},
@@ -260,44 +226,32 @@ export function useContactChange() {
 		}, [backToField, code, flow, queryClient, run]);
 
 	/**
-	 * Resend for the current stage. Code #1 is resent by STARTING AGAIN (the
-	 * server expires the older pending row); code #2 by `resend-new`, which
-	 * keeps the already-verified identity step. Resolves true when sent.
+	 * Another code to the same new contact. Resolves true when sent.
+	 *
+	 * ⚠️ The server answers a NEW `requestId` and expires the row this flow was
+	 * holding, so the id is REPLACED — keeping the old one would confirm against
+	 * a dead row and answer "This code has expired" for a code just read off the
+	 * phone. `pendingInvitesToCurrentEmail` is NOT replaced: only `start` counts
+	 * the invites, and a resend always answers 0, which would erase the warning.
 	 */
 	const resend = useCallback(async (): Promise<boolean> => {
-		if (flow.stage === "identity") {
-			const { kind, value } = flow;
-			const started = await run(() => startContactChange({ kind, value }));
-			if (!started) return false;
-			setFlow((f) => ({
-				...f,
-				requestId: started.requestId,
-				sentTo: started.sentTo,
-				pendingInvitesToCurrentEmail: started.pendingInvitesToCurrentEmail,
-			}));
-			setCodeState("");
-			setResendIn(started.resendAfterSec);
-			return true;
-		}
-		if (flow.stage === "new" && flow.requestId) {
-			const { requestId, kind, value } = flow;
-			const sent = await run(() =>
-				resendContactChangeNewCode({ requestId, kind, value }),
-			);
-			if (!sent) return false;
-			setFlow((f) => ({
-				...f,
-				newRequestId: sent.newRequestId,
-				sentTo: sent.sentTo,
-			}));
-			setCodeState("");
-			setResendIn(sent.resendAfterSec);
-			return true;
-		}
-		return false;
+		if (flow.stage !== "code" || !flow.requestId) return false;
+		const { requestId, kind, value } = flow;
+		const sent = await run(() =>
+			resendContactChangeNewCode({ requestId, kind, value }),
+		);
+		if (!sent) return false;
+		setFlow((f) => ({
+			...f,
+			requestId: sent.requestId,
+			sentTo: sent.sentTo,
+		}));
+		setCodeState("");
+		setResendIn(sent.resendAfterSec);
+		return true;
 	}, [flow, run]);
 
-	/** Close the flow and forget its ids. The countdown survives on purpose. */
+	/** Close the flow and forget its id. The countdown survives on purpose. */
 	const reset = useCallback(() => {
 		setFlow(IDLE);
 		setCodeState("");
@@ -323,15 +277,8 @@ export function useContactChange() {
 		resend,
 		reset,
 		clearProblem,
-		/** True while a code sheet should be on screen. */
-		codeOpen: flow.stage === "identity" || flow.stage === "new",
-		/**
-		 * False on step 3 while no code #2 exists — the send failed after code #1
-		 * was accepted. Verify is disabled then; Resend is the way forward.
-		 */
-		canVerify:
-			flow.stage === "identity" ||
-			(flow.stage === "new" && flow.newRequestId !== null),
+		/** True while the code sheet should be on screen. */
+		codeOpen: flow.stage === "code",
 	};
 }
 

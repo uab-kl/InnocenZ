@@ -56,7 +56,7 @@ type Mode = "password" | ContactKind | null;
  * `iz-*` classes from `agency-portal/prototype-theme.css`, which the agency
  * shell imports and the admin shell does not, so it would render unstyled on
  * this page. What is shared is everything that matters — the api modules, the
- * two-code state machine (`useContactChange`), the server-sentence localiser
+ * one-code state machine (`useContactChange`), the server-sentence localiser
  * and the "where the code went" sentence — so the three portals cannot
  * disagree about the flow, only about the chrome around it.
  */
@@ -342,9 +342,10 @@ function PasswordDialog({
 }
 
 /**
- * Change phone or email — the two-code flow. Step 1 sends a code to the
- * CURRENT phone and email; step 2 sends one to the NEW contact; confirm writes
- * the change and stores the re-issued tokens (inside the api call, before the
+ * Change phone or email — one code (owner, 21 Sep 2026). The CURRENT PASSWORD
+ * proves it is you and the code goes to the NEW contact; nothing is sent to the
+ * address or number already on the account, before or after. Confirm writes the
+ * change and stores the re-issued tokens (inside the api call, before the
  * profile refetch goes out).
  */
 function ContactDialog({
@@ -361,12 +362,16 @@ function ContactDialog({
 }) {
 	const { t } = usePortalLocale();
 	const valueId = useId();
+	const passwordId = useId();
 	const codeId = useId();
 	const contact = useContactChange();
 	const [value, setValue] = useState("");
+	/** Taken as an argument by `start` and never kept by the hook; cleared here. */
+	const [password, setPassword] = useState("");
 	const [localError, setLocalError] = useState<string | null>(null);
 
 	const close = () => {
+		setPassword("");
 		contact.reset();
 		onClose();
 	};
@@ -401,15 +406,20 @@ function ContactDialog({
 				return;
 			}
 		}
-		await contact.start(kind, value);
+		if (!password.trim()) {
+			setLocalError(t.profile.enterCurrentPassword);
+			return;
+		}
+		await contact.start(kind, value, password);
 	};
 
 	const submitCode = async (e: React.FormEvent) => {
 		e.preventDefault();
 		const confirmed = await contact.submitCode();
-		// Moved on to code #2, back to the field, or refused — stays open.
+		// Refused, or sent back to the field — the dialog stays open.
 		if (!confirmed) return;
 		if (!confirmed.tokensStored) {
+			setPassword("");
 			contact.reset();
 			onSignInAgain(kind);
 			return;
@@ -436,11 +446,9 @@ function ContactDialog({
 		? kind === "email"
 			? t.profile.changeEmail
 			: t.profile.changePhone
-		: contact.stage === "identity"
-			? t.authCodes.identityTitle
-			: kind === "email"
-				? t.authCodes.newEmailTitle
-				: t.authCodes.newPhoneTitle;
+		: kind === "email"
+			? t.authCodes.newEmailTitle
+			: t.authCodes.newPhoneTitle;
 
 	return (
 		<Dialog open onOpenChange={(open) => (open ? null : close())}>
@@ -452,11 +460,9 @@ function ContactDialog({
 							? kind === "email"
 								? t.authCodes.emailStepsHint
 								: t.authCodes.phoneStepsHint
-							: contact.stage === "identity"
-								? t.authCodes.identityHint
-								: kind === "email"
-									? t.authCodes.newEmailHint
-									: t.authCodes.newPhoneHint}
+							: kind === "email"
+								? t.authCodes.newEmailHint
+								: t.authCodes.newPhoneHint}
 					</DialogDescription>
 				</DialogHeader>
 
@@ -504,6 +510,25 @@ function ContactDialog({
 								</p>
 							) : null}
 						</div>
+						{/*
+						 * The CURRENT PASSWORD — what proves it is you now that
+						 * nothing is sent to the contact already on the account.
+						 */}
+						<div className="grid gap-2">
+							<Label htmlFor={passwordId}>{t.profile.currentPassword}</Label>
+							<PasswordInput
+								id={passwordId}
+								value={password}
+								onChange={(e) => {
+									setPassword(e.target.value);
+									setLocalError(null);
+									contact.clearProblem();
+								}}
+								placeholder={t.profile.enterCurrentPassword}
+								autoComplete="current-password"
+								disabled={contact.busy}
+							/>
+						</div>
 						<InlineError text={localError ?? problemText} />
 						<DialogFooter>
 							<Button type="button" variant="outline" onClick={close}>
@@ -526,9 +551,17 @@ function ContactDialog({
 							{delivery.none ? <p>{delivery.none}</p> : null}
 							{delivery.failed ? <p>{delivery.failed}</p> : null}
 							{delivery.logged ? <p>{delivery.logged}</p> : null}
-							{contact.stage === "identity" &&
-							kind === "email" &&
-							contact.pendingInvitesToCurrentEmail > 0 ? (
+							{/*
+							 * ⚠️ THE PENDING-INVITES WARNING, on the code step: the
+							 * last moment BEFORE the change is written, and the
+							 * first at which the count exists (only `start`
+							 * answers it — and this dialog swaps the field form
+							 * out for this one, so there is nowhere earlier to put
+							 * it). It used to be gated on the identity step, which
+							 * no longer exists; left that way it would have
+							 * rendered nowhere at all.
+							 */}
+							{kind === "email" && contact.pendingInvitesToCurrentEmail > 0 ? (
 								<p className="text-amber-600 dark:text-amber-400">
 									{fill(t.authCodes.pendingInvitesWarning, {
 										n: contact.pendingInvitesToCurrentEmail,
@@ -561,20 +594,11 @@ function ContactDialog({
 									? fill(t.portalUi.resendOtpIn, { seconds: contact.resendIn })
 									: t.portalUi.resendOtp}
 							</Button>
-							{/* No code #2 yet (it failed to go out after code #1 was
-							    accepted): nothing to verify — Resend is the way on. */}
-							<Button
-								type="submit"
-								disabled={contact.busy || !contact.canVerify}
-							>
+							<Button type="submit" disabled={contact.busy}>
 								{contact.busy && (
 									<Loader2 className="mr-1 h-4 w-4 animate-spin" />
 								)}
-								{contact.busy
-									? t.authCodes.verifying
-									: contact.stage === "identity"
-										? t.authCodes.continueLabel
-										: t.profile.verifyAndSave}
+								{contact.busy ? t.authCodes.verifying : t.profile.verifyAndSave}
 							</Button>
 						</DialogFooter>
 					</form>
