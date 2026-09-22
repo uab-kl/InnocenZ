@@ -29,6 +29,29 @@ const coRunBlockList = [
 ];
 
 /**
+ * ⚠️ Metro's `projectRoot` is the MONOREPO ROOT here, not `apps/mobile` —
+ * `withNxMetro` sets it — so Metro crawls and `fs.watch`es every folder at the
+ * top of the repo, tool and scratch directories included. That is not merely
+ * wasteful: a directory listed during the crawl and deleted before Metro
+ * watches it throws ENOENT out of `FallbackWatcher.#watchdir`, which nothing
+ * catches, and `expo start` dies with exit code 7. It cost a dev session on
+ * 22 Sep 2026, when a stray `.video-tools/` went away mid-crawl:
+ *   Error: ENOENT ... watch '…\.video-tools\node_modules\agent-base\dist\src'
+ * Metro skips a directory ENTIRELY only when the pattern matches the directory
+ * ITSELF, so each entry below ends `(?:[/\\]|$)` rather than the `[/\\].*`
+ * above, which hides the contents but still watches the folder.
+ * Add any new top-level tool or scratch folder here. ⚠️ Never match
+ * `node_modules/.pnpm` — that is where pnpm keeps the real packages, and
+ * blocking it would break module resolution.
+ */
+const rootClutterBlockList = [
+  /[/\\]_to_delete(?:[/\\]|$)/,
+  /[/\\]outputs(?:[/\\]|$)/,
+  /[/\\]patches(?:[/\\]|$)/,
+  /[/\\]\.(?:nx|claude|codex|gemini|agents|opencode|vscode|github|video-tools)(?:[/\\]|$)/,
+];
+
+/**
  * Metro configuration
  * https://reactnative.dev/docs/metro
  *
@@ -42,7 +65,7 @@ const customConfig = {
   resolver: {
     assetExts: assetExts.filter((ext) => ext !== 'svg'),
     sourceExts: [...sourceExts, 'cjs', 'mjs', 'svg'],
-    blockList: coRunBlockList,
+    blockList: [...coRunBlockList, ...rootClutterBlockList],
   },
   // Prefer watching the mobile app; monorepo packages resolve on demand.
   watchFolders: [projectRoot, path.join(monorepoRoot, 'node_modules')],
