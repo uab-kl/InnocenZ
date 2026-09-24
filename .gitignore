@@ -96,3 +96,31 @@ npm-debug.*
 *.orig.*
 web-build/
 cache/
+
+# Local video-generation environments, weights, and intermediate frames
+/outputs/**/lipsync-env/
+/outputs/**/pydeps/
+/outputs/**/__pycache__/
+/outputs/**/models/
+/outputs/**/MuseTalk/
+/outputs/**/cleanframes/
+/outputs/**/crops/
+/outputs/**/latents/
+/outputs/**/lipframes/
+/outputs/**/generated/
+/outputs/**/generated-v2/
+/outputs/**/generated-question/
+/outputs/**/*.pt
+/outputs/**/*.pth
+/outputs/**/*.safetensors
+/outputs/**/*.pyc
+/outputs/**/*.log
+
+# The whole production folder stays out of git (owner, 24 Sep 2026).
+# It is 4.9 GB of video, audio and frame sequences, and git keeps every binary
+# blob forever - committing it would put ~141 MB into every clone permanently,
+# including the coworker's, and removing it later would need a history rewrite
+# on a shared branch. The deliverables live in the Drive folder, which is where
+# they are actually delivered from. The specific rules above are kept because
+# they record what each subfolder is.
+/outputs/
