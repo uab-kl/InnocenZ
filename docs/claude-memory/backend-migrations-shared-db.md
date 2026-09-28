@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 99e51269-5dac-4554-b863-5d6151c58dd4
+  modified: 2026-09-28T05:47:57.666Z
 ---
 
 Applying backend drizzle migrations to the SHARED Postgres (`postgres.gremoryyx.com:6543/innocenz-test`, PostgreSQL 17.5, superuser `postgres`). Coworker shares this DB but authorized additive changes (see [[dont-touch-backend]]).
@@ -14,6 +15,8 @@ Applying backend drizzle migrations to the SHARED Postgres (`postgres.gremoryyx.
 **Apply with bare** `pnpm exec drizzle-kit migrate --config=drizzle.migrate.config.ts`. NEVER `pnpm migrate` (it runs `drizzle-kit generate` first, then RBAC/admin **seed** scripts that mutate the shared DB). Avoid `drizzle-kit generate` on this shared/drifted tree unless intended.
 
 **TIMESTAMP-ORDERING TRAP (caused a silent no-op):** drizzle-kit decides which journal entries are pending by `entry.when > max(created_at)` in `drizzle.__drizzle_migrations`. The coworker hand-stamped migration `0016_admin_request_requested_plan` with a rounded, FUTURE `when = 1784500000000` (~2026-07-17). Any new migration whose real generated `when` is LOWER is **silently skipped** — drizzle still prints "migrations applied successfully!" with zero changes. Fix: bump the new entry's `when` in `postgres/migrations/meta/_journal.json` above the current `max(created_at)`. Until wall-clock passes ~2026-07-17, freshly generated migrations need a manual `when` bump.
+
+**GUARDED SINCE 28 SEP 2026 — the trap now fails LOUDLY.** The backend `migrate:deploy` runs `src/scripts/check-migration-order.ts` first (read-only): it exits 1 naming any unapplied journal entry stamped at or below the newest ledger row, and prints the smallest safe `when`. On 28 Sep the ledger ran to **2026-10-23T23:43:20Z** (37 future-stamped rows), so the next migration needs `when ≥ 1792799001000` until the clock passes that. Identity is the `when` stamp, NOT the file hash — 132 of 167 files no longer hash as applied (line endings / edits). `0077_overtime_approval_and_bank` is live under a re-stamped `when` and is allow-listed in `migration-order.ts` (`KNOWN_RESTAMPED`).
 
 **Pre-check before applying** (read-only): connect via `pg`, verify target objects don't already exist, and read `select max(created_at) from drizzle.__drizzle_migrations` to know the threshold to exceed.
 

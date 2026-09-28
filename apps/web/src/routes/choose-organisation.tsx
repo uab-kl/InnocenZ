@@ -12,7 +12,6 @@ import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Button } from "@/components/ui/button";
 import type { User, UserOrganisation } from "@/lib/auth";
-import { hasValidTokens } from "@/lib/auth/auth-storage";
 import {
 	countPortalChoices,
 	defaultLandingPath,
@@ -21,6 +20,7 @@ import {
 } from "@/lib/auth/enter-organisation";
 import { kickToLogin } from "@/lib/auth/guards";
 import { nextForPortal, portalOfPath } from "@/lib/auth/portal-of-path";
+import { resumeSession } from "@/lib/auth/token-refresh";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
 import { hardNavigate } from "@/lib/hard-navigate";
@@ -83,11 +83,21 @@ function ChooseOrganisationBody() {
 		async (isLive: () => boolean) => {
 			/*
 			 * No session at all — someone opened this URL directly, or their
-			 * tokens expired while it sat in a tab. `fetchProfile` throws before
-			 * it reaches the network in that case, so nothing else would send them
-			 * to /login; they would sit on a retry button that can never succeed.
+			 * session ended while it sat in a tab. `fetchProfile` throws before
+			 * it reaches the network with no token, so nothing else would send
+			 * them to /login; they would sit on a retry button that can never
+			 * succeed.
+			 *
+			 * `resumeSession`, not the access token's clock: that clock runs out
+			 * after 15 minutes in production, and this used to send somebody back
+			 * from lunch — 7-day refresh token in hand — to the login page. It
+			 * refreshes first and answers false only when the session is over;
+			 * an undecidable refresh (offline, 429) goes on to the profile read,
+			 * whose failure offers the retry below instead of a sign-out.
 			 */
-			if (!hasValidTokens()) {
+			const alive = await resumeSession();
+			if (!isLive()) return;
+			if (!alive) {
 				kickToLogin();
 				return;
 			}
@@ -100,7 +110,8 @@ function ChooseOrganisationBody() {
 				 * NOT "this account has no organisations" — we simply could not
 				 * ask. Rendering an empty list would be inventing that answer, so
 				 * say what happened and offer the retry. An expired token has
-				 * already been sent to /login by the client interceptor.
+				 * already been refreshed and replayed by the client interceptor,
+				 * and a session that is really over already sent to /login.
 				 */
 				if (isLive()) setPhase({ kind: "failed" });
 				return;

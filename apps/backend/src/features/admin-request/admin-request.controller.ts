@@ -14,8 +14,39 @@ import { Error } from '@/error/index.js';
 import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
-import { applyPlanChangeToLedger } from './apply-plan-change.js';
+import type { DbTransaction } from '@/types/db-transaction.js';
+import {
+  type AppliedPlanChange,
+  type LedgerRequestFacts,
+  type PlanChangeRecord,
+  applyPlanChangeToLedger,
+  ledgerRefusal,
+} from './apply-plan-change.js';
+import {
+  type PlanChangeRefusal,
+  PlanChangeRefusedError,
+  RequestNotPendingError,
+  notPendingMessage,
+} from './plan-change-rules.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
+
+/** A refusal answered with the rule's own status and sentence. */
+function refusalBody(refusal: Pick<PlanChangeRefusal, 'message'>) {
+  return { success: false, message: refusal.message, data: null };
+}
+
+/**
+ * A resolve's plan SWITCH (Custom renegotiation) was refused or rolled back.
+ * Carried out of `applyResolvedPriceToLedger`, whose other steps still log and
+ * swallow, so `resolve()` can answer with the truth. `globalThis.Error` because
+ * this file's `Error` is the response-message enum.
+ */
+class SwitchNotAppliedError extends globalThis.Error {
+  constructor(readonly cause: unknown) {
+    super('The plan switch was not applied');
+    this.name = 'SwitchNotAppliedError';
+  }
+}
 
 export class AdminRequestControllerClass {
   constructor(
@@ -30,29 +61,44 @@ export class AdminRequestControllerClass {
   /**
    * Move a subscriber onto the plan they asked for, in the `member_subscription`
    * ledger that the admin History page reads. Called when an outlet's plan change
-   * is APPROVED, and when an agency's is recorded as 'direct' (agency switches
-   * apply automatically — see create()).
+   * is APPROVED, when an agency's is recorded as 'direct' (agency switches apply
+   * automatically — see create()), and when a Custom renegotiation that names a
+   * plan is resolved.
    *
-   * The ledger is a history of charges, so a switch is a NEW row: the old active
-   * row is closed (`ended_at` stamped, status 'expired') rather than overwritten,
-   * which is what lets History still show what the venue used to pay.
+   * The ledger is a history of charges, so a switch is a NEW row: every live
+   * plan row is closed (`ended_at` stamped, status 'expired') rather than
+   * overwritten, which is what lets History still show what the venue used to
+   * pay. (That close was lost in the 3 Sep 2026 merge and is restored in the
+   * shared module — see apply-plan-change.ts.)
    *
-   * Never throws into the caller: a request that cannot be reflected (no
-   * subscriber id, unknown plan) is still approved, and the mismatch is logged —
-   * refusing the approval would leave the admin unable to answer the request at
-   * all.
+   * THROWS `PlanChangeRefusedError` when the switch cannot be applied — an
+   * organisation that does not exist, a plan for the other audience, an add-on,
+   * a retired plan — before anything is written. It used to log and approve
+   * anyway, on the reasoning that refusing would leave the admin unable to
+   * answer the request; but the admin can DECLINE it, and approving quietly is
+   * how an ACTIVE Premier row was opened for an outlet that exists nowhere.
    */
-  private async applyPlanChangeToLedger(record: AdminRequest, actor: string): Promise<void> {
+  private async applyPlanChangeToLedger(
+    record: PlanChangeRecord,
+    actor: string,
+    inTransaction?: (tx: DbTransaction) => Promise<void>,
+  ): Promise<AppliedPlanChange> {
     // The write itself lives in a shared module: the scheduled agency tier job
     // performs the same switch, and a money rule copied into a cron is a rule
     // that will eventually disagree with itself.
-    await applyPlanChangeToLedger({
+    return applyPlanChangeToLedger({
       memberSubscriptionRepository: this.memberSubscriptionRepository,
       subscriptionRepository: this.subscriptionRepository,
       subscriptionInvoiceRepository: this.subscriptionInvoiceRepository,
       record,
       actor,
+      inTransaction,
     });
+  }
+
+  /** See `ledgerRefusal` (apply-plan-change.ts): may this request's answer reach the ledger? */
+  private ledgerRefusal(request: LedgerRequestFacts): Promise<PlanChangeRefusal | null> {
+    return ledgerRefusal({ subscriptionRepository: this.subscriptionRepository, request });
   }
 
   async list(req: Request, res: Response) {
@@ -176,6 +222,19 @@ export class AdminRequestControllerClass {
         }
       }
 
+      // ⚠️ THE ORGANISATION MUST EXIST — admins included. The check above
+      // exempts an admin from OWNERSHIP, and nothing asked whether the id is a
+      // real outlet/agency at all; see ledgerRefusal. A plan switch is also
+      // checked against its plan here, so it is refused when filed rather than
+      // waiting in the queue for an approval the ledger will refuse.
+      const refusal = await this.ledgerRefusal({
+        type: parsed.data.type,
+        subscriberType: parsed.data.subscriberType ?? null,
+        subscriberId: parsed.data.subscriberId ?? null,
+        requestedPlanId: parsed.data.requestedPlanId ?? null,
+      });
+      if (refusal) return res.status(refusal.status).json(refusalBody(refusal));
+
       // Every request records the plan the subscriber was on when it was raised,
       // whatever its type: the admin drawer's "BEFORE · FROM PLAN" is otherwise
       // empty for POS quotes and contact requests, which tells the admin nothing
@@ -292,7 +351,11 @@ export class AdminRequestControllerClass {
         }
       }
 
-      const record = await this.repository.create({
+      // Agency plan changes are applied automatically (by PR count) and only
+      // logged here as 'direct'; outlet plan changes wait for admin approval.
+      const isDirect =
+        parsed.data.type === 'plan_change' && parsed.data.subscriberType === 'agency';
+      const fields = {
         type: parsed.data.type,
         subscriberType: parsed.data.subscriberType ?? null,
         subscriberId: parsed.data.subscriberId ?? null,
@@ -303,21 +366,45 @@ export class AdminRequestControllerClass {
         currentPlanId,
         requestedPlanId: parsed.data.requestedPlanId ?? null,
         message: parsed.data.message ?? null,
-        // Agency plan changes are applied automatically (by PR count) and only
-        // logged here as 'direct'; outlet plan changes wait for admin approval.
-        status:
-          parsed.data.type === 'plan_change' && parsed.data.subscriberType === 'agency'
-            ? 'direct'
-            : 'pending',
+        status: isDirect ? ('direct' as const) : ('pending' as const),
         createdBy: actor,
         updatedBy: actor,
-      });
-      if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
-      // An agency switch needs no approval ('direct'), so it takes effect in the
-      // ledger straight away. An outlet's waits for approve().
-      if (record.type === 'plan_change' && record.status === 'direct') {
-        await this.applyPlanChangeToLedger(record, actor);
+      };
+
+      if (isDirect) {
+        /**
+         * An agency switch needs no approval, so it takes effect straight away —
+         * and the 'direct' record is FILED INSIDE the switch's own transaction.
+         * Filed first and applied after, a switch the ledger then refused (or
+         * failed to write) left a 'direct' row on the admin's Plan Change page
+         * announcing a move that never happened — the same shape as the 17 Jul
+         * "switch to Enterprise" that never reached the ledger.
+         */
+        const filed: { record: AdminRequest | null } = { record: null };
+        try {
+          await this.applyPlanChangeToLedger(fields, actor, async (tx) => {
+            filed.record = await this.repository.create(fields, tx);
+            if (!filed.record) {
+              throw new globalThis.Error('[AdminRequestController.create] could not file the plan change');
+            }
+          });
+        } catch (error) {
+          if (error instanceof PlanChangeRefusedError) {
+            return res.status(error.status).json(refusalBody(error));
+          }
+          logger.error('[AdminRequestController.create] direct switch failed:', error);
+          return res.status(500).json({
+            success: false,
+            message: 'The plan could not be switched. Nothing was changed — try again.',
+            data: null,
+          });
+        }
+        return res.status(201).json({ success: true, message: 'Request submitted', data: filed.record });
       }
+
+      // An outlet's switch, and every other request, waits for an admin.
+      const record = await this.repository.create(fields);
+      if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
       res.status(201).json({ success: true, message: 'Request submitted', data: record });
     } catch (error) {
       logger.error('[AdminRequestController.create] Error:', error);
@@ -456,7 +543,16 @@ export class AdminRequestControllerClass {
           // Leaving needs no agreed figure (the tier has a list price); joining or
           // re-pricing does, and applyPlanChangeToLedger falls back to the plan's
           // own price when quotedAmount is null.
-          await this.applyPlanChangeToLedger(record, actor);
+          //
+          // ⚠️ NOT swallowed by the catch below. The switch is the one write this
+          // resolve exists for, and since 28 Sep 2026 applyPlanChangeToLedger
+          // THROWS on a refusal or a rolled-back write — logging it here would
+          // answer "Request resolved" over a switch that never happened.
+          try {
+            await this.applyPlanChangeToLedger(record, actor);
+          } catch (error) {
+            throw new SwitchNotAppliedError(error);
+          }
 
           /**
            * A RESET ONTO A NORMAL TIER IS ALSO A PLAN CHANGE, and is filed as one
@@ -545,6 +641,9 @@ export class AdminRequestControllerClass {
         });
       }
     } catch (error) {
+      // The Custom switch reports to resolve(); every other ledger step keeps the
+      // old contract (logged, never thrown — the decision itself stands).
+      if (error instanceof SwitchNotAppliedError) throw error;
       logger.error('[AdminRequestController.applyResolvedPriceToLedger] Error:', error);
     }
   }
@@ -878,6 +977,27 @@ export class AdminRequestControllerClass {
             : parsed.data.quotedAmount.toFixed(2);
       }
 
+      /**
+       * RE-TYPING A REQUEST IS RE-FILING IT. The subscriber id cannot be edited,
+       * but its TYPE can — so switching "outlet" to "agency" points the same id
+       * at the other table, where it most likely names nobody, and turning a
+       * contact request into a plan change makes it approvable. Both are checked
+       * as create() checks a new request. Only when one of them actually
+       * changes: an admin annotating an old request must not be blocked by it.
+       */
+      const nextType = payload.type ?? existing.type;
+      const nextSubscriberType =
+        payload.subscriberType !== undefined ? payload.subscriberType : existing.subscriberType;
+      if (nextType !== existing.type || nextSubscriberType !== existing.subscriberType) {
+        const refusal = await this.ledgerRefusal({
+          type: nextType,
+          subscriberType: nextSubscriberType,
+          subscriberId: existing.subscriberId,
+          requestedPlanId: existing.requestedPlanId,
+        });
+        if (refusal) return res.status(refusal.status).json(refusalBody(refusal));
+      }
+
       const record = await this.repository.update(existing.id, payload);
       if (!record) {
         return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -897,18 +1017,55 @@ export class AdminRequestControllerClass {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
       const actor = getActor(req);
+      const existing = await this.repository.getById(paramId(req.params.id));
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Resolving a POS quote or a Custom renegotiation WRITES the ledger (see
+      // applyResolvedPriceToLedger), so it is checked before it is recorded: an
+      // add-on line or a Custom switch for an organisation that does not exist
+      // is refused here, not logged afterwards behind a "Request resolved".
+      // A plan_change is approved, not resolved — resolving one moves nothing —
+      // and neither does a request naming no organisation, which the ledger
+      // step skips outright.
+      if (existing.type !== 'plan_change' && existing.subscriberType && existing.subscriberId) {
+        const refusal = await this.ledgerRefusal(existing);
+        if (refusal) return res.status(refusal.status).json(refusalBody(refusal));
+      }
+
       const payload: Parameters<AdminRequestRepositoryClass['update']>[1] = {
         status: 'resolved',
         updatedBy: actor,
       };
       if (parsed.data.quotedAmount !== undefined) payload.quotedAmount = parsed.data.quotedAmount.toFixed(2);
 
-      const record = await this.repository.update(paramId(req.params.id), payload);
+      const record = await this.repository.update(existing.id, payload);
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       // Resolving is where a negotiated price becomes real — until now the
       // figure lived only on this row, so nothing billed it and the subscriber
       // never saw it.
-      await this.applyResolvedPriceToLedger(record, actor);
+      try {
+        await this.applyResolvedPriceToLedger(record, actor);
+      } catch (error) {
+        if (!(error instanceof SwitchNotAppliedError)) throw error;
+        // The switch was refused or rolled back AFTER the request was marked
+        // resolved: put the request back as it was, so it is still open and the
+        // admin is told the truth instead of "Request resolved".
+        await this.repository.update(existing.id, {
+          status: existing.status,
+          ...(parsed.data.quotedAmount !== undefined ? { quotedAmount: existing.quotedAmount } : {}),
+          updatedBy: actor,
+        });
+        if (error.cause instanceof PlanChangeRefusedError) {
+          return res.status(error.cause.status).json(refusalBody(error.cause));
+        }
+        logger.error('[AdminRequestController.resolve] switch failed:', error.cause);
+        return res.status(500).json({
+          success: false,
+          message:
+            'The plan switch could not be applied to billing. Nothing was changed — the request is still open, so try again.',
+          data: null,
+        });
+      }
       res.status(200).json({ success: true, message: 'Request resolved', data: record });
     } catch (error) {
       logger.error('[AdminRequestController.resolve] Error:', error);
@@ -916,8 +1073,23 @@ export class AdminRequestControllerClass {
     }
   }
 
-  // Approve an outlet plan change. The price follows the to-plan from now on —
-  // the frontend passes the to-plan price as quotedAmount so it is stamped here.
+  /**
+   * Approve an outlet plan change. The price follows the to-plan from now on —
+   * the frontend passes the to-plan price as quotedAmount so it is stamped here.
+   *
+   * ⚠️ ONLY A PENDING REQUEST, CLAIMED ATOMICALLY. This checked the type and
+   * nothing else, so an approved, declined, withdrawn or 'direct' plan change
+   * could be approved again — and each approval applied the switch to the
+   * ledger again. Now:
+   *  - a request that is plainly not pending is answered 409 with the reason;
+   *  - the switch is validated BEFORE anything is written, so a ghost
+   *    organisation or a wrong plan is refused while the request is still
+   *    pending, for the admin to decline;
+   *  - the move out of `pending` is one `UPDATE … WHERE status = 'pending'`,
+   *    run INSIDE the switch's transaction, so a double-click (or two admins)
+   *    applies it once, and a switch that fails leaves the request pending
+   *    rather than "approved" with nothing behind it.
+   */
   async approve(req: Request, res: Response) {
     try {
       const parsed = ResolveAdminRequestSchema.safeParse(req.body ?? {});
@@ -929,18 +1101,60 @@ export class AdminRequestControllerClass {
       if (existing.type !== 'plan_change') {
         return res.status(400).json({ success: false, message: 'Only plan changes can be approved', data: null });
       }
+      // The early answer for a stale screen. The claim below is what actually
+      // guarantees it — this read cannot, on its own, stop a double-click.
+      if (existing.status !== 'pending') {
+        return res
+          .status(409)
+          .json({ success: false, message: notPendingMessage(existing.status), data: null });
+      }
+
+      const actor = getActor(req);
       const payload: Parameters<AdminRequestRepositoryClass['update']>[1] = {
         status: 'approved',
-        updatedBy: getActor(req),
+        updatedBy: actor,
       };
       if (parsed.data.quotedAmount !== undefined) payload.quotedAmount = parsed.data.quotedAmount.toFixed(2);
 
-      const record = await this.repository.update(existing.id, payload);
-      if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
       // Approval is what makes the switch real: reflect it in the billing ledger
       // so the admin History page and the subscriber's own screen agree.
-      await this.applyPlanChangeToLedger(record, getActor(req));
-      res.status(200).json({ success: true, message: 'Plan change approved', data: record });
+      const claimed: { record: AdminRequest | null } = { record: null };
+      let applied: AppliedPlanChange;
+      try {
+        applied = await this.applyPlanChangeToLedger(
+          { ...existing, quotedAmount: payload.quotedAmount ?? existing.quotedAmount },
+          actor,
+          async (tx) => {
+            claimed.record = await this.repository.claimPending(existing.id, payload, tx);
+            if (!claimed.record) throw new RequestNotPendingError();
+          },
+        );
+      } catch (error) {
+        if (error instanceof PlanChangeRefusedError) {
+          return res.status(error.status).json(refusalBody(error));
+        }
+        if (error instanceof RequestNotPendingError) {
+          // Answered between the read above and the claim — name the state it
+          // is in now, so the admin knows what happened instead of retrying.
+          const now = await this.repository.getById(existing.id);
+          if (!now) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+          return res
+            .status(409)
+            .json({ success: false, message: notPendingMessage(now.status), data: null });
+        }
+        logger.error('[AdminRequestController.approve] switch failed:', error);
+        return res.status(500).json({
+          success: false,
+          message:
+            'The plan change could not be applied to billing. Nothing was changed — the request is still pending, so try again.',
+          data: null,
+        });
+      }
+      res.status(200).json({
+        success: true,
+        message: `Plan change approved — ${existing.subscriberName} is now on ${applied.opened.planName}.`,
+        data: claimed.record,
+      });
     } catch (error) {
       logger.error('[AdminRequestController.approve] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

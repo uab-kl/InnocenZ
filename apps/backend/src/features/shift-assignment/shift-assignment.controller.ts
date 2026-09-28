@@ -33,6 +33,7 @@ import {
   redactAssignmentsForOutlet,
 } from '@/util/outlet-redaction';
 import { saveProofPhotosToR2 } from '@/util/pv-proof-photo';
+import { r2KeyFromSignedUrl } from '@/util/r2';
 import { isOwnedUserKey } from '@/util/user-folder';
 import {
   LineDateConflictError,
@@ -45,6 +46,12 @@ import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/paymen
 import { buildOvertimeLine, overtimeDedupeRef } from '@/features/payment-voucher/overtime-line';
 import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
 import { attachPenaltyToWeek } from '@/features/payment-voucher/attach-penalty-to-week';
+import { sealWageLine } from '@/features/payment-voucher/wage-line';
+import {
+  checkOutProofRefusal,
+  linesMissingProof,
+  shiftDayWindow,
+} from '@/features/payment-voucher/checkout-proof';
 import { sealCheckOut } from './seal-checkout';
 import { computeCancelFee, type CancelFee } from './cancel-fee';
 import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penalty-rule.repository.js';
@@ -493,6 +500,24 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'Already checked out', data: null });
       }
 
+      // THE RECEIPT-PICTURE RULE, HERE AS WELL AS ON THE PHONE (owner, 4 Aug
+      // 2026): every drink or tip logged on this shift carries its picture, or
+      // the shift stays open. It lived only in CheckInScreen until 28 Sep 2026,
+      // so any caller that skipped the screen closed the shift anyway. The rule
+      // and its day window are in checkout-proof.ts — no stricter than the
+      // phone's, so a build that passes its own gate is never refused here.
+      const checkedInAt = new Date(existing.checkInAt);
+      const proofLines = await this.paymentVoucherRepository.listLinesForProofCheck({
+        prId: pr?.id ?? userId,
+        userId,
+        ...shiftDayWindow(checkedInAt),
+        since: checkedInAt,
+      });
+      const proofRefusal = checkOutProofRefusal(linesMissingProof(proofLines).length);
+      if (proofRefusal) {
+        return res.status(409).json({ success: false, message: proofRefusal, data: null });
+      }
+
       // Check-out RECORDS the position but never blocks on it: a PR who has
       // already worked the shift must always be able to close it, even if they
       // stepped out to the car park. The fence gates entry, not exit.
@@ -588,6 +613,25 @@ export class ShiftAssignmentControllerClass {
             `of RM${earned.dayRate} — sealed RM${earned.amount}`,
         );
       }
+      // THE WAGE GOES ON THE VOUCHER HERE, not in a second call from the phone.
+      // That call was the only writer, so a dropped connection — or any check-out
+      // after midnight, which the phone dated "today" against a shift dated
+      // yesterday — lost the night's pay for good. Awaited so an older app's
+      // follow-up call finds the line and answers "Already sealed"; never fatal,
+      // because the check-out itself is already committed. See wage-line.ts.
+      const wage = await sealWageLine(
+        {
+          shiftAssignmentRepository: this.shiftAssignmentRepository,
+          paymentVoucherRepository: this.paymentVoucherRepository,
+          prRepository: this.prRepository,
+        },
+        { assignmentId: id, actor },
+      );
+      if (wage.outcome === 'refused') {
+        logger.error(
+          `[shift-assignment.checkOut] ${id}: wage sealed on the shift but NOT filed on a voucher — ${wage.reason}`,
+        );
+      }
       // A forgotten check-out is worth seeing even though it claims nothing —
       // otherwise the only trace of it is a shift that quietly sealed at its
       // scheduled hours, and a PR who really did work late has no way to say so.
@@ -608,7 +652,11 @@ export class ShiftAssignmentControllerClass {
       // approve overtime that no longer has a believable number behind it — and
       // now has no number at all, since the columns stay null.
       if (overtime.minutes != null) {
-        const members = await this.agencyMemberRepository.listByAgency(existing.agencyId);
+        // Active members only — the list also holds applicants, declined and
+        // deactivated rows (the cut-loss notices reached both on 28 Sep 2026).
+        const members = await this.agencyMemberRepository.listByAgency(existing.agencyId, {
+          status: 'active',
+        });
         const memberUserIds = members
           .map((m) => m.userId)
           .filter((userId): userId is string => !!userId);
@@ -838,7 +886,12 @@ export class ShiftAssignmentControllerClass {
       // amend flow can re-send what the server served without the PR having to
       // re-photograph the MC. saveProofPhotosToR2 passes owned keys through and
       // drops foreign ones.
-      for (const photo of rawPhotos) {
+      for (const sent of rawPhotos) {
+        // A stored MC photo now reaches the phone as a SIGNED LINK, not a key
+        // (sensitive files are no longer public — util/r2.ts). An amend that
+        // re-sends it is turned back into the key here, so the check below and
+        // the stored row both see the key, never an expiring URL.
+        const photo = typeof sent === 'string' ? (r2KeyFromSignedUrl(sent) ?? sent) : sent;
         // Owner is proven by the uuid head so BOTH `user/<uuid>/leave/…` and
         // `user/pr/<slug>-<id8>/leave/…` are accepted as this PR's own key.
         const isOwnedKey =

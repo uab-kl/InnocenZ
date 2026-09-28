@@ -2,6 +2,10 @@ import { env } from "@/env";
 import { apiErrorCopy } from "@/lib/auth/api-error-copy";
 import { getAccessToken } from "@/lib/auth/auth-storage";
 import { kickToLogin } from "@/lib/auth/guards";
+import {
+	fetchWithSession,
+	RefreshUnavailableError,
+} from "@/lib/auth/token-refresh";
 import { getClient } from "@/lib/axios-v1";
 
 interface ApiResponse<T> {
@@ -59,11 +63,11 @@ export async function fetchMyProfileImageSource(
 	userId: string,
 ): Promise<ProfileImageSource | null> {
 	try {
-		const token = getAccessToken();
-		if (!token) return null;
-		const response = await fetch(
+		if (!getAccessToken()) return null;
+		// Refreshed and replayed once on a 401 — past the access token's 15
+		// minutes this read otherwise hid Adjust for the rest of the session.
+		const response = await fetchWithSession(
 			`${env.VITE_API_URL}/v1/user/${userId}/profile-image-source`,
-			{ headers: { Authorization: `Bearer ${token}` } },
 		);
 		if (!response.ok) return null;
 		const payload = (await response.json()) as ApiResponse<ProfileImageSource>;
@@ -87,8 +91,7 @@ export async function uploadMyProfileImage(
 		state?: { zoom: number; fx: number; fy: number } | null;
 	},
 ): Promise<UpdatedUser> {
-	const token = getAccessToken();
-	if (!token) {
+	if (!getAccessToken()) {
 		kickToLogin();
 		throw new Error(apiErrorCopy().webLib.notSignedIn);
 	}
@@ -105,15 +108,25 @@ export async function uploadMyProfileImage(
 	}
 
 	// Use fetch so the browser sets multipart boundary (axios defaults to JSON).
-	const response = await fetch(
-		`${env.VITE_API_URL}/v1/user/${userId}/profile-image`,
-		{
-			method: "POST",
-			headers: { Authorization: `Bearer ${token}` },
-			body: form,
-		},
-	);
+	// `fetchWithSession` refreshes and replays it once on a 401, as the axios
+	// client does — the route sits behind authenticateJWT and checks no
+	// credential of its own, so its only 401 is the session's.
+	let response: Response;
+	try {
+		response = await fetchWithSession(
+			`${env.VITE_API_URL}/v1/user/${userId}/profile-image`,
+			{ method: "POST", body: form },
+		);
+	} catch (error) {
+		// The refresh could not be DECIDED (offline, 429, 5xx) — the session is
+		// not known to be over, so nobody is signed out; the upload just failed.
+		if (error instanceof RefreshUnavailableError) {
+			throw new Error(apiErrorCopy().profile.couldNotUploadPhoto);
+		}
+		throw error;
+	}
 
+	// Still 401 after the refresh: the session really is over.
 	if (response.status === 401) {
 		kickToLogin();
 		throw new Error(apiErrorCopy().webLib.sessionExpired);

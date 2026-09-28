@@ -78,7 +78,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const { checkIn: markLocalOnDuty, checkOut: markLocalComplete, phase: localPhase } =
     useShiftSession();
   // Receipt commission + the wages seal now come from the backend current-week voucher.
-  const { receiptLines, addLine } = usePrEarnings();
+  const { receiptLines, refresh: refreshEarnings } = usePrEarnings();
   // The active assignment (with its resolved rate card + drink menu) is shared
   // with Scan via the provider, so both screens act on the same real shift.
   const { active, current, phase, loading, error: loadError, refresh, patch, dismiss, focus, focusedId } =
@@ -460,36 +460,14 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
         if (forCheckout) {
           const sealed = await checkOutShiftAssignment(token, active.id, fix);
-          // The amount the SERVER just sealed, first — it is the only party that
-          // knows how many minutes were worked, and since 0097 it pro-rates the
-          // day rate by them. This row is what the PR reads as their wages, so
-          // preferring the rate card here printed the full day on a shift that
-          // earned a fraction of it. `sealed.payRule` marks a row the new rule
-          // decided; a falsy amount on such a row is a real zero, not a miss.
-          // The rate card stays as the fallback for a server that sealed nothing
-          // (a commission-only PR) and for rows predating the rule.
-          const wagesRm =
-            sealed.payRule != null
-              ? Number(sealed.payAmount) || 0
-              : Number(active.rate?.wagePerHour) ||
-                Number(sealed.payAmount) ||
-                Number(active.payAmount) ||
-                0;
-          await addLine({
-            kind: 'wages',
-            source: 'checkin',
-            // STORED on the voucher line and read back by the agency web
-            // portal — a value, not a label. Stays English.
-            item: 'Daily wages',
-            quantity: 1,
-            sales: wagesRm,
-            commission: wagesRm,
-            // Seal wages on today (same key the receipts use), so the Payment
-            // "This week" column groups wages + drinks + tips together.
-            lineDate: todayKey,
-            outlet: active.outletName ?? undefined,
-            dedupeRef: active.id,
-          });
+          // THE SERVER FILES THE WAGE NOW (28 Sep 2026), inside the check-out
+          // call — the phone no longer sends a second "Daily wages" line. That
+          // second call was the only writer, and it lost the night's pay on any
+          // dropped connection, and on EVERY check-out after midnight: it dated
+          // the line today while the shift is dated yesterday, which the server
+          // refuses. Re-reading the week is all that is left to do here, so the
+          // Payment tab we land on shows the wage the server just wrote.
+          await refreshEarnings();
           // Overtime is NOT auto-paid any more. The server clamps a forgotten
           // check-out to the shift's scheduled end (pay locks to the shift
           // window), and genuine OT beyond 6h is only money once the agency
@@ -520,11 +498,10 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       active,
       refresh,
       patch,
-      addLine,
+      refreshEarnings,
       markLocalOnDuty,
       markLocalComplete,
       setTab,
-      todayKey,
       t,
     ],
   );

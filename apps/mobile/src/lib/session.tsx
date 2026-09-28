@@ -1,16 +1,29 @@
 /**
  * PR session state — signs in against the backend auth API and exposes the
- * logged-in user (`/auth/me`) to the app. Token persists across reloads on
- * web via localStorage; native keeps it in memory for the dev session.
+ * logged-in user (`/auth/me`) to the app.
+ *
+ * A session is the PAIR the server issues — a 15-minute access token and a
+ * 7-day refresh token — plus the access token's expiry. `saved-session` keeps
+ * it between launches (SecureStore on a phone, session/localStorage on web), and
+ * `token-refresh` renews the access token in place whenever the server refuses
+ * it, reading the pair through the provider this component registers.
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Platform } from 'react-native';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ApiError,
   fetchMe,
   fetchMyAgencyLinks,
   login,
   phoneCandidates,
+  refreshAccessToken,
   updateUserProfile,
   uploadUserProfileImage,
   uploadUserPortfolioPhoto,
@@ -21,59 +34,15 @@ import {
   type Me,
   type ProfileUpdate,
 } from './api';
-
-const TOKEN_KEY = 'iz-pr-token';
-
-/** Minimal web storage surface — the RN tsconfig has no `dom` lib. */
-type WebStorage = {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
-};
-
-/**
- * Web keeps the token in BOTH storages. sessionStorage is per-tab, so two PR
- * tabs side by side each keep their OWN identity across refresh — signing in
- * as a second PR used to overwrite the first tab's session, and a refresh
- * would "jump" to the other PR. localStorage only seeds brand-new tabs with
- * the most recent login.
- */
-function webTabStorage(): WebStorage | null {
-  if (Platform.OS !== 'web') return null;
-  return (globalThis as { sessionStorage?: WebStorage }).sessionStorage ?? null;
-}
-
-function webSharedStorage(): WebStorage | null {
-  if (Platform.OS !== 'web') return null;
-  return (globalThis as { localStorage?: WebStorage }).localStorage ?? null;
-}
-
-function readStoredToken(): string | null {
-  try {
-    const own = webTabStorage()?.getItem(TOKEN_KEY) ?? null;
-    if (own) return own;
-    // Fresh tab: adopt the most recent login once, then live per-tab.
-    const shared = webSharedStorage()?.getItem(TOKEN_KEY) ?? null;
-    if (shared) webTabStorage()?.setItem(TOKEN_KEY, shared);
-    return shared;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredToken(token: string | null) {
-  try {
-    if (token) {
-      webTabStorage()?.setItem(TOKEN_KEY, token);
-      webSharedStorage()?.setItem(TOKEN_KEY, token);
-    } else {
-      webTabStorage()?.removeItem(TOKEN_KEY);
-      webSharedStorage()?.removeItem(TOKEN_KEY);
-    }
-  } catch {
-    /* storage unavailable — in-memory session only */
-  }
-}
+import { savedSession } from './saved-session';
+import { resumeSession } from './session-resume';
+import {
+  forgetSupersededTokens,
+  noteSupersededToken,
+  registerTokenProvider,
+  renewSession,
+  type SessionTokens,
+} from './token-refresh';
 
 type SessionState = {
   me: Me | null;
@@ -81,13 +50,21 @@ type SessionState = {
   /** Approved agency_pr links for this PR (mapped to the old membership shape). */
   agencies: AgencyMembership[];
   booting: boolean;
+  /**
+   * A saved session is held but could not be confirmed — no connection, or the
+   * server failed us. She is NOT signed out: the session is still saved, and
+   * `resume` tries again.
+   */
+  offline: boolean;
+  /** Open the saved session again — what boot does, and what Retry does. */
+  resume: () => Promise<void>;
   signIn: (
     identifier: string,
     password: string,
   ) => Promise<{ user: Me; accessToken: string }>;
   signOut: () => void;
   /**
-   * Replace the stored access token with one the SERVER just re-issued.
+   * Replace the session with the pair the SERVER just re-issued.
    *
    * ⚠️ Needed because a JWT here carries only `{loginMethod, loginCriteria}` —
    * no user id — so every request resolves the account by looking that
@@ -97,8 +74,12 @@ type SessionState = {
    * fact SUCCEEDED. `/auth/contact-change/confirm` returns a fresh pair
    * (`reissueTokens` in contact-change.controller.ts); this is how it gets
    * kept. It replaced `/auth/phone/change`, deleted 21 Sep 2026.
+   *
+   * ⚠️ Take the REFRESH token too. The change stamps a cutoff that kills the old
+   * refresh token along with the old access token, so keeping only the new
+   * access token would end the session 15 minutes later.
    */
-  adoptToken: (accessToken: string) => void;
+  adoptToken: (accessToken: string, refreshToken: string | null) => void;
   updateProfile: (patch: ProfileUpdate) => Promise<Me>;
   uploadAvatar: (file: Blob, filename?: string) => Promise<void>;
   uploadPortfolioPhoto: (slot: number, file: Blob, filename?: string) => Promise<Me>;
@@ -116,6 +97,90 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [agencies, setAgencies] = useState<AgencyMembership[]>([]);
   const [booting, setBooting] = useState(true);
+  const [offline, setOffline] = useState(false);
+  /**
+   * The pair itself. api.ts reads it through the token provider, so it changes
+   * SYNCHRONOUSLY with every sign-in, refresh and sign-out — React state only
+   * reaches a request on the next render, and one sent in between would carry a
+   * token that is already gone.
+   */
+  const sessionRef = useRef<SessionTokens | null>(null);
+
+  const hold = useCallback((next: SessionTokens | null) => {
+    sessionRef.current = next;
+    setToken(next?.accessToken ?? null);
+  }, []);
+
+  /**
+   * Sign-out, or a refresh the server refused: forget the session everywhere.
+   *
+   * Local only — the server has no logout, so the refresh token stays valid
+   * there until it expires. Forgetting it here is all a sign-out can do.
+   */
+  const endSession = useCallback(() => {
+    forgetSupersededTokens();
+    hold(null);
+    setMe(null);
+    setOffline(false);
+    void savedSession.clear();
+  }, [hold]);
+
+  /** A pair the server just issued. `sameAccount`: re-issued after a credential change. */
+  const beginSession = useCallback(
+    (next: SessionTokens, sameAccount: boolean) => {
+      const previous = sessionRef.current;
+      if (sameAccount && previous) noteSupersededToken(previous.accessToken);
+      else forgetSupersededTokens();
+      hold(next);
+      setOffline(false);
+      void savedSession.save(next, 'signIn');
+    },
+    [hold],
+  );
+
+  // Lend the pair to api.ts. Registered before the boot effect below runs (same
+  // commit, declaration order), so boot's own `/auth/me` can already renew.
+  useEffect(
+    () =>
+      registerTokenProvider({
+        current: () => sessionRef.current,
+        renewed: (next) => {
+          hold(next);
+          void savedSession.save(next, 'refresh');
+        },
+        dead: endSession,
+      }),
+    [hold, endSession],
+  );
+
+  const resume = useCallback(async () => {
+    setBooting(true);
+    setOffline(false);
+    const saved = await savedSession.load();
+    if (!saved) {
+      // Memory only — never `endSession` here, which would also clear storage:
+      // a read can fail for a moment (a keychain still locked) with a perfectly
+      // good session behind it, and the next launch must still find it.
+      hold(null);
+      setBooting(false);
+      return;
+    }
+    hold(saved);
+    const result = await resumeSession(saved, {
+      fetchMe,
+      renew: (stale) => renewSession(stale, refreshAccessToken),
+      held: () => sessionRef.current,
+      now: () => Date.now(),
+    });
+    if (result.kind === 'signedIn') setMe(result.me);
+    else if (result.kind === 'offline') setOffline(true);
+    else endSession();
+    setBooting(false);
+  }, [hold, endSession]);
+
+  useEffect(() => {
+    void resume();
+  }, [resume]);
 
   // agency_pr links (not agency_user — that table is portal operators only).
   useEffect(() => {
@@ -152,66 +217,60 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [token, me]);
 
-  useEffect(() => {
-    const stored = readStoredToken();
-    if (!stored) {
-      setBooting(false);
-      return;
-    }
-    setToken(stored);
-    fetchMe(stored)
-      .then(setMe)
-      .catch(() => {
-        writeStoredToken(null);
-        setToken(null);
-      })
-      .finally(() => setBooting(false));
-  }, []);
+  const adoptToken = useCallback(
+    (accessToken: string, refreshToken: string | null) => {
+      // The re-issued pair carries no expiry. Unknown is safe: a refusal renews
+      // it the ordinary way, and the next refresh records one.
+      beginSession({ accessToken, refreshToken, expiredAt: null }, true);
+    },
+    [beginSession],
+  );
 
-  const adoptToken = useCallback((accessToken: string) => {
-    writeStoredToken(accessToken);
-    setToken(accessToken);
-  }, []);
-
-  const signIn = useCallback(async (identifier: string, password: string) => {
-    const candidates = phoneCandidates(identifier);
-    // English on purpose — see the ApiError note in ./api. A seed value only:
-    // `phoneCandidates` never returns an empty list, so the loop below always
-    // replaces it with the real failure before anything is thrown.
-    let lastError: unknown = new ApiError('Invalid credentials', 401);
-    for (const candidate of candidates) {
-      try {
-        const result = await login(candidate, password);
-        const user = await fetchMe(result.accessToken);
-        writeStoredToken(result.accessToken);
-        setToken(result.accessToken);
-        setMe(user);
-        return { user, accessToken: result.accessToken };
-      } catch (error) {
-        lastError = error;
-        if (!(error instanceof ApiError) || (error.status !== 400 && error.status !== 401)) {
-          throw error;
+  const signIn = useCallback(
+    async (identifier: string, password: string) => {
+      const candidates = phoneCandidates(identifier);
+      // English on purpose — see the ApiError note in ./api. A seed value only:
+      // `phoneCandidates` never returns an empty list, so the loop below always
+      // replaces it with the real failure before anything is thrown.
+      let lastError: unknown = new ApiError('Invalid credentials', 401);
+      for (const candidate of candidates) {
+        try {
+          const result = await login(candidate, password);
+          const user = await fetchMe(result.accessToken);
+          beginSession(
+            {
+              accessToken: result.accessToken,
+              // Kept, not dropped: it is what renews the 15-minute access token.
+              refreshToken: result.refreshToken || null,
+              expiredAt: typeof result.expiredAt === 'number' ? result.expiredAt : null,
+            },
+            false,
+          );
+          setMe(user);
+          return { user, accessToken: result.accessToken };
+        } catch (error) {
+          lastError = error;
+          if (!(error instanceof ApiError) || (error.status !== 400 && error.status !== 401)) {
+            throw error;
+          }
         }
       }
-    }
-    throw lastError;
-  }, []);
+      throw lastError;
+    },
+    [beginSession],
+  );
 
-  const signOut = useCallback(() => {
-    writeStoredToken(null);
-    setToken(null);
-    setMe(null);
-  }, []);
+  const signOut = endSession;
 
   const refreshMe = useCallback(async (accessTokenOverride?: string) => {
-    // Override required right after signIn — React state `token` is still null
-    // until the next render, so a bare refreshMe() would no-op and leave
-    // profileImage / portfolio / comcard blank after signup uploads.
-    const t = accessTokenOverride ?? token;
+    // The override is what a caller holding a token it JUST received passes;
+    // the ref already has it as well, since sign-in and adoptToken set it
+    // synchronously — the React `token` would not have it until the next render.
+    const t = accessTokenOverride ?? sessionRef.current?.accessToken;
     if (!t) return;
     const user = await fetchMe(t);
     setMe(user);
-  }, [token]);
+  }, []);
 
   const updateProfile = useCallback(
     async (patch: ProfileUpdate) => {
@@ -283,6 +342,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       token,
       agencies,
       booting,
+      offline,
+      resume,
       signIn,
       signOut,
       adoptToken,
@@ -299,6 +360,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       token,
       agencies,
       booting,
+      offline,
+      resume,
       signIn,
       signOut,
       adoptToken,

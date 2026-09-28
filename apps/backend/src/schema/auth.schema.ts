@@ -157,7 +157,19 @@ const registerOrgFields = {
 const RegisterSchema = z
   .object({
     email: z.email('Invalid email format').optional(),
-    phoneNum: z.string(),
+    /**
+     * OPTIONAL HERE, REQUIRED IN THE HANDLER — for everybody except an
+     * authenticated admin creating another ADMIN (`isAdminCreatingAdmin`,
+     * Fix First, 28 Sep 2026). The schema cannot see the caller, so it only
+     * lets the field be absent; `registerUser` refuses the absence for every
+     * public PR, agency and outlet sign-up, where the phone is the login.
+     *
+     * The admin screen has no phone field and used to invent
+     * `'+admin-' + 12 hex` to get past a required `z.string()`. A blank is
+     * absent, never stored: `z.string()` let '' through to the UNIQUE column,
+     * where the second one would have been a 500.
+     */
+    phoneNum: blankIsAbsent(z.string().optional()),
     username: z.string().min(1, 'Username is required'),
     // Empty string is not "optional" in Zod — treat "" as missing so public
     // clients that omit a password don't get a misleading min-length error.

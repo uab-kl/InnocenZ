@@ -5,6 +5,7 @@ import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
 import { checkVoucherBalance } from './payment-voucher-balance';
 import { auditVoucher } from './payment-voucher-audit';
 import { klToday, paymentDueDate } from './payment-voucher-week';
+import { isWageLineFor, sealWageLine } from './wage-line';
 import { describeWorkedTime } from '@/features/shift-assignment/wage';
 
 export type GenerateWeeklyParams = {
@@ -52,6 +53,21 @@ export type GenerateWeeklyResult = {
     prId: string;
     voucherId: string;
     problems: string[];
+  }>;
+  /**
+   * Wage lines this run had to write onto a voucher that ALREADY existed — the
+   * net under check-out and cut-loss sealing (wage-line.ts). Always empty in a
+   * healthy week; every entry is a shift whose pay would otherwise have gone
+   * out missing.
+   */
+  wagesFilled: Array<{
+    agencyId: string;
+    prId: string;
+    assignmentId: string;
+    voucherId: string;
+    amount: string;
+    /** The agency had signed the old total; they must sign the new one. */
+    signatureVoided: boolean;
   }>;
 };
 
@@ -124,6 +140,7 @@ export class PaymentVoucherGeneratorClass {
       skipped: [],
       imbalanced: [],
       unreconciled: [],
+      wagesFilled: [],
     };
 
     for (const agencyId of agencyIds) {
@@ -145,6 +162,13 @@ export class PaymentVoucherGeneratorClass {
         // weekEnd passed so the check is an OVERLAP, not a week_start match: a
         // voucher this PR already has under a different anchor still counts.
         if (await this.paymentVoucherRepository.existsForPrWeek(agencyId, prId, weekStart, weekEnd)) {
+          // Not rebuilt — but this run is the last look before the week goes
+          // out, and a voucher the PR's first drink created only holds the wages
+          // that check-out or a release managed to file. Any that did not land
+          // would otherwise go out missing, with nothing left to write them.
+          result.wagesFilled.push(
+            ...(await this.fillMissingWages({ agencyId, prId, weekStart, prRows, actor })),
+          );
           result.skipped.push({ agencyId, prId, reason: 'already_exists' });
           continue;
         }
@@ -273,6 +297,12 @@ export class PaymentVoucherGeneratorClass {
     logger.info(
       `[PaymentVoucherGenerator] week ${weekStart}..${weekEnd}: ${result.created.length} created, ${result.skipped.length} skipped across ${result.agenciesProcessed} agencies`,
     );
+    if (result.wagesFilled.length > 0) {
+      logger.warn(
+        `[PaymentVoucherGenerator] filled ${result.wagesFilled.length} wage line(s) that check-out never filed: ` +
+          result.wagesFilled.map((w) => `${w.assignmentId}=RM${w.amount}`).join(', '),
+      );
+    }
     if (result.imbalanced.length > 0) {
       logger.error(
         `[PaymentVoucherGenerator] ${result.imbalanced.length} of ${result.created.length} vouchers DO NOT BALANCE — do not pay these until reviewed`,
@@ -284,5 +314,64 @@ export class PaymentVoucherGeneratorClass {
       );
     }
     return result;
+  }
+
+  /**
+   * Wage lines missing from a week's EXISTING, still-open voucher, written now.
+   *
+   * Only an open draft (`getCurrentWeekDraft`: pending_review / disputed) is
+   * touched — a sent or signed voucher is a document the PR has been handed, and
+   * changing it here would be exactly the rewrite the lock forbids. Each shift
+   * goes through `sealWageLine`, so the date, the amount rule and the
+   * once-only insert are the same ones check-out uses.
+   */
+  private async fillMissingWages(params: {
+    agencyId: string;
+    prId: string;
+    weekStart: string;
+    prRows: ReadonlyArray<{ assignment: { id: string } }>;
+    actor: string;
+  }): Promise<GenerateWeeklyResult['wagesFilled']> {
+    const { agencyId, prId, weekStart, prRows, actor } = params;
+    const filled: GenerateWeeklyResult['wagesFilled'] = [];
+    try {
+      const pr = await this.prRepository.getById(prId);
+      const draft = await this.paymentVoucherRepository.getCurrentWeekDraft(
+        prId,
+        weekStart,
+        pr?.userId,
+        agencyId,
+      );
+      if (!draft) return filled;
+      for (const row of prRows) {
+        if (draft.lines.some((line) => isWageLineFor(line, row.assignment.id))) continue;
+        const out = await sealWageLine(
+          {
+            shiftAssignmentRepository: this.shiftAssignmentRepository,
+            paymentVoucherRepository: this.paymentVoucherRepository,
+            prRepository: this.prRepository,
+          },
+          { assignmentId: row.assignment.id, actor },
+        );
+        if (out.outcome === 'sealed') {
+          filled.push({
+            agencyId,
+            prId,
+            assignmentId: row.assignment.id,
+            voucherId: out.voucherId,
+            amount: out.amount,
+            signatureVoided: out.signatureVoided,
+          });
+        } else if (out.outcome === 'refused') {
+          logger.error(
+            `[PaymentVoucherGenerator] ${row.assignment.id}: completed shift has no wage line and none could be filed — ${out.reason}`,
+          );
+        }
+      }
+    } catch (error) {
+      // A failed top-up must not stop the week's other vouchers being built.
+      logger.error('[PaymentVoucherGenerator.fillMissingWages] Error:', error);
+    }
+    return filled;
   }
 }

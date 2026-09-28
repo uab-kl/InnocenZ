@@ -20,6 +20,61 @@ const orgScopeDeps: OrgScopeDeps = {
   outletMemberRepository,
 };
 
+/** The two portals whose authority lives on a membership lane. */
+const ORG_PORTALS: ReadonlySet<string> = new Set(['agency', 'outlet']);
+
+/**
+ * THE ROLES THAT MAY ANSWER WITHOUT A MEMBERSHIP — every role the caller holds
+ * that is NOT an agency- or outlet-portal role.
+ *
+ * ⚠️ An agency or outlet role is only a DOOR (may this account open that
+ * console); what it may DO there is its membership lane's business. Letting one
+ * answer a permission check on its own is how a demoted or removed member kept
+ * their old powers: with no active membership of the module's portal the check
+ * fell back to the union of every `user_role` row, and a surviving `Owner` row
+ * answered `payment_voucher:update` for somebody who was no longer an Owner
+ * anywhere.
+ *
+ * What remains are the deliberate cross-portal holders the fallback exists
+ * for: the portal-less `pr` role (the phone reads `dashboard`, `rating`,
+ * `roster` and `payment_voucher`) and admin-portal roles. Measured live on
+ * 28 Sep 2026: those four `pr` reads are the only grants any such role holds
+ * besides `admin` itself, which never gets this far.
+ */
+export function rolesAnsweringWithoutMembership<
+  R extends { portalCode: string | null },
+>(roles: readonly R[]): R[] {
+  return roles.filter((r) => !ORG_PORTALS.has(r.portalCode ?? ''));
+}
+
+/**
+ * Does any of `roleIds` hold `permissionType` on `moduleKey`, among the grant
+ * rows `getUserPermissions` returned?
+ *
+ * The same question `userHasPermission` asks of the whole union, narrowed to
+ * the roles named. Its portal rule (role portal = module portal, or a role with
+ * no portal, or an admin-portal role) always holds for the roles
+ * `rolesAnsweringWithoutMembership` lets through, so key + verb is all that is
+ * left to compare. Its status filters already ran in the query.
+ */
+export function grantedToRoles(
+  grants: ReadonlyArray<{
+    roleId: string;
+    moduleKey: string;
+    permissionType: string;
+  }>,
+  roleIds: ReadonlySet<string>,
+  moduleKey: string,
+  permissionType: PermissionTypeCode,
+): boolean {
+  return grants.some(
+    (g) =>
+      roleIds.has(g.roleId) &&
+      g.moduleKey === moduleKey &&
+      g.permissionType === permissionType,
+  );
+}
+
 /**
  * Module C/R/U gate — resolved from the caller's JOB TITLE AT THE
  * ORGANISATION THEY ARE ACTING IN, not from the union of their global roles.
@@ -36,13 +91,15 @@ const orgScopeDeps: OrgScopeDeps = {
  * organisation of that kind the caller is acting in, reads the title on that
  * membership, and asks what THAT role is granted.
  *
- * ⚠️ IT NARROWS ONLY WHERE IT SAFELY CAN. If the caller holds no membership
- * of the module's portal at all, the old user-wide check runs unchanged. That
- * is not laziness: the grant table has deliberate cross-portal rows — the
- * mobile PR role has NO portal and reads dashboard, rating, roster and
- * payment_voucher across all three — and narrowing those to a membership they
- * do not have would lock every PR out. Same shape as
- * `requireOutletSubRoleIfMember`, and for the same reason.
+ * ⚠️ NO MEMBERSHIP OF THE MODULE'S PORTAL IS NOT A FREE PASS. The grant table
+ * has deliberate cross-portal rows — the mobile PR role has NO portal and reads
+ * dashboard, rating, roster and payment_voucher across all three — so a caller
+ * with no membership there still gets an answer from the role table. But only
+ * from roles that are not agency or outlet roles
+ * (`rolesAnsweringWithoutMembership`): until 28 Sep 2026 this fell back to the
+ * union of EVERY role the account held, so a member demoted or removed at their
+ * only organisation of that kind was judged by the title they no longer had.
+ * An agency or outlet role now answers only through an active membership's lane.
  */
 export function requirePermission(
   moduleKey: string,
@@ -157,10 +214,19 @@ export function requirePermission(
         }
       }
 
-      // No membership of this module's portal (a PR, a cross-portal grant, or
-      // a module with no portal at all) — unchanged behaviour.
-      const ok = await authRepository.userHasPermission(
-        user.id,
+      /*
+       * No active membership of this module's portal — a PR, an admin-portal
+       * role, or a module with no portal at all. Answered by the roles that
+       * carry no lane, and ONLY by them: an agency or outlet role left over from
+       * a title the person no longer holds must not answer here, or demoting
+       * them would change nothing the server enforces.
+       */
+      const laneless = rolesAnsweringWithoutMembership(roles);
+      if (laneless.length === 0) return refuse();
+      const grants = await authRepository.getUserPermissions(user.id);
+      const ok = grantedToRoles(
+        grants,
+        new Set(laneless.map((r) => r.roleId)),
         moduleKey,
         permissionType,
       );

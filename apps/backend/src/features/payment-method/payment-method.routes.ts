@@ -66,9 +66,11 @@ router.put(
   '/mine',
   requireRole('outlet', 'agency', 'admin'),
   // The org billing method is a settings write. requireRole alone admitted any
-  // member of either portal, so a view-only Director could replace it. The
-  // module is seeded on BOTH portals and userHasPermission resolves each
-  // caller against their own, so one guard covers agency and outlet correctly.
+  // member of either portal, so a view-only Director could replace it.
+  // `orgOwnerPaysOnly` resolves the organisation the request acts for (the
+  // same `resolveOrgScope` the controller uses) and demands the OWNER lane on
+  // that membership — guarantor excluded — so one guard covers agency and
+  // outlet, and a demotion takes effect on the next request.
   orgOwnerPaysOnly,
   paymentMethodController.upsertMine.bind(paymentMethodController),
 );

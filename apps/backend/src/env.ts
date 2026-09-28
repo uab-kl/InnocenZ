@@ -47,8 +47,10 @@ export const env = createEnv({
      */
     CORS_ALLOWED_ORIGINS: z.string().optional(),
     /**
-     * Express `trust proxy`. UNSET = today's behaviour exactly (no trust), so
-     * this changes nothing until a deployment opts in.
+     * Express `trust proxy`. UNSET = trust nothing in development and ONE HOP
+     * in production (main.ts, since 28 Sep 2026 — no deployment had set it, so
+     * every deployed limiter saw the proxy as the only caller). `false` / `0`
+     * opts a production box out when nothing sits in front of it.
      *
      * Set it wherever the API sits behind a reverse proxy or CDN, or the rate
      * limiter sees the PROXY's address on every request and throttles the whole
@@ -73,6 +75,18 @@ export const env = createEnv({
     R2_ACCESS_KEY_ID: z.string().min(1).optional(),
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     R2_PUBLIC_URL: z.string().url().optional(),
+    /**
+     * A PRIVATE bucket for the files nobody should reach by URL alone — ID-card
+     * photos, receipt and MC proof, dispute evidence, signed voucher PDFs (see
+     * `isSensitiveR2Key`). Optional: unset, those files stay in R2_BUCKET_NAME
+     * and are still served as short-lived signed links, but the bucket's public
+     * address keeps working for anyone holding an old link. Same credentials,
+     * so the R2 token must be scoped to BOTH buckets. Move the existing objects
+     * with `src/scripts/_move-sensitive-r2-objects.ts` before setting it.
+     */
+    R2_PRIVATE_BUCKET_NAME: z.string().min(1).optional(),
+    /** Lifetime of a signed link to a sensitive file, in seconds (default 3600, max 7 days). */
+    R2_SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().max(604800).optional(),
     /*
      * PAYOUT PROVIDER (flow 2 — the agency pays its PRs). All optional: the
      * bank-file export path is fully functional with none of them set, and

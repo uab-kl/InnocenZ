@@ -2128,6 +2128,112 @@ function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
 	);
 }
 
+type FinanceInk = { w: number; h: number; strokes: [number, number][][] };
+
+/**
+ * The agency's signature pad — drawn, or one tap with the signature on file.
+ *
+ * Shared by the two places a voucher asks for it: before the send (the normal
+ * rail) and before recording payment on a voucher the PR signed but the agency
+ * never did (sent before the 3 Aug 2026 finance gate). Payment now needs both
+ * signatures, so without the second place those vouchers could never be paid.
+ */
+function FinanceSignPad({
+	title,
+	body,
+	signError,
+	signOpen,
+	onOpenPad,
+	onClosePad,
+	storedSignature,
+	isSigning,
+	onSign,
+}: {
+	title: string;
+	body: string;
+	signError: string | null;
+	signOpen: boolean;
+	onOpenPad: () => void;
+	onClosePad: () => void;
+	storedSignature: FinanceInk | null;
+	isSigning: boolean;
+	onSign: (ink: FinanceInk) => void;
+}) {
+	const { t } = usePortalLocale();
+	return (
+		<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
+			<p className="iz-sm font-bold">{title}</p>
+			<p className="iz-tiny iz-muted2 mt-0.5">{body}</p>
+			{signError && (
+				<p className="iz-tiny mt-1.5 text-[var(--iz-red,#c0554f)]">
+					{signError}
+				</p>
+			)}
+			{signOpen ? (
+				<div className="mt-2">
+					<PrSignaturePad
+						label={t.payroll.drawYourSignature}
+						onConfirm={() => {
+							/* the PNG is not persisted — strokes are */
+						}}
+						onConfirmInk={(ink) => onSign(ink)}
+						onCancel={onClosePad}
+					/>
+				</div>
+			) : storedSignature ? (
+				/*
+				 * Tap-to-sign. The stored ink is PRE-LOADED, never applied
+				 * automatically: opening the voucher and pressing this is still the
+				 * act of signing, and the preview above the button shows exactly
+				 * which mark is about to go on the document. Drawing a fresh one
+				 * stays available, because a signer must be able to sign as
+				 * themselves today rather than as their past self.
+				 */
+				<>
+					<div className="mt-2 flex h-14 items-end rounded-lg border border-[var(--iz-line)] bg-white/95 px-2 py-1">
+						<SignatureInkMark
+							ink={JSON.stringify(storedSignature)}
+							label={t.payroll.yourSignatureOnFile}
+							className="h-10 w-full"
+						/>
+					</div>
+					<button
+						type="button"
+						className="iz-btn iz-btn-primary mt-2 w-full"
+						disabled={isSigning}
+						onClick={() => onSign(storedSignature)}
+					>
+						<Pencil className="h-4 w-4" />
+						{isSigning ? t.payroll.signing : t.payroll.signWithMySignature}
+					</button>
+					<button
+						type="button"
+						className="iz-btn iz-btn-ghost mt-1.5 w-full"
+						disabled={isSigning}
+						onClick={onOpenPad}
+					>
+						{t.agencyPv.drawDifferentSignature}
+					</button>
+				</>
+			) : (
+				<>
+					<button
+						type="button"
+						className="iz-btn iz-btn-primary mt-2 w-full"
+						disabled={isSigning}
+						onClick={onOpenPad}
+					>
+						<Pencil className="h-4 w-4" /> {t.agencyPv.signThisVoucher}
+					</button>
+					<p className="iz-tiny iz-muted2 mt-1 text-center">
+						{t.agencyPv.saveSignatureHint}
+					</p>
+				</>
+			)}
+		</div>
+	);
+}
+
 function PvDetail({
 	pv,
 	receiptScans,
@@ -2231,7 +2337,14 @@ function PvDetail({
 		try {
 			await financeSign({ id: pv.id, signature: ink });
 			setSignOpen(false);
-			toast(t.payroll.voucherSignedCanSend, "success");
+			// A SIGNED voucher was signed late, to be paid — "send it now" would
+			// point at a step it passed long ago.
+			toast(
+				pv.status === "SIGNED"
+					? t.agencyPv.voucherSignedCanPay
+					: t.payroll.voucherSignedCanSend,
+				"success",
+			);
 		} catch (error) {
 			// The server's refusal verbatim: each one is a real rule (already sent,
 			// wrong role), not a generic failure the agency has to guess at.
@@ -2652,83 +2765,17 @@ function PvDetail({
 					)}
 
 					{!financeSigned && !weekStillOpen && (
-						<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
-							<p className="iz-sm font-bold">
-								{t.payroll.financeSignatureRequired}
-							</p>
-							<p className="iz-tiny iz-muted2 mt-0.5">
-								{t.agencyPv.signToAttest}
-							</p>
-							{signError && (
-								<p className="iz-tiny mt-1.5 text-[var(--iz-red,#c0554f)]">
-									{signError}
-								</p>
-							)}
-							{signOpen ? (
-								<div className="mt-2">
-									<PrSignaturePad
-										label={t.payroll.drawYourSignature}
-										onConfirm={() => {
-											/* the PNG is not persisted — strokes are */
-										}}
-										onConfirmInk={(ink) => void handleFinanceSign(ink)}
-										onCancel={() => setSignOpen(false)}
-									/>
-								</div>
-							) : storedSignature ? (
-								/*
-								 * Tap-to-sign. The stored ink is PRE-LOADED, never applied
-								 * automatically: opening the voucher and pressing this is
-								 * still the act of signing, and the preview above the button
-								 * shows exactly which mark is about to go on the document.
-								 * Drawing a fresh one stays available, because a signer must
-								 * be able to sign as themselves today rather than as their
-								 * past self.
-								 */
-								<>
-									<div className="mt-2 flex h-14 items-end rounded-lg border border-[var(--iz-line)] bg-white/95 px-2 py-1">
-										<SignatureInkMark
-											ink={JSON.stringify(storedSignature)}
-											label={t.payroll.yourSignatureOnFile}
-											className="h-10 w-full"
-										/>
-									</div>
-									<button
-										type="button"
-										className="iz-btn iz-btn-primary mt-2 w-full"
-										disabled={isSigning}
-										onClick={() => void handleFinanceSign(storedSignature)}
-									>
-										<Pencil className="h-4 w-4" />
-										{isSigning
-											? t.payroll.signing
-											: t.payroll.signWithMySignature}
-									</button>
-									<button
-										type="button"
-										className="iz-btn iz-btn-ghost mt-1.5 w-full"
-										disabled={isSigning}
-										onClick={() => setSignOpen(true)}
-									>
-										{t.agencyPv.drawDifferentSignature}
-									</button>
-								</>
-							) : (
-								<>
-									<button
-										type="button"
-										className="iz-btn iz-btn-primary mt-2 w-full"
-										disabled={isSigning}
-										onClick={() => setSignOpen(true)}
-									>
-										<Pencil className="h-4 w-4" /> {t.agencyPv.signThisVoucher}
-									</button>
-									<p className="iz-tiny iz-muted2 mt-1 text-center">
-										{t.agencyPv.saveSignatureHint}
-									</p>
-								</>
-							)}
-						</div>
+						<FinanceSignPad
+							title={t.payroll.financeSignatureRequired}
+							body={t.agencyPv.signToAttest}
+							signError={signError}
+							signOpen={signOpen}
+							onOpenPad={() => setSignOpen(true)}
+							onClosePad={() => setSignOpen(false)}
+							storedSignature={storedSignature}
+							isSigning={isSigning}
+							onSign={(ink) => void handleFinanceSign(ink)}
+						/>
 					)}
 					{/*
 					 * NOT RENDERED AT ALL on the in-progress week — not merely disabled.
@@ -2818,7 +2865,27 @@ function PvDetail({
 			 * because a transfer can be real without its reference being to hand,
 			 * and blocking the record would lose the more important fact.
 			 */}
-			{pv.status === "SIGNED" && can("raisePv") && (
+			{/*
+			 * Payment needs BOTH signatures (server-enforced since 28 Sep 2026). A
+			 * voucher the PR signed but the agency never did — sent before the
+			 * finance gate existed — is offered the pad first; the server accepts
+			 * that one missing signature on a signed voucher and refuses to
+			 * replace an existing one.
+			 */}
+			{pv.status === "SIGNED" && can("raisePv") && !financeSigned && (
+				<FinanceSignPad
+					title={t.payroll.financeSignatureRequired}
+					body={t.agencyPv.signBeforePaying}
+					signError={signError}
+					signOpen={signOpen}
+					onOpenPad={() => setSignOpen(true)}
+					onClosePad={() => setSignOpen(false)}
+					storedSignature={storedSignature}
+					isSigning={isSigning}
+					onSign={(ink) => void handleFinanceSign(ink)}
+				/>
+			)}
+			{pv.status === "SIGNED" && can("raisePv") && financeSigned && (
 				<div className="mt-2 rounded-xl border border-[rgba(93,217,160,.35)] p-3">
 					<p className="iz-sm font-bold">{t.payroll.recordPayment}</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">{t.agencyPv.markPaidHint}</p>
@@ -2834,16 +2901,16 @@ function PvDetail({
 						type="button"
 						className="iz-btn iz-btn-primary mt-2 w-full"
 						onClick={() => {
-							markPaid(pv.id, bankRef.trim() || undefined);
-							setBankRef("");
 							// The amount arrives as a SLOT, already run through formatRM —
 							// baking "RM" into a key would give the currency a second home.
-							toast(
-								fill(t.agencyPv.recordedAsPaid, {
-									amount: formatRM(getPvNetTotal(pv)),
-								}),
-								"success",
-							);
+							const amount = formatRM(getPvNetTotal(pv));
+							markPaid(pv.id, bankRef.trim() || undefined)
+								.then(() => {
+									setBankRef("");
+									toast(fill(t.agencyPv.recordedAsPaid, { amount }), "success");
+								})
+								// The hook already toasted the server's own refusal sentence.
+								.catch(() => undefined);
 						}}
 					>
 						<CheckCircle2 className="h-4 w-4" /> {t.agencyPv.markAsPaid}
@@ -2888,9 +2955,15 @@ function PvDetail({
 					className="iz-btn iz-btn-primary mt-3 w-full"
 					disabled={!overrideReason.trim()}
 					onClick={() => {
-						overrideSigned(pv.id, overrideReason);
-						setOverrideOpen(false);
-						setOverrideReason("");
+						overrideSigned(pv.id, overrideReason)
+							.then(() => {
+								setOverrideOpen(false);
+								setOverrideReason("");
+								toast(t.agencyPv.voucherReopened, "success");
+							})
+							// Refusal already toasted by the hook; the sheet stays open
+							// with the reason typed, so nothing has to be re-entered.
+							.catch(() => undefined);
 					}}
 				>
 					{t.agencyPv.confirmOverride}

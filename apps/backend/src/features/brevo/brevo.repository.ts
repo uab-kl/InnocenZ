@@ -8,6 +8,8 @@ import type { SendMailOptions, Transporter } from 'nodemailer';
 import { env } from '@/env.js';
 import { logger } from '@/util/logger.js';
 import { isEmail } from '@/util/email.js';
+// A leaf module with no imports — safe here.
+import { maskContactText } from '@/features/auth/query-error-redaction.js';
 import type { SendEmailInput, SendEmailResult } from '@/features/mailing/mailing.model.js';
 
 let transporter: Transporter | null = null;
@@ -73,16 +75,22 @@ export async function sendEmail(
   const accepted = (info.accepted ?? []).map(String);
   const rejected = (info.rejected ?? []).map(String);
 
+  // Recipients MASKED (first letter + domain). This line fires on every mail
+  // sent — each password reset, code and invite — and put the address of each
+  // one in the application log in plain text.
   logger.info('[brevo] sent', {
     messageId: info.messageId,
-    to: toList,
+    to: toList.map(maskContactText),
     subject: input.subject,
-    accepted,
-    rejected,
+    accepted: accepted.map(maskContactText),
+    rejected: rejected.map(maskContactText),
   });
 
   if (rejected.length > 0 && accepted.length === 0) {
-    throw new Error(`sendEmail: all recipients rejected (${rejected.join(', ')})`);
+    // Masked in the message too: callers log what this throws.
+    throw new Error(
+      `sendEmail: all recipients rejected (${rejected.map(maskContactText).join(', ')})`,
+    );
   }
 
   return {

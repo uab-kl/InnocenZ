@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
-import { MemberSubscriptionRepositoryClass } from './member-subscription.repository.js';
+import {
+  MemberSubscriptionRepositoryClass,
+  type GuardedCloseOutcome,
+} from './member-subscription.repository.js';
 import { MemberSubscriptionFilter, SubscriberType, MemberSubscriptionStatus } from './member-subscription.model.js';
 import {
   CreateMemberSubscriptionSchema,
@@ -12,7 +15,6 @@ import { logger } from '@/util/logger.js';
 import { parseGranularity } from '@/util/period.js';
 import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import { LIVE_MEMBER_SUBSCRIPTION_STATUSES } from './member-subscription.model.js';
-import { wouldLeaveOrgPlanless } from '@/features/subscription/plan-limit.js';
 
 /** Does this status still mean the org is ON the lane? */
 function isLiveStatus(status: string): boolean {
@@ -20,32 +22,48 @@ function isLiveStatus(status: string): boolean {
   return live.includes(status);
 }
 
+type RefusalBody = { status: number; body: { success: false; message: string; data: null } };
+
 /**
- * The refusal for closing an org's LAST plan, or null when it may proceed.
- *
- * The creation doors all require a plan now — sign-up, admin create, the tier
- * switch — but nothing guarded the other end, and cancelling is the everyday
- * action that breaks the rule. An outlet left with no plan cannot post at all;
- * an agency left with no plan is invisible to the Sunday tier rule, which reads
- * FROM this table, so it can never be re-priced.
+ * When the guarded close could not be CHECKED — the transaction failed, so
+ * nothing was written.
  *
  * REFUSES ON UNKNOWN, unlike the posting gate. There, an unanswerable question
  * must not take a working venue offline. Here it must not wave through a
  * cancellation nobody can undo — a retry is the cheaper mistake.
  */
-async function lastPlanRefusal(memberSubscriptionId: string): Promise<{
-  status: number;
-  body: { success: boolean; message: string; data: null };
-} | null> {
-  const verdict = await wouldLeaveOrgPlanless(memberSubscriptionId);
-  if (verdict === 'no') return null;
-  if (verdict === 'unknown') {
+const CLOSE_UNCHECKED: RefusalBody = {
+  status: 503,
+  body: {
+    success: false,
+    message:
+      "Could not check whether this is the organisation's last plan. Nothing was changed — try again.",
+    data: null,
+  },
+};
+
+/**
+ * The reply for a close the guard refused.
+ *
+ * The creation doors all require a plan — sign-up, admin create, the tier
+ * switch — and cancelling is the everyday action that would break the rule. An
+ * outlet left with no plan cannot post at all; an agency left with no plan is
+ * invisible to the Sunday tier rule, which reads FROM this table, so it can
+ * never be re-priced.
+ */
+function closeRefusal(
+  reason: Extract<GuardedCloseOutcome, { kind: 'refused' }>['reason'],
+): RefusalBody {
+  if (reason === 'not_found') {
+    return { status: 404, body: { success: false, message: Error.NOT_FOUND, data: null } };
+  }
+  if (reason === 'already_ended') {
     return {
-      status: 503,
+      status: 409,
       body: {
         success: false,
         message:
-          "Could not check whether this is the organisation's last plan. Nothing was changed — try again.",
+          'This subscription has already ended. Nothing was changed — cancelling it again would rewrite when it ended.',
         data: null,
       },
     };
@@ -305,8 +323,21 @@ export class MemberSubscriptionControllerClass {
         (payload.endedAt !== undefined && payload.endedAt !== null) ||
         (payload.status !== undefined && !isLiveStatus(payload.status));
       if (closesLane) {
-        const refusal = await lastPlanRefusal(id);
-        if (refusal) return res.status(refusal.status).json(refusal.body);
+        // The guard and the write in one transaction — see closeUnlessLastPlan.
+        let outcome: GuardedCloseOutcome;
+        try {
+          outcome = await this.repository.closeUnlessLastPlan(id, payload, 'edit');
+        } catch (error) {
+          logger.error('[MemberSubscriptionController.update] guarded close failed:', error);
+          return res.status(CLOSE_UNCHECKED.status).json(CLOSE_UNCHECKED.body);
+        }
+        if (outcome.kind === 'refused') {
+          const refusal = closeRefusal(outcome.reason);
+          return res.status(refusal.status).json(refusal.body);
+        }
+        return res
+          .status(200)
+          .json({ success: true, message: 'Subscription record updated', data: outcome.record });
       }
 
       const record = await this.repository.update(id, payload);
@@ -318,22 +349,39 @@ export class MemberSubscriptionControllerClass {
     }
   }
 
+  /**
+   * End a subscription row today — the admin's "Cancel subscription".
+   *
+   * Guarded and atomic (`closeUnlessLastPlan`): an org's ONLY live plan is
+   * refused, a row that already ended is refused rather than re-dated, and a
+   * row whose organisation does not exist is let through — it cannot leave a
+   * real org planless — with a reply that says so, because an admin who meant
+   * to end a real venue's plan must not read that as the ordinary outcome.
+   */
   async cancel(req: Request, res: Response) {
+    const id = paramId(req.params.id);
+    let outcome: GuardedCloseOutcome;
     try {
-      const id = paramId(req.params.id);
-      const refusal = await lastPlanRefusal(id);
-      if (refusal) return res.status(refusal.status).json(refusal.body);
-
-      const record = await this.repository.update(id, {
-        status: 'cancelled',
-        endedAt: new Date(),
-        updatedBy: getActor(req),
-      });
-      if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Subscription cancelled', data: record });
+      outcome = await this.repository.closeUnlessLastPlan(
+        id,
+        { status: 'cancelled', endedAt: new Date(), updatedBy: getActor(req) },
+        'cancel',
+      );
     } catch (error) {
       logger.error('[MemberSubscriptionController.cancel] Error:', error);
-      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      return res.status(CLOSE_UNCHECKED.status).json(CLOSE_UNCHECKED.body);
     }
+    if (outcome.kind === 'refused') {
+      const refusal = closeRefusal(outcome.reason);
+      return res.status(refusal.status).json(refusal.body);
+    }
+
+    const { record } = outcome;
+    const message =
+      outcome.verdict === 'ghost'
+        ? `Subscription cancelled. No ${record.subscriberType} with this id is registered, so ` +
+          `this ${record.planName} row belonged to no real organisation and nobody was left without a plan.`
+        : `Subscription cancelled — ${record.subscriberName} is no longer on ${record.planName} from today.`;
+    res.status(200).json({ success: true, message, data: record });
   }
 }

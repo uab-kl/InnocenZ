@@ -22,6 +22,7 @@ import {
   publicOtpPurposeValues,
   type PublicOtpPurpose,
 } from './phone-verification.model.js';
+import { isUnactivatedAccount, mayResetPassword } from './account-activation.js';
 import { UserRepositoryClass } from '@/features/user/user.repository.js';
 
 /**
@@ -148,7 +149,11 @@ export class OtpControllerClass {
 
       if (purpose === 'forgot_password') {
         const user = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
-        if (!user || user.status.toLowerCase() !== 'active') {
+        // An account with NO PASSWORD is answered as unknown too: a reset never
+        // writes a first password (account-activation.ts). A roster stub is
+        // claimed by signing up with its phone, not by "forgetting" a password
+        // nobody set.
+        if (!mayResetPassword(user)) {
           // Same shape as a real send so callers cannot probe accounts cheaply,
           // but nothing goes out.
           return res.status(200).json({
@@ -164,7 +169,24 @@ export class OtpControllerClass {
 
       if (purpose === 'signup') {
         const taken = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
-        if (taken) {
+        /*
+         * A NEVER-ACTIVATED ROSTER STUB IS NOT "TAKEN" (Fix First, 28 Sep 2026).
+         * Signing up with its phone is how the invited PR claims it
+         * (`registerUser`, account-activation.ts), so the code is sent — but
+         * to the PHONE ALONE. A sign-up code is otherwise emailed to the typed
+         * address as well, and a receipt verified from an inbox the typist
+         * chose would let anyone who knows the number take over the account an
+         * agency created for somebody else. `registerUser` refuses a claim on a
+         * receipt whose `channel` names an email, so this is enforced at both
+         * ends. Whether the stub is PR-only is judged there, where the roles
+         * are read.
+         *
+         * Disclosure: a stub now answers 200 here where an activated account
+         * answers 409. This endpoint already told registered from unregistered;
+         * the new fact is only "invited but never activated".
+         */
+        const claimingStub = isUnactivatedAccount(taken);
+        if (taken && !claimingStub) {
           return res.status(409).json({
             success: false,
             message: 'That phone number already has an account',
@@ -178,10 +200,12 @@ export class OtpControllerClass {
            * already HAS an account — that is mail a stranger can aim, and the
            * registration would fail on this address later anyway. The same
            * refusal this endpoint already gives for a taken phone number, so it
-           * discloses nothing it did not already disclose.
+           * discloses nothing it did not already disclose. The stub being
+           * claimed is not "somebody else": its own address is the one the
+           * claim will replace.
            */
           const emailTaken = await this.userRepository.getUserByLoginMethod('email', email);
-          if (emailTaken) {
+          if (emailTaken && emailTaken.id !== taken?.id) {
             return res.status(409).json({
               success: false,
               message: 'That email already has an account',
@@ -189,6 +213,9 @@ export class OtpControllerClass {
             });
           }
         }
+        // Checked above so a taken address still fails HERE rather than after
+        // the code — but for a claim the code itself goes to the phone alone.
+        if (claimingStub) email = null;
       }
 
       const existing = await this.phoneVerificationRepository.findActivePending(

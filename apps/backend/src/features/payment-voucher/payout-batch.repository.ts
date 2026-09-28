@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import type { DbTransaction } from '@/types/db-transaction';
@@ -136,6 +136,12 @@ export class PayoutBatchRepositoryClass {
           and(
             eq(PaymentVoucherTable.agencyId, params.agencyId),
             eq(PaymentVoucherTable.status, 'signed'),
+            // BOTH signatures, as the single "Mark paid" now demands
+            // (payment-voucher-lock.ts). A voucher the agency never signed is
+            // left out of the run rather than listed as "blocked", which this
+            // screen reads as missing bank details; it appears on Payroll with
+            // the sign pad instead.
+            isNotNull(PaymentVoucherTable.financeHeadSignedAt),
             eq(PaymentVoucherTable.weekStart, params.weekStart),
             eq(PaymentVoucherTable.weekEnd, params.weekEnd),
           ),
@@ -410,6 +416,9 @@ export class PayoutBatchRepositoryClass {
                 and(
                   eq(PaymentVoucherTable.id, item.voucherId),
                   eq(PaymentVoucherTable.status, 'signed'),
+                  // Dual-signed only — a run created before the rule cannot
+                  // settle an agency-unsigned voucher into `paid` either.
+                  isNotNull(PaymentVoucherTable.financeHeadSignedAt),
                 ),
               )
               .returning({ id: PaymentVoucherTable.id });

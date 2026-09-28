@@ -25,6 +25,7 @@ import {
 import {
   AgencyFilter,
   AgencyUserSubRole,
+  AgencyUserType,
   AgencyStatus,
   agencyUserSubRoleValues,
 } from './agency.model';
@@ -47,6 +48,11 @@ import {
   inferMembershipSubRole,
   portalRoleNameForSubRole,
 } from '@/features/rbac/portal-role-map';
+import {
+  changeWithdrawsInvites,
+  commitMembershipChange,
+  MEMBERSHIP_CHANGE_NOT_SAVED,
+} from '@/features/rbac/membership-access';
 import { portalRepository } from '@/features/rbac/portal/portal.repository';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import type { AuthRepositoryClass } from '@/features/auth/auth.repository.js';
@@ -1501,29 +1507,10 @@ export class AgencyControllerClass {
       }
 
       /**
-       * ⚠️ THE TEST IS "A TITLE WAS NAMED", NOT "THE TITLE CHANGED".
+       * A TITLE THAT IS NOT SEEDED IS REFUSED BEFORE ANYTHING IS WRITTEN.
        *
-       * It used to also require `parsed.data.subRole !== target.subRole`, and
-       * that extra term left the one hole this whole endpoint exists to close.
-       * Reinstating a removed member with the lane they ALREADY held —
-       * `{status:'active', subRole:'finance'}` against a row whose `sub_role`
-       * column already says `finance`, which is exactly what the UI sends
-       * because it pre-selects their remembered lane — matched
-       * `subRole === target.subRole`, skipped this entire block, and therefore
-       * never re-assigned the portal role that removal had revoked. The
-       * member came back ACTIVE WITH NO ROLE.
-       *
-       * That state is not merely broken, it is the state
-       * `ensurePortalRolesFromMembership` existed to paper over: on the next
-       * `/auth/me` it silently minted a role for them. And since 0160 that
-       * heal was far more generous than its name suggested — `holdsAgencyLane`
-       * uses the role only as a DOOR check and reads the authority off
-       * `agency_user.sub_role`, so healing a removed OWNER handed back OWNER
-       * authority, with no invite and nobody's decision behind it.
-       *
-       * Naming the same title is a legitimate, deliberate reinstatement. It
-       * has to grant. The 409 above still covers the other case — reactivating
-       * without naming any title, for somebody whose role is gone.
+       * The recompute inside the transaction below would refuse it too, but
+       * only as a rolled-back change; checking here keeps the specific answer.
        */
       if (parsed.data.subRole != null) {
         const roleName = portalRoleNameForSubRole(
@@ -1541,108 +1528,93 @@ export class AgencyControllerClass {
             data: null,
           });
         }
-        /**
-         * THE TITLE IS WRITTEN TO THIS MEMBERSHIP, AND ONLY THIS ONE.
-         *
-         * Owner, 10 Sep 2026: *"it should only change for the organisation,
-         * not all organisation, because that person might have different job
-         * titles with different organisation"*. Since 0160 the title is a
-         * column on the membership row, so a change is one UPDATE against one
-         * agency and cannot reach any other.
-         */
-        await this.agencyMemberRepository.update(memberId, {
-          subRole: parsed.data.subRole,
-          updatedBy: actor,
-        });
-
-        /**
-         * PORTAL ACCESS is a separate, still-global fact — may this person
-         * open the agency portal at all — and it stays on `user_role`.
-         * So the new title's role is ENSURED rather than swapped in.
-         *
-         * ⚠️ The prune below is conditional, and the condition is the whole
-         * point. Deleting every agency role unconditionally is what
-         * rewrote a person's title at the OTHER organisation, because one of
-         * those rows may be the access their membership there depends on. It
-         * is only safe when this is their only active agency.
-         *
-         * ⚠️ KNOWN GAP, deliberate and recorded: module permissions
-         * (`requirePermission` → `role_permission`) are still resolved from
-         * the union of a person's portal roles with no organisation term. So
-         * for somebody who genuinely staffs two agencys, a demotion
-         * here narrows what the SCREEN offers but not yet what the server
-         * grants. Closing that means giving `userHasPermission` an org
-         * argument — a separate slice, tracked in TEST_SCRIPT §9.
-         */
-        const portal = await portalRepository.getPortalByCode('agency');
-        /*
-         * ⚠️ ONLY IF THEY WILL ACTUALLY BE A MEMBER AFTERWARDS.
-         *
-         * Without this test a body carrying only `{"subRole":"director"}`
-         * against a REMOVED membership re-assigned the portal role and handed
-         * that person their login back — silently, through an endpoint that
-         * reads as an edit rather than a reinstatement. Removal deliberately
-         * revokes the role on the way out; correcting the recorded title of
-         * somebody who has left must not undo that.
-         *
-         * The title above is still written, because a removed member's row
-         * should be able to say what they WERE. Only the access is withheld.
-         * Reinstating them is `{status:'active', subRole:'…'}`, which passes
-         * this test by naming the status explicitly.
-         */
-        const willBeActive =
-          parsed.data.status != null
-            ? parsed.data.status === 'active'
-            : target.status === 'active';
-        const held = await this.userRoleRepository.getUserRoles(target.userId);
-        if (willBeActive && !held.some((r) => r.id === nextRole.id)) {
-          await this.userRoleRepository.assignRoleToUser({
-            userId: target.userId,
-            roleId: nextRole.id,
-            createdBy: actor,
-            updatedBy: actor,
-          });
-        }
-        const elsewhere = (
-          await this.agencyMemberRepository.listByUser(target.userId)
-        ).filter(
-          (m) => m.status === 'active' && m.agencyId !== agencyId
-        );
-        if (elsewhere.length === 0) {
-          for (const r of held) {
-            if (portal && r.portalId === portal.id && r.id !== nextRole.id) {
-              await this.userRoleRepository.removeRoleFromUser(
-                target.userId,
-                r.id,
-              );
-            }
-          }
-        }
       }
 
-      const memberRow =
-        parsed.data.status != null
-          ? await this.agencyMemberRepository.update(memberId, {
-              status: parsed.data.status,
-              updatedBy: actor,
-            })
-          : await this.agencyMemberRepository.getById(memberId);
+      /**
+       * THE TITLE IS WRITTEN TO THIS MEMBERSHIP, AND ONLY THIS ONE.
+       *
+       * Owner, 10 Sep 2026: *"it should only change for the organisation,
+       * not all organisation, because that person might have different job
+       * titles with different organisation"*. Since 0160 the title is a
+       * column on the membership row, so a change is one UPDATE against one
+       * agency and cannot reach any other. A removed member's title is still
+       * written — the row should be able to say what they WERE.
+       */
+      const changes = {
+        ...(parsed.data.subRole != null
+          ? { subRole: parsed.data.subRole }
+          : {}),
+        ...(parsed.data.status != null ? { status: parsed.data.status } : {}),
+      };
+
+      /**
+       * ⚠️ THE WRITE, THE ROLES AND THE INVITATIONS COMMIT TOGETHER OR NOT AT ALL
+       * (`commitMembershipChange`). This used to be separate statements, the
+       * title's UPDATE result was ignored, and a write that failed still came
+       * back 200 "Member updated" — a demotion reported done while the old
+       * title kept deciding what the person could do.
+       *
+       * PORTAL ACCESS (`user_role`) is RECOMPUTED from the lanes of every
+       * membership still active after this write — see `membership-access.ts`.
+       * That one rule replaces three this handler used to need, each of which
+       * had once been wrong:
+       *
+       *  · it runs on EVERY change, not only when a title is named, so
+       *    reinstating somebody with the lane they already held re-grants that
+       *    lane's role (the old "title changed" test skipped it, and the member
+       *    came back active with no role);
+       *  · it counts ACTIVE memberships only, so correcting the recorded title
+       *    of somebody who has left hands them no login back;
+       *  · it takes a demoted title's role away even when the person staffs
+       *    another agency. The old prune ran only for a one-agency person, so a
+       *    two-agency Owner demoted here stayed an Owner on `user_role` — and
+       *    `requireRole`, `requirePortal`, the lane guards' door check and the
+       *    old all-roles fallback in `requirePermission` all read that row.
+       *
+       * DEACTIVATING HERE IS REMOVING, so it revokes exactly as the DELETE does:
+       * the same recompute, with this membership no longer active.
+       *
+       * A new title or a departure also withdraws any invitation still pending
+       * for them here — accepting one re-activates a removed member with THE
+       * INVITATION'S lane, which made an old Finance invite a way back up.
+       */
+      let memberRow: AgencyUserType | null;
+      if (Object.keys(changes).length === 0) {
+        memberRow = await this.agencyMemberRepository.getById(memberId);
+      } else {
+        const inviteEmail = changeWithdrawsInvites(target, parsed.data)
+          ? ((await this.userRepository.getUserById(target.userId))?.email ??
+            null)
+          : null;
+        try {
+          memberRow = await commitMembershipChange({
+            org: 'agency',
+            orgId: agencyId,
+            userId: target.userId,
+            actor,
+            withdrawInvitesFor: inviteEmail,
+            write: (tx) =>
+              this.agencyMemberRepository.update(
+                memberId,
+                { ...changes, updatedBy: actor },
+                tx,
+              ),
+          });
+        } catch (error) {
+          // Rolled back whole, so the member is exactly as they were — say so.
+          logger.error('[AgencyController.updateMember] Rolled back:', error);
+          return res.status(500).json({
+            success: false,
+            message: MEMBERSHIP_CHANGE_NOT_SAVED,
+            data: null,
+          });
+        }
+      }
       if (!memberRow) {
         return res
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-
-      /**
-       * DEACTIVATING HERE IS REMOVING, so it must revoke the same way.
-       *
-       * `status` on this endpoint is free text and an owner's to set — the route
-       * file says so — and setting it to anything but 'active' takes the member
-       * out of the agency exactly as `removeMember` does. Revoking only on the
-       * DELETE would have left the identical hole one route down: the
-       * `user_role` row surviving, so a deactivated operator still clears
-       * `requireRole('agency')` and stays a signed-in agency account.
-       */
 
       /*
        * ⚠️ ONE CALL — activating is three writes that must happen together: the
@@ -1652,7 +1624,9 @@ export class AgencyControllerClass {
        * one had already forgotten the id; `activateOrgMembership` carries the
        * full account of why they are now inseparable.
        *
-       * The status write above set the row; this settles what that MEANS.
+       * AFTER the commit, deliberately: it writes through its own connection,
+       * and inside the transaction it would queue behind the very row the
+       * transaction has locked, waiting for a commit that waits for it.
        */
       if (parsed.data.status === 'active') {
         await activateOrgMembership({
@@ -1663,9 +1637,6 @@ export class AgencyControllerClass {
           actor,
           current: memberRow,
         });
-      }
-      if (parsed.data.status != null && parsed.data.status !== 'active') {
-        await this.revokeAgencyPortalRoleIfLastMembership(target.userId);
       }
 
       const member =
@@ -1683,43 +1654,15 @@ export class AgencyControllerClass {
     }
   }
 
-  /**
-   * Revoke the agency portal role once the user's LAST active membership goes.
-   *
-   * `remove()` and a `status` write on `updateMember` both only flip
-   * `agency_user.status`; the `user_role` row survives, and
-   * `requireRole('agency')` reads that row. Leaving it behind meant an operator
-   * who had just been removed still cleared the coarse role gate — and, before
-   * the matching fix in `resolveOrgScope`, still resolved this agency's FULL
-   * scope through the very membership that was revoked.
-   *
-   * Conditional on it being the LAST one, because `user_role` is a global
-   * (user, role) pair with no agency on it: someone who staffs two agencies
-   * holds ONE agency role covering both, so revoking it unconditionally would
-   * evict them from the agency that did not remove them. While any active
-   * membership remains the role is still earned, and `resolveOrgScope` confines
-   * them to the agencies they are still in.
-   *
-   * Shared by both callers on purpose. Two copies of a revocation rule is how
-   * one of them gets missed — which is precisely what happened when this lived
-   * inline in `removeMember` and `updateMember` could deactivate without it.
+  /*
+   * `revokeAgencyPortalRoleIfLastMembership` WAS HERE (28 Sep 2026). It took the
+   * agency roles away only when the LAST active membership went, because one
+   * `user_role` row was assumed to cover every agency a person staffs. That was
+   * right about eviction and wrong about titles: a two-agency Owner removed at
+   * one kept the Owner row for the other. Both callers now recompute the whole
+   * set from the lanes still active (`commitMembershipChange`), which revokes
+   * on the last membership and corrects the title on every other one.
    */
-  private async revokeAgencyPortalRoleIfLastMembership(
-    userId: string,
-  ): Promise<void> {
-    const stillActive = (
-      await this.agencyMemberRepository.listByUser(userId)
-    ).some((m) => m.status === 'active');
-    if (stillActive) return;
-    const portal = await portalRepository.getPortalByCode('agency');
-    if (!portal) return;
-    const held = await this.userRoleRepository.getUserRoles(userId);
-    for (const r of held) {
-      if (r.portalId === portal.id) {
-        await this.userRoleRepository.removeRoleFromUser(userId, r.id);
-      }
-    }
-  }
 
   async removeMember(req: Request, res: Response) {
     try {
@@ -1770,17 +1713,34 @@ export class AgencyControllerClass {
         target.status,
         target.firstActivatedAt,
       );
-      const removed = await this.agencyMemberRepository.remove(
-        memberId,
-        getActor(req),
-        nextStatus,
-      );
-      if (!removed)
-        return res
-          .status(404)
-          .json({ success: false, message: Error.NOT_FOUND, data: null });
-
-      await this.revokeAgencyPortalRoleIfLastMembership(target.userId);
+      /*
+       * The status, the portal roles and the pending invitations in ONE
+       * transaction — see `updateMember`. `remove()` answers false on a failed
+       * write, and that used to read as 404 while the roles were left alone.
+       */
+      const actor = getActor(req);
+      const inviteEmail = changeWithdrawsInvites(target)
+        ? ((await this.userRepository.getUserById(target.userId))?.email ??
+          null)
+        : null;
+      try {
+        await commitMembershipChange({
+          org: 'agency',
+          orgId: agencyId,
+          userId: target.userId,
+          actor,
+          withdrawInvitesFor: inviteEmail,
+          write: (tx) =>
+            this.agencyMemberRepository.remove(memberId, actor, nextStatus, tx),
+        });
+      } catch (error) {
+        logger.error('[AgencyController.removeMember] Rolled back:', error);
+        return res.status(500).json({
+          success: false,
+          message: MEMBERSHIP_CHANGE_NOT_SAVED,
+          data: null,
+        });
+      }
 
       res
         .status(200)

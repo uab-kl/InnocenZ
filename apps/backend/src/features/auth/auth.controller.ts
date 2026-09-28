@@ -5,6 +5,12 @@ import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { Error } from '@/error/index.js';
 import { isTokenBeforeCutoff } from './session-cutoff.js';
 import { safeErrorFields } from './query-error-redaction.js';
+import {
+  isClaimablePrStub,
+  isUnactivatedAccount,
+  mayResetPassword,
+  receiptProvesPhoneAlone,
+} from './account-activation.js';
 import { hashPassword, comparePassword } from '@/util/password.js';
 import { logger } from '@/util/logger.js';
 import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
@@ -61,6 +67,10 @@ import {
 import { db } from '@/db/index.js';
 import { SYSTEM_ACTOR } from '@/util/actor';
 import { sendPasswordResetEmail } from '@/features/mailing/mailing.repository.js';
+import { isProduction } from '@/features/account-code/delivery.js';
+import { storedPhone, toWhatsAppDigits } from '@/features/account-code/phone.js';
+import type { UserType } from '@/features/user/user.model.js';
+import type { PhoneVerification } from './phone-verification.model.js';
 import { env } from '@/env.js';
 
 /** Reset-link lifetime. Keep the label in step with the number. */
@@ -383,6 +393,40 @@ export class AuthControllerClass {
   }
 
   /**
+   * An authenticated ADMIN creating another ADMIN — the one registration that
+   * may omit a phone (Fix First, 28 Sep 2026).
+   *
+   * The admin screen has no phone field, so it used to invent one
+   * (`'+admin-' + 12 hex`) to satisfy the schema. Stripped of its letters that
+   * read as a real Malaysian mobile, and every code for that admin went to it
+   * by WhatsApp and SMS. Mirrors `resolveRegistrationRoleId`'s admin branch
+   * exactly: an admin caller AND a `roleId` naming the admin role. Every other
+   * caller — a public PR, an agency or outlet sign-up, an admin creating a
+   * non-admin — must still send a phone, because for them it is the login.
+   */
+  private async isAdminCreatingAdmin(req: Request, roleId: string | undefined): Promise<boolean> {
+    if (!roleId) return false;
+    if (!(await this.callerIsAdmin(req))) return false;
+    // `getRoleById` answers null on a failed read, which refuses: safe side.
+    const role = await this.roleRepository.getRoleById(roleId);
+    return role?.roleName === portalRoleName.ADMIN;
+  }
+
+  /**
+   * The roster stub a PR's OWN sign-up with this phone may claim, or null.
+   *
+   * Only a never-activated account holding the `pr` role and nothing else
+   * (account-activation.ts). The role read is skipped for every activated
+   * account, so the ordinary "that number is already registered" path costs
+   * no extra query.
+   */
+  private async claimablePrStub(account: UserType | null): Promise<UserType | null> {
+    if (!account || !isUnactivatedAccount(account)) return null;
+    const roles = await this.authRepository.getRolesForUserIds([account.id]);
+    return isClaimablePrStub(account, roles.map((role) => role.roleName)) ? account : null;
+  }
+
+  /**
    * Decides which role a registration creates. The whole point of this method
    * is that a public caller never gets to name one.
    *
@@ -467,7 +511,8 @@ export class AuthControllerClass {
       personInCharge?: string;
       contactEmail?: string;
       email?: string;
-      phoneNum: string;
+      /** Always present on this path — `registerUser` requires it of an org sign-up. */
+      phoneNum?: string;
       packageId?: string;
     },
     actor: string,
@@ -482,7 +527,7 @@ export class AuthControllerClass {
     const country = body.country ?? null;
     const contactName = body.personInCharge ?? null;
     const contactEmail = body.contactEmail ?? body.email ?? null;
-    const contactPhone = body.phoneNum;
+    const contactPhone = body.phoneNum ?? null;
     const accountType = body.accountType === 'agency' ? 'agency' : 'outlet';
 
     /**
@@ -709,10 +754,15 @@ export class AuthControllerClass {
 
       const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
       const conflicts: { field: 'phone' | 'idNo'; message: string }[] = [];
+      // A never-activated roster stub on this number is the account this
+      // sign-up will CLAIM (registerUser), not a conflict — and neither is the
+      // IC the agency typed onto it.
+      let claimable: UserType | null = null;
 
       if (phoneNum.length >= 8) {
         const existingPhone = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
-        if (existingPhone) {
+        claimable = await this.claimablePrStub(existingPhone);
+        if (existingPhone && !claimable) {
           conflicts.push({
             field: 'phone',
             message: 'That phone number already has an account. Sign in, or use another number.',
@@ -727,7 +777,7 @@ export class AuthControllerClass {
         const existingId = await this.userProfileRepository.findByNormalizedIdNo(
           parsed.data.idNo,
         );
-        if (existingId) {
+        if (existingId && existingId.userId !== claimable?.id) {
           conflicts.push({
             field: 'idNo',
             message: 'That ID number already has an account. Sign in, or check the number.',
@@ -763,10 +813,22 @@ export class AuthControllerClass {
       logger.info('[AuthController.register] Register request received');
       const parsedBody = RegisterSchema.parse(req.body);
 
+      // The phone is the login for everybody but an admin the admin screen
+      // creates — see isAdminCreatingAdmin. Refused before any lookup.
+      if (!parsedBody.phoneNum && !(await this.isAdminCreatingAdmin(req, parsedBody.roleId))) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone number is required',
+          data: null,
+        });
+      }
+
       // Public PR sign-up must present a verified WhatsApp OTP receipt. Admins
       // creating accounts (or outlet/agency web signup) are not on this path.
       const isPublicPr =
         parsedBody.accountType === 'pr' && !(await this.callerIsAdmin(req));
+      // Kept for the stub claim below, which needs to know where the code went.
+      let signupReceipt: PhoneVerification | null = null;
       if (isPublicPr) {
         if (!parsedBody.password) {
           return res.status(400).json({
@@ -785,7 +847,7 @@ export class AuthControllerClass {
         const proof = await this.phoneVerificationRepository.getById(
           parsedBody.verificationId,
         );
-        const phoneDigits = normalizePhoneDigits(parsedBody.phoneNum);
+        const phoneDigits = normalizePhoneDigits(parsedBody.phoneNum ?? '');
         if (!isVerifiedOtpUsable(proof, phoneDigits, 'signup')) {
           return res.status(400).json({
             success: false,
@@ -793,6 +855,7 @@ export class AuthControllerClass {
             data: null,
           });
         }
+        signupReceipt = proof;
         // Validate before createUserWithRole — an empty profile after a 400 would
         // leave a half-registered account with a consumed OTP receipt.
         const hasProfileDetails = Boolean(
@@ -822,9 +885,38 @@ export class AuthControllerClass {
       // USER_ALREADY_EXISTS on the last step of a 6-step form, for a value typed
       // back on step 1 — leaving no way to tell which field to change.
 
+      const existingPhone = parsedBody.phoneNum
+        ? await this.userRepository.getUserByLoginMethod('phone', parsedBody.phoneNum)
+        : null;
+      /*
+       * 🔴 A ROSTER STUB IS CLAIMED HERE — AND NOWHERE ELSE (Fix First,
+       * 28 Sep 2026; account-activation.ts).
+       *
+       * An agency adding a PR by phone creates an account with no password
+       * (`POST /pr`). That PR used to be told "already registered — sign in"
+       * here, could not sign in, and could only get in through Forgot password
+       * — a reset to contacts the AGENCY typed and may still change, which is
+       * why no reset activates an account any more. Instead, a public PR
+       * sign-up whose verified receipt proves the stub's own number takes the
+       * stub over: her password, her username, her email, the roster
+       * membership the agency already approved.
+       *
+       * Three conditions, all required: a PUBLIC PR sign-up (never an admin or
+       * an organisation form); a receipt whose code went to the PHONE ALONE
+       * (a code also emailed to a typed inbox proves that inbox instead); and a
+       * stub that is never-activated and PR-only. Anything else on this number
+       * is still the 409 below.
+       */
+      const claimTarget =
+        isPublicPr && signupReceipt && receiptProvesPhoneAlone(signupReceipt.channel)
+          ? await this.claimablePrStub(existingPhone)
+          : null;
+
       if (parsedBody.email) {
         const existingEmail = await this.userRepository.getUserByLoginMethod('email', parsedBody.email);
-        if (existingEmail) {
+        // The stub being claimed is not "somebody else" — its own address is the
+        // one this sign-up replaces.
+        if (existingEmail && existingEmail.id !== claimTarget?.id) {
           return res.status(409).json({
             success: false,
             message: `That email (${parsedBody.email}) is already registered. Use another one, or leave the email blank.`,
@@ -833,8 +925,7 @@ export class AuthControllerClass {
         }
       }
 
-      const existingPhone = await this.userRepository.getUserByLoginMethod('phone', parsedBody.phoneNum);
-      if (existingPhone) {
+      if (existingPhone && !claimTarget) {
         return res.status(409).json({
           success: false,
           message: `That phone number (${parsedBody.phoneNum}) is already registered. Sign in instead, or use another number.`,
@@ -844,7 +935,8 @@ export class AuthControllerClass {
 
       if (parsedBody.idNo) {
         const existingId = await this.userProfileRepository.findByNormalizedIdNo(parsedBody.idNo);
-        if (existingId) {
+        // Nor is the IC the agency typed onto the stub she is claiming.
+        if (existingId && existingId.userId !== claimTarget?.id) {
           return res.status(409).json({
             success: false,
             message: 'An account with this ID number already exists',
@@ -893,24 +985,59 @@ export class AuthControllerClass {
 
       const passwordHash = parsedBody.password ? await hashPassword(parsedBody.password) : null;
       // Prefer the caller's user id (admin creating an account). Public self-register → system.
-      const actor = req.user?.id ?? SYSTEM_ACTOR;
+      // A claim is the person acting on her OWN account, proven by her phone.
+      const actor = claimTarget?.id ?? req.user?.id ?? SYSTEM_ACTOR;
+      // Stored LOWERCASE and trimmed — every email writer does, so the unique
+      // index and the case-insensitive sign-in agree about which addresses are
+      // "the same".
+      const email = parsedBody.email ? parsedBody.email.trim().toLowerCase() : null;
 
-      let user = await this.authRepository.createUserWithRole(
-        {
-          // Stored LOWERCASE and trimmed — every email writer does, so the
-          // unique index and the case-insensitive sign-in agree about which
-          // addresses are "the same".
-          email: parsedBody.email ? parsedBody.email.trim().toLowerCase() : null,
-          phoneNum: parsedBody.phoneNum,
-          username: parsedBody.username,
+      let user: UserType;
+      if (claimTarget && passwordHash) {
+        // Public PR sign-up always carries a password (checked above), so this
+        // is every claim; the `passwordHash` term only tells the compiler.
+        const provenDigits = toWhatsAppDigits(parsedBody.phoneNum);
+        const claimed = await this.authRepository.claimUnactivatedAccount({
+          userId: claimTarget.id,
           passwordHash,
-          status: 'active',
-          profileImage: null,
-          createdBy: actor,
-          updatedBy: actor,
-        },
-        resolved.roleId,
-      );
+          username: parsedBody.username,
+          // Hers or none — never the address the agency typed. See the
+          // repository method for why leaving it would keep a reset door open.
+          email,
+          // The number she just proved, in the stored spelling.
+          phoneNum: provenDigits
+            ? storedPhone(provenDigits)
+            : (claimTarget.phoneNum ?? parsedBody.phoneNum ?? ''),
+          actor,
+        });
+        if (!claimed) {
+          // Claimed, activated or disabled since it was read: a taken number now.
+          return res.status(409).json({
+            success: false,
+            message: `That phone number (${parsedBody.phoneNum}) is already registered. Sign in instead, or use another number.`,
+            data: null,
+          });
+        }
+        user = claimed;
+        logger.info('[AuthController.register] PR sign-up claimed a roster account', {
+          userId: claimed.id,
+        });
+      } else {
+        user = await this.authRepository.createUserWithRole(
+          {
+            email,
+            // Absent only for an admin creating an admin (checked at the top).
+            phoneNum: parsedBody.phoneNum ?? null,
+            username: parsedBody.username,
+            passwordHash,
+            status: 'active',
+            profileImage: null,
+            createdBy: actor,
+            updatedBy: actor,
+          },
+          resolved.roleId,
+        );
+      }
 
       // The folder cache was primed at boot, so this brand-new user is not in
       // it yet — without this their avatar and ID docs would be written to a
@@ -1203,8 +1330,17 @@ export class AuthControllerClass {
       };
 
       const user = await this.userRepository.getUserByLoginMethod('email', email);
-      if (!user || user.status.toLowerCase() !== 'active') {
-        logger.info('[AuthController.forgotPassword] No active account for that email');
+      /*
+       * An account with NO PASSWORD gets the same answer as an unknown address,
+       * at the same point — before any token is written or mail sent — so
+       * neither the body nor the delay tells them apart. A reset replaces a
+       * password; it never creates the first one (account-activation.ts): a
+       * roster stub's email was typed by the agency that created it, which may
+       * still change it until the PR claims the account by signing up with her
+       * phone.
+       */
+      if (!mayResetPassword(user)) {
+        logger.info('[AuthController.forgotPassword] No resettable account for that email');
         return res.status(200).json(neutral);
       }
 
@@ -1226,16 +1362,34 @@ export class AuthControllerClass {
           expiryLabel: RESET_TOKEN_TTL_LABEL,
         });
         if (!sent) {
-          // SMTP is not configured. The link is deliberately NOT returned to
-          // the caller — log it so a dev can still finish the flow locally.
-          logger.warn(
-            '[AuthController.forgotPassword] Email not configured — reset link only logged:',
-            resetPasswordLink,
-          );
+          /*
+           * SMTP is not configured. The link is deliberately NOT returned to
+           * the caller — and in PRODUCTION it is not logged either: it carries
+           * the raw token, so the line was a live takeover of this account for
+           * the next hour for anyone who can read the logs. Production records
+           * only WHO a link was skipped for. Outside production the link is
+           * still logged so a developer can finish the flow locally — the same
+           * split `deliverCode` applies to one-time codes.
+           */
+          if (isProduction()) {
+            logger.warn(
+              '[AuthController.forgotPassword] Email not configured — reset link NOT delivered',
+              { userId: user.id },
+            );
+          } else {
+            logger.warn(
+              '[AuthController.forgotPassword] Email not configured — reset link logged for local dev only',
+              { userId: user.id, resetPasswordLink },
+            );
+          }
         }
       } catch (mailError) {
         // A dead mailbox must not tell the caller whether the account exists.
-        logger.error('[AuthController.forgotPassword] Could not send reset email:', mailError);
+        // Fields only: an SMTP refusal quotes the recipient address.
+        logger.error(
+          '[AuthController.forgotPassword] Could not send reset email:',
+          { userId: user.id, ...safeErrorFields(mailError) },
+        );
       }
 
       return res.status(200).json(neutral);
@@ -1690,12 +1844,33 @@ export class AuthControllerClass {
       const { token, password } = parseResult.data;
       const resetToken = await this.authRepository.getPasswordResetToken(token);
 
-      if (!resetToken || resetToken.expiresAt < new Date()) {
-        return res.status(400).json({
+      const invalidLink = () =>
+        res.status(400).json({
           success: false,
           message: 'Reset link is invalid or has expired.',
           data: null,
         });
+
+      if (!resetToken || resetToken.expiresAt < new Date()) {
+        return invalidLink();
+      }
+
+      /*
+       * RE-READ THE ACCOUNT BEFORE WRITING. The token was checked for existence
+       * and age only, so a link issued to an account that was disabled since —
+       * or to a password-less roster stub, before the stub rule shipped — still
+       * wrote a password. A reset replaces a password; it never creates the
+       * first one (account-activation.ts). Answered as an invalid link.
+       */
+      const account = await this.userRepository.getUserById(resetToken.userId);
+      if (!mayResetPassword(account)) {
+        // A null read may be a blip rather than a gone account, so the token is
+        // only spent when the account was actually read and refused.
+        if (account) await this.authRepository.deletePasswordResetToken(token);
+        logger.warn('[AuthController.resetPassword] Refused: account not resettable', {
+          userId: resetToken.userId,
+        });
+        return invalidLink();
       }
 
       const passwordHash = await hashPassword(password);
@@ -1749,7 +1924,20 @@ export class AuthControllerClass {
       }
 
       const user = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
-      if (!user || user.status.toLowerCase() !== 'active') {
+      /*
+       * ⚠️ NOT A WAY TO ACTIVATE AN ACCOUNT (Fix First, 28 Sep 2026). This path
+       * proves possession of the number, and it used to be the only door a
+       * roster stub (active, NO password) had — which is why it may not be one
+       * any more: the stub's number was typed by the agency that created it,
+       * and the agency may re-point it until the account is claimed. The
+       * decision recorded in account-activation.ts: PR SIGN-UP already verifies
+       * the phone by OTP, so a stub is claimed THERE (`registerUser`, with a
+       * code sent to the phone alone), and every reset — this one included —
+       * requires a password already on file. A stub is answered exactly as a
+       * number with no account. `send` never issues it a forgot_password code
+       * in the first place; this is the second lock.
+       */
+      if (!mayResetPassword(user)) {
         return res.status(400).json({
           success: false,
           message: 'No active account for this number',

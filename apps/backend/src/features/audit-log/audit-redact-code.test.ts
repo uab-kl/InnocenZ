@@ -50,3 +50,59 @@ describe('audit redaction of account codes', () => {
     }
   });
 });
+
+/**
+ * The three spellings found in the live table on 28 Sep 2026 — a plaintext
+ * `confirmPassword`, and MFA enrolments carrying `otpauthUrl` — plus the
+ * variants of each that a camelCase-only list would also have missed.
+ */
+describe('audit redaction of credential spellings', () => {
+  it('redacts the spellings that leaked', () => {
+    const body = {
+      confirmPassword: 'hunter22',
+      otpauthUrl: 'otpauth://totp/InnocenZ:admin?secret=JBSWY3DPEHPK3PXP',
+      secret: 'JBSWY3DPEHPK3PXP',
+      mfaCode: '654321',
+    };
+    const redacted = redactSensitive(body);
+    for (const key of Object.keys(body)) {
+      expect(redacted[key as keyof typeof body]).toBe('[REDACTED]');
+    }
+  });
+
+  it('is blind to case and separators', () => {
+    for (const key of ['refresh_token', 'ACCESS_TOKEN', 'otpauth_url', 'Confirm-Password', 'mfa_secret']) {
+      expect(isSensitiveAuditKey(key)).toBe(true);
+    }
+  });
+
+  it('catches any key ENDING in password, token or secret', () => {
+    for (const key of ['oldPassword', 'repeatPassword', 'resetToken', 'inviteToken', 'clientSecret']) {
+      expect(isSensitiveAuditKey(key)).toBe(true);
+    }
+  });
+
+  it('keeps fields that only mention a credential', () => {
+    for (const key of ['passwordChangedAt', 'tokenCount', 'secretaryName', 'email', 'status']) {
+      expect(isSensitiveAuditKey(key)).toBe(false);
+    }
+  });
+
+  it('keeps a boolean or null under a credential-shaped key', () => {
+    const row = { hasPassword: true, password: null, token: undefined };
+    expect(redactSensitive(row)).toEqual(row);
+  });
+
+  it('redacts nested values and whole objects under a credential key', () => {
+    const response = {
+      data: {
+        mfa: { secret: { base32: 'JBSWY3DP', otpauth_url: 'otpauth://…' } },
+        user: { email: 'x@y.my', resetToken: 'abc' },
+      },
+    };
+    const redacted = redactSensitive(response);
+    expect(redacted.data.mfa.secret).toBe('[REDACTED]');
+    expect(redacted.data.user.resetToken).toBe('[REDACTED]');
+    expect(redacted.data.user.email).toBe('x@y.my');
+  });
+});

@@ -10,11 +10,8 @@ export function requestLoggerMiddleware(
 
   res.on('finish', () => {
     const responseTime = Date.now() - startTime;
-    const clientIp =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      (req.headers['x-real-ip'] as string) ||
-      req.socket.remoteAddress ||
-      'unknown';
+    // `req.ip` honours `trust proxy` (main.ts); the raw header is client input.
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
 
     logger.info('HTTP Request', {
       method: req.method,

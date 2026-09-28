@@ -4,7 +4,7 @@ import axios from "axios";
 import { Check, Loader2, MailWarning } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/landing/BrandLogo";
-import { hasValidTokens } from "@/lib/auth/auth-storage";
+import { resumeSession } from "@/lib/auth/token-refresh";
 import { fetchProfile } from "@/lib/auth/use-profile";
 import { getClient, getPublicClient } from "@/lib/axios-v1";
 import {
@@ -129,13 +129,16 @@ function OrgMemberInvitePage() {
 
 	useEffect(() => {
 		let live = true;
-		if (!hasValidTokens()) {
-			setMyEmail(null);
-			return;
-		}
-		fetchProfile()
+		/*
+		 * `resumeSession`, not the access token's clock. Invitations are opened
+		 * from an email, often long after signing in, and past the token's 15
+		 * minutes the page told a signed-in invitee to sign in. It refreshes
+		 * first and answers false only when there is no session to resume.
+		 */
+		resumeSession()
+			.then((alive) => (alive ? fetchProfile() : null))
 			.then((p) => {
-				if (live) setMyEmail(p.email?.trim().toLowerCase() || null);
+				if (live) setMyEmail(p?.email?.trim().toLowerCase() || null);
 			})
 			// A failed profile read is not "signed out" in any meaningful sense,
 			// but it is indistinguishable from here, and the signed-out branch is

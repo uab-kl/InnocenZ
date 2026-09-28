@@ -96,6 +96,30 @@ export async function fetchMemberSubscriptions(
 	};
 }
 
+export interface CancelMemberSubscriptionResponse {
+	success: boolean;
+	/** The server's own sentence — shown as-is, success or refusal. */
+	message: string;
+	data: MemberSubscription;
+}
+
+/**
+ * End a subscription row today (admin only). The server refuses an
+ * organisation's ONLY live plan (409), a row that has already ended (409), and
+ * lets through a row whose organisation does not exist — saying so in
+ * `message`. A refusal arrives as an axios error carrying the same shape.
+ */
+export async function cancelMemberSubscription(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<CancelMemberSubscriptionResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<CancelMemberSubscriptionResponse>(
+		`/member-subscription/${id}/cancel`,
+	);
+	return response.data;
+}
+
 export interface MemberSubscriptionSummaryPoint {
 	period: string;
 	outletRevenue: number;

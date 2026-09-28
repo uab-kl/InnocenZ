@@ -1,15 +1,24 @@
 /**
  * Session boot screen — same brand atmosphere as Login, not a bare spinner.
+ *
+ * With `offline` it is also where a SAVED sign-in waits when it could not be
+ * confirmed (no connection, server down). She is still signed in, so this says
+ * so and offers Retry — plus Sign out, the one way to leave on purpose.
  */
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { useLocale } from '../i18n';
+import { IzButton } from './ui';
 
 const LOGO = require('../../assets/images/innocenz-logo.png');
 
-export function BootSplash() {
+type BootSplashProps = {
+  offline?: { onRetry: () => void; onSignOut: () => void };
+};
+
+export function BootSplash({ offline }: BootSplashProps) {
   const { t } = useLocale();
   const enter = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
@@ -79,7 +88,7 @@ export function BootSplash() {
   });
 
   return (
-    <View style={styles.screen} accessibilityLabel={t.common.loading}>
+    <View style={styles.screen} accessibilityLabel={offline ? undefined : t.common.loading}>
       <View style={styles.atmosphere} pointerEvents="none">
         <View style={[styles.orb, styles.orbTop]} />
         <View style={[styles.orb, styles.orbGold]} />
@@ -103,11 +112,22 @@ export function BootSplash() {
         </View>
 
         <Text style={styles.wordmark}>InnocenZ</Text>
-        <Text style={styles.caption}>{t.common.loadingSession}</Text>
+        <Text style={styles.caption}>
+          {offline ? t.common.sessionOffline : t.common.loadingSession}
+        </Text>
 
-        <View style={styles.track}>
-          <Animated.View style={[styles.fill, { width: barWidth, left: barLeft }]} />
-        </View>
+        {offline ? (
+          <View style={styles.actions}>
+            <IzButton label={t.common.retry} onPress={offline.onRetry} />
+            <Pressable onPress={offline.onSignOut} hitSlop={10} style={styles.signOut}>
+              <Text style={styles.signOutText}>{t.profile.signOut}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.track}>
+            <Animated.View style={[styles.fill, { width: barWidth, left: barLeft }]} />
+          </View>
+        )}
       </Animated.View>
     </View>
   );
@@ -210,5 +230,18 @@ const styles = StyleSheet.create({
     bottom: 0,
     borderRadius: 2,
     backgroundColor: C.violet,
+  },
+  actions: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  signOut: {
+    marginTop: 18,
+    paddingVertical: 8,
+  },
+  signOutText: {
+    ...font(),
+    fontSize: 15,
+    color: C.prMuted,
   },
 });

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { paymentVoucherController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
+import { requirePermission } from '@/middlewares/require-permission.js';
 import { agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
@@ -93,7 +94,12 @@ router.post(
 // decision with it. Stated inline so moving the route cannot lose it again.
 router.post(
   '/:id/export-ticket',
+  // The door stays: the portal-less `pr` role holds `payment_voucher:read`, so
+  // the permission alone would re-admit every PR token to this route. The
+  // permission is the LANE, read off the membership at the acting agency, so a
+  // demoted or removed member is refused even if an old role row survives.
   requireRole('admin', 'agency'),
+  requirePermission('payment_voucher', 'read'),
   paymentVoucherController.createVoucherExportTicket.bind(
     paymentVoucherController,
   ),

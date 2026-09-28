@@ -499,7 +499,8 @@ export function SecurityScreen() {
      * with it would collect a 401 under a password that DID change.
      */
     const accessToken = issued?.accessToken ?? null;
-    if (accessToken) adoptToken(accessToken);
+    // The refresh token too: the cutoff killed the old one as well.
+    if (accessToken) adoptToken(accessToken, issued?.refreshToken ?? null);
     resetPasswordFlow();
     clearTypedPasswords();
     setBusy(false);
@@ -668,7 +669,8 @@ export function SecurityScreen() {
      * that SUCCEEDED.
      */
     const accessToken = result?.accessToken ?? null;
-    if (accessToken) adoptToken(accessToken);
+    // The refresh token too: the cutoff killed the old one as well.
+    if (accessToken) adoptToken(accessToken, result?.refreshToken ?? null);
     resetContactFlow();
     setPhoneNumber('');
     setEmailInput('');

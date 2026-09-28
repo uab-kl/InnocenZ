@@ -45,6 +45,9 @@ COPY --from=builder --chown=backend:nodejs /deploy .
 
 USER backend
 EXPOSE 7780
+# Probes the port main.ts actually listens on — PORT, else BACKEND_PORT (7777).
+# It probed PORT || 7780, so with the documented BACKEND_PORT=7777 the container
+# reported itself unhealthy while serving normally.
 HEALTHCHECK --interval=30s --timeout=30s --start-period=30s --retries=3 \
-  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 7780) + '/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://localhost:' + (process.env.PORT || process.env.BACKEND_PORT || 7777) + '/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "dist/main.js"]

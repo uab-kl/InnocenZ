@@ -11,6 +11,7 @@ import {
 } from '@/composition-root.js';
 import { notifyMany } from '@/features/notification/notify.js';
 import { applyPlanChangeToLedger } from '@/features/admin-request/apply-plan-change.js';
+import { PlanChangeRefusedError } from '@/features/admin-request/plan-change-rules.js';
 import {
   agencyWeeklyPvCount,
   resolveActivePlanLimit,
@@ -305,45 +306,69 @@ async function runAgencyTier(): Promise<void> {
       continue;
     }
 
-    // Filed as the same 'direct' admin_request an agency switch has always
-    // produced, so the move appears on the admin's Plan Change page with its
-    // reason instead of a plan silently changing overnight.
-    const request = await adminRequestRepository.create({
-      type: 'plan_change',
-      subscriberType: 'agency',
-      subscriberId: row.subscriberId,
-      subscriberName: row.subscriberName,
-      currentPlanId: row.subscriptionId ?? null,
-      requestedPlanId: banded.id,
-      status: 'direct',
-      message: `${issued} PV issued in ${weekStart}..${weekEnd} — tier moved from ${row.planName} to ${banded.name} by the weekly volume rule.`,
-      createdBy: SYSTEM_ACTOR,
-      updatedBy: SYSTEM_ACTOR,
-    });
-
-    await applyPlanChangeToLedger({
-      memberSubscriptionRepository,
-      subscriptionRepository,
-      // The week opens at 03:00 and this job moves the tier at 03:30: the
-      // week's invoice already exists, unpaid, at the old tier. Pricing the
-      // switch re-prices it to the tier the PVs actually put the agency on.
-      subscriptionInvoiceRepository,
-      record: {
-        id: request?.id ?? 'agency-tier-job',
-        subscriberType: 'agency',
-        subscriberId: row.subscriberId,
-        subscriberName: row.subscriberName,
-        requestedPlanId: banded.id,
-      },
-      actor: SYSTEM_ACTOR,
-    });
+    try {
+      await applyPlanChangeToLedger({
+        memberSubscriptionRepository,
+        subscriptionRepository,
+        // The week opens at 03:00 and this job moves the tier at 03:30: the
+        // week's invoice already exists, unpaid, at the old tier. Pricing the
+        // switch re-prices it to the tier the PVs actually put the agency on.
+        subscriptionInvoiceRepository,
+        record: {
+          subscriberType: 'agency',
+          subscriberId: row.subscriberId,
+          subscriberName: row.subscriberName,
+          requestedPlanId: banded.id,
+        },
+        actor: SYSTEM_ACTOR,
+        // Filed as the same 'direct' admin_request an agency switch has always
+        // produced, so the move appears on the admin's Plan Change page with
+        // its reason instead of a plan silently changing overnight — and filed
+        // INSIDE the switch's transaction, so a move that is refused or fails
+        // leaves no record claiming it happened.
+        inTransaction: async (tx) => {
+          const request = await adminRequestRepository.create(
+            {
+              type: 'plan_change',
+              subscriberType: 'agency',
+              subscriberId: row.subscriberId,
+              subscriberName: row.subscriberName,
+              currentPlanId: row.subscriptionId ?? null,
+              requestedPlanId: banded.id,
+              status: 'direct',
+              message: `${issued} PV issued in ${weekStart}..${weekEnd} — tier moved from ${row.planName} to ${banded.name} by the weekly volume rule.`,
+              createdBy: SYSTEM_ACTOR,
+              updatedBy: SYSTEM_ACTOR,
+            },
+            tx,
+          );
+          if (!request) throw new Error('could not file the Plan Change record');
+        },
+      });
+    } catch (error) {
+      // applyPlanChangeToLedger REFUSES now instead of logging and carrying on
+      // (an agency id that is no registered agency, a retired plan). One
+      // agency's refusal or failure must not cost the next agency its
+      // re-pricing, and no "now on …" statement may go out for a move that did
+      // not land — so it is logged and the loop moves on.
+      if (error instanceof PlanChangeRefusedError) {
+        logger.warn(
+          `[agency-tier] ${row.subscriberName}: not moved to ${banded.name} — ${error.message}`,
+        );
+      } else {
+        logger.error(
+          `[agency-tier] ${row.subscriberName}: move to ${banded.name} failed; left on ${row.planName}:`,
+          error,
+        );
+      }
+      continue;
+    }
     moved += 1;
     logger.info(
       `[agency-tier] ${row.subscriberName}: ${issued} PV -> ${banded.name} (was ${row.planName})`,
     );
-    // Sent AFTER the ledger write, so a statement can never announce a move
-    // that did not land. applyPlanChangeToLedger swallows its own failures by
-    // design, which is exactly why the order matters rather than the result.
+    // Sent AFTER the ledger write, and only when it landed: the catch above
+    // skips this for a move that was refused or rolled back.
     await sendStatement({
       subscriberId: row.subscriberId,
       subscriberName: row.subscriberName,

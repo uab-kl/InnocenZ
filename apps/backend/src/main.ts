@@ -126,13 +126,33 @@ const corsOptions: cors.CorsOptions = {
  * rate-limit bucket per request — which is why the narrow forms are documented
  * first in env.ts.
  */
-if (env.TRUST_PROXY) {
-  const raw = env.TRUST_PROXY.trim();
-  const hops = Number(raw);
+/*
+ * ⚠️ PRODUCTION DEFAULTS TO ONE HOP (28 Sep 2026). Neither deploy env example
+ * carried the variable, so every deployed backend ran with it unset — behind
+ * Caddy (tools/deploy/docker-compose.yml) or the host proxy on staging — and
+ * every IP-keyed limiter held ONE bucket for the whole platform: one busy
+ * minute of logins anywhere locked everyone out. Every documented deployment
+ * has exactly one proxy in front, so production now trusts one hop unless told
+ * otherwise; `TRUST_PROXY=false` (or `0`) opts out for a box that is reached
+ * directly. Development keeps the old default of trusting nothing.
+ */
+const trustProxyRaw =
+  env.TRUST_PROXY?.trim() || (env.NODE_ENV === 'production' ? '1' : '');
+if (trustProxyRaw) {
+  const hops = Number(trustProxyRaw);
   const setting: boolean | number | string =
-    raw === 'true' ? true : Number.isInteger(hops) && raw !== '' ? hops : raw;
+    trustProxyRaw === 'true'
+      ? true
+      : trustProxyRaw === 'false'
+        ? false
+        : Number.isInteger(hops)
+          ? hops
+          : trustProxyRaw;
   app.set('trust proxy', setting);
-  logger.info(`[startup] trust proxy = ${String(setting)}`);
+  logger.info(
+    `[startup] trust proxy = ${String(setting)}` +
+      (env.TRUST_PROXY ? '' : ' (production default — set TRUST_PROXY to override)'),
+  );
 }
 
 app.use(cors(corsOptions));
@@ -171,6 +191,13 @@ app.use(
   }),
 );
 app.use(requestLoggerMiddleware);
+// ID-card photos saved to DISK (the fallback when R2 is not configured) are not
+// public files: this static mount would otherwise serve them to anyone holding
+// `/img/users/ic-docs/<userId>-front.jpg`, which is guessable from a user id.
+// Refused before the static handler; in R2 they are served as signed links.
+app.use(['/img/users/ic-docs', '/img/users/id-docs'], (_req, res) => {
+  res.status(404).end();
+});
 app.use('/img', express.static(path.join(process.cwd(), 'public', 'img')));
 // Self-log proof photos ride in the JSON body as base64 data URLs (up to 6 ×
 // ~1.5 MB per the payment-voucher schema), so the default 100 kb limit is far

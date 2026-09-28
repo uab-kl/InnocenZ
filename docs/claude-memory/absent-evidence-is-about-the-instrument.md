@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: aed993f6-53d2-4695-9554-c1646d82b25c
-  modified: 2026-08-11T08:32:49.164Z
+  modified: 2026-09-07T04:28:39.938Z
 ---
 
 **When something comes back empty, the first question is whether the instrument could have found it.**
@@ -35,6 +35,15 @@ Four instances on 3–4 Aug 2026, and two were published to the audit page as fa
   security-rule spec lived in `src/util`, and `passWithNoTests: true` turned "found no tests" into a
   green run. **A green suite that ran zero of your tests is the worst possible signal for a security
   rule.**
+- 🔴 **`2>/dev/null` on the very command whose failure WAS the experiment (7 Sep 2026).** To show two
+  mobile test failures were pre-existing I ran `git stash push <paths> 2>/dev/null`, then re-ran the
+  suite. The push had **refused** — untracked paths were mixed into the list — so the "without my
+  changes" run still contained every change, and its identical result read as proof. **Silencing
+  stderr on a setup step turns "the experiment never ran" into "the experiment agreed with me."**
+  It then got expensive: the follow-up `git stash pop` popped an unrelated OLD stash and left four
+  files conflicted (`UU`), two belonging to a concurrent session in the same worktree. Recovery
+  needed `git restore --source=HEAD` — but only after PROVING those files were clean at HEAD, which
+  is what made it a recovery rather than a second act of damage.
 
 **Why:** every one of these produced *confident* output. A grep with no hits, a file with no `fetch`,
 a SKIP line and a passing suite all look like answers, so they get written down as findings and — in
@@ -53,5 +62,10 @@ measuring nothing.
   against known data.
 - After adding a test in a new directory, **confirm the runner actually picked it up** (file count,
   not just a green tick).
+- **Never silence stderr on a setup step.** In an A/B run the setup command IS the experiment; if it
+  can fail, read its exit code and assert the state actually changed (`git stash list`, a file's
+  absence) before trusting the comparison. When the cheap alternative exists — here, `git status`
+  showing which files were touched, plus the failing files importing none of them — prefer it to
+  mutating the tree at all, especially a tree a concurrent session shares.
 
 Related: [[confirm-before-asserting]] · [[green-signals-that-lie]] · [[audit-entries-are-leads]]

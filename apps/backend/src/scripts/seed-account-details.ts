@@ -3,11 +3,19 @@
  * every agency/outlet lane role (Owner, Finance, Ops Head, Director, Guarantor).
  *
  *   cd apps/backend
- *   npx tsx --tsconfig tsconfig.json src/scripts/seed-account-details.ts          # dry run
- *   npx tsx --tsconfig tsconfig.json src/scripts/seed-account-details.ts --apply  # write
+ *   npx tsx --tsconfig tsconfig.json src/scripts/seed-account-details.ts --i-know-this-is-a-test-db          # dry run
+ *   npx tsx --tsconfig tsconfig.json src/scripts/seed-account-details.ts --i-know-this-is-a-test-db --apply  # write
  *
- * Flags: --apply writes, --no-images skips the R2 uploads (much faster),
- *        --only=pr|web restricts the population.
+ * Flags: --i-know-this-is-a-test-db is REQUIRED (see rule 0), --apply writes,
+ *        --no-images skips the R2 uploads (much faster), --only=pr|web
+ *        restricts the population.
+ *
+ * ── Rule 0: it refuses to run anywhere but a test database ───────────────
+ *
+ * Everything this writes is SYNTHETIC. It exits before touching the database
+ * unless the acknowledgement flag is passed AND the target's name (POSTGRES_DB)
+ * carries a `test` token — `innocenz-test` passes, a production name does not,
+ * and the flag alone does not override that (scripts/test-database-guard.ts).
  *
  * ── The rules this obeys ──────────────────────────────────────────────────
  *
@@ -43,6 +51,17 @@
  *    membership is not touched at all: it belongs to `agency_pr`, which already
  *    covers every PR here.
  *
+ * 6. NEVER A SIGNATURE, NEVER A VERDICT (Fix First, 28 Sep 2026). This script
+ *    used to stamp generated stroke ink onto every blank
+ *    `user_profile.signature_ink` and to force `verification_status =
+ *    'verified'` on blank and draft profiles. Both are gone. `signature_ink`
+ *    pre-loads the one-tap sign button on a payment voucher, so a scribble
+ *    written here is one tap from being an attestation on a money document —
+ *    on 9 Sep 2026 it put synthetic ink on 18 accounts, real people among them.
+ *    The only writer of that column is the person's own
+ *    `PUT /user/me/signature`. And "verified" is an admin's decision about a
+ *    real document, not a fact a seed can supply.
+ *
  * Everything generated is SYNTHETIC and shaped for the innocenz-test database.
  */
 import 'dotenv/config';
@@ -61,6 +80,7 @@ import { profileImageObjectKey } from '@/util/profile-image';
 import { portfolioImageObjectKey } from '@/util/portfolio-image';
 import { primeUserFolders } from '@/util/user-folder';
 import { r2Configured, r2PutObject } from '@/util/r2';
+import { testDatabaseRefusal } from './test-database-guard';
 
 const ACTOR = 'seed-account-details';
 const APPLY = process.argv.includes('--apply');
@@ -613,41 +633,8 @@ function buildBank(rng: () => number, taken: Set<string>): { name: string; accou
   throw new Error('Could not mint a free bank account number');
 }
 
-/**
- * A drawn signature in the shape the product actually stores.
- *
- * `signature_ink` is NOT an image data-URL — it is `JSON.stringify` of
- * `{ w, h, strokes: [[[x, y], …]] }` (SaveMySignatureSchema in
- * schema/user-profile.schema.ts), which the PV PDF re-draws stroke by stroke.
- * Writing a PNG here would typecheck, store fine, and then fail at the one
- * moment it matters — rendering a payment voucher.
- */
-function buildSignatureInk(rng: () => number): string {
-  const w = 600;
-  const h = 200;
-  const strokeCount = intBetween(rng, 2, 3);
-  const strokes: Array<Array<[number, number]>> = [];
-
-  let cursorX = 40;
-  for (let s = 0; s < strokeCount; s += 1) {
-    const points: Array<[number, number]> = [];
-    const steps = intBetween(rng, 26, 44);
-    const amplitude = intBetween(rng, 22, 46);
-    const baseline = 110 + intBetween(rng, -12, 12);
-    const step = intBetween(rng, 9, 14);
-    for (let i = 0; i < steps; i += 1) {
-      const x = cursorX + i * step;
-      const y = baseline - Math.sin(i / 2.1 + s) * amplitude - (i / steps) * intBetween(rng, 0, 18);
-      points.push([
-        Math.round(Math.min(x, w - 10)),
-        Math.round(Math.max(12, Math.min(y, h - 12))),
-      ]);
-    }
-    cursorX = Math.min(points[points.length - 1][0] - intBetween(rng, 30, 90), w - 140);
-    strokes.push(points);
-  }
-  return JSON.stringify({ w, h, strokes });
-}
+// `buildSignatureInk` lived here. Removed with the write that used it — see
+// rule 6 in the header: a seed never writes `user_profile.signature_ink`.
 
 /** A synthetic MyKad face as a PNG buffer, so the admin sheet has a real image. */
 async function buildIdCardPng(input: {
@@ -771,6 +758,16 @@ type Plan = {
 };
 
 async function main() {
+  // Rule 0 — BEFORE the first query: an explicit flag AND a test database.
+  const refusal = testDatabaseRefusal({
+    argv: process.argv,
+    databaseName: process.env.POSTGRES_DB,
+  });
+  if (refusal) {
+    console.error(refusal);
+    process.exit(1);
+  }
+
   await primeUserFolders();
 
   const rows = await db
@@ -805,8 +802,8 @@ async function main() {
       idPhotoBack: UserProfileTable.idPhotoBack,
       bankName: UserProfileTable.bankName,
       bankAccountNo: UserProfileTable.bankAccountNo,
-      signatureInk: UserProfileTable.signatureInk,
-      verificationStatus: UserProfileTable.verificationStatus,
+      // `signatureInk` and `verificationStatus` are no longer read: this
+      // script writes neither (rule 6).
     })
     .from(UserTable)
     .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id));
@@ -1194,16 +1191,15 @@ async function main() {
       if (isBlank(row.comcardHipCm)) profilePatch.comcardHipCm = intBetween(rng, 84, 100);
     }
 
-    // ── payout + signature ──
+    // ── payout ──
     if (isBlank(row.bankName) || isBlank(row.bankAccountNo)) {
       const bank = buildBank(rng, takenBank);
       if (isBlank(row.bankName)) profilePatch.bankName = bank.name;
       if (isBlank(row.bankAccountNo)) profilePatch.bankAccountNo = bank.accountNo;
     }
-    if (isBlank(row.signatureInk)) profilePatch.signatureInk = buildSignatureInk(rng);
-    if (isBlank(row.verificationStatus) || row.verificationStatus === 'draft') {
-      profilePatch.verificationStatus = 'verified';
-    }
+    // NO signature and NO verification verdict — rule 6. Both used to be
+    // written here: generated ink on every blank `signature_ink`, and
+    // 'verified' forced onto blank and draft profiles.
 
     // ── ID document scans ──
     /**
@@ -1352,11 +1348,7 @@ async function main() {
     for (const note of plan.notes) console.log(`    note: ${note}`);
     if (!plan.hasProfileRow) console.log('    creates the missing user_profile row');
     for (const [key, value] of Object.entries(fields)) {
-      const shown = Array.isArray(value)
-        ? value.join(' / ')
-        : key === 'signatureInk'
-          ? `${String(value).slice(0, 38)}... (stroke JSON)`
-          : String(value);
+      const shown = Array.isArray(value) ? value.join(' / ') : String(value);
       console.log(`    ${key.padEnd(18)} = ${shown}`);
     }
     if (plan.images.length) {

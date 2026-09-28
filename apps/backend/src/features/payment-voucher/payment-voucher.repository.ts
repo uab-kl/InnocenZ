@@ -95,6 +95,21 @@ export class VoucherConflictError extends Error {
 }
 
 /**
+ * The voucher is counter-signed (or paid) and may not be deleted. Thrown by
+ * `remove` from INSIDE its transaction, after the row lock — the controller's
+ * own check reads before the lock, and a PR can sign in between.
+ */
+export class VoucherLockedError extends Error {
+  constructor(
+    voucherId: string,
+    readonly status: PaymentVoucherStatus,
+  ) {
+    super(`Voucher ${voucherId} is ${status} and cannot be deleted`);
+    this.name = 'VoucherLockedError';
+  }
+}
+
+/**
  * How a voucher SAYS WHOSE IT IS -- joined through the FK, never copied onto
  * the voucher row (one fact, one table).
  *
@@ -279,6 +294,12 @@ export class PaymentVoucherRepositoryClass {
     data: Partial<PaymentVoucherInsertType>,
     lines?: LineInput[],
     expectedUpdatedAt?: string,
+    /**
+     * The status the caller's gates judged. When the row has moved on since
+     * (the PR signed, another tab recorded payment), the write is refused
+     * rather than applied to a state nobody checked.
+     */
+    expectedStatus?: PaymentVoucherStatus,
   ): Promise<PaymentVoucherWithLines | null> {
     try {
       return await db.transaction(async (tx) => {
@@ -290,15 +311,20 @@ export class PaymentVoucherRepositoryClass {
         // destroy the PR's line and its proof photo with no error on either
         // side. Only enforced when the caller sent a token, so the scheduler
         // and every status-flip path are untouched.
-        if (expectedUpdatedAt !== undefined) {
+        if (expectedUpdatedAt !== undefined || expectedStatus !== undefined) {
           const [current] = await tx
-            .select({ updatedAt: PaymentVoucherTable.updatedAt })
+            .select({
+              updatedAt: PaymentVoucherTable.updatedAt,
+              status: PaymentVoucherTable.status,
+            })
             .from(PaymentVoucherTable)
             .where(eq(PaymentVoucherTable.id, id))
             .for('update');
           if (
             current &&
-            current.updatedAt.getTime() !== new Date(expectedUpdatedAt).getTime()
+            ((expectedUpdatedAt !== undefined &&
+              current.updatedAt.getTime() !== new Date(expectedUpdatedAt).getTime()) ||
+              (expectedStatus !== undefined && current.status !== expectedStatus))
           ) {
             throw new VoucherConflictError(id);
           }
@@ -606,6 +632,16 @@ export class PaymentVoucherRepositoryClass {
   async remove(id: string): Promise<boolean> {
     try {
       return await db.transaction(async (tx) => {
+        // Locked first, so the status judged is the status deleted.
+        const [current] = await tx
+          .select({ status: PaymentVoucherTable.status })
+          .from(PaymentVoucherTable)
+          .where(eq(PaymentVoucherTable.id, id))
+          .for('update');
+        if (!current) return false;
+        if (current.status === 'signed' || current.status === 'paid') {
+          throw new VoucherLockedError(id, current.status);
+        }
         // Un-charge the fees this voucher carried BEFORE the row goes. The FK
         // SET-NULLs cancel_fee_voucher_id but leaves cancel_fee_charged_at
         // stamped — and listUnchargedCancelFees filters on `charged_at IS
@@ -1867,6 +1903,123 @@ export class PaymentVoucherRepositoryClass {
       logger.error('[PaymentVoucherRepository.addLine] Error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Appends `line` unless the voucher already carries one `isSame` recognises —
+   * the look and the insert under ONE row lock, so two writers sealing the same
+   * shift at once (the server's own seal at check-out and an older phone's
+   * follow-up call, or a cut-loss release racing the PR's own check-out) cannot
+   * both find nothing and both insert. `addLine` checks nothing, and a
+   * check-then-`addLine` in the caller is exactly that race.
+   *
+   * Refuses with `VoucherConflictError` when the voucher has left its open
+   * states between the caller's lookup and the lock: appending to a SENT
+   * voucher changes a document the PR has already been asked to sign.
+   *
+   * `voidFinanceSignature`: when the insert lands on a voucher the agency has
+   * already signed, the signature comes off — it attested a total that just
+   * changed, and the send gate then holds the voucher until they sign again.
+   */
+  async addLineOnce(
+    voucherId: string,
+    line: LineInput,
+    isSame: (existing: PaymentVoucherLineType) => boolean,
+    options: { voidFinanceSignature?: boolean } = {},
+  ): Promise<{ line: PaymentVoucherLineType; created: boolean; signatureVoided: boolean }> {
+    try {
+      return await db.transaction(async (tx) => {
+        const [voucher] = await tx
+          .select({
+            status: PaymentVoucherTable.status,
+            financeHeadSignedAt: PaymentVoucherTable.financeHeadSignedAt,
+          })
+          .from(PaymentVoucherTable)
+          .where(eq(PaymentVoucherTable.id, voucherId))
+          .for('update');
+        if (
+          !voucher ||
+          !PaymentVoucherRepositoryClass.OPEN_WEEK_STATUSES.includes(voucher.status)
+        ) {
+          throw new VoucherConflictError(voucherId);
+        }
+        const existing = await this.getLines(voucherId, tx);
+        const same = existing.find(isSame);
+        if (same) return { line: same, created: false, signatureVoided: false };
+
+        await this.assertLinesAgreeWithShifts(tx, [line]);
+        const [inserted] = await tx
+          .insert(PaymentVoucherLineTable)
+          .values(prepareLine({ ...line, voucherId, sortOrder: existing.length }))
+          .returning();
+        await this.recomputeTotals(voucherId, tx);
+
+        const signatureVoided =
+          options.voidFinanceSignature === true && voucher.financeHeadSignedAt !== null;
+        if (signatureVoided) {
+          await tx
+            .update(PaymentVoucherTable)
+            .set({
+              financeHeadSignedAt: null,
+              financeHeadSignature: null,
+              financeHeadName: null,
+              financeHeadRole: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(PaymentVoucherTable.id, voucherId));
+        }
+        return { line: inserted, created: true, signatureVoided };
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.addLineOnce] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The PR's own lines dated inside `[fromDate, toDate]` and written at or after
+   * `since`, across every agency's voucher, each with the photos of the receipt
+   * it came from — what the check-out proof rule judges (`checkout-proof.ts`).
+   * Mirrors what the phone reads for the same gate: the week feed merges every
+   * agency, and a line inherits its receipt's picture.
+   */
+  async listLinesForProofCheck(params: {
+    prId: string;
+    userId?: string | null;
+    fromDate: string;
+    toDate: string;
+    since: Date;
+  }): Promise<
+    {
+      id: string;
+      ref: string | null;
+      component: PaymentVoucherLineType['component'];
+      proofPhotos: string[] | null;
+      receiptPhotos: string[] | null;
+    }[]
+  > {
+    return db
+      .select({
+        id: PaymentVoucherLineTable.id,
+        ref: PaymentVoucherLineTable.ref,
+        component: PaymentVoucherLineTable.component,
+        proofPhotos: PaymentVoucherLineTable.proofPhotos,
+        receiptPhotos: PaymentVoucherReceiptTable.proofPhotos,
+      })
+      .from(PaymentVoucherLineTable)
+      .innerJoin(PaymentVoucherTable, eq(PaymentVoucherTable.id, PaymentVoucherLineTable.voucherId))
+      .leftJoin(
+        PaymentVoucherReceiptTable,
+        eq(PaymentVoucherReceiptTable.id, PaymentVoucherLineTable.receiptId),
+      )
+      .where(
+        and(
+          this.ownershipOf(params.prId, params.userId),
+          gte(PaymentVoucherLineTable.lineDate, params.fromDate),
+          lte(PaymentVoucherLineTable.lineDate, params.toDate),
+          gte(PaymentVoucherLineTable.createdAt, params.since),
+        ),
+      );
   }
 
   /** Patches one line in place and recomputes its voucher totals. */

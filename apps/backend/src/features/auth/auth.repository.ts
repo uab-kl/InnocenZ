@@ -1,6 +1,6 @@
 import { db } from '@/db/index';
 import { ensurePersonCode } from '@/util/member-code';
-import { eq, inArray, and, SQL, or, ilike, asc, desc, sql } from 'drizzle-orm';
+import { eq, inArray, and, SQL, or, ilike, asc, desc, sql, isNull } from 'drizzle-orm';
 import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { logger } from '@/util/logger.js';
 import { UserInsertType, UserTable, UserType } from '@/features/user/user.model.js';
@@ -632,5 +632,64 @@ export class AuthRepositoryClass {
       throw redactQueryError(error);
     }
     return cutoff;
+  }
+
+  /**
+   * A PR CLAIMS THE ROSTER STUB AN AGENCY CREATED FOR HER — the one write that
+   * may give a never-activated account its FIRST password
+   * (features/auth/account-activation.ts; the caller is `registerUser`, after a
+   * phone-only OTP receipt for the stub's own number).
+   *
+   * ONE CONDITIONAL STATEMENT: `password_hash IS NULL AND status = 'active'` is
+   * in the WHERE, so the decision the controller read and this write cannot be
+   * split by a second sign-up racing on the same stub, or by an admin disabling
+   * it in between — 0 rows means "claimed, activated or disabled since it was
+   * read", and the caller answers as for a taken number.
+   *
+   * Every sign-in contact on the claimed account is the CLAIMANT's: the phone
+   * she just proved (stored canonically), and the email she typed — or none.
+   * The agency typed the stub's email, and leaving it would keep a reset
+   * channel the agency controls on an account that is no longer its to reach.
+   *
+   * Also stamps `sessions_valid_from` (nothing issued before the account had an
+   * owner may act as her) and clears a lockout earned by sign-in attempts on a
+   * password that never existed.
+   */
+  async claimUnactivatedAccount(input: {
+    userId: string;
+    passwordHash: string;
+    username: string;
+    email: string | null;
+    phoneNum: string;
+    actor: string;
+  }): Promise<UserType | null> {
+    const now = new Date();
+    try {
+      const [claimed] = await db
+        .update(UserTable)
+        .set({
+          passwordHash: input.passwordHash,
+          username: input.username,
+          email: input.email,
+          phoneNum: input.phoneNum,
+          sessionsValidFrom: floorToSecond(now),
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          updatedAt: now,
+          updatedBy: input.actor,
+        })
+        .where(
+          and(
+            eq(UserTable.id, input.userId),
+            isNull(UserTable.passwordHash),
+            sql`lower(${UserTable.status}) = 'active'`,
+          ),
+        )
+        .returning();
+      return claimed ?? null;
+    } catch (error) {
+      // The new hash is a bound value here too; see updateUserPassword.
+      throw redactQueryError(error);
+    }
   }
 }
