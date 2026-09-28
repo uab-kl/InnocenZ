@@ -45,6 +45,13 @@ export function localDateKey(d: Date): string {
  *   no stamp → today, exactly as before
  *
  * Capped at four days so a stamp that cannot be true cannot spin the loop.
+ *
+ * ⚠️ "Today" is `todayKey` and nothing else — never a second read of the clock.
+ * The open-shift branch used to take `new Date()` while every other branch took
+ * the key it was handed, so the function was not a function of its arguments:
+ * the midnight-crossing test passed only when the machine's own date happened
+ * to be 13 Sep 2026. Both screens pass the device's own date, which is what the
+ * default is too, so the app itself reads exactly what it read before.
  */
 export function shiftDayKeys(
   checkInAt: string | null | undefined,
@@ -53,12 +60,10 @@ export function shiftDayKeys(
 ): string[] {
   const start = checkInAt ? new Date(checkInAt) : null;
   if (!start || Number.isNaN(start.getTime())) return [todayKey];
-  const raw = checkOutAt ? new Date(checkOutAt) : new Date();
-  const end =
-    !Number.isNaN(raw.getTime()) && raw.getTime() >= start.getTime()
-      ? raw
-      : start;
-  const last = localDateKey(end);
+  const last = checkOutAt
+    ? closedShiftLastDay(start, checkOutAt)
+    : // A clock behind the check-in stamp is not a reason to span backwards.
+      maxDayKey(localDateKey(start), todayKey);
   const keys: string[] = [];
   const cursor = new Date(
     start.getFullYear(),
@@ -72,6 +77,19 @@ export function shiftDayKeys(
     cursor.setDate(cursor.getDate() + 1);
   }
   return keys;
+}
+
+/** The check-out's day — or the check-in's, when the check-out is unreadable or earlier. */
+function closedShiftLastDay(start: Date, checkOutAt: string): string {
+  const end = new Date(checkOutAt);
+  return !Number.isNaN(end.getTime()) && end.getTime() >= start.getTime()
+    ? localDateKey(end)
+    : localDateKey(start);
+}
+
+/** The later of two YYYY-MM-DD keys (zero-padded, so they sort as strings). */
+function maxDayKey(a: string, b: string): string {
+  return b > a ? b : a;
 }
 
 /**

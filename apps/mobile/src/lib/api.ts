@@ -6,7 +6,9 @@
  */
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { isSessionRefusal } from './api-error-copy';
 import type { DeviceFix } from './device-location';
+import { renewSession, type RefreshOutcome } from './token-refresh';
 
 const DEFAULT_BACKEND_PORT = 7777;
 
@@ -195,8 +197,26 @@ export class ApiError extends Error {
  * between two shifts), and advice dropped in the transport layer is advice nobody
  * can choose to show. Only the calls with something to read use this; the rest keep
  * the narrower shape rather than growing a field they ignore.
+ *
+ * ⚠️ A request refused because its SESSION expired is renewed and sent ONCE more
+ * (`renewedRequest`). Every call below that takes an `accessToken` gets that
+ * without changing: the token is still a parameter, and the retry swaps only the
+ * Authorization header.
  */
 async function requestEnvelope<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data: T; warning: string | null }> {
+  try {
+    return await sendEnvelope<T>(path, init);
+  } catch (error) {
+    const again = await renewedRequest(error, init);
+    if (!again) throw error;
+    return sendEnvelope<T>(path, again);
+  }
+}
+
+async function sendEnvelope<T>(
   path: string,
   init?: RequestInit,
 ): Promise<{ data: T; warning: string | null }> {
@@ -234,6 +254,77 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
+/** The token a request was sent with, read back from its Authorization header. */
+function bearerTokenOf(headers: RequestInit['headers']): string | null {
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+    return null;
+  }
+  const value = (headers as Record<string, unknown>).Authorization;
+  const match =
+    typeof value === 'string' ? /^Bearer\s+(\S+)$/.exec(value) : null;
+  return match ? match[1] : null;
+}
+
+/**
+ * The same request with a renewed token — or null when it must not be sent again.
+ *
+ * Only a SESSION refusal qualifies — `isSessionRefusal`, the same test the
+ * screens use: 401 AND the server's bare 'Unauthorized'. A 401 'Incorrect
+ * password' is an answer about the password, which no refresh can change. And
+ * only a request that carried a Bearer token: one sent without a session has
+ * none to renew. `renewSession` decides the rest — one shared refresh, never a
+ * swap onto another account's token.
+ */
+async function renewedRequest(
+  error: unknown,
+  init?: RequestInit,
+): Promise<RequestInit | null> {
+  if (!(error instanceof ApiError) || !isSessionRefusal(error.status, error.message)) {
+    return null;
+  }
+  const sent = bearerTokenOf(init?.headers);
+  if (!sent) return null;
+  const renewal = await renewSession(sent, refreshAccessToken);
+  if (renewal.kind !== 'retry') return null;
+  return {
+    ...init,
+    headers: {
+      ...(init?.headers as Record<string, string>),
+      Authorization: `Bearer ${renewal.accessToken}`,
+    },
+  };
+}
+
+/**
+ * `fetch` for the calls that cannot go through `requestEnvelope` — multipart
+ * uploads and binary downloads — with the same single renewal on a refused
+ * session. A failure to connect is thrown untouched; each caller words its own.
+ */
+async function fetchWithSession(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status !== 401) return res;
+  const again = await renewedRequest(await refusalOf(res), init);
+  return again ? fetch(url, again) : res;
+}
+
+/**
+ * A 401 as the error `requestEnvelope` would have thrown. Read from a CLONE, so
+ * the caller can still read the body of a refusal that is not about the session.
+ */
+async function refusalOf(res: Response): Promise<ApiError> {
+  const body =
+    typeof res.clone === 'function'
+      ? ((await res
+          .clone()
+          .json()
+          .catch(() => null)) as { message?: string } | null)
+      : null;
+  return new ApiError(body?.message ?? `Request failed (${res.status})`, res.status);
+}
+
 export function login(
   identifier: string,
   password: string,
@@ -245,6 +336,61 @@ export function login(
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * Trade the refresh token for a new access token (`POST /auth/refresh` — the
+ * refresh token itself is not rotated, so it keeps its 7 days from sign-in).
+ * NEVER throws: every answer is sorted into what the caller must do about it.
+ *
+ *   200            → renewed
+ *   401            → dead: the server's 'Please sign in again.' — expired,
+ *                    forged, account disabled, or stamped out by a password or
+ *                    contact change
+ *   404            → dead too: a server with no refresh route can never renew
+ *                    this session, and "sign in again" is what the app did
+ *                    before it had one — rather than calling it offline forever
+ *   anything else  → unavailable: no connection, the 429 of the limiter this
+ *                    route shares with login, a 5xx. The session stands.
+ *
+ * A bare fetch with no Authorization header, so a refusal here can never set off
+ * a second refresh.
+ */
+export async function refreshAccessToken(
+  refreshToken: string,
+): Promise<RefreshOutcome> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch {
+    return { kind: 'unavailable' };
+  }
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<{
+    accessToken?: unknown;
+    expiredAt?: unknown;
+  } | null> | null;
+  const data = body?.data;
+  if (
+    res.ok &&
+    body?.success &&
+    typeof data?.accessToken === 'string' &&
+    data.accessToken
+  ) {
+    return {
+      kind: 'renewed',
+      accessToken: data.accessToken,
+      expiredAt:
+        typeof data.expiredAt === 'number' && Number.isFinite(data.expiredAt)
+          ? data.expiredAt
+          : null,
+    };
+  }
+  if (res.status === 401 || res.status === 404) return { kind: 'dead' };
+  return { kind: 'unavailable' };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1069,7 +1215,7 @@ export async function uploadUserProfileImage(
   appendMultipartFile(form, 'profileImage', file, filename);
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/user/${userId}/profile-image`, {
+    res = await fetchWithSession(`${API_BASE}/user/${userId}/profile-image`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
@@ -1100,7 +1246,7 @@ export async function uploadUserPortfolioPhoto(
   appendMultipartFile(form, 'portfolioPhoto', file, filename);
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/user/${userId}/portfolio/${slot}`, {
+    res = await fetchWithSession(`${API_BASE}/user/${userId}/portfolio/${slot}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
@@ -1123,7 +1269,7 @@ export async function uploadUserComcardImage(
   appendMultipartFile(form, 'comcardImage', file, filename);
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/user/${userId}/comcard-image`, {
+    res = await fetchWithSession(`${API_BASE}/user/${userId}/comcard-image`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
@@ -1142,7 +1288,7 @@ export async function generateUserComcard(
 ): Promise<Me> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/user/${userId}/comcard/generate`, {
+    res = await fetchWithSession(`${API_BASE}/user/${userId}/comcard/generate`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -1165,7 +1311,7 @@ export async function uploadUserIdDoc(
   appendMultipartFile(form, 'idPhoto', file, filename);
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/user/${userId}/id-photo/${side}`, {
+    res = await fetchWithSession(`${API_BASE}/user/${userId}/id-photo/${side}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
@@ -1401,7 +1547,7 @@ export async function fetchMyVoucherPdfBlob(
   accessToken: string,
   voucherId: string,
 ): Promise<Blob> {
-  const res = await fetch(
+  const res = await fetchWithSession(
     `${API_BASE}/payment-voucher/mine/${voucherId}/export.pdf`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -1420,7 +1566,7 @@ export async function fetchMyVoucherExcelBlob(
   accessToken: string,
   voucherId: string,
 ): Promise<Blob> {
-  const res = await fetch(
+  const res = await fetchWithSession(
     `${API_BASE}/payment-voucher/mine/${voucherId}/export.xlsx`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },

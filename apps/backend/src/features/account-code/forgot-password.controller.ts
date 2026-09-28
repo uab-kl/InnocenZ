@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { logger } from '@/util/logger.js';
 import { Error as ApiError } from '@/error/index.js';
 import type { PhoneVerification } from '@/features/auth/phone-verification.model.js';
+import { mayResetPassword } from '@/features/auth/account-activation.js';
 import { safeErrorFields } from '@/features/auth/query-error-redaction.js';
 import { floorToSecond } from '@/features/auth/session-cutoff.js';
 import type { UserType } from '@/features/user/user.model.js';
@@ -69,7 +70,9 @@ const realSleep = (ms: number) =>
  * NEUTRAL BY DESIGN, across BOTH calls:
  *
  *  • `start` answers the same 200, message and data shape for an unknown
- *    address, an inactive account, and a code actually sent. The resend
+ *    address, an inactive account, an account with NO PASSWORD (a roster stub
+ *    — a reset never activates one, see account-activation.ts), and a code
+ *    actually sent. The resend
  *    cooldown is measured on the TYPED identifier, never on the account (see
  *    IdentifierCooldown).
  *  • `complete` answers the same for the `requestId` of an unknown address as
@@ -137,7 +140,17 @@ export class ForgotPasswordControllerClass {
       };
 
       const user = await this.deps.users.getUserByLoginMethod(kind, value);
-      if (!user || user.status.toLowerCase() !== 'active') {
+      /*
+       * An account with NO PASSWORD answers like an unknown address — same
+       * stand-in, same padding, nothing sent (account-activation.ts). A reset
+       * replaces a password; it never creates the first one. A roster stub's
+       * email and phone were typed by an agency, which may still re-point them
+       * while the stub is unclaimed, so a code to "the contacts on file" is a
+       * code to whatever the agency chose. The one way into a stub is the PR's
+       * own sign-up with a verified phone. Decided from the row this lookup
+       * already returned — no extra query, so no timing difference either.
+       */
+      if (!mayResetPassword(user)) {
         return await standIn();
       }
 
@@ -227,8 +240,10 @@ export class ForgotPasswordControllerClass {
       }
 
       // Past this point the caller holds the code: nothing below needs padding.
+      // Re-checked here as well as at start: a row issued before the stub rule
+      // (or an account disabled since) must not write a first password.
       const user = await this.deps.users.getUserById(userId);
-      if (!user || user.status.toLowerCase() !== 'active') {
+      if (!mayResetPassword(user)) {
         await this.deps.codes.update(row.id, { status: 'expired', updatedBy: userId });
         return send(res, 400, RESET_CODE_EXPIRED);
       }

@@ -1,13 +1,24 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+	keepPreviousData,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	AlertCircle,
+	Ban,
 	History as HistoryIcon,
 	Loader2,
 	RefreshCw,
 	Search,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+	CancelSubscriptionDialog,
+	isCancellable,
+} from "@/components/admin/cancel-subscription-dialog";
 import {
 	DateMultiFilter,
 	datesToQueryParam,
@@ -40,6 +51,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
+import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -51,8 +63,10 @@ import {
 } from "@/lib/utils";
 import { fetchAgencies } from "@/services/agency";
 import {
+	cancelMemberSubscription,
 	fetchMemberSubscriptions,
 	type MemberBillingCycle,
+	type MemberSubscription,
 	type MemberSubscriptionStatus,
 	type MemberSubscriptionsQueryParams,
 	type SubscriberType,
@@ -172,6 +186,28 @@ function HistoryPage() {
 	const records = historyQuery.data?.data ?? [];
 	const pagination = historyQuery.data?.pagination;
 	const showLoading = historyQuery.isLoading && records.length === 0;
+
+	/**
+	 * Ending a subscription row. There was no control for it at all, so a row
+	 * an admin had to end — like an ACTIVE plan opened for an organisation that
+	 * does not exist — could only be closed by hand in the database.
+	 *
+	 * Success shows the SERVER's sentence (it says when the row had no real
+	 * organisation behind it); a refusal stays in the dialog. Silence after a
+	 * click reads as failure and invites a second, harmful one.
+	 */
+	const queryClient = useQueryClient();
+	const [cancelTarget, setCancelTarget] = useState<MemberSubscription | null>(
+		null,
+	);
+	const cancelMutation = useMutation({
+		mutationFn: (id: string) => cancelMemberSubscription(id, logout),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["member-subscriptions"] });
+			setCancelTarget(null);
+			toast.success(response.message || t.adminBusiness.subscriptionCancelled);
+		},
+	});
 
 	/**
 	 * Every registered organisation, and the ledger ids that HAVE a charge.
@@ -366,12 +402,15 @@ function HistoryPage() {
 									<TableHead className="w-[190px]">
 										{t.adminBusiness.colSubscribed}
 									</TableHead>
+									<TableHead className="text-right">
+										{t.admin.colActions}
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
 								{showLoading ? (
 									<TableRow>
-										<TableCell colSpan={7} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
 												<span>{t.adminBusiness.loadingHistory}</span>
@@ -380,7 +419,7 @@ function HistoryPage() {
 									</TableRow>
 								) : historyQuery.isError ? (
 									<TableRow>
-										<TableCell colSpan={7} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
@@ -402,7 +441,7 @@ function HistoryPage() {
 									</TableRow>
 								) : records.length === 0 ? (
 									<TableRow>
-										<TableCell colSpan={7} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<HistoryIcon className="h-6 w-6" />
 												<span>{t.adminBusiness.noSubscriptionsFound}</span>
@@ -438,6 +477,28 @@ function HistoryPage() {
 											</TableCell>
 											<TableCell className="text-muted-foreground text-sm">
 												{formatDate(record.startedAt)}
+											</TableCell>
+											<TableCell className="text-right">
+												{isCancellable(record) && (
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														className="text-destructive"
+														aria-label={fill(
+															t.adminBusiness.cancelSubscriptionFor,
+															{ name: record.subscriberName },
+														)}
+														disabled={cancelMutation.isPending}
+														onClick={() => {
+															cancelMutation.reset();
+															setCancelTarget(record);
+														}}
+													>
+														<Ban className="h-4 w-4" />
+														{t.adminBusiness.cancelSubscription}
+													</Button>
+												)}
 											</TableCell>
 										</TableRow>
 									))
@@ -539,6 +600,25 @@ function HistoryPage() {
 					</CardContent>
 				</Card>
 			)}
+
+			<CancelSubscriptionDialog
+				record={cancelTarget}
+				onOpenChange={(open) => {
+					// Never dismissed mid-request: the answer must land somewhere
+					// the admin can read it.
+					if (open || cancelMutation.isPending) return;
+					setCancelTarget(null);
+					cancelMutation.reset();
+				}}
+				onConfirm={() => {
+					if (cancelTarget) cancelMutation.mutate(cancelTarget.id);
+				}}
+				isPending={cancelMutation.isPending}
+				error={toMutationError(
+					cancelMutation.error,
+					t.adminBusiness.cancelSubscriptionFailed,
+				)}
+			/>
 		</PageShell>
 	);
 }

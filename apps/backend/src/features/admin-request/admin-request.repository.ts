@@ -303,6 +303,33 @@ export class AdminRequestRepositoryClass {
     }
   }
 
+  /**
+   * Move a request out of `pending` ONLY IF IT IS STILL PENDING, returning it —
+   * or null when it is not (answered, withdrawn, or no such id).
+   *
+   * One statement with the status in its WHERE, rather than read-then-write:
+   * `approve` used to check nothing at all, so an approved, declined, withdrawn
+   * or 'direct' plan change could be approved again and applied to the ledger a
+   * second time. A check read beforehand would still let two admins (or one
+   * double-click) both see 'pending'; this row lock lets exactly one through.
+   *
+   * Takes a transaction and does NOT swallow errors, unlike `update`: it runs
+   * inside the switch's own transaction, and a swallowed error would read as
+   * "no longer pending" while the transaction it broke carried on.
+   */
+  async claimPending(
+    id: string,
+    data: Partial<AdminRequestInsertType>,
+    tx: DbTransaction,
+  ): Promise<AdminRequest | null> {
+    const [row] = await tx
+      .update(AdminRequestTable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(AdminRequestTable.id, id), eq(AdminRequestTable.status, 'pending')))
+      .returning();
+    return row ?? null;
+  }
+
   async countPending(
     filter?: Pick<AdminRequestFilter, 'type' | 'excludeType'>,
   ): Promise<number> {

@@ -6,7 +6,15 @@ import {
 import {
   PaymentVoucherRepositoryClass,
   VoucherConflictError,
+  VoucherLockedError,
 } from './payment-voucher.repository';
+import {
+  OVERRIDE_CLEARS,
+  financeSignRefusal,
+  isOverride,
+  voucherDeleteRefusal,
+  voucherUpdateRefusal,
+} from './payment-voucher-lock.js';
 import {
   buildVoucherPrintHtml,
   buildVoucherWorkbook,
@@ -1647,6 +1655,23 @@ export class PaymentVoucherControllerClass {
       // Agency users cannot move a voucher to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
 
+      // Once the PR has counter-signed, the figures are locked and payment needs
+      // both signatures — see payment-voucher-lock.ts. Judged on the fields the
+      // caller actually SENT, so a status flip carrying only a bank reference
+      // still passes.
+      const lockRefusal = voucherUpdateRefusal(existing, {
+        fields: Object.entries(parsed.data)
+          .filter(([, value]) => value !== undefined)
+          .map(([key]) => key),
+        status: data.status,
+        disputeNote: data.disputeNote,
+      });
+      if (lockRefusal) {
+        return res
+          .status(409)
+          .json({ success: false, message: lockRefusal, data: null });
+      }
+
       // Sending the voucher to the PR is the moment the day-by-day review is
       // for. Gated ONLY on the pending_review -> sent transition: the dispute
       // paths also write 'sent', but that is a voucher coming BACK from a
@@ -1905,12 +1930,21 @@ export class PaymentVoucherControllerClass {
         stamps.paidAt = new Date();
       if (data.status === 'disputed' && !existing.disputedAt)
         stamps.disputedAt = new Date();
+      // The override re-opens the voucher for correction, so both signatures
+      // come off with it: the agency signs the corrected figures again before
+      // the send, and the PR counter-signs them after.
+      const cleared = isOverride(existing.status, data.status)
+        ? OVERRIDE_CLEARS
+        : {};
 
       const voucher = await this.paymentVoucherRepository.update(
         id,
-        { ...data, ...totals, ...stamps, updatedBy: getActor(req) },
+        { ...data, ...totals, ...stamps, ...cleared, updatedBy: getActor(req) },
         lines ? toLineRows(lines) : undefined,
         expectedUpdatedAt,
+        // Every rule above judged THIS status. Re-checked under the row lock,
+        // so a PR signing in the same instant cannot slip a rewrite past it.
+        existing.status,
       );
       if (!voucher)
         return res
@@ -1960,6 +1994,15 @@ export class PaymentVoucherControllerClass {
           .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
+      // A signed or paid voucher is a money record, and deleting it also
+      // un-charges its fees and penalties. Admin-only already; still refused.
+      const deleteRefusal = voucherDeleteRefusal(existing);
+      if (deleteRefusal) {
+        return res
+          .status(409)
+          .json({ success: false, message: deleteRefusal, data: null });
+      }
+
       const removed = await this.paymentVoucherRepository.remove(id);
       if (!removed)
         return res
@@ -1971,6 +2014,16 @@ export class PaymentVoucherControllerClass {
         data: null,
       });
     } catch (error) {
+      // The PR signed between the read above and the delete's row lock.
+      if (error instanceof VoucherLockedError) {
+        return res.status(409).json({
+          success: false,
+          message:
+            voucherDeleteRefusal({ status: error.status, financeHeadSignedAt: null }) ??
+            error.message,
+          data: null,
+        });
+      }
       logger.error('[PaymentVoucherController.remove] Error:', error);
       res.status(500).json({
         success: false,
@@ -2397,13 +2450,14 @@ export class PaymentVoucherControllerClass {
           .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      if (existing.status !== 'pending_review') {
-        return res.status(409).json({
-          success: false,
-          message:
-            'This voucher has already been sent — the finance signature belongs before it goes to the PR.',
-          data: null,
-        });
+      // Normally review-only; a voucher that left review WITHOUT the agency's
+      // signature may take the missing one, or it could never be paid now that
+      // payment needs both. See `financeSignRefusal`.
+      const signRefusal = financeSignRefusal(existing);
+      if (signRefusal) {
+        return res
+          .status(409)
+          .json({ success: false, message: signRefusal, data: null });
       }
 
       // The week must be OVER. Enforced here and not only in the portal: the web
@@ -2449,18 +2503,32 @@ export class PaymentVoucherControllerClass {
         // happened to sort first.
         this.paymentVoucherRepository.getUserRoleName(actor, existing.agencyId),
       ]);
-      const voucher = await this.paymentVoucherRepository.update(id, {
-        financeHeadName: signerName ?? actor,
-        financeHeadRole: signerRole ?? undefined,
-        financeHeadSignedAt: new Date(),
-        financeHeadSignature: JSON.stringify(parsed.data.signature),
-        updatedBy: actor,
-      });
+      const voucher = await this.paymentVoucherRepository.update(
+        id,
+        {
+          financeHeadName: signerName ?? actor,
+          financeHeadRole: signerRole ?? undefined,
+          financeHeadSignedAt: new Date(),
+          financeHeadSignature: JSON.stringify(parsed.data.signature),
+          updatedBy: actor,
+        },
+        undefined,
+        undefined,
+        // Judged at this status above; a concurrent pay or send refuses here.
+        existing.status,
+      );
 
       res
         .status(200)
         .json({ success: true, message: 'Voucher signed', data: voucher });
     } catch (error) {
+      if (error instanceof VoucherConflictError) {
+        return res.status(409).json({
+          success: false,
+          message: 'This voucher changed while you were signing — reload it and sign again.',
+          data: null,
+        });
+      }
       logger.error(
         '[PaymentVoucherController.financeSignVoucher] Error:',
         error,

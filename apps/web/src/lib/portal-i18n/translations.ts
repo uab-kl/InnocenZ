@@ -3878,6 +3878,17 @@ const en = {
 		planUpdated: "Plan updated successfully",
 		planCreateFailed: "Failed to create plan",
 		planUpdateFailed: "Failed to update plan",
+		/** Current Plan row action + its confirm button. The server's own sentence is shown on success or refusal; these are fallbacks. */
+		cancelSubscription: "Cancel subscription",
+		/** aria-label on the row action — names the subscriber so a screen reader knows which row. Starts with the visible label, so voice control ("click Cancel subscription") still finds it. */
+		cancelSubscriptionFor: "Cancel subscription — {name}",
+		cancelSubscriptionTitle: "Cancel this subscription?",
+		cancelSubscriptionConfirm:
+			"{name} stops being on {plan} from today. The row stays in the history as Cancelled. An organisation's only plan cannot be ended — move it onto another plan instead.",
+		/** The dismiss button — never plain "Cancel" beside "Cancel subscription". */
+		keepSubscription: "Keep subscription",
+		subscriptionCancelled: "Subscription cancelled",
+		cancelSubscriptionFailed: "Could not cancel the subscription",
 	},
 	adminService: {
 		// Outcomes for resolving a PR money dispute. It used to run its side
@@ -4373,8 +4384,18 @@ const en = {
 		/** The button. payroll.overrideSignedPv is the sheet's own title and stays the shorter form. */
 		overrideSignedPvAuditLogged: "Override signed PV (audit logged)",
 		overrideExplainer:
-			"Finance may override with a mandatory audit reason — PV re-opens for PR review",
+			"Finance may override with a mandatory audit reason — PV re-opens for PR review. Both signatures come off: you sign the corrected voucher again before re-sending, and the PR counter-signs it again.",
 		confirmOverride: "Confirm override",
+		/**
+		 * A PR-signed voucher the agency never signed (sent before the finance
+		 * gate existed). Payment needs both signatures, so the pad comes first.
+		 */
+		signBeforePaying:
+			"The agency never signed this voucher. Sign it to attest the figures the PR counter-signed, then record the payment.",
+		/** Toast after an override — the server has just taken both signatures off. */
+		voucherReopened: "Voucher re-opened — both signatures removed",
+		/** Toast after the late agency signature on a PR-signed voucher. */
+		voucherSignedCanPay: "Voucher signed — you can record the payment now",
 	},
 	agencyPrs: {
 		/** Recent-penalties band summary, backend evaluation. `amount` arrives as "RM 120" from the call site — currency never lives in the dictionary. */
@@ -10165,6 +10186,14 @@ const zh: PortalTranslations = {
 		planUpdated: "套餐更新成功",
 		planCreateFailed: "创建套餐失败",
 		planUpdateFailed: "更新套餐失败",
+		cancelSubscription: "取消订阅",
+		cancelSubscriptionFor: "取消订阅 —— {name}",
+		cancelSubscriptionTitle: "确定取消此订阅？",
+		cancelSubscriptionConfirm:
+			"{name} 自今日起不再使用 {plan}。该记录会以「已取消」保留在历史中。机构唯一的套餐不能直接结束 —— 请改为将其转到其他套餐。",
+		keepSubscription: "保留订阅",
+		subscriptionCancelled: "订阅已取消",
+		cancelSubscriptionFailed: "无法取消订阅",
 	},
 	adminService: {
 		disputeAccepted: "已接受争议",
@@ -10497,8 +10526,12 @@ const zh: PortalTranslations = {
 		overriddenByAt: "由 {by} 撤改 · {at}",
 		overrideSignedPvAuditLogged: "撤改已签署付款单（记入审计日志）",
 		overrideExplainer:
-			"财务可在填写必填的审计原因后撤改 — 付款单将重新开放供 PR 审核",
+			"财务可在填写必填的审计原因后撤改 — 付款单将重新开放供 PR 审核。双方签名将被撤除：重新发送前您需再次签署更正后的付款单，PR 也需再次会签。",
 		confirmOverride: "确认撤改",
+		signBeforePaying:
+			"本机构尚未签署此付款单。请先签名确认 PR 已会签的金额，然后再登记付款。",
+		voucherReopened: "付款单已重新开放 — 双方签名已撤除",
+		voucherSignedCanPay: "付款单已签署 — 现在可以登记付款",
 	},
 	agencyPrs: {
 		penaltyBreachOne: "{n} 项违规 · 合计 {amount}",

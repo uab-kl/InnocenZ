@@ -5,10 +5,44 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '@/env';
 import { logger } from '@/util/logger';
 
 let client: S3Client | null = null;
+
+/**
+ * THE FILES NOBODY SHOULD REACH BY URL ALONE (28 Sep 2026).
+ *
+ * Every object used to be served by joining its key to the bucket's PUBLIC
+ * address, so an ID-card photo, a receipt, an MC slip or a signed voucher was
+ * readable by anyone who ever held the link — forever, from any device, logged
+ * or cached anywhere it passed through. These folders hold identity documents,
+ * money evidence and signed money documents; they are now served only as
+ * short-lived signed links (`r2SignedGetUrl`), and live in the private bucket
+ * when one is configured (`R2_PRIVATE_BUCKET_NAME`).
+ *
+ * Avatars, portfolio shots, comcards and organisation logos are meant to be
+ * seen and stay on the public address. The user folder is one or two segments
+ * (`user/<uuid>/…` legacy, `user/<lane>/<slug-id>/…` since the rename), the
+ * same shape `DELETABLE_FOLDER_RE` in pv-proof-photo.ts matches.
+ */
+const SENSITIVE_KEY_RE =
+  /^user\/(?:[^/]+\/){1,2}(?:ic-docs|id-docs|receipts|leave|disputes|pv)\//;
+
+export function isSensitiveR2Key(key: string | null | undefined): boolean {
+  return !!key && SENSITIVE_KEY_RE.test(key);
+}
+
+/** The bucket that holds `key` — the private one for sensitive keys, when configured. */
+export function r2BucketFor(key: string): string {
+  return isSensitiveR2Key(key) && env.R2_PRIVATE_BUCKET_NAME
+    ? env.R2_PRIVATE_BUCKET_NAME
+    : env.R2_BUCKET_NAME!;
+}
+
+/** Default lifetime of a signed link: long enough to read a screen, short enough to expire. */
+const SIGNED_URL_TTL_SECONDS = 3600;
 
 export function r2Configured(): boolean {
   return Boolean(
@@ -56,14 +90,72 @@ export function isR2ObjectKey(ref: string | null | undefined): boolean {
   );
 }
 
-/** Object key from a stored ref: key itself, or stripped from our public URL. */
+/**
+ * Object key from a stored ref: the key itself, stripped from our public URL,
+ * or read back out of a signed link WE issued (`r2KeyFromSignedUrl`).
+ */
 export function r2KeyFromStoredRef(ref: string | null | undefined): string | null {
   if (!ref) return null;
   if (isR2ObjectKey(ref)) return ref;
+  const signed = r2KeyFromSignedUrl(ref);
+  if (signed) return signed;
   if (!env.R2_PUBLIC_URL) return null;
   const base = env.R2_PUBLIC_URL.replace(/\/$/, '');
   if (!ref.startsWith(`${base}/`)) return null;
   return ref.slice(base.length + 1);
+}
+
+/**
+ * A short-lived signed GET link to one object — how a sensitive file reaches a
+ * screen. Signing is local arithmetic over the credentials (no network call),
+ * so it is cheap enough to do per key per response.
+ */
+export async function r2SignedGetUrl(
+  key: string,
+  ttlSeconds: number = env.R2_SIGNED_URL_TTL_SECONDS ?? SIGNED_URL_TTL_SECONDS,
+): Promise<string> {
+  return getSignedUrl(
+    getClient(),
+    new GetObjectCommand({ Bucket: r2BucketFor(key), Key: key }),
+    { expiresIn: ttlSeconds },
+  );
+}
+
+/**
+ * The object key inside a signed link THIS server issued, or null.
+ *
+ * Needed because clients hand stored photos BACK: the phone re-sends a line's
+ * existing `proofPhotos` when it edits the line, and after this change those
+ * arrive as signed links rather than keys. Stored as-is they would be an
+ * expiring URL in the database — and the edit's cleanup, which deletes any
+ * previous key missing from the new list, would delete the object itself.
+ *
+ * Only our endpoint and our buckets are recognised, in both addressing styles
+ * the SDK emits (`<bucket>.<host>/<key>` and `<host>/<bucket>/<key>`), and only
+ * with a signature present — any other URL stays what it was.
+ */
+export function r2KeyFromSignedUrl(ref: string | null | undefined): string | null {
+  if (!ref || !env.R2_ENDPOINT || !env.R2_BUCKET_NAME) return null;
+  let url: URL;
+  let endpointHost: string;
+  try {
+    url = new URL(ref);
+    endpointHost = new URL(env.R2_ENDPOINT).host;
+  } catch {
+    return null;
+  }
+  if (!url.searchParams.has('X-Amz-Signature')) return null;
+  const path = decodeURIComponent(url.pathname.replace(/^\//, ''));
+  const buckets = [env.R2_BUCKET_NAME, env.R2_PRIVATE_BUCKET_NAME].filter(
+    (b): b is string => !!b,
+  );
+  for (const bucket of buckets) {
+    if (url.host === `${bucket}.${endpointHost}` && path) return path;
+    if (url.host === endpointHost && path.startsWith(`${bucket}/`)) {
+      return path.slice(bucket.length + 1) || null;
+    }
+  }
+  return null;
 }
 
 /** @deprecated Prefer r2KeyFromStoredRef — accepts keys or full public URLs. */
@@ -82,7 +174,7 @@ export async function r2PutObject(input: {
 }): Promise<string> {
   await getClient().send(
     new PutObjectCommand({
-      Bucket: env.R2_BUCKET_NAME!,
+      Bucket: r2BucketFor(input.key),
       Key: input.key,
       Body: input.body,
       ContentType: input.contentType,
@@ -111,7 +203,7 @@ export async function r2GetObject(
 ): Promise<{ body: Buffer; contentType: string } | null> {
   try {
     const result = await getClient().send(
-      new GetObjectCommand({ Bucket: env.R2_BUCKET_NAME!, Key: key }),
+      new GetObjectCommand({ Bucket: r2BucketFor(key), Key: key }),
     );
     if (!result.Body) return null;
     const bytes = await result.Body.transformToByteArray();
@@ -132,7 +224,7 @@ export async function r2DeleteObject(key: string): Promise<void> {
   try {
     await getClient().send(
       new DeleteObjectCommand({
-        Bucket: env.R2_BUCKET_NAME!,
+        Bucket: r2BucketFor(key),
         Key: key,
       }),
     );
@@ -161,7 +253,7 @@ export async function r2ListKeys(prefix: string): Promise<string[]> {
     do {
       const page = await getClient().send(
         new ListObjectsV2Command({
-          Bucket: env.R2_BUCKET_NAME!,
+          Bucket: r2BucketFor(prefix),
           Prefix: prefix,
           ContinuationToken: token,
         }),

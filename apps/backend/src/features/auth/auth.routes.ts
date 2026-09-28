@@ -13,6 +13,7 @@ import {
   otpSendPerPhoneLimiter,
   otpVerifyLimiter,
   otpVerifyPerPhoneLimiter,
+  refreshLimiter,
   registerCheckLimiter,
   registerLimiter,
   resetPasswordLimiter,
@@ -41,10 +42,12 @@ router.post('/login', loginLimiter, authController.login.bind(authController));
 /*
  * The endpoint the refresh token was minted for and never had. Rate-limited
  * like login: it is an unauthenticated POST that issues a credential, which is
- * the same shape, and `loginLimiter` is deliberately generous enough for a
- * venue's staff behind one NAT address.
+ * the same shape — but in its OWN bucket since 28 Sep 2026: once the web and
+ * the app refresh on their own, every open tab spends a few calls an hour, and
+ * sharing login's counter would let those refreshes lock a whole venue out of
+ * signing in. See `refreshLimiter`.
  */
-router.post('/refresh', loginLimiter, authController.refresh.bind(authController));
+router.post('/refresh', refreshLimiter, authController.refresh.bind(authController));
 
 router.get(
   '/org-member-invite',

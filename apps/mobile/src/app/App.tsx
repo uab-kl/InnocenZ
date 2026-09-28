@@ -68,7 +68,7 @@ function LoggedInShell() {
 }
 
 function AppShell() {
-  const { me, booting } = useSession();
+  const { me, booting, offline, resume, signOut } = useSession();
   const [authView, setAuthView] = useState<'signIn' | 'signUp'>('signIn');
 
   // Signup leaves authView on 'signUp'; clear it once logged in so logout
@@ -81,6 +81,17 @@ function AppShell() {
     return (
       <PhoneFrame scroll={false}>
         <BootSplash />
+      </PhoneFrame>
+    );
+  }
+
+  // A saved sign-in that could not be confirmed is NOT a signed-out PR: the
+  // sign-in screen here would tell her she had been logged out, when all she
+  // lacks is a connection.
+  if (!me && offline) {
+    return (
+      <PhoneFrame scroll={false}>
+        <BootSplash offline={{ onRetry: () => void resume(), onSignOut: signOut }} />
       </PhoneFrame>
     );
   }

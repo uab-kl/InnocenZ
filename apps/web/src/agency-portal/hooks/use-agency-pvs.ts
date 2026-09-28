@@ -253,8 +253,14 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 		resolveDispute: (id: string) => patch(id, { status: "sent" }),
 		// Finance override of a signed/paid PV — re-opens for PR review; the
 		// reason is recorded in the dispute note (backend has no override-audit).
+		// The server takes BOTH signatures off with it. Returns the promise so the
+		// screen confirms only what actually happened; a refusal is already
+		// toasted by `updateMut.onError`.
 		overrideSigned: (id: string, reason: string) =>
-			patch(id, { status: "pending_review", disputeNote: reason }),
+			updateMut.mutateAsync({
+				id,
+				input: { status: "pending_review", disputeNote: reason },
+			}),
 		// Dispute-resolution line edit: replace lines and the deduction. Carries
 		// the concurrency token — this is the one patch that REPLACES the line
 		// set, so it is the one that must refuse when the voucher moved.
@@ -275,9 +281,16 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 		 *
 		 * The server stamps `paid_at` only when it is not already set, so a second
 		 * click cannot re-date a payment that already happened.
+		 *
+		 * A promise, not a fire-and-forget `patch`: the button used to toast
+		 * "recorded as paid" before the server answered, so a refusal (no agency
+		 * signature, an open dispute) showed a success AND a warning at once.
 		 */
 		markPaid: (id: string, bankRef?: string) =>
-			patch(id, { status: "paid", ...(bankRef ? { bankRef } : {}) }),
+			updateMut.mutateAsync({
+				id,
+				input: { status: "paid", ...(bankRef ? { bankRef } : {}) },
+			}),
 		/**
 		 * The same two steps, over a selection. Each voucher takes the identical
 		 * request its single-button twin above sends, so every server gate that

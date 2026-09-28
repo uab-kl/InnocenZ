@@ -155,6 +155,47 @@ describe('POST /auth/password/forgot/start', () => {
     expect(ctx.deliver).not.toHaveBeenCalled();
   });
 
+  /*
+   * A roster stub (active, no password) must not be ACTIVATED by a reset: its
+   * contacts were typed by the agency that created it. It answers exactly like
+   * an address nobody registered — by email and by phone alike, since this flow
+   * sends one code to every contact on file whichever one was typed.
+   */
+  it.each([
+    ['email', { email: 'owner@atlas-agency.my' }],
+    ['phone', { phoneNum: '012-345 6789' }],
+  ])('treats an account with NO PASSWORD as unknown when reached by %s — no row, no code', async (_kind, body) => {
+    const stub = setup({ user: fakeUser({ passwordHash: null }) });
+    const unknown = setup({ user: null });
+    const s = await start(stub, body);
+    const u = await start(unknown, body);
+
+    expect(s.statusCode).toBe(u.statusCode);
+    expect(s.body.message).toBe(u.body.message);
+    expect(Object.keys(s.body.data).sort()).toEqual(Object.keys(u.body.data).sort());
+    expect(stub.deliver).not.toHaveBeenCalled();
+    expect(stub.codes.create).not.toHaveBeenCalled();
+    // Same padding floor as the unknown address: the delay cannot tell them apart.
+    expect(stub.sleep.mock.calls).toEqual(unknown.sleep.mock.calls);
+  });
+
+  it("a stub's request id then answers guess by guess like an unknown one's", async () => {
+    const stub = setup({ user: fakeUser({ passwordHash: null }) });
+    const unknown = setup({ user: null });
+    const s = await start(stub, { email: 'owner@atlas-agency.my' });
+    const u = await start(unknown, { email: 'owner@atlas-agency.my' });
+    const trace = async (ctx: ReturnType<typeof setup>, requestId: string) => {
+      const out: Array<[number, string]> = [];
+      for (let i = 0; i < 6; i += 1) {
+        const res = await complete(ctx, { requestId, code: '000000', password: 'new-password' });
+        out.push([res.statusCode, res.body.message]);
+      }
+      return out;
+    };
+    expect(await trace(stub, s.body.data.requestId)).toEqual(await trace(unknown, u.body.data.requestId));
+    expect(stub.accounts.completePasswordReset).not.toHaveBeenCalled();
+  });
+
   it('applies the 60 s cooldown to known and unknown identifiers alike', async () => {
     const known = setup();
     const unknown = setup({ user: null });
@@ -295,6 +336,18 @@ describe('POST /auth/password/forgot/complete', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.body.message).toBe(RESET_CODE_EXPIRED);
+  });
+
+  it('re-checks the account at complete: a row whose account has NO password writes nothing', async () => {
+    // A row issued before the stub rule shipped: the right code must still not
+    // hand a password-less account its first password.
+    const { ctx, requestId, code } = await started();
+    ctx.user!.passwordHash = null;
+    const res = await complete(ctx, { requestId, code, password: 'new-password' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe(RESET_CODE_EXPIRED);
+    expect(ctx.accounts.completePasswordReset).not.toHaveBeenCalled();
+    expect(ctx.codes.rows.get(requestId)!.status).toBe('expired');
   });
 
   it('a code already spent by a racing request is 409', async () => {

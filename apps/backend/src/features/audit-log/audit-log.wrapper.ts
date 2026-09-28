@@ -71,35 +71,19 @@ const ENTITY_MAP: Record<string, string> = {
   auth: 'Auth',
 };
 
+/*
+ * `req.ip`, never the raw `X-Forwarded-For` header. The header is whatever the
+ * CLIENT sent unless a proxy we trust rewrote it, so reading it directly let any
+ * caller write an address of their choosing into the audit log. `req.ip` honours
+ * Express `trust proxy` (main.ts), which is the one place that knows how many
+ * hops in front of us are real.
+ */
 function getRestIpAddress(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    const forwardedStr = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return forwardedStr.split(',')[0].trim();
-  }
-
-  const realIp = req.headers['x-real-ip'];
-  if (realIp) {
-    return Array.isArray(realIp) ? realIp[0] : realIp;
-  }
-
   return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
 function getGraphqlIpAddress(context: GraphQLContext): string {
-  const req = context.req;
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    const forwardedStr = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return forwardedStr.split(',')[0].trim();
-  }
-
-  const realIp = req.headers['x-real-ip'];
-  if (realIp) {
-    return Array.isArray(realIp) ? realIp[0] : realIp;
-  }
-
-  return req.ip || req.socket?.remoteAddress || 'unknown';
+  return getRestIpAddress(context.req);
 }
 
 function getRestUserAgent(req: Request): string {

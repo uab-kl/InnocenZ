@@ -1,11 +1,11 @@
 ---
 name: shared-checkout-git-state-moves
-description: "This working tree is shared with other agent sessions — files get auto-staged and directories move mid-task, so git status is not all yours; plus TEST_SCRIPT.md is committed CRLF, so any edit to it shows a 9,000-line whole-file diff unless you use -c core.autocrlf=false"
+description: "This working tree is shared with other agent sessions — files get auto-staged and directories move mid-task, so git status is not all yours; plus the TEST_SCRIPT.md line-ending trap, whose flag advice INVERTED on 3 Sep 2026 (the blob is LF now, so plain git diff is the accurate one) — measure BOTH diffs before believing either"
 metadata: 
   node_type: memory
   type: feedback
   originSessionId: efcdecd7-22b8-4478-b091-4c5c79c63a5e
-  modified: 2026-08-06T08:28:21.771Z
+  modified: 2026-09-03T05:32:48.038Z
 ---
 
 **6 Aug 2026.** Two surprises in one session, both about the working tree rather than the code.
@@ -29,14 +29,30 @@ work automatically.
 - A `tsc` or test failure may be another session's half-finished state. Say so instead of reporting
   it as breakage in your own change.
 
-## TEST_SCRIPT.md is committed with CRLF, and `core.autocrlf=true`
+## TEST_SCRIPT.md line endings — ⚠️ THE FIX BELOW IS NOW INVERTED (re-measured 3 Sep 2026)
 
-Editing it at all produces a **~9,400-line whole-file diff**: the blob has `\r\n`, autocrlf cleans
-the worktree copy to `\n`, so every line differs. It looks like catastrophic churn around a 50-line
-edit.
+**Read this half first.** On 3 Sep 2026 the blob is **LF**, not CRLF — it was re-committed
+normalized at some point after 6 Aug. The worktree copy is still CRLF and `core.autocrlf` is still
+`true`, so the two commands have swapped roles:
 
-- Read the real change with **`git -c core.autocrlf=false diff -- TEST_SCRIPT.md`**, and stage it the
-  same way (`git -c core.autocrlf=false add`) to keep the blob CRLF.
+- **plain `git diff -- TEST_SCRIPT.md` is now the ACCURATE one.** A 17-line insertion measured
+  `17 insertions, 0 deletions`. Stage it with a plain `git add`; autocrlf stores LF and the commit
+  shows the real change.
+- **`git -c core.autocrlf=false` is now the one that lies** — it compares the CRLF worktree against
+  an LF blob, so every line differs: the same 17-line edit read `7,380 insertions, 7,363 deletions`.
+
+The lasting rule is not either flag, it is: **measure both before believing either.** Which
+direction the mismatch runs is a property of the blob on the day, and the blob changed underneath a
+memory that named one specific flag as the answer.
+
+The original 6 Aug finding, kept because the mechanism is the useful part:
+
+Editing it at all produced a **~9,400-line whole-file diff**: the blob had `\r\n`, autocrlf cleaned
+the worktree copy to `\n`, so every line differed. It looked like catastrophic churn around a
+50-line edit.
+
+- At that time you read the real change with `git -c core.autocrlf=false diff -- TEST_SCRIPT.md`
+  and staged it the same way to keep the blob CRLF. **That is now backwards — see above.**
 - The file showed clean before my first edit only because of git's **stat cache** — git had not
   re-read it, so the conversion never ran. A clean `git status` on a file nobody has touched is not
   proof its endings agree with the index.

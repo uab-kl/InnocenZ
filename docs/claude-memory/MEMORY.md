@@ -1,6 +1,6 @@
 # Memory Index
 
-All 171 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
+All 179 memories, grouped by what they are for. This index and `docs/claude-memory/` in the repo
 are kept identical in BOTH directions — see [Sync memory mirrors](sync-memory-mirrors.md).
 Dated session history is NOT here: it lives in `TEST_SCRIPT.md` §8/§10. Rules live in `CLAUDE.md`.
 The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stops + schema), not a log.
@@ -220,3 +220,14 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 ### Newly added - file these into a section above
 
 - [Tips row is seeded and locked](tips-row-is-seeded-and-locked.md) — Every outlet is created with a Tips row on Service Entitlement that it may price but not delete — and its category is 'tip', a money bucket, never 'service'
+
+### Newly added - file these into a section above
+
+- [Arrange tabs most important first](arrange-tabs-most-important-first.md) — Every workbook and multi-page deliverable lists its tabs most-important-first; reference catalogues go last
+- [Click through testing techniques](click-through-testing-techniques.md) — "How to click-test all 4 roles in the Browser pane — per-tab pinned sessions, shared locale, toasts that vanish, MC photo upload without a camera, and reading the server's refusal body"
+- [Never round trip marketing xlsx](never-round-trip-marketing-xlsx.md) — "A Google-Sheets/converter round-trip of marketing.xlsx silently deleted a whole sheet, all 8 drawings and 49 of 66 formulas"
+- [Production version probe](production-version-probe.md) — "How to tell which build innocenz.net / staging runs without credentials — authed routes all 401 (useless), use a dated PUBLIC route; plus the 28 Sep 2026 reading and the repo-is-public finding"
+- [Repo public is intentional](repo-public-is-intentional.md) — "GitHub uab-kl/InnocenZ is PUBLIC ON PURPOSE (owner, 28 Sep 2026) — do not list the visibility itself as a bug; still keep personal data and secrets out of commits"
+- [Sensitive files signed links](sensitive-files-signed-links.md) — "Since 28 Sep 2026 ID-card, receipt, MC, dispute and signed-voucher files leave the API as 1-hour SIGNED links, may live in a private R2 bucket (R2_PRIVATE_BUCKET_NAME), and signed links sent back are turned into keys"
+- [Shared db writes need the user](shared-db-writes-need-the-user.md) — "Bulk writes to the shared innocenz-test DB (e.g. redacting 3,283 audit rows) are blocked by the auto-mode permission classifier — build a dry-run-first script, run the dry run, hand the --apply to the user"
+- [Wage line is server sealed](wage-line-is-server-sealed.md) — "Since 28 Sep 2026 the SERVER writes the wages line (check-out, cut-loss release, Sunday net) on the SHIFT's date and week — the phone no longer sends it; a paid voucher needs BOTH signatures; a signed voucher is locked"

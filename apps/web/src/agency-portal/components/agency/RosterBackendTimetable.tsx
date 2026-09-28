@@ -506,6 +506,11 @@ export function RosterBackendTimetable({
 						{ outlet: string; slot: string | null; shiftId: string }[]
 					>();
 				const arr = byDate.get(shift.shiftDate) ?? [];
+				// One marker per SHIFT: a request row can repeat for the same person
+				// (one per agency the job was posted to), and a second chip for the
+				// same night says nothing new — while the shift id is the marker's
+				// React key, so a repeat would collide.
+				if (arr.some((existing) => existing.shiftId === shift.id)) continue;
 				arr.push({ outlet, slot: shift.slot ?? null, shiftId: shift.id });
 				byDate.set(shift.shiftDate, arr);
 				map.set(r.userId, byDate);
@@ -1378,10 +1383,10 @@ export function RosterBackendTimetable({
 															    she already holds a slot today: the request may be
 															    for a different hour, and hiding it made a named
 															    ask invisible exactly when the PR was busiest. */}
-															{dayRequests?.map((r, i) => (
+															{dayRequests?.map((r) => (
 																<button
 																	type="button"
-																	key={`${r.outlet}-${r.slot ?? ""}-${i}`}
+																	key={r.shiftId}
 																	className="iz-roster-week-cell iz-roster-week-cell--pending"
 																	style={{ marginTop: 4 }}
 																	title={[r.outlet, r.slot]
@@ -1527,10 +1532,10 @@ export function RosterBackendTimetable({
 														 * already showed, which is what turns it from an error
 														 * into a reminder.
 														 */}
-														{dayRequests?.map((r, i) => (
+														{dayRequests?.map((r) => (
 															<button
 																type="button"
-																key={`${r.outlet}-${r.slot ?? ""}-${i}`}
+																key={r.shiftId}
 																className="iz-roster-week-cell iz-roster-week-cell--pending"
 																style={{ marginTop: 4 }}
 																title={[r.outlet, r.slot]

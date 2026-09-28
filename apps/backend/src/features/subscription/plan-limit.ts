@@ -1,10 +1,16 @@
-import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
+import type { DbTransaction } from '@/types/db-transaction.js';
 import {
   LIVE_MEMBER_SUBSCRIPTION_STATUSES,
   MemberSubscriptionTable,
+  type MemberSubscription,
+  type SubscriberType,
 } from '@/features/member-subscription/member-subscription.model.js';
+import type { CloseLaneFacts } from '@/features/member-subscription/plan-lane-rules.js';
+import { AgencyTable } from '@/features/agency/agency.model.js';
+import { OutletTable } from '@/features/outlet/outlet.model.js';
 import { ShiftTable } from '@/features/shift/shift.model.js';
 import { SubscriptionTable } from './subscription.model.js';
 
@@ -108,79 +114,176 @@ export async function resolveActivePlanLimit(params: {
   }
 }
 
+export type PlanLaneSubscriber = { subscriberType: SubscriberType; subscriberId: string };
+
 /**
- * Would closing this ledger row leave its org with no plan at all?
+ * Is there an outlet/agency row with this id — in the table its type names?
  *
- * The creation doors all refuse an org without a plan now, but nothing guarded
- * the other end: `PATCH /member-subscription/:id/cancel` stamps `ended_at` and
+ * `member_subscription.subscriber_id` (and `admin_request.subscriber_id`) carry
+ * NO foreign key, because the id points into one of two tables. So nothing in
+ * the schema stops a ledger row for an organisation that does not exist, and
+ * one was opened on 28 Sep 2026: an ACTIVE Premier row for an outlet id found
+ * in neither table. This is the question the schema cannot ask.
+ *
+ * THROWS on a failed read, deliberately. Every caller is about to write money
+ * or refuse to, and "could not tell" must not be read as either answer.
+ */
+export async function subscriberOrgExists(
+  subscriber: PlanLaneSubscriber,
+  client: DbTransaction | typeof db = db,
+): Promise<boolean> {
+  if (subscriber.subscriberType === 'agency') {
+    const [agency] = await client
+      .select({ id: AgencyTable.id })
+      .from(AgencyTable)
+      .where(eq(AgencyTable.id, subscriber.subscriberId))
+      .limit(1);
+    return Boolean(agency);
+  }
+  const [outlet] = await client
+    .select({ id: OutletTable.id })
+    .from(OutletTable)
+    .where(eq(OutletTable.id, subscriber.subscriberId))
+    .limit(1);
+  return Boolean(outlet);
+}
+
+/**
+ * "This row is on the PLAN lane", asked WITHOUT a join: `FOR UPDATE` may not
+ * reach the nullable side of an outer join, so the catalog is asked in a
+ * subquery. A row with no `subscription_id` predates add-ons and counts as a
+ * plan — the same rule `resolveActivePlanLimit` applies through its join.
+ */
+function onPlanLane(): SQL {
+  return sql`(${MemberSubscriptionTable.subscriptionId} is null or exists (
+    select 1 from "main"."subscription" s
+     where s.id = ${MemberSubscriptionTable.subscriptionId} and s.kind = 'plan'))`;
+}
+
+/**
+ * Hold this org's PLAN LANE until the caller's transaction ends.
+ *
+ * Row locks alone cannot keep the lane to one live row. Under READ COMMITTED a
+ * second switch that queued behind the first one's `FOR UPDATE` wakes up with a
+ * snapshot taken BEFORE the first one's new row existed — so it closes nothing
+ * and opens a second live plan beside it. A transaction-scoped advisory lock,
+ * taken before anything is read, makes the second writer wait first and read
+ * after, so it sees the row the first one opened. The same device as
+ * `payout_batch_reference`.
+ *
+ * Every writer of the lane takes it FIRST, before any row lock — a switch and
+ * a cancel on one org then queue in the same order instead of deadlocking.
+ * Re-entrant: taking it twice in one transaction is harmless.
+ */
+export async function takePlanLane(
+  tx: DbTransaction,
+  subscriber: PlanLaneSubscriber,
+): Promise<void> {
+  const key = `member_subscription:plan_lane:${subscriber.subscriberType}:${subscriber.subscriberId}`;
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
+}
+
+/**
+ * Take the lane, then LOCK and return its live plan rows, newest first.
+ *
+ * "Live" is the shared definition — `ended_at` unset AND a live status — so a
+ * row an admin set to `cancelled` without a date is not treated as a plan here
+ * any more than it is by the posting gate or the invoice job.
+ */
+export async function lockLivePlanRows(
+  tx: DbTransaction,
+  subscriber: PlanLaneSubscriber,
+): Promise<MemberSubscription[]> {
+  await takePlanLane(tx, subscriber);
+  return tx
+    .select()
+    .from(MemberSubscriptionTable)
+    .where(
+      and(
+        eq(MemberSubscriptionTable.subscriberType, subscriber.subscriberType),
+        eq(MemberSubscriptionTable.subscriberId, subscriber.subscriberId),
+        isNull(MemberSubscriptionTable.endedAt),
+        inArray(MemberSubscriptionTable.status, [...LIVE_MEMBER_SUBSCRIPTION_STATUSES]),
+        onPlanLane(),
+      ),
+    )
+    .orderBy(desc(MemberSubscriptionTable.startedAt))
+    .for('update');
+}
+
+/**
+ * What the last-plan guard decides on, read INSIDE the caller's transaction
+ * and under lock — `closeLaneVerdict` (plan-lane-rules.ts) makes the decision.
+ *
+ * The creation doors all refuse an org without a plan, but nothing guarded the
+ * other end: `PATCH /member-subscription/:id/cancel` stamps `ended_at` and
  * writes no replacement, and `PUT /member-subscription/:id` lets an admin set
  * `ended_at` or a dead `status` by hand. Either one applied to an org's only
- * plan makes it planless in a single click — and for an outlet that is now an
- * outage, because the posting gate refuses a venue with no plan.
+ * plan makes it planless in a single click — for an outlet an outage, because
+ * the posting gate refuses a venue with no plan. ADD-ONS stay freely
+ * cancellable: POS is held alongside a plan and dropping it takes nothing away.
  *
- * ADD-ONS ARE FREELY CANCELLABLE. Only a `kind = 'plan'` lane is a plan; POS
- * integration is held alongside one and dropping it takes nothing away.
+ * ⚠️ READ UNDER LOCK, IN THE SAME TRANSACTION AS THE WRITE. The first version
+ * checked here and wrote in the controller afterwards, so two admins ending an
+ * org's last two plan rows at once could each see the other's row still live
+ * and both succeed. Now the lane is held from the check to the write.
  *
- * Returns `'unknown'` when it cannot tell. The caller REFUSES on unknown, which
- * is the opposite of the posting gate's rule and deliberately so: there, an
- * unknown answer must not take a working venue offline; here, an unknown answer
- * must not let an irreversible cancellation through on a guess. Refusing an
- * admin's cancel during a database blip costs a retry.
+ * THROWS on a failed read, and the caller REFUSES — the opposite of the posting
+ * gate's rule, deliberately: there, an unknown answer must not take a working
+ * venue offline; here, it must not let an irreversible cancellation through on
+ * a guess. A refused cancel during a database blip costs a retry.
  */
-export async function wouldLeaveOrgPlanless(
+export async function readCloseLaneFacts(
+  tx: DbTransaction,
   memberSubscriptionId: string,
-): Promise<'no' | 'yes' | 'unknown'> {
-  try {
-    const [row] = await db
-      .select({
-        subscriberType: MemberSubscriptionTable.subscriberType,
-        subscriberId: MemberSubscriptionTable.subscriberId,
-        status: MemberSubscriptionTable.status,
-        endedAt: MemberSubscriptionTable.endedAt,
-        kind: sql<string>`coalesce(${SubscriptionTable.kind}::text, 'plan')`,
-      })
-      .from(MemberSubscriptionTable)
-      .leftJoin(
-        SubscriptionTable,
-        eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id),
-      )
-      .where(eq(MemberSubscriptionTable.id, memberSubscriptionId))
-      .limit(1);
+): Promise<CloseLaneFacts> {
+  const missing: CloseLaneFacts = { target: null, otherLivePlanRows: 0, subscriberExists: false };
 
-    // No such row, an add-on, or a lane the org has ALREADY left: closing it
-    // takes no plan away, so there is nothing to protect.
-    if (!row) return 'no';
-    if (row.kind !== 'plan') return 'no';
-    if (row.endedAt !== null) return 'no';
-    const live: readonly string[] = LIVE_MEMBER_SUBSCRIPTION_STATUSES;
-    if (!live.includes(row.status)) return 'no';
+  // WHICH lane first, unlocked, so the lane lock can be taken before any row
+  // lock — the order `applyPlanChangeToLedger` takes them in.
+  const [owner] = await tx
+    .select({
+      subscriberType: MemberSubscriptionTable.subscriberType,
+      subscriberId: MemberSubscriptionTable.subscriberId,
+    })
+    .from(MemberSubscriptionTable)
+    .where(eq(MemberSubscriptionTable.id, memberSubscriptionId))
+    .limit(1);
+  if (!owner) return missing;
+  const subscriber = { subscriberType: owner.subscriberType, subscriberId: owner.subscriberId };
+  await takePlanLane(tx, subscriber);
 
-    const [other] = await db
-      .select({ id: MemberSubscriptionTable.id })
-      .from(MemberSubscriptionTable)
-      .leftJoin(
-        SubscriptionTable,
-        eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id),
-      )
-      .where(
-        and(
-          eq(MemberSubscriptionTable.subscriberType, row.subscriberType),
-          eq(MemberSubscriptionTable.subscriberId, row.subscriberId),
-          ne(MemberSubscriptionTable.id, memberSubscriptionId),
-          isNull(MemberSubscriptionTable.endedAt),
-          inArray(MemberSubscriptionTable.status, [
-            ...LIVE_MEMBER_SUBSCRIPTION_STATUSES,
-          ]),
-          sql`coalesce(${SubscriptionTable.kind}::text, 'plan') = 'plan'`,
-        ),
-      )
-      .limit(1);
+  const [target] = await tx
+    .select({
+      id: MemberSubscriptionTable.id,
+      subscriptionId: MemberSubscriptionTable.subscriptionId,
+      status: MemberSubscriptionTable.status,
+      endedAt: MemberSubscriptionTable.endedAt,
+    })
+    .from(MemberSubscriptionTable)
+    .where(eq(MemberSubscriptionTable.id, memberSubscriptionId))
+    .limit(1)
+    .for('update');
+  if (!target) return missing;
 
-    return other ? 'no' : 'yes';
-  } catch (error) {
-    logger.error('[plan-limit.wouldLeaveOrgPlanless] Error:', error);
-    return 'unknown';
-  }
+  const [catalog] = target.subscriptionId
+    ? await tx
+        .select({ kind: SubscriptionTable.kind })
+        .from(SubscriptionTable)
+        .where(eq(SubscriptionTable.id, target.subscriptionId))
+        .limit(1)
+    : [];
+
+  const live = await lockLivePlanRows(tx, subscriber);
+  return {
+    target: {
+      kind: catalog?.kind ?? 'plan',
+      status: target.status,
+      endedAt: target.endedAt,
+    },
+    otherLivePlanRows: live.filter((row) => row.id !== target.id).length,
+    subscriberExists: await subscriberOrgExists(subscriber, tx),
+  };
 }
 
 /**

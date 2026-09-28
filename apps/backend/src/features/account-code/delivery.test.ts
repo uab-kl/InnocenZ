@@ -90,6 +90,21 @@ describe('deliverCode — one code, every channel', () => {
     expect(s.sendSms).not.toHaveBeenCalled();
   });
 
+  /*
+   * The admin screen used to store '+admin-' + hex as the phone. Its digits read
+   * as a real Malaysian mobile, so an admin's reset code went to a stranger by
+   * WhatsApp and SMS. A value with a letter is no longer a phone destination.
+   */
+  it('never sends WhatsApp or SMS to a junk phone that only LOOKS like digits', async () => {
+    const s = senders();
+    const junk = '+admin-012345678901';
+    expect(plannedChannels({ phone: junk, email: input.email })).toEqual(['email']);
+    const result = await deliverCode({ ...input, phone: junk }, s);
+    expect(result.sentTo.map((d) => d.channel)).toEqual(['email']);
+    expect(s.sendWhatsApp).not.toHaveBeenCalled();
+    expect(s.sendSms).not.toHaveBeenCalled();
+  });
+
   it('one channel failing does not fail the others, and one sent is enough', async () => {
     env.NODE_ENV = 'production';
     const s = senders({

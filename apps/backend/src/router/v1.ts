@@ -34,11 +34,15 @@ import ratingRoutes from '@/features/rating/rating.routes.js';
 import notificationRoutes from '@/features/notification/notification.routes.js';
 import collectionInvoiceRoutes from '@/features/collection-invoice/collection-invoice.routes.js';
 import { platformAuditMiddleware } from '@/middlewares/platform-audit.js';
+import { signPrivateFiles } from '@/middlewares/sign-private-files.js';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import { requireAdmin } from '@/middlewares/require-role.js';
 
 const v1Router = express.Router();
 
+// Sensitive files (ID cards, proof photos, signed vouchers) leave as signed,
+// expiring links. BEFORE the audit on purpose — see sign-private-files.ts.
+v1Router.use(signPrivateFiles);
 v1Router.use(platformAuditMiddleware);
 
 v1Router.use('/health', healthRoutes);

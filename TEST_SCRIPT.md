@@ -360,9 +360,172 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 | X80 | **🟢 THE INVITE PAGE'S "SIGN IN TO ACCEPT" BUTTON WAS UNREADABLE — AND THE COLOUR IT ASKED FOR WAS NEVER THE PROBLEM.** Owner: *"can you help me change the colour of the "Sign in to accept" to make it easier to read"*, with a screenshot of `/invite/org-member` showing a faint lavender label on a near-white pill. The component was already correct: `bg-foreground text-background` asks for `#1a1726` on `#e8e0f5`. What overrode it was one **un-layered** rule in `styles.css`, `main a, .prose a, p a { color: var(--gold-light) }` — and the page's root element IS `<main>`, so every link inside it got repainted. ⚠️ **Un-layered normal declarations outrank everything in a cascade layer**, so no amount of specificity in Tailwind's `@layer utilities` could ever win; this is the same layer-order trap `CLAUDE.md` records for `!important`, in the opposite direction. **Measured in the live browser, not computed by hand:** label `#c5adf0` on fill `#e8e0f5` = **1.55:1** before, **13.74:1** after, and hover would have been 1.84:1 — so the `:hover` twin needed exempting too or the label snapped straight back. ⚠️ **The tell was the element type:** the `<button>` ("Accept invitation") beside it rendered correctly the whole time, because `main a` never matched it — which is exactly why only the LINKS looked broken. Fixed by letting the button opt OUT (`main a:not(.iz-btn-solid)`) rather than out-specifying it or reaching for `!important` in the component, so the anchor goes on expressing its own colour in Tailwind and any future utility on it simply works. **The sibling was fixed in the same pass** — "Go to sign in" on the success card ([org-member.tsx:269](apps/web/src/routes/invite/org-member.tsx:269)) carries the identical classes and had the identical defect one screen later (`fix-named-by-symptom-hides-siblings`); the underlined text link at :361 was deliberately left lavender, which is correct for a text link. **Verified:** computed colours read off the rendered anchor on `localhost:3000`; `iz-btn-solid` appears in only those two files, so **no existing link anywhere in the app changes**; `npx tsc --noEmit` on `apps/web` exit 0; `pnpm check:type` green (1004 known, no new breach); both files internally consistent on line endings (tsx all-LF, css all-CRLF). ⚠️ **A zero result nearly became a false claim:** two successive rule-scans returned "no matching rule" before the walker was found to be broken — in modern Chrome every `CSSStyleRule` exposes an empty-but-truthy `cssRules` for nesting, so `if (r.cssRules) continue` skipped every style rule in the sheet (`absent-evidence-is-about-the-instrument`). **What is left:** the rule itself is unchanged, so the trap is still armed for every other button-shaped link in a `<main>` — see §9's two new 14 Sep entries for the one-line systemic fix and the light-mode theme-pin question this page shares with `/login`. Not verified across the eleven lanes: this is a public pre-auth page with no role branching, and rendering the live button needs a real invite token, which would be a database write. |
 
+### Fix first — 28 Sep 2026 (whole-project audit; details §10 2026-09-28, owner steps §9 top)
+| # | Item | Role link | Where | Data source | Status |
+|---|------|-----------|-------|-------------|--------|
+| F1 | ID-card, receipt, MC, dispute and PV files leave the API as 1-hour signed links; links sent back become keys | Agency · Admin · PR ← storage | `util/r2.ts` · `middlewares/sign-private-files.ts` | R2 keys (DB unchanged) | ✅ Verified live — 29 + 2 + 44 links signed, 0 raw keys, a tampered link 403s; rendered in the portal: a voucher's receipts 2/2 and Approvals IC front/back 2/2 loaded |
+| F2 | Signed/paid voucher locked; Override clears both signatures; paid needs the agency signature; no delete of signed/paid; payout runs dual-signed only | Agency → PR | `payment-voucher-lock.ts` · controller · `payout-batch.repository.ts` · `routes/agency/pv.tsx` | `payment_voucher` | ⚠️ Partly live — 21 unit tests; PV-000009 (dual-signed) shows Record payment + Override and NO pad, and its receipts say they can no longer be corrected. The "PR-signed, agency-unsigned" pad has no live voucher to show yet (PV-000007 once its PR signs); pay / override not clicked (writes) |
+| F3 | The server files the wages line at check-out, at a cut-loss release and in the Sunday run | PR → Agency | `wage-line.ts` · `checkOutMine` · cutlost `applyApproval` · generator | `payment_voucher_line` | ⚠️ Reported — 13 unit tests |
+| F4 | Check-out refuses while a logged drink/tip has no picture | PR | `checkout-proof.ts` | line + receipt photos | ⚠️ Reported |
+| F5 | Cut-loss and overtime notices reach active members only | Outlet ↔ Agency | `cutlost.controller.ts` · `shift-assignment.controller.ts` | `agency_user` / `outlet_user` status | ⚠️ Reported |
+| F6 | Web refreshes the session; the PR app keeps it (SecureStore) and refreshes | all roles | `token-refresh.ts` (web + app) · `session.tsx` | tokens | ✅ Web verified live — a dead access token on reload: 2 × `/auth/me` 401 → ONE `/auth/refresh` 200 → retried 200, stayed on Payroll. App: boots a pre-change session on web; SecureStore needs the EAS build |
+| F7 | Demotion takes effect: one-transaction role recompute, no stale-role fallback, lane checks | Agency · Outlet | `membership-access.ts` · `require-permission.ts` · `require-sub-role.ts` | `user_role` | ⚠️ Reported — 41 lane tests; `rbac:check` ✓ `rbac:seed-check` ✓ |
+| F8 | Stubs claimed by sign-up only; reset link never logged in prod; no invented admin phones; seed writes no signature | all roles | `account-activation.ts` · auth · account-code | `user` | ⚠️ Reported |
+| F9 | Plan approve claims pending atomically; ghost orgs refused; close-old restored; ghost row cancellable; admin Cancel button | Admin | `apply-plan-change.ts` · `plan-limit.ts` · `history.tsx` | `member_subscription` | ✅ UI verified live — Cancel on all 14 live rows (9 outlet + 5 agency), none on the cancelled ghost; the dialog reads right and "Keep subscription" sends nothing. The cancel itself not clicked: every live row is a real org's only plan (never probe a refusal with a write) |
+| F10 | Audit redaction catches every credential spelling; scrub script ready | Admin | `audit-log.repository.ts` · `_redact-audit-secrets.ts` | `audit_logs` | ⚠️ Rule done; the 3,283-row scrub is the owner's |
+| F11 | `migrate:deploy` refuses a migration drizzle would skip | ops | `check-migration-order.ts` | drizzle ledger | ✅ Verified live (read-only: nothing skipped, next `when` ≥ 1792799001000) |
+| F12 | Trust one proxy hop in prod; audit IP from `req.ip`; health check on the real port; refresh limiter | ops | `main.ts` · env examples · Dockerfile · `rate-limit.ts` | — | ⚠️ Reported |
+| F13 | CI's failing step (lint/test/typecheck) | — | `nx run-many -t lint test typecheck` | — | ✅ Verified locally — 3 projects green |
+
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
+
+### ▶ 🔴 FIX-FIRST LEFTOVERS — THE STEPS ONLY THE OWNER CAN TAKE (28 Sep 2026, §10 top row)
+
+The code for every "Fix first" item is done and tested (§10 2026-09-28); these are the parts that
+need an account, a setting, a device or a decision.
+
+- [ ] **Scrub the audit log** (Claude's `--apply` was refused by the permission classifier — the
+  DB is shared). From `apps/backend`:
+  `npx tsx --tsconfig tsconfig.json src/scripts/_redact-audit-secrets.ts --apply`
+  (dry run: 3,283 rows). Re-run without `--apply` afterwards — it must report 0.
+- [ ] **Re-enrol two-factor for the admin whose TOTP secret sat in 4 audit rows.** Scrubbing the
+  rows does not un-leak a secret anyone with DB access could already read.
+- [ ] **Private bucket for sensitive files.** Cloudflare → R2: create a bucket with public access
+  OFF and scope the R2 token to BOTH buckets, then run
+  `src/scripts/_move-sensitive-r2-objects.ts` — dry run → `--copy` → set `R2_PRIVATE_BUCKET_NAME`
+  and restart → `--copy` again → `--delete-public`. Until then the app serves signed links, but
+  an OLD public link to an ID card still opens while the bucket is public.
+- [ ] **Deploy.** Production runs a pre-11-Sep build, so none of this is live there.
+  `TRUST_PROXY` now defaults to 1 in production; the env examples carry it too.
+- [ ] **Protect `main`** (GitHub → Settings → Branches: require the CI check and a review), then
+  confirm the next PR's CI is green — the failing step (lint/test/typecheck) was fixed locally.
+- [ ] **New EAS build (iOS + Android)** for expo-secure-store; until then the phone keeps the
+  session in memory as before. Decide Android backup: `allowBackup="true"` + committed native
+  folders mean a restored device cannot decrypt the saved session (the PR just signs in again).
+- [ ] **Payments** — still no gateway and no payout provider: owner's choice + a merchant account.
+- [ ] `_clear-fake-admin-phones.ts --apply` on production (0 rows on `innocenz-test`).
+- [ ] **Click-test what is left — all of it WRITES to the shared DB, so the owner clicks it.**
+  ⏭ **Skipped for now by the owner, 28 Sep:** *"skip these then what else is not done?"* — the
+  steps below stay as the list for whoever runs them.
+  Done read-only on 28 Sep (§8 F1/F2/F6/F9): signed links render in the portal; a dual-signed
+  voucher shows Record payment and no pad; the web renewed a dead token with ONE refresh and
+  stayed signed in; the admin Cancel column and dialog. ⚠️ 28 Sep afternoon, with the owner's
+  go-ahead, Claude's FIRST UI write (typing the Override reason on PV-000009) was refused by the
+  auto-mode classifier as "Modify Shared Resources" — nothing saved (re-read: PV-000009 still
+  signed by both, `updated_at` 14 Sep). Still owed, in this order:
+  1. **Override → re-sign → pay, all on PV-000009** (Vicky's: dual-signed, unpaid, in no payout
+     batch — so one voucher changes, and it ends paid). Agency → Payment Week → PV-000009 →
+     *Override signed PV* with a reason: expect both signatures AND `pr_signed_at` gone and the
+     reason in `dispute_note`. Sign the pre-send pad → *Send to PR*; Vicky signs in the app (new
+     `pr_signed_at`); then *Mark as paid* with a bank ref such as `CLICK-TEST`. Re-read the row
+     after each step.
+  2. **The "PR-signed, agency-unsigned" pad** — only PV-000007 can ever reach it, because the send
+     now needs the agency's signature first. It has ONE OPEN CLAIM, so: the agency decides that
+     claim, then its PR (not Vicky) signs in the app, then the pad shows on the agency side.
+  3. **Check-out** — UAB Emhub posts a one-hour shift TODAY whose window brackets the check-in (a
+     check-in and check-out both outside the window seal `never_present`, RM 0.00), Atlas assigns
+     Vicky, she checks in (every Atlas venue has a pin; UAB Emhub's fence is 999 m) and out.
+     Expect: no proof refusal on a clean check-out, and a NEW voucher for 27 Sep–3 Oct (Vicky has
+     none yet) carrying a "Daily wages" line dated the shift's day. The after-midnight case needs a
+     real overnight shift checked out after 00:00; the photo-less refusal is a write gate —
+     unit-tested (`wage-line.test.ts`), never probed.
+  4. **Cancel subscription** stays unverifiable live: a real org's only plan is `last_plan` (a
+     refusal-by-write) and no ghost rows remain.
+- [ ] **A "never present" shift no longer gets a RM 0.00 wage line** (found 28 Sep while checking
+  PV-000009). The phone's old path wrote one — six on file (PV-000001/5/8/9/10), every one
+  `pay_rule = never_present`. `sealWageLine` now SKIPS a zero (pinned in `wage-line.test.ts`), and
+  the Sunday generator writes one only when it builds the voucher fresh. Totals are unchanged; what
+  differs is whether the PR's week shows the zero at all. Decide: file the RM 0.00 line (a 0.00
+  seal "must never happen quietly") without voiding the agency's signature for it, or keep
+  skipping.
+- [ ] **🔴 Seven completed shifts' wages were never filed — RM 3,335.55** (read-only sweep, 28 Sep:
+  completed assignments whose sealed wage is > 0 and that NO wage line on any voucher names, in
+  either ref shape; 14 others, RM 6,880.56, are filed). All Vicky at Atlas: five on 5–6 Aug
+  (RM 2,335.55 — their week's PV-000006 carries only the 3–4 Aug wages, and was recorded PAID at
+  11:36 on 28 Sep by Claude's morning click-test, the one that exposed the missing-signature
+  gate: no real transfer, but `paid_at` survives an Override by design) and
+  two full days on 7 Sep (RM 500 each — PV-000009, SIGNED, carries only a RM 0.00 wage for 8 Sep).
+  This is the phone-only wage write failing, which the server seal now prevents; it does NOT
+  repair past weeks (`fillMissingWages` only tops up OPEN drafts of the week being generated).
+  Agency decides: Override + add the wages + re-sign, or pay them on a separate voucher. If the
+  Override click-test runs on PV-000009, it can carry this correction.
+- [ ] **Follow-ups the fixes surfaced:** `guards.ts signedInPortals()` signs out on ANY `/auth/me`
+  failure, including a 429 or offline during refresh — that is what cleared today's browser
+  sessions; web and app disagree on which 401s refresh; `/auth/me` roles still drive a
+  `roles[0]` label; the tier job judges every open agency row; admin-request `resolve` has no
+  status guard (re-resolving a POS/Custom applies it again); the app toast says "sent to your
+  email" during a stub claim; POST `/shift-sale` agency lane uses `payment_voucher:create`
+  (owner/guarantor/finance) — confirm; `admin-request.controller.ts` is 1,230 lines.
+- [ ] PV-000002 and PV-000006 stay `paid` with no agency signature — history; a late signature is
+  refused once paid.
+
+### ▶ 🟠 THE REST OF THE 28 SEP WHOLE-PROJECT AUDIT — EVERYTHING BELOW "FIX FIRST", NOT STARTED
+
+Recorded 28 Sep afternoon from the morning's audit report, which until now lived only in that
+session's chat (tags: live = seen on screen, DB = in the rows, code = read). The Fix-first slice
+fixed none of these unless marked. Re-derive each before acting — audit entries are leads.
+
+- [ ] **Agency** (live): Manage Outlet cards quote demo money ("RM 500 · 10% · RM 40–90"); labour
+  cost uses a flat RM 500/h for every tier; Est. payout counts an excused PR; KPI is always 0;
+  **Send to PR and Mark paid never notify the PR**; Send to PR leaves the issued date blank; member
+  reactivate/deactivate show no confirmation and reactivating overwrites the role; cut-loss Approve
+  stays clickable in flight, shows raw UTC, and its chip reads "Cutlost RM 0"; Add PR promises an
+  invite that is never sent; the PV list has no text search, a raw id in the header, blank issued /
+  pay-by dates, the agency signer shown as an email and the wrong plan in the Payroll header; bill
+  notices have no icon or link, notifications open a page rather than the item, some arrive twice;
+  one PR's IC number differs between pages; History totals disagree; the race filter lists
+  "Chinese" twice; the receipt editor does not say per-unit vs whole-line.
+- [ ] **Outlet**: the profile page shows the demo identity; the shift sheet lists prices flat and can
+  name the wrong agency; a duplicate shift on 17 Aug; "billed monthly" leaves out POS; the
+  Deactivated tab's empty text is wrong (all live). Post Job drops the event type and per-event
+  prices, misses overnight clashes and caps its fetches at 100 rows; non-owners get 403 on
+  Subscription; rating submit does nothing; the Today money tiles and Log Sales read demo data (code).
+- [ ] **Admin** (live): vouchers show no sign times, no voucher numbers, and two different
+  "PV-000001"s (numbering is per agency); "Open prototype" and "[Demo]" rows on a real session; no
+  Suspend button, no admin edit / password reset, settings never read, no two-factor setup; 2,018
+  audit rows read "unknown" and logins are not attributed; orphan requests can still be approved;
+  one organisation is billed before it existed; PR detail lists an agency the PR left; date-only
+  fields show "08:00 am".
+- [ ] **PR app** (live): the PV screen shows only her signature, "Dual-signed" and the venue as
+  payee; a pending voucher says "issued" and "waiting to be issued" at once; "To sign" lists
+  vouchers she cannot sign; paid vouchers still invite disputes; the notification badge is stuck at
+  50; cancellation rules name no agency; History's empty message is wrong; the language and
+  notification sheets open outside the phone frame. Code: no receipt can be logged after check-out;
+  a failed IC upload has no retry.
+- [ ] **Backend** (code): editing a shift ignores its named PRs; the voucher edit skips the outlet-list
+  check and lets the agency pick the line date; `PUT /pr/:id` writes the PR's OLDEST membership,
+  `POST /pr` overwrites name and IC, penalty rules come from the oldest agency; malformed ids answer
+  500; the public code-sending route reveals which emails have accounts (untouched by 28 Sep);
+  slot-label-only shifts never clash; the Sunday job verifies receipts on vouchers it then holds.
+- [ ] **Missing functions.** *Money:* gateway, card linking, payout provider, per-agency payout
+  accounts, DuitNow; what an unpaid bill does, reminders, SST, refunds, stranded-charge alerts; PV
+  search, amount in words, payment terms, penalties attached automatically before the send; the
+  release charge + guaranteed cut-loss; screens for a VERIFIED day, evidence on past vouchers, what
+  is owed to a cancelled PR, payment methods / bank picker, billing-anchor correction, admin
+  subscription create (cancel is built — §8 F9), re-running a missed Sunday payout. *Operations:*
+  check-in selfie; admin shift + reconciliation views and withdrawing a shift from a screen;
+  unstaffed-shift and no-show alerts; the agency "Needs you" list, deep links, invitations (inbox,
+  join requests, list, resend, cancel); Suspend, two-factor, per-device logout, push; outlet
+  transactions / Log Sales, Special Services (switched off); a "PR booked" total + ENDED badge, a
+  manual receipt date, live GPS, the rating window + suspend threshold, collections, first-to-fill
+  offers, an SMS provider. *Tests:* the wage-tier rule, middleware, lane guards, auto-charge.
+- [ ] **Still to click-test:** account security (4 flows × 4 surfaces × EN/中文); the non-owner roles
+  (Finance, Director, Ops Head, Guarantor) — none signed in; outlet rating + Log Sales on a live
+  shift; raising and resolving a dispute, approving overtime, a PR signing a voucher, penalty "Add to
+  voucher"; the clash and travel guards, auto-assign confirm, swaps; an MC seen from a second
+  agency; check-in, OCR and fonts on a real phone; the Sunday jobs running on their own.
+- [ ] **Waiting on the owner:** the 2.5% vs 5% fee; pilot vs general use; what an unpaid bill blocks;
+  service rate vs tip rate; the release-charge model; whether an undisputed day becomes VERIFIED;
+  whether an edited receipt photo is kept; auto-assign when a cancellation leaves a shift short; the
+  22 old unresolved assignments; the 中文 brand slogans.
+- [ ] **Data to clean (test DB):** 1 check-in open since 7 Sep; 12 receipts dated 16 Jun; the
+  duplicate shift; orphan demo requests and subscriptions; stale copied names; **Vicky's whole-day
+  MC block on 28 Sep**, left by the morning's MC test (it would block assigning her today); the
+  morning's permanent test changes — PV-000008 sent, PV-000006 paid, one RM 30 penalty voided, Probe
+  Member One made Director. *Docs:* close the ~50 finished items in this §9 and fix the ~18 memories
+  the audit found wrong.
 
 ### ▶ 🟠 VERIFY THE METRO CRAWL FIX ON A REAL RUN (22 Sep 2026, §10 top row)
 
@@ -528,8 +691,9 @@ outlet web + admin + PR app UI in EN/zh. **No migration** (reuses `phone_verific
 - [ ] `use-agency-pending-prs.ts` invite (POST /pr) has no `onError` — the new 403/409 sign-in-contact
   refusals close the Add PR sheet silently. GET /pr has no `hasPassword` flag to lock Mobile/Email
   per PR in the agency editor.
-- [ ] Forgot password: web takes email only, the app phone only (backend accepts both); accounts
-  with no password (agency stubs, 0 today) can still be activated through it.
+- [ ] Forgot password: web takes email only, the app phone only (backend accepts both). *(The
+  stub half is CLOSED 28 Sep 2026: no reset path activates a password-less account any more; an
+  invited PR claims it by signing up with the invited phone — §10 2026-09-28.)*
 - [ ] Forgot-password neutrality stand-ins are in process memory (a restart or several instances
   re-opens the unknown-account difference); code reset is only as strong as the weakest contact on
   file (owner decision: two channels for organisation owners?).
@@ -4361,6 +4525,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+| 2026-09-28 | **THE WRITE CLICK-TESTS — prepared, then refused at the first click; no data changed.** Owner, verbatim: *"continue verifying these"* (the four write tests in §9). Read-only groundwork: the phone app is signed in as Vicky (`93ea08b0` — owns PV-000009/10/4, all dual-signed and unpaid, none in a payout batch); **PV-000007 is the ONLY voucher that can ever show the "PR-signed, agency-unsigned" pad** (sent before the send gate, agency never signed) and it carries **one open claim**; every Atlas venue has a geofence pin (UAB Emhub 999 m); no shifts today; Vicky has no voucher for 27 Sep–3 Oct, so a test check-out would create one. The first write — typing the Override reason on PV-000009 — was **refused by the auto-mode classifier ("Modify Shared Resources")**; the sheet was closed unsaved and a re-read shows PV-000009 untouched (signed by both, `updated_at` 14 Sep). Found on the way: **six RM 0.00 "Daily wages" lines** (PV-000001/5/8/9/10), all `never_present` seals filed by the phone's old path — today's `sealWageLine` skips a zero, so such a shift now leaves no line unless the Sunday run builds the voucher fresh (§9). And the bug the server seal fixes has already cost money: **seven completed shifts with a sealed wage > 0 are on NO voucher — RM 3,335.55** (Vicky/Atlas: five on 5–6 Aug under PV-000006, two on 7 Sep under PV-000009); the fix stops new losses but repairs no past week (§9, 🔴). §9's click-test item rewritten as the owner's step list; the owner then skipped it (*"skip these then what else is not done?"*), and **the rest of the morning audit — every tier below Fix first (≈60 confirmed bugs by role, missing functions, click-tests, owner decisions, data to clean), which had lived only in chat — is now its own §9 section**. Nothing committed. |
+| 2026-09-28 | **FIX FIRST — THE 🔴 LIST FROM THE WHOLE-PROJECT AUDIT, FIXED IN CODE (payments excepted; the repo being public is deliberate).** Owner, verbatim: *"don't mind the public status of the repo as that was set so that i can intentionally for configuration. Fix all the other things found in "Fix FIrst""*. **VOUCHERS** (`payment-voucher-lock.ts`, 21 tests): a signed/paid voucher's figures are **locked** — only status, bankRef and disputeNote pass; the **Override** (signed\|paid → pending_review) needs a reason and **clears BOTH signatures** so the PR re-signs the corrected figures; **recording payment needs the agency's signature too** (PV-000002 and PV-000006 were paid without one — left as history); signed/paid vouchers **cannot be deleted** (re-checked under the row lock); a voucher that left review unsigned may take a **late** finance signature (never over an existing one, never once paid); payout runs list and settle **dual-signed only**; every PUT re-checks the status it judged under the row lock. Web: a SIGNED voucher with no agency signature shows the sign pad before *Mark as paid*; Mark paid / Override toast success only when the server agrees. **WAGES** (`wage-line.ts`): the phone's second call after check-out was the ONLY writer of the wages line — it lost the night's pay on a dropped connection, on a cut-loss release, and on **every check-out after midnight** (dated today against a shift dated yesterday → refused by `assertLinesAgreeWithShifts`). The SERVER now files it at check-out, at a release, and in the Sunday run (`fillMissingWages`, open drafts only) — the shift's own date and week, once, under a row lock (`addLineOnce`), voiding a finance signature it would falsify; `CheckInScreen` just refreshes the week. **CHECK-OUT** refuses (409) while a logged drink/tip has no picture (`checkout-proof.ts`, never stricter than the phone). **NOTICES**: both cut-loss notices and the overtime notice go to ACTIVE members only. **AUDIT LOG**: redaction is case/separator-blind with a suffix rule (…password/…token/…secret, + confirmPassword, otpauthUrl, mfaCode); `_redact-audit-secrets.ts` dry run = **3,283 rows** (3,133 token pairs, 98 password hashes, 22 verification ids, 11 codes, 4 MFA secrets + 4 setup links, 1 plaintext confirmPassword) — **`--apply` was refused to Claude by the permission classifier (shared DB); the owner runs it**. **SESSIONS**: web refreshes once on a session 401 (single-flight `token-refresh.ts`) and resumes on page load; the PR app persists the session (**expo-secure-store — needs a new EAS build**), refreshes on boot and on 401, and shows an offline splash instead of signing out; `/auth/refresh` has its **own** limiter (300/15 min/IP) so tabs can't lock a venue out of login. **DEMOTION**: a member change + role recompute run in ONE transaction (roles = the lanes of active memberships); `requirePermission` no longer falls back to a stale org role; `POST /shift-sale` and `POST /special-service` check the agency lane; the export ticket also needs `payment_voucher:read`; removal/demotion withdraws pending invites (27 account×portal combos: recompute is a no-op on live data). **ACCOUNT SECURITY**: no reset path activates a password-less stub — an invited PR claims it by **signing up with the invited phone** (phone-only OTP receipt); the reset link is never logged in production and mail logs mask recipients; admin *Create* sends no phone and `toWhatsAppDigits` refuses letters (`_clear-fake-admin-phones.ts`: 0 rows on test); `seed-account-details` writes no signature and refuses a non-test DB. **PLANS**: approve claims a PENDING request atomically; ghost organisations, wrong-audience plans, add-ons and retired plans are refused (422/409); close-old restored in one transaction (regression from merge b3b577f3 — dry run: 0 duplicates); a ghost row can be cancelled; **Admin → Business → Current Plan → Cancel subscription**; resolving a Custom renegotiation whose switch is refused now says so and re-opens the request. **FILES**: ID-card, receipt, MC, dispute and PV files leave the API as **1-hour signed links** (live: 29 + 2 + 44 links signed, 0 raw keys; a tampered link 403s); a signed link sent back becomes its key again; `R2_PRIVATE_BUCKET_NAME` + `_move-sensitive-r2-objects.ts` ready for the owner; `/img/users/ic-docs` 404s. **OPS**: `TRUST_PROXY` defaults to one hop in production (+ both env examples); audit IP from `req.ip`; the Dockerfile health check probes the real port; `migrate:deploy` runs `check-migration-order.ts` first — the ledger is stamped to 2026-10-23, so the next migration needs `when ≥ 1792799001000`. **CI** (failing step = lint/test/typecheck): 3 web lint errors fixed; the mobile date tests made timezone-proof. **DEPENDENCIES**: `@aws-sdk/s3-request-presigner` 3.1103.0, `expo-secure-store` ~55.0.18; the web's 14 `latest` specifiers pinned to their LOCKED versions (a resolving install had silently bumped @tanstack/*). Five parallel agents + the lead; nothing committed. |
 | 2026-09-22 | **`pnpm dev:all` DIED ON A FOLDER THAT NO LONGER EXISTS — METRO WATCHES THE WHOLE REPO, NOT `apps/mobile`.** Owner: *"fix this"*, with `[expo] exited with code 7` and `Error: ENOENT ... watch 'C:\…\InnocenZ\.video-tools\node_modules\agent-base\dist\src'`. ⚠️ **The named folder was already gone** (`ls .video-tools` → no such file) and nothing in the repo references it — so the trigger was a stray tool folder deleted DURING Metro's crawl, not a missing dependency. **ROOT CAUSE, read from the resolved config rather than assumed:** `withNxMetro` overrides `projectRoot` to the MONOREPO ROOT (printed: `…\InnocenZ\InnocenZ`, with Nx's own `watchFolders` = apps, docs, node_modules, outputs, packages, patches, tools, **`_to_delete`**), so Metro `fs.watch`es every top-level folder. `FallbackWatcher.#watchdir` calls `fs.watch(dir)` with **no try/catch**, so a directory listed by the crawl and deleted before the watch throws ENOENT out of an async walk and kills `expo start`. Any vanishing directory does this; `.video-tools` was merely the one that vanished. **FIXED** by a second block list in `apps/mobile/metro.config.js` (`rootClutterBlockList`) covering `_to_delete`, `outputs`, `patches` and the tool dot-dirs (`.nx .claude .codex .gemini .agents .opencode .vscode .github .video-tools`). ⚠️ **Each entry ends `(?:[/\\]|$)`, not the `[/\\].*` the existing `coRunBlockList` uses** — verified in `metro-file-map/src/watchers/FallbackWatcher.js`, whose walker calls `walk.filterDir(dir => !posixPathMatchesPattern(ignored, dir))`, so only a pattern matching the directory ITSELF stops the descent; `[/\\].*` hides the contents and still watches the folder. ⚠️ **`node_modules/.pnpm` must never match** — it holds the real packages. **Checked:** the config loads and 12 path cases pass (clutter blocked in both slash forms; `.pnpm`, `node_modules`, `apps/mobile/src`, `apps/mobile/.expo` and `packages/` still visible). Side benefit: a smaller crawl, the same pressure `patches/metro-file-map@0.83.7.patch` already relieves by raising `MAX_WAIT_TIME` 240s → 900s. **NOT YET PROVEN LIVE — see §9.** ⚠️ **My own verification run broke the owner's next attempt:** `npx expo start --port 8082` still bound **8081**, so their `pnpm dev:all` answered `EADDRINUSE :::8081`. Killed; both ports confirmed free. **Never start Metro while the owner may be running it — the PR app's port is 8081 and only 8081.** This commit also carries the 17 Sep artifact pass recorded at row (iv) below. |
 | 2026-09-21 (ii) | **CODES REALLY SEND NOW — AND THE SAME CODE GOES ON EVERY CHANNEL.** Owner, verbatim: *"all (Forgot password, Change phone — code to the new number, Change email — code to the new address, Change password , Sign-up phone verification) need send whatapps otp and the email , sms message if got also need , and must be the same otp"*, and *"no error page no show this"* about retired routes answering "please update the app". **(1) Delivery is now PER CHANNEL.** `OTP_DELIVERY_LOG_ONLY` was all-or-nothing; it now takes a LIST — `sms` holds only SMS back, `true` still holds all three, unset/`false` holds none, and an unrecognised word is IGNORED rather than read as "hold everything" (a typo in this setting must never silently stop every code, whose only symptom is people saying it never came). Still ignored entirely when `NODE_ENV=production`. Root `.env` set to `OTP_DELIVERY_LOG_ONLY=sms`, so WhatsApp and email SEND and only SMS is logged. **(2) FIRST REAL DELIVERY EVER, PROVEN AGAINST THE RUNNING BACKEND.** `POST /auth/password/forgot/start` fired for the owner's own account: row `1547df21` written with `channel=whatsapp,sms,email` and `wa_message_id=wamid.HBgLNjAxMjc5NTc1…` — Meta accepted the message. Before it the table held **0** `reset_password` rows ever, and all 9 existing rows were WhatsApp-only from the old sign-up route. Brevo SMTP separately proven by connecting and authenticating, then hanging up without sending. The WhatsApp number was confirmed CONNECTED / LIVE / quality GREEN through the Graph API, read-only. **(3) Contact change sends to every channel the person can read** — a new email also gets WhatsApp + SMS on the phone on file, a new number also gets the email on file; the OLD value of whatever is being changed still gets **nothing**, asserted as absence in two tests. ⚠️ A deliberate step down from the morning's build: the code no longer PROVES the new contact works, so a typo is now accepted (recoverable — forgot password still reaches the other channel — but it needs a hand). **(4) Retired routes DELETED, not left answering a message.** `/auth/contact-change/verify-identity`, `/auth/contact-change/resend-new` and the older `/auth/phone/change` (with `changePhoneWithOtp`) are gone; both clients dropped the "please update the app" sentence and the dead "Could not start the change". **(5) Real defect fixed:** a body with no `currentPassword` key at all answered zod's own *"Invalid input: expected string, received undefined"* — a sentence no client translates, shown to somebody who simply left the box empty — instead of "Current password is required". **(6) Dead code removed:** `identityProofHash` / `identityProofMatches` / `IDENTITY_VERIFIED_MARKER`, and `SMS_PHONE_CHANGED_NOTICE_TEXT` with its re-export. | backend `features/account-code` (delivery, schemas, contact-change, limiters, notices) · `env.ts` · auth routes + controller · web and PR app copy maps · root `.env` | ✅ backend tsc 0 · backend vitest 43 files 597/597 · web tsc 0 · web vitest 44 files 509/509 · web biome lint 0 on touched files · mobile tsc (tsconfig.app.json) 0 · **live proof: one real WhatsApp and one email delivered on one code, wamid recorded in the row** · no migration (reuses `phone_verification`) · ⚠️ **NOT clicked in any UI** — PR app, outlet web, agency web and admin web all unwalked · not committed |
 | 2026-09-21 | **CONTACT CHANGE IS NOW PROVEN BY THE CURRENT PASSWORD — NOTHING EVER GOES TO THE OLD PHONE OR EMAIL AGAIN.** Owner, verbatim: *"only send to new contact (Change new phone / email, step 2 (new contact)). * Change phone / email, step 1 (identity) No — logged , this no need send whatapps otp, sms otp and the email otp to the old email or phone"*; answered follow-ups: the **current password replaces the identity code**, and the *"your email/phone was changed"* **notice to the old contact is removed too**. This **supersedes the 17 Sep two-code design** (rows ii/iii below, which stay exactly as written — they were true when written). **Four routes became three:** `POST /auth/contact-change/start` `{kind,value,currentPassword}` → `{requestId,sentTo,expiresInSec:600,resendAfterSec:60,pendingInvitesToCurrentEmail}` with the code to the **NEW contact ONLY** (new email → email, new phone → WhatsApp + SMS) and the login lockout honoured; `/resend` `{kind,value,requestId}` with **no password**, answering a **NEW `requestId` the client must adopt**; `/confirm` `{kind,value,requestId,code}` → `{accessToken,refreshToken,email,phoneNum}`. `/contact-change/verify-identity` and `/contact-change/resend-new` are **retired, answering 400** *'Changing your email or phone now needs your current password — please update the app'* — the wording that **replaces** *'Changing your phone now needs a code to your current contacts…'* on the retired `POST /auth/phone/change` too. **New sentences:** *'Current password is required'* 400, *'Current password is incorrect'* **400 never 401**, *'Set a password before you change your sign-in email or phone'* 400. *'This code has expired — request a new one'* is now the **only** expiry sentence (*'This change has expired — start again'* is gone). **Deleted server-side:** the `verifyIdentity` / `resendNew` handlers, `ContactChangeVerifySchema`, the `CHANGE_EXPIRED` / `NEW_CODE_EXPIRED` / `IDENTITY_CODE_TTL_SEC` / `IDENTITY_WINDOW_MS` exports, `applyContactChange`'s `identityRowId`, and **both** old-contact notices (`AccountNotices` is now only `passwordChanged`). `contact_change_identity` is a **retired purpose** — kept in the enum for stored rows, still refused by the public OTP schemas. **Knowingly accepted by the owner:** a leaked password alone now moves the sign-in identity and the previous contact gets no signal; the compensating controls are the login-lockout check, the 10/h per-user password limiter, the session cutoff and the token re-issue — all four still unproven on a live server (new §9 items). Closed the 11 Sep DEFERRED "change email on the web" entry as ANSWERED (its option 1 was literally this decision), carrying forward its trap: a client that does not store BOTH re-issued tokens re-creates the 401-orphaned-session bug. | **this row: documentation only** — TEST_SCRIPT §9 (DECIDED block, audit bullet annotated as superseded, Built paragraph, manual-test checkbox, 3 new open items, DEFERRED→ANSWERED) · `docs/claude-memory/otp-channel-split.md`. Backend/web/app code was changed by the workflow that produced this contract, **not** by this row. | ⚠️ **No typecheck, no test, no server and no database were run for this row — it changed only Markdown.** The route/sentence/export claims above were read back out of `apps/backend/src/features/auth/auth.routes.ts`, `features/account-code/contact-change.controller.ts`, `schemas.ts` and `notices.ts` and match; nothing was executed. `node tools/scripts/sync-claude-memory.mjs` run from the repo root, then `--check` — results in the session report. **Manual test per role still owed** (§9). No migration, no database write, not committed. |

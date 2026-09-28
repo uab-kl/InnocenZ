@@ -29,6 +29,7 @@ import {
   isR2ObjectKey,
   r2Configured,
   r2DeleteObject,
+  r2KeyFromSignedUrl,
   r2PutObject,
 } from '@/util/r2';
 
@@ -148,7 +149,12 @@ export async function saveProofPhotosToR2(input: {
   const stamp = Date.now();
   const out: string[] = [];
   for (let i = 0; i < photos.length; i++) {
-    const photo = photos[i]!;
+    // Proof photos reach clients as SIGNED LINKS now (util/r2.ts), and the phone
+    // re-sends a line's existing photos when it edits the line. Back to the key
+    // first — stored as-is, the row would hold an expiring URL, and the edit's
+    // cleanup (which deletes previous keys missing from the new list) would
+    // delete the very object the link points at.
+    const photo = r2KeyFromSignedUrl(photos[i]!) ?? photos[i]!;
     if (isR2ObjectKey(photo)) {
       // Carry-forward, but ONLY for keys this user owns. A client can put any
       // string in proofPhotos; without this check a PR could store another

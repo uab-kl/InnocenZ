@@ -472,11 +472,85 @@ export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
  * money leaving the organisation, and the stand-in stands in everywhere except
  * payment.
  *
- * A caller who IS a venue member is passed straight through — they are the
- * other guard's business, not this one's.
+ * A member of the venue the route names is passed straight through — they are
+ * the other guard's business, not this one's. See `agencyCallerGuard` for how
+ * "is this an agency caller" is decided.
  */
 export function requireAgencyLaneIfNotOutletMember(
   ...allowed: AgencySubRole[]
+) {
+  return agencyCallerGuard(
+    (userId, agencyId) => holdsAgencyLane(userId, agencyId, allowed),
+    'Only the agency owner can change a venue rate card.',
+  );
+}
+
+/**
+ * THE SAME GUARD, JUDGED BY `role_permission` INSTEAD OF A LANE LIST — for the
+ * routes an agency shares with a venue where the portal gates the agency's
+ * button on a PERMISSION.
+ *
+ * `POST /shift-sale` and `POST /special-service` carried only
+ * `requireOutletPermissionIfMember`, which passes everybody with no venue
+ * membership — so every agency lane, a view-only Director included, could log
+ * a PR's floor sales or book a service on the agency's account. The agency
+ * portal offers the special-service booking only to `raisePv`
+ * (`payment_voucher:create`), so that is what the server now asks of the lane
+ * the caller holds at the agency the request acts for. The lane is read the way
+ * `requirePermission` reads it: the membership's `sub_role` →
+ * `portalRoleNameForSubRole` → `roleHasPermission`, so the table decides and
+ * a demotion takes effect on the next request.
+ */
+export function requireAgencyPermissionIfNotOutletMember(
+  moduleKey: string,
+  permissionType: 'create' | 'read' | 'update',
+) {
+  return agencyCallerGuard(
+    async (userId, agencyId) => {
+      const memberships = await agencyMemberRepository.listByUser(userId);
+      const here = memberships.find(
+        (m) => m.status === 'active' && m.agencyId === agencyId,
+      );
+      if (!here) return false;
+      return authRepository.roleHasPermission(
+        portalRoleNameForSubRole('agency', here.subRole),
+        'agency',
+        moduleKey,
+        permissionType,
+      );
+    },
+    `Forbidden — requires ${moduleKey}:${permissionType} at this agency`,
+  );
+}
+
+/**
+ * WHO IS AN AGENCY CALLER ON THIS REQUEST — and then, only of them, `judge`.
+ *
+ * ⚠️ This used to pass anybody holding an active venue membership ANYWHERE.
+ * Somebody who owns a venue of their own and is a view-only Director at an
+ * agency, acting from the agency console, therefore skipped the agency lane
+ * check entirely: their venue membership answered for an agency request. Two
+ * narrower questions replace that one:
+ *
+ *   1. Does the route NAME a venue (`:outletId`) the caller is an active member
+ *      of? Then they are acting as that venue's operator, and the venue guard
+ *      before this one has judged them.
+ *   2. Otherwise, is the request acting FOR AN AGENCY? Answered by
+ *      `resolveOrgScope` — the same resolution the handlers use to decide whose
+ *      sale or posting this is — so the guard cannot approve one organisation
+ *      while the handler writes as another. A named venue (`x-org-kind:
+ *      outlet`) makes it a venue request; otherwise any active agency
+ *      membership makes it an agency one.
+ *
+ * Only agency callers are judged, at the agency `resolveActingOrgId` verifies
+ * (the named `x-org-id`, or their only agency — never the oldest by accident;
+ * ambiguity is asked back as a 400). A caller with no agency membership at all
+ * — a PR posting from the phone — is not an agency caller and passes to the
+ * handler, which pins who they are.
+ */
+function agencyCallerGuard(
+  judge: (userId: string, agencyId: string) => Promise<boolean>,
+  refusal: string,
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = req.user;
@@ -488,24 +562,34 @@ export function requireAgencyLaneIfNotOutletMember(
     try {
       if (await isAdmin(user.id)) return next();
 
-      // A venue operator: `requireOutletPermissionIfMember` owns that case.
-      const outletMemberships = await outletMemberRepository.listByUser(user.id);
-      if (outletMemberships.some((m) => m.status === 'active')) return next();
+      const namedOutlet = req.params.outletId
+        ? paramId(req.params.outletId)
+        : null;
+      if (namedOutlet) {
+        const venues = await outletMemberRepository.listByUser(user.id);
+        if (
+          venues.some((m) => m.status === 'active' && m.outletId === namedOutlet)
+        ) {
+          return next();
+        }
+      }
+
+      const scope = await resolveOrgScope(req, orgScopeDeps);
+      if (!scope.agencyId) return next();
 
       const agencyId = await resolveActingOrgId(req, orgScopeDeps, 'agency');
       if (!agencyId) {
-        return res.status(403).json({
+        return res.status(400).json({
           success: false,
-          message: Error.FORBIDDEN ?? 'Forbidden',
+          message:
+            'Which organisation? Send x-org-id, or name it in the request.',
           data: null,
         });
       }
-      if (await holdsAgencyLane(user.id, agencyId, allowed)) return next();
-      return res.status(403).json({
-        success: false,
-        message: 'Only the agency owner can change a venue rate card.',
-        data: null,
-      });
+      if (await judge(user.id, agencyId)) return next();
+      return res
+        .status(403)
+        .json({ success: false, message: refusal, data: null });
       // Bare catch, matching every other guard in this file — `logger` is not
       // imported here on purpose, so the middlewares stay free of it.
     } catch {

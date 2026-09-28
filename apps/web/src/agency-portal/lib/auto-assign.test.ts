@@ -62,16 +62,18 @@ const worked = (
 	prId: string,
 	outletId: string | undefined,
 	over: Partial<ShiftAssignment> = {},
-): ShiftAssignment =>
-	({
-		id: `history-${(historyRow += 1)}`,
+): ShiftAssignment => {
+	historyRow += 1;
+	return {
+		id: `history-${historyRow}`,
 		shiftId: "shift-history",
 		prId,
 		outletId,
 		shiftDate: "2030-01-01",
 		status: "completed",
 		...over,
-	}) as unknown as ShiftAssignment;
+	} as unknown as ShiftAssignment;
+};
 
 function planWith(opts: {
 	prs: PrPersonnel[];

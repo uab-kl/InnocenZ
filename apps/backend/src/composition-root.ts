@@ -478,6 +478,8 @@ export const cutlostController = new CutlostControllerClass(
   agencyMemberRepository,
   authRepository,
   outletMemberRepository,
+  // A release files the wage it seals (wage-line.ts).
+  paymentVoucherRepository,
 );
 
 export const shiftSaleRepository = new ShiftSaleRepositoryClass();

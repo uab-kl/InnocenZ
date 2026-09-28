@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { User } from "@/lib/auth";
-import { getAccessToken, hasValidTokens } from "@/lib/auth/auth-storage";
+import { getAccessToken, hasSessionTokens } from "@/lib/auth/auth-storage";
 import { kickToLogin } from "@/lib/auth/guards";
 import { getClient } from "@/lib/axios-v1";
 import { noteR2PublicUrl } from "@/lib/proof-photo";
@@ -151,7 +151,13 @@ export function useProfile() {
 	return useQuery({
 		queryKey: profileQueryKey,
 		queryFn: fetchProfile,
-		enabled: hasValidTokens(),
+		/*
+		 * A session, not the access token's clock. Gated on the clock, a page
+		 * loaded more than 15 minutes after sign-in never asked for the profile
+		 * at all — every screen reading it saw nobody signed in. Asked now, the
+		 * expired token collects a 401 and the client refreshes and replays it.
+		 */
+		enabled: hasSessionTokens(),
 		staleTime: 5 * 60 * 1000,
 		retry: 1,
 		refetchOnWindowFocus: false,

@@ -116,13 +116,21 @@ export async function createAdmin(
 	}
 
 	const client = getClient(onRefreshFail);
+	/*
+	 * NO PHONE (Fix First, 28 Sep 2026). This used to send an invented
+	 * `'+admin-' + 12 hex` because `/auth/register` required one — and the
+	 * server, stripping the letters, read what was left as a real Malaysian
+	 * mobile and sent this admin's reset codes to it by WhatsApp and SMS.
+	 * `/auth/register` now accepts a missing phone for exactly this call (an
+	 * admin creating an admin) and nothing else. An admin adds a real number
+	 * later from their own Security settings.
+	 */
 	const response = await client.post<{
 		success: boolean;
 		message: string;
 		data: BackendUser;
 	}>("/auth/register", {
 		email: input.email,
-		phoneNum: `+admin-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
 		username: input.displayName,
 		password: input.password,
 		roleId: adminRoleId,

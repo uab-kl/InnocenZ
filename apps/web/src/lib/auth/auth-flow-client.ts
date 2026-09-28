@@ -115,8 +115,12 @@ export function toAuthFlowError(
 	return new AuthFlowError(fallback);
 }
 
-/** `exp` of a JWT in milliseconds, or null. Display-free, never verified. */
-function jwtExpiryMs(token: string): number | null {
+/**
+ * `exp` of a JWT in milliseconds, or null. Display-free, never verified.
+ * Also read by `token-refresh.ts`, so a refreshed token's clock is taken the
+ * same way as a re-issued one's.
+ */
+export function jwtExpiryMs(token: string): number | null {
 	try {
 		const segment = token.split(".")[1];
 		if (!segment) return null;

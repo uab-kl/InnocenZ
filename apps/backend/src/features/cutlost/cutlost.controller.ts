@@ -13,6 +13,8 @@ import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.rep
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { sealCheckOut } from '@/features/shift-assignment/seal-checkout';
 import { resolveTierWages } from '@/features/shift-assignment/resolve-tier-wages';
+import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository';
+import { sealWageLine } from '@/features/payment-voucher/wage-line';
 import { CreateCutlostRequestSchema, DecideCutlostRequestSchema } from '@/schema/cutlost.schema';
 import { CutlostRepositoryClass } from './cutlost.repository';
 import { CutlostRequestWithContext } from './cutlost.model';
@@ -35,6 +37,10 @@ export class CutlostControllerClass {
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
+    // A release SEALS a wage (pro-rata for the hours worked), and since 28 Sep
+    // 2026 it also files it — the released PR never checks out, so no phone
+    // call was ever going to. See wage-line.ts.
+    private paymentVoucherRepository: PaymentVoucherRepositoryClass,
   ) {}
 
   private resolveScope(req: Request): Promise<OrgScope> {
@@ -348,6 +354,22 @@ export class CutlostControllerClass {
           `${seal.earned.workedMinutes}/${seal.earned.scheduledMinutes} min, ` +
           `rule=${seal.earned.rule}, sealed RM${seal.earned.amount}`,
       );
+      // The wage just sealed goes on the week's voucher now. Nothing else would
+      // write it: the PR never checks out, and the Sunday generator skips a week
+      // that already has a voucher — while the PR is told their wage is sealed.
+      const wage = await sealWageLine(
+        {
+          shiftAssignmentRepository: this.shiftAssignmentRepository,
+          paymentVoucherRepository: this.paymentVoucherRepository,
+          prRepository: this.prRepository,
+        },
+        { assignmentId: named.assignmentId, actor },
+      );
+      if (wage.outcome === 'refused') {
+        logger.error(
+          `[cutlost.approve] ${request.id}: ${named.assignmentId} released and sealed, but the wage is NOT on a voucher — ${wage.reason}`,
+        );
+      }
     }
 
     // Unfilled slots come off the plan, floored at the people actually on the
@@ -388,7 +410,13 @@ export class CutlostControllerClass {
   private async notifyAgency(request: CutlostRequestWithContext | null, actor: string) {
     if (!request) return;
     try {
-      const members = await this.agencyMemberRepository.listByAgency(request.agencyId);
+      // ACTIVE members only. The list holds every row the agency ever had —
+      // pending applicants, declined ones (`rejected`) and deactivated members
+      // (`inactive`) — and on 28 Sep 2026 this notice reached a deactivated
+      // member and a declined applicant. Same filter every other fan-out uses.
+      const members = await this.agencyMemberRepository.listByAgency(request.agencyId, {
+        status: 'active',
+      });
       const userIds = members.map((m) => m.userId).filter((v): v is string => !!v);
       const names = request.releasedAssignments.map((a) => a.prName ?? 'a PR');
       await notifyMany(userIds, {
@@ -423,8 +451,12 @@ export class CutlostControllerClass {
     actor: string,
   ) {
     try {
+      // Active outlet members only — same reason as `notifyAgency` above.
       const members = await this.outletMemberRepository.listByOutlet(request.outletId);
-      const userIds = members.map((m) => m.userId).filter((v): v is string => !!v);
+      const userIds = members
+        .filter((m) => m.status === 'active')
+        .map((m) => m.userId)
+        .filter((v): v is string => !!v);
       await notifyMany(userIds, {
         kind: 'cutlost_decided',
         title: decision === 'approve' ? 'Cut-loss approved' : 'Cut-loss declined',

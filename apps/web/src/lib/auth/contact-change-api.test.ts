@@ -1,4 +1,4 @@
-import {
+import axios, {
 	AxiosError,
 	type AxiosResponse,
 	type InternalAxiosRequestConfig,
@@ -13,8 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *     the token this tab holds. The api call must STORE the re-issued pair
  *     before it resolves, or the next request is a 401 and the client ejects
  *     the session.
- *  2. A wrong code is HTTP 400 by contract. The authenticated client signs out
- *     on ANY 401, so a refusal must travel as an `AuthFlowError` that leaves
+ *  2. A wrong code is HTTP 400 by contract. The authenticated client reads a
+ *     401 as the session's — it refreshes, replays, and signs out if that
+ *     fails too — so a refusal must travel as an `AuthFlowError` that leaves
  *     the session — and the tokens — alone.
  *
  * The HTTP layer is the REAL axios client from `axios-v1`, interceptors and
@@ -119,6 +120,8 @@ beforeEach(() => {
 	kickToLogin.mockClear();
 	getClient(kickToLogin).defaults.adapter = fakeAdapter;
 	getPublicClient().defaults.adapter = fakeAdapter;
+	// A 401's refresh goes through bare axios (lib/auth/token-refresh.ts).
+	axios.defaults.adapter = fakeAdapter;
 	saveAccessToken("old-access");
 	saveRefreshToken("old-refresh");
 });
@@ -469,10 +472,18 @@ describe("contact change — a refusal does not sign out", () => {
 	 */
 
 	it("CONTROL: a 401 through the same client DOES kick — the instrument can see one", async () => {
-		replies.push({
-			status: 401,
-			body: { success: false, message: "Unauthorized", data: null },
-		});
+		// The session 401 is refreshed first; the kick comes when the server
+		// refuses the refresh token too — a session that is really over.
+		replies.push(
+			{
+				status: 401,
+				body: { success: false, message: "Unauthorized", data: null },
+			},
+			{
+				status: 401,
+				body: { success: false, message: "Please sign in again.", data: null },
+			},
+		);
 
 		await expect(
 			startContactChange({
@@ -481,6 +492,11 @@ describe("contact change — a refusal does not sign out", () => {
 				currentPassword: "pw",
 			}),
 		).rejects.toBeInstanceOf(AuthFlowError);
+		expect(seen.map((s) => s.url)).toEqual([
+			"/auth/contact-change/start",
+			"/auth/refresh",
+		]);
+		expect(seen[1].body).toEqual({ refreshToken: "old-refresh" });
 		expect(kickToLogin).toHaveBeenCalledTimes(1);
 	});
 

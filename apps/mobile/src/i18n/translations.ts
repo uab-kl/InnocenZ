@@ -19,6 +19,8 @@ export type AppTranslations = {
     loading: string;
     loadingSession: string;
     retry: string;
+    /** Opening the app, a SAVED sign-in could not be confirmed (no connection, server down). She is still signed in; Retry and Sign out sit under it. */
+    sessionOffline: string;
     yes: string;
     no: string;
     outlet: string;
@@ -1704,6 +1706,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       loading: 'Loading…',
       loadingSession: 'Getting things ready…',
       retry: 'Retry',
+      sessionOffline: 'Can’t reach InnocenZ right now. You’re still signed in — check your connection and retry.',
       yes: 'Yes',
       no: 'No',
       outlet: 'Outlet',
@@ -2880,6 +2883,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       loading: '加载中…',
       loadingSession: '正在准备…',
       retry: '重试',
+      sessionOffline: '暂时无法连接 InnocenZ。你仍处于登录状态——请检查网络后重试。',
       yes: '是',
       no: '否',
       outlet: '门店',
@@ -4049,6 +4053,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       loading: '載入中…',
       loadingSession: '正在準備…',
       retry: '重試',
+      sessionOffline: '暫時無法連線 InnocenZ。你仍保持登入狀態——請檢查網路後重試。',
       yes: '是',
       no: '否',
       outlet: '門店',

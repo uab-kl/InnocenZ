@@ -259,3 +259,84 @@ describe('POST /auth/otp/send — whose address the code may reach', () => {
     expect(ctx.phoneVerificationRepository.create).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A ROSTER STUB (active, NO password) — Fix First, 28 Sep 2026.
+ *
+ * It is claimed by the invited PR signing up with its phone, never by a reset.
+ * So `signup` sends to a stub's number (it is not "taken") but to the PHONE
+ * ALONE: a code that also went to a typed inbox would let anyone who knows the
+ * number verify it from their own mailbox and take the account over. And
+ * `forgot_password` answers a stub exactly like a number nobody registered.
+ */
+describe('POST /auth/otp/send — a never-activated roster stub', () => {
+  const stub = () => fakeUser({ passwordHash: null });
+
+  it('signup: sends to the stub’s phone, and to the phone ALONE even when an email is typed', async () => {
+    const ctx = setup({ byLoginMethod: (method) => (method === 'phone' ? stub() : null) });
+
+    const res = await ctx.send({
+      phoneNum: '+60123456789',
+      purpose: 'signup',
+      email: 'someone.else@x.my',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const sent = delivered(ctx.deliver);
+    expect(sent.phone).toBe('60123456789');
+    expect(sent.email).toBeNull();
+    // The receipt records that it proves the phone alone — registerUser reads this.
+    expect([...ctx.rows.values()][0].channel).toBe('whatsapp,sms');
+    expect(res.body.data.sentTo.map((d: { channel: string }) => d.channel)).toEqual(['whatsapp', 'sms']);
+  });
+
+  it('signup: the stub’s OWN email is not "taken" — but it is still not mailed', async () => {
+    const ctx = setup({ byLoginMethod: () => stub() });
+
+    const res = await ctx.send({
+      phoneNum: '+60123456789',
+      purpose: 'signup',
+      email: 'owner@atlas-agency.my',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(delivered(ctx.deliver).email).toBeNull();
+  });
+
+  it('signup: an email held by ANOTHER account is still refused before any code', async () => {
+    const ctx = setup({
+      byLoginMethod: (method) => (method === 'phone' ? stub() : fakeUser({ id: 'user-2' })),
+    });
+
+    const res = await ctx.send({
+      phoneNum: '+60123456789',
+      purpose: 'signup',
+      email: 'owner@other.my',
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.message).toBe('That email already has an account');
+    expect(ctx.deliver).not.toHaveBeenCalled();
+  });
+
+  it('signup: an ACTIVATED account’s phone is still 409', async () => {
+    const ctx = setup({ byLoginMethod: (method) => (method === 'phone' ? fakeUser() : null) });
+    const res = await ctx.send({ phoneNum: '+60123456789', purpose: 'signup' });
+    expect(res.statusCode).toBe(409);
+    expect(res.body.message).toBe('That phone number already has an account');
+    expect(ctx.deliver).not.toHaveBeenCalled();
+  });
+
+  it('forgot_password: a stub answers exactly like an unknown number — neutral 200, nothing sent', async () => {
+    const stubCtx = setup({ byLoginMethod: () => stub() });
+    const unknownCtx = setup({ byLoginMethod: () => null });
+
+    const s = await stubCtx.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
+    const u = await unknownCtx.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
+
+    expect(s.statusCode).toBe(200);
+    expect(s.body).toEqual(u.body);
+    expect(stubCtx.deliver).not.toHaveBeenCalled();
+    expect(stubCtx.phoneVerificationRepository.create).not.toHaveBeenCalled();
+  });
+});

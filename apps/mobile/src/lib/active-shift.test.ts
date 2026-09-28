@@ -100,21 +100,49 @@ describe('pickActive · the ordinary single open check-in is unchanged', () => {
   });
 });
 
+/*
+ * ⚠️ Every stamp below is written WITHOUT an offset, on purpose. An ISO
+ * date-time with no offset parses as the DEVICE's local time, which is the clock
+ * `localDateKey` reads — so "22:30, then 03:00 the next morning" means that in
+ * whatever timezone the suite runs. They used to carry `+08:00`, which only
+ * meant it on a Malaysian machine: CI runs in UTC, where 03:00+08:00 is still
+ * 19:00 the day BEFORE, and "stops at the check-out day" failed there every day.
+ */
 describe('shiftDayKeys', () => {
   it('spans both days of a shift that crossed midnight', () => {
     // Checked in 22:30, still on duty at 01:10 the next morning.
-    const keys = shiftDayKeys('2026-09-12T22:30:00+08:00', null, '2026-09-13');
+    const keys = shiftDayKeys('2026-09-12T22:30:00', null, '2026-09-13');
     expect(keys).toEqual(['2026-09-12', '2026-09-13']);
   });
 
   it('stops at the check-out day, not the day after', () => {
     // A closed shift must not swallow the next night's receipts.
     const keys = shiftDayKeys(
-      '2026-09-12T22:30:00+08:00',
-      '2026-09-13T03:00:00+08:00',
+      '2026-09-12T22:30:00',
+      '2026-09-13T03:00:00',
       '2026-09-14',
     );
     expect(keys).toEqual(['2026-09-12', '2026-09-13']);
+  });
+
+  it('reads "today" from the key it is handed, never from the clock', () => {
+    // The open-shift branch used to read `new Date()`, so the midnight case
+    // above passed only when the machine's date was 13 Sep 2026. A year the
+    // suite will never run in proves the key is what decides.
+    expect(shiftDayKeys('2031-03-01T22:30:00', null, '2031-03-02')).toEqual([
+      '2031-03-01',
+      '2031-03-02',
+    ]);
+    expect(shiftDayKeys('2031-03-01T22:30:00', null, '2031-03-01')).toEqual([
+      '2031-03-01',
+    ]);
+  });
+
+  it('never spans backwards when "today" is before the check-in day', () => {
+    // A device clock behind the stamp: the shift is still just its own day.
+    expect(shiftDayKeys('2031-03-01T22:30:00', null, '2031-02-27')).toEqual([
+      '2031-03-01',
+    ]);
   });
 
   it('is just today when there is no check-in stamp', () => {
@@ -123,8 +151,8 @@ describe('shiftDayKeys', () => {
 
   it('is one day for a shift that did not cross midnight', () => {
     const keys = shiftDayKeys(
-      '2026-09-13T19:00:00+08:00',
-      '2026-09-13T23:00:00+08:00',
+      '2026-09-13T19:00:00',
+      '2026-09-13T23:00:00',
       '2026-09-13',
     );
     expect(keys).toEqual(['2026-09-13']);
@@ -133,8 +161,8 @@ describe('shiftDayKeys', () => {
   it('caps the span so an impossible stamp cannot spin the loop', () => {
     // A check-out a year later is not a real shift; it must not enumerate 365 days.
     const keys = shiftDayKeys(
-      '2026-01-01T20:00:00+08:00',
-      '2027-01-01T02:00:00+08:00',
+      '2026-01-01T20:00:00',
+      '2027-01-01T02:00:00',
       '2027-01-01',
     );
     expect(keys).toHaveLength(4);
@@ -142,8 +170,8 @@ describe('shiftDayKeys', () => {
 
   it('ignores a check-out that precedes the check-in', () => {
     const keys = shiftDayKeys(
-      '2026-09-13T20:00:00+08:00',
-      '2026-09-01T02:00:00+08:00',
+      '2026-09-13T20:00:00',
+      '2026-09-01T02:00:00',
       '2026-09-13',
     );
     expect(keys).toEqual(['2026-09-13']);

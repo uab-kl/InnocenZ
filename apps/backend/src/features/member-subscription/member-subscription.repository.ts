@@ -9,6 +9,16 @@ import {
   MemberSubscriptionInsertType,
   MemberSubscriptionTable,
 } from './member-subscription.model.js';
+import { readCloseLaneFacts } from '@/features/subscription/plan-limit.js';
+import { type CloseLaneVerdict, closeLaneRefusal, closeLaneVerdict } from './plan-lane-rules.js';
+
+/**
+ * What a guarded close did. `closed` carries the verdict it was let through
+ * on, so the caller can say WHY — a ghost row is worth saying out loud.
+ */
+export type GuardedCloseOutcome =
+  | { kind: 'closed'; record: MemberSubscription; verdict: CloseLaneVerdict }
+  | { kind: 'refused'; reason: 'not_found' | 'already_ended' | 'last_plan' };
 
 export type PeriodRevenueRow = {
   period: string;
@@ -319,6 +329,45 @@ export class MemberSubscriptionRepositoryClass {
       logger.error('[MemberSubscriptionRepository.update] Error:', error);
       return null;
     }
+  }
+
+  /**
+   * Close (cancel, or end by edit) a ledger row UNLESS that leaves a real org
+   * with no plan — the check and the write in ONE transaction, under the lane
+   * lock and `FOR UPDATE` on the org's live plan rows (see `readCloseLaneFacts`).
+   *
+   * It used to be check-then-update across two round trips with nothing held,
+   * so two admins ending an org's last two plan rows at the same moment could
+   * each see the other's row still live, and both succeed.
+   *
+   * A row whose organisation does not exist is let through: it cannot leave a
+   * real org planless, and the refusal it used to get is exactly what stopped
+   * an admin ending the ghost Premier row opened on 28 Sep 2026.
+   *
+   * THROWS when the database fails (nothing is written — the transaction rolls
+   * back). Unlike the reads above it does not swallow into a quiet default: a
+   * swallowed error here would read as "not found" or "allowed".
+   */
+  async closeUnlessLastPlan(
+    id: string,
+    data: Partial<MemberSubscriptionInsertType>,
+    door: 'cancel' | 'edit',
+  ): Promise<GuardedCloseOutcome> {
+    return db.transaction(async (tx) => {
+      const verdict = closeLaneVerdict(await readCloseLaneFacts(tx, id));
+      const refusal = closeLaneRefusal(verdict, door);
+      if (refusal) return { kind: 'refused', reason: refusal };
+
+      const [record] = await tx
+        .update(MemberSubscriptionTable)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(MemberSubscriptionTable.id, id))
+        .returning();
+      // The row is locked FOR UPDATE above, so it cannot vanish in between;
+      // throwing rolls back rather than reporting a close that did not happen.
+      if (!record) throw new Error(`[closeUnlessLastPlan] row ${id} was not updated`);
+      return { kind: 'closed', record, verdict };
+    });
   }
 
   // Subscription revenue bucketed by the given granularity (day/week/month/year),

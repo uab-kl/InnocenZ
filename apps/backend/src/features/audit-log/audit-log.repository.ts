@@ -328,11 +328,40 @@ const SENSITIVE_KEYS = new Set([
   // ⚠️ This also blanks any other field literally named `code` in an audited
   // body (e.g. a portal's `code`); a redacted label is the cheaper mistake.
   'code',
+  // Found in the live table on 28 Sep 2026, each written by a lane the list
+  // above did not name: a typed `confirmPassword` in PLAINTEXT, and four MFA
+  // enrolments whose URI was spelt `otpauthUrl` (the list had only `…Uri`).
+  'confirmPassword',
+  'otpauthUrl',
+  // The login body's authenticator code — short-lived, but a credential.
+  'mfaCode',
+  'otp',
 ]);
 
-/** The set itself, read-only — exported so its contents can be asserted. */
+/**
+ * Keys compared case- and separator-blind, so `refresh_token`, `ConfirmPassword`
+ * and `otpauth_url` cannot slip past a list written in camelCase.
+ */
+function normaliseAuditKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+const SENSITIVE_NORMALISED = new Set([...SENSITIVE_KEYS].map(normaliseAuditKey));
+
+/**
+ * Is this key a credential? The explicit list, plus the three SUFFIXES every
+ * credential here has carried — `…password`, `…token`, `…secret`. The suffix
+ * rule is what the list kept missing: each leak above was a new spelling of a
+ * kind of field that was already on it. Suffix rather than substring, so
+ * `passwordChangedAt` and `tokenCount` stay readable.
+ */
 export function isSensitiveAuditKey(key: string): boolean {
-  return SENSITIVE_KEYS.has(key);
+  const k = normaliseAuditKey(key);
+  return (
+    SENSITIVE_NORMALISED.has(k) ||
+    k.endsWith('password') ||
+    k.endsWith('token') ||
+    k.endsWith('secret')
+  );
 }
 
 /**
@@ -361,7 +390,11 @@ export function redactSensitive<T>(value: T): T {
 
   const redacted: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    redacted[key] = SENSITIVE_KEYS.has(key) ? '[REDACTED]' : redactSensitive(entry);
+    // A boolean or null under a credential-shaped key (`hasPassword: true`)
+    // carries no secret, so it stays — the record keeps what it can.
+    const carriesValue = entry !== null && entry !== undefined && typeof entry !== 'boolean';
+    redacted[key] =
+      carriesValue && isSensitiveAuditKey(key) ? '[REDACTED]' : redactSensitive(entry);
   }
 
   return redacted as T;

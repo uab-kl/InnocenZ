@@ -3,6 +3,7 @@
  * '+', no spaces — or `null` when it cannot be one.
  *
  * The rules, in order:
+ *  0. a value holding ANY LETTER is not a phone number — null (see below);
  *  1. strip everything that is not a digit ("+60 12-345 6789" → "60123456789");
  *  2. a leading "00" is the international dialling prefix — drop it;
  *  3. otherwise a leading "0" is a Malaysian trunk prefix — replace it with the
@@ -12,10 +13,22 @@
  * Steps 2 and 3 are exclusive: "00" followed by a "0" is not a real number, and
  * turning it into "60…" would invent one.
  *
+ * ⚠️ WHY LETTERS REFUSE THE WHOLE VALUE (Fix First, 28 Sep 2026). Step 1 used to
+ * run on anything, so junk BECAME a number. The admin screen stored
+ * `'+admin-' + 12 hex characters` as every admin's phone, and stripping the
+ * letters out of `+admin-0a12b3456c78` leaves `0123456 78…` — a Malaysian-looking
+ * mobile. `deliverCode` then sent that admin's reset and change codes by
+ * WhatsApp and SMS to whoever holds the invented line. Punctuation is still
+ * stripped (people type `+60 (12) 345-6789`); a letter means the value was
+ * never a phone, so it is never a delivery target. Any script counts — `\p{L}`,
+ * not just a-z.
+ *
  * Stored phones on `user.phone_num` are '+' + these digits (see `storedPhone`).
  */
 export function toWhatsAppDigits(phone: string | null | undefined): string | null {
-  let digits = (phone ?? '').replace(/\D/g, '');
+  const raw = phone ?? '';
+  if (/\p{L}/u.test(raw)) return null;
+  let digits = raw.replace(/\D/g, '');
   if (digits.startsWith('00')) {
     digits = digits.slice(2);
   } else if (digits.startsWith('0')) {

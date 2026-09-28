@@ -5,6 +5,7 @@ import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
 import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org-member-invite.repository.js';
+import { resyncPortalRoles } from '@/features/rbac/membership-access.js';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository.js';
 import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository.js';
 import { UserRepositoryClass } from '@/features/user/user.repository.js';
@@ -770,6 +771,9 @@ export class OrgMemberInviteControllerClass {
       user.id,
     );
     if (existing?.status === 'active') {
+      // Their title here is unchanged, but a previous accept that died between
+      // the activation and the role leaves exactly this state — heal it.
+      await resyncPortalRoles({ userId: user.id, org: 'outlet', actor });
       await this.inviteRepository.update(invite.id, {
         status: 'accepted',
         acceptedUserId: user.id,
@@ -810,7 +814,9 @@ export class OrgMemberInviteControllerClass {
         updatedBy: actor,
       });
     }
-    await this.ensurePortalRole(user.id, invite.roleId, actor);
+    // The roles follow the lanes, never the invite's own `roleId` — see
+    // `acceptAgency` below.
+    await resyncPortalRoles({ userId: user.id, org: 'outlet', actor });
     await this.inviteRepository.update(invite.id, {
       status: 'accepted',
       acceptedUserId: user.id,
@@ -845,6 +851,8 @@ export class OrgMemberInviteControllerClass {
       user.id,
     );
     if (existing?.status === 'active') {
+      // Unchanged title; heals a previous accept that died before its role.
+      await resyncPortalRoles({ userId: user.id, org: 'agency', actor });
       await this.inviteRepository.update(invite.id, {
         status: 'accepted',
         acceptedUserId: user.id,
@@ -885,7 +893,21 @@ export class OrgMemberInviteControllerClass {
         updatedBy: actor,
       });
     }
-    await this.ensurePortalRole(user.id, invite.roleId, actor);
+    /*
+     * ⚠️ RECOMPUTED FROM THE LANES, NOT ADDED FROM THE INVITE.
+     *
+     * This used to be `ensurePortalRole(invite.roleId)`, which only ever ADDED:
+     * somebody re-joining as Director kept the Owner row from the membership
+     * they held before, and the role granted was the invite's `roleId` even
+     * where it disagreed with the `subRole` the membership was given. Now the
+     * account ends holding exactly the roles its active lanes imply — the same
+     * rule `updateMember` and `removeMember` apply (`membership-access.ts`).
+     *
+     * Its own transaction: the activation above writes through
+     * `activateOrgMembership`'s own connection and has committed by now, so the
+     * recompute reads the new lane back.
+     */
+    await resyncPortalRoles({ userId: user.id, org: 'agency', actor });
     await this.inviteRepository.update(invite.id, {
       status: 'accepted',
       acceptedUserId: user.id,
@@ -905,18 +927,9 @@ export class OrgMemberInviteControllerClass {
     });
   }
 
-  private async ensurePortalRole(
-    userId: string,
-    roleId: string,
-    actor: string,
-  ) {
-    const roles = await this.userRoleRepository.getUserRoles(userId);
-    if (roles.some((r) => r.id === roleId)) return;
-    await this.userRoleRepository.assignRoleToUser({
-      userId,
-      roleId,
-      createdBy: actor,
-      updatedBy: actor,
-    });
-  }
+  /*
+   * `ensurePortalRole` WAS HERE (28 Sep 2026): add the invite's role if it was
+   * missing, never take one away. Replaced by `resyncPortalRoles` in both
+   * accept paths — see the note in `acceptAgency`.
+   */
 }

@@ -213,6 +213,24 @@ export const loginLimiter = rateLimit({
 });
 
 /**
+ * Token refresh — its OWN bucket, not login's (28 Sep 2026).
+ *
+ * It rode `loginLimiter` until the web and the app learned to refresh: every
+ * open tab now trades its refresh token for a new access token about four times
+ * an hour, so a venue with fifteen tabs open behind one NAT address would spend
+ * login's 60 on refreshes alone — and then nobody at that venue could sign IN
+ * either, because the two shared a counter. A refresh cannot guess anything (it
+ * needs a valid signed refresh token), so this cap only bounds a runaway client.
+ */
+export const refreshLimiter = rateLimit({
+  name: 'refresh',
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  keys: (req) => [`ip:${clientIp(req)}`],
+  message: 'Too many session refreshes. Please wait a moment and try again.',
+});
+
+/**
  * WhatsApp OTP send. The tightest rule here, because every call past the
  * limiter spends real money and puts an unrequested message on someone's
  * phone. Keyed per phone number as well as per host for the same reason

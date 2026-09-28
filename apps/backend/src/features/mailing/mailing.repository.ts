@@ -22,6 +22,8 @@ import type {
   SendEmailInput,
   SendEmailResult,
 } from '@/features/mailing/mailing.model.js';
+// A leaf module with no imports — safe to pull into a repository.
+import { maskContactText } from '@/features/auth/query-error-redaction.js';
 import { logger } from '@/util/logger.js';
 
 export { emailConfigured };
@@ -140,7 +142,9 @@ export async function sendOrgApprovedNotificationEmail(input: {
   if (!emailConfigured()) {
     logger.warn(
       '[mailing] Email not configured — skipped org approved notification',
-      { orgName: input.orgName, to: input.recipientEmail },
+      // Masked, like every address this file logs: first letter + domain is
+      // enough to tell two test accounts apart.
+      { orgName: input.orgName, to: maskContactText(input.recipientEmail) },
     );
     return null;
   }
@@ -188,9 +192,12 @@ export async function sendPasswordResetEmail(input: {
   expiryLabel: string;
 }): Promise<SendEmailResult | null> {
   if (!emailConfigured()) {
+    // The address MASKED, and never the link: it carries the raw reset token.
+    // What the caller does with a skipped link is its decision (production
+    // logs only the account id — AuthController.forgotPassword).
     logger.warn(
       '[mailing] Email not configured — skipped password reset email',
-      { to: input.recipientEmail },
+      { to: maskContactText(input.recipientEmail) },
     );
     return null;
   }
@@ -330,7 +337,7 @@ export async function sendOrgMemberInviteMail(input: {
   if (!emailConfigured()) {
     logger.warn(
       '[mailing] Email not configured — skipped org member invite email',
-      { orgName: input.orgName, to: input.recipientEmail },
+      { orgName: input.orgName, to: maskContactText(input.recipientEmail) },
     );
     return null;
   }

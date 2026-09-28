@@ -132,8 +132,66 @@ export function saveAuthTokens(
 	saveTokenExpiry(expiredAt);
 }
 
+/**
+ * Both tokens AND an access token whose clock has not run out.
+ *
+ * ⚠️ "Has the access token's clock run out" is NOT "is this person signed
+ * out". Production mints a 15-minute access token beside a 7-day refresh
+ * token, so somebody back from lunch fails this test while holding a perfectly
+ * good session — and the gates that used it as a sign-in check sent them to
+ * /login. To ask whether there is a session at all, use `hasSessionTokens()`;
+ * to bring an expired one back before acting, `resumeSession()` in
+ * `token-refresh.ts`.
+ */
 export function hasValidTokens(): boolean {
 	const accessToken = getAccessToken();
 	const refreshToken = getRefreshToken();
 	return !!accessToken && !!refreshToken && !isTokenExpired();
+}
+
+/**
+ * Does this tab hold a session at all — access AND refresh token — whatever the
+ * access token's clock says?
+ *
+ * The right gate for "may this screen ask the server": past the access token's
+ * 15 minutes the request still goes out, collects a 401, and the client
+ * refreshes and replays it (`token-refresh.ts`). Only a refused refresh ends
+ * the session.
+ */
+export function hasSessionTokens(): boolean {
+	return !!getAccessToken() && !!getRefreshToken();
+}
+
+/**
+ * Store the access token `/auth/refresh` just minted from `spentRefreshToken` —
+ * in THIS TAB ONLY, and only while this tab still holds that refresh token.
+ * Returns whether it was stored.
+ *
+ * Two ways the ordinary `saveAccessToken` would be wrong here:
+ *
+ *  • THE TAB MAY HAVE MOVED ON while the refresh was in flight — signed out, or
+ *    signed in as somebody else. Writing then would put an access token back
+ *    into a tab whose person had just ended that session. So nothing is written
+ *    unless the refresh token spent is still this tab's.
+ *  • THE SEED MAY NOT BE OURS. `writeKey` also writes the shared localStorage
+ *    seed, and a later sign-in in another tab owns that seed now. Writing this
+ *    session's access token beside that session's refresh token would hand the
+ *    next new tab one identity that turns into another at its first refresh —
+ *    the "my agency tab became the outlet" bug this file exists to prevent. A
+ *    new tab that seeds an expired access token simply refreshes it itself.
+ *
+ * `expiresAt` null = the server did not say, so no clock is kept rather than a
+ * stale one: `hasValidTokens()` then reads false, which only costs a refresh.
+ */
+export function saveRefreshedAccessToken(
+	spentRefreshToken: string,
+	accessToken: string,
+	expiresAt: number | null,
+): boolean {
+	const tab = tabStore();
+	if (!tab || readKey(REFRESH_TOKEN_KEY) !== spentRefreshToken) return false;
+	tab.setItem(ACCESS_TOKEN_KEY, accessToken);
+	if (expiresAt === null) tab.removeItem(TOKEN_EXPIRY_KEY);
+	else tab.setItem(TOKEN_EXPIRY_KEY, expiresAt.toString());
+	return true;
 }

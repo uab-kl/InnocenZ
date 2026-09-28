@@ -218,8 +218,10 @@ describe('step 2 — the code and the new password together', () => {
       code: '123456',
       newPassword: 'new-password',
     });
-    // Before anything else touches the API — the old token is dead by now.
-    expect(mockAdoptToken).toHaveBeenCalledWith('fresh-access');
+    // Before anything else touches the API — the old token is dead by now. The
+    // REFRESH token is adopted with it: the change's cutoff killed the old one
+    // too, and a session left holding it would end 15 minutes later.
+    expect(mockAdoptToken).toHaveBeenCalledWith('fresh-access', 'fresh-refresh');
     expect(mockRefreshMe).toHaveBeenCalledWith('fresh-access');
   });
 

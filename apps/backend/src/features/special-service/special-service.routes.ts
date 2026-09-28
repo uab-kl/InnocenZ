@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { specialServiceController } from '@/composition-root.js';
 import { requireAdmin } from '@/middlewares/require-role.js';
-import { requireOutletPermissionIfMember } from '@/middlewares/require-sub-role.js';
+import {
+  requireAgencyPermissionIfNotOutletMember,
+  requireOutletPermissionIfMember,
+} from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -57,10 +60,19 @@ router.get('/:id', specialServiceController.getById.bind(specialServiceControlle
  * the owner asked whether it is used at all. Gated anyway: a reachable endpoint
  * should not be ungated, and a dormant one is the easiest kind to forget when
  * it wakes up.
+ *
+ * ⚠️ AND THE AGENCY HALF (28 Sep 2026). "Lets everyone else through" let every
+ * AGENCY lane through too, so a view-only Director could book a budgeted service
+ * on the agency's account. The agency portal offers the booking only to
+ * `raisePv` (`payment_voucher:create`: owner, guarantor, finance), and the
+ * second guard now asks exactly that of the lane the caller holds at the agency
+ * the request acts for. A PR holds no agency membership, is not an agency
+ * caller, and still passes to the handler.
  */
 router.post(
   '/',
   requireOutletPermissionIfMember('special_service', 'create'),
+  requireAgencyPermissionIfNotOutletMember('payment_voucher', 'create'),
   specialServiceController.create.bind(specialServiceController),
 );
 // Assigning a vendor and moving an order's status are admin acts, matching the
