@@ -20,6 +20,33 @@ export interface LandingTranslations {
 		english: string;
 		chinese: string;
 	};
+	/** The floating chat button, bottom-left — the WhatsApp button's twin. */
+	chat: {
+		open: string;
+		close: string;
+		/** The floating button's label while the panel is open ("✕ Cancel"). */
+		cancel: string;
+		restart: string;
+		title: string;
+		subtitle: string;
+		greeting: string;
+		rolePr: string;
+		roleAgency: string;
+		roleOutlet: string;
+		roleOther: string;
+		placeholder: string;
+		send: string;
+		typing: string;
+		whatsapp: string;
+		/** WhatsApp messages pre-filled per role, so the first reply can be useful. */
+		prMsg: string;
+		agencyMsg: string;
+		outletMsg: string;
+		otherMsg: string;
+		/** Appended to the WhatsApp message when the bot could not answer. */
+		questionMsg: string;
+		panelLabel: string;
+	};
 	hero: {
 		eyebrow: string;
 		titleLine1: string;
@@ -388,6 +415,30 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			english: "English",
 			chinese: "Simplified Chinese",
 		},
+		chat: {
+			open: "Chat with us",
+			close: "Close",
+			cancel: "Cancel",
+			restart: "Start over",
+			title: "InnocenZ",
+			subtitle: "Ask us anything",
+			greeting:
+				"Hi! I'm the InnocenZ assistant. Tell me who you are and I'll show you exactly where to go — or just type a question.",
+			rolePr: "I'm a PR",
+			roleAgency: "I run an agency",
+			roleOutlet: "I run an outlet",
+			roleOther: "Something else",
+			placeholder: "Ask about check-in, pay, roster…",
+			send: "Send",
+			typing: "InnocenZ is typing",
+			whatsapp: "Chat with our team on WhatsApp",
+			prMsg: "Hi InnocenZ, I'm a PR and I'd like to know how InnocenZ works.",
+			agencyMsg: "Hi InnocenZ, I run a PR agency and I'd like to book a demo.",
+			outletMsg: "Hi InnocenZ, I run an outlet and I'd like to book a demo.",
+			otherMsg: "Hi InnocenZ, I have a question.",
+			questionMsg: "My question:",
+			panelLabel: "Chat with InnocenZ",
+		},
 		hero: {
 			eyebrow: "Introducing InnocenZ · 2026",
 			titleLine1: "The Operating Platform for",
@@ -728,6 +779,30 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			login: "登录",
 			english: "English",
 			chinese: "简体中文",
+		},
+		chat: {
+			open: "在线咨询",
+			close: "关闭",
+			cancel: "取消",
+			restart: "重新开始",
+			title: "InnocenZ",
+			subtitle: "有问题随时问我们",
+			greeting:
+				"你好！我是 InnocenZ 助手。告诉我你的身份，我会告诉你该去哪个页面 — 或直接输入问题。",
+			rolePr: "我是 PR",
+			roleAgency: "我经营经纪公司",
+			roleOutlet: "我经营门店（Outlet）",
+			roleOther: "其他问题",
+			placeholder: "问问签到、薪资、排班…",
+			send: "发送",
+			typing: "InnocenZ 正在输入",
+			whatsapp: "在 WhatsApp 联系我们的团队",
+			prMsg: "你好 InnocenZ，我是 PR，想了解 InnocenZ 怎么用。",
+			agencyMsg: "你好 InnocenZ，我经营 PR 经纪公司，想预约演示。",
+			outletMsg: "你好 InnocenZ，我经营门店，想预约演示。",
+			otherMsg: "你好 InnocenZ，我有一个问题。",
+			questionMsg: "我的问题：",
+			panelLabel: "与 InnocenZ 聊天",
 		},
 		hero: {
 			eyebrow: "InnocenZ 登场 · 2026",
