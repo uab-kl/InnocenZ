@@ -2,6 +2,12 @@
 
 Two rules settled on 30 Jul 2026, both found by *running* things rather than reading them.
 
+**A NEW PR NEEDS A REACHABLE MOBILE NUMBER (owner, 29 Sep 2026 — "Keep it required").** A roster
+stub is claimed ONLY by the PR's own sign-up proving the number on file, so `POST /pr` refuses a new
+stub whose phone does not normalise (`signInPhoneDigits`, 8-15 digits) with `PR_MOBILE_REQUIRED`;
+adding an EXISTING account (matched by phone or email) is unaffected. Both web forms (Roster → Add
+PR, Approvals → Invite) require it too.
+
 ## 1. A person has ONE phone number: `user.phone_num`
 
 The app signs in by mobile number and matches `user.phone_num`. Every agency-facing screen — roster,

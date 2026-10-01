@@ -377,9 +377,151 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | F12 | Trust one proxy hop in prod; audit IP from `req.ip`; health check on the real port; refresh limiter | ops | `main.ts` · env examples · Dockerfile · `rate-limit.ts` | — | ⚠️ Reported |
 | F13 | CI's failing step (lint/test/typecheck) | — | `nx run-many -t lint test typecheck` | — | ✅ Verified locally — 3 projects green |
 
+### Audit bugs below Fix first — 29 Sep 2026 (5 agents + lead; details §10 2026-09-29; afternoon G12–G22: 7 agents + lead, §10 2026-09-29 (iii); leftovers §9 top)
+| # | Item | Role link | Where | Data source | Status |
+|---|------|-----------|-------|-------------|--------|
+| G1 | PR told when a voucher is sent / paid; send stamps issued + pay-by dates (never re-dates) | Agency → PR | `payment-voucher-issue.ts` · controller · weekly-payout job | `notification` · `payment_voucher` | ⚠️ Unit-tested (needs a send to see live) |
+| G2 | Agency PV list: search, voucher no. in header, real dates, signer name · role, plan from the live row; receipt editor says "line total" | Agency | `routes/agency/pv.tsx` · `pv-list-filters` · `pv-display-dates` · `use-agency-live-plan` | `payment_voucher` · `member_subscription` | ⚠️ Unit-tested — agency tab signed out before the live pass |
+| G3 | Agency line edit obeys the outlet list + shift date; Sunday job no longer verifies receipts on vouchers it holds | Agency | `payment-voucher-line-edit.ts` · `weekly-payout.job.ts` | lines · receipts | ⚠️ Unit-tested |
+| G4 | Admin voucher list: numbers with their agency, both sign times | Admin | `routes/admin/service/payment-voucher.tsx` · `voucher-identity.ts` | `payment_voucher` + agency | ⚠️ Unit-tested — admin tab signed out |
+| G5 | PR app PV: both signatures (name · role · date), PR as payee, agency as payer; pending ≠ "issued"; "To sign" = signable only; signed/paid inspect-only | PR | `PvDetailScreen` · `PaymentHistoryPanel` · `pv-signatures` · `payment-history-map` | `/payment-voucher/mine` | ✅ Verified live (Vicky): PV-000009 shows agency owner · Owner · 14 Sep and Vicky · 14 Sep, "Both signatures on file", Payee = the PR, Paid by Atlas; PV-000011 reads only "Waiting for your agency to issue"; To sign lists PV-000008 alone |
+| G6 | Agency screens: real outlet rates (no demo RM 500 · 10%), per-tier labour cost, excused PR not paid, KPI = agency grade, member decisions say the server's sentence + keep the old role, cut-loss pane (busy, local time, no RM 0 chip), Add PR copy honest, IC from the profile (by `pr_id`), History "in wages", race filter case-blind | Agency | see §10 | `outlet_workspace` · `shift_assignment.pay_amount` · `agency_pr.kpi_tier` · `user_profile` | ⚠️ Unit-tested — agency tab signed out |
+| G7 | Outlet: real profile card, shift sheet names the invited agencies + two price lines, billed monthly incl. POS, empty-tab text, shared queries page past 100, overnight clash, rating really posts, real sales tiles; shift edit keeps named PRs; label-only slots refused | Outlet | see §10 | `shift` · `shift_sale` · `member_subscription` | ⚠️ Mostly unit-tested — ✅ the settings header card live ("UAB Emhub · Frank Lee · Verified · outlet active") |
+| G8 | Admin + security: no "Open prototype", logins attributed, PR detail current agencies only, date-only as dates, PR writes scoped to the acting agency, malformed ids → 404, `/auth/otp/send` answers alike, web signs out only on a session refusal, admin role label, tier job judges live plan rows, request answers claimed once | Admin · all | see §10 | `audit_logs` · `agency_pr` · `admin_request` | ⚠️ Unit-tested; ✅ `GET /auth/agencies/not-a-uuid/logo` → 404 JSON (agent, read-only) |
+| G9 | PR app: badge = server unread count, sheets inside the phone frame, cancellation rules per agency, History empty text, IC upload retry + Profile re-upload, stub-claim toast, 401 rule = web's | PR | `TopBar` · `LanguageSwitcher` · `AgencySchedulePanel` · `ShiftHistoryPanel` · `token-refresh` | `notification` · `penalty_rule` | ✅ Verified live (Vicky): badge 57 = DB unread 57; the bell sheet opens inside the bezel; "Atlas Agency" 24 h / 2 h / −25% / −50% and "Why We Met" free; History current week shows only "No shifts in this week" |
+| G10 | Notifications: bill + cut-loss kinds have icons/links, rows open the item, a repeat within 2 min is not delivered twice | Agency · Outlet | `notification-targets.ts` · `repeat-delivery.ts` | `notification` | ⚠️ Unit-tested |
+| G11 | Geofence search: Google places first (geocoder fallback), thin/partial matches never rewrite the address, "Use the address you entered" | Outlet | `geocode.ts` · `GeoFenceCard` · `geo-fence-address.ts` | Google · `outlet` | ✅ Verified live (search only) — see §10 |
+| G12 | Agency Payroll finds each voucher's PR in the SERVER roster (the store's is empty live): profile IC + payee code, one legal-name label per PR (FK first), search on the printed IC; an unsent card says "Raised", not "Issued" | Agency | `routes/agency/pv.tsx` · `hooks/use-voucher-roster.ts` · `agency-payroll.ts` · `PvCardSummary` | `payment_voucher.pr_id` → `user_profile` | ✅ Verified live: every Vicky voucher IC …8820, payee code VICK-8820, "(Vicky) Victoria Tan Mei Lin" on all, week counts 3 PRs |
+| G13 | Live pass of G2 / G4 / G6 / G7 / G8 (see §10 2026-09-29 (iii)) | Agency · Admin · Outlet | — | — | ✅ Verified live, read-only — except Today's money tiles (no live shift) and the Est. payout sheet (no shift today) |
+| G14 | "Resend to PR" re-notifies as a reminder (owner decision 1) | Agency → PR | `payment-voucher-issue.ts` · mobile `notification-copy.ts` | `notification` | ⚠️ Unit-tested (a send is a write) |
+| G15 | First partial weekly billing period pro-rated (decision 3); monthly outlet periods start on the anchor day | Agency | `subscription-period.ts` · `pro-rata.ts` · invoice repo · web invoice row / receipt / admin panel | `subscription_invoice.note` | ⚠️ Unit-tested (no mid-week approval since) |
+| G16 | Numeric KPI 0–100, formula server-only (decision 4) | Agency · Admin | `kpi-score.ts` · `pr-kpi.ts` · `pr.controller` list · `ManagePrGridCard` · `prs.tsx` | `shift_assignment` · `rating` | ✅ Verified live: 0 / 17 / 78 / 81 and "—", no formula or tooltip on the page |
+| G17 | Migrations 0167 + 0168; Post Job persists the special sub-type, the "Other" name and the event's own prices; the bookings pill says "Special" with no sub-type | Outlet → Agency | `shift.*` · `shift.schema.ts` · `backend-shift-map` · `OutletShiftDetailPanel` · `agency-outlet-shift-map` · `OutletBookings` | `shift.special_event_type` · `shift_drink_menu` · `notification_user_created_idx` | ✅ Applied + verified in `information_schema`; reads live (Calendar 8 shifts); a post = unit-tested |
+| G18 | Add PR requires a mobile number (server + Roster Add PR + Approvals Invite, translated refusal) | Agency | `pr.controller` · `pr-write-rules` · `RosterAddPrDialog` · `pending.tsx` · `pr-write-refusal` | `user` · `agency_pr` | ⚠️ Unit-tested (a create is a write) |
+| G19 | Backend follow-ups: wage line keeps `component` on a rewrite; join decisions guarded (repeat 200, opposite 409, race-safe); per-job advisory lock; plan change approvable from `contacted`; no username as legal name; `POST /rating` = `rating:create`; `/auth/otp/send` withheld address → neutral 200 | All | see §10 (iii) | `payment_voucher_line` · `agency_pr` · `admin_request` · `user_profile` | ⚠️ Unit-tested (backend suite); `rbac:check` + `rbac:seed-check` clean |
+| G20 | Web: Director's outlet Today shows the PR panel read-only; bell + member-change copy EN/中文; outlet History "in wages"; Est. payout sheet from server wages; agency History take-home; roster counts people; Log Sales per PR | Outlet · Agency | see §10 (iii) | `shift_sale` · `shift_assignment` · `payment_voucher` | ✅ Live: agency History "RM 15,128.58 take-home · RM 10,207.78 in wages" (wages = DB, 26 completed), outlet History "RM 8,066.11 in wages" (= DB, 23 completed), roster "2 PRs · 4 shifts"; ⚠️ Director view, Log Sales and 中文 copy unit-tested (+ Director API reads) |
+| G21 | PR app: every sheet opens inside the phone frame (one `PhoneSheet`, nesting stacks); a notification tap opens its item | PR | `PhoneSheet` · `notification-targets.ts` · `pr-nav` · `ShiftsScreen` · `PaymentScreen` | `notification` | ✅ Live (agent, writes blocked in the page): bell, lightbox, History calendar, filter + nested calendar, Change phone + dial picker in frame; new shift → day sheet; dispute accepted → PV-000011 |
+| G22 | Test-data clean-up script, dry run only | Owner | `cleanup-test-data-29sep.ts` (+ rules, 34 tests) | see §9 | ⏳ Owner runs `--apply --i-know-this-is-a-test-db` |
+| G23 | Review fixes: a hung scheduled job is abandoned after 30 min so its lock frees (`JOB_LOCK_MAX_RUN_MS`); the clean-up's `--apply` also needs `--i-know-this-is-a-test-db` (`applyRefusal`); a new stub PR needs a REACHABLE mobile (`signInPhoneDigits`, not just non-blank); `POST /shift-sale` caps each amount, the units and the drinks+tips total at the columns' limits (400, not a raw 500); `resolvePvPrName`'s IC branch returns the legal name too | Backend · Agency | `scheduler/job-lock.ts` · `cleanup-test-data-29sep*.ts` · `pr.controller.ts` · `shift-sale.schema.ts` · `agency-payroll.ts` | — | ⚠️ Unit-tested (job-lock 16, clean-up rules 34, pr-personnel 150, sale schema 5 new, agency lib 513) |
+| G24 | Money uses a special night's OWN prices (owner decision): one resolver per shift feeds the PR's `/mine` `drinkMenu` (+ `drinkMenuSource`) and the voucher name check; the PR app shows the sub-type + event prices | PR · Agency | `shift-assignment.repository.ts` `resolveDrinkMenusForShifts` · `/mine` · `catalogueForReceipt` · app `special-event.ts` / `EventPriceCard` | `shift_drink_menu` · `outlet_drink_menu` | ⚠️ Unit-tested (no special shift has its own list yet — 0 rows) |
+| G25 | Invoice VOID (0169 applied): admin-only `PATCH /subscription-invoice/:id/void` with a reason, refused for paid / in-flight / credited bills; every owed reader skips void (`isInvoiceOwed`); FPX refuses; a voided period is never re-minted; grey pill + "Voided bills"; the clean-up voids instead of deleting | Admin · Outlet · Agency | `invoice-void.ts` · void route · `subscription-payment` · web `isInvoiceOwed` · `invoice-payment-sheet` | `subscription_invoice.status` | ✅ Live: the admin payment sheet offers "Void" beside "Mark paid" (not pressed); ⚠️ the void itself unit-tested |
+| G26 | Billing: a plan switch in a pro-rated first week charges the FULL-WEEK difference (owner); a re-joined lane never bills its gap and pro-rates the re-join period; the New-bill notice states the amount after credits | Agency · Outlet | `subscription-invoice.repository.ts` · `subscription-period.ts` · `announce-opened.ts` | `subscription_invoice` | ⚠️ Unit-tested |
+| G27 | KPI weights only in the server-only env `KPI_WEIGHTS` (owner); no weight in code, tests or docs; unset → "—" + one warning | Agency · Admin | `kpi-score.ts` `parseKpiWeights` · `pr-kpi.ts` · env examples | env | ✅ Live: Manage PR still 0 / 78 / 17 / 81 from the local setting |
+| G28 | Log Sales counts services (owner): `POST /shift-sale` total = drinks + tips + services, omitted services kept; every row editable; Log Sales in the Calendar shift sheet; Close shift / Withdraw confirm with the server's sentence | Outlet | `shift-sale.*` · `OutletPrSalesLog` · `OutletShiftDetailPanel` · `OutletOperationsCalendar` · `outlet-write-refusal.ts` | `shift_sale` | ✅ Live: the 29 Sep sheet shows "LOG SALES · Vicky · Recorded RM 1,500.00 · Save" (not pressed) |
+| G29 | Agency History: per-PR take-home with the wage beside it, penalty lines subtracted; roster Drinks/Tips + home live floor from real `shift_sale`; outlet History special type; bell copy for all 20 kinds; 34 outlet refusal sentences + join-decision sentences EN/中文 | Agency · Outlet | `history-take-home.ts` · `use-agency-history.ts` · `roster-recorded-sales.ts` · `notification-copy.ts` · `outlet-write-refusal.ts` · `pr-decision-copy.ts` | `shift_assignment` · voucher lines · `shift_sale` | ✅ Live: header RM 15,108.58 = Vicky 11,698.48 + Alice 3,414.60 + jk −4.50; wages RM 10,207.78 = DB |
+| G30 | Backend + app hardening: manual job scripts under the lock; join decisions answer real sentences; custom plan change reaches billing; OTP resets answer before sending + 2.5 s sign-up floor; PR app — swap status, removed booking, PV not-found, web sheets Escape/focus/animation | All | `scheduler/manual-run.ts` · `join-decision.ts` · `admin-request.*` · `otp.controller.ts` · app `PhoneSheet` / `notification-targets` / `pv-lookup` | — | ⚠️ Unit-tested; the app sheets checked live by the agent (writes blocked in the page) |
+
+### Section 4 finished + general sign-in / sign-up answers — 30 Sep 2026 (5 agents + 2 reviewers + lead; details §10 2026-09-30; leftovers §9 top)
+| # | Item | Role link | Where | Data source | Status |
+|---|------|-----------|-------|-------------|--------|
+| G31 | One sign-in answer and one sign-up answer for anyone who has not proved ownership (owner decision (e), go-ahead 30 Sep) + the security review's fixes: login 401 "Wrong email or password" / "Wrong phone number or password" for unknown, password-less and wrong password (one bcrypt compare, 500 ms floor, failed-attempt write off the answer's path, the same 5-try lock for identifiers with no account, a failed read → 500 not a strike); inactive + suspended told only after the right password; `/auth/register` + `/register-member` one 409 naming no field, and every lookup-free check (plan, account type, organisation) BEFORE any lookup; `/register/check` looks nothing up; a taken phone gets its sign-up code on the phone alone, named only to whoever proved it; the legacy phone reset's verify answers a number with no account like one with a code (stand-ins + 500 ms floor); the emailed reset link answers before the token and mail; `0060…` = `+60…` in every lookup, lockout key and OTP budget | All (public) | `account-answers.ts` · `unknown-login-lockout.ts` · `auth.controller.ts` · `otp.controller.ts` · `org-member-invite.controller.ts` · `user.repository.ts` `phoneLoginCandidates` · `rate-limit.ts` · web `login.tsx` / `signup-form.tsx` / `member-signup-refusal.ts` · app `translations.ts` / `api-error-copy.ts` / sign-up screen | `user` · `user_profile` · `phone_verification` | ⚠️ Unit-tested — not live: every sign-in / sign-up POST writes (an audit row, a real account's failed-attempt count, a real WhatsApp code). Read-only probe: 1 stored `00…` phone, 0 lines held by two accounts |
+| G32 | WhatsApp + Brevo sends bounded: `WHATSAPP_SEND_TIMEOUT_MS` 10 s (a timeout is the existing "Could not reach WhatsApp Cloud API"); Brevo DNS 5 s · connect 10 s · greeting 10 s · socket 20 s of silence — a hung provider now costs ~10 s / ~20 s, not minutes | All | `whatsapp-client.ts` · `brevo.repository.ts` | — | ⚠️ Unit-tested |
+| G33 | Money taken for a VOIDED or already-PAID bill reaches the admin: `GET /subscription-payment/refunds-due` (admin-only, the writer's own `REFUND_DUE_*` prefixes, org name joined live, LIMIT 100, a failed read ≠ "nothing owed") → red "N payment(s) need a refund" card on Plan Payment, each line opens that bill's payment sheet. **+ Mark refunded** (`POST /subscription-payment/:id/refunded`, admin-only, `{ reference }` ≤ 60): one guarded UPDATE — marker required, not already refunded, the refund reference appended to `reference` (never overwritten; nothing written if both will not fit); 200/400/404/409 in EN/中文 from a per-line dialog. Voided-bill money is now stored `pending` (as `succeeded` a second payment on that bill hit `subscription_payment_settled_invoice_idx` and 500'd the webhook for ever); a marked row is final against a late `failed` AND a redelivery; PAID TWICE under a new gateway id writes its own flagged row; a gateway reason can never read as a marker ("Gateway: …"); the stranded-claim log skips marked rows; the payment sheet shows a red "Refund due" badge, "Refunded" grey. Review: approve, all 2 MEDIUM + 4 LOW fixed; `refund-due.repository.ts` split out (payment repository 838 → 629 lines) | Admin | `subscription-payment.*` · `refund-due.repository.ts` · `refund-message.ts` · `auto-charge.ts` · `refunds-due-card.tsx` · `mark-refunded-dialog.tsx` · `invoice-payment-sheet.tsx` · `plan-payment.tsx` | `subscription_payment` | ✅ Live API, read-only: admin 200 (0 rows — the card is correctly absent), 9 other lanes 403; Mark refunded's refusals BEFORE any write fired live (400 blank / 61 characters, 404 malformed id); the 404-unknown-row and 409 paths unit-tested |
+| G34 | The web bell keeps the New-bill notice's credit sentence (`srvBillCredit`, EN/中文, integer cents, after the pro-rata sentence) | Agency · Outlet | `notification-copy.ts` | `notification.payload.creditApplied` | ⚠️ Unit-tested |
+| G35 | Post Job is all-or-nothing: `POST /shift/batch` (≤31) runs the single post's own `checkShiftPost` on every item with the earlier items counted (intra-batch clash, per-date plan cap); a refusal answers the exact sentence + `{index, shiftDate}` and writes nothing, otherwise one transaction and one bell per shift after commit; the web shows the server's "Posted N shifts" and "Nothing was posted — the shift on {day} was refused: …" (EN/中文). Review follow-ups: the phone dock's Post cannot double-post (`isPosting` + a `postInFlight` ref), the per-venue reads are read once per batch, `shift.controller.ts` 1,368 → 709 lines + `shift-venue-rules.ts` / `shift-post-check.ts` / `shift-notifications.ts`, the unused web `createShift` deleted | Outlet | `shift.controller.ts` · `shift-post-check.ts` · `shift-venue-rules.ts` · `shift-notifications.ts` · `shift.repository.ts` · `shift.routes.ts` · `use-outlet-post-job.ts` · `bookings.tsx` · `outlet-write-refusal.ts` | `shift` + its children | ⚠️ Unit-tested (a post is a write) |
+| G36 | `admin-request.controller.ts` (1,362 lines) split into six files of ≤424 lines — verbatim moves, one facade keeps the class and its routes | Admin | `admin-request-{queue,subscriber,actions,ledger,rules}.ts` | — | ✅ The same 45 tests unchanged + the full suite |
+| G37 | Negative money reads "−RM 4.50" everywhere: one web `formatRM` (`format-rm.ts`), the app's `formatRM` / `formatAmount`, admin `formatPriceRm`, the voucher exports (web + backend; the backend PDF prints "–RM" — its font has no U+2212), the web PR grid "−20.00"; the PR app's claim list and evidence sheet name the special night ("Special event · VIP night") from `/payment-voucher/mine/current-week` | All | `format-rm.ts` · `demo-shifts.ts` · `payment-voucher-{pdf,excel}.ts` · `pv-pdf.ts` · `PrWeeklyPaymentGrid.tsx` · `cell-evidence.ts` · `PaymentScreen.tsx` | `shift` special fields | ✅ The −4.50 History card via a read-only API check; the claim tag unit-tested (all 14 live claims are on normal shifts) |
+| G38 | Agency History's take-home from ONE server read: `GET /payment-voucher/history-extras` (the list's guard, agency from the membership, a ≤366-day window) replaces one `GET /payment-voucher/:id` per voucher; the fee waiver now refreshes the voucher list too | Agency | `history-extras.*` · `use-agency-history.ts` · `CancellationFeesPanel.tsx` | `payment_voucher` · lines · receipts | ✅ Live read-only (owner / guarantor / director): RM 15,108.58 both ways, 11 vouchers, 0 differences over 17 nights; ~0.2 s vs ~2.5 s |
+| G39 | Proof before a venue, agency or team-member account is created (owner, 30 Sep: *"lets go with your pick for number 2"* — option (b)): `POST /auth/signup-email-code` mails a 6-digit code to ANY typed address with one answer (it looks no account up; 30/h per host, 3/h per MAILBOX shared with `/otp/send` — `name+x@` and Gmail dots fold into one budget — and a 200/h overall ceiling; a resend never voids an earlier code). `/auth/register` (public outlet / agency) and `/auth/register-member` spend it after every lookup-free check and BEFORE any lookup — every try counted BEFORE it is compared (5 per code, atomic), consumed once, bound to the address; a proven taken email is named (`SIGNUP_EMAIL_HAS_ACCOUNT`), a taken phone / IC stays general. The PR phone receipt is now spent `verified → consumed` BEFORE the lookups, so one receipt reaches them once (it was spent only by success, then after the lookups). The IC-vs-gender refusal moved ahead of the code and the account (it used to 400 AFTER `createUserWithRole`, leaving a half-built account). `emailCode` / `emailCodeId` redacted from `audit_logs`. Web: a "Verify your email" box on `/signup` and `/signup-member` (EN/中文; any 409 or dead code resets it, a typo does not); app: after a 409 or "verify again" the PR returns to the code step with her draft kept. Security review: 0 critical / 0 high — its two race MEDIUMs, the mail-relay MEDIUM (mailbox key + ceiling) and three LOWs fixed; the rest in §9 | All (public) | `signup-email-code.ts` · `account-answers.ts` · `auth.controller.ts` · `org-member-invite.controller.ts` · `auth.routes.ts` · `rate-limit.ts` · `audit-log.repository.ts` · web `signup-email-code*` / `use-signup-email-code.ts` / `signup-form.tsx` / `signup-member.tsx` / `register-api.ts` · app `sign-up-screen.tsx` / `register-refusal.ts` | `phone_verification` (purpose `signup_email` — a varchar value, NO migration) | ⚠️ Unit-tested — not live: every send mails a real inbox and every sign-up writes |
+| G41 | Old wrong passwords stop counting after a day (owner decision (c), 30 Sep): `recordFailedLoginAttempt` restarts the count at 1 when `last_failed_login_at` is NULL or a day old — in the SAME statement that decides the lock — and stamps `now()`; the in-memory counter for identifiers with no account forgets after the same day (`FAILED_LOGIN_MEMORY_MINUTES`, was 7 days). So an account with old typos no longer locks before an address with no account would; a guesser who keeps guessing still re-locks on each wrong guess after a lock | All (sign-in) | `user.model.ts` · `user.repository.ts` · `unknown-login-lockout.ts` · `auth.controller.ts` · migration `0170_user_last_failed_login_at.sql` | `user.last_failed_login_at` (NEW, 0170) | ✅ Migration live (information_schema + ledger 175) and the model's user SELECT run read-only against the live table; the counting unit-tested (SQL rendered, both counters' day). Not fired live — a wrong password writes |
+| G40 | Web sign-up refused EVERY real venue and agency: three `register-schemas.ts` patterns had lost their backslash since `548eaa7c` (9 Sep) — `/^d{12}$/` is twelve letter d's, so every real SSM number and every passport birth date failed before the form was sent. Same typo in `OutletOperationsCalendar.tsx` since 20 Aug: its strip's from-today demand / supplied / unfilled read 0. Both fixed; a sweep of every `apps/*` `.ts/.tsx` found no third | Outlet · Agency | `register-schemas.ts` · `OutletOperationsCalendar.tsx` | — | ✅ Unit — both new tests fail on the old patterns |
+| G46 | A failed read of a partnership is no longer "no partnership" (owner, 1 Oct: *"fix these first, then we will merge with main branch"*): `listApprovedAgencyIdsForOutlet` answered `[]` when its query THREW — the value for "no approved agency" — so a database blip refused a post or an admin's move with 400 "link an agency in Settings first" (sending a venue that HAS agencies to Settings) and the venue's PR list came back empty. It now throws; every caller's own catch answers 500. FOUND alongside and closed the same way: its mirror `listApprovedOutletIdsForAgency` turned the same failure into "not linked to this outlet" at three gates — staffing a shift, posting a special service, the venue-route guard (`requireOutletScopeByParam`). Web: Post Job's Select PRs says "Could not load your PRs — refresh the page to try again." (EN/中文) when the pool fails to load, instead of "No PRs to name yet" | Outlet · Agency · Admin | `agency-outlet.repository.ts` · `use-outlet-pr-pool.ts` (`prPoolEmptyHint`) · `bookings.tsx` · `translations.ts` | `agency_outlet` | ✅ Live, read-only (SELECTs only; probe deleted after one run): 8 venues and 5 agencies read through both functions — 12 approved links each way, agreeing link for link. Unit: the repository throws on a failed read (new test file — every controller test mocks it); post + batch 500 with nothing written; move 500; outlet `GET /pr` 500; the venue-route guard 500 (it had no test at all); the picker's three hints. The 500 itself is not fired live (it needs a failing database) |
+| G45 | The shift race's last two loose ends (owner, 1 Oct: *"continue with this first"*): (1) THE PLAN IS READ AGAIN UNDER THE LOCK — the write guard judged the day it counted under the venue's lock against the plan the CHECK had read before the lock, so a plan switched in between was enforced at its old size (a post decided on Growth could land after one decided on the new, smaller plan had filled the day, leaving it past that plan's cap). `POST /shift`, `POST /shift/batch` and `PUT /shift/:id` now read the plan through the write's own transaction after the locks — once per venue per write — and a check whose plan read FAILED no longer waves the post past the cap. No plan-lane lock is needed: a plan switch never reads a day's shifts, and every post at a venue is ordered by the venue lock; (2) an admin MOVING a shift to a venue that approves only SOME of its agencies is told so — "Only some of this shift's agencies are approved for that outlet — link the others to it first, or withdraw the shift and post it again" (403; "this shift's agencies" = the ones it was sent to AND an anchor the edit names); the post's "None of the selected agencies…" now only when none are; ids compared lower-cased. Code review: approve, 0 critical / high / medium; its 3 LOWs fixed — the anchor's place in the check now pinned by a test, `PUT /shift/:id` compares the STORED id (a URL in capitals missed the shift's agency list, and re-timing such a shift clashed with its own PR's booking), a no-op de-dup removed | Outlet · Admin | `plan-limit.ts` (`resolveActivePlanLimit(params, client)`) · `shift-venue-rules.ts` · `shift-post-check.ts` · `shift-edit-rules.ts` | `member_subscription` + `subscription` (read under the lock) · `agency_outlet` | ✅ LIVE, read-only probe (deleted after one run), 3/3: all 8 venues' plans read through a READ ONLY transaction after a lock equal the pool's (8 plan, 0 none, 0 unknown); the plan rule's answer identical under the lock for 8/8; a failed plan read inside the transaction is `unknown` AND aborts it (next statement 25P02), so nothing can be written. Unit: 10 new tests (4 in the new `plan-limit-client.test.ts`); 6 deliberate mutations each caught — one test was vacuous (Atlas's id is all digits, so capitals changed nothing) and was fixed until it caught its mutation. Not live: a real plan switch racing a real post (two writes) |
+| G44 | The shift race's three leftovers finished (owner, 30 Sep: *"finish these up"*): (1) a PR can no longer be double-booked by two writes landing together — every lane that SEATS or RE-TIMES a PR (`PUT /shift/:id`, `POST /shift-assignment`, the re-staffing `PUT /shift-assignment/:id`, swap approval) takes transaction advisory locks FIRST in ONE fixed order — venue `shift-post:` → shift `shift-seat:` → PR `pr-booking:` (each class once, keys distinct / lower-cased / sorted; asking out of order throws) — then re-runs its overlap / cross-agency rules through the transaction, re-reading the shift's time and who is on it; (2) FOUND on the way and closed: swap approval never checked the time-overlap rule — it now does, with the swap lane's existing PR-facing 409 ("Another of your shifts is too close…") and the assignment path's own 400 on the request screen (a rival agency's booking stays unnamed); (3) an admin MOVING a shift to another venue now meets the target's rules — clash / live / plan (sentences shared with a post), the template must be the target's card (400), every invited agency approved there (403 / 400), both venues locked and re-checked through the transaction | Outlet · Agency · Admin · PR | `shift-write-guard.ts` · `shift-edit-rules.ts` (new) · `pr-seating-rules.ts` (new) · `shift-venue-rules.ts` · `shift.controller.ts` / `.repository.ts` · shift-assignment + outlet-swap controllers / repositories | `shift` · `shift_assignment` (reads under the locks) | ✅ LIVE, read-only probe on the shared Postgres (deleted after one run), 9/9: all three locks taken in a READ ONLY transaction; a second session refused the same venue / shift / PR lock while held and granted another venue's; the fixed order enforced on a real transaction; the lock free the moment its transaction ended; the clash and plan re-reads run through a transaction on the real tables. Unit: 4 new test files, 21 deliberate mutations each caught. Not live: two real writes racing |
+| G43 | The shift write race closed (owner, 30 Sep: *"close the codes you can do without asking me first"*): two writes landing together could each pass the clash and plan rules against a database holding neither, and both commit — two shifts on one clock, or a day past the plan. `POST /shift`, `POST /shift/batch` and `PUT /shift/:id` now run a guard FIRST inside their own transaction: `pg_advisory_xact_lock(hashtextextended('shift-post:<outlet>', 0))` per distinct venue (lower-cased, sorted — no deadlock between batches), then the clash and plan rules again THROUGH that transaction (the same two helpers the outside check uses, so wording and batch counting cannot drift). A refusal throws `ShiftWriteRefused` → rolled back, answered exactly as the outside check would (`{index, shiftDate}` on a batch), no bell. The outside check still runs, so every ordinary answer is unchanged | Outlet · Admin | `shift-write-guard.ts` (new) · `shift-post-check.ts` · `shift-venue-rules.ts` · `shift.repository.ts` · `shift.controller.ts` · `plan-limit.ts` | `shift` (reads under the lock) | ⚠️ Unit — 29 new tests: the lock SQL rendered, the guard first on the transaction, clash and plan races on single / batch / PUT against a fake db whose reads differ inside and outside the transaction; six deliberate mutations each caught. Not live — a post is a write |
+| G42 | Owner, 30 Sep: *"close the codes you can do without asking me first"* — three of the review's leftovers closed: (1) `registerUser`'s lookups FAIL CLOSED — every lookup rethrows on a failed read (a 500 that creates nothing), and `isLoginValueTaken` decides "taken" whenever the sign-in lookup cannot name ONE account (a number on file twice used to read as free); `findByNormalizedIdNo` throws too and logs through `safeErrorFields` (its raw error carried the ID number); (2) every per-host rate limit counts an IPv6 caller by its /64 (`ipBudgetKey` / `clientBudgetKey`, shared by `account-code/limiters.ts`), IPv4 and IPv4-in-IPv6 per address, anything unparsable as it came; (3) app: a sign-up that succeeded but whose sign-in right after it failed goes straight to sign-in with "Your account is ready — sign in" (EN/简/繁, green) — and the sign-up screen's own "Back to sign in" link no longer hands its tap event to that notice | All (public) | `auth.controller.ts` · `user-profile.repository.ts` · `rate-limit.ts` · `account-code/limiters.ts` · app `sign-up-screen.tsx` / `LoginScreen.tsx` / `App.tsx` / `signup-copy.ts` | — | ✅ Unit (failed reads → 500 and nothing created; a number on file twice → 409; 12 IPv6/IPv4 cases; the notice rendered) |
+
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
+
+### ▶ 🟠 LEFT AFTER THE 30 SEP SLICE (§8 G31–G38, §10 2026-09-30)
+
+Owner, 30 Sep: *"finish up 4, then for 1 continue with the general sign-up/sign-in messages"*.
+Section 4 and the general messages are done. The independent security review of the sign-in /
+sign-up change found four things that were fixed (§8 G31) and three that only the owner can decide:
+
+- [x] ✅ **DECIDED 30 Sep — the sign-up code by email: KEEP IT** (owner: *"for number 1 just leave
+  it"*, after asking how phone-only would block sign-up — answer: with SMS unsigned, WhatsApp would
+  be the code's only road). Accepted: a prober who types a stranger's number with their OWN email
+  reads the answer in their inbox (mail = a free number, none = it has an account); one real inbox
+  per probe, 3/h per mailbox, 30/h per IP. Revisit once an SMS provider is signed (phone-only then
+  has two roads), or with the middle way offered: WhatsApp first, email only when WhatsApp is down.
+- [x] ✅ **DECIDED + BUILT 30 Sep — proof before an organisation or member account** (owner: *"lets
+  go with your pick for number 2 and 3"* = option (b), an emailed code first; §8 G39). ⚠️ What (b)
+  leaves, said to the owner when offering it: the code proves the INBOX, so somebody who proves their
+  own can still test a stranger's PHONE or IC on the same form (a free one CREATES the account,
+  holding that phone and IC) — one fresh code per try. Closing it = option (c), a WhatsApp code too,
+  and/or IC clashes sent to the admin's approval instead of refused on the form.
+- [x] ✅ **DECIDED + BUILT 30 Sep — the lockout: option (c)** (§8 G41). The helpful "Too many failed
+  attempts — try again in N minutes" stays; wrong guesses now EXPIRE after a day for real accounts
+  and identifiers with no account alike (a guesser still re-locks). Migration `0170` (nullable
+  `user.last_failed_login_at`, no default, no backfill): the first attempt to create it was refused by
+  the permission system and NOT retried; the owner then asked *"what is the migration for?"* and,
+  told, answered *"alright go ahead tehn"*. Applied by `pnpm migrate:deploy` from the ROOT (order
+  check ✓, `when` 1792799004000, ledger 175), confirmed in `information_schema` (timestamptz,
+  nullable, no default, 0 rows holding a value) BEFORE the model column was added; then a read-only
+  SELECT through the model proved every user query still runs (18 columns).
+- [ ] **Left by the sign-up-code security review (30 Sep; 0 critical, 0 high — its two race
+  MEDIUMs and three LOWs fixed, §8 G39):**
+  - the new `/auth/signup-email-code` still mails any address: bounded 30/h per host, 3/h per
+    MAILBOX, 200/h overall — a CAPTCHA is the owner's call. ✅ 30 Sep (§8 G42): every per-host
+    limit now counts an IPv6 caller by its /64 (`ipBudgetKey`), not per address;
+  - a stranger can spend a real person's 3/h mailbox budget (inherent to a per-recipient limit —
+    a resend no longer voids their code);
+  - a failed database read during `redeem` answers "expired" / "too many attempts" (misleading,
+    never a leak). ✅ 30 Sep (§8 G42): `registerUser`'s lookups now fail CLOSED — a failed read is a
+    500 that creates nothing, and a value on file twice counts as taken (`isLoginValueTaken`);
+  - audit rows of refused `/signup-email-code` calls keep the typed address, as every audited public
+    POST does;
+  - compatibility: an older organisation / member client gets 400 "Verify your email first"; with
+    Brevo down every organisation / member sign-up answers 503; a PR whose sign-up 409s re-verifies
+    her phone. ✅ 30 Sep (§8 G42): a sign-up that succeeded but whose sign-in right after failed now
+    lands on sign-in with "Your account is ready — sign in" (EN/简/繁).
+- [ ] **Screen checks (the owner, or a session allowed to sign in):** `/agency/history` reads "RM
+  15,108.58 take-home · RM 10,207.78 in wages" with ONE `history-extras` call in the network panel;
+  admin Plan Payment shows no refund card while there are 0 rows; the sign-in page says "Wrong email
+  or password" for a wrong password (EN/中文); a Post Job batch — three dates all post, and one over
+  the plan posts NOTHING, keeps the form and names the day; Finance and Director refused Post Job;
+  `/signup` and `/signup-member` show the "Verify your email" box (Send code → the server's
+  sentence, 6 digits, "Resend in Ns", Change email) and `/signup` now ACCEPTS a real 12-digit SSM
+  number (§8 G40); the outlet calendar strip shows non-zero from-today demand / unfilled; admin Plan
+  Payment's refund card offers "Mark refunded — INV-…" with its dialog. Pressing Send code, Submit or
+  Confirm writes or mails — the owner's to press.
+- [ ] **Indexes (owner — a migration):** `payment_voucher_line.voucher_id` and
+  `payment_voucher_receipt.voucher_id` have no index, so every voucher read scans.
+- [x] ✅ **Check-then-insert race — CLOSED 30 Sep** (§8 G43) for `POST /shift`, `POST /shift/batch`
+  AND `PUT /shift/:id`: the write locks each venue (`pg_advisory_xact_lock`) first in its own
+  transaction, then re-runs the clash and plan rules through it. ✅ **Its three leftovers finished the
+  same day** (owner: *"finish these up"*, §8 G44): the PR double-booking check runs under per-SHIFT and
+  per-PR locks on every lane that seats a PR (edit, assign, re-staff, swap approval) in ONE fixed order
+  — venue → shift → PR, enforced at runtime; an admin's move to another venue is checked against the
+  TARGET's rules (clash, live, plan, template, agencies); and the locks were PROVEN on the live
+  Postgres by a read-only probe (9/9). Deliberately not locked: lanes that only take a PR OFF a shift
+  (cancel, leave, no-show sweep, check-out). Still not live: two real posts racing (a write — the
+  owner's to click). ✅ **Its last two loose ends closed 1 Oct** (owner: *"continue with this first"*,
+  §8 G45): a move whose target approves only SOME of the shift's agencies now says "Only some…" (the
+  post's "None of…" only when none are), and the plan is read again under the lock, through the
+  write's own transaction. `POST /shift/batch` carries no idempotency key, but a batch RESENT after a lost answer
+  is refused whole by the clash rule whenever its shifts have a time; only an UNTIMED shift (no slot,
+  which the clash rule skips) would post twice.
+- [x] ✅ **FIXED 1 Oct (§8 G46): a failed read of a venue's approved agencies read as "none".** Both
+  approved-link reads now throw and their callers answer 500; Post Job's picker says the PRs could not
+  load. ⚠️ **Still open, same pattern, display only:** `listDirectory`, `listByOutlet`, `listByAgency`
+  and `listEvents` in the same repository still answer `[]` on a failed read, so a blip shows a
+  partnership screen as empty rather than failed — no gate reads them, so nothing is refused.
+- [ ] **No agency Finance account exists** on `innocenz-test`, so that lane is only unit-tested in
+  the History and refund checks.
+- [ ] **The legacy resets** (`/auth/otp/send|verify` with `forgot_password`,
+  `/auth/password/reset-otp`, the emailed `/auth/forgot-password`) are called by no current client —
+  only PR-app builds from before 17 Sep. Retire them once none is in use (their stand-ins live in
+  memory: a restart forgets them).
+- [ ] **Out of scope, from the review:** the team invite answers "That email has no InnocenZ account
+  yet" (`util/invitable-account.ts:68`) — signed-in only, but anyone can sign up an organisation to
+  reach it.
+- [ ] **The BuildSteps workbook was NOT regenerated.** The current 14-tab book is not on this machine
+  — only a 6 Aug 8-tab copy in Downloads, which would become a second, divergent book. Regenerate it
+  on the machine that holds it (house rule: after a big slice).
 
 ### ▶ 🔴 FIX-FIRST LEFTOVERS — THE STEPS ONLY THE OWNER CAN TAKE (28 Sep 2026, §10 top row)
 
@@ -433,14 +575,17 @@ need an account, a setting, a device or a decision.
      unit-tested (`wage-line.test.ts`), never probed.
   4. **Cancel subscription** stays unverifiable live: a real org's only plan is `last_plan` (a
      refusal-by-write) and no ghost rows remain.
-- [ ] **A "never present" shift no longer gets a RM 0.00 wage line** (found 28 Sep while checking
+- [x] **CLOSED by the owner, 29 Sep — *"don't mind it as it was just our testing results"*** (this
+  item and the unfiled-wages one below: test data, not acted on).
+  **A "never present" shift no longer gets a RM 0.00 wage line** (found 28 Sep while checking
   PV-000009). The phone's old path wrote one — six on file (PV-000001/5/8/9/10), every one
   `pay_rule = never_present`. `sealWageLine` now SKIPS a zero (pinned in `wage-line.test.ts`), and
   the Sunday generator writes one only when it builds the voucher fresh. Totals are unchanged; what
   differs is whether the PR's week shows the zero at all. Decide: file the RM 0.00 line (a 0.00
   seal "must never happen quietly") without voiding the agency's signature for it, or keep
   skipping.
-- [ ] **🔴 Seven completed shifts' wages were never filed — RM 3,335.55** (read-only sweep, 28 Sep:
+- [x] **CLOSED by the owner, 29 Sep (test results, see above).** ~~🔴~~ **Seven completed shifts'
+  wages were never filed — RM 3,335.55** (read-only sweep, 28 Sep:
   completed assignments whose sealed wage is > 0 and that NO wage line on any voucher names, in
   either ref shape; 14 others, RM 6,880.56, are filed). All Vicky at Atlas: five on 5–6 Aug
   (RM 2,335.55 — their week's PV-000006 carries only the 3–4 Aug wages, and was recorded PAID at
@@ -451,23 +596,111 @@ need an account, a setting, a device or a decision.
   repair past weeks (`fillMissingWages` only tops up OPEN drafts of the week being generated).
   Agency decides: Override + add the wages + re-sign, or pay them on a separate voucher. If the
   Override click-test runs on PV-000009, it can carry this correction.
-- [ ] **Follow-ups the fixes surfaced:** `guards.ts signedInPortals()` signs out on ANY `/auth/me`
+- [x] ✅ 29 Sep (§8 G8/G9 — all fixed except the file size: guards sign out only on a session refusal, the app's 401 rule mirrors the web, admin role label, tier job judges live plan rows, request answers claimed once, stub-claim toast honest, `POST /shift-sale` gate confirmed right; `admin-request.controller.ts` was ~1,230 lines — ✅ split into six files on 30 Sep, §8 G36) **Follow-ups the fixes surfaced:** `guards.ts signedInPortals()` signs out on ANY `/auth/me`
   failure, including a 429 or offline during refresh — that is what cleared today's browser
   sessions; web and app disagree on which 401s refresh; `/auth/me` roles still drive a
   `roles[0]` label; the tier job judges every open agency row; admin-request `resolve` has no
   status guard (re-resolving a POS/Custom applies it again); the app toast says "sent to your
   email" during a stub claim; POST `/shift-sale` agency lane uses `payment_voucher:create`
-  (owner/guarantor/finance) — confirm; `admin-request.controller.ts` is 1,230 lines.
+  (owner/guarantor/finance) — confirm; ~~`admin-request.controller.ts` is 1,230 lines~~ ✅ split 30 Sep (§8 G36).
 - [ ] PV-000002 and PV-000006 stay `paid` with no agency signature — history; a late signature is
   refused once paid.
 
-### ▶ 🟠 THE REST OF THE 28 SEP WHOLE-PROJECT AUDIT — EVERYTHING BELOW "FIX FIRST", NOT STARTED
+### ▶ 🟠 LEFT AFTER THE 29 SEP AFTERNOON SLICE (7 agents + lead — §8 G12–G22, §10 2026-09-29 (iii))
+
+Owner, 29 Sep: *"do the live checks, then continue with the rest except the receipt one for that
+one put it on hold till everything else is done then i will make a decision again"* + *"also
+handle these migrations"*. The live pass, decisions 1/3/4, both migrations, Add PR, every agent
+follow-up below and the web/mobile defaults are DONE (§8 G12–G22). What stands:
+
+- [ ] ⏸ **ON HOLD BY THE OWNER — receipts after check-out** (decision 2). The rules proposed: the
+  PR picks the FINISHED shift and the line is dated with that shift's day; same Sun–Sat week and
+  before the Sunday send (after it, an agency Override); a late scan waits for agency approval
+  (today a scan verifies at creation); receipt photo still required; the server enforces the same
+  bounds. Ask again now the rest is done.
+- [x] ✅ **Owner decisions — ANSWERED 29 Sep evening, all built ((e) on 30 Sep):** (a) money uses a special
+  night's OWN prices — `resolveDrinkMenusForShifts` feeds the PR's `/mine` `drinkMenu` (+
+  `drinkMenuSource`) and the voucher name check (`catalogueForReceipt`); the sales split reads each
+  line's stored category, so it follows; the app's card now says tonight's amounts use these prices.
+  (b) a plan switch inside a pro-rated first week charges the FULL-WEEK difference (the share-based
+  switch was reverted) — ⚠️ consequence: a DOWNGRADE there credits the full difference, which can
+  exceed what that pro-rated week billed (Growth 2/7 = RM 71.43 billed, switch to Starter credits RM
+  125); credits only come off later periods, nothing is paid out. (c) KPI weights → the server-only
+  env `KPI_WEIGHTS` (format `reliability=…,punctuality=…,rating=…`; unset → every KPI "—" + one
+  warning; set in this machine's `.env`; ⚠️ every staging/production `.env.backend` needs it). (d) Log
+  Sales counts services (total = drinks + tips + services; omitted services keep the row's). (e)
+  general sign-up + sign-in messages — ✅ BUILT 30 Sep (owner's go-ahead in chat: *"for 1 continue
+  with the general sign-up/sign-in messages"*; §8 G31): login answers unknown / password-less /
+  wrong password alike (one bcrypt compare, 500 ms floor, the same lockout for unknown
+  identifiers; inactive and suspended told only after the right password); `/auth/register`,
+  `/auth/register-member` and `/auth/register/check` never name a field to an unproven caller; a
+  taken phone gets its sign-up code on the phone alone and is named only to whoever proved it. (f)
+  Add PR keeps the mobile number REQUIRED. (g) invoice VOID — added (migration 0169, applied).
+- [ ] **Data only — the owner runs it:** `apps/backend/src/scripts/cleanup-test-data-29sep.ts`
+  (dry run by default; `--apply`, `--only=`, `--keep-shift=`; refuses a DB without "test" in its
+  name; one audit row per change, deletes restorable from `audit_logs`; invoices are now VOIDED, not deleted — 0169). From `apps/backend`:
+  `npx tsx --tsconfig tsconfig.json src/scripts/cleanup-test-data-29sep.ts --apply --i-know-this-is-a-test-db`
+  runs 1–9 (`--apply` without that flag, or against a DB without "test" in its name, refuses):
+  8 `[Demo]` requests (delete) · 4 seed-sample plan rows (`billing_starts_at` → NULL — ⚠️ outlet
+  `ed739c13`'s ONLY plan: it bills nothing until an admin sets a real start) · the 16 invoices
+  from those anchors (VOID with a reason; must follow 2) · 5 receipts back to `approved` · PV-000003/4 signer
+  e-mail → display name · 9 blank due dates · 12 duplicate notices · 59 race spellings. Opt-in:
+  `--only=3b` (void INV-000033…37, `cd50e9f6` weeks with no plan), `--only=4 --keep-shift=<2ed03fd8|a91c04f4>`
+  (the 17 Aug duplicate — neither copy has work). Listed for the owner, never written: the check-in
+  open since 7 Sep, 12 receipts dated 16 Jun, stale copied names, Vicky's 28 Sep MC block, the 28 Sep
+  test changes (PV-000008 sent, PV-000006 paid, RM 30 penalty voided, Probe Member One → Director +
+  deactivated). Also data: five first weeks billed in full before the pro-rata rule
+  (INV-000028/-38/-43/-49/-15, RM 464.29 over it); 38 PR profiles whose legal name equals the
+  username (some may be the old `ensureOpsBridge` bug's).
+- [x] ✅ **Follow-ups found this afternoon — DONE 29 Sep evening** (§8 G24–G30): manual job scripts
+  run under the scheduler lock; join/leave decisions answer real sentences (EN/中文); a custom
+  `plan_change` now reaches billing through approve's own path; History per-PR take-home with the
+  wage beside it, penalty LINES subtracted; roster Drinks/Tips + the home live-floor table read real
+  `shift_sale`; Log Sales in the Calendar sheet; outlet History shows the special type; the PR app
+  shows the sub-type + event prices; the web bell covers all 20 kinds, 34 outlet refusal sentences
+  translated; the floor footer translated; PR app — swap To-do checks status, a removed booking
+  opens its day with a clear message, `PvDetailScreen` never shows another voucher, web sheets
+  close on Escape / trap focus / animate; a re-joined lane never bills its gap and pro-rates the
+  re-join period; the "New bill" notice states the amount after credits; admin can void; the
+  Calendar's Close shift / Withdraw confirm with the server's sentence; `/auth/otp/send` resets
+  answer before sending and sign-up answers wait a 2.5 s floor.
+- [x] ✅ **30 Sep — the code items of this round are DONE (§8 G32–G38):** timeouts on the WhatsApp
+  and Brevo sends; agency History from one server-side read (`history-extras`); "−RM 4.50"
+  everywhere; the web bell keeps the credit sentence; the PR app's claim list names the special
+  night; Post Job all-or-nothing (`POST /shift/batch`); a payment on a voided / already-paid bill
+  lands on a red "needs a refund" card on Plan Payment.
+- [ ] **Still open from this round (code / owner):** By-outlet History cards exclude deductions (a
+  deduction belongs to a PR's week, not a venue — likely right, say so if not); swaps carry no
+  expiry; a Custom plan change lands at RM 0.00 (no negotiated price on either door — owner); the
+  voucher exports' LINE tables still print a hyphen ("-20.00") — the twins agree, only the totals
+  moved to "−RM".
+- [ ] **Data found this round (owner):** agency `cd50e9f6` was billed 5 × RM 125 for weeks it held no
+  plan (5 Jul–8 Aug — the clean-up's `--only=3b` now VOIDS them), its re-join week 9–15 Aug at the
+  full RM 125 for 4 of 7 days, and 5 June Enterprise weeks after it left; PR `4eb70d95…` shows a
+  take-home of −RM 4.50 (RM 0 wage + RM 12.50 OT + RM 3 commission − RM 20 penalty).
+- [ ] **Security follow-ups — PRE-EXISTING, found by the 29 Sep review (not regressions):**
+  ✅ **HIGH — DONE 30 Sep (§8 G31):** `POST /auth/register` for `accountType` outlet/agency answered
+  409 "That email / phone … is already registered" with no proof of anything — now one sentence that
+  names no field, after every lookup has run. ✅ DONE 29 Sep evening: the two MEDIUM timing items below (answer-first resets, 2.5 s sign-up floor). **MEDIUM**
+  `forgot_password` timing: an unknown number is answered after one lookup, a real account only after
+  the code row + the WhatsApp/SMS/e-mail fan-out — answer BEFORE the send (every reset gets the neutral
+  200 anyway), which means restructuring `OtpControllerClass.send`. **MEDIUM** the withheld sign-up
+  address skips the e-mail leg, so the answer can come back measurably faster (statistical only) —
+  pad OTP answers to a fixed floor. ✅ 30 Sep: `POST /auth/login` no longer says "This account is not
+  registered yet" for an unknown e-mail (§8 G31).
+- [ ] **Google key:** enable Places API (New) for `GOOGLE_MAPS_API_KEY` (the geofence options list).
+
+### ▶ 🟠 THE REST OF THE 28 SEP WHOLE-PROJECT AUDIT — EVERYTHING BELOW "FIX FIRST"
+
+✅ **29 Sep: the five role bug lists below were fixed** (5 agents, every lead re-derived first —
+§8 G1–G11; what is left is in the section above). Missing functions, click-tests, owner
+decisions and data to clean below are still open.
 
 Recorded 28 Sep afternoon from the morning's audit report, which until now lived only in that
 session's chat (tags: live = seen on screen, DB = in the rows, code = read). The Fix-first slice
 fixed none of these unless marked. Re-derive each before acting — audit entries are leads.
 
-- [ ] **Agency** (live): Manage Outlet cards quote demo money ("RM 500 · 10% · RM 40–90"); labour
+- [x] ✅ 29 Sep (§8 G1–G2, G6) — **Agency** (live): Manage Outlet cards quote demo money ("RM 500 · 10% · RM 40–90"); labour
   cost uses a flat RM 500/h for every tier; Est. payout counts an excused PR; KPI is always 0;
   **Send to PR and Mark paid never notify the PR**; Send to PR leaves the issued date blank; member
   reactivate/deactivate show no confirmation and reactivating overwrites the role; cut-loss Approve
@@ -477,24 +710,24 @@ fixed none of these unless marked. Re-derive each before acting — audit entrie
   notices have no icon or link, notifications open a page rather than the item, some arrive twice;
   one PR's IC number differs between pages; History totals disagree; the race filter lists
   "Chinese" twice; the receipt editor does not say per-unit vs whole-line.
-- [ ] **Outlet**: the profile page shows the demo identity; the shift sheet lists prices flat and can
+- [x] ✅ 29 Sep (§8 G7; blank-post sub-type + per-event prices need a migration) — **Outlet**: the profile page shows the demo identity; the shift sheet lists prices flat and can
   name the wrong agency; a duplicate shift on 17 Aug; "billed monthly" leaves out POS; the
   Deactivated tab's empty text is wrong (all live). Post Job drops the event type and per-event
   prices, misses overnight clashes and caps its fetches at 100 rows; non-owners get 403 on
   Subscription; rating submit does nothing; the Today money tiles and Log Sales read demo data (code).
-- [ ] **Admin** (live): vouchers show no sign times, no voucher numbers, and two different
+- [x] ✅ 29 Sep (§8 G4, G8; Suspend / admin edit / settings / 2FA are missing FEATURES, still open) — **Admin** (live): vouchers show no sign times, no voucher numbers, and two different
   "PV-000001"s (numbering is per agency); "Open prototype" and "[Demo]" rows on a real session; no
   Suspend button, no admin edit / password reset, settings never read, no two-factor setup; 2,018
   audit rows read "unknown" and logins are not attributed; orphan requests can still be approved;
   one organisation is billed before it existed; PR detail lists an agency the PR left; date-only
   fields show "08:00 am".
-- [ ] **PR app** (live): the PV screen shows only her signature, "Dual-signed" and the venue as
+- [x] ✅ 29 Sep (§8 G5, G9; receipts after check-out = owner decision) — **PR app** (live): the PV screen shows only her signature, "Dual-signed" and the venue as
   payee; a pending voucher says "issued" and "waiting to be issued" at once; "To sign" lists
   vouchers she cannot sign; paid vouchers still invite disputes; the notification badge is stuck at
   50; cancellation rules name no agency; History's empty message is wrong; the language and
   notification sheets open outside the phone frame. Code: no receipt can be logged after check-out;
   a failed IC upload has no retry.
-- [ ] **Backend** (code): editing a shift ignores its named PRs; the voucher edit skips the outlet-list
+- [x] ✅ 29 Sep (§8 G3, G7, G8) — **Backend** (code): editing a shift ignores its named PRs; the voucher edit skips the outlet-list
   check and lets the agency pick the line date; `PUT /pr/:id` writes the PR's OLDEST membership,
   `POST /pr` overwrites name and IC, penalty rules come from the oldest agency; malformed ids answer
   500; the public code-sending route reveals which emails have accounts (untouched by 28 Sep);
@@ -1065,155 +1298,6 @@ database with no model or migration in this repo, and the owner confirmed on 20 
 leave them alone.
 
 
-### ▶ ✅ ALL CLEARED 12 Sep 2026 — the sweep's 10 open bugs, fixed
-
-All confirmed by an independent verifier told to refute them, and ALL NOW FIXED (changelog
-xxvii). Kept here with their original wording because each one names a shape worth recognising
-again; the fix is noted under each.
-
-⚠️ **One is only half-fixed and needs data work:** the stale `user_role` rows themselves
-(`finance@velvet23.my` and `ops@velvet23.my` still carry an `Owner` row) are untouched. `/auth/me`
-no longer reads them, so nothing leaks, but they are wrong and a future feature that reads role
-rows would inherit the same lie. Cleaning them is a `user_role` delete per account — deliberately
-not done blind, because a role row is also what lets somebody open a portal at all.
-
-1. **🔴 CRITICAL — `POST /admin-request` applies a plan switch to ANY org named in the body.**
-   `admin-request.controller.ts:264` — no ownership check on the target org. A signed-in
-   operator can switch a rival venue's subscription plan by naming its id.
-
-2. **🟠 HIGH — a 409 on `plan_change` leaks a rival venue's unpaid period count and total.**
-   `admin-request.controller.ts:247`. Same endpoint, same missing scope check.
-
-3. **🟠 HIGH — payment-method save/read on the OUTLET page silently targets the AGENCY.**
-   `payment-method.controller.ts:32` ignores `outletId`. An outlet owner who also staffs an
-   agency edits the agency's card while looking at their venue's screen.
-
-4. **🟠 HIGH — an outlet owner who also staffs any agency gets 404 on their own venue's
-   checkout.** `org-scope.ts:147` — `resolveOrgScope` returns `{agencyId, outletIds: []}` for
-   anyone with one active agency membership, so every outlet invoice fails the ownership test.
-   The Pay button shows (canEdit is true) and every attempt answers "not found".
-   ⚠️ This is the same resolver `orgOwnerPaysOnly` now shares, so guard and controller agree —
-   they are consistently wrong together rather than inconsistently, which is the safer half.
-
-5. **🟠 HIGH — `modulePortalCode('settings')` picks an arbitrary portal.** `auth.repository.ts:343`
-   — two module rows named `settings`, `limit(1)`, no `ORDER BY`. Every `requirePermission` on a
-   shared module key is deciding by whichever row the planner returns first.
-
-6. **🟡 MEDIUM — "only the owner can SEE the payment method" is UI-only.**
-   `payment-method.routes.ts:15` — the API still returns it to any member, so the card details
-   are one fetch away for somebody the screen hides them from.
-
-7. **🟡 MEDIUM — Resend has no cooldown or disabled state.** Each click spends one of the 5
-   sends/hour per phone, including the ones the server refuses, so a person can lock themselves
-   out of their own number by pressing a button that looks free.
-
-8. **🟢 LOW — a DEMO session is told to check WhatsApp for a code that is never sent.**
-   The demo branch toasts `otpSentTo` and accepts any six characters, which is correct for a
-   prototype, but the copy now names WhatsApp.
-
-9. **🟢 LOW — subscription pages hide the payment controls on `!canEdit` but still show the
-   read-only banner only to Finance.** Ops Head and Director get no explanation.
-
-10. **🟢 LOW — `orgOwnerPaysOnly` answers 403 "not the owner" for an ambiguity that should be
-    400 "which organisation?".** Fixed in passing — the guard now returns 400 when no org
-    resolves — but the same shape exists elsewhere.
-
-
-### ▶ ✅ RESOLVED 11 Sep 2026 — the seeder now agrees with the database (outlet Finance)
-
-**Owner's ruling:** *"follow the latest, what can do what cannot do RBAC for the user. The web
-matrix must not lie to user and always must follow the database that actually what can access
-what cannot."* The database wins, because `requirePermission` → `roleHasPermission` reads those
-rows and they are what actually decides access.
-
-`seed-rbac.ts` only ever ADDS — it "ensures" a role and never removes — so it ensured 7 grants
-for outlet Finance while the live rows held **19**. Every other role already matched. The 12
-extras (booking CRU, rating CRU, sales create/update, special_service create/update, workspace
-create/update) were leftovers from an earlier, wider seeding.
-
-`OUTLET_FINANCE` was widened to those 19. Verified after redeploy: **seeder == database ==
-derived matrix for all five outlet lanes** (Owner 22, Finance 19, Ops Head 18, Director 8,
-Guarantor 22), and `pnpm rbac:sync` wrote nothing — the web was already correct.
-
-⚠️ This was not only a comment being wrong. A FRESH database would have seeded Finance with
-only 7, so the same code granted different access depending on which database it met.
-
-✅ **BUILT (12 Sep 2026) — this item is closed.** `pnpm rbac:seed-check` compares `ROLE_GRANTS`
-to the live `role_permission` rows and exits 1 on drift (`src/scripts/check-rbac-seed.ts`), so
-the loop `rbac:check` left open — web == database, but nothing watching seeder == database — is
-now shut from both ends. The seeder still only ADDS: removing a grant means deleting the row by
-hand, and `rbac:seed-check` is what tells you one is left over.
-
-### ▶ ✅ ANSWERED — change email on the web (deferred 11 Sep 2026, answered 21 Sep 2026)
-
-**CLOSED.** The owner deferred this on 11 Sep — *"for this no do yet cannot change the email with
-the otp, leave it first"* — and on **21 Sep 2026 chose option 1 below, almost word for word**:
-the **current password** is the proof, plus a code to the **new address**. It is built; see the
-account-security block at the top of §9 for the three-route shape and the sentences to test.
-The original entry is kept because both of its traps are still live.
-
-The problem it described: `PATCH /user/:id` accepts `email` with **no proof of any kind** beyond
-the session, so a left-open laptop was an account takeover — change the email, then "forgot
-password" to it. That writer is now closed (§10 row ii), and the change goes through
-`/auth/contact-change/*`.
-
-The two options the owner was given, and which one they took:
-1. **Current password as the proof** (what most products do, no new infrastructure) — **CHOSEN
-   21 Sep 2026**, and implemented as `POST /auth/contact-change/start { kind, value,
-   currentPassword }`, self-only from the token, rather than the `POST /auth/email/change` sketched
-   here. It also covers phone, which this entry did not anticipate.
-2. **A real email OTP** — a verification code to the NEW address, mirroring the phone lane.
-   **Also taken**, as the second half: the code to the new contact is what `confirm` checks. What
-   was dropped is the code to the CURRENT contacts, which was never one of these two options.
-
-⚠️ **CARRIED FORWARD — the trap that outlives the decision.** It must **re-issue the token pair**,
-exactly like `/auth/phone/change` used to: a JWT carries only `{loginMethod, loginCriteria}` and
-every agency and outlet operator signs in BY EMAIL, so changing it orphans their own session and
-the next request answers 401 `Unauthorized` — the same bug the PR app hit on phone.
-`/auth/contact-change/confirm` answers `{ accessToken, refreshToken, email, phoneNum }` for that
-reason; **any client that does not STORE both tokens re-creates the bug**, and that is one of the
-things the manual test per lane (§9, top block) has to prove on a real session.
-
-
-### ▶ ✅ BUILT AND PROVEN 11 Sep 2026 — the joining flow's four web surfaces (owner directive, 10 Sep)
-
-**DONE, and click-through tested end to end — including the photo** (changelog ix). The line that
-stood here for four entries, *"nothing below has been exercised in a browser"*, no longer holds:
-four real sign-ups went through the live form, both portals' queues were populated and approved,
-and every field a user types was read back out of the database and compared with what was typed.
-The photo was the last hold-out and is now proven byte-for-byte through R2.
-
-⚠️ **What is still owed on this directive** is the OTHER half of directive 1 — the *"request the
-role at the profile setting page"* surface. Acceptance today happens only through the emailed
-token link; there is no in-app place for an invited person to see a waiting invitation, and no way
-for an owner to see, resend or cancel one they sent. That is the remaining gap, not the
-click-through. The original scope, kept for reference:
-
-The backend is built, verified and green (changelog xxi). **None of the UI exists yet**, so today the
-feature is reachable only by API. In owner's words, what is owed:
-
-1. **A link under ACCOUNT TYPE on the sign-up page** — beside Outlet / PR Agency — redirecting to a
-   member sign-up. Those two tiles register ORGANISATIONS; this registers a PERSON.
-2. **The member sign-up page.** Name / email / phone / password, then optionally: Outlet or Agency →
-   which organisation (`GET /auth/outlets`, `GET /auth/agencies`) → which role. POST to
-   `/auth/register-member`. ⚠️ The org step is OPTIONAL (owner) — skipping it leaves an account any
-   organisation can invite by email.
-3. **A "New Member" tab on the AGENCY Approvals page** (`/agency/pending`), beside the existing
-   PR and Outlet tabs. Lists `agency_user` rows with `status:'pending'`; the owner picks the real
-   role and approves. ⚠️ Approve is already built — `updateMember({status:'active', subRole})`. Do
-   NOT add a second write path.
-4. **The same tab for OUTLET.** `OrgMembersPanel` already renders non-active members with a status
-   label, so the row shows today; what is missing is the approve action with a role picker.
-
-⚠️ **`GET /auth/org-member-invite/mine` is built and has no caller yet.** It lists a signed-in
-person's pending invitations, for a profile-settings panel that was deliberately deferred (owner
-chose "web invite page only"). It is a `/mine` read and harmless, but it is ahead of its UI — wire
-it up or delete it rather than leaving it to rot.
-
-⚠️ **Nothing here is click-through tested.** The backend was proven by schema probes and live
-repository reads, never through a browser.
-
-
 ### ▶ OPEN — a cancelled PR cannot see what an agency still OWES them (owner directive, 10 Sep 2026)
 
 **⚠️ THE RULE, stated by the owner 10 Sep 2026 — and BOTH halves are already enforced.**
@@ -1283,33 +1367,6 @@ the obvious API. Separately, `pr.controller.ts` writes `'left'` and then immedia
 protected row into a deletable one. **Raise with the owner before touching any of it.**
 
 
-### ▶ ✅ NOT REPRODUCIBLE 13 Sep 2026 — re-tested, now that a dual-org account exists
-
-The note below parked this as *"unverifiable by construction — no account on this database holds
-two memberships"*. **That is no longer true**, so it was re-tested rather than left on trust:
-
-* **2+ agencies:** still nobody. The agency-side routes remain unexercisable, exactly as parked.
-* **2+ OUTLETS:** `jinkgan48@gmail.com` has been active at UAB Emhub AND JK House since
-  11 Sep — the first such account.
-* **2+ agencies as a PR:** several (one at four agencies), on `agency_pr`, a different table.
-
-Tested read-only as that account, against a shift and an assignment at EACH venue, with and
-without `x-org-id`:
-
-| route | UAB Emhub | JK House |
-|---|---|---|
-| `GET /shift/:id` | 200 / 200 | 200 / 200 |
-| `GET /shift-assignment/:id` | 200 / 200 | 200 / 200 |
-| `GET /pr/:id` | 200 / 200 | 200 / 200 |
-
-No 404, header or no header. The oldest-membership fallback does not lock this person out of
-their second venue. `_probe-dual-outlet-reads.ts` and `_probe-dual-outlet-assignments.ts` re-run it.
-
-⚠️ **Still genuinely untested:** the three `payment-voucher` routes in the list, which are
-AGENCY-scoped — no account holds two agencies, so that half stays parked on the same reasoning.
-
-**The original 10 Sep entry, kept for its reasoning:**
-
 ### ▶ OPEN — six resource-id routes still answer as ONE agency for a dual-agency operator (10 Sep 2026)
 
 **Not a leak, and not the security half** — that closed in slice 4c. Every one of these compares
@@ -1345,32 +1402,6 @@ tests** over any of this middleware — `apps/backend/src/middlewares` has no te
 Every claim about it is code-read plus live probe.
 
 
-### ▶ ✅ FIXED 13 Sep 2026 — an unpriced tier reads as blank now
-
-Database first: all 8 venues have an `outlet_workspace` with 7 tier rates, so nothing renders
-this fallback TODAY — it is a latent trap for a venue whose seeding fails, which is exactly
-the shape that goes unreported.
-
-`workspaceSettingsFromBackend` no longer starts a tier from the Velvet fixture. The stakes
-were higher than display: `workspace.tsx` seeds its draft from this output and PUTs the whole
-draft, so the next save on any unrelated field would write RM 40/50/55/65/80 into the venue's
-real `outlet_tier_rate` — the table every PR wage and commission is priced from. The DRINK
-MENU half of this file was fixed for that same reason; the tiers were the same bug one field
-over, on the more expensive column.
-
-⚠️ **`BLANK_OUTLET_WORKSPACE` IS NOT BLANK, and the first attempt shipped on that
-assumption.** It is built by `normalizeTierRates`, which ends in `ensureAscendingTierWages`
-and `ensureDistinctTierCommissions`, so from an all-zero base it still SYNTHESISES a ladder —
-Tier I came back at RM 40 with Tier II on 1%. The test caught it; the fallback is now a local
-`UNPRICED_TIER` of real zeros. Those two helpers are right for a workspace being EDITED and
-wrong for one that does not exist yet. The shared constant is untouched, since `demo-seed.ts`
-wants the ladder.
-
-5 tests, including one asserting "Velvet 23" appears nowhere in the mapped output, and one
-that a REAL tier row still maps through unchanged.
-
-**The original 10 Sep entry:**
-
 ### ▶ (was) OPEN — `DEFAULT_OUTLET_WORKSPACE` is demo data standing in for a real default (10 Sep 2026)
 
 Every venue now has a real `outlet_workspace` row, so `apps/web`’s
@@ -1390,44 +1421,6 @@ rather than a plausible set of numbers. The seeding in
 `features/outlet-workspace/default-rate-card.ts` is the server-side answer;
 this is the client half.
 
-
-### ▶ ✅ FIXED 13 Sep 2026 — and it was never an outlet problem; it was the whole table
-
-**One line, and it silenced every entity.** The old-data fetchers read
-`req.params.id`, but they run inside `platformAuditMiddleware`, which is mounted
-`v1Router.use(...)` — BEFORE any route is matched. Express fills `req.params` when a route
-matches, so at that moment it is `{}`. Every fetcher got `undefined` and returned null.
-
-Measured live before the fix: **0 rows with `old_data` on EVERY entity**, not just outlet —
-`User` 266 updates / 0, `agency` 263 / 0, `outlet` 257 / 0, `payment-voucher` 286 / 0. `User`
-has had a registered fetcher all along and never once produced a row.
-
-⚠️ **The asymmetry that hid it for months:** `resolveEntityIdFromRequest`, which fills
-`audit_logs.entity_id`, reads the SAME `req.params` and works — because it runs in
-`res.on('finish')`, long after routing. One request, two readers of one field, opposite
-answers, and only one of them wrong. Nothing about the entity_id column ever looked broken.
-
-`resolveEntityIdFromPath` now takes the id off the URL, mirroring `resolveEntityFromPath`
-including its `rbac` special case, so an entity and its id always come from the same segment
-of the same path. It refuses a non-id segment (`/user/me/locale` must not look up a user
-called "me") and accepts a trailing sub-resource (`/payment-voucher/:id/export-ticket` still
-audits the voucher). `outlet` and `agency` fetchers added — registered LOWER-CASE, because
-`ENTITY_MAP` renames only the six RBAC paths and a capitalised key would register a fetcher
-nothing ever looks up, failing silently in exactly the old way.
-
-**8 unit tests on the resolver, and the chain proved end-to-end read-only** with a fake
-request whose `params` is empty — the real middleware state: outlet, agency and User each
-return their row, and a collection write correctly stays null. Deliberately NOT proved by
-sending a PUT: an "idempotent" outlet update is precisely the write this project's rule is
-about, since a schema default can turn a same-value save into a real change.
-
-⚠️ **Still true, and the deeper half of the original note:** the row records what the
-resource IS, not what the caller ASKED FOR. `logRestMutation` receives `requestBody` and
-uses it only on FAILURE; on success it is discarded. With `old_data` populated a diff now
-answers "which field moved", which is most of what was wanted — but "did the caller send
-this, or did the code?" still needs the request captured, and that wants its own column.
-
-**The original 10 Sep entry:**
 
 ### ▶ (was) OPEN — `audit_logs.old_data` is NULL for outlet UPDATEs, so the table cannot say what changed (10 Sep 2026)
 
@@ -1452,30 +1445,6 @@ exported from that folder — a PATCH schema built inline inside a controller is
 invisible to it, which is why the four RBAC/subscription ones were promoted to
 named exports. Keep it that way.
 
-
-### ▶ ✅ CLOSED 13 Sep 2026 — two halves were already stale; the third is now a check
-
-Re-verified rather than acted on from the note:
-
-1. **Conflict markers on `main`: GONE.** `git show main:TEST_SCRIPT.md` finds 0. Fixed by the
-   merge the note predicted.
-2. **`outlet.controller.ts` mixed endings: GONE.** It is uniformly CRLF (1564 of 1564), so it
-   aligns and merges normally.
-3. **The whole-repo normalisation the note proposed was NOT done, on purpose.** 1905 of 2113
-   tracked files are CRLF in the blob. `* text=auto eol=lf` plus a renormalise would rewrite
-   90% of the tree in ONE commit and make the next merge from the teammate's branch conflict
-   in nearly every file — the exact failure it is meant to prevent, amplified. Nothing in
-   tracked source has ever failed because of consistent CRLF; the two real CRLF incidents
-   were a `.sh` shebang (already pinned in `.gitattributes`) and the server's own untracked
-   `.env`.
-
-**What shipped instead** — `pnpm check:endings`, which fails only on MIXED endings, the state
-that actually makes a file conflict whole. It found 2 offenders on its first run, **both
-created by this session's own edit scripts** (a Python append and a bash heredoc writing LF
-into CRLF files), plus a stray doubled CR this session had put into TEST_SCRIPT.md. All
-normalised to their dominant ending — minimal diff, no tree-wide rewrite.
-
-**The original 9 Sep entry:**
 
 ### ▶ (was) OPEN — `main` carries committed conflict markers, and CRLF endings (9 Sep 2026)
 
@@ -1503,14 +1472,6 @@ already hit a CRLF fault from the other direction — main's own
 balance against BOTH merge parents before committing. No typecheck, test or
 lint in this repo parses CSS, so a resolution that splits a rule passes every
 gate and still returns 500 on every route.
-
-### ▶ ✅ CLOSED 13 Sep 2026 — stale; the key is referenced nowhere on SL any more
-
-`t.shell.greetingNamed` appears in NEITHER `translations.ts` nor `PortalShell.tsx` on
-`origin/SL` today, so the commit that referenced it has been superseded and the mismatch is
-gone. Verified by reading the branch, not by changing it — `SL` is the teammate's.
-
-**The original 9 Sep entry:**
 
 ### ▶ (was) OPEN — branch `SL` does not typecheck at HEAD: a commit landed AHEAD of its dictionary key (9 Sep 2026)
 
@@ -1576,42 +1537,6 @@ deletes the R2 object and would blank another's picture.
 ⚠️ Whatever fills covers must NOT re-create the cards themselves. They are the
 venue's examples to delete; re-running the seeding resurrects removed cards,
 which is the failure `initRoles()` already has with roles.
-
-### ✅ CLOSED 9 Sep 2026 — "Adjust crop" now survives a reload (was: it vanished)
-
-**Fixed the same day it was raised** — see the §10 row. The original is now stored
-beside the image in R2 (`__source.<ext>` + `__crop.json`) and read back through
-the API, so Adjust is offered for a photo saved in any earlier session. The
-description below is kept because the REASON the button was hidden is still the
-reason the fix had to store the original rather than re-crop the output.
-
-### ~~OPEN~~ — "Adjust crop" disappears on reload (found 9 Sep 2026, corrects X78)
-
-The owner opened the outlet profile for **Hide-in Bistro & Lounge**, which has a
-saved logo, and asked where the crop edit had gone. Nothing is broken — but X78
-claims both cards "now offer Adjust crop" without saying that the offer lasts
-only as long as the browser tab.
-
-`photoSource` is component state initialised to `null`
-(`routes/outlet/settings.tsx`, `routes/agency/profile.tsx`,
-`components/auth/AccountAvatarCard.tsx`) and is filled **only when a file is
-picked**. The button is gated on it — `onAdjustPhoto={photoSource ? … }` and
-`{photoSource && …}` — so after any reload there is nothing to adjust and the
-button hides. The org cards gate again on `editing && canEdit`, so edit mode is
-required as well.
-
-**It is deliberate, and the reason is sound:** only the full-resolution ORIGINAL
-can be safely re-cropped. What is persisted is the cropped square, so re-cropping
-that would discard everything outside the previous square and soften the image
-on every pass. Hiding the button was chosen over degrading the picture.
-
-**What was built (9 Sep 2026):** exactly that — the original is persisted beside
-the cropped output and re-read on mount, so a later session re-opens the true
-source at its previous framing.
-
-⚠️ Do NOT "fix" any future variant of this by feeding the stored CROPPED image
-back into the sheet. That is the lossy path the original gate existed to prevent,
-and it remains wrong.
 
 ### ▶ ◑ HALF DONE 13 Sep 2026 — the API can correct an anchor; no screen shows it yet
 
@@ -1786,175 +1711,6 @@ it. Re-run `ipconfig` and redo the two `.env` lines when either changes. The alt
 none of this: the phone can already reach `https://innocenz.duckdns.org` from anywhere — use that
 whenever the phone only needs to SEE the app rather than run uncommitted local code.
 
-### ▶ ✅ CLOSED next day — THE PR CURRENT WEEK IS SPLIT BY AGENCY (8 Sep 2026)
-
-Owner: *"the shifts here should also separate based on the agency ... for a clearer picture"*. Built.
-
-**Step 1 answered YES, and it is what made the rest small.** The hand-off flagged the prerequisite as
-UNVERIFIED — whether an agency can reach the current-week line payload at all. It already can, twice over:
-`lines[].voucherId` comes straight off the line’s own foreign key (`toReceiptLineDTO`), and `vouchers[]`
-has carried `{ id, agencyId, agencyName }` per voucher since 0129. **So this needed no backend change and
-no migration** — the answer was on the wire and nothing was reading it.
-
-**What it does now.** The live week renders ONE CARD PER AGENCY, the same shape the past weeks already
-take (one card = one voucher = one payer), each with its own shift rows and its own earned/wages totals.
-A single-agency week is unchanged except that the card now NAMES the agency, which was the owner’s other
-complaint on the same screen.
-
-**The three things it was told to protect, and how each is held:**
-
-1. **Agency per line, never guessed.** `agencyResolver` returns null for a voucher it cannot resolve and
-   for a payload with no `vouchers[]` at all; those lines land in an UNATTRIBUTED card that keeps the
-   original `week-current` id. Falling back to "the first agency" would have been the
-   `oldest-membership-was-the-agency` bug in a new place.
-2. **The two-outlet rule survives.** A day worked at two venues for ONE agency still merges into one
-   record labelled with both venues — the key is `agencyId|dateIso`, so the agency is an ADDITIONAL
-   split, not a replacement for the outlet handling. Pinned by a test.
-3. **The total still matches Payment.** Every line belongs to exactly one voucher and so exactly one
-   bucket, so the cards sum to what the flat card summed. Pinned by a test that compares the split total
-   against the flat line total.
-
-**Two defects fixed in passing, both invisible until the week could hold two payers:** the live shift id
-was `live-<date>`, so two agencies on one night produced a DUPLICATE React key and one row was silently
-dropped; and `mergeHistoryShiftsWithWeekPay` decided "archived" by `weekId !== 'week-current'`, which
-would have read every per-agency card as history and duplicated the whole week onto the screen.
-
-⚠️ **Still open — it is NOT rendered.** The PR app needs a password login and this session does not type
-passwords into forms. Everything below is build-and-data evidence, so the one-minute click-through on a
-real PR account is still owed:
-
-- The live data DOES exercise it: week starting **2026-09-06**, one PR holds **two** `pending_review`
-  vouchers — Atlas Agency `PV-000009` (7 lines, **RM 215.00**) and Why We Met `PV-000001` (3 lines,
-  **RM 68.33**). That card read one merged **RM 283.33** with no agency named before this change.
-- Expect: two live cards, Atlas above Why We Met (server `vouchers` order), totals as above, both open by
-  default, each collapsing independently.
-
-⚠️ Related and load-bearing, unchanged: `self-logged-money-goes-to-the-oldest-agency` and
-`cross-agency-voucher-contamination`. This feature MAKES those visible rather than causing them — if a card
-names the wrong company, suspect the row, not the split.
-
-⚠️ **Found while running the suite, NOT fixed (out of scope):** `apps/mobile/src/lib/active-shift.test.ts`
-imports from `vitest` inside a Jest project, so the whole suite file **fails to run and always has** — it
-arrived with `cb8d25f1` and has never executed once. `pickActive` therefore has ZERO coverage while
-appearing to be covered. One import line to fix.
-
-### ▶ ✅ CLOSED — TYPOGRAPHY click-through DONE on both portals (7 Sep 2026)
-
-**CLOSED the same day — the owner signed in an agency and an outlet session and both
-portals were walked page by page. 9 agency + 8 outlet pages, 17 of 17 now measure ZERO
-off-ladder elements; the live pages found five defects the static audit could not see
-(see §10 xxx). What remains open below is only the two class-name renames.**
-
-The one-font / one-ladder / lavender-title change (§10 xxviii) was verified by measuring
-computed styles against the real stylesheets in a harness page, because the portals are
-behind a login and this session does not type passwords into forms. That proves the CSS
-resolves correctly; it does not prove any real screen still lays out.
-
-What a person still has to confirm on screen:
-
-- `owner@atlas-agency.my` — Payroll, Approvals, Roster, PV detail. Nothing wrapped or
-  clipped that did not before; the badge pills (now 11-12px, were 16-17px) still read cleanly.
-- `owner@velvet23.my` or `emhub@emhub.test` — Today, Post Job, Workspace, History, Settings.
-  **The outlet is the portal most likely to look changed**: it had its own duplicate copy of
-  the override layer and rendered one step LARGER than the agency everywhere. It is now
-  identical to the agency, which is the point, but it is a visible shift.
-- The **roster week grid** is the tightest surface in either portal — its cells were 7.5-11px and are now 11-12px. If anything overflows, it will be there first.
-- The **payment voucher** (`/agency/pv` -> open a voucher) must still look like a printed
-  document: Segoe UI body, Georgia title, black on white. It was deliberately excluded from
-  the font sweep so it keeps matching the backend PDF and Excel — worth one look to confirm
-  the exclusion held.
-
-**Two follow-ups, neither done, both deliberate:**
-
-1. `.font-sora` and `.font-manrope` now resolve to the SAME font, so the class names lie.
-   They are still referenced from TSX and from selectors like `h2.font-sora.text-lg`, so
-   renaming touches markup as well as CSS — left as a separate, mechanical rename rather
-   than smuggled into a typography change.
-2. `.iz-pr-app` (the PR phone web view) carries a **third** copy of the readability override
-   layer with its own numbers. Its fonts were unified along with everything else, but its
-   SIZES were left alone as out of scope — the owner asked for agency and outlet. The PR
-   view will sit on a different ladder from the two web portals until it is brought over.
-
-### ▶ ✅ CLOSED — a pending receipt could block a voucher from a queue that could not show it (7 Sep 2026)
-
-Found while aligning the rail badge with the Payroll tabs, not looked for. On the live
-agency, **the rail counts 2 pending receipts and all three week tabs show Receipts (0)**.
-
-The cause is an asymmetry that already existed: the voucher list has an AGE CATCH-ALL —
-`lastLastWeekPvs` deliberately holds every unpaid voucher from any week, precisely so an
-overdue one cannot age out of every tab (see its comment, and the PV-000006 story that
-prompted it) — while `receiptsInPayrollWeek` is a plain window with no catch-all. So a
-pending receipt older than the payment-week window is listed by no tab at all.
-
-That matters because a pending receipt **blocks its voucher from being sent**. The two
-halves together mean: the voucher stays visible on the Payment Week tab, refuses to send,
-and the receipt explaining why is not reachable from this page.
-
-**FIXED the same day**, with the first of the two options — `receiptsInPayrollWeek` now takes
-`includesOlder`, true on the payment week only, exactly as the voucher list already worked.
-Only PENDING rows are rescued: what must not age out is what is UNFINISHED, and sweeping up
-nineteen verified June receipts would have buried the two that need someone. The panel takes
-the same flag, so the count and the list it opens still come from one rule.
-
-Proven on the live agency: the two rows the API reports as pending (`e40f8f1c…`, `d71a4c86…`,
-`weekStart` 2026-08-09 and 2026-08-02) are now IN the payment week's list — All (7) ·
-**Waiting on you (2)** · Verified (5), with **Approve all (2)** offered — and both ids were
-matched individually rather than inferred from the count.
-
-⚠️ **Do not "fix" this by summing the three week tabs to find the missing rows.** The tabs
-OVERLAP on purpose — the payment week repeats vouchers that also appear under This Week or
-Last Week, and its own comment says the duplication is intentional so a voucher can be found
-by the week it was WORKED. Each week tab equals its own sub-tabs; across tabs the totals add
-up to nothing meaningful, and an earlier note in this session compared them that way and was
-wrong to.
-
-### ▶ ✅ CLOSED — one PR on two venue cards, with nothing to say which one she is at (7 Sep 2026)
-
-Owner, on the roster's **Check-in locations** panel: *"why is 'Vicky' showing up under both Maps?"*
-The panel was right — she held two assignments that day, at two venues — but the second card gave the
-reader nothing: `Not checked in · Rostered · 12:00 - 13:00`, forty minutes before that shift began.
-Fixed in `use-agency-attendance-fixes.ts` + `AgencyAttendanceFixPanel.tsx`: a rostered row now says
-when it is **Due**, and names the venue the PR is **still checked in at** when one exists. Verified on
-the live Atlas login (see §10 xv).
-
-**Second pass (§10 xvi) — the first one missed the case the owner was actually looking at.** By then
-Vicky's duplicate was between two STAMPED rows, and the fix above only touched rows that had not
-stamped. Every stamped row now leads with `In 11:10 AM` (plus `· out …` when closed), and an unclosed
-check-in that a later stamp elsewhere has overtaken says `· since checked in at Velvet 23`. **Rule
-worth keeping: a duplicate row can appear in any of the panel's three buckets — fixing one bucket
-fixes one third of the symptom.**
-
-**A finding the panel now surfaces rather than causes:** two open check-ins for one PR means a
-check-out was never made. **Third pass (§10 xviii) closed the hole that let it happen** — `checkInMine`
-now 409s while any other check-in of that person's is still open, across every agency, because the
-constraint is a body and not an org.
-
-⚠️ **The rule is forward-only. Vicky's two open rows from before it are still there** (UAB Emhub 11:10
-and Velvet 23 11:31, both unclosed). Nothing auto-closes them and nothing should — a check-out stamps
-time that turns into wages. She can clear them herself: check-out is ungated by design, so both close
-from the phone in the normal way. Until then she cannot start a third shift, which is the rule working.
-
-**Left open, deliberately:** the panel is scoped to ONE agency's assignments, so "still checked in at"
-can only ever name a venue this agency staffed. A PR on a second agency's floor is invisible here and
-must not be guessed at. Also, the Due→Not-checked-in flip is evaluated at render, so it lands on the
-next refetch (60 s stale time), not on the stroke of the minute.
-
-### ▶ ✅ CLOSED — unresolved past assignments, and the fine that could not explain itself (7 Sep 2026)
-
-Both from the (xi) diagnosis. `no-show-sweep.job.ts` closes out any assignment with no check-in a few
-hours after its shift ends (at the shift's end when another shift follows), and the minimum-shifts
-breach now prints `1 of 3 shifts worked · 3 offered`. Vicky's two 3 Sep rows read `no_show` live, and
-the RM 50 is unchanged — `no_show` and `assigned` count identically in `attendanceWindow`, so the
-sweep corrects the RECORD without moving money. See changelog (xii).
-
-**Two things it deliberately did NOT do:**
-
-1. **19 unresolved assignments older than the 30-day lookback are still `assigned`** (oldest 24 Jul).
-   The job counts them in its log every run and leaves them. Rewriting months of history is a
-   decision for a person: say the word and it is a one-run change to the lookback.
-2. **No notification fires on a no-show.** The PR is not told, and neither is the agency. If a black
-   mark should reach the person it is about, that is a new notification kind, not part of this job.
-
 ### ▶ ⚠️ TWO AGENTS SHARED THIS WORKING TREE (7 Sep 2026)
 
 A second session worked on branch `SL` at the same time as the penalties slice, on a different
@@ -2013,13 +1769,6 @@ than reported. What IS proven: backend tsc 0, and the process restarted at 11:58
 ⚠️ **The Sunday 08:00 job has never fired on its own.** The one seal so far was run by hand through
 `_probe-penalty-seal.ts --apply`. First natural run: Sun 13 Sep 08:00 KL.
 
-### ▶ ✅ CLOSED — a weekly minimum IS satisfiable in one day (7 Sep 2026)
-
-Owner: *"3 shifts in a day still translates to 3 shifts in a week"*. `assigned_this_week` counts
-ASSIGNMENTS and never distinct days, so the code already was this rule and nothing changed. Recorded
-because it was open as a question, and because the tempting "fix" — counting distinct `shift_date` —
-would silently lower real fines. `pr-penalty.test.ts` now asserts it, so a future change has to argue
-with a test rather than with a comment. See changelog (xiii).
 ### ▶ ✅ MOSTLY CLOSED — the payment-week catch-all, confirmed by the owner (7 Sep 2026)
 
 Owner confirmed the Overtime fix on screen: the two 20/22 Aug claims now reach the **Payment Week**
@@ -2035,41 +1784,6 @@ screenshots — headers read `Atlas Agency (Agency Owner)` / `UAB Emhub (Outlet 
 2. **The send actually going through.** Deciding BOTH aged claims should let the voucher's
    **Send to PR for e-sign** succeed rather than name them — the server refuses that independently, so
    this is the proof that the client gate and the server gate now agree.
-
-### ▶ ✅ CLOSED — the two role lists are aligned (7 Sep 2026)
-
-Owner picked **Financial Head · Ops Head · 总监**, and both lists now carry them. Enforced by
-`role-labels.test.ts` rather than by a comment: 12 cases assert every role reads identically in
-`t.roles.*` and `t.profile.role*` across EN and 中文, and that no role string smuggles the
-organisation back in. See changelog (x).
-### ▶ ✅ CLOSED — the signed-out type pass is verified on all four routes (6 Sep 2026)
-
-`--iz-page-scale` moved **0.8 → 0.9**, resizing every signed-out page at once. All four are
-now measured: **/forgot-password** and **/reset-password** both report h1 **30px**, horizontal
-overflow **0** and zero clipped elements; **/signup** reports overflow **0**. Nothing that fitted
-at 0.8 clips at 0.9.
-
-The check also PROVED the heading scoping was right: `/forgot-password` keeps the bare
-`.login-heading-line` at **30px** while still inheriting the bigger **55px** controls from bare
-`.login-page` — exactly what `AuthCardShell`'s own comment asks for, and what the `/login`-only
-`.login-threshold` scope was built to protect.
-
-⚠️ **It also caught a rule that never applied.** `/signup`'s heading measured **30px**, not the
-36-48px specified: the new rule sat EARLIER in the file than the original
-`.signup-page .signup-heading span`, so at equal specificity the original won. Fixed by editing
-the original in place and deleting the duplicate — one rule for that selector now, measured at
-**48px**. Lesson: when a size does not take, look for a same-specificity rule LATER in the sheet
-before touching the selector.
-
-Two smaller things left deliberately:
-
-- **The middle flow caption crosses the connecting curve.** "Fills the roster. Pays the team."
-  wraps to two lines and the second sits over the SVG rail. It is legible and the owner did not
-  raise it, but the fix is either a shorter middle string or nudging that node's `y`.
-- **Only the flow captions were de-capsed.** The hero stat labels
-  (`LESS TIME ON MANPOWER PLANNING`) are still spaced-out mono caps wrapping to three lines,
-  which is the same defect this slice fixed one section lower. Left alone because the owner
-  named the flow strip and the dashboards, not the hero — but it is the obvious next one.
 
 ### ▶ 🟡 The brand slogans stay English under 中文 — needs the owner's wording, not a guess (6 Sep 2026)
 
@@ -2114,138 +1828,6 @@ well as shorten the long ones; only the shortening is in. Deciding which panels,
 are unnecessary needs the screens side by side with someone who knows which ones nobody reads —
 it cannot be derived from the dictionary, because a string's length says nothing about whether
 the surface it sits on earns its place.
-
-### ▶ ✅ CLOSED by decision — old one-agency requests are LEFT AS THEY ARE (3 Sep 2026)
-
-The fan-out fixed the WRITE path; the rows already in the database were written by the old
-one-agency code and stay one-agency. Four shifts are affected — both of the 3 Sep Emhub posts
-(Vicky, addressed to Why We Met, invisible to Atlas) and the two 24 Aug posts (6 and 5 names).
-**Owner's call: leave them** — *"leave those as long as the next few shifts take this fix then it
-is fine"*. No backfill was run and none is planned; those four stay one-agency for good, so do
-NOT re-raise this as pending work. The check that matters is the NEXT posts: rerun
-`_probe-request-pr-cross-agency.ts` and read section 2 — a post made under the fix has
-`asked_agencies` equal to `invited`, and the four pre-fix rows are the ones dated 3 Sep and
-24 Aug.
-
-⚠️ Related, still open: `requestedPrs` is accepted only on CREATE. `UpdateShiftSchema` inherits
-the field via `.partial()` but the update handler never writes it, so editing a posted shift can
-neither add a named PR nor repair one of the rows above.
-
-### ▶ ✅ CLOSED same day — OUTLET PRIVACY SWEEP: both leaks fixed (3 Sept 2026)
-
-**Shipped.** New `util/outlet-redaction.ts` blanks the fields; `redactIdentityDocsForOutlet` —
-the middleware `/user` has always used — is now wired to `GET /pr`, `GET /pr/:id`,
-`GET /shift-assignment` and `GET /shift-assignment/:id`, and both controllers honour the flag it
-sets. `IDENTITY_DOC_FIELDS` is exported and REUSED rather than re-typed: two lists of "what an
-outlet must not see" is one list that gets updated and one that does not.
-
-**Blanked for outlet callers:** `icNo` + the shared identity-doc list inside `profile` (PR row);
-the seven `cancelFee*` columns, the four raw coordinates and `leaveProofPhotos` (assignment row).
-**Deliberately kept:** `cancelNoticeHours` (the venue’s own operational fact),
-`checkIn/OutDistanceM` + `AccuracyM` (measured FROM the venue’s own location — distance from a
-point you own is not a position, and it is the geofence evidence), `leaveStatus` (a venue must
-know the PR is not coming; it must not see the doctor’s note), and `phone`/`email` (a booked PR
-has to be reachable on the night). Blanked to `null`, never deleted — a missing key renders
-`undefined` or throws on a destructure, and a privacy fix that breaks a roster gets reverted.
-
-**Age survives.** `toUserProfileResponse` already derives `age` from `dob` upstream — verified: of
-every live profile carrying a `dob`, none arrives without an `age` — so blanking the date costs
-the venue nothing. A derive-age-here fallback was written, shown to never fire on live data, and
-DELETED rather than shipped as a branch nobody would notice going wrong.
-
-**Proof is TWO-SIDED, which is the part that matters.** A fix that hides a column from everybody
-is an outage, not a privacy fix — the agency roster reads `icNo` and the payroll lane reads the
-coordinates. `_probe-redaction-counter-test.ts` asserts both directions and reports INCONCLUSIVE
-where the agency column is empty (a field null for everyone proves nothing):
-`icNo` outlet 0 / agency 5 · `profile.dob` 0 / 5 · `checkInLat` 0 / 18 · `checkInLng` 0 / 18 ·
-`checkOutLat` 0 / 17 · `cancelFeeRm` 0 / 1 · `cancelFeeVoucherId` 0 / 1 — **NO LEAKS**, every row
-discriminating. Booking pool intact across all 44 rows: name, nickname, tier, status, comcard,
-portfolio, languages, roster. Outlet History still renders "Vicky · Atlas Agency · 3 shifts" and
-`/pr?pageSize=500` still 200s — which is exactly what a GATE would have broken.
-
-**The original finding, kept for the record:**
-
-Swept all 55 outlet-reachable GETs with a real outlet token (`emhub@emhub.test`), deep-scanning
-live responses. **25 refused (403) — every discipline surface held**: `/pr/:id/penalties`,
-`/agency/:id/penalty-rules`, `/penalty-proposals`, `/uncharged`, `/agency/:id/prs`,
-`/payment-voucher` (where deductions live), `/payout-batch`, `/shift-assignment/attendance-fixes`,
-`/shift-assignment/overtime/pending`. Two endpoints leak. Instrument:
-`_probe-outlet-privacy-sweep.ts` + `_probe-outlet-pii-scope.ts`.
-
-The rule being broken is already WRITTEN, in `redact-identity-docs.ts`: *"OWNER DECISION
-(30 Jul 2026): an outlet may see WHO is working at its venue, not who they are. Coordinates stay
-closed … and IC number, date of birth, home address and both sides of the ID photo now go with
-them."* That module exists, is correct, and is wired to `/user` — and to nothing else. Its own
-header records that the decision sat undelivered for three weeks once before, because the check
-matched a deprecated role name. This is the same decision undelivered again, on two other routes.
-
-**① `GET /pr` hands an outlet IC numbers and dates of birth.** `pr.routes.ts` imports
-`requireRole` and `requirePermission` and no redactor, so the roster rows go out whole: `icNo`,
-`profile.dob`, `phone`, `email`, `profile.race`. Live with `?pageSize=200`: **44 PRs across 2
-agencies — 5 ICs, 23 DOBs, 25 phones — when only 6 people have ever worked at that venue.** The
-44 is NOT a scoping bug: the controller deliberately serves "its approved agencies’ rosters, not
-the people who happen to have worked here before", which is the booking pool the plan sells. The
-row SET is intended; the FIELD projection was never narrowed to match. Same file already withholds
-`stats.totalPaidRm` from outlets — the field-level instinct was there, applied once.
-
-**② `GET /shift-assignment` hands an outlet a PR’s fine and their GPS trail.** The full row ships:
-`cancelFeeRm` / `cancelFeePct` / `cancelFeeChargedAt` / `cancelFeeVoucherId` (a cancellation
-PENALTY charged to the PR, and a pointer into their voucher — 1 live row), and metre-level
-`checkInLat` / `checkInLng` / `checkOutLat` / `checkOutLng` (**15 and 14 rows**, 8 decimal places).
-The coordinates directly contradict "coordinates stay closed" — that call was made when
-`attendance-fixes` was gated, and the main list was never looked at. Also in the projection:
-`leaveStatus` / `leaveProofPhotos` (a photographed MC), unpopulated at this venue, so **carried but
-unexercised** — the shape is the exposure, not the current rows.
-
-**Fix — same shape both times, not a gate.** A 403 blanks PR names on live outlet screens (that is
-exactly why `redact-identity-docs.ts` chose a flag over a guard). Wire
-`redactIdentityDocsForOutlet` onto `/pr` and `/shift-assignment` and have their mappers honour
-`req.redactIdentityDocs`, dropping `icNo`/`dob` on the PR row and the four cancel-fee columns, the
-four coordinates and `leaveProofPhotos` on the assignment row. **Check every other route that
-returns a user- or assignment-shaped payload in the same pass** — the lesson of this finding is
-that the decision was wired to one route and assumed everywhere.
-
-**③ By design, but worth re-confirming: `GET /user` is not org-scoped for an outlet.** Returns all
-**74 platform users** (74 emails, 36 phones) — every PR, every other venue’s staff, every agency
-user. Identity docs ARE redacted here and `dob` is replaced by `age` (verified), which is the
-stated mitigation, and the module explains that gating blanks two live screens. So this is the
-accepted trade rather than a defect — but the blast radius is the whole user table, and the owner
-should re-confirm that names+email+phone for every account is what "resolve PR display names" needs.
-
-**⚠️ The first run of this sweep reported these endpoints CLEAN.** Three instrument faults, all
-now fixed in the probe: `ic` does not match `icNo`; `lat`/`lng`/`leaveProof` were not in the
-vocabulary at all; and it scanned only the first 2 array elements, so a penalty on row 25 of 35 was
-invisible. What actually found the leaks was enumerating FIELD NAMES rather than pattern-matching
-them. **Do not trust a privacy sweep that has never been shown to catch a known-present field.**
-
-### ▶ ❌ REFUTED 13 Sep 2026 — Havoc is a SERVICE, and the tips bucket is right
-
-**Do not "fix" this. Re-tagging Havoc as a drink would CUT a PR's commission on it.**
-
-The claim below is that Havoc is a drink *"on the outlet's drinks list"*. It is not. JK House's
-own catalogue tags it `service`:
-
-| category | items |
-|---|---|
-| drink (7) | Cosmo, Dom Perignon, Don Julio, Herradura, Ladies drink, Lemon Drop, Test |
-| service (3) | Booking commission, **Havoc**, Testes |
-| tip (1) | Tips |
-
-Every Havoc voucher line across six-plus receipts is `component = 'tip_commission'`, consistently
-— the venue classified it, and the system agrees with the venue. `receiptKindForItem` puts every
-service entitlement on the tips side DELIBERATELY, because a service is commissioned at the tip
-rate; that rule was itself the fix for the real bug here (Havoc used to fall into `others` and
-render as **OT**, which was wrong and is long closed).
-
-⚠️ **What "fixing" it would cost.** At JK House `tip_pct` sits 5 points ABOVE `drink_pct` at
-every tier (Tier I 15% vs 10%, Tier III 17% vs 12%), and in happy hour the drink rate is a third
-of it (5%). On a RM 1,000 item that is **RM 50-100 per unit taken off a PR's pay** — on a premise
-that is false.
-
-If the owner decides Havoc really should be a drink, that is a CATALOGUE edit the venue makes in
-Workspace, not a code change.
-
-**The original 3 Sep entry, kept for its reasoning:**
 
 ### ▶ A DRINK IS SITTING IN THE TIPS BUCKET — surfaced by the new Payroll strip (3 Sep 2026)
 
@@ -2314,8 +1896,11 @@ What is left needs a **commercial decision first, then credentials** — nothing
     `gatewayConnected` in `PaymentMethodCard.tsx`. Clear the old token when a re-save replaces a card.
   - [ ] **Stranded automatic charges** are only LOGGED (`stranded=` in the job line) — needs a Fiuu
     status query or an admin screen.
-  - [ ] **Paid twice** is flagged on the row (`failure_reason` "PAID TWICE … refund due") + an error
-    log — there is no refund flow and no admin alert.
+  - [x] **Paid twice** ✅ 30 Sep 2026 (§8 G33) — flagged rows (and money on a VOIDED bill) now
+    reach the admin as a red "needs a refund" card on Plan Payment, each with **Mark refunded**
+    (`POST /subscription-payment/:id/refunded`, the refund reference kept beside the payment's own);
+    a PAID TWICE under a NEW gateway id writes its own flagged row instead of only logging. The
+    money itself is still sent back by hand at the bank or gateway.
   - [ ] **Owner decisions:** who gets the failure notice (today owner + finance, same as the
     bill-opened notice); whether a successful charge also notifies; whether ended lanes' unpaid
     bills may be charged (today: no); email as well as the bell.
@@ -2403,7 +1988,7 @@ What is left needs a **commercial decision first, then credentials** — nothing
   before 9 Aug, the ledger's first run — and it means a day the 03:00 job does not run is a period
   that is never billed. Decision needed: backfill from the anchor (bills history) or from a fixed
   ledger-start date. (b) An **add-on re-quote** (POS 99,999 → 200) closes and re-opens the add-on row
-  directly (`admin-request.controller.ts:372`), outside `prorateLaneSwitch` — no upgrade line, no
+  directly (`admin-request-ledger.ts` `applyResolvedPriceToLedger` since the 30 Sep split; was `admin-request.controller.ts:372`), outside `prorateLaneSwitch` — no upgrade line, no
   credit. The owner's rule was stated for plans; say whether add-ons follow it.
   *(First write of this block went through a shell string and lost every backticked name; repaired
   by hand — the shell is not the tool for prose.)*
@@ -2580,18 +2165,6 @@ cannot find another shift" is the subject of a human conversation, not a machine
 for whoever builds it: the agency now carries a venue right it cannot refuse, so every refusal
 that used to live in its approve button has to live in the guard-rails above instead.
 
-### ▶ ✅ CLOSED same day — the penalty window counted every agency a PR works for
-
-**FIXED 26 Aug 2026** — see §10. `attendanceWindow` now takes a REQUIRED `agencyId` and
-carries `and sa.agency_id = …` in both its `wk` and `mth` CTEs. Required, not optional: an
-optional scope is one a future caller forgets, and the omission type-checks.
-
-⚠️ **Left deliberately unverified:** no live penalty was re-run end to end. The probe
-`_probe-penalty-window-agency-scope.ts` (READ-ONLY) proves the numbers diverge on real rows,
-but nobody has opened Manage PR on a week where a fine actually changes. Worth one look at an
-agency with `min_shifts_per_week` configured, because the fix makes fines APPEAR that the leak
-was suppressing — a PR who looked compliant on another agency's shifts no longer does.
-
 ### ▶ The MC day-block needs a live 2-agency click-through (26 Aug 2026)
 
 The whole-day block on MC approval (§10, 26 Aug) is proven by tsc and unit tests, not by a real
@@ -2611,76 +2184,6 @@ request the agency can approve. Same check for an **Ops Head** login. If it is s
 read `sessionStorage.getItem("iz-outlet-identity")` — it should now carry a `userId` equal to
 the signed-in account and `"subRole":"outlet_owner"`.
 
-### ▶ ✅ CLOSED same day — an overnight booking was invisible to every busy PREVIEW the morning after
-
-**FIXED 24 Aug 2026** — see §10. One rule, `windowsEffectiveOn`, now carries a genuinely
-wrapping window into the day it spills into, rebased; the roster and the comcard pill both
-fetch from the day before and fold through it. Surface 1 was not fixed but **REMOVED**: the
-owner ruled the outlet may not know a PR is taken, because naming PRs is a request and not a
-booking. Verified live (Vicky: Mon 24 `22:00 - 04:00`, Tue 25 `00:00 - 04:00`, no phantom
-third marker) and pinned by 12 sabotage-tested unit tests. Kept below for the reasoning.
-
-Proven on live data 24 Aug 2026 with `_probe-overnight-busy-window-carry.ts` (read-only, and
-sabotaged first to prove it can FAIL). Vicky holds `22:00 - 04:00` on 2026-08-24 at JK House
-(Why We Met Agency), `assigned`, no check-out — so she occupies **00:00-04:00 of the 25th**.
-
-Root cause is ONE fact with three consumers: a shift is stamped only with its **start date**
-(`shift.shift_date`), and every preview both FETCHES and BUCKETS by exact date.
-`listCommittedWindows` filters `shift_date >= from AND <= to`, so asking the 25th never
-returns the 24th's row — and even if it did, the client looks it up under `byDate.get(iso)`
-for the drafted day only. `windowsOverlapPadded` handles the ±1440 wrap correctly and never
-gets handed the window.
-
-| surface | fetch range | bucket |
-|---|---|---|
-| Post Job SELECT PRS badge (`use-outlet-busy-windows.ts`) | `from=to=` drafted date | `byDate.get(iso)` |
-| Agency roster busy marker (`RosterBackendTimetable.tsx:300`) | the displayed week | `.get(dateIso)` — Monday cannot see Sunday night, and the week's first day cannot see the previous Saturday at all |
-| Manage PR comcard live pill (`use-agency-pr-live-status.ts:43`) | `from=to=today` | plus `a.shiftDate?.slice(0,10) !== todayIso` on the assignments read |
-
-**The assign guard is the only place that gets it right** — `listForPr` with NO date window,
-compared on a continuous timeline, and its own comment says a 22:00-04:00 must meet the next
-morning's 02:00-06:00. So the preview warns **LESS** than the guard it previews: the venue
-sees no badge, requests her, and the server refuses later. That is the inverse of the
-over-warning bug `listCommittedWindows`' comment was written about.
-
-Observed live on the Atlas roster, Vicky's row: **Mon 24 Aug** = `Unavailable 22:00 - 04:00`
-(correct — the anonymous cross-agency marker), **Tue 25 Aug** = **blank**, with an enabled
-"Assign Victoria Tan Mei Lin on 2026-08-25" button. The comcard pill is the worst of the
-three: after midnight a PR who checked in last night and has not checked out reads
-**available**, because `ownOnDuty` drops yesterday's row too.
-
-⚠️ NOT fired end to end: no small-hours shift exists on the 25th to request against, and
-creating one is a write. The guard's refusal is proven by reading it, not by a 409.
-
-Fix shape: widen each fetch by one day and compare on a continuous timeline instead of a date
-bucket. Three surfaces, one rule — name the fix after the RULE, not after the picker, or the
-siblings survive (see `fix-named-by-symptom-hides-siblings`).
-
-### ▶ ✅ CLOSED — the PV editor lost-update shipped in `d0fc0ae` (22 Aug 2026)
-
-Was the top open item here while §10 already recorded it as done — the backlog and the
-changelog contradicted each other for three commits. `expectedUpdatedAt` is in
-`UpdatePaymentVoucherSchema`, the repository re-reads under `SELECT … FOR UPDATE` and throws
-`VoucherConflictError` on a stale token. **What is still owed is the click-through, not the
-code**: open the agency voucher editor, have the PR self-log a drink into the same day, save,
-and confirm the editor is refused with the 409 sentence rather than silently winning.
-
-### ▶ ✅ CLOSED — Check-In showed RM 0.00 for a night shift after midnight (24 Aug 2026)
-
-Owner's screenshot, 24 Aug 09:13: Payment showed the Sun 23 Aug shift at **RM 322.50** while the
-Check-In tab, summarising that SAME shift, showed **Final payout RM 0.00**, an empty STATUS panel
-and **SALES TARGET RM 0.00 · 0%**.
-
-Both screens read the same array from `usePrEarnings` and differed only in the day they asked
-for: Payment asked for the SHIFT's day, Check-In asked for the DEVICE's today. `pickActive` keeps
-a finished shift pinned for TWELVE HOURS expressly because a night shift crosses midnight, so
-between midnight and that expiry the pinned summary always read zero. Fixed by scoping to the
-shift's own span (`shiftDayKeys`) — see the §10 row for 2026-08-24.
-
-⚠️ The wage half of that RM 0.00 was CORRECT and was deliberately left alone: booked 20:30–21:00,
-both stamps at 22:12, so zero minutes fell inside the window and the server sealed a pro-rated
-RM 0.00. Only the commission was wrong.
-
 ### ▶ 🔴 DEACTIVATING A ROLE DOES NOT REMOVE ITS ACCESS (found 26 Aug 2026 by the role-delete recon, NOT fixed)
 
 The admin RBAC sheet's Active toggle says "Inactive roles grant no access." Half the backend
@@ -2699,15 +2202,6 @@ private workaround so one implementation answers "does this role count". ⚠️ 
 after: the `pr` role is seeded ACTIVE and must stay unaffected, and check no session flow
 depends on an inactive role still resolving (e.g. legacy `agency`/`outlet` names, which are
 deprecated-but-present in rbac-constant.ts).
-
-### ▶ ✅ CLOSED — OT was recorded and invisible on Payment (24 Aug 2026)
-
-Check-In said **"+1m OT recorded"**; the Payment grid's Others cell for that day was a dash and
-nothing on the screen said why. The dash was CORRECT — overtime is never auto-paid — but a PR
-reading only Payment could not tell "recorded and waiting on my agency" from "nothing happened".
-An amber caption now sits under the review caption: *"1m on Sun 23 — overtime recorded at
-check-out, waiting on your agency. It is not in the figures above."* See the §10 row for
-2026-08-24 (d).
 
 ### ▶ 🔴 RECEIPT STATUS LIFECYCLE — owner's spec, 23 Aug 2026 (00:40)
 
@@ -2909,78 +2403,6 @@ Three things need a signed-in agency owner with at least one breaching PR to con
 
 Backend + web are already running (:7777, :3000). Signing in requires typing a password, so this
 one needs the owner at the keyboard.
-
-### ▶ ✅ CLOSED — apps/web builds again (verified 22 Aug 2026, was: DOES NOT BUILD)
-
-Re-ran it to check rather than trusting the entry: `npx vite build` in `apps/web` →
-**`✓ built in 29.53s`**, `.output/server/index.mjs` written, exit 0. The `MISSING_EXPORT`
-failure below is HISTORY and is kept only for the diagnosis trail.
-
-⚠️ **The diagnosis recorded below was wrong, and the record should say so.** It blamed version
-drift across five `@tanstack/*` packages pinned to `"latest"`. PR #76 found the actual cause —
-a single DUPLICATE nested `@tanstack/router-core`, which the table below had in fact already
-identified — and fixed that. The `"latest"` pins are still a real hazard worth closing on their
-own (two machines can resolve different trees from one range), but they were not what broke the
-build. Left as the 🟡 item it always was, not the 🔴 it was written up as.
-
-<details><summary>Original 19 Aug write-up (superseded)</summary>
-
-`pnpm build` in `apps/web` dies with `MISSING_EXPORT` on `waitForRequest`,
-`disposeSsrResponseDetached`, `bindSsrResponseToRequest` and `_getRenderedMatches`. **Not caused by
-the `main` merge** — the pre-merge tree fails identically against the same `node_modules`, and
-neither side touched `package.json` or `pnpm-lock.yaml`. It also survived a `pnpm install`.
-
-The repo has TWO copies and the build resolves the wrong one:
-
-| location | version | has the four exports |
-|---|---|---|
-| `node_modules/@tanstack/router-core` | 1.171.24 | yes |
-| `apps/web/node_modules/@tanstack/router-core` | **1.171.15** | **no** |
-
-The nested copy is an EXACT pin (`"@tanstack/router-core": "1.171.15"`) inside
-`@tanstack/router-plugin` 1.168.32 and `@tanstack/router-generator`, so `pnpm install` will keep
-re-creating it. ⚠️ **The deeper cause is that `apps/web/package.json` pins most `@tanstack/*` to
-`"latest"`**, so they were resolved at different times and no longer agree: react-router 1.170.29,
-react-start 1.168.46, router-plugin 1.168.32, router-cli 1.167.19, ssr-query and devtools 1.167.1.
-A floating pin does not drift on its own — it drifts *per install*, so two machines can hold
-different trees from one lockfile-less range. Fix by bumping `@tanstack/router-plugin` /
-`router-cli` to a release whose pinned `router-core` matches 1.171.24, then pinning the whole
-`@tanstack/*` set to explicit versions. **Dev is unaffected** — Vite serves every route fine; this
-blocks the production build only.
-
-</details>
-
-### ▶ ✅ PROVEN LIVE 19 Aug 2026 — the two shift-assignment refusals (was: not yet fired)
-
-`DELETE /shift-assignment/:id` now refuses an assignment on a past date, or one with a
-check-in/check-out stamp on any date; `POST /outlet-swap` refuses the same two. Both were
-**deliberately not fired** against the shared `innocenz-test` DB before restarting: the running
-process is `tsx watch`, and if it is serving stale routes then a probe of the DELETE guard does not
-return 409 — it deletes a real assignment row, taking its attendance stamps and sealed wage with it.
-⚠️ **A guard you cannot test without risking the thing it protects is not testable in place.** The
-safe order is: restart the backend, THEN fire both. A refusal writes nothing, so once the code is
-live both probes are free (see the `prove-guards-live-without-writing` note).
-
-Fired against the live `innocenz-test` DB as `owner@atlas-agency.my`, after restarting the backend
-so the process definitely held the merged code. **Both refused, and both wrote nothing:**
-
-- `DELETE /shift-assignment/069a16ae…` (shift dated 2026-08-03) → **409** *"That shift has already
-  passed — the assignment on it is the record of who worked, not a booking to undo. Mark it
-  cancelled or no-show instead."* Re-read afterwards: the row is still there.
-- `POST /outlet-swap` `{assignmentId: 069a16ae…, toShiftId: 23c842b9…}` — both shifts on 2026-08-03,
-  so it clears the same-date check and reaches the new guard → **409** *"That shift has already
-  passed — there is nothing left to swap."* `GET /outlet-swap` afterwards: **0** rows for that
-  assignment, so no `pending_pr` was raised.
-
-⚠️ **STILL UNPROVEN: the check-in branch of both guards.** It refuses on `checkInAt`/`checkOutAt`
-regardless of date, and this DB currently has **zero** assignments dated today-or-later carrying a
-check-in stamp — so there was nothing to fire it at. Absent evidence about the instrument, not about
-the rule (see `absent-evidence-is-about-the-instrument`). Fire it the next time a PR checks in.
-
-Also still unfired, and deliberately: **a same-day assignment with no check-in must still DELETE
-cleanly.** That one is a real write against a shared DB, so it needs a row someone is willing to
-lose — the guard must not have swallowed the ordinary undo-a-mis-assignment case it was written to
-preserve.
 
 ### ▶ 🟡 `RosterAssignDialog` is an ORPHAN — decide: wire it, or delete it (19 Aug 2026)
 
@@ -3184,122 +2606,6 @@ admin or agency clears the flag even alongside an outlet role — the header war
 over-broad matching blanks names on two live screens. **Verify with a real outlet login, not
 a typecheck.** Suspected same root cause: Post Job 403s an outlet Owner.
 
-### ▶ ✅ FIXED 13 Aug 2026 — cancellation fee said "Not linked to a shift" (see §10)
-
-The PR's Deductions evidence sheet shows *"Not linked to a shift — this was logged without
-an open shift, so there is no check-in to show"* on a **cancelled-shift fee**, which is the
-one deduction that is definitionally ABOUT a shift. The PR cannot see which shift they were
-charged for.
-
-**Root cause — a fix named after its symptom that missed its sibling.**
-`asAssignmentId` (`payment-voucher.controller.ts:422`) strips exactly one suffix:
-
-```ts
-const bare = raw.replace(/-ot$/i, '');      // the check-out seal marks overtime `<id>-ot`
-return UUID_RE.test(bare) ? bare : null;
-```
-
-But `penaltyDedupeRef` (`penalty-line.ts:34`) writes `` `${chargeId}-pen` ``. So `<uuid>-pen`
-fails the UUID test → `shiftAssignmentId: null` → `weekShifts` (`:1244`) never asks for the id
-→ `buildCellEvidence` groups it under `''` → `group.shift` is null → that wording.
-
-**Proven on the live row** (the one in the owner's screenshot). `payment_voucher_line` where
-`ref like '%-pen%'`: *"Cancelled shift — 50% of RM 40.00"*, −20.00, 2026-08-11,
-`component=deduction`, dedupe `ea520f72-…-pen`. Today `asAssignmentId` → **null**. Stripping
-`-pen` as well → `ea520f72-…`, which **resolves to a real assignment: "Tues" @ Emhub Testing,
-2026-08-11, status=`cancelled`**.
-
-**The rest of the chain already works** — checked, not assumed: `listByIdsForPrs`
-(`shift-assignment.repository.ts:1082`) filters on **id + prId only, with NO status filter**,
-so a `cancelled` assignment resolves fine.
-
-**Fix:** `raw.replace(/-(ot|pen)$/i, '')`. Safe for the other penalty source too — a WEEKLY
-charge's `chargeId` is a `penalty_charge.id`, which matches no assignment, so it resolves to
-nothing and correctly keeps the honest "not linked" note (a weekly penalty genuinely is not
-about one shift). Worth a second look at the sheet's copy afterwards: for a cancellation the
-line *"there is no check-in to show"* is true but beside the point — there is no check-in
-BECAUSE they cancelled.
-
-
-### ▶ TIER-SLOT RULE — ALL 4 FIXED 13 Aug 2026 (commit 740c0fc) — kept for the reasoning
-
-**Closed the same day they were opened.** See the §10 row for what shipped and how it
-was proven. Two follow-ups the fix deliberately did NOT take on:
-
-- **`listSwapTargets` / `countLiveAssignments` still offer by headcount only**, so the
-  agency's swap-target picker will still show a shift that is headcount-free but
-  tier-full. The request can be raised and now fails at approval with a clear message
-  rather than landing a bad row. `remainingByBucket` in the tier-demand leaf exists for
-  exactly this "offer only what the API will accept" job.
-- **`hasFreeSeat` still takes no row lock** (unchanged): two simultaneous re-staffings of
-  the last seat could both pass. Locking the shift on every status PATCH would put a
-  write lock on the busiest path in the system (check-in, check-out) to guard the
-  quietest, which is the wrong trade.
-
-The original findings, left as written because the reasoning is the useful part:
-
-### ▶ AUTO-ASSIGN: "N shifts this week" was a LIFETIME count (found AND FIXED 3 Sep 2026)
-
-- [x] **🟠 The ranking number the sheet prints, and the fairness tie-break behind it, both count
-  every assignment the agency has ever made.** `weekCountByPr` (`auto-assign.ts`) increments once
-  per row of `weekAssignments`, and that query has **no date filter** — the hook pages
-  `GET /shift-assignment` to exhaustion, "whatever the parameter name says". Measured on Atlas,
-  3 Sep 2026: the sheet printed **Vicky 31 / jk 2 / Haziq 3**, which is exactly the lifetime row
-  count; the real Sun–Sat week (30 Aug – 5 Sep) is **2 / 0 / 0**. So the label is wrong AND
-  `load()` is wrong — a PR with a long history is pushed down the queue forever regardless of what
-  they worked this week, which is the opposite of the spreading rule the sort exists to apply.
-  The fix is to count only assignments inside the payroll week; the plan does not currently receive
-  that range, so it needs either a `weekRange` param or the Sun–Sat derivation from `targetDates`.
-  **FIXED the same day**, once the owner asked for it: the payroll week is derived inside
-  `buildAutoAssignPlan` from `targetDates` via `getPayrollWeekSundayIso` + `addDaysToIso`, and rows
-  outside `weekFrom..weekTo` (or with no readable date) are skipped. **Derived, not passed in** —
-  `weekAssignments` arrives unfiltered, so a caller who forgot to narrow it would silently
-  reinstate the lifetime count and nothing would look wrong until someone read the number. Sunday-
-  anchored through the ONE helper, per its docblock: nothing in the app may derive a week another
-  way, and this count is what broke last time one did (12 Aug 2026, Mon–Sun). *(Agency)*
-
-### ▶ TIER-SLOT RULE — 4 GAPS FOUND BY AUDIT (opened 13 Aug 2026, ALL NOW FIXED)
-
-The rule itself holds where it matters most: `POST /shift-assignment` checks headcount **then**
-`seatFor` under a row lock, and the planner's tier mapping is byte-identical to the backend's.
-These four are the ways round it, worst first.
-
-1. **🔴 The planner reads at most 100 assignments, oldest-first — LATENT, fires at row 101.**
-   `use-auto-assign-plan.ts:74-95` asks for `pageSize: 500`; every controller clamps to
-   `MAX_PAGE_SIZE = 100` (`shift-assignment.controller.ts:60,75`), and `listPaginated` applies
-   **no date filter** and orders `createdAt` **ascending** (`:705-706`). So once an agency passes
-   101 lifetime assignments, `weekAssignments` is its **oldest 100 rows, ever** — this week's are
-   all past the cutoff. Then `staffedByShift` is empty for every current shift: every shift reads
-   fully unstaffed, `remainingByBucket` returns the full asked counts, tiers already at quota are
-   waved through, and booked PRs get proposed. `validateAutoAssignPairs` refetches with the **same
-   broken query**, so it drops nothing and every pair 409s. **Live today: 44 rows, all Atlas — not
-   yet firing.** Fix: date-scope the assignments query (the shifts query already carries
-   `fromDate`/`toDate`) or page to exhaustion. Same clamp affects `use-roster-slots.ts:27-51`.
-2. **🟠 `validateAutoAssignPairs` never re-checks the tier mix.** `auto-assign.ts:418` has only
-   `"shift-gone" | "shift-full" | "pr-busy"`; `payTiers` is never read in the loop at `:468-481`.
-   Scenario: shift `quantity: 4`, demand Tier I ×2 + Tier III ×2, plan proposes Alice for the last
-   Tier I seat; someone assigns Bob (Tier I) from the roster grid while the sheet is open. At
-   Confirm `4-3=1` is open, Alice is free, shift still confirmed — so it writes, and the backend
-   409s. **The message is then lost twice**: `createShiftAssignment` throws the raw axios error
-   (`"Request failed with status code 409"`), and `AutoAssignSheet.tsx:98-103` renders only
-   `failed.length` — *"N assignments could not be made — please retry"*. **Retrying can never
-   succeed.** Fix: add a `"tier-full"` DropReason and surface the server's own sentence.
-3. **🟠 Two write paths bypass the tier guard entirely** — both call quantity-only checks:
-   re-staffing a cancelled row via `PUT /shift-assignment/:id` (`shift-assignment.controller.ts:1736-1749`
-   → `hasFreeSeat`, `repository:399-413`) and **outlet-swap approve** (`outlet-swap.repository.ts:245-258`,
-   which never reads `ShiftPayTierTable` at all). Both can land a row `POST` would have refused —
-   e.g. a 3rd Tier I on a shift that asked for 2. Fix: call `seatFor` from the same leaf module.
-4. **🟡 "N open slots" doesn't subtract tier-unfillable seats.** `openSlots = quantity - staffed`
-   (`auto-assign.ts:201`), and `remainingByBucket` sits right beside it unconsulted. A shift asking
-   4× Tier I with no Tier I free but 10 Tier III idle shows *"4 open slots today / No free PRs —
-   everyone is booked or inactive"* (`AiSuggestionsPanel.tsx:71-73`) — false — and the sheet reads
-   *"4 open slots cannot be filled — only 10 free PRs today"*, which contradicts itself. Nothing
-   anywhere says **"no PR of a requested tier is free"**, the one actionable fact.
-
-⚠️ **Comment rot to fix alongside**: `auto-assign.ts:440-443` and `use-auto-assign-plan.ts:125-127`
-both still assert the backend "does NOT enforce a shift's `quantity`… it only checks agency
-ownership". That was true when written and is **false today** (`ShiftFullError` at `:290-292`).
-
 ### ▶ WHY WE MET SEEDED PRs — TWO SMALL HOLES (opened 12 Aug 2026)
 
 `seed-why-we-met-prs.ts` filed the owner's 36 picture folders as pending Why We Met PRs
@@ -3311,40 +2617,6 @@ auto-comcard needs **≥4** (`canGeneratePortfolioComcard`). The seeder now has 
 The grace photo the owner pasted in chat never reached disk — only janice's did (screenshot).
 (2) **Everything but nickname + photos is empty** — legal name, IC, DOB, languages, race,
 tier: the owner fills these from Manage PR / Approvals.
-### ✅ FIXED 12 Aug 2026 — the agency Outlets screen reported every backend shift as 0 supplied
-
-**Resolved the same day it was audited — see the §10 row. Kept here for the chain it documents.**
-
-Audit of the 7 remaining `shift.filled` readers left after the planning-sheet fix. **One was a
-live bug, on a different screen from the one the owner reported.**
-
-`outletShiftRequestFromBackend` ([agency-outlet-shift-map.ts:25](apps/web/src/agency-portal/lib/agency-outlet-shift-map.ts))
-maps a **backend** `Shift` and copies `shift.filled` — the dead column — then synthesises
-`prs: Array.from({length: filled})`. Since `filled` is always 0, `prs` is always `[]`. The chain:
-
-`useAgencyOutletDemand` → `buildAgencyOutletSummaries` → `outletShiftDemandSupplied` →
-`outletShiftSuppliedCount` = `prs.length` = **0**, feeding `suppliedSlots`, `openSlots`,
-`totalSupplied` and `todaySupplied` on **`/agency/outlets`**. Every backend shift reads as fully
-unstaffed, so "open slots" is overstated by exactly the number of PRs actually rostered.
-
-Worse than a uniformly wrong screen: the same hook ALSO passes the **real** `useRosterSlots`
-data, so roster-derived figures on that page are correct while the shift-derived ones are not —
-right and wrong numbers side by side, with nothing saying which is which.
-
-**Fix:** derive `filled`/`prs` from the roster assignments, exactly as
-`backend-shift-map.ts:297` already does. The hook holds `roster` already; the mapper just needs
-it passed in. Do NOT keep the placeholder-id synthesis — real `prId`s are available.
-
-**Also worth doing while there:** `backend-shift-map.ts:297` reads
-`staffing.length > 0 ? staffing.length : shift.filled`. Correct today (when `staffing` is empty
-`shift.filled` is 0 too), but it implies the column is a meaningful fallback. Simplify to
-`staffing.length`.
-
-**Cleared by the same audit — no action needed:** `portal-sync.ts:193/209/317` and
-`store.ts:3976/5897` all operate on the demo store's `OutletShiftSlot`/`ShiftRequest`, where
-`filled` IS maintained (`fillOutletShiftSlot` writes `filled: prs.length`, and the store
-decrements it alongside `prs.filter(...)`). Self-consistent, not backend-derived.
-
 ### ▶ Roster auto-assign: rewired to the backend, NOT click-verified (12 Aug 2026)
 
 The Planning banner now runs the same `useAutoAssignPlan` the home card runs, scoped to
@@ -3517,28 +2789,6 @@ Fix is one line: default to `"agency_finance"`, the least-privileged agency lane
 session degrades to read-mostly instead of to full owner. Worth checking the outlet equivalent at
 the same time.
 
-### ▶ ~~The weekly penalties have no "charged" state~~ — BUILT 11 Aug 2026 (migration 0117)
-
-Kept for the reasoning only; `penalty_charge` now exists and the Finance list carries both kinds.
-The remaining gap is the one below (the deduction is still hand-entered).
-
-<details><summary>original note</summary>
-
-Cancellation fees are now stored rows with a `cancel_fee_charged_at` column, so "uncharged" is a
-FACT and Finance gets an exact list. The three **weekly** rules — min shifts, MC cap, lateness —
-are recomputed per request from `attendanceWindow` and nothing anywhere records whether one was
-ever applied to a voucher.
-
-So `GET /agency/:id/uncharged` deliberately returns cancellations ONLY. It would be easy to also
-list the weekly proposals there and let the total read as "outstanding" — and it would be wrong:
-the same RM 50 would reappear every week after being paid, because nothing can tell the two apart.
-
-To close it, the weekly proposals need somewhere to live at the moment they are accepted (a
-`penalty_charge` row keyed to PR + week + rule type, stamped when applied). Until then Manage PR's
-"Recent penalties" stays a proposal, and Finance should treat it as one.
-
-</details>
-
 ### ▶ A cancellation fee is CHARGEABLE but the deduction is still hand-entered (11 Aug 2026)
 
 `POST /agency/:id/uncharged/mark-charged` records that a fee was collected and drains it off the
@@ -3644,22 +2894,6 @@ against the tree, and these three are still true:
 
 Fixed on the way past: `pv.tsx` printed `resolvePvPrName` in one list and `resolvePvPrLabel` in
 its sibling — same screen, same PR, two names (`932678e`).
-
-### ▶ SETTLED — an agency sees only ITS OWN tier (owner decision, 6 Aug 2026)
-
-Owner asked *"agency poster page and manage pr page where is the others outlet tier ?"* after the
-PR phone started showing one badge per agency (Alice: Atlas · TIER II, Starline · TIER I).
-
-**Decision: each agency's tier stays private. No code change — this is already the behaviour.**
-`pr.repository.ts:429` scopes the list to `agency_pr.agencyId = <acting agency>`, so every PR row
-carries that agency's own grading and no one else's. The asymmetry is deliberate:
-
-- **The PR sees every tier** — they are all gradings *of her*, so she is entitled to them.
-- **An agency sees only its own** — `agency_pr.tier` is that agency's competitive judgement of a
-  freelancer. Publishing it to a rival leaks their rate card and poaching value.
-
-⚠️ Do **not** "sync" tier to one value across agencies to make screens match. Two agencies grading
-the same PR differently is two true facts. See §10, 6 Aug.
 
 ### ▶ `composePr` invents a tier, and breaks ties arbitrarily (found 6 Aug 2026, NOT fixed)
 
@@ -3797,22 +3031,6 @@ depending on which screen you are on.
   emptying one list easy — decide whether an empty event menu means "free" or "follow workspace", and
   say so in the UI either way.
 
-### ▶ RESOLVED — the "NOT MINE" Post Job picker was a concurrent session's IN-FLIGHT work (5 Aug 2026)
-
-This entry used to read *"uncommitted in the tree, not mine"* and asked its owner to finish it. It was
-being written **as that entry was authored** — same worktree, same afternoon. It is now complete and
-live-verified; see §10 (h).
-
-The caution it recorded still stands and is the reason to keep this entry: ⚠️ **two writers were in
-this worktree at once on 5 Aug**, and `git status` changed underneath a staging step. What the entry
-got *wrong* is worth more than what it got right — it read a half-written diff and inferred a finished
-intent from it, then filed a to-do against a phantom owner. **A file that appears mid-session is not
-abandoned work; it may simply be work in progress.** Check for a live writer before filing, reverting,
-or "finishing" someone else's diff.
-
-- [x] Landed: `use-outlet-pr-pool.ts` (new) · `post-job-fields.tsx` · `routes/outlet/bookings.tsx`.
-  `languagesForPrIds` is deleted and its only two callers were updated in the same change.
-
 ### ▶ MANAGE-PR DETAIL — all 3 sections wired; SHIFT HISTORY deliberately has NO payout (5 Aug 2026)
 
 Shift history is now a real read (§8 A7). What remains open on it:
@@ -3930,7 +3148,6 @@ approval of a figure that no longer exists.
   clicking Approve twice because nothing appeared to happen, and on these paths a second click
   re-approves or re-stales a day.
 
-### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
 ### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (jk — receipt editor committed)
 
 > **`57bd165` closed the "uncommitted receipt-editor tree" block.** Code + migrations are in the
@@ -3938,14 +3155,6 @@ approval of a figure that no longer exists.
 > edit paths, then work the §9 DAY/RECEIPT AGREEMENT AUDIT highs (PvDetail dispute never hits server,
 > disputed voucher turns every cell into withdraw). Do **not** treat §8 A6/X58 as verified until a
 > real agency login drives the editor.
-
-### ▶ ~~UNCOMMITTED WORK IN THE TREE~~ — ✅ CLOSED 4 Aug 2026 (`57bd165`)
-
-> Was: receipt editor + `0083`/`0084` readers sitting untracked while the DB already had the columns.
-> **Landed** as `feat(agency): correct a receipt under Approve, and inside the dispute queue`.
-> Checklist that used to live here (untracked editor files, DisputeQueuePanel blocked on them,
-> "doc rows without code") is **done**. Remaining product gaps are in RECEIPT EDITOR SCOPE verify +
-> DAY/RECEIPT AGREEMENT AUDIT below — not "commit the tree".
 
 ### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
 
@@ -4258,32 +3467,6 @@ an amend flow.
    voucher → `audit-live-vouchers.ts` still reports OK → the week can now be sent.
 
 
-### 🟢 ROWS ON THE SHARED DB — resolved 2 Aug (§8 X50, X54)
-
-**ONE approved overtime decision remains, and it is the one that was asked for:**
-`f5a1f227-a1ca-449d-8d02-10bddc05a1c9`, shift 2026-07-23, 60 min, **RM 175.00** on **PV-000002**
-(700.00 → 875.00). Keep it — it is the live proof that overtime becomes money.
-
-✅ **The surplus second approval is CLEARED** (`9d897070…`, RM 150.00). **PV-000003 went
-1353.30 / 4 lines → 1203.30 / 3 lines**, exactly RM 150.00 lighter, and `audit-live-vouchers.ts`
-still reports **3/3 reconcile**.
-
-⚠️ **DO NOT use raw SQL for this — the two-statement `DELETE` + `UPDATE` previously recorded here
-was INCOMPLETE and would have corrupted the voucher.** A voucher's `subtotal`/`net` are recomputed
-when a line is *added*, so deleting the row behind their backs leaves **a voucher whose stated total
-no longer matches its own lines** — PV-000003 would have sat at 1353.30 with 1203.30 of lines under
-it. That is the exact fault class this audit exists to catch, so the cleanup would have created one.
-
-**Use the script, which goes through the repository's own `deleteLine()` and therefore calls
-`recomputeTotals` in the same transaction:**
-
-```bash
-npx tsx --tsconfig tsconfig.json src/scripts/fire-overtime-approval.ts --clear=<assignment-id> --dry-run
-```
-
-Drop `--dry-run` to apply. Then confirm with `--report` (read-only inventory of every overtime
-decision) and `audit-live-vouchers.ts`. Both are safe to re-run at any time.
-
 ### ▶️ jk's 31 Jul session hand-off — SUPERSEDED AS A "START HERE", KEPT FOR ITS ITEMS
 
 > ⚠️ **Arrived on the 2 Aug merge of `main` into `SL` (jk's `b6c5786`, PR #41). The block above is the
@@ -4524,7 +3707,1079 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ---
 
+### 📦 CLOSED — MOVED OUT OF THE BACKLOG ON 30 SEP 2026 (kept word for word, for the record)
+
+Every entry below already said it was closed in its OWN heading (✅ closed / fixed / resolved,
+❌ refuted, a struck-through title) when it was moved here, so the backlog above holds only what is
+still owed. Nothing below is a to-do; the details and proof sit in §8 and §10. Entries headed
+"(was) OPEN" were NOT moved — their resolution is not recorded next to them, so they stay above
+until someone confirms it. Order is the order they sat in the backlog.
+
+#### ▶ ✅ ALL CLEARED 12 Sep 2026 — the sweep's 10 open bugs, fixed
+
+All confirmed by an independent verifier told to refute them, and ALL NOW FIXED (changelog
+xxvii). Kept here with their original wording because each one names a shape worth recognising
+again; the fix is noted under each.
+
+⚠️ **One is only half-fixed and needs data work:** the stale `user_role` rows themselves
+(`finance@velvet23.my` and `ops@velvet23.my` still carry an `Owner` row) are untouched. `/auth/me`
+no longer reads them, so nothing leaks, but they are wrong and a future feature that reads role
+rows would inherit the same lie. Cleaning them is a `user_role` delete per account — deliberately
+not done blind, because a role row is also what lets somebody open a portal at all.
+
+1. **🔴 CRITICAL — `POST /admin-request` applies a plan switch to ANY org named in the body.**
+   `admin-request.controller.ts:264` (now `admin-request-subscriber.ts` `create`) — no ownership check on the target org. ✅ Fixed since: `create` asks `resolveOrgScope` and answers 404 for an org that is not the caller's (re-read 30 Sep). A signed-in
+   operator can switch a rival venue's subscription plan by naming its id.
+
+2. **🟠 HIGH — a 409 on `plan_change` leaks a rival venue's unpaid period count and total.**
+   `admin-request.controller.ts:247`. Same endpoint, same missing scope check. ✅ Fixed by the same 404, which runs before the 409 (re-read 30 Sep).
+
+3. **🟠 HIGH — payment-method save/read on the OUTLET page silently targets the AGENCY.**
+   `payment-method.controller.ts:32` ignores `outletId`. An outlet owner who also staffs an
+   agency edits the agency's card while looking at their venue's screen.
+
+4. **🟠 HIGH — an outlet owner who also staffs any agency gets 404 on their own venue's
+   checkout.** `org-scope.ts:147` — `resolveOrgScope` returns `{agencyId, outletIds: []}` for
+   anyone with one active agency membership, so every outlet invoice fails the ownership test.
+   The Pay button shows (canEdit is true) and every attempt answers "not found".
+   ⚠️ This is the same resolver `orgOwnerPaysOnly` now shares, so guard and controller agree —
+   they are consistently wrong together rather than inconsistently, which is the safer half.
+
+5. **🟠 HIGH — `modulePortalCode('settings')` picks an arbitrary portal.** `auth.repository.ts:343`
+   — two module rows named `settings`, `limit(1)`, no `ORDER BY`. Every `requirePermission` on a
+   shared module key is deciding by whichever row the planner returns first.
+
+6. **🟡 MEDIUM — "only the owner can SEE the payment method" is UI-only.**
+   `payment-method.routes.ts:15` — the API still returns it to any member, so the card details
+   are one fetch away for somebody the screen hides them from.
+
+7. **🟡 MEDIUM — Resend has no cooldown or disabled state.** Each click spends one of the 5
+   sends/hour per phone, including the ones the server refuses, so a person can lock themselves
+   out of their own number by pressing a button that looks free.
+
+8. **🟢 LOW — a DEMO session is told to check WhatsApp for a code that is never sent.**
+   The demo branch toasts `otpSentTo` and accepts any six characters, which is correct for a
+   prototype, but the copy now names WhatsApp.
+
+9. **🟢 LOW — subscription pages hide the payment controls on `!canEdit` but still show the
+   read-only banner only to Finance.** Ops Head and Director get no explanation.
+
+10. **🟢 LOW — `orgOwnerPaysOnly` answers 403 "not the owner" for an ambiguity that should be
+    400 "which organisation?".** Fixed in passing — the guard now returns 400 when no org
+    resolves — but the same shape exists elsewhere.
+
+#### ▶ ✅ RESOLVED 11 Sep 2026 — the seeder now agrees with the database (outlet Finance)
+
+**Owner's ruling:** *"follow the latest, what can do what cannot do RBAC for the user. The web
+matrix must not lie to user and always must follow the database that actually what can access
+what cannot."* The database wins, because `requirePermission` → `roleHasPermission` reads those
+rows and they are what actually decides access.
+
+`seed-rbac.ts` only ever ADDS — it "ensures" a role and never removes — so it ensured 7 grants
+for outlet Finance while the live rows held **19**. Every other role already matched. The 12
+extras (booking CRU, rating CRU, sales create/update, special_service create/update, workspace
+create/update) were leftovers from an earlier, wider seeding.
+
+`OUTLET_FINANCE` was widened to those 19. Verified after redeploy: **seeder == database ==
+derived matrix for all five outlet lanes** (Owner 22, Finance 19, Ops Head 18, Director 8,
+Guarantor 22), and `pnpm rbac:sync` wrote nothing — the web was already correct.
+
+⚠️ This was not only a comment being wrong. A FRESH database would have seeded Finance with
+only 7, so the same code granted different access depending on which database it met.
+
+✅ **BUILT (12 Sep 2026) — this item is closed.** `pnpm rbac:seed-check` compares `ROLE_GRANTS`
+to the live `role_permission` rows and exits 1 on drift (`src/scripts/check-rbac-seed.ts`), so
+the loop `rbac:check` left open — web == database, but nothing watching seeder == database — is
+now shut from both ends. The seeder still only ADDS: removing a grant means deleting the row by
+hand, and `rbac:seed-check` is what tells you one is left over.
+
+#### ▶ ✅ ANSWERED — change email on the web (deferred 11 Sep 2026, answered 21 Sep 2026)
+
+**CLOSED.** The owner deferred this on 11 Sep — *"for this no do yet cannot change the email with
+the otp, leave it first"* — and on **21 Sep 2026 chose option 1 below, almost word for word**:
+the **current password** is the proof, plus a code to the **new address**. It is built; see the
+account-security block at the top of §9 for the three-route shape and the sentences to test.
+The original entry is kept because both of its traps are still live.
+
+The problem it described: `PATCH /user/:id` accepts `email` with **no proof of any kind** beyond
+the session, so a left-open laptop was an account takeover — change the email, then "forgot
+password" to it. That writer is now closed (§10 row ii), and the change goes through
+`/auth/contact-change/*`.
+
+The two options the owner was given, and which one they took:
+1. **Current password as the proof** (what most products do, no new infrastructure) — **CHOSEN
+   21 Sep 2026**, and implemented as `POST /auth/contact-change/start { kind, value,
+   currentPassword }`, self-only from the token, rather than the `POST /auth/email/change` sketched
+   here. It also covers phone, which this entry did not anticipate.
+2. **A real email OTP** — a verification code to the NEW address, mirroring the phone lane.
+   **Also taken**, as the second half: the code to the new contact is what `confirm` checks. What
+   was dropped is the code to the CURRENT contacts, which was never one of these two options.
+
+⚠️ **CARRIED FORWARD — the trap that outlives the decision.** It must **re-issue the token pair**,
+exactly like `/auth/phone/change` used to: a JWT carries only `{loginMethod, loginCriteria}` and
+every agency and outlet operator signs in BY EMAIL, so changing it orphans their own session and
+the next request answers 401 `Unauthorized` — the same bug the PR app hit on phone.
+`/auth/contact-change/confirm` answers `{ accessToken, refreshToken, email, phoneNum }` for that
+reason; **any client that does not STORE both tokens re-creates the bug**, and that is one of the
+things the manual test per lane (§9, top block) has to prove on a real session.
+
+#### ▶ ✅ BUILT AND PROVEN 11 Sep 2026 — the joining flow's four web surfaces (owner directive, 10 Sep)
+
+**DONE, and click-through tested end to end — including the photo** (changelog ix). The line that
+stood here for four entries, *"nothing below has been exercised in a browser"*, no longer holds:
+four real sign-ups went through the live form, both portals' queues were populated and approved,
+and every field a user types was read back out of the database and compared with what was typed.
+The photo was the last hold-out and is now proven byte-for-byte through R2.
+
+⚠️ **What is still owed on this directive** is the OTHER half of directive 1 — the *"request the
+role at the profile setting page"* surface. Acceptance today happens only through the emailed
+token link; there is no in-app place for an invited person to see a waiting invitation, and no way
+for an owner to see, resend or cancel one they sent. That is the remaining gap, not the
+click-through. The original scope, kept for reference:
+
+The backend is built, verified and green (changelog xxi). **None of the UI exists yet**, so today the
+feature is reachable only by API. In owner's words, what is owed:
+
+1. **A link under ACCOUNT TYPE on the sign-up page** — beside Outlet / PR Agency — redirecting to a
+   member sign-up. Those two tiles register ORGANISATIONS; this registers a PERSON.
+2. **The member sign-up page.** Name / email / phone / password, then optionally: Outlet or Agency →
+   which organisation (`GET /auth/outlets`, `GET /auth/agencies`) → which role. POST to
+   `/auth/register-member`. ⚠️ The org step is OPTIONAL (owner) — skipping it leaves an account any
+   organisation can invite by email.
+3. **A "New Member" tab on the AGENCY Approvals page** (`/agency/pending`), beside the existing
+   PR and Outlet tabs. Lists `agency_user` rows with `status:'pending'`; the owner picks the real
+   role and approves. ⚠️ Approve is already built — `updateMember({status:'active', subRole})`. Do
+   NOT add a second write path.
+4. **The same tab for OUTLET.** `OrgMembersPanel` already renders non-active members with a status
+   label, so the row shows today; what is missing is the approve action with a role picker.
+
+⚠️ **`GET /auth/org-member-invite/mine` is built and has no caller yet.** It lists a signed-in
+person's pending invitations, for a profile-settings panel that was deliberately deferred (owner
+chose "web invite page only"). It is a `/mine` read and harmless, but it is ahead of its UI — wire
+it up or delete it rather than leaving it to rot.
+
+⚠️ **Nothing here is click-through tested.** The backend was proven by schema probes and live
+repository reads, never through a browser.
+
+#### ▶ ✅ NOT REPRODUCIBLE 13 Sep 2026 — re-tested, now that a dual-org account exists
+
+The note below parked this as *"unverifiable by construction — no account on this database holds
+two memberships"*. **That is no longer true**, so it was re-tested rather than left on trust:
+
+* **2+ agencies:** still nobody. The agency-side routes remain unexercisable, exactly as parked.
+* **2+ OUTLETS:** `jinkgan48@gmail.com` has been active at UAB Emhub AND JK House since
+  11 Sep — the first such account.
+* **2+ agencies as a PR:** several (one at four agencies), on `agency_pr`, a different table.
+
+Tested read-only as that account, against a shift and an assignment at EACH venue, with and
+without `x-org-id`:
+
+| route | UAB Emhub | JK House |
+|---|---|---|
+| `GET /shift/:id` | 200 / 200 | 200 / 200 |
+| `GET /shift-assignment/:id` | 200 / 200 | 200 / 200 |
+| `GET /pr/:id` | 200 / 200 | 200 / 200 |
+
+No 404, header or no header. The oldest-membership fallback does not lock this person out of
+their second venue. `_probe-dual-outlet-reads.ts` and `_probe-dual-outlet-assignments.ts` re-run it.
+
+⚠️ **Still genuinely untested:** the three `payment-voucher` routes in the list, which are
+AGENCY-scoped — no account holds two agencies, so that half stays parked on the same reasoning.
+
+**The original 10 Sep entry, kept for its reasoning:**
+
+#### ▶ ✅ FIXED 13 Sep 2026 — an unpriced tier reads as blank now
+
+Database first: all 8 venues have an `outlet_workspace` with 7 tier rates, so nothing renders
+this fallback TODAY — it is a latent trap for a venue whose seeding fails, which is exactly
+the shape that goes unreported.
+
+`workspaceSettingsFromBackend` no longer starts a tier from the Velvet fixture. The stakes
+were higher than display: `workspace.tsx` seeds its draft from this output and PUTs the whole
+draft, so the next save on any unrelated field would write RM 40/50/55/65/80 into the venue's
+real `outlet_tier_rate` — the table every PR wage and commission is priced from. The DRINK
+MENU half of this file was fixed for that same reason; the tiers were the same bug one field
+over, on the more expensive column.
+
+⚠️ **`BLANK_OUTLET_WORKSPACE` IS NOT BLANK, and the first attempt shipped on that
+assumption.** It is built by `normalizeTierRates`, which ends in `ensureAscendingTierWages`
+and `ensureDistinctTierCommissions`, so from an all-zero base it still SYNTHESISES a ladder —
+Tier I came back at RM 40 with Tier II on 1%. The test caught it; the fallback is now a local
+`UNPRICED_TIER` of real zeros. Those two helpers are right for a workspace being EDITED and
+wrong for one that does not exist yet. The shared constant is untouched, since `demo-seed.ts`
+wants the ladder.
+
+5 tests, including one asserting "Velvet 23" appears nowhere in the mapped output, and one
+that a REAL tier row still maps through unchanged.
+
+**The original 10 Sep entry:**
+
+#### ▶ ✅ FIXED 13 Sep 2026 — and it was never an outlet problem; it was the whole table
+
+**One line, and it silenced every entity.** The old-data fetchers read
+`req.params.id`, but they run inside `platformAuditMiddleware`, which is mounted
+`v1Router.use(...)` — BEFORE any route is matched. Express fills `req.params` when a route
+matches, so at that moment it is `{}`. Every fetcher got `undefined` and returned null.
+
+Measured live before the fix: **0 rows with `old_data` on EVERY entity**, not just outlet —
+`User` 266 updates / 0, `agency` 263 / 0, `outlet` 257 / 0, `payment-voucher` 286 / 0. `User`
+has had a registered fetcher all along and never once produced a row.
+
+⚠️ **The asymmetry that hid it for months:** `resolveEntityIdFromRequest`, which fills
+`audit_logs.entity_id`, reads the SAME `req.params` and works — because it runs in
+`res.on('finish')`, long after routing. One request, two readers of one field, opposite
+answers, and only one of them wrong. Nothing about the entity_id column ever looked broken.
+
+`resolveEntityIdFromPath` now takes the id off the URL, mirroring `resolveEntityFromPath`
+including its `rbac` special case, so an entity and its id always come from the same segment
+of the same path. It refuses a non-id segment (`/user/me/locale` must not look up a user
+called "me") and accepts a trailing sub-resource (`/payment-voucher/:id/export-ticket` still
+audits the voucher). `outlet` and `agency` fetchers added — registered LOWER-CASE, because
+`ENTITY_MAP` renames only the six RBAC paths and a capitalised key would register a fetcher
+nothing ever looks up, failing silently in exactly the old way.
+
+**8 unit tests on the resolver, and the chain proved end-to-end read-only** with a fake
+request whose `params` is empty — the real middleware state: outlet, agency and User each
+return their row, and a collection write correctly stays null. Deliberately NOT proved by
+sending a PUT: an "idempotent" outlet update is precisely the write this project's rule is
+about, since a schema default can turn a same-value save into a real change.
+
+⚠️ **Still true, and the deeper half of the original note:** the row records what the
+resource IS, not what the caller ASKED FOR. `logRestMutation` receives `requestBody` and
+uses it only on FAILURE; on success it is discarded. With `old_data` populated a diff now
+answers "which field moved", which is most of what was wanted — but "did the caller send
+this, or did the code?" still needs the request captured, and that wants its own column.
+
+**The original 10 Sep entry:**
+
+#### ▶ ✅ CLOSED 13 Sep 2026 — two halves were already stale; the third is now a check
+
+Re-verified rather than acted on from the note:
+
+1. **Conflict markers on `main`: GONE.** `git show main:TEST_SCRIPT.md` finds 0. Fixed by the
+   merge the note predicted.
+2. **`outlet.controller.ts` mixed endings: GONE.** It is uniformly CRLF (1564 of 1564), so it
+   aligns and merges normally.
+3. **The whole-repo normalisation the note proposed was NOT done, on purpose.** 1905 of 2113
+   tracked files are CRLF in the blob. `* text=auto eol=lf` plus a renormalise would rewrite
+   90% of the tree in ONE commit and make the next merge from the teammate's branch conflict
+   in nearly every file — the exact failure it is meant to prevent, amplified. Nothing in
+   tracked source has ever failed because of consistent CRLF; the two real CRLF incidents
+   were a `.sh` shebang (already pinned in `.gitattributes`) and the server's own untracked
+   `.env`.
+
+**What shipped instead** — `pnpm check:endings`, which fails only on MIXED endings, the state
+that actually makes a file conflict whole. It found 2 offenders on its first run, **both
+created by this session's own edit scripts** (a Python append and a bash heredoc writing LF
+into CRLF files), plus a stray doubled CR this session had put into TEST_SCRIPT.md. All
+normalised to their dominant ending — minimal diff, no tree-wide rewrite.
+
+**The original 9 Sep entry:**
+
+#### ▶ ✅ CLOSED 13 Sep 2026 — stale; the key is referenced nowhere on SL any more
+
+`t.shell.greetingNamed` appears in NEITHER `translations.ts` nor `PortalShell.tsx` on
+`origin/SL` today, so the commit that referenced it has been superseded and the mismatch is
+gone. Verified by reading the branch, not by changing it — `SL` is the teammate's.
+
+**The original 9 Sep entry:**
+
+#### ✅ CLOSED 9 Sep 2026 — "Adjust crop" now survives a reload (was: it vanished)
+
+**Fixed the same day it was raised** — see the §10 row. The original is now stored
+beside the image in R2 (`__source.<ext>` + `__crop.json`) and read back through
+the API, so Adjust is offered for a photo saved in any earlier session. The
+description below is kept because the REASON the button was hidden is still the
+reason the fix had to store the original rather than re-crop the output.
+
+#### ~~OPEN~~ — "Adjust crop" disappears on reload (found 9 Sep 2026, corrects X78)
+
+The owner opened the outlet profile for **Hide-in Bistro & Lounge**, which has a
+saved logo, and asked where the crop edit had gone. Nothing is broken — but X78
+claims both cards "now offer Adjust crop" without saying that the offer lasts
+only as long as the browser tab.
+
+`photoSource` is component state initialised to `null`
+(`routes/outlet/settings.tsx`, `routes/agency/profile.tsx`,
+`components/auth/AccountAvatarCard.tsx`) and is filled **only when a file is
+picked**. The button is gated on it — `onAdjustPhoto={photoSource ? … }` and
+`{photoSource && …}` — so after any reload there is nothing to adjust and the
+button hides. The org cards gate again on `editing && canEdit`, so edit mode is
+required as well.
+
+**It is deliberate, and the reason is sound:** only the full-resolution ORIGINAL
+can be safely re-cropped. What is persisted is the cropped square, so re-cropping
+that would discard everything outside the previous square and soften the image
+on every pass. Hiding the button was chosen over degrading the picture.
+
+**What was built (9 Sep 2026):** exactly that — the original is persisted beside
+the cropped output and re-read on mount, so a later session re-opens the true
+source at its previous framing.
+
+⚠️ Do NOT "fix" any future variant of this by feeding the stored CROPPED image
+back into the sheet. That is the lossy path the original gate existed to prevent,
+and it remains wrong.
+
+#### ▶ ✅ CLOSED next day — THE PR CURRENT WEEK IS SPLIT BY AGENCY (8 Sep 2026)
+
+Owner: *"the shifts here should also separate based on the agency ... for a clearer picture"*. Built.
+
+**Step 1 answered YES, and it is what made the rest small.** The hand-off flagged the prerequisite as
+UNVERIFIED — whether an agency can reach the current-week line payload at all. It already can, twice over:
+`lines[].voucherId` comes straight off the line’s own foreign key (`toReceiptLineDTO`), and `vouchers[]`
+has carried `{ id, agencyId, agencyName }` per voucher since 0129. **So this needed no backend change and
+no migration** — the answer was on the wire and nothing was reading it.
+
+**What it does now.** The live week renders ONE CARD PER AGENCY, the same shape the past weeks already
+take (one card = one voucher = one payer), each with its own shift rows and its own earned/wages totals.
+A single-agency week is unchanged except that the card now NAMES the agency, which was the owner’s other
+complaint on the same screen.
+
+**The three things it was told to protect, and how each is held:**
+
+1. **Agency per line, never guessed.** `agencyResolver` returns null for a voucher it cannot resolve and
+   for a payload with no `vouchers[]` at all; those lines land in an UNATTRIBUTED card that keeps the
+   original `week-current` id. Falling back to "the first agency" would have been the
+   `oldest-membership-was-the-agency` bug in a new place.
+2. **The two-outlet rule survives.** A day worked at two venues for ONE agency still merges into one
+   record labelled with both venues — the key is `agencyId|dateIso`, so the agency is an ADDITIONAL
+   split, not a replacement for the outlet handling. Pinned by a test.
+3. **The total still matches Payment.** Every line belongs to exactly one voucher and so exactly one
+   bucket, so the cards sum to what the flat card summed. Pinned by a test that compares the split total
+   against the flat line total.
+
+**Two defects fixed in passing, both invisible until the week could hold two payers:** the live shift id
+was `live-<date>`, so two agencies on one night produced a DUPLICATE React key and one row was silently
+dropped; and `mergeHistoryShiftsWithWeekPay` decided "archived" by `weekId !== 'week-current'`, which
+would have read every per-agency card as history and duplicated the whole week onto the screen.
+
+⚠️ **Still open — it is NOT rendered.** The PR app needs a password login and this session does not type
+passwords into forms. Everything below is build-and-data evidence, so the one-minute click-through on a
+real PR account is still owed:
+
+- The live data DOES exercise it: week starting **2026-09-06**, one PR holds **two** `pending_review`
+  vouchers — Atlas Agency `PV-000009` (7 lines, **RM 215.00**) and Why We Met `PV-000001` (3 lines,
+  **RM 68.33**). That card read one merged **RM 283.33** with no agency named before this change.
+- Expect: two live cards, Atlas above Why We Met (server `vouchers` order), totals as above, both open by
+  default, each collapsing independently.
+
+⚠️ Related and load-bearing, unchanged: `self-logged-money-goes-to-the-oldest-agency` and
+`cross-agency-voucher-contamination`. This feature MAKES those visible rather than causing them — if a card
+names the wrong company, suspect the row, not the split.
+
+⚠️ **Found while running the suite, NOT fixed (out of scope):** `apps/mobile/src/lib/active-shift.test.ts`
+imports from `vitest` inside a Jest project, so the whole suite file **fails to run and always has** — it
+arrived with `cb8d25f1` and has never executed once. `pickActive` therefore has ZERO coverage while
+appearing to be covered. One import line to fix.
+
+#### ▶ ✅ CLOSED — TYPOGRAPHY click-through DONE on both portals (7 Sep 2026)
+
+**CLOSED the same day — the owner signed in an agency and an outlet session and both
+portals were walked page by page. 9 agency + 8 outlet pages, 17 of 17 now measure ZERO
+off-ladder elements; the live pages found five defects the static audit could not see
+(see §10 xxx). What remains open below is only the two class-name renames.**
+
+The one-font / one-ladder / lavender-title change (§10 xxviii) was verified by measuring
+computed styles against the real stylesheets in a harness page, because the portals are
+behind a login and this session does not type passwords into forms. That proves the CSS
+resolves correctly; it does not prove any real screen still lays out.
+
+What a person still has to confirm on screen:
+
+- `owner@atlas-agency.my` — Payroll, Approvals, Roster, PV detail. Nothing wrapped or
+  clipped that did not before; the badge pills (now 11-12px, were 16-17px) still read cleanly.
+- `owner@velvet23.my` or `emhub@emhub.test` — Today, Post Job, Workspace, History, Settings.
+  **The outlet is the portal most likely to look changed**: it had its own duplicate copy of
+  the override layer and rendered one step LARGER than the agency everywhere. It is now
+  identical to the agency, which is the point, but it is a visible shift.
+- The **roster week grid** is the tightest surface in either portal — its cells were 7.5-11px and are now 11-12px. If anything overflows, it will be there first.
+- The **payment voucher** (`/agency/pv` -> open a voucher) must still look like a printed
+  document: Segoe UI body, Georgia title, black on white. It was deliberately excluded from
+  the font sweep so it keeps matching the backend PDF and Excel — worth one look to confirm
+  the exclusion held.
+
+**Two follow-ups, neither done, both deliberate:**
+
+1. `.font-sora` and `.font-manrope` now resolve to the SAME font, so the class names lie.
+   They are still referenced from TSX and from selectors like `h2.font-sora.text-lg`, so
+   renaming touches markup as well as CSS — left as a separate, mechanical rename rather
+   than smuggled into a typography change.
+2. `.iz-pr-app` (the PR phone web view) carries a **third** copy of the readability override
+   layer with its own numbers. Its fonts were unified along with everything else, but its
+   SIZES were left alone as out of scope — the owner asked for agency and outlet. The PR
+   view will sit on a different ladder from the two web portals until it is brought over.
+
+#### ▶ ✅ CLOSED — a pending receipt could block a voucher from a queue that could not show it (7 Sep 2026)
+
+Found while aligning the rail badge with the Payroll tabs, not looked for. On the live
+agency, **the rail counts 2 pending receipts and all three week tabs show Receipts (0)**.
+
+The cause is an asymmetry that already existed: the voucher list has an AGE CATCH-ALL —
+`lastLastWeekPvs` deliberately holds every unpaid voucher from any week, precisely so an
+overdue one cannot age out of every tab (see its comment, and the PV-000006 story that
+prompted it) — while `receiptsInPayrollWeek` is a plain window with no catch-all. So a
+pending receipt older than the payment-week window is listed by no tab at all.
+
+That matters because a pending receipt **blocks its voucher from being sent**. The two
+halves together mean: the voucher stays visible on the Payment Week tab, refuses to send,
+and the receipt explaining why is not reachable from this page.
+
+**FIXED the same day**, with the first of the two options — `receiptsInPayrollWeek` now takes
+`includesOlder`, true on the payment week only, exactly as the voucher list already worked.
+Only PENDING rows are rescued: what must not age out is what is UNFINISHED, and sweeping up
+nineteen verified June receipts would have buried the two that need someone. The panel takes
+the same flag, so the count and the list it opens still come from one rule.
+
+Proven on the live agency: the two rows the API reports as pending (`e40f8f1c…`, `d71a4c86…`,
+`weekStart` 2026-08-09 and 2026-08-02) are now IN the payment week's list — All (7) ·
+**Waiting on you (2)** · Verified (5), with **Approve all (2)** offered — and both ids were
+matched individually rather than inferred from the count.
+
+⚠️ **Do not "fix" this by summing the three week tabs to find the missing rows.** The tabs
+OVERLAP on purpose — the payment week repeats vouchers that also appear under This Week or
+Last Week, and its own comment says the duplication is intentional so a voucher can be found
+by the week it was WORKED. Each week tab equals its own sub-tabs; across tabs the totals add
+up to nothing meaningful, and an earlier note in this session compared them that way and was
+wrong to.
+
+#### ▶ ✅ CLOSED — one PR on two venue cards, with nothing to say which one she is at (7 Sep 2026)
+
+Owner, on the roster's **Check-in locations** panel: *"why is 'Vicky' showing up under both Maps?"*
+The panel was right — she held two assignments that day, at two venues — but the second card gave the
+reader nothing: `Not checked in · Rostered · 12:00 - 13:00`, forty minutes before that shift began.
+Fixed in `use-agency-attendance-fixes.ts` + `AgencyAttendanceFixPanel.tsx`: a rostered row now says
+when it is **Due**, and names the venue the PR is **still checked in at** when one exists. Verified on
+the live Atlas login (see §10 xv).
+
+**Second pass (§10 xvi) — the first one missed the case the owner was actually looking at.** By then
+Vicky's duplicate was between two STAMPED rows, and the fix above only touched rows that had not
+stamped. Every stamped row now leads with `In 11:10 AM` (plus `· out …` when closed), and an unclosed
+check-in that a later stamp elsewhere has overtaken says `· since checked in at Velvet 23`. **Rule
+worth keeping: a duplicate row can appear in any of the panel's three buckets — fixing one bucket
+fixes one third of the symptom.**
+
+**A finding the panel now surfaces rather than causes:** two open check-ins for one PR means a
+check-out was never made. **Third pass (§10 xviii) closed the hole that let it happen** — `checkInMine`
+now 409s while any other check-in of that person's is still open, across every agency, because the
+constraint is a body and not an org.
+
+⚠️ **The rule is forward-only. Vicky's two open rows from before it are still there** (UAB Emhub 11:10
+and Velvet 23 11:31, both unclosed). Nothing auto-closes them and nothing should — a check-out stamps
+time that turns into wages. She can clear them herself: check-out is ungated by design, so both close
+from the phone in the normal way. Until then she cannot start a third shift, which is the rule working.
+
+**Left open, deliberately:** the panel is scoped to ONE agency's assignments, so "still checked in at"
+can only ever name a venue this agency staffed. A PR on a second agency's floor is invisible here and
+must not be guessed at. Also, the Due→Not-checked-in flip is evaluated at render, so it lands on the
+next refetch (60 s stale time), not on the stroke of the minute.
+
+#### ▶ ✅ CLOSED — unresolved past assignments, and the fine that could not explain itself (7 Sep 2026)
+
+Both from the (xi) diagnosis. `no-show-sweep.job.ts` closes out any assignment with no check-in a few
+hours after its shift ends (at the shift's end when another shift follows), and the minimum-shifts
+breach now prints `1 of 3 shifts worked · 3 offered`. Vicky's two 3 Sep rows read `no_show` live, and
+the RM 50 is unchanged — `no_show` and `assigned` count identically in `attendanceWindow`, so the
+sweep corrects the RECORD without moving money. See changelog (xii).
+
+**Two things it deliberately did NOT do:**
+
+1. **19 unresolved assignments older than the 30-day lookback are still `assigned`** (oldest 24 Jul).
+   The job counts them in its log every run and leaves them. Rewriting months of history is a
+   decision for a person: say the word and it is a one-run change to the lookback.
+2. **No notification fires on a no-show.** The PR is not told, and neither is the agency. If a black
+   mark should reach the person it is about, that is a new notification kind, not part of this job.
+
+#### ▶ ✅ CLOSED — a weekly minimum IS satisfiable in one day (7 Sep 2026)
+
+Owner: *"3 shifts in a day still translates to 3 shifts in a week"*. `assigned_this_week` counts
+ASSIGNMENTS and never distinct days, so the code already was this rule and nothing changed. Recorded
+because it was open as a question, and because the tempting "fix" — counting distinct `shift_date` —
+would silently lower real fines. `pr-penalty.test.ts` now asserts it, so a future change has to argue
+with a test rather than with a comment. See changelog (xiii).
+
+#### ▶ ✅ CLOSED — the two role lists are aligned (7 Sep 2026)
+
+Owner picked **Financial Head · Ops Head · 总监**, and both lists now carry them. Enforced by
+`role-labels.test.ts` rather than by a comment: 12 cases assert every role reads identically in
+`t.roles.*` and `t.profile.role*` across EN and 中文, and that no role string smuggles the
+organisation back in. See changelog (x).
+
+#### ▶ ✅ CLOSED — the signed-out type pass is verified on all four routes (6 Sep 2026)
+
+`--iz-page-scale` moved **0.8 → 0.9**, resizing every signed-out page at once. All four are
+now measured: **/forgot-password** and **/reset-password** both report h1 **30px**, horizontal
+overflow **0** and zero clipped elements; **/signup** reports overflow **0**. Nothing that fitted
+at 0.8 clips at 0.9.
+
+The check also PROVED the heading scoping was right: `/forgot-password` keeps the bare
+`.login-heading-line` at **30px** while still inheriting the bigger **55px** controls from bare
+`.login-page` — exactly what `AuthCardShell`'s own comment asks for, and what the `/login`-only
+`.login-threshold` scope was built to protect.
+
+⚠️ **It also caught a rule that never applied.** `/signup`'s heading measured **30px**, not the
+36-48px specified: the new rule sat EARLIER in the file than the original
+`.signup-page .signup-heading span`, so at equal specificity the original won. Fixed by editing
+the original in place and deleting the duplicate — one rule for that selector now, measured at
+**48px**. Lesson: when a size does not take, look for a same-specificity rule LATER in the sheet
+before touching the selector.
+
+Two smaller things left deliberately:
+
+- **The middle flow caption crosses the connecting curve.** "Fills the roster. Pays the team."
+  wraps to two lines and the second sits over the SVG rail. It is legible and the owner did not
+  raise it, but the fix is either a shorter middle string or nudging that node's `y`.
+- **Only the flow captions were de-capsed.** The hero stat labels
+  (`LESS TIME ON MANPOWER PLANNING`) are still spaced-out mono caps wrapping to three lines,
+  which is the same defect this slice fixed one section lower. Left alone because the owner
+  named the flow strip and the dashboards, not the hero — but it is the obvious next one.
+
+#### ▶ ✅ CLOSED by decision — old one-agency requests are LEFT AS THEY ARE (3 Sep 2026)
+
+The fan-out fixed the WRITE path; the rows already in the database were written by the old
+one-agency code and stay one-agency. Four shifts are affected — both of the 3 Sep Emhub posts
+(Vicky, addressed to Why We Met, invisible to Atlas) and the two 24 Aug posts (6 and 5 names).
+**Owner's call: leave them** — *"leave those as long as the next few shifts take this fix then it
+is fine"*. No backfill was run and none is planned; those four stay one-agency for good, so do
+NOT re-raise this as pending work. The check that matters is the NEXT posts: rerun
+`_probe-request-pr-cross-agency.ts` and read section 2 — a post made under the fix has
+`asked_agencies` equal to `invited`, and the four pre-fix rows are the ones dated 3 Sep and
+24 Aug.
+
+⚠️ Related, still open: `requestedPrs` is accepted only on CREATE. `UpdateShiftSchema` inherits
+the field via `.partial()` but the update handler never writes it, so editing a posted shift can
+neither add a named PR nor repair one of the rows above.
+
+#### ▶ ✅ CLOSED same day — OUTLET PRIVACY SWEEP: both leaks fixed (3 Sept 2026)
+
+**Shipped.** New `util/outlet-redaction.ts` blanks the fields; `redactIdentityDocsForOutlet` —
+the middleware `/user` has always used — is now wired to `GET /pr`, `GET /pr/:id`,
+`GET /shift-assignment` and `GET /shift-assignment/:id`, and both controllers honour the flag it
+sets. `IDENTITY_DOC_FIELDS` is exported and REUSED rather than re-typed: two lists of "what an
+outlet must not see" is one list that gets updated and one that does not.
+
+**Blanked for outlet callers:** `icNo` + the shared identity-doc list inside `profile` (PR row);
+the seven `cancelFee*` columns, the four raw coordinates and `leaveProofPhotos` (assignment row).
+**Deliberately kept:** `cancelNoticeHours` (the venue’s own operational fact),
+`checkIn/OutDistanceM` + `AccuracyM` (measured FROM the venue’s own location — distance from a
+point you own is not a position, and it is the geofence evidence), `leaveStatus` (a venue must
+know the PR is not coming; it must not see the doctor’s note), and `phone`/`email` (a booked PR
+has to be reachable on the night). Blanked to `null`, never deleted — a missing key renders
+`undefined` or throws on a destructure, and a privacy fix that breaks a roster gets reverted.
+
+**Age survives.** `toUserProfileResponse` already derives `age` from `dob` upstream — verified: of
+every live profile carrying a `dob`, none arrives without an `age` — so blanking the date costs
+the venue nothing. A derive-age-here fallback was written, shown to never fire on live data, and
+DELETED rather than shipped as a branch nobody would notice going wrong.
+
+**Proof is TWO-SIDED, which is the part that matters.** A fix that hides a column from everybody
+is an outage, not a privacy fix — the agency roster reads `icNo` and the payroll lane reads the
+coordinates. `_probe-redaction-counter-test.ts` asserts both directions and reports INCONCLUSIVE
+where the agency column is empty (a field null for everyone proves nothing):
+`icNo` outlet 0 / agency 5 · `profile.dob` 0 / 5 · `checkInLat` 0 / 18 · `checkInLng` 0 / 18 ·
+`checkOutLat` 0 / 17 · `cancelFeeRm` 0 / 1 · `cancelFeeVoucherId` 0 / 1 — **NO LEAKS**, every row
+discriminating. Booking pool intact across all 44 rows: name, nickname, tier, status, comcard,
+portfolio, languages, roster. Outlet History still renders "Vicky · Atlas Agency · 3 shifts" and
+`/pr?pageSize=500` still 200s — which is exactly what a GATE would have broken.
+
+**The original finding, kept for the record:**
+
+Swept all 55 outlet-reachable GETs with a real outlet token (`emhub@emhub.test`), deep-scanning
+live responses. **25 refused (403) — every discipline surface held**: `/pr/:id/penalties`,
+`/agency/:id/penalty-rules`, `/penalty-proposals`, `/uncharged`, `/agency/:id/prs`,
+`/payment-voucher` (where deductions live), `/payout-batch`, `/shift-assignment/attendance-fixes`,
+`/shift-assignment/overtime/pending`. Two endpoints leak. Instrument:
+`_probe-outlet-privacy-sweep.ts` + `_probe-outlet-pii-scope.ts`.
+
+The rule being broken is already WRITTEN, in `redact-identity-docs.ts`: *"OWNER DECISION
+(30 Jul 2026): an outlet may see WHO is working at its venue, not who they are. Coordinates stay
+closed … and IC number, date of birth, home address and both sides of the ID photo now go with
+them."* That module exists, is correct, and is wired to `/user` — and to nothing else. Its own
+header records that the decision sat undelivered for three weeks once before, because the check
+matched a deprecated role name. This is the same decision undelivered again, on two other routes.
+
+**① `GET /pr` hands an outlet IC numbers and dates of birth.** `pr.routes.ts` imports
+`requireRole` and `requirePermission` and no redactor, so the roster rows go out whole: `icNo`,
+`profile.dob`, `phone`, `email`, `profile.race`. Live with `?pageSize=200`: **44 PRs across 2
+agencies — 5 ICs, 23 DOBs, 25 phones — when only 6 people have ever worked at that venue.** The
+44 is NOT a scoping bug: the controller deliberately serves "its approved agencies’ rosters, not
+the people who happen to have worked here before", which is the booking pool the plan sells. The
+row SET is intended; the FIELD projection was never narrowed to match. Same file already withholds
+`stats.totalPaidRm` from outlets — the field-level instinct was there, applied once.
+
+**② `GET /shift-assignment` hands an outlet a PR’s fine and their GPS trail.** The full row ships:
+`cancelFeeRm` / `cancelFeePct` / `cancelFeeChargedAt` / `cancelFeeVoucherId` (a cancellation
+PENALTY charged to the PR, and a pointer into their voucher — 1 live row), and metre-level
+`checkInLat` / `checkInLng` / `checkOutLat` / `checkOutLng` (**15 and 14 rows**, 8 decimal places).
+The coordinates directly contradict "coordinates stay closed" — that call was made when
+`attendance-fixes` was gated, and the main list was never looked at. Also in the projection:
+`leaveStatus` / `leaveProofPhotos` (a photographed MC), unpopulated at this venue, so **carried but
+unexercised** — the shape is the exposure, not the current rows.
+
+**Fix — same shape both times, not a gate.** A 403 blanks PR names on live outlet screens (that is
+exactly why `redact-identity-docs.ts` chose a flag over a guard). Wire
+`redactIdentityDocsForOutlet` onto `/pr` and `/shift-assignment` and have their mappers honour
+`req.redactIdentityDocs`, dropping `icNo`/`dob` on the PR row and the four cancel-fee columns, the
+four coordinates and `leaveProofPhotos` on the assignment row. **Check every other route that
+returns a user- or assignment-shaped payload in the same pass** — the lesson of this finding is
+that the decision was wired to one route and assumed everywhere.
+
+**③ By design, but worth re-confirming: `GET /user` is not org-scoped for an outlet.** Returns all
+**74 platform users** (74 emails, 36 phones) — every PR, every other venue’s staff, every agency
+user. Identity docs ARE redacted here and `dob` is replaced by `age` (verified), which is the
+stated mitigation, and the module explains that gating blanks two live screens. So this is the
+accepted trade rather than a defect — but the blast radius is the whole user table, and the owner
+should re-confirm that names+email+phone for every account is what "resolve PR display names" needs.
+
+**⚠️ The first run of this sweep reported these endpoints CLEAN.** Three instrument faults, all
+now fixed in the probe: `ic` does not match `icNo`; `lat`/`lng`/`leaveProof` were not in the
+vocabulary at all; and it scanned only the first 2 array elements, so a penalty on row 25 of 35 was
+invisible. What actually found the leaks was enumerating FIELD NAMES rather than pattern-matching
+them. **Do not trust a privacy sweep that has never been shown to catch a known-present field.**
+
+#### ▶ ❌ REFUTED 13 Sep 2026 — Havoc is a SERVICE, and the tips bucket is right
+
+**Do not "fix" this. Re-tagging Havoc as a drink would CUT a PR's commission on it.**
+
+The claim below is that Havoc is a drink *"on the outlet's drinks list"*. It is not. JK House's
+own catalogue tags it `service`:
+
+| category | items |
+|---|---|
+| drink (7) | Cosmo, Dom Perignon, Don Julio, Herradura, Ladies drink, Lemon Drop, Test |
+| service (3) | Booking commission, **Havoc**, Testes |
+| tip (1) | Tips |
+
+Every Havoc voucher line across six-plus receipts is `component = 'tip_commission'`, consistently
+— the venue classified it, and the system agrees with the venue. `receiptKindForItem` puts every
+service entitlement on the tips side DELIBERATELY, because a service is commissioned at the tip
+rate; that rule was itself the fix for the real bug here (Havoc used to fall into `others` and
+render as **OT**, which was wrong and is long closed).
+
+⚠️ **What "fixing" it would cost.** At JK House `tip_pct` sits 5 points ABOVE `drink_pct` at
+every tier (Tier I 15% vs 10%, Tier III 17% vs 12%), and in happy hour the drink rate is a third
+of it (5%). On a RM 1,000 item that is **RM 50-100 per unit taken off a PR's pay** — on a premise
+that is false.
+
+If the owner decides Havoc really should be a drink, that is a CATALOGUE edit the venue makes in
+Workspace, not a code change.
+
+**The original 3 Sep entry, kept for its reasoning:**
+
+#### ▶ ✅ CLOSED same day — the penalty window counted every agency a PR works for
+
+**FIXED 26 Aug 2026** — see §10. `attendanceWindow` now takes a REQUIRED `agencyId` and
+carries `and sa.agency_id = …` in both its `wk` and `mth` CTEs. Required, not optional: an
+optional scope is one a future caller forgets, and the omission type-checks.
+
+⚠️ **Left deliberately unverified:** no live penalty was re-run end to end. The probe
+`_probe-penalty-window-agency-scope.ts` (READ-ONLY) proves the numbers diverge on real rows,
+but nobody has opened Manage PR on a week where a fine actually changes. Worth one look at an
+agency with `min_shifts_per_week` configured, because the fix makes fines APPEAR that the leak
+was suppressing — a PR who looked compliant on another agency's shifts no longer does.
+
+#### ▶ ✅ CLOSED same day — an overnight booking was invisible to every busy PREVIEW the morning after
+
+**FIXED 24 Aug 2026** — see §10. One rule, `windowsEffectiveOn`, now carries a genuinely
+wrapping window into the day it spills into, rebased; the roster and the comcard pill both
+fetch from the day before and fold through it. Surface 1 was not fixed but **REMOVED**: the
+owner ruled the outlet may not know a PR is taken, because naming PRs is a request and not a
+booking. Verified live (Vicky: Mon 24 `22:00 - 04:00`, Tue 25 `00:00 - 04:00`, no phantom
+third marker) and pinned by 12 sabotage-tested unit tests. Kept below for the reasoning.
+
+Proven on live data 24 Aug 2026 with `_probe-overnight-busy-window-carry.ts` (read-only, and
+sabotaged first to prove it can FAIL). Vicky holds `22:00 - 04:00` on 2026-08-24 at JK House
+(Why We Met Agency), `assigned`, no check-out — so she occupies **00:00-04:00 of the 25th**.
+
+Root cause is ONE fact with three consumers: a shift is stamped only with its **start date**
+(`shift.shift_date`), and every preview both FETCHES and BUCKETS by exact date.
+`listCommittedWindows` filters `shift_date >= from AND <= to`, so asking the 25th never
+returns the 24th's row — and even if it did, the client looks it up under `byDate.get(iso)`
+for the drafted day only. `windowsOverlapPadded` handles the ±1440 wrap correctly and never
+gets handed the window.
+
+| surface | fetch range | bucket |
+|---|---|---|
+| Post Job SELECT PRS badge (`use-outlet-busy-windows.ts`) | `from=to=` drafted date | `byDate.get(iso)` |
+| Agency roster busy marker (`RosterBackendTimetable.tsx:300`) | the displayed week | `.get(dateIso)` — Monday cannot see Sunday night, and the week's first day cannot see the previous Saturday at all |
+| Manage PR comcard live pill (`use-agency-pr-live-status.ts:43`) | `from=to=today` | plus `a.shiftDate?.slice(0,10) !== todayIso` on the assignments read |
+
+**The assign guard is the only place that gets it right** — `listForPr` with NO date window,
+compared on a continuous timeline, and its own comment says a 22:00-04:00 must meet the next
+morning's 02:00-06:00. So the preview warns **LESS** than the guard it previews: the venue
+sees no badge, requests her, and the server refuses later. That is the inverse of the
+over-warning bug `listCommittedWindows`' comment was written about.
+
+Observed live on the Atlas roster, Vicky's row: **Mon 24 Aug** = `Unavailable 22:00 - 04:00`
+(correct — the anonymous cross-agency marker), **Tue 25 Aug** = **blank**, with an enabled
+"Assign Victoria Tan Mei Lin on 2026-08-25" button. The comcard pill is the worst of the
+three: after midnight a PR who checked in last night and has not checked out reads
+**available**, because `ownOnDuty` drops yesterday's row too.
+
+⚠️ NOT fired end to end: no small-hours shift exists on the 25th to request against, and
+creating one is a write. The guard's refusal is proven by reading it, not by a 409.
+
+Fix shape: widen each fetch by one day and compare on a continuous timeline instead of a date
+bucket. Three surfaces, one rule — name the fix after the RULE, not after the picker, or the
+siblings survive (see `fix-named-by-symptom-hides-siblings`).
+
+#### ▶ ✅ CLOSED — the PV editor lost-update shipped in `d0fc0ae` (22 Aug 2026)
+
+Was the top open item here while §10 already recorded it as done — the backlog and the
+changelog contradicted each other for three commits. `expectedUpdatedAt` is in
+`UpdatePaymentVoucherSchema`, the repository re-reads under `SELECT … FOR UPDATE` and throws
+`VoucherConflictError` on a stale token. **What is still owed is the click-through, not the
+code**: open the agency voucher editor, have the PR self-log a drink into the same day, save,
+and confirm the editor is refused with the 409 sentence rather than silently winning.
+
+#### ▶ ✅ CLOSED — Check-In showed RM 0.00 for a night shift after midnight (24 Aug 2026)
+
+Owner's screenshot, 24 Aug 09:13: Payment showed the Sun 23 Aug shift at **RM 322.50** while the
+Check-In tab, summarising that SAME shift, showed **Final payout RM 0.00**, an empty STATUS panel
+and **SALES TARGET RM 0.00 · 0%**.
+
+Both screens read the same array from `usePrEarnings` and differed only in the day they asked
+for: Payment asked for the SHIFT's day, Check-In asked for the DEVICE's today. `pickActive` keeps
+a finished shift pinned for TWELVE HOURS expressly because a night shift crosses midnight, so
+between midnight and that expiry the pinned summary always read zero. Fixed by scoping to the
+shift's own span (`shiftDayKeys`) — see the §10 row for 2026-08-24.
+
+⚠️ The wage half of that RM 0.00 was CORRECT and was deliberately left alone: booked 20:30–21:00,
+both stamps at 22:12, so zero minutes fell inside the window and the server sealed a pro-rated
+RM 0.00. Only the commission was wrong.
+
+#### ▶ ✅ CLOSED — OT was recorded and invisible on Payment (24 Aug 2026)
+
+Check-In said **"+1m OT recorded"**; the Payment grid's Others cell for that day was a dash and
+nothing on the screen said why. The dash was CORRECT — overtime is never auto-paid — but a PR
+reading only Payment could not tell "recorded and waiting on my agency" from "nothing happened".
+An amber caption now sits under the review caption: *"1m on Sun 23 — overtime recorded at
+check-out, waiting on your agency. It is not in the figures above."* See the §10 row for
+2026-08-24 (d).
+
+#### ▶ ✅ CLOSED — apps/web builds again (verified 22 Aug 2026, was: DOES NOT BUILD)
+
+Re-ran it to check rather than trusting the entry: `npx vite build` in `apps/web` →
+**`✓ built in 29.53s`**, `.output/server/index.mjs` written, exit 0. The `MISSING_EXPORT`
+failure below is HISTORY and is kept only for the diagnosis trail.
+
+⚠️ **The diagnosis recorded below was wrong, and the record should say so.** It blamed version
+drift across five `@tanstack/*` packages pinned to `"latest"`. PR #76 found the actual cause —
+a single DUPLICATE nested `@tanstack/router-core`, which the table below had in fact already
+identified — and fixed that. The `"latest"` pins are still a real hazard worth closing on their
+own (two machines can resolve different trees from one range), but they were not what broke the
+build. Left as the 🟡 item it always was, not the 🔴 it was written up as.
+
+<details><summary>Original 19 Aug write-up (superseded)</summary>
+
+`pnpm build` in `apps/web` dies with `MISSING_EXPORT` on `waitForRequest`,
+`disposeSsrResponseDetached`, `bindSsrResponseToRequest` and `_getRenderedMatches`. **Not caused by
+the `main` merge** — the pre-merge tree fails identically against the same `node_modules`, and
+neither side touched `package.json` or `pnpm-lock.yaml`. It also survived a `pnpm install`.
+
+The repo has TWO copies and the build resolves the wrong one:
+
+| location | version | has the four exports |
+|---|---|---|
+| `node_modules/@tanstack/router-core` | 1.171.24 | yes |
+| `apps/web/node_modules/@tanstack/router-core` | **1.171.15** | **no** |
+
+The nested copy is an EXACT pin (`"@tanstack/router-core": "1.171.15"`) inside
+`@tanstack/router-plugin` 1.168.32 and `@tanstack/router-generator`, so `pnpm install` will keep
+re-creating it. ⚠️ **The deeper cause is that `apps/web/package.json` pins most `@tanstack/*` to
+`"latest"`**, so they were resolved at different times and no longer agree: react-router 1.170.29,
+react-start 1.168.46, router-plugin 1.168.32, router-cli 1.167.19, ssr-query and devtools 1.167.1.
+A floating pin does not drift on its own — it drifts *per install*, so two machines can hold
+different trees from one lockfile-less range. Fix by bumping `@tanstack/router-plugin` /
+`router-cli` to a release whose pinned `router-core` matches 1.171.24, then pinning the whole
+`@tanstack/*` set to explicit versions. **Dev is unaffected** — Vite serves every route fine; this
+blocks the production build only.
+
+</details>
+
+#### ▶ ✅ PROVEN LIVE 19 Aug 2026 — the two shift-assignment refusals (was: not yet fired)
+
+`DELETE /shift-assignment/:id` now refuses an assignment on a past date, or one with a
+check-in/check-out stamp on any date; `POST /outlet-swap` refuses the same two. Both were
+**deliberately not fired** against the shared `innocenz-test` DB before restarting: the running
+process is `tsx watch`, and if it is serving stale routes then a probe of the DELETE guard does not
+return 409 — it deletes a real assignment row, taking its attendance stamps and sealed wage with it.
+⚠️ **A guard you cannot test without risking the thing it protects is not testable in place.** The
+safe order is: restart the backend, THEN fire both. A refusal writes nothing, so once the code is
+live both probes are free (see the `prove-guards-live-without-writing` note).
+
+Fired against the live `innocenz-test` DB as `owner@atlas-agency.my`, after restarting the backend
+so the process definitely held the merged code. **Both refused, and both wrote nothing:**
+
+- `DELETE /shift-assignment/069a16ae…` (shift dated 2026-08-03) → **409** *"That shift has already
+  passed — the assignment on it is the record of who worked, not a booking to undo. Mark it
+  cancelled or no-show instead."* Re-read afterwards: the row is still there.
+- `POST /outlet-swap` `{assignmentId: 069a16ae…, toShiftId: 23c842b9…}` — both shifts on 2026-08-03,
+  so it clears the same-date check and reaches the new guard → **409** *"That shift has already
+  passed — there is nothing left to swap."* `GET /outlet-swap` afterwards: **0** rows for that
+  assignment, so no `pending_pr` was raised.
+
+⚠️ **STILL UNPROVEN: the check-in branch of both guards.** It refuses on `checkInAt`/`checkOutAt`
+regardless of date, and this DB currently has **zero** assignments dated today-or-later carrying a
+check-in stamp — so there was nothing to fire it at. Absent evidence about the instrument, not about
+the rule (see `absent-evidence-is-about-the-instrument`). Fire it the next time a PR checks in.
+
+Also still unfired, and deliberately: **a same-day assignment with no check-in must still DELETE
+cleanly.** That one is a real write against a shared DB, so it needs a row someone is willing to
+lose — the guard must not have swallowed the ordinary undo-a-mis-assignment case it was written to
+preserve.
+
+#### ▶ ✅ FIXED 13 Aug 2026 — cancellation fee said "Not linked to a shift" (see §10)
+
+The PR's Deductions evidence sheet shows *"Not linked to a shift — this was logged without
+an open shift, so there is no check-in to show"* on a **cancelled-shift fee**, which is the
+one deduction that is definitionally ABOUT a shift. The PR cannot see which shift they were
+charged for.
+
+**Root cause — a fix named after its symptom that missed its sibling.**
+`asAssignmentId` (`payment-voucher.controller.ts:422`) strips exactly one suffix:
+
+```ts
+const bare = raw.replace(/-ot$/i, '');      // the check-out seal marks overtime `<id>-ot`
+return UUID_RE.test(bare) ? bare : null;
+```
+
+But `penaltyDedupeRef` (`penalty-line.ts:34`) writes `` `${chargeId}-pen` ``. So `<uuid>-pen`
+fails the UUID test → `shiftAssignmentId: null` → `weekShifts` (`:1244`) never asks for the id
+→ `buildCellEvidence` groups it under `''` → `group.shift` is null → that wording.
+
+**Proven on the live row** (the one in the owner's screenshot). `payment_voucher_line` where
+`ref like '%-pen%'`: *"Cancelled shift — 50% of RM 40.00"*, −20.00, 2026-08-11,
+`component=deduction`, dedupe `ea520f72-…-pen`. Today `asAssignmentId` → **null**. Stripping
+`-pen` as well → `ea520f72-…`, which **resolves to a real assignment: "Tues" @ Emhub Testing,
+2026-08-11, status=`cancelled`**.
+
+**The rest of the chain already works** — checked, not assumed: `listByIdsForPrs`
+(`shift-assignment.repository.ts:1082`) filters on **id + prId only, with NO status filter**,
+so a `cancelled` assignment resolves fine.
+
+**Fix:** `raw.replace(/-(ot|pen)$/i, '')`. Safe for the other penalty source too — a WEEKLY
+charge's `chargeId` is a `penalty_charge.id`, which matches no assignment, so it resolves to
+nothing and correctly keeps the honest "not linked" note (a weekly penalty genuinely is not
+about one shift). Worth a second look at the sheet's copy afterwards: for a cancellation the
+line *"there is no check-in to show"* is true but beside the point — there is no check-in
+BECAUSE they cancelled.
+
+#### ▶ TIER-SLOT RULE — ALL 4 FIXED 13 Aug 2026 (commit 740c0fc) — kept for the reasoning
+
+**Closed the same day they were opened.** See the §10 row for what shipped and how it
+was proven. Two follow-ups the fix deliberately did NOT take on:
+
+- **`listSwapTargets` / `countLiveAssignments` still offer by headcount only**, so the
+  agency's swap-target picker will still show a shift that is headcount-free but
+  tier-full. The request can be raised and now fails at approval with a clear message
+  rather than landing a bad row. `remainingByBucket` in the tier-demand leaf exists for
+  exactly this "offer only what the API will accept" job.
+- **`hasFreeSeat` still takes no row lock** (unchanged): two simultaneous re-staffings of
+  the last seat could both pass. Locking the shift on every status PATCH would put a
+  write lock on the busiest path in the system (check-in, check-out) to guard the
+  quietest, which is the wrong trade.
+
+The original findings, left as written because the reasoning is the useful part:
+
+#### ▶ AUTO-ASSIGN: "N shifts this week" was a LIFETIME count (found AND FIXED 3 Sep 2026)
+
+- [x] **🟠 The ranking number the sheet prints, and the fairness tie-break behind it, both count
+  every assignment the agency has ever made.** `weekCountByPr` (`auto-assign.ts`) increments once
+  per row of `weekAssignments`, and that query has **no date filter** — the hook pages
+  `GET /shift-assignment` to exhaustion, "whatever the parameter name says". Measured on Atlas,
+  3 Sep 2026: the sheet printed **Vicky 31 / jk 2 / Haziq 3**, which is exactly the lifetime row
+  count; the real Sun–Sat week (30 Aug – 5 Sep) is **2 / 0 / 0**. So the label is wrong AND
+  `load()` is wrong — a PR with a long history is pushed down the queue forever regardless of what
+  they worked this week, which is the opposite of the spreading rule the sort exists to apply.
+  The fix is to count only assignments inside the payroll week; the plan does not currently receive
+  that range, so it needs either a `weekRange` param or the Sun–Sat derivation from `targetDates`.
+  **FIXED the same day**, once the owner asked for it: the payroll week is derived inside
+  `buildAutoAssignPlan` from `targetDates` via `getPayrollWeekSundayIso` + `addDaysToIso`, and rows
+  outside `weekFrom..weekTo` (or with no readable date) are skipped. **Derived, not passed in** —
+  `weekAssignments` arrives unfiltered, so a caller who forgot to narrow it would silently
+  reinstate the lifetime count and nothing would look wrong until someone read the number. Sunday-
+  anchored through the ONE helper, per its docblock: nothing in the app may derive a week another
+  way, and this count is what broke last time one did (12 Aug 2026, Mon–Sun). *(Agency)*
+
+#### ▶ TIER-SLOT RULE — 4 GAPS FOUND BY AUDIT (opened 13 Aug 2026, ALL NOW FIXED)
+
+The rule itself holds where it matters most: `POST /shift-assignment` checks headcount **then**
+`seatFor` under a row lock, and the planner's tier mapping is byte-identical to the backend's.
+These four are the ways round it, worst first.
+
+1. **🔴 The planner reads at most 100 assignments, oldest-first — LATENT, fires at row 101.**
+   `use-auto-assign-plan.ts:74-95` asks for `pageSize: 500`; every controller clamps to
+   `MAX_PAGE_SIZE = 100` (`shift-assignment.controller.ts:60,75`), and `listPaginated` applies
+   **no date filter** and orders `createdAt` **ascending** (`:705-706`). So once an agency passes
+   101 lifetime assignments, `weekAssignments` is its **oldest 100 rows, ever** — this week's are
+   all past the cutoff. Then `staffedByShift` is empty for every current shift: every shift reads
+   fully unstaffed, `remainingByBucket` returns the full asked counts, tiers already at quota are
+   waved through, and booked PRs get proposed. `validateAutoAssignPairs` refetches with the **same
+   broken query**, so it drops nothing and every pair 409s. **Live today: 44 rows, all Atlas — not
+   yet firing.** Fix: date-scope the assignments query (the shifts query already carries
+   `fromDate`/`toDate`) or page to exhaustion. Same clamp affects `use-roster-slots.ts:27-51`.
+2. **🟠 `validateAutoAssignPairs` never re-checks the tier mix.** `auto-assign.ts:418` has only
+   `"shift-gone" | "shift-full" | "pr-busy"`; `payTiers` is never read in the loop at `:468-481`.
+   Scenario: shift `quantity: 4`, demand Tier I ×2 + Tier III ×2, plan proposes Alice for the last
+   Tier I seat; someone assigns Bob (Tier I) from the roster grid while the sheet is open. At
+   Confirm `4-3=1` is open, Alice is free, shift still confirmed — so it writes, and the backend
+   409s. **The message is then lost twice**: `createShiftAssignment` throws the raw axios error
+   (`"Request failed with status code 409"`), and `AutoAssignSheet.tsx:98-103` renders only
+   `failed.length` — *"N assignments could not be made — please retry"*. **Retrying can never
+   succeed.** Fix: add a `"tier-full"` DropReason and surface the server's own sentence.
+3. **🟠 Two write paths bypass the tier guard entirely** — both call quantity-only checks:
+   re-staffing a cancelled row via `PUT /shift-assignment/:id` (`shift-assignment.controller.ts:1736-1749`
+   → `hasFreeSeat`, `repository:399-413`) and **outlet-swap approve** (`outlet-swap.repository.ts:245-258`,
+   which never reads `ShiftPayTierTable` at all). Both can land a row `POST` would have refused —
+   e.g. a 3rd Tier I on a shift that asked for 2. Fix: call `seatFor` from the same leaf module.
+4. **🟡 "N open slots" doesn't subtract tier-unfillable seats.** `openSlots = quantity - staffed`
+   (`auto-assign.ts:201`), and `remainingByBucket` sits right beside it unconsulted. A shift asking
+   4× Tier I with no Tier I free but 10 Tier III idle shows *"4 open slots today / No free PRs —
+   everyone is booked or inactive"* (`AiSuggestionsPanel.tsx:71-73`) — false — and the sheet reads
+   *"4 open slots cannot be filled — only 10 free PRs today"*, which contradicts itself. Nothing
+   anywhere says **"no PR of a requested tier is free"**, the one actionable fact.
+
+⚠️ **Comment rot to fix alongside**: `auto-assign.ts:440-443` and `use-auto-assign-plan.ts:125-127`
+both still assert the backend "does NOT enforce a shift's `quantity`… it only checks agency
+ownership". That was true when written and is **false today** (`ShiftFullError` at `:290-292`).
+
+#### ✅ FIXED 12 Aug 2026 — the agency Outlets screen reported every backend shift as 0 supplied
+
+**Resolved the same day it was audited — see the §10 row. Kept here for the chain it documents.**
+
+Audit of the 7 remaining `shift.filled` readers left after the planning-sheet fix. **One was a
+live bug, on a different screen from the one the owner reported.**
+
+`outletShiftRequestFromBackend` ([agency-outlet-shift-map.ts:25](apps/web/src/agency-portal/lib/agency-outlet-shift-map.ts))
+maps a **backend** `Shift` and copies `shift.filled` — the dead column — then synthesises
+`prs: Array.from({length: filled})`. Since `filled` is always 0, `prs` is always `[]`. The chain:
+
+`useAgencyOutletDemand` → `buildAgencyOutletSummaries` → `outletShiftDemandSupplied` →
+`outletShiftSuppliedCount` = `prs.length` = **0**, feeding `suppliedSlots`, `openSlots`,
+`totalSupplied` and `todaySupplied` on **`/agency/outlets`**. Every backend shift reads as fully
+unstaffed, so "open slots" is overstated by exactly the number of PRs actually rostered.
+
+Worse than a uniformly wrong screen: the same hook ALSO passes the **real** `useRosterSlots`
+data, so roster-derived figures on that page are correct while the shift-derived ones are not —
+right and wrong numbers side by side, with nothing saying which is which.
+
+**Fix:** derive `filled`/`prs` from the roster assignments, exactly as
+`backend-shift-map.ts:297` already does. The hook holds `roster` already; the mapper just needs
+it passed in. Do NOT keep the placeholder-id synthesis — real `prId`s are available.
+
+**Also worth doing while there:** `backend-shift-map.ts:297` reads
+`staffing.length > 0 ? staffing.length : shift.filled`. Correct today (when `staffing` is empty
+`shift.filled` is 0 too), but it implies the column is a meaningful fallback. Simplify to
+`staffing.length`.
+
+**Cleared by the same audit — no action needed:** `portal-sync.ts:193/209/317` and
+`store.ts:3976/5897` all operate on the demo store's `OutletShiftSlot`/`ShiftRequest`, where
+`filled` IS maintained (`fillOutletShiftSlot` writes `filled: prs.length`, and the store
+decrements it alongside `prs.filter(...)`). Self-consistent, not backend-derived.
+
+#### ▶ ~~The weekly penalties have no "charged" state~~ — BUILT 11 Aug 2026 (migration 0117)
+
+Kept for the reasoning only; `penalty_charge` now exists and the Finance list carries both kinds.
+The remaining gap is the one below (the deduction is still hand-entered).
+
+<details><summary>original note</summary>
+
+Cancellation fees are now stored rows with a `cancel_fee_charged_at` column, so "uncharged" is a
+FACT and Finance gets an exact list. The three **weekly** rules — min shifts, MC cap, lateness —
+are recomputed per request from `attendanceWindow` and nothing anywhere records whether one was
+ever applied to a voucher.
+
+So `GET /agency/:id/uncharged` deliberately returns cancellations ONLY. It would be easy to also
+list the weekly proposals there and let the total read as "outstanding" — and it would be wrong:
+the same RM 50 would reappear every week after being paid, because nothing can tell the two apart.
+
+To close it, the weekly proposals need somewhere to live at the moment they are accepted (a
+`penalty_charge` row keyed to PR + week + rule type, stamped when applied). Until then Manage PR's
+"Recent penalties" stays a proposal, and Finance should treat it as one.
+
+</details>
+
+#### ▶ SETTLED — an agency sees only ITS OWN tier (owner decision, 6 Aug 2026)
+
+Owner asked *"agency poster page and manage pr page where is the others outlet tier ?"* after the
+PR phone started showing one badge per agency (Alice: Atlas · TIER II, Starline · TIER I).
+
+**Decision: each agency's tier stays private. No code change — this is already the behaviour.**
+`pr.repository.ts:429` scopes the list to `agency_pr.agencyId = <acting agency>`, so every PR row
+carries that agency's own grading and no one else's. The asymmetry is deliberate:
+
+- **The PR sees every tier** — they are all gradings *of her*, so she is entitled to them.
+- **An agency sees only its own** — `agency_pr.tier` is that agency's competitive judgement of a
+  freelancer. Publishing it to a rival leaks their rate card and poaching value.
+
+⚠️ Do **not** "sync" tier to one value across agencies to make screens match. Two agencies grading
+the same PR differently is two true facts. See §10, 6 Aug.
+
+#### ▶ RESOLVED — the "NOT MINE" Post Job picker was a concurrent session's IN-FLIGHT work (5 Aug 2026)
+
+This entry used to read *"uncommitted in the tree, not mine"* and asked its owner to finish it. It was
+being written **as that entry was authored** — same worktree, same afternoon. It is now complete and
+live-verified; see §10 (h).
+
+The caution it recorded still stands and is the reason to keep this entry: ⚠️ **two writers were in
+this worktree at once on 5 Aug**, and `git status` changed underneath a staging step. What the entry
+got *wrong* is worth more than what it got right — it read a half-written diff and inferred a finished
+intent from it, then filed a to-do against a phantom owner. **A file that appears mid-session is not
+abandoned work; it may simply be work in progress.** Check for a live writer before filing, reverting,
+or "finishing" someone else's diff.
+
+- [x] Landed: `use-outlet-pr-pool.ts` (new) · `post-job-fields.tsx` · `routes/outlet/bookings.tsx`.
+  `languagesForPrIds` is deleted and its only two callers were updated in the same change.
+
+#### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
+
+#### ▶ ~~UNCOMMITTED WORK IN THE TREE~~ — ✅ CLOSED 4 Aug 2026 (`57bd165`)
+
+> Was: receipt editor + `0083`/`0084` readers sitting untracked while the DB already had the columns.
+> **Landed** as `feat(agency): correct a receipt under Approve, and inside the dispute queue`.
+> Checklist that used to live here (untracked editor files, DisputeQueuePanel blocked on them,
+> "doc rows without code") is **done**. Remaining product gaps are in RECEIPT EDITOR SCOPE verify +
+> DAY/RECEIPT AGREEMENT AUDIT below — not "commit the tree".
+
+#### 🟢 ROWS ON THE SHARED DB — resolved 2 Aug (§8 X50, X54)
+
+**ONE approved overtime decision remains, and it is the one that was asked for:**
+`f5a1f227-a1ca-449d-8d02-10bddc05a1c9`, shift 2026-07-23, 60 min, **RM 175.00** on **PV-000002**
+(700.00 → 875.00). Keep it — it is the live proof that overtime becomes money.
+
+✅ **The surplus second approval is CLEARED** (`9d897070…`, RM 150.00). **PV-000003 went
+1353.30 / 4 lines → 1203.30 / 3 lines**, exactly RM 150.00 lighter, and `audit-live-vouchers.ts`
+still reports **3/3 reconcile**.
+
+⚠️ **DO NOT use raw SQL for this — the two-statement `DELETE` + `UPDATE` previously recorded here
+was INCOMPLETE and would have corrupted the voucher.** A voucher's `subtotal`/`net` are recomputed
+when a line is *added*, so deleting the row behind their backs leaves **a voucher whose stated total
+no longer matches its own lines** — PV-000003 would have sat at 1353.30 with 1203.30 of lines under
+it. That is the exact fault class this audit exists to catch, so the cleanup would have created one.
+
+**Use the script, which goes through the repository's own `deleteLine()` and therefore calls
+`recomputeTotals` in the same transaction:**
+
+```bash
+npx tsx --tsconfig tsconfig.json src/scripts/fire-overtime-approval.ts --clear=<assignment-id> --dry-run
+```
+
+Drop `--dry-run` to apply. Then confirm with `--report` (read-only inventory of every overtime
+decision) and `audit-live-vouchers.ts`. Both are safe to re-run at any time.
+
 ## 10. Changelog (what changed / what's done — append newest at top)
+| 2026-10-01 (ii) | **A FAILED PARTNERSHIP READ NO LONGER READS AS "NO PARTNERSHIP".** Owner (screenshot of the item found earlier today): *"fix these first, then we will merge with main branch"*. §8 G46: `listApprovedAgencyIdsForOutlet` and its mirror `listApprovedOutletIdsForAgency` throw on a failed read instead of answering `[]`, so a blip answers 500 rather than "link an agency in Settings first" (post, move), "not linked to this outlet" (staffing, special services, the venue-route guard) or an empty PR list; Post Job's picker says "Could not load your PRs — refresh the page to try again." (EN/中文). **The G45 code review came back:** approve, 0 critical / high / medium; its 3 LOWs fixed (the move's anchor pinned by a test; `PUT /shift/:id` compares the stored id, not the URL's — capitals missed the shift's agencies and made a re-timed shift clash with its own PR; a no-op de-dup removed) and the move's sentence reworded to "Only some of this shift's agencies…" so it stays true when the edit names a new anchor. **Live, read-only:** 8 venues / 5 agencies — 12 approved links read both ways, agreeing. **Checks:** backend 126 files / 1,799, tsc 0 · web 109 / 1,292, tsc 0, biome lint clean on the touched files (the format check fails on the CRLF those files already had in the last commit — not new), `check:type` no new · mobile 37 suites / 560 with `PhoneSheet`'s animation test failing once under load and passing 23/23 alone, as before; `tsc -p tsconfig.app.json` 0. No DB write. |
+| 2026-10-01 | **THE SHIFT RACE'S LAST TWO LOOSE ENDS CLOSED.** Owner (screenshot of the two items left from 30 Sep): *"continue with this first"*. §8 G45: (1) the write guard now reads the venue's PLAN again through its own transaction after the locks (it used the plan the check had read before them, so a plan switched in between was enforced at its old size); `resolveActivePlanLimit` takes an optional client; once per venue per write; a failed plan read at the check no longer waves a post past the cap. (2) An admin's move to a venue that approves only SOME of the shift's agencies says "Only some…" instead of "None of…"; agency ids compared lower-cased. **Live proof without a write:** a temporary read-only probe (READ ONLY transactions, a made-up lock id, counts only; deleted after one run) — 3/3 PASS: 8/8 venues' plans equal through the transaction and the pool, the plan rule's answer equal 8/8, a failed plan read inside a transaction aborts it (25P02). **Mutation check:** 6 deliberate breakages, each caught — after one vacuous test (an all-digit id that capitals cannot change) was fixed. **Found, not fixed (§9):** a failed read of a venue's approved agencies reads as "none" — a wrong 400 "link an agency in Settings first" on a post or move, and an empty PR list. **Checks:** backend 124 files / 1,784, tsc 0. Web and app untouched. No DB write. Memory synced. Nothing committed. |
+| 2026-09-30 (v) | **THE SHIFT RACE'S LEFTOVERS FINISHED AND PROVEN ON THE LIVE DATABASE.** Owner (screenshot of the three leftovers): *"finish these up"*. One agent (resumed twice) built §8 G44: per-shift and per-PR locks in one fixed order (venue → shift → PR) on every lane that seats or re-times a PR, the double-booking re-check under them, a swap's missing overlap rule (found on the way; existing sentences only), and an admin's venue move checked against the target's rules. **Live proof without a write:** a temporary read-only probe (READ ONLY transactions, made-up lock ids, pass/fail and counts only; deleted after one run) — 9/9 PASS on the shared Postgres. **Checks (lead's own run):** backend 123 files / 1,774, tsc 0. No DB write. Nothing committed. |
+| 2026-09-30 (iv) | **THE CODE-ONLY LEFTOVERS CLOSED.** Owner: *"anything else pending or not done?"* (answered with the list), then *"close the codes you can do without asking me first"*. **Closed** (§8 G42–G43): `registerUser`'s lookups fail CLOSED (a failed read → 500 creating nothing; a value on file twice → taken; `findByNormalizedIdNo` throws and no longer logs the ID number); every per-host rate limit counts IPv6 by /64; the app sends a PR whose post-sign-up sign-in failed straight to sign-in with "Your account is ready" (EN/简/繁) — and the typecheck caught the old "Back to sign in" link handing its tap event to that notice; the shift write race closed for single post, batch AND edit (a per-venue advisory lock first in the write's transaction, the clash and plan rules re-run through it; one agent, 29 tests, six mutations caught). **Not done, on purpose:** retiring the legacy resets — nothing shows whether pre-17-Sep app builds are still in use. **Checks:** backend 119 files / 1,716, tsc 0 · mobile 37 suites / 560, `tsc -p tsconfig.app.json` 0. No DB write. Nothing committed. |
+| 2026-09-30 (iii) | **DECISION #3 BUILT — MIGRATION 0170 APPLIED.** Owner: *"what is the migration for?"* (answered: the database has to remember WHEN the last wrong password was typed, so old ones can stop counting — one empty column, nothing else changed), then *"alright go ahead tehn"*. Order check read-only first (0 pending, next `when` ≥ 1792799004000); `0170_user_last_failed_login_at.sql` + journal entry; `pnpm migrate:deploy` from the ROOT (drizzle, then the ensure-only role / RBAC / admin seeders — nothing new granted); the column confirmed in `information_schema` and the ledger (175) BEFORE the model changed; then a temporary read-only probe ran the model's full user SELECT against the live table (18 columns — deleted after one run); `/health` and `/health/db` 200 on the reloaded backend. Code (§8 G41): the decaying count in `recordFailedLoginAttempt`, `FAILED_LOGIN_MEMORY_MINUTES` shared with the no-account counter (7 days → 1 day). **Checks:** backend 117 files / 1,671, tsc 0. **No other DB write.** Next migration needs `when` ≥ 1792799005000. Nothing committed. |
+| 2026-09-30 (ii) | **THE THREE SIGN-UP DECISIONS TAKEN; #2 BUILT, #3 BLOCKED ON ITS MIGRATION; REFUND + POST JOB FOLLOW-UPS CLOSED; WEB SIGN-UP UNBROKEN.** Owner: *"how would it block the sign-up? … for number 2 & 3 give me the options"* (answered: today one code goes by WhatsApp AND email; phone-only would leave WhatsApp the only road until SMS is signed), then *"lets go with your pick for number 2 and 3 but for number 1 just leave it"*, then *"what is the refund for?"* (subscription money paid on a voided bill or paid twice — a safety net; no payment gateway is registered yet, 0 cases). **#1 kept.** **#2 built** (§8 G39): `POST /auth/signup-email-code` + the code spent by `/auth/register` (public outlet / agency) and `/auth/register-member` before any lookup; the PR phone receipt now spent before the lookups; web "Verify your email" box, app back to the code step after a 409. **#3 option (c) chosen but BLOCKED:** creating migration `0170` (`user.last_failed_login_at`) was refused by the permission system — not retried, not routed around; it waits for the owner's explicit words (§9 top). **Security review of the sign-up code:** 0 critical / 0 high; FIXED — a code could be guessed more than 5 times by sending tries together (now counted BEFORE compared); one PR receipt could run N sign-ups at once (now spent before the lookups); the mailer keyed on the literal address (now per mailbox, + a 200/h ceiling); a resend voided the owner's live code; the IC-vs-gender 400 came after the account was created; `emailCode` unredacted in audit rows. **Refund follow-ups** (§8 G33): Mark refunded (admin, guarded UPDATE, EN/中文 dialog), voided-bill money stored `pending`, marker final vs redelivery, PAID TWICE new id flagged; review approve — 2 MEDIUM + 4 LOW fixed (`refund-due.repository.ts` split, 838 → 629 lines). **Post Job follow-ups** (§8 G35): dock double-post guard, per-venue reads once per batch, `shift.controller.ts` 1,368 → 709 + 3 files, web `createShift` deleted; a resent batch cannot double-post a TIMED shift (clash rule), only an untimed one (§9). **Found and fixed on the way** (§8 G40): the web sign-up refused EVERY real venue / agency since 9 Sep — `/^d{12}$/` (letter d's) in `register-schemas.ts`; the same typo zeroed the outlet calendar strip since 20 Aug. **Checks:** backend 116 files / 1,667, tsc 0 · web 108 / 1,287, tsc 0, biome clean, `check:type` no new · mobile 36 suites / 558 (the `PhoneSheet` animation test flakes only while other suites run — alone 23/23), `tsc -p tsconfig.app.json` 0. **Not live:** every code send mails a real inbox and every sign-up writes. Memory synced. Nothing committed. |
+| 2026-09-30 | **SECTION 4 FINISHED, THE GENERAL SIGN-IN / SIGN-UP ANSWERS BUILT, AND A SECURITY REVIEW ACTED ON.** Owner: *"finish up 4, then for 1 continue with the general sign-up/sign-in messages"* (the explicit go-ahead the 29 Sep permission refusal on `auth.controller.ts` needed), then *"did you change the format or anything about the sign-up/sign-in form?"* — no: only the words shown when the server refuses, and the PR app's step-1 number check is gone. **Five agents + lead** (§8 G31–G38): WhatsApp 10 s / Brevo 5-10-10-20 s timeouts; a red "needs a refund" card on admin Plan Payment for money taken on a voided or already-paid bill (`/subscription-payment/refunds-due`, the writer's own prefixes); the web bell keeps the credit sentence; `POST /shift/batch` makes Post Job all-or-nothing (shared `checkShiftPost`, intra-batch clash + plan cap, one transaction, bells after commit); `admin-request.controller.ts` 1,362 lines → six files ≤424; "−RM 4.50" everywhere (web, app, admin, both voucher exports — the backend PDF prints "–RM", no U+2212 in its font) and the PR app's claim list names the special night; agency History's take-home from ONE `history-extras` read (live read-only: RM 15,108.58 both ways, 0 differences, ~0.2 s vs ~2.5 s). **Lead — general answers:** `account-answers.ts`; login answers unknown / password-less / wrong password alike (dummy bcrypt, 500 ms floor, the same 5-try lock for identifiers with no account in `unknown-login-lockout.ts`), inactive + suspended only after the right password; register / register-member / register-check never name a field to an unproven caller; a taken phone's sign-up code goes to the phone alone and only a phone-alone receipt may be told the phone is taken; web + app copy EN/中文/繁. **Independent security review** (0 critical, sign-in sound, sign-up not): FIXED — lookup-free checks (plan, account type, organisation) moved before the lookups (a deliberately invalid request read 409-vs-400); the legacy phone reset's verify told accounts apart by "Invalid code" vs "No active code" → in-memory stand-ins run a real row's arithmetic under a 500 ms floor; the emailed reset link now answers before its token and mail; `0060…` was a different line from `+60…` at lookup while its code reached the same handset → one canonical form in `phoneLoginCandidates`, the lockout keys and the OTP budgets (read-only probe: 1 stored `00…` phone, 0 lines on two accounts); a failed read at sign-in is a 500, never a strike; lock minutes clamped to 15; the failed-attempt write taken off the answer's path. THREE OWNER DECISIONS left (§9 top): the sign-up code's email leg (an inbox side channel), proof before an organisation / member account exists, a silent vs visible lockout. **Code review of batch + refunds:** approve; its MEDIUMs (no "Mark refunded"; the phone Post dock not disabled while posting) sent back to their agents. **§9 tidy:** 40 entries already headed closed moved word for word into a record block at the end of §9 (0 lines lost); six "(was) OPEN" entries stay — nothing records their fix. **Not live:** every sign-in / sign-up / post is a write on the shared DB. **Tests:** backend 113 files / 1,586; web + mobile green (§8). The BuildSteps workbook is not on this machine (a stale 6 Aug copy only), so it was not regenerated. Nothing committed. |
+| 2026-09-29 (v) | **THE OWNER'S SEVEN DECISIONS BUILT, THE ITEM-5 CODE DONE, AND A SECOND REVIEW ROUND.** Owner: *"do the code items in 5 next, for the ones in the image give me options to choose from"*; choices (two option screens): event prices drive money · FULL-WEEK switch difference · KPI weights to a private setting · Log Sales counts services · general sign-up + sign-in messages · Add PR keeps the mobile required · add Void. **Built** (§8 G24–G30): `resolveDrinkMenusForShifts` (one resolver per shift → PR `/mine` `drinkMenu` + `drinkMenuSource`, voucher `catalogueForReceipt`; the app's card says tonight's amounts use these); migration **0169** (`void` added to `subscription_invoice_status`, applied by Claude on the owner's "Add Void", verified in `pg_enum`, ledger 174) + admin void route/sheet, every owed reader via `isInvoiceOwed`, the clean-up voids instead of deleting; full-week switch (`switchDifference`); re-joined lanes never bill their gap (`spanHoldsPeriod`/`lanePeriodShare`); New-bill notice after credits; `KPI_WEIGHTS` env (no weight in code/tests/docs; set in this machine's `.env`); `POST /shift-sale` counts services (omitted = kept); Log Sales in the Calendar sheet; Close shift/Withdraw confirm with the server's sentence (`SHIFT_SEALED_MESSAGE`, `outletWriteSuccessText`); History per-PR take-home + penalty lines; roster Drinks/Tips + home floor from real `shift_sale`; outlet History special type; bell copy for all 20 kinds; 34 outlet refusal + join-decision sentences EN/中文; OTP resets answer before sending + 2.5 s sign-up floor; manual job scripts under the lock; custom plan change through approve's path; PR app swap/removed-booking/PV-not-found/web-sheet a11y. **Blocked, not retried:** decision (e) — the edit to `auth.controller.ts` was refused by the permission system ("Modify Shared Resources"); needs the owner's explicit go-ahead. **Also blocked and then done by the lead:** the PR-app agent refused the relayed "Use event prices" as possible instruction poisoning (it came by agent message); the owner had chosen it directly in this session, so the lead built it. **Live, read-only:** Manage PR KPI 0/78/17/81 from the private setting; admin payment sheet offers Void beside Mark paid (not pressed); the 29 Sep Calendar sheet shows LOG SALES · Vicky · RM 1,500.00 · Save (not pressed); History RM 15,108.58 = the three cards. **Reviews (round 2):** code — APPROVE; MEDIUM fixed: with `drinkMenu` now the event list the app's "usually RM Y" comparison could never fire — removed (type, card, Scan, `eventPriceVenue` in 3 languages, test), stale comments fixed; LOW fixed: "Shift updated" translated. Security — 0 critical; HIGH fixed: two overlapping `generateMissing` runs (nightly job + admin Refresh) could spend one downgrade credit twice — `applyOpenCredits` now runs one transaction per invoice with `FOR UPDATE OF c` and a status-guarded debit; MEDIUM fixed: the unwired `unknown-login-lockout.ts` deleted; LOW noted: a payment landing on a void bill only logs "refund due". **Checks:** `nx run-many -t lint test typecheck` (3 projects) green AFTER the review fixes too — backend 98 files / 1,425 · web 93 / 1,091 · mobile 33 suites / 523; mobile `tsc -p tsconfig.app.json` 0; `check:type`, `rbac:check`, `rbac:seed-check` clean. No DB writes except the owner-approved migration. Nothing committed. |
+| 2026-09-29 (iv) | **INDEPENDENT REVIEWS OF THE AFTERNOON'S 151 FILES — FIXED WHAT WAS OURS, LISTED WHAT WAS NOT.** Owner: *"continue with the reviews then show me what's left"*. **Security review:** 0 critical; 8 of 11 areas clean (rating gate, KPI exposure — formula never leaves `kpi-score.ts`, outlet callers get no key at all; join decisions — a real compare-and-swap; shift event fields — agencies cannot write them, bounds + parameterised writes; billing pro-rata — the unique period index + the `billed` set, and `note` is not client-writable; Log Sales — the server re-derives outlet, agency and total; PR-app deep links — ids are only trusted inside the caller's own `/mine` data). **Fixed:** a HUNG scheduled job held its advisory lock for the life of the process (the shared server's idle-in-transaction timeout is 0) — runs are now abandoned at `JOB_LOCK_MAX_RUN_MS` = 30 min, the transaction rolls back and the lock frees (`withinDeadline`, 2 tests); the clean-up script's `--apply` now also needs the house acknowledgement flag `--i-know-this-is-a-test-db` (`applyRefusal`, 5 tests — the refusal runs before `@/db` is imported, confirmed by reading, never by trying `--apply`); a new stub PR needs a REACHABLE mobile (`signInPhoneDigits` — "x" used to pass); `POST /shift-sale` caps each amount, the units and the drinks+tips total at the columns' limits (400, not a raw 500; `shift-sale.schema.test.ts` 5). **Listed, pre-existing (§9):** HIGH `POST /auth/register` (outlet/agency) still answers "already registered" per field — an account oracle; MEDIUM the `forgot_password` timing gap (unknown = one lookup, real = code row + fan-out); MEDIUM the withheld sign-up address skips the e-mail leg (timing, statistical). **Code review: APPROVE**, one MEDIUM fixed — `resolvePvPrName`'s IC fallback still returned the WORKING name while the FK branch returns the legal one (a voucher with no `prId` would re-open the double count); both now return `icName` first (+1 test). **Checks after the fixes:** `nx run-many -t lint test typecheck` backend 90 files / 1,270 tests, web 85 / 865 — green; `check:type` no new breach; mobile unchanged since its green run (461). Nothing committed. |
+| 2026-09-29 (iii) | **LIVE PASS ON EVERY ROLE, THE OWNER'S FOUR DECISIONS, BOTH MIGRATIONS APPLIED, AND THE REST OF THE LIST.** Owner: *"do the live checks, then continue with the rest except the receipt one for that one put it on hold till everything else is done then i will make a decision again"*, then *"also handle these migrations"*. **Live, read-only (signed in as agency owner / admin / outlet owner):** agency Payroll — search box, voucher numbers, signer "Dato' Lim Wei Khoon · Owner · 14 Sep 2026 · 11:30", plan from the live row; **FOUND + FIXED: every voucher printed the IC COPY, not the profile's** — the page looked the PR up in the zustand store's `agencyPRs`, which a real session never fills, so yesterday's `rosterPrForVoucher` fix never matched live (Vicky's 8 Sep IC correction showed on PV-000011 only). New `useVoucherRoster` (the server roster Manage PR reads) now feeds the cards, the detail, the filter and the search (search matches the PRINTED IC); detail payee code VICK-8820. **FOUND + FIXED: `resolvePvPrName` matched the IC copy first and returned the roster's working name** — PV-000011 read "Vicky", the rest "(Vicky) Victoria Tan Mei Lin", and with a real roster the week's PR count would have counted her twice; it now resolves by the voucher's FK first and returns the LEGAL name (all read "(Vicky) Victoria Tan Mei Lin", 3 PRs). A not-yet-sent card now says "Raised {date}" (the date is the day the draft was raised — `issued_date` is the voucher date by the 3 Sep rule), not "Issued". Manage Outlet cards = each venue's saved Tier I (read-only query: six at 500 / 10% / 15%, Testing 2 at 600 / 11% / 10%). Roster planning 13–19 Sep "RM 16.67" = the stored `pay_amount`. Manage PR: KPI numbers (0 / 78 / 17 / 81, "—" with no history), no formula text or tooltip on the page, race filter "Chinese" once. Admin: no "Open prototype", voucher list names the agency beside each number (two PV-000001s) with both sign times, today's 11:52 login attributed ("Dato' Lim Wei Khoon · Owner", not "unknown"), PR detail DOB "12 Mar 1996" (no "08:00 am"), agencies Atlas + Why We Met. Outlet: "Billed monthly · RM 7,199.00 (RM 6,999.00 plan + RM 200.00 POS)" = each period's invoice; Approvals empty text per tab; the 29 Sep shift sheet names "Why We Met", prices drinks RM 150–200 and services RM 50–1,000 on two lines, Sales 1.5k = the three scans. Noted, not ours: PV-000002 (Why We Met, 11:46 today) was raised by the PR's own scans; the audit log shows a second user ("David", 192.168.0.165) writing to the shared DB. **Decisions:** (1) resend re-notifies — built earlier today; (3) first partial week PRO-RATED — `subscription-period.ts` `periodShareFor` + new `pro-rata.ts` (`price × days held ÷ days`, integer sen, rounded once), dates stay Sun–Sat (the ledger's dedupe key), the fact rides in the existing `subscription_invoice.note` ("Pro-rated: 2 of 7 days from …"), no invoice on the books is re-priced; outlet monthly periods are anchored on the start day and unaffected; a plan switch inside a pro-rated week moves by the two plans' shares (beyond the brief — owner to confirm); shown on the invoice row, receipt and admin panel (EN + 中文); (4) numeric KPI — `kpi-score.ts` (the ONLY place the weights live), `pr-kpi.ts` one query per `GET /pr` list, agency-scoped, admin across agencies, outlets never computed and `kpiScore` on the outlet redaction list; the agency grade is relabelled "Agency grade"; (2) receipts after check-out — ON HOLD by the owner. **Migrations (owner OK'd):** `0167_shift_special_type_and_event_prices` (`shift.special_event_type` varchar(30), `shift.custom_special_event_name` varchar(120), new `shift_drink_menu` — the per-shift twin of `outlet_drink_menu` as `shift_pay_tier` is of `outlet_tier_rate`, because the workspace save REPLACES `outlet_drink_menu`) and `0168_notification_user_created_idx` (`notification(user_id, created_at DESC)` — the table had only its PK); journal `when` 1792799001000 / …2000 above the ledger; `pnpm migrate:deploy` from the root; verified in `information_schema` / `pg_indexes` / the ledger (173 rows, max 1792799002000). **Add PR requires a mobile number** (owner default): `POST /pr` refuses a NEW stub with no usable phone (`PR_MOBILE_REQUIRED`) — the only way a stub is claimed is the PR's sign-up proving that number; adding an existing account is unchanged; both web forms (Roster → Add PR, Approvals → Invite) require it with a hint; the sentence is translated. Tests: web pv-roster-pr 14 (2 new), pr-write-refusal 10; backend pr-contact-guard 28 (2 new). **Post Job (0167 wired):** `POST`/`PUT /shift` accept `specialEventType` / `customSpecialEventName` / `eventDrinkMenu` (≤100 lines, category drink|service|tip — every Workspace list carries the seeded Tips row), normalised by one pure `normaliseSpecialEvent` (non-special → nulls and no prices; the name only for 'other'; omitted keeps, [] clears, like `payTiers`), written in the pay tiers' transaction (`replaceEventDrinkMenu`), returned on list + get (one query for the list's special shifts); the web prefers the shift's own type over the card's, the sheet prices a special night as 'Event-specific', the agency's Manage Outlet shows the sub-type too; the bookings pill says 'Special' with no sub-type. **Backend follow-ups (all 7 re-derived):** a PUT rewrite now carries `component` (with `receiptId`/`proofPhotos`) by unique ref (`withCarriedFacts`) — a wage line no longer came back as 'Others' RM 0.00 and re-sealable; join decisions (`join-decision.ts`): only pending / leave_pending rows are decided, a repeat answers 200 'Already … Nothing changed.' with no write or notice, the opposite answers 409, `setApproveStatus(…, { from })` makes a double click race-safe (the lead was worse than filed: a second click on a DEPARTURE re-rostered a leaver or rejected a member); every scheduled job runs under `pg_try_advisory_xact_lock` (`scheduler/job-lock.ts`, held ≥45 s so a second backend's tick in the same minute skips; jobs are daily/weekly + the 15-min no-show sweep); plan changes approvable from 'contacted' (`claimAwaitingAnswer`, `claimPending` deleted); the join bridge no longer writes the username as the legal name; `POST /rating` = `rating:create` (live read: same four outlet roles as `booking:create`, nobody's access changed); `/auth/otp/send` — the e-mail is already sent in parallel (lead partly refuted), the real bug was a 503 exactly where an address was withheld (re-opening enumeration): resets always get the neutral 200, a withheld sign-up address the same 200 as a free one. **PR app:** every bare `Modal` → `PhoneSheet` (CheckInScreen ×3, HistDateTimeFilter ×2, JobPostingsPanel, CellEvidenceSheet, ImageLightbox, SecurityScreen, ForgotPasswordModal, sign-up pickers ×3, plus PaymentHistoryPanel, PvDetailScreen ×2, PaymentScreen ×2, sign-up steps 4/5), nested sheets stack, native props pinned, a source scan fails on any new bare Modal; `notification-targets.ts` routes every server kind (voucher → detail or This week; new shift / released / MC → that day's sheet; overtime → week or voucher; swap → To-do; membership → Profile), agent-verified live with non-GET requests blocked. **Web follow-ups:** Director's outlet Today shows the panel on `viewLiveDashboard` (Rate still needs `ratePrs`) — `outlet-today-access.ts`; bell copy for 11 kinds + every member-change sentence in EN/中文 (`notification-copy.ts`, `member-change-copy.ts`); outlet History 'in wages'; the Est. payout sheet lists the slot's bookings with their server wages; agency History '{take-home} take-home · {wages} in wages' (wages + approved OT + commission on approved/verified receipts − voucher deductions); roster 'N PRs · M shifts'; Log Sales per PR on Today (`sales:create`, server sentence, rows carrying services read-only); the History shifts fetch pages past 100. **Clean-up script** (owner runs it — §9): dry run only, before/after snapshots identical. **Live re-checks after the agents:** agency History 'RM 15,128.58 take-home · RM 10,207.78 in wages' — wages = the DB (26 completed bookings keyed on the BOOKING's agency; a first query keyed on the shift's agency said 21 / RM 9,702.22 — the wrong instrument, 5 bookings sit on another agency's shift); outlet History 'RM 8,066.11 in wages' = DB 23 completed; roster 6–12 Sep '2 PRs · 4 shifts', 23–29 Aug '1 · 3 shifts'; the outlet Calendar loads all 8 shifts through the new columns. **Checks:** `pnpm nx run-many -t lint test typecheck` (backend, web, mobile) green — backend 89 files / 1,257 tests, web 85 / 864, mobile 30 suites / 461; mobile `tsc -p tsconfig.app.json` 0; `check:type` no new breach; `rbac:check` + `rbac:seed-check` match. No agent wrote to the database; the only DB change is the owner-approved migration. Nothing committed. |
+| 2026-09-29 | **THE AUDIT'S BUGS BELOW "FIX FIRST" — FIXED BY FIVE PARALLEL AGENTS, EVERY LEAD RE-DERIVED FIRST.** Owner: *"i have relogged in to 1 of every role, now continue with the bugs found. For this one don't mind it as it was just our testing results"* (the unfiled-wage / RM 0.00 findings → closed, §9). **A — vouchers:** the PR is notified on send (`pending_review\|disputed → sent`) and on paid (`signed → paid`) through one builder shared with the Sunday job and payout runs, a retry stays silent; send stamps issued + pay-by only when null; agency PV list gets text search, the voucher number in the header, real dates, "name · role · date" signer, the plan from the live `member_subscription` row; the receipt editor says the commission is the LINE total; admin voucher list shows the agency beside each number (two PV-000001s) and both sign times; PR app shows BOTH signatures, the PR as payee and the agency as payer, no "issued" on a pending card, "To sign" = signable only, signed/paid inspect-only; the agency line edit obeys the outlet list and the shift date (`payment-voucher-line-edit.ts`); the Sunday job no longer verifies receipts on vouchers it holds. **B — agency:** outlet cards read the venue's saved Tier I (no demo RM 500 · 10%, no invented tip range); labour cost from `shift_assignment.pay_amount` (was hours × the DAILY wage = RM 500/h, ×1.08, RM 350 filler); excused rows pay 0; KPI shows the agency's grade; member decisions toast the server's own sentence (new `member-change-message.ts`) and reactivation opens on the role held before; cut-loss pane busy-locks, shows local time, drops the RM 0 chip; Add PR copy no longer promises an invite (none exists); the IC comes from the profile via `pr_id`, not the voucher's snapshot; History says "in wages"; race filter case-blind. **C — outlet + shift:** real profile card; the shift sheet names the INVITED agencies (`agencyIds`, venue/admin only) and prices drinks and services as two lines; "Billed monthly" includes POS; empty-tab text per filter; one paged fetch per shared query key (100-row cap gone), overnight clash window; rating really posts (`useSubmitOutletRating`); real sales tiles from `shift_sale`; `PUT /shift` keeps/replaces named PRs and refuses `agencyIds`; a non-window slot is refused. **D — admin + security:** "Open prototype" removed; logins attributed (`req.user` set after login/refresh); PR detail counts current memberships only; date-only fields via `formatDay`; `PUT /pr/:id` needs its agency, `POST /pr` only fills blanks, penalty rules per approved agency; malformed ids → 404 before any handler (`guard-id-params.ts`, one mount); `/auth/otp/send` answers alike for known and unknown emails/numbers; `guards.ts` signs out only on a session refusal; admin role label; tier job judges live plan rows only; admin-request answers claimed once (`claimAwaitingAnswer`); `POST /shift-sale` gate confirmed right. **E — PR app + notifications:** badge = server unread count ("99+" cap) + `POST /notification/read-all`; bell + language sheets inside the phone frame; cancellation rules per agency; History empty text; sign-up IC upload retries + Profile re-upload; stub-claim toast honest; the app's 401 rule mirrors the web; notification kinds complete with icons and item links; a repeat within 2 minutes is not delivered twice (`repeat-delivery.ts`). **Lead:** the geofence search (row below); two mobile suites got the repo's 30 s per-suite budget after timing out only under a parallel run. **Checks (parallel `nx run-many -t test`):** backend 1,055 · web 733 · mobile 393 / 26 suites — all pass; web + backend typecheck, mobile `tsc -p tsconfig.app.json`, `check:type`, `rbac:check`, `rbac:seed-check` all clean. **Live (read-only):** PR app verified (§8 G5, G9); the agency and admin tabs were signed out mid-slice, so their checks wait for a sign-in (§9). No DB writes by any agent. Nothing committed. |
+| 2026-09-29 | **GEOFENCE ADDRESS SEARCH — WHY THE TYPED ADDRESS WAS LOST, AND GOOGLE'S OPTIONS + "USE THE ADDRESS YOU ENTERED".** Owner: *"help me check on why this one is not using the specific address i have filled in"*, then *"make it so if the user searches a location that exist in google it will show them the options? As well as a choice to use the specific location that they entered"*. **Cause, read-only:** Google's Geocoding API answers UAB Emhub's full address with the EmHub complex itself (an establishment, `GEOMETRIC_CENTER`, 1,390 m from the suburb centre, 0 m from the saved pin — so the PIN was right) but addresses it only "Kota Damansara, 47810 Petaling Jaya" and flags `partial_match`; after a TYPED search the card defaulted "also update the venue address" ON, so the 10:54 save replaced `address_line_1` "Kompleks Perindustrian EmHub, Persiaran Surian" / line 2 "Seksyen 3, Taman Sains Selangor, Kota Damansara" with the suburb (audit rows; the old city was wrongly "Johor Bahru"). The geocoder also returns ONE result ("1 Utama", "Sunway Pyramid" → 1 each), and **Places API (New) is BLOCKED for `GOOGLE_MAPS_API_KEY`** (403 PERMISSION_DENIED on searchText + autocomplete). **Fix:** backend `geocode.ts` passes `partialMatch` / `hasStreet` (`candidateFromResult`), adds `searchPlaces` (Places API (New) Text Search, up to 5 named places, `precision: 'PLACE'`, `name`) and `searchLocations` (Places first → geocoder fallback; a blocked key logs one warning) — used ONLY by the typed search `GET /outlet/geocode`; the address-edit re-geocode and "Find from venue address" keep the geocoder. Web: a match that loses detail (`geocodeLosesDetail`) no longer defaults to rewriting the address, and says so ("Google matched only part…", "…the venue keeps its own address — only the pin moves"); options show their NAME; new **"Use the address you entered"** card saves the operator's own words (`typedAddressSync`: street lines typed, a typed postcode/city wins, state/country from the match) with the pin on the first match. EN + 中文. **Verified live, read-only** (UAB Emhub owner, Settings → Attendance, search only — no Use button pressed): "1 Utama" → Google's Rooftop match + "Use this location and address" + the typed card; the EmHub address → Block centre + both notes + "Use this location" + the typed card offering the full address. Tests: backend geocode 15 (8 new), web geo-fence-address 12 (6 new); web + backend typecheck green; `check:type` no new breach. **Owner:** enable Places API (New) and add it to the key's API restrictions to get the multi-option list; press "Use my address" on the EmHub search to restore the venue's full address. **Then, owner: *"why is it working for 1 utama but not working for emhub? emhub clearly has its own google result as well though?"*** — it IS the Emhub result: "Emhub", "Emhub Kota Damansara" and the full typed address return the SAME Google place (same place_id, 0 m apart). The difference is Google's own record: 1 Utama carries premise + street number + route and a ROOFTOP point; Emhub's listing carries no street at all (Google Search's own panel reads "Kota Damansara, 47810 Petaling Jaya, Selangor"), so the geocoder can only give its centre point, and it returns no NAME (names need Places API). The amber "Block centre" made a named place look like an area: the backend now flags `isPlace` (types establishment / point_of_interest) and such a centre reads **"Google's pin for this place"**, not a warning (backend geocode tests 16). ⚠️ Correction to a claim made in chat: the "424 m" viewport is Google's default for ANY point (1 Utama's is identical) — it is not Emhub's size. |
 | 2026-09-28 | **THE WRITE CLICK-TESTS — prepared, then refused at the first click; no data changed.** Owner, verbatim: *"continue verifying these"* (the four write tests in §9). Read-only groundwork: the phone app is signed in as Vicky (`93ea08b0` — owns PV-000009/10/4, all dual-signed and unpaid, none in a payout batch); **PV-000007 is the ONLY voucher that can ever show the "PR-signed, agency-unsigned" pad** (sent before the send gate, agency never signed) and it carries **one open claim**; every Atlas venue has a geofence pin (UAB Emhub 999 m); no shifts today; Vicky has no voucher for 27 Sep–3 Oct, so a test check-out would create one. The first write — typing the Override reason on PV-000009 — was **refused by the auto-mode classifier ("Modify Shared Resources")**; the sheet was closed unsaved and a re-read shows PV-000009 untouched (signed by both, `updated_at` 14 Sep). Found on the way: **six RM 0.00 "Daily wages" lines** (PV-000001/5/8/9/10), all `never_present` seals filed by the phone's old path — today's `sealWageLine` skips a zero, so such a shift now leaves no line unless the Sunday run builds the voucher fresh (§9). And the bug the server seal fixes has already cost money: **seven completed shifts with a sealed wage > 0 are on NO voucher — RM 3,335.55** (Vicky/Atlas: five on 5–6 Aug under PV-000006, two on 7 Sep under PV-000009); the fix stops new losses but repairs no past week (§9, 🔴). §9's click-test item rewritten as the owner's step list; the owner then skipped it (*"skip these then what else is not done?"*), and **the rest of the morning audit — every tier below Fix first (≈60 confirmed bugs by role, missing functions, click-tests, owner decisions, data to clean), which had lived only in chat — is now its own §9 section**. Nothing committed. |
 | 2026-09-28 | **FIX FIRST — THE 🔴 LIST FROM THE WHOLE-PROJECT AUDIT, FIXED IN CODE (payments excepted; the repo being public is deliberate).** Owner, verbatim: *"don't mind the public status of the repo as that was set so that i can intentionally for configuration. Fix all the other things found in "Fix FIrst""*. **VOUCHERS** (`payment-voucher-lock.ts`, 21 tests): a signed/paid voucher's figures are **locked** — only status, bankRef and disputeNote pass; the **Override** (signed\|paid → pending_review) needs a reason and **clears BOTH signatures** so the PR re-signs the corrected figures; **recording payment needs the agency's signature too** (PV-000002 and PV-000006 were paid without one — left as history); signed/paid vouchers **cannot be deleted** (re-checked under the row lock); a voucher that left review unsigned may take a **late** finance signature (never over an existing one, never once paid); payout runs list and settle **dual-signed only**; every PUT re-checks the status it judged under the row lock. Web: a SIGNED voucher with no agency signature shows the sign pad before *Mark as paid*; Mark paid / Override toast success only when the server agrees. **WAGES** (`wage-line.ts`): the phone's second call after check-out was the ONLY writer of the wages line — it lost the night's pay on a dropped connection, on a cut-loss release, and on **every check-out after midnight** (dated today against a shift dated yesterday → refused by `assertLinesAgreeWithShifts`). The SERVER now files it at check-out, at a release, and in the Sunday run (`fillMissingWages`, open drafts only) — the shift's own date and week, once, under a row lock (`addLineOnce`), voiding a finance signature it would falsify; `CheckInScreen` just refreshes the week. **CHECK-OUT** refuses (409) while a logged drink/tip has no picture (`checkout-proof.ts`, never stricter than the phone). **NOTICES**: both cut-loss notices and the overtime notice go to ACTIVE members only. **AUDIT LOG**: redaction is case/separator-blind with a suffix rule (…password/…token/…secret, + confirmPassword, otpauthUrl, mfaCode); `_redact-audit-secrets.ts` dry run = **3,283 rows** (3,133 token pairs, 98 password hashes, 22 verification ids, 11 codes, 4 MFA secrets + 4 setup links, 1 plaintext confirmPassword) — **`--apply` was refused to Claude by the permission classifier (shared DB); the owner runs it**. **SESSIONS**: web refreshes once on a session 401 (single-flight `token-refresh.ts`) and resumes on page load; the PR app persists the session (**expo-secure-store — needs a new EAS build**), refreshes on boot and on 401, and shows an offline splash instead of signing out; `/auth/refresh` has its **own** limiter (300/15 min/IP) so tabs can't lock a venue out of login. **DEMOTION**: a member change + role recompute run in ONE transaction (roles = the lanes of active memberships); `requirePermission` no longer falls back to a stale org role; `POST /shift-sale` and `POST /special-service` check the agency lane; the export ticket also needs `payment_voucher:read`; removal/demotion withdraws pending invites (27 account×portal combos: recompute is a no-op on live data). **ACCOUNT SECURITY**: no reset path activates a password-less stub — an invited PR claims it by **signing up with the invited phone** (phone-only OTP receipt); the reset link is never logged in production and mail logs mask recipients; admin *Create* sends no phone and `toWhatsAppDigits` refuses letters (`_clear-fake-admin-phones.ts`: 0 rows on test); `seed-account-details` writes no signature and refuses a non-test DB. **PLANS**: approve claims a PENDING request atomically; ghost organisations, wrong-audience plans, add-ons and retired plans are refused (422/409); close-old restored in one transaction (regression from merge b3b577f3 — dry run: 0 duplicates); a ghost row can be cancelled; **Admin → Business → Current Plan → Cancel subscription**; resolving a Custom renegotiation whose switch is refused now says so and re-opens the request. **FILES**: ID-card, receipt, MC, dispute and PV files leave the API as **1-hour signed links** (live: 29 + 2 + 44 links signed, 0 raw keys; a tampered link 403s); a signed link sent back becomes its key again; `R2_PRIVATE_BUCKET_NAME` + `_move-sensitive-r2-objects.ts` ready for the owner; `/img/users/ic-docs` 404s. **OPS**: `TRUST_PROXY` defaults to one hop in production (+ both env examples); audit IP from `req.ip`; the Dockerfile health check probes the real port; `migrate:deploy` runs `check-migration-order.ts` first — the ledger is stamped to 2026-10-23, so the next migration needs `when ≥ 1792799001000`. **CI** (failing step = lint/test/typecheck): 3 web lint errors fixed; the mobile date tests made timezone-proof. **DEPENDENCIES**: `@aws-sdk/s3-request-presigner` 3.1103.0, `expo-secure-store` ~55.0.18; the web's 14 `latest` specifiers pinned to their LOCKED versions (a resolving install had silently bumped @tanstack/*). Five parallel agents + the lead; nothing committed. |
 | 2026-09-22 | **`pnpm dev:all` DIED ON A FOLDER THAT NO LONGER EXISTS — METRO WATCHES THE WHOLE REPO, NOT `apps/mobile`.** Owner: *"fix this"*, with `[expo] exited with code 7` and `Error: ENOENT ... watch 'C:\…\InnocenZ\.video-tools\node_modules\agent-base\dist\src'`. ⚠️ **The named folder was already gone** (`ls .video-tools` → no such file) and nothing in the repo references it — so the trigger was a stray tool folder deleted DURING Metro's crawl, not a missing dependency. **ROOT CAUSE, read from the resolved config rather than assumed:** `withNxMetro` overrides `projectRoot` to the MONOREPO ROOT (printed: `…\InnocenZ\InnocenZ`, with Nx's own `watchFolders` = apps, docs, node_modules, outputs, packages, patches, tools, **`_to_delete`**), so Metro `fs.watch`es every top-level folder. `FallbackWatcher.#watchdir` calls `fs.watch(dir)` with **no try/catch**, so a directory listed by the crawl and deleted before the watch throws ENOENT out of an async walk and kills `expo start`. Any vanishing directory does this; `.video-tools` was merely the one that vanished. **FIXED** by a second block list in `apps/mobile/metro.config.js` (`rootClutterBlockList`) covering `_to_delete`, `outputs`, `patches` and the tool dot-dirs (`.nx .claude .codex .gemini .agents .opencode .vscode .github .video-tools`). ⚠️ **Each entry ends `(?:[/\\]|$)`, not the `[/\\].*` the existing `coRunBlockList` uses** — verified in `metro-file-map/src/watchers/FallbackWatcher.js`, whose walker calls `walk.filterDir(dir => !posixPathMatchesPattern(ignored, dir))`, so only a pattern matching the directory ITSELF stops the descent; `[/\\].*` hides the contents and still watches the folder. ⚠️ **`node_modules/.pnpm` must never match** — it holds the real packages. **Checked:** the config loads and 12 path cases pass (clutter blocked in both slash forms; `.pnpm`, `node_modules`, `apps/mobile/src`, `apps/mobile/.expo` and `packages/` still visible). Side benefit: a smaller crawl, the same pressure `patches/metro-file-map@0.83.7.patch` already relieves by raising `MAX_WAIT_TIME` 240s → 900s. **NOT YET PROVEN LIVE — see §9.** ⚠️ **My own verification run broke the owner's next attempt:** `npx expo start --port 8082` still bound **8081**, so their `pnpm dev:all` answered `EADDRINUSE :::8081`. Killed; both ports confirmed free. **Never start Metro while the owner may be running it — the PR app's port is 8081 and only 8081.** This commit also carries the 17 Sep artifact pass recorded at row (iv) below. |

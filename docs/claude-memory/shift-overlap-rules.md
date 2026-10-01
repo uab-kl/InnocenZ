@@ -40,6 +40,28 @@ being special-cased with a ±1-day lookback.
 
 Label-only slots ("Late night") carry no parseable window and never clash — deliberate.
 
+## Checks that race need a lock — ONE order (30 Sep 2026)
+
+A check that reads and a write that follows are two moments; two requests landing together both
+passed (two shifts on one clock, a day past the plan, one PR booked twice). Every write that posts,
+edits, moves or SEATS a PR now takes transaction advisory locks FIRST
+(`features/shift/shift-write-guard.ts`), then re-runs its rules through that transaction:
+**venue `shift-post:` → shift `shift-seat:` → PR `pr-booking:`**, each class once, keys lower-cased
+and sorted; asking out of order throws. **How to apply:** a NEW lane that seats a PR, or moves a
+shift in time or place, must take the same locks in the same order and re-check under them — a
+lock taken in another order can deadlock against the existing lanes. Lanes that only take a PR
+OFF a shift (cancel, leave, no-show, check-out) are deliberately unlocked. Proven live, read-only
+(9/9: a second session is refused the same key and granted another venue's). Swap approval had no
+overlap check at all until then.
+
+**Never re-check under the lock with a fact read BEFORE it (1 Oct 2026).** The guard first re-ran
+the plan rule against the plan the check had memoised, so a plan switched between check and lock was
+enforced at its old size — two posts decided on different plans could stack a day past the new cap.
+Any fact that caps a SET of writes (the plan's daily headcount) must be re-read through the
+transaction after the lock (`resolveActivePlanLimit(params, tx)`). A fact about one row that no other
+write's validity depends on (the venue's live status on a post) may stay memoised. No plan-lane lock
+is needed: a plan switch never reads a day's shifts, and the venue lock orders every post.
+
 **Live-verified:** overnight pair refused 400 (naming the other shift + venue), a clear next-day
 window accepted, a second same-day shift accepted, test shift restored.
 
