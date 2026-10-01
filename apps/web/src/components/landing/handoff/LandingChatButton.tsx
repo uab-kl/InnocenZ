@@ -3,12 +3,15 @@ import {
 	MessageCircle,
 	RotateCcw,
 	SendHorizontal,
+	Sparkles,
 	X,
 } from "lucide-react";
 import {
 	type CSSProperties,
 	type FormEvent,
+	Fragment,
 	type PointerEvent,
+	type ReactNode,
 	useCallback,
 	useEffect,
 	useId,
@@ -21,6 +24,7 @@ import {
 	type LandingTranslations,
 	useLandingLocale,
 } from "@/lib/landing-i18n";
+import { askLandingAi } from "./landing-chat-ai";
 import {
 	answerRole,
 	CHAT_FALLBACK,
@@ -32,12 +36,14 @@ import {
 	FOLLOW_UPS,
 	groupSteps,
 	LEAD_INS,
+	MAX_CHIPS,
 	nextChips,
 	placeHeading,
 	ROLE_CHIPS,
 	SMALL_TALK,
 	topicById,
 	understand,
+	type WrittenReply,
 } from "./landing-chat-knowledge";
 
 /*
@@ -54,9 +60,12 @@ import {
  *
  * WHAT IT SAYS: a conversation, not a menu (owner, 1 Oct: "the user can
  * continue ask … and the chatbot will reply", "make other user feel like
- * talking with a real human"). Every answer comes from the hand-written
- * knowledge base in `landing-chat-knowledge.ts`, never a language model, so it
- * can only say what InnocenZ really does — see that file for why. The human
+ * talking with a real human"). Answers come from the hand-written knowledge
+ * base in `landing-chat-knowledge.ts`, so it can only say what InnocenZ really
+ * does — see that file for why. Only a question its keywords cannot match goes
+ * to the AI model (`landing-chat-ai.ts`, owner 1 Oct 2026), and the model is
+ * given nothing but that same knowledge base and told to answer from it alone;
+ * if the AI is unavailable the keyword "not sure" answer shows as before. The human
  * feel is in the DELIVERY: a typing indicator paced to the length of what is
  * coming, an answer split into short bubbles the way a person types, a varied
  * opening, and a closing question offering the next step. It still introduces
@@ -207,7 +216,77 @@ function answerFor(
 			return SMALL_TALK[locale][reply.id];
 		case "fallback":
 			return CHAT_FALLBACK[locale];
+		case "ai":
+			/* Written in the other language before a switch: show the written answer
+			 * in the language now on screen, never a mixed conversation. */
+			if (reply.locale !== locale) return answerFor(reply.backup, locale, c);
+			/* Same layout as a written answer, plus a quiet AI label. WhatsApp only
+			 * when the AI could not answer (it sets `handoff`). */
+			return { ...reply.answer, note: c.aiNote };
 	}
+}
+
+/**
+ * The words a visitor must find on screen, highlighted: `**Review & sign**`
+ * (the AI marks them) and 「审阅并签名」 (中文 names already sit in brackets, in
+ * the written answers too). Built from React elements, never HTML, so nothing
+ * the model writes can inject markup. A stray `**` is dropped.
+ */
+function emphasize(text: string): ReactNode {
+	/* Also “quoted” names: the model sometimes quotes a button instead of
+	 * marking it, and without this the role highlighter below would chop
+	 * “Sign up as Outlet or PR Agency” into three separate highlights. */
+	return text
+		.split(/\*\*(.+?)\*\*|(「[^」]+」)|(“[^”]{1,80}”)/g)
+		.map((part, i) => {
+			if (part === undefined || part === "") return null;
+			/* split() yields [text, bold, bracketed, quoted, text, …]: slots 1-3 of
+			 * each group of four are the captured keywords. */
+			const keyword = i % 4 !== 0;
+			return keyword ? (
+				// biome-ignore lint/suspicious/noArrayIndexKey: a fixed split of one string
+				<strong key={i} style={{ color: "var(--hz-gold)", fontWeight: 600 }}>
+					{part}
+				</strong>
+			) : (
+				// biome-ignore lint/suspicious/noArrayIndexKey: a fixed split of one string
+				<Fragment key={i}>{highlightRoles(part.replaceAll("**", ""))}</Fragment>
+			);
+		});
+}
+
+/**
+ * WHO a sentence is about, bold on a soft gold highlight (owner, 1 Oct 2026:
+ * "pr, agency or outlet important words make bold and highlight it") — so a
+ * reader skimming an answer sees at once whether a step is theirs. Distinct from
+ * the gold button names above: those are things to tap, these are people.
+ * Capital "PR" only, so "pr" inside a word or a sentence never lights up.
+ */
+const ROLE_WORDS =
+	/(\bPR\s+[Aa]genc(?:y|ies)\b|\bPRs?\b|\b[Aa]genc(?:y|ies)\b|\b[Oo]utlets?\b|PR\s*经纪公司|经纪公司|门店|场所)/g;
+
+function highlightRoles(text: string): ReactNode {
+	if (!ROLE_WORDS.test(text)) return text;
+	ROLE_WORDS.lastIndex = 0;
+	return text.split(ROLE_WORDS).map((part, i) =>
+		i % 2 === 1 ? (
+			<strong
+				// biome-ignore lint/suspicious/noArrayIndexKey: a fixed split of one string
+				key={i}
+				style={{
+					color: "var(--hz-ink)",
+					fontWeight: 700,
+					background: "rgba(242, 198, 107, 0.16)",
+					borderRadius: 4,
+					padding: "0 4px",
+				}}
+			>
+				{part}
+			</strong>
+		) : (
+			part
+		),
+	);
 }
 
 function roleLabel(role: ChatRole, c: LandingTranslations["chat"]): string {
@@ -225,6 +304,7 @@ function chipLabel(
 	c: LandingTranslations["chat"],
 ): string {
 	if (chip.kind === "role") return roleLabel(chip.role, c);
+	if (chip.kind === "ask") return chip.text;
 	return topicById(chip.id)?.[locale].chip ?? "";
 }
 
@@ -272,7 +352,6 @@ export function LandingChatButton() {
 	/** Topics already answered, so they are not offered again. */
 	const asked = useRef(new Set<string>());
 	/** The last typed question the bot could not answer, for the WhatsApp message. */
-	const unanswered = useRef("");
 	const nextId = useRef(1);
 	/** Bubbles still "being typed" — flushed at once if the visitor speaks again. */
 	const pending = useRef<{ timer: number; land: () => void }[]>([]);
@@ -439,6 +518,10 @@ export function LandingChatButton() {
 				parts.push({ part: "follow", chars: 60 });
 			} else if (reply.kind === "topic" && offer?.kind === "topic") {
 				parts.push({ part: "follow", chars: 40, nextId: offer.id });
+			} else if (reply.kind === "ai" && reply.more && reply.locale === locale) {
+				/* The AI's "tell me more", asked the same way a written answer offers
+				 * its next topic. */
+				parts.push({ part: "follow", chars: 40 });
 			}
 
 			setTyping(true);
@@ -467,32 +550,121 @@ export function LandingChatButton() {
 		[c, locale, push],
 	);
 
+	/* The AI question in flight, with the written answer to give it if it is cut
+	 * short — a newer question or Start over must never leave it unanswered, and
+	 * a slow answer must never land after the conversation has moved on. */
+	const aiRequest = useRef<{
+		ctl: AbortController;
+		backup: WrittenReply;
+		next: ChatChip[];
+	} | null>(null);
+
+	useEffect(() => () => aiRequest.current?.ctl.abort(), []);
+
+	/** A question asked while the last is still being answered: the last one gets
+	 * its written answer now, in order, before the new question shows. */
+	const settlePending = () => {
+		const previous = aiRequest.current;
+		if (!previous) return;
+		previous.ctl.abort();
+		aiRequest.current = null;
+		deliver(previous.backup, previous.next);
+		flush();
+	};
+
+	/*
+	 * EVERY reply comes from Gemini (owner, 1 Oct 2026: "the chatbot reply from
+	 * the gemini api, no hardcoded"). Gemini is handed the whole knowledge base as
+	 * its facts on each message, so editing `landing-chat-knowledge.ts` changes
+	 * what it says straight away; nothing is trained. The keyword match still runs
+	 * — it picks the role and the next suggestions, and its written answer is the
+	 * BACKUP shown only when the AI cannot answer (no key, quota, Google down), so
+	 * the chat never goes silent. While Gemini thinks, the typing dots show.
+	 */
+	const replyWithAi = (
+		question: string,
+		forRole: ChatRole | null,
+		backup: WrittenReply,
+		next: ChatChip[],
+		typed: boolean,
+	) => {
+		const request = { ctl: new AbortController(), backup, next };
+		aiRequest.current = request;
+		setTyping(true);
+		setChips([]);
+		void askLandingAi(question, locale, forRole, request.ctl.signal).then(
+			(ai) => {
+				if (request.ctl.signal.aborted || aiRequest.current !== request) return;
+				aiRequest.current = null;
+				if (!ai) {
+					deliver(backup, next);
+					return;
+				}
+				/* "Tell me more" leads the suggestions, as the follow-up asks. */
+				const chips: ChatChip[] = ai.more
+					? [{ kind: "ask" as const, text: ai.more }, ...next].slice(
+							0,
+							MAX_CHIPS,
+						)
+					: next;
+				deliver(
+					{
+						kind: "ai",
+						question,
+						typed,
+						locale,
+						answer: ai.answer,
+						more: ai.more,
+						backup,
+					},
+					chips,
+				);
+			},
+		);
+	};
+
 	const ask = (text: string) => {
 		const question = text.trim();
 		if (!question) return;
 		flush();
+		settlePending();
 		push({ from: "user", said: { kind: "text", text: question } });
 		const u = understand(question, role, asked.current);
 		setRole(u.role);
 		if (u.reply.kind === "topic") asked.current.add(u.reply.id);
-		unanswered.current = u.reply.kind === "fallback" ? question : "";
-		deliver(u.reply, u.next);
+		replyWithAi(question, u.role, u.reply, u.next, true);
 	};
 
 	const pick = (chip: ChatChip) => {
+		/* "Tell me more" is a question, asked as if typed. */
+		if (chip.kind === "ask") {
+			ask(chip.text);
+			return;
+		}
 		flush();
+		settlePending();
 		push({ from: "user", said: chip });
-		unanswered.current = "";
+		/* The button's own words are the question ("I run an agency"). */
+		const question = chipLabel(chip, locale, c);
 		if (chip.kind === "role") {
 			setRole(chip.role);
-			deliver(
+			replyWithAi(
+				question,
+				chip.role,
 				{ kind: "intro", role: chip.role },
 				nextChips(chip.role, asked.current),
+				false,
 			);
 			return;
 		}
 		asked.current.add(chip.id);
-		deliver({ kind: "topic", id: chip.id }, nextChips(role, asked.current));
+		replyWithAi(
+			question,
+			role,
+			{ kind: "topic", id: chip.id },
+			nextChips(role, asked.current),
+			false,
+		);
 	};
 
 	const onSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -502,10 +674,11 @@ export function LandingChatButton() {
 	};
 
 	const restart = () => {
+		aiRequest.current?.ctl.abort();
+		aiRequest.current = null;
 		for (const p of pending.current) window.clearTimeout(p.timer);
 		pending.current = [];
 		asked.current = new Set();
-		unanswered.current = "";
 		setMessages([WELCOME]);
 		setChips(ROLE_CHIPS);
 		setRole(null);
@@ -513,14 +686,20 @@ export function LandingChatButton() {
 		setDraft("");
 	};
 
-	const handoffMessage = () => {
+	/** The WhatsApp text for one bubble — with THAT bubble's typed question, not
+	 * whatever was typed last (an older bubble's link must not change). */
+	const handoffMessage = (reply: ChatReply) => {
 		const intro = {
 			pr: c.prMsg,
 			agency: c.agencyMsg,
 			outlet: c.outletMsg,
 			general: c.otherMsg,
 		}[role ?? "general"];
-		const q = unanswered.current.slice(0, MAX_QUESTION);
+		const asked =
+			reply.kind === "fallback" || (reply.kind === "ai" && reply.typed)
+				? reply.question
+				: "";
+		const q = asked.slice(0, MAX_QUESTION);
 		return q ? `${intro}\n\n${c.questionMsg} ${q}` : intro;
 	};
 
@@ -588,7 +767,7 @@ export function LandingChatButton() {
 		const answer = answerFor(m.reply, locale, c);
 		const handoff = answer.handoff ? (
 			<a
-				href={whatsAppLink(handoffMessage())}
+				href={whatsAppLink(handoffMessage(m.reply))}
 				target="_blank"
 				rel="noopener noreferrer"
 				className="mt-3 inline-flex items-center gap-2 rounded-full px-4 py-2 transition-colors hover:bg-[rgba(242,198,107,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c66b]"
@@ -603,18 +782,30 @@ export function LandingChatButton() {
 				{c.whatsapp}
 			</a>
 		) : null;
+		/* The AI label sits quietly under the answer; a written note (a caveat in
+		 * the knowledge base) keeps its divider, since it is part of the answer. */
 		const note = answer.note ? (
-			<p
-				className="mt-3 pt-3"
-				style={{
-					borderTop: "1px solid var(--hz-line)",
-					fontSize: 13,
-					lineHeight: 1.5,
-					color: "var(--hz-ink-dim)",
-				}}
-			>
-				{answer.note}
-			</p>
+			m.reply.kind === "ai" ? (
+				<p
+					className="mt-3 flex items-center gap-1.5"
+					style={{ fontSize: 11.5, color: "var(--hz-ink-dim)" }}
+				>
+					<Sparkles aria-hidden="true" className="size-3" />
+					{answer.note}
+				</p>
+			) : (
+				<p
+					className="mt-3 pt-3"
+					style={{
+						borderTop: "1px solid var(--hz-line)",
+						fontSize: 13,
+						lineHeight: 1.5,
+						color: "var(--hz-ink-dim)",
+					}}
+				>
+					{answer.note}
+				</p>
+			)
 		) : null;
 		const hasSteps = Boolean(answer.steps?.length);
 
@@ -628,7 +819,7 @@ export function LandingChatButton() {
 				<>
 					<p>
 						{lead}
-						{answer.text}
+						{emphasize(answer.text)}
 					</p>
 					{!hasSteps && note}
 					{!hasSteps && handoff}
@@ -643,41 +834,76 @@ export function LandingChatButton() {
 			const ordered = answer.ordered !== false;
 			const role = answerRole(m.reply);
 			const List = ordered ? "ol" : "ul";
+			/* A path, not a list (owner, 2 Oct: "help me to design it"): one thin
+			 * gold line runs down the left through every step's marker, each place
+			 * is a gold label the steps hang under, and the numbers are gold
+			 * coins — so the eye follows where to go, then what to do. */
 			return (
 				<>
-					<div className="flex flex-col gap-3.5">
+					<div className="relative flex flex-col gap-3">
+						<span
+							aria-hidden="true"
+							className="absolute"
+							style={{
+								left: 11,
+								top: 14,
+								bottom: 12,
+								width: 1.5,
+								borderRadius: 1,
+								background:
+									"linear-gradient(180deg, rgba(242,198,107,0.55), rgba(242,198,107,0.12))",
+							}}
+						/>
 						{groupSteps(answer.steps ?? []).map((g) => (
 							<div
 								key={`${g.where}-${g.steps[0]?.n}`}
-								className="flex flex-col gap-1.5"
+								className="relative flex flex-col gap-2"
 							>
-								<p
-									style={{
-										color: "var(--hz-gold)",
-										fontSize: 14,
-										fontWeight: 600,
-										lineHeight: 1.35,
-									}}
-								>
-									{placeHeading(g.where, role, locale)}
+								<p className="pl-8">
+									<span
+										className="inline-flex items-center rounded-full px-2.5 py-0.5"
+										style={{
+											background: "rgba(242, 198, 107, 0.1)",
+											border: "1px solid rgba(242, 198, 107, 0.35)",
+											color: "var(--hz-gold)",
+											fontSize: 12.5,
+											fontWeight: 600,
+											lineHeight: 1.5,
+										}}
+									>
+										{placeHeading(g.where, role, locale)}
+									</span>
 								</p>
-								<List className="flex flex-col gap-1.5">
+								<List className="flex flex-col gap-2">
 									{g.steps.map((s) => (
-										<li key={s.n} className="flex gap-2">
+										<li key={s.n} className="relative flex items-start gap-3">
 											<span
-												className="shrink-0 tabular-nums"
+												className="relative z-[1] flex shrink-0 items-center justify-center rounded-full tabular-nums"
 												style={{
-													minWidth: ordered ? "1.6em" : "0.9em",
-													color: "var(--hz-gold)",
-													fontSize: 14,
-													fontWeight: 600,
-													lineHeight: 1.5,
+													width: 23,
+													height: 23,
+													marginTop: 0.5,
+													background: ordered ? GOLD : "transparent",
+													color: "#1a1207",
+													fontSize: 12,
+													fontWeight: 700,
 												}}
 											>
-												{ordered ? `${s.n})` : "•"}
+												{ordered ? (
+													s.n
+												) : (
+													<span
+														className="rounded-full"
+														style={{
+															width: 8,
+															height: 8,
+															background: "var(--hz-gold)",
+														}}
+													/>
+												)}
 											</span>
-											<span style={{ fontSize: 14, lineHeight: 1.5 }}>
-												{s.what}
+											<span style={{ fontSize: 14, lineHeight: 1.55 }}>
+												{emphasize(s.what)}
 											</span>
 										</li>
 									))}
@@ -691,9 +917,11 @@ export function LandingChatButton() {
 			);
 		}
 		const follow = FOLLOW_UPS[locale];
+		const template = follow.topic[m.id % follow.topic.length];
+		if (m.reply.kind === "ai" && m.reply.more)
+			return <p>{template.replace("{next}", m.reply.more)}</p>;
 		if (m.reply.kind === "intro" || !m.nextId) return <p>{follow.intro}</p>;
 		const nextChip = topicById(m.nextId)?.[locale].chip ?? "";
-		const template = follow.topic[m.id % follow.topic.length];
 		return <p>{template.replace("{next}", nextChip)}</p>;
 	};
 
@@ -875,19 +1103,41 @@ export function LandingChatButton() {
 											return (
 												<button
 													key={
-														chip.kind === "role" ? `role-${chip.role}` : chip.id
+														chip.kind === "role"
+															? `role-${chip.role}`
+															: chip.kind === "ask"
+																? `ask-${chip.text}`
+																: chip.id
 													}
 													type="button"
 													data-chat-chip
 													onClick={() => pick(chip)}
-													className="rounded-full px-3.5 py-2 text-left transition-colors hover:bg-[rgba(242,198,107,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c66b]"
-													style={{
-														border: "1px solid var(--hz-line-strong)",
-														color: "var(--hz-ink)",
-														fontSize: 13.5,
-														lineHeight: 1.3,
-													}}
+													className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-left transition-colors hover:bg-[rgba(242,198,107,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2c66b]"
+													style={
+														/* The AI's own "tell me more" is the recommended
+														 * next step, so it is the one chip in gold. */
+														chip.kind === "ask"
+															? {
+																	border: "1px solid rgba(242, 198, 107, 0.6)",
+																	background: "rgba(242, 198, 107, 0.08)",
+																	color: "var(--hz-gold)",
+																	fontSize: 13.5,
+																	lineHeight: 1.3,
+																}
+															: {
+																	border: "1px solid var(--hz-line-strong)",
+																	color: "var(--hz-ink)",
+																	fontSize: 13.5,
+																	lineHeight: 1.3,
+																}
+													}
 												>
+													{chip.kind === "ask" && (
+														<Sparkles
+															aria-hidden="true"
+															className="size-3.5 shrink-0"
+														/>
+													)}
 													{label}
 												</button>
 											);
@@ -896,10 +1146,22 @@ export function LandingChatButton() {
 								)}
 							</div>
 
+							{/* Said BEFORE the first message (review, 1 Oct 2026): what is
+							 * typed goes to Google's Gemini, so no personal details. */}
+							<p
+								className="shrink-0 px-4 pt-2 text-center"
+								style={{
+									borderTop: "1px solid var(--hz-line)",
+									color: "var(--hz-ink-dim)",
+									fontSize: 11.5,
+									lineHeight: 1.4,
+								}}
+							>
+								{c.aiDisclosure}
+							</p>
 							<form
 								onSubmit={onSubmit}
-								className="flex shrink-0 items-center gap-2 px-3 py-3"
-								style={{ borderTop: "1px solid var(--hz-line)" }}
+								className="flex shrink-0 items-center gap-2 px-3 pt-2 pb-3"
 							>
 								<label htmlFor={inputId} className="sr-only">
 									{c.placeholder}

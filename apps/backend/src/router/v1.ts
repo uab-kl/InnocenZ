@@ -1,6 +1,7 @@
 import express from 'express';
 import { authRoutes } from '@/features/auth/index.js';
 import { healthRoutes } from '@/features/health/index.js';
+import { landingChatRoutes } from '@/features/landing-chat/index.js';
 import { whatsappRoutes } from '@/features/whatsapp/index.js';
 import userRoutes from '@/features/user/user.routes.js';
 import { rbacRoutes } from '@/features/rbac/index.js';
@@ -40,6 +41,14 @@ import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import { requireAdmin } from '@/middlewares/require-role.js';
 
 const v1Router = express.Router();
+
+// Landing-page chat — public (the landing page has no session), rate-limited in
+// its own routes. ABOVE the audit and file-signing middlewares on purpose: it
+// changes no data and returns no files, and auditing it would store every
+// visitor's question. Mounted here rather than skipped by path inside the audit
+// middleware, because Express matches /Landing-Chat too and a string test would
+// not (review, 1 Oct 2026).
+v1Router.use('/landing-chat', landingChatRoutes);
 
 // Sensitive files (ID cards, proof photos, signed vouchers) leave as signed,
 // expiring links. BEFORE the audit on purpose — see sign-private-files.ts.

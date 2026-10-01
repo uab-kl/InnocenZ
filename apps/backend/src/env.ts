@@ -67,6 +67,25 @@ export const env = createEnv({
     // message and the operator drops the pin by hand. NOT the same key as the
     // one in apps/mobile/app.json — that one is restricted to the app bundle.
     GOOGLE_MAPS_API_KEY: z.string().optional(),
+    // Landing-page chat (features/landing-chat). Optional: without the key the
+    // endpoint answers 503 and the website keeps its keyword answers. Use a key
+    // from a project WITHOUT billing (AI Studio "Free tier") — the Maps project
+    // is billed, and a chat key there would land on the Maps bill.
+    GEMINI_API_KEY: z.string().optional(),
+    /** Comma-separated model names to try in order; default in landing-chat.service.ts. */
+    GEMINI_MODEL: z.string().optional(),
+    /**
+     * Questions the whole site may send to Gemini per day (all visitors together);
+     * 0 turns the AI off. Read leniently: a typo in this optional knob falls back
+     * to the default instead of stopping the whole backend from booting.
+     */
+    LANDING_CHAT_DAILY_LIMIT: z
+      .string()
+      .optional()
+      .transform((v) => {
+        const n = v ? Number(v) : Number.NaN;
+        return Number.isInteger(n) && n >= 0 ? Math.min(n, 1_000_000) : 1000;
+      }),
     // Cloudflare R2 (S3-compatible). Optional at boot — profile-image upload
     // requires them and returns a clear 503 when missing.
     R2_ACCOUNT_ID: z.string().min(1).optional(),
