@@ -6,9 +6,13 @@
  */
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { isSessionRefusal } from './api-error-copy';
 import type { DeviceFix } from './device-location';
-import { renewSession, type RefreshOutcome } from './token-refresh';
+import {
+  isSessionRefusalAt,
+  refreshRefusedByServer,
+  renewSession,
+  type RefreshOutcome,
+} from './token-refresh';
 
 const DEFAULT_BACKEND_PORT = 7777;
 
@@ -153,6 +157,14 @@ export type MeProfile = {
    */
   bankName: string | null;
   bankAccountNo: string | null;
+  /**
+   * The ID card photos on file (`user_profile.id_photo_front` / `_back`) — a
+   * short-lived signed link, never shown here, only tested for presence: a null
+   * is a side the agency still needs. Optional: an older backend omits them,
+   * which must read as "unknown", not "missing".
+   */
+  idPhotoFront?: string | null;
+  idPhotoBack?: string | null;
 };
 
 export type Me = {
@@ -210,7 +222,7 @@ async function requestEnvelope<T>(
   try {
     return await sendEnvelope<T>(path, init);
   } catch (error) {
-    const again = await renewedRequest(error, init);
+    const again = await renewedRequest(error, path, init);
     if (!again) throw error;
     return sendEnvelope<T>(path, again);
   }
@@ -268,18 +280,20 @@ function bearerTokenOf(headers: RequestInit['headers']): string | null {
 /**
  * The same request with a renewed token — or null when it must not be sent again.
  *
- * Only a SESSION refusal qualifies — `isSessionRefusal`, the same test the
- * screens use: 401 AND the server's bare 'Unauthorized'. A 401 'Incorrect
- * password' is an answer about the password, which no refresh can change. And
- * only a request that carried a Bearer token: one sent without a session has
- * none to renew. `renewSession` decides the rest — one shared refresh, never a
- * swap onto another account's token.
+ * Only a SESSION refusal qualifies — `isSessionRefusalAt`, the web's rule: any
+ * 401 except from login, refresh and self-delete, whose 401 judges a password
+ * or a token in the BODY that no refresh can change ("Incorrect password").
+ * Judged by where the request went, as the web does, not by the sentence that
+ * came back. And only a request that carried a Bearer token: one sent without a
+ * session has none to renew. `renewSession` decides the rest — one shared
+ * refresh, never a swap onto another account's token.
  */
 async function renewedRequest(
   error: unknown,
+  url: string,
   init?: RequestInit,
 ): Promise<RequestInit | null> {
-  if (!(error instanceof ApiError) || !isSessionRefusal(error.status, error.message)) {
+  if (!(error instanceof ApiError) || !isSessionRefusalAt(error.status, url)) {
     return null;
   }
   const sent = bearerTokenOf(init?.headers);
@@ -306,7 +320,7 @@ async function fetchWithSession(
 ): Promise<Response> {
   const res = await fetch(url, init);
   if (res.status !== 401) return res;
-  const again = await renewedRequest(await refusalOf(res), init);
+  const again = await renewedRequest(await refusalOf(res), url, init);
   return again ? fetch(url, again) : res;
 }
 
@@ -389,7 +403,9 @@ export async function refreshAccessToken(
           : null,
     };
   }
-  if (res.status === 401 || res.status === 404) return { kind: 'dead' };
+  // The web's classification (`refusedByServer`): a 400 or 403 is as final as
+  // a 401 — only a timeout, the limiter and a 5xx leave the session standing.
+  if (refreshRefusedByServer(res.status)) return { kind: 'dead' };
   return { kind: 'unavailable' };
 }
 
@@ -479,24 +495,17 @@ export async function fetchPublicAgencies(): Promise<PublicAgency[]> {
   });
 }
 
-/** Step-1 gate: phone + ID must not already belong to an account. */
-export type RegisterCheckConflict = {
-  field: 'phone' | 'idNo';
-  message: string;
-};
-
-export function checkPrRegisterAvailability(
-  phoneNum: string,
-  idNo: string,
-): Promise<{ available: true }> {
-  return request<{ available: true }>('/auth/register/check', {
-    method: 'POST',
-    body: JSON.stringify({ phoneNum, idNo }),
-  });
-}
-
 /** Seconds the code stays valid, and how long before Resend is allowed. */
-export type OtpSendResult = { expiresInSec: number; resendAfterSec: number };
+export type OtpSendResult = {
+  expiresInSec: number;
+  resendAfterSec: number;
+  /**
+   * Where the code ACTUALLY went, masked, per channel. It can be fewer places
+   * than were asked for: claiming an agency's stub account sends the code to
+   * the PHONE ALONE, whatever email was typed. Optional for an older backend.
+   */
+  sentTo?: CodeDelivery[];
+};
 
 /** Receipt proving this number passed — handed back to register / reset / change-phone. */
 export type OtpVerifyResult = { verificationId: string };
@@ -1463,6 +1472,30 @@ export type ShiftAssignmentRecord = {
   /** `shift.event_kind` — 'normal' | 'special'. Never null (DB default). */
   eventKind: string;
   /**
+   * WHICH special night (0167) — VIP night, a launch, "Other · Merdeka
+   * Celebration". Two pairs, as `GET /shift` serves them: the shift's own, and
+   * the pair of the event card it was posted from (the fallback for a shift
+   * posted before 0167). `special-event.ts` picks ONE whole pair.
+   *
+   * Optional: a backend that has not restarted omits them, and every card then
+   * says a bare "Special event", exactly as before.
+   */
+  specialEventType?: string | null;
+  customSpecialEventName?: string | null;
+  templateSpecialEventType?: string | null;
+  templateCustomEventName?: string | null;
+  /**
+   * A special night's OWN price list (`shift_drink_menu`, 0167), for the card
+   * that names it. Since 29 Sep 2026 (owner: "Use event prices") `drinkMenu`
+   * below IS this list on such a night — the server resolves the list per shift
+   * and says which one it sent in `drinkMenuSource`.
+   *
+   * `[]` = the night is priced from the venue's list. ABSENT = not known (a
+   * backend that has not restarted, or its read failed), which shows nothing
+   * rather than claiming the night has no prices of its own.
+   */
+  eventDrinkMenu?: OutletDrinkItem[];
+  /**
    * WHAT TO WEAR (0132) and WHICH LANGUAGES the venue asked for — its own asks,
    * off the shift row. Optional so a backend that has not restarted yet reads
    * as "not said" rather than crashing the card; null when the shift carries
@@ -1508,8 +1541,14 @@ export type ShiftAssignmentRecord = {
   tier: string;
   /** Resolved rate card for this PR's tier at this outlet, or null if unset. */
   rate: ShiftAssignmentRate | null;
-  /** The shift outlet's real drink menu (empty when no workspace menu). */
+  /**
+   * The list this shift's lines are logged from: a special night's own list when
+   * it has one, else the venue's Workspace menu (empty when none) — resolved by
+   * the server per shift (owner, 29 Sep 2026: "Use event prices").
+   */
   drinkMenu: OutletDrinkItem[];
+  /** Which list `drinkMenu` is. Optional: a backend that has not restarted omits it. */
+  drinkMenuSource?: 'event' | 'workspace';
 };
 
 export type SignedVoucher = {
@@ -1621,6 +1660,8 @@ export async function createMyVoucherExportTicket(
  */
 export type NotificationKind =
   | 'payment_voucher_issued'
+  /** The voucher's money left the agency (0141). PR-addressed. */
+  | 'payment_voucher_paid'
   | 'payment_voucher_dispute_resolved'
   | 'overtime_pending_approval'
   | 'overtime_decided'
@@ -1636,7 +1677,11 @@ export type NotificationKind =
   | 'leave_requested'
   | 'leave_decided'
   /** An agency broadcast — free text, nothing to open. */
-  | 'agency_broadcast';
+  | 'agency_broadcast'
+  // Owner + finance billing notices (0136, 0137, 0166) — never a PR's.
+  | 'subscription_tier_weekly'
+  | 'subscription_invoice_opened'
+  | 'subscription_autopay_failed';
 
 export type NotificationRecord = {
   id: string;
@@ -1661,6 +1706,39 @@ export function fetchMyNotifications(
   return request<NotificationRecord[]>('/notification?limit=50', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+}
+
+/**
+ * How many of this PR's notifications are unread — ALL of them, counted by the
+ * server.
+ *
+ * The bell used to count the unread rows of the page it had loaded, and the
+ * page is 50 rows, so a PR with 64 unread saw a badge stuck at 50.
+ */
+export async function fetchUnreadNotificationCount(
+  accessToken: string,
+): Promise<number> {
+  const data = await request<{ unread: number } | null>(
+    '/notification/unread-count',
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  const unread = Number(data?.unread);
+  return Number.isFinite(unread) && unread > 0 ? Math.floor(unread) : 0;
+}
+
+/**
+ * Every unread notification of this PR, marked read in ONE write — including
+ * the ones older than the loaded page, which a per-row loop could never reach.
+ * Answers how many were cleared.
+ */
+export async function markAllNotificationsRead(
+  accessToken: string,
+): Promise<number> {
+  const data = await request<{ updated: number } | null>('/notification/read-all', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return Number(data?.updated) || 0;
 }
 
 /** Idempotent. A row that is not this PR's answers 404, which `request` throws. */
@@ -2188,6 +2266,19 @@ export type PrWeekShift = {
    * the tag than not shown at all.
    */
   eventKind?: string | null;
+  /**
+   * WHICH special night (0167) — the same two pairs `GET /shift-assignment/mine`
+   * serves (see `ShiftAssignmentRecord`): the shift's own, and those of the event
+   * card it was posted from. `special-event.ts` picks ONE whole pair, so the
+   * claim list and the evidence sheet can say "Special event · VIP night".
+   *
+   * Optional: a backend that has not restarted omits them, and the tag then says
+   * a bare "Special event", exactly as before.
+   */
+  specialEventType?: string | null;
+  customSpecialEventName?: string | null;
+  templateSpecialEventType?: string | null;
+  templateCustomEventName?: string | null;
   /** The venue logo + the event picture, for the evidence sheet header. */
   outletLogo?: string | null;
   templateCoverImage?: string | null;
@@ -2227,6 +2318,26 @@ export type PrWeekShift = {
 };
 
 /** The PR's live current-week earnings — powers Check-In STATUS + Payment This-week. */
+/**
+ * Both halves of a voucher's DUAL SIGNATURE, and its payee — facts the printed
+ * PV already hands the same PR. The voucher screen could only ever draw her own
+ * signature, beside a caption announcing "Dual-signed", because the agency's
+ * half never left the server on a /mine read.
+ *
+ * All optional: a backend that has not restarted sends none of them, and the
+ * screen then says only what it knows rather than inventing a signer.
+ */
+export type PrVoucherSignatures = {
+  /** The payee as the voucher names her — the PR is paid; the agency pays. */
+  prName?: string | null;
+  prSignedAt?: string | null;
+  /** Who signed for the agency, as stored at signing. */
+  financeHeadName?: string | null;
+  /** The capacity they signed in — 'Owner', 'Finance'… Null before 0149. */
+  financeHeadRole?: string | null;
+  financeHeadSignedAt?: string | null;
+};
+
 export type PrCurrentWeek = {
   voucherId: string | null;
   /**
@@ -2263,7 +2374,7 @@ export type PrCurrentWeek = {
    * means "fall back to the single-voucher fields", which is exactly the
    * behaviour that shipped before.
    */
-  vouchers?: {
+  vouchers?: ({
     id: string;
     voucherNo: string | null;
     agencyId: string;
@@ -2276,7 +2387,7 @@ export type PrCurrentWeek = {
     agencyLogo?: string | null;
     net: string;
     status: string | null;
-  }[];
+  } & PrVoucherSignatures)[];
   /** Set on the "Last week" voucher when the PR has raised a dispute (§3 F). */
   disputeReason?: string | null;
   disputeNote?: string | null;
@@ -2444,7 +2555,7 @@ export type PrHistoryVoucher = {
   prSignedAt: string | null;
   paidAt: string | null;
   lines: PrReceiptLine[];
-};
+} & PrVoucherSignatures;
 
 export function fetchMyPaymentHistory(
   accessToken: string,

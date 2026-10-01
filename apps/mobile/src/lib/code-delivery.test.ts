@@ -3,6 +3,7 @@
 import { translations } from '../i18n/translations';
 import type { CodeDelivery } from './api';
 import {
+  codeReachedEmail,
   codeReachedSomewhere,
   describeCodeDelivery,
   isCompleteCode,
@@ -153,5 +154,37 @@ describe('small helpers', () => {
     expect(isCompleteCode('12345')).toBe(false);
     expect(isCompleteCode('1234567')).toBe(false);
     expect(isCompleteCode('12345a')).toBe(false);
+  });
+});
+
+/**
+ * SIGN-UP'S 'AND BY EMAIL' LINE (28 Sep 2026 follow-up): claiming an agency's
+ * stub account sends the code to the PHONE ALONE — the server drops the typed
+ * email — yet the toast named the inbox. It may only when the server says so.
+ */
+describe('codeReachedEmail', () => {
+  test('a stub claim: phone channels only, so no email is named', () => {
+    expect(
+      codeReachedEmail([
+        { channel: 'whatsapp', to: PHONE, status: 'sent' },
+        { channel: 'sms', to: PHONE, status: 'logged' },
+      ]),
+    ).toBe(false);
+  });
+
+  test('an email that was sent (or logged in development) is named', () => {
+    expect(codeReachedEmail([{ channel: 'email', to: MAIL, status: 'sent' }])).toBe(true);
+    expect(codeReachedEmail([{ channel: 'email', to: MAIL, status: 'logged' }])).toBe(true);
+  });
+
+  test('an email that failed or was skipped is not', () => {
+    expect(codeReachedEmail([{ channel: 'email', to: MAIL, status: 'failed' }])).toBe(false);
+    expect(codeReachedEmail([{ channel: 'email', to: MAIL, status: 'skipped' }])).toBe(false);
+  });
+
+  test('no report at all (an older backend) is not a yes', () => {
+    expect(codeReachedEmail(undefined)).toBe(false);
+    expect(codeReachedEmail(null)).toBe(false);
+    expect(codeReachedEmail([])).toBe(false);
   });
 });

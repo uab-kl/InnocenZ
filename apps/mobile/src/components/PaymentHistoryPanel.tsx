@@ -5,7 +5,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -29,6 +28,7 @@ import {
   localizePayLineType,
   localizePayOutlet,
   localizePayStatusMeta,
+  weekMatchesStatusChip,
 } from '../lib/payment-history-map';
 import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import {
@@ -43,6 +43,7 @@ import { usePrNav } from '../lib/pr-nav';
 import { useSignedPvs } from '../lib/signed-pv';
 import { IzButton, Pill } from './ui';
 import { HistDateField, HistDateTimeFilter, HistTimeInput } from './HistDateTimeFilter';
+import { PhoneSheet } from './PhoneSheet';
 import {
   Briefcase,
   Calendar,
@@ -182,9 +183,8 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
     };
     return allWeeks.filter((w) => {
       if (!matchesPaymentWeekDayTime(w, dayTime)) return false;
-      if (applied.status === 'paid' && w.status !== 'paid') return false;
-      if (applied.status === 'signed' && w.status !== 'signed') return false;
-      if (applied.status === 'pending' && w.status !== 'pending') return false;
+      // "To sign" means signable NOW — see `weekMatchesStatusChip`.
+      if (!weekMatchesStatusChip(w, applied.status)) return false;
       if (applied.outlet !== 'all') {
         const hit =
           w.outlet === applied.outlet ||
@@ -531,10 +531,11 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         )}
       </View>
 
-      {/* Filter sheet */}
-      <Modal
+      {/* Filter sheet. PhoneSheet, not a bare Modal: on the web build a Modal
+          covers the browser window outside the phone frame, and the calendar
+          and time pickers it opens (also PhoneSheets) would land behind it. */}
+      <PhoneSheet
         visible={filterOpen}
-        transparent
         animationType="slide"
         onRequestClose={() => setFilterOpen(false)}
       >
@@ -631,7 +632,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
             </ScrollView>
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
     </View>
   );
 }
@@ -681,13 +682,22 @@ function WeekCard({
           </Text>
           <Text style={styles.cardSub} numberOfLines={1}>
             {/* Two whole keys, not a plural 's' glued on: Chinese has no plural
-                form, and the sentence has to be one string in every locale. */}
-            {formatMessage(
-              week.shifts === 1
-                ? t.payHistory.cardMetaOne
-                : t.payHistory.cardMetaMany,
-              { n: week.shifts, date: week.issued },
-            )}
+                form, and the sentence has to be one string in every locale.
+                No "Issued" on a voucher the agency has not issued — the line
+                below already says it is waiting for them. */}
+            {week.awaitingIssue
+              ? formatMessage(
+                  week.shifts === 1
+                    ? t.payHistory.cardShiftsOne
+                    : t.payHistory.cardShiftsMany,
+                  { n: week.shifts },
+                )
+              : formatMessage(
+                  week.shifts === 1
+                    ? t.payHistory.cardMetaOne
+                    : t.payHistory.cardMetaMany,
+                  { n: week.shifts, date: week.issued },
+                )}
           </Text>
           <Text
             style={[
@@ -747,7 +757,7 @@ function WeekCard({
         {week.earlyWithdrawal != null && week.earlyWithdrawal > 0 && (
           <Metric
             label={t.payHistory.metricEarlyWithdrawal}
-            value={`−${formatRM(week.earlyWithdrawal)}`}
+            value={formatRM(-week.earlyWithdrawal)}
             color={C.red}
           />
         )}
@@ -793,7 +803,9 @@ function WeekCard({
                       },
                     ]}
                   >
-                    {l.debit ? `−${formatRM(l.amount)}` : formatRM(l.amount)}
+                    {/* A debit is stored as a positive amount with `debit` set;
+                        negated here so `formatRM` prints its one sign. */}
+                    {formatRM(l.debit ? -Math.abs(l.amount) : l.amount)}
                   </Text>
                 </View>
               ))}

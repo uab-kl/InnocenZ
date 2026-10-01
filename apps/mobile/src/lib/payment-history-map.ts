@@ -56,6 +56,9 @@ function pvRefForWeek(
 }
 
 function issuedLabel(v: PrHistoryVoucher): string {
+  // Not issued is not issued: a draft's `issued_date` is the day it was RAISED,
+  // and printing it as "Issued" contradicts the voucher's own status line.
+  if (v.status === 'pending_review') return '—';
   const iso = asIsoDate(v.issuedDate) ?? asIsoDate(v.prSignedAt) ?? asIsoDate(v.paidAt);
   if (!iso) return '—';
   const [y, m, d] = iso.split('-').map(Number);
@@ -126,6 +129,26 @@ export function localizePayStatusMeta(meta: string, t: AppTranslations): string 
       : t.payHistory.statusSigned;
   }
   return trimmed;
+}
+
+/** The History status chips. 'pending' is the one labelled "To sign". */
+export type PayStatusChip = 'all' | 'paid' | 'signed' | 'pending';
+
+/**
+ * Does a week belong under a status chip?
+ *
+ * "To sign" lists what is waiting for HER signature — which is only a voucher
+ * the agency has SENT (`canSign`). It filtered on the 'pending' badge, which
+ * also folds in a voucher still on the agency's desk and a disputed one, so the
+ * chip a PR opens to find her own work listed vouchers she could not sign.
+ */
+export function weekMatchesStatusChip(
+  week: Pick<HistPayWeek, 'status' | 'canSign'>,
+  chip: PayStatusChip,
+): boolean {
+  if (chip === 'all') return true;
+  if (chip === 'pending') return week.canSign;
+  return week.status === chip;
 }
 
 /** Short aggregate label — "(2)-outlet" instead of the long "Multi-outlet (2)". */
@@ -272,6 +295,7 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
     // The voucher's OWN flag, kept beside `canSign` for the same reason: the
     // 'pending' badge cannot carry it. See the field's note on HistPayWeek.
     isDisputed: v.status === 'disputed',
+    awaitingIssue: v.status === 'pending_review',
     statusMeta: statusMeta(v),
     net: Math.round(net * 100) / 100,
     // Carried so the normaliser can agree with the server rather than

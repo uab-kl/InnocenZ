@@ -69,6 +69,13 @@ export type HistPayWeek = {
    * re-read of `statusMeta`: a sentence can be reworded, a flag cannot.
    */
   isDisputed?: boolean;
+  /**
+   * Still on the agency's desk (`pending_review`) — the third fact the
+   * 'pending' badge folds away. A voucher raised by the PR's first self-log
+   * carries the day it was RAISED in `issued_date`, so the card printed
+   * "Issued 13 Sep" directly above "Waiting for your agency to issue".
+   */
+  awaitingIssue?: boolean;
   statusMeta: string;
   net: number;
   /**

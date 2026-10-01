@@ -3,13 +3,12 @@
  * Step UIs live in step-1…step-6; this file owns wizard state + navigation.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../../theme/theme';
 import { font } from '../../theme/fonts';
 import {
 	ApiError,
-	checkPrRegisterAvailability,
 	fetchPublicAgencies,
 	generateUserComcard,
 	registerPr,
@@ -20,10 +19,15 @@ import {
 	uploadUserProfileImage,
 	verifyPrOtp,
 	type PublicAgency,
-	type RegisterCheckConflict,
 } from '../../lib/api';
-import { isPlausibleEmail, normalizeEmailInput } from '../../lib/code-delivery';
+import { localizeApiError } from '../../lib/api-error-copy';
+import {
+	codeReachedEmail,
+	isPlausibleEmail,
+	normalizeEmailInput,
+} from '../../lib/code-delivery';
 import { resolveUploadFile } from '../../lib/photo-file';
+import { withRetries } from '../../lib/retry';
 import { useSession } from '../../lib/session';
 import { formatMessage, useLocale } from '../../i18n';
 import { IzButton } from '../../components/ui';
@@ -32,6 +36,7 @@ import { ChevronLeft } from '../../components/icons';
 import { CODE_LENGTH, RESEND_SECONDS, STEPS } from './constants';
 import { emptyDraft, phoneParts, validateStep, type Draft, type FieldErrors } from './types';
 import { KeyboardScrollProvider, useKeyboardScroll } from './keyboard-scroll';
+import { spentReceiptRefusal } from './register-refusal';
 import { Step1Persona } from './step-1';
 import { Step2Address } from './step-2';
 import { Step3Agency } from './step-3';
@@ -39,7 +44,11 @@ import { Step4VerifyPhotos } from './step-4';
 import { Step5Summary } from './step-5';
 import { Step6Otp } from './step-6';
 
-export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void }) {
+/**
+ * `onBackToSignIn(notice)` — the sign-in screen shows `notice` above its form.
+ * Passed only when the account now EXISTS (see `verifyAndSubmit`).
+ */
+export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: (notice?: string) => void }) {
 	const scroller = useRef<ScrollView | null>(null);
 	return (
 		<KeyboardScrollProvider scrollRef={scroller}>
@@ -52,7 +61,7 @@ function SignUpScreenInner({
 	onBackToSignIn,
 	scroller,
 }: {
-	onBackToSignIn: () => void;
+	onBackToSignIn: (notice?: string) => void;
 	scroller: React.RefObject<ScrollView | null>;
 }) {
 	const { signIn, refreshMe } = useSession();
@@ -68,6 +77,11 @@ function SignUpScreenInner({
 	const [resendIn, setResendIn] = useState(0);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	/*
+	 * The refusal a "Back to sign in" link belongs to. Tied to the SENTENCE, not
+	 * a flag: any later error is a different sentence and hides the link.
+	 */
+	const [signInFor, setSignInFor] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 	const [toast, setToast] = useState<string | null>(null);
@@ -136,7 +150,14 @@ function SignUpScreenInner({
 	 * the step). A ref survives the wipe, because the effect itself reads it.
 	 */
 	const pendingAfterStep = useRef<
-		| { kind: 'refusal'; field: keyof FieldErrors; msg: string }
+		| {
+				kind: 'refusal';
+				/** The box to mark, when the refusal is about one. */
+				field?: keyof FieldErrors;
+				msg: string;
+				/** Offer "Back to sign in" under it — an account already exists. */
+				signIn?: boolean;
+		  }
 		| { kind: 'notice'; msg: string }
 		| null
 	>(null);
@@ -147,7 +168,8 @@ function SignUpScreenInner({
 		pendingAfterStep.current = null;
 		const refusal = carried?.kind === 'refusal' ? carried : null;
 		setError(refusal ? refusal.msg : null);
-		setFieldErrors(refusal ? { [refusal.field]: refusal.msg } : {});
+		setFieldErrors(refusal?.field ? { [refusal.field]: refusal.msg } : {});
+		setSignInFor(refusal?.signIn ? refusal.msg : null);
 		setNotice(carried?.kind === 'notice' ? carried.msg : null);
 		setToast(null);
 		if (refusal) showToast(refusal.msg);
@@ -166,13 +188,24 @@ function SignUpScreenInner({
 		[],
 	);
 
+	// The server's own sentence, in her language where it is a known one (the
+	// sign-up 409s, a wrong or expired code); anything else as it was sent.
 	const describe = (e: unknown, fallback: string) =>
-		e instanceof ApiError ? e.message : fallback;
+		e instanceof ApiError && e.message.trim()
+			? localizeApiError(e.message, t.errors)
+			: fallback;
 
 	// `t.signup` IS the validation copy — validateStep takes Partial<SignupFieldCopy>,
 	// so the hand-built 31-key map is gone. It is also one stable object per locale,
 	// which the map was not: it was rebuilt every render and killed the memo below.
-	const goNext = async () => {
+	/*
+	 * No "is this number free?" lookup on step 1 any more (owner, 29 Sep 2026:
+	 * "General message, both"). `/auth/register/check` told anybody whether a
+	 * phone or an ID number had an account, so it no longer says, and asking
+	 * would only cost a round trip. A number that has one is told so at the
+	 * end, by `/auth/register`, once her code has proved it is hers.
+	 */
+	const goNext = () => {
 		const { fields, toast: toastMsg } = validateStep(
 			step,
 			draft,
@@ -183,40 +216,6 @@ function SignUpScreenInner({
 			setFieldErrors(fields);
 			showToast(toastMsg);
 			return;
-		}
-		if (step === 1) {
-			setBusy(true);
-			setError(null);
-			try {
-				await checkPrRegisterAvailability(phoneNum, draft.idNo.trim());
-			} catch (e) {
-				if (e instanceof ApiError && e.status === 409) {
-					const conflicts =
-						e.data &&
-						typeof e.data === 'object' &&
-						Array.isArray((e.data as { conflicts?: RegisterCheckConflict[] }).conflicts)
-							? (e.data as { conflicts: RegisterCheckConflict[] }).conflicts
-							: [];
-					const nextFields: FieldErrors = {};
-					for (const c of conflicts) {
-						if (c.field === 'phone') nextFields.phone = c.message;
-						if (c.field === 'idNo') nextFields.idNo = c.message;
-					}
-					if (!nextFields.phone && !nextFields.idNo) {
-						nextFields.phone = e.message;
-					}
-					setFieldErrors(nextFields);
-					showToast(e.message);
-					setBusy(false);
-					return;
-				}
-				const msg = describe(e, t.signup.toastVerifyPhoneFailed);
-				setError(msg);
-				showToast(msg);
-				setBusy(false);
-				return;
-			}
-			setBusy(false);
 		}
 		setFieldErrors({});
 		setStep((s) => Math.min(s + 1, STEPS.length));
@@ -269,9 +268,15 @@ function SignUpScreenInner({
 				const res = await sendPrOtp(phoneNum, 'signup', { email: codeEmail });
 				setResendIn(res.resendAfterSec || RESEND_SECONDS);
 				setOtp('');
+				/*
+				 * The email half is named only when the SERVER says it went. Claiming
+				 * an agency's stub account sends the code to the phone alone, and the
+				 * old toast still said "and by email to …" — so she waited on an inbox
+				 * that would never receive it.
+				 */
 				const sent = resending
 					? t.signup.toastCodeResent
-					: codeEmail
+					: codeEmail && codeReachedEmail(res.sentTo)
 						? formatMessage(t.signup.toastCodeSentWithEmail, {
 								phone: fullPhone,
 								email: codeEmail,
@@ -292,13 +297,15 @@ function SignUpScreenInner({
 			} catch (e) {
 				if (e instanceof ApiError && e.status === 409) {
 					/*
-					 * ⚠️ 409 NO LONGER MEANS "phone taken" ON ITS OWN. Since the
-					 * email travels with the code, `/auth/otp/send` refuses a
-					 * TAKEN EMAIL with the same status — and a sign-up code must
-					 * never land in an existing account's inbox. Both send her
-					 * back to step 1, but they point at DIFFERENT boxes, and
-					 * telling her to change her phone number because of her
-					 * email is how a PR gets stuck on a field that was fine.
+					 * ONLY AN OLDER SERVER ANSWERS 409 HERE. Since 30 Sep 2026
+					 * `/auth/otp/send` answers every sign-up alike — a number
+					 * with an account gets its code on the phone alone, and the
+					 * collision is told by `/auth/register` once the code proved
+					 * it. Kept for a server not yet redeployed, which refused a
+					 * taken phone (and, before 28 Sep, a taken email) with this
+					 * status; each points at its own box, because telling her to
+					 * change her phone number because of her email is how a PR
+					 * gets stuck on a field that was fine.
 					 */
 					const emailTaken = /email/i.test(e.message);
 					const msg = emailTaken
@@ -341,6 +348,8 @@ function SignUpScreenInner({
 		setError(null);
 		setNotice(null);
 		let hasReceipt = Boolean(verificationId);
+		/** True only while `registerPr` is the call in flight — see the catch. */
+		let registering = false;
 		try {
 			// Verify OTP first (JSON). Register also JSON-only — multipart avatar on
 			// /auth/register often fails on device ("Cannot reach backend") even when
@@ -357,6 +366,7 @@ function SignUpScreenInner({
 			const bustCm = optionalCm(draft.bustCm);
 			const waistCm = optionalCm(draft.waistCm);
 			const hipCm = optionalCm(draft.hipCm);
+			registering = true;
 			await registerPr({
 				verificationId: verified,
 				phoneNum,
@@ -386,7 +396,23 @@ function SignUpScreenInner({
 					languages: draft.languages,
 				},
 			});
-			const { user: signedIn, accessToken } = await signIn(phoneNum, draft.password);
+			registering = false;
+			/*
+			 * THE ACCOUNT EXISTS NOW (30 Sep 2026). If the sign-in right after it
+			 * fails — a dropped connection, a slow server — retrying the wizard
+			 * could only spend a fresh code to be told "that phone number already
+			 * has an account". So a failed sign-in HERE sends her straight to the
+			 * sign-in screen, saying the account is ready. The photo uploads that
+			 * follow need this session; their own retries live on Profile.
+			 */
+			let session: Awaited<ReturnType<typeof signIn>>;
+			try {
+				session = await signIn(phoneNum, draft.password);
+			} catch {
+				onBackToSignIn(t.signup.accountReadySignIn);
+				return;
+			}
+			const { user: signedIn, accessToken } = session;
 			// Guarantee ID is on user_profile — heal if register left it blank.
 			if (
 				!signedIn.profile.idNo &&
@@ -426,6 +452,14 @@ function SignUpScreenInner({
 				);
 			}
 
+			/*
+			 * The ID card is RETRIED; nothing else here is. It is the one asset
+			 * with no second chance in the app beyond this screen — the avatar and
+			 * gallery have their own buttons on Profile — so a single dropped
+			 * connection used to lose it for good. A photo still missing after the
+			 * retries is offered again on Profile ("ID card photos").
+			 */
+			const idRetry = { attempts: 3, delayMs: 1500 };
 			const idFront = resolveUploadFile(
 				draft.idPhotoFrontFile,
 				draft.idPhotoFrontUri,
@@ -433,7 +467,10 @@ function SignUpScreenInner({
 			);
 			if (idFront) {
 				await runUpload('id-front', () =>
-					uploadUserIdDoc(accessToken, signedIn.id, 'front', idFront, 'id-front.jpg'),
+					withRetries(
+						() => uploadUserIdDoc(accessToken, signedIn.id, 'front', idFront, 'id-front.jpg'),
+						idRetry,
+					),
 				);
 			}
 
@@ -443,7 +480,10 @@ function SignUpScreenInner({
 				: null;
 			if (idBack) {
 				await runUpload('id-back', () =>
-					uploadUserIdDoc(accessToken, signedIn.id, 'back', idBack, 'id-back.jpg'),
+					withRetries(
+						() => uploadUserIdDoc(accessToken, signedIn.id, 'back', idBack, 'id-back.jpg'),
+						idRetry,
+					),
 				);
 			}
 
@@ -484,6 +524,34 @@ function SignUpScreenInner({
 				);
 			}
 		} catch (e) {
+			const spent = registering
+				? spentReceiptRefusal(e, t.errors, t.signup.toastRegisterFailed)
+				: null;
+			if (spent) {
+				/*
+				 * HER RECEIPT IS DEAD (30 Sep 2026): the server spends it on ANY
+				 * 409 as well as on success, and one sent again is refused with
+				 * "Phone verification is missing or expired — verify again".
+				 * Forget it and the code she typed, and take her back to step 5,
+				 * whose submit sends a FRESH code — sending the same receipt could
+				 * only collect that 400 again. Her draft is left exactly as typed.
+				 *
+				 * ⚠️ The sentence travels through `pendingAfterStep`, never beside
+				 * `setStep` (see the comment there). Safe: this runs only from
+				 * step 6, so the step always changes and the effect consumes it.
+				 * A 409 also offers the way back to sign-in — both 409 sentences
+				 * (a taken phone, or the general one) say "sign in".
+				 */
+				setVerificationId(null);
+				setOtp('');
+				pendingAfterStep.current = {
+					kind: 'refusal',
+					msg: spent.msg,
+					signIn: spent.signIn,
+				};
+				setStep(5);
+				return;
+			}
 			if (!hasReceipt) setOtp('');
 			const msg =
 				e instanceof ApiError && e.status === 410
@@ -621,6 +689,19 @@ function SignUpScreenInner({
 				) : null}
 
 				{error ? <Text style={styles.error}>{error}</Text> : null}
+				{error && error === signInFor ? (
+					<Pressable
+						// Wrapped: handed straight to onPress, the tap EVENT would arrive
+						// as the sign-in screen's notice.
+						onPress={() => onBackToSignIn()}
+						disabled={busy}
+						hitSlop={8}
+						accessibilityRole="link"
+						style={styles.signInLink}
+					>
+						<Text style={styles.signInLinkText}>{t.signup.backToSignIn}</Text>
+					</Pressable>
+				) : null}
 				{notice && !error ? <Text style={styles.notice}>{notice}</Text> : null}
 			</ScrollView>
 
@@ -718,5 +799,12 @@ const styles = StyleSheet.create({
 		lineHeight: C.fsTiny * 1.4,
 		color: C.green,
 		marginTop: 8,
+	},
+	signInLink: { alignSelf: 'flex-start', marginTop: 8 },
+	signInLinkText: {
+		...font(700),
+		fontSize: C.fsTiny,
+		color: C.accent,
+		textDecorationLine: 'underline',
 	},
 });

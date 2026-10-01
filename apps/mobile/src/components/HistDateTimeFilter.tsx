@@ -2,7 +2,7 @@
  * History date calendar + from/to time — mirrors proto `PvDateTimeFilter` / `HistDateCalendar`.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { todayYmd, ymdToIso } from '../lib/demo-shifts';
@@ -15,6 +15,7 @@ import {
 } from '../lib/hist-date-time-filters';
 import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { Calendar, ChevronDown, Clock } from './icons';
+import { PhoneSheet } from './PhoneSheet';
 
 /**
  * Calendar names, resolved by INDEX. Each entry is a FUNCTION — module scope
@@ -186,8 +187,11 @@ export function HistTimeInput({
           ) : null}
         </View>
       </Pressable>
+      {/* PhoneSheet, not a bare Modal (both pickers here): on the web build a
+          Modal covers the browser window outside the phone frame — and inside
+          Payment history's filter sheet it would open BEHIND that sheet. */}
       {open && !disabled && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <PhoneSheet visible animationType="fade" onRequestClose={() => setOpen(false)}>
           <Pressable style={styles.modalBackdrop} onPress={() => setOpen(false)}>
             <Pressable style={styles.timeModalCard} onPress={(e) => e.stopPropagation()}>
               <Text style={styles.timeModalTitle}>{label}</Text>
@@ -216,7 +220,7 @@ export function HistTimeInput({
               </Pressable>
             </Pressable>
           </Pressable>
-        </Modal>
+        </PhoneSheet>
       )}
     </View>
   );
@@ -485,9 +489,8 @@ export function HistDateField({
         </View>
       </Pressable>
 
-      <Modal
+      <PhoneSheet
         visible={calendarOpen}
-        transparent
         animationType="fade"
         onRequestClose={() => onCalendarOpenChange(false)}
       >
@@ -503,7 +506,7 @@ export function HistDateField({
             />
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
     </View>
   );
 }

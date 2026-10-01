@@ -20,7 +20,6 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -28,6 +27,7 @@ import {
   View,
 } from 'react-native';
 import { Eye, EyeOff } from '../components/icons';
+import { PhoneSheet } from '../components/PhoneSheet';
 import { C, GRADIENTS, grad } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { ApiError, completeForgotPassword, startForgotPassword } from '../lib/api';
@@ -254,7 +254,10 @@ export function ForgotPasswordModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={requestClose}>
+    // PhoneSheet, not a bare Modal: on the web build a Modal covers the browser
+    // window outside the phone frame, and the dial-code picker it opens (a
+    // PhoneSheet too) would land behind it. A phone still gets the Modal.
+    <PhoneSheet visible={visible} animationType="slide" onRequestClose={requestClose}>
       <Pressable style={styles.backdrop} onPress={requestClose}>
         <Pressable
           style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
@@ -514,7 +517,7 @@ export function ForgotPasswordModal({
           )}
         </Pressable>
       </Pressable>
-    </Modal>
+    </PhoneSheet>
   );
 }
 

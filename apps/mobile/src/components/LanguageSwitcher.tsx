@@ -2,11 +2,12 @@
  * Compact EN / 简体中文 / 繁體中文 switcher — same idea as web HandoffLanguageSwitcher.
  */
 import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { useLocale, type AppLocale } from '../i18n';
 import { ChevronDown } from './icons';
+import { PhoneSheet } from './PhoneSheet';
 
 type Props = {
   /** Compact pill for login/profile headers. */
@@ -42,7 +43,13 @@ export function LanguageSwitcher({ compact = false }: Props) {
         <ChevronDown size={compact ? 12 : 14} color={C.muted} />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      {/*
+        PhoneSheet, not a bare Modal: on the web build a Modal opens over the
+        whole browser window, outside the phone frame the rest of the app draws
+        in. It is the sheet host every in-frame sheet already uses; native keeps
+        a real Modal.
+      */}
+      <PhoneSheet visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>{t.lang.language}</Text>
@@ -65,7 +72,7 @@ export function LanguageSwitcher({ compact = false }: Props) {
             </Pressable>
           </View>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
     </>
   );
 }

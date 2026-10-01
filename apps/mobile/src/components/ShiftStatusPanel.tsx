@@ -5,7 +5,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Image,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,

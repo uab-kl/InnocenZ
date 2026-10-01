@@ -55,19 +55,30 @@ export function useAwaitingLastWeekPv() {
   const { isSigned } = useSignedPvs();
   const [week, setWeek] = useState<PrCurrentWeek | null>(null);
   const [loading, setLoading] = useState(false);
+  /*
+   * Has the read ANSWERED yet, and did the last one fail? `week === null` is
+   * three different facts — not asked yet, no voucher last week, the read
+   * failed — and PV detail must not say "not found" on the first or third.
+   */
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!token) {
       setWeek(null);
+      setLoaded(true);
       return;
     }
     setLoading(true);
     try {
       setWeek(await fetchMyLastWeek(token));
+      setFailed(false);
     } catch {
       setWeek(null);
+      setFailed(true);
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [token]);
 
@@ -159,5 +170,5 @@ export function useAwaitingLastWeekPv() {
     [awaitingAll, week],
   );
 
-  return { awaiting, awaitingAll, loading, refresh, lastWeek: week };
+  return { awaiting, awaitingAll, loading, loaded, failed, refresh, lastWeek: week };
 }

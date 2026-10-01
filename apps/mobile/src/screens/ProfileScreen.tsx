@@ -30,7 +30,14 @@ import {
   PORTFOLIO_SLOTS,
 } from '../lib/demo-shifts';
 import { PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
-import { pickImageFromGalleryEx, pickImagesFromGallery } from '../lib/photo-file';
+import {
+  captureFromCamera,
+  pickImageFromGalleryEx,
+  pickImagesFromGallery,
+} from '../lib/photo-file';
+import { missingIdPhotoSides, type IdPhotoSide } from '../lib/id-photos';
+import { withRetries } from '../lib/retry';
+import { localizeApiError } from '../lib/api-error-copy';
 import { useSession } from '../lib/session';
 import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { Avatar, IzButton } from '../components/ui';
@@ -96,8 +103,17 @@ const TIER_LABEL: Record<string, (t: AppTranslations) => string> = {
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openSecurity } = usePrNav();
   const { t } = useLocale();
-  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, generateComcard, token } =
-    useSession();
+  const {
+    me,
+    agencies: memberships,
+    signOut,
+    updateProfile,
+    uploadAvatar,
+    uploadPortfolioPhoto,
+    uploadIdDoc,
+    generateComcard,
+    token,
+  } = useSession();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -545,6 +561,43 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       setError(e instanceof ApiError ? e.message : t.profile.avatarUploadFailed);
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * THE SECOND CHANCE FOR AN ID PHOTO. Sign-up sends the card once, after the
+   * account exists; when that upload failed, nothing anywhere offered it again
+   * and the agency was left without the PR's ID. The section below appears only
+   * while a side is missing (`missingIdPhotoSides`), and this sends it — with
+   * the same retry sign-up now uses for a dropped connection.
+   */
+  const missingIdSides = missingIdPhotoSides(me?.profile);
+  const [idUploading, setIdUploading] = useState<IdPhotoSide | null>(null);
+  const onTakeIdPhoto = async (side: IdPhotoSide) => {
+    if (idUploading) return;
+    const picked = await captureFromCamera({
+      facing: 'back',
+      filename: side === 'front' ? 'id-front.jpg' : 'id-back.jpg',
+    });
+    if (!picked) return;
+    if (picked.size != null && picked.size > 5 * 1024 * 1024) {
+      setError(t.profile.imageTooLarge);
+      return;
+    }
+    setIdUploading(side);
+    setError(null);
+    try {
+      await withRetries(() => uploadIdDoc(side, picked.file, picked.filename), {
+        attempts: 3,
+        delayMs: 1500,
+      });
+      showToast(t.profile.idPhotoSaved);
+    } catch (e) {
+      setError(
+        e instanceof ApiError ? localizeApiError(e.message, t.errors) : t.profile.idPhotoFailed,
+      );
+    } finally {
+      setIdUploading(null);
     }
   };
 
@@ -1441,6 +1494,38 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <Text style={styles.bankEmptyText}>{t.profile.noBankDetails}</Text>
           )}
         </View>
+
+        {/*
+          ID PHOTOS — only while a side is MISSING. Sign-up is the one other
+          place the card is sent, and a failed upload there had no retry: this
+          is it. Nothing renders for a PR whose card is on file.
+        */}
+        {missingIdSides.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t.profile.idPhotosTitle}</Text>
+            <Text style={styles.bankEmptyText}>{t.profile.idPhotosHint}</Text>
+            {missingIdSides.map((side) => (
+              <View key={side} style={styles.idPhotoRow}>
+                <Text style={styles.idPhotoSide}>
+                  {side === 'back'
+                    ? t.profile.idPhotoBack
+                    : me?.profile.idType === 'Passport'
+                      ? t.profile.idPhotoPassport
+                      : t.profile.idPhotoFront}
+                </Text>
+                <IzButton
+                  label={idUploading === side ? t.profile.saving : t.profile.idPhotoTake}
+                  icon={Camera}
+                  variant="soft"
+                  small
+                  fullWidth={false}
+                  disabled={idUploading !== null}
+                  onPress={() => void onTakeIdPhoto(side)}
+                />
+              </View>
+            ))}
+          </View>
+        )}
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -2051,6 +2136,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   bankEmptyText: { marginTop: 8, ...font(), fontSize: 13, color: C.amber },
+  /** One missing side of the ID: its name, and the camera button. Wraps on a narrow phone. */
+  idPhotoRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  idPhotoSide: { ...font(700), fontSize: 14, color: C.txt },
   bankHint: { marginTop: 8, ...font(), fontSize: 12, color: C.prMuted },
   agencyLoadError: {
     marginTop: 8,

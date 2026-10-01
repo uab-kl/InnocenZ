@@ -15,7 +15,7 @@
  * Pure: no fetching, no hooks, no React. Everything it needs is already in the
  * payload the Payment screen holds.
  */
-import type { PrCurrentWeek, PrReceiptLine, PrWeekShift } from './api';
+import type { PrCurrentWeek, PrReceiptLine, PrWeekDispute, PrWeekShift } from './api';
 import { type GridBucket, gridBucket } from './week-pay-grid';
 
 /** One paper receipt's worth of lines inside a cell. */
@@ -155,6 +155,80 @@ export function buildCellEvidence(
  */
 export function evidenceMatchesCell(evidence: CellEvidence, cellAmount: number): boolean {
   return Math.round(evidence.total * 100) === Math.round(cellAmount * 100);
+}
+
+/** One shift a claim names, as the Payment claim list describes it. */
+export type ClaimShift = {
+  receiptNo: string;
+  orderNo: string | null;
+  eventName: string | null;
+  eventKind: string | null;
+  /**
+   * WHICH special night — both pairs, off the week's `shifts[]`, for
+   * `eventKindLabel` (special-event.ts). Null when the backend sent none.
+   */
+  specialEventType: string | null;
+  customSpecialEventName: string | null;
+  templateSpecialEventType: string | null;
+  templateCustomEventName: string | null;
+  outletName: string | null;
+  slot: string | null;
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  overtimeMinutes: number | null;
+};
+
+/**
+ * The shift(s) a claim actually names — receiptRefs resolved back through the
+ * day's evidence to the outlet, slot and attendance stamps behind each receipt.
+ *
+ * Returns [] when the claim named nothing, which is every claim raised before
+ * the shift picker existed. The caller says so out loud rather than rendering
+ * an empty space that reads as "still loading".
+ */
+export function claimShifts(
+  week: PrCurrentWeek | null,
+  claim: Pick<PrWeekDispute, 'disputeDate' | 'component' | 'receiptId' | 'receiptRefs'>,
+): ClaimShift[] {
+  const refs = claim.receiptRefs ?? [];
+  const evidence = buildCellEvidence(week, claim.disputeDate, claim.component);
+  return evidence.groups.flatMap((g) =>
+    g.receipts
+      /*
+       * The FK first, the old receipt NUMBERS second, and neither = the claim
+       * covered the WHOLE cell, so every shift in it was part of that one
+       * argument. Listing them answers "which shift?" with the truth — "all of
+       * them" — instead of a dead end saying nothing was recorded.
+       */
+      .filter((r) =>
+        claim.receiptId
+          ? r.receiptId === claim.receiptId
+          : r.receiptNo && (refs.length === 0 || refs.includes(r.receiptNo)),
+      )
+      .map((r) => ({
+        receiptNo: r.receiptNo as string,
+        orderNo: r.orderNo,
+        /*
+         * The night, not just the venue. The agency's own receipt card names
+         * the event and its type, and a claim the PR files about that night
+         * has to be readable beside it — "Emhub Testing, special event" is
+         * what both sides argue about, and the outlet name alone loses which
+         * of two shifts at one venue this was. WHICH special night rides along
+         * too, so the tag can say "Special event · VIP night".
+         */
+        eventName: g.shift?.eventName ?? null,
+        eventKind: g.shift?.eventKind ?? null,
+        specialEventType: g.shift?.specialEventType ?? null,
+        customSpecialEventName: g.shift?.customSpecialEventName ?? null,
+        templateSpecialEventType: g.shift?.templateSpecialEventType ?? null,
+        templateCustomEventName: g.shift?.templateCustomEventName ?? null,
+        outletName: g.shift?.outletName ?? null,
+        slot: g.shift?.slot ?? null,
+        checkInAt: g.shift?.checkInAt ?? null,
+        checkOutAt: g.shift?.checkOutAt ?? null,
+        overtimeMinutes: g.shift?.overtimeMinutes ?? null,
+      })),
+  );
 }
 
 /**

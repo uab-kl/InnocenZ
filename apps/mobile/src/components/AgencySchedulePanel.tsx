@@ -32,7 +32,6 @@ import { PhoneSheet } from './PhoneSheet';
 import {
   DEFAULT_CANCELLATION_BANDS,
   type CancellationBands,
-  cancellationBandsFrom,
   // Kept ONLY as the stable English id behind each month chip's React key —
   // the label a PR reads comes from `MONTH_LONG` / `MONTH_SHORT` below. Keying
   // on the rendered label would remount all twelve chips on a language switch.
@@ -58,11 +57,17 @@ import {
   blockMyDay,
   cancelMyShiftAssignment,
   fetchMyUnavailableDays,
-  getMyPenaltyRules,
   requestMyShiftLeave,
   unblockMyDay,
   type ShiftAssignmentRecord,
 } from '../lib/api';
+import {
+  cancellationBandsForAgency,
+  cancellationRuleGroups,
+  shiftAgencyName,
+} from '../lib/cancel-rules';
+import { useMyPenaltyRules } from '../lib/use-penalty-rules';
+import { eventKindLabel } from '../lib/special-event';
 
 /** Backend marker a rejected MC/leave leaves on the assignment notes. */
 const LEAVE_REJECTED_PREFIX = '[Leave rejected]';
@@ -399,7 +404,26 @@ function cancelPenalty(
   };
 }
 
-export function AgencySchedulePanel() {
+/**
+ * A day to open on arrival — a notification's shift, handed down by
+ * ShiftsScreen. A NEW object opens it again (a second notification, same day).
+ * `assignmentId` is the booking the notice was about: when the re-read list no
+ * longer holds it, the day's sheet says so.
+ */
+export type ScheduleDayFocus = { dateIso: string; assignmentId?: string };
+
+/**
+ * Focuses already opened. Folding and reopening the Agency Schedule section
+ * remounts this panel with the SAME focus still passed down, and it must not
+ * pop a sheet open that the PR had closed.
+ */
+const openedFocus = new WeakSet<ScheduleDayFocus>();
+
+export function AgencySchedulePanel({
+  focusDay = null,
+}: {
+  focusDay?: ScheduleDayFocus | null;
+} = {}) {
   const { t } = useLocale();
   const today = todayYmd();
   const { me, agencies, token } = useSession();
@@ -422,18 +446,29 @@ export function AgencySchedulePanel() {
   const [reasonTarget, setReasonTarget] = useState<string | null>(null);
   const [reasonDraft, setReasonDraft] = useState('');
   const [rulesOpen, setRulesOpen] = useState(false);
-  // The agency's cancellation bands. Seeded with the defaults rather than null
-  // so the Cancel button always shows a number — and they are the same numbers
-  // the app charged before this was configurable, so a slow fetch does not make
-  // the price jump once it lands.
-  const [cancelBands, setCancelBands] = useState<CancellationBands>(
-    DEFAULT_CANCELLATION_BANDS,
+  // The agencies' penalty rules. Null until they load (and after a failure),
+  // which prices with the defaults — the same numbers the app charged before
+  // this was configurable, so a slow fetch does not blank the Cancel button.
+  const penaltyRules = useMyPenaltyRules();
+  /**
+   * The bands a shift is charged by — the ones of the agency that BOOKED it.
+   * One set for every shift was right only for a PR with one agency; the server
+   * seals each fee from the assignment's own agency (`cancel-rules.ts`).
+   */
+  const bandsFor = (a: ShiftAssignmentRecord) =>
+    cancellationBandsForAgency(penaltyRules, a.agencyId);
+  const ruleGroups = useMemo(
+    () => cancellationRuleGroups(penaltyRules, agencies),
+    [penaltyRules, agencies],
   );
   const [cancelledIds, setCancelledIds] = useState<string[]>([]);
   // Cancel-shift confirmation (penalty + required reason → backend, agency notified).
   const [cancelTarget, setCancelTarget] = useState<{
     entry: TimetableEntry;
     penalty: CancelPenalty;
+    /** The booking agency's bands, and its name for the rules card. */
+    bands: CancellationBands;
+    agencyName: string | null;
   } | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -445,24 +480,6 @@ export function AgencySchedulePanel() {
   const [leavePhotos, setLeavePhotos] = useState<string[]>([]);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
-
-  // Load the agency's cancellation bands. A failure keeps the defaults rather
-  // than blanking the price: the PR still needs to see what cancelling costs,
-  // and the defaults are what the server would charge anyway.
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    getMyPenaltyRules(token)
-      .then((rules) => {
-        if (!cancelled) setCancelBands(cancellationBandsFrom(rules));
-      })
-      .catch(() => {
-        /* keep DEFAULT_CANCELLATION_BANDS */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   // The days already blocked, from the server. Without this the calendar opens
   // blank every launch and the PR re-blocks days that are in fact already
@@ -536,7 +553,13 @@ export function AgencySchedulePanel() {
     }
     setCancelReason('');
     setCancelError(null);
-    setCancelTarget({ entry, penalty: cancelPenalty(assignment, cancelBands) });
+    const bands = bandsFor(assignment);
+    setCancelTarget({
+      entry,
+      penalty: cancelPenalty(assignment, bands),
+      bands,
+      agencyName: shiftAgencyName(assignment, agencies),
+    });
   };
 
   const confirmCancel = async () => {
@@ -678,7 +701,39 @@ export function AgencySchedulePanel() {
   const [missedTarget, setMissedTarget] = useState<{
     iso: string;
     rows: ShiftAssignmentRecord[];
+    /** Opened by a notice whose booking is no longer on the schedule. */
+    gone?: boolean;
   } | null>(null);
+
+  /*
+   * OPENED FROM A NOTIFICATION: turn the calendar to that month and open the
+   * day — the same sheet a tap on the day opens, listing every shift on it
+   * with what happened to each (booked, cancelled, MC/leave, worked).
+   *
+   * ⚠️ ALWAYS the sheet, never only the month. A booking removed after its
+   * notice was sent used to leave the day empty, and the calendar just turned
+   * — which read as "the app lost my shift". Now the sheet opens and SAYS the
+   * shift is no longer on the schedule (above whatever else the day still
+   * holds). Asked of the booking the notice named, not of the day: another
+   * shift on the same day does not stand in for the one that went.
+   *
+   * Keyed on the focus OBJECT, and reading the rows as they stand at that
+   * moment — ShiftsScreen re-reads the assignments BEFORE handing the day
+   * down, so a leave decided a minute ago is shown decided, and a booking
+   * made a minute ago is found rather than reported gone.
+   */
+  useEffect(() => {
+    if (!focusDay || openedFocus.has(focusDay)) return;
+    openedFocus.add(focusDay);
+    const [y, m] = isoToYmd(focusDay.dateIso);
+    setViewMonth(new Date(y, m - 1, 1));
+    const rows = shiftsByIso.get(focusDay.dateIso) ?? [];
+    const gone = focusDay.assignmentId
+      ? !rows.some((a) => a.id === focusDay.assignmentId)
+      : rows.length === 0;
+    setMissedTarget({ iso: focusDay.dateIso, rows, gone });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per focus, rows as they stand
+  }, [focusDay]);
   // Which picker (month/year chip row) the MONTH / YEAR fields have open.
   const [navOpen, setNavOpen] = useState<'month' | 'year' | null>(null);
 
@@ -803,26 +858,41 @@ export function AgencySchedulePanel() {
             }
           />
         </Pressable>
+        {/*
+          ONE SET PER AGENCY, EACH UNDER ITS NAME. The panel used to print one
+          unnamed set — the defaults when the agency had written none — so a PR
+          on two rosters could not tell whose rules these were, and one whose
+          agency charges nothing read a fee the server never seals.
+        */}
         {rulesOpen && (
           <View style={styles.rulesList}>
-            {cancellationRules(cancelBands).map((r) => (
-              <View key={r.id} style={styles.ruleRow}>
-                <Text style={styles.ruleWhen}>{r.label(t)}</Text>
-                <Text
-                  style={[
-                    styles.ruleOut,
-                    {
-                      color:
-                        r.tone === 'green'
-                          ? C.green
-                          : r.tone === 'amber'
-                            ? C.amber
-                            : C.red,
-                    },
-                  ]}
-                >
-                  {r.outcome(t)}
-                </Text>
+            {ruleGroups.map((group) => (
+              <View key={group.agencyId ?? 'rules'} style={styles.rulesGroup}>
+                {group.agencyName ? (
+                  <Text style={styles.rulesAgency} numberOfLines={1}>
+                    {group.agencyName}
+                  </Text>
+                ) : null}
+                {cancellationRules(group.bands).map((r) => (
+                  <View key={r.id} style={styles.ruleRow}>
+                    <Text style={styles.ruleWhen}>{r.label(t)}</Text>
+                    <Text
+                      style={[
+                        styles.ruleOut,
+                        {
+                          color:
+                            r.tone === 'green'
+                              ? C.green
+                              : r.tone === 'amber'
+                                ? C.amber
+                                : C.red,
+                        },
+                      ]}
+                    >
+                      {r.outcome(t)}
+                    </Text>
+                  </View>
+                ))}
               </View>
             ))}
           </View>
@@ -1012,8 +1082,11 @@ export function AgencySchedulePanel() {
                 <TimetableRow
                   key={entry.id}
                   entry={entry}
+                  kindLabel={assignment ? eventKindLabel(assignment, t) : null}
                   penalty={
-                    assignment ? cancelPenalty(assignment, cancelBands) : null
+                    assignment
+                      ? cancelPenalty(assignment, bandsFor(assignment))
+                      : null
                   }
                   leavePending={assignment?.status === 'leave_pending'}
                   leaveRejected={
@@ -1163,7 +1236,16 @@ export function AgencySchedulePanel() {
                     {t.checkin.cancelRules.toUpperCase()}
                   </Text>
                 </View>
-                {cancellationRules(cancelBands).map((r) => (
+                {/* The agency that booked THIS shift — its rules are the ones
+                    the fee above is sealed from. A name is data: untranslated. */}
+                {cancelTarget?.agencyName ? (
+                  <Text style={styles.rulesCardAgency} numberOfLines={1}>
+                    {cancelTarget.agencyName}
+                  </Text>
+                ) : null}
+                {cancellationRules(
+                  cancelTarget?.bands ?? DEFAULT_CANCELLATION_BANDS,
+                ).map((r) => (
                   <View
                     key={r.id}
                     style={[
@@ -1429,11 +1511,28 @@ export function AgencySchedulePanel() {
                 <Text style={styles.missedDate}>
                   {friendlyDate(t, ...isoToYmd(missedTarget.iso))}
                 </Text>
+                {/* The notice's booking was removed after it was sent — said
+                    first, and plainly, above whatever the day still holds. */}
+                {missedTarget.gone ? (
+                  <Text style={styles.goneNote} role="alert">
+                    {t.schedule.shiftNoLongerOnSchedule}
+                  </Text>
+                ) : null}
                 {missedTarget.rows.map((a) => (
                   <View key={a.id} style={styles.missedRow}>
                     <Text style={styles.missedOutlet}>
                       {a.outletName ?? t.common.outlet}
                     </Text>
+                    {/* WHICH night — "Launch party · Special event · VIP night".
+                        Two shifts at one venue on one day read the same by
+                        outlet and slot alone. */}
+                    {a.eventName?.trim() || a.eventKind === 'special' ? (
+                      <Text style={styles.missedMeta}>
+                        {[a.eventName?.trim(), eventKindLabel(a, t)]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    ) : null}
                     <Text style={styles.missedMeta}>{a.slot ?? '—'}</Text>
                     {/* WHAT HAPPENED, per shift. A day can hold one shift she
                         checked into and another she missed, and colouring the
@@ -1495,6 +1594,7 @@ function LegendSwatch({ color, label }: { color: string; label: string }) {
 
 function TimetableRow({
   entry,
+  kindLabel,
   penalty,
   leavePending,
   leaveRejected,
@@ -1502,6 +1602,12 @@ function TimetableRow({
   onLeave,
 }: {
   entry: TimetableEntry;
+  /**
+   * The kind in words, naming WHICH special night ("Special event · VIP
+   * night"). Null for a row with no live assignment (the demo fallback), which
+   * keeps the bare kind.
+   */
+  kindLabel: string | null;
   penalty: CancelPenalty | null;
   /** Backend row is leave_pending — swap the action buttons for a wait note. */
   leavePending: boolean;
@@ -1573,9 +1679,11 @@ function TimetableRow({
             {entry.outlet}
           </Text>
           {entry.event ? (
-            <Text style={styles.ttEventLine} numberOfLines={1}>
+            // Two lines: the sub-type is the part a single line would cut.
+            <Text style={styles.ttEventLine} numberOfLines={2}>
               {entry.event} ·{' '}
-              {isSpecial ? t.shifts.specialEvent : t.shifts.normalShift}
+              {kindLabel ??
+                (isSpecial ? t.shifts.specialEvent : t.shifts.normalShift)}
             </Text>
           ) : null}
           <Text style={styles.ttWhenLine} numberOfLines={1}>
@@ -1618,7 +1726,7 @@ function TimetableRow({
               </Text>
               {penalty && penalty.amount > 0 ? (
                 <Text style={styles.cancelPenaltyText} numberOfLines={1}>
-                  −{formatRM(penalty.amount)}
+                  {formatRM(-penalty.amount)}
                 </Text>
               ) : null}
             </Pressable>
@@ -1676,6 +1784,10 @@ const styles = StyleSheet.create({
   },
   ruleWhen: { ...font(), fontSize: 13, color: C.prMuted },
   ruleOut: { ...font(700), fontSize: 13 },
+  /** One agency's block of bands — gap between agencies, none inside one. */
+  rulesGroup: { gap: 0, paddingTop: 4 },
+  /** Whose rules the rows beneath are. */
+  rulesAgency: { ...font(700), fontSize: 13, color: C.goldL, paddingTop: 4 },
   calWrap: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1912,6 +2024,19 @@ const styles = StyleSheet.create({
     ...font(),
     fontSize: 12,
     color: C.prMuted2,
+  },
+  /** "No longer on your schedule" — a fact, not a status, so no status colour. */
+  goneNote: {
+    marginTop: 10,
+    ...font(600),
+    fontSize: 13,
+    lineHeight: 19,
+    color: C.txt,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   timetable: { marginTop: 2 },
   ttHead: {
@@ -2252,6 +2377,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: C.txt,
   },
+  rulesCardAgency: { ...font(700), fontSize: 13, color: C.goldL },
   ruleCardRow: {
     borderWidth: 1,
     borderRadius: 10,

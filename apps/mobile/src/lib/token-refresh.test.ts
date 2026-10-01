@@ -2,7 +2,9 @@
 // describe/expect/test/jest as globals.
 import {
   forgetSupersededTokens,
+  isSessionRefusalAt,
   noteSupersededToken,
+  refreshRefusedByServer,
   registerTokenProvider,
   renewSession,
   type RefreshOutcome,
@@ -202,5 +204,47 @@ describe('the session moves while the server is being asked', () => {
     expect(await waiting).toEqual({ kind: 'retry', accessToken: 'NEW' });
     // The old refresh token's refusal says nothing about the new pair.
     expect(provider.dead).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * WHICH 401s THE APP RENEWS — the SAME rule as the web's `isSessionRefusal`
+ * (apps/web/src/lib/auth/token-refresh.ts). The cases below are the web test's
+ * own, so the two clients cannot quietly disagree again.
+ */
+describe('isSessionRefusalAt — only a 401, and never from a body-credential endpoint', () => {
+  test.each<[number | undefined, string, boolean]>([
+    [401, '/notification', true],
+    [401, '/auth/me', true],
+    [401, '/auth/org-member-invite/accept', true],
+    [401, 'http://h/graphql', true],
+    [401, 'http://192.168.0.2:7777/api/v1/payment-voucher/mine/pv-1/export.pdf', true],
+    [401, '/auth/login', false],
+    [401, 'http://h/api/v1/auth/refresh?x=1', false],
+    [401, '/user/abc/delete/', false],
+    [401, 'http://192.168.0.2:7777/api/v1/user/abc/delete', false],
+    [403, '/notification', false],
+    [undefined, '/notification', false],
+  ])('%s %s → %s', (status, url, expected) => {
+    expect(isSessionRefusalAt(status, url)).toBe(expected);
+  });
+
+  test('a delete-looking path that is NOT self-delete still renews', () => {
+    expect(isSessionRefusalAt(401, '/user/abc/delete/photo')).toBe(true);
+  });
+});
+
+describe('refreshRefusedByServer — the web\'s refusedByServer', () => {
+  test.each<[number, boolean]>([
+    [400, true],
+    [401, true],
+    [403, true],
+    [404, true],
+    [408, false],
+    [429, false],
+    [500, false],
+    [503, false],
+  ])('%s → %s', (status, expected) => {
+    expect(refreshRefusedByServer(status)).toBe(expected);
   });
 });

@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import type { SignupFieldCopy } from '../../i18n/signup-copy';
 import { C, F, GRADIENTS, grad } from '../../theme/theme';
 import { font } from '../../theme/fonts';
 import { Camera, Check, Shield } from '../../components/icons';
+import { PhoneSheet } from '../../components/PhoneSheet';
 import { captureFromCamera } from '../../lib/photo-file';
 import {
   isValidNricFormat,
@@ -618,9 +618,10 @@ export function Step4VerifyPhotos({
         </View>
       ) : null}
 
-      <Modal
+      {/* PhoneSheet, not a bare Modal: on the web build a Modal covers the
+          browser window outside the phone frame. */}
+      <PhoneSheet
         visible={promptOpen}
-        transparent
         animationType="fade"
         onRequestClose={() => setPromptOpen(false)}
       >
@@ -655,7 +656,7 @@ export function Step4VerifyPhotos({
             </Pressable>
           </View>
         </View>
-      </Modal>
+      </PhoneSheet>
     </>
   );
 }

@@ -7,7 +7,7 @@
  * panel) and the wages seal write to the backend current-week voucher.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { distanceM } from '../lib/geo';
@@ -15,7 +15,6 @@ import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { font } from '../theme/fonts';
 import {
   cancellationRuleSummary,
-  DEFAULT_CANCELLATION_BANDS,
   GEOFENCE_METERS,
   GPS_BYPASS,
   fmtDFriendly,
@@ -30,8 +29,11 @@ import { shiftDayKeys as shiftDayKeysFor } from '../lib/pick-active-shift';
 import { overtimeHours, overtimePay } from '../lib/pr-rate';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
+import { cancellationBandsForAgency, shiftAgencyName } from '../lib/cancel-rules';
+import { useMyPenaltyRules } from '../lib/use-penalty-rules';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { usePrNav } from '../lib/pr-nav';
+import { eventKindLabel } from '../lib/special-event';
 import { useLocale, formatMessage } from '../i18n';
 import {
   assetUrl,
@@ -45,6 +47,7 @@ import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
 import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
 import { MapPin } from '../components/icons';
 import { ImageLightbox, ZoomHint } from '../components/ImageLightbox';
+import { PhoneSheet } from '../components/PhoneSheet';
 import type { PrTab } from '../components/BottomNav';
 
 // react-native-maps ships native code only — requiring it on web would crash
@@ -71,7 +74,9 @@ function localYmd(d: Date): Ymd {
 
 export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { t } = useLocale();
-  const { token } = useSession();
+  const { token, agencies } = useSession();
+  // Whose cancellation rules the cancel sheet prints — see `cancel-rules.ts`.
+  const penaltyRules = useMyPenaltyRules();
   const { setTab } = usePrNav();
   // Keep local session in sync so Scan / Shifts don't bounce the PR back to
   // "check in" while they're already on duty from the backend stamp.
@@ -93,8 +98,8 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Bottom sheets render outside PhoneFrame, so they must clear the Android
-  // nav-button bar themselves.
+  // On a phone the bottom sheets are Modals outside PhoneFrame, so they must
+  // clear the Android nav-button bar themselves (web insets are zero).
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
 
@@ -658,9 +663,8 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         color: active?.eventKind === 'special' ? '#E8C27A' : '#C9B8F2',
                       }}
                     >
-                      {active?.eventKind === 'special'
-                        ? t.shifts.specialEvent
-                        : t.shifts.normalShift}
+                      {/* WHICH special night — "Special event · VIP night". */}
+                      {eventKindLabel(active, t)}
                     </Text>
                   </View>
                   <ZoomHint />
@@ -671,6 +675,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <Text style={styles.venueName}>{outletName}</Text>
                   <Text style={styles.event}>
                     {active.eventName ?? t.checkin.eventFallback}
+                    {/* With no event picture there is no badge to carry the
+                        kind, and a special night then read like any other. */}
+                    {!active.templateCoverImage && active.eventKind === 'special'
+                      ? ` · ${eventKindLabel(active, t)}`
+                      : ''}
                   </Text>
                   <Text style={styles.tapHint}>
                     {briefOpen ? t.common.tapToCollapse : t.common.tapToExpand}
@@ -896,10 +905,13 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         * old block used, and then lets the PR through — because the alternative
         * was a shift they could never close, a wage never sealed, and every
         * later check-in refused behind it.
+        *
+        * PhoneSheet, not a bare Modal, for all three sheets on this screen: on
+        * the web build a Modal covers the whole browser window, outside the
+        * phone frame. A phone still gets the same Modal.
         */}
-      <Modal
+      <PhoneSheet
         visible={emptyShiftOpen}
-        transparent
         animationType="slide"
         onRequestClose={() => setEmptyShiftOpen(false)}
       >
@@ -937,11 +949,10 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             </Pressable>
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
 
-      <Modal
+      <PhoneSheet
         visible={cancelOpen}
-        transparent
         animationType="slide"
         onRequestClose={() => setCancelOpen(false)}
       >
@@ -956,8 +967,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             </Text>
             <Text style={styles.sheetHint}>{t.checkin.cancelWarning}</Text>
             <Text style={styles.rulesTitle}>{t.checkin.cancelRules}</Text>
-            {cancellationRuleSummary(DEFAULT_CANCELLATION_BANDS, t).map((r) => (
-              <View key={r.label} style={styles.ruleRow}>
+            {/*
+              THE BOOKING AGENCY'S rules, under its name. This printed the
+              hard-coded defaults for every shift — a 25% / 50% fee even for an
+              agency that charges nothing, and never whose rules they were.
+            */}
+            {active && shiftAgencyName(active, agencies) ? (
+              <Text style={styles.rulesAgency} numberOfLines={1}>
+                {shiftAgencyName(active, agencies)}
+              </Text>
+            ) : null}
+            {cancellationRuleSummary(
+              cancellationBandsForAgency(penaltyRules, active?.agencyId),
+              t,
+            ).map((r) => (
+              <View key={r.id} style={styles.ruleRow}>
                 <Text style={styles.ruleLabel}>{r.label}</Text>
                 <Text
                   style={[
@@ -1008,12 +1032,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             </Pressable>
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
 
       {/* Styled location explainer — shown once, BEFORE the bare OS popup. */}
-      <Modal
+      <PhoneSheet
         visible={locPromptOpen}
-        transparent
         animationType="fade"
         onRequestClose={() => {
           setLocPromptOpen(false);
@@ -1057,7 +1080,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             </Pressable>
           </View>
         </View>
-      </Modal>
+      </PhoneSheet>
     </View>
   );
 }
@@ -1401,6 +1424,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: C.muted2,
   },
+  /** Whose rules the rows below are — the agency that booked this shift. */
+  rulesAgency: { ...font(700), fontSize: 13, color: C.goldL, marginTop: 4 },
   ruleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

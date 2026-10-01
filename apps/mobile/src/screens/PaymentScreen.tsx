@@ -6,7 +6,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +18,7 @@ import { font } from '../theme/fonts';
 import {
   DAY_SHORT,
   MONTH_SHORT,
+  formatAmount,
   formatRM,
   formatUpcomingWeekLabel,
   weekPayGridTotal,
@@ -44,8 +44,14 @@ import {
   type GridBucket,
   VERIFIED_STATUSES,
 } from '../lib/week-pay-grid';
-import { buildCellEvidence, receiptDisputable } from '../lib/cell-evidence';
+import {
+  buildCellEvidence,
+  claimShifts,
+  receiptDisputable,
+} from '../lib/cell-evidence';
+import { eventKindLabel } from '../lib/special-event';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
+import { PhoneSheet } from '../components/PhoneSheet';
 import {
   dayStatusLabel,
   cellReviewTone,
@@ -363,60 +369,8 @@ function cellAmount(day: WeeklyDayPay, key: GridBucket): number {
  */
 function formatCell(value: number): string {
   if (value === 0) return '—';
-  return value < 0 ? `−${Math.abs(value).toFixed(2)}` : value.toFixed(2);
-}
-
-/**
- * The shift(s) a claim actually names — receiptRefs resolved back through the
- * day's evidence to the outlet, slot and attendance stamps behind each receipt.
- *
- * Returns [] when the claim named nothing, which is every claim raised before
- * the shift picker existed. The caller says so out loud rather than rendering
- * an empty space that reads as "still loading".
- */
-function claimShifts(
-  week: PrCurrentWeek | null,
-  d: {
-    disputeDate: string;
-    component: IncomeKey;
-    receiptId: string | null;
-    receiptRefs: string[] | null;
-  },
-) {
-  const refs = d.receiptRefs ?? [];
-  const evidence = buildCellEvidence(week, d.disputeDate, d.component);
-  return evidence.groups.flatMap((g) =>
-    g.receipts
-      /*
-       * The FK first, the old receipt NUMBERS second, and neither = the claim
-       * covered the WHOLE cell, so every shift in it was part of that one
-       * argument. Listing them answers "which shift?" with the truth — "all of
-       * them" — instead of a dead end saying nothing was recorded.
-       */
-      .filter((r) =>
-        d.receiptId
-          ? r.receiptId === d.receiptId
-          : r.receiptNo && (refs.length === 0 || refs.includes(r.receiptNo)),
-      )
-      .map((r) => ({
-        receiptNo: r.receiptNo as string,
-        orderNo: r.orderNo,
-        /*
-         * The night, not just the venue. The agency's own receipt card names
-         * the event and its type, and a claim the PR files about that night
-         * has to be readable beside it — "Emhub Testing, special event" is
-         * what both sides argue about, and the outlet name alone loses which
-         * of two shifts at one venue this was.
-         */
-        eventName: g.shift?.eventName ?? null,
-        eventKind: g.shift?.eventKind ?? null,
-        outletName: g.shift?.outletName ?? null,
-        slot: g.shift?.slot ?? null,
-        checkInAt: g.shift?.checkInAt ?? null,
-        checkOutAt: g.shift?.checkOutAt ?? null,
-        overtimeMinutes: g.shift?.overtimeMinutes ?? null,
-      })),
-  );
+  // The evidence sheet's item table prints the same `formatAmount`.
+  return formatAmount(value);
 }
 
 /** "Tue · 4 Aug 2026" — UTC-parsed to match how the grid buckets its days. */
@@ -465,14 +419,6 @@ function shiftWindowLabel(
   return overtimeMinutes && overtimeMinutes > 0
     ? formatMessage(t.payment.withOvertime, { base, m: overtimeMinutes })
     : base;
-}
-
-/** "Special event" / "Normal shift" — the outlet's own toggle, worded as the agency words it. */
-function eventKindLabel(
-  kind: string | null | undefined,
-  t: AppTranslations,
-): string {
-  return kind === 'special' ? t.shifts.specialEvent : t.shifts.normalShift;
 }
 
 /** "4 Aug, 11:29 AM" — the stamp, short enough to sit on a claim row. */
@@ -739,11 +685,13 @@ export function PaymentScreen({
   }, [token]);
 
   // Check-out lands here with paymentWeek: 'current' so This week (sealed
-  // shift) is visible immediately — not Last week.
-  const focusWeek =
-    route.name === 'tabs' && route.tab === 'payment'
-      ? route.paymentWeek
-      : undefined;
+  // shift) is visible immediately — not Last week. So does a notification
+  // about this week's money (TopBar). The effect below is keyed on the ROUTE
+  // too, because the week string alone does not change when This week is asked
+  // for again while the PR has since switched to Last week.
+  const paymentRoute =
+    route.name === 'tabs' && route.tab === 'payment' ? route : null;
+  const focusWeek = paymentRoute?.paymentWeek;
   const [weekTab, setWeekTab] = useState<WeekTab>(() =>
     focusWeek === 'current' || (!focusWeek && hasThisWeekRows)
       ? 'current'
@@ -761,7 +709,7 @@ export function PaymentScreen({
       setWeekTab('last');
       setLastOpen(true);
     }
-  }, [focusWeek, refreshEarnings]);
+  }, [paymentRoute, focusWeek, refreshEarnings]);
   const [disputedKeys, setDisputedKeys] = useState<Set<string>>(
     () => new Set(),
   );
@@ -2083,11 +2031,19 @@ export function PaymentScreen({
 
               {hasLastWeekRows ? (
                 <>
-                  <Text style={styles.disputeHint}>
-                    {tapHintParts[0]}
-                    <Text style={{ color: C.red }}>{t.payment.redWord}</Text>
-                    {tapHintParts[1] ?? ''}
-                  </Text>
+                  {/* "Dispute it from there" only while some voucher in the
+                      week can still be disputed — a signed or paid week is
+                      inspect-only, and its cells already carry the inspect
+                      glyph rather than a flag. */}
+                  {weekDisputable(lastWeek) ? (
+                    <Text style={styles.disputeHint}>
+                      {tapHintParts[0]}
+                      <Text style={{ color: C.red }}>{t.payment.redWord}</Text>
+                      {tapHintParts[1] ?? ''}
+                    </Text>
+                  ) : (
+                    <Text style={styles.disputeHint}>{t.pv.tapHintInspect}</Text>
+                  )}
 
                   <Text style={styles.footNote}>
                     {t.payment.pvIssuedSunday}{' '}
@@ -2541,11 +2497,13 @@ export function PaymentScreen({
        * which of my four rows?". Reachable by tapping the status cell, and fed
        * by the server's own dispute rows, so it is the same record the agency
        * is working from rather than a client-side echo of it.
+       *
+       * Both sheets on this screen are PhoneSheets, not bare Modals: on the web
+       * build a Modal covers the browser window outside the phone frame.
        */}
       {claimDay && (
-        <Modal
+        <PhoneSheet
           visible
-          transparent
           animationType="slide"
           onRequestClose={() => setClaimDay(null)}
         >
@@ -2755,8 +2713,11 @@ export function PaymentScreen({
                                         s.outletName ??
                                         t.payment.shiftFallback}
                                     </Text>
+                                    {/* WHICH special night — "Special event · VIP
+                                        night" — by the rule every other shift
+                                        card uses (special-event.ts). */}
                                     <Text style={styles.claimEventTag}>
-                                      {eventKindLabel(s.eventKind, t)}
+                                      {eventKindLabel(s, t)}
                                     </Text>
                                   </View>
                                   <Text style={styles.claimShiftMeta}>
@@ -2875,7 +2836,7 @@ export function PaymentScreen({
               })()}
             </View>
           </View>
-        </Modal>
+        </PhoneSheet>
       )}
 
       {evidenceTarget && (
@@ -2963,9 +2924,8 @@ export function PaymentScreen({
         />
       )}
 
-      <Modal
+      <PhoneSheet
         visible={disputeOpen}
-        transparent
         animationType="slide"
         onRequestClose={closeDispute}
       >
@@ -3349,7 +3309,7 @@ export function PaymentScreen({
             </ScrollView>
           </View>
         </View>
-      </Modal>
+      </PhoneSheet>
     </View>
   );
 }
@@ -3487,8 +3447,9 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
     <View style={penaltyStyles.card}>
       <View style={penaltyStyles.head}>
         <Text style={penaltyStyles.title}>{t.payment.penaltiesThisWeek}</Text>
+        {/* Money OFF, so passed negative — `formatRM` prints the one sign. */}
         <Text style={penaltyStyles.total}>
-          −{formatRM(Number(data.totalRm))}
+          {formatRM(-Number(data.totalRm))}
         </Text>
       </View>
       {data.penalties.map((p) => (
@@ -3502,7 +3463,7 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={penaltyStyles.amount}>
-              −{formatRM(Number(p.fineRm))}
+              {formatRM(-Number(p.fineRm))}
             </Text>
             <Text style={penaltyStyles.state}>
               {p.chargedAt
@@ -3524,7 +3485,7 @@ function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
           </View>
           <View style={{ alignItems: 'flex-end' }}>
             <Text style={penaltyStyles.amount}>
-              −{formatRM(Number(c.feeRm ?? 0))}
+              {formatRM(-Number(c.feeRm ?? 0))}
             </Text>
             <Text style={penaltyStyles.state}>
               {c.chargedAt

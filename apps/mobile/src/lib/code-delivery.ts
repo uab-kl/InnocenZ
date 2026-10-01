@@ -33,6 +33,19 @@ export function codeReachedSomewhere(
   return (sentTo ?? []).some(countsAsReached);
 }
 
+/**
+ * Did the code reach an EMAIL inbox? Asking for one is not the same thing: the
+ * server drops the email when an invited PR claims her agency's stub account —
+ * that code goes to the phone alone — and the sign-up screen said "and by email
+ * to …" anyway, from what it had asked for rather than what was done.
+ * No report (an older backend) is not a yes.
+ */
+export function codeReachedEmail(
+  sentTo: readonly CodeDelivery[] | null | undefined,
+): boolean {
+  return (sentTo ?? []).some((d) => d.channel === 'email' && countsAsReached(d));
+}
+
 function channelLabel(channel: CodeChannel, copy: SecurityCopy): string {
   if (channel === 'whatsapp') return copy.channelWhatsapp;
   if (channel === 'sms') return copy.channelSms;

@@ -21,6 +21,7 @@ import {
   weekRecordsFromLines,
 } from '../lib/week-agency-split';
 import { matchesShiftDayTime } from '../lib/hist-date-time-filters';
+import { historyEmptyState, historyFiltersActive } from '../lib/history-empty-state';
 import { usePaymentHistory } from '../lib/payment-history';
 import {
   currentWeekHistoryMeta,
@@ -274,6 +275,13 @@ export function ShiftHistoryPanel() {
   }, [filtered, historyWeeks]);
   const shownShiftCount =
     weekTab === 'current' ? currentShiftCount : payrollShiftCount;
+  const filtersActive = historyFiltersActive({ query, outlet, status, date });
+  const emptyState = historyEmptyState({
+    shownCount: shownShiftCount,
+    weekTab,
+    hasAnyPayrollWeek,
+    filtersActive,
+  });
 
   const earned = filtered
     .filter((s) => s.status !== 'cancelled')
@@ -460,12 +468,7 @@ export function ShiftHistoryPanel() {
           const weekShifts = filtered.filter((s) => s.weekId === week.id);
           // Hide empty past weeks entirely (no phantom PV totals without shifts).
           if (week.kind !== 'current' && weekShifts.length === 0) return null;
-          if (
-            weekShifts.length === 0 &&
-            (outlet !== 'all' || status !== 'any' || date || query)
-          ) {
-            return null;
-          }
+          if (weekShifts.length === 0 && filtersActive) return null;
           const active = weekShifts.filter((s) => s.status !== 'cancelled');
           const weekEarned = active.reduce((s, r) => s + r.payout, 0);
           const weekWages = active.reduce((s, r) => s + r.wages, 0);
@@ -543,22 +546,22 @@ export function ShiftHistoryPanel() {
         })}
 
         {/*
-          Two different emptinesses, and they need different sentences. "No
-          shifts match" beside a Reset button is wrong for a PR who has simply
-          never been issued a voucher — there is nothing to reset, and the
-          button would do nothing.
+          Different emptinesses need different sentences — `historyEmptyState`.
+          "No shifts match" beside a Reset button belongs ONLY to a list a
+          filter emptied: it was also shown to a PR with no filter set and no
+          shift yet this week, under the live card's own "No shifts in this
+          week", with a button that could reset nothing.
         */}
-        {shownShiftCount === 0 &&
-          (weekTab === 'payroll' && !hasAnyPayrollWeek ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>{t.history.noPayrollWeeksYet}</Text>
-            </View>
-          ) : (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>{t.history.noShiftsMatch}</Text>
-              <IzButton label={t.history.resetFilters} variant="soft" small onPress={clearFilters} />
-            </View>
-          ))}
+        {emptyState === 'noShiftsMatch' ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>{t.history.noShiftsMatch}</Text>
+            <IzButton label={t.history.resetFilters} variant="soft" small onPress={clearFilters} />
+          </View>
+        ) : emptyState === 'noPayrollWeeksYet' || emptyState === 'noPayrollShiftsYet' ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>{t.history[emptyState]}</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -641,7 +644,7 @@ function Metric({
         </Text>
       </View>
       <Text style={[styles.metricVal, negative && { color: C.red }]}>
-        {value > 0 ? `${negative ? '−' : ''}${formatRM(value)}` : '—'}
+        {value > 0 ? formatRM(negative ? -value : value) : '—'}
       </Text>
     </View>
   );
