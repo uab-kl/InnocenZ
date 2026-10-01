@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { rateLimit } from '@/middlewares/rate-limit.js';
+import { clientBudgetKey, rateLimit } from '@/middlewares/rate-limit.js';
 import { toWhatsAppDigits } from './phone.js';
 
 /**
@@ -14,10 +14,6 @@ import { toWhatsAppDigits } from './phone.js';
  *    OTP limiters are stacked on top in the routes.
  */
 
-function clientIp(req: Request): string {
-  return req.ip ?? req.socket.remoteAddress ?? 'unknown';
-}
-
 function userKey(req: Request): string | null {
   return req.user?.id ? `user:${req.user.id}` : null;
 }
@@ -26,7 +22,8 @@ export const forgotStartIpLimiter = rateLimit({
   name: 'password-forgot-start-ip',
   windowMs: 60 * 60 * 1000,
   max: 20,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  // The shared per-host key: an IPv6 caller counts as its /64 (rate-limit.ts).
+  keys: (req) => [clientBudgetKey(req)],
   message: 'Too many password reset requests. Please try again later.',
 });
 
@@ -50,7 +47,8 @@ export const forgotCompleteIpLimiter = rateLimit({
   name: 'password-forgot-complete-ip',
   windowMs: 15 * 60 * 1000,
   max: 15,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  // The shared per-host key: an IPv6 caller counts as its /64 (rate-limit.ts).
+  keys: (req) => [clientBudgetKey(req)],
   message: 'Too many attempts. Please wait a few minutes and try again.',
 });
 

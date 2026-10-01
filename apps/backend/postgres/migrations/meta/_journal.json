@@ -1170,6 +1170,34 @@
       "when": 1792799000000,
       "tag": "0166_notification_kind_subscription_autopay_failed",
       "breakpoints": true
+    },
+    {
+      "idx": 167,
+      "version": "7",
+      "when": 1792799001000,
+      "tag": "0167_shift_special_type_and_event_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "7",
+      "when": 1792799002000,
+      "tag": "0168_notification_user_created_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 169,
+      "version": "7",
+      "when": 1792799003000,
+      "tag": "0169_subscription_invoice_void",
+      "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "7",
+      "when": 1792799004000,
+      "tag": "0170_user_last_failed_login_at",
+      "breakpoints": true
     }
   ]
 }

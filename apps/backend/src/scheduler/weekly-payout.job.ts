@@ -12,6 +12,11 @@ import {
   buildDayReviewView,
   voucherSendGate,
 } from '@/features/payment-voucher/payment-voucher-day-review.js';
+import {
+  issueStamps,
+  issuedNotice,
+} from '@/features/payment-voucher/payment-voucher-issue.js';
+import type { PaymentVoucherWithLines } from '@/features/payment-voucher/payment-voucher.model.js';
 import { notify, notifyMany } from '@/features/notification/notify.js';
 import type { JobDefinition } from './scheduler.js';
 
@@ -90,34 +95,6 @@ export async function runWeeklyPayout(): Promise<void> {
     }
   }
 
-  // APPROVED -> VERIFIED, the rollover arm of the receipt lifecycle.
-  //
-  // Runs BEFORE the issue pass below, and that order is the point: the gate
-  // refuses a voucher with a PENDING receipt, so if the rollover ran afterwards
-  // a week's receipts would spend an extra seven days at 'approved' before
-  // closing — a whole cadence skipped, every week, invisibly.
-  //
-  // Scoped by `week_start <= weekStart`, so a voucher held back for a fortnight
-  // still rolls over when it clears. Vouchers with an open dispute are skipped
-  // inside the repository: verified means closed, and closing evidence under a
-  // live claim would settle it out from under the PR.
-  try {
-    const verified = await paymentVoucherRepository.verifyApprovedReceipts({
-      throughWeekStart: weekStart,
-      actor: ACTOR,
-    });
-    logger.info(
-      `[weekly-payout] receipts: ${verified.length} approved receipt(s) rolled over to verified` +
-        (verified.length > 0
-          ? ` (${verified.slice(0, 10).join(', ')}${verified.length > 10 ? ', …' : ''})`
-          : ''),
-    );
-  } catch (error) {
-    // A receipt left at 'approved' rolls over next Monday. It must not cost the
-    // PRs the vouchers and notifications below.
-    logger.error('[weekly-payout] receipt rollover failed:', error);
-  }
-
   // Issue: every voucher for the closed week still at 'pending_review' —
   // whether generated seconds ago or accumulated live while the PR logged
   // receipts during the week — is sent to the PR for signature ("one week,
@@ -126,7 +103,7 @@ export async function runWeeklyPayout(): Promise<void> {
   // does not balance stays held at pending_review for the agency to fix first.
   const pending = await paymentVoucherRepository.listForWeek(weekStart, ['pending_review']);
   const issuedDate = klToday();
-  const issued: { voucherId: string; prId: string | null }[] = [];
+  const issued: PaymentVoucherWithLines[] = [];
   /**
    * agencyId -> the vouchers this run refused to send, SPLIT BY WHY, so one
    * notification per agency can name the action actually owed. Still one per
@@ -216,12 +193,15 @@ export async function runWeeklyPayout(): Promise<void> {
       continue;
     }
 
+    // The same stamps the agency's own Send to PR takes (`issueStamps`): only
+    // the dates this voucher lacks — a draft-born voucher already carries the
+    // day it was raised, and that is never re-dated.
     const sent = await paymentVoucherRepository.update(voucher.id, {
       status: 'sent',
-      issuedDate: voucher.issuedDate ?? issuedDate,
+      ...issueStamps(voucher, issuedDate),
       updatedBy: ACTOR,
     });
-    if (sent) issued.push({ voucherId: voucher.id, prId: voucher.prId });
+    if (sent) issued.push(sent);
   }
   logger.info(
     `[weekly-payout] issued ${issued.length} voucher(s) to PRs` +
@@ -230,11 +210,44 @@ export async function runWeeklyPayout(): Promise<void> {
       (awaitingSignature > 0 ? ` (${awaitingSignature} awaiting finance signature)` : ''),
   );
 
+  // APPROVED -> VERIFIED, the rollover arm of the receipt lifecycle.
+  //
+  // AFTER the issue pass, and only on vouchers that have LEFT review. It used
+  // to run first over every voucher with `week_start <= weekStart`, whatever
+  // its status — so a voucher the pass above then HELD (unbalanced, receipts
+  // pending, unsigned) had its approved receipts closed while it sat on the
+  // agency's desk, and `reviewReceipt` then refused to let the agency withdraw
+  // an approval on the very voucher it had just been told to fix. Five
+  // receipts on held vouchers were closed that way (read-only, 29 Sep 2026).
+  //
+  // Running second costs no cadence: the send gate asks only about PENDING
+  // receipts, never approved ones, and a voucher issued a moment ago is already
+  // past review here, so its receipts still close this same night. A voucher
+  // held for a fortnight rolls over the Sunday after it is finally sent.
+  // Vouchers with an open dispute stay skipped inside the repository.
+  try {
+    const verified = await paymentVoucherRepository.verifyApprovedReceipts({
+      throughWeekStart: weekStart,
+      excludeVoucherStatuses: ['pending_review'],
+      actor: ACTOR,
+    });
+    logger.info(
+      `[weekly-payout] receipts: ${verified.length} approved receipt(s) rolled over to verified` +
+        (verified.length > 0
+          ? ` (${verified.slice(0, 10).join(', ')}${verified.length > 10 ? ', …' : ''})`
+          : ''),
+    );
+  } catch (error) {
+    // A receipt left at 'approved' rolls over next Sunday. It must not cost the
+    // PRs the notifications below.
+    logger.error('[weekly-payout] receipt rollover failed:', error);
+  }
+
   let notified = 0;
   let unlinked = 0;
 
-  for (const created of issued) {
-    const pr = created.prId ? await prRepository.getById(created.prId) : null;
+  for (const voucher of issued) {
+    const pr = voucher.prId ? await prRepository.getById(voucher.prId) : null;
     // pr.userId is nullable — a PR row can exist before anyone has signed up for
     // it. There is no account to notify, and that is not an error.
     if (!pr?.userId) {
@@ -244,13 +257,11 @@ export async function runWeeklyPayout(): Promise<void> {
 
     // No tx: the voucher is already committed by the generator, so tying the
     // notification to a transaction here would buy nothing. notify() never
-    // throws, so a failed notification cannot undo a real voucher.
+    // throws, so a failed notification cannot undo a real voucher. Worded by
+    // the same builder the agency's manual send uses, so the two doors agree.
     const row = await notify({
       userId: pr.userId,
-      kind: 'payment_voucher_issued',
-      title: 'Your payment voucher is ready',
-      body: `Week ${weekStart} to ${weekEnd}. Check the amounts and raise a dispute if anything is wrong.`,
-      payload: { voucherId: created.voucherId, weekStart, weekEnd },
+      ...issuedNotice(voucher),
       actor: ACTOR,
     });
     if (row) notified += 1;

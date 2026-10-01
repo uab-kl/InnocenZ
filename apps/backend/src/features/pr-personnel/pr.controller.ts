@@ -26,7 +26,13 @@ import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penal
 import { PenaltyChargeRepositoryClass } from '@/features/agency/penalty-charge.repository.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
+import {
+  identityPatchForAdd,
+  PR_MOBILE_REQUIRED,
+  penaltyRuleAgencyIds,
+} from './pr-write-rules.js';
 import { EMPTY_PR_STATS, loadPrStats } from './pr-stats.js';
+import { loadPrKpiScores } from './pr-kpi.js';
 import { derivedAge } from './ic-dob.js';
 import {
   refreshStoredComcard,
@@ -40,6 +46,7 @@ import {
   normaliseSignInEmail,
   sameSignInPhone,
   signInContactChanges,
+  signInPhoneDigits,
   signInPhoneLookupForms,
   storedSignInPhone,
   type SignInContactPatch,
@@ -627,12 +634,14 @@ export class PrControllerClass {
         const totalCount = filtered.length;
         const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
         const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
-        // Attendance + paid, for THIS agency only. Computed over the page rows,
-        // so the two aggregates stay two queries however large the roster grows.
-        const stats = await loadPrStats({
-          prIds: pageRows.map((pr) => pr.id),
-          agencyId: scope.agencyId,
-        });
+        // Attendance + paid, and the KPI score, for THIS agency only. Computed
+        // over the page rows, so each stays a fixed number of queries however
+        // large the roster grows.
+        const pageIds = pageRows.map((pr) => pr.id);
+        const [stats, kpiScores] = await Promise.all([
+          loadPrStats({ prIds: pageIds, agencyId: scope.agencyId }),
+          loadPrKpiScores({ prIds: pageIds, agencyId: scope.agencyId }),
+        ]);
         const withPassword = await this.prRepository.listUserIdsWithPassword(
           pageRows.map((pr) => pr.userId),
         );
@@ -644,6 +653,9 @@ export class PrControllerClass {
             // See `withSignInOwnership`: read-only sign-in contact in the editor.
             hasPassword: withPassword.has(pr.userId),
             stats: stats.get(pr.id) ?? EMPTY_PR_STATS,
+            // The number alone — how it is made never leaves the server (see
+            // kpi-score.ts). Null while there is nothing to score.
+            kpiScore: kpiScores.get(pr.id) ?? null,
           })),
           pagination: {
             page,
@@ -713,6 +725,15 @@ export class PrControllerClass {
             prIds: prs.map((pr) => pr.id),
             agencyId: filter.agencyId ?? null,
           });
+      // Same rule and same scope as `stats`: an outlet never gets a KPI score
+      // (owner, 29 Sep 2026 — the agency and admin only); an admin gets it for
+      // the agency it filtered by, or across every agency.
+      const kpiScores = isOutletCaller
+        ? null
+        : await loadPrKpiScores({
+            prIds: prs.map((pr) => pr.id),
+            agencyId: filter.agencyId ?? null,
+          });
       // Same rule as `stats`: an outlet caller is never asked about, and never
       // told, whether a PR has activated their account.
       const withPassword = isOutletCaller
@@ -731,6 +752,7 @@ export class PrControllerClass {
               ...pr,
               hasPassword: withPassword?.has(pr.userId) ?? false,
               stats: stats.get(pr.id) ?? EMPTY_PR_STATS,
+              kpiScore: kpiScores?.get(pr.id) ?? null,
             }))
           : req.redactIdentityDocs
             ? redactPrRowsForOutlet(prs)
@@ -1086,6 +1108,26 @@ export class PrControllerClass {
       }
 
       /*
+       * A NEW STUB NEEDS A MOBILE NUMBER (owner default, 29 Sep 2026).
+       *
+       * The one way into a roster stub is the PR's own sign-up proving the
+       * number on file (`isClaimablePrStub` + `receiptProvesPhoneAlone`), so a
+       * stub created without one could never be claimed — the invite simply
+       * never arrived anywhere. Adding an EXISTING account (matched above by
+       * phone or email) is unaffected. REACHABLE, not merely typed (security
+       * review, 29 Sep): `storedSignInPhone` keeps a value it cannot normalise
+       * ("x"), and no code can ever be sent to that — the same 8-15 digit rule
+       * the code sender uses (`signInPhoneDigits`).
+       */
+      if (!userId && !signInPhoneDigits(parsed.data.phone)) {
+        return res.status(400).json({
+          success: false,
+          message: PR_MOBILE_REQUIRED,
+          data: null,
+        });
+      }
+
+      /*
        * ⚠️ AN EXISTING ACCOUNT KEEPS ITS SIGN-IN CONTACT.
        *
        * This path used to hand `phone` and `email` — `null` for whichever the
@@ -1164,11 +1206,26 @@ export class PrControllerClass {
         await ensurePersonCode(userId);
       }
 
-      await this.userProfileRepository.update(userId, {
-        fullName: parsed.data.name,
-        idNo: parsed.data.icNo ?? undefined,
-        updatedBy: actor,
+      /*
+       * ⚠️ AN EXISTING ACCOUNT KEEPS ITS LEGAL NAME AND IC, TOO — the same
+       * principle as its sign-in contact above (28 Sep audit). This wrote the
+       * typed name and IC over whatever the matched account held, and the bridge
+       * below then stored `id_no = NULL` whenever the agency left the IC blank.
+       * `identityPatchForAdd` fills only what is blank on an existing account.
+       */
+      const storedProfile = createdStub
+        ? null
+        : await this.userProfileRepository.getByUserId(userId);
+      const identity = identityPatchForAdd({
+        createdStub,
+        stored: storedProfile
+          ? { fullName: storedProfile.fullName, idNo: storedProfile.idNo }
+          : null,
+        typed: { name: parsed.data.name, icNo: parsed.data.icNo },
       });
+      if (Object.keys(identity).length > 0) {
+        await this.userProfileRepository.update(userId, { ...identity, updatedBy: actor });
+      }
       // Never rewrite username on an existing account — that is their login handle.
       if (createdStub && (phone || email)) {
         await this.userRepository.updateUser(
@@ -1191,13 +1248,15 @@ export class PrControllerClass {
         agencyId,
         actor,
         tier: parsed.data.tier,
-        name: parsed.data.name,
         nickname: parsed.data.nickname ?? null,
         // No `phone` / `email`: an existing account's allowed correction was
-        // written above, and a stub created above already stored both.
-        icNo: parsed.data.icNo ?? null,
+        // written above, and a stub created above already stored both. No
+        // `name` / `icNo` either: `identityPatchForAdd` above decided those,
+        // and handing them on re-applied the overwrite it exists to prevent.
       });
-      const withProfile = await this.prRepository.getById(pr.id);
+      // Read back AS THIS AGENCY: without it the response described the
+      // person's oldest membership, not the one just added.
+      const withProfile = await this.prRepository.getById(pr.id, agencyId);
       res.status(201).json({
         success: true,
         message: 'PR created',
@@ -1382,6 +1441,10 @@ export class PrControllerClass {
       const pr = await this.prRepository.update(id, {
         ...prColumns,
         ...(data.status === 'active' ? { rejectReason: null } : {}),
+        // The membership `updateMembership` just wrote, named explicitly. Left
+        // to the repository, it re-applied tier / approval to the OLDEST row
+        // this person holds — another agency's (28 Sep audit).
+        agencyId: resolved.agencyId,
         updatedBy: actor,
       });
       if (!pr)
@@ -1593,9 +1656,12 @@ export class PrControllerClass {
    * button costs — so they have to be readable by the person paying. The
    * agency-side route cannot serve this: `GET /agency/:id/penalty-rules` is
    * scoped to that agency's owner/finance, and widening it to the `pr` role
-   * would let any PR read ANY agency's fine schedule by id. This takes no id at
-   * all; the agency is derived from the caller's own membership, so there is
-   * nothing to tamper with.
+   * would let any PR read ANY agency's fine schedule by id. The agencies come
+   * from the caller's own APPROVED memberships, so there is nothing to tamper
+   * with: `?agencyId=` may only narrow to one of them.
+   *
+   * ⚠️ EVERY agency she works for, not the oldest (28 Sep audit) — see
+   * `penaltyRuleAgencyIds`. Each row carries its `agencyId`.
    */
   async getMyPenaltyRules(req: Request, res: Response) {
     try {
@@ -1606,16 +1672,26 @@ export class PrControllerClass {
           .json({ success: false, message: Error.UNAUTHORIZED, data: null });
       }
 
-      const pr = await this.prRepository.getByUserId(userId);
-      if (!pr) {
+      const requested =
+        typeof req.query.agencyId === 'string' ? req.query.agencyId.trim() : null;
+      const agencyIds = penaltyRuleAgencyIds(
+        await this.prRepository.listApprovedAgencyIds(userId),
+        requested,
+      );
+      if (agencyIds === null) {
+        // Not one of hers — the same 404 whether or not the agency exists.
         return res
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(
-        pr.agencyId,
-      );
+      const rules = (
+        await Promise.all(
+          agencyIds.map((agencyId) =>
+            this.agencyPenaltyRuleRepository.listByAgencyId(agencyId),
+          ),
+        )
+      ).flat();
       // Empty is a real answer — an agency that has written no rules charges
       // nothing — so this is 200 with [], never 404.
       res.status(200).json({ success: true, message: 'OK', data: rules });

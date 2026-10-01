@@ -1,0 +1,25 @@
+-- Old wrong passwords stop counting after a day (owner, 30 Sep 2026 — the
+-- lockout decision, option (c): keep the helpful "Too many failed attempts"
+-- message, and let old wrong guesses expire; migration approved in so many
+-- words: "alright go ahead then").
+--
+-- WHAT WAS WRONG. `failed_login_attempts` never decayed: only a successful
+-- sign-in or a password reset cleared it. An account left with three old typos
+-- therefore locked after two new wrong guesses, while an email or phone number
+-- with NO account needs five (features/auth/unknown-login-lockout.ts) — so a
+-- lock arriving early told a stranger that the account exists.
+--
+-- WHAT THIS ADDS. The time of the latest wrong password. A wrong password more
+-- than a day after the previous one starts the count again at 1 — the rule the
+-- in-memory counter for identifiers with no account follows too (it forgets an
+-- identifier left alone for a day). Somebody who keeps guessing keeps
+-- re-locking, exactly as before.
+--
+-- ⚠️ NULLABLE, NO DEFAULT, NO BACKFILL. NULL reads as "no wrong password in the
+-- last day", so an account's leftover count restarts at its next wrong password
+-- — which is the point. A lock already running (`locked_until`) is untouched.
+--
+-- ⚠️ NOT an audit column: `updated_at` changes on every edit; this moves only
+-- on a wrong password (UserRepositoryClass.recordFailedLoginAttempt).
+ALTER TABLE "main"."user"
+  ADD COLUMN IF NOT EXISTS "last_failed_login_at" timestamp with time zone;

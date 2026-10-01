@@ -1,8 +1,12 @@
 import { and, desc, eq, inArray, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
+import type { DbTransaction } from '@/types/db-transaction.js';
 import { UserTable } from '@/features/user/user.model.js';
-import { SubscriptionInvoiceTable } from '@/features/subscription-invoice/subscription-invoice.model.js';
+import {
+  type SubscriptionInvoice,
+  SubscriptionInvoiceTable,
+} from '@/features/subscription-invoice/subscription-invoice.model.js';
 import type { PaymentMethodType } from '@/features/payment-method/payment-method.model.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
@@ -12,6 +16,15 @@ import {
   SubscriptionPaymentFilter,
   SubscriptionPaymentTable,
 } from './subscription-payment.model.js';
+import {
+  type MarkRefundedResult,
+  neutraliseGatewayReason,
+  paidTwiceReason,
+  type RefundDue,
+  RefundDueRepositoryClass,
+  refundDueKind,
+  voidedBillReason,
+} from './refund-due.repository.js';
 
 /** Only a uuid is a person; `system` and `gateway:curlec` are stamps. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,7 +66,75 @@ export type AttemptResult =
 /** Just enough of an organisation to head a panel with: who they are, and their mark. */
 export type OrgProfile = { id: string; name: string; logoImage: string | null };
 
+/**
+ * THE TWO REFUND-DUE WRITES `recordAttempt` makes, one shape each. Money that
+ * cannot settle its bill — a voided one, or one something else already paid —
+ * is either written onto the attempt that carried it, or recorded as a new one.
+ * Both stay NON-SETTLING and say why in `failure_reason`, in the sentences
+ * refund-due.repository.ts spells.
+ */
+async function flagAttempt(
+  tx: DbTransaction,
+  prior: SubscriptionPayment,
+  input: AttemptInput,
+  failureReason: string,
+): Promise<SubscriptionPayment> {
+  const [flagged] = await tx
+    .update(SubscriptionPaymentTable)
+    .set({
+      reference: input.reference ?? prior.reference,
+      failureReason,
+      updatedAt: new Date(),
+      updatedBy: input.actor,
+    })
+    .where(eq(SubscriptionPaymentTable.id, prior.id))
+    .returning();
+  return flagged ?? prior;
+}
+
+async function insertOwedBack(
+  tx: DbTransaction,
+  invoice: Pick<SubscriptionInvoice, 'id' | 'amount' | 'currency'>,
+  input: AttemptInput,
+  failureReason: string,
+): Promise<SubscriptionPayment | undefined> {
+  const [recorded] = await tx
+    .insert(SubscriptionPaymentTable)
+    .values({
+      subscriptionInvoiceId: invoice.id,
+      paymentMethodId: input.paymentMethodId ?? null,
+      methodType: input.methodType,
+      gateway: input.gateway ?? null,
+      gatewayPaymentId: input.gatewayPaymentId ?? null,
+      reference: input.reference ?? null,
+      amount: invoice.amount,
+      currency: invoice.currency,
+      status: 'pending',
+      failureReason,
+      paidAt: null,
+      createdBy: input.actor,
+      updatedBy: input.actor,
+    })
+    .returning();
+  return recorded;
+}
+
 export class SubscriptionPaymentRepositoryClass {
+  /** Money owed back, and marking one refunded — refund-due.repository.ts. */
+  private readonly refundsDue = new RefundDueRepositoryClass();
+
+  listRefundsDue(limit?: number): Promise<RefundDue[] | null> {
+    return this.refundsDue.listRefundsDue(limit);
+  }
+
+  markRefunded(
+    paymentId: string,
+    refundReference: string,
+    actor: string,
+  ): Promise<MarkRefundedResult> {
+    return this.refundsDue.markRefunded(paymentId, refundReference, actor);
+  }
+
   /**
    * The subscriber's name and logo, read from whichever table actually owns it.
    *
@@ -255,6 +336,9 @@ export class SubscriptionPaymentRepositoryClass {
       const outcome = input.outcome ?? 'succeeded';
       const settles = outcome === 'succeeded';
       const paidAt = input.paidAt ?? new Date();
+      // The caller's words for a decline — kept, but never able to pass for a
+      // refund-due marker (see `neutraliseGatewayReason`).
+      const gatewayReason = neutraliseGatewayReason(input.failureReason);
 
       const settled = await db.transaction(async (tx) => {
         // Read the invoice inside the transaction, so a concurrent settlement
@@ -268,6 +352,63 @@ export class SubscriptionPaymentRepositoryClass {
           .limit(1)
           .for('update');
         if (!invoice) return null;
+
+        /**
+         * MONEY FOR A VOIDED BILL IS RECORDED, NEVER SETTLED (29 Sep 2026).
+         *
+         * A void is refused while a payment is in flight and the checkout
+         * refuses a void bill, so this is the race that slips between them — a
+         * debit that cleared after all. Flipping the bill to `paid` would
+         * resurrect a charge InnocenZ withdrew; dropping the delivery would
+         * leave the gateway retrying while the org's money sat unrecorded. So:
+         * the attempt is written (or advanced) like any other, the bill stays
+         * `void`, and the row says a refund is owed — the PAID TWICE shape below.
+         *
+         * ⚠️ NON-SETTLING — `pending`, never `succeeded` (30 Sep 2026). Stored as
+         * `succeeded`, a SECOND distinct payment on the same voided bill hit
+         * `subscription_payment_settled_invoice_idx` (one `succeeded` row per
+         * bill): the transaction threw, the webhook answered 500 and the gateway
+         * retried forever. `pending` is what a PAID TWICE row keeps and sits
+         * outside that index; the MARKER, not the status, is what says the money
+         * arrived (and `listRefundsDue` finds it by the marker). `paid_at` stays
+         * null — it is set only on `succeeded`.
+         */
+        if (settles && invoice.status === 'void') {
+          const refundDue = voidedBillReason(invoice.invoiceNo);
+          const [prior] =
+            input.gateway && input.gatewayPaymentId
+              ? await tx
+                  .select()
+                  .from(SubscriptionPaymentTable)
+                  .where(
+                    and(
+                      eq(SubscriptionPaymentTable.gateway, input.gateway),
+                      eq(SubscriptionPaymentTable.gatewayPaymentId, input.gatewayPaymentId),
+                      eq(SubscriptionPaymentTable.subscriptionInvoiceId, invoice.id),
+                    ),
+                  )
+                  .limit(1)
+              : [];
+          /*
+           * Already refunded, or already marked owed back: a redelivery writes
+           * NOTHING — the same final-state rule as the one-gateway-id block below.
+           * The unconditional re-flag this replaced dropped the refund's
+           * reference ("TRAN1 · Refund: MBB-1" became "TRAN1") and restamped the
+           * row as the gateway's.
+           */
+          const owedBack = prior ? refundDueKind(prior.failureReason) !== null : false;
+          if (prior && (prior.status === 'refunded' || owedBack)) {
+            return { row: prior, alreadyRecorded: true, ...(owedBack ? { paidTwice: true } : {}) };
+          }
+          logger.error(
+            `[SubscriptionPaymentRepository.recordAttempt] ${refundDue} (${input.gateway ?? input.methodType} ${input.gatewayPaymentId ?? ''})`,
+          );
+          if (prior) {
+            return { row: await flagAttempt(tx, prior, input, refundDue), alreadyRecorded: true, paidTwice: true };
+          }
+          const recorded = await insertOwedBack(tx, invoice, input, refundDue);
+          return recorded ? { row: recorded, alreadyRecorded: false, paidTwice: true } : null;
+        }
 
         /**
          * ONE GATEWAY PAYMENT ID IS ONE PAYMENT, AND A PAYMENT MOVES.
@@ -303,9 +444,14 @@ export class SubscriptionPaymentRepositoryClass {
             .limit(1);
 
           if (prior) {
-            const terminal = prior.status === 'succeeded' || prior.status === 'refunded';
+            // A row marked refund-due recorded money that ARRIVED — as final as
+            // `succeeded`, though its status cannot say so (it must stay outside
+            // the one-settlement index). A late `failed` for the same payment
+            // would otherwise walk it back and erase that a refund is owed.
+            const owedBack = refundDueKind(prior.failureReason) !== null;
+            const terminal = prior.status === 'succeeded' || prior.status === 'refunded' || owedBack;
             if (terminal || prior.status === outcome) {
-              return { row: prior, alreadyRecorded: true };
+              return { row: prior, alreadyRecorded: true, ...(owedBack ? { paidTwice: true } : {}) };
             }
             /*
              * PAID TWICE. This payment was still pending when something else —
@@ -317,27 +463,18 @@ export class SubscriptionPaymentRepositoryClass {
              * instead, answer the gateway, and say it loudly: a refund is owed.
              */
             if (settles && invoice.status === 'paid') {
-              const [flagged] = await tx
-                .update(SubscriptionPaymentTable)
-                .set({
-                  reference: input.reference ?? prior.reference,
-                  failureReason: `PAID TWICE — money taken but ${invoice.invoiceNo} was already paid; refund due`,
-                  updatedAt: new Date(),
-                  updatedBy: input.actor,
-                })
-                .where(eq(SubscriptionPaymentTable.id, prior.id))
-                .returning();
+              const flagged = await flagAttempt(tx, prior, input, paidTwiceReason(invoice.invoiceNo));
               logger.error(
                 `[SubscriptionPaymentRepository.recordAttempt] PAID TWICE: ${input.gateway} ${input.gatewayPaymentId} succeeded on ${invoice.invoiceNo}, which was already paid — refund due`,
               );
-              return { row: flagged ?? prior, alreadyRecorded: true, paidTwice: true };
+              return { row: flagged, alreadyRecorded: true, paidTwice: true };
             }
             const [moved] = await tx
               .update(SubscriptionPaymentTable)
               .set({
                 status: outcome,
                 reference: input.reference ?? prior.reference,
-                failureReason: input.failureReason ?? null,
+                failureReason: gatewayReason,
                 paidAt: settles ? paidAt : null,
                 updatedAt: new Date(),
                 updatedBy: input.actor,
@@ -382,6 +519,19 @@ export class SubscriptionPaymentRepositoryClass {
               logger.error(
                 `[SubscriptionPaymentRepository.recordAttempt] PAID TWICE: ${input.gateway} ${input.gatewayPaymentId} succeeded on ${invoice.invoiceNo}, already settled by ${prior.id} — refund due`,
               );
+              /*
+               * RECORDED, not only logged (30 Sep 2026): that log line was the
+               * only trace of this money, so the refunds-due list could never
+               * show it. Written NON-SETTLING (`pending`, like the flagged rows
+               * above), so the one-settlement index is untouched. Only when the
+               * gateway is named as well as the id: the lookup above that makes a
+               * redelivery idempotent needs both, and without it every retry
+               * would write another row — that case stays log-only.
+               */
+              if (input.gateway) {
+                const flagged = await insertOwedBack(tx, invoice, input, paidTwiceReason(invoice.invoiceNo));
+                if (flagged) return { row: flagged, alreadyRecorded: false, paidTwice: true };
+              }
             }
             return { row: prior, alreadyRecorded: true, paidTwice };
           }
@@ -399,7 +549,7 @@ export class SubscriptionPaymentRepositoryClass {
             amount: invoice.amount,
             currency: invoice.currency,
             status: outcome,
-            failureReason: input.failureReason ?? null,
+            failureReason: gatewayReason,
             // The CHECK constraint requires a timestamp on `succeeded` and the
             // column is meaningless without one anywhere else.
             paidAt: settles ? paidAt : null,

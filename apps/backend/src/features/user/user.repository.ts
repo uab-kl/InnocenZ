@@ -5,6 +5,7 @@ import { UserTable, UserType, UserInsertType, UserFilter } from './user.model';
 import { DbTransaction } from '@/types/db-transaction';
 import { logger } from '@/util/logger';
 import { redactQueryError, safeErrorFields } from '@/features/auth/query-error-redaction';
+import { FAILED_LOGIN_MEMORY_MINUTES } from '@/features/auth/unknown-login-lockout';
 import { buildPeriodDateWhere } from '@/util/filter-date-format';
 import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository';
 
@@ -19,21 +20,33 @@ import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-pr
 /**
  * The digit strings a typed phone number may legitimately mean.
  *
- * Malaysian numbers are written three ways for the same line: `+60123456789`
- * (stored), `60123456789` (what the sign-in placeholder shows), and
- * `0123456789` (what people actually say and write). Only the first ever matched,
- * which is why a PR could be refused a number that was correct.
+ * Malaysian numbers are written several ways for the same line: `+60123456789`
+ * (stored), `60123456789` (what the sign-in placeholder shows), `0123456789`
+ * (what people actually say and write) and `0060123456789` (the international
+ * dialling prefix). Only the first ever matched, which is why a PR could be
+ * refused a number that was correct.
  *
- * Deliberately narrow: it swaps a leading `0` for the `60` country code and back,
- * nothing else. Matching on a suffix — "the last 9 digits" — would let one
- * country's number open another's account.
+ * ⚠️ `00` (security review, 30 Sep 2026): the WhatsApp/SMS delivery
+ * (`toWhatsAppDigits`) drops a leading `00`, and this did not — so `0060…`
+ * matched no account while a sign-up code for it reached `+60…`'s handset, and
+ * a second account could be made on somebody else's number. The same line now
+ * matches however it is typed, including a row stored with the prefix.
+ *
+ * Deliberately narrow: it drops a `00` prefix and swaps a leading `0` for the
+ * `60` country code and back, nothing else. Matching on a suffix — "the last 9
+ * digits" — would let one country's number open another's account.
  */
 export function phoneLoginCandidates(value: string): string[] {
   const digits = (value ?? '').replace(/\D/g, '');
   if (digits.length < 6) return [];
-  const forms = new Set<string>([digits]);
-  if (digits.startsWith('0')) forms.add(`60${digits.slice(1)}`);
-  if (digits.startsWith('60')) forms.add(`0${digits.slice(2)}`);
+  // The international form the providers deliver to (`toWhatsAppDigits`).
+  const international = digits.startsWith('00')
+    ? digits.slice(2)
+    : digits.startsWith('0')
+      ? `60${digits.slice(1)}`
+      : digits;
+  const forms = new Set<string>([digits, international, `00${international}`]);
+  if (international.startsWith('60')) forms.add(`0${international.slice(2)}`);
   return [...forms];
 }
 
@@ -104,18 +117,33 @@ export class UserRepositoryClass {
    * letting a request still inside bcrypt erase a lock two other requests had
    * just earned. The CASE keeps an existing lock (ELSE locked_until, never
    * NULL) and only ever extends, so concurrent failures can't unlock anyone.
+   *
+   * OLD WRONG GUESSES EXPIRE (owner, 30 Sep 2026; migration 0170). The count
+   * used to be forever — cleared only by a successful sign-in or a reset — so
+   * an account left with old typos locked before its fifth new guess, while
+   * an address with NO account needs five (`unknown-login-lockout.ts`): an
+   * early lock told a stranger the account exists. A wrong password more than
+   * `forgetAfterMinutes` after the previous one now counts from 1 again — the
+   * rule the in-memory counter for identifiers with no account follows. Both
+   * SET expressions read the row as it was BEFORE this update (Postgres), so
+   * the restart and the lock agree. Somebody who keeps guessing never goes a
+   * day between guesses, and keeps re-locking exactly as before.
    */
   async recordFailedLoginAttempt(
     id: string,
     maxAttempts: number,
     lockoutMinutes: number,
+    forgetAfterMinutes: number = FAILED_LOGIN_MEMORY_MINUTES,
   ): Promise<{ attempts: number; lockedUntil: Date | null } | null> {
+    const stale = sql`(${UserTable.lastFailedLoginAt} IS NULL OR ${UserTable.lastFailedLoginAt} < now() - (${forgetAfterMinutes} * interval '1 minute'))`;
+    const attempts = sql`(CASE WHEN ${stale} THEN 1 ELSE ${UserTable.failedLoginAttempts} + 1 END)`;
     try {
       const [row] = await db
         .update(UserTable)
         .set({
-          failedLoginAttempts: sql`${UserTable.failedLoginAttempts} + 1`,
-          lockedUntil: sql`CASE WHEN ${UserTable.failedLoginAttempts} + 1 >= ${maxAttempts} THEN now() + (${lockoutMinutes} * interval '1 minute') ELSE ${UserTable.lockedUntil} END`,
+          failedLoginAttempts: attempts,
+          lockedUntil: sql`CASE WHEN ${attempts} >= ${maxAttempts} THEN now() + (${lockoutMinutes} * interval '1 minute') ELSE ${UserTable.lockedUntil} END`,
+          lastFailedLoginAt: sql`now()`,
           updatedAt: new Date(),
           updatedBy: id,
         })
@@ -282,7 +310,16 @@ export class UserRepositoryClass {
     }
   }
 
-  async getUserByLoginMethod(method: 'email' | 'phone', value: string): Promise<UserType | null> {
+  /**
+   * `rethrow`: a failed read throws instead of answering null. Sign-in asks for
+   * it — there a null means "no such account" and costs a strike, which a
+   * database blip must not.
+   */
+  async getUserByLoginMethod(
+    method: 'email' | 'phone',
+    value: string,
+    options: { rethrow?: boolean } = {},
+  ): Promise<UserType | null> {
     try {
       logger.info('[UserRepository.getUserByLoginMethod] Getting user by login method:', method);
       let users: UserType[] = [];
@@ -347,6 +384,7 @@ export class UserRepositoryClass {
     } catch (error) {
       // The bound values ARE the email or the phone candidates being looked up.
       logger.error('[UserRepository.getUserByLoginMethod] Error:', safeErrorFields(error));
+      if (options.rethrow) throw error;
       return null;
     }
   }

@@ -195,6 +195,13 @@ const RegisterSchema = z
     /** Receipt from POST /auth/otp/verify — required for public PR sign-up. */
     verificationId: z.string().uuid().optional(),
     /**
+     * The code emailed by POST /auth/signup-email-code, and its id — required
+     * for a PUBLIC outlet or agency sign-up (owner, 30 Sep 2026), checked by
+     * `signup-email-code.ts`, which judges their shape too.
+     */
+    emailCodeId: z.string().trim().max(64).optional(),
+    emailCode: z.string().trim().max(16).optional(),
+    /**
      * Optional agency the PR is joining / was referred by. Public PR sign-up
      * writes `agency_pr` keyed by user_id (pending until the agency approves).
      */

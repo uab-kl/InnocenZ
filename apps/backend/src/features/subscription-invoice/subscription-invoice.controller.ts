@@ -6,7 +6,11 @@ import {
   SubscriptionInvoiceStatus,
 } from './subscription-invoice.model.js';
 import { SubscriberType } from '@/features/member-subscription/member-subscription.model.js';
-import { UpdateSubscriptionInvoiceSchema } from '@/schema/subscription-invoice.schema.js';
+import {
+  UpdateSubscriptionInvoiceSchema,
+  VoidSubscriptionInvoiceSchema,
+} from '@/schema/subscription-invoice.schema.js';
+import { voidedMessage } from './invoice-void.js';
 import { Error } from '@/error/index.js';
 import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
@@ -219,6 +223,21 @@ export class SubscriptionInvoiceControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
+      /*
+       * A VOID BILL IS NEITHER PAID NOR UNPAID (29 Sep 2026). "Mark paid" would
+       * settle a bill nobody owes, and "Mark unpaid" is `voidSettlements`, which
+       * writes status `unpaid` — it would quietly bring the voided charge back
+       * as owed. A void is final; a charge that was right after all is raised
+       * as a new bill.
+       */
+      if (existing.status === 'void') {
+        return res.status(409).json({
+          success: false,
+          message: `${existing.invoiceNo} was voided — a void bill cannot be marked paid or unpaid. Nothing was changed.`,
+          data: null,
+        });
+      }
+
       if (parsed.data.status === 'paid') {
         /**
          * WHICH INSTRUMENT, when the admin names a rail rather than a transfer.
@@ -274,6 +293,65 @@ export class SubscriptionInvoiceControllerClass {
       });
     } catch (error) {
       logger.error('[SubscriptionInvoiceController.update] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * VOID AN UNPAID BILL RAISED IN ERROR — owner, 29 Sep 2026: "Add Void".
+   * Admin-only at the route; the reason is required.
+   *
+   * Every rule is `voidRefusal` (invoice-void.ts), asked by the repository
+   * under a row lock: paid, a payment in flight, money recorded, or a credit
+   * tied to the bill → 409 with the reason in words, nothing written.
+   *
+   * THE AUDIT ROW is `platformAuditMiddleware`'s, written as this response goes
+   * out: the request body carries the reason, the response's `data` the voided
+   * row. It is handed the row as it stood BEFORE here, so the entry reads
+   * unpaid → void rather than only the after-state.
+   *
+   * The confirmation is the server's own sentence (`voidedMessage`), which the
+   * admin sheet shows verbatim — the house rule for every action.
+   */
+  async voidInvoice(req: Request, res: Response) {
+    try {
+      const parsed = VoidSubscriptionInvoiceSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+      const id = paramId(req.params.id);
+      const result = await this.repository.voidUnpaid({
+        id,
+        reason: parsed.data.reason,
+        actor: getActor(req),
+      });
+      if (!result.ok) {
+        if ('notFound' in result) {
+          return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        }
+        return res
+          .status(result.refusal.status)
+          .json({ success: false, message: result.refusal.message, data: null });
+      }
+
+      req.auditOldData = {
+        id: result.before.id,
+        invoiceNo: result.before.invoiceNo,
+        status: result.before.status,
+        amount: result.before.amount,
+        note: result.before.note,
+      };
+      // Re-read with its subscriber columns, the shape every other read returns.
+      const record = await this.repository.getById(id);
+      res.status(200).json({
+        success: true,
+        message: voidedMessage(result.after.invoiceNo),
+        data: record ?? result.after,
+      });
+    } catch (error) {
+      logger.error('[SubscriptionInvoiceController.voidInvoice] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

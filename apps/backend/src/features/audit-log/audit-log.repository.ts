@@ -336,6 +336,12 @@ const SENSITIVE_KEYS = new Set([
   // The login body's authenticator code — short-lived, but a credential.
   'mfaCode',
   'otp',
+  // The emailed sign-up code and its id (30 Sep 2026), carried by
+  // /auth/register and /auth/register-member. Keys match WHOLE, so `code`
+  // above does not cover `emailCode`; a sign-up refused before the code is
+  // spent would otherwise leave a live pair in the table for ten minutes.
+  'emailCode',
+  'emailCodeId',
 ]);
 
 /**

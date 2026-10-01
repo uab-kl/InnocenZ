@@ -6,7 +6,14 @@
  *   ... --agency=<uuid>                                  # one agency only
  *
  * With no --week-start, it defaults to the most recently finished Mon–Sun week.
- * A scheduled cron would call the same PaymentVoucherGenerator.generateForWeek.
+ * The scheduled `weekly-payout` job calls the same PaymentVoucherGenerator.generateForWeek.
+ *
+ * ⚠️ UNDER THAT JOB'S LOCK (29 Sep 2026). This is the payout job's generation
+ * step run by hand, so it takes the same `weekly-payout` advisory lock the
+ * Sunday tick takes (`runJobByHand`) — two generators writing vouchers for
+ * overlapping weeks at once is exactly what the lock is for. If a backend is
+ * running the payout right now, this prints "NOT RUN — another process is
+ * running …", writes nothing and exits 2; the flags above are unchanged.
  */
 // FIRST, before composition-root: importing that builds the pg pool, and without
 // the env loaded it builds from unset credentials and dies at the first query
@@ -19,6 +26,8 @@ import { paymentVoucherGenerator } from '@/composition-root.js';
 // from UTC calendar fields, which lands on the wrong seven days when run near a
 // week boundary from Malaysia. One implementation, one answer.
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
+import { MANUAL_RUN_SKIPPED_EXIT_CODE, runJobByHand } from '@/scheduler/manual-run.js';
+import { WEEKLY_PAYOUT_JOB } from '@/scheduler/weekly-payout.job.js';
 
 function getArg(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -33,7 +42,11 @@ async function main() {
 
   console.log(`[generate-weekly-pvs] window ${weekStart}..${weekEnd}${agencyId ? ` agency=${agencyId}` : ' (all agencies)'}`);
 
-  const result = await paymentVoucherGenerator.generateForWeek({ weekStart, weekEnd, agencyId });
+  const outcome = await runJobByHand(WEEKLY_PAYOUT_JOB, () =>
+    paymentVoucherGenerator.generateForWeek({ weekStart, weekEnd, agencyId }),
+  );
+  if (!outcome.ran) process.exit(MANUAL_RUN_SKIPPED_EXIT_CODE);
+  const result = outcome.result;
 
   console.log(`agencies processed: ${result.agenciesProcessed}`);
   console.log(`vouchers created:   ${result.created.length}`);

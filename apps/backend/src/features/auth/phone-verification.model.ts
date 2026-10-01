@@ -47,6 +47,18 @@ export type PhoneVerificationStatus = (typeof phoneVerificationStatusValues)[num
  * stored; nothing issues either any more. `contact_change_identity` was step 1
  * of the two-code change — a code to the CURRENT contacts — retired by the
  * owner on 21 Sep 2026, who asked that nothing reach the old phone or email.
+ *
+ *  • `signup_email`             — a venue, agency or team-member sign-up's code,
+ *                                 EMAIL ONLY (owner, 30 Sep 2026: proof before
+ *                                 the account is created). No phone is
+ *                                 involved: `phone_num` holds a hash of the
+ *                                 address (`signupEmailAnchor`), never a number
+ *                                 and never the address itself, and the code
+ *                                 hash is bound to the address. Issued by
+ *                                 `POST /auth/signup-email-code`, spent by
+ *                                 `/auth/register` and `/auth/register-member`
+ *                                 — never by the public `/auth/otp/*` routes.
+ *                                 Also a value in this array only: no migration.
  */
 export const phoneVerificationPurposeValues = [
   'signup',
@@ -56,6 +68,7 @@ export const phoneVerificationPurposeValues = [
   'contact_change_identity',
   'contact_change_new',
   'password_change',
+  'signup_email',
 ] as const;
 export type PhoneVerificationPurpose = (typeof phoneVerificationPurposeValues)[number];
 

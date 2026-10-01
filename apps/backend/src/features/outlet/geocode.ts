@@ -22,7 +22,13 @@ import { logger } from '@/util/logger';
 const GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
 
 /** Google returns a rooftop/approximate hint; it is worth showing the operator. */
-export type GeocodePrecision = 'ROOFTOP' | 'RANGE_INTERPOLATED' | 'GEOMETRIC_CENTER' | 'APPROXIMATE';
+export type GeocodePrecision =
+  | 'ROOFTOP'
+  | 'RANGE_INTERPOLATED'
+  | 'GEOMETRIC_CENTER'
+  | 'APPROXIMATE'
+  /** A named Google Maps place from Places search, which reports no location_type. */
+  | 'PLACE';
 
 /**
  * The six address columns an outlet row stores, as this candidate would write
@@ -59,6 +65,56 @@ export interface GeocodeCandidate {
   placeId: string;
   /** The same place, split into the outlet's address columns. */
   components: GeocodeAddressParts;
+  /** Google matched only PART of the query (its own `partial_match`). */
+  partialMatch: boolean;
+  /**
+   * Does Google's address for this place name a street at all? A named place
+   * can come back with no street — "Kompleks Perindustrian EmHub, Persiaran
+   * Surian, Seksyen 3…" answers "Kota Damansara, 47810 Petaling Jaya": the pin
+   * is the complex, but its address is thinner than the one the operator typed.
+   */
+  hasStreet: boolean;
+  /**
+   * Google knows this match as a named place (an establishment or point of
+   * interest), not just an address. "Emhub" is one although its listing has
+   * no street, so its GEOMETRIC_CENTER is that place's own pin, not a block's.
+   */
+  isPlace: boolean;
+  /** The place's own name ("1 Utama Shopping Centre") — Places search only. */
+  name?: string;
+}
+
+/** Result types that make a match a named place rather than an address. */
+const PLACE_TYPES = ['establishment', 'point_of_interest'];
+
+/** Component types that put a match at street level or finer. */
+const STREET_TYPES = ['street_number', 'route', 'premise', 'subpremise', 'street_address'];
+
+/** One Google geocoding result, as the geocode API's `results[]` carries it. */
+export interface GoogleGeocodeResult {
+  formatted_address: string;
+  place_id: string;
+  partial_match?: boolean;
+  types?: string[];
+  address_components?: GoogleAddressComponent[];
+  geometry: { location: { lat: number; lng: number }; location_type: GeocodePrecision };
+}
+
+/** One Google result -> the candidate the operator picks from. */
+export function candidateFromResult(result: GoogleGeocodeResult): GeocodeCandidate {
+  return {
+    formattedAddress: result.formatted_address,
+    lat: result.geometry.location.lat,
+    lng: result.geometry.location.lng,
+    precision: result.geometry.location_type,
+    placeId: result.place_id,
+    components: addressPartsFromComponents(result.address_components, result.formatted_address),
+    partialMatch: result.partial_match === true,
+    isPlace: (result.types ?? []).some((type) => PLACE_TYPES.includes(type)),
+    hasStreet: (result.address_components ?? []).some((component) =>
+      component.types.some((type) => STREET_TYPES.includes(type)),
+    ),
+  };
 }
 
 /** Non-empty parts, comma-joined — Google's own order, no invented words. */
@@ -214,12 +270,7 @@ export async function geocodeAddress(address: string): Promise<GeocodeOutcome> {
     const body = (await res.json()) as {
       status: string;
       error_message?: string;
-      results?: Array<{
-        formatted_address: string;
-        place_id: string;
-        address_components?: GoogleAddressComponent[];
-        geometry: { location: { lat: number; lng: number }; location_type: GeocodePrecision };
-      }>;
+      results?: GoogleGeocodeResult[];
     };
 
     if (body.status === 'ZERO_RESULTS') {
@@ -232,14 +283,7 @@ export async function geocodeAddress(address: string): Promise<GeocodeOutcome> {
       return { ok: false, reason: 'upstream', message: 'Address lookup service rejected the request.' };
     }
 
-    const candidates: GeocodeCandidate[] = (body.results ?? []).slice(0, 5).map((r) => ({
-      formattedAddress: r.formatted_address,
-      lat: r.geometry.location.lat,
-      lng: r.geometry.location.lng,
-      precision: r.geometry.location_type,
-      placeId: r.place_id,
-      components: addressPartsFromComponents(r.address_components, r.formatted_address),
-    }));
+    const candidates: GeocodeCandidate[] = (body.results ?? []).slice(0, 5).map(candidateFromResult);
 
     if (candidates.length === 0) {
       return { ok: false, reason: 'no_match', message: 'No location matched that address.' };
@@ -249,4 +293,126 @@ export async function geocodeAddress(address: string): Promise<GeocodeOutcome> {
     logger.error('[geocodeAddress] Error:', error);
     return { ok: false, reason: 'upstream', message: 'Address lookup failed. Drop the pin on the map instead.' };
   }
+}
+
+// ─── Places search: the several places a name can mean ─────────────────────
+
+const PLACES_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
+const PLACES_FIELD_MASK = [
+  'places.id',
+  'places.displayName',
+  'places.formattedAddress',
+  'places.location',
+  'places.addressComponents',
+].join(',');
+
+/** One place as Places API (New) Text Search returns it — the fields asked for. */
+export interface GooglePlace {
+  id: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  location?: { latitude: number; longitude: number };
+  addressComponents?: Array<{ longText: string; shortText: string; types: string[] }>;
+}
+
+/** One Places result -> a candidate; null for a place with no location. */
+export function candidateFromPlace(place: GooglePlace): GeocodeCandidate | null {
+  if (!place.location) return null;
+  const components: GoogleAddressComponent[] = (place.addressComponents ?? []).map((part) => ({
+    long_name: part.longText,
+    short_name: part.shortText,
+    types: part.types,
+  }));
+  const formattedAddress = place.formattedAddress ?? '';
+  return {
+    formattedAddress,
+    lat: place.location.latitude,
+    lng: place.location.longitude,
+    precision: 'PLACE',
+    placeId: place.id,
+    components: addressPartsFromComponents(components, formattedAddress),
+    partialMatch: false,
+    isPlace: true,
+    hasStreet: components.some((part) => part.types.some((type) => STREET_TYPES.includes(type))),
+    name: place.displayName?.text?.trim() || undefined,
+  };
+}
+
+/** Logged once per process: a blocked API is config, not a per-request fault. */
+let placesBlockedLogged = false;
+
+/**
+ * Named places matching free text — the list Google Maps itself would offer.
+ *
+ * The Geocoding API answers ONE best match: "1 Utama", "Sunway Pyramid" and
+ * UAB Emhub's own address each came back as a single result (29 Sep 2026), so
+ * an operator could never choose between the places a name can mean. Needs
+ * "Places API (New)" enabled for GOOGLE_MAPS_API_KEY; until it is, Google
+ * answers 403 and `searchLocations` falls back to the geocoder.
+ */
+export async function searchPlaces(query: string): Promise<GeocodeOutcome> {
+  const key = env.GOOGLE_MAPS_API_KEY;
+  if (!key) {
+    return {
+      ok: false,
+      reason: 'not_configured',
+      message: 'Address lookup is not configured on this server (GOOGLE_MAPS_API_KEY is unset). Drop the pin on the map instead.',
+    };
+  }
+  try {
+    const res = await fetch(PLACES_SEARCH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': PLACES_FIELD_MASK,
+      },
+      body: JSON.stringify({ textQuery: query, regionCode: 'MY', languageCode: 'en', pageSize: 5 }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      if (res.status !== 403) {
+        logger.error(`[searchPlaces] Google responded ${res.status}`);
+      } else if (!placesBlockedLogged) {
+        placesBlockedLogged = true;
+        logger.warn(
+          '[searchPlaces] Places API (New) is not enabled for GOOGLE_MAPS_API_KEY — address search falls back to the Geocoding API, which offers one match',
+        );
+      }
+      return { ok: false, reason: 'upstream', message: 'Place search is unavailable right now.' };
+    }
+    const body = (await res.json()) as { places?: GooglePlace[] };
+    const candidates = (body.places ?? [])
+      .map(candidateFromPlace)
+      .filter((candidate): candidate is GeocodeCandidate => candidate !== null)
+      .slice(0, 5);
+    if (candidates.length === 0) {
+      return { ok: false, reason: 'no_match', message: 'No location matched that address.' };
+    }
+    return { ok: true, candidates };
+  } catch (error) {
+    logger.error('[searchPlaces] Error:', error);
+    return { ok: false, reason: 'upstream', message: 'Place search failed.' };
+  }
+}
+
+/**
+ * An operator's typed search: the places Google Maps knows by that name first,
+ * then the Geocoding API's single best match when Places is unavailable or
+ * finds nothing. A missing key is reported as-is — the geocoder needs it too.
+ */
+export async function searchLocations(
+  query: string,
+  deps: {
+    searchPlaces: (query: string) => Promise<GeocodeOutcome>;
+    geocodeAddress: (address: string) => Promise<GeocodeOutcome>;
+  } = { searchPlaces, geocodeAddress },
+): Promise<GeocodeOutcome> {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return { ok: false, reason: 'no_match', message: 'Enter an address to look up.' };
+  }
+  const places = await deps.searchPlaces(trimmed);
+  if (places.ok || places.reason === 'not_configured') return places;
+  return deps.geocodeAddress(trimmed);
 }

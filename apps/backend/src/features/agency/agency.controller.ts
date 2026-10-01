@@ -31,8 +31,16 @@ import {
 } from './agency.model';
 import {
   AgencyPrApproveStatus,
+  AgencyPrType,
   agencyPrApproveStatusValues,
 } from '@/features/pr-personnel/pr.model';
+import {
+  decidedMessage,
+  type JoinDecision,
+  LEAVE_REJECTED_PREFIX,
+  type SettledAnswer,
+  settledDecisionAnswer,
+} from './join-decision';
 import { saveOrgLogoFromBase64 } from '@/util/org-logo';
 import { r2DeleteStoredRef } from '@/util/r2';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository';
@@ -53,6 +61,10 @@ import {
   commitMembershipChange,
   MEMBERSHIP_CHANGE_NOT_SAVED,
 } from '@/features/rbac/membership-access';
+import {
+  memberRemovalMessage,
+  memberUpdateMessage,
+} from '@/features/rbac/member-change-message';
 import { portalRepository } from '@/features/rbac/portal/portal.repository';
 import { portalRoleName } from '@/types/rbac-constant.js';
 import type { AuthRepositoryClass } from '@/features/auth/auth.repository.js';
@@ -79,6 +91,19 @@ function parseApproveStatus(value: unknown): AgencyPrApproveStatus | undefined {
   return (agencyPrApproveStatusValues as readonly string[]).includes(value)
     ? (value as AgencyPrApproveStatus)
     : undefined;
+}
+
+/**
+ * The answer to a decision on a row that is no longer waiting for it: a repeat
+ * is a success that changed nothing, the opposite decision a 409. The portal
+ * prints `message` either way, so it says what the row already is.
+ */
+function respondSettled(res: Response, settled: SettledAnswer, row: AgencyPrType) {
+  return res.status(settled.status).json({
+    success: settled.status === 200,
+    message: settled.message,
+    data: settled.status === 200 ? row : null,
+  });
 }
 
 export class AgencyControllerClass {
@@ -407,6 +432,15 @@ export class AgencyControllerClass {
           .json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
+      // ONLY A ROW THAT IS WAITING IS DECIDED (29 Sep 2026). A second click, or
+      // a stale tab, on a row already decided is ANSWERED — same decision: 200
+      // with nothing written and nobody told; the opposite: 409. It used to be
+      // re-applied: Approve twice re-notified "You were accepted", and a second
+      // click on a departure fell into join semantics and put a PR who had left
+      // back on the roster. See join-decision.ts.
+      const settled = settledDecisionAnswer(currentLink, approveStatus);
+      if (settled) return respondSettled(res, settled, currentLink);
+
       if (currentLink.approveStatus === 'leave_pending') {
         if (approveStatus === 'approved') {
           // Approving the departure RE-RUNS the settlement gate: money can
@@ -432,11 +466,12 @@ export class AgencyControllerClass {
             userId,
             'left',
             actor,
+            undefined,
+            // Claimed: of two clicks, one decides it and one is answered.
+            { from: 'leave_pending' },
           );
           if (!leftRow) {
-            return res
-              .status(404)
-              .json({ success: false, message: Error.NOT_FOUND, data: null });
+            return this.answerMovedDecision(res, agencyId, userId, approveStatus, 'leave_pending');
           }
           // Reuses the join-resolution kind — notification_kind is a PG enum
           // and a departure-specific value would cost another migration; the
@@ -451,7 +486,9 @@ export class AgencyControllerClass {
           });
           return res.status(200).json({
             success: true,
-            message: 'Departure approved',
+            // A sentence, not a label — the Approvals page prints it as the
+            // confirmation (join-decision.ts `decidedMessage`).
+            message: decidedMessage('departure', 'approved'),
             data: leftRow,
           });
         }
@@ -473,12 +510,11 @@ export class AgencyControllerClass {
           userId,
           'approved',
           actor,
-          `[Leave rejected] ${reason}`,
+          `${LEAVE_REJECTED_PREFIX}${reason}`,
+          { from: 'leave_pending' },
         );
         if (!keptRow) {
-          return res
-            .status(404)
-            .json({ success: false, message: Error.NOT_FOUND, data: null });
+          return this.answerMovedDecision(res, agencyId, userId, approveStatus, 'leave_pending');
         }
         await notify({
           userId,
@@ -490,7 +526,7 @@ export class AgencyControllerClass {
         });
         return res.status(200).json({
           success: true,
-          message: 'Departure rejected',
+          message: decidedMessage('departure', 'rejected'),
           data: keptRow,
         });
       }
@@ -504,11 +540,11 @@ export class AgencyControllerClass {
         approveStatus,
         actor,
         approveStatus === 'rejected' ? rejectReason : undefined,
+        // Claimed: two clicks that both read `pending` decide it once.
+        { from: 'pending' },
       );
       if (!row) {
-        return res
-          .status(404)
-          .json({ success: false, message: Error.NOT_FOUND, data: null });
+        return this.answerMovedDecision(res, agencyId, userId, approveStatus, 'pending');
       }
 
       // Ops still require pr.id until Phase C — bridge from user / user_profile.
@@ -522,7 +558,14 @@ export class AgencyControllerClass {
           agencyId,
           actor,
           tier: row.tier,
-          name: profile?.fullName?.trim() || user?.username || 'PR',
+          // NO `name` (29 Sep 2026). This passed
+          // `profile.fullName || user.username || 'PR'`, and the bridge writes
+          // `name` to `user_profile.full_name` — so accepting a PR who had not
+          // yet typed a legal name stored their USERNAME (or "PR") as it, on
+          // the column the vouchers, the IC match and the payee line read as
+          // the legal name. A username is not a legal name: blank stays blank
+          // until the PR fills it, and every reader already falls back to the
+          // username at read time (`composePr`, the roster and PV SQL).
           nickname: user?.username ?? null,
           phone: user?.phoneNum ?? null,
           email: user?.email ?? null,
@@ -545,7 +588,9 @@ export class AgencyControllerClass {
         actor,
       });
 
-      res.status(200).json({ success: true, message: 'OK', data: row });
+      // It said "OK" — the one door on this page that confirmed nothing. The
+      // decision, in words: who joined the roster, or who was turned away.
+      res.status(200).json({ success: true, message: decidedMessage('join', approveStatus), data: row });
     } catch (error) {
       logger.error('[AgencyController.setAgencyPrApproval] Error:', error);
       res.status(500).json({
@@ -554,6 +599,44 @@ export class AgencyControllerClass {
         data: null,
       });
     }
+  }
+
+  /**
+   * The claimed write came back empty: the row left `from` between the read
+   * and the write — the other half of a double-click decided it — or is gone.
+   * Answered by what the row is NOW, exactly as if this click had come second,
+   * so the PR is told once. Still in `from` means the write itself failed (the
+   * repository logs and answers null): a 500, never a 200 over nothing.
+   */
+  private async answerMovedDecision(
+    res: Response,
+    agencyId: string,
+    userId: string,
+    decision: JoinDecision,
+    from: AgencyPrApproveStatus,
+  ) {
+    const now = (await this.agencyPrRepository.listByUser(userId)).find(
+      (l) => l.agencyId === agencyId,
+    );
+    if (!now) {
+      return res
+        .status(404)
+        .json({ success: false, message: Error.NOT_FOUND, data: null });
+    }
+    const settled = settledDecisionAnswer(now, decision);
+    if (settled) return respondSettled(res, settled, now);
+    if (now.approveStatus !== from) {
+      return res.status(409).json({
+        success: false,
+        message: 'This request changed while you were deciding it — reload the page to see it now. Nothing changed.',
+        data: null,
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: Error.INTERNAL_SERVER_ERROR,
+      data: null,
+    });
   }
 
 
@@ -1641,9 +1724,17 @@ export class AgencyControllerClass {
 
       const member =
         await this.agencyMemberRepository.getByIdEnriched(memberId);
-      res
-        .status(200)
-        .json({ success: true, message: 'Member updated', data: member });
+      // Says WHAT happened — reactivated as, approved as, role changed to —
+      // because the portal prints this sentence as the confirmation.
+      const message = memberUpdateMessage({
+        org: 'agency',
+        previousStatus: target.status,
+        previousSubRole: target.subRole,
+        wasMember: Boolean(target.firstActivatedAt),
+        nextStatus: parsed.data.status,
+        nextSubRole: parsed.data.subRole,
+      });
+      res.status(200).json({ success: true, message, data: member });
     } catch (error) {
       logger.error('[AgencyController.updateMember] Error:', error);
       res.status(500).json({
@@ -1742,9 +1833,12 @@ export class AgencyControllerClass {
         });
       }
 
-      res
-        .status(200)
-        .json({ success: true, message: 'Member removed', data: null });
+      res.status(200).json({
+        success: true,
+        // A decline and a deactivation are this same call; say which it was.
+        message: memberRemovalMessage(nextStatus),
+        data: null,
+      });
     } catch (error) {
       logger.error('[AgencyController.removeMember] Error:', error);
       res.status(500).json({

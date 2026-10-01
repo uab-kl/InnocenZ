@@ -168,46 +168,48 @@ export class AgencyOutletRepository {
    * `ended` needed no new clause here, and that is the argument for modelling
    * it as a status rather than a flag: testing equality against `approved`
    * excludes every non-permission automatically, including ones added later.
+   *
+   * ⚠️ THROWS on a failed read (1 Oct 2026) — it used to answer `[]`, the same
+   * value as "this venue has no approved agency", so a database blip refused a
+   * post (and an admin's move) with "link an agency in Settings first" and
+   * emptied the venue's PR list: a wrong reason, sending a venue that HAS
+   * agencies off to Settings. Every caller's own catch now answers 500, the
+   * same rule `PlanLookup` keeps for the plan — never read a failed fact as "none".
    */
   async listApprovedAgencyIdsForOutlet(outletId: string): Promise<string[]> {
-    try {
-      const rows = await db
-        .select({ agencyId: AgencyOutletTable.agencyId })
-        .from(AgencyOutletTable)
-        .where(
-          and(
-            eq(AgencyOutletTable.outletId, outletId),
-            eq(AgencyOutletTable.approveStatus, 'approved'),
-          ),
-        );
-      return rows.map((row) => row.agencyId);
-    } catch (error) {
-      logger.error('[AgencyOutletRepository.listApprovedAgencyIdsForOutlet] Error:', error);
-      return [];
-    }
+    const rows = await db
+      .select({ agencyId: AgencyOutletTable.agencyId })
+      .from(AgencyOutletTable)
+      .where(
+        and(
+          eq(AgencyOutletTable.outletId, outletId),
+          eq(AgencyOutletTable.approveStatus, 'approved'),
+        ),
+      );
+    return rows.map((row) => row.agencyId);
   }
 
   /**
    * The venues this agency may see. THIS IS THE PORTAL'S VISIBILITY RULE — it
    * replaces `GET /outlet?onboardedByAgencyId=`. Returning too many ids here
    * shows an agency a venue that never invited it.
+   *
+   * ⚠️ THROWS on a failed read (1 Oct 2026), for the reason above: its `[]`
+   * answered three gates — staffing a shift, posting a special service, and the
+   * outlet-route guard — with "not linked to this outlet" when the link was
+   * there and only the read had failed. Their own catches now answer 500.
    */
   async listApprovedOutletIdsForAgency(agencyId: string): Promise<string[]> {
-    try {
-      const rows = await db
-        .select({ outletId: AgencyOutletTable.outletId })
-        .from(AgencyOutletTable)
-        .where(
-          and(
-            eq(AgencyOutletTable.agencyId, agencyId),
-            eq(AgencyOutletTable.approveStatus, 'approved'),
-          ),
-        );
-      return rows.map((row) => row.outletId);
-    } catch (error) {
-      logger.error('[AgencyOutletRepository.listApprovedOutletIdsForAgency] Error:', error);
-      return [];
-    }
+    const rows = await db
+      .select({ outletId: AgencyOutletTable.outletId })
+      .from(AgencyOutletTable)
+      .where(
+        and(
+          eq(AgencyOutletTable.agencyId, agencyId),
+          eq(AgencyOutletTable.approveStatus, 'approved'),
+        ),
+      );
+    return rows.map((row) => row.outletId);
   }
 
   /** This agency's linked venues, narrowed by state / search — Outlet-Linking tab. */

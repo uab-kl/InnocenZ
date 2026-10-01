@@ -203,6 +203,12 @@ export type PrWithProfileType = PrType & {
   roster: PrRoster | null;
   /** Absent (not zeroed) when the caller is not entitled to it — see PrStatsType. */
   stats?: PrStatsType;
+  /**
+   * The KPI score, a whole number 0–100, or null while there is nothing to
+   * score (`pr-kpi.ts`). The number alone: nothing that went into it is ever
+   * sent. LIST path, agency and admin callers only — absent for an outlet.
+   */
+  kpiScore?: number | null;
 };
 
 export type PrFilter = {

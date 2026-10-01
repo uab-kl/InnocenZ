@@ -18,7 +18,10 @@ import {
 } from '@/features/subscription/plan-limit.js';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
-import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
+import {
+  LIVE_MEMBER_SUBSCRIPTION_STATUSES,
+  MemberSubscriptionTable,
+} from '@/features/member-subscription/member-subscription.model.js';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
 import type { JobDefinition } from './scheduler.js';
@@ -64,6 +67,56 @@ export function bandFor(
   return plans.find((p) => p.limitAmount === null) ?? null;
 }
 
+/** One open agency ledger row, with the two facts the job must judge it by. */
+export type TierJobRow = {
+  id: string;
+  subscriberId: string;
+  subscriberName: string;
+  planName: string;
+  subscriptionId: string | null;
+  status: string;
+  startedAt: Date;
+  /** The catalog row's kind; null when the row names no catalog plan. */
+  kind: string | null;
+  /** The agency's own status; null when no agency row has this id. */
+  agencyStatus: string | null;
+};
+
+/**
+ * WHICH ROWS THE JOB MAY JUDGE — one per agency, and only a real, live plan
+ * (28 Sep 2026 follow-up: "the tier job judges every open agency row").
+ *
+ * It judged every agency row with `ended_at IS NULL`, so:
+ *  - a row an admin set to `cancelled` without a date was re-banded, and
+ *    `applyPlanChangeToLedger` (which reads the shared live definition and
+ *    found nothing to close) OPENED a new plan — a cancelled subscription
+ *    brought back to life by the weekly job;
+ *  - an add-on row was judged as if it were the plan;
+ *  - an agency holding two open plan rows was judged, notified and possibly
+ *    moved twice in one run;
+ *  - an agency that is not `active` (pending approval, suspended, deactivated,
+ *    or no agency row at all) was re-priced and sent a statement.
+ *
+ * Live = the shared `LIVE_MEMBER_SUBSCRIPTION_STATUSES`; plan lane = a catalog
+ * `kind` of 'plan', or no catalog row (the same rule `onPlanLane` applies);
+ * active agencies only, as `reportPlanlessAgencies` below already scopes
+ * itself. Of several, the NEWEST started is the plan the agency is on.
+ */
+export function rowsToJudge(rows: readonly TierJobRow[]): TierJobRow[] {
+  const live: readonly string[] = LIVE_MEMBER_SUBSCRIPTION_STATUSES;
+  const newest = new Map<string, TierJobRow>();
+  for (const row of rows) {
+    if (!live.includes(row.status)) continue;
+    if (row.kind !== null && row.kind !== 'plan') continue;
+    if (row.agencyStatus !== 'active') continue;
+    const held = newest.get(row.subscriberId);
+    if (!held || row.startedAt.getTime() > held.startedAt.getTime()) {
+      newest.set(row.subscriberId, row);
+    }
+  }
+  return [...newest.values()];
+}
+
 async function runAgencyTier(): Promise<void> {
   const { weekStart, weekEnd } = previousCompleteWeek();
 
@@ -89,22 +142,35 @@ async function runAgencyTier(): Promise<void> {
 
   // Only agencies that hold a live PLAN. One with no subscription is a billing
   // question, not a tier question, and inventing a plan for it here would bill
-  // an org that never subscribed.
-  const live = await db
+  // an org that never subscribed. `rowsToJudge` says which open rows count.
+  const open = await db
     .select({
       id: MemberSubscriptionTable.id,
       subscriberId: MemberSubscriptionTable.subscriberId,
       subscriberName: MemberSubscriptionTable.subscriberName,
       planName: MemberSubscriptionTable.planName,
       subscriptionId: MemberSubscriptionTable.subscriptionId,
+      status: MemberSubscriptionTable.status,
+      startedAt: MemberSubscriptionTable.startedAt,
+      kind: SubscriptionTable.kind,
+      agencyStatus: AgencyTable.status,
     })
     .from(MemberSubscriptionTable)
+    .leftJoin(SubscriptionTable, eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id))
+    .leftJoin(AgencyTable, eq(MemberSubscriptionTable.subscriberId, AgencyTable.id))
     .where(
       and(
         eq(MemberSubscriptionTable.subscriberType, 'agency'),
         isNull(MemberSubscriptionTable.endedAt),
       ),
     );
+  const live = rowsToJudge(open);
+  if (live.length < open.length) {
+    logger.info(
+      `[agency-tier] judging ${live.length} of ${open.length} open agency row(s) — the rest are ` +
+        'not a live plan of an active agency, or a second row for one already judged',
+    );
+  }
 
   /**
    * AN AGENCY MID-NEGOTIATION IS NOT RE-BANDED (owner's call, 27 Aug 2026).

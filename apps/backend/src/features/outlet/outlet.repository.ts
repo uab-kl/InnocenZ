@@ -54,9 +54,14 @@ export class OutletRepositoryClass {
     }
   }
 
-  async getById(id: string): Promise<OutletType | null> {
+  /**
+   * `client`: the pool, or a shift edit's transaction (shift-edit-rules.ts,
+   * 30 Sep 2026) — an admin moving a shift re-reads the target venue's status
+   * under the venues' locks.
+   */
+  async getById(id: string, client: DbTransaction | typeof db = db): Promise<OutletType | null> {
     try {
-      const [outlet] = await db
+      const [outlet] = await client
         .select()
         .from(OutletTable)
         .where(eq(OutletTable.id, id))

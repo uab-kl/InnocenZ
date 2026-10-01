@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { Error } from '@/error/index.js';
 import { logger } from '@/util/logger.js';
-import { paramId } from '@/util/params.js';
+import { paramId, uuidParam } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import {
   type OrgScopeDeps,
@@ -15,7 +15,13 @@ import { toPublicPaymentMethod } from '@/features/payment-method/payment-method.
 import { env } from '@/env.js';
 import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { getGateway, listGateways } from './payment-gateway.js';
-import { AUTO_CHARGE_ACTOR, autoChargeInFlight, notifyAutoChargeFailed } from './auto-charge.js';
+import {
+  AUTO_CHARGE_ACTOR,
+  autoChargeInFlight,
+  formatBillAmount,
+  notifyAutoChargeFailed,
+} from './auto-charge.js';
+import { REFUND_MESSAGES, REFUND_REFERENCE_MAX, refundedMessage } from './refund-message.js';
 
 /**
  * Base URL clients join with stored R2 object keys to build image URLs. Null
@@ -268,6 +274,15 @@ export class SubscriptionPaymentControllerClass {
             (invoice.subscriberType === 'outlet' && ownOutletIds.includes(invoice.subscriberId)));
         // Someone else's invoice is a 404, never a 403 — do not confirm it exists.
         if (!owns) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        // A voided bill is owed by nobody (29 Sep 2026) — opening a checkout for
+        // it would take money for a charge InnocenZ has already withdrawn.
+        if (invoice.status === 'void') {
+          return res.status(409).json({
+            success: false,
+            message: `${invoice.invoiceNo} was voided — there is nothing to pay`,
+            data: null,
+          });
+        }
         if (invoice.status === 'paid') {
           return res.status(409).json({
             success: false,
@@ -360,6 +375,109 @@ export class SubscriptionPaymentControllerClass {
   /** Which providers are registered. Empty today, and the admin UI reads it to say so. */
   async gateways(_req: Request, res: Response) {
     res.status(200).json({ success: true, message: 'OK', data: listGateways() });
+  }
+
+  /**
+   * MONEY INNOCENZ OWES BACK — payments that landed on a voided bill or on one
+   * already paid (`recordAttempt` marks them refund-due and settles nothing).
+   * The admin's Plan Payment page reads this to put them at the top in red,
+   * instead of leaving them in a log line nobody reads.
+   *
+   * The route is `requireAdmin`, and admin-ness is asked AGAIN here the way
+   * `listForInvoice` asks it: this read spans every organisation, so a route
+   * that ever lost its guard must still not become a door onto all of them.
+   */
+  async refundsDue(req: Request, res: Response) {
+    try {
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
+      if (!scope.isAdmin) {
+        return res.status(403).json({ success: false, message: Error.FORBIDDEN, data: null });
+      }
+      const rows = await this.repository.listRefundsDue();
+      // A failed read is a 500, never an empty list — "nothing owed" and "could
+      // not look" must not look the same on the page that says money is owed.
+      if (!rows) {
+        return res
+          .status(500)
+          .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+      res.status(200).json({ success: true, message: 'OK', data: rows });
+    } catch (error) {
+      logger.error('[SubscriptionPaymentController.refundsDue] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * THE MONEY WENT BACK — the admin's "Mark refunded" on the red card.
+   *
+   * Guarded like `refundsDue`: the route is `requireAdmin` and admin-ness is
+   * asked again here. The body carries ONE thing, the refund's own bank or
+   * gateway reference — required, because "refunded" with nothing to match on
+   * a statement is an assertion nobody can check. Which rows may move, and the
+   * double-click guard, live in the repository's single guarded UPDATE.
+   *
+   * Every answer is a sentence from `refund-message.ts`, which the web shows as
+   * the confirmation or the refusal and translates by those exact words.
+   */
+  async markRefunded(req: Request, res: Response) {
+    try {
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
+      if (!scope.isAdmin) {
+        return res.status(403).json({ success: false, message: Error.FORBIDDEN, data: null });
+      }
+      const id = uuidParam(req.params.id);
+      if (!id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const raw: unknown = req.body?.reference;
+      const reference = typeof raw === 'string' ? raw.trim() : '';
+      if (!reference) {
+        return res
+          .status(400)
+          .json({ success: false, message: REFUND_MESSAGES.referenceMissing, data: null });
+      }
+      if (reference.length > REFUND_REFERENCE_MAX) {
+        return res
+          .status(400)
+          .json({ success: false, message: REFUND_MESSAGES.referenceTooLong, data: null });
+      }
+
+      const result = await this.repository.markRefunded(id, reference, getActor(req));
+      if (!result.ok) {
+        switch (result.reason) {
+          case 'not_found':
+            return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+          case 'already_refunded':
+            return res
+              .status(409)
+              .json({ success: false, message: REFUND_MESSAGES.alreadyRefunded, data: null });
+          case 'not_owed_back':
+            return res
+              .status(409)
+              .json({ success: false, message: REFUND_MESSAGES.notOwedBack, data: null });
+          case 'no_room':
+            return res.status(409).json({ success: false, message: REFUND_MESSAGES.noRoom, data: null });
+          default:
+            return res
+              .status(500)
+              .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: refundedMessage(
+          result.invoiceNo,
+          formatBillAmount(result.payment.amount, result.payment.currency),
+          reference,
+        ),
+        data: result.payment,
+      });
+    } catch (error) {
+      logger.error('[SubscriptionPaymentController.markRefunded] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
   }
 
   /**

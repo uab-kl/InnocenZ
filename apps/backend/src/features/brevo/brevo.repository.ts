@@ -14,6 +14,23 @@ import type { SendEmailInput, SendEmailResult } from '@/features/mailing/mailing
 
 let transporter: Transporter | null = null;
 
+/**
+ * THE SMTP LEG IS BOUNDED (30 Sep 2026). With none of these set, nodemailer 7
+ * waited 2 min to connect, 30 s for the greeting and 10 min of silence — so a
+ * hung relay held a code request (and the sign-up answer behind it) for minutes.
+ * Measured against Brevo's relay: ~0.55 s to EHLO over TLS, ~1.1-1.5 s for a
+ * whole send; each bound below is many times that, so only a hang is cut.
+ *
+ * `socketTimeout` is SILENCE, not a total: it restarts on every byte, and the
+ * slowest normal silence is the relay accepting the message after DATA. DNS is
+ * resolved before the connect clock starts, so it gets a bound of its own
+ * (per query; nodemailer caches the answer for 5 minutes).
+ */
+export const BREVO_DNS_TIMEOUT_MS = 5_000;
+export const BREVO_CONNECTION_TIMEOUT_MS = 10_000;
+export const BREVO_GREETING_TIMEOUT_MS = 10_000;
+export const BREVO_SOCKET_TIMEOUT_MS = 20_000;
+
 export function emailConfigured(): boolean {
   return Boolean(
     env.SENDER_EMAIL &&
@@ -38,6 +55,10 @@ function getTransporter(): Transporter {
         user: env.BREVO_SMTP_USER!,
         pass: env.BREVO_SMTP_KEY!,
       },
+      dnsTimeout: BREVO_DNS_TIMEOUT_MS,
+      connectionTimeout: BREVO_CONNECTION_TIMEOUT_MS,
+      greetingTimeout: BREVO_GREETING_TIMEOUT_MS,
+      socketTimeout: BREVO_SOCKET_TIMEOUT_MS,
     });
   }
   return transporter;

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -7,6 +7,7 @@ import {
   NotificationInsertType,
   NotificationTable,
 } from './notification.model.js';
+import { isRepeatDelivery } from './repeat-delivery.js';
 
 export class NotificationRepositoryClass {
   /**
@@ -26,6 +27,67 @@ export class NotificationRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[NotificationRepository.create] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * `create`, unless this exact notice is the one the recipient was just given.
+   *
+   * The duplicates on file came from ONE event delivered twice, never from two
+   * events: the Sunday jobs ran in two backend processes against the shared
+   * database on 13 Sep (every tier statement and day-review notice arrived
+   * 0.4–0.8 s apart), and a join approval submitted twice wrote two notices
+   * 0.3 s apart. `isRepeatDelivery` is the test — the latest notice, unread,
+   * saying exactly this — and this is where it is applied.
+   *
+   * Returns the EXISTING row for a repeat, so a caller counting deliveries
+   * still counts this person as told.
+   *
+   * Without a caller transaction the read and the insert share their own, behind
+   * a lock on the recipient: two processes running the same job at the same
+   * instant would otherwise both read "not told yet" and both write. With one,
+   * the caller's transaction is used and no lock is taken — a caller notifying
+   * several people inside one transaction could otherwise deadlock against
+   * another doing the same in a different order.
+   */
+  async createUnlessRepeat(
+    input: NotificationInsertType,
+    options: { windowMs: number; tx?: DbTransaction },
+  ): Promise<Notification | null> {
+    const run = async (tx: DbTransaction, lock: boolean) => {
+      if (lock) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`notification:${input.userId}`}, 0))`,
+        );
+      }
+      // The window is measured on the DATABASE clock, the one `created_at` was
+      // written with — two app hosts can disagree by seconds.
+      const windowSeconds = Math.max(0, Math.floor(options.windowMs / 1000));
+      const [latest] = await tx
+        .select()
+        .from(NotificationTable)
+        .where(
+          and(
+            eq(NotificationTable.userId, input.userId),
+            gt(
+              NotificationTable.createdAt,
+              sql`now() - make_interval(secs => ${windowSeconds})`,
+            ),
+          ),
+        )
+        .orderBy(desc(NotificationTable.createdAt))
+        .limit(1);
+      if (latest && isRepeatDelivery(latest, input)) return latest;
+      const [row] = await tx.insert(NotificationTable).values(input).returning();
+      return row ?? null;
+    };
+    try {
+      return options.tx
+        ? await run(options.tx, false)
+        : await db.transaction((tx) => run(tx, true));
+    } catch (error) {
+      logger.error('[NotificationRepository.createUnlessRepeat] Error:', error);
       return null;
     }
   }
@@ -85,6 +147,30 @@ export class NotificationRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[NotificationRepository.markRead] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Marks EVERY unread notification of one user read — how many, or null on a
+   * fault.
+   *
+   * The bell's "Mark all read" used to fan out one `markRead` per row it had
+   * LOADED, and a page is 50 rows: a PR with 64 unread cleared 50, and the
+   * other 14 sat below the page where no button could reach them. Scoped by
+   * owner in the WHERE, like `markRead`, and read rows keep the timestamp of
+   * the moment they were really read.
+   */
+  async markAllRead(userId: string): Promise<number | null> {
+    try {
+      const rows = await db
+        .update(NotificationTable)
+        .set({ readAt: new Date(), updatedAt: new Date(), updatedBy: userId })
+        .where(and(eq(NotificationTable.userId, userId), isNull(NotificationTable.readAt)))
+        .returning({ id: NotificationTable.id });
+      return rows.length;
+    } catch (error) {
+      logger.error('[NotificationRepository.markAllRead] Error:', error);
       return null;
     }
   }

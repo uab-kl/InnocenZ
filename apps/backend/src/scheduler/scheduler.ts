@@ -1,5 +1,6 @@
 import cron, { ScheduledTask } from 'node-cron';
 import { logger } from '@/util/logger.js';
+import { type RunExclusiveOptions, runExclusive } from './job-lock.js';
 
 /**
  * Kuala Lumpur. Every job here is a business rhythm — the weekly payout, an
@@ -9,7 +10,10 @@ import { logger } from '@/util/logger.js';
 export const SCHEDULER_TIMEZONE = 'Asia/Kuala_Lumpur';
 
 export interface JobDefinition {
-  /** Stable identifier, used for logging and the overlap guard. */
+  /**
+   * Stable identifier, used for logging, the overlap guard and the
+   * cross-process lock key (`jobLockKey`) — renaming a job changes its lock.
+   */
   name: string;
   /** Standard 5-field cron expression, read in SCHEDULER_TIMEZONE. */
   schedule: string;
@@ -20,15 +24,25 @@ export interface JobDefinition {
  * The one place background work is registered.
  *
  * Deliberately a tiny wrapper rather than scattered `cron.schedule` calls: the
- * two things that actually bite — a job silently overlapping itself, and a job
- * throwing into an unhandled rejection that takes the process down — have to be
- * solved once, not per job.
+ * things that actually bite — a job silently overlapping itself, a job throwing
+ * into an unhandled rejection that takes the process down, and (29 Sep 2026)
+ * the same job running once in EVERY backend process — have to be solved once,
+ * not per job.
+ *
+ * Exported for tests, which hand it a fake lock executor; the app uses the one
+ * `scheduler` instance below.
  */
-class SchedulerClass {
+export class SchedulerClass {
   private jobs = new Map<string, { definition: JobDefinition; task?: ScheduledTask }>();
   /** Names currently mid-run, so a slow job cannot be started on top of itself. */
   private running = new Set<string>();
   private started = false;
+
+  /**
+   * `lock` reaches `runExclusive` (job-lock.ts): the per-job Postgres advisory
+   * lock that lets one process — of however many are up — run each tick.
+   */
+  constructor(private readonly lock: RunExclusiveOptions = {}) {}
 
   register(definition: JobDefinition): void {
     if (this.jobs.has(definition.name)) {
@@ -46,7 +60,7 @@ class SchedulerClass {
   }
 
   /**
-   * Runs a job with the two guards applied. Exposed so a job can also be
+   * Runs a job with the guards applied. Exposed so a job can also be
    * triggered by hand (a script, an admin action) and still get them.
    */
   async runNow(name: string): Promise<void> {
@@ -62,10 +76,12 @@ class SchedulerClass {
     }
 
     this.running.add(name);
-    const startedAt = Date.now();
     try {
-      await entry.definition.run();
-      logger.info(`[scheduler] ${name} finished in ${Date.now() - startedAt}ms`);
+      // …and not running in ANOTHER process either: every backend starts this
+      // scheduler against the same database. A process that loses the lock
+      // skips the tick with one log line (see job-lock.ts).
+      const outcome = await runExclusive(name, () => entry.definition.run(), this.lock);
+      if (outcome.ran) logger.info(`[scheduler] ${name} finished in ${outcome.ms}ms`);
     } catch (error) {
       // Swallowed on purpose: an unhandled rejection inside a cron tick would
       // take the API process down with it. The job is broken, not the server.

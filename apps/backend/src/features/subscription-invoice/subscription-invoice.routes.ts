@@ -22,6 +22,14 @@ router.get(
   canRead,
   subscriptionInvoiceController.getById.bind(subscriptionInvoiceController),
 );
+// Voiding a bill raised in error (owner, 29 Sep 2026: "Add Void") is InnocenZ's
+// call too — with a reason, and only on a bill nothing has touched. PATCH, so
+// the platform audit records it as an UPDATE with the row it replaced.
+router.patch(
+  '/:id/void',
+  requireAdmin,
+  subscriptionInvoiceController.voidInvoice.bind(subscriptionInvoiceController),
+);
 // Marking money received is InnocenZ's call, never the payer's.
 router.put(
   '/:id',

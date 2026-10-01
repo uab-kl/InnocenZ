@@ -26,6 +26,7 @@ import {
 } from './payout-provider';
 import { matchResponseToItems, parsePayoutResponseCsv } from './payout-response-csv';
 import { resolveAgencyCredentials } from './agency-payout-account.model';
+import { paidNotice, voucherPayeeUserId } from './payment-voucher-issue.js';
 
 type Scope = { isAdmin: boolean; agencyId: string | null };
 
@@ -691,16 +692,10 @@ export class PayoutBatchControllerClass {
     for (const voucherId of voucherIds) {
       try {
         const voucher = await this.paymentVoucherRepository.getById(voucherId);
-        const userId = voucher?.userId ?? voucher?.prId ?? null;
+        const userId = voucher ? voucherPayeeUserId(voucher) : null;
         if (!voucher || !userId) continue;
-        await notify({
-          userId,
-          kind: 'payment_voucher_paid',
-          title: 'You have been paid',
-          body: `${voucher.voucherNo ?? 'Your voucher'} — RM ${voucher.net} has been transferred to your bank.`,
-          payload: { voucherId: voucher.id, amount: voucher.net },
-          actor,
-        });
+        // One wording for both paid lanes — this one and "Mark as paid".
+        await notify({ userId, ...paidNotice(voucher), actor });
       } catch (error) {
         logger.error('[PayoutBatchController.notifyPaid] Error:', error);
       }

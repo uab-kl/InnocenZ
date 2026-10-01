@@ -17,6 +17,7 @@
  */
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { logger } from '@/util/logger.js';
+import { toWhatsAppDigits } from '@/features/account-code/phone.js';
 
 type Bucket = { count: number; resetAt: number };
 
@@ -96,6 +97,42 @@ function clientIp(req: Request): string {
   return req.ip ?? req.socket.remoteAddress ?? 'unknown';
 }
 
+/**
+ * ONE BUDGET PER IPv6 NETWORK, not per address (security review, 30 Sep 2026).
+ *
+ * A subscriber is handed a whole /64 — 18 quintillion addresses — so a per-host
+ * limit keyed on the full IPv6 address gave an attacker a fresh budget with
+ * every request, just by picking the next address in their own block. The
+ * limit now counts the /64. IPv4, and IPv4 carried inside IPv6 (`::ffff:a.b.c.d`),
+ * stay one address each. Anything that does not parse is used as it came, so a
+ * malformed value can never fold several callers together.
+ */
+export function ipBudgetKey(ip: string): string {
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+  if (mapped) return mapped[1];
+  if (!ip.includes(':')) return ip;
+
+  const bare = ip.split('%')[0]; // a link-local zone id is not part of the network
+  const halves = bare.split('::');
+  if (halves.length > 2) return ip;
+  const left = halves[0] ? halves[0].split(':') : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  // An embedded IPv4 tail (`64:ff9b::1.2.3.4`) fills two groups.
+  const tailWidth = (right.length ? right : left).at(-1)?.includes('.') ? 1 : 0;
+  const missing = 8 - (left.length + right.length + tailWidth);
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return ip;
+  const groups = [...left, ...Array<string>(halves.length === 2 ? missing : 0).fill('0'), ...right];
+
+  const network = groups.slice(0, 4);
+  if (!network.every((group) => /^[0-9a-f]{1,4}$/i.test(group))) return ip;
+  return `${network.map((group) => parseInt(group, 16).toString(16)).join(':')}::/64`;
+}
+
+/** The per-host key every limiter counts: the address, or its /64 for IPv6. */
+export function clientBudgetKey(req: Request): string {
+  return `ip:${ipBudgetKey(clientIp(req))}`;
+}
+
 /** Lowercased + trimmed, or `Foo@x.com` and `foo@x.com` get separate budgets. */
 function normalizedBodyField(req: Request, field: string): string | null {
   const raw = (req.body as Record<string, unknown> | undefined)?.[field];
@@ -168,7 +205,7 @@ export const forgotPasswordLimiter = rateLimit({
   name: 'forgot-password',
   windowMs: 60 * 60 * 1000,
   max: 20,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  keys: (req) => [clientBudgetKey(req)],
   message: 'Too many password reset requests. Please try again later.',
 });
 
@@ -192,7 +229,7 @@ export const resetPasswordLimiter = rateLimit({
   name: 'reset-password',
   windowMs: 15 * 60 * 1000,
   max: 15,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  keys: (req) => [clientBudgetKey(req)],
   message: 'Too many reset attempts. Please try again later.',
 });
 
@@ -207,7 +244,7 @@ export const loginLimiter = rateLimit({
   name: 'login',
   windowMs: 15 * 60 * 1000,
   max: 60,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  keys: (req) => [clientBudgetKey(req)],
   message:
     'Too many sign-in attempts. Please wait a few minutes and try again.',
 });
@@ -226,7 +263,7 @@ export const refreshLimiter = rateLimit({
   name: 'refresh',
   windowMs: 15 * 60 * 1000,
   max: 300,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  keys: (req) => [clientBudgetKey(req)],
   message: 'Too many session refreshes. Please wait a moment and try again.',
 });
 
@@ -240,20 +277,27 @@ export const otpSendLimiter = rateLimit({
   name: 'otp-send',
   windowMs: 60 * 60 * 1000,
   max: 30,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  keys: (req) => [clientBudgetKey(req)],
   message: 'Too many verification codes requested. Please try again later.',
 });
+
+/**
+ * One budget per LINE, however it is typed. Bare digits made "0123…", "60123…"
+ * and "0060123…" — one handset — three budgets (security review, 30 Sep 2026);
+ * the key is now the international form the code is actually delivered to
+ * (`toWhatsAppDigits`), falling back to the digits for a value it rejects.
+ */
+function phoneBudgetKey(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = toWhatsAppDigits(phone) ?? phone.replace(/\D/g, '');
+  return digits ? `phone:${digits}` : null;
+}
 
 export const otpSendPerPhoneLimiter = rateLimit({
   name: 'otp-send-phone',
   windowMs: 60 * 60 * 1000,
   max: 5,
-  keys: (req) => {
-    const phone = normalizedBodyField(req, 'phoneNum');
-    // Digits only — "+60 12-345" and "60123 45" are one number, one budget.
-    const digits = phone?.replace(/\D/g, '') ?? null;
-    return [digits ? `phone:${digits}` : null];
-  },
+  keys: (req) => [phoneBudgetKey(normalizedBodyField(req, 'phoneNum'))],
   message: 'Too many verification codes requested. Please try again later.',
 });
 
@@ -275,11 +319,46 @@ export const otpSendPerEmailLimiter = rateLimit({
   name: 'otp-send-email',
   windowMs: 60 * 60 * 1000,
   max: 3,
-  keys: (req) => {
-    const email = normalizedBodyField(req, 'email');
-    return [email ? `email:${email}` : null];
-  },
+  keys: (req) => [mailboxBudgetKey(normalizedBodyField(req, 'email'))],
   message: 'Too many verification codes requested for that email. Please try again later.',
+});
+
+/**
+ * ONE BUDGET PER MAILBOX, however the address is dressed (security review,
+ * 30 Sep 2026). `name+anything@…` reaches the same inbox as `name@…`, and at
+ * Gmail so does `n.a.m.e@…`; keyed on the literal address, each spelling was a
+ * fresh 3-an-hour budget aimed at one person. Only the KEY is folded — the mail
+ * still goes to the address as typed. Expects a lowercased, trimmed value.
+ */
+export function mailboxBudgetKey(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const at = email.lastIndexOf('@');
+  if (at <= 0) return `email:${email}`;
+  let local = email.slice(0, at);
+  let domain = email.slice(at + 1);
+  const plus = local.indexOf('+');
+  if (plus > 0) local = local.slice(0, plus);
+  if (domain === 'googlemail.com') domain = 'gmail.com';
+  if (domain === 'gmail.com') local = local.replace(/\./g, '');
+  return `email:${local}@${domain}`;
+}
+
+/**
+ * ONE CEILING FOR THE WHOLE SIGN-UP-CODE MAILER (security review, 30 Sep 2026).
+ * `POST /auth/signup-email-code` mails a branded code to any address a stranger
+ * types. The per-host and per-mailbox budgets bound one sender and one inbox;
+ * neither bounds the TOTAL — the email provider's quota, which every
+ * password-reset mail shares. Venues and agencies sign up a handful of times a
+ * day, so no real sign-up meets this; a flood from many hosts meets it instead
+ * of the quota. A flood can therefore hold sign-up codes for up to an hour —
+ * the better failure than holding password resets.
+ */
+export const signupEmailCodeGlobalLimiter = rateLimit({
+  name: 'signup-email-code-global',
+  windowMs: 60 * 60 * 1000,
+  max: 200,
+  keys: () => ['all'],
+  message: 'Too many verification codes requested. Please try again later.',
 });
 
 /**
@@ -294,7 +373,7 @@ export const otpVerifyLimiter = rateLimit({
   name: 'otp-verify',
   windowMs: 15 * 60 * 1000,
   max: 60,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  keys: (req) => [clientBudgetKey(req)],
   message: 'Too many attempts. Please wait a few minutes and try again.',
 });
 
@@ -302,11 +381,7 @@ export const otpVerifyPerPhoneLimiter = rateLimit({
   name: 'otp-verify-phone',
   windowMs: 60 * 60 * 1000,
   max: 15,
-  keys: (req) => {
-    const phone = normalizedBodyField(req, 'phoneNum');
-    const digits = phone?.replace(/\D/g, '') ?? null;
-    return [digits ? `phone:${digits}` : null];
-  },
+  keys: (req) => [phoneBudgetKey(normalizedBodyField(req, 'phoneNum'))],
   message: 'Too many attempts for this number. Please try again later.',
 });
 
@@ -338,7 +413,7 @@ export const registerLimiter = rateLimit({
   max: 20,
   keys: (req) => {
     const email = normalizedBodyField(req, 'email');
-    return [`ip:${clientIp(req)}`, email ? `email:${email}` : null];
+    return [clientBudgetKey(req), email ? `email:${email}` : null];
   },
   message: 'Too many sign-up attempts. Please try again later.',
 });
@@ -357,6 +432,6 @@ export const registerCheckLimiter = rateLimit({
   name: 'register-check',
   windowMs: 15 * 60 * 1000,
   max: 120,
-  keys: (req) => [`ip:${clientIp(req)}`],
+  keys: (req) => [clientBudgetKey(req)],
   message: 'Too many checks. Please wait a few minutes and try again.',
 });

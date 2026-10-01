@@ -16,10 +16,9 @@ vi.mock('@/features/whatsapp/whatsapp-client.js', () => ({
   sendWhatsAppOtp: vi.fn(),
 }));
 
-import type { Request, Response } from 'express';
-import type { UserType } from '@/features/user/user.model';
 import type { DeliverCodeInput } from '@/features/account-code/delivery';
-import { OtpControllerClass, OtpSendSchema } from './otp.controller';
+import { OtpSendSchema } from './otp.controller';
+import { delivered, fakeUser, setup } from './otp-send.test-support';
 
 /**
  * SIGN-UP PHONE VERIFICATION GAINS THE EMAIL CHANNEL (owner, 21 Sep 2026:
@@ -33,105 +32,12 @@ import { OtpControllerClass, OtpSendSchema } from './otp.controller';
  *    of the wizard that typed it — but never one that already has an account.
  *  • `forgot_password` IGNORES the body's email and mails the ACCOUNT's, so
  *    nothing a caller types can make the server write to a stranger.
+ *
+ * ⚠️ Since 29 Sep 2026 a reset is ANSWERED FIRST and its code minted and sent
+ * afterwards (otp-send-timing.test.ts). The fakes collect that work instead of
+ * running it, so every reset case below calls `settle()` before it looks at a
+ * row or a delivery — without it a "nothing was sent" would pass vacuously.
  */
-
-const NOW = Date.parse('2026-09-21T10:00:00.000Z');
-
-function fakeUser(overrides: Partial<UserType> = {}): UserType {
-  return {
-    id: 'user-1',
-    email: 'owner@atlas-agency.my',
-    phoneNum: '+60123456789',
-    profileImage: null,
-    username: 'Owner',
-    memberCode: 'INNUSR0001',
-    passwordHash: 'hash:old-password',
-    status: 'active',
-    preferredLocale: null,
-    failedLoginAttempts: 0,
-    lockedUntil: null,
-    blockedReason: null,
-    sessionsValidFrom: null,
-    createdAt: new Date(NOW),
-    updatedAt: new Date(NOW),
-    createdBy: 'system',
-    updatedBy: 'system',
-    ...overrides,
-  } as UserType;
-}
-
-type FakeRes = Response & { statusCode: number; body: { success: boolean; message: string; data: any } };
-
-function fakeRes(): FakeRes {
-  const res = {
-    statusCode: 0,
-    body: null as unknown,
-    status(code: number) {
-      res.statusCode = code;
-      return res;
-    },
-    json(payload: unknown) {
-      res.body = payload;
-      return res;
-    },
-  };
-  return res as unknown as FakeRes;
-}
-
-function setup(options: { byLoginMethod?: (method: 'email' | 'phone') => UserType | null } = {}) {
-  const rows = new Map<string, Record<string, unknown>>();
-  let seq = 0;
-  const phoneVerificationRepository = {
-    findActivePending: vi.fn(async () => null),
-    expirePendingForPhone: vi.fn(async () => {}),
-    create: vi.fn(async (data: Record<string, unknown>) => {
-      seq += 1;
-      const row = { id: `row-${seq}`, ...data };
-      rows.set(row.id, row);
-      return row;
-    }),
-    update: vi.fn(async (id: string, data: Record<string, unknown>) => {
-      const row = rows.get(id);
-      if (!row) return null;
-      Object.assign(row, data);
-      return row;
-    }),
-  };
-  const userRepository = {
-    getUserByLoginMethod: vi.fn(async (method: 'email' | 'phone') =>
-      options.byLoginMethod ? options.byLoginMethod(method) : null,
-    ),
-  };
-  /** Reports every destination it was handed as sent — see fakes.test-support. */
-  const deliver = vi.fn(async (input: DeliverCodeInput) => {
-    const sentTo: Array<{ channel: string; to: string; status: 'sent' }> = [];
-    if (input.phone) {
-      sentTo.push({ channel: 'whatsapp', to: `phone:${input.phone}`, status: 'sent' });
-      sentTo.push({ channel: 'sms', to: `phone:${input.phone}`, status: 'sent' });
-    }
-    if (input.email) sentTo.push({ channel: 'email', to: `email:${input.email}`, status: 'sent' });
-    return { sentTo, ok: sentTo.length > 0, waMessageId: null } as never;
-  });
-
-  const controller = new OtpControllerClass(
-    phoneVerificationRepository as never,
-    userRepository as never,
-    deliver as never,
-  );
-
-  const send = async (body: unknown) => {
-    const res = fakeRes();
-    await controller.send({ body } as unknown as Request, res);
-    return res;
-  };
-
-  return { controller, send, deliver, rows, phoneVerificationRepository, userRepository };
-}
-
-/** The destinations `deliver` was handed on call `n`. */
-function delivered(deliver: ReturnType<typeof setup>['deliver'], n = 0) {
-  return deliver.mock.calls[n]?.[0] as DeliverCodeInput;
-}
 
 describe('POST /auth/otp/send — the optional email channel', () => {
   it('sends the SAME code to WhatsApp/SMS and to the email in the body', async () => {
@@ -155,7 +61,12 @@ describe('POST /auth/otp/send — the optional email channel', () => {
     // The row records what it will actually be tried on, not 'whatsapp'.
     const row = [...ctx.rows.values()][0];
     expect(row.channel).toBe('whatsapp,sms,email');
-    expect(res.body.data.sentTo).toHaveLength(3);
+    // The ANSWER does not say where it went — see `otpSendAnswer`.
+    expect(res.body).toEqual({
+      success: true,
+      message: 'OTP sent',
+      data: { expiresInSec: 600, resendAfterSec: 60 },
+    });
   });
 
   it('WITHOUT an email it still sends on WhatsApp, exactly as before', async () => {
@@ -210,7 +121,7 @@ describe('POST /auth/otp/send — the optional email channel', () => {
  * aimed at a stranger's inbox.
  */
 describe('POST /auth/otp/send — whose address the code may reach', () => {
-  it('REFUSES a sign-up code to an email that already has an account', async () => {
+  it('NEVER mails a sign-up code to an email that already has an account', async () => {
     const ctx = setup({
       // No account on the phone; one on the email.
       byLoginMethod: (method) => (method === 'email' ? fakeUser() : null),
@@ -222,10 +133,30 @@ describe('POST /auth/otp/send — whose address the code may reach', () => {
       email: 'owner@atlas-agency.my',
     });
 
-    expect(res.statusCode).toBe(409);
-    expect(res.body.message).toBe('That email already has an account');
-    expect(ctx.deliver).not.toHaveBeenCalled();
-    expect(ctx.phoneVerificationRepository.create).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    const sent = delivered(ctx.deliver);
+    // The phone being verified still gets its code; the registered inbox does not.
+    expect(sent.phone).toBe('60123456789');
+    expect(sent.email).toBeNull();
+    expect([...ctx.rows.values()][0].channel).toBe('whatsapp,sms');
+  });
+
+  /**
+   * THE 28 SEP AUDIT: this public route told a stranger which EMAILS have
+   * accounts ("That email already has an account"). A taken address and a free
+   * one must now be indistinguishable from the answer alone.
+   */
+  it('answers a registered email EXACTLY as it answers a free one', async () => {
+    const taken = setup({ byLoginMethod: (method) => (method === 'email' ? fakeUser() : null) });
+    const free = setup({ byLoginMethod: () => null });
+    const body = { phoneNum: '+60123456789', purpose: 'signup', email: 'owner@atlas-agency.my' };
+
+    const a = await taken.send(body);
+    const b = await free.send(body);
+
+    expect(a.statusCode).toBe(b.statusCode);
+    expect(a.body).toEqual(b.body);
+    expect(JSON.stringify(a.body)).not.toMatch(/email|account/i);
   });
 
   it('forgot_password IGNORES the body email and mails the ACCOUNT’s address', async () => {
@@ -237,6 +168,7 @@ describe('POST /auth/otp/send — whose address the code may reach', () => {
       // An address the caller typed. It must go NOWHERE.
       email: 'attacker@evil.example',
     });
+    await ctx.settle();
 
     expect(res.statusCode).toBe(200);
     const sent = delivered(ctx.deliver);
@@ -253,10 +185,65 @@ describe('POST /auth/otp/send — whose address the code may reach', () => {
       purpose: 'forgot_password',
       email: 'attacker@evil.example',
     });
+    // Not even after the answer.
+    await ctx.settle();
 
     expect(res.statusCode).toBe(200);
     expect(ctx.deliver).not.toHaveBeenCalled();
     expect(ctx.phoneVerificationRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('forgot_password: a registered number and an unknown one get the SAME body', async () => {
+    const known = setup({ byLoginMethod: () => fakeUser() });
+    const unknown = setup({ byLoginMethod: () => null });
+
+    const a = await known.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
+    const b = await unknown.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
+    await known.settle();
+    await unknown.settle();
+
+    expect(known.deliver).toHaveBeenCalledTimes(1);
+    expect(unknown.deliver).not.toHaveBeenCalled();
+    expect(a.statusCode).toBe(b.statusCode);
+    // It used to carry `sentTo` for a real account only — the account's own
+    // masked email included, shown to whoever typed the phone number.
+    expect(a.body).toEqual(b.body);
+  });
+
+  it('forgot_password: a quick second request for a real number is not a tell-tale 429', async () => {
+    const ctx = setup({ byLoginMethod: () => fakeUser() });
+    ctx.phoneVerificationRepository.findActivePending.mockResolvedValueOnce({
+      id: 'row-live',
+      createdAt: new Date(),
+    } as never);
+
+    const res = await ctx.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
+    const unknown = await setup({ byLoginMethod: () => null }).send({
+      phoneNum: '+60123456789',
+      purpose: 'forgot_password',
+    });
+    await ctx.settle();
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual(unknown.body);
+    // The window WAS consulted — so the two lines below are not vacuous.
+    expect(ctx.phoneVerificationRepository.findActivePending).toHaveBeenCalledTimes(1);
+    // The code already on its way stays the valid one — nothing new is minted.
+    expect(ctx.deliver).not.toHaveBeenCalled();
+    expect(ctx.phoneVerificationRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('signup: a quick second request still says how long to wait (the person is at the wizard)', async () => {
+    const ctx = setup();
+    ctx.phoneVerificationRepository.findActivePending.mockResolvedValueOnce({
+      id: 'row-live',
+      createdAt: new Date(),
+    } as never);
+
+    const res = await ctx.send({ phoneNum: '+60123456789', purpose: 'signup' });
+
+    expect(res.statusCode).toBe(429);
+    expect(res.body.message).toMatch(/^Wait \d+s before requesting another code$/);
   });
 });
 
@@ -287,7 +274,7 @@ describe('POST /auth/otp/send — a never-activated roster stub', () => {
     expect(sent.email).toBeNull();
     // The receipt records that it proves the phone alone — registerUser reads this.
     expect([...ctx.rows.values()][0].channel).toBe('whatsapp,sms');
-    expect(res.body.data.sentTo.map((d: { channel: string }) => d.channel)).toEqual(['whatsapp', 'sms']);
+    expect(res.body.data).toEqual({ expiresInSec: 600, resendAfterSec: 60 });
   });
 
   it('signup: the stub’s OWN email is not "taken" — but it is still not mailed', async () => {
@@ -303,7 +290,7 @@ describe('POST /auth/otp/send — a never-activated roster stub', () => {
     expect(delivered(ctx.deliver).email).toBeNull();
   });
 
-  it('signup: an email held by ANOTHER account is still refused before any code', async () => {
+  it('signup: an email held by ANOTHER account is never mailed — and the answer does not say so', async () => {
     const ctx = setup({
       byLoginMethod: (method) => (method === 'phone' ? stub() : fakeUser({ id: 'user-2' })),
     });
@@ -314,17 +301,26 @@ describe('POST /auth/otp/send — a never-activated roster stub', () => {
       email: 'owner@other.my',
     });
 
-    expect(res.statusCode).toBe(409);
-    expect(res.body.message).toBe('That email already has an account');
-    expect(ctx.deliver).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(delivered(ctx.deliver).email).toBeNull();
+    expect(res.body.message).toBe('OTP sent');
   });
 
-  it('signup: an ACTIVATED account’s phone is still 409', async () => {
-    const ctx = setup({ byLoginMethod: (method) => (method === 'phone' ? fakeUser() : null) });
-    const res = await ctx.send({ phoneNum: '+60123456789', purpose: 'signup' });
-    expect(res.statusCode).toBe(409);
-    expect(res.body.message).toBe('That phone number already has an account');
-    expect(ctx.deliver).not.toHaveBeenCalled();
+  it('signup: an ACTIVATED account’s phone answers exactly like a free one — its code on the phone ALONE', async () => {
+    // Owner, 29 Sep 2026 ("General message, both"): this was a 409 naming the
+    // number, to anybody who typed it.
+    const takenCtx = setup({ byLoginMethod: (method) => (method === 'phone' ? fakeUser() : null) });
+    const freeCtx = setup({ byLoginMethod: () => null });
+    const body = { phoneNum: '+60123456789', purpose: 'signup', email: 'typed@mail.my' };
+
+    const taken = await takenCtx.send(body);
+    const free = await freeCtx.send(body);
+
+    expect(taken.statusCode).toBe(200);
+    expect(taken.body).toEqual(free.body);
+    // Only whoever holds the phone can read it — never the inbox that was typed.
+    expect(delivered(takenCtx.deliver).email).toBeNull();
+    expect(delivered(freeCtx.deliver).email).toBe('typed@mail.my');
   });
 
   it('forgot_password: a stub answers exactly like an unknown number — neutral 200, nothing sent', async () => {
@@ -333,10 +329,115 @@ describe('POST /auth/otp/send — a never-activated roster stub', () => {
 
     const s = await stubCtx.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
     const u = await unknownCtx.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
+    await stubCtx.settle();
 
     expect(s.statusCode).toBe(200);
     expect(s.body).toEqual(u.body);
     expect(stubCtx.deliver).not.toHaveBeenCalled();
     expect(stubCtx.phoneVerificationRepository.create).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 29 Sep 2026 follow-up: "`/auth/otp/send` answers 503 when WhatsApp and SMS
+ * both fail, with the email dropped".
+ *
+ * The email is not a later fallback — it goes out BESIDE WhatsApp and SMS, so a
+ * mailable address already carries the code when the phone channels fail. The
+ * addresses the route drops are dropped on purpose (another account's inbox, a
+ * stub claim, anything typed on a reset). What leaked was the ANSWER: with the
+ * phone channels down, a 503 marked exactly the requests where an address had
+ * been withheld — i.e. which addresses and numbers have accounts.
+ */
+describe('POST /auth/otp/send — when WhatsApp and SMS both fail', () => {
+  /** WhatsApp and SMS refuse; the email channel, when handed an address, works. */
+  const phoneChannelsDown = async (input: DeliverCodeInput) => {
+    const sentTo = [
+      { channel: 'whatsapp', to: 'phone', status: 'failed' },
+      { channel: 'sms', to: 'phone', status: 'failed' },
+      ...(input.email ? [{ channel: 'email', to: 'email', status: 'sent' }] : []),
+    ];
+    return { sentTo, ok: Boolean(input.email), waMessageId: null } as never;
+  };
+  const withPhoneDown = (ctx: ReturnType<typeof setup>) => {
+    ctx.deliver.mockImplementation(phoneChannelsDown);
+    return ctx;
+  };
+  const body = { phoneNum: '+60123456789', purpose: 'signup', email: 'owner@atlas-agency.my' };
+
+  it('a mailable sign-up address still carries the code — the email IS the fallback', async () => {
+    const ctx = withPhoneDown(setup());
+
+    const res = await ctx.send(body);
+
+    expect(res.statusCode).toBe(200);
+    expect(delivered(ctx.deliver).email).toBe('owner@atlas-agency.my');
+    expect([...ctx.rows.values()][0].status).toBe('pending');
+  });
+
+  it('an address held by ANOTHER account is still never mailed — and the answer is the free address’s', async () => {
+    const taken = withPhoneDown(setup({ byLoginMethod: (m) => (m === 'email' ? fakeUser() : null) }));
+    const free = withPhoneDown(setup({ byLoginMethod: () => null }));
+
+    const a = await taken.send(body);
+    const b = await free.send(body);
+
+    expect(delivered(taken.deliver).email).toBeNull();
+    // It used to be 503 here and 200 there: the oracle, back through an outage.
+    expect(a.statusCode).toBe(b.statusCode);
+    expect(a.body).toEqual(b.body);
+    // Still pending, like the free twin's — so the 60 s resend wait answers alike.
+    expect([...taken.rows.values()][0].status).toBe('pending');
+  });
+
+  it('a stub claim with a typed address answers as the free number does — the code went to the phone alone', async () => {
+    const stubbed = withPhoneDown(
+      setup({ byLoginMethod: (m) => (m === 'phone' ? fakeUser({ passwordHash: null }) : null) }),
+    );
+    const free = withPhoneDown(setup({ byLoginMethod: () => null }));
+
+    const a = await stubbed.send({ ...body, email: 'someone.else@x.my' });
+    const b = await free.send({ ...body, email: 'someone.else@x.my' });
+
+    expect(delivered(stubbed.deliver).email).toBeNull();
+    expect(a.statusCode).toBe(b.statusCode);
+    expect(a.body).toEqual(b.body);
+  });
+
+  it('forgot_password: a registered number with no email on file answers like an unknown number', async () => {
+    const known = withPhoneDown(setup({ byLoginMethod: () => fakeUser({ email: null }) }));
+    const unknown = setup({ byLoginMethod: () => null });
+
+    const a = await known.send({ phoneNum: '+60123456789', purpose: 'forgot_password', email: 'attacker@evil.example' });
+    const b = await unknown.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
+    await known.settle();
+
+    // The typed address is still NOT a fallback for a reset — that would hand
+    // the code for somebody else's account to whoever typed their number.
+    expect(delivered(known.deliver).email).toBeNull();
+    expect(a.statusCode).toBe(200);
+    expect(a.body).toEqual(b.body);
+    // Nothing reached anyone, so nothing is left waiting to be verified.
+    expect([...known.rows.values()][0].status).toBe('expired');
+  });
+
+  it('forgot_password: the ACCOUNT’s own email carries the reset when the phone channels fail', async () => {
+    const ctx = withPhoneDown(setup({ byLoginMethod: () => fakeUser() }));
+
+    const res = await ctx.send({ phoneNum: '+60123456789', purpose: 'forgot_password' });
+    await ctx.settle();
+
+    expect(res.statusCode).toBe(200);
+    expect(delivered(ctx.deliver).email).toBe('owner@atlas-agency.my');
+    expect([...ctx.rows.values()][0].status).toBe('pending');
+  });
+
+  it('with NO address to hide, a send that reached nobody is still the honest 503', async () => {
+    const ctx = withPhoneDown(setup());
+
+    const res = await ctx.send({ phoneNum: '+60123456789', purpose: 'signup' });
+
+    expect(res.statusCode).toBe(503);
+    expect([...ctx.rows.values()][0].status).toBe('expired');
   });
 });

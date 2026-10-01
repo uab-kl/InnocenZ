@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authController, agencyRepository, otpController, orgMemberInviteController, outletRepository, subscriptionRepository } from '@/composition-root.js';
+import { authController, agencyRepository, otpController, orgMemberInviteController, outletRepository, signupEmailCodes, subscriptionRepository } from '@/composition-root.js';
 import { uploadRegisterProfileImage } from '@/middlewares/upload-profile-image';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js';
@@ -17,6 +17,7 @@ import {
   registerCheckLimiter,
   registerLimiter,
   resetPasswordLimiter,
+  signupEmailCodeGlobalLimiter,
 } from '@/middlewares/rate-limit.js';
 import {
   contactChangeController,
@@ -206,6 +207,23 @@ router.post(
   otpSendPerEmailLimiter,
   optionalAuthenticateJWT,
   otpController.send.bind(otpController),
+);
+/**
+ * THE EMAILED SIGN-UP CODE for a public venue, agency or team-member sign-up
+ * (owner, 30 Sep 2026 — proof before the account is created). Public, and it
+ * mails an address from the request body, so it carries the SAME two budgets
+ * as `/otp/send` above: per host, and per RECIPIENT — one shared 3-an-hour
+ * inbox budget across both routes, which no IP rotation widens. It looks no
+ * account up; see `signup-email-code.ts`.
+ */
+router.post(
+  '/signup-email-code',
+  otpSendLimiter,
+  otpSendPerEmailLimiter,
+  // LAST, so only a request the host and mailbox budgets let through counts
+  // against it — first, one host's refused flood would spend everyone's ceiling.
+  signupEmailCodeGlobalLimiter,
+  signupEmailCodes.send.bind(signupEmailCodes),
 );
 // Limited like /otp/send above — verify was the ONLY auth endpoint with no
 // limiter, and it is the one whose success mints a password-reset proof.

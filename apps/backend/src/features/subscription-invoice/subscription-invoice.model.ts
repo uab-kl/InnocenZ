@@ -5,12 +5,22 @@ import {
   MemberSubscriptionTable,
   type SubscriberType,
 } from '@/features/member-subscription/member-subscription.model.js';
+import type { ProRata } from './pro-rata.js';
 
-// Two states, because that is the whole decision: an admin has seen the money
+// `unpaid` / `paid` are the whole payment decision: an admin has seen the money
 // arrive, or has not. `unpaid` is the default and stays until a human says
 // otherwise — nothing in this app can observe a bank transfer, so no automatic
 // transition to `paid` exists or should.
-export const subscriptionInvoiceStatusValues = ['unpaid', 'paid'] as const;
+//
+// `void` (0169; owner, 29 Sep 2026: "Add Void") is neither: a bill raised in
+// ERROR, taken back by an admin with a reason (`invoice-void.ts`). It is not
+// owed, never paid, and never billed again — the row stays so the period's
+// (member_subscription_id, period_start) slot stays taken. ⚠️ "Not paid" is NOT
+// "owed": every reader that sums what an org owes asks for `unpaid`, never
+// `!== 'paid'`.
+export const subscriptionInvoiceStatusValues = ['unpaid', 'paid', 'void'] as const;
+/** The one status that is money owed. */
+export const OWED_INVOICE_STATUS = 'unpaid' as const;
 export const subscriptionInvoiceKindValues = ['period', 'upgrade'] as const;
 export type SubscriptionInvoiceKind = (typeof subscriptionInvoiceKindValues)[number];
 export type SubscriptionInvoiceStatus = (typeof subscriptionInvoiceStatusValues)[number];
@@ -98,6 +108,13 @@ export type SubscriptionInvoiceWithSubscriber = SubscriptionInvoice & {
   subscriberName: string;
   planName: string;
   billingCycle: string;
+  /**
+   * Set only on a lane's partial FIRST period, billed by the day (owner,
+   * 29 Sep 2026). Read back off this row's own `note` by `parseProRataNote`,
+   * never recomputed from the calendar — so a first week billed in full before
+   * the rule existed still reads as the whole week it was charged for.
+   */
+  proRata: ProRata | null;
 };
 
 export type SubscriptionInvoiceFilter = {

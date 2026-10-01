@@ -14,8 +14,22 @@ import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week.js';
  * payroll week.
  */
 const KL_OFFSET_MS = 8 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type BillingPeriod = { periodStart: string; periodEnd: string };
+
+/**
+ * How much of one billing period a lane actually HELD — the calendar half of
+ * the pro-rata rule; the money half lives in `pro-rata.ts`.
+ */
+export type PeriodShare = {
+  /** The first KL day that is billed: the anchor day inside a lane's first period, else the period's own start. */
+  billedFrom: string;
+  /** Days from `billedFrom` through the period's last day, both inclusive. */
+  billedDays: number;
+  /** Days in the whole period, both ends inclusive — 7 for a Sun–Sat week. */
+  periodDays: number;
+};
 
 /**
  * The KL calendar day an instant falls on.
@@ -138,4 +152,109 @@ export function billingPeriodsFor(params: {
     periods.push({ periodStart, periodEnd: addDays(nextStart, -1) });
   }
   return periods;
+}
+
+/** Calendar days from `from` to `to`, BOTH inclusive; 0 when either cannot be read or `to` comes first. */
+function daysInclusive(from: string, to: string): number {
+  const start = parseDay(from);
+  const end = parseDay(to);
+  if (!start || !end) return 0;
+  const span =
+    (Date.UTC(end.year, end.month - 1, end.date) - Date.UTC(start.year, start.month - 1, start.date)) /
+    DAY_MS;
+  return span < 0 ? 0 : span + 1;
+}
+
+/**
+ * THE SHARE OF A PERIOD THE LANE HELD — owner, 29 Sep 2026: a first partial
+ * week is NOT billed in full.
+ *
+ * The weekly calendar is the payroll week, so `billingPeriodsFor` opens a
+ * lane's first period on the SUNDAY of the week its anchor falls in. An agency
+ * approved on Friday 7 Aug was therefore billed all of 2–8 Aug at RM 125
+ * (INV-000049) for the two days it could actually use. The period itself stays
+ * calendar-aligned — its Sunday is the key the ledger dedupes on, and moving it
+ * would re-mint every first week already billed — so it is the CHARGE that
+ * follows the days held, from the anchor day through the period's last day.
+ *
+ * Takes the same `startedAt` instant `billingPeriodsFor` is given and reads its
+ * KL day the same way, so the two cannot disagree about where a lane starts.
+ *
+ * Only a period the anchor falls strictly INSIDE is partial. Every later period
+ * starts after the anchor, and a monthly or annual period STARTS on its anchor
+ * (`monthsAfter` steps from it), so both come back whole — which is why this
+ * rule changes nothing for outlets. An unreadable day also comes back whole:
+ * the ledger's behaviour before this rule, never a guessed discount.
+ */
+export function periodShareFor(period: BillingPeriod, startedAt: Date): PeriodShare {
+  const periodDays = daysInclusive(period.periodStart, period.periodEnd);
+  const whole: PeriodShare = { billedFrom: period.periodStart, billedDays: periodDays, periodDays };
+  // Checked before `klDayOf`, which throws on an Invalid Date rather than answering.
+  if (periodDays === 0 || !Number.isFinite(startedAt.getTime())) return whole;
+  const anchorDay = klDayOf(startedAt);
+  if (!parseDay(anchorDay)) return whole;
+  if (anchorDay <= period.periodStart || anchorDay > period.periodEnd) return whole;
+  return { billedFrom: anchorDay, billedDays: daysInclusive(anchorDay, period.periodEnd), periodDays };
+}
+
+/** One row on a billing lane, for the only question asked of it here: when did it hold the lane? */
+export type LaneSpan = { startedAt: Date; endedAt: Date | null };
+
+/**
+ * Did this row hold the lane at some point in the period? From the KL day it
+ * started, up to — not including — the KL day it ended: a row that ended ON a
+ * period's first day held none of that period. The one definition of "held",
+ * shared by the pricing pick and the share below so the two cannot disagree.
+ */
+export function spanHoldsPeriod(span: LaneSpan, period: BillingPeriod): boolean {
+  return (
+    klDayOf(span.startedAt) <= period.periodEnd &&
+    (span.endedAt === null || klDayOf(span.endedAt) > period.periodStart)
+  );
+}
+
+/**
+ * HOW MUCH OF A PERIOD A LANE HELD — `null` WHEN IT HELD NONE OF IT (29 Sep
+ * 2026 follow-up: "a re-joined billing lane keeps its EARLIEST anchor").
+ *
+ * A lane walks ONE calendar from its earliest anchor — deliberately, since a
+ * second calendar per row is how Emhub was billed two overlapping months. But
+ * a lane can be LEFT and later RE-JOINED, and the walk then crosses months in
+ * which the org held nothing. Each of those periods was priced `?? latest` —
+ * by the plan the org came back on — and billed: agency cd50e9f6 left
+ * Enterprise on 30 Jun, came back on Starter on Wed 12 Aug, and the 2 Sep
+ * catch-up minted five RM 125 weeks (5 Jul – 8 Aug) for a lane it did not hold
+ * (read-only, 29 Sep 2026), then billed the re-join week in full.
+ *
+ * So, for one period on that calendar:
+ *  - no row held any of it                  → `null`: never billed;
+ *  - the lane's anchor falls inside it      → `periodShareFor` from the anchor,
+ *                                             exactly as before (the first period);
+ *  - the lane was held on its FIRST day     → the whole period, billed in
+ *                                             advance as every period is;
+ *  - held only from a day INSIDE it — the
+ *    lane came back after a gap             → billed from that day, like any
+ *                                             first period.
+ *
+ * The same calendar stays: a re-joined month is billed from the re-join day to
+ * the end of the calendar month it lands in, and whole from the next — never a
+ * second calendar that could overlap a period already billed.
+ */
+export function lanePeriodShare(
+  period: BillingPeriod,
+  anchoredAt: Date,
+  spans: readonly LaneSpan[],
+): PeriodShare | null {
+  const holding = spans.filter((span) => spanHoldsPeriod(span, period));
+  if (holding.length === 0) return null;
+
+  const fromAnchor = periodShareFor(period, anchoredAt);
+  if (fromAnchor.billedDays < fromAnchor.periodDays) return fromAnchor;
+  if (holding.some((span) => klDayOf(span.startedAt) <= period.periodStart)) return fromAnchor;
+
+  // Every row that held this period started inside it: the lane came back here.
+  const cameBack = holding.reduce((earliest, span) =>
+    span.startedAt < earliest.startedAt ? span : earliest,
+  );
+  return periodShareFor(period, cameBack.startedAt);
 }

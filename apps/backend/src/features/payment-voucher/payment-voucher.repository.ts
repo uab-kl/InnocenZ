@@ -10,6 +10,7 @@ import {
   lte,
   ne,
   notExists,
+  notInArray,
   or,
   sql,
   SQL,
@@ -24,9 +25,10 @@ import { DbTransaction } from '@/types/db-transaction';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model';
 import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
-import { klToday } from './payment-voucher-week';
+import { klToday, paymentDueDate } from './payment-voucher-week';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { prepareLine, resolveComponent } from './payment-voucher-component';
+import { uniqueByRef, withCarriedFacts } from './payment-voucher-line-edit';
 import {
   assignmentIdFromRef,
   checkLineAgainstShift,
@@ -352,21 +354,15 @@ export class PaymentVoucherRepositoryClass {
           // client round-trips unchanged while editing a price. Only refs that
           // appear EXACTLY ONCE are carried: an ambiguous match would attach a
           // receipt to the wrong money, which is worse than the null it replaces.
+          //
+          // The line's `component` rides the same carry (29 Sep 2026): a
+          // generator wage is `ref = <assignment id>` + `component = 'wages'`,
+          // and a bare id packs no kind to re-derive it from — see
+          // `withCarriedFacts`. `uniqueByRef` is the SAME rule `planLineRewrite`
+          // judged the payload by, so the two cannot disagree about which lines
+          // are the same money.
           const previous = await this.getLines(id, tx);
-          const carryable = new Map<
-            string,
-            { receiptId: string | null; proofPhotos: string[] | null }
-          >();
-          const refCounts = new Map<string, number>();
-          for (const line of previous) {
-            if (!line.ref) continue;
-            refCounts.set(line.ref, (refCounts.get(line.ref) ?? 0) + 1);
-            carryable.set(line.ref, {
-              receiptId: line.receiptId,
-              proofPhotos: line.proofPhotos,
-            });
-          }
-          for (const [ref, count] of refCounts) if (count > 1) carryable.delete(ref);
+          const carryable = uniqueByRef(previous);
 
           /*
            * PENALTY LINES SURVIVE THE WIPE — they are not the caller's to drop.
@@ -419,18 +415,15 @@ export class PaymentVoucherRepositoryClass {
               ? await tx
                   .insert(PaymentVoucherLineTable)
                   .values(
-                    [...lines, ...restored].map((line, i) => {
-                      const carried = line.ref ? carryable.get(line.ref) : undefined;
-                      return prepareLine({
-                        ...line,
+                    [...lines, ...restored].map((line, i) =>
+                      prepareLine({
                         // An explicit value from the caller always wins; this only
                         // fills in what the HTTP payload cannot express.
-                        receiptId: line.receiptId ?? carried?.receiptId ?? null,
-                        proofPhotos: line.proofPhotos ?? carried?.proofPhotos ?? null,
+                        ...withCarriedFacts(line, carryable),
                         voucherId: id,
                         sortOrder: i,
-                      });
-                    }),
+                      }),
+                    ),
                   )
                   .returning()
               : [];
@@ -502,7 +495,10 @@ export class PaymentVoucherRepositoryClass {
     page: number;
     pageSize: number;
   }): Promise<{
-    vouchers: (PaymentVoucherType & { prNickname: string | null })[];
+    vouchers: (PaymentVoucherType & {
+      prNickname: string | null;
+      agencyName: string | null;
+    })[];
     totalCount: number;
   }> {
     try {
@@ -538,9 +534,18 @@ export class PaymentVoucherRepositoryClass {
       // so all three name a payee from one place. LEFT, because a voucher may
       // legitimately have no `pr_id` yet.
       const rows = await db
-        .select({ voucher: PaymentVoucherTable, prNickname: UserTable.username })
+        .select({
+          voucher: PaymentVoucherTable,
+          prNickname: UserTable.username,
+          // WHOSE number this is. `voucher_no` is per agency since 0152, so the
+          // admin list — every agency at once — shows two PV-000001s that are
+          // two different documents. The agency is read through the FK, never
+          // copied onto the voucher.
+          agencyName: AgencyTable.name,
+        })
         .from(PaymentVoucherTable)
         .leftJoin(UserTable, eq(PaymentVoucherTable.prId, UserTable.id))
+        .leftJoin(AgencyTable, eq(PaymentVoucherTable.agencyId, AgencyTable.id))
         .where(whereClause)
         // NEWEST WEEK FIRST. This was a bare `orderBy(createdAt)` — ascending —
         // so the admin inbox opened on the oldest voucher on the platform and
@@ -562,6 +567,7 @@ export class PaymentVoucherRepositoryClass {
       const vouchers = rows.map((row) => ({
         ...row.voucher,
         prNickname: row.prNickname ?? null,
+        agencyName: row.agencyName ?? null,
       }));
 
       return { vouchers, totalCount };
@@ -1285,12 +1291,17 @@ export class PaymentVoucherRepositoryClass {
          * `klToday()`, matching the generator exactly. NOT `new Date()` in UTC:
          * that is the bug `todayIso`'s own docstring records, where a cron at
          * 02:00 KL stamped every voucher with the previous day.
-         *
-         * `dueDate` is deliberately left alone — the generator does not set it
-         * either, and inventing a payment deadline here would be this project's
-         * recurring defect of writing a plausible value where it has no fact.
          */
         issuedDate: klToday(),
+        /*
+         * THE PAY-BY DATE, which the generator has always written and this door
+         * never did — the note that stood here said "the generator does not set
+         * it either", and it did. A draft-born voucher (most of them) then showed
+         * a blank "Pay by" on every screen for its whole life. It is not a guess:
+         * `paymentDueDate` is the owner's rule, a pure function of the week, so
+         * the same seven days get the same deadline whichever door made them.
+         */
+        dueDate: paymentDueDate(data.weekEnd) ?? undefined,
         subtotal: '0.00',
         deduction: '0.00',
         net: '0.00',
@@ -1681,13 +1692,26 @@ export class PaymentVoucherRepositoryClass {
   async verifyApprovedReceipts(opts: {
     voucherId?: string;
     throughWeekStart?: string;
+    /**
+     * Vouchers in these states keep their approved receipts open. The Sunday
+     * job passes `pending_review`: a voucher it HOLDS is still on the agency's
+     * desk, and closing its evidence there locked the agency out of withdrawing
+     * an approval (`reviewReceipt` refuses a verified receipt) on the very
+     * voucher it had been told to go and fix.
+     */
+    excludeVoucherStatuses?: PaymentVoucherStatus[];
     actor: string;
   }): Promise<string[]> {
     if (!opts.voucherId && !opts.throughWeekStart) return [];
     try {
-      const voucherFilter = opts.voucherId
-        ? eq(PaymentVoucherTable.id, opts.voucherId)
-        : lte(PaymentVoucherTable.weekStart, opts.throughWeekStart!);
+      const voucherFilter = and(
+        opts.voucherId
+          ? eq(PaymentVoucherTable.id, opts.voucherId)
+          : lte(PaymentVoucherTable.weekStart, opts.throughWeekStart!),
+        opts.excludeVoucherStatuses?.length
+          ? notInArray(PaymentVoucherTable.status, opts.excludeVoucherStatuses)
+          : undefined,
+      );
 
       const rows = await db
         .update(PaymentVoucherReceiptTable)

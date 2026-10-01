@@ -105,6 +105,23 @@ export class ShiftSaleRepositoryClass {
     }
   }
 
+  /**
+   * The (shift, PR) row a log is about to overwrite, or null when there is none.
+   *
+   * THROWS on a failed read, unlike its siblings: `POST /shift-sale` keeps the
+   * row's stored SERVICES when the caller does not send them, and a read that
+   * quietly answered "no row" would zero a receipt's service sales out of the
+   * total. A 500 is the honest answer there.
+   */
+  async getByShiftAndPr(shiftId: string, prId: string): Promise<ShiftSaleType | null> {
+    const [row] = await db
+      .select()
+      .from(ShiftSaleTable)
+      .where(and(eq(ShiftSaleTable.shiftId, shiftId), eq(ShiftSaleTable.prId, prId)))
+      .limit(1);
+    return row ?? null;
+  }
+
   // Floor sales grouped by day — powers the report chart / daily breakdown.
   async reportByDay(filter?: ShiftSaleFilter): Promise<ShiftSaleDayTotals[]> {
     try {

@@ -71,6 +71,28 @@ router.get(
 );
 
 /**
+ * Payments owed BACK — money that landed on a voided or already-paid bill.
+ * Admin-only, because it spans every organisation; the handler re-asks
+ * admin-ness itself, the way `listForInvoice` resolves its own scope.
+ */
+router.get(
+  '/refunds-due',
+  requireAdmin,
+  subscriptionPaymentController.refundsDue.bind(subscriptionPaymentController),
+);
+
+/**
+ * The money went back — "Mark refunded" on one of those rows. Admin-only and
+ * re-asked in the handler, like the list it clears; only a row still marked
+ * refund-due can move, once.
+ */
+router.post(
+  '/:id/refunded',
+  requireAdmin,
+  subscriptionPaymentController.markRefunded.bind(subscriptionPaymentController),
+);
+
+/**
  * The attempts behind one invoice. Not admin-only — a venue asking "did my
  * payment go through" is asking about itself — and the controller resolves
  * ownership from the invoice against the session, so no org id is accepted

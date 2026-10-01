@@ -169,19 +169,22 @@ export function requestTouchesLedger(type: AdminRequestType): boolean {
 
 /**
  * Thrown from inside approve's transaction when the atomic claim finds the
- * request is no longer `pending` — someone answered it between the page loading
- * and the click. Throwing rolls the switch back before it touches the ledger.
+ * request is no longer awaiting an answer (`pending` or `contacted`) — someone
+ * answered it between the page loading and the click. Throwing rolls the switch
+ * back before it touches the ledger.
  */
 export class RequestNotPendingError extends globalThis.Error {
   constructor() {
-    super('The request is no longer pending.');
+    super('The request is no longer awaiting an answer.');
     this.name = 'RequestNotPendingError';
   }
 }
 
 /**
- * Why a request that is no longer `pending` cannot be approved — one sentence
- * per state, because "409 Conflict" tells an admin nothing about what to do.
+ * Why a request that is no longer awaiting an answer cannot be approved — one
+ * sentence per state, because "409 Conflict" tells an admin nothing about what
+ * to do. `contacted` is NOT one of them since 29 Sep 2026: marking a request
+ * contacted decides nothing, and it approves like a pending one.
  */
 export function notPendingMessage(status: string): string {
   switch (status) {
@@ -194,6 +197,29 @@ export function notPendingMessage(status: string): string {
     case 'direct':
       return `This switch was applied when it was filed — there is nothing to approve. ${NOTHING_CHANGED}`;
     default:
-      return `This plan change is ${status}, not pending, so it cannot be approved. ${NOTHING_CHANGED}`;
+      return `This plan change is ${status}, not awaiting an answer, so it cannot be approved. ${NOTHING_CHANGED}`;
+  }
+}
+
+/**
+ * Why a request that is no longer awaiting an answer cannot be answered again
+ * — resolved, marked contacted or declined (28 Sep 2026 follow-up). One
+ * sentence per state, like `notPendingMessage`, because "409" tells an admin
+ * nothing, and the first one is the case this exists for: resolving a POS
+ * quote or a Custom price a second time applied it to billing a second time.
+ */
+export function answeredRequestMessage(status: string): string {
+  switch (status) {
+    case 'resolved':
+      return `This request was already resolved — answering it again would apply its price to billing a second time. ${NOTHING_CHANGED}`;
+    case 'declined':
+      return `This request was declined, so it can no longer be answered. ${NOTHING_CHANGED}`;
+    case 'withdrawn':
+      return `The subscriber withdrew this request, so there is nothing left to answer. ${NOTHING_CHANGED}`;
+    case 'approved':
+    case 'direct':
+      return `This request was already applied (${status}) — there is nothing left to answer. ${NOTHING_CHANGED}`;
+    default:
+      return `This request is ${status}, not awaiting an answer. ${NOTHING_CHANGED}`;
   }
 }

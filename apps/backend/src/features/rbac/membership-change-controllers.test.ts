@@ -244,6 +244,8 @@ describe('PUT /agency/:id/members/:memberId', () => {
     await agencyController(repo).updateMember(put({ status: 'inactive' }), res);
 
     expect(res.statusCode).toBe(200);
+    // The sentence the portal prints — it used to be "Member updated" for this.
+    expect(res.body.message).toBe('Member deactivated — they no longer have access.');
     expect(repo.update).toHaveBeenCalledWith(MEMBER, { status: 'inactive', updatedBy: OWNER_ID }, h.TX);
     expect(vi.mocked(commitMembershipChange).mock.calls[0][0]).toMatchObject({
       withdrawInvitesFor: `${TARGET_ID}@example.com`,
@@ -265,6 +267,7 @@ describe('PUT /agency/:id/members/:memberId', () => {
     await agencyController(repo).updateMember(put({ status: 'active', subRole: 'finance' }), res);
 
     expect(res.statusCode).toBe(200);
+    expect(res.body.message).toBe('Member reactivated as Finance.');
     expect(repo.update).toHaveBeenCalledWith(
       MEMBER,
       { subRole: 'finance', status: 'active', updatedBy: OWNER_ID },
@@ -307,6 +310,7 @@ describe('DELETE /agency/:id/members/:memberId', () => {
     await agencyController(repo).removeMember(del(), res);
 
     expect(res.statusCode).toBe(200);
+    expect(res.body.message).toBe('Member deactivated — they no longer have access.');
     expect(repo.remove).toHaveBeenCalledWith(MEMBER, OWNER_ID, 'inactive', h.TX);
     expect(vi.mocked(commitMembershipChange).mock.calls[0][0]).toMatchObject({
       org: 'agency',

@@ -5,14 +5,25 @@
  *
  *   npx tsx --tsconfig tsconfig.json src/scripts/_probe-penalty-seal.ts
  *   npx tsx --tsconfig tsconfig.json src/scripts/_probe-penalty-seal.ts --apply
+ *
+ * `--apply` runs under the scheduler's own `penalty-seal` lock (29 Sep 2026,
+ * `runJobByHand`): while a backend's Sunday 08:00 tick is sealing, it prints
+ * "NOT RUN — another process is running …", writes nothing and exits 2. The dry
+ * run takes no lock — it writes nothing, and holding the lock could make the
+ * real tick skip its week.
  */
 import './_probe-env';
-import { runPenaltySeal } from '../scheduler/penalty-seal.job';
+import { MANUAL_RUN_SKIPPED_EXIT_CODE, runJobByHand } from '../scheduler/manual-run';
+import { PENALTY_SEAL_JOB, runPenaltySeal } from '../scheduler/penalty-seal.job';
 
 const apply = process.argv.includes('--apply');
 
 async function main() {
-  const r = await runPenaltySeal(new Date(), { dryRun: !apply });
+  const outcome = apply
+    ? await runJobByHand(PENALTY_SEAL_JOB, () => runPenaltySeal(new Date(), { dryRun: false }))
+    : { ran: true as const, result: await runPenaltySeal(new Date(), { dryRun: true }) };
+  if (!outcome.ran) process.exit(MANUAL_RUN_SKIPPED_EXIT_CODE);
+  const r = outcome.result;
   console.log(`\n${apply ? 'APPLIED' : 'DRY RUN - nothing written'}`);
   console.log(`  week      : ${r.weekStart} .. ${r.weekEnd}`);
   console.log(`  agencies  : ${r.agencies} (with an enabled rule)`);

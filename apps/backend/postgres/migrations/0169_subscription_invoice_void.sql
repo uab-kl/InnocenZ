@@ -1,0 +1,21 @@
+-- 0169_subscription_invoice_void
+--
+-- AN INVOICE RAISED IN ERROR CAN BE VOIDED, NOT ONLY DELETED (owner, 29 Sep
+-- 2026: "Add Void" — "Admin can void an UNPAID invoice with a reason; it stops
+-- counting as owed and stays on record").
+--
+-- `subscription_invoice.status` knew only 'unpaid' and 'paid' (0118), so the
+-- only way to take back a wrong charge was to DELETE the row — which the 29 Sep
+-- test-data clean-up had to do for 16 invoices billed from fictional anchors,
+-- and which also let the nightly job re-mint the same period the moment its
+-- anchor still pointed there. A void keeps the row (so the period's unique
+-- (member_subscription_id, period_start) slot stays taken and is never billed
+-- again) and the record of what was once charged.
+--
+-- The reason rides in the existing `note` column beside any pro-rata sentence;
+-- no new column. Every reader that meant "not paid = owed" is taught to skip
+-- 'void' in the same change.
+--
+-- Additive and idempotent; ALTER TYPE ... ADD VALUE cannot be rolled back inside
+-- a transaction, so a re-run must be a no-op.
+ALTER TYPE "main"."subscription_invoice_status" ADD VALUE IF NOT EXISTS 'void';
